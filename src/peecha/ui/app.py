@@ -55,6 +55,8 @@ class PeechaApp(MDApp):
         همه‌ی ویجت‌ها یک‌جا حل می‌شود.
         """
         for style_name, style_value in self.theme_cls.font_styles.items():
+            if style_name == "Icon":
+                continue  # این کلید فونت گلیف آیکون (Material Design Icons) است، نه متن
             style_value[0] = self.font_name
 
     def build(self):
@@ -79,12 +81,16 @@ class PeechaApp(MDApp):
 
         # بعد از ثبت فونت import می‌شوند تا شکل‌دهی/تم روی همه اعمال شده باشد
         from peecha.config import has_saved_settings  # noqa: PLC0415
+        from peecha.ui.screens.admin_bootstrap import AdminBootstrapScreen  # noqa: PLC0415
         from peecha.ui.screens.connection_settings import ConnectionSettingsScreen  # noqa: PLC0415
         from peecha.ui.screens.login import LoginScreen  # noqa: PLC0415
+        from peecha.ui.screens.shell import ShellScreen  # noqa: PLC0415
 
         screen_manager = MDScreenManager()
         screen_manager.add_widget(ConnectionSettingsScreen())
         screen_manager.add_widget(LoginScreen())
+        screen_manager.add_widget(AdminBootstrapScreen())
+        screen_manager.add_widget(ShellScreen())
         # اولین اجرا (بدون تنظیمات ذخیره‌شده) با فرم اتصال شروع می‌شود؛
         # دفعات بعد مستقیم می‌رود سراغ ورود (تنظیمات از صفحه‌ی ورود هم در دسترس است)
         screen_manager.current = "login" if has_saved_settings() else "connection_settings"

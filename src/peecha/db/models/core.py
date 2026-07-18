@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from sqlalchemy import Boolean, Date, ForeignKey, Numeric, SmallInteger, String
+from sqlalchemy import Boolean, Date, ForeignKey, Numeric, SmallInteger, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from peecha.db.base import Base
@@ -66,7 +66,7 @@ class Company(Base):
     base_currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     default_language_id: Mapped[int] = mapped_column(ForeignKey("core.languages.language_id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime.datetime]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     base_currency: Mapped[Currency] = relationship(foreign_keys=[base_currency_id])
     default_language: Mapped[Language] = relationship(foreign_keys=[default_language_id])

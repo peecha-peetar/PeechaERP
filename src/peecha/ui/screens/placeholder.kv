@@ -1,0 +1,12 @@
+<PlaceholderScreen>:
+    name: "placeholder"
+    md_bg_color: app.theme_cls.bg_normal
+
+    PLabel:
+        text: root.message
+        halign: "center"
+        # adaptive_size: توضیح در dashboard.kv (فرمول text_size خودِ MDLabel
+        # به width وابسته است؛ ست‌کردن دستیِ text_size ثابت با آن رقابت
+        # می‌کند، اما adaptive_size همان فرمول را پایدار به None می‌رساند)
+        adaptive_size: True
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}

@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import theme peecha.ui.theme
 
 # استایل مرکزی پیچا — معادل یک فایل CSS برای Kivy: به‌جای تکرار font_name/
 # halign روی تک‌تک ویجت‌ها در هر صفحه (که باعث شد یک‌بار یادمان برود و یک
@@ -6,14 +7,29 @@
 # همین کلاس‌ها استفاده می‌کنند. این فایل باید قبل از هر kv دیگری Builder شود
 # (در src/peecha/ui/app.py، قبل از import صفحات).
 
+
+# نکته‌ی مهم: خودِ MDLabel به‌صورت پیش‌فرض (در label.kv خودِ KivyMD)
+# text_size را روی (self.width, None) می‌گذارد تا متن چندخطی wrap شود.
+# چون shape() کل رشته را یک‌بار برای نمایش تک‌خطیِ RTL بازچینی می‌کند، اگر
+# Label بعداً همین رشته‌ی بازچینی‌شده را با منطق wrap چپ‌به‌راستِ خودش به
+# چند خط بشکند، نتیجه کاملاً درهم می‌شود (نه فقط زشت، غلط). راه‌حل، خاموش
+# نگه‌داشتنِ wrap با max_lines=1 است، نه حذف text_size (که ارث‌بری از
+# MDLabel دوباره آن را ست می‌کند). به‌جای شکستن خط، متنِ زیادی با «...»
+# از سمت چپ (انتهای بصریِ متنِ راست‌چین) کوتاه می‌شود.
 <PLabel@MDLabel>:
     font_name: app.font_name
     halign: "right"
+    max_lines: 1
+    shorten: True
+    shorten_from: "left"
 
 <PTitleLabel@MDLabel>:
     font_name: app.font_name
     font_style: "H5"
     halign: "right"
+    max_lines: 1
+    shorten: True
+    shorten_from: "left"
     size_hint_y: None
     height: self.texture_size[1]
 
@@ -21,6 +37,9 @@
     font_name: app.font_name
     halign: "right"
     theme_text_color: "Hint"
+    max_lines: 1
+    shorten: True
+    shorten_from: "left"
     size_hint_y: None
     height: self.texture_size[1] if self.text else "0dp"
 
@@ -40,3 +59,98 @@
 
 <PFlatButton@MDFlatButton>:
     font_name: app.font_name
+
+<PLabelListRow>:
+    size_hint_y: None
+    height: "40dp"
+    padding: ["8dp", "0dp"]
+    canvas.before:
+        Color:
+            rgba: theme.DIVIDER
+        Line:
+            points: [self.x, self.y, self.x + self.width, self.y]
+            width: 1
+
+    PLabel:
+        text: root.text
+        valign: "middle"
+
+<PNavItem>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "44dp"
+    padding: ["12dp", "0dp"]
+    spacing: "8dp"
+    radius: [10, 10, 10, 10]
+    md_bg_color: theme.SELECTED if root.selected else (0, 0, 0, 0)
+
+    MDIcon:
+        icon: root.icon
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT if root.selected else theme.TEXT_SECONDARY
+
+    PLabel:
+        text: root.text
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT if root.selected else theme.TEXT_PRIMARY
+        valign: "middle"
+
+<PStatCard>:
+    orientation: "vertical"
+    size_hint_y: None
+    height: "150dp"
+    padding: "16dp"
+    spacing: "6dp"
+    radius: [18, 18, 18, 18]
+    elevation: 0
+    md_bg_color: theme.SURFACE
+    line_color: theme.BORDER
+
+    BoxLayout:
+        size_hint_y: None
+        height: "36dp"
+        spacing: "8dp"
+
+        PLabel:
+            text: root.title
+            font_style: "Caption"
+            theme_text_color: "Custom"
+            text_color: theme.TEXT_SECONDARY
+            valign: "middle"
+
+        MDBoxLayout:
+            size_hint: None, None
+            size: "36dp", "36dp"
+            radius: [10, 10, 10, 10]
+            md_bg_color: root.icon_bg_color
+
+            MDIcon:
+                icon: root.icon
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                halign: "center"
+                valign: "middle"
+
+    PLabel:
+        text: root.value
+        font_style: "H4"
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_PRIMARY
+        size_hint_y: None
+        height: self.texture_size[1]
+
+    PLabel:
+        text: root.subtitle
+        font_style: "Caption"
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        size_hint_y: None
+        height: self.texture_size[1]
+
+    PLabel:
+        text: root.trend_text
+        font_style: "Caption"
+        theme_text_color: "Custom"
+        text_color: theme.SUCCESS if root.trend_positive else theme.DANGER
+        size_hint_y: None
+        height: self.texture_size[1]

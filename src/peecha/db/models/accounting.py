@@ -18,6 +18,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -176,7 +177,7 @@ class JournalEntry(Base):
     is_system_generated: Mapped[bool] = mapped_column(Boolean, default=False)
     reversed_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
-    created_at: Mapped[datetime.datetime]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
     posted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     posted_at: Mapped[datetime.datetime | None]
 

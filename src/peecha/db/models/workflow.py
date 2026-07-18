@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, SmallInteger, String
+from sqlalchemy import ForeignKey, ForeignKeyConstraint, SmallInteger, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -106,7 +106,7 @@ class CartableItem(Base):
     current_approver_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     status_id: Mapped[int] = mapped_column(ForeignKey("wf.cartable_statuses.status_id"))
     submitted_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
-    submitted_at: Mapped[datetime.datetime]
+    submitted_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     steps: Mapped[list["CartableItemStep"]] = relationship(back_populates="cartable_item")
     actions: Mapped[list["CartableAction"]] = relationship(back_populates="cartable_item")
@@ -133,6 +133,6 @@ class CartableAction(Base):
     action_type_id: Mapped[int] = mapped_column(ForeignKey("wf.cartable_action_types.action_type_id"))
     action_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     comment: Mapped[str | None]
-    action_at: Mapped[datetime.datetime]
+    action_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
     cartable_item: Mapped[CartableItem] = relationship(back_populates="actions")

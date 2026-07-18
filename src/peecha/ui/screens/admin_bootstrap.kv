@@ -1,0 +1,55 @@
+#:import shape peecha.ui.rtl.shape
+
+<AdminBootstrapScreen>:
+    name: "admin_bootstrap"
+    md_bg_color: app.theme_cls.bg_normal
+
+    MDCard:
+        size_hint: None, None
+        size: "380dp", "620dp"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+        orientation: "vertical"
+        padding: "24dp"
+        spacing: "12dp"
+        elevation: 2
+        radius: [18, 18, 18, 18]
+
+        PTitleLabel:
+            text: shape("راه‌اندازی اولیه‌ی پیچا")
+
+        PLabel:
+            text: shape("هنوز هیچ کاربری در سیستم ثبت نشده؛ این کاربر و شرکت، اولین‌ها خواهند بود.")
+            theme_text_color: "Hint"
+            size_hint_y: None
+            height: self.texture_size[1]
+
+        PTextField:
+            id: company_name_field
+            hint_text: shape("نام شرکت")
+
+        PTextField:
+            id: username_field
+            hint_text: shape("نام کاربری مدیر")
+
+        PTextField:
+            id: full_name_field
+            hint_text: shape("نام کامل مدیر")
+
+        PTextField:
+            id: password_field
+            hint_text: shape("رمز عبور")
+            password: True
+
+        PTextField:
+            id: confirm_password_field
+            hint_text: shape("تکرار رمز عبور")
+            password: True
+
+        PHintLabel:
+            id: status_label
+            text: ""
+
+        PRaisedButton:
+            text: shape("ساخت و ورود")
+            pos_hint: {"center_x": 0.5}
+            on_release: root.create_admin()

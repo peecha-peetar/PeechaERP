@@ -1,32 +1,69 @@
-"""رنگ‌های semantic پیچا — معادل جدول بخش ۳ در docs/ui-ux-guidelines.md.
+"""پالت رسمی پیچا — دقیقاً طبق جدول‌های بخش ۳/۴ در docs/ui-ux-guidelines.md.
 
-این رنگ‌ها معنا حمل می‌کنند (وضعیت سند)، نه صرفاً تزیین؛ برای همین جدا از
-پالت عمومی KivyMD در یک‌جا نگه‌داری می‌شوند تا همه‌ی صفحات یکسان استفاده کنند.
+منبع واحد این مقادیر همین فایل است؛ هم از پایتون و هم مستقیم از KV
+(`#:import theme peecha.ui.theme`) استفاده می‌شود تا رنگ‌ها در دو جا به‌صورت
+غیرهم‌گام تکرار نشوند.
 """
 
 from __future__ import annotations
 
-# RGBA در بازه‌ی ۰..۱ (فرمت مورد انتظار KivyMD)
+
+def hex_to_rgba(hex_code: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
+    hex_code = hex_code.lstrip("#")
+    r = int(hex_code[0:2], 16) / 255
+    g = int(hex_code[2:4], 16) / 255
+    b = int(hex_code[4:6], 16) / 255
+    return (r, g, b, alpha)
+
+
+# رنگ‌های برند/اکشن
+PRIMARY = hex_to_rgba("020025")
+PRIMARY_HOVER = hex_to_rgba("0B0B55")
+PRIMARY_LIGHT = hex_to_rgba("EEF2FF")
+ACCENT = hex_to_rgba("2563EB")
+SUCCESS = hex_to_rgba("10B981")
+WARNING = hex_to_rgba("F59E0B")
+DANGER = hex_to_rgba("EF4444")
+INFO = hex_to_rgba("0EA5E9")
+
+# اکسنت‌های اضافیِ نمودار (دسته‌ی سوم/چهارم به بعد)
+CHART_PURPLE = hex_to_rgba("9333EA")
+CHART_ORANGE = hex_to_rgba("F97316")
+
+# سطح/پس‌زمینه (تم روشن)
+BACKGROUND = hex_to_rgba("F7F8FC")
+SURFACE = hex_to_rgba("FFFFFF")
+HOVER = hex_to_rgba("F4F6FA")
+SELECTED = hex_to_rgba("EEF2FF")
+BORDER = hex_to_rgba("E5E7EB")
+DIVIDER = hex_to_rgba("ECECEC")
+
+# متن
+TEXT_PRIMARY = hex_to_rgba("111827")
+TEXT_SECONDARY = hex_to_rgba("6B7280")
+TEXT_DISABLED = hex_to_rgba("9CA3AF")
+
+# RGBA در بازه‌ی ۰..۱ (فرمت مورد انتظار KivyMD) — نگاشت قدیمی برای سازگاری با کدهای موجود
 SEMANTIC_COLORS: dict[str, dict[str, tuple[float, float, float, float]]] = {
     "light": {
-        "primary": (0.10, 0.35, 0.60, 1),
-        "success": (0.16, 0.55, 0.28, 1),   # PERMANENT / APPROVED
-        "warning": (0.80, 0.55, 0.10, 1),   # TEMPORARY / PENDING
-        "danger":  (0.75, 0.15, 0.15, 1),   # REJECTED / REVERSED / CANCELLED / حذف
-        "info":    (0.15, 0.45, 0.70, 1),   # تولید خودکار سیستم، نکته‌ها
-        "background": (0.98, 0.98, 0.98, 1),
-        "surface": (1, 1, 1, 1),
-        "text": (0.10, 0.10, 0.10, 1),
+        "primary": ACCENT,
+        "success": SUCCESS,
+        "warning": WARNING,
+        "danger": DANGER,
+        "info": INFO,
+        "background": BACKGROUND,
+        "surface": SURFACE,
+        "text": TEXT_PRIMARY,
     },
     "dark": {
-        "primary": (0.35, 0.60, 0.85, 1),
-        "success": (0.35, 0.70, 0.45, 1),
-        "warning": (0.90, 0.70, 0.30, 1),
-        "danger":  (0.90, 0.40, 0.40, 1),
-        "info":    (0.45, 0.65, 0.85, 1),
-        "background": (0.09, 0.09, 0.10, 1),
-        "surface": (0.14, 0.14, 0.15, 1),
-        "text": (0.92, 0.92, 0.92, 1),
+        "primary": hex_to_rgba("5B8DEF"),
+        "success": hex_to_rgba("34D399"),
+        "warning": hex_to_rgba("FBBF24"),
+        "danger": hex_to_rgba("F87171"),
+        "info": hex_to_rgba("38BDF8"),
+        "background": hex_to_rgba("0F1115"),
+        "surface": hex_to_rgba("1A1D23"),
+        "text": hex_to_rgba("E5E7EB"),
     },
 }
 

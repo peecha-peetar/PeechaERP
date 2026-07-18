@@ -1,0 +1,98 @@
+#:import shape peecha.ui.rtl.shape
+#:import theme peecha.ui.theme
+
+<ChartOfAccountsScreen>:
+    name: "chart_of_accounts"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "horizontal"
+        padding: "24dp"
+        spacing: "16dp"
+
+        MDCard:
+            orientation: "vertical"
+            padding: "16dp"
+            spacing: "8dp"
+            radius: [18, 18, 18, 18]
+            elevation: 0
+            md_bg_color: theme.SURFACE
+            line_color: theme.BORDER
+            size_hint_x: 0.62
+
+            PLabel:
+                text: shape("کدینگ حسابداری")
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+            ScrollView:
+                BoxLayout:
+                    id: accounts_list
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+
+        MDCard:
+            orientation: "vertical"
+            padding: "16dp"
+            spacing: "10dp"
+            radius: [18, 18, 18, 18]
+            elevation: 0
+            md_bg_color: theme.SURFACE
+            line_color: theme.BORDER
+            size_hint_x: 0.38
+
+            PLabel:
+                text: shape("افزودن حساب گروه جدید")
+                font_style: "Subtitle1"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PTextField:
+                id: segment_code_field
+                hint_text: shape("کد حساب")
+
+            PTextField:
+                id: name_field
+                hint_text: shape("نام حساب")
+
+            PFlatButton:
+                id: nature_button
+                text: ""
+                on_release: root.open_nature_menu()
+
+            PFlatButton:
+                id: category_button
+                text: ""
+                on_release: root.open_category_menu()
+
+            PFlatButton:
+                id: account_type_button
+                text: ""
+                on_release: root.open_account_type_menu()
+
+            BoxLayout:
+                size_hint_y: None
+                height: "36dp"
+                spacing: "8dp"
+
+                MDCheckbox:
+                    id: is_postable_checkbox
+                    size_hint: None, None
+                    size: "24dp", "24dp"
+                    pos_hint: {"center_y": 0.5}
+
+                PLabel:
+                    text: shape("قابل ثبت سند (Postable)")
+                    valign: "middle"
+
+            Widget:
+
+            PRaisedButton:
+                text: shape("افزودن حساب")
+                on_release: root.add_account()

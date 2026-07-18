@@ -6,7 +6,7 @@
 
     MDCard:
         size_hint: None, None
-        size: "360dp", "480dp"
+        size: "380dp", "560dp"
         pos_hint: {"center_x": 0.5, "center_y": 0.5}
         orientation: "vertical"
         padding: "24dp"
@@ -34,6 +34,16 @@
         PHintLabel:
             id: status_label
             text: ""
+
+        PRaisedButton:
+            id: bootstrap_button
+            text: shape("ساخت اولین کاربر مدیر")
+            pos_hint: {"center_x": 0.5}
+            opacity: 0
+            disabled: True
+            size_hint_y: None
+            height: "0dp"
+            on_release: root.open_admin_bootstrap()
 
         PFlatButton:
             text: shape("تنظیمات اتصال به دیتابیس")
