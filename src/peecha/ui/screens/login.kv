@@ -14,48 +14,28 @@
         elevation: 2
         radius: [12, 12, 12, 12]
 
-        MDLabel:
+        PTitleLabel:
             text: shape("ورود به پیچا")
-            font_name: app.font_name
-            font_style: "H5"
-            halign: "right"
-            size_hint_y: None
-            height: self.texture_size[1]
 
-        MDTextField:
+        PTextField:
             id: username_field
             hint_text: shape("نام کاربری")
-            font_name: app.font_name
-            halign: "right"
-            size_hint_y: None
-            height: "48dp"
 
-        MDTextField:
+        PTextField:
             id: password_field
             hint_text: shape("رمز عبور")
-            font_name: app.font_name
             password: True
-            halign: "right"
-            size_hint_y: None
-            height: "48dp"
 
-        MDRaisedButton:
+        PRaisedButton:
             text: shape("ورود")
-            font_name: app.font_name
             pos_hint: {"center_x": 0.5}
             on_release: root.attempt_login()
 
-        MDLabel:
+        PHintLabel:
             id: status_label
             text: ""
-            font_name: app.font_name
-            halign: "right"
-            theme_text_color: "Hint"
-            size_hint_y: None
-            height: self.texture_size[1]
 
-        MDFlatButton:
+        PFlatButton:
             text: shape("تنظیمات اتصال به دیتابیس")
-            font_name: app.font_name
             pos_hint: {"center_x": 0.5}
             on_release: root.open_connection_settings()

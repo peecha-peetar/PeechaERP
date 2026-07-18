@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 
 from kivy.core.text import LabelBase
+from kivy.lang import Builder
 from kivymd.app import MDApp
 from kivymd.uix.screenmanager import MDScreenManager
 
@@ -20,6 +21,7 @@ _ASSETS_DIR = os.path.join(
 _FONT_DIR = os.path.join(_ASSETS_DIR, "fonts")
 _VAZIRMATN_REGULAR = os.path.join(_FONT_DIR, "Vazirmatn-Regular.ttf")
 _VAZIRMATN_BOLD = os.path.join(_FONT_DIR, "Vazirmatn-Bold.ttf")
+_WIDGETS_KV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "widgets.kv")
 
 
 def _register_persian_font() -> str:
@@ -64,6 +66,10 @@ class PeechaApp(MDApp):
         self.theme_cls.theme_style = "Light"  # طبق docs/ui-ux-guidelines.md بخش ۳؛ سوییچ تیره در قدم بعدی
         self.theme_cls.primary_palette = "Blue"
         self._apply_font_to_theme_styles()
+
+        # استایل مرکزی (PLabel/PTextField/...) باید قبل از هر kv صفحه‌ای Builder
+        # شود، وگرنه صفحاتی که از این کلاس‌ها استفاده می‌کنند خطای «کلاس ناشناخته» می‌گیرند
+        Builder.load_file(_WIDGETS_KV_PATH)
 
         # بعد از ثبت فونت import می‌شوند تا شکل‌دهی/تم روی همه اعمال شده باشد
         from peecha.config import has_saved_settings  # noqa: PLC0415

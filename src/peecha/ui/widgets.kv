@@ -1,0 +1,37 @@
+#:import shape peecha.ui.rtl.shape
+
+# استایل مرکزی پیچا — معادل یک فایل CSS برای Kivy: به‌جای تکرار font_name/
+# halign روی تک‌تک ویجت‌ها در هر صفحه (که باعث شد یک‌بار یادمان برود و یک
+# صفحه فونتش نصفه‌نیمه بماند)، اینجا یک‌بار تعریف می‌شود و همه‌ی صفحات از
+# همین کلاس‌ها استفاده می‌کنند. این فایل باید قبل از هر kv دیگری Builder شود
+# (در src/peecha/ui/app.py، قبل از import صفحات).
+
+<PLabel@MDLabel>:
+    font_name: app.font_name
+    halign: "right"
+
+<PTitleLabel@MDLabel>:
+    font_name: app.font_name
+    font_style: "H5"
+    halign: "right"
+    size_hint_y: None
+    height: self.texture_size[1]
+
+<PHintLabel@MDLabel>:
+    font_name: app.font_name
+    halign: "right"
+    theme_text_color: "Hint"
+    size_hint_y: None
+    height: self.texture_size[1] if self.text else "0dp"
+
+<PTextField@MDTextField>:
+    font_name: app.font_name
+    halign: "right"
+    size_hint_y: None
+    height: "48dp"
+
+<PRaisedButton@MDRaisedButton>:
+    font_name: app.font_name
+
+<PFlatButton@MDFlatButton>:
+    font_name: app.font_name

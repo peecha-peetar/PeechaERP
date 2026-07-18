@@ -14,77 +14,46 @@
         elevation: 2
         radius: [12, 12, 12, 12]
 
-        MDLabel:
+        PTitleLabel:
             text: shape("تنظیمات اتصال به دیتابیس")
-            font_name: app.font_name
-            font_style: "H5"
-            halign: "right"
-            size_hint_y: None
-            height: self.texture_size[1]
 
-        MDTextField:
+        PTextField:
             id: host_field
             hint_text: shape("آدرس سرور (Host)")
-            font_name: app.font_name
-            halign: "right"
-            size_hint_y: None
-            height: "48dp"
 
-        MDTextField:
+        PTextField:
             id: port_field
             hint_text: shape("پورت")
-            font_name: app.font_name
-            halign: "right"
             input_filter: "int"
-            size_hint_y: None
-            height: "48dp"
 
-        MDTextField:
+        PTextField:
             id: name_field
             hint_text: shape("نام دیتابیس")
-            font_name: app.font_name
-            halign: "right"
-            size_hint_y: None
-            height: "48dp"
 
-        MDTextField:
+        PTextField:
             id: user_field
             hint_text: shape("نام کاربری دیتابیس")
-            font_name: app.font_name
-            halign: "right"
-            size_hint_y: None
-            height: "48dp"
 
-        MDTextField:
+        PTextField:
             id: password_field
             hint_text: shape("رمز عبور دیتابیس")
-            font_name: app.font_name
             password: True
-            halign: "right"
-            size_hint_y: None
-            height: "48dp"
 
-        MDLabel:
+        PHintLabel:
             id: status_label
             text: ""
-            font_name: app.font_name
-            halign: "right"
-            size_hint_y: None
-            height: self.texture_size[1] if self.text else "0dp"
 
         BoxLayout:
             size_hint_y: None
             height: "48dp"
             spacing: "8dp"
 
-            MDFlatButton:
+            PFlatButton:
                 text: shape("تست اتصال")
-                font_name: app.font_name
                 on_release: root.test_connection_pressed()
 
-            MDFlatButton:
+            PFlatButton:
                 text: shape("ساخت جدول‌ها")
-                font_name: app.font_name
                 on_release: root.create_tables_pressed()
 
         BoxLayout:
@@ -93,7 +62,6 @@
 
             Widget:
 
-            MDRaisedButton:
+            PRaisedButton:
                 text: shape("ذخیره و ادامه")
-                font_name: app.font_name
                 on_release: root.save_and_continue()
