@@ -28,3 +28,6 @@ class LoginScreen(MDScreen):
             else "نام کاربری را وارد کنید."
         )
         self.ids.status_label.text = shape(message)
+
+    def open_connection_settings(self) -> None:
+        self.manager.current = "connection_settings"

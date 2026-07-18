@@ -6,7 +6,7 @@
 
     MDCard:
         size_hint: None, None
-        size: "360dp", "420dp"
+        size: "360dp", "480dp"
         pos_hint: {"center_x": 0.5, "center_y": 0.5}
         orientation: "vertical"
         padding: "24dp"
@@ -53,3 +53,9 @@
             theme_text_color: "Hint"
             size_hint_y: None
             height: self.texture_size[1]
+
+        MDFlatButton:
+            text: shape("تنظیمات اتصال به دیتابیس")
+            font_name: app.font_name
+            pos_hint: {"center_x": 0.5}
+            on_release: root.open_connection_settings()

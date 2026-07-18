@@ -40,6 +40,16 @@ def get_engine():
     return _engine
 
 
+def reset_engine() -> None:
+    """بعد از ذخیره‌ی تنظیمات اتصال جدید از فرم UI صدا زده می‌شود تا
+    engine/session بعدی با مقادیر تازه ساخته شوند، نه نسخه‌ی cache‌شده‌ی قبلی."""
+    global _engine, _SessionFactory
+    if _engine is not None:
+        _engine.dispose()
+    _engine = None
+    _SessionFactory = None
+
+
 def get_session_factory() -> sessionmaker[Session]:
     global _SessionFactory
     if _SessionFactory is None:

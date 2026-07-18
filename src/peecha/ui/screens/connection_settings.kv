@@ -1,0 +1,81 @@
+#:import shape peecha.ui.rtl.shape
+
+<ConnectionSettingsScreen>:
+    name: "connection_settings"
+    md_bg_color: app.theme_cls.bg_normal
+
+    MDCard:
+        size_hint: None, None
+        size: "420dp", "560dp"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+        orientation: "vertical"
+        padding: "24dp"
+        spacing: "12dp"
+        elevation: 2
+        radius: [12, 12, 12, 12]
+
+        MDLabel:
+            text: shape("تنظیمات اتصال به دیتابیس")
+            font_style: "H5"
+            halign: "right"
+            size_hint_y: None
+            height: self.texture_size[1]
+
+        MDTextField:
+            id: host_field
+            hint_text: shape("آدرس سرور (Host)")
+            halign: "right"
+            size_hint_y: None
+            height: "48dp"
+
+        MDTextField:
+            id: port_field
+            hint_text: shape("پورت")
+            halign: "right"
+            input_filter: "int"
+            size_hint_y: None
+            height: "48dp"
+
+        MDTextField:
+            id: name_field
+            hint_text: shape("نام دیتابیس")
+            halign: "right"
+            size_hint_y: None
+            height: "48dp"
+
+        MDTextField:
+            id: user_field
+            hint_text: shape("نام کاربری دیتابیس")
+            halign: "right"
+            size_hint_y: None
+            height: "48dp"
+
+        MDTextField:
+            id: password_field
+            hint_text: shape("رمز عبور دیتابیس")
+            password: True
+            halign: "right"
+            size_hint_y: None
+            height: "48dp"
+
+        MDLabel:
+            id: status_label
+            text: ""
+            halign: "right"
+            size_hint_y: None
+            height: self.texture_size[1] if self.text else "0dp"
+
+        BoxLayout:
+            size_hint_y: None
+            height: "48dp"
+            spacing: "8dp"
+
+            MDFlatButton:
+                text: shape("تست اتصال")
+                on_release: root.test_connection_pressed()
+
+            Widget:
+
+            MDRaisedButton:
+                text: shape("ذخیره و ادامه")
+                on_release: root.save_and_continue()

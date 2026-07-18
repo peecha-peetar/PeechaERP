@@ -65,10 +65,17 @@ class PeechaApp(MDApp):
         self.theme_cls.primary_palette = "Blue"
         self._apply_font_to_theme_styles()
 
-        from peecha.ui.screens.login import LoginScreen  # noqa: PLC0415 (بعد از ثبت فونت import می‌شود)
+        # بعد از ثبت فونت import می‌شوند تا شکل‌دهی/تم روی همه اعمال شده باشد
+        from peecha.config import has_saved_settings  # noqa: PLC0415
+        from peecha.ui.screens.connection_settings import ConnectionSettingsScreen  # noqa: PLC0415
+        from peecha.ui.screens.login import LoginScreen  # noqa: PLC0415
 
         screen_manager = MDScreenManager()
+        screen_manager.add_widget(ConnectionSettingsScreen())
         screen_manager.add_widget(LoginScreen())
+        # اولین اجرا (بدون تنظیمات ذخیره‌شده) با فرم اتصال شروع می‌شود؛
+        # دفعات بعد مستقیم می‌رود سراغ ورود (تنظیمات از صفحه‌ی ورود هم در دسترس است)
+        screen_manager.current = "login" if has_saved_settings() else "connection_settings"
         return screen_manager
 
 
