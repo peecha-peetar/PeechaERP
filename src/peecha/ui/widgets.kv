@@ -24,8 +24,13 @@
     size_hint_y: None
     height: self.texture_size[1] if self.text else "0dp"
 
-<PTextField@MDTextField>:
+# PTextField خودش یک کلاس پایتونی است (src/peecha/ui/widgets.py)، نه یک
+# دینامیک‌کلاسِ خالص KV، چون راست‌چین‌کردن لیبل شناور hint/helper نیاز به
+# کد پایتون دارد (توضیح در همان فایل). اینجا فقط ظاهر ویجت خودش را تنظیم می‌کنیم.
+<PTextField>:
     font_name: app.font_name
+    font_name_hint_text: app.font_name
+    font_name_helper_text: app.font_name
     halign: "right"
     size_hint_y: None
     height: "48dp"

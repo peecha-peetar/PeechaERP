@@ -71,7 +71,10 @@ class PeechaApp(MDApp):
         self._apply_font_to_theme_styles()
 
         # استایل مرکزی (PLabel/PTextField/...) باید قبل از هر kv صفحه‌ای Builder
-        # شود، وگرنه صفحاتی که از این کلاس‌ها استفاده می‌کنند خطای «کلاس ناشناخته» می‌گیرند
+        # شود، وگرنه صفحاتی که از این کلاس‌ها استفاده می‌کنند خطای «کلاس ناشناخته» می‌گیرند.
+        # import قبل از Builder.load_file لازم است تا PTextField در Factory ثبت شده باشد.
+        import peecha.ui.widgets  # noqa: F401,PLC0415
+
         Builder.load_file(_WIDGETS_KV_PATH)
 
         # بعد از ثبت فونت import می‌شوند تا شکل‌دهی/تم روی همه اعمال شده باشد
