@@ -56,6 +56,36 @@ CREATE TABLE wf.ApprovalWorkflowSteps (
     CONSTRAINT PK_ApprovalWorkflowSteps PRIMARY KEY (WorkflowID, RequestTypeID, StepNo)
 );
 
+-- ---------------------------------------------------------------------
+-- قوانین شرطی مرحله‌ی تایید: یک مرحله می‌تواند «همیشه» اعمال شود (پیش‌فرض،
+-- وقتی هیچ شرطی برایش ثبت نشده) یا فقط وقتی شرط(های) پیوست‌شده برقرار باشد
+-- (مثلاً «فقط اگر مبلغ سند >= ۱۰۰,۰۰۰,۰۰۰ ریال»). چند شرط روی یک مرحله = AND.
+-- نوع شرط از یک lookup می‌آید و پارامترهایش در JSONB است تا افزودن نوع شرط
+-- جدید (مثلاً بر اساس مرکز هزینه یا حساب خاص) بدون تغییر ساختار جدول ممکن
+-- باشد — فقط یک ردیف جدید در ConditionTypes + یک ارزیاب در سرویس پایتون.
+-- چون این جدول‌ها زیرمجموعه‌ی wf.ApprovalWorkflows هستند که خودشان به
+-- FormID/ماژول وصل‌اند، این قوانین طبیعتاً «به‌تفکیک هر ماژول» تعریف/مدیریت
+-- می‌شوند (در تنظیمات همان ماژول در UI).
+-- ---------------------------------------------------------------------
+CREATE TABLE wf.ConditionTypes (
+    ConditionTypeID SMALLINT    NOT NULL PRIMARY KEY,
+    Code            VARCHAR(30) NOT NULL UNIQUE
+);
+INSERT INTO wf.ConditionTypes (ConditionTypeID, Code) VALUES
+    (1, 'AMOUNT_THRESHOLD');
+
+CREATE TABLE wf.ApprovalStepConditions (
+    ConditionID     BIGINT   GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    WorkflowID      INT      NOT NULL,
+    RequestTypeID   SMALLINT NOT NULL,
+    StepNo          SMALLINT NOT NULL,
+    ConditionTypeID SMALLINT NOT NULL REFERENCES wf.ConditionTypes(ConditionTypeID),
+    Parameters      JSONB    NOT NULL DEFAULT '{}'::jsonb,  -- مثلاً {"operator": ">=", "amount": 100000000, "currency": "IRR"}
+    CONSTRAINT FK_ApprovalStepConditions_Step FOREIGN KEY (WorkflowID, RequestTypeID, StepNo)
+        REFERENCES wf.ApprovalWorkflowSteps(WorkflowID, RequestTypeID, StepNo)
+);
+CREATE INDEX IX_ApprovalStepConditions_Step ON wf.ApprovalStepConditions(WorkflowID, RequestTypeID, StepNo);
+
 -- وضعیت زنده‌ی هر درخواست در کارتابل (یک سند در هر لحظه حداکثر یک درخواست PENDING دارد)
 CREATE TABLE wf.CartableItems (
     CartableItemID         BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -64,7 +94,7 @@ CREATE TABLE wf.CartableItems (
     SourceRecordID           BIGINT       NOT NULL,   -- کلید رکورد واقعی در جدول همان ماژول (مثلاً acc.JournalEntries.JournalEntryID)؛ چون نوع منبع متغیر است، FK واقعی امکان‌پذیر نیست
     RequestTypeID            SMALLINT     NOT NULL REFERENCES wf.CartableRequestTypes(RequestTypeID),
     WorkflowID               INT          NULL REFERENCES wf.ApprovalWorkflows(WorkflowID),
-    CurrentStepNo            SMALLINT     NOT NULL DEFAULT 1,
+    CurrentStepNo            SMALLINT     NOT NULL DEFAULT 1,   -- به wf.CartableItemSteps همین آیتم اشاره دارد، نه مستقیم به قالب wf.ApprovalWorkflowSteps
     CurrentApproverRoleID    INT          NULL REFERENCES sec.Roles(RoleID),   -- کپی از تعریف مرحله، برای کوئری سریع صف کارتابل
     CurrentApproverUserID    INT          NULL REFERENCES sec.Users(UserID),   -- ارجاع مستقیم/تفویض‌شده؛ یا SubmittedByUserID وقتی «عودت» شده
     StatusID                 SMALLINT     NOT NULL REFERENCES wf.CartableStatuses(StatusID),
@@ -75,6 +105,19 @@ CREATE INDEX IX_CartableItems_Source ON wf.CartableItems(FormID, SourceRecordID)
 -- صف «کارهای من»: جست‌وجوی سریع موارد PENDING به‌ازای نقش/کاربر جاری
 CREATE INDEX IX_CartableItems_PendingByRole ON wf.CartableItems(CurrentApproverRoleID, StatusID) WHERE StatusID = 1;
 CREATE INDEX IX_CartableItems_PendingByUser ON wf.CartableItems(CurrentApproverUserID, StatusID) WHERE StatusID = 1;
+
+-- زنجیره‌ی نهاییِ محقق‌شده برای همین درخواست خاص: در لحظه‌ی ارسال، سرویس
+-- پایتون شرط‌های wf.ApprovalStepConditions را در برابر اطلاعات همان سند
+-- (مثلاً مبلغ کل) ارزیابی می‌کند و فقط مراحلِ منطبق (یا بدون‌شرط) را اینجا
+-- ماده‌ی می‌کند و پیاپی شماره‌گذاری می‌کند. با این کار زنجیره‌ی واقعیِ طی‌شده
+-- برای هر سند شفاف/قابل‌حسابرسی می‌ماند، حتی اگر بعداً تعریف قوانین در
+-- wf.ApprovalWorkflowSteps تغییر کند.
+CREATE TABLE wf.CartableItemSteps (
+    CartableItemID BIGINT   NOT NULL REFERENCES wf.CartableItems(CartableItemID),
+    StepNo         SMALLINT NOT NULL,
+    ApproverRoleID INT      NOT NULL REFERENCES sec.Roles(RoleID),
+    CONSTRAINT PK_CartableItemSteps PRIMARY KEY (CartableItemID, StepNo)
+);
 
 -- تاریخچه‌ی کامل اقدامات روی هر آیتم کارتابل (تایید/رد/عودت/ابطال/ارجاع/ارسال‌مجدد)
 CREATE TABLE wf.CartableActions (
