@@ -1,82 +1,89 @@
 -- پیچا | کارتابل: صف تایید سراسری برای اسناد همه‌ی ماژول‌ها (حسابداری، انبار،
 -- خرید و فروش، خزانه‌داری، ...)؛ هر سند از هر ماژول با ارجاع به sec.Forms
 -- (کاتالوگ فرم‌های موجود) و یک شناسه‌ی رکورد مبدا در این صف قرار می‌گیرد.
--- سازگار با SQL Server 2016
+-- شامل: تایید چندمرحله‌ای، برگشت به کارتابل صادرکننده، و درخواست حذف
+-- (حذف اسناد دائم هم از همین کارتابل عبور می‌کند، نه حذف مستقیم).
+-- PostgreSQL 13+
 -- پیش‌نیاز: 002_security_rbac.sql
 
 CREATE SCHEMA wf;
-GO
+
+-- نوع درخواست: همان زیرساخت کارتابل هم برای تایید ثبت/ویرایش و هم برای
+-- تایید درخواست حذف استفاده می‌شود؛ سرویس مصرف‌کننده (مثلاً حسابداری) با
+-- توجه به RequestTypeID تصمیم می‌گیرد که APPROVED یعنی «دائم کن» یا «حذف کن».
+CREATE TABLE wf.CartableRequestTypes (
+    RequestTypeID SMALLINT    NOT NULL PRIMARY KEY,
+    Code          VARCHAR(20) NOT NULL UNIQUE
+);
+INSERT INTO wf.CartableRequestTypes (RequestTypeID, Code) VALUES
+    (1, 'CREATE'), (2, 'EDIT'), (3, 'DELETE');
 
 CREATE TABLE wf.CartableStatuses (
-    StatusID TINYINT     NOT NULL PRIMARY KEY,
+    StatusID SMALLINT    NOT NULL PRIMARY KEY,
     Code     VARCHAR(20) NOT NULL UNIQUE
 );
-GO
 INSERT INTO wf.CartableStatuses (StatusID, Code) VALUES
-    (1, 'PENDING'), (2, 'APPROVED'), (3, 'REJECTED'), (4, 'RETURNED'), (5, 'CANCELLED');
-GO
+    (1, 'PENDING'), (2, 'APPROVED'), (3, 'REJECTED'), (4, 'CANCELLED');
+-- توجه: «عودت» (RETURN) یک وضعیت پایانی جدا نیست؛ آیتم PENDING می‌ماند ولی
+-- CurrentApproverUserID آن به SubmittedByUserID تغییر می‌کند (یعنی به کارتابل
+-- صادرکننده برمی‌گردد). با اقدام RESUBMIT دوباره به تاییدکننده‌ی همان مرحله می‌رود.
 
 CREATE TABLE wf.CartableActionTypes (
-    ActionTypeID TINYINT     NOT NULL PRIMARY KEY,
+    ActionTypeID SMALLINT    NOT NULL PRIMARY KEY,
     Code         VARCHAR(20) NOT NULL UNIQUE
 );
-GO
 INSERT INTO wf.CartableActionTypes (ActionTypeID, Code) VALUES
-    (1, 'APPROVE'), (2, 'REJECT'), (3, 'RETURN'), (4, 'CANCEL'), (5, 'DELEGATE');
-GO
+    (1, 'APPROVE'), (2, 'REJECT'), (3, 'RETURN'), (4, 'CANCEL'), (5, 'DELEGATE'), (6, 'RESUBMIT');
 
 -- تعریف زنجیره‌ی تایید برای یک نوع سند مشخص در یک شرکت (اختیاری؛ نبودِ
 -- تعریف یعنی تک‌مرحله‌ای با تاییدکننده‌ای که لایه‌ی سرویس مشخص می‌کند)
 CREATE TABLE wf.ApprovalWorkflows (
-    WorkflowID INT         NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    WorkflowID INT         GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     CompanyID  INT         NOT NULL REFERENCES core.Companies(CompanyID),
     FormID     INT         NOT NULL REFERENCES sec.Forms(FormID),
     Code       VARCHAR(50) NOT NULL,
-    IsActive   BIT         NOT NULL CONSTRAINT DF_ApprovalWorkflows_IsActive DEFAULT (1),
+    IsActive   BOOLEAN     NOT NULL DEFAULT TRUE,
     CONSTRAINT UQ_ApprovalWorkflows UNIQUE (CompanyID, FormID, Code)
 );
-GO
 
+-- هر مرحله می‌تواند مخصوص یک نوع درخواست باشد (مثلاً زنجیره‌ی تایید حذف
+-- می‌تواند از زنجیره‌ی تایید ثبت عادی سخت‌گیرتر/متفاوت باشد)
 CREATE TABLE wf.ApprovalWorkflowSteps (
     WorkflowID     INT      NOT NULL REFERENCES wf.ApprovalWorkflows(WorkflowID),
+    RequestTypeID  SMALLINT NOT NULL REFERENCES wf.CartableRequestTypes(RequestTypeID),
     StepNo         SMALLINT NOT NULL,
     ApproverRoleID INT      NOT NULL REFERENCES sec.Roles(RoleID),   -- هر کاربرِ دارای این نقش می‌تواند این مرحله را تایید کند
-    CONSTRAINT PK_ApprovalWorkflowSteps PRIMARY KEY (WorkflowID, StepNo)
+    CONSTRAINT PK_ApprovalWorkflowSteps PRIMARY KEY (WorkflowID, RequestTypeID, StepNo)
 );
-GO
 
--- وضعیت زنده‌ی هر سند در کارتابل (یک سند در هر لحظه حداکثر یک ردیف PENDING دارد)
+-- وضعیت زنده‌ی هر درخواست در کارتابل (یک سند در هر لحظه حداکثر یک درخواست PENDING دارد)
 CREATE TABLE wf.CartableItems (
-    CartableItemID        BIGINT       NOT NULL IDENTITY(1,1) PRIMARY KEY,
-    CompanyID              INT          NOT NULL REFERENCES core.Companies(CompanyID),
-    FormID                  INT          NOT NULL REFERENCES sec.Forms(FormID),   -- نوع سند (مثلاً «سند حسابداری»، «حواله انبار»، ...)
-    SourceRecordID          BIGINT       NOT NULL,   -- کلید رکورد واقعی در جدول همان ماژول (مثلاً acc.JournalEntries.JournalEntryID)؛ چون نوع منبع متغیر است، FK واقعی امکان‌پذیر نیست
-    WorkflowID              INT          NULL REFERENCES wf.ApprovalWorkflows(WorkflowID),
-    CurrentStepNo           SMALLINT     NOT NULL CONSTRAINT DF_CartableItems_StepNo DEFAULT (1),
-    CurrentApproverRoleID   INT          NULL REFERENCES sec.Roles(RoleID),   -- کپی از تعریف مرحله، برای کوئری سریع صف کارتابل
-    CurrentApproverUserID   INT          NULL REFERENCES sec.Users(UserID),   -- ارجاع مستقیم/تفویض‌شده به یک کاربر خاص
-    StatusID                TINYINT      NOT NULL REFERENCES wf.CartableStatuses(StatusID),
-    SubmittedByUserID       INT          NOT NULL REFERENCES sec.Users(UserID),
-    SubmittedAt             DATETIME2(0) NOT NULL CONSTRAINT DF_CartableItems_SubmittedAt DEFAULT (SYSUTCDATETIME())
+    CartableItemID         BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CompanyID               INT          NOT NULL REFERENCES core.Companies(CompanyID),
+    FormID                   INT          NOT NULL REFERENCES sec.Forms(FormID),   -- نوع سند (مثلاً «سند حسابداری»، «حواله انبار»، ...)
+    SourceRecordID           BIGINT       NOT NULL,   -- کلید رکورد واقعی در جدول همان ماژول (مثلاً acc.JournalEntries.JournalEntryID)؛ چون نوع منبع متغیر است، FK واقعی امکان‌پذیر نیست
+    RequestTypeID            SMALLINT     NOT NULL REFERENCES wf.CartableRequestTypes(RequestTypeID),
+    WorkflowID               INT          NULL REFERENCES wf.ApprovalWorkflows(WorkflowID),
+    CurrentStepNo            SMALLINT     NOT NULL DEFAULT 1,
+    CurrentApproverRoleID    INT          NULL REFERENCES sec.Roles(RoleID),   -- کپی از تعریف مرحله، برای کوئری سریع صف کارتابل
+    CurrentApproverUserID    INT          NULL REFERENCES sec.Users(UserID),   -- ارجاع مستقیم/تفویض‌شده؛ یا SubmittedByUserID وقتی «عودت» شده
+    StatusID                 SMALLINT     NOT NULL REFERENCES wf.CartableStatuses(StatusID),
+    SubmittedByUserID        INT          NOT NULL REFERENCES sec.Users(UserID),
+    SubmittedAt               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-GO
 CREATE INDEX IX_CartableItems_Source ON wf.CartableItems(FormID, SourceRecordID);
-GO
 -- صف «کارهای من»: جست‌وجوی سریع موارد PENDING به‌ازای نقش/کاربر جاری
 CREATE INDEX IX_CartableItems_PendingByRole ON wf.CartableItems(CurrentApproverRoleID, StatusID) WHERE StatusID = 1;
 CREATE INDEX IX_CartableItems_PendingByUser ON wf.CartableItems(CurrentApproverUserID, StatusID) WHERE StatusID = 1;
-GO
 
--- تاریخچه‌ی کامل اقدامات روی هر آیتم کارتابل (تایید/رد/عودت/ابطال/ارجاع)
+-- تاریخچه‌ی کامل اقدامات روی هر آیتم کارتابل (تایید/رد/عودت/ابطال/ارجاع/ارسال‌مجدد)
 CREATE TABLE wf.CartableActions (
-    ActionID        BIGINT       NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    ActionID        BIGINT       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     CartableItemID  BIGINT       NOT NULL REFERENCES wf.CartableItems(CartableItemID),
     StepNo          SMALLINT     NOT NULL,
-    ActionTypeID    TINYINT      NOT NULL REFERENCES wf.CartableActionTypes(ActionTypeID),
+    ActionTypeID    SMALLINT     NOT NULL REFERENCES wf.CartableActionTypes(ActionTypeID),
     ActionByUserID  INT          NOT NULL REFERENCES sec.Users(UserID),
-    Comment         NVARCHAR(500) NULL,
-    ActionAt        DATETIME2(0) NOT NULL CONSTRAINT DF_CartableActions_ActionAt DEFAULT (SYSUTCDATETIME())
+    Comment         TEXT         NULL,
+    ActionAt        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
-GO
 CREATE INDEX IX_CartableActions_Item ON wf.CartableActions(CartableItemID);
-GO
