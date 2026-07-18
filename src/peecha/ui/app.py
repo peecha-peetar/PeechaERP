@@ -11,7 +11,10 @@ import os
 
 from kivy.core.text import LabelBase
 from kivy.lang import Builder
+from kivy.uix.floatlayout import FloatLayout
 from kivymd.app import MDApp
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.label import MDLabel
 from kivymd.uix.screenmanager import MDScreenManager
 
 _ASSETS_DIR = os.path.join(
@@ -56,11 +59,11 @@ class PeechaApp(MDApp):
 
     def build(self):
         self.font_name = _register_persian_font()
-        if self.font_name == "Roboto":
+        font_missing = self.font_name == "Roboto"
+        if font_missing:
             print(
-                "[peecha] هشدار: فونت Vazirmatn پیدا نشد "
-                f"({_VAZIRMATN_REGULAR}) — متن فارسی درست نمایش داده نمی‌شود. "
-                "طبق assets/fonts/README.md فونت را دانلود کنید."
+                f"[peecha] WARNING: Vazirmatn font not found at {_VAZIRMATN_REGULAR} "
+                "-- Persian text will render as empty boxes. See assets/fonts/README.md."
             )
 
         self.theme_cls.theme_style = "Light"  # طبق docs/ui-ux-guidelines.md بخش ۳؛ سوییچ تیره در قدم بعدی
@@ -82,7 +85,35 @@ class PeechaApp(MDApp):
         # اولین اجرا (بدون تنظیمات ذخیره‌شده) با فرم اتصال شروع می‌شود؛
         # دفعات بعد مستقیم می‌رود سراغ ورود (تنظیمات از صفحه‌ی ورود هم در دسترس است)
         screen_manager.current = "login" if has_saved_settings() else "connection_settings"
-        return screen_manager
+
+        if not font_missing:
+            return screen_manager
+
+        # اگر فونت پیدا نشد، یک نوار هشدار انگلیسی (نه فارسی — چون خودِ فارسی
+        # هم بدون این فونت جعبه‌ی خالی می‌شود) بالای همه‌ی صفحات ثابت می‌ماند،
+        # تا وقتی کاربر می‌بیند «چرا فارسی درست نیست»، پاسخش تضمینی خوانا باشد.
+        root = FloatLayout()
+        root.add_widget(screen_manager)
+        warning_bar = MDBoxLayout(
+            size_hint=(1, None),
+            height="48dp",
+            pos_hint={"top": 1},
+        )
+        warning_bar.md_bg_color = (0.75, 0.15, 0.15, 1)
+        warning_bar.add_widget(
+            MDLabel(
+                text=(
+                    "Persian font not found - Persian text below is boxes, not a bug.\n"
+                    "Copy Vazirmatn-Regular.ttf + Vazirmatn-Bold.ttf into assets/fonts/ and restart. "
+                    "See assets/fonts/README.md."
+                ),
+                halign="center",
+                theme_text_color="Custom",
+                text_color=(1, 1, 1, 1),
+            )
+        )
+        root.add_widget(warning_bar)
+        return root
 
 
 def main() -> None:
