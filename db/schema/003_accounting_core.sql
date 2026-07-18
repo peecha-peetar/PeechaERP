@@ -34,8 +34,10 @@ CREATE TABLE acc.FiscalPeriods (
 GO
 
 -- ---------------------------------------------------------------------
--- کدینگ حسابداری (سرفصل حساب‌ها) — درخت با عمق آزاد؛ AccountLevel صرفاً
--- برچسب گزارشی است (۱=گروه، ۲=کل، ۳=معین، ...) و محدودکننده‌ی عمق واقعی نیست.
+-- کدینگ حسابداری (سرفصل حساب‌ها) — ۴ سطح: گروه(۱) / کل(۲) / معین(۳) به‌صورت
+-- درخت والد-فرزند، و تفصیلی شناور(۴) که چون چندبعدی و هم‌زمان‌پذیر است
+-- (یک معین می‌تواند هم‌زمان چند بعد تفصیلی بخواهد) عمداً به‌صورت یک سیستم
+-- جدا (چند جدول پایین‌تر) مدل شده، نه یک والد/فرزند دیگر در همین درخت.
 -- ---------------------------------------------------------------------
 CREATE TABLE acc.AccountNatures (            -- ماهیت حساب: بدهکار/بستانکار/دوطرفه
     NatureID TINYINT     NOT NULL PRIMARY KEY,
@@ -55,15 +57,29 @@ INSERT INTO acc.AccountCategories (CategoryID, Code) VALUES
     (1, 'ASSET'), (2, 'LIABILITY'), (3, 'EQUITY'), (4, 'REVENUE'), (5, 'EXPENSE');
 GO
 
+-- نوع حساب: ترازنامه‌ای (دائمی، در پایان سال مالی بسته نمی‌شود) در برابر
+-- موقت (نظیر درآمد/هزینه؛ با سند اختتامیه به صفر می‌رسد). معمولاً در سطح
+-- گروه تعیین می‌شود و کل/معین زیرمجموعه‌اش همان مقدار را به ارث می‌برند
+-- (این هم‌خوانی در لایه‌ی سرویس بررسی می‌شود، نه با CHECK بین‌ردیفی).
+CREATE TABLE acc.AccountTypes (
+    AccountTypeID TINYINT     NOT NULL PRIMARY KEY,
+    Code          VARCHAR(20) NOT NULL UNIQUE     -- PERMANENT (ترازنامه‌ای), TEMPORARY (موقت)
+);
+GO
+INSERT INTO acc.AccountTypes (AccountTypeID, Code) VALUES
+    (1, 'PERMANENT'), (2, 'TEMPORARY');
+GO
+
 CREATE TABLE acc.ChartOfAccounts (
     AccountID        INT          NOT NULL IDENTITY(1,1) PRIMARY KEY,
     CompanyID        INT          NOT NULL REFERENCES core.Companies(CompanyID),
     ParentAccountID  INT          NULL REFERENCES acc.ChartOfAccounts(AccountID),
     SegmentCode      VARCHAR(20)  NOT NULL,   -- کد این گره به‌تنهایی، مثلاً "01"
     FullCode         VARCHAR(100) NOT NULL,   -- کد کامل ترکیبی برای نمایش/مرتب‌سازی سریع، مثلاً "11.01"
-    AccountLevel     TINYINT      NOT NULL,   -- ۱=گروه، ۲=کل، ۳=معین (صرفاً برچسب گزارشی)
+    AccountLevel     TINYINT      NOT NULL,   -- ۱=گروه، ۲=کل، ۳=معین (صرفاً برچسب گزارشی روی همین درخت)
     NatureID         TINYINT      NOT NULL REFERENCES acc.AccountNatures(NatureID),
     CategoryID       TINYINT      NOT NULL REFERENCES acc.AccountCategories(CategoryID),
+    AccountTypeID    TINYINT      NOT NULL REFERENCES acc.AccountTypes(AccountTypeID),
     IsPostable       BIT          NOT NULL CONSTRAINT DF_ChartOfAccounts_IsPostable DEFAULT (0), -- فقط حساب‌های Postable می‌توانند طرف سند قرار بگیرند
     CurrencyID       INT          NULL REFERENCES core.Currencies(CurrencyID), -- NULL = هر ارز فعال شرکت؛ مقداردار = این حساب فقط با این ارز
     IsActive         BIT          NOT NULL CONSTRAINT DF_ChartOfAccounts_IsActive DEFAULT (1),
@@ -71,6 +87,15 @@ CREATE TABLE acc.ChartOfAccounts (
 );
 GO
 CREATE INDEX IX_ChartOfAccounts_Parent ON acc.ChartOfAccounts(ParentAccountID);
+GO
+
+-- حساب‌های واسطی که موتور «سند اختتامیه‌ی خودکار» به آن‌ها نیاز دارد:
+-- بستن حساب‌های موقت به حساب واسط سود/زیان، سپس انتقال آن به سود انباشته.
+CREATE TABLE acc.CompanyAccountingSettings (
+    CompanyID                 INT NOT NULL PRIMARY KEY REFERENCES core.Companies(CompanyID),
+    ProfitAndLossAccountID    INT NULL REFERENCES acc.ChartOfAccounts(AccountID),
+    RetainedEarningsAccountID INT NULL REFERENCES acc.ChartOfAccounts(AccountID)
+);
 GO
 
 -- ---------------------------------------------------------------------
@@ -118,29 +143,62 @@ GO
 
 CREATE TABLE acc.JournalEntryStatuses (
     StatusID TINYINT     NOT NULL PRIMARY KEY,
-    Code     VARCHAR(20) NOT NULL UNIQUE      -- TEMPORARY (موقت), PERMANENT (دائم), REVERSED (برگشت‌خورده)
+    Code     VARCHAR(20) NOT NULL UNIQUE
 );
 GO
 INSERT INTO acc.JournalEntryStatuses (StatusID, Code) VALUES
-    (1, 'TEMPORARY'), (2, 'PERMANENT'), (3, 'REVERSED');
+    (1, 'TEMPORARY'),   -- موقت: قابل ویرایش/ادغام، شماره‌اش هم قابل تغییر است
+    (2, 'PERMANENT'),   -- دائم: پس از تایید در کارتابل؛ شماره‌ی ثابت گرفته و دیگر قابل ویرایش نیست
+    (3, 'REVERSED'),    -- برگشت‌خورده: یک سند برگشتی جدید آن را خنثی کرده
+    (4, 'CANCELLED');   -- ابطال‌شده/ادغام‌شده در سند موقت دیگر
 GO
 
+-- هر سند هم شماره‌ی موقت دارد (از لحظه‌ی ایجاد، قابل تغییر/ادغام) و هم
+-- شماره‌ی ثابت (فقط پس از تایید نهایی در کارتابل تخصیص می‌یابد؛ پیوسته و
+-- پس از تخصیص غیرقابل تغییر — enforce شده با تریگر پایین همین فایل).
 CREATE TABLE acc.JournalEntries (            -- هدر سند
-    JournalEntryID   INT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
-    CompanyID        INT           NOT NULL REFERENCES core.Companies(CompanyID),
-    FiscalYearID     INT           NOT NULL REFERENCES acc.FiscalYears(FiscalYearID),
-    DocumentNo       INT           NOT NULL,   -- شماره سند در سال مالی؛ تخصیص آن بر عهده‌ی لایه‌ی سرویس است
-    DocumentDate     DATE          NOT NULL,
-    EntryTypeID      TINYINT       NOT NULL REFERENCES acc.JournalEntryTypes(EntryTypeID),
-    StatusID         TINYINT       NOT NULL REFERENCES acc.JournalEntryStatuses(StatusID),
-    Description      NVARCHAR(500) NULL,
-    ReversedEntryID  INT           NULL REFERENCES acc.JournalEntries(JournalEntryID), -- اگر این سند، برگشتِ سند دیگری است
-    CreatedByUserID  INT           NOT NULL REFERENCES sec.Users(UserID),
-    CreatedAt        DATETIME2(0)  NOT NULL CONSTRAINT DF_JournalEntries_CreatedAt DEFAULT (SYSUTCDATETIME()),
-    PostedByUserID   INT           NULL REFERENCES sec.Users(UserID),
-    PostedAt         DATETIME2(0)  NULL,
-    CONSTRAINT UQ_JournalEntries_DocNo UNIQUE (CompanyID, FiscalYearID, DocumentNo)
+    JournalEntryID    INT           NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    CompanyID         INT           NOT NULL REFERENCES core.Companies(CompanyID),
+    FiscalYearID      INT           NOT NULL REFERENCES acc.FiscalYears(FiscalYearID),
+    TemporaryNo       INT           NOT NULL,   -- شماره موقت؛ تخصیص/تغییر/ادغام آن بر عهده‌ی لایه‌ی سرویس است
+    PermanentNo       INT           NULL,       -- شماره ثابت؛ فقط هنگام تبدیل به PERMANENT پر می‌شود
+    DocumentDate      DATE          NOT NULL,
+    EntryTypeID       TINYINT       NOT NULL REFERENCES acc.JournalEntryTypes(EntryTypeID),
+    StatusID          TINYINT       NOT NULL REFERENCES acc.JournalEntryStatuses(StatusID),
+    Description       NVARCHAR(500) NULL,
+    IsSystemGenerated BIT           NOT NULL CONSTRAINT DF_JournalEntries_IsSystemGenerated DEFAULT (0), -- مثلاً سند اختتامیه‌ی خودکار
+    ReversedEntryID   INT           NULL REFERENCES acc.JournalEntries(JournalEntryID), -- اگر این سند، برگشتِ سند دیگری است
+    CreatedByUserID   INT           NOT NULL REFERENCES sec.Users(UserID),
+    CreatedAt         DATETIME2(0)  NOT NULL CONSTRAINT DF_JournalEntries_CreatedAt DEFAULT (SYSUTCDATETIME()),
+    PostedByUserID    INT           NULL REFERENCES sec.Users(UserID),   -- کاربری که در کارتابل تاییدِ نهایی را زده
+    PostedAt          DATETIME2(0)  NULL,
+    CONSTRAINT UQ_JournalEntries_TemporaryNo UNIQUE (CompanyID, FiscalYearID, TemporaryNo)
 );
+GO
+-- شماره‌ی ثابت فقط وقتی مقدار دارد یکتاست (بین چند سند TEMPORARY هنوز NULL است)
+CREATE UNIQUE INDEX UX_JournalEntries_PermanentNo
+    ON acc.JournalEntries(CompanyID, FiscalYearID, PermanentNo)
+    WHERE PermanentNo IS NOT NULL;
+GO
+
+CREATE TRIGGER acc.TR_JournalEntries_PreventPermanentNoChange
+ON acc.JournalEntries
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN deleted d ON d.JournalEntryID = i.JournalEntryID
+        WHERE d.PermanentNo IS NOT NULL
+          AND (i.PermanentNo IS NULL OR i.PermanentNo <> d.PermanentNo)
+    )
+    BEGIN
+        RAISERROR (N'شماره ثابت سند حسابداری پس از تخصیص غیرقابل تغییر است.', 16, 1);
+        ROLLBACK TRANSACTION;
+    END
+END
 GO
 
 CREATE TABLE acc.JournalEntryLines (         -- آرتیکل‌های سند (ردیف‌های بدهکار/بستانکار)
