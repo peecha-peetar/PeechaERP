@@ -13,6 +13,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha.config import DatabaseConfig, load_database_config, save_database_config, test_connection
 from peecha.db.base import reset_engine
+from peecha.db.schema_bootstrap import initialize_schema, is_initialized
 from peecha.ui.rtl import shape
 from peecha.ui.theme import SEMANTIC_COLORS
 
@@ -49,6 +50,29 @@ class ConnectionSettingsScreen(MDScreen):
         self._set_status("در حال بررسی اتصال...", ok=True)
         ok, message = test_connection(self._current_config())
         self._set_status(("اتصال موفق بود." if ok else f"اتصال ناموفق: {message}"), ok=ok)
+
+    def create_tables_pressed(self) -> None:
+        from sqlalchemy import create_engine
+        from sqlalchemy.exc import SQLAlchemyError
+
+        self._set_status("در حال بررسی/ساخت جدول‌ها...", ok=True)
+        try:
+            config = self._current_config()
+        except ValueError:
+            self._set_status("پورت باید یک عدد باشد.", ok=False)
+            return
+
+        engine = create_engine(config.sqlalchemy_url, future=True)
+        try:
+            if is_initialized(engine):
+                self._set_status("جدول‌ها از قبل ساخته شده‌اند؛ کاری لازم نبود.", ok=True)
+                return
+            initialize_schema(engine)
+            self._set_status("جدول‌های دیتابیس با موفقیت ساخته شدند.", ok=True)
+        except SQLAlchemyError as exc:
+            self._set_status(f"ساخت جدول‌ها ناموفق بود: {exc.__cause__ or exc}", ok=False)
+        finally:
+            engine.dispose()
 
     def save_and_continue(self) -> None:
         try:

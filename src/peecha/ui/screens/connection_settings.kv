@@ -6,7 +6,7 @@
 
     MDCard:
         size_hint: None, None
-        size: "420dp", "560dp"
+        size: "420dp", "620dp"
         pos_hint: {"center_x": 0.5, "center_y": 0.5}
         orientation: "vertical"
         padding: "24dp"
@@ -73,6 +73,14 @@
             MDFlatButton:
                 text: shape("تست اتصال")
                 on_release: root.test_connection_pressed()
+
+            MDFlatButton:
+                text: shape("ساخت جدول‌ها")
+                on_release: root.create_tables_pressed()
+
+        BoxLayout:
+            size_hint_y: None
+            height: "48dp"
 
             Widget:
 
