@@ -38,6 +38,20 @@ def _register_persian_font() -> str:
 class PeechaApp(MDApp):
     font_name = "Roboto"  # در build() با نتیجه‌ی _register_persian_font جایگزین می‌شود
 
+    def _apply_font_to_theme_styles(self) -> None:
+        """جایگزینی فونت پیش‌فرض در تمام font_style های KivyMD.
+
+        علت: در KivyMD، هر ویجتی که `font_style` دارد (اکثر MDLabel ها،
+        و لیبل داخلی MDTextField برای hint_text) هنگام تنظیم font_style
+        خودش font_name را از theme_cls.font_styles می‌خواند و override
+        می‌کند — یعنی ست‌کردن `font_name` مستقیم روی خودِ ویجت در KV برای
+        این‌ها کافی نیست (فقط ویجت‌های بدون font_style مثل دکمه را درست
+        نشان می‌دهد). با عوض‌کردن خودِ جدول font_styles، این مشکل برای
+        همه‌ی ویجت‌ها یک‌جا حل می‌شود.
+        """
+        for style_name, style_value in self.theme_cls.font_styles.items():
+            style_value[0] = self.font_name
+
     def build(self):
         self.font_name = _register_persian_font()
         if self.font_name == "Roboto":
@@ -49,6 +63,7 @@ class PeechaApp(MDApp):
 
         self.theme_cls.theme_style = "Light"  # طبق docs/ui-ux-guidelines.md بخش ۳؛ سوییچ تیره در قدم بعدی
         self.theme_cls.primary_palette = "Blue"
+        self._apply_font_to_theme_styles()
 
         from peecha.ui.screens.login import LoginScreen  # noqa: PLC0415 (بعد از ثبت فونت import می‌شود)
 
