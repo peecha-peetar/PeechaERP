@@ -18,8 +18,31 @@
 ## ساختار
 
 ```
-db/schema/    اسکریپت‌های DDL دیتابیس (به ترتیب شماره اجرا می‌شوند، PostgreSQL)
-docs/         مستندات تصمیمات معماری
+db/schema/         اسکریپت‌های DDL دیتابیس (به ترتیب شماره اجرا می‌شوند، PostgreSQL)
+docs/               مستندات تصمیمات معماری (شامل docs/ui-ux-guidelines.md)
+src/peecha/         کد اپلیکیشن
+  config.py          خواندن تنظیمات از .env
+  db/base.py         SQLAlchemy Base + engine/session
+  db/models/         مدل‌های ORM، یک فایل به‌ازای هر schema (core, sec, acc, wf, doc)
+  ui/app.py           نقطه‌ی ورود Kivy/KivyMD
+  ui/rtl.py            شکل‌دهی متن فارسی/عربی (Kivy بومی RTL ندارد)
+  ui/theme.py           رنگ‌های semantic (وضعیت سند/کارتابل)
+  ui/screens/            صفحات (فعلاً فقط صفحه‌ی ورود، پوسته‌ای)
+assets/fonts/       فونت Vazirmatn (باید طبق assets/fonts/README.md دانلود شود)
+main.py             اجرای اپ: python main.py
 ```
+
+## راه‌اندازی در PyCharm
+
+1. پروژه را در PyCharm باز کنید؛ پوشه‌ی `src` را Sources Root کنید (راست‌کلیک ← Mark Directory as ← Sources Root).
+2. یک Python Interpreter (Python 3.11+) با `pip install -e ".[dev]"` بسازید (یا `pip install -r requirements.txt`).
+3. فونت فارسی را طبق `assets/fonts/README.md` دانلود کنید (بدون آن، متن فارسی به‌صورت جعبه‌ی خالی نمایش داده می‌شود — محدودیت شناخته‌شده‌ی Kivy، نه یک باگ).
+4. `.env.example` را به `.env` کپی و مقادیر اتصال PostgreSQL را وارد کنید.
+5. `python main.py` — صفحه‌ی ورود (پوسته‌ی UI، هنوز بدون اتصال واقعی به احراز هویت) باز می‌شود.
+
+> نکته‌ی فنی مهم: Kivy برخلاف Qt/Flutter از RTL و شکل‌دهی حروف فارسی/عربی
+> به‌صورت بومی پشتیبانی نمی‌کند. این پروژه با `arabic-reshaper` + `python-bidi`
+> (`src/peecha/ui/rtl.py`) این را جبران می‌کند؛ هر متن فارسی در UI باید از
+> تابع `shape()` عبور کند، وگرنه حروف جدا از هم نمایش داده می‌شوند.
 
 قدم‌های بعدی با نظر مشاور پروژه (شما) مشخص می‌شود.

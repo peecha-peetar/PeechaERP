@@ -1,0 +1,28 @@
+[project]
+name = "peecha"
+version = "0.1.0"
+description = "پیچا — نرم‌افزار حسابداری/ERP چندشرکتی، چندارزی، چندزبانه"
+requires-python = ">=3.11"
+dependencies = [
+    "kivy>=2.3,<3.0",
+    "kivymd>=1.2,<2.0",       # KivyMD 2.0 هنوز فقط از git master نصب می‌شود؛ وقتی روی PyPI پایدار شد ارتقا بدهید
+    "arabic-reshaper>=3.0",   # شکل‌دهی حروف فارسی/عربی (Kivy بومی پشتیبانی نمی‌کند — docs/ui-ux-guidelines.md)
+    "python-bidi>=0.4",       # ترتیب نمایش RTL همراه arabic-reshaper
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
+    "python-dotenv>=1.0",
+    "alembic>=1.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

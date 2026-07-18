@@ -1,0 +1,11 @@
+# این پروژه با pyproject.toml پکیج می‌شود (pip install -e .).
+# این فایل فقط برای راحتیِ تنظیم سریعِ Interpreter در PyCharm است و باید با
+# dependencies در pyproject.toml هم‌گام بماند.
+kivy>=2.3,<3.0
+kivymd>=1.2,<2.0
+arabic-reshaper>=3.0
+python-bidi>=0.4
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+python-dotenv>=1.0
+alembic>=1.13
