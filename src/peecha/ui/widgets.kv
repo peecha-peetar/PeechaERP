@@ -164,6 +164,22 @@
         size_hint_y: None
         height: self.texture_size[1]
 
+<PBadge>:
+    size_hint: None, None
+    size: self.minimum_width, dp(24)
+    padding: ["10dp", "0dp"]
+    radius: [12, 12, 12, 12]
+    md_bg_color: root.badge_color[0], root.badge_color[1], root.badge_color[2], 0.14
+
+    PLabel:
+        text: root.text
+        theme_text_color: "Custom"
+        text_color: root.badge_color
+        font_style: "Caption"
+        halign: "center"
+        valign: "middle"
+        adaptive_width: True
+
 <PNavItem>:
     orientation: "horizontal"
     size_hint_y: None

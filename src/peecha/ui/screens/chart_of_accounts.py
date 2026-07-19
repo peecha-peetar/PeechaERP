@@ -6,11 +6,14 @@ from __future__ import annotations
 import os
 
 from kivy.lang import Builder
+from kivy.properties import BooleanProperty, ListProperty, StringProperty
+from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.ui import theme
 from peecha.ui.rtl import shape
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "chart_of_accounts.kv")
@@ -23,6 +26,19 @@ _CATEGORY_OPTIONS = [
 ]
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
+_LEVEL_BADGE_COLORS = {1: theme.TEXT_SECONDARY, 2: theme.INFO, 3: theme.ACCENT}
+
+
+class AccountRowWidget(MDBoxLayout):
+    """یک ردیفِ جدولِ کدینگ حسابداری: کد | نام (تورفته بر اساس سطح) | سطح | وضعیت."""
+
+    code_text = StringProperty("")
+    name_text = StringProperty("")
+    level_text = StringProperty("")
+    level_badge_color = ListProperty([0, 0, 0, 1])
+    status_text = StringProperty("")
+    status_badge_color = ListProperty([0, 0, 0, 1])
+    zebra = BooleanProperty(False)
 _NO_PARENT_LABEL = "— بدون والد (سطح گروه) —"
 
 
@@ -118,13 +134,15 @@ class ChartOfAccountsScreen(MDScreen):
         self.ids.accounts_list.clear_widgets()
         if session.current_company is None:
             self._set_status("هیچ شرکتی انتخاب نشده است.")
+            self.ids.grid_header.opacity = 0
             return
 
-        from peecha.ui.widgets import PEmptyState, PLabelListRow  # noqa: PLC0415
+        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
 
         rows = coa_service.list_accounts(session.current_company.company_id)
         self._parent_options = rows
         self._set_status("")
+        self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
             self.ids.accounts_list.add_widget(
                 PEmptyState(
@@ -133,9 +151,18 @@ class ChartOfAccountsScreen(MDScreen):
                 )
             )
         for i, row in enumerate(rows):
-            indent = "      " * (row.account_level - 1)
-            text = f"{row.full_code}   {indent}{row.name}"
-            self.ids.accounts_list.add_widget(PLabelListRow(text=shape(text), zebra=i % 2 == 1))
+            indent = "    " * (row.account_level - 1)
+            self.ids.accounts_list.add_widget(
+                AccountRowWidget(
+                    code_text=row.full_code,
+                    name_text=shape(f"{indent}{row.name}"),
+                    level_text=shape(_LEVEL_LABELS[row.account_level]),
+                    level_badge_color=_LEVEL_BADGE_COLORS[row.account_level],
+                    status_text=shape("قابل ثبت" if row.is_postable else "گروه‌بندی"),
+                    status_badge_color=theme.SUCCESS if row.is_postable else theme.TEXT_DISABLED,
+                    zebra=i % 2 == 1,
+                )
+            )
 
         # اگر والدِ انتخاب‌شده دیگر معتبر نیست (مثلاً بعد از رفرش) بازنشانی می‌شود
         if self._parent_account_id is not None and not any(

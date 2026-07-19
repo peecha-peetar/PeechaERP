@@ -120,6 +120,47 @@
                         size_hint_y: None
                         height: self.texture_size[1]
 
+                    # هدرِ ستون‌ها: عرض هر ستون دقیقاً باید با size_hint_x معادلش
+                    # در <JournalEntryLineRow> یکی باشد وگرنه زیر هم نمی‌نشینند.
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "24dp"
+                        spacing: "8dp"
+
+                        PLabel:
+                            text: shape("حساب")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            size_hint_x: 0.32
+
+                        PLabel:
+                            text: shape("شرح ردیف")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            size_hint_x: 0.26
+
+                        PLabel:
+                            text: shape("بدهکار")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            size_hint_x: 0.16
+
+                        PLabel:
+                            text: shape("بستانکار")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            size_hint_x: 0.16
+
+                        Widget:
+
                     BoxLayout:
                         id: lines_box
                         orientation: "vertical"

@@ -2,6 +2,47 @@
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
+# ردیفِ جدولِ کدینگ حسابداری — چهار ستون: کد | نام حساب | سطح | وضعیت.
+# عرض ستون‌ها اینجا و در هدر (پایین‌تر در <ChartOfAccountsScreen>) باید
+# دقیقاً یکی باشد وگرنه ستون‌های ردیف زیر هدر نمی‌نشینند.
+<AccountRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "40dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.HOVER if root.zebra else (0, 0, 0, 0)
+
+    PLabel:
+        text: root.code_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.22
+
+    PLabel:
+        text: root.name_text
+        valign: "middle"
+        size_hint_x: 0.43
+
+    AnchorLayout:
+        size_hint_x: 0.15
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.level_text
+            badge_color: root.level_badge_color
+
+    AnchorLayout:
+        size_hint_x: 0.20
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: root.status_badge_color
+
 <ChartOfAccountsScreen>:
     name: "chart_of_accounts"
     md_bg_color: theme.BACKGROUND
@@ -61,6 +102,48 @@
                 PHintLabel:
                     id: status_label
                     text: ""
+
+                # هدرِ ستون‌ها بیرون از ScrollView (چسبان/sticky، طبق
+                # docs/ui-ux-guidelines.md بخش ۷): با اسکرول ردیف‌ها جابه‌جا نمی‌شود.
+                BoxLayout:
+                    id: grid_header
+                    size_hint_y: None
+                    height: "32dp"
+                    padding: ["12dp", "0dp"]
+
+                    PLabel:
+                        text: shape("کد")
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        valign: "middle"
+                        size_hint_x: 0.22
+
+                    PLabel:
+                        text: shape("نام حساب")
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        valign: "middle"
+                        size_hint_x: 0.43
+
+                    PLabel:
+                        text: shape("سطح")
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        halign: "right"
+                        valign: "middle"
+                        size_hint_x: 0.15
+
+                    PLabel:
+                        text: shape("وضعیت")
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        halign: "right"
+                        valign: "middle"
+                        size_hint_x: 0.20
 
                 ScrollView:
                     BoxLayout:

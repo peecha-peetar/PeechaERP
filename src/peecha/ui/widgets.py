@@ -116,6 +116,13 @@ class PEmptyState(MDBoxLayout):
     text = StringProperty("")
 
 
+class PBadge(MDBoxLayout):
+    """نشانِ کوچکِ رنگی (سطح/وضعیت/...) — طبق docs/ui-ux-guidelines.md بخش ۲۰."""
+
+    text = StringProperty("")
+    badge_color = ListProperty([0.145, 0.388, 0.922, 1])
+
+
 class LineAreaChart(Widget):
     """نمودار خطی/ناحیه‌ای ساده (رسم دستی روی Canvas) — طبق تصمیم بخش ۱۱ راهنمای UI/UX.
 
@@ -223,6 +230,7 @@ Factory.register("PTextField", cls=PTextField)
 Factory.register("PNavItem", cls=PNavItem)
 Factory.register("PLabelListRow", cls=PLabelListRow)
 Factory.register("PEmptyState", cls=PEmptyState)
+Factory.register("PBadge", cls=PBadge)
 Factory.register("PStatCard", cls=PStatCard)
 Factory.register("LineAreaChart", cls=LineAreaChart)
 Factory.register("DonutChart", cls=DonutChart)
