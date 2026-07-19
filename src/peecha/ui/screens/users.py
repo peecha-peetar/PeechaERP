@@ -117,8 +117,9 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
             }
             for lid, name in self._language_options
         ]
-        self._menu = MDDropdownMenu(caller=self.ids.language_button, items=items, width_mult=3)
-        self._menu.open()
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
+        self._menu = open_rtl_dropdown(self.ids.language_button, items, width_mult=3)
 
     def _select_language(self, language_id: int) -> None:
         self._language_id = language_id
@@ -159,11 +160,11 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         if row is None:
             return
         self._editing_user_id = user_id
-        self.ids.username_field.text = row.username
+        self.ids.username_field.set_value(row.username)
         self.ids.username_field.disabled = True
-        self.ids.full_name_field.text = row.full_name
+        self.ids.full_name_field.set_value(row.full_name)
         self.ids.full_name_field.focus = True
-        self.ids.email_field.text = row.email or ""
+        self.ids.email_field.set_value(row.email or "")
         self.ids.password_field.text = ""
         self.ids.password_field.hint_text = shape("رمز عبور جدید (اختیاری)")
         self._language_id = row.default_language_id
@@ -199,8 +200,8 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self._set_status("")
 
     def save_user(self) -> None:
-        full_name = self.ids.full_name_field.text.strip()
-        email = self.ids.email_field.text.strip()
+        full_name = self.ids.full_name_field.value.strip()
+        email = self.ids.email_field.value.strip()
         password = self.ids.password_field.text
         company_ids = self._checked_company_ids()
         default_company_id = company_ids[0] if company_ids else None
@@ -228,7 +229,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
             self.refresh_list()
             return
 
-        username = self.ids.username_field.text.strip()
+        username = self.ids.username_field.value.strip()
         if not username or not full_name or not password:
             self._set_status("نام‌کاربری، نام کامل و رمز عبور را وارد کنید.", is_error=True)
             return

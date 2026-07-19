@@ -184,6 +184,8 @@ class ShellScreen(MDScreen):
     def open_company_menu(self) -> None:
         if not self._company_options:
             return
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         items = [
             {
                 "text": shape(c.display_name),
@@ -191,8 +193,7 @@ class ShellScreen(MDScreen):
             }
             for c in self._company_options
         ]
-        self._menu = MDDropdownMenu(caller=self.ids.company_button, items=items, width_mult=3)
-        self._menu.open()
+        self._menu = open_rtl_dropdown(self.ids.company_button, items, width_mult=3)
 
     def _select_company(self, company_id: int) -> None:
         if session.current_company is not None and session.current_company.company_id == company_id:
@@ -221,6 +222,8 @@ class ShellScreen(MDScreen):
     def open_fiscal_year_menu(self) -> None:
         if not self._fiscal_year_options:
             return
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         items = [
             {
                 "text": shape(numerals.to_persian_digits(fy.code)),
@@ -228,8 +231,7 @@ class ShellScreen(MDScreen):
             }
             for fy in self._fiscal_year_options
         ]
-        self._menu = MDDropdownMenu(caller=self.ids.fiscal_year_button, items=items, width_mult=3)
-        self._menu.open()
+        self._menu = open_rtl_dropdown(self.ids.fiscal_year_button, items, width_mult=3)
 
     def _select_fiscal_year(self, fiscal_year_id: int) -> None:
         fy = next((f for f in self._fiscal_year_options if f.fiscal_year_id == fiscal_year_id), None)
@@ -261,6 +263,8 @@ class ShellScreen(MDScreen):
     def open_language_menu(self) -> None:
         if not self._language_options:
             return
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         items = [
             {
                 "text": shape(l.native_name),
@@ -268,8 +272,7 @@ class ShellScreen(MDScreen):
             }
             for l in self._language_options
         ]
-        self._menu = MDDropdownMenu(caller=self.ids.language_button, items=items, width_mult=3)
-        self._menu.open()
+        self._menu = open_rtl_dropdown(self.ids.language_button, items, width_mult=3)
 
     def _select_language(self, language_id: int) -> None:
         row = next((l for l in self._language_options if l.language_id == language_id), None)

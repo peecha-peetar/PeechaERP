@@ -98,6 +98,8 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.language_button.text = shape(language.native_name if language else "— انتخاب زبان —")
 
     def open_currency_menu(self) -> None:
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         items = [
             {
                 "text": shape(c.iso_code),
@@ -105,15 +107,16 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
             }
             for c in self._currency_options
         ]
-        menu = MDDropdownMenu(caller=self.ids.currency_button, items=items, width_mult=3)
+        menu = open_rtl_dropdown(self.ids.currency_button, items, width_mult=3)
         self._menus["currency"] = menu
-        menu.open()
 
     def _select_currency(self, currency_id: int) -> None:
         self._currency_id = currency_id
         self._refresh_dropdown_texts()
 
     def open_language_menu(self) -> None:
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         items = [
             {
                 "text": shape(l.native_name),
@@ -121,9 +124,8 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
             }
             for l in self._language_options
         ]
-        menu = MDDropdownMenu(caller=self.ids.language_button, items=items, width_mult=3)
+        menu = open_rtl_dropdown(self.ids.language_button, items, width_mult=3)
         self._menus["language"] = menu
-        menu.open()
 
     def _select_language(self, language_id: int) -> None:
         self._language_id = language_id
@@ -164,14 +166,14 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         if row is None:
             return
         self._editing_company_id = company_id
-        self.ids.code_field.text = row.code
+        self.ids.code_field.set_value(row.code)
         self.ids.code_field.disabled = True
-        self.ids.legal_name_field.text = row.legal_name
-        self.ids.display_name_field.text = row.display_name
+        self.ids.legal_name_field.set_value(row.legal_name)
+        self.ids.display_name_field.set_value(row.display_name)
         self.ids.display_name_field.focus = True
-        self.ids.economic_code_field.text = row.economic_code or ""
-        self.ids.registration_no_field.text = row.registration_no or ""
-        self.ids.national_id_field.text = row.national_id or ""
+        self.ids.economic_code_field.set_value(row.economic_code or "")
+        self.ids.registration_no_field.set_value(row.registration_no or "")
+        self.ids.national_id_field.set_value(row.national_id or "")
         self.ids.fy_start_month_field.text = numerals.to_persian_digits(str(row.fiscal_year_start_month))
         self.ids.fy_start_day_field.text = numerals.to_persian_digits(str(row.fiscal_year_start_day))
         self._currency_id = row.base_currency_id
@@ -209,8 +211,8 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         self.refresh_list()
 
     def save_company(self) -> None:
-        legal_name = self.ids.legal_name_field.text.strip()
-        display_name = self.ids.display_name_field.text.strip()
+        legal_name = self.ids.legal_name_field.value.strip()
+        display_name = self.ids.display_name_field.value.strip()
         if self._currency_id is None or self._language_id is None:
             self._set_status("ابتدا یک ارزِ پایه و زبانِ پیش‌فرض تعریف کنید.")
             return
@@ -238,9 +240,9 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
                     fiscal_year_start_month=fy_month,
                     fiscal_year_start_day=fy_day,
                     is_active=self.ids.is_active_checkbox.active,
-                    economic_code=self.ids.economic_code_field.text.strip(),
-                    registration_no=self.ids.registration_no_field.text.strip(),
-                    national_id=self.ids.national_id_field.text.strip(),
+                    economic_code=self.ids.economic_code_field.value.strip(),
+                    registration_no=self.ids.registration_no_field.value.strip(),
+                    national_id=self.ids.national_id_field.value.strip(),
                 )
             except Exception as exc:  # noqa: BLE001
                 self._set_status(f"خطا: {exc}")
@@ -248,7 +250,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
             self.cancel_edit()
             return
 
-        code = self.ids.code_field.text.strip()
+        code = self.ids.code_field.value.strip()
         if not code or not legal_name or not display_name:
             self._set_status("کد، نام حقوقی و نام نمایشی را وارد کنید.")
             return
@@ -261,9 +263,9 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
                 default_language_id=self._language_id,
                 fiscal_year_start_month=fy_month,
                 fiscal_year_start_day=fy_day,
-                economic_code=self.ids.economic_code_field.text.strip(),
-                registration_no=self.ids.registration_no_field.text.strip(),
-                national_id=self.ids.national_id_field.text.strip(),
+                economic_code=self.ids.economic_code_field.value.strip(),
+                registration_no=self.ids.registration_no_field.value.strip(),
+                national_id=self.ids.national_id_field.value.strip(),
             )
         except Exception as exc:  # noqa: BLE001
             self._set_status(f"خطا: {exc}")

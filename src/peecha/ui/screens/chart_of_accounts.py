@@ -112,14 +112,15 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids[button_id].text = shape(label)
 
     def _open_dropdown(self, button_id: str, options: list[tuple[str, str]], on_select) -> None:
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         caller = self.ids[button_id]
         items = [
             {"text": shape(label), "on_release": lambda value=value: (menu.dismiss(), on_select(value))}
             for value, label in options
         ]
-        menu = MDDropdownMenu(caller=caller, items=items, width_mult=4)
+        menu = open_rtl_dropdown(caller, items, width_mult=4)
         self._menus[button_id] = menu
-        menu.open()
 
     def open_nature_menu(self) -> None:
         def select(value: str) -> None:
@@ -143,6 +144,8 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._open_dropdown("account_type_button", _ACCOUNT_TYPE_OPTIONS, select)
 
     def open_parent_menu(self) -> None:
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         caller = self.ids.parent_button
         items = [
             {
@@ -160,9 +163,8 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     "on_release": lambda account_id=row.account_id: (menu.dismiss(), self._select_parent(account_id)),
                 }
             )
-        menu = MDDropdownMenu(caller=caller, items=items, width_mult=4)
+        menu = open_rtl_dropdown(caller, items, width_mult=4)
         self._menus["parent_button"] = menu
-        menu.open()
 
     def _select_parent(self, account_id: int | None) -> None:
         self._parent_account_id = account_id
@@ -231,10 +233,10 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         if row is None:
             return
         self._editing_account_id = account_id
-        self.ids.segment_code_field.text = row.full_code.rsplit("-", 1)[-1]
+        self.ids.segment_code_field.set_value(row.full_code.rsplit("-", 1)[-1])
         self.ids.segment_code_field.disabled = True
         self.ids.parent_button.disabled = True
-        self.ids.name_field.text = row.name
+        self.ids.name_field.set_value(row.name)
         self.ids.name_field.focus = True
         self._nature_code = row.nature_code
         self._category_code = row.category_code
@@ -274,7 +276,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             self._set_status("هیچ شرکتی انتخاب نشده است.")
             return
 
-        name = self.ids.name_field.text.strip()
+        name = self.ids.name_field.value.strip()
         # اولویت با زبانِ فعالِ انتخاب‌شده در سوییچرِ هدر است (طبق درخواستِ
         # صریح)، بعد زبانِ پیش‌فرضِ کاربر، بعد زبانِ پیش‌فرضِ شرکت.
         language_id = (
@@ -311,7 +313,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         # کد حساب فارسی نمایش داده می‌شود (persian_digits: True در KV) اما
         # باید همیشه ASCII ذخیره شود — چون full_code برای مرتب‌سازی/تطبیقِ
         # والد استفاده می‌شود و مخلوط‌شدنِ دو سیستمِ رقمی آن را می‌شکند.
-        segment_code = numerals.to_ascii_digits(self.ids.segment_code_field.text.strip())
+        segment_code = numerals.to_ascii_digits(self.ids.segment_code_field.value.strip())
         if not segment_code or not name:
             self._set_status("کد و نام حساب را وارد کنید.")
             return

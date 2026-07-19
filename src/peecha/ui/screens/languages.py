@@ -122,9 +122,9 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         if row is None:
             return
         self._editing_language_id = language_id
-        self.ids.code_field.text = row.code
+        self.ids.code_field.set_value(row.code)
         self.ids.code_field.disabled = True
-        self.ids.name_field.text = row.native_name
+        self.ids.name_field.set_value(row.native_name)
         self.ids.name_field.focus = True
         self.ids.sort_order_field.text = str(row.sort_order)
         self.ids.is_rtl_checkbox.active = row.is_rtl
@@ -160,7 +160,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
     def save_language(self) -> None:
         from peecha.ui import numerals  # noqa: PLC0415
 
-        name = self.ids.name_field.text.strip()
+        name = self.ids.name_field.value.strip()
         sort_order_text = numerals.to_ascii_digits(self.ids.sort_order_field.text.strip())
         sort_order = int(sort_order_text) if sort_order_text.isdigit() else 0
 
@@ -183,7 +183,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
             self.cancel_edit()
             return
 
-        code = self.ids.code_field.text.strip()
+        code = self.ids.code_field.value.strip()
         if not code or not name:
             self._set_status("کد و نام زبان را وارد کنید.")
             return

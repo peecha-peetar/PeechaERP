@@ -19,6 +19,8 @@ from kivy.uix.behaviors import ButtonBehavior, FocusBehavior
 from kivy.uix.widget import Widget
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.menu import MDDropdownMenu
+from kivymd.uix.menu.menu import BaseDropdownItem  # فقط از menu/__init__.py صادر نمی‌شود
 from kivymd.uix.textfield import MDTextField
 
 from peecha.ui import theme
@@ -105,9 +107,28 @@ class PStatCard(SoftShadowBehavior, MDBoxLayout):
 class PTextField(MDTextField):
     """persian_digits=True یعنی هر رقمِ ASCII/عربی‌ای که کاربر تایپ کند
     بلافاصله به رقم فارسی تبدیل می‌شود — طبق درخواستِ صریح کاربر که ارقامِ
-    همه‌ی فیلدها فارسی دیده شود، نه فقط در نمایشِ نهایی."""
+    همه‌ی فیلدها فارسی دیده شود، نه فقط در نمایشِ نهایی.
+
+    محدودیتِ واقعیِ Kivy (توضیح کامل در rtl.py): TextInput هم مثلِ Label
+    هیچ bidi/شکل‌دهیِ بومی ندارد؛ اگر متنِ فارسیِ چندکلمه‌ای مستقیم و بدونِ
+    shape() در .text گذاشته شود (مثلاً پرکردنِ فیلد برای حالتِ ویرایش)،
+    کاملاً برعکس/درهم نمایش داده می‌شود (با تست مستقیم پیدا شد). چون
+    shape() رشته را بازچینیِ بصری می‌کند (نه چیزی که بشود دوباره تایپ روی
+    آن ادامه داد)، این‌جا دو حالت را جدا نگه می‌داریم:
+      - set_value(raw)/`.value`: مقدارِ منطقی (خام) — همیشه همین باید
+        خوانده/نوشته شود، نه `.text` مستقیم.
+      - `.text`: مقدارِ نمایشی — وقتی فیلد فوکوس ندارد (کاربر در حالِ
+        تایپ نیست) shape شده نمایش داده می‌شود تا خوانا باشد؛ به‌محضِ
+        گرفتنِ فوکوس، فوراً به‌متنِ خام برمی‌گردد تا خودِ تایپ/مکان‌نمای
+        کاربر با متنِ منطقی کار کند، نه رشته‌ی بازچینی‌شده."""
 
     persian_digits = BooleanProperty(False)
+    # کلاس‌های فرزند که خودشان چرخه‌ی کاملِ shape‌کردنِ `.text` را مدیریت
+    # می‌کنند (مثلاً AccountSearchField، که با انتخاب یک نتیجه مستقیم
+    # `self.text = shape(...)` می‌کند) باید این را False کنند؛ وگرنه این
+    # کلاس دوباره روی متنِ از قبل shape‌شده shape() صدا می‌زند و خرابش
+    # می‌کند (shape کردنِ متنِ shape‌شده، نه چیزِ دیگر، تضمین‌شده خراب است).
+    auto_shape_display = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -115,7 +136,12 @@ class PTextField(MDTextField):
             label = getattr(self, label_attr, None)
             if label is not None:
                 label.halign = "right"
+        self._raw_value = self.text
+        self._showing_shaped = False
+        self._suppress_raw_tracking = False
         self.bind(text=self._persianize_on_text)
+        self.bind(text=self._track_raw_value)
+        self.bind(focus=self._on_focus_toggle_shape)
 
     def _persianize_on_text(self, _instance, value: str) -> None:
         if not self.persian_digits:
@@ -127,6 +153,66 @@ class PTextField(MDTextField):
             cursor = self.cursor
             self.text = converted
             self.cursor = cursor
+
+    def _track_raw_value(self, _instance, value: str) -> None:
+        # فقط وقتی *خودمان* داریم نسخه‌ی shape‌شده را موقتاً نمایش می‌دهیم
+        # (_suppress_raw_tracking) این تغییر نادیده گرفته می‌شود؛ هر تغییرِ
+        # دیگری — چه تایپِ کاربر، چه `.text = ...` مستقیم از جای دیگرِ کد
+        # (مثلاً پاک‌کردنِ فرم) — باید بلافاصله مقدارِ منطقیِ تازه در نظر
+        # گرفته شود، وگرنه set_value/`.value` با مقدارِ کهنه از هم‌گام
+        # خارج می‌شوند (با تست مستقیم پیدا شد: پاک‌کردنِ فرم بعد از یک بار
+        # blur-شدنِ فیلد، مقدارِ رشته‌ی shape‌شده‌ی قبلی را نگه می‌داشت).
+        if self._suppress_raw_tracking:
+            return
+        self._raw_value = value
+        self._showing_shaped = False
+
+    def _on_focus_toggle_shape(self, _instance, focused: bool) -> None:
+        if not self.auto_shape_display:
+            return
+        if focused:
+            if self._showing_shaped:
+                self._set_text_silently(self._raw_value)
+                self._showing_shaped = False
+        else:
+            self._apply_shaped_display()
+
+    def _apply_shaped_display(self) -> None:
+        if not self.auto_shape_display or self._showing_shaped or not self.text:
+            return
+        from peecha.ui.rtl import shape  # noqa: PLC0415 - جلوگیریِ وابستگیِ چرخه‌ای در import سطح‌ماژول
+
+        shaped = shape(self.text)
+        if shaped != self.text:
+            raw = self.text
+            self._set_text_silently(shaped)
+            self._raw_value = raw
+            self._showing_shaped = True
+
+    def _set_text_silently(self, value: str) -> None:
+        """`.text` را عوض می‌کند بدونِ این‌که _track_raw_value آن را به‌عنوانِ
+        مقدارِ منطقیِ تازه ثبت کند (چون این تغییر خودِ ما هستیم، نه ورودیِ
+        بیرونی/کاربر)."""
+        self._suppress_raw_tracking = True
+        self.text = value
+        self._suppress_raw_tracking = False
+
+    @property
+    def value(self) -> str:
+        """مقدارِ منطقی (بدونِ شکل‌دهیِ نمایشی) — همیشه این باید برای
+        ذخیره‌سازی/پردازش خوانده شود، نه `.text`."""
+        return self._raw_value
+
+    def set_value(self, raw_value: str) -> None:
+        """پرکردنِ برنامه‌ایِ فیلد با یک مقدارِ منطقیِ از پیش‌آماده (مثلاً
+        حالتِ ویرایش) — برخلافِ `self.text = raw_value` مستقیم، اگر فیلد
+        همین الان فوکوس نداشته باشد بلافاصله نسخه‌ی shape‌شده (خوانا) نمایش
+        داده می‌شود."""
+        self._raw_value = raw_value
+        self._showing_shaped = False
+        self.text = raw_value
+        if not self.focus:
+            self._apply_shaped_display()
 
 
 class PNavItem(ButtonBehavior, MDBoxLayout):
@@ -290,7 +376,29 @@ class DonutChart(Widget):
                 start_angle = end_angle
 
 
+class PDropdownItem(BaseDropdownItem):
+    """آیتمِ منوی کشویی با متنِ راست‌چین. MDDropdownTextItem خودِ KivyMD
+    همیشه چپ‌چین است (با خواندنِ مستقیمِ menu.kv پیدا شد: MDLabelِ داخلی‌اش
+    هیچ‌وقت halign نمی‌گیرد و هیچ property عمومی برای override هم ندارد).
+    این‌جا مستقیم از BaseDropdownItem (بدونِ فرزند) ارث می‌بریم، نه از
+    MDDropdownTextItem — وگرنه چون خودِ MDDropdownTextItem هم یک KV rule
+    با یک MDLabelِ مستقلِ دیگر دارد، دو لیبل روی هم می‌افتند (تستِ مستقیم
+    این را تایید کرد)."""
+
+
+def open_rtl_dropdown(caller, items: list[dict], width_mult: int = 3) -> MDDropdownMenu:
+    """جایگزینِ ساختِ مستقیمِ MDDropdownMenu در همه‌جای برنامه — همان
+    فرمتِ همیشگیِ items (دیکشنری‌های {"text":..., "on_release":...}) را
+    می‌گیرد، فقط viewclass را به PDropdownItem (راست‌چین) تنظیم می‌کند."""
+    for item in items:
+        item.setdefault("viewclass", "PDropdownItem")
+    menu = MDDropdownMenu(caller=caller, items=items, width_mult=width_mult)
+    menu.open()
+    return menu
+
+
 Factory.register("PCard", cls=PCard)
+Factory.register("PDropdownItem", cls=PDropdownItem)
 Factory.register("PTextField", cls=PTextField)
 Factory.register("PNavItem", cls=PNavItem)
 Factory.register("PNavGroupLabel", cls=PNavGroupLabel)

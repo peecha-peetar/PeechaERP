@@ -126,8 +126,9 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
                     "on_release": lambda rid=row.role_id: (self._menu.dismiss(), self._select_parent(rid)),
                 }
             )
-        self._menu = MDDropdownMenu(caller=self.ids.parent_button, items=items, width_mult=3)
-        self._menu.open()
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
+        self._menu = open_rtl_dropdown(self.ids.parent_button, items, width_mult=3)
 
     def _select_parent(self, role_id: int | None) -> None:
         self._parent_role_id = role_id
@@ -172,7 +173,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         if row is None:
             return
         self._editing_role_id = role_id
-        self.ids.code_field.text = row.code
+        self.ids.code_field.set_value(row.code)
         self.ids.code_field.disabled = True
         self._select_parent(row.parent_role_id)
         self.ids.is_active_checkbox.active = row.is_active
@@ -224,7 +225,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
             self.cancel_edit()
             return
 
-        code = self.ids.code_field.text.strip()
+        code = self.ids.code_field.value.strip()
         if not code:
             self._set_status("کدِ نقش را وارد کنید.", is_error=True)
             return

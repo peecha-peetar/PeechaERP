@@ -74,6 +74,10 @@ class AccountSearchField(PTextField):
     def __init__(self, account_options: list[coa_service.AccountRow], on_select, **kwargs):
         kwargs.setdefault("persian_digits", True)
         kwargs.setdefault("hint_text", shape("جستجوی کد یا نام حساب"))
+        # خودش با انتخاب یک نتیجه مستقیم self.text = shape(...) می‌کند؛ اگر
+        # PTextField هم روی این (متنِ از قبل shape‌شده) دوباره shape() صدا
+        # بزند، خرابش می‌کند — پس مکانیزمِ خودکارِ کلاسِ پایه اینجا خاموش است.
+        kwargs.setdefault("auto_shape_display", False)
         super().__init__(**kwargs)
         self.account_options = account_options
         self._on_select = on_select
@@ -402,7 +406,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             lines.append(
                 je_service.LineInput(
                     account_id=row.account_id,
-                    description=row.ids.description_field.text.strip(),
+                    description=row.ids.description_field.value.strip(),
                     debit=debit,
                     credit=credit,
                 )
@@ -430,7 +434,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     journal_entry_id=self._editing_entry_id,
                     company_id=session.current_company.company_id,
                     document_date=document_date,
-                    description=self.ids.description_field.text.strip(),
+                    description=self.ids.description_field.value.strip(),
                     lines=lines,
                 )
                 message = "سند به‌روزرسانی شد."
@@ -439,7 +443,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     company_id=session.current_company.company_id,
                     created_by_user_id=session.current_user.user_id,
                     document_date=document_date,
-                    description=self.ids.description_field.text.strip(),
+                    description=self.ids.description_field.value.strip(),
                     lines=lines,
                 )
                 message = f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
@@ -469,7 +473,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.lines_box.clear_widgets()
         self._rows = []
         self.ids.date_field.text = numerals.format_jalali_date(entry.document_date)
-        self.ids.description_field.text = entry.description
+        self.ids.description_field.set_value(entry.description)
         accounts_by_id = {a.account_id: a for a in self._account_options}
         for ln in lines:
             self.add_line()
@@ -477,7 +481,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             account = accounts_by_id.get(ln.account_id)
             if account is not None:
                 row.set_account(account)
-            row.ids.description_field.text = ln.description
+            row.ids.description_field.set_value(ln.description)
             row.ids.debit_field.text = str(ln.debit) if ln.debit else ""
             row.ids.credit_field.text = str(ln.credit) if ln.credit else ""
         if not lines:

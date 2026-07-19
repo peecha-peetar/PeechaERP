@@ -47,12 +47,12 @@ class _FieldEditRow(MDBoxLayout):
         self.field_id = field_id
         self._on_save = on_save
         self._on_reset = on_reset
-        self.ids.value_field.text = current_label
+        self.ids.value_field.set_value(current_label)
         self.ids.reset_button.disabled = not has_override
         self.ids.reset_button.opacity = 1 if has_override else 0.35
 
     def save(self) -> None:
-        self._on_save(self.field_id, self.ids.value_field.text)
+        self._on_save(self.field_id, self.ids.value_field.value)
 
     def reset(self) -> None:
         self._on_reset(self.field_id)
@@ -90,6 +90,8 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.form_button.text = shape(label)
 
     def open_form_menu(self) -> None:
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         items = [
             {
                 "text": shape(roles_service.FORM_LABELS.get(code, code)),
@@ -97,8 +99,7 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
             }
             for code in _MANAGED_FORMS
         ]
-        self._menu = MDDropdownMenu(caller=self.ids.form_button, items=items, width_mult=3)
-        self._menu.open()
+        self._menu = open_rtl_dropdown(self.ids.form_button, items, width_mult=3)
 
     def _select_form(self, form_code: str) -> None:
         self._form_code = form_code
@@ -112,6 +113,8 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
     def open_language_menu(self) -> None:
         if not self._language_options:
             return
+        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+
         items = [
             {
                 "text": shape(l.native_name),
@@ -119,8 +122,7 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
             }
             for l in self._language_options
         ]
-        self._menu = MDDropdownMenu(caller=self.ids.language_button, items=items, width_mult=3)
-        self._menu.open()
+        self._menu = open_rtl_dropdown(self.ids.language_button, items, width_mult=3)
 
     def _select_language(self, language_id: int) -> None:
         self._language_id = language_id
