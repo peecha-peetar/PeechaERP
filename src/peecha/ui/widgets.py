@@ -174,8 +174,55 @@ class PTextField(MDTextField):
             if self._showing_shaped:
                 self._set_text_silently(self._raw_value)
                 self._showing_shaped = False
+                self.cursor = (len(self._raw_value), 0)
         else:
             self._apply_shaped_display()
+
+    def insert_text(self, substring: str, from_undo: bool = False) -> None:
+        # قبل از این‌که خودِ Kivy متن را داخلِ .text وارد کند، اگر همین الان
+        # نسخه‌ی shape‌شده (از تایپِ کاراکترِ قبلی) نمایش داده می‌شود، باید
+        # اول به متنِ خام برگردیم — وگرنه Kivy کاراکترِ تازه را داخلِ رشته‌ی
+        # بازچینی‌شده وارد می‌کند که با موقعیتِ منطقی هیچ تناظرِ درستی ندارد.
+        self._revert_to_raw_for_edit()
+        super().insert_text(substring, from_undo=from_undo)
+        self._live_shape_after_edit()
+
+    def do_backspace(self, from_undo: bool = False, mode: str = "bkspc") -> None:
+        self._revert_to_raw_for_edit()
+        super().do_backspace(from_undo=from_undo, mode=mode)
+        self._live_shape_after_edit()
+
+    def _revert_to_raw_for_edit(self) -> None:
+        if not self.auto_shape_display or not self._showing_shaped:
+            return
+        self._set_text_silently(self._raw_value)
+        self._showing_shaped = False
+        # موقعیتِ مکان‌نما در رشته‌ی shape‌شده (بازچینی‌شده) هیچ تناظرِ
+        # ساده‌ای با موقعیتِ منطقی ندارد؛ چون فیلدهای این‌جا (شرح/نام) معمولاً
+        # پشتِ‌سرهم تایپ می‌شوند نه ویرایشِ میان‌متن، فرض می‌کنیم ادامه‌ی تایپ
+        # از انتهای متنِ خام است.
+        self.cursor = (len(self._raw_value), 0)
+
+    def _live_shape_after_edit(self) -> None:
+        # برخلافِ _apply_shaped_display (که فقط هنگامِ از‌دست‌دادنِ فوکوس صدا
+        # زده می‌شود)، این تابع بعدِ *هر* کلیدِ تایپ‌شده هم صدا زده می‌شود —
+        # چون بدونِ آن، درحینِ تایپ متنِ فارسی کاملاً وارونه/نامرتب دیده
+        # می‌شد (نه فقط در حالتِ پرشده‌ی برنامه‌ای)؛ طبق گزارشِ مستقیمِ کاربر.
+        if not self.auto_shape_display:
+            return
+        from peecha.ui.rtl import shape  # noqa: PLC0415
+
+        raw = self.text
+        shaped = shape(raw)
+        if shaped != raw:
+            self._set_text_silently(shaped)
+            self._raw_value = raw
+            self._showing_shaped = True
+            # بعدِ بازچینیِ بصری، کاراکترِ تازه‌تایپ‌شده اولِ رشته (سمتِ چپِ
+            # صفحه) قرار می‌گیرد؛ مکان‌نما را همان‌جا می‌گذاریم تا تایپِ بعدی
+            # (که دوباره به انتهای متنِ خام می‌چسبد) از نظرِ بصری پشتِ‌سرهم
+            # به‌نظر برسد.
+            self.cursor = (0, 0)
 
     def _apply_shaped_display(self) -> None:
         if not self.auto_shape_display or self._showing_shaped or not self.text:
