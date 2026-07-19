@@ -103,20 +103,50 @@ class PStatCard(SoftShadowBehavior, MDBoxLayout):
 
 
 class PTextField(MDTextField):
+    """persian_digits=True یعنی هر رقمِ ASCII/عربی‌ای که کاربر تایپ کند
+    بلافاصله به رقم فارسی تبدیل می‌شود — طبق درخواستِ صریح کاربر که ارقامِ
+    همه‌ی فیلدها فارسی دیده شود، نه فقط در نمایشِ نهایی."""
+
+    persian_digits = BooleanProperty(False)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         for label_attr in ("_hint_text_label", "_helper_text_label", "_max_length_label"):
             label = getattr(self, label_attr, None)
             if label is not None:
                 label.halign = "right"
+        self.bind(text=self._persianize_on_text)
+
+    def _persianize_on_text(self, _instance, value: str) -> None:
+        if not self.persian_digits:
+            return
+        from peecha.ui.numerals import to_persian_digits  # noqa: PLC0415 - جلوگیری از وابستگیِ چرخه‌ای در import سطح‌ماژول
+
+        converted = to_persian_digits(value)
+        if converted != value:
+            cursor = self.cursor
+            self.text = converted
+            self.cursor = cursor
 
 
 class PNavItem(ButtonBehavior, MDBoxLayout):
-    """آیتم منوی نوار کناری — طبق docs/ui-ux-guidelines.md بخش ۵/۱۰."""
+    """آیتم منوی نوار کناری — طبق docs/ui-ux-guidelines.md بخش ۵/۱۰.
+
+    sub=True یعنی این یک زیرآیتمِ تورفته‌ی یک گروه است (مثل «کدینگ
+    حسابداری» زیر «مالی و حسابداری»)، نه یک ماژول سطح‌بالا."""
 
     icon = StringProperty("circle-outline")
     text = StringProperty("")
     selected = BooleanProperty(False)
+    sub = BooleanProperty(False)
+
+
+class PNavGroupLabel(MDBoxLayout):
+    """سرآیتمِ غیرقابل‌کلیکِ یک گروه در نوار کناری (مثل «مالی و حسابداری»)
+    که زیرآیتم‌هایش بلافاصله زیرش می‌آیند."""
+
+    icon = StringProperty("circle-outline")
+    text = StringProperty("")
 
 
 class PSelectField(KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):
@@ -124,13 +154,6 @@ class PSelectField(KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout)
     Enter/Space قابل‌بازشدن، تا انتخاب از منو هم بدون ماوس ممکن باشد."""
 
     text = StringProperty("")
-
-
-class PTabButton(KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):
-    """دکمه‌ی یک بخشِ نوارِ تبِ کپسولی."""
-
-    text = StringProperty("")
-    active = BooleanProperty(False)
 
 
 class PRaisedButton(KeyboardActivatedButtonBehavior, MDRaisedButton):
@@ -270,8 +293,8 @@ class DonutChart(Widget):
 Factory.register("PCard", cls=PCard)
 Factory.register("PTextField", cls=PTextField)
 Factory.register("PNavItem", cls=PNavItem)
+Factory.register("PNavGroupLabel", cls=PNavGroupLabel)
 Factory.register("PSelectField", cls=PSelectField)
-Factory.register("PTabButton", cls=PTabButton)
 Factory.register("PRaisedButton", cls=PRaisedButton)
 Factory.register("PFlatButton", cls=PFlatButton)
 Factory.register("PLabelListRow", cls=PLabelListRow)

@@ -17,12 +17,13 @@ import decimal
 import os
 
 from kivy.lang import Builder
+from kivy.metrics import dp
 from kivy.properties import BooleanProperty, ListProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.dropdown import DropDown
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
 from peecha import session
@@ -31,6 +32,7 @@ from peecha.services import journal_entries as je_service
 from peecha.ui import numerals, theme
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
+from peecha.ui.widgets import PTextField
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "journal_entry.kv")
 Builder.load_file(_KV_PATH)
@@ -44,40 +46,154 @@ _STATUS_COLORS = {
 }
 
 
+class _AccountOptionRow(ButtonBehavior, MDBoxLayout):
+    """یک ردیف از نتایجِ جستجوی زنده‌ی AccountSearchField."""
+
+    label_text = StringProperty("")
+    highlighted = BooleanProperty(False)
+
+    def __init__(self, account_row: coa_service.AccountRow, on_choose, **kwargs):
+        super().__init__(**kwargs)
+        self.account_row = account_row
+        self._on_choose = on_choose
+
+    def on_release(self) -> None:
+        self._on_choose(self.account_row)
+
+
+class AccountSearchField(PTextField):
+    """فیلدِ کدِ حساب با جستجوی همزمان: طبق درخواستِ صریح، با هر کاراکترِ
+    تایپ‌شده نتایج بلافاصله فیلتر می‌شوند (روی full_code و نام)، بالا/پایین
+    بینِ نتایجِ نمایش‌داده‌شده حرکت می‌کند و Enter نتیجه‌ی هایلایت‌شده را
+    انتخاب می‌کند. چون هر نمونه به داده‌ی مخصوصِ خودش (فهرستِ حساب‌ها،
+    کال‌بکِ انتخاب) نیاز دارد که در KV قابل‌تعریف نیست، در پایتون
+    (JournalEntryLineRow) ساخته و در یک جایگاهِ KV جاگذاری می‌شود، نه
+    مستقیم در KV اعلام می‌شود."""
+
+    def __init__(self, account_options: list[coa_service.AccountRow], on_select, **kwargs):
+        kwargs.setdefault("persian_digits", True)
+        kwargs.setdefault("hint_text", shape("جستجوی کد یا نام حساب"))
+        super().__init__(**kwargs)
+        self.account_options = account_options
+        self._on_select = on_select
+        self.account_id: int | None = None
+        self._results: list[coa_service.AccountRow] = []
+        self._highlighted_index = -1
+        self._suppress_filter = False
+        self._dropdown = DropDown(auto_width=False, max_height=dp(240))
+        self._dropdown.width = dp(340)
+        self.bind(text=self._on_text_changed)
+        self.bind(focus=self._on_focus_changed)
+
+    def _on_focus_changed(self, _instance, focused: bool) -> None:
+        # عمداً با گرفتنِ فوکوس منو باز نمی‌شود (فقط با تایپِ کاراکتر، طبق
+        # درخواستِ صریح) — چون فوکوسِ خودکارِ فرم روی ردیفِ تازه‌ساخته (در
+        # _reset_form/_focus_after_row) در همان فریمی می‌افتد که Kivy هنوز
+        # موقعیتِ نهاییِ ویجت را layout نکرده؛ بازکردنِ منو در آن لحظه با
+        # مختصاتِ نادرست محاسبه می‌شود (با تست مستقیم پیدا شد: منو روی نوار
+        # کناری می‌افتد). با اولین کاراکترِ واقعی که کاربر تایپ می‌کند، لایه‌بندی
+        # قطعاً تمام شده و این مشکل وجود ندارد.
+        if not focused:
+            self._dropdown.dismiss()
+
+    def _on_text_changed(self, _instance, value: str) -> None:
+        if self._suppress_filter:
+            return
+        self.account_id = None
+        self._filter_and_show(value)
+
+    def _filter_and_show(self, query: str) -> None:
+        query_norm = numerals.to_ascii_digits(query).strip()
+        if not query_norm:
+            self._results = list(self.account_options)
+        else:
+            self._results = [
+                row for row in self.account_options if query_norm in row.full_code or query_norm in row.name
+            ]
+        self._highlighted_index = 0 if self._results else -1
+        self._rebuild_dropdown()
+        if self._results and self.focus:
+            # چون persian_digits=True با هر تایپِ رقم یک‌بار دیگر خودش را
+            # صدا می‌زند (تبدیل رقم → بازتنظیمِ text → دوباره این متد، طبق
+            # همان الگوی موجود در PTextField._persianize_on_text)، اگر منو
+            # از قبل باز باشد نباید دوباره open() صدا زده شود — DropDown
+            # با فراخوانیِ تودرتوی open() روی همان ویجت کرش می‌کند (تست
+            # مستقیم تایید کرد: «قبلاً یک والد دارد»).
+            if self._dropdown.attach_to is None:
+                self._dropdown.open(self)
+        else:
+            self._dropdown.dismiss()
+
+    def _rebuild_dropdown(self) -> None:
+        self._dropdown.clear_widgets()
+        for i, row in enumerate(self._results):
+            self._dropdown.add_widget(
+                _AccountOptionRow(
+                    account_row=row,
+                    on_choose=self._select,
+                    label_text=shape(f"{numerals.to_persian_digits(row.full_code)} — {row.name}"),
+                    highlighted=(i == self._highlighted_index),
+                )
+            )
+
+    def _move_highlight(self, delta: int) -> None:
+        if not self._results:
+            return
+        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
+        self._rebuild_dropdown()
+
+    def _select(self, account_row: coa_service.AccountRow) -> None:
+        self.set_selected(account_row)
+        self._dropdown.dismiss()
+        self._on_select()
+
+    def set_selected(self, account_row: coa_service.AccountRow) -> None:
+        """پیش‌پرکردنِ فیلد (مثلاً هنگام بارگذاریِ سند برای ویرایش) بدونِ
+        بازکردنِ منو یا صدازدنِ on_select."""
+        self.account_id = account_row.account_id
+        self._suppress_filter = True
+        self.text = shape(f"{numerals.to_persian_digits(account_row.full_code)} — {account_row.name}")
+        self._suppress_filter = False
+
+    def keyboard_on_key_down(self, window, keycode, text, modifiers):
+        key = keycode[0]
+        if key == 273:  # بالا
+            self._move_highlight(-1)
+            return True
+        if key == 274:  # پایین
+            self._move_highlight(1)
+            return True
+        if key in (13, 271):  # اینتر / اینترِ صفحه‌کلیدِ عددی
+            if self._results and 0 <= self._highlighted_index < len(self._results):
+                self._select(self._results[self._highlighted_index])
+            return True
+        if key == 27 and self._dropdown.attach_to is not None:  # Escape فقط منو را می‌بندد، نه کل فرم را
+            self._dropdown.dismiss()
+            return True
+        return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
+
 class JournalEntryLineRow(MDBoxLayout):
     def __init__(self, account_options, on_change, on_remove, on_validate, **kwargs):
         super().__init__(**kwargs)
-        self._account_options = account_options
         self._on_change = on_change
         self._on_remove = on_remove
         self._on_validate = on_validate
-        self._menu: MDDropdownMenu | None = None
-        self.account_id: int | None = None
+        self.account_field = AccountSearchField(account_options=account_options, on_select=self._account_selected)
+        self.ids.account_slot.add_widget(self.account_field)
+        self.account_field.focus_next = self.ids.description_field
+        self.ids.description_field.focus_previous = self.account_field
 
-    def open_account_menu(self) -> None:
-        items = [
-            {
-                "text": shape(f"{row.full_code} — {row.name}"),
-                "on_release": lambda account_id=row.account_id, label=f"{row.full_code} — {row.name}": (
-                    self._select_account(account_id, label)
-                ),
-            }
-            for row in self._account_options
-        ]
-        if not items:
-            items = [{"text": shape("هیچ حساب قابل‌ثبتی تعریف نشده"), "on_release": lambda: self._menu.dismiss()}]
-        self._menu = MDDropdownMenu(caller=self.ids.account_button, items=items, width_mult=4)
-        self._menu.open()
+    @property
+    def account_id(self) -> int | None:
+        return self.account_field.account_id
 
-    def set_account(self, account_id: int, label: str) -> None:
-        self.account_id = account_id
-        self.ids.account_button.text = shape(label)
+    def set_account(self, account_row: coa_service.AccountRow) -> None:
+        self.account_field.set_selected(account_row)
 
-    def _select_account(self, account_id: int, label: str) -> None:
-        if self._menu is not None:
-            self._menu.dismiss()
-        self.set_account(account_id, label)
+    def _account_selected(self) -> None:
         self._on_change()
+        self.ids.debit_field.focus = True
 
     def on_debit_changed(self) -> None:
         if self.ids.debit_field.text.strip():
@@ -181,6 +297,9 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self.add_line()
         self.add_line()
         self._recalculate()
+        # طبق درخواستِ صریح: وقتی فرمِ سند بارگذاری می‌شود، فوکوس روی
+        # فیلدِ جستجوی کدِ حسابِ ردیفِ اول باشد.
+        self._rows[0].account_field.focus = True
 
     def add_line(self) -> None:
         row = JournalEntryLineRow(
@@ -207,11 +326,11 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         if not self._rows:
             self.ids.description_field.focus_next = self.ids.add_line_button
             return
-        self.ids.description_field.focus_next = self._rows[0].ids.account_button
+        self.ids.description_field.focus_next = self._rows[0].account_field
         for i, row in enumerate(self._rows):
             if i + 1 < len(self._rows):
-                row.ids.credit_field.focus_next = self._rows[i + 1].ids.account_button
-                self._rows[i + 1].ids.account_button.focus_previous = row.ids.credit_field
+                row.ids.credit_field.focus_next = self._rows[i + 1].account_field
+                self._rows[i + 1].account_field.focus_previous = row.ids.credit_field
             else:
                 row.ids.credit_field.focus_next = self.ids.add_line_button
 
@@ -221,10 +340,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         ردیف‌ها فقط به ردیف بعدی می‌رود."""
         if row is self._rows[-1]:
             self.add_line()
-            self._rows[-1].ids.account_button.focus = True
+            self._rows[-1].account_field.focus = True
         else:
             idx = self._rows.index(row)
-            self._rows[idx + 1].ids.account_button.focus = True
+            self._rows[idx + 1].account_field.focus = True
 
     def _recalculate(self) -> None:
         total_debit = decimal.Decimal(0)
@@ -236,8 +355,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             except ValueError:
                 pass  # حین تایپ مقدار ناقص عادی است؛ فقط در ثبت نهایی خطا نشان داده می‌شود
 
-        self.ids.total_debit_label.text = shape(f"جمع بدهکار: {total_debit:,}")
-        self.ids.total_credit_label.text = shape(f"جمع بستانکار: {total_credit:,}")
+        self.ids.total_debit_label.text = shape(f"جمع بدهکار: {numerals.format_amount(total_debit)}")
+        self.ids.total_credit_label.text = shape(f"جمع بستانکار: {numerals.format_amount(total_credit)}")
 
         balanced = total_debit == total_credit and total_debit > 0
         chip_color = theme.SUCCESS if balanced else theme.DANGER
@@ -303,7 +422,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     description=self.ids.description_field.text.strip(),
                     lines=lines,
                 )
-                message = f"سند با شماره‌ی موقت {result.temporary_no} ثبت شد."
+                message = f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای اعتبارسنجی/دیتابیس به کاربر
             self._set_status(f"خطا: {exc}", is_error=True)
             return
@@ -337,7 +456,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             row = self._rows[-1]
             account = accounts_by_id.get(ln.account_id)
             if account is not None:
-                row.set_account(account.account_id, f"{account.full_code} — {account.name}")
+                row.set_account(account)
             row.ids.description_field.text = ln.description
             row.ids.debit_field.text = str(ln.debit) if ln.debit else ""
             row.ids.credit_field.text = str(ln.credit) if ln.credit else ""
@@ -346,13 +465,14 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             self.add_line()
         self._recalculate()
 
-        self.ids.form_title.text = shape(f"ویرایش سند «{entry.temporary_no}»")
+        temp_no_fa = numerals.to_persian_digits(str(entry.temporary_no))
+        self.ids.form_title.text = shape(f"ویرایش سند «{temp_no_fa}»")
         self.ids.save_button.text = shape("ذخیره تغییرات")
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(f"در حال ویرایش سند شماره‌ی موقت {entry.temporary_no} — Escape برای لغو.")
+        self._set_status(f"در حال ویرایش سند شماره‌ی موقت {temp_no_fa} — Escape برای لغو.")
         self.ids.date_field.focus = True
         self.refresh_entries()
 
@@ -378,7 +498,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
 
         self._delete_dialog = MDDialog(
             title=shape("حذف سند"),
-            text=shape(f"سند با شماره‌ی موقت {entry.temporary_no} حذف شود؟ این کار قابل بازگشت نیست."),
+            text=shape(
+                f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(entry.temporary_no))} حذف شود؟ "
+                "این کار قابل بازگشت نیست."
+            ),
             buttons=[
                 MDFlatButton(text=shape("لغو"), on_release=lambda *_: self._delete_dialog.dismiss()),
                 MDRaisedButton(text=shape("حذف"), md_bg_color=theme.DANGER, on_release=_do_delete),
@@ -420,10 +543,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     journal_entry_id=entry.journal_entry_id,
                     on_edit=self.edit_entry,
                     on_delete=self.confirm_delete,
-                    number_text=str(entry.temporary_no),
+                    number_text=numerals.to_persian_digits(str(entry.temporary_no)),
                     date_text=numerals.format_jalali_date(entry.document_date),
                     description_text=shape(entry.description or "—"),
-                    amount_text=f"{entry.total_amount:,}",
+                    amount_text=numerals.format_amount(entry.total_amount),
                     status_text=shape(_STATUS_LABELS.get(entry.status_code, entry.status_code)),
                     status_badge_color=_STATUS_COLORS.get(entry.status_code, theme.TEXT_DISABLED),
                     zebra=i % 2 == 1,
@@ -431,6 +554,3 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     selected=entry.journal_entry_id == self._editing_entry_id,
                 )
             )
-
-    def go_to_chart_of_accounts(self) -> None:
-        self.manager.current = "chart_of_accounts"

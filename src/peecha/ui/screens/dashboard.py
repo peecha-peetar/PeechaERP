@@ -14,7 +14,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import dashboard as dashboard_service
-from peecha.ui import theme
+from peecha.ui import numerals, theme
 from peecha.ui.rtl import shape
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "dashboard.kv")
@@ -30,10 +30,14 @@ class DashboardScreen(MDScreen):
     def refresh(self) -> None:
         company_id = session.current_company.company_id if session.current_company else None
 
-        self.ids.card_companies.value = str(dashboard_service.count_companies())
-        self.ids.card_users.value = str(dashboard_service.count_users())
-        self.ids.card_accounts.value = str(dashboard_service.count_chart_of_accounts(company_id))
-        self.ids.card_entries.value = str(dashboard_service.count_journal_entries(company_id))
+        self.ids.card_companies.value = numerals.to_persian_digits(str(dashboard_service.count_companies()))
+        self.ids.card_users.value = numerals.to_persian_digits(str(dashboard_service.count_users()))
+        self.ids.card_accounts.value = numerals.to_persian_digits(
+            str(dashboard_service.count_chart_of_accounts(company_id))
+        )
+        self.ids.card_entries.value = numerals.to_persian_digits(
+            str(dashboard_service.count_journal_entries(company_id))
+        )
 
         labels, values = dashboard_service.journal_entries_per_month(company_id)
         if any(values):
@@ -53,7 +57,7 @@ class DashboardScreen(MDScreen):
                 for i, (label, count) in enumerate(breakdown)
             ]
             self.ids.accounts_legend.text = "\n".join(
-                shape(f"⬤ {label} — {count}") for label, count in breakdown
+                shape(f"⬤ {label} — {numerals.to_persian_digits(str(count))}") for label, count in breakdown
             )
             self.ids.accounts_donut_empty.text = ""
         else:

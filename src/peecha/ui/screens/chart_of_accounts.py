@@ -16,7 +16,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
-from peecha.ui import theme
+from peecha.ui import numerals, theme
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -145,7 +145,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         for row in self._parent_options:
             if row.account_level >= coa_service.MAX_ACCOUNT_LEVEL:
                 continue  # معین دیگر نمی‌تواند زیرشاخه بگیرد
-            label = f"{row.full_code} — {row.name}"
+            label = f"{numerals.to_persian_digits(row.full_code)} — {row.name}"
             items.append(
                 {
                     "text": shape(label),
@@ -163,7 +163,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             self.ids.level_preview_label.text = shape(f"سطحِ حساب جدید: {_LEVEL_LABELS[1]}")
             return
         parent = next(row for row in self._parent_options if row.account_id == account_id)
-        self.ids.parent_button.text = shape(f"{parent.full_code} — {parent.name}")
+        self.ids.parent_button.text = shape(f"{numerals.to_persian_digits(parent.full_code)} — {parent.name}")
         new_level = parent.account_level + 1
         self.ids.level_preview_label.text = shape(f"سطحِ حساب جدید: {_LEVEL_LABELS[new_level]}")
 
@@ -198,7 +198,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     account_id=row.account_id,
                     on_edit=self.edit_account,
                     on_delete=self.confirm_delete,
-                    code_text=row.full_code,
+                    code_text=numerals.to_persian_digits(row.full_code),
                     name_text=shape(f"{indent}{row.name}"),
                     level_text=shape(_LEVEL_LABELS[row.account_level]),
                     level_badge_color=_LEVEL_BADGE_COLORS[row.account_level],
@@ -235,13 +235,15 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._set_dropdown_text("nature_button", _NATURE_OPTIONS, self._nature_code)
         self._set_dropdown_text("category_button", _CATEGORY_OPTIONS, self._category_code)
         self._set_dropdown_text("account_type_button", _ACCOUNT_TYPE_OPTIONS, self._account_type_code)
-        self.ids.form_title.text = shape(f"ویرایش حساب «{row.full_code}»")
+        self.ids.form_title.text = shape(f"ویرایش حساب «{numerals.to_persian_digits(row.full_code)}»")
         self.ids.save_button.text = shape("ذخیره تغییرات")
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(f"در حال ویرایش «{row.full_code} — {row.name}» — Escape برای لغو.")
+        self._set_status(
+            f"در حال ویرایش «{numerals.to_persian_digits(row.full_code)} — {row.name}» — Escape برای لغو."
+        )
         self.refresh_list()
 
     def cancel_edit(self) -> None:
@@ -292,7 +294,10 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             self.cancel_edit()
             return
 
-        segment_code = self.ids.segment_code_field.text.strip()
+        # کد حساب فارسی نمایش داده می‌شود (persian_digits: True در KV) اما
+        # باید همیشه ASCII ذخیره شود — چون full_code برای مرتب‌سازی/تطبیقِ
+        # والد استفاده می‌شود و مخلوط‌شدنِ دو سیستمِ رقمی آن را می‌شکند.
+        segment_code = numerals.to_ascii_digits(self.ids.segment_code_field.text.strip())
         if not segment_code or not name:
             self._set_status("کد و نام حساب را وارد کنید.")
             return
@@ -330,7 +335,9 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
 
         self._delete_dialog = MDDialog(
             title=shape("حذف حساب"),
-            text=shape(f"حساب «{row.full_code} — {row.name}» حذف شود؟ این کار قابل بازگشت نیست."),
+            text=shape(
+                f"حساب «{numerals.to_persian_digits(row.full_code)} — {row.name}» حذف شود؟ این کار قابل بازگشت نیست."
+            ),
             buttons=[
                 MDFlatButton(text=shape("لغو"), on_release=lambda *_: self._delete_dialog.dismiss()),
                 MDRaisedButton(text=shape("حذف"), md_bg_color=theme.DANGER, on_release=_do_delete),
@@ -351,6 +358,3 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         else:
             self._set_status("حساب حذف شد.")
             self.refresh_list()
-
-    def go_to_journal_entry(self) -> None:
-        self.manager.current = "journal_entry"

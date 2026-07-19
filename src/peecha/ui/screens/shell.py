@@ -23,9 +23,22 @@ _KV_PATH = os.path.join(os.path.dirname(__file__), "shell.kv")
 Builder.load_file(_KV_PATH)
 
 # TODO(موقت): جایگزینی با کوئری روی sec.modules/sec.menus وقتی صفحه‌ی مدیریت منو ساخته شد
+#
+# آیتم‌های سطح‌بالا ممکن است خودشان یک صفحه باشند («screen»)، یا یک گروه با
+# چند زیرآیتم («children») — طبق درخواست کاربر، به‌جای تبِ داخلیِ جداگانه
+# برای فرم‌های ماژول مالی/حسابداری (کدینگ حسابداری، صدور سند)، همه‌ی این
+# میان‌برها مستقیم زیرِ «مالی و حسابداری» در نوار کناری دیده می‌شوند.
 NAV_ITEMS = [
     {"code": "dashboard", "label": "داشبورد", "icon": "view-dashboard-outline", "screen": "dashboard"},
-    {"code": "GL", "label": "مالی و حسابداری", "icon": "cash-multiple", "screen": "chart_of_accounts"},
+    {
+        "code": "GL",
+        "label": "مالی و حسابداری",
+        "icon": "cash-multiple",
+        "children": [
+            {"code": "GL_COA", "label": "کدینگ حسابداری", "icon": "format-list-bulleted", "screen": "chart_of_accounts"},
+            {"code": "GL_JE", "label": "صدور سند", "icon": "file-document-edit-outline", "screen": "journal_entry"},
+        ],
+    },
     {"code": "INV", "label": "انبار و موجودی", "icon": "package-variant-closed", "screen": None},
     {"code": "SALES", "label": "فروش و بازاریابی", "icon": "cart-outline", "screen": None},
     {"code": "PURCH", "label": "خرید و تدارکات", "icon": "truck-outline", "screen": None},
@@ -33,6 +46,20 @@ NAV_ITEMS = [
     {"code": "INVOICES", "label": "فاکتورها", "icon": "receipt-text-outline", "screen": None},
     {"code": "REPORTS", "label": "گزارش‌ها", "icon": "chart-bar", "screen": None},
 ]
+
+
+def _flatten_nav_items() -> list[dict]:
+    """فهرست تخت (بدون تو در تو) از همه‌ی آیتم‌های قابل‌کلیک — هم آیتم‌های
+    سطح‌بالای بدون فرزند، هم هرکدام از زیرآیتم‌های یک گروه؛ خودِ سرآیتمِ
+    گروه‌دار (مثل «مالی و حسابداری») در این فهرست نیست چون خودش صفحه‌ای
+    ندارد، فقط زیرآیتم‌هایش دارند."""
+    flat: list[dict] = []
+    for item in NAV_ITEMS:
+        if "children" in item:
+            flat.extend(item["children"])
+        else:
+            flat.append(item)
+    return flat
 
 
 class ShellScreen(MDScreen):
@@ -57,20 +84,33 @@ class ShellScreen(MDScreen):
         content.add_widget(PlaceholderScreen())
 
     def _build_nav_items(self) -> None:
-        from peecha.ui.widgets import PNavItem  # noqa: PLC0415
+        from peecha.ui.widgets import PNavGroupLabel, PNavItem  # noqa: PLC0415
 
         for item in NAV_ITEMS:
-            nav_item = PNavItem(icon=item["icon"], text=shape(item["label"]))
-            nav_item.bind(on_release=lambda _inst, code=item["code"]: self._select_nav(code))
-            self.ids.nav_list.add_widget(nav_item)
+            if "children" in item:
+                self.ids.nav_list.add_widget(PNavGroupLabel(icon=item["icon"], text=shape(item["label"])))
+                for child in item["children"]:
+                    nav_item = PNavItem(icon=child["icon"], text=shape(child["label"]), sub=True)
+                    nav_item.bind(on_release=lambda _inst, code=child["code"]: self._select_nav(code))
+                    self.ids.nav_list.add_widget(nav_item)
+            else:
+                nav_item = PNavItem(icon=item["icon"], text=shape(item["label"]))
+                nav_item.bind(on_release=lambda _inst, code=item["code"]: self._select_nav(code))
+                self.ids.nav_list.add_widget(nav_item)
 
     def _select_nav(self, code: str) -> None:
         content: MDScreenManager = self.ids.content_manager
-        item = next((i for i in NAV_ITEMS if i["code"] == code), None)
+        flat_items = _flatten_nav_items()
+        item = next((i for i in flat_items if i["code"] == code), None)
         if item is None:
             return
 
-        for widget, nav_item in zip(NAV_ITEMS, self.ids.nav_list.children[::-1], strict=True):
+        # نوار کناری هم سرآیتم‌های گروه (غیرقابل‌کلیک) و هم آیتم‌های قابل‌کلیک
+        # را دارد؛ فقط آیتم‌های قابل‌کلیک را با flat_items جفت می‌کنیم.
+        from peecha.ui.widgets import PNavItem  # noqa: PLC0415
+
+        clickable_widgets = [w for w in self.ids.nav_list.children[::-1] if isinstance(w, PNavItem)]
+        for widget, nav_item in zip(flat_items, clickable_widgets, strict=True):
             nav_item.selected = widget["code"] == code
 
         target_screen_name = item["screen"] or "placeholder"

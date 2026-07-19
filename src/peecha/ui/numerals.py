@@ -15,11 +15,22 @@ import jdatetime
 _PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹"
 _ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
 _ASCII_DIGITS = "0123456789"
-_DIGIT_MAP = str.maketrans(_PERSIAN_DIGITS + _ARABIC_DIGITS, _ASCII_DIGITS * 2)
+_TO_ASCII_MAP = str.maketrans(_PERSIAN_DIGITS + _ARABIC_DIGITS, _ASCII_DIGITS * 2)
+_TO_PERSIAN_MAP = str.maketrans(_ASCII_DIGITS, _PERSIAN_DIGITS)
 
 
 def to_ascii_digits(text: str) -> str:
-    return text.translate(_DIGIT_MAP)
+    return text.translate(_TO_ASCII_MAP)
+
+
+def to_persian_digits(text: str) -> str:
+    """برعکسِ to_ascii_digits — برای نمایش (نه پردازش/ذخیره‌سازی)، چون
+    درخواستِ صریح کاربر این بود که ارقامِ همه‌ی فیلدها فارسی دیده شود."""
+    return text.translate(_TO_PERSIAN_MAP)
+
+
+def format_amount(value: decimal.Decimal | int) -> str:
+    return to_persian_digits(f"{value:,}")
 
 
 def parse_decimal(text: str) -> decimal.Decimal:
@@ -45,4 +56,4 @@ def parse_jalali_date(text: str) -> datetime.date:
 
 
 def format_jalali_date(value: datetime.date) -> str:
-    return jdatetime.date.fromgregorian(date=value).strftime("%Y/%m/%d")
+    return to_persian_digits(jdatetime.date.fromgregorian(date=value).strftime("%Y/%m/%d"))
