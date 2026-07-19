@@ -45,6 +45,18 @@ NAV_ITEMS = [
     {"code": "HR", "label": "منابع انسانی", "icon": "account-group-outline", "screen": None},
     {"code": "INVOICES", "label": "فاکتورها", "icon": "receipt-text-outline", "screen": None},
     {"code": "REPORTS", "label": "گزارش‌ها", "icon": "chart-bar", "screen": None},
+    {
+        "code": "SETTINGS",
+        "label": "مدیریت سیستم",
+        "icon": "cog-outline",
+        "children": [
+            {"code": "SET_LANG", "label": "زبان‌ها", "icon": "translate", "screen": "languages"},
+            {"code": "SET_COMPANY", "label": "شرکت‌ها", "icon": "domain", "screen": "companies"},
+            {"code": "SET_FY", "label": "سال‌های مالی", "icon": "calendar-blank-outline", "screen": "fiscal_years"},
+            {"code": "SET_USERS", "label": "کاربران", "icon": "account-multiple-outline", "screen": "users"},
+            {"code": "SET_ROLES", "label": "نقش‌ها و دسترسی‌ها", "icon": "shield-account-outline", "screen": "roles"},
+        ],
+    },
 ]
 
 
@@ -73,14 +85,24 @@ class ShellScreen(MDScreen):
 
     def _build_content_screens(self) -> None:
         from peecha.ui.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
+        from peecha.ui.screens.companies import CompaniesScreen  # noqa: PLC0415
         from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
+        from peecha.ui.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
         from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
+        from peecha.ui.screens.languages import LanguagesScreen  # noqa: PLC0415
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
+        from peecha.ui.screens.roles import RolesScreen  # noqa: PLC0415
+        from peecha.ui.screens.users import UsersScreen  # noqa: PLC0415
 
         content: MDScreenManager = self.ids.content_manager
         content.add_widget(DashboardScreen())
         content.add_widget(ChartOfAccountsScreen())
         content.add_widget(JournalEntryScreen())
+        content.add_widget(LanguagesScreen())
+        content.add_widget(CompaniesScreen())
+        content.add_widget(FiscalYearsScreen())
+        content.add_widget(UsersScreen())
+        content.add_widget(RolesScreen())
         content.add_widget(PlaceholderScreen())
 
     def _build_nav_items(self) -> None:

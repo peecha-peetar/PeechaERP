@@ -30,6 +30,13 @@ def bootstrap_system(username: str, full_name: str, password: str, company_name:
             db_session.add(currency)
             db_session.flush()
 
+        # چند ارزِ رایجِ دیگر هم از ابتدا موجود باشند تا فرمِ تعریفِ شرکت
+        # بدون نیاز به صفحه‌ی جداگانه‌ی مدیریتِ ارز، گزینه برای انتخاب داشته باشد.
+        for iso_code, symbol, decimal_places in (("USD", "$", 2), ("EUR", "€", 2)):
+            if not db_session.scalar(select(Currency).where(Currency.iso_code == iso_code)):
+                db_session.add(Currency(iso_code=iso_code, symbol=symbol, decimal_places=decimal_places, is_active=True))
+        db_session.flush()
+
         company = Company(
             code="C1",
             legal_name=company_name,

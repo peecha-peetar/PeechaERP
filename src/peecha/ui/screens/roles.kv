@@ -1,0 +1,352 @@
+#:import shape peecha.ui.rtl.shape
+#:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
+
+# نکته‌ی مهمِ RTL (همه‌جای این فایل): فرزندِ اول‌اعلام‌شده در BoxLayoutِ افقی
+# چپ‌ترین می‌شود؛ برای چک‌باکس‌های تکی طبقِ قراردادِ chart_of_accounts.kv
+# چک‌باکس اول/چپ و لیبل دوم/راست اعلام می‌شود.
+<_RoleUserRow>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    spacing: "8dp"
+
+    MDCheckbox:
+        id: check
+        size_hint: None, None
+        size: "24dp", "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    PLabel:
+        text: root.label_text
+        valign: "middle"
+
+# شبکه‌ی دسترسی: چهار چک‌باکسِ اکشن + لیبلِ نامِ فرم. چون لیبل باید
+# راست‌ترین (اولین‌چیزِ خوانده‌شده) باشد، آخر از همه اعلام می‌شود؛ ترتیبِ
+# چهار چک‌باکس هم برعکسِ ترتیبِ منطقیِ VIEW→CREATE→EDIT→DELETE است تا
+# زیرِ هدرِ ستون‌ها (پایین‌تر در <RolesScreen>) دقیقاً بنشیند.
+<_PermissionRow>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    spacing: "4dp"
+
+    MDCheckbox:
+        id: check_delete
+        size_hint_x: None
+        width: "56dp"
+        size_hint_y: None
+        height: "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    MDCheckbox:
+        id: check_edit
+        size_hint_x: None
+        width: "56dp"
+        size_hint_y: None
+        height: "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    MDCheckbox:
+        id: check_create
+        size_hint_x: None
+        width: "56dp"
+        size_hint_y: None
+        height: "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    MDCheckbox:
+        id: check_view
+        size_hint_x: None
+        width: "56dp"
+        size_hint_y: None
+        height: "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    PLabel:
+        text: root.label_text
+        valign: "middle"
+
+<RoleRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "40dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+
+    MDIconButton:
+        icon: "pencil-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT
+        on_release: root.on_release()
+
+    AnchorLayout:
+        size_hint_x: 0.2
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: theme.SUCCESS if root.is_active_row else theme.TEXT_DISABLED
+
+    PLabel:
+        text: root.parent_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.35
+
+    PLabel:
+        text: root.code_text
+        valign: "middle"
+        size_hint_x: 0.35
+
+<RolesScreen>:
+    name: "roles"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "horizontal"
+        padding: "24dp"
+        spacing: "20dp"
+
+        PCard:
+            size_hint_x: 0.32
+
+            PLabel:
+                text: shape("نقش‌های شرکت")
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+            BoxLayout:
+                size_hint_y: None
+                height: "28dp"
+                padding: ["12dp", "0dp"]
+
+                Widget:
+                    size_hint_x: None
+                    width: "28dp"
+
+                PLabel:
+                    text: shape("وضعیت")
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.2
+
+                PLabel:
+                    text: shape("والد")
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.35
+
+                PLabel:
+                    text: shape("کد نقش")
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.35
+
+            ScrollView:
+                BoxLayout:
+                    id: roles_list
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "2dp"
+
+        PCard:
+            size_hint_x: 0.68
+            spacing: "12dp"
+
+            ScrollView:
+                do_scroll_x: False
+
+                BoxLayout:
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "16dp"
+
+                    BoxLayout:
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "10dp"
+
+                        PLabel:
+                            id: form_title
+                            text: shape("افزودن نقش جدید")
+                            font_style: "Subtitle1"
+                            size_hint_y: None
+                            height: self.texture_size[1]
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: "48dp"
+                            spacing: "12dp"
+
+                            PTextField:
+                                id: code_field
+                                hint_text: shape("کدِ نقش")
+                                size_hint_x: 0.5
+                                focus_next: parent_button
+
+                            PSelectField:
+                                id: parent_button
+                                text: ""
+                                size_hint_x: 0.5
+                                on_release: root.open_parent_menu()
+                                focus_next: save_button
+                                focus_previous: code_field
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: "36dp"
+                            spacing: "8dp"
+
+                            MDCheckbox:
+                                id: is_active_checkbox
+                                active: True
+                                size_hint: None, None
+                                size: "24dp", "24dp"
+                                pos_hint: {"center_y": 0.5}
+
+                            PLabel:
+                                text: shape("فعال")
+                                valign: "middle"
+
+                        BoxLayout:
+                            size_hint_y: None
+                            height: "40dp"
+                            spacing: "8dp"
+
+                            PRaisedButton:
+                                id: save_button
+                                text: shape("افزودن نقش")
+                                on_release: root.save_role()
+                                focus_previous: parent_button
+                                focus_next: cancel_edit_button
+
+                            PFlatButton:
+                                id: cancel_edit_button
+                                text: shape("لغو ویرایش (Esc)")
+                                theme_text_color: "Custom"
+                                text_color: theme.TEXT_SECONDARY
+                                opacity: 0
+                                disabled: True
+                                size_hint_x: None
+                                width: "0dp"
+                                on_release: root.cancel_edit()
+                                focus_previous: save_button
+
+                    BoxLayout:
+                        id: permissions_panel
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "16dp"
+
+                        BoxLayout:
+                            orientation: "vertical"
+                            size_hint_y: None
+                            height: self.minimum_height
+                            spacing: "6dp"
+
+                            PLabel:
+                                text: shape("دسترسیِ فرم‌ها")
+                                font_style: "Subtitle1"
+                                size_hint_y: None
+                                height: self.texture_size[1]
+
+                            BoxLayout:
+                                size_hint_y: None
+                                height: "24dp"
+                                spacing: "4dp"
+
+                                PLabel:
+                                    text: shape("حذف")
+                                    font_style: "Caption"
+                                    theme_text_color: "Custom"
+                                    text_color: theme.TEXT_SECONDARY
+                                    halign: "center"
+                                    valign: "middle"
+                                    size_hint_x: None
+                                    width: "56dp"
+
+                                PLabel:
+                                    text: shape("ویرایش")
+                                    font_style: "Caption"
+                                    theme_text_color: "Custom"
+                                    text_color: theme.TEXT_SECONDARY
+                                    halign: "center"
+                                    valign: "middle"
+                                    size_hint_x: None
+                                    width: "56dp"
+
+                                PLabel:
+                                    text: shape("افزودن")
+                                    font_style: "Caption"
+                                    theme_text_color: "Custom"
+                                    text_color: theme.TEXT_SECONDARY
+                                    halign: "center"
+                                    valign: "middle"
+                                    size_hint_x: None
+                                    width: "56dp"
+
+                                PLabel:
+                                    text: shape("مشاهده")
+                                    font_style: "Caption"
+                                    theme_text_color: "Custom"
+                                    text_color: theme.TEXT_SECONDARY
+                                    halign: "center"
+                                    valign: "middle"
+                                    size_hint_x: None
+                                    width: "56dp"
+
+                                PLabel:
+                                    text: shape("فرم")
+                                    font_style: "Caption"
+                                    theme_text_color: "Custom"
+                                    text_color: theme.TEXT_SECONDARY
+                                    valign: "middle"
+
+                            BoxLayout:
+                                id: permissions_grid_box
+                                orientation: "vertical"
+                                size_hint_y: None
+                                height: self.minimum_height
+                                spacing: "2dp"
+
+                        BoxLayout:
+                            orientation: "vertical"
+                            size_hint_y: None
+                            height: self.minimum_height
+                            spacing: "6dp"
+
+                            PLabel:
+                                text: shape("کاربرانِ این نقش")
+                                font_style: "Subtitle1"
+                                size_hint_y: None
+                                height: self.texture_size[1]
+
+                            BoxLayout:
+                                id: role_users_box
+                                orientation: "vertical"
+                                size_hint_y: None
+                                height: self.minimum_height
+                                spacing: "2dp"

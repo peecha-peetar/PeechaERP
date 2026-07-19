@@ -81,7 +81,7 @@ def _validate_accounts(session, company_id: int, real_lines: list[LineInput]) ->
             raise ValueError(f"حساب «{account.full_code}» قابل ثبت سند نیست.")
 
 
-def _fiscal_year_bounds(
+def fiscal_year_bounds(
     start_month: int, start_day: int, on_date: datetime.date
 ) -> tuple[str, datetime.date, datetime.date]:
     jalali = jdatetime.date.fromgregorian(date=on_date)
@@ -94,7 +94,7 @@ def _fiscal_year_bounds(
 
 
 def _get_or_create_fiscal_year(session, company: Company, on_date: datetime.date) -> FiscalYear:
-    code, start, end = _fiscal_year_bounds(company.fiscal_year_start_month, company.fiscal_year_start_day, on_date)
+    code, start, end = fiscal_year_bounds(company.fiscal_year_start_month, company.fiscal_year_start_day, on_date)
     fiscal_year = session.scalar(
         select(FiscalYear).where(FiscalYear.company_id == company.company_id, FiscalYear.code == code)
     )

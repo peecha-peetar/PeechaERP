@@ -1,0 +1,259 @@
+#:import shape peecha.ui.rtl.shape
+#:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
+
+# ردیفِ چک‌لیستِ دسترسیِ شرکت — طبق قراردادِ تکرارشونده‌ی این فایل‌ها
+# (مثلِ is_postable_checkbox در chart_of_accounts.kv)، چک‌باکس اول اعلام
+# می‌شود (چپ‌ترین) و لیبل بعدش (راست‌ترین، نزدیک‌تر به لبه‌ی خواندنِ RTL).
+<_CompanyCheckRow>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    spacing: "8dp"
+
+    MDCheckbox:
+        id: check
+        size_hint: None, None
+        size: "24dp", "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    PLabel:
+        text: root.label_text
+        valign: "middle"
+
+# نکته‌ی مهمِ RTL: مثل بقیه‌ی صفحه‌ها — ترتیبِ اعلام در KV عمداً برعکسِ
+# ترتیب منطقیِ ستون‌هاست.
+<UserRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "40dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+
+    MDIconButton:
+        icon: "pencil-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT
+        on_release: root.on_release()
+
+    AnchorLayout:
+        size_hint_x: 0.16
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: theme.SUCCESS if root.is_active_row else theme.TEXT_DISABLED
+
+    AnchorLayout:
+        size_hint_x: 0.16
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.role_text
+            badge_color: theme.ACCENT
+
+    PLabel:
+        text: root.name_text
+        valign: "middle"
+        size_hint_x: 0.34
+
+    PLabel:
+        text: root.username_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.20
+
+<UsersScreen>:
+    name: "users"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "horizontal"
+        padding: "24dp"
+        spacing: "20dp"
+
+        PCard:
+            size_hint_x: 0.56
+
+            PLabel:
+                text: shape("کاربران")
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+            BoxLayout:
+                id: grid_header
+                size_hint_y: None
+                height: "32dp"
+                padding: ["12dp", "0dp"]
+
+                Widget:
+                    size_hint_x: None
+                    width: "28dp"
+
+                PLabel:
+                    text: shape("وضعیت")
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.16
+
+                PLabel:
+                    text: shape("نقش")
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.16
+
+                PLabel:
+                    text: shape("نام کامل")
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.34
+
+                PLabel:
+                    text: shape("نام‌کاربری")
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.20
+
+            ScrollView:
+                BoxLayout:
+                    id: users_list
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "2dp"
+
+        PCard:
+            size_hint_x: 0.44
+            spacing: "12dp"
+
+            ScrollView:
+                do_scroll_x: False
+
+                BoxLayout:
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "12dp"
+
+                    PLabel:
+                        id: form_title
+                        text: shape("افزودن کاربر جدید")
+                        font_style: "Subtitle1"
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    PTextField:
+                        id: username_field
+                        hint_text: shape("نام‌کاربری")
+                        focus_next: full_name_field
+
+                    PTextField:
+                        id: full_name_field
+                        hint_text: shape("نام کامل")
+                        focus_next: email_field
+                        focus_previous: username_field
+
+                    PTextField:
+                        id: email_field
+                        hint_text: shape("ایمیل")
+                        focus_next: password_field
+                        focus_previous: full_name_field
+
+                    PTextField:
+                        id: password_field
+                        hint_text: shape("رمز عبور")
+                        password: True
+                        focus_next: language_button
+                        focus_previous: email_field
+
+                    PSelectField:
+                        id: language_button
+                        text: ""
+                        on_release: root.open_language_menu()
+                        focus_next: save_button
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "36dp"
+                        spacing: "8dp"
+
+                        MDCheckbox:
+                            id: is_super_admin_checkbox
+                            size_hint: None, None
+                            size: "24dp", "24dp"
+                            pos_hint: {"center_y": 0.5}
+
+                        PLabel:
+                            text: shape("مدیرِ کل (دسترسیِ کامل)")
+                            valign: "middle"
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "36dp"
+                        spacing: "8dp"
+
+                        MDCheckbox:
+                            id: is_active_checkbox
+                            active: True
+                            size_hint: None, None
+                            size: "24dp", "24dp"
+                            pos_hint: {"center_y": 0.5}
+
+                        PLabel:
+                            text: shape("فعال")
+                            valign: "middle"
+
+                    PLabel:
+                        text: shape("دسترسی به شرکت‌ها")
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    BoxLayout:
+                        id: companies_checklist_box
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+
+                    PRaisedButton:
+                        id: save_button
+                        text: shape("افزودن کاربر")
+                        on_release: root.save_user()
+                        focus_previous: language_button
+                        focus_next: cancel_edit_button
+
+                    PFlatButton:
+                        id: cancel_edit_button
+                        text: shape("لغو ویرایش (Esc)")
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        opacity: 0
+                        disabled: True
+                        size_hint_y: None
+                        height: "0dp"
+                        on_release: root.cancel_edit()
+                        focus_previous: save_button

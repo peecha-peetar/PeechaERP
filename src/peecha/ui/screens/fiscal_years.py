@@ -1,0 +1,120 @@
+"""صفحه‌ی مدیریت سال‌های مالیِ شرکتِ جاری — هر سالِ مالی با واردکردنِ یک
+تاریخِ دلخواه در همان سال ساخته می‌شود (بازه‌ی دقیق طبق الگوی شروع سال مالیِ
+شرکت خودکار محاسبه و ۱۲ دوره‌ی ماهانه هم ساخته می‌شود)."""
+
+from __future__ import annotations
+
+import datetime
+import os
+
+from kivy.lang import Builder
+from kivy.properties import BooleanProperty, StringProperty
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.screen import MDScreen
+
+from peecha import session
+from peecha.services import fiscal_years as fiscal_years_service
+from peecha.ui import numerals, theme
+from peecha.ui.rtl import shape
+from peecha.ui.shortcuts import KeyboardShortcutMixin
+
+_KV_PATH = os.path.join(os.path.dirname(__file__), "fiscal_years.kv")
+Builder.load_file(_KV_PATH)
+
+
+class FiscalYearRowWidget(MDBoxLayout):
+    code_text = StringProperty("")
+    range_text = StringProperty("")
+    periods_text = StringProperty("")
+    status_text = StringProperty("")
+    is_closed_row = BooleanProperty(False)
+    zebra = BooleanProperty(False)
+
+    def __init__(self, fiscal_year_id: int, on_toggle, **kwargs):
+        super().__init__(**kwargs)
+        self.fiscal_year_id = fiscal_year_id
+        self._on_toggle = on_toggle
+
+    def toggle(self) -> None:
+        self._on_toggle(self.fiscal_year_id, not self.is_closed_row)
+
+
+class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
+    def on_pre_enter(self, *args):
+        self.ids.on_date_field.text = numerals.format_jalali_date(datetime.date.today())
+        self.refresh_list()
+        self.bind_shortcuts()
+
+    def on_leave(self, *args):
+        self.unbind_shortcuts()
+
+    def on_shortcut_save(self) -> None:
+        self.save_fiscal_year()
+
+    def _set_status(self, message: str, *, is_error: bool = False) -> None:
+        self.ids.status_label.text = shape(message)
+        self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
+
+    def refresh_list(self) -> None:
+        self.ids.years_list.clear_widgets()
+        if session.current_company is None:
+            self._set_status("هیچ شرکتی انتخاب نشده است.", is_error=True)
+            self.ids.grid_header.opacity = 0
+            return
+
+        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
+
+        rows = fiscal_years_service.list_fiscal_years(session.current_company.company_id)
+        self.ids.grid_header.opacity = 1 if rows else 0
+        if not rows:
+            self.ids.years_list.add_widget(
+                PEmptyState(icon="calendar-blank-outline", text=shape("هنوز سالِ مالی‌ای تعریف نشده است."))
+            )
+        for i, row in enumerate(rows):
+            self.ids.years_list.add_widget(
+                FiscalYearRowWidget(
+                    fiscal_year_id=row.fiscal_year_id,
+                    on_toggle=self._toggle_closed,
+                    code_text=numerals.to_persian_digits(row.code),
+                    range_text=shape(
+                        f"{numerals.format_jalali_date(row.start_date)} تا "
+                        f"{numerals.format_jalali_date(row.end_date)}"
+                    ),
+                    periods_text=numerals.to_persian_digits(f"{row.period_count} دوره"),
+                    status_text=shape("بسته" if row.is_closed else "باز"),
+                    is_closed_row=row.is_closed,
+                    zebra=i % 2 == 1,
+                )
+            )
+
+    def save_fiscal_year(self) -> None:
+        if session.current_company is None:
+            self._set_status("هیچ شرکتی انتخاب نشده است.", is_error=True)
+            return
+        try:
+            on_date = numerals.parse_jalali_date(self.ids.on_date_field.text)
+        except ValueError as exc:
+            self._set_status(str(exc), is_error=True)
+            return
+        try:
+            fiscal_year = fiscal_years_service.create_fiscal_year_for_date(
+                company_id=session.current_company.company_id,
+                start_month=session.current_company.fiscal_year_start_month,
+                start_day=session.current_company.fiscal_year_start_day,
+                on_date=on_date,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._set_status(f"خطا: {exc}", is_error=True)
+            return
+        self._set_status(f"سالِ مالیِ «{numerals.to_persian_digits(fiscal_year.code)}» ساخته شد.")
+        self.refresh_list()
+
+    def _toggle_closed(self, fiscal_year_id: int, is_closed: bool) -> None:
+        if session.current_company is None:
+            return
+        try:
+            fiscal_years_service.set_closed(fiscal_year_id, session.current_company.company_id, is_closed)
+        except Exception as exc:  # noqa: BLE001
+            self._set_status(f"خطا: {exc}", is_error=True)
+            return
+        self.refresh_list()
