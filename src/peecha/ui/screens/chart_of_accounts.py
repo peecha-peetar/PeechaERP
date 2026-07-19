@@ -120,18 +120,22 @@ class ChartOfAccountsScreen(MDScreen):
             self._set_status("هیچ شرکتی انتخاب نشده است.")
             return
 
-        from peecha.ui.widgets import PLabelListRow  # noqa: PLC0415
+        from peecha.ui.widgets import PEmptyState, PLabelListRow  # noqa: PLC0415
 
         rows = coa_service.list_accounts(session.current_company.company_id)
         self._parent_options = rows
+        self._set_status("")
         if not rows:
-            self._set_status("هنوز حسابی تعریف نشده — از فرم روبه‌رو یک حساب گروه اضافه کنید.")
-        else:
-            self._set_status("")
-        for row in rows:
-            indent = "    " * (row.account_level - 1)
+            self.ids.accounts_list.add_widget(
+                PEmptyState(
+                    icon="format-list-bulleted-square",
+                    text=shape("هنوز حسابی تعریف نشده — از فرم روبه‌رو یک حساب گروه اضافه کنید."),
+                )
+            )
+        for i, row in enumerate(rows):
+            indent = "      " * (row.account_level - 1)
             text = f"{row.full_code}   {indent}{row.name}"
-            self.ids.accounts_list.add_widget(PLabelListRow(text=shape(text)))
+            self.ids.accounts_list.add_widget(PLabelListRow(text=shape(text), zebra=i % 2 == 1))
 
         # اگر والدِ انتخاب‌شده دیگر معتبر نیست (مثلاً بعد از رفرش) بازنشانی می‌شود
         if self._parent_account_id is not None and not any(

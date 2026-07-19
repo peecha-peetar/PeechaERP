@@ -10,8 +10,8 @@
             orientation: "vertical"
             size_hint_y: None
             height: self.minimum_height
-            padding: "24dp"
-            spacing: "16dp"
+            padding: "32dp"
+            spacing: "24dp"
 
             PLabel:
                 text: shape("داشبورد اصلی")
@@ -28,8 +28,8 @@
 
             BoxLayout:
                 size_hint_y: None
-                height: "150dp"
-                spacing: "16dp"
+                height: "156dp"
+                spacing: "20dp"
 
                 PStatCard:
                     id: card_companies
@@ -61,17 +61,10 @@
 
             BoxLayout:
                 size_hint_y: None
-                height: "320dp"
-                spacing: "16dp"
+                height: "340dp"
+                spacing: "20dp"
 
-                MDCard:
-                    orientation: "vertical"
-                    padding: "16dp"
-                    spacing: "8dp"
-                    radius: [18, 18, 18, 18]
-                    elevation: 0
-                    md_bg_color: theme.SURFACE
-                    line_color: theme.BORDER
+                PCard:
                     size_hint_x: 0.65
 
                     PLabel:
@@ -97,14 +90,7 @@
                             adaptive_size: True
                             pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
-                MDCard:
-                    orientation: "vertical"
-                    padding: "16dp"
-                    spacing: "8dp"
-                    radius: [18, 18, 18, 18]
-                    elevation: 0
-                    md_bg_color: theme.SURFACE
-                    line_color: theme.BORDER
+                PCard:
                     size_hint_x: 0.35
 
                     PLabel:

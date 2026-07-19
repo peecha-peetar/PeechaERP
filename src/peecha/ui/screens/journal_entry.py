@@ -128,8 +128,10 @@ class JournalEntryScreen(MDScreen):
         self.ids.total_credit_label.text = shape(f"جمع بستانکار: {total_credit:,}")
 
         balanced = total_debit == total_credit and total_debit > 0
+        chip_color = theme.SUCCESS if balanced else theme.DANGER
         self.ids.balance_label.text = shape("متعادل" if balanced else "نامتعادل")
-        self.ids.balance_label.text_color = theme.SUCCESS if balanced else theme.DANGER
+        self.ids.balance_label.text_color = chip_color
+        self.ids.balance_chip.md_bg_color = (chip_color[0], chip_color[1], chip_color[2], 0.12)
 
     def _set_status(self, message: str, *, is_error: bool = False) -> None:
         self.ids.status_label.text = shape(message)

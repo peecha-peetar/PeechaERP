@@ -1,12 +1,35 @@
+#:import theme peecha.ui.theme
+
 <PlaceholderScreen>:
     name: "placeholder"
-    md_bg_color: app.theme_cls.bg_normal
+    md_bg_color: theme.BACKGROUND
 
-    PLabel:
-        text: root.message
-        halign: "center"
-        # adaptive_size: توضیح در dashboard.kv (فرمول text_size خودِ MDLabel
-        # به width وابسته است؛ ست‌کردن دستیِ text_size ثابت با آن رقابت
-        # می‌کند، اما adaptive_size همان فرمول را پایدار به None می‌رساند)
-        adaptive_size: True
+    BoxLayout:
+        orientation: "vertical"
+        size_hint: None, None
+        size: "320dp", "220dp"
+        spacing: "14dp"
         pos_hint: {"center_x": 0.5, "center_y": 0.5}
+
+        MDBoxLayout:
+            size_hint: None, None
+            size: "72dp", "72dp"
+            pos_hint: {"center_x": 0.5}
+            radius: [26, 26, 26, 26]
+            md_bg_color: theme.SELECTED
+
+            MDIcon:
+                icon: "hammer-wrench"
+                theme_text_color: "Custom"
+                text_color: theme.ACCENT
+                halign: "center"
+                valign: "middle"
+                font_size: "32sp"
+
+        PLabel:
+            text: root.message
+            halign: "center"
+            theme_text_color: "Custom"
+            text_color: theme.TEXT_SECONDARY
+            adaptive_size: True
+            pos_hint: {"center_x": 0.5}

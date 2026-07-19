@@ -1,67 +1,87 @@
 #:import shape peecha.ui.rtl.shape
+#:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
 
 <ConnectionSettingsScreen>:
     name: "connection_settings"
-    md_bg_color: app.theme_cls.bg_normal
+    md_bg_color: theme.BACKGROUND
 
-    MDCard:
-        size_hint: None, None
-        size: "420dp", "620dp"
-        pos_hint: {"center_x": 0.5, "center_y": 0.5}
-        orientation: "vertical"
-        padding: "24dp"
-        spacing: "12dp"
-        elevation: 2
-        radius: [12, 12, 12, 12]
-
-        PTitleLabel:
-            text: shape("تنظیمات اتصال به دیتابیس")
-
-        PTextField:
-            id: host_field
-            hint_text: shape("آدرس سرور (Host)")
-
-        PTextField:
-            id: port_field
-            hint_text: shape("پورت")
-            input_filter: "int"
-
-        PTextField:
-            id: name_field
-            hint_text: shape("نام دیتابیس")
-
-        PTextField:
-            id: user_field
-            hint_text: shape("نام کاربری دیتابیس")
-
-        PTextField:
-            id: password_field
-            hint_text: shape("رمز عبور دیتابیس")
-            password: True
-
-        PHintLabel:
-            id: status_label
-            text: ""
-
+    ScrollView:
         BoxLayout:
-            size_hint_y: None
-            height: "48dp"
-            spacing: "8dp"
+            orientation: "vertical"
+            size_hint: None, None
+            size: dp(420), self.minimum_height
+            pos_hint: {"center_x": 0.5}
+            padding: ["0dp", "32dp"]
+            spacing: "20dp"
 
-            PFlatButton:
-                text: shape("تست اتصال")
-                on_release: root.test_connection_pressed()
+            MDBoxLayout:
+                size_hint: None, None
+                size: "64dp", "64dp"
+                pos_hint: {"center_x": 0.5}
+                radius: [22, 22, 22, 22]
+                md_bg_color: theme.PRIMARY
 
-            PFlatButton:
-                text: shape("ساخت جدول‌ها")
-                on_release: root.create_tables_pressed()
+                MDIcon:
+                    icon: "database-cog-outline"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    halign: "center"
+                    valign: "middle"
+                    font_size: "30sp"
 
-        BoxLayout:
-            size_hint_y: None
-            height: "48dp"
+            PCard:
+                size_hint_y: None
+                height: self.minimum_height
 
-            Widget:
+                PTitleLabel:
+                    text: shape("تنظیمات اتصال به دیتابیس")
 
-            PRaisedButton:
-                text: shape("ذخیره و ادامه")
-                on_release: root.save_and_continue()
+                PTextField:
+                    id: host_field
+                    hint_text: shape("آدرس سرور (Host)")
+
+                PTextField:
+                    id: port_field
+                    hint_text: shape("پورت")
+                    input_filter: "int"
+
+                PTextField:
+                    id: name_field
+                    hint_text: shape("نام دیتابیس")
+
+                PTextField:
+                    id: user_field
+                    hint_text: shape("نام کاربری دیتابیس")
+
+                PTextField:
+                    id: password_field
+                    hint_text: shape("رمز عبور دیتابیس")
+                    password: True
+
+                PHintLabel:
+                    id: status_label
+                    text: ""
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "48dp"
+                    spacing: "8dp"
+
+                    PFlatButton:
+                        text: shape("تست اتصال")
+                        on_release: root.test_connection_pressed()
+
+                    PFlatButton:
+                        text: shape("ساخت جدول‌ها")
+                        on_release: root.create_tables_pressed()
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "48dp"
+
+                    Widget:
+
+                    PRaisedButton:
+                        text: shape("ذخیره و ادامه")
+                        on_release: root.save_and_continue()

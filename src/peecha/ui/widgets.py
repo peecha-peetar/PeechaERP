@@ -12,12 +12,77 @@ from __future__ import annotations
 
 from kivy.factory import Factory
 from kivy.graphics import Color, Line
+from kivy.graphics import RoundedRectangle
+from kivy.metrics import dp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.widget import Widget
 from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.card import MDCard
 from kivymd.uix.textfield import MDTextField
+
+from peecha.ui import theme
+
+# سه لایه‌ی نیمه‌شفاف با پخش/افست/شفافیتِ افزایشی، برای تقریب دستیِ یک
+# box-shadow نرم (طبق جدول Elevation در docs/ui-ux-guidelines.md بخش ۴).
+_SHADOW_LAYERS = [
+    (dp(12), dp(16), 0.035),
+    (dp(6), dp(9), 0.05),
+    (dp(2), dp(3), 0.07),
+]
+
+
+class SoftShadowBehavior:
+    """سایه‌ی نرم چندلایه روی canvas.before، جایگزین elevation خودِ MDCard.
+
+    در KivyMD 1.2.0 (نسخه‌ی نصب‌شده)، elevation>0 یک هاله‌ی تیره و سخت
+    تولید می‌کند، نه سایه‌ی ملایمِ Material — با آزمایش مستقیم تایید شد.
+    این mixin به‌جایش چند RoundedRectangle نیمه‌شفاف با پخش/افست افزایشی
+    زیر کارت می‌کشد که به یک سایه‌ی نرم نزدیک‌تر است، به‌علاوه یک حاشیه‌ی
+    ۱px ظریف طبق پالت. هر ویجتی که این mixin را دارد باید `radius` و
+    `md_bg_color` را داشته باشد (مثل MDBoxLayout/MDCard).
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._shadow_rects: list[tuple[RoundedRectangle, float, float]] = []
+        with self.canvas.before:
+            for spread, offset, alpha in _SHADOW_LAYERS:
+                Color(0, 0, 0, alpha)
+                self._shadow_rects.append((RoundedRectangle(), spread, offset))
+            self._face_color_instr = Color(rgba=self.md_bg_color)
+            self._face_rect = RoundedRectangle()
+            Color(rgba=theme.BORDER)
+            self._border_line = Line(width=1)
+        self.bind(pos=self._redraw, size=self._redraw, radius=self._redraw, md_bg_color=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *_args) -> None:
+        radius_value = self.radius[0] if isinstance(self.radius, (list, tuple)) else self.radius
+        for rect, spread, offset in self._shadow_rects:
+            rect.pos = (self.x - spread, self.y - offset - spread)
+            rect.size = (self.width + spread * 2, self.height + spread * 2)
+            rect.radius = [radius_value + spread] * 4
+        self._face_color_instr.rgba = self.md_bg_color
+        self._face_rect.pos = self.pos
+        self._face_rect.size = self.size
+        self._face_rect.radius = self.radius if isinstance(self.radius, (list, tuple)) else [self.radius] * 4
+        self._border_line.rounded_rectangle = (self.x, self.y, self.width, self.height, radius_value)
+
+
+class PCard(SoftShadowBehavior, MDBoxLayout):
+    """کارتِ عمومیِ برنامه (پنل‌های داشبورد/کدینگ حسابداری/صدور سند و…)."""
+
+
+class PStatCard(SoftShadowBehavior, MDBoxLayout):
+    """کارت آماری (KPI) — طبق docs/ui-ux-guidelines.md بخش ۱۰."""
+
+    icon = StringProperty("chart-box-outline")
+    icon_bg_color = ListProperty([0.145, 0.388, 0.922, 1])
+    title = StringProperty("")
+    value = StringProperty("")
+    subtitle = StringProperty("")
+    trend_text = StringProperty("")
+    trend_positive = BooleanProperty(True)
 
 
 class PTextField(MDTextField):
@@ -41,18 +106,14 @@ class PLabelListRow(MDBoxLayout):
     """یک ردیف ساده‌ی متنی راست‌چین برای فهرست‌ها (مثلاً کدینگ حسابداری)."""
 
     text = StringProperty("")
+    zebra = BooleanProperty(False)
 
 
-class PStatCard(MDCard):
-    """کارت آماری (KPI) — طبق docs/ui-ux-guidelines.md بخش ۱۰."""
+class PEmptyState(MDBoxLayout):
+    """حالت خالیِ یک لیست/گرید: آیکون بزرگِ کم‌رنگ + یک خط توضیح."""
 
-    icon = StringProperty("chart-box-outline")
-    icon_bg_color = ListProperty([0.145, 0.388, 0.922, 1])
-    title = StringProperty("")
-    value = StringProperty("")
-    subtitle = StringProperty("")
-    trend_text = StringProperty("")
-    trend_positive = BooleanProperty(True)
+    icon = StringProperty("information-outline")
+    text = StringProperty("")
 
 
 class LineAreaChart(Widget):
@@ -157,9 +218,11 @@ class DonutChart(Widget):
                 start_angle = end_angle
 
 
+Factory.register("PCard", cls=PCard)
 Factory.register("PTextField", cls=PTextField)
 Factory.register("PNavItem", cls=PNavItem)
 Factory.register("PLabelListRow", cls=PLabelListRow)
+Factory.register("PEmptyState", cls=PEmptyState)
 Factory.register("PStatCard", cls=PStatCard)
 Factory.register("LineAreaChart", cls=LineAreaChart)
 Factory.register("DonutChart", cls=DonutChart)

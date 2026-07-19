@@ -1,51 +1,78 @@
 #:import shape peecha.ui.rtl.shape
+#:import theme peecha.ui.theme
 
 <LoginScreen>:
     name: "login"
-    md_bg_color: app.theme_cls.bg_normal
+    md_bg_color: theme.BACKGROUND
 
-    MDCard:
-        size_hint: None, None
-        size: "380dp", "560dp"
-        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+    BoxLayout:
         orientation: "vertical"
-        padding: "24dp"
-        spacing: "16dp"
-        elevation: 2
-        radius: [12, 12, 12, 12]
+        size_hint: None, None
+        size: "380dp", "600dp"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+        spacing: "20dp"
+
+        Widget:
+
+        MDBoxLayout:
+            size_hint: None, None
+            size: "64dp", "64dp"
+            pos_hint: {"center_x": 0.5}
+            radius: [22, 22, 22, 22]
+            md_bg_color: theme.PRIMARY
+
+            MDIcon:
+                icon: "chart-donut"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                halign: "center"
+                valign: "middle"
+                font_size: "30sp"
 
         PTitleLabel:
-            text: shape("ورود به پیچا")
+            text: shape("پیچا")
+            halign: "center"
+            font_style: "H4"
+            size_hint_x: 1
 
-        PTextField:
-            id: username_field
-            hint_text: shape("نام کاربری")
-
-        PTextField:
-            id: password_field
-            hint_text: shape("رمز عبور")
-            password: True
-
-        PRaisedButton:
-            text: shape("ورود")
-            pos_hint: {"center_x": 0.5}
-            on_release: root.attempt_login()
-
-        PHintLabel:
-            id: status_label
-            text: ""
-
-        PRaisedButton:
-            id: bootstrap_button
-            text: shape("ساخت اولین کاربر مدیر")
-            pos_hint: {"center_x": 0.5}
-            opacity: 0
-            disabled: True
+        PCard:
             size_hint_y: None
-            height: "0dp"
-            on_release: root.open_admin_bootstrap()
+            height: self.minimum_height
 
-        PFlatButton:
-            text: shape("تنظیمات اتصال به دیتابیس")
-            pos_hint: {"center_x": 0.5}
-            on_release: root.open_connection_settings()
+            PTitleLabel:
+                text: shape("ورود به سیستم")
+
+            PTextField:
+                id: username_field
+                hint_text: shape("نام کاربری")
+
+            PTextField:
+                id: password_field
+                hint_text: shape("رمز عبور")
+                password: True
+
+            PRaisedButton:
+                text: shape("ورود")
+                pos_hint: {"center_x": 0.5}
+                on_release: root.attempt_login()
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+            PRaisedButton:
+                id: bootstrap_button
+                text: shape("ساخت اولین کاربر مدیر")
+                pos_hint: {"center_x": 0.5}
+                opacity: 0
+                disabled: True
+                size_hint_y: None
+                height: "0dp"
+                on_release: root.open_admin_bootstrap()
+
+            PFlatButton:
+                text: shape("تنظیمات اتصال به دیتابیس")
+                pos_hint: {"center_x": 0.5}
+                on_release: root.open_connection_settings()
+
+        Widget:

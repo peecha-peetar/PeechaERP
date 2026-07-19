@@ -1,5 +1,6 @@
 #:import shape peecha.ui.rtl.shape
 #:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
 
 <ChartOfAccountsScreen>:
     name: "chart_of_accounts"
@@ -10,40 +11,45 @@
 
         BoxLayout:
             size_hint_y: None
-            height: "48dp"
-            padding: ["24dp", "0dp"]
-            spacing: "8dp"
+            height: "64dp"
+            padding: ["24dp", "14dp"]
             canvas.before:
                 Color:
                     rgba: theme.SURFACE
                 Rectangle:
                     pos: self.pos
                     size: self.size
+                Color:
+                    rgba: theme.DIVIDER
+                Line:
+                    points: [self.x, self.y, self.x + self.width, self.y]
+                    width: 1
 
-            PFlatButton:
-                text: shape("کدینگ حسابداری")
-                theme_text_color: "Custom"
-                text_color: theme.ACCENT
+            MDBoxLayout:
+                size_hint: None, None
+                size: self.minimum_width, dp(36)
+                padding: "4dp"
+                spacing: "4dp"
+                radius: [20, 20, 20, 20]
+                md_bg_color: theme.HOVER
 
-            PFlatButton:
-                text: shape("صدور سند")
-                on_release: root.go_to_journal_entry()
+                PTabButton:
+                    text: shape("کدینگ حسابداری")
+                    active: True
+
+                PTabButton:
+                    text: shape("صدور سند")
+                    active: False
+                    on_release: root.go_to_journal_entry()
 
             Widget:
 
         BoxLayout:
             orientation: "horizontal"
             padding: "24dp"
-            spacing: "16dp"
+            spacing: "20dp"
 
-            MDCard:
-                orientation: "vertical"
-                padding: "16dp"
-                spacing: "8dp"
-                radius: [18, 18, 18, 18]
-                elevation: 0
-                md_bg_color: theme.SURFACE
-                line_color: theme.BORDER
+            PCard:
                 size_hint_x: 0.62
 
                 PLabel:
@@ -62,16 +68,11 @@
                         orientation: "vertical"
                         size_hint_y: None
                         height: self.minimum_height
+                        spacing: "2dp"
 
-            MDCard:
-                orientation: "vertical"
-                padding: "16dp"
-                spacing: "10dp"
-                radius: [18, 18, 18, 18]
-                elevation: 0
-                md_bg_color: theme.SURFACE
-                line_color: theme.BORDER
+            PCard:
                 size_hint_x: 0.38
+                spacing: "14dp"
 
                 PLabel:
                     text: shape("افزودن حساب جدید")
@@ -79,7 +80,7 @@
                     size_hint_y: None
                     height: self.texture_size[1]
 
-                PFlatButton:
+                PSelectField:
                     id: parent_button
                     text: ""
                     on_release: root.open_parent_menu()
@@ -96,17 +97,17 @@
                     id: name_field
                     hint_text: shape("نام حساب")
 
-                PFlatButton:
+                PSelectField:
                     id: nature_button
                     text: ""
                     on_release: root.open_nature_menu()
 
-                PFlatButton:
+                PSelectField:
                     id: category_button
                     text: ""
                     on_release: root.open_category_menu()
 
-                PFlatButton:
+                PSelectField:
                     id: account_type_button
                     text: ""
                     on_release: root.open_account_type_menu()

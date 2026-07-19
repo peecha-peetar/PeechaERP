@@ -1,13 +1,15 @@
 #:import shape peecha.ui.rtl.shape
 #:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
 
 <JournalEntryLineRow>:
     orientation: "horizontal"
     size_hint_y: None
-    height: "48dp"
+    height: "52dp"
     spacing: "8dp"
+    padding: ["0dp", "2dp"]
 
-    PFlatButton:
+    PSelectField:
         id: account_button
         text: shape("انتخاب حساب")
         size_hint_x: 0.32
@@ -31,7 +33,7 @@
         on_text: root.on_credit_changed()
 
     MDIconButton:
-        icon: "close"
+        icon: "close-circle-outline"
         theme_text_color: "Custom"
         text_color: theme.DANGER
         on_release: root.remove_line()
@@ -46,24 +48,36 @@
 
         BoxLayout:
             size_hint_y: None
-            height: "48dp"
-            padding: ["24dp", "0dp"]
-            spacing: "8dp"
+            height: "64dp"
+            padding: ["24dp", "14dp"]
             canvas.before:
                 Color:
                     rgba: theme.SURFACE
                 Rectangle:
                     pos: self.pos
                     size: self.size
+                Color:
+                    rgba: theme.DIVIDER
+                Line:
+                    points: [self.x, self.y, self.x + self.width, self.y]
+                    width: 1
 
-            PFlatButton:
-                text: shape("کدینگ حسابداری")
-                on_release: root.go_to_chart_of_accounts()
+            MDBoxLayout:
+                size_hint: None, None
+                size: self.minimum_width, dp(36)
+                padding: "4dp"
+                spacing: "4dp"
+                radius: [20, 20, 20, 20]
+                md_bg_color: theme.HOVER
 
-            PFlatButton:
-                text: shape("صدور سند")
-                theme_text_color: "Custom"
-                text_color: theme.ACCENT
+                PTabButton:
+                    text: shape("کدینگ حسابداری")
+                    active: False
+                    on_release: root.go_to_chart_of_accounts()
+
+                PTabButton:
+                    text: shape("صدور سند")
+                    active: True
 
             Widget:
 
@@ -75,14 +89,7 @@
                 padding: "24dp"
                 spacing: "12dp"
 
-                MDCard:
-                    orientation: "vertical"
-                    padding: "16dp"
-                    spacing: "12dp"
-                    radius: [18, 18, 18, 18]
-                    elevation: 0
-                    md_bg_color: theme.SURFACE
-                    line_color: theme.BORDER
+                PCard:
                     size_hint_y: None
                     height: self.minimum_height
 
@@ -118,18 +125,23 @@
                         orientation: "vertical"
                         size_hint_y: None
                         height: self.minimum_height
-                        spacing: "4dp"
+                        spacing: "6dp"
 
                     PFlatButton:
                         text: shape("+ افزودن ردیف")
+                        theme_text_color: "Custom"
+                        text_color: theme.ACCENT
                         size_hint_y: None
                         height: "36dp"
                         on_release: root.add_line()
 
-                    BoxLayout:
+                    MDBoxLayout:
                         size_hint_y: None
-                        height: "32dp"
-                        spacing: "16dp"
+                        height: "56dp"
+                        padding: ["16dp", "0dp"]
+                        spacing: "20dp"
+                        radius: [14, 14, 14, 14]
+                        md_bg_color: theme.HOVER
 
                         PLabel:
                             id: total_debit_label
@@ -145,14 +157,26 @@
                             text_color: theme.TEXT_PRIMARY
                             valign: "middle"
 
-                        PLabel:
-                            id: balance_label
-                            text: ""
-                            theme_text_color: "Custom"
-                            text_color: theme.DANGER
-                            valign: "middle"
-
                         Widget:
+
+                        MDBoxLayout:
+                            id: balance_chip
+                            size_hint: None, None
+                            size: self.minimum_width, dp(30)
+                            padding: ["14dp", "0dp"]
+                            radius: [15, 15, 15, 15]
+                            md_bg_color: theme.DANGER[0], theme.DANGER[1], theme.DANGER[2], 0.12
+                            pos_hint: {"center_y": 0.5}
+
+                            PLabel:
+                                id: balance_label
+                                text: ""
+                                theme_text_color: "Custom"
+                                text_color: theme.DANGER
+                                halign: "center"
+                                valign: "middle"
+                                # adaptive_width: توضیح در dashboard.kv/widgets.kv (PTabButton)
+                                adaptive_width: True
 
                     PHintLabel:
                         id: status_label
