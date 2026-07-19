@@ -14,15 +14,19 @@ from peecha.db.base import new_session
 from peecha.db.models.security import UserCompany
 from peecha.services.auth import authenticate, has_any_user
 from peecha.ui.rtl import shape
+from peecha.ui.shortcuts import KeyboardShortcutMixin
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "login.kv")
 Builder.load_file(_KV_PATH)
 
 
-class LoginScreen(MDScreen):
+class LoginScreen(KeyboardShortcutMixin, MDScreen):
     def on_pre_enter(self, *args):
         self.ids.status_label.text = ""
         self.ids.bootstrap_button.size_hint_y = None
+        self.bind_shortcuts()
+        # فوکوس خودکار روی اولین فیلد: کاربر بدون لمس ماوس هم بتواند تایپ را شروع کند
+        self.ids.username_field.focus = True
         try:
             no_users = not has_any_user()
         except SQLAlchemyError:
@@ -36,6 +40,12 @@ class LoginScreen(MDScreen):
         self.ids.bootstrap_button.height = "36dp" if no_users else "0dp"
         if no_users:
             self._set_status("هنوز کاربری ثبت نشده — از دکمه‌ی زیر شروع کنید.")
+
+    def on_leave(self, *args):
+        self.unbind_shortcuts()
+
+    def on_shortcut_save(self) -> None:
+        self.attempt_login()
 
     def _set_status(self, message: str) -> None:
         self.ids.status_label.text = shape(message)

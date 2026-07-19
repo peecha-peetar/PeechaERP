@@ -84,6 +84,17 @@ class ShellScreen(MDScreen):
         md_app = MDApp.get_running_app()
         md_app.theme_cls.theme_style = "Dark" if md_app.theme_cls.theme_style == "Light" else "Light"
 
+    def on_leave(self, *args):
+        # content_manager یک ScreenManagerِ تودرتوی جداست: وقتی خودِ پوسته
+        # (shell) با خروج از حساب کاربری ترک می‌شود، on_leave خودش خودکار
+        # به صفحه‌ی فعلیِ داخلِ content_manager نمی‌رسد — اگر آن صفحه
+        # میانبرهای کیبورد بسته باشد (مثل کدینگ حسابداری/صدور سند)، بدون
+        # این فراخوانیِ صریح، آن‌ها به Window بسته می‌مانند و بعد از خروج هم
+        # فعال می‌مانند.
+        current_screen = self.ids.content_manager.current_screen
+        if current_screen is not None and hasattr(current_screen, "unbind_shortcuts"):
+            current_screen.unbind_shortcuts()
+
     def log_out(self) -> None:
         session.log_out()
         self.manager.current = "login"

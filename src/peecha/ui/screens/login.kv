@@ -45,11 +45,15 @@
             PTextField:
                 id: username_field
                 hint_text: shape("نام کاربری")
+                focus_next: password_field
+                on_text_validate: root.attempt_login()
 
             PTextField:
                 id: password_field
                 hint_text: shape("رمز عبور")
                 password: True
+                focus_previous: username_field
+                on_text_validate: root.attempt_login()
 
             PRaisedButton:
                 text: shape("ورود")

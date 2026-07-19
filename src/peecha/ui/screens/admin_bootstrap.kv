@@ -46,24 +46,37 @@
                 PTextField:
                     id: company_name_field
                     hint_text: shape("نام شرکت")
+                    focus_next: username_field
+                    on_text_validate: root.create_admin()
 
                 PTextField:
                     id: username_field
                     hint_text: shape("نام کاربری مدیر")
+                    focus_next: full_name_field
+                    focus_previous: company_name_field
+                    on_text_validate: root.create_admin()
 
                 PTextField:
                     id: full_name_field
                     hint_text: shape("نام کامل مدیر")
+                    focus_next: password_field
+                    focus_previous: username_field
+                    on_text_validate: root.create_admin()
 
                 PTextField:
                     id: password_field
                     hint_text: shape("رمز عبور")
                     password: True
+                    focus_next: confirm_password_field
+                    focus_previous: full_name_field
+                    on_text_validate: root.create_admin()
 
                 PTextField:
                     id: confirm_password_field
                     hint_text: shape("تکرار رمز عبور")
                     password: True
+                    focus_previous: password_field
+                    on_text_validate: root.create_admin()
 
                 PHintLabel:
                     id: status_label

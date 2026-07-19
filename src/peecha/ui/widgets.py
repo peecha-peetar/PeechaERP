@@ -15,12 +15,29 @@ from kivy.graphics import Color, Line
 from kivy.graphics import RoundedRectangle
 from kivy.metrics import dp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.behaviors import ButtonBehavior, FocusBehavior
 from kivy.uix.widget import Widget
+from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.textfield import MDTextField
 
 from peecha.ui import theme
+
+_ACTIVATE_KEYCODES = (13, 32, 271)  # enter, spacebar, numpadenter
+
+
+class KeyboardActivatedButtonBehavior(FocusBehavior):
+    """برای دکمه‌هایی که جایگزینِ TextInput در فرم‌ها هستند (فیلدهای انتخابی،
+    تب‌ها، دکمه‌ها): FocusBehavior فقط رسیدن با Tab را می‌دهد؛ فعال‌سازی با
+    Enter/Space (مثل کلیک) را خودمان اضافه می‌کنیم — طبق درخواستِ صریح
+    که کارِ فرم‌ها باید بدون ماوس هم ممکن باشد."""
+
+    def keyboard_on_key_down(self, window, keycode, text, modifiers):
+        if keycode[0] in _ACTIVATE_KEYCODES:
+            self.dispatch("on_release")
+            return True
+        return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
 
 # سه لایه‌ی نیمه‌شفاف با پخش/افست/شفافیتِ افزایشی، برای تقریب دستیِ یک
 # box-shadow نرم (طبق جدول Elevation در docs/ui-ux-guidelines.md بخش ۴).
@@ -100,6 +117,31 @@ class PNavItem(ButtonBehavior, MDBoxLayout):
     icon = StringProperty("circle-outline")
     text = StringProperty("")
     selected = BooleanProperty(False)
+
+
+class PSelectField(KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):
+    """فیلدِ انتخابی (بازکننده‌ی منوی کشویی) — با Tab قابل‌رسیدن و با
+    Enter/Space قابل‌بازشدن، تا انتخاب از منو هم بدون ماوس ممکن باشد."""
+
+    text = StringProperty("")
+
+
+class PTabButton(KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):
+    """دکمه‌ی یک بخشِ نوارِ تبِ کپسولی."""
+
+    text = StringProperty("")
+    active = BooleanProperty(False)
+
+
+class PRaisedButton(KeyboardActivatedButtonBehavior, MDRaisedButton):
+    """دکمه‌ی اصلیِ فرم‌ها — MDRaisedButton خودش FocusBehavior ندارد (تست
+    مستقیم تایید کرد)، پس با Tab قابل‌رسیدن نبود و نمی‌شد focus_next یک
+    فیلد دیگر را به آن وصل کرد؛ این mixin هم قابل‌فوکوس‌شدن و هم فعال‌سازی
+    با Enter/Space را اضافه می‌کند."""
+
+
+class PFlatButton(KeyboardActivatedButtonBehavior, MDFlatButton):
+    """دکمه‌ی ثانویه — همان قابلیتِ کیبوردِ PRaisedButton."""
 
 
 class PLabelListRow(MDBoxLayout):
@@ -228,6 +270,10 @@ class DonutChart(Widget):
 Factory.register("PCard", cls=PCard)
 Factory.register("PTextField", cls=PTextField)
 Factory.register("PNavItem", cls=PNavItem)
+Factory.register("PSelectField", cls=PSelectField)
+Factory.register("PTabButton", cls=PTabButton)
+Factory.register("PRaisedButton", cls=PRaisedButton)
+Factory.register("PFlatButton", cls=PFlatButton)
 Factory.register("PLabelListRow", cls=PLabelListRow)
 Factory.register("PEmptyState", cls=PEmptyState)
 Factory.register("PBadge", cls=PBadge)

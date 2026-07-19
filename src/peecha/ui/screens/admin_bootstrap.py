@@ -14,14 +14,23 @@ from peecha.db.base import new_session
 from peecha.db.models.security import UserCompany
 from peecha.services.bootstrap import bootstrap_system
 from peecha.ui.rtl import shape
+from peecha.ui.shortcuts import KeyboardShortcutMixin
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "admin_bootstrap.kv")
 Builder.load_file(_KV_PATH)
 
 
-class AdminBootstrapScreen(MDScreen):
+class AdminBootstrapScreen(KeyboardShortcutMixin, MDScreen):
     def on_pre_enter(self, *args):
         self.ids.status_label.text = ""
+        self.bind_shortcuts()
+        self.ids.company_name_field.focus = True
+
+    def on_leave(self, *args):
+        self.unbind_shortcuts()
+
+    def on_shortcut_save(self) -> None:
+        self.create_admin()
 
     def _set_status(self, message: str) -> None:
         self.ids.status_label.text = shape(message)

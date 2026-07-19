@@ -14,29 +14,104 @@
         text: shape("انتخاب حساب")
         size_hint_x: 0.32
         on_release: root.open_account_menu()
+        focus_next: description_field
 
     PTextField:
         id: description_field
         hint_text: shape("شرح ردیف")
         size_hint_x: 0.26
+        focus_next: debit_field
+        focus_previous: account_button
 
     PTextField:
         id: debit_field
         hint_text: shape("بدهکار")
         size_hint_x: 0.16
         on_text: root.on_debit_changed()
+        on_text_validate: root.request_next()
+        focus_next: credit_field
+        focus_previous: description_field
 
     PTextField:
         id: credit_field
         hint_text: shape("بستانکار")
         size_hint_x: 0.16
         on_text: root.on_credit_changed()
+        on_text_validate: root.request_next()
+        focus_previous: debit_field
 
     MDIconButton:
         icon: "close-circle-outline"
         theme_text_color: "Custom"
         text_color: theme.DANGER
         on_release: root.remove_line()
+
+# ردیفِ جدولِ «اسناد اخیر» — شماره | تاریخ | شرح | مبلغ | وضعیت + ویرایش/حذف.
+# فقط سندهای TEMPORARY قابل‌ویرایش/حذف‌اند (root.editable)؛ برای بقیه این
+# دو آیکون اصلاً نمایش داده نمی‌شوند.
+<JournalEntryRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "40dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+
+    PLabel:
+        text: root.number_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.12
+
+    PLabel:
+        text: root.date_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.18
+
+    PLabel:
+        text: root.description_text
+        valign: "middle"
+        size_hint_x: 0.32
+
+    PLabel:
+        text: root.amount_text
+        valign: "middle"
+        halign: "right"
+        size_hint_x: 0.18
+
+    AnchorLayout:
+        size_hint_x: 0.20
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: root.status_badge_color
+
+    MDIconButton:
+        icon: "pencil-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        opacity: 1 if root.editable else 0
+        disabled: not root.editable
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT
+        on_release: root.on_release()
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        opacity: 1 if root.editable else 0
+        disabled: not root.editable
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.request_delete()
 
 
 <JournalEntryScreen>:
@@ -94,6 +169,7 @@
                     height: self.minimum_height
 
                     PLabel:
+                        id: form_title
                         text: shape("صدور سند حسابداری")
                         font_style: "H5"
                         size_hint_y: None
@@ -108,11 +184,13 @@
                             id: date_field
                             hint_text: shape("تاریخ سند (۱۴۰۳/۰۴/۲۸)")
                             size_hint_x: 0.3
+                            focus_next: description_field
 
                         PTextField:
                             id: description_field
                             hint_text: shape("شرح سند")
                             size_hint_x: 0.7
+                            focus_previous: date_field
 
                     PLabel:
                         text: shape("ردیف‌ها")
@@ -169,12 +247,14 @@
                         spacing: "6dp"
 
                     PFlatButton:
+                        id: add_line_button
                         text: shape("+ افزودن ردیف")
                         theme_text_color: "Custom"
                         text_color: theme.ACCENT
                         size_hint_y: None
                         height: "36dp"
                         on_release: root.add_line()
+                        focus_next: save_button
 
                     MDBoxLayout:
                         size_hint_y: None
@@ -225,6 +305,95 @@
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
 
-                    PRaisedButton:
-                        text: shape("ثبت سند")
-                        on_release: root.submit()
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "48dp"
+                        spacing: "8dp"
+
+                        PRaisedButton:
+                            id: save_button
+                            text: shape("ثبت سند")
+                            on_release: root.save_entry()
+                            focus_previous: add_line_button
+                            focus_next: cancel_edit_button
+
+                        PFlatButton:
+                            id: cancel_edit_button
+                            text: shape("لغو ویرایش (Esc)")
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            opacity: 0
+                            disabled: True
+                            focus_previous: save_button
+                            size_hint_y: None
+                            height: "0dp"
+                            on_release: root.cancel_edit()
+
+                PCard:
+                    size_hint_y: None
+                    height: self.minimum_height
+
+                    PLabel:
+                        text: shape("اسناد اخیر")
+                        font_style: "H5"
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    BoxLayout:
+                        id: entries_header
+                        size_hint_y: None
+                        height: "28dp"
+                        spacing: "8dp"
+
+                        PLabel:
+                            text: shape("شماره")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            size_hint_x: 0.12
+
+                        PLabel:
+                            text: shape("تاریخ")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            size_hint_x: 0.18
+
+                        PLabel:
+                            text: shape("شرح")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            size_hint_x: 0.32
+
+                        PLabel:
+                            text: shape("مبلغ")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            valign: "middle"
+                            halign: "right"
+                            size_hint_x: 0.18
+
+                        PLabel:
+                            text: shape("وضعیت")
+                            font_style: "Caption"
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_SECONDARY
+                            halign: "right"
+                            valign: "middle"
+                            size_hint_x: 0.20
+
+                        Widget:
+                            size_hint_x: None
+                            width: "56dp"
+
+                    BoxLayout:
+                        id: entries_list
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "2dp"

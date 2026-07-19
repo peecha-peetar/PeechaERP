@@ -54,6 +54,12 @@
     halign: "right"
     size_hint_y: None
     height: "48dp"
+    # همه‌ی فیلدهای برنامه تک‌خطی‌اند: multiline:False یعنی Enter به‌جای
+    # افزودن خط جدید، رویداد on_text_validate را شلیک می‌کند (برای ثبتِ
+    # فرم با کیبورد)؛ write_tab:False یعنی Tab کاراکتر تب وارد نمی‌کند،
+    # به‌جایش فوکوس را طبق focus_next/focus_previous جابه‌جا می‌کند.
+    multiline: False
+    write_tab: False
     mode: "fill"
     radius: [12, 12, 0, 0]
     fill_color_normal: theme.HOVER
@@ -73,25 +79,47 @@
 # می‌کند) تداخل می‌کند و با دکمه‌ی ارتفاع-صفر (مثل bootstrap_button مخفی)
 # کرش می‌دهد (`ValueError: border_radius must have 4, got 0`، با تست مستقیم
 # پیدا شد). ارتفاع/۲ همین الان دکمه‌ها را کپسولی نشان می‌دهد، نیازی نیست.
-<PRaisedButton@MDRaisedButton>:
+# کلاسِ پایتونیِ واقعی‌اند (نه دینامیک‌کلاسِ خالص KV) چون MDRaisedButton/
+# MDFlatButton خودشان FocusBehavior ندارند (با Tab قابل‌رسیدن نبودند و
+# focus_next یک فیلدِ دیگر نمی‌توانست به آن‌ها وصل شود — تست مستقیم تایید
+# کرد)؛ PRaisedButton/PFlatButton این را هم اضافه می‌کنند.
+<PRaisedButton>:
     font_name: app.font_name
     elevation: 0
     md_bg_color: theme.ACCENT
+    canvas.after:
+        Color:
+            rgba: theme.PRIMARY if self.focus else (0, 0, 0, 0)
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, 10)
+            width: 1.5
 
-<PFlatButton@MDFlatButton>:
+<PFlatButton>:
     font_name: app.font_name
+    canvas.after:
+        Color:
+            rgba: theme.ACCENT if self.focus else (0, 0, 0, 0)
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, 10)
+            width: 1.5
 
 # دکمه‌ی یک بخشِ نوارِ تبِ کپسولی (مثلاً «کدینگ حسابداری» / «صدور سند»)؛
 # root.active رنگ پس‌زمینه/متن را کنترل می‌کند، خودِ کلیک با on_release
-# در هر صفحه مدیریت می‌شود (چون مقصدِ ناوبری هرجا فرق می‌کند).
-<PTabButton@ButtonBehavior+MDBoxLayout>:
-    active: False
-    text: ""
+# در هر صفحه مدیریت می‌شود (چون مقصدِ ناوبری هرجا فرق می‌کند). کلاسِ پایتونیِ
+# واقعی است (نه دینامیک‌کلاسِ خالص KV) چون کیبورد (Enter/Space برای فعال‌سازی)
+# نیاز به override کردنِ keyboard_on_key_down در پایتون دارد.
+<PTabButton>:
     size_hint: None, None
     size: self.minimum_width, dp(36)
     padding: ["18dp", "0dp"]
     radius: [18, 18, 18, 18]
     md_bg_color: theme.ACCENT if root.active else (0, 0, 0, 0)
+    canvas.after:
+        Color:
+            rgba: theme.ACCENT if root.focus else (0, 0, 0, 0)
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, 18)
+            width: 1.5
 
     PLabel:
         text: root.text
@@ -107,9 +135,9 @@
 # فیلدِ انتخابی (select) — برای دکمه‌هایی که یک منوی کشویی باز می‌کنند
 # (ماهیت/دسته/نوع حساب/والد و...)؛ قبلاً از PFlatButton استفاده می‌شد که
 # شبیه یک لینک ساده بود، نه یک فیلد فرم. ظاهرش هم‌خانواده‌ی PTextField
-# (fill + radius) است تا با بقیه‌ی فرم یک‌دست باشد.
-<PSelectField@ButtonBehavior+MDBoxLayout>:
-    text: ""
+# (fill + radius) است تا با بقیه‌ی فرم یک‌دست باشد. کلاسِ پایتونیِ واقعی
+# است به همان دلیلِ PTabButton (کیبورد).
+<PSelectField>:
     orientation: "horizontal"
     size_hint_y: None
     height: "48dp"
@@ -117,6 +145,12 @@
     spacing: "6dp"
     radius: [12, 12, 12, 12]
     md_bg_color: theme.HOVER
+    canvas.after:
+        Color:
+            rgba: theme.ACCENT if root.focus else (0, 0, 0, 0)
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, 12)
+            width: 1.5
 
     PLabel:
         text: root.text

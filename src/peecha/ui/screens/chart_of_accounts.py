@@ -7,7 +7,10 @@ import os
 
 from kivy.lang import Builder
 from kivy.properties import BooleanProperty, ListProperty, StringProperty
+from kivy.uix.behaviors import ButtonBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.button import MDFlatButton, MDRaisedButton
+from kivymd.uix.dialog import MDDialog
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
@@ -15,6 +18,7 @@ from peecha import session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.ui import theme
 from peecha.ui.rtl import shape
+from peecha.ui.shortcuts import KeyboardShortcutMixin
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "chart_of_accounts.kv")
 Builder.load_file(_KV_PATH)
@@ -27,10 +31,12 @@ _CATEGORY_OPTIONS = [
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _LEVEL_BADGE_COLORS = {1: theme.TEXT_SECONDARY, 2: theme.INFO, 3: theme.ACCENT}
+_NO_PARENT_LABEL = "— بدون والد (سطح گروه) —"
 
 
-class AccountRowWidget(MDBoxLayout):
-    """یک ردیفِ جدولِ کدینگ حسابداری: کد | نام (تورفته بر اساس سطح) | سطح | وضعیت."""
+class AccountRowWidget(ButtonBehavior, MDBoxLayout):
+    """یک ردیفِ جدولِ کدینگ حسابداری: کد | نام (تورفته بر اساس سطح) | سطح |
+    وضعیت | ویرایش | حذف. کلیک روی خودِ ردیف هم مثل دکمه‌ی ویرایش عمل می‌کند."""
 
     code_text = StringProperty("")
     name_text = StringProperty("")
@@ -39,10 +45,22 @@ class AccountRowWidget(MDBoxLayout):
     status_text = StringProperty("")
     status_badge_color = ListProperty([0, 0, 0, 1])
     zebra = BooleanProperty(False)
-_NO_PARENT_LABEL = "— بدون والد (سطح گروه) —"
+    selected = BooleanProperty(False)
+
+    def __init__(self, account_id: int, on_edit, on_delete, **kwargs):
+        super().__init__(**kwargs)
+        self.account_id = account_id
+        self._on_edit = on_edit
+        self._on_delete = on_delete
+
+    def on_release(self) -> None:
+        self._on_edit(self.account_id)
+
+    def request_delete(self) -> None:
+        self._on_delete(self.account_id)
 
 
-class ChartOfAccountsScreen(MDScreen):
+class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._nature_code = _NATURE_OPTIONS[0][0]
@@ -50,7 +68,10 @@ class ChartOfAccountsScreen(MDScreen):
         self._account_type_code = _ACCOUNT_TYPE_OPTIONS[0][0]
         self._parent_account_id: int | None = None
         self._parent_options: list[coa_service.AccountRow] = []
+        self._accounts_by_id: dict[int, coa_service.AccountRow] = {}
         self._menus: dict[str, MDDropdownMenu] = {}
+        self._editing_account_id: int | None = None
+        self._delete_dialog: MDDialog | None = None
 
     def on_pre_enter(self, *args):
         self._set_dropdown_text("nature_button", _NATURE_OPTIONS, self._nature_code)
@@ -58,6 +79,25 @@ class ChartOfAccountsScreen(MDScreen):
         self._set_dropdown_text("account_type_button", _ACCOUNT_TYPE_OPTIONS, self._account_type_code)
         self.refresh_list()
         self._select_parent(self._parent_account_id)
+        self.bind_shortcuts()
+
+    def on_leave(self, *args):
+        self.unbind_shortcuts()
+
+    def on_shortcut_save(self) -> None:
+        self.save_account()
+
+    def on_shortcut_cancel(self) -> bool:
+        if self._editing_account_id is not None:
+            self.cancel_edit()
+            return True
+        return False
+
+    def on_shortcut_delete(self) -> bool:
+        if self._editing_account_id is not None:
+            self.confirm_delete(self._editing_account_id)
+            return True
+        return False
 
     def _set_dropdown_text(self, button_id: str, options: list[tuple[str, str]], code: str) -> None:
         label = next(label for value, label in options if value == code)
@@ -141,6 +181,7 @@ class ChartOfAccountsScreen(MDScreen):
 
         rows = coa_service.list_accounts(session.current_company.company_id)
         self._parent_options = rows
+        self._accounts_by_id = {row.account_id: row for row in rows}
         self._set_status("")
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
@@ -154,6 +195,9 @@ class ChartOfAccountsScreen(MDScreen):
             indent = "    " * (row.account_level - 1)
             self.ids.accounts_list.add_widget(
                 AccountRowWidget(
+                    account_id=row.account_id,
+                    on_edit=self.edit_account,
+                    on_delete=self.confirm_delete,
                     code_text=row.full_code,
                     name_text=shape(f"{indent}{row.name}"),
                     level_text=shape(_LEVEL_LABELS[row.account_level]),
@@ -161,6 +205,7 @@ class ChartOfAccountsScreen(MDScreen):
                     status_text=shape("قابل ثبت" if row.is_postable else "گروه‌بندی"),
                     status_badge_color=theme.SUCCESS if row.is_postable else theme.TEXT_DISABLED,
                     zebra=i % 2 == 1,
+                    selected=row.account_id == self._editing_account_id,
                 )
             )
 
@@ -170,22 +215,87 @@ class ChartOfAccountsScreen(MDScreen):
         ):
             self._select_parent(None)
 
-    def add_account(self) -> None:
+        if self._editing_account_id is not None and self._editing_account_id not in self._accounts_by_id:
+            self.cancel_edit()
+
+    def edit_account(self, account_id: int) -> None:
+        row = self._accounts_by_id.get(account_id)
+        if row is None:
+            return
+        self._editing_account_id = account_id
+        self.ids.segment_code_field.text = row.full_code.rsplit("-", 1)[-1]
+        self.ids.segment_code_field.disabled = True
+        self.ids.parent_button.disabled = True
+        self.ids.name_field.text = row.name
+        self.ids.name_field.focus = True
+        self._nature_code = row.nature_code
+        self._category_code = row.category_code
+        self._account_type_code = row.account_type_code
+        self.ids.is_postable_checkbox.active = row.is_postable
+        self._set_dropdown_text("nature_button", _NATURE_OPTIONS, self._nature_code)
+        self._set_dropdown_text("category_button", _CATEGORY_OPTIONS, self._category_code)
+        self._set_dropdown_text("account_type_button", _ACCOUNT_TYPE_OPTIONS, self._account_type_code)
+        self.ids.form_title.text = shape(f"ویرایش حساب «{row.full_code}»")
+        self.ids.save_button.text = shape("ذخیره تغییرات")
+        self.ids.cancel_edit_button.opacity = 1
+        self.ids.cancel_edit_button.disabled = False
+        self.ids.cancel_edit_button.size_hint_y = None
+        self.ids.cancel_edit_button.height = "36dp"
+        self._set_status(f"در حال ویرایش «{row.full_code} — {row.name}» — Escape برای لغو.")
+        self.refresh_list()
+
+    def cancel_edit(self) -> None:
+        self._editing_account_id = None
+        self.ids.segment_code_field.text = ""
+        self.ids.segment_code_field.disabled = False
+        self.ids.parent_button.disabled = False
+        self.ids.name_field.text = ""
+        self.ids.form_title.text = shape("افزودن حساب جدید")
+        self.ids.save_button.text = shape("افزودن حساب")
+        self.ids.cancel_edit_button.opacity = 0
+        self.ids.cancel_edit_button.disabled = True
+        self.ids.cancel_edit_button.size_hint_y = None
+        self.ids.cancel_edit_button.height = "0dp"
+        self._set_status("")
+        self.refresh_list()
+
+    def save_account(self) -> None:
         if session.current_company is None:
             self._set_status("هیچ شرکتی انتخاب نشده است.")
             return
 
-        segment_code = self.ids.segment_code_field.text.strip()
         name = self.ids.name_field.text.strip()
-        if not segment_code or not name:
-            self._set_status("کد و نام حساب را وارد کنید.")
-            return
-
         language_id = (
             session.current_user.default_language_id
             if session.current_user and session.current_user.default_language_id
             else session.current_company.default_language_id
         )
+
+        if self._editing_account_id is not None:
+            if not name:
+                self._set_status("نام حساب را وارد کنید.")
+                return
+            try:
+                coa_service.update_account(
+                    account_id=self._editing_account_id,
+                    company_id=session.current_company.company_id,
+                    name=name,
+                    nature_code=self._nature_code,
+                    category_code=self._category_code,
+                    account_type_code=self._account_type_code,
+                    is_postable=self.ids.is_postable_checkbox.active,
+                    language_id=language_id,
+                )
+            except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
+                self._set_status(f"خطا: {exc}")
+                return
+            self.cancel_edit()
+            return
+
+        segment_code = self.ids.segment_code_field.text.strip()
+        if not segment_code or not name:
+            self._set_status("کد و نام حساب را وارد کنید.")
+            return
         try:
             coa_service.create_account(
                 company_id=session.current_company.company_id,
@@ -205,6 +315,42 @@ class ChartOfAccountsScreen(MDScreen):
         self.ids.segment_code_field.text = ""
         self.ids.name_field.text = ""
         self.refresh_list()
+
+    def confirm_delete(self, account_id: int) -> None:
+        row = self._accounts_by_id.get(account_id)
+        if row is None:
+            return
+
+        if self._delete_dialog is not None:
+            self._delete_dialog.dismiss()
+
+        def _do_delete(*_args) -> None:
+            self._delete_dialog.dismiss()
+            self._perform_delete(account_id)
+
+        self._delete_dialog = MDDialog(
+            title=shape("حذف حساب"),
+            text=shape(f"حساب «{row.full_code} — {row.name}» حذف شود؟ این کار قابل بازگشت نیست."),
+            buttons=[
+                MDFlatButton(text=shape("لغو"), on_release=lambda *_: self._delete_dialog.dismiss()),
+                MDRaisedButton(text=shape("حذف"), md_bg_color=theme.DANGER, on_release=_do_delete),
+            ],
+        )
+        self._delete_dialog.open()
+
+    def _perform_delete(self, account_id: int) -> None:
+        if session.current_company is None:
+            return
+        try:
+            coa_service.delete_account(account_id, session.current_company.company_id)
+        except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
+            self._set_status(f"خطا: {exc}")
+            return
+        if self._editing_account_id == account_id:
+            self.cancel_edit()
+        else:
+            self._set_status("حساب حذف شد.")
+            self.refresh_list()
 
     def go_to_journal_entry(self) -> None:
         self.manager.current = "journal_entry"

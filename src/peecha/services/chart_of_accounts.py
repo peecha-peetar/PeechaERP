@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import AccountCategory, AccountNature, AccountType, ChartOfAccount
+from peecha.db.models.accounting import AccountCategory, AccountNature, AccountType, ChartOfAccount, JournalEntryLine
 from peecha.db.models.core import Translation
 
 MAX_ACCOUNT_LEVEL = 3
@@ -131,3 +131,87 @@ def create_account(
         session.refresh(account)
         session.expunge(account)
         return account
+
+
+def update_account(
+    account_id: int,
+    company_id: int,
+    name: str,
+    nature_code: str,
+    category_code: str,
+    account_type_code: str,
+    is_postable: bool,
+    language_id: int,
+) -> ChartOfAccount:
+    """ویرایشِ حساب — عمداً فقط نام/ماهیت/دسته/نوع/قابل‌ثبت‌بودن قابل‌تغییرند؛
+    کد و والد (که full_code و سطحِ کل زیردرخت را تعیین می‌کنند) در این
+    نسخه ثابت می‌مانند تا ویرایش نیاز به بازمحاسبه‌ی زنجیره‌ای نداشته باشد."""
+    with new_session() as session:
+        account = session.get(ChartOfAccount, account_id)
+        if account is None or account.company_id != company_id:
+            raise ValueError("حساب نامعتبر است.")
+
+        nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
+        category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
+        account_type = session.scalar(select(AccountType).where(AccountType.code == account_type_code))
+        if nature is None or category is None or account_type is None:
+            raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
+
+        account.nature_id = nature.nature_id
+        account.category_id = category.category_id
+        account.account_type_id = account_type.account_type_id
+        account.is_postable = is_postable
+
+        translation = session.scalar(
+            select(Translation).where(
+                Translation.entity_type == "ChartOfAccount",
+                Translation.entity_id == account_id,
+                Translation.property_name == "Name",
+                Translation.language_id == language_id,
+            )
+        )
+        if translation is None:
+            session.add(
+                Translation(
+                    entity_type="ChartOfAccount",
+                    entity_id=account_id,
+                    property_name="Name",
+                    language_id=language_id,
+                    value=name,
+                )
+            )
+        else:
+            translation.value = name
+
+        session.commit()
+        session.refresh(account)
+        session.expunge(account)
+        return account
+
+
+def delete_account(account_id: int, company_id: int) -> None:
+    with new_session() as session:
+        account = session.get(ChartOfAccount, account_id)
+        if account is None or account.company_id != company_id:
+            raise ValueError("حساب نامعتبر است.")
+
+        child_count = session.scalar(
+            select(func.count()).select_from(ChartOfAccount).where(ChartOfAccount.parent_account_id == account_id)
+        )
+        if child_count:
+            raise ValueError("این حساب زیرشاخه دارد؛ اول زیرشاخه‌ها را حذف کنید.")
+
+        line_count = session.scalar(
+            select(func.count()).select_from(JournalEntryLine).where(JournalEntryLine.account_id == account_id)
+        )
+        if line_count:
+            raise ValueError("این حساب در سندهای حسابداری استفاده شده؛ قابل حذف نیست.")
+
+        session.execute(
+            Translation.__table__.delete().where(
+                Translation.entity_type == "ChartOfAccount",
+                Translation.entity_id == account_id,
+            )
+        )
+        session.delete(account)
+        session.commit()

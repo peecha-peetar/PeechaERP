@@ -15,13 +15,14 @@ from peecha.config import DatabaseConfig, load_database_config, save_database_co
 from peecha.db.base import reset_engine
 from peecha.db.schema_bootstrap import initialize_schema, is_initialized
 from peecha.ui.rtl import shape
+from peecha.ui.shortcuts import KeyboardShortcutMixin
 from peecha.ui.theme import SEMANTIC_COLORS
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "connection_settings.kv")
 Builder.load_file(_KV_PATH)
 
 
-class ConnectionSettingsScreen(MDScreen):
+class ConnectionSettingsScreen(KeyboardShortcutMixin, MDScreen):
     def on_pre_enter(self, *args):
         config = load_database_config()
         self.ids.host_field.text = config.host
@@ -30,6 +31,14 @@ class ConnectionSettingsScreen(MDScreen):
         self.ids.user_field.text = config.user
         self.ids.password_field.text = config.password
         self.ids.status_label.text = ""
+        self.bind_shortcuts()
+        self.ids.host_field.focus = True
+
+    def on_leave(self, *args):
+        self.unbind_shortcuts()
+
+    def on_shortcut_save(self) -> None:
+        self.save_and_continue()
 
     def _current_config(self) -> DatabaseConfig:
         return DatabaseConfig(

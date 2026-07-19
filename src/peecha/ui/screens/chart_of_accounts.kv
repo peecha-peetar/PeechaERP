@@ -2,16 +2,18 @@
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
-# ردیفِ جدولِ کدینگ حسابداری — چهار ستون: کد | نام حساب | سطح | وضعیت.
-# عرض ستون‌ها اینجا و در هدر (پایین‌تر در <ChartOfAccountsScreen>) باید
-# دقیقاً یکی باشد وگرنه ستون‌های ردیف زیر هدر نمی‌نشینند.
+# ردیفِ جدولِ کدینگ حسابداری — چهار ستون: کد | نام حساب | سطح | وضعیت +
+# دو آیکونِ ویرایش/حذف با عرضِ ثابت. عرضِ ستون‌های نسبی اینجا و در هدر
+# (پایین‌تر در <ChartOfAccountsScreen>) باید دقیقاً یکی باشد، و هدر هم باید
+# به‌اندازه‌ی همین دو آیکون یک فاصله‌ی خالیِ هم‌عرض داشته باشد، وگرنه
+# ستون‌های ردیف زیر هدر نمی‌نشینند.
 <AccountRowWidget>:
     orientation: "horizontal"
     size_hint_y: None
     height: "40dp"
     padding: ["12dp", "0dp"]
     radius: [8, 8, 8, 8]
-    md_bg_color: theme.HOVER if root.zebra else (0, 0, 0, 0)
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
 
     PLabel:
         text: root.code_text
@@ -42,6 +44,24 @@
         PBadge:
             text: root.status_text
             badge_color: root.status_badge_color
+
+    MDIconButton:
+        icon: "pencil-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT
+        on_release: root.on_release()
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.request_delete()
 
 <ChartOfAccountsScreen>:
     name: "chart_of_accounts"
@@ -145,6 +165,11 @@
                         valign: "middle"
                         size_hint_x: 0.20
 
+                    # جای‌خالیِ هم‌عرض با دو آیکونِ ویرایش/حذفِ ردیف‌ها (۲۸dp × ۲)
+                    Widget:
+                        size_hint_x: None
+                        width: "56dp"
+
                 ScrollView:
                     BoxLayout:
                         id: accounts_list
@@ -158,6 +183,7 @@
                 spacing: "14dp"
 
                 PLabel:
+                    id: form_title
                     text: shape("افزودن حساب جدید")
                     font_style: "Subtitle1"
                     size_hint_y: None
@@ -167,6 +193,7 @@
                     id: parent_button
                     text: ""
                     on_release: root.open_parent_menu()
+                    focus_next: segment_code_field
 
                 PHintLabel:
                     id: level_preview_label
@@ -175,25 +202,36 @@
                 PTextField:
                     id: segment_code_field
                     hint_text: shape("کد حساب (فقط بخش این سطح)")
+                    focus_next: name_field
+                    focus_previous: parent_button
 
                 PTextField:
                     id: name_field
                     hint_text: shape("نام حساب")
+                    focus_next: nature_button
+                    focus_previous: segment_code_field
+                    on_text_validate: root.save_account()
 
                 PSelectField:
                     id: nature_button
                     text: ""
                     on_release: root.open_nature_menu()
+                    focus_next: category_button
+                    focus_previous: name_field
 
                 PSelectField:
                     id: category_button
                     text: ""
                     on_release: root.open_category_menu()
+                    focus_next: account_type_button
+                    focus_previous: nature_button
 
                 PSelectField:
                     id: account_type_button
                     text: ""
                     on_release: root.open_account_type_menu()
+                    focus_previous: category_button
+                    focus_next: save_button
 
                 BoxLayout:
                     size_hint_y: None
@@ -213,5 +251,20 @@
                 Widget:
 
                 PRaisedButton:
+                    id: save_button
                     text: shape("افزودن حساب")
-                    on_release: root.add_account()
+                    on_release: root.save_account()
+                    focus_previous: account_type_button
+                    focus_next: cancel_edit_button
+
+                PFlatButton:
+                    id: cancel_edit_button
+                    text: shape("لغو ویرایش (Esc)")
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    opacity: 0
+                    disabled: True
+                    size_hint_y: None
+                    height: "0dp"
+                    on_release: root.cancel_edit()
+                    focus_previous: save_button

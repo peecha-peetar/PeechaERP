@@ -40,24 +40,37 @@
                 PTextField:
                     id: host_field
                     hint_text: shape("آدرس سرور (Host)")
+                    focus_next: port_field
+                    on_text_validate: root.save_and_continue()
 
                 PTextField:
                     id: port_field
                     hint_text: shape("پورت")
                     input_filter: "int"
+                    focus_next: name_field
+                    focus_previous: host_field
+                    on_text_validate: root.save_and_continue()
 
                 PTextField:
                     id: name_field
                     hint_text: shape("نام دیتابیس")
+                    focus_next: user_field
+                    focus_previous: port_field
+                    on_text_validate: root.save_and_continue()
 
                 PTextField:
                     id: user_field
                     hint_text: shape("نام کاربری دیتابیس")
+                    focus_next: password_field
+                    focus_previous: name_field
+                    on_text_validate: root.save_and_continue()
 
                 PTextField:
                     id: password_field
                     hint_text: shape("رمز عبور دیتابیس")
                     password: True
+                    focus_previous: user_field
+                    on_text_validate: root.save_and_continue()
 
                 PHintLabel:
                     id: status_label
