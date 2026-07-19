@@ -1,5 +1,10 @@
-"""سرویس کدینگ حسابداری — فقط ساخت حساب‌های سطح گروه (بدون والد) در این
-نسخه؛ افزودن زیرشاخه (کل/معین) با انتخاب والد یک قدم بعدی است."""
+"""سرویس کدینگ حسابداری — درخت سه‌سطحی گروه/کل/معین.
+
+سطح از روی والدِ انتخابی محاسبه می‌شود (نه ورودی کاربر): بدون والد یعنی
+سطح ۱ (گروه)، والدِ سطح ۱ یعنی سطح ۲ (کل)، والدِ سطح ۲ یعنی سطح ۳ (معین).
+معین دیگر نمی‌تواند زیرشاخه بگیرد — طبق طراحی دیتابیس (account_level) که
+فقط ۳ سطح را در نظر گرفته.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +16,8 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import AccountCategory, AccountNature, AccountType, ChartOfAccount
 from peecha.db.models.core import Translation
 
+MAX_ACCOUNT_LEVEL = 3
+
 
 @dataclass
 class AccountRow:
@@ -19,6 +26,9 @@ class AccountRow:
     name: str
     account_level: int
     is_postable: bool
+    nature_code: str
+    category_code: str
+    account_type_code: str
 
 
 def list_accounts(company_id: int) -> list[AccountRow]:
@@ -39,6 +49,11 @@ def list_accounts(company_id: int) -> list[AccountRow]:
                 )
             ).all()
             names = dict(rows)
+
+        nature_codes = dict(session.execute(select(AccountNature.nature_id, AccountNature.code)).all())
+        category_codes = dict(session.execute(select(AccountCategory.category_id, AccountCategory.code)).all())
+        account_type_codes = dict(session.execute(select(AccountType.account_type_id, AccountType.code)).all())
+
         return [
             AccountRow(
                 account_id=a.account_id,
@@ -46,12 +61,20 @@ def list_accounts(company_id: int) -> list[AccountRow]:
                 name=names.get(a.account_id, a.segment_code),
                 account_level=a.account_level,
                 is_postable=a.is_postable,
+                nature_code=nature_codes[a.nature_id],
+                category_code=category_codes[a.category_id],
+                account_type_code=account_type_codes[a.account_type_id],
             )
             for a in accounts
         ]
 
 
-def create_root_account(
+def list_postable_accounts(company_id: int) -> list[AccountRow]:
+    """فقط حساب‌های قابل‌ثبت‌سند (معمولاً سطح معین) — برای انتخابگرِ ردیف سند."""
+    return [row for row in list_accounts(company_id) if row.is_postable]
+
+
+def create_account(
     company_id: int,
     segment_code: str,
     name: str,
@@ -60,6 +83,7 @@ def create_root_account(
     account_type_code: str,
     is_postable: bool,
     language_id: int,
+    parent_account_id: int | None = None,
 ) -> ChartOfAccount:
     with new_session() as session:
         nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
@@ -68,12 +92,24 @@ def create_root_account(
         if nature is None or category is None or account_type is None:
             raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
 
+        if parent_account_id is None:
+            account_level = 1
+            full_code = segment_code
+        else:
+            parent = session.get(ChartOfAccount, parent_account_id)
+            if parent is None or parent.company_id != company_id:
+                raise ValueError("حساب والد نامعتبر است.")
+            if parent.account_level >= MAX_ACCOUNT_LEVEL:
+                raise ValueError("حساب سطح معین دیگر نمی‌تواند زیرشاخه بگیرد.")
+            account_level = parent.account_level + 1
+            full_code = f"{parent.full_code}-{segment_code}"
+
         account = ChartOfAccount(
             company_id=company_id,
-            parent_account_id=None,
+            parent_account_id=parent_account_id,
             segment_code=segment_code,
-            full_code=segment_code,
-            account_level=1,
+            full_code=full_code,
+            account_level=account_level,
             nature_id=nature.nature_id,
             category_id=category.category_id,
             account_type_id=account_type.account_type_id,

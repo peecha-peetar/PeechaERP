@@ -1,0 +1,165 @@
+#:import shape peecha.ui.rtl.shape
+#:import theme peecha.ui.theme
+
+<JournalEntryLineRow>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "48dp"
+    spacing: "8dp"
+
+    PFlatButton:
+        id: account_button
+        text: shape("انتخاب حساب")
+        size_hint_x: 0.32
+        on_release: root.open_account_menu()
+
+    PTextField:
+        id: description_field
+        hint_text: shape("شرح ردیف")
+        size_hint_x: 0.26
+
+    PTextField:
+        id: debit_field
+        hint_text: shape("بدهکار")
+        size_hint_x: 0.16
+        on_text: root.on_debit_changed()
+
+    PTextField:
+        id: credit_field
+        hint_text: shape("بستانکار")
+        size_hint_x: 0.16
+        on_text: root.on_credit_changed()
+
+    MDIconButton:
+        icon: "close"
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.remove_line()
+
+
+<JournalEntryScreen>:
+    name: "journal_entry"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "vertical"
+
+        BoxLayout:
+            size_hint_y: None
+            height: "48dp"
+            padding: ["24dp", "0dp"]
+            spacing: "8dp"
+            canvas.before:
+                Color:
+                    rgba: theme.SURFACE
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+
+            PFlatButton:
+                text: shape("کدینگ حسابداری")
+                on_release: root.go_to_chart_of_accounts()
+
+            PFlatButton:
+                text: shape("صدور سند")
+                theme_text_color: "Custom"
+                text_color: theme.ACCENT
+
+            Widget:
+
+        ScrollView:
+            BoxLayout:
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                padding: "24dp"
+                spacing: "12dp"
+
+                MDCard:
+                    orientation: "vertical"
+                    padding: "16dp"
+                    spacing: "12dp"
+                    radius: [18, 18, 18, 18]
+                    elevation: 0
+                    md_bg_color: theme.SURFACE
+                    line_color: theme.BORDER
+                    size_hint_y: None
+                    height: self.minimum_height
+
+                    PLabel:
+                        text: shape("صدور سند حسابداری")
+                        font_style: "H5"
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "48dp"
+                        spacing: "12dp"
+
+                        PTextField:
+                            id: date_field
+                            hint_text: shape("تاریخ سند (۱۴۰۳/۰۴/۲۸)")
+                            size_hint_x: 0.3
+
+                        PTextField:
+                            id: description_field
+                            hint_text: shape("شرح سند")
+                            size_hint_x: 0.7
+
+                    PLabel:
+                        text: shape("ردیف‌ها")
+                        font_style: "Subtitle1"
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    BoxLayout:
+                        id: lines_box
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "4dp"
+
+                    PFlatButton:
+                        text: shape("+ افزودن ردیف")
+                        size_hint_y: None
+                        height: "36dp"
+                        on_release: root.add_line()
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "32dp"
+                        spacing: "16dp"
+
+                        PLabel:
+                            id: total_debit_label
+                            text: ""
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_PRIMARY
+                            valign: "middle"
+
+                        PLabel:
+                            id: total_credit_label
+                            text: ""
+                            theme_text_color: "Custom"
+                            text_color: theme.TEXT_PRIMARY
+                            valign: "middle"
+
+                        PLabel:
+                            id: balance_label
+                            text: ""
+                            theme_text_color: "Custom"
+                            text_color: theme.DANGER
+                            valign: "middle"
+
+                        Widget:
+
+                    PHintLabel:
+                        id: status_label
+                        text: ""
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+
+                    PRaisedButton:
+                        text: shape("ثبت سند")
+                        on_release: root.submit()

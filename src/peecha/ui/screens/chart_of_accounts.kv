@@ -6,93 +6,128 @@
     md_bg_color: theme.BACKGROUND
 
     BoxLayout:
-        orientation: "horizontal"
-        padding: "24dp"
-        spacing: "16dp"
+        orientation: "vertical"
 
-        MDCard:
-            orientation: "vertical"
-            padding: "16dp"
+        BoxLayout:
+            size_hint_y: None
+            height: "48dp"
+            padding: ["24dp", "0dp"]
             spacing: "8dp"
-            radius: [18, 18, 18, 18]
-            elevation: 0
-            md_bg_color: theme.SURFACE
-            line_color: theme.BORDER
-            size_hint_x: 0.62
+            canvas.before:
+                Color:
+                    rgba: theme.SURFACE
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
 
-            PLabel:
+            PFlatButton:
                 text: shape("کدینگ حسابداری")
-                font_style: "H5"
-                size_hint_y: None
-                height: self.texture_size[1]
-
-            PHintLabel:
-                id: status_label
-                text: ""
-
-            ScrollView:
-                BoxLayout:
-                    id: accounts_list
-                    orientation: "vertical"
-                    size_hint_y: None
-                    height: self.minimum_height
-
-        MDCard:
-            orientation: "vertical"
-            padding: "16dp"
-            spacing: "10dp"
-            radius: [18, 18, 18, 18]
-            elevation: 0
-            md_bg_color: theme.SURFACE
-            line_color: theme.BORDER
-            size_hint_x: 0.38
-
-            PLabel:
-                text: shape("افزودن حساب گروه جدید")
-                font_style: "Subtitle1"
-                size_hint_y: None
-                height: self.texture_size[1]
-
-            PTextField:
-                id: segment_code_field
-                hint_text: shape("کد حساب")
-
-            PTextField:
-                id: name_field
-                hint_text: shape("نام حساب")
+                theme_text_color: "Custom"
+                text_color: theme.ACCENT
 
             PFlatButton:
-                id: nature_button
-                text: ""
-                on_release: root.open_nature_menu()
-
-            PFlatButton:
-                id: category_button
-                text: ""
-                on_release: root.open_category_menu()
-
-            PFlatButton:
-                id: account_type_button
-                text: ""
-                on_release: root.open_account_type_menu()
-
-            BoxLayout:
-                size_hint_y: None
-                height: "36dp"
-                spacing: "8dp"
-
-                MDCheckbox:
-                    id: is_postable_checkbox
-                    size_hint: None, None
-                    size: "24dp", "24dp"
-                    pos_hint: {"center_y": 0.5}
-
-                PLabel:
-                    text: shape("قابل ثبت سند (Postable)")
-                    valign: "middle"
+                text: shape("صدور سند")
+                on_release: root.go_to_journal_entry()
 
             Widget:
 
-            PRaisedButton:
-                text: shape("افزودن حساب")
-                on_release: root.add_account()
+        BoxLayout:
+            orientation: "horizontal"
+            padding: "24dp"
+            spacing: "16dp"
+
+            MDCard:
+                orientation: "vertical"
+                padding: "16dp"
+                spacing: "8dp"
+                radius: [18, 18, 18, 18]
+                elevation: 0
+                md_bg_color: theme.SURFACE
+                line_color: theme.BORDER
+                size_hint_x: 0.62
+
+                PLabel:
+                    text: shape("کدینگ حسابداری (گروه / کل / معین)")
+                    font_style: "H5"
+                    size_hint_y: None
+                    height: self.texture_size[1]
+
+                PHintLabel:
+                    id: status_label
+                    text: ""
+
+                ScrollView:
+                    BoxLayout:
+                        id: accounts_list
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+
+            MDCard:
+                orientation: "vertical"
+                padding: "16dp"
+                spacing: "10dp"
+                radius: [18, 18, 18, 18]
+                elevation: 0
+                md_bg_color: theme.SURFACE
+                line_color: theme.BORDER
+                size_hint_x: 0.38
+
+                PLabel:
+                    text: shape("افزودن حساب جدید")
+                    font_style: "Subtitle1"
+                    size_hint_y: None
+                    height: self.texture_size[1]
+
+                PFlatButton:
+                    id: parent_button
+                    text: ""
+                    on_release: root.open_parent_menu()
+
+                PHintLabel:
+                    id: level_preview_label
+                    text: shape("سطحِ حساب جدید: گروه")
+
+                PTextField:
+                    id: segment_code_field
+                    hint_text: shape("کد حساب (فقط بخش این سطح)")
+
+                PTextField:
+                    id: name_field
+                    hint_text: shape("نام حساب")
+
+                PFlatButton:
+                    id: nature_button
+                    text: ""
+                    on_release: root.open_nature_menu()
+
+                PFlatButton:
+                    id: category_button
+                    text: ""
+                    on_release: root.open_category_menu()
+
+                PFlatButton:
+                    id: account_type_button
+                    text: ""
+                    on_release: root.open_account_type_menu()
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "36dp"
+                    spacing: "8dp"
+
+                    MDCheckbox:
+                        id: is_postable_checkbox
+                        size_hint: None, None
+                        size: "24dp", "24dp"
+                        pos_hint: {"center_y": 0.5}
+
+                    PLabel:
+                        text: shape("قابل ثبت سند (Postable)")
+                        valign: "middle"
+
+                Widget:
+
+                PRaisedButton:
+                    text: shape("افزودن حساب")
+                    on_release: root.add_account()

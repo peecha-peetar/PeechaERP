@@ -47,11 +47,13 @@ class ShellScreen(MDScreen):
     def _build_content_screens(self) -> None:
         from peecha.ui.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
         from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
+        from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
 
         content: MDScreenManager = self.ids.content_manager
         content.add_widget(DashboardScreen())
         content.add_widget(ChartOfAccountsScreen())
+        content.add_widget(JournalEntryScreen())
         content.add_widget(PlaceholderScreen())
 
     def _build_nav_items(self) -> None:
