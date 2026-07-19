@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from peecha.db.base import new_session
 from peecha.db.models.core import Company, Currency, Language
+from peecha.db.models.security import UserCompany
 
 
 @dataclass
@@ -36,6 +37,14 @@ class CurrencyOption:
     iso_code: str
 
 
+def get_company_model(company_id: int) -> Company | None:
+    """شیءِ کاملِ ORM (نه فقط CompanyRow) — برای session.current_company، چون
+    بقیه‌ی برنامه به ستون‌های خامِ مدل (مثلاً fiscal_year_start_month) نیاز
+    دارد، نه dataclass خلاصه‌شده."""
+    with new_session() as session:
+        return session.get(Company, company_id)
+
+
 def list_currencies() -> list[CurrencyOption]:
     with new_session() as session:
         rows = session.scalars(select(Currency).where(Currency.is_active).order_by(Currency.iso_code)).all()
@@ -45,6 +54,44 @@ def list_currencies() -> list[CurrencyOption]:
 def list_companies() -> list[CompanyRow]:
     with new_session() as session:
         companies = session.scalars(select(Company).order_by(Company.code)).all()
+        currencies = {c.currency_id: c.iso_code for c in session.scalars(select(Currency))}
+        langs = {l.language_id: l.native_name for l in session.scalars(select(Language))}
+        return [
+            CompanyRow(
+                company_id=c.company_id,
+                code=c.code,
+                legal_name=c.legal_name,
+                display_name=c.display_name,
+                economic_code=c.economic_code,
+                registration_no=c.registration_no,
+                national_id=c.national_id,
+                fiscal_year_start_month=c.fiscal_year_start_month,
+                fiscal_year_start_day=c.fiscal_year_start_day,
+                base_currency_id=c.base_currency_id,
+                base_currency_code=currencies.get(c.base_currency_id, "?"),
+                default_language_id=c.default_language_id,
+                default_language_name=langs.get(c.default_language_id, "?"),
+                is_active=c.is_active,
+            )
+            for c in companies
+        ]
+
+
+def list_companies_for_user(user_id: int) -> list[CompanyRow]:
+    """فقط شرکت‌هایی که کاربر از طریق sec.user_companies دسترسی دارد —
+    برای سوییچرِ «شرکتِ فعال» در هدر، که طبق درخواستِ صریح باید محدود به
+    شرکت‌های قابل‌دسترسِ همان کاربر باشد، نه فهرستِ کاملِ همه‌ی شرکت‌ها."""
+    with new_session() as session:
+        company_ids = {
+            row for row in session.scalars(
+                select(UserCompany.company_id).where(UserCompany.user_id == user_id)
+            )
+        }
+        if not company_ids:
+            return []
+        companies = session.scalars(
+            select(Company).where(Company.company_id.in_(company_ids)).order_by(Company.code)
+        ).all()
         currencies = {c.currency_id: c.iso_code for c in session.scalars(select(Currency))}
         langs = {l.language_id: l.native_name for l in session.scalars(select(Language))}
         return [

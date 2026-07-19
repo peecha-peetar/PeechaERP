@@ -10,13 +10,19 @@
 
 from __future__ import annotations
 
+import datetime
 import os
 
 from kivy.lang import Builder
+from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.screenmanager import MDScreenManager
 
 from peecha import session
+from peecha.services import companies as companies_service
+from peecha.services import fiscal_years as fiscal_years_service
+from peecha.services import languages as languages_service
+from peecha.ui import numerals
 from peecha.ui.rtl import shape
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "shell.kv")
@@ -75,12 +81,20 @@ def _flatten_nav_items() -> list[dict]:
 
 
 class ShellScreen(MDScreen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._company_options: list[companies_service.CompanyRow] = []
+        self._fiscal_year_options: list[fiscal_years_service.FiscalYearRow] = []
+        self._language_options: list[languages_service.LanguageRow] = []
+        self._menu: MDDropdownMenu | None = None
+
     def on_pre_enter(self, *args):
         if not self.ids.content_manager.screen_names:
             self._build_content_screens()
         if not self.ids.nav_list.children:
             self._build_nav_items()
         self.ids.user_label.text = shape(session.current_user.full_name if session.current_user else "")
+        self._load_context_switcher()
         self._select_nav("dashboard")
 
     def _build_content_screens(self) -> None:
@@ -139,6 +153,145 @@ class ShellScreen(MDScreen):
         if target_screen_name == "placeholder":
             content.get_screen("placeholder").set_module_name(item["label"])
         content.current = target_screen_name
+
+    # --- سوییچرِ «شرکتِ فعال / سالِ مالیِ فعال / زبان» در هدر -------------------
+    # طبق درخواستِ صریح کاربر: جایی مشخص (اینجا هدر) که کاربر از میانِ
+    # شرکت‌هایی که خودش دسترسی دارد (sec.user_companies) شرکتِ فعال را
+    # انتخاب کند؛ سالِ مالی و زبان هم به همین ترتیب. تعویضِ شرکت باید صفحه‌ی
+    # فعلی را هم دوباره از دیتابیس بار کند (چون کدینگ حسابداری/سند/... همه
+    # به company_id وابسته‌اند).
+
+    def _load_context_switcher(self) -> None:
+        if session.current_user is None:
+            return
+        self._company_options = companies_service.list_companies_for_user(session.current_user.user_id)
+        if session.current_company is None or not any(
+            c.company_id == session.current_company.company_id for c in self._company_options
+        ):
+            first = self._company_options[0] if self._company_options else None
+            session.current_company = companies_service.get_company_model(first.company_id) if first else None
+        self._refresh_company_text()
+        self._reload_fiscal_years()
+        self._load_languages()
+
+    def _refresh_company_text(self) -> None:
+        text = session.current_company.display_name if session.current_company else "— بدون شرکت —"
+        self.ids.company_button.text = shape(text)
+
+    def open_company_menu(self) -> None:
+        if not self._company_options:
+            return
+        items = [
+            {
+                "text": shape(c.display_name),
+                "on_release": lambda cid=c.company_id: (self._menu.dismiss(), self._select_company(cid)),
+            }
+            for c in self._company_options
+        ]
+        self._menu = MDDropdownMenu(caller=self.ids.company_button, items=items, width_mult=3)
+        self._menu.open()
+
+    def _select_company(self, company_id: int) -> None:
+        if session.current_company is not None and session.current_company.company_id == company_id:
+            return
+        session.current_company = companies_service.get_company_model(company_id)
+        self._refresh_company_text()
+        self._reload_fiscal_years()
+        self._refresh_current_screen()
+
+    def _reload_fiscal_years(self) -> None:
+        if session.current_company is None:
+            self._fiscal_year_options = []
+            session.current_fiscal_year = None
+        else:
+            self._fiscal_year_options = fiscal_years_service.list_fiscal_years(session.current_company.company_id)
+            session.current_fiscal_year = fiscal_years_service.pick_current(
+                session.current_company.company_id, datetime.date.today()
+            )
+        self._refresh_fiscal_year_text()
+
+    def _refresh_fiscal_year_text(self) -> None:
+        fy = session.current_fiscal_year
+        text = numerals.to_persian_digits(fy.code) if fy else "— سالی تعریف نشده —"
+        self.ids.fiscal_year_button.text = shape(text)
+
+    def open_fiscal_year_menu(self) -> None:
+        if not self._fiscal_year_options:
+            return
+        items = [
+            {
+                "text": shape(numerals.to_persian_digits(fy.code)),
+                "on_release": lambda fy_id=fy.fiscal_year_id: (self._menu.dismiss(), self._select_fiscal_year(fy_id)),
+            }
+            for fy in self._fiscal_year_options
+        ]
+        self._menu = MDDropdownMenu(caller=self.ids.fiscal_year_button, items=items, width_mult=3)
+        self._menu.open()
+
+    def _select_fiscal_year(self, fiscal_year_id: int) -> None:
+        fy = next((f for f in self._fiscal_year_options if f.fiscal_year_id == fiscal_year_id), None)
+        if fy is None:
+            return
+        session.current_fiscal_year = fy
+        self._refresh_fiscal_year_text()
+
+    def _load_languages(self) -> None:
+        self._language_options = languages_service.list_languages()
+        if session.current_language is None or not any(
+            l.language_id == session.current_language.language_id for l in self._language_options
+        ):
+            preferred_id = (
+                session.current_user.default_language_id
+                if session.current_user and session.current_user.default_language_id
+                else (session.current_company.default_language_id if session.current_company else None)
+            )
+            chosen = next((l for l in self._language_options if l.language_id == preferred_id), None)
+            chosen = chosen or next((l for l in self._language_options if l.is_default), None)
+            chosen = chosen or (self._language_options[0] if self._language_options else None)
+            session.current_language = chosen
+        self._refresh_language_text()
+
+    def _refresh_language_text(self) -> None:
+        text = session.current_language.native_name if session.current_language else "— بدون زبان —"
+        self.ids.language_button.text = shape(text)
+
+    def open_language_menu(self) -> None:
+        if not self._language_options:
+            return
+        items = [
+            {
+                "text": shape(l.native_name),
+                "on_release": lambda lid=l.language_id: (self._menu.dismiss(), self._select_language(lid)),
+            }
+            for l in self._language_options
+        ]
+        self._menu = MDDropdownMenu(caller=self.ids.language_button, items=items, width_mult=3)
+        self._menu.open()
+
+    def _select_language(self, language_id: int) -> None:
+        row = next((l for l in self._language_options if l.language_id == language_id), None)
+        if row is None:
+            return
+        session.current_language = row
+        self._refresh_language_text()
+
+    def _refresh_current_screen(self) -> None:
+        """صفحه‌ی محتوایِ جاری را بعد از تعویضِ شرکت دوباره از دیتابیس بار
+        می‌کند — عمداً on_pre_enter صدا زده نمی‌شود چون آن هم bind_shortcuts()
+        را دوباره صدا می‌زند و چون صفحه از قبل باز/بایند است، این باعث
+        دوبار-بایندشدنِ میانبرهای کیبورد می‌شود (با تست مستقیم پیدا شد)."""
+        screen = self.ids.content_manager.current_screen
+        if screen is None:
+            return
+        if hasattr(screen, "_load_accounts") and hasattr(screen, "cancel_edit"):
+            screen._load_accounts()
+            screen.cancel_edit()
+        elif hasattr(screen, "cancel_edit"):
+            screen.cancel_edit()
+        elif hasattr(screen, "refresh_list"):
+            screen.refresh_list()
+        elif hasattr(screen, "refresh"):
+            screen.refresh()
 
     def toggle_theme(self) -> None:
         from kivymd.app import MDApp  # noqa: PLC0415

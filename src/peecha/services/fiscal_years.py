@@ -59,6 +59,20 @@ def list_fiscal_years(company_id: int) -> list[FiscalYearRow]:
         ]
 
 
+def pick_current(company_id: int, on_date: datetime.date) -> FiscalYearRow | None:
+    """سالِ مالیِ دربرگیرنده‌ی on_date را برمی‌گرداند (برای پیش‌فرضِ سوییچرِ
+    «سالِ مالیِ فعال» در هدر)؛ اگر چنین سالی تعریف نشده بود، جدیدترین سالِ
+    مالیِ موجود (طبق end_date) را برمی‌گرداند، وگرنه None (هنوز هیچ سالِ
+    مالی‌ای برای این شرکت تعریف نشده)."""
+    years = list_fiscal_years(company_id)
+    if not years:
+        return None
+    containing = next((y for y in years if y.start_date <= on_date <= y.end_date), None)
+    if containing is not None:
+        return containing
+    return max(years, key=lambda y: y.end_date)
+
+
 def _clamp_day(month: int, day: int) -> int:
     return min(day, _DAYS_IN_MONTH[month - 1])
 

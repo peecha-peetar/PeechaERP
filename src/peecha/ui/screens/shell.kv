@@ -39,6 +39,31 @@
 
                 Widget:
 
+                # سوییچرِ زمینه: شرکتِ فعال / سالِ مالیِ فعال / زبان — طبق
+                # درخواستِ صریح، محدود به شرکت‌هایی که خودِ کاربر (sec.user_companies)
+                # به آن‌ها دسترسی دارد. عرضِ ثابت (نه size_hint_x پیش‌فرضِ ۱ خودِ
+                # PSelectField) چون سه‌تا کنارِ هم‌اند و نباید بی‌رویه کش بیایند.
+                PSelectField:
+                    id: language_button
+                    text: ""
+                    size_hint_x: None
+                    width: "110dp"
+                    on_release: root.open_language_menu()
+
+                PSelectField:
+                    id: fiscal_year_button
+                    text: ""
+                    size_hint_x: None
+                    width: "120dp"
+                    on_release: root.open_fiscal_year_menu()
+
+                PSelectField:
+                    id: company_button
+                    text: ""
+                    size_hint_x: None
+                    width: "190dp"
+                    on_release: root.open_company_menu()
+
                 PLabel:
                     id: user_label
                     text: ""

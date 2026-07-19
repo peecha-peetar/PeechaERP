@@ -267,10 +267,16 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             return
 
         name = self.ids.name_field.text.strip()
+        # اولویت با زبانِ فعالِ انتخاب‌شده در سوییچرِ هدر است (طبق درخواستِ
+        # صریح)، بعد زبانِ پیش‌فرضِ کاربر، بعد زبانِ پیش‌فرضِ شرکت.
         language_id = (
-            session.current_user.default_language_id
-            if session.current_user and session.current_user.default_language_id
-            else session.current_company.default_language_id
+            session.current_language.language_id
+            if session.current_language
+            else (
+                session.current_user.default_language_id
+                if session.current_user and session.current_user.default_language_id
+                else session.current_company.default_language_id
+            )
         )
 
         if self._editing_account_id is not None:
