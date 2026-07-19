@@ -28,6 +28,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import field_labels as field_labels_service
 from peecha.services import journal_entries as je_service
 from peecha.ui import numerals, theme
 from peecha.ui.rtl import shape
@@ -247,13 +248,31 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self._rows: list[JournalEntryLineRow] = []
         self._editing_entry_id: int | None = None
         self._delete_dialog: MDDialog | None = None
+        self._field_labels: dict[str, str] = {}
 
     def on_pre_enter(self, *args):
         self._load_accounts()
+        self.apply_field_labels()
         self._reset_form()
         self._set_status("")
         self.refresh_entries()
         self.bind_shortcuts()
+
+    def apply_field_labels(self) -> None:
+        language_id = session.current_language.language_id if session.current_language else None
+        self._field_labels = field_labels_service.get_labels_map("journal_entry", language_id)
+        self.ids.description_field.hint_text = shape(self._field_labels["description"])
+        self.ids.date_field.hint_text = shape(self._field_labels["date"])
+        for row in self._rows:
+            self._apply_line_labels(row)
+
+    def _apply_line_labels(self, row: JournalEntryLineRow) -> None:
+        if not self._field_labels:
+            return
+        row.account_field.hint_text = shape(self._field_labels["line_account"])
+        row.ids.description_field.hint_text = shape(self._field_labels["line_description"])
+        row.ids.debit_field.hint_text = shape(self._field_labels["line_debit"])
+        row.ids.credit_field.hint_text = shape(self._field_labels["line_credit"])
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
@@ -310,6 +329,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         )
         self._rows.append(row)
         self.ids.lines_box.add_widget(row)
+        self._apply_line_labels(row)
         self._relink_row_focus()
 
     def _remove_line(self, row: JournalEntryLineRow) -> None:

@@ -12,7 +12,9 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
+from peecha import session
 from peecha.services import companies as companies_service
+from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
 from peecha.ui import numerals, theme
 from peecha.ui.rtl import shape
@@ -61,11 +63,24 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
             default_lang = next((l for l in self._language_options if l.is_default), self._language_options[0])
             self._language_id = default_lang.language_id
         self._refresh_dropdown_texts()
+        self.apply_field_labels()
         self.refresh_list()
         self.bind_shortcuts()
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
+
+    def apply_field_labels(self) -> None:
+        language_id = session.current_language.language_id if session.current_language else None
+        labels = field_labels_service.get_labels_map("companies", language_id)
+        self.ids.code_field.hint_text = shape(labels["code"])
+        self.ids.legal_name_field.hint_text = shape(labels["legal_name"])
+        self.ids.display_name_field.hint_text = shape(labels["display_name"])
+        self.ids.economic_code_field.hint_text = shape(labels["economic_code"])
+        self.ids.registration_no_field.hint_text = shape(labels["registration_no"])
+        self.ids.national_id_field.hint_text = shape(labels["national_id"])
+        self.ids.fy_start_day_field.hint_text = shape(labels["fy_start_day"])
+        self.ids.fy_start_month_field.hint_text = shape(labels["fy_start_month"])
 
     def on_shortcut_save(self) -> None:
         self.save_company()

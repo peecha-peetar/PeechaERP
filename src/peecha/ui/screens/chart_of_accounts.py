@@ -16,6 +16,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import field_labels as field_labels_service
 from peecha.ui import numerals, theme
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
@@ -77,12 +78,19 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._set_dropdown_text("nature_button", _NATURE_OPTIONS, self._nature_code)
         self._set_dropdown_text("category_button", _CATEGORY_OPTIONS, self._category_code)
         self._set_dropdown_text("account_type_button", _ACCOUNT_TYPE_OPTIONS, self._account_type_code)
+        self.apply_field_labels()
         self.refresh_list()
         self._select_parent(self._parent_account_id)
         self.bind_shortcuts()
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
+
+    def apply_field_labels(self) -> None:
+        language_id = session.current_language.language_id if session.current_language else None
+        labels = field_labels_service.get_labels_map("chart_of_accounts", language_id)
+        self.ids.segment_code_field.hint_text = shape(labels["segment_code"])
+        self.ids.name_field.hint_text = shape(labels["name"])
 
     def on_shortcut_save(self) -> None:
         self.save_account()

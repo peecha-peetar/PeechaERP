@@ -14,6 +14,7 @@ from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
 from peecha import session
+from peecha.services import field_labels as field_labels_service
 from peecha.services import users as users_service
 from peecha.ui import theme
 from peecha.ui.rtl import shape
@@ -67,11 +68,20 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
             self._language_id = self._language_options[0][0]
         self._rebuild_company_checklist()
         self._refresh_language_text()
+        self.apply_field_labels()
         self.refresh_list()
         self.bind_shortcuts()
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
+
+    def apply_field_labels(self) -> None:
+        language_id = session.current_language.language_id if session.current_language else None
+        labels = field_labels_service.get_labels_map("users", language_id)
+        self.ids.username_field.hint_text = shape(labels["username"])
+        self.ids.full_name_field.hint_text = shape(labels["full_name"])
+        self.ids.email_field.hint_text = shape(labels["email"])
+        self.ids.password_field.hint_text = shape(labels["password"])
 
     def on_shortcut_save(self) -> None:
         self.save_user()
@@ -176,7 +186,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.full_name_field.text = ""
         self.ids.email_field.text = ""
         self.ids.password_field.text = ""
-        self.ids.password_field.hint_text = shape("رمز عبور")
+        self.apply_field_labels()
         self.ids.is_super_admin_checkbox.active = False
         self.ids.is_active_checkbox.active = True
         self._rebuild_company_checklist()

@@ -13,6 +13,8 @@ from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.screen import MDScreen
 
+from peecha import session
+from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
 from peecha.ui import theme
 from peecha.ui.rtl import shape
@@ -53,11 +55,19 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         self._delete_dialog: MDDialog | None = None
 
     def on_pre_enter(self, *args):
+        self.apply_field_labels()
         self.refresh_list()
         self.bind_shortcuts()
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
+
+    def apply_field_labels(self) -> None:
+        language_id = session.current_language.language_id if session.current_language else None
+        labels = field_labels_service.get_labels_map("languages", language_id)
+        self.ids.code_field.hint_text = shape(labels["code"])
+        self.ids.name_field.hint_text = shape(labels["native_name"])
+        self.ids.sort_order_field.hint_text = shape(labels["sort_order"])
 
     def on_shortcut_save(self) -> None:
         self.save_language()

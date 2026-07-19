@@ -16,6 +16,7 @@ from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
 from peecha import session
+from peecha.services import field_labels as field_labels_service
 from peecha.services import roles as roles_service
 from peecha.ui import theme
 from peecha.ui.rtl import shape
@@ -81,6 +82,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
 
     def on_pre_enter(self, *args):
         self._forms = roles_service.list_forms()
+        self.apply_field_labels()
         self.refresh_list()
         self._select_parent(None)
         self._build_permissions_grid(None)
@@ -89,6 +91,11 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
+
+    def apply_field_labels(self) -> None:
+        language_id = session.current_language.language_id if session.current_language else None
+        labels = field_labels_service.get_labels_map("roles", language_id)
+        self.ids.code_field.hint_text = shape(labels["code"])
 
     def on_shortcut_save(self) -> None:
         self.save_role()

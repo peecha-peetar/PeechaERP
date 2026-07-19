@@ -61,6 +61,7 @@ NAV_ITEMS = [
             {"code": "SET_FY", "label": "سال‌های مالی", "icon": "calendar-blank-outline", "screen": "fiscal_years"},
             {"code": "SET_USERS", "label": "کاربران", "icon": "account-multiple-outline", "screen": "users"},
             {"code": "SET_ROLES", "label": "نقش‌ها و دسترسی‌ها", "icon": "shield-account-outline", "screen": "roles"},
+            {"code": "SET_FIELD_LABELS", "label": "عنوانِ فیلدها", "icon": "form-textbox", "screen": "field_labels"},
         ],
     },
 ]
@@ -101,6 +102,7 @@ class ShellScreen(MDScreen):
         from peecha.ui.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
         from peecha.ui.screens.companies import CompaniesScreen  # noqa: PLC0415
         from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
+        from peecha.ui.screens.field_labels import FieldLabelsScreen  # noqa: PLC0415
         from peecha.ui.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
         from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
         from peecha.ui.screens.languages import LanguagesScreen  # noqa: PLC0415
@@ -117,6 +119,7 @@ class ShellScreen(MDScreen):
         content.add_widget(FiscalYearsScreen())
         content.add_widget(UsersScreen())
         content.add_widget(RolesScreen())
+        content.add_widget(FieldLabelsScreen())
         content.add_widget(PlaceholderScreen())
 
     def _build_nav_items(self) -> None:
@@ -274,15 +277,19 @@ class ShellScreen(MDScreen):
             return
         session.current_language = row
         self._refresh_language_text()
+        self._refresh_current_screen()
 
     def _refresh_current_screen(self) -> None:
-        """صفحه‌ی محتوایِ جاری را بعد از تعویضِ شرکت دوباره از دیتابیس بار
-        می‌کند — عمداً on_pre_enter صدا زده نمی‌شود چون آن هم bind_shortcuts()
-        را دوباره صدا می‌زند و چون صفحه از قبل باز/بایند است، این باعث
-        دوبار-بایندشدنِ میانبرهای کیبورد می‌شود (با تست مستقیم پیدا شد)."""
+        """صفحه‌ی محتوایِ جاری را بعد از تعویضِ شرکت/زبان دوباره از دیتابیس
+        بار می‌کند — عمداً on_pre_enter صدا زده نمی‌شود چون آن هم
+        bind_shortcuts() را دوباره صدا می‌زند و چون صفحه از قبل باز/بایند
+        است، این باعث دوبار-بایندشدنِ میانبرهای کیبورد می‌شود (با تست مستقیم
+        پیدا شد)."""
         screen = self.ids.content_manager.current_screen
         if screen is None:
             return
+        if hasattr(screen, "apply_field_labels"):
+            screen.apply_field_labels()
         if hasattr(screen, "_load_accounts") and hasattr(screen, "cancel_edit"):
             screen._load_accounts()
             screen.cancel_edit()
