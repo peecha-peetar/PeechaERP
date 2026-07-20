@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import os
 
+from kivy.factory import Factory
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, ListProperty, StringProperty
+from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
@@ -36,10 +38,18 @@ _LEVEL_BADGE_COLORS = {1: theme.TEXT_SECONDARY, 2: theme.INFO, 3: theme.ACCENT}
 _NO_PARENT_LABEL = "— بدون والد (سطح گروه) —"
 
 
-class AccountRowWidget(ButtonBehavior, MDBoxLayout):
+class AccountRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
     """یک ردیفِ جدولِ کدینگ حسابداری: کد | نام (تورفته بر اساس سطح) | سطح |
-    وضعیت | ویرایش | حذف. کلیک روی خودِ ردیف هم مثل دکمه‌ی ویرایش عمل می‌کند."""
+    وضعیت | ویرایش | حذف. کلیک روی خودِ ردیف هم مثل دکمه‌ی ویرایش عمل می‌کند.
 
+    طبق تست مستقیم: با فهرستِ BoxLayout+ScrollView قبلی که هر ردیف را با
+    add_widget در یک حلقه اضافه می‌کرد، بازسازیِ فهرست با ۵۰۰ حساب ۴۲۲
+    ثانیه طول می‌کشید (چون هر add_widget کلِ چیدمانِ فرزندهای قبلی را
+    دوباره محاسبه می‌کند — O(n²)). RecycleView این مشکل را با دو کار حل
+    می‌کند: (۱) کلِ داده یک‌جا به rv.data داده می‌شود، نه ردیف‌به‌ردیف؛
+    (۲) فقط ردیف‌های واقعاً قابل‌مشاهده روی صفحه واقعاً ویجت می‌گیرند."""
+
+    account_id = NumericProperty(0)
     code_text = StringProperty("")
     name_text = StringProperty("")
     level_text = StringProperty("")
@@ -48,18 +58,19 @@ class AccountRowWidget(ButtonBehavior, MDBoxLayout):
     status_badge_color = ListProperty([0, 0, 0, 1])
     zebra = BooleanProperty(False)
     selected = BooleanProperty(False)
-
-    def __init__(self, account_id: int, on_edit, on_delete, **kwargs):
-        super().__init__(**kwargs)
-        self.account_id = account_id
-        self._on_edit = on_edit
-        self._on_delete = on_delete
+    on_edit = ObjectProperty(None)
+    on_delete = ObjectProperty(None)
 
     def on_release(self) -> None:
-        self._on_edit(self.account_id)
+        if self.on_edit is not None:
+            self.on_edit(self.account_id)
 
     def request_delete(self) -> None:
-        self._on_delete(self.account_id)
+        if self.on_delete is not None:
+            self.on_delete(self.account_id)
+
+
+Factory.register("AccountRowWidget", cls=AccountRowWidget)
 
 
 class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
@@ -182,43 +193,43 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.status_label.text = shape(message)
 
     def refresh_list(self) -> None:
-        self.ids.accounts_list.clear_widgets()
         if session.current_company is None:
             self._set_status(tr("هیچ شرکتی انتخاب نشده است."))
             self.ids.grid_header.opacity = 0
+            self.ids.accounts_list.data = []
             return
-
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
 
         rows = coa_service.list_accounts(session.current_company.company_id)
         self._parent_options = rows
         self._accounts_by_id = {row.account_id: row for row in rows}
         self._set_status(tr(""))
         self.ids.grid_header.opacity = 1 if rows else 0
+
         if not rows:
-            self.ids.accounts_list.add_widget(
-                PEmptyState(
-                    icon="format-list-bulleted-square",
-                    text=shape(tr("هنوز حسابی تعریف نشده — از فرم روبه‌رو یک حساب گروه اضافه کنید.")),
-                )
-            )
-        for i, row in enumerate(rows):
-            indent = "    " * (row.account_level - 1)
-            self.ids.accounts_list.add_widget(
-                AccountRowWidget(
-                    account_id=row.account_id,
-                    on_edit=self.edit_account,
-                    on_delete=self.confirm_delete,
-                    code_text=numerals.to_persian_digits(row.full_code),
-                    name_text=shape(f"{indent}{row.name}"),
-                    level_text=shape(tr(_LEVEL_LABELS[row.account_level])),
-                    level_badge_color=_LEVEL_BADGE_COLORS[row.account_level],
-                    status_text=shape(tr("قابل ثبت") if row.is_postable else tr("گروه‌بندی")),
-                    status_badge_color=theme.SUCCESS if row.is_postable else theme.TEXT_DISABLED,
-                    zebra=i % 2 == 1,
-                    selected=row.account_id == self._editing_account_id,
-                )
-            )
+            self.ids.accounts_list.data = [
+                {
+                    "viewclass": "PEmptyState",
+                    "icon": "format-list-bulleted-square",
+                    "text": shape(tr("هنوز حسابی تعریف نشده — از فرم روبه‌رو یک حساب گروه اضافه کنید.")),
+                }
+            ]
+        else:
+            self.ids.accounts_list.data = [
+                {
+                    "account_id": row.account_id,
+                    "on_edit": self.edit_account,
+                    "on_delete": self.confirm_delete,
+                    "code_text": numerals.to_persian_digits(row.full_code),
+                    "name_text": shape(f"{'    ' * (row.account_level - 1)}{row.name}"),
+                    "level_text": shape(tr(_LEVEL_LABELS[row.account_level])),
+                    "level_badge_color": _LEVEL_BADGE_COLORS[row.account_level],
+                    "status_text": shape(tr("قابل ثبت") if row.is_postable else tr("گروه‌بندی")),
+                    "status_badge_color": theme.SUCCESS if row.is_postable else theme.TEXT_DISABLED,
+                    "zebra": i % 2 == 1,
+                    "selected": row.account_id == self._editing_account_id,
+                }
+                for i, row in enumerate(rows)
+            ]
 
         # اگر والدِ انتخاب‌شده دیگر معتبر نیست (مثلاً بعد از رفرش) بازنشانی می‌شود
         if self._parent_account_id is not None and not any(

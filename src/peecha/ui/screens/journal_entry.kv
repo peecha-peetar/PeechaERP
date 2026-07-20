@@ -404,9 +404,15 @@
                         valign: "middle"
                         size_hint_x: 0.12
 
-                BoxLayout:
+                RecycleView:
                     id: entries_list
-                    orientation: "vertical"
+                    viewclass: "JournalEntryRowWidget"
                     size_hint_y: None
-                    height: self.minimum_height
-                    spacing: "2dp"
+                    height: "480dp"
+
+                    RecycleBoxLayout:
+                        orientation: "vertical"
+                        default_size_hint: 1, None
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "2dp"

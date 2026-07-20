@@ -159,10 +159,13 @@
                 text: ""
 
         PCard:
-            ScrollView:
-                BoxLayout:
-                    id: rows_list
+            RecycleView:
+                id: rows_list
+                viewclass: "_TranslationRow"
+
+                RecycleBoxLayout:
                     orientation: "vertical"
+                    default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "6dp"

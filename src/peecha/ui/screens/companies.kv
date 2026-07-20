@@ -132,10 +132,13 @@
                     valign: "middle"
                     size_hint_x: 0.14
 
-            ScrollView:
-                BoxLayout:
-                    id: companies_list
+            RecycleView:
+                id: companies_list
+                viewclass: "CompanyRowWidget"
+
+                RecycleBoxLayout:
                     orientation: "vertical"
+                    default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "2dp"

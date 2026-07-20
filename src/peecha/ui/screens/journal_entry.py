@@ -16,11 +16,13 @@ import datetime
 import decimal
 import os
 
+from kivy.factory import Factory
 from kivy.lang import Builder
 from kivy.metrics import dp
-from kivy.properties import BooleanProperty, ListProperty, StringProperty
+from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.dropdown import DropDown
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
@@ -348,9 +350,16 @@ class JournalEntryLineRow(MDBoxLayout):
         self._on_remove(self)
 
 
-class JournalEntryRowWidget(ButtonBehavior, MDBoxLayout):
-    """یک ردیفِ جدولِ «اسناد اخیر»: کلیک روی ردیف = بارگذاری برای ویرایش."""
+class JournalEntryRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
+    """یک ردیفِ جدولِ «اسناد اخیر»: کلیک روی ردیف = بارگذاری برای ویرایش.
 
+    طبق تست مستقیم روی chart_of_accounts (همان الگو): فهرستِ BoxLayout+
+    add_widget-در-حلقه با تعدادِ زیادِ اسناد به‌شدت کند می‌شود (O(n²) چون
+    هر add_widget کلِ چیدمانِ فرزندهای قبلی را دوباره محاسبه می‌کند).
+    اسنادِ حسابداری دقیقاً همان چیزی هستند که با استفاده‌ی واقعی به‌سرعت
+    زیاد می‌شوند، پس RecycleView اینجا اهمیتِ ویژه‌ای دارد."""
+
+    journal_entry_id = NumericProperty(0)
     number_text = StringProperty("")
     date_text = StringProperty("")
     description_text = StringProperty("")
@@ -360,20 +369,19 @@ class JournalEntryRowWidget(ButtonBehavior, MDBoxLayout):
     zebra = BooleanProperty(False)
     editable = BooleanProperty(False)
     selected = BooleanProperty(False)
-
-    def __init__(self, journal_entry_id: int, on_edit, on_delete, **kwargs):
-        super().__init__(**kwargs)
-        self.journal_entry_id = journal_entry_id
-        self._on_edit = on_edit
-        self._on_delete = on_delete
+    on_edit = ObjectProperty(None)
+    on_delete = ObjectProperty(None)
 
     def on_release(self) -> None:
-        if self.editable:
-            self._on_edit(self.journal_entry_id)
+        if self.editable and self.on_edit is not None:
+            self.on_edit(self.journal_entry_id)
 
     def request_delete(self) -> None:
-        if self.editable:
-            self._on_delete(self.journal_entry_id)
+        if self.editable and self.on_delete is not None:
+            self.on_delete(self.journal_entry_id)
+
+
+Factory.register("JournalEntryRowWidget", cls=JournalEntryRowWidget)
 
 
 class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
@@ -706,34 +714,32 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self.refresh_entries()
 
     def refresh_entries(self) -> None:
-        self.ids.entries_list.clear_widgets()
         if session.current_company is None:
+            self.ids.entries_list.data = []
             return
-
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
 
         entries = je_service.list_journal_entries(session.current_company.company_id)
         self.ids.entries_header.opacity = 1 if entries else 0
         if not entries:
-            self.ids.entries_list.add_widget(
-                PEmptyState(icon="file-document-outline", text=shape(tr("هنوز سندی ثبت نشده است.")))
-            )
+            self.ids.entries_list.data = [
+                {"viewclass": "PEmptyState", "icon": "file-document-outline", "text": shape(tr("هنوز سندی ثبت نشده است."))}
+            ]
             return
 
-        for i, entry in enumerate(entries):
-            self.ids.entries_list.add_widget(
-                JournalEntryRowWidget(
-                    journal_entry_id=entry.journal_entry_id,
-                    on_edit=self.edit_entry,
-                    on_delete=self.confirm_delete,
-                    number_text=numerals.to_persian_digits(str(entry.temporary_no)),
-                    date_text=numerals.format_jalali_date(entry.document_date),
-                    description_text=shape(entry.description or "—"),
-                    amount_text=numerals.format_amount(entry.total_amount),
-                    status_text=shape(tr(_STATUS_LABELS.get(entry.status_code, entry.status_code))),
-                    status_badge_color=_STATUS_COLORS.get(entry.status_code, theme.TEXT_DISABLED),
-                    zebra=i % 2 == 1,
-                    editable=entry.status_code == "TEMPORARY",
-                    selected=entry.journal_entry_id == self._editing_entry_id,
-                )
-            )
+        self.ids.entries_list.data = [
+            {
+                "journal_entry_id": entry.journal_entry_id,
+                "on_edit": self.edit_entry,
+                "on_delete": self.confirm_delete,
+                "number_text": numerals.to_persian_digits(str(entry.temporary_no)),
+                "date_text": numerals.format_jalali_date(entry.document_date),
+                "description_text": shape(entry.description or "—"),
+                "amount_text": numerals.format_amount(entry.total_amount),
+                "status_text": shape(tr(_STATUS_LABELS.get(entry.status_code, entry.status_code))),
+                "status_badge_color": _STATUS_COLORS.get(entry.status_code, theme.TEXT_DISABLED),
+                "zebra": i % 2 == 1,
+                "editable": entry.status_code == "TEMPORARY",
+                "selected": entry.journal_entry_id == self._editing_entry_id,
+            }
+            for i, entry in enumerate(entries)
+        ]

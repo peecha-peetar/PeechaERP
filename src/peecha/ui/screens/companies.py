@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import os
 
+from kivy.factory import Factory
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
@@ -25,7 +27,8 @@ _KV_PATH = os.path.join(os.path.dirname(__file__), "companies.kv")
 Builder.load_file(_KV_PATH)
 
 
-class CompanyRowWidget(ButtonBehavior, MDBoxLayout):
+class CompanyRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
+    company_id = NumericProperty(0)
     code_text = StringProperty("")
     name_text = StringProperty("")
     currency_text = StringProperty("")
@@ -34,14 +37,14 @@ class CompanyRowWidget(ButtonBehavior, MDBoxLayout):
     is_active_row = BooleanProperty(True)
     zebra = BooleanProperty(False)
     selected = BooleanProperty(False)
-
-    def __init__(self, company_id: int, on_edit, **kwargs):
-        super().__init__(**kwargs)
-        self.company_id = company_id
-        self._on_edit = on_edit
+    on_edit = ObjectProperty(None)
 
     def on_release(self) -> None:
-        self._on_edit(self.company_id)
+        if self.on_edit is not None:
+            self.on_edit(self.company_id)
+
+
+Factory.register("CompanyRowWidget", cls=CompanyRowWidget)
 
 
 class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
@@ -153,31 +156,30 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.status_label.text = shape(message)
 
     def refresh_list(self) -> None:
-        self.ids.companies_list.clear_widgets()
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
-
         rows = companies_service.list_companies()
         self._rows_by_id = {r.company_id: r for r in rows}
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
-            self.ids.companies_list.add_widget(
-                PEmptyState(icon="domain", text=shape(tr("هنوز شرکتی تعریف نشده است.")))
-            )
-        for i, row in enumerate(rows):
-            self.ids.companies_list.add_widget(
-                CompanyRowWidget(
-                    company_id=row.company_id,
-                    on_edit=self.edit_company,
-                    code_text=row.code,
-                    name_text=shape(row.display_name),
-                    currency_text=row.base_currency_code,
-                    language_text=shape(row.default_language_name),
-                    status_text=shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                    is_active_row=row.is_active,
-                    zebra=i % 2 == 1,
-                    selected=row.company_id == self._editing_company_id,
-                )
-            )
+            self.ids.companies_list.data = [
+                {"viewclass": "PEmptyState", "icon": "domain", "text": shape(tr("هنوز شرکتی تعریف نشده است."))}
+            ]
+            return
+
+        self.ids.companies_list.data = [
+            {
+                "company_id": row.company_id,
+                "on_edit": self.edit_company,
+                "code_text": row.code,
+                "name_text": shape(row.display_name),
+                "currency_text": row.base_currency_code,
+                "language_text": shape(row.default_language_name),
+                "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
+                "is_active_row": row.is_active,
+                "zebra": i % 2 == 1,
+                "selected": row.company_id == self._editing_company_id,
+            }
+            for i, row in enumerate(rows)
+        ]
 
     def edit_company(self, company_id: int) -> None:
         row = self._rows_by_id.get(company_id)

@@ -162,10 +162,13 @@
                     valign: "middle"
                     size_hint_x: 0.35
 
-            ScrollView:
-                BoxLayout:
-                    id: roles_list
+            RecycleView:
+                id: roles_list
+                viewclass: "RoleRowWidget"
+
+                RecycleBoxLayout:
                     orientation: "vertical"
+                    default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "2dp"

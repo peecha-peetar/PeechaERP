@@ -111,10 +111,13 @@
                     valign: "middle"
                     size_hint_x: 0.18
 
-            ScrollView:
-                BoxLayout:
-                    id: years_list
+            RecycleView:
+                id: years_list
+                viewclass: "FiscalYearRowWidget"
+
+                RecycleBoxLayout:
                     orientation: "vertical"
+                    default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "2dp"

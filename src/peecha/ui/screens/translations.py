@@ -17,8 +17,10 @@ import os
 import threading
 
 from kivy.clock import Clock
+from kivy.factory import Factory
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.properties import BooleanProperty, ObjectProperty, StringProperty
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
@@ -37,37 +39,43 @@ from peecha.ui.theme import DANGER, TEXT_SECONDARY
 _KV_PATH = os.path.join(os.path.dirname(__file__), "translations.kv")
 Builder.load_file(_KV_PATH)
 
-_MAX_VISIBLE_ROWS = 300  # جلوگیری از رندرِ بیش‌ازحدِ کند اگر فهرستِ منبع خیلی بزرگ شود
 
+class _TranslationRow(RecycleDataViewBehavior, MDBoxLayout):
+    """طبق تست مستقیم روی chart_of_accounts: با تعدادِ زیادِ ردیف (اینجا تا
+    ۲۴۰+ متنِ منبع)، BoxLayout+add_widget-در-حلقه به‌شدت کند است (O(n²)).
+    این صفحه قبلاً با یک سقفِ دستی (_MAX_VISIBLE_ROWS) این را موقتاً دور
+    می‌زد؛ RecycleView مشکل را واقعاً حل می‌کند، پس آن سقف هم دیگر لازم
+    نیست. چون این ردیف فیلدِ متنِ قابل‌ویرایش دارد، مقدارش باید در
+    refresh_view_attrs (نه فقط یک‌بار در ساخت) با دادهِ تازه هم‌گام شود —
+    وگرنه با اسکرول، یک ویجتِ بازیافتی مقدارِ ردیفِ قبلی‌اش را نشان می‌دهد."""
 
-class _TranslationRow(MDBoxLayout):
     source_text = StringProperty("")
     is_untranslated = BooleanProperty(False)
     is_checked = BooleanProperty(False)
+    on_save = ObjectProperty(None)
+    on_toggle = ObjectProperty(None)
 
-    def __init__(self, source: str, current_value: str, on_save, on_toggle, checked: bool, **kwargs):
-        super().__init__(**kwargs)
-        self.source = source
-        self._on_save = on_save
-        self._on_toggle = on_toggle
-        self.source_text = shape(source)
-        self.is_untranslated = current_value == source
-        self.ids.value_field.set_value(current_value)
-        self.is_checked = checked
+    def refresh_view_attrs(self, rv, index, data):
+        self.index = index
+        self.source = data.get("source", "")
+        self.source_text = data.get("source_text", "")
+        self.is_untranslated = data.get("is_untranslated", False)
+        self.is_checked = data.get("is_checked", False)
+        self.on_save = data.get("on_save")
+        self.on_toggle = data.get("on_toggle")
+        self.ids.value_field.set_value(data.get("current_value", ""))
 
     def save(self) -> None:
-        self._on_save(self.source, self.ids.value_field.value)
+        if self.on_save is not None:
+            self.on_save(self.source, self.ids.value_field.value)
 
     def toggle_checked(self) -> None:
-        # طبق تست مستقیم: با ۲۰۰+ ردیف، استفاده از MDCheckbox واقعیِ KivyMD
-        # (که خودش هنگامِ ساخت چند Clock.schedule_once داخلی صدا می‌زند)
-        # هنگام بازسازیِ کاملِ فهرست (که با هر save/فیلتر اتفاق می‌افتد)
-        # صف‌ای انبوه از رویدادهای Clock ایجاد می‌کرد و برنامه را هنگ
-        # می‌کرد — دقیقاً همان الگوی کاری که باعثِ هنگِ گزارش‌شده بود. یک
-        # دکمه‌ی آیکونیِ ساده (که همین الان هم برای دکمه‌ی ذخیره در همین
-        # ردیف استفاده شده و مشکلی نداشت) همان تجربه را بدونِ آن هزینه می‌دهد.
         self.is_checked = not self.is_checked
-        self._on_toggle(self.source, self.is_checked)
+        if self.on_toggle is not None:
+            self.on_toggle(self.source, self.is_checked)
+
+
+Factory.register("_TranslationRow", cls=_TranslationRow)
 
 
 class _BulkEditContent(MDBoxLayout):
@@ -173,7 +181,6 @@ class TranslationsScreen(KeyboardShortcutMixin, MDScreen):
         return sources
 
     def refresh_list(self) -> None:
-        self.ids.rows_list.clear_widgets()
         language = self._current_language()
         if language is None:
             self._set_status(tr("ابتدا یک زبانِ غیرِپیش‌فرض تعریف کنید."))
@@ -181,11 +188,10 @@ class TranslationsScreen(KeyboardShortcutMixin, MDScreen):
             self.ids.bulk_edit_button.disabled = True
             self.ids.bulk_delete_button.disabled = True
             self.ids.select_all_checkbox.disabled = True
+            self.ids.rows_list.data = []
             return
 
         self.ids.translate_online_button.disabled = self._translating
-
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
 
         catalog = i18n.get_catalog(language.code)
         all_sources = i18n.list_source_strings()
@@ -207,20 +213,23 @@ class TranslationsScreen(KeyboardShortcutMixin, MDScreen):
         self._updating_select_all = False
 
         if not sources:
-            self.ids.rows_list.add_widget(
-                PEmptyState(icon="translate", text=shape(tr("موردی با این فیلتر پیدا نشد.")))
-            )
+            self.ids.rows_list.data = [
+                {"viewclass": "PEmptyState", "icon": "translate", "text": shape(tr("موردی با این فیلتر پیدا نشد."))}
+            ]
             return
-        for source in sources[:_MAX_VISIBLE_ROWS]:
-            self.ids.rows_list.add_widget(
-                _TranslationRow(
-                    source=source,
-                    current_value=catalog.get(source, source),
-                    on_save=self._save_translation,
-                    on_toggle=self._on_row_toggle,
-                    checked=source in self._selected,
-                )
-            )
+
+        self.ids.rows_list.data = [
+            {
+                "source": source,
+                "source_text": shape(source),
+                "current_value": catalog.get(source, source),
+                "is_untranslated": catalog.get(source, source) == source,
+                "is_checked": source in self._selected,
+                "on_save": self._save_translation,
+                "on_toggle": self._on_row_toggle,
+            }
+            for source in sources
+        ]
 
     def _on_row_toggle(self, source: str, active: bool) -> None:
         if active:

@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import os
 
+from kivy.factory import Factory
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
@@ -25,7 +27,8 @@ _KV_PATH = os.path.join(os.path.dirname(__file__), "users.kv")
 Builder.load_file(_KV_PATH)
 
 
-class UserRowWidget(ButtonBehavior, MDBoxLayout):
+class UserRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
+    user_id = NumericProperty(0)
     username_text = StringProperty("")
     name_text = StringProperty("")
     role_text = StringProperty("")
@@ -33,14 +36,14 @@ class UserRowWidget(ButtonBehavior, MDBoxLayout):
     is_active_row = BooleanProperty(True)
     zebra = BooleanProperty(False)
     selected = BooleanProperty(False)
-
-    def __init__(self, user_id: int, on_edit, **kwargs):
-        super().__init__(**kwargs)
-        self.user_id = user_id
-        self._on_edit = on_edit
+    on_edit = ObjectProperty(None)
 
     def on_release(self) -> None:
-        self._on_edit(self.user_id)
+        if self.on_edit is not None:
+            self.on_edit(self.user_id)
+
+
+Factory.register("UserRowWidget", cls=UserRowWidget)
 
 
 class _CompanyCheckRow(MDBoxLayout):
@@ -136,30 +139,29 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
 
     def refresh_list(self) -> None:
-        self.ids.users_list.clear_widgets()
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
-
         rows = users_service.list_users()
         self._rows_by_id = {r.user_id: r for r in rows}
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
-            self.ids.users_list.add_widget(
-                PEmptyState(icon="account-multiple-outline", text=shape(tr("هنوز کاربری تعریف نشده است.")))
-            )
-        for i, row in enumerate(rows):
-            self.ids.users_list.add_widget(
-                UserRowWidget(
-                    user_id=row.user_id,
-                    on_edit=self.edit_user,
-                    username_text=row.username,
-                    name_text=shape(row.full_name),
-                    role_text=shape(tr("مدیر کل") if row.is_super_admin else tr("کاربر")),
-                    status_text=shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                    is_active_row=row.is_active,
-                    zebra=i % 2 == 1,
-                    selected=row.user_id == self._editing_user_id,
-                )
-            )
+            self.ids.users_list.data = [
+                {"viewclass": "PEmptyState", "icon": "account-multiple-outline", "text": shape(tr("هنوز کاربری تعریف نشده است."))}
+            ]
+            return
+
+        self.ids.users_list.data = [
+            {
+                "user_id": row.user_id,
+                "on_edit": self.edit_user,
+                "username_text": row.username,
+                "name_text": shape(row.full_name),
+                "role_text": shape(tr("مدیر کل") if row.is_super_admin else tr("کاربر")),
+                "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
+                "is_active_row": row.is_active,
+                "zebra": i % 2 == 1,
+                "selected": row.user_id == self._editing_user_id,
+            }
+            for i, row in enumerate(rows)
+        ]
 
     def edit_user(self, user_id: int) -> None:
         row = self._rows_by_id.get(user_id)

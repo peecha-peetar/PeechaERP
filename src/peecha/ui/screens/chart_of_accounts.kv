@@ -137,10 +137,13 @@
                     valign: "middle"
                     size_hint_x: 0.22
 
-            ScrollView:
-                BoxLayout:
-                    id: accounts_list
+            RecycleView:
+                id: accounts_list
+                viewclass: "AccountRowWidget"
+
+                RecycleBoxLayout:
                     orientation: "vertical"
+                    default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "2dp"

@@ -7,8 +7,10 @@ from __future__ import annotations
 import datetime
 import os
 
+from kivy.factory import Factory
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.screen import MDScreen
 
@@ -24,21 +26,22 @@ _KV_PATH = os.path.join(os.path.dirname(__file__), "fiscal_years.kv")
 Builder.load_file(_KV_PATH)
 
 
-class FiscalYearRowWidget(MDBoxLayout):
+class FiscalYearRowWidget(RecycleDataViewBehavior, MDBoxLayout):
+    fiscal_year_id = NumericProperty(0)
     code_text = StringProperty("")
     range_text = StringProperty("")
     periods_text = StringProperty("")
     status_text = StringProperty("")
     is_closed_row = BooleanProperty(False)
     zebra = BooleanProperty(False)
-
-    def __init__(self, fiscal_year_id: int, on_toggle, **kwargs):
-        super().__init__(**kwargs)
-        self.fiscal_year_id = fiscal_year_id
-        self._on_toggle = on_toggle
+    on_toggle = ObjectProperty(None)
 
     def toggle(self) -> None:
-        self._on_toggle(self.fiscal_year_id, not self.is_closed_row)
+        if self.on_toggle is not None:
+            self.on_toggle(self.fiscal_year_id, not self.is_closed_row)
+
+
+Factory.register("FiscalYearRowWidget", cls=FiscalYearRowWidget)
 
 
 class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
@@ -64,36 +67,36 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
 
     def refresh_list(self) -> None:
-        self.ids.years_list.clear_widgets()
         if session.current_company is None:
             self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
             self.ids.grid_header.opacity = 0
+            self.ids.years_list.data = []
             return
-
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
 
         rows = fiscal_years_service.list_fiscal_years(session.current_company.company_id)
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
-            self.ids.years_list.add_widget(
-                PEmptyState(icon="calendar-blank-outline", text=shape(tr("هنوز سالِ مالی‌ای تعریف نشده است.")))
-            )
-        for i, row in enumerate(rows):
-            self.ids.years_list.add_widget(
-                FiscalYearRowWidget(
-                    fiscal_year_id=row.fiscal_year_id,
-                    on_toggle=self._toggle_closed,
-                    code_text=numerals.to_persian_digits(row.code),
-                    range_text=shape(
-                        f"{numerals.format_jalali_date(row.start_date)} تا "
-                        f"{numerals.format_jalali_date(row.end_date)}"
-                    ),
-                    periods_text=numerals.to_persian_digits(f"{row.period_count} دوره"),
-                    status_text=shape(tr("بسته") if row.is_closed else tr("باز")),
-                    is_closed_row=row.is_closed,
-                    zebra=i % 2 == 1,
-                )
-            )
+            self.ids.years_list.data = [
+                {"viewclass": "PEmptyState", "icon": "calendar-blank-outline", "text": shape(tr("هنوز سالِ مالی‌ای تعریف نشده است."))}
+            ]
+            return
+
+        self.ids.years_list.data = [
+            {
+                "fiscal_year_id": row.fiscal_year_id,
+                "on_toggle": self._toggle_closed,
+                "code_text": numerals.to_persian_digits(row.code),
+                "range_text": shape(
+                    f"{numerals.format_jalali_date(row.start_date)} تا "
+                    f"{numerals.format_jalali_date(row.end_date)}"
+                ),
+                "periods_text": numerals.to_persian_digits(f"{row.period_count} دوره"),
+                "status_text": shape(tr("بسته") if row.is_closed else tr("باز")),
+                "is_closed_row": row.is_closed,
+                "zebra": i % 2 == 1,
+            }
+            for i, row in enumerate(rows)
+        ]
 
     def save_fiscal_year(self) -> None:
         if session.current_company is None:

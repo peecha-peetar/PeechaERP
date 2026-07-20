@@ -143,10 +143,13 @@
                     valign: "middle"
                     size_hint_x: 0.16
 
-            ScrollView:
-                BoxLayout:
-                    id: languages_list
+            RecycleView:
+                id: languages_list
+                viewclass: "LanguageRowWidget"
+
+                RecycleBoxLayout:
                     orientation: "vertical"
+                    default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "2dp"

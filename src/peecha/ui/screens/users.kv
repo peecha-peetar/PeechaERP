@@ -137,10 +137,13 @@
                     valign: "middle"
                     size_hint_x: 0.20
 
-            ScrollView:
-                BoxLayout:
-                    id: users_list
+            RecycleView:
+                id: users_list
+                viewclass: "UserRowWidget"
+
+                RecycleBoxLayout:
                     orientation: "vertical"
+                    default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "2dp"

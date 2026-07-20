@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import os
 
+from kivy.factory import Factory
 from kivy.lang import Builder
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
@@ -25,7 +27,8 @@ _KV_PATH = os.path.join(os.path.dirname(__file__), "languages.kv")
 Builder.load_file(_KV_PATH)
 
 
-class LanguageRowWidget(ButtonBehavior, MDBoxLayout):
+class LanguageRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
+    language_id = NumericProperty(0)
     code_text = StringProperty("")
     name_text = StringProperty("")
     direction_text = StringProperty("")
@@ -34,18 +37,19 @@ class LanguageRowWidget(ButtonBehavior, MDBoxLayout):
     is_active_row = BooleanProperty(True)
     zebra = BooleanProperty(False)
     selected = BooleanProperty(False)
-
-    def __init__(self, language_id: int, on_edit, on_delete, **kwargs):
-        super().__init__(**kwargs)
-        self.language_id = language_id
-        self._on_edit = on_edit
-        self._on_delete = on_delete
+    on_edit = ObjectProperty(None)
+    on_delete = ObjectProperty(None)
 
     def on_release(self) -> None:
-        self._on_edit(self.language_id)
+        if self.on_edit is not None:
+            self.on_edit(self.language_id)
 
     def request_delete(self) -> None:
-        self._on_delete(self.language_id)
+        if self.on_delete is not None:
+            self.on_delete(self.language_id)
+
+
+Factory.register("LanguageRowWidget", cls=LanguageRowWidget)
 
 
 class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
@@ -89,32 +93,30 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.status_label.text = shape(message)
 
     def refresh_list(self) -> None:
-        self.ids.languages_list.clear_widgets()
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
-
         rows = languages_service.list_languages()
         self._rows_by_id = {r.language_id: r for r in rows}
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
-            self.ids.languages_list.add_widget(
-                PEmptyState(icon="translate", text=shape(tr("هنوز زبانی تعریف نشده است.")))
-            )
-        for i, row in enumerate(rows):
-            self.ids.languages_list.add_widget(
-                LanguageRowWidget(
-                    language_id=row.language_id,
-                    on_edit=self.edit_language,
-                    on_delete=self.confirm_delete,
-                    code_text=row.code,
-                    name_text=shape(row.native_name),
-                    direction_text=shape(tr("راست‌به‌چپ") if row.is_rtl else tr("چپ‌به‌راست")),
-                    default_text=shape(tr("پیش‌فرض") if row.is_default else ""),
-                    status_text=shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                    is_active_row=row.is_active,
-                    zebra=i % 2 == 1,
-                    selected=row.language_id == self._editing_language_id,
-                )
-            )
+            self.ids.languages_list.data = [
+                {"viewclass": "PEmptyState", "icon": "translate", "text": shape(tr("هنوز زبانی تعریف نشده است."))}
+            ]
+        else:
+            self.ids.languages_list.data = [
+                {
+                    "language_id": row.language_id,
+                    "on_edit": self.edit_language,
+                    "on_delete": self.confirm_delete,
+                    "code_text": row.code,
+                    "name_text": shape(row.native_name),
+                    "direction_text": shape(tr("راست‌به‌چپ") if row.is_rtl else tr("چپ‌به‌راست")),
+                    "default_text": shape(tr("پیش‌فرض") if row.is_default else ""),
+                    "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
+                    "is_active_row": row.is_active,
+                    "zebra": i % 2 == 1,
+                    "selected": row.language_id == self._editing_language_id,
+                }
+                for i, row in enumerate(rows)
+            ]
         if self._editing_language_id is not None and self._editing_language_id not in self._rows_by_id:
             self.cancel_edit()
 
