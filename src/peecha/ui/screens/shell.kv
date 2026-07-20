@@ -108,7 +108,9 @@
                 # گزارشِ مستقیمِ کاربر.
                 transition: NoTransition()
 
-        # نوار کناری (راست)
+        # نوار کناری (راست) — طبق مدرن‌سازیِ ظاهر (نسخه‌ی دوم، بولدتر): پسِ‌زمینه‌ی
+        # تیره‌ی کاملِ نوار کناری (الگوی رایجِ SaaS-هایِ ۲۰۲۶ مثلِ Linear/Vercel)
+        # به‌جای سفیدِ قبلی — تفاوتش با یک نگاه مشخص است، نه یک ظرافتِ قابل‌چشم‌پوشی.
         BoxLayout:
             orientation: "vertical"
             size_hint_x: None
@@ -117,7 +119,7 @@
             spacing: "8dp"
             canvas.before:
                 Color:
-                    rgba: theme.SURFACE
+                    rgba: theme.PRIMARY
                 Rectangle:
                     pos: self.pos
                     size: self.size
@@ -130,7 +132,7 @@
                 MDIconButton:
                     icon: "printer-outline"
                     theme_text_color: "Custom"
-                    text_color: theme.TEXT_SECONDARY
+                    text_color: 1, 1, 1, 0.55
 
                 Widget:
 
@@ -139,12 +141,14 @@
                     font_style: "H6"
                     halign: "right"
                     valign: "middle"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
 
                 MDBoxLayout:
                     size_hint: None, None
                     size: "36dp", "36dp"
                     radius: [12, 12, 12, 12]
-                    md_bg_color: theme.PRIMARY
+                    md_bg_color: theme.ACCENT
 
                     MDIcon:
                         icon: "chart-donut"
@@ -158,7 +162,7 @@
                 height: "1dp"
                 canvas.before:
                     Color:
-                        rgba: theme.DIVIDER
+                        rgba: 1, 1, 1, 0.1
                     Rectangle:
                         pos: self.pos
                         size: self.size
