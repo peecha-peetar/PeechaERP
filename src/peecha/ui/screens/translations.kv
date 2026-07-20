@@ -37,6 +37,27 @@
         valign: "middle"
         size_hint_x: 0.5
 
+    MDIconButton:
+        id: select_checkbox
+        icon: "checkbox-marked" if root.is_checked else "checkbox-blank-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT if root.is_checked else theme.TEXT_SECONDARY
+        on_release: root.toggle_checked()
+
+<_BulkEditContent>:
+    orientation: "vertical"
+    size_hint_y: None
+    height: "72dp"
+    padding: ["8dp", "8dp"]
+
+    PTextField:
+        id: value_field
+        hint_text: ((app.ui_language_code or True) and shape(tr("مقدارِ تازه برای موارد انتخاب‌شده")))
+        mode: "fill"
+
 <TranslationsScreen>:
     name: "translations"
     md_bg_color: theme.BACKGROUND
@@ -59,6 +80,14 @@
             PHintLabel:
                 text: ((app.ui_language_code or True) and shape(tr("متن‌های ثابتِ برنامه را برای هر زبان اینجا ببینید/اصلاح کنید؛ یا برای موارد بدون‌ترجمه از سرویسِ آنلاین کمک بگیرید.")))
 
+            PTextField:
+                id: filter_field
+                size_hint_y: None
+                height: "44dp"
+                hint_text: ((app.ui_language_code or True) and shape(tr("جستجو در متن‌ها...")))
+                mode: "fill"
+                on_text: root.on_filter_text(self.text)
+
             BoxLayout:
                 size_hint_y: None
                 height: "48dp"
@@ -70,28 +99,54 @@
                     size_hint_x: 0.3
                     on_release: root.open_language_menu()
 
-                PTextField:
-                    id: filter_field
-                    hint_text: ((app.ui_language_code or True) and shape(tr("جستجو در متن‌ها...")))
-                    size_hint_x: 0.4
-                    on_text: root.on_filter_text(self.text)
+                PSelectField:
+                    id: group_button
+                    text: ""
+                    size_hint_x: 0.3
+                    on_release: root.open_group_menu()
 
                 PTextField:
                     id: service_url_field
                     hint_text: ((app.ui_language_code or True) and shape(tr("آدرسِ سرویسِ ترجمه")))
-                    size_hint_x: 0.3
+                    size_hint_x: 0.4
 
             BoxLayout:
                 size_hint_y: None
                 height: "40dp"
                 spacing: "12dp"
 
-                Widget:
-
                 PRaisedButton:
                     id: translate_online_button
                     text: ((app.ui_language_code or True) and shape(tr("ترجمه با سرویسِ آنلاین")))
                     on_release: root.translate_online()
+
+                Widget:
+
+                PRaisedButton:
+                    id: bulk_delete_button
+                    text: ((app.ui_language_code or True) and shape(tr("حذف")))
+                    md_bg_color: theme.DANGER
+                    disabled: True
+                    on_release: root.bulk_delete()
+
+                PRaisedButton:
+                    id: bulk_edit_button
+                    text: ((app.ui_language_code or True) and shape(tr("ویرایش")))
+                    disabled: True
+                    on_release: root.bulk_edit()
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("انتخاب همه")))
+                    size_hint_x: None
+                    width: "90dp"
+                    valign: "middle"
+
+                MDCheckbox:
+                    id: select_all_checkbox
+                    size_hint: None, None
+                    size: "24dp", "24dp"
+                    pos_hint: {"center_y": 0.5}
+                    on_active: root.toggle_select_all(self.active)
 
             PHintLabel:
                 id: status_label

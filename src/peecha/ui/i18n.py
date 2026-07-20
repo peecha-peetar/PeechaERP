@@ -28,6 +28,8 @@ import json
 import os
 import threading
 
+from kivy.clock import Clock
+
 from peecha import session
 
 _LOCALES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "locales")
@@ -36,6 +38,43 @@ _SOURCE_CATALOG_PATH = os.path.join(_LOCALES_DIR, "_source.json")
 _lock = threading.Lock()
 _catalog_cache: dict[str, dict[str, str]] = {}
 _source_cache: dict[str, str] | None = None
+
+# ثبتِ خودکارِ رشته‌ها (اولین‌بار که tr() یک متنِ تازه می‌بیند) قبلاً هر بار
+# بلافاصله کلِ فایلِ کاتالوگ را روی دیسک می‌نوشت — چون tr() از داخلِ صدها
+# بایندینگِ KV در یک ساخت‌وسازِ دسته‌ایِ صفحه‌ها (مثلاً بالا آمدنِ برنامه)
+# پشت‌سرهم صدا زده می‌شود، این یعنی ده‌ها نوشتنِ همزمانِ دیسک روی خودِ ترد UI
+# — که علتِ هنگ‌کردنِ محسوسِ برنامه بود. راه‌حل: فقط در حافظه علامت‌گذاری کن و
+# نوشتنِ واقعی را با یک تاخیرِ کوتاه دسته‌ای کن (debounce) تا این انفجارِ
+# نوشتن به یک نوشتنِ واحد تبدیل شود.
+_dirty_source = False
+_dirty_languages: set[str] = set()
+_flush_event = None
+
+
+def _schedule_flush() -> None:
+    global _flush_event
+    if _flush_event is not None:
+        _flush_event.cancel()
+    _flush_event = Clock.schedule_once(_flush_dirty, 0.3)
+
+
+def _flush_dirty(_dt: float | None = None) -> None:
+    global _dirty_source, _flush_event
+    _flush_event = None
+    with _lock:
+        if _dirty_source:
+            _write_json(_SOURCE_CATALOG_PATH, _source_cache or {})
+            _dirty_source = False
+        for code in _dirty_languages:
+            _write_json(_catalog_path(code), _catalog_cache.get(code, {}))
+        _dirty_languages.clear()
+
+
+def flush_now() -> None:
+    """نوشتنِ فوریِ هر تغییرِ معوق — برای فراخوانی صریح قبلِ بستنِ برنامه."""
+    if _flush_event is not None:
+        _flush_event.cancel()
+    _flush_dirty()
 
 
 def _catalog_path(language_code: str) -> str:
@@ -66,7 +105,9 @@ def _register_source_string(text: str) -> None:
     """هر متنِ فارسیِ تازه‌ای که از tr() عبور کند در فهرستِ منبع ثبت
     می‌شود — همان مکانیزمی که تضمین می‌کند فرم‌های تازه‌ی آینده هم در
     فایل‌های ترجمه ظاهر شوند (حتی اگر مقدارِ ترجمه‌شان تا اصلاحِ دستی
-    همان فارسی بماند)."""
+    همان فارسی بماند). نوشتنِ روی دیسک بلافاصله نیست، دسته‌ای/تاخیردار
+    است (نگاه کن به توضیحِ _schedule_flush بالا)."""
+    global _dirty_source
     source = _load_source_catalog()
     if text in source:
         return
@@ -75,7 +116,8 @@ def _register_source_string(text: str) -> None:
         if text in source:
             return
         source[text] = text
-        _write_json(_SOURCE_CATALOG_PATH, source)
+        _dirty_source = True
+    _schedule_flush()
 
 
 def _load_catalog(language_code: str) -> dict[str, str]:
@@ -140,10 +182,15 @@ def tr(text: str) -> str:
 
     # رشته‌ای که هنوز برای این زبان ترجمه نشده — فعلاً فارسی نمایش داده
     # می‌شود، اما هم‌زمان در فایلِ همین زبان ثبت می‌شود (با مقدارِ فارسی)
-    # تا بعداً با ویرایشِ همان فایل قابل‌اصلاح باشد.
+    # تا بعداً با ویرایشِ همان فایل قابل‌اصلاح باشد. نوشتنِ روی دیسک دسته‌ای/
+    # تاخیردار است، نه بلافاصله (نگاه کن به توضیحِ _schedule_flush بالا).
+    newly_added = False
     with _lock:
         catalog = _load_catalog(language.code)
         if text not in catalog:
             catalog[text] = text
-            _write_json(_catalog_path(language.code), catalog)
+            _dirty_languages.add(language.code)
+            newly_added = True
+    if newly_added:
+        _schedule_flush()
     return text

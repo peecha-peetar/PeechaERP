@@ -133,6 +133,13 @@ class PeechaApp(MDApp):
         root.add_widget(warning_bar)
         return root
 
+    def on_stop(self):
+        # نوشتنِ فوریِ هر تغییرِ ترجمه‌ی معوق (که برای جلوگیری از هنگ، دسته‌ای/
+        # تاخیردار نوشته می‌شود — نگاه کن به peecha/ui/i18n.py) قبل از بسته‌شدن.
+        from peecha.ui import i18n  # noqa: PLC0415
+
+        i18n.flush_now()
+
 
 def main() -> None:
     PeechaApp().run()
