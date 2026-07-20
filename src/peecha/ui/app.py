@@ -13,6 +13,7 @@ from kivy.core.text import LabelBase
 from kivy.lang import Builder
 from kivy.properties import StringProperty
 from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.screenmanager import FadeTransition
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
@@ -96,6 +97,13 @@ class PeechaApp(MDApp):
         from peecha.ui.screens.shell import ShellScreen  # noqa: PLC0415
 
         screen_manager = MDScreenManager()
+        # طبق درخواستِ مدرن‌سازیِ ظاهر: یک fade کوتاه بینِ صفحاتِ بزرگِ
+        # برنامه (اتصال/ورود/راه‌اندازی/پوسته‌ی اصلی) — نه نوارِ کناری، که
+        # طبق گزارشِ قبلیِ کاربر عمداً NoTransition ماند چون ترنزیشنِ
+        # پیش‌فرضِ ۰.۴ ثانیه‌ای هر کلیکِ منو را «کند» نشان می‌داد. اینجا چون
+        # این گذارها نادر و بزرگ‌مقیاس‌اند (نه هر کلیکِ منو)، یک محوشدنِ
+        # کوتاه فقط ظرافت اضافه می‌کند، نه کندی.
+        screen_manager.transition = FadeTransition(duration=0.15)
         screen_manager.add_widget(ConnectionSettingsScreen())
         screen_manager.add_widget(LoginScreen())
         screen_manager.add_widget(AdminBootstrapScreen())

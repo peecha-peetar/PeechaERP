@@ -10,6 +10,7 @@ font_name_helper_text قابل‌تنظیم است، نه جهتشان). برا�
 
 from __future__ import annotations
 
+from kivy.animation import Animation
 from kivy.factory import Factory
 from kivy.graphics import Color, Line
 from kivy.graphics import RoundedRectangle
@@ -39,6 +40,24 @@ class KeyboardActivatedButtonBehavior(FocusBehavior):
             self.dispatch("on_release")
             return True
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
+
+class PressFeedbackBehavior:
+    """میکرو-تعاملِ لمس/کلیک — طبق درخواستِ مدرن‌سازیِ ظاهر: یک افتِ کوتاهِ
+    opacity هنگامِ فشردن و بازگشتِ نرم بعدِ رهاشدن، تا دکمه‌ها/آیتم‌های
+    منو «زنده» به‌نظر برسند (نه تغییرِ آنیِ حالت). عمداً روی opacity کار
+    می‌کند نه رنگ، چون این‌طوری با بایندینگ‌های KV دیگر (مثلِ md_bg_color
+    بر اساسِ selected) تداخل نمی‌کند — آن‌ها همچنان جدا و آنی کار می‌کنند."""
+
+    def on_press(self):
+        super().on_press()
+        Animation.cancel_all(self, "opacity")
+        Animation(opacity=0.7, duration=0.05).start(self)
+
+    def on_release(self):
+        super().on_release()
+        Animation.cancel_all(self, "opacity")
+        Animation(opacity=1, duration=0.15).start(self)
 
 
 # سه لایه‌ی نیمه‌شفاف با پخش/افست/شفافیتِ افزایشی، برای تقریب دستیِ یک
@@ -262,7 +281,7 @@ class PTextField(MDTextField):
             self._apply_shaped_display()
 
 
-class PNavItem(ButtonBehavior, MDBoxLayout):
+class PNavItem(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
     """آیتم منوی نوار کناری — طبق docs/ui-ux-guidelines.md بخش ۵/۱۰.
 
     sub=True یعنی این یک زیرآیتمِ تورفته‌ی یک گروه است (مثل «کدینگ
@@ -274,7 +293,7 @@ class PNavItem(ButtonBehavior, MDBoxLayout):
     sub = BooleanProperty(False)
 
 
-class PNavGroupLabel(ButtonBehavior, MDBoxLayout):
+class PNavGroupLabel(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
     """سرآیتمِ یک گروه در نوار کناری (مثل «مالی و حسابداری») — قابل‌کلیک
     برای جمع‌کردن/بازکردنِ زیرآیتم‌هایش (طبق درخواستِ صریح: زیرمجموعه‌ی هر
     گروه وقتی باز نیست باید جمع‌شونده باشد، نه همیشه نمایان)."""
@@ -284,21 +303,21 @@ class PNavGroupLabel(ButtonBehavior, MDBoxLayout):
     expanded = BooleanProperty(False)
 
 
-class PSelectField(KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):
+class PSelectField(PressFeedbackBehavior, KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):
     """فیلدِ انتخابی (بازکننده‌ی منوی کشویی) — با Tab قابل‌رسیدن و با
     Enter/Space قابل‌بازشدن، تا انتخاب از منو هم بدون ماوس ممکن باشد."""
 
     text = StringProperty("")
 
 
-class PRaisedButton(KeyboardActivatedButtonBehavior, MDRaisedButton):
+class PRaisedButton(PressFeedbackBehavior, KeyboardActivatedButtonBehavior, MDRaisedButton):
     """دکمه‌ی اصلیِ فرم‌ها — MDRaisedButton خودش FocusBehavior ندارد (تست
     مستقیم تایید کرد)، پس با Tab قابل‌رسیدن نبود و نمی‌شد focus_next یک
     فیلد دیگر را به آن وصل کرد؛ این mixin هم قابل‌فوکوس‌شدن و هم فعال‌سازی
     با Enter/Space را اضافه می‌کند."""
 
 
-class PFlatButton(KeyboardActivatedButtonBehavior, MDFlatButton):
+class PFlatButton(PressFeedbackBehavior, KeyboardActivatedButtonBehavior, MDFlatButton):
     """دکمه‌ی ثانویه — همان قابلیتِ کیبوردِ PRaisedButton."""
 
 

@@ -14,12 +14,15 @@
         BoxLayout:
             orientation: "vertical"
 
-            # نوار بالا
+            # نوار بالا — طبق مدرن‌سازیِ ظاهر: فاصله‌گذاریِ بیشتر + یک جداکننده‌ی
+            # عمودیِ ظریف بینِ خوشه‌ی سوییچرهای زمینه (زبان/سال/شرکت) و
+            # خوشه‌ی اکشن‌های کاربر (نام/زنگوله/تم/خروج)، تا شلوغیِ قبلی
+            # (همه چسبیده به هم) به دو گروهِ قابل‌تشخیص تقسیم شود.
             BoxLayout:
                 size_hint_y: None
                 height: "64dp"
                 padding: ["20dp", "8dp"]
-                spacing: "12dp"
+                spacing: "16dp"
                 canvas.before:
                     Color:
                         rgba: theme.SURFACE
@@ -65,6 +68,16 @@
                     size_hint_x: None
                     width: "190dp"
                     on_release: root.open_company_menu()
+
+                Widget:
+                    size_hint_x: None
+                    width: "1dp"
+                    canvas:
+                        Color:
+                            rgba: theme.DIVIDER
+                        Rectangle:
+                            pos: self.x, self.y + dp(14)
+                            size: dp(1), self.height - dp(28)
 
                 PLabel:
                     id: user_label
