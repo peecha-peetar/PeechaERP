@@ -109,7 +109,7 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
 
     def _refresh_language_text(self) -> None:
         row = next((l for l in self._language_options if l.language_id == self._language_id), None)
-        self.ids.language_button.text = shape(row.native_name if row else "— زبانی تعریف نشده —")
+        self.ids.language_button.text = shape(row.native_name if row else tr("— زبانی تعریف نشده —"))
 
     def open_language_menu(self) -> None:
         if not self._language_options:
@@ -133,9 +133,9 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
     def refresh_list(self) -> None:
         self.ids.fields_list.clear_widgets()
         if self._language_id is None:
-            self._set_status("ابتدا یک زبان تعریف کنید.")
+            self._set_status(tr("ابتدا یک زبان تعریف کنید."))
             return
-        self._set_status("")
+        self._set_status(tr(""))
 
         from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
 
@@ -158,10 +158,10 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
 
     def _save_label(self, field_id: int, label: str) -> None:
         field_labels_service.set_label(field_id, self._language_id, label)
-        self._set_status("ذخیره شد.")
+        self._set_status(tr("ذخیره شد."))
         self.refresh_list()
 
     def _reset_label(self, field_id: int) -> None:
         field_labels_service.set_label(field_id, self._language_id, None)
-        self._set_status("به عنوانِ پیش‌فرض بازگشت.")
+        self._set_status(tr("به عنوانِ پیش‌فرض بازگشت."))
         self.refresh_list()

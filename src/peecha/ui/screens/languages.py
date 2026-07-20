@@ -155,7 +155,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "0dp"
-        self._set_status("")
+        self._set_status(tr(""))
         self.refresh_list()
 
     def save_language(self) -> None:
@@ -167,7 +167,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
 
         if self._editing_language_id is not None:
             if not name:
-                self._set_status("نام زبان را وارد کنید.")
+                self._set_status(tr("نام زبان را وارد کنید."))
                 return
             try:
                 languages_service.update_language(
@@ -186,7 +186,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
 
         code = self.ids.code_field.value.strip()
         if not code or not name:
-            self._set_status("کد و نام زبان را وارد کنید.")
+            self._set_status(tr("کد و نام زبان را وارد کنید."))
             return
         try:
             languages_service.create_language(
@@ -245,5 +245,5 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         if self._editing_language_id == language_id:
             self.cancel_edit()
         else:
-            self._set_status("زبان حذف شد.")
+            self._set_status(tr("زبان حذف شد."))
             self.refresh_list()

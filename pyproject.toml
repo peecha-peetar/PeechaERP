@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "alembic>=1.13",
     "jdatetime>=5.0",         # تقویم شمسی (پیش‌فرض طبق docs/ui-ux-guidelines.md بخش ۱)
+    "requests>=2.31",         # فراخوانیِ سرویسِ ترجمه‌ی زنده (LibreTranslate) از صفحه‌ی ترجمه‌ها
 ]
 
 [project.optional-dependencies]

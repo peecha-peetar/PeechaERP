@@ -398,7 +398,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         if not self._form_initialized:
             self._reset_form()
             self._form_initialized = True
-        self._set_status("")
+        self._set_status(tr(""))
         self.refresh_entries()
         self.bind_shortcuts()
 
@@ -573,7 +573,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
 
     def save_entry(self) -> None:
         if session.current_company is None or session.current_user is None:
-            self._set_status("کاربر یا شرکت جاری نامعتبر است.", is_error=True)
+            self._set_status(tr("کاربر یا شرکت جاری نامعتبر است."), is_error=True)
             return
 
         try:
@@ -660,7 +660,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
 
     def cancel_edit(self) -> None:
         self._reset_form()
-        self._set_status("")
+        self._set_status(tr(""))
         self.refresh_entries()
 
     def confirm_delete(self, journal_entry_id: int) -> None:
@@ -702,7 +702,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             return
         if self._editing_entry_id == journal_entry_id:
             self._reset_form()
-        self._set_status("سند حذف شد.")
+        self._set_status(tr("سند حذف شد."))
         self.refresh_entries()
 
     def refresh_entries(self) -> None:

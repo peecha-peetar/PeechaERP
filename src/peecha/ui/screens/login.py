@@ -13,6 +13,7 @@ from peecha import session
 from peecha.db.base import new_session
 from peecha.db.models.security import UserCompany
 from peecha.services.auth import authenticate, has_any_user
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -33,13 +34,13 @@ class LoginScreen(KeyboardShortcutMixin, MDScreen):
             self.ids.bootstrap_button.opacity = 0
             self.ids.bootstrap_button.disabled = True
             self.ids.bootstrap_button.height = "0dp"
-            self._set_status("اتصال به دیتابیس برقرار نشد — از «تنظیمات اتصال به دیتابیس» بررسی کنید.")
+            self._set_status(tr("اتصال به دیتابیس برقرار نشد — از «تنظیمات اتصال به دیتابیس» بررسی کنید."))
             return
         self.ids.bootstrap_button.opacity = 1 if no_users else 0
         self.ids.bootstrap_button.disabled = not no_users
         self.ids.bootstrap_button.height = "36dp" if no_users else "0dp"
         if no_users:
-            self._set_status("هنوز کاربری ثبت نشده — از دکمه‌ی زیر شروع کنید.")
+            self._set_status(tr("هنوز کاربری ثبت نشده — از دکمه‌ی زیر شروع کنید."))
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
@@ -55,16 +56,16 @@ class LoginScreen(KeyboardShortcutMixin, MDScreen):
         password = self.ids.password_field.text
 
         if not username or not password:
-            self._set_status("نام کاربری و رمز عبور را وارد کنید.")
+            self._set_status(tr("نام کاربری و رمز عبور را وارد کنید."))
             return
 
         try:
             user = authenticate(username, password)
         except SQLAlchemyError:
-            self._set_status("اتصال به دیتابیس برقرار نشد.")
+            self._set_status(tr("اتصال به دیتابیس برقرار نشد."))
             return
         if user is None:
-            self._set_status("نام کاربری یا رمز عبور نادرست است.")
+            self._set_status(tr("نام کاربری یا رمز عبور نادرست است."))
             return
 
         session.current_user = user

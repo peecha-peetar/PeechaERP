@@ -203,7 +203,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "0dp"
-        self._set_status("")
+        self._set_status(tr(""))
 
     def save_user(self) -> None:
         full_name = self.ids.full_name_field.value.strip()
@@ -214,7 +214,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
 
         if self._editing_user_id is not None:
             if not full_name:
-                self._set_status("نام کامل را وارد کنید.")
+                self._set_status(tr("نام کامل را وارد کنید."))
                 return
             try:
                 users_service.update_user(
@@ -237,7 +237,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
 
         username = self.ids.username_field.value.strip()
         if not username or not full_name or not password:
-            self._set_status("نام‌کاربری، نام کامل و رمز عبور را وارد کنید.", is_error=True)
+            self._set_status(tr("نام‌کاربری، نام کامل و رمز عبور را وارد کنید."), is_error=True)
             return
         try:
             users_service.create_user(
@@ -255,5 +255,5 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
             return
 
         self.cancel_edit()
-        self._set_status("کاربر با موفقیت اضافه شد.")
+        self._set_status(tr("کاربر با موفقیت اضافه شد."))
         self.refresh_list()

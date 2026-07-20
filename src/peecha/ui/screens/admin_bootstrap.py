@@ -13,6 +13,7 @@ from peecha import session
 from peecha.db.base import new_session
 from peecha.db.models.security import UserCompany
 from peecha.services.bootstrap import bootstrap_system
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -43,13 +44,13 @@ class AdminBootstrapScreen(KeyboardShortcutMixin, MDScreen):
         confirm = self.ids.confirm_password_field.text
 
         if not username or not full_name or not company_name:
-            self._set_status("همه‌ی فیلدها را پر کنید.")
+            self._set_status(tr("همه‌ی فیلدها را پر کنید."))
             return
         if len(password) < 6:
-            self._set_status("رمز عبور باید حداقل ۶ کاراکتر باشد.")
+            self._set_status(tr("رمز عبور باید حداقل ۶ کاراکتر باشد."))
             return
         if password != confirm:
-            self._set_status("تکرار رمز عبور مطابقت ندارد.")
+            self._set_status(tr("تکرار رمز عبور مطابقت ندارد."))
             return
 
         try:

@@ -146,7 +146,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.roles_list.clear_widgets()
         company_id = self._current_company_id()
         if company_id is None:
-            self._set_status("هیچ شرکتی انتخاب نشده است.", is_error=True)
+            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
             return
 
         from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
@@ -204,7 +204,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "0dp"
-        self._set_status("")
+        self._set_status(tr(""))
         self._build_permissions_grid(None)
         self._build_users_checklist(None)
         self.refresh_list()
@@ -212,7 +212,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
     def save_role(self) -> None:
         company_id = self._current_company_id()
         if company_id is None:
-            self._set_status("هیچ شرکتی انتخاب نشده است.", is_error=True)
+            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
             return
 
         if self._editing_role_id is not None:
@@ -231,7 +231,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
 
         code = self.ids.code_field.value.strip()
         if not code:
-            self._set_status("کدِ نقش را وارد کنید.", is_error=True)
+            self._set_status(tr("کدِ نقش را وارد کنید."), is_error=True)
             return
         try:
             role = roles_service.create_role(company_id=company_id, code=code, parent_role_id=self._parent_role_id)

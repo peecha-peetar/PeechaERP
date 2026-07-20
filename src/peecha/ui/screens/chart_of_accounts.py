@@ -184,7 +184,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
     def refresh_list(self) -> None:
         self.ids.accounts_list.clear_widgets()
         if session.current_company is None:
-            self._set_status("هیچ شرکتی انتخاب نشده است.")
+            self._set_status(tr("هیچ شرکتی انتخاب نشده است."))
             self.ids.grid_header.opacity = 0
             return
 
@@ -193,7 +193,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         rows = coa_service.list_accounts(session.current_company.company_id)
         self._parent_options = rows
         self._accounts_by_id = {row.account_id: row for row in rows}
-        self._set_status("")
+        self._set_status(tr(""))
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
             self.ids.accounts_list.add_widget(
@@ -269,12 +269,12 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "0dp"
-        self._set_status("")
+        self._set_status(tr(""))
         self.refresh_list()
 
     def save_account(self) -> None:
         if session.current_company is None:
-            self._set_status("هیچ شرکتی انتخاب نشده است.")
+            self._set_status(tr("هیچ شرکتی انتخاب نشده است."))
             return
 
         name = self.ids.name_field.value.strip()
@@ -292,7 +292,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
 
         if self._editing_account_id is not None:
             if not name:
-                self._set_status("نام حساب را وارد کنید.")
+                self._set_status(tr("نام حساب را وارد کنید."))
                 return
             try:
                 coa_service.update_account(
@@ -316,7 +316,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         # والد استفاده می‌شود و مخلوط‌شدنِ دو سیستمِ رقمی آن را می‌شکند.
         segment_code = numerals.to_ascii_digits(self.ids.segment_code_field.value.strip())
         if not segment_code or not name:
-            self._set_status("کد و نام حساب را وارد کنید.")
+            self._set_status(tr("کد و نام حساب را وارد کنید."))
             return
         try:
             coa_service.create_account(
@@ -375,5 +375,5 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         if self._editing_account_id == account_id:
             self.cancel_edit()
         else:
-            self._set_status("حساب حذف شد.")
+            self._set_status(tr("حساب حذف شد."))
             self.refresh_list()

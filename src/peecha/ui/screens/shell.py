@@ -63,6 +63,7 @@ NAV_ITEMS = [
             {"code": "SET_USERS", "label": "کاربران", "icon": "account-multiple-outline", "screen": "users"},
             {"code": "SET_ROLES", "label": "نقش‌ها و دسترسی‌ها", "icon": "shield-account-outline", "screen": "roles"},
             {"code": "SET_FIELD_LABELS", "label": "عنوانِ فیلدها", "icon": "form-textbox", "screen": "field_labels"},
+            {"code": "SET_TRANSLATIONS", "label": "ترجمه‌ها", "icon": "web", "screen": "translations"},
         ],
     },
 ]
@@ -112,6 +113,7 @@ class ShellScreen(MDScreen):
         from peecha.ui.screens.languages import LanguagesScreen  # noqa: PLC0415
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
         from peecha.ui.screens.roles import RolesScreen  # noqa: PLC0415
+        from peecha.ui.screens.translations import TranslationsScreen  # noqa: PLC0415
         from peecha.ui.screens.users import UsersScreen  # noqa: PLC0415
 
         content: MDScreenManager = self.ids.content_manager
@@ -121,6 +123,7 @@ class ShellScreen(MDScreen):
         content.add_widget(LanguagesScreen())
         content.add_widget(CompaniesScreen())
         content.add_widget(FiscalYearsScreen())
+        content.add_widget(TranslationsScreen())
         content.add_widget(UsersScreen())
         content.add_widget(RolesScreen())
         content.add_widget(FieldLabelsScreen())

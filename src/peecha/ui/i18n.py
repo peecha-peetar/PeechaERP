@@ -95,6 +95,33 @@ def invalidate_cache(language_code: str | None = None) -> None:
         _catalog_cache.pop(language_code, None)
 
 
+def list_source_strings() -> list[str]:
+    """فهرستِ همه‌ی متن‌های فارسیِ قابل‌ترجمه — برای صفحه‌ی «ترجمه‌ها»."""
+    return sorted(_load_source_catalog().keys())
+
+
+def get_catalog(language_code: str) -> dict[str, str]:
+    """کپیِ کاتالوگِ یک زبان — برای نمایش/ویرایش در صفحه‌ی «ترجمه‌ها»."""
+    return dict(_load_catalog(language_code))
+
+
+def set_translation(language_code: str, source_text: str, translated_text: str) -> None:
+    """ذخیره‌ی دستیِ یک ترجمه (از فرمِ صفحه‌ی «ترجمه‌ها») — بلافاصله هم در
+    فایل نوشته می‌شود هم کشِ همین جلسه را به‌روز می‌کند."""
+    catalog = _load_catalog(language_code)
+    catalog[source_text] = translated_text
+    _write_json(_catalog_path(language_code), catalog)
+
+
+def update_catalog(language_code: str, updates: dict[str, str]) -> None:
+    """ذخیره‌ی دسته‌ای — برای نتیجه‌ی «ترجمه با سرویسِ آنلاین»."""
+    if not updates:
+        return
+    catalog = _load_catalog(language_code)
+    catalog.update(updates)
+    _write_json(_catalog_path(language_code), catalog)
+
+
 def tr(text: str) -> str:
     """ترجمه‌ی یک متنِ ثابتِ رابط کاربری به زبانِ فعلاً انتخاب‌شده
     (session.current_language). برای زبانِ پیش‌فرض یا وقتی زبانی انتخاب

@@ -49,6 +49,8 @@ _FORMS = [
     ("fiscal_years", "SETTINGS", "سال‌های مالی"),
     ("users", "SETTINGS", "کاربران"),
     ("roles", "SETTINGS", "نقش‌ها و دسترسی‌ها"),
+    ("field_labels", "SETTINGS", "عنوانِ فیلدها"),
+    ("translations", "SETTINGS", "ترجمه‌ها"),
 ]
 
 FORM_LABELS: dict[str, str] = {code: label for code, _module, label in _FORMS}

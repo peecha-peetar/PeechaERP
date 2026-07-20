@@ -113,7 +113,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
             return
         self._currency_options = companies_service.list_currencies()
         self._refresh_dropdown_texts()
-        self._set_status("رقم اعشارِ ارز ذخیره شد.")
+        self._set_status(tr("رقم اعشارِ ارز ذخیره شد."))
 
     def open_currency_menu(self) -> None:
         from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
@@ -225,28 +225,28 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "0dp"
-        self._set_status("")
+        self._set_status(tr(""))
         self.refresh_list()
 
     def save_company(self) -> None:
         legal_name = self.ids.legal_name_field.value.strip()
         display_name = self.ids.display_name_field.value.strip()
         if self._currency_id is None or self._language_id is None:
-            self._set_status("ابتدا یک ارزِ پایه و زبانِ پیش‌فرض تعریف کنید.")
+            self._set_status(tr("ابتدا یک ارزِ پایه و زبانِ پیش‌فرض تعریف کنید."))
             return
         try:
             fy_month = int(numerals.to_ascii_digits(self.ids.fy_start_month_field.text.strip()) or "1")
             fy_day = int(numerals.to_ascii_digits(self.ids.fy_start_day_field.text.strip()) or "1")
         except ValueError:
-            self._set_status("ماه/روزِ شروعِ سال مالی نامعتبر است.")
+            self._set_status(tr("ماه/روزِ شروعِ سال مالی نامعتبر است."))
             return
         if not (1 <= fy_month <= 12) or not (1 <= fy_day <= 31):
-            self._set_status("ماه باید بین ۱ تا ۱۲ و روز باید بین ۱ تا ۳۱ باشد.")
+            self._set_status(tr("ماه باید بین ۱ تا ۱۲ و روز باید بین ۱ تا ۳۱ باشد."))
             return
 
         if self._editing_company_id is not None:
             if not legal_name or not display_name:
-                self._set_status("نام حقوقی و نام نمایشی را وارد کنید.")
+                self._set_status(tr("نام حقوقی و نام نمایشی را وارد کنید."))
                 return
             try:
                 companies_service.update_company(
@@ -270,7 +270,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
 
         code = self.ids.code_field.value.strip()
         if not code or not legal_name or not display_name:
-            self._set_status("کد، نام حقوقی و نام نمایشی را وارد کنید.")
+            self._set_status(tr("کد، نام حقوقی و نام نمایشی را وارد کنید."))
             return
         try:
             companies_service.create_company(
@@ -290,4 +290,4 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
             return
 
         self.cancel_edit()
-        self._set_status("شرکت با موفقیت اضافه شد.")
+        self._set_status(tr("شرکت با موفقیت اضافه شد."))

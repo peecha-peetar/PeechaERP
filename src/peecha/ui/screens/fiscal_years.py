@@ -66,7 +66,7 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
     def refresh_list(self) -> None:
         self.ids.years_list.clear_widgets()
         if session.current_company is None:
-            self._set_status("هیچ شرکتی انتخاب نشده است.", is_error=True)
+            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
             self.ids.grid_header.opacity = 0
             return
 
@@ -97,7 +97,7 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
 
     def save_fiscal_year(self) -> None:
         if session.current_company is None:
-            self._set_status("هیچ شرکتی انتخاب نشده است.", is_error=True)
+            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
             return
         try:
             on_date = numerals.parse_jalali_date(self.ids.on_date_field.text)
