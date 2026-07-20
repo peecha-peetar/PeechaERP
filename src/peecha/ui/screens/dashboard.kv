@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 
 <DashboardScreen>:
@@ -14,13 +15,13 @@
             spacing: "24dp"
 
             PLabel:
-                text: shape("داشبورد اصلی")
+                text: ((app.ui_language_code or True) and shape(tr("داشبورد اصلی")))
                 font_style: "H4"
                 size_hint_y: None
                 height: self.texture_size[1]
 
             PLabel:
-                text: shape("خلاصه‌ی وضعیت سیستم")
+                text: ((app.ui_language_code or True) and shape(tr("خلاصه‌ی وضعیت سیستم")))
                 theme_text_color: "Custom"
                 text_color: theme.TEXT_SECONDARY
                 size_hint_y: None
@@ -35,28 +36,28 @@
                     id: card_companies
                     icon: "domain"
                     icon_bg_color: theme.ACCENT
-                    title: shape("شرکت‌ها")
+                    title: ((app.ui_language_code or True) and shape(tr("شرکت‌ها")))
                     value: "0"
 
                 PStatCard:
                     id: card_users
                     icon: "account-multiple-outline"
                     icon_bg_color: theme.SUCCESS
-                    title: shape("کاربران")
+                    title: ((app.ui_language_code or True) and shape(tr("کاربران")))
                     value: "0"
 
                 PStatCard:
                     id: card_accounts
                     icon: "format-list-bulleted"
                     icon_bg_color: theme.CHART_PURPLE
-                    title: shape("حساب‌های تعریف‌شده")
+                    title: ((app.ui_language_code or True) and shape(tr("حساب‌های تعریف‌شده")))
                     value: "0"
 
                 PStatCard:
                     id: card_entries
                     icon: "file-document-outline"
                     icon_bg_color: theme.CHART_ORANGE
-                    title: shape("اسناد حسابداری")
+                    title: ((app.ui_language_code or True) and shape(tr("اسناد حسابداری")))
                     value: "0"
 
             BoxLayout:
@@ -68,7 +69,7 @@
                     size_hint_x: 0.65
 
                     PLabel:
-                        text: shape("اسناد حسابداری ثبت‌شده (۶ ماه اخیر)")
+                        text: ((app.ui_language_code or True) and shape(tr("اسناد حسابداری ثبت‌شده (۶ ماه اخیر)")))
                         font_style: "Subtitle1"
                         size_hint_y: None
                         height: self.texture_size[1]
@@ -94,7 +95,7 @@
                     size_hint_x: 0.35
 
                     PLabel:
-                        text: shape("ترکیب کدینگ حسابداری")
+                        text: ((app.ui_language_code or True) and shape(tr("ترکیب کدینگ حسابداری")))
                         font_style: "Subtitle1"
                         size_hint_y: None
                         height: self.texture_size[1]

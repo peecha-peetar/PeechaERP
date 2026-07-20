@@ -31,6 +31,7 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import field_labels as field_labels_service
 from peecha.services import journal_entries as je_service
 from peecha.ui import numerals, theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 from peecha.ui.widgets import PTextField
@@ -73,7 +74,7 @@ class AccountSearchField(PTextField):
 
     def __init__(self, account_options: list[coa_service.AccountRow], on_select, **kwargs):
         kwargs.setdefault("persian_digits", True)
-        kwargs.setdefault("hint_text", shape("جستجوی کد یا نام حساب"))
+        kwargs.setdefault("hint_text", shape(tr("جستجوی کد یا نام حساب")))
         # خودش با انتخاب یک نتیجه مستقیم self.text = shape(...) می‌کند؛ اگر
         # PTextField هم روی این (متنِ از قبل shape‌شده) دوباره shape() صدا
         # بزند، خرابش می‌کند — پس مکانیزمِ خودکارِ کلاسِ پایه اینجا خاموش است.
@@ -202,7 +203,7 @@ class LineDescriptionField(PTextField):
     بعدی می‌رود (با focus_next که JournalEntryLineRow وصل می‌کند)."""
 
     def __init__(self, suggestions_provider, **kwargs):
-        kwargs.setdefault("hint_text", shape("شرح ردیف"))
+        kwargs.setdefault("hint_text", shape(tr("شرح ردیف")))
         super().__init__(**kwargs)
         self._suggestions_provider = suggestions_provider
         self._results: list[str] = []
@@ -403,7 +404,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
 
     def apply_field_labels(self) -> None:
         language_id = session.current_language.language_id if session.current_language else None
-        self._field_labels = field_labels_service.get_labels_map("journal_entry", language_id)
+        self._field_labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("journal_entry", language_id).items()}
         self.ids.description_field.hint_text = shape(self._field_labels["description"])
         self.ids.date_field.hint_text = shape(self._field_labels["date"])
         for row in self._rows:
@@ -453,8 +454,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.date_field.text = numerals.format_jalali_date(datetime.date.today())
         self.ids.description_field.text = ""
         self.ids.amount_words_label.text = ""
-        self.ids.form_title.text = shape("صدور سند حسابداری")
-        self.ids.save_button.text = shape("ثبت سند")
+        self.ids.form_title.text = shape(tr("صدور سند حسابداری"))
+        self.ids.save_button.text = shape(tr("ثبت سند"))
         self.ids.cancel_edit_button.opacity = 0
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
@@ -536,12 +537,12 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             except ValueError:
                 pass  # حین تایپ مقدار ناقص عادی است؛ فقط در ثبت نهایی خطا نشان داده می‌شود
 
-        self.ids.total_debit_label.text = shape(f"جمع بدهکار: {numerals.format_amount(total_debit)}")
-        self.ids.total_credit_label.text = shape(f"جمع بستانکار: {numerals.format_amount(total_credit)}")
+        self.ids.total_debit_label.text = shape(tr("جمع بدهکار: {}").format(numerals.format_amount(total_debit)))
+        self.ids.total_credit_label.text = shape(tr("جمع بستانکار: {}").format(numerals.format_amount(total_credit)))
 
         balanced = total_debit == total_credit and total_debit > 0
         chip_color = theme.SUCCESS if balanced else theme.DANGER
-        self.ids.balance_label.text = shape("متعادل" if balanced else "نامتعادل")
+        self.ids.balance_label.text = shape(tr("متعادل") if balanced else tr("نامتعادل"))
         self.ids.balance_label.text_color = chip_color
         self.ids.balance_chip.md_bg_color = (chip_color[0], chip_color[1], chip_color[2], 0.12)
 
@@ -605,7 +606,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                 )
                 message = f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای اعتبارسنجی/دیتابیس به کاربر
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
 
         self._reset_form()
@@ -618,7 +619,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         try:
             lines = je_service.get_journal_entry_lines(journal_entry_id)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
 
         entries = je_service.list_journal_entries(session.current_company.company_id)
@@ -647,13 +648,13 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self._recalculate()
 
         temp_no_fa = numerals.to_persian_digits(str(entry.temporary_no))
-        self.ids.form_title.text = shape(f"ویرایش سند «{temp_no_fa}»")
-        self.ids.save_button.text = shape("ذخیره تغییرات")
+        self.ids.form_title.text = shape(tr("ویرایش سند «{}»").format(temp_no_fa))
+        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(f"در حال ویرایش سند شماره‌ی موقت {temp_no_fa} — Escape برای لغو.")
+        self._set_status(tr("در حال ویرایش سند شماره‌ی موقت {} — Escape برای لغو.").format(temp_no_fa))
         self.ids.date_field.focus = True
         self.refresh_entries()
 
@@ -678,14 +679,15 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             self._perform_delete(journal_entry_id)
 
         self._delete_dialog = MDDialog(
-            title=shape("حذف سند"),
+            title=shape(tr("حذف سند")),
             text=shape(
-                f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(entry.temporary_no))} حذف شود؟ "
-                "این کار قابل بازگشت نیست."
+                tr("سند با شماره‌ی موقت {} حذف شود؟ این کار قابل بازگشت نیست.").format(
+                    numerals.to_persian_digits(str(entry.temporary_no))
+                )
             ),
             buttons=[
-                MDFlatButton(text=shape("لغو"), on_release=lambda *_: self._delete_dialog.dismiss()),
-                MDRaisedButton(text=shape("حذف"), md_bg_color=theme.DANGER, on_release=_do_delete),
+                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._delete_dialog.dismiss()),
+                MDRaisedButton(text=shape(tr("حذف")), md_bg_color=theme.DANGER, on_release=_do_delete),
             ],
         )
         self._delete_dialog.open()
@@ -696,7 +698,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         try:
             je_service.delete_journal_entry(journal_entry_id, session.current_company.company_id)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
         if self._editing_entry_id == journal_entry_id:
             self._reset_form()
@@ -714,7 +716,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.entries_header.opacity = 1 if entries else 0
         if not entries:
             self.ids.entries_list.add_widget(
-                PEmptyState(icon="file-document-outline", text=shape("هنوز سندی ثبت نشده است."))
+                PEmptyState(icon="file-document-outline", text=shape(tr("هنوز سندی ثبت نشده است.")))
             )
             return
 
@@ -728,7 +730,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     date_text=numerals.format_jalali_date(entry.document_date),
                     description_text=shape(entry.description or "—"),
                     amount_text=numerals.format_amount(entry.total_amount),
-                    status_text=shape(_STATUS_LABELS.get(entry.status_code, entry.status_code)),
+                    status_text=shape(tr(_STATUS_LABELS.get(entry.status_code, entry.status_code))),
                     status_badge_color=_STATUS_COLORS.get(entry.status_code, theme.TEXT_DISABLED),
                     zebra=i % 2 == 1,
                     editable=entry.status_code == "TEMPORARY",

@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -62,7 +63,7 @@
             size_hint_x: 0.66
 
             PLabel:
-                text: shape("سال‌های مالی")
+                text: ((app.ui_language_code or True) and shape(tr("سال‌های مالی")))
                 font_style: "H5"
                 size_hint_y: None
                 height: self.texture_size[1]
@@ -78,7 +79,7 @@
                     width: "28dp"
 
                 PLabel:
-                    text: shape("وضعیت")
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -87,7 +88,7 @@
                     size_hint_x: 0.14
 
                 PLabel:
-                    text: shape("دوره‌ها")
+                    text: ((app.ui_language_code or True) and shape(tr("دوره‌ها")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -95,7 +96,7 @@
                     size_hint_x: 0.18
 
                 PLabel:
-                    text: shape("بازه")
+                    text: ((app.ui_language_code or True) and shape(tr("بازه")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -103,7 +104,7 @@
                     size_hint_x: 0.5
 
                 PLabel:
-                    text: shape("کد")
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -123,17 +124,17 @@
             spacing: "14dp"
 
             PLabel:
-                text: shape("افزودن سال مالی")
+                text: ((app.ui_language_code or True) and shape(tr("افزودن سال مالی")))
                 font_style: "Subtitle1"
                 size_hint_y: None
                 height: self.texture_size[1]
 
             PHintLabel:
-                text: shape("یک تاریخ در سالِ مالیِ موردنظر را وارد کنید؛ بازه و ۱۲ دوره‌ی ماهانه خودکار ساخته می‌شود.")
+                text: ((app.ui_language_code or True) and shape(tr("یک تاریخ در سالِ مالیِ موردنظر را وارد کنید؛ بازه و ۱۲ دوره‌ی ماهانه خودکار ساخته می‌شود.")))
 
             PTextField:
                 id: on_date_field
-                hint_text: shape("تاریخ (۱۴۰۴/۰۱/۰۱)")
+                hint_text: ((app.ui_language_code or True) and shape(tr("تاریخ (۱۴۰۴/۰۱/۰۱)")))
                 persian_digits: True
                 on_text_validate: root.save_fiscal_year()
                 focus_next: save_button
@@ -142,7 +143,7 @@
 
             PRaisedButton:
                 id: save_button
-                text: shape("افزودن سال مالی")
+                text: ((app.ui_language_code or True) and shape(tr("افزودن سال مالی")))
                 on_release: root.save_fiscal_year()
                 focus_previous: on_date_field
 

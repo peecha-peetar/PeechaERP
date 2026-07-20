@@ -16,6 +16,7 @@ from peecha import session
 from peecha.services import field_labels as field_labels_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.ui import numerals, theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -52,7 +53,7 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
 
     def apply_field_labels(self) -> None:
         language_id = session.current_language.language_id if session.current_language else None
-        labels = field_labels_service.get_labels_map("fiscal_years", language_id)
+        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("fiscal_years", language_id).items()}
         self.ids.on_date_field.hint_text = shape(labels["on_date"])
 
     def on_shortcut_save(self) -> None:
@@ -75,7 +76,7 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
             self.ids.years_list.add_widget(
-                PEmptyState(icon="calendar-blank-outline", text=shape("هنوز سالِ مالی‌ای تعریف نشده است."))
+                PEmptyState(icon="calendar-blank-outline", text=shape(tr("هنوز سالِ مالی‌ای تعریف نشده است.")))
             )
         for i, row in enumerate(rows):
             self.ids.years_list.add_widget(
@@ -88,7 +89,7 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
                         f"{numerals.format_jalali_date(row.end_date)}"
                     ),
                     periods_text=numerals.to_persian_digits(f"{row.period_count} دوره"),
-                    status_text=shape("بسته" if row.is_closed else "باز"),
+                    status_text=shape(tr("بسته") if row.is_closed else tr("باز")),
                     is_closed_row=row.is_closed,
                     zebra=i % 2 == 1,
                 )
@@ -111,7 +112,7 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
                 on_date=on_date,
             )
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
         self._set_status(f"سالِ مالیِ «{numerals.to_persian_digits(fiscal_year.code)}» ساخته شد.")
         self.refresh_list()
@@ -122,6 +123,6 @@ class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
         try:
             fiscal_years_service.set_closed(fiscal_year_id, session.current_company.company_id, is_closed)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
         self.refresh_list()

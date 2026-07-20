@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -35,17 +36,17 @@
                 height: self.minimum_height
 
                 PTitleLabel:
-                    text: shape("تنظیمات اتصال به دیتابیس")
+                    text: ((app.ui_language_code or True) and shape(tr("تنظیمات اتصال به دیتابیس")))
 
                 PTextField:
                     id: host_field
-                    hint_text: shape("آدرس سرور (Host)")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("آدرس سرور (Host)")))
                     focus_next: port_field
                     on_text_validate: root.save_and_continue()
 
                 PTextField:
                     id: port_field
-                    hint_text: shape("پورت")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("پورت")))
                     input_filter: "int"
                     focus_next: name_field
                     focus_previous: host_field
@@ -53,21 +54,21 @@
 
                 PTextField:
                     id: name_field
-                    hint_text: shape("نام دیتابیس")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("نام دیتابیس")))
                     focus_next: user_field
                     focus_previous: port_field
                     on_text_validate: root.save_and_continue()
 
                 PTextField:
                     id: user_field
-                    hint_text: shape("نام کاربری دیتابیس")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("نام کاربری دیتابیس")))
                     focus_next: password_field
                     focus_previous: name_field
                     on_text_validate: root.save_and_continue()
 
                 PTextField:
                     id: password_field
-                    hint_text: shape("رمز عبور دیتابیس")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("رمز عبور دیتابیس")))
                     password: True
                     focus_previous: user_field
                     on_text_validate: root.save_and_continue()
@@ -82,11 +83,11 @@
                     spacing: "8dp"
 
                     PFlatButton:
-                        text: shape("تست اتصال")
+                        text: ((app.ui_language_code or True) and shape(tr("تست اتصال")))
                         on_release: root.test_connection_pressed()
 
                     PFlatButton:
-                        text: shape("ساخت جدول‌ها")
+                        text: ((app.ui_language_code or True) and shape(tr("ساخت جدول‌ها")))
                         on_release: root.create_tables_pressed()
 
                 BoxLayout:
@@ -96,5 +97,5 @@
                     Widget:
 
                     PRaisedButton:
-                        text: shape("ذخیره و ادامه")
+                        text: ((app.ui_language_code or True) and shape(tr("ذخیره و ادامه")))
                         on_release: root.save_and_continue()

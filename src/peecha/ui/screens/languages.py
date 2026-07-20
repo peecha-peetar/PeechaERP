@@ -17,6 +17,7 @@ from peecha import session
 from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
 from peecha.ui import theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -64,7 +65,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
 
     def apply_field_labels(self) -> None:
         language_id = session.current_language.language_id if session.current_language else None
-        labels = field_labels_service.get_labels_map("languages", language_id)
+        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("languages", language_id).items()}
         self.ids.code_field.hint_text = shape(labels["code"])
         self.ids.name_field.hint_text = shape(labels["native_name"])
         self.ids.sort_order_field.hint_text = shape(labels["sort_order"])
@@ -96,7 +97,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
             self.ids.languages_list.add_widget(
-                PEmptyState(icon="translate", text=shape("هنوز زبانی تعریف نشده است."))
+                PEmptyState(icon="translate", text=shape(tr("هنوز زبانی تعریف نشده است.")))
             )
         for i, row in enumerate(rows):
             self.ids.languages_list.add_widget(
@@ -106,9 +107,9 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
                     on_delete=self.confirm_delete,
                     code_text=row.code,
                     name_text=shape(row.native_name),
-                    direction_text=shape("راست‌به‌چپ" if row.is_rtl else "چپ‌به‌راست"),
-                    default_text=shape("پیش‌فرض" if row.is_default else ""),
-                    status_text=shape("فعال" if row.is_active else "غیرفعال"),
+                    direction_text=shape(tr("راست‌به‌چپ") if row.is_rtl else tr("چپ‌به‌راست")),
+                    default_text=shape(tr("پیش‌فرض") if row.is_default else ""),
+                    status_text=shape(tr("فعال") if row.is_active else tr("غیرفعال")),
                     is_active_row=row.is_active,
                     zebra=i % 2 == 1,
                     selected=row.language_id == self._editing_language_id,
@@ -130,13 +131,13 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.is_rtl_checkbox.active = row.is_rtl
         self.ids.is_default_checkbox.active = row.is_default
         self.ids.is_active_checkbox.active = row.is_active
-        self.ids.form_title.text = shape(f"ویرایش زبان «{row.native_name}»")
-        self.ids.save_button.text = shape("ذخیره تغییرات")
+        self.ids.form_title.text = shape(tr("ویرایش زبان «{}»").format(row.native_name))
+        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(f"در حال ویرایش «{row.native_name}» — Escape برای لغو.")
+        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.native_name))
         self.refresh_list()
 
     def cancel_edit(self) -> None:
@@ -148,8 +149,8 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.is_rtl_checkbox.active = False
         self.ids.is_default_checkbox.active = False
         self.ids.is_active_checkbox.active = True
-        self.ids.form_title.text = shape("افزودن زبان جدید")
-        self.ids.save_button.text = shape("افزودن زبان")
+        self.ids.form_title.text = shape(tr("افزودن زبان جدید"))
+        self.ids.save_button.text = shape(tr("افزودن زبان"))
         self.ids.cancel_edit_button.opacity = 0
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
@@ -178,7 +179,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
                     sort_order=sort_order,
                 )
             except Exception as exc:  # noqa: BLE001
-                self._set_status(f"خطا: {exc}")
+                self._set_status(tr("خطا: {}").format(exc))
                 return
             self.cancel_edit()
             return
@@ -196,8 +197,15 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
                 sort_order=sort_order,
             )
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}")
+            self._set_status(tr("خطا: {}").format(exc))
             return
+
+        # طبق درخواستِ صریح: به‌محضِ ساختِ زبانِ تازه، خودکار ترجمه شود و
+        # در فایلِ جداگانه‌ی همان زبان ذخیره شود (نه فقط دیتابیس) تا بعداً
+        # با ویرایشِ همان فایل قابل‌اصلاح باشد.
+        from peecha.services import i18n_translations as i18n_translations_service  # noqa: PLC0415
+
+        i18n_translations_service.generate_translation_file(code)
 
         self.ids.code_field.text = ""
         self.ids.name_field.text = ""
@@ -219,11 +227,11 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
             self._perform_delete(language_id)
 
         self._delete_dialog = MDDialog(
-            title=shape("حذف زبان"),
-            text=shape(f"زبان «{row.native_name}» حذف شود؟ این کار قابل بازگشت نیست."),
+            title=shape(tr("حذف زبان")),
+            text=shape(tr("زبان «{}» حذف شود؟ این کار قابل بازگشت نیست.").format(row.native_name)),
             buttons=[
-                MDFlatButton(text=shape("لغو"), on_release=lambda *_: self._delete_dialog.dismiss()),
-                MDRaisedButton(text=shape("حذف"), md_bg_color=theme.DANGER, on_release=_do_delete),
+                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._delete_dialog.dismiss()),
+                MDRaisedButton(text=shape(tr("حذف")), md_bg_color=theme.DANGER, on_release=_do_delete),
             ],
         )
         self._delete_dialog.open()
@@ -232,7 +240,7 @@ class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
         try:
             languages_service.delete_language(language_id)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}")
+            self._set_status(tr("خطا: {}").format(exc))
             return
         if self._editing_language_id == language_id:
             self.cancel_edit()

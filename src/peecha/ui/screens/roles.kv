@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -118,7 +119,7 @@
             size_hint_x: 0.32
 
             PLabel:
-                text: shape("نقش‌های شرکت")
+                text: ((app.ui_language_code or True) and shape(tr("نقش‌های شرکت")))
                 font_style: "H5"
                 size_hint_y: None
                 height: self.texture_size[1]
@@ -137,7 +138,7 @@
                     width: "28dp"
 
                 PLabel:
-                    text: shape("وضعیت")
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -146,7 +147,7 @@
                     size_hint_x: 0.2
 
                 PLabel:
-                    text: shape("والد")
+                    text: ((app.ui_language_code or True) and shape(tr("والد")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -154,7 +155,7 @@
                     size_hint_x: 0.35
 
                 PLabel:
-                    text: shape("کد نقش")
+                    text: ((app.ui_language_code or True) and shape(tr("کد نقش")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -190,7 +191,7 @@
 
                         PLabel:
                             id: form_title
-                            text: shape("افزودن نقش جدید")
+                            text: ((app.ui_language_code or True) and shape(tr("افزودن نقش جدید")))
                             font_style: "Subtitle1"
                             size_hint_y: None
                             height: self.texture_size[1]
@@ -202,7 +203,7 @@
 
                             PTextField:
                                 id: code_field
-                                hint_text: shape("کدِ نقش")
+                                hint_text: ((app.ui_language_code or True) and shape(tr("کدِ نقش")))
                                 size_hint_x: 0.5
                                 focus_next: parent_button
 
@@ -227,7 +228,7 @@
                                 pos_hint: {"center_y": 0.5}
 
                             PLabel:
-                                text: shape("فعال")
+                                text: ((app.ui_language_code or True) and shape(tr("فعال")))
                                 valign: "middle"
 
                         BoxLayout:
@@ -237,14 +238,14 @@
 
                             PRaisedButton:
                                 id: save_button
-                                text: shape("افزودن نقش")
+                                text: ((app.ui_language_code or True) and shape(tr("افزودن نقش")))
                                 on_release: root.save_role()
                                 focus_previous: parent_button
                                 focus_next: cancel_edit_button
 
                             PFlatButton:
                                 id: cancel_edit_button
-                                text: shape("لغو ویرایش (Esc)")
+                                text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
                                 theme_text_color: "Custom"
                                 text_color: theme.TEXT_SECONDARY
                                 opacity: 0
@@ -268,7 +269,7 @@
                             spacing: "6dp"
 
                             PLabel:
-                                text: shape("دسترسیِ فرم‌ها")
+                                text: ((app.ui_language_code or True) and shape(tr("دسترسیِ فرم‌ها")))
                                 font_style: "Subtitle1"
                                 size_hint_y: None
                                 height: self.texture_size[1]
@@ -279,7 +280,7 @@
                                 spacing: "4dp"
 
                                 PLabel:
-                                    text: shape("حذف")
+                                    text: ((app.ui_language_code or True) and shape(tr("حذف")))
                                     font_style: "Caption"
                                     theme_text_color: "Custom"
                                     text_color: theme.TEXT_SECONDARY
@@ -289,7 +290,7 @@
                                     width: "56dp"
 
                                 PLabel:
-                                    text: shape("ویرایش")
+                                    text: ((app.ui_language_code or True) and shape(tr("ویرایش")))
                                     font_style: "Caption"
                                     theme_text_color: "Custom"
                                     text_color: theme.TEXT_SECONDARY
@@ -299,7 +300,7 @@
                                     width: "56dp"
 
                                 PLabel:
-                                    text: shape("افزودن")
+                                    text: ((app.ui_language_code or True) and shape(tr("افزودن")))
                                     font_style: "Caption"
                                     theme_text_color: "Custom"
                                     text_color: theme.TEXT_SECONDARY
@@ -309,7 +310,7 @@
                                     width: "56dp"
 
                                 PLabel:
-                                    text: shape("مشاهده")
+                                    text: ((app.ui_language_code or True) and shape(tr("مشاهده")))
                                     font_style: "Caption"
                                     theme_text_color: "Custom"
                                     text_color: theme.TEXT_SECONDARY
@@ -319,7 +320,7 @@
                                     width: "56dp"
 
                                 PLabel:
-                                    text: shape("فرم")
+                                    text: ((app.ui_language_code or True) and shape(tr("فرم")))
                                     font_style: "Caption"
                                     theme_text_color: "Custom"
                                     text_color: theme.TEXT_SECONDARY
@@ -339,7 +340,7 @@
                             spacing: "6dp"
 
                             PLabel:
-                                text: shape("کاربرانِ این نقش")
+                                text: ((app.ui_language_code or True) and shape(tr("کاربرانِ این نقش")))
                                 font_style: "Subtitle1"
                                 size_hint_y: None
                                 height: self.texture_size[1]

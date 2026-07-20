@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 
 <LoginScreen>:
@@ -30,7 +31,7 @@
                 font_size: "30sp"
 
         PTitleLabel:
-            text: shape("پیچا")
+            text: ((app.ui_language_code or True) and shape(tr("پیچا")))
             halign: "center"
             font_style: "H4"
             size_hint_x: 1
@@ -40,23 +41,23 @@
             height: self.minimum_height
 
             PTitleLabel:
-                text: shape("ورود به سیستم")
+                text: ((app.ui_language_code or True) and shape(tr("ورود به سیستم")))
 
             PTextField:
                 id: username_field
-                hint_text: shape("نام کاربری")
+                hint_text: ((app.ui_language_code or True) and shape(tr("نام کاربری")))
                 focus_next: password_field
                 on_text_validate: root.attempt_login()
 
             PTextField:
                 id: password_field
-                hint_text: shape("رمز عبور")
+                hint_text: ((app.ui_language_code or True) and shape(tr("رمز عبور")))
                 password: True
                 focus_previous: username_field
                 on_text_validate: root.attempt_login()
 
             PRaisedButton:
-                text: shape("ورود")
+                text: ((app.ui_language_code or True) and shape(tr("ورود")))
                 pos_hint: {"center_x": 0.5}
                 on_release: root.attempt_login()
 
@@ -66,7 +67,7 @@
 
             PRaisedButton:
                 id: bootstrap_button
-                text: shape("ساخت اولین کاربر مدیر")
+                text: ((app.ui_language_code or True) and shape(tr("ساخت اولین کاربر مدیر")))
                 pos_hint: {"center_x": 0.5}
                 opacity: 0
                 disabled: True
@@ -75,7 +76,7 @@
                 on_release: root.open_admin_bootstrap()
 
             PFlatButton:
-                text: shape("تنظیمات اتصال به دیتابیس")
+                text: ((app.ui_language_code or True) and shape(tr("تنظیمات اتصال به دیتابیس")))
                 pos_hint: {"center_x": 0.5}
                 on_release: root.open_connection_settings()
 

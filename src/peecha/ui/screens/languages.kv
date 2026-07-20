@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -81,7 +82,7 @@
             size_hint_x: 0.62
 
             PLabel:
-                text: shape("زبان‌های سیستم")
+                text: ((app.ui_language_code or True) and shape(tr("زبان‌های سیستم")))
                 font_style: "H5"
                 size_hint_y: None
                 height: self.texture_size[1]
@@ -101,7 +102,7 @@
                     width: "56dp"
 
                 PLabel:
-                    text: shape("وضعیت")
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -110,7 +111,7 @@
                     size_hint_x: 0.16
 
                 PLabel:
-                    text: shape("پیش‌فرض")
+                    text: ((app.ui_language_code or True) and shape(tr("پیش‌فرض")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -119,7 +120,7 @@
                     size_hint_x: 0.16
 
                 PLabel:
-                    text: shape("جهت")
+                    text: ((app.ui_language_code or True) and shape(tr("جهت")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -127,7 +128,7 @@
                     size_hint_x: 0.24
 
                 PLabel:
-                    text: shape("نام")
+                    text: ((app.ui_language_code or True) and shape(tr("نام")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -135,7 +136,7 @@
                     size_hint_x: 0.28
 
                 PLabel:
-                    text: shape("کد")
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -156,25 +157,25 @@
 
             PLabel:
                 id: form_title
-                text: shape("افزودن زبان جدید")
+                text: ((app.ui_language_code or True) and shape(tr("افزودن زبان جدید")))
                 font_style: "Subtitle1"
                 size_hint_y: None
                 height: self.texture_size[1]
 
             PTextField:
                 id: code_field
-                hint_text: shape("کد زبان (مثلاً fa-IR)")
+                hint_text: ((app.ui_language_code or True) and shape(tr("کد زبان (مثلاً fa-IR)")))
                 focus_next: name_field
 
             PTextField:
                 id: name_field
-                hint_text: shape("نام زبان (مثلاً فارسی)")
+                hint_text: ((app.ui_language_code or True) and shape(tr("نام زبان (مثلاً فارسی)")))
                 focus_next: sort_order_field
                 focus_previous: code_field
 
             PTextField:
                 id: sort_order_field
-                hint_text: shape("ترتیبِ نمایش")
+                hint_text: ((app.ui_language_code or True) and shape(tr("ترتیبِ نمایش")))
                 persian_digits: True
                 focus_next: save_button
                 focus_previous: name_field
@@ -192,7 +193,7 @@
                     pos_hint: {"center_y": 0.5}
 
                 PLabel:
-                    text: shape("راست‌به‌چپ (RTL)")
+                    text: ((app.ui_language_code or True) and shape(tr("راست‌به‌چپ (RTL)")))
                     valign: "middle"
 
             BoxLayout:
@@ -207,7 +208,7 @@
                     pos_hint: {"center_y": 0.5}
 
                 PLabel:
-                    text: shape("زبانِ پیش‌فرض سیستم")
+                    text: ((app.ui_language_code or True) and shape(tr("زبانِ پیش‌فرض سیستم")))
                     valign: "middle"
 
             BoxLayout:
@@ -223,21 +224,21 @@
                     pos_hint: {"center_y": 0.5}
 
                 PLabel:
-                    text: shape("فعال")
+                    text: ((app.ui_language_code or True) and shape(tr("فعال")))
                     valign: "middle"
 
             Widget:
 
             PRaisedButton:
                 id: save_button
-                text: shape("افزودن زبان")
+                text: ((app.ui_language_code or True) and shape(tr("افزودن زبان")))
                 on_release: root.save_language()
                 focus_previous: sort_order_field
                 focus_next: cancel_edit_button
 
             PFlatButton:
                 id: cancel_edit_button
-                text: shape("لغو ویرایش (Esc)")
+                text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
                 theme_text_color: "Custom"
                 text_color: theme.TEXT_SECONDARY
                 opacity: 0

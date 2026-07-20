@@ -15,6 +15,7 @@ from kivymd.uix.screen import MDScreen
 from peecha import session
 from peecha.services import dashboard as dashboard_service
 from peecha.ui import numerals, theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "dashboard.kv")
@@ -43,12 +44,12 @@ class DashboardScreen(MDScreen):
         if any(values):
             self.ids.entries_chart.labels = labels
             self.ids.entries_chart.series = [
-                {"name": shape("تعداد اسناد"), "color": theme.ACCENT, "values": [float(v) for v in values]}
+                {"name": shape(tr("تعداد اسناد")), "color": theme.ACCENT, "values": [float(v) for v in values]}
             ]
             self.ids.entries_chart_empty.text = ""
         else:
             self.ids.entries_chart.series = []
-            self.ids.entries_chart_empty.text = shape("هنوز سند حسابداری‌ای ثبت نشده است.")
+            self.ids.entries_chart_empty.text = shape(tr("هنوز سند حسابداری‌ای ثبت نشده است."))
 
         breakdown = dashboard_service.chart_of_accounts_by_category(company_id)
         if breakdown:
@@ -63,4 +64,4 @@ class DashboardScreen(MDScreen):
         else:
             self.ids.accounts_donut.segments = []
             self.ids.accounts_legend.text = ""
-            self.ids.accounts_donut_empty.text = shape("هنوز حسابی در کدینگ حسابداری تعریف نشده است.")
+            self.ids.accounts_donut_empty.text = shape(tr("هنوز حسابی در کدینگ حسابداری تعریف نشده است."))

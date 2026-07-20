@@ -23,6 +23,7 @@ from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha.ui import numerals
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "shell.kv")
@@ -94,6 +95,7 @@ class ShellScreen(MDScreen):
     def on_pre_enter(self, *args):
         if not self.ids.content_manager.screen_names:
             self._build_content_screens()
+            self._sync_translation_files()
         if not self.ids.nav_list.children:
             self._build_nav_items()
         self.ids.user_label.text = shape(session.current_user.full_name if session.current_user else "")
@@ -124,6 +126,17 @@ class ShellScreen(MDScreen):
         content.add_widget(FieldLabelsScreen())
         content.add_widget(PlaceholderScreen())
 
+    def _sync_translation_files(self) -> None:
+        # طبق درخواستِ صریح: «در آینده هم اگر فرمی اضافه میشه ترجمه بشه» —
+        # هر بار برنامه بالا می‌آید، فایلِ ترجمه‌ی همه‌ی زبان‌های غیرِ
+        # پیش‌فرضِ موجود با فهرستِ فعلیِ متن‌های قابل‌ترجمه (که ممکن است
+        # از آخرین‌بار رشدکرده باشد) هم‌گام می‌شود.
+        from peecha.services import i18n_translations as i18n_translations_service  # noqa: PLC0415
+
+        non_default_codes = [lang.code for lang in languages_service.list_languages() if not lang.is_default]
+        if non_default_codes:
+            i18n_translations_service.regenerate_all(non_default_codes)
+
     def _build_nav_items(self) -> None:
         from peecha.ui.widgets import PNavGroupLabel, PNavItem  # noqa: PLC0415
 
@@ -132,21 +145,21 @@ class ShellScreen(MDScreen):
 
         for item in NAV_ITEMS:
             if "children" in item:
-                group_label = PNavGroupLabel(icon=item["icon"], text=shape(item["label"]), expanded=False)
+                group_label = PNavGroupLabel(icon=item["icon"], text=shape(tr(item["label"])), expanded=False)
                 group_label.bind(on_release=lambda _inst, code=item["code"]: self._toggle_group(code))
                 self.ids.nav_list.add_widget(group_label)
                 self._group_labels[item["code"]] = group_label
 
                 children_widgets = []
                 for child in item["children"]:
-                    nav_item = PNavItem(icon=child["icon"], text=shape(child["label"]), sub=True)
+                    nav_item = PNavItem(icon=child["icon"], text=shape(tr(child["label"])), sub=True)
                     nav_item.bind(on_release=lambda _inst, code=child["code"]: self._select_nav(code))
                     self.ids.nav_list.add_widget(nav_item)
                     children_widgets.append(nav_item)
                 self._group_children[item["code"]] = children_widgets
                 self._set_group_expanded(item["code"], expanded=False)
             else:
-                nav_item = PNavItem(icon=item["icon"], text=shape(item["label"]))
+                nav_item = PNavItem(icon=item["icon"], text=shape(tr(item["label"])))
                 nav_item.bind(on_release=lambda _inst, code=item["code"]: self._select_nav(code))
                 self.ids.nav_list.add_widget(nav_item)
 
@@ -223,7 +236,7 @@ class ShellScreen(MDScreen):
         self._load_languages()
 
     def _refresh_company_text(self) -> None:
-        text = session.current_company.display_name if session.current_company else "— بدون شرکت —"
+        text = session.current_company.display_name if session.current_company else tr("— بدون شرکت —")
         self.ids.company_button.text = shape(text)
 
     def open_company_menu(self) -> None:
@@ -261,7 +274,7 @@ class ShellScreen(MDScreen):
 
     def _refresh_fiscal_year_text(self) -> None:
         fy = session.current_fiscal_year
-        text = numerals.to_persian_digits(fy.code) if fy else "— سالی تعریف نشده —"
+        text = numerals.to_persian_digits(fy.code) if fy else tr("— سالی تعریف نشده —")
         self.ids.fiscal_year_button.text = shape(text)
 
     def open_fiscal_year_menu(self) -> None:
@@ -298,11 +311,11 @@ class ShellScreen(MDScreen):
             chosen = next((l for l in self._language_options if l.language_id == preferred_id), None)
             chosen = chosen or next((l for l in self._language_options if l.is_default), None)
             chosen = chosen or (self._language_options[0] if self._language_options else None)
-            session.current_language = chosen
+            self._set_current_language(chosen)
         self._refresh_language_text()
 
     def _refresh_language_text(self) -> None:
-        text = session.current_language.native_name if session.current_language else "— بدون زبان —"
+        text = session.current_language.native_name if session.current_language else tr("— بدون زبان —")
         self.ids.language_button.text = shape(text)
 
     def open_language_menu(self) -> None:
@@ -323,9 +336,36 @@ class ShellScreen(MDScreen):
         row = next((l for l in self._language_options if l.language_id == language_id), None)
         if row is None:
             return
-        session.current_language = row
+        self._set_current_language(row)
         self._refresh_language_text()
+        self._refresh_nav_item_texts()
         self._refresh_current_screen()
+
+    def _set_current_language(self, row: languages_service.LanguageRow | None) -> None:
+        session.current_language = row
+        # طبق درخواستِ صریح: با تعویضِ زبان، متن‌های ثابتِ اعلام‌شده در KV
+        # هم باید زنده ترجمه شوند — چون خودِ session.current_language یک
+        # Kivy Property نیست، این پرچمِ کمکی روی App همان نقش را بازی
+        # می‌کند (توضیحِ کامل در app.py، PeechaApp.ui_language_code).
+        from kivymd.app import MDApp  # noqa: PLC0415
+
+        app = MDApp.get_running_app()
+        if app is not None:
+            app.ui_language_code = row.code if row else ""
+
+    def _refresh_nav_item_texts(self) -> None:
+        # طبق درخواستِ صریح: نوار کناری فقط یک‌بار ساخته می‌شود (برای
+        # سرعت)، پس با تعویضِ زبان از هدر باید متنِ آیتم‌ها را دوباره از
+        # روی NAV_ITEMS با ترجمه‌ی تازه بازسازی کنیم — خودِ ویجت‌ها را نه.
+        from peecha.ui.widgets import PNavItem  # noqa: PLC0415
+
+        for code, label_widget in self._group_labels.items():
+            group_item = next(i for i in NAV_ITEMS if i["code"] == code)
+            label_widget.text = shape(tr(group_item["label"]))
+
+        clickable_widgets = [w for w in self.ids.nav_list.children[::-1] if isinstance(w, PNavItem)]
+        for widget, item in zip(clickable_widgets, _flatten_nav_items(), strict=True):
+            widget.text = shape(tr(item["label"]))
 
     def _refresh_current_screen(self) -> None:
         """صفحه‌ی محتوایِ جاری را بعد از تعویضِ شرکت/زبان دوباره از دیتابیس

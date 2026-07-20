@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -80,7 +81,7 @@
             size_hint_x: 0.62
 
             PLabel:
-                text: shape("کدینگ حسابداری (گروه / کل / معین)")
+                text: ((app.ui_language_code or True) and shape(tr("کدینگ حسابداری (گروه / کل / معین)")))
                 font_style: "H5"
                 size_hint_y: None
                 height: self.texture_size[1]
@@ -103,7 +104,7 @@
                     width: "56dp"
 
                 PLabel:
-                    text: shape("وضعیت")
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -112,7 +113,7 @@
                     size_hint_x: 0.20
 
                 PLabel:
-                    text: shape("سطح")
+                    text: ((app.ui_language_code or True) and shape(tr("سطح")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -121,7 +122,7 @@
                     size_hint_x: 0.15
 
                 PLabel:
-                    text: shape("نام حساب")
+                    text: ((app.ui_language_code or True) and shape(tr("نام حساب")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -129,7 +130,7 @@
                     size_hint_x: 0.43
 
                 PLabel:
-                    text: shape("کد")
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -150,7 +151,7 @@
 
             PLabel:
                 id: form_title
-                text: shape("افزودن حساب جدید")
+                text: ((app.ui_language_code or True) and shape(tr("افزودن حساب جدید")))
                 font_style: "Subtitle1"
                 size_hint_y: None
                 height: self.texture_size[1]
@@ -163,18 +164,18 @@
 
             PHintLabel:
                 id: level_preview_label
-                text: shape("سطحِ حساب جدید: گروه")
+                text: ((app.ui_language_code or True) and shape(tr("سطحِ حساب جدید: گروه")))
 
             PTextField:
                 id: segment_code_field
-                hint_text: shape("کد حساب (فقط بخش این سطح)")
+                hint_text: ((app.ui_language_code or True) and shape(tr("کد حساب (فقط بخش این سطح)")))
                 persian_digits: True
                 focus_next: name_field
                 focus_previous: parent_button
 
             PTextField:
                 id: name_field
-                hint_text: shape("نام حساب")
+                hint_text: ((app.ui_language_code or True) and shape(tr("نام حساب")))
                 focus_next: nature_button
                 focus_previous: segment_code_field
                 on_text_validate: root.save_account()
@@ -212,21 +213,21 @@
                     pos_hint: {"center_y": 0.5}
 
                 PLabel:
-                    text: shape("قابل ثبت سند (Postable)")
+                    text: ((app.ui_language_code or True) and shape(tr("قابل ثبت سند (Postable)")))
                     valign: "middle"
 
             Widget:
 
             PRaisedButton:
                 id: save_button
-                text: shape("افزودن حساب")
+                text: ((app.ui_language_code or True) and shape(tr("افزودن حساب")))
                 on_release: root.save_account()
                 focus_previous: account_type_button
                 focus_next: cancel_edit_button
 
             PFlatButton:
                 id: cancel_edit_button
-                text: shape("لغو ویرایش (Esc)")
+                text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
                 theme_text_color: "Custom"
                 text_color: theme.TEXT_SECONDARY
                 opacity: 0

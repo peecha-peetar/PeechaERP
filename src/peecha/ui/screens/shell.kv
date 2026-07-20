@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import NoTransition kivy.uix.screenmanager.NoTransition
 
@@ -33,7 +34,7 @@
 
                 PTextField:
                     id: search_field
-                    hint_text: shape("جستجو در سیستم...")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("جستجو در سیستم...")))
                     icon_right: "magnify"
                     mode: "round"
                     size_hint_x: 0.4
@@ -121,7 +122,7 @@
                 Widget:
 
                 PLabel:
-                    text: shape("پیچا")
+                    text: ((app.ui_language_code or True) and shape(tr("پیچا")))
                     font_style: "H6"
                     halign: "right"
                     valign: "middle"

@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -83,7 +84,7 @@
             size_hint_x: 0.56
 
             PLabel:
-                text: shape("کاربران")
+                text: ((app.ui_language_code or True) and shape(tr("کاربران")))
                 font_style: "H5"
                 size_hint_y: None
                 height: self.texture_size[1]
@@ -103,7 +104,7 @@
                     width: "28dp"
 
                 PLabel:
-                    text: shape("وضعیت")
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -112,7 +113,7 @@
                     size_hint_x: 0.16
 
                 PLabel:
-                    text: shape("نقش")
+                    text: ((app.ui_language_code or True) and shape(tr("نقش")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -121,7 +122,7 @@
                     size_hint_x: 0.16
 
                 PLabel:
-                    text: shape("نام کامل")
+                    text: ((app.ui_language_code or True) and shape(tr("نام کامل")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -129,7 +130,7 @@
                     size_hint_x: 0.34
 
                 PLabel:
-                    text: shape("نام‌کاربری")
+                    text: ((app.ui_language_code or True) and shape(tr("نام‌کاربری")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -159,31 +160,31 @@
 
                     PLabel:
                         id: form_title
-                        text: shape("افزودن کاربر جدید")
+                        text: ((app.ui_language_code or True) and shape(tr("افزودن کاربر جدید")))
                         font_style: "Subtitle1"
                         size_hint_y: None
                         height: self.texture_size[1]
 
                     PTextField:
                         id: username_field
-                        hint_text: shape("نام‌کاربری")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("نام‌کاربری")))
                         focus_next: full_name_field
 
                     PTextField:
                         id: full_name_field
-                        hint_text: shape("نام کامل")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("نام کامل")))
                         focus_next: email_field
                         focus_previous: username_field
 
                     PTextField:
                         id: email_field
-                        hint_text: shape("ایمیل")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("ایمیل")))
                         focus_next: password_field
                         focus_previous: full_name_field
 
                     PTextField:
                         id: password_field
-                        hint_text: shape("رمز عبور")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("رمز عبور")))
                         password: True
                         focus_next: language_button
                         focus_previous: email_field
@@ -206,7 +207,7 @@
                             pos_hint: {"center_y": 0.5}
 
                         PLabel:
-                            text: shape("مدیرِ کل (دسترسیِ کامل)")
+                            text: ((app.ui_language_code or True) and shape(tr("مدیرِ کل (دسترسیِ کامل)")))
                             valign: "middle"
 
                     BoxLayout:
@@ -222,11 +223,11 @@
                             pos_hint: {"center_y": 0.5}
 
                         PLabel:
-                            text: shape("فعال")
+                            text: ((app.ui_language_code or True) and shape(tr("فعال")))
                             valign: "middle"
 
                     PLabel:
-                        text: shape("دسترسی به شرکت‌ها")
+                        text: ((app.ui_language_code or True) and shape(tr("دسترسی به شرکت‌ها")))
                         font_style: "Caption"
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
@@ -241,14 +242,14 @@
 
                     PRaisedButton:
                         id: save_button
-                        text: shape("افزودن کاربر")
+                        text: ((app.ui_language_code or True) and shape(tr("افزودن کاربر")))
                         on_release: root.save_user()
                         focus_previous: language_button
                         focus_next: cancel_edit_button
 
                     PFlatButton:
                         id: cancel_edit_button
-                        text: shape("لغو ویرایش (Esc)")
+                        text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         opacity: 0

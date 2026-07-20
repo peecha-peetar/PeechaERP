@@ -17,6 +17,7 @@ from peecha.services import companies as companies_service
 from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
 from peecha.ui import numerals, theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -72,7 +73,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
 
     def apply_field_labels(self) -> None:
         language_id = session.current_language.language_id if session.current_language else None
-        labels = field_labels_service.get_labels_map("companies", language_id)
+        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("companies", language_id).items()}
         self.ids.code_field.hint_text = shape(labels["code"])
         self.ids.legal_name_field.hint_text = shape(labels["legal_name"])
         self.ids.display_name_field.hint_text = shape(labels["display_name"])
@@ -160,7 +161,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
             self.ids.companies_list.add_widget(
-                PEmptyState(icon="domain", text=shape("هنوز شرکتی تعریف نشده است."))
+                PEmptyState(icon="domain", text=shape(tr("هنوز شرکتی تعریف نشده است.")))
             )
         for i, row in enumerate(rows):
             self.ids.companies_list.add_widget(
@@ -171,7 +172,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
                     name_text=shape(row.display_name),
                     currency_text=row.base_currency_code,
                     language_text=shape(row.default_language_name),
-                    status_text=shape("فعال" if row.is_active else "غیرفعال"),
+                    status_text=shape(tr("فعال") if row.is_active else tr("غیرفعال")),
                     is_active_row=row.is_active,
                     zebra=i % 2 == 1,
                     selected=row.company_id == self._editing_company_id,
@@ -197,13 +198,13 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         self._language_id = row.default_language_id
         self._refresh_dropdown_texts()
         self.ids.is_active_checkbox.active = row.is_active
-        self.ids.form_title.text = shape(f"ویرایش شرکت «{row.display_name}»")
-        self.ids.save_button.text = shape("ذخیره تغییرات")
+        self.ids.form_title.text = shape(tr("ویرایش شرکت «{}»").format(row.display_name))
+        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(f"در حال ویرایش «{row.display_name}» — Escape برای لغو.")
+        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.display_name))
         self.refresh_list()
 
     def cancel_edit(self) -> None:
@@ -218,8 +219,8 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.fy_start_month_field.text = "۱"
         self.ids.fy_start_day_field.text = "۱"
         self.ids.is_active_checkbox.active = True
-        self.ids.form_title.text = shape("افزودن شرکت جدید")
-        self.ids.save_button.text = shape("افزودن شرکت")
+        self.ids.form_title.text = shape(tr("افزودن شرکت جدید"))
+        self.ids.save_button.text = shape(tr("افزودن شرکت"))
         self.ids.cancel_edit_button.opacity = 0
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
@@ -262,7 +263,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
                     national_id=self.ids.national_id_field.value.strip(),
                 )
             except Exception as exc:  # noqa: BLE001
-                self._set_status(f"خطا: {exc}")
+                self._set_status(tr("خطا: {}").format(exc))
                 return
             self.cancel_edit()
             return
@@ -285,7 +286,7 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
                 national_id=self.ids.national_id_field.value.strip(),
             )
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}")
+            self._set_status(tr("خطا: {}").format(exc))
             return
 
         self.cancel_edit()

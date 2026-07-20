@@ -11,6 +11,7 @@ import os
 
 from kivy.core.text import LabelBase
 from kivy.lang import Builder
+from kivy.properties import StringProperty
 from kivy.uix.floatlayout import FloatLayout
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -42,6 +43,14 @@ def _register_persian_font() -> str:
 
 class PeechaApp(MDApp):
     font_name = "Roboto"  # در build() با نتیجه‌ی _register_persian_font جایگزین می‌شود
+    # طبق درخواستِ صریح: با تعویضِ زبان از هدر، متن‌های ثابتِ اعلام‌شده در
+    # KV (که shape(tr("...")) استفاده می‌کنند) هم باید زنده ترجمه شوند. چون
+    # session.current_language یک property ساده‌ی پایتونی است (نه Kivy
+    # Property)، KV هیچ‌وقت خودکار متوجهِ تغییرش نمی‌شود و expression را
+    # دوباره ارزیابی نمی‌کند؛ این property فقط همین یک نقشِ فنی را دارد:
+    # هر KV rule که با «(app.ui_language_code or True) and ...» نوشته شده،
+    # با تغییرِ این مقدار مجبور به ارزیابیِ دوباره می‌شود.
+    ui_language_code = StringProperty("")
 
     def _apply_font_to_theme_styles(self) -> None:
         """جایگزینی فونت پیش‌فرض در تمام font_style های KivyMD.

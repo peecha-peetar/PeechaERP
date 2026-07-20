@@ -19,6 +19,7 @@ from peecha import session
 from peecha.services import field_labels as field_labels_service
 from peecha.services import roles as roles_service
 from peecha.ui import theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -97,7 +98,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
 
     def apply_field_labels(self) -> None:
         language_id = session.current_language.language_id if session.current_language else None
-        labels = field_labels_service.get_labels_map("roles", language_id)
+        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("roles", language_id).items()}
         self.ids.code_field.hint_text = shape(labels["code"])
 
     def on_shortcut_save(self) -> None:
@@ -118,7 +119,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
 
     def open_parent_menu(self) -> None:
         items = [
-            {"text": shape(_NO_PARENT_LABEL), "on_release": lambda: (self._menu.dismiss(), self._select_parent(None))}
+            {"text": shape(tr(_NO_PARENT_LABEL)), "on_release": lambda: (self._menu.dismiss(), self._select_parent(None))}
         ]
         for row in self._role_options:
             if row.role_id == self._editing_role_id:
@@ -136,10 +137,10 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
     def _select_parent(self, role_id: int | None) -> None:
         self._parent_role_id = role_id
         if role_id is None:
-            self.ids.parent_button.text = shape(_NO_PARENT_LABEL)
+            self.ids.parent_button.text = shape(tr(_NO_PARENT_LABEL))
             return
         parent = next((r for r in self._role_options if r.role_id == role_id), None)
-        self.ids.parent_button.text = shape(parent.code if parent else _NO_PARENT_LABEL)
+        self.ids.parent_button.text = shape(parent.code if parent else tr(_NO_PARENT_LABEL))
 
     def refresh_list(self) -> None:
         self.ids.roles_list.clear_widgets()
@@ -155,7 +156,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         self._role_options = rows
         if not rows:
             self.ids.roles_list.add_widget(
-                PEmptyState(icon="shield-account-outline", text=shape("هنوز نقشی تعریف نشده است."))
+                PEmptyState(icon="shield-account-outline", text=shape(tr("هنوز نقشی تعریف نشده است.")))
             )
         for i, row in enumerate(rows):
             self.ids.roles_list.add_widget(
@@ -164,7 +165,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
                     on_edit=self.edit_role,
                     code_text=row.code,
                     parent_text=shape(row.parent_code or "—"),
-                    status_text=shape("فعال" if row.is_active else "غیرفعال"),
+                    status_text=shape(tr("فعال") if row.is_active else tr("غیرفعال")),
                     is_active_row=row.is_active,
                     zebra=i % 2 == 1,
                     selected=row.role_id == self._editing_role_id,
@@ -180,13 +181,13 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.code_field.disabled = True
         self._select_parent(row.parent_role_id)
         self.ids.is_active_checkbox.active = row.is_active
-        self.ids.form_title.text = shape(f"ویرایش نقش «{row.code}»")
-        self.ids.save_button.text = shape("ذخیره تغییرات")
+        self.ids.form_title.text = shape(tr("ویرایش نقش «{}»").format(row.code))
+        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(f"در حال ویرایش «{row.code}» — Escape برای لغو.")
+        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.code))
         self._build_permissions_grid(role_id)
         self._build_users_checklist(role_id)
         self.refresh_list()
@@ -197,8 +198,8 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.code_field.disabled = False
         self._select_parent(None)
         self.ids.is_active_checkbox.active = True
-        self.ids.form_title.text = shape("افزودن نقش جدید")
-        self.ids.save_button.text = shape("افزودن نقش")
+        self.ids.form_title.text = shape(tr("افزودن نقش جدید"))
+        self.ids.save_button.text = shape(tr("افزودن نقش"))
         self.ids.cancel_edit_button.opacity = 0
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
@@ -223,7 +224,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
                     is_active=self.ids.is_active_checkbox.active,
                 )
             except Exception as exc:  # noqa: BLE001
-                self._set_status(f"خطا: {exc}", is_error=True)
+                self._set_status(tr("خطا: {}").format(exc), is_error=True)
                 return
             self.cancel_edit()
             return
@@ -235,7 +236,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         try:
             role = roles_service.create_role(company_id=company_id, code=code, parent_role_id=self._parent_role_id)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
         self._set_status(f"نقش «{role.code}» ساخته شد؛ حالا دسترسی‌های آن را تنظیم کنید.")
         self.refresh_list()
@@ -251,7 +252,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
             self.ids.permissions_grid_box.add_widget(
                 PEmptyState(
                     icon="shield-off-outline",
-                    text=shape("ابتدا یک نقش را ذخیره یا برای ویرایش انتخاب کنید."),
+                    text=shape(tr("ابتدا یک نقش را ذخیره یا برای ویرایش انتخاب کنید.")),
                 )
             )
             return
@@ -260,7 +261,9 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
             row = _PermissionRow(
                 form_id=form.form_id,
                 on_toggle=lambda form_id, action_code, active: self._set_permission(role_id, form_id, action_code, active),
-                label_text=shape(f"{roles_service.MODULE_LABELS.get(form.module_code, form.module_code)} — {form.label}"),
+                label_text=shape(
+                    f"{tr(roles_service.MODULE_LABELS.get(form.module_code, form.module_code))} — {tr(form.label)}"
+                ),
             )
             for action_code in _ACTIONS:
                 checkbox = row.ids[f"check_{action_code.lower()}"]
@@ -274,7 +277,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         try:
             roles_service.set_role_permission(role_id, form_id, action_code, is_allowed)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
 
     # --- تخصیصِ کاربران به نقش ------------------------------------------------
 
@@ -285,7 +288,7 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
             from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
 
             self.ids.role_users_box.add_widget(
-                PEmptyState(icon="account-off-outline", text=shape("نقشی برای تخصیصِ کاربر انتخاب نشده است."))
+                PEmptyState(icon="account-off-outline", text=shape(tr("نقشی برای تخصیصِ کاربر انتخاب نشده است.")))
             )
             return
         rows = roles_service.list_role_users(role_id, company_id)
@@ -306,4 +309,4 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         try:
             roles_service.set_user_role(user_id, role_id, company_id, assigned)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)

@@ -17,6 +17,7 @@ from peecha import session
 from peecha.services import field_labels as field_labels_service
 from peecha.services import users as users_service
 from peecha.ui import theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -82,7 +83,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
 
     def apply_field_labels(self) -> None:
         language_id = session.current_language.language_id if session.current_language else None
-        labels = field_labels_service.get_labels_map("users", language_id)
+        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("users", language_id).items()}
         self.ids.username_field.hint_text = shape(labels["username"])
         self.ids.full_name_field.hint_text = shape(labels["full_name"])
         self.ids.email_field.hint_text = shape(labels["email"])
@@ -143,7 +144,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.grid_header.opacity = 1 if rows else 0
         if not rows:
             self.ids.users_list.add_widget(
-                PEmptyState(icon="account-multiple-outline", text=shape("هنوز کاربری تعریف نشده است."))
+                PEmptyState(icon="account-multiple-outline", text=shape(tr("هنوز کاربری تعریف نشده است.")))
             )
         for i, row in enumerate(rows):
             self.ids.users_list.add_widget(
@@ -152,8 +153,8 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
                     on_edit=self.edit_user,
                     username_text=row.username,
                     name_text=shape(row.full_name),
-                    role_text=shape("مدیر کل" if row.is_super_admin else "کاربر"),
-                    status_text=shape("فعال" if row.is_active else "غیرفعال"),
+                    role_text=shape(tr("مدیر کل") if row.is_super_admin else tr("کاربر")),
+                    status_text=shape(tr("فعال") if row.is_active else tr("غیرفعال")),
                     is_active_row=row.is_active,
                     zebra=i % 2 == 1,
                     selected=row.user_id == self._editing_user_id,
@@ -171,19 +172,19 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.full_name_field.focus = True
         self.ids.email_field.set_value(row.email or "")
         self.ids.password_field.text = ""
-        self.ids.password_field.hint_text = shape("رمز عبور جدید (اختیاری)")
+        self.ids.password_field.hint_text = shape(tr("رمز عبور جدید (اختیاری)"))
         self._language_id = row.default_language_id
         self._refresh_language_text()
         self.ids.is_super_admin_checkbox.active = row.is_super_admin
         self.ids.is_active_checkbox.active = row.is_active
         self._rebuild_company_checklist(set(row.company_ids))
-        self.ids.form_title.text = shape(f"ویرایش کاربر «{row.full_name}»")
-        self.ids.save_button.text = shape("ذخیره تغییرات")
+        self.ids.form_title.text = shape(tr("ویرایش کاربر «{}»").format(row.full_name))
+        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(f"در حال ویرایش «{row.full_name}» — Escape برای لغو.")
+        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.full_name))
 
     def cancel_edit(self) -> None:
         self._editing_user_id = None
@@ -196,8 +197,8 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.is_super_admin_checkbox.active = False
         self.ids.is_active_checkbox.active = True
         self._rebuild_company_checklist()
-        self.ids.form_title.text = shape("افزودن کاربر جدید")
-        self.ids.save_button.text = shape("افزودن کاربر")
+        self.ids.form_title.text = shape(tr("افزودن کاربر جدید"))
+        self.ids.save_button.text = shape(tr("افزودن کاربر"))
         self.ids.cancel_edit_button.opacity = 0
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
@@ -228,7 +229,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
                     new_password=password or None,
                 )
             except Exception as exc:  # noqa: BLE001
-                self._set_status(f"خطا: {exc}", is_error=True)
+                self._set_status(tr("خطا: {}").format(exc), is_error=True)
                 return
             self.cancel_edit()
             self.refresh_list()
@@ -250,7 +251,7 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
                 default_company_id=default_company_id,
             )
         except Exception as exc:  # noqa: BLE001
-            self._set_status(f"خطا: {exc}", is_error=True)
+            self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
 
         self.cancel_edit()

@@ -19,6 +19,7 @@ from peecha import session
 from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
 from peecha.services import roles as roles_service
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -87,14 +88,14 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
 
     def _refresh_form_text(self) -> None:
         label = roles_service.FORM_LABELS.get(self._form_code, self._form_code)
-        self.ids.form_button.text = shape(label)
+        self.ids.form_button.text = shape(tr(label))
 
     def open_form_menu(self) -> None:
         from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
 
         items = [
             {
-                "text": shape(roles_service.FORM_LABELS.get(code, code)),
+                "text": shape(tr(roles_service.FORM_LABELS.get(code, code))),
                 "on_release": lambda c=code: (self._menu.dismiss(), self._select_form(c)),
             }
             for code in _MANAGED_FORMS
@@ -141,7 +142,7 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
         rows = field_labels_service.list_fields(self._form_code, self._language_id)
         if not rows:
             self.ids.fields_list.add_widget(
-                PEmptyState(icon="form-textbox", text=shape("این فرم فیلدی برای مدیریتِ عنوان ندارد."))
+                PEmptyState(icon="form-textbox", text=shape(tr("این فرم فیلدی برای مدیریتِ عنوان ندارد.")))
             )
         for row in rows:
             self.ids.fields_list.add_widget(
@@ -151,7 +152,7 @@ class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
                     has_override=row.label is not None,
                     on_save=self._save_label,
                     on_reset=self._reset_label,
-                    default_label_text=shape(f"پیش‌فرض: {row.default_label}"),
+                    default_label_text=shape(tr("پیش‌فرض: {}").format(row.default_label)),
                 )
             )
 

@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -71,7 +72,7 @@
             size_hint_x: 0.58
 
             PLabel:
-                text: shape("شرکت‌ها")
+                text: ((app.ui_language_code or True) and shape(tr("شرکت‌ها")))
                 font_style: "H5"
                 size_hint_y: None
                 height: self.texture_size[1]
@@ -91,7 +92,7 @@
                     width: "28dp"
 
                 PLabel:
-                    text: shape("وضعیت")
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -100,7 +101,7 @@
                     size_hint_x: 0.16
 
                 PLabel:
-                    text: shape("زبان")
+                    text: ((app.ui_language_code or True) and shape(tr("زبان")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -108,7 +109,7 @@
                     size_hint_x: 0.18
 
                 PLabel:
-                    text: shape("ارز")
+                    text: ((app.ui_language_code or True) and shape(tr("ارز")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -116,7 +117,7 @@
                     size_hint_x: 0.14
 
                 PLabel:
-                    text: shape("نام نمایشی")
+                    text: ((app.ui_language_code or True) and shape(tr("نام نمایشی")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -124,7 +125,7 @@
                     size_hint_x: 0.34
 
                 PLabel:
-                    text: shape("کد")
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
                     font_style: "Caption"
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
@@ -154,45 +155,45 @@
 
                     PLabel:
                         id: form_title
-                        text: shape("افزودن شرکت جدید")
+                        text: ((app.ui_language_code or True) and shape(tr("افزودن شرکت جدید")))
                         font_style: "Subtitle1"
                         size_hint_y: None
                         height: self.texture_size[1]
 
                     PTextField:
                         id: code_field
-                        hint_text: shape("کد شرکت")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("کد شرکت")))
                         focus_next: legal_name_field
 
                     PTextField:
                         id: legal_name_field
-                        hint_text: shape("نام حقوقی")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("نام حقوقی")))
                         focus_next: display_name_field
                         focus_previous: code_field
 
                     PTextField:
                         id: display_name_field
-                        hint_text: shape("نام نمایشی")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("نام نمایشی")))
                         focus_next: economic_code_field
                         focus_previous: legal_name_field
 
                     PTextField:
                         id: economic_code_field
-                        hint_text: shape("کد اقتصادی")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("کد اقتصادی")))
                         persian_digits: True
                         focus_next: registration_no_field
                         focus_previous: display_name_field
 
                     PTextField:
                         id: registration_no_field
-                        hint_text: shape("شماره ثبت")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("شماره ثبت")))
                         persian_digits: True
                         focus_next: national_id_field
                         focus_previous: economic_code_field
 
                     PTextField:
                         id: national_id_field
-                        hint_text: shape("شناسه ملی")
+                        hint_text: ((app.ui_language_code or True) and shape(tr("شناسه ملی")))
                         persian_digits: True
                         focus_next: fy_start_day_field
                         focus_previous: registration_no_field
@@ -204,7 +205,7 @@
 
                         PTextField:
                             id: fy_start_day_field
-                            hint_text: shape("روزِ شروعِ سال مالی")
+                            hint_text: ((app.ui_language_code or True) and shape(tr("روزِ شروعِ سال مالی")))
                             text: "۱"
                             persian_digits: True
                             size_hint_x: 0.5
@@ -213,7 +214,7 @@
 
                         PTextField:
                             id: fy_start_month_field
-                            hint_text: shape("ماهِ شروعِ سال مالی")
+                            hint_text: ((app.ui_language_code or True) and shape(tr("ماهِ شروعِ سال مالی")))
                             text: "۱"
                             persian_digits: True
                             size_hint_x: 0.5
@@ -237,7 +238,7 @@
 
                         PTextField:
                             id: currency_decimals_field
-                            hint_text: shape("رقم اعشارِ ارز")
+                            hint_text: ((app.ui_language_code or True) and shape(tr("رقم اعشارِ ارز")))
                             persian_digits: True
                             focus_next: language_button
 
@@ -266,19 +267,19 @@
                             pos_hint: {"center_y": 0.5}
 
                         PLabel:
-                            text: shape("فعال")
+                            text: ((app.ui_language_code or True) and shape(tr("فعال")))
                             valign: "middle"
 
                     PRaisedButton:
                         id: save_button
-                        text: shape("افزودن شرکت")
+                        text: ((app.ui_language_code or True) and shape(tr("افزودن شرکت")))
                         on_release: root.save_company()
                         focus_previous: language_button
                         focus_next: cancel_edit_button
 
                     PFlatButton:
                         id: cancel_edit_button
-                        text: shape("لغو ویرایش (Esc)")
+                        text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         opacity: 0

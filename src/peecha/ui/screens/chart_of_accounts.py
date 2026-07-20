@@ -18,6 +18,7 @@ from peecha import session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import field_labels as field_labels_service
 from peecha.ui import numerals, theme
+from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
 
@@ -88,7 +89,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
 
     def apply_field_labels(self) -> None:
         language_id = session.current_language.language_id if session.current_language else None
-        labels = field_labels_service.get_labels_map("chart_of_accounts", language_id)
+        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("chart_of_accounts", language_id).items()}
         self.ids.segment_code_field.hint_text = shape(labels["segment_code"])
         self.ids.name_field.hint_text = shape(labels["name"])
 
@@ -109,14 +110,14 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
 
     def _set_dropdown_text(self, button_id: str, options: list[tuple[str, str]], code: str) -> None:
         label = next(label for value, label in options if value == code)
-        self.ids[button_id].text = shape(label)
+        self.ids[button_id].text = shape(tr(label))
 
     def _open_dropdown(self, button_id: str, options: list[tuple[str, str]], on_select) -> None:
         from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
 
         caller = self.ids[button_id]
         items = [
-            {"text": shape(label), "on_release": lambda value=value: (menu.dismiss(), on_select(value))}
+            {"text": shape(tr(label)), "on_release": lambda value=value: (menu.dismiss(), on_select(value))}
             for value, label in options
         ]
         menu = open_rtl_dropdown(caller, items, width_mult=4)
@@ -149,7 +150,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         caller = self.ids.parent_button
         items = [
             {
-                "text": shape(_NO_PARENT_LABEL),
+                "text": shape(tr(_NO_PARENT_LABEL)),
                 "on_release": lambda: (menu.dismiss(), self._select_parent(None)),
             }
         ]
@@ -169,13 +170,13 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
     def _select_parent(self, account_id: int | None) -> None:
         self._parent_account_id = account_id
         if account_id is None:
-            self.ids.parent_button.text = shape(_NO_PARENT_LABEL)
-            self.ids.level_preview_label.text = shape(f"سطحِ حساب جدید: {_LEVEL_LABELS[1]}")
+            self.ids.parent_button.text = shape(tr(_NO_PARENT_LABEL))
+            self.ids.level_preview_label.text = shape(f"{tr('سطحِ حساب جدید:')} {tr(_LEVEL_LABELS[1])}")
             return
         parent = next(row for row in self._parent_options if row.account_id == account_id)
         self.ids.parent_button.text = shape(f"{numerals.to_persian_digits(parent.full_code)} — {parent.name}")
         new_level = parent.account_level + 1
-        self.ids.level_preview_label.text = shape(f"سطحِ حساب جدید: {_LEVEL_LABELS[new_level]}")
+        self.ids.level_preview_label.text = shape(f"{tr('سطحِ حساب جدید:')} {tr(_LEVEL_LABELS[new_level])}")
 
     def _set_status(self, message: str) -> None:
         self.ids.status_label.text = shape(message)
@@ -198,7 +199,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             self.ids.accounts_list.add_widget(
                 PEmptyState(
                     icon="format-list-bulleted-square",
-                    text=shape("هنوز حسابی تعریف نشده — از فرم روبه‌رو یک حساب گروه اضافه کنید."),
+                    text=shape(tr("هنوز حسابی تعریف نشده — از فرم روبه‌رو یک حساب گروه اضافه کنید.")),
                 )
             )
         for i, row in enumerate(rows):
@@ -210,9 +211,9 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     on_delete=self.confirm_delete,
                     code_text=numerals.to_persian_digits(row.full_code),
                     name_text=shape(f"{indent}{row.name}"),
-                    level_text=shape(_LEVEL_LABELS[row.account_level]),
+                    level_text=shape(tr(_LEVEL_LABELS[row.account_level])),
                     level_badge_color=_LEVEL_BADGE_COLORS[row.account_level],
-                    status_text=shape("قابل ثبت" if row.is_postable else "گروه‌بندی"),
+                    status_text=shape(tr("قابل ثبت") if row.is_postable else tr("گروه‌بندی")),
                     status_badge_color=theme.SUCCESS if row.is_postable else theme.TEXT_DISABLED,
                     zebra=i % 2 == 1,
                     selected=row.account_id == self._editing_account_id,
@@ -245,14 +246,14 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._set_dropdown_text("nature_button", _NATURE_OPTIONS, self._nature_code)
         self._set_dropdown_text("category_button", _CATEGORY_OPTIONS, self._category_code)
         self._set_dropdown_text("account_type_button", _ACCOUNT_TYPE_OPTIONS, self._account_type_code)
-        self.ids.form_title.text = shape(f"ویرایش حساب «{numerals.to_persian_digits(row.full_code)}»")
-        self.ids.save_button.text = shape("ذخیره تغییرات")
+        self.ids.form_title.text = shape(tr("ویرایش حساب «{}»").format(numerals.to_persian_digits(row.full_code)))
+        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
         self.ids.cancel_edit_button.opacity = 1
         self.ids.cancel_edit_button.disabled = False
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "36dp"
         self._set_status(
-            f"در حال ویرایش «{numerals.to_persian_digits(row.full_code)} — {row.name}» — Escape برای لغو."
+            tr("در حال ویرایش «{}» — Escape برای لغو.").format(f"{numerals.to_persian_digits(row.full_code)} — {row.name}")
         )
         self.refresh_list()
 
@@ -262,8 +263,8 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.segment_code_field.disabled = False
         self.ids.parent_button.disabled = False
         self.ids.name_field.text = ""
-        self.ids.form_title.text = shape("افزودن حساب جدید")
-        self.ids.save_button.text = shape("افزودن حساب")
+        self.ids.form_title.text = shape(tr("افزودن حساب جدید"))
+        self.ids.save_button.text = shape(tr("افزودن حساب"))
         self.ids.cancel_edit_button.opacity = 0
         self.ids.cancel_edit_button.disabled = True
         self.ids.cancel_edit_button.size_hint_y = None
@@ -305,7 +306,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     language_id=language_id,
                 )
             except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
-                self._set_status(f"خطا: {exc}")
+                self._set_status(tr("خطا: {}").format(exc))
                 return
             self.cancel_edit()
             return
@@ -330,7 +331,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                 parent_account_id=self._parent_account_id,
             )
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
-            self._set_status(f"خطا: {exc}")
+            self._set_status(tr("خطا: {}").format(exc))
             return
 
         self.ids.segment_code_field.text = ""
@@ -350,13 +351,15 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             self._perform_delete(account_id)
 
         self._delete_dialog = MDDialog(
-            title=shape("حذف حساب"),
+            title=shape(tr("حذف حساب")),
             text=shape(
-                f"حساب «{numerals.to_persian_digits(row.full_code)} — {row.name}» حذف شود؟ این کار قابل بازگشت نیست."
+                tr("حساب «{}» حذف شود؟ این کار قابل بازگشت نیست.").format(
+                    f"{numerals.to_persian_digits(row.full_code)} — {row.name}"
+                )
             ),
             buttons=[
-                MDFlatButton(text=shape("لغو"), on_release=lambda *_: self._delete_dialog.dismiss()),
-                MDRaisedButton(text=shape("حذف"), md_bg_color=theme.DANGER, on_release=_do_delete),
+                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._delete_dialog.dismiss()),
+                MDRaisedButton(text=shape(tr("حذف")), md_bg_color=theme.DANGER, on_release=_do_delete),
             ],
         )
         self._delete_dialog.open()
@@ -367,7 +370,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         try:
             coa_service.delete_account(account_id, session.current_company.company_id)
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
-            self._set_status(f"خطا: {exc}")
+            self._set_status(tr("خطا: {}").format(exc))
             return
         if self._editing_account_id == account_id:
             self.cancel_edit()

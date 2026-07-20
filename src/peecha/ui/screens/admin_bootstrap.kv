@@ -1,4 +1,5 @@
 #:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
@@ -35,37 +36,37 @@
                 height: self.minimum_height
 
                 PTitleLabel:
-                    text: shape("راه‌اندازی اولیه‌ی پیچا")
+                    text: ((app.ui_language_code or True) and shape(tr("راه‌اندازی اولیه‌ی پیچا")))
 
                 PLabel:
-                    text: shape("هنوز هیچ کاربری در سیستم ثبت نشده؛ این کاربر و شرکت، اولین‌ها خواهند بود.")
+                    text: ((app.ui_language_code or True) and shape(tr("هنوز هیچ کاربری در سیستم ثبت نشده؛ این کاربر و شرکت، اولین‌ها خواهند بود.")))
                     theme_text_color: "Hint"
                     size_hint_y: None
                     height: self.texture_size[1]
 
                 PTextField:
                     id: company_name_field
-                    hint_text: shape("نام شرکت")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("نام شرکت")))
                     focus_next: username_field
                     on_text_validate: root.create_admin()
 
                 PTextField:
                     id: username_field
-                    hint_text: shape("نام کاربری مدیر")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("نام کاربری مدیر")))
                     focus_next: full_name_field
                     focus_previous: company_name_field
                     on_text_validate: root.create_admin()
 
                 PTextField:
                     id: full_name_field
-                    hint_text: shape("نام کامل مدیر")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("نام کامل مدیر")))
                     focus_next: password_field
                     focus_previous: username_field
                     on_text_validate: root.create_admin()
 
                 PTextField:
                     id: password_field
-                    hint_text: shape("رمز عبور")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("رمز عبور")))
                     password: True
                     focus_next: confirm_password_field
                     focus_previous: full_name_field
@@ -73,7 +74,7 @@
 
                 PTextField:
                     id: confirm_password_field
-                    hint_text: shape("تکرار رمز عبور")
+                    hint_text: ((app.ui_language_code or True) and shape(tr("تکرار رمز عبور")))
                     password: True
                     focus_previous: password_field
                     on_text_validate: root.create_admin()
@@ -83,6 +84,6 @@
                     text: ""
 
                 PRaisedButton:
-                    text: shape("ساخت و ورود")
+                    text: ((app.ui_language_code or True) and shape(tr("ساخت و ورود")))
                     pos_hint: {"center_x": 0.5}
                     on_release: root.create_admin()
