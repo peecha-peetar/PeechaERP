@@ -96,19 +96,25 @@
                 PSelectField:
                     id: language_button
                     text: ""
-                    size_hint_x: 0.3
+                    size_hint_x: 0.22
                     on_release: root.open_language_menu()
 
                 PSelectField:
                     id: group_button
                     text: ""
-                    size_hint_x: 0.3
+                    size_hint_x: 0.22
                     on_release: root.open_group_menu()
 
                 PTextField:
                     id: service_url_field
                     hint_text: ((app.ui_language_code or True) and shape(tr("آدرسِ سرویسِ ترجمه")))
-                    size_hint_x: 0.4
+                    size_hint_x: 0.3
+
+                PTextField:
+                    id: api_key_field
+                    hint_text: ((app.ui_language_code or True) and shape(tr("کلیدِ API سرویسِ ترجمه (اختیاری)")))
+                    password: True
+                    size_hint_x: 0.26
 
             BoxLayout:
                 size_hint_y: None

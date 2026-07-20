@@ -333,6 +333,7 @@ class TranslationsScreen(KeyboardShortcutMixin, MDScreen):
             return
 
         base_url = self.ids.service_url_field.text.strip() or machine_translation.DEFAULT_BASE_URL
+        api_key = self.ids.api_key_field.text.strip() or None
         target_code = machine_translation.target_language_code(language.code)
         language_id = language.language_id
         language_code = language.code
@@ -345,7 +346,9 @@ class TranslationsScreen(KeyboardShortcutMixin, MDScreen):
             error_message: str | None = None
             result = None
             try:
-                result = machine_translation.translate_texts(untranslated, target_code, base_url=base_url)
+                result = machine_translation.translate_texts(
+                    untranslated, target_code, base_url=base_url, api_key=api_key
+                )
             except machine_translation.TranslationServiceError as exc:
                 error_message = str(exc)
             Clock.schedule_once(lambda _dt: self._on_translate_done(language_id, language_code, result, error_message))

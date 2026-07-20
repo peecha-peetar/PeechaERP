@@ -72,7 +72,24 @@ def translate_texts(
                 result.failed_texts.append(text)
         except (requests.RequestException, ValueError) as exc:
             if index == 0:
-                raise TranslationServiceError(f"اتصال به سرویسِ ترجمه ناموفق بود: {exc}") from exc
+                raise TranslationServiceError(f"اتصال به سرویسِ ترجمه ناموفق بود: {_describe_error(exc)}") from exc
             result.failed_texts.append(text)
 
     return result
+
+
+def _describe_error(exc: Exception) -> str:
+    """پیامِ خامِ requests («400 Client Error: Bad Request for url: ...»)
+    دلیلِ واقعی را نشان نمی‌دهد؛ LibreTranslate معمولاً دلیل را در بدنه‌ی
+    JSON پاسخ می‌گذارد (مثلاً «کلیدِ API لازم است» یا «زبانِ مبدأ/مقصد
+    پشتیبانی نمی‌شود») — این را هم اضافه می‌کنیم تا کاربر بداند دقیقاً
+    باید چه چیزی را اصلاح کند (مثلاً گرفتنِ کلیدِ API یا تغییرِ آدرسِ سرویس)."""
+    response = getattr(exc, "response", None)
+    if response is None:
+        return str(exc)
+    try:
+        body = response.json()
+        detail = body.get("error") or body.get("message") or body
+    except ValueError:
+        detail = response.text
+    return f"{exc} — پاسخِ سرویس: {detail}"
