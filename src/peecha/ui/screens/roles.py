@@ -84,9 +84,12 @@ class RolesScreen(KeyboardShortcutMixin, MDScreen):
         self._forms = roles_service.list_forms()
         self.apply_field_labels()
         self.refresh_list()
-        self._select_parent(None)
-        self._build_permissions_grid(None)
-        self._build_users_checklist(None)
+        # طبق درخواستِ صریح: با برگشتن به این صفحه، انتخابِ والد/شبکه‌ی
+        # دسترسی/تخصیصِ کاربرانِ نیمه‌کاره نباید پاک شود — با وضعیتِ فعلی
+        # (نه با None ثابت) دوباره ساخته می‌شود.
+        self._select_parent(self._parent_role_id)
+        self._build_permissions_grid(self._editing_role_id)
+        self._build_users_checklist(self._editing_role_id)
         self.bind_shortcuts()
 
     def on_leave(self, *args):

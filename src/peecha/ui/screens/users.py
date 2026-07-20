@@ -66,7 +66,12 @@ class UsersScreen(KeyboardShortcutMixin, MDScreen):
         self._language_options = users_service.list_languages_for_picker()
         if self._language_id is None and self._language_options:
             self._language_id = self._language_options[0][0]
-        self._rebuild_company_checklist()
+        # طبق درخواستِ صریح: با برگشتن به این صفحه، شرکت‌های تیک‌خورده‌ی
+        # فرمِ نیمه‌کاره نباید پاک شود — قبل از بازسازیِ چک‌لیست، انتخابِ
+        # فعلی را نگه می‌داریم (اولین بارِ ورود، self._company_checks هنوز
+        # خالی است پس چیزی برای نگه‌داشتن نیست).
+        previously_checked = set(self._checked_company_ids()) if self._company_checks else None
+        self._rebuild_company_checklist(previously_checked)
         self._refresh_language_text()
         self.apply_field_labels()
         self.refresh_list()

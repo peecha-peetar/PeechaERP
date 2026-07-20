@@ -13,6 +13,17 @@
         text: root.label_text
         valign: "middle"
 
+# ردیفِ یک پیشنهادِ شرح در منوی کشوییِ LineDescriptionField.
+<_SuggestionRow>:
+    size_hint_y: None
+    height: "36dp"
+    padding: ["10dp", "0dp"]
+    md_bg_color: theme.SELECTED if root.highlighted else (0, 0, 0, 0)
+
+    PLabel:
+        text: root.label_text
+        valign: "middle"
+
 # نکته‌ی مهمِ RTL (همه‌جای این فایل): در BoxLayout افقیِ Kivy فرزندِ
 # اول‌اعلام‌شده همیشه چپ‌ترین می‌شود (تست مستقیم تایید کرد، Kivy خودش پرچم
 # RTL برای BoxLayout ندارد)؛ برای این‌که ستون‌ها/فیلدها به ترتیب درستِ
@@ -37,6 +48,7 @@
         persian_digits: True
         on_text: root.on_credit_changed()
         on_text_validate: root.request_next()
+        on_focus: root.on_amount_focus(self)
         focus_previous: debit_field
 
     PTextField:
@@ -45,18 +57,21 @@
         size_hint_x: 0.16
         persian_digits: True
         on_text: root.on_debit_changed()
-        on_text_validate: root.request_next()
+        # طبق درخواستِ صریح: اگر بدهکار پر شده باشد Enter به ردیفِ بعد
+        # می‌رود؛ اگر صفر/خالی باشد (یعنی این ردیف بستانکار است) Enter به
+        # فیلدِ بستانکارِ همین ردیف می‌رود، نه ردیفِ بعد.
+        on_text_validate: root.on_debit_validate()
+        on_focus: root.on_amount_focus(self)
         focus_next: credit_field
-        focus_previous: description_field
+        # focus_previous واقعی (سمتِ LineDescriptionField) در پایتون وصل
+        # می‌شود (JournalEntryLineRow.__init__)، همان‌طور که account_field.
 
-    PTextField:
-        id: description_field
-        hint_text: shape("شرح ردیف")
+    # جایگاهِ LineDescriptionField — چون این ویجت برای پیشنهادِ زنده به
+    # فهرستِ شرح‌های قبلیِ همین شرکت نیاز دارد (در KV قابل‌تعریف نیست)، در
+    # پایتون ساخته و همین‌جا جاگذاری می‌شود (JournalEntryLineRow.__init__).
+    BoxLayout:
+        id: description_slot
         size_hint_x: 0.26
-        focus_next: debit_field
-        # focus_previous واقعی (سمتِ AccountSearchField) در پایتون وصل
-        # می‌شود (JournalEntryLineRow.__init__)، چون این ویجت به‌خاطرِ
-        # نیاز به داده‌ی مخصوصِ هر نمونه در KV قابل‌تعریف نیست.
 
     # جایگاهِ AccountSearchField — چون این ویجت به داده‌ی مخصوصِ هر نمونه
     # (فهرستِ حساب‌ها، کال‌بکِ انتخاب) نیاز دارد که در KV قابل‌تعریف نیست،
@@ -166,6 +181,10 @@
                         hint_text: shape("شرح سند")
                         size_hint_x: 0.7
                         focus_previous: date_field
+                        # طبق درخواستِ صریح: با Enter به اولین فیلدِ حسابِ
+                        # ردیف‌ها می‌رود (focus_next پویا در _relink_row_focus
+                        # به‌روز می‌شود، پس همیشه به ردیفِ درستی اشاره دارد).
+                        on_text_validate: self.focus_next.focus = True if self.focus_next else None
 
                     PTextField:
                         id: date_field
@@ -173,6 +192,9 @@
                         size_hint_x: 0.3
                         persian_digits: True
                         focus_next: description_field
+                        # طبق درخواستِ صریح: نقطه‌ی شروعِ کیبوردِ سند تاریخ
+                        # است؛ Enter به شرحِ سند می‌رود.
+                        on_text_validate: self.focus_next.focus = True
 
                 PLabel:
                     text: shape("ردیف‌ها")
@@ -280,6 +302,14 @@
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_PRIMARY
                         valign: "middle"
+
+                # طبق درخواستِ صریح: مبلغِ واردشده (در هر فیلدِ بدهکار/بستانکار
+                # از هر ردیف) به‌صورتِ زنده زیرِ فرم به حروف نمایش داده می‌شود.
+                PHintLabel:
+                    id: amount_words_label
+                    text: ""
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
 
                 PHintLabel:
                     id: status_label

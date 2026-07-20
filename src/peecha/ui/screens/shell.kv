@@ -1,5 +1,6 @@
 #:import shape peecha.ui.rtl.shape
 #:import theme peecha.ui.theme
+#:import NoTransition kivy.uix.screenmanager.NoTransition
 
 <ShellScreen>:
     name: "shell"
@@ -87,6 +88,11 @@
 
             MDScreenManager:
                 id: content_manager
+                # نوار کناری یک ناوبریِ ثابت/دائمی است (نه پشته‌ی صفحاتِ
+                # موبایل)؛ ترنزیشنِ پیش‌فرضِ Kivy (اسلایدِ ۰.۴ ثانیه‌ای) باعث
+                # می‌شد هر کلیک روی نوار کناری «تنبل»/دیر به‌نظر برسد — طبق
+                # گزارشِ مستقیمِ کاربر.
+                transition: NoTransition()
 
         # نوار کناری (راست)
         BoxLayout:

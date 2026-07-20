@@ -202,6 +202,25 @@ def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
         ]
 
 
+def list_recent_line_descriptions(company_id: int, limit: int = 300) -> list[str]:
+    """فهرستِ متمایزِ شرح‌های قبلاً واردشده برای ردیف‌های سند — برای
+    پیشنهادِ زنده هنگامِ تایپ در فیلدِ «شرح ردیف» (طبق درخواستِ صریح)."""
+    with new_session() as session:
+        rows = session.execute(
+            select(JournalEntryLine.description)
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .where(JournalEntry.company_id == company_id, JournalEntryLine.description.isnot(None))
+            .order_by(JournalEntryLine.line_id.desc())
+            .limit(limit)
+        ).all()
+        seen: dict[str, None] = {}
+        for (description,) in rows:
+            text = (description or "").strip()
+            if text and text not in seen:
+                seen[text] = None
+        return list(seen.keys())
+
+
 def get_journal_entry_lines(journal_entry_id: int) -> list[LineInput]:
     with new_session() as session:
         lines = session.scalars(

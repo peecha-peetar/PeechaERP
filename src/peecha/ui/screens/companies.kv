@@ -224,7 +224,28 @@
                         id: currency_button
                         text: ""
                         on_release: root.open_currency_menu()
-                        focus_next: language_button
+                        focus_next: currency_decimals_field
+
+                    # رقمِ اعشارِ ارزِ انتخاب‌شده (طبق درخواستِ صریح) — چون
+                    # decimal_places متعلق به خودِ ارز است (نه شرکت)، جدا از
+                    # دکمه‌ی «ذخیره‌ی شرکت» با آیکونِ کنارش بلافاصله ذخیره
+                    # می‌شود، مشابهِ الگوی دسترسی‌های roles.py.
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "48dp"
+                        spacing: "8dp"
+
+                        PTextField:
+                            id: currency_decimals_field
+                            hint_text: shape("رقم اعشارِ ارز")
+                            persian_digits: True
+                            focus_next: language_button
+
+                        MDIconButton:
+                            icon: "content-save-outline"
+                            theme_text_color: "Custom"
+                            text_color: theme.ACCENT
+                            on_release: root.save_currency_decimals()
 
                     PSelectField:
                         id: language_button

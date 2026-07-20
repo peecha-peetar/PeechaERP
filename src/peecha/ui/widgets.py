@@ -274,12 +274,14 @@ class PNavItem(ButtonBehavior, MDBoxLayout):
     sub = BooleanProperty(False)
 
 
-class PNavGroupLabel(MDBoxLayout):
-    """سرآیتمِ غیرقابل‌کلیکِ یک گروه در نوار کناری (مثل «مالی و حسابداری»)
-    که زیرآیتم‌هایش بلافاصله زیرش می‌آیند."""
+class PNavGroupLabel(ButtonBehavior, MDBoxLayout):
+    """سرآیتمِ یک گروه در نوار کناری (مثل «مالی و حسابداری») — قابل‌کلیک
+    برای جمع‌کردن/بازکردنِ زیرآیتم‌هایش (طبق درخواستِ صریح: زیرمجموعه‌ی هر
+    گروه وقتی باز نیست باید جمع‌شونده باشد، نه همیشه نمایان)."""
 
     icon = StringProperty("circle-outline")
     text = StringProperty("")
+    expanded = BooleanProperty(False)
 
 
 class PSelectField(KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):

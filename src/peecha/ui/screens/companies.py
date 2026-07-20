@@ -94,8 +94,25 @@ class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
     def _refresh_dropdown_texts(self) -> None:
         currency = next((c for c in self._currency_options if c.currency_id == self._currency_id), None)
         self.ids.currency_button.text = shape(currency.iso_code if currency else "— انتخاب ارز —")
+        self.ids.currency_decimals_field.text = (
+            numerals.to_persian_digits(str(currency.decimal_places)) if currency else ""
+        )
         language = next((l for l in self._language_options if l.language_id == self._language_id), None)
         self.ids.language_button.text = shape(language.native_name if language else "— انتخاب زبان —")
+
+    def save_currency_decimals(self) -> None:
+        if self._currency_id is None:
+            return
+        raw = numerals.to_ascii_digits(self.ids.currency_decimals_field.text).strip()
+        try:
+            decimal_places = int(raw)
+            companies_service.update_currency_decimal_places(self._currency_id, decimal_places)
+        except ValueError as exc:
+            self._set_status(str(exc))
+            return
+        self._currency_options = companies_service.list_currencies()
+        self._refresh_dropdown_texts()
+        self._set_status("رقم اعشارِ ارز ذخیره شد.")
 
     def open_currency_menu(self) -> None:
         from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415

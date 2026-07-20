@@ -178,16 +178,126 @@ class AccountSearchField(PTextField):
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
 
 
+class _SuggestionRow(ButtonBehavior, MDBoxLayout):
+    """یک ردیفِ نتیجه‌ی پیشنهادِ شرح — مشابهِ _AccountOptionRow."""
+
+    label_text = StringProperty("")
+    highlighted = BooleanProperty(False)
+
+    def __init__(self, suggestion_text: str, on_choose, **kwargs):
+        super().__init__(**kwargs)
+        self.suggestion_text = suggestion_text
+        self._on_choose = on_choose
+
+    def on_release(self) -> None:
+        self._on_choose(self.suggestion_text)
+
+
+class LineDescriptionField(PTextField):
+    """فیلدِ شرحِ ردیف با پیشنهادِ زنده از شرح‌های قبلاً واردشده‌ی همین
+    شرکت (طبق درخواستِ صریح: «در هنگام تایپ خودش هم کلمه پیشنهاد بده»).
+    انتخابِ یک پیشنهاد (کلیک یا Enترِ روی گزینه‌ی هایلایت‌شده) هم مقدار را
+    می‌گذارد هم — دقیقاً مثلِ AccountSearchField — بلافاصله به فیلدِ بعدی
+    (بدهکار) می‌رود؛ اگر منویی باز نباشد، Enterِ معمولی هم به همان فیلدِ
+    بعدی می‌رود (با focus_next که JournalEntryLineRow وصل می‌کند)."""
+
+    def __init__(self, suggestions_provider, **kwargs):
+        kwargs.setdefault("hint_text", shape("شرح ردیف"))
+        super().__init__(**kwargs)
+        self._suggestions_provider = suggestions_provider
+        self._results: list[str] = []
+        self._highlighted_index = -1
+        self._dropdown = DropDown(auto_width=False, max_height=dp(180))
+        self._dropdown.width = dp(280)
+        self.bind(text=self._on_text_changed)
+        self.bind(focus=self._on_focus_changed)
+        self.bind(on_text_validate=self._on_default_validate)
+
+    def _on_focus_changed(self, _instance, focused: bool) -> None:
+        if not focused:
+            self._dropdown.dismiss()
+
+    def _on_text_changed(self, _instance, value: str) -> None:
+        query = value.strip()
+        if not query:
+            self._results = []
+            self._dropdown.dismiss()
+            return
+        suggestions = self._suggestions_provider()
+        self._results = [s for s in suggestions if query in s and s != query][:8]
+        self._highlighted_index = 0 if self._results else -1
+        self._rebuild_dropdown()
+        if self._results and self.focus:
+            if self._dropdown.attach_to is None:
+                self._dropdown.open(self)
+        else:
+            self._dropdown.dismiss()
+
+    def _rebuild_dropdown(self) -> None:
+        self._dropdown.clear_widgets()
+        for i, text in enumerate(self._results):
+            self._dropdown.add_widget(
+                _SuggestionRow(
+                    suggestion_text=text,
+                    on_choose=self._select,
+                    label_text=shape(text),
+                    highlighted=(i == self._highlighted_index),
+                )
+            )
+
+    def _move_highlight(self, delta: int) -> None:
+        if not self._results:
+            return
+        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
+        self._rebuild_dropdown()
+
+    def _select(self, text: str) -> None:
+        self.set_value(text)
+        self._dropdown.dismiss()
+        self._results = []
+        if self.focus_next:
+            self.focus_next.focus = True
+
+    def _on_default_validate(self, *_args) -> None:
+        if self.focus_next:
+            self.focus_next.focus = True
+
+    def keyboard_on_key_down(self, window, keycode, text, modifiers):
+        key = keycode[0]
+        if key == 273 and self._dropdown.attach_to is not None:  # بالا
+            self._move_highlight(-1)
+            return True
+        if key == 274 and self._dropdown.attach_to is not None:  # پایین
+            self._move_highlight(1)
+            return True
+        if key in (13, 271) and self._dropdown.attach_to is not None and self._results:
+            self._select(self._results[self._highlighted_index])
+            return True
+        if key == 27 and self._dropdown.attach_to is not None:  # Escape فقط منو را می‌بندد
+            self._dropdown.dismiss()
+            return True
+        return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
+
 class JournalEntryLineRow(MDBoxLayout):
-    def __init__(self, account_options, on_change, on_remove, on_validate, **kwargs):
+    def __init__(
+        self, account_options, on_change, on_remove, on_validate, description_suggestions, on_amount_text, **kwargs
+    ):
         super().__init__(**kwargs)
         self._on_change = on_change
         self._on_remove = on_remove
         self._on_validate = on_validate
+        self._on_amount_text = on_amount_text
         self.account_field = AccountSearchField(account_options=account_options, on_select=self._account_selected)
         self.ids.account_slot.add_widget(self.account_field)
-        self.account_field.focus_next = self.ids.description_field
-        self.ids.description_field.focus_previous = self.account_field
+
+        self.description_field = LineDescriptionField(suggestions_provider=description_suggestions)
+        self.ids.description_slot.add_widget(self.description_field)
+
+        self.account_field.focus_next = self.description_field
+        self.description_field.focus_previous = self.account_field
+        self.description_field.focus_next = self.ids.debit_field
+        self.ids.debit_field.focus_previous = self.description_field
 
     @property
     def account_id(self) -> int | None:
@@ -197,18 +307,38 @@ class JournalEntryLineRow(MDBoxLayout):
         self.account_field.set_selected(account_row)
 
     def _account_selected(self) -> None:
+        # طبق درخواستِ صریح: بعدِ انتخابِ حساب، فوکوس به فیلدِ شرحِ همین
+        # ردیف می‌رود (نه مستقیم به بدهکار).
         self._on_change()
-        self.ids.debit_field.focus = True
+        self.description_field.focus = True
 
     def on_debit_changed(self) -> None:
         if self.ids.debit_field.text.strip():
             self.ids.credit_field.text = ""
         self._on_change()
+        self._on_amount_text(self.ids.debit_field.text)
 
     def on_credit_changed(self) -> None:
         if self.ids.credit_field.text.strip():
             self.ids.debit_field.text = ""
         self._on_change()
+        self._on_amount_text(self.ids.credit_field.text)
+
+    def on_amount_focus(self, field) -> None:
+        # طبق درخواستِ صریح، «لایو» یعنی همان لحظه‌ی رفتن روی فیلد هم مبلغِ
+        # موجود (نه فقط تایپِ تازه) به حروف نمایش داده شود.
+        if field.focus:
+            self._on_amount_text(field.text)
+
+    def on_debit_validate(self) -> None:
+        # طبق درخواستِ صریح: اگر بدهکار مقداری غیرصفر دارد، Enter به ردیفِ
+        # بعد می‌رود؛ اگر خالی/صفر است (این ردیف قرار است بستانکار باشد)
+        # Enter فقط به فیلدِ بستانکارِ همین ردیف می‌رود.
+        raw = numerals.to_ascii_digits(self.ids.debit_field.text).strip()
+        if raw and raw != "0":
+            self.request_next()
+        else:
+            self.ids.credit_field.focus = True
 
     def request_next(self) -> None:
         self._on_validate(self)
@@ -249,15 +379,24 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._account_options: list[coa_service.AccountRow] = []
+        self._description_suggestions: list[str] = []
         self._rows: list[JournalEntryLineRow] = []
         self._editing_entry_id: int | None = None
         self._delete_dialog: MDDialog | None = None
         self._field_labels: dict[str, str] = {}
+        self._form_initialized = False
 
     def on_pre_enter(self, *args):
         self._load_accounts()
         self.apply_field_labels()
-        self._reset_form()
+        # طبق درخواستِ صریح: با رفتن به فرمِ دیگر و برگشتن به این صفحه،
+        # اطلاعاتِ نیمه‌واردشده نباید پاک شود — پس _reset_form() فقط بارِ
+        # اولی که این صفحه باز می‌شود صدا زده می‌شود، نه هر بار. (بازنشانیِ
+        # آگاهانه/عمدی همچنان از طریق cancel_edit()/Escape یا بعدِ ثبتِ
+        # موفق ممکن است.)
+        if not self._form_initialized:
+            self._reset_form()
+            self._form_initialized = True
         self._set_status("")
         self.refresh_entries()
         self.bind_shortcuts()
@@ -274,7 +413,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         if not self._field_labels:
             return
         row.account_field.hint_text = shape(self._field_labels["line_account"])
-        row.ids.description_field.hint_text = shape(self._field_labels["line_description"])
+        row.description_field.hint_text = shape(self._field_labels["line_description"])
         row.ids.debit_field.hint_text = shape(self._field_labels["line_debit"])
         row.ids.credit_field.hint_text = shape(self._field_labels["line_credit"])
 
@@ -299,8 +438,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
     def _load_accounts(self) -> None:
         if session.current_company is None:
             self._account_options = []
+            self._description_suggestions = []
         else:
             self._account_options = coa_service.list_postable_accounts(session.current_company.company_id)
+            self._description_suggestions = je_service.list_recent_line_descriptions(session.current_company.company_id)
 
     def _reset_form(self) -> None:
         # توجه: پیام وضعیت (مثلاً «سند ثبت شد») را عمداً اینجا پاک نمی‌کنیم؛
@@ -311,6 +452,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self._rows = []
         self.ids.date_field.text = numerals.format_jalali_date(datetime.date.today())
         self.ids.description_field.text = ""
+        self.ids.amount_words_label.text = ""
         self.ids.form_title.text = shape("صدور سند حسابداری")
         self.ids.save_button.text = shape("ثبت سند")
         self.ids.cancel_edit_button.opacity = 0
@@ -320,9 +462,22 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self.add_line()
         self.add_line()
         self._recalculate()
-        # طبق درخواستِ صریح: وقتی فرمِ سند بارگذاری می‌شود، فوکوس روی
-        # فیلدِ جستجوی کدِ حسابِ ردیفِ اول باشد.
-        self._rows[0].account_field.focus = True
+        # طبق درخواستِ صریح: نقطه‌ی شروعِ کیبوردِ سند تاریخ است — با Enter
+        # به شرحِ سند، بعد به کدِ حسابِ ردیفِ اول می‌رود (زنجیره‌ی focus_next).
+        self.ids.date_field.focus = True
+
+    def update_amount_words(self, raw_text: str) -> None:
+        # طبق درخواستِ صریح: مبلغِ واردشده به‌صورتِ زنده زیرِ فرم به حروف
+        # نمایش داده می‌شود؛ اگر مقدار خالی/صفر/نامعتبر باشد برچسب خالی می‌شود.
+        try:
+            value = numerals.parse_decimal(raw_text)
+        except ValueError:
+            self.ids.amount_words_label.text = ""
+            return
+        if not value:
+            self.ids.amount_words_label.text = ""
+            return
+        self.ids.amount_words_label.text = shape(numerals.amount_to_words(value))
 
     def add_line(self) -> None:
         row = JournalEntryLineRow(
@@ -330,6 +485,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             on_change=self._recalculate,
             on_remove=self._remove_line,
             on_validate=self._focus_after_row,
+            description_suggestions=lambda: self._description_suggestions,
+            on_amount_text=self.update_amount_words,
         )
         self._rows.append(row)
         self.ids.lines_box.add_widget(row)
@@ -406,7 +563,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             lines.append(
                 je_service.LineInput(
                     account_id=row.account_id,
-                    description=row.ids.description_field.value.strip(),
+                    description=row.description_field.value.strip(),
                     debit=debit,
                     credit=credit,
                 )
@@ -481,7 +638,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             account = accounts_by_id.get(ln.account_id)
             if account is not None:
                 row.set_account(account)
-            row.ids.description_field.set_value(ln.description)
+            row.description_field.set_value(ln.description)
             row.ids.debit_field.text = str(ln.debit) if ln.debit else ""
             row.ids.credit_field.text = str(ln.credit) if ln.credit else ""
         if not lines:

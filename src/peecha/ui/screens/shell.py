@@ -88,6 +88,8 @@ class ShellScreen(MDScreen):
         self._fiscal_year_options: list[fiscal_years_service.FiscalYearRow] = []
         self._language_options: list[languages_service.LanguageRow] = []
         self._menu: MDDropdownMenu | None = None
+        self._group_children: dict[str, list] = {}
+        self._group_labels: dict[str, object] = {}
 
     def on_pre_enter(self, *args):
         if not self.ids.content_manager.screen_names:
@@ -125,17 +127,59 @@ class ShellScreen(MDScreen):
     def _build_nav_items(self) -> None:
         from peecha.ui.widgets import PNavGroupLabel, PNavItem  # noqa: PLC0415
 
+        self._group_children: dict[str, list] = {}
+        self._group_labels: dict[str, PNavGroupLabel] = {}
+
         for item in NAV_ITEMS:
             if "children" in item:
-                self.ids.nav_list.add_widget(PNavGroupLabel(icon=item["icon"], text=shape(item["label"])))
+                group_label = PNavGroupLabel(icon=item["icon"], text=shape(item["label"]), expanded=False)
+                group_label.bind(on_release=lambda _inst, code=item["code"]: self._toggle_group(code))
+                self.ids.nav_list.add_widget(group_label)
+                self._group_labels[item["code"]] = group_label
+
+                children_widgets = []
                 for child in item["children"]:
                     nav_item = PNavItem(icon=child["icon"], text=shape(child["label"]), sub=True)
                     nav_item.bind(on_release=lambda _inst, code=child["code"]: self._select_nav(code))
                     self.ids.nav_list.add_widget(nav_item)
+                    children_widgets.append(nav_item)
+                self._group_children[item["code"]] = children_widgets
+                self._set_group_expanded(item["code"], expanded=False)
             else:
                 nav_item = PNavItem(icon=item["icon"], text=shape(item["label"]))
                 nav_item.bind(on_release=lambda _inst, code=item["code"]: self._select_nav(code))
                 self.ids.nav_list.add_widget(nav_item)
+
+    def _set_group_expanded(self, group_code: str, *, expanded: bool) -> None:
+        label = self._group_labels.get(group_code)
+        if label is not None:
+            label.expanded = expanded
+        for nav_item in self._group_children.get(group_code, []):
+            if expanded:
+                nav_item.disabled = False
+                nav_item.opacity = 1
+                nav_item.size_hint_y = None
+                nav_item.height = "40dp" if nav_item.sub else "44dp"
+            else:
+                nav_item.disabled = True
+                nav_item.opacity = 0
+                nav_item.size_hint_y = None
+                nav_item.height = 0
+
+    def _toggle_group(self, group_code: str) -> None:
+        label = self._group_labels.get(group_code)
+        if label is None:
+            return
+        self._set_group_expanded(group_code, expanded=not label.expanded)
+
+    def _expand_group_containing(self, code: str) -> None:
+        """گروهی که این کد در آن است را باز می‌کند — مثلاً وقتی مستقیم به
+        زیرآیتمِ یک گروهِ جمع‌شده رفته می‌شود (نه از طریق کلیکِ خودِ کاربر
+        روی سرآیتمِ گروه)، تا زیرآیتمِ فعال از دیدِ کاربر پنهان نماند."""
+        for item in NAV_ITEMS:
+            if "children" in item and any(child["code"] == code for child in item["children"]):
+                self._set_group_expanded(item["code"], expanded=True)
+                return
 
     def _select_nav(self, code: str) -> None:
         content: MDScreenManager = self.ids.content_manager
@@ -151,6 +195,7 @@ class ShellScreen(MDScreen):
         clickable_widgets = [w for w in self.ids.nav_list.children[::-1] if isinstance(w, PNavItem)]
         for widget, nav_item in zip(flat_items, clickable_widgets, strict=True):
             nav_item.selected = widget["code"] == code
+        self._expand_group_containing(code)
 
         target_screen_name = item["screen"] or "placeholder"
         if target_screen_name == "placeholder":

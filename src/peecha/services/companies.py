@@ -35,6 +35,7 @@ class CompanyRow:
 class CurrencyOption:
     currency_id: int
     iso_code: str
+    decimal_places: int
 
 
 def get_company_model(company_id: int) -> Company | None:
@@ -48,7 +49,21 @@ def get_company_model(company_id: int) -> Company | None:
 def list_currencies() -> list[CurrencyOption]:
     with new_session() as session:
         rows = session.scalars(select(Currency).where(Currency.is_active).order_by(Currency.iso_code)).all()
-        return [CurrencyOption(currency_id=c.currency_id, iso_code=c.iso_code) for c in rows]
+        return [
+            CurrencyOption(currency_id=c.currency_id, iso_code=c.iso_code, decimal_places=c.decimal_places)
+            for c in rows
+        ]
+
+
+def update_currency_decimal_places(currency_id: int, decimal_places: int) -> None:
+    if decimal_places < 0 or decimal_places > 6:
+        raise ValueError("رقم اعشار باید بین ۰ تا ۶ باشد.")
+    with new_session() as session:
+        currency = session.get(Currency, currency_id)
+        if currency is None:
+            raise ValueError("ارز نامعتبر است.")
+        currency.decimal_places = decimal_places
+        session.commit()
 
 
 def list_companies() -> list[CompanyRow]:

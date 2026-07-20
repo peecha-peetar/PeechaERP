@@ -57,3 +57,86 @@ def parse_jalali_date(text: str) -> datetime.date:
 
 def format_jalali_date(value: datetime.date) -> str:
     return to_persian_digits(jdatetime.date.fromgregorian(date=value).strftime("%Y/%m/%d"))
+
+
+_ONES_WORDS = ["", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه"]
+_TEENS_WORDS = [
+    "ده", "یازده", "دوازده", "سیزده", "چهارده", "پانزده", "شانزده", "هفده", "هجده", "نوزده",
+]
+_TENS_WORDS = ["", "", "بیست", "سی", "چهل", "پنجاه", "شصت", "هفتاد", "هشتاد", "نود"]
+_HUNDREDS_WORDS = [
+    "", "صد", "دویست", "سیصد", "چهارصد", "پانصد", "ششصد", "هفتصد", "هشتصد", "نهصد",
+]
+_SCALE_WORDS = ["", "هزار", "میلیون", "میلیارد", "تریلیون", "کوادریلیون"]
+
+
+def _three_digit_group_to_words(n: int) -> str:
+    parts = []
+    hundreds, remainder = divmod(n, 100)
+    if hundreds:
+        parts.append(_HUNDREDS_WORDS[hundreds])
+    if 10 <= remainder <= 19:
+        parts.append(_TEENS_WORDS[remainder - 10])
+    else:
+        tens, ones = divmod(remainder, 10)
+        if tens:
+            parts.append(_TENS_WORDS[tens])
+        if ones:
+            parts.append(_ONES_WORDS[ones])
+    return " و ".join(parts)
+
+
+def number_to_words(n: int) -> str:
+    """عددِ صحیحِ غیرمنفی را به حروفِ فارسی تبدیل می‌کند (مثلاً ۱۲۵۰۰۰ →
+    «صد و بیست و پنج هزار»)."""
+    if n < 0:
+        return "منفی " + number_to_words(-n)
+    if n == 0:
+        return "صفر"
+
+    groups: list[int] = []
+    remaining = n
+    while remaining > 0:
+        groups.append(remaining % 1000)
+        remaining //= 1000
+    if len(groups) > len(_SCALE_WORDS):
+        # عددی بزرگ‌تر از بزرگ‌ترین مقیاسِ پشتیبانی‌شده — به رقم برمی‌گردیم
+        # تا خطا ندهد (این حجم مبلغ در عمل پیش نمی‌آید).
+        return to_persian_digits(str(n))
+
+    parts = []
+    for index in reversed(range(len(groups))):
+        group_value = groups[index]
+        if group_value == 0:
+            continue
+        words = _three_digit_group_to_words(group_value)
+        if index > 0:
+            words += " " + _SCALE_WORDS[index]
+        parts.append(words)
+    return " و ".join(parts)
+
+
+def amount_to_words(value: decimal.Decimal | int, *, unit: str = "ریال") -> str:
+    """مبلغ به حروف — برای نمایشِ زنده‌ی زیرِ فیلدهای مبلغ (طبق درخواستِ
+    صریح). بخشِ اعشاری (اگر باشد) جداگانه به حروف اضافه می‌شود."""
+    value = decimal.Decimal(value)
+    if value == 0:
+        return f"{number_to_words(0)} {unit}".strip()
+    is_negative = value < 0
+    value = abs(value)
+    integer_part = int(value)
+    fractional_part = value - integer_part
+
+    words = number_to_words(integer_part)
+    if fractional_part:
+        # بخشِ اعشاری را به‌صورتِ عددِ صحیحِ سمتِ راستِ ممیز به حروف
+        # می‌بریم (مثلاً ۱۲۵۰.۵۰ → «... و پنجاه صدم»).
+        scale = fractional_part.as_tuple().exponent
+        digits_after_point = -scale if scale < 0 else 0
+        fractional_int = int((fractional_part * (10**digits_after_point)).to_integral_value())
+        if fractional_int:
+            denom_words = {1: "دهم", 2: "صدم", 3: "هزارم"}.get(digits_after_point, "")
+            words += f" و {number_to_words(fractional_int)} {denom_words}".rstrip()
+
+    result = f"{words} {unit}".strip()
+    return f"منفی {result}" if is_negative else result

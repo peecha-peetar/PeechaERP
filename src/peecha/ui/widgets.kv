@@ -234,6 +234,15 @@
     padding: ["12dp", "0dp"]
     spacing: "8dp"
 
+    MDIcon:
+        # شِوروُنِ جمع/باز — طبق قراردادِ چیدمانِ افقیِ RTL (اول‌اعلام‌شده =
+        # سمتِ چپ)، این اولین فرزند است تا کنارِ لبه‌ی چپِ ردیف بنشیند.
+        icon: "chevron-down" if root.expanded else "chevron-left"
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        size_hint_x: None
+        width: self.texture_size[0]
+
     PLabel:
         text: root.text
         theme_text_color: "Custom"
