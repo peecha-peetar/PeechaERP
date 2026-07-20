@@ -1,0 +1,27 @@
+# اجرای مترجمِ زنده (LibreTranslate) به‌صورتِ محلی — بدونِ نیاز به کلیدِ API
+# و بدونِ محدودیتِ سرورِ عمومی. راهنمای کامل: docs/self-hosted-translation-service.md
+#
+# اجرا:   docker compose -f docker-compose.libretranslate.yml up -d
+# توقف:   docker compose -f docker-compose.libretranslate.yml down
+#
+# بعد از بالا آمدن، در برنامه (صفحه‌ی «ترجمه‌ها»)، «آدرسِ سرویسِ ترجمه» را
+# روی http://localhost:5000 بگذارید و فیلدِ «کلیدِ API» را خالی بگذارید.
+
+services:
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: peecha-libretranslate
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # فقط زبان‌های موردنیاز بارگذاری شوند (نه همه‌ی ~۴۰ زبان — چند گیگابایت
+      # صرفه‌جویی در دانلود/دیسک). فارسی (fa) همیشه لازم است چون زبانِ منبعِ
+      # ماست؛ بقیه را بر اساسِ زبان‌هایی که در برنامه تعریف می‌کنید اضافه/کم کنید.
+      - LT_LOAD_ONLY=en,fa,ar,fr,de,tr
+      - LT_DISABLE_WEB_UI=false
+    volumes:
+      - libretranslate-models:/home/libretranslate/.local
+
+volumes:
+  libretranslate-models:
