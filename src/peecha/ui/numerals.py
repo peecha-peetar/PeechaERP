@@ -59,6 +59,13 @@ def format_jalali_date(value: datetime.date) -> str:
     return to_persian_digits(jdatetime.date.fromgregorian(date=value).strftime("%Y/%m/%d"))
 
 
+def format_jalali_datetime(value: datetime.datetime) -> str:
+    """تاریخ+ساعتِ محلی — برای ردیف‌های ردِ حسابرسی که به‌ثانیه اهمیت دارند."""
+    local_value = value.astimezone() if value.tzinfo is not None else value
+    date_part = jdatetime.date.fromgregorian(date=local_value.date()).strftime("%Y/%m/%d")
+    return to_persian_digits(f"{date_part} {local_value.strftime('%H:%M')}")
+
+
 _ONES_WORDS = ["", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه"]
 _TEENS_WORDS = [
     "ده", "یازده", "دوازده", "سیزده", "چهارده", "پانزده", "شانزده", "هفده", "هجده", "نوزده",

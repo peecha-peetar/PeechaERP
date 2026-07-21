@@ -349,6 +349,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     account_type_code=self._account_type_code,
                     is_postable=self.ids.is_postable_checkbox.active,
                     language_id=language_id,
+                    changed_by_user_id=session.current_user.user_id if session.current_user else None,
                 )
                 dimensions_service.set_account_dimension_types(
                     account_id=self._editing_account_id,
@@ -379,6 +380,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                 is_postable=self.ids.is_postable_checkbox.active,
                 language_id=language_id,
                 parent_account_id=self._parent_account_id,
+                changed_by_user_id=session.current_user.user_id if session.current_user else None,
             )
             dimensions_service.set_account_dimension_types(
                 account_id=account.account_id,
@@ -424,7 +426,11 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         if session.current_company is None:
             return
         try:
-            coa_service.delete_account(account_id, session.current_company.company_id)
+            coa_service.delete_account(
+                account_id,
+                session.current_company.company_id,
+                changed_by_user_id=session.current_user.user_id if session.current_user else None,
+            )
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
             self._set_status(tr("خطا: {}").format(exc))
             return

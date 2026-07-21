@@ -869,6 +869,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     document_date=document_date,
                     description=self.ids.description_field.value.strip(),
                     lines=lines,
+                    changed_by_user_id=session.current_user.user_id,
                 )
                 message = "سند به‌روزرسانی شد."
             else:
@@ -978,7 +979,11 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         if session.current_company is None:
             return
         try:
-            je_service.delete_journal_entry(journal_entry_id, session.current_company.company_id)
+            je_service.delete_journal_entry(
+                journal_entry_id,
+                session.current_company.company_id,
+                changed_by_user_id=session.current_user.user_id if session.current_user else None,
+            )
         except Exception as exc:  # noqa: BLE001
             self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return

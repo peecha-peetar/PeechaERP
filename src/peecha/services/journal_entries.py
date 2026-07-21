@@ -32,8 +32,50 @@ from peecha.db.models.accounting import (
     JournalEntryType,
 )
 from peecha.db.models.core import Company, CompanyCurrency
+from peecha.services import audit as audit_service
 
 _BASE_QUANT = decimal.Decimal("0.01")
+
+
+def _lines_snapshot(lines) -> list[dict]:
+    """نسخه‌ی قابلِ‌سریالایز (JSON) از ردیف‌های سند — برایِ ردِ حسابرسی."""
+    return [
+        {
+            "account_id": ln.account_id,
+            "description": ln.description,
+            "debit": str(ln.debit),
+            "credit": str(ln.credit),
+            "currency_id": ln.currency_id,
+            "exchange_rate": str(ln.exchange_rate) if ln.exchange_rate is not None else None,
+        }
+        for ln in lines
+    ]
+
+
+def _snapshot_existing_entry(session, journal_entry_id: int) -> dict:
+    """نسخه‌ی قابلِ‌سریالایزِ سند و ردیف‌هایش، خوانده‌شده از همان
+    session — برایِ ثبتِ «قبل» در ردِ حسابرسیِ ویرایش/حذف."""
+    entry = session.get(JournalEntry, journal_entry_id)
+    lines = session.scalars(
+        select(JournalEntryLine)
+        .where(JournalEntryLine.journal_entry_id == journal_entry_id)
+        .order_by(JournalEntryLine.line_no)
+    ).all()
+    return {
+        "document_date": entry.document_date.isoformat(),
+        "description": entry.description,
+        "lines": [
+            {
+                "account_id": ln.account_id,
+                "description": ln.description,
+                "debit": str(ln.debit_amount_fc),
+                "credit": str(ln.credit_amount_fc),
+                "currency_id": ln.currency_id,
+                "exchange_rate": str(ln.exchange_rate),
+            }
+            for ln in lines
+        ],
+    }
 
 
 @dataclass
@@ -256,6 +298,22 @@ def create_journal_entry(
                     )
                 )
 
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=created_by_user_id,
+            entity_type="JournalEntry",
+            entity_id=entry.journal_entry_id,
+            action="CREATE",
+            changes={
+                "after": {
+                    "document_date": document_date.isoformat(),
+                    "description": description,
+                    "lines": _lines_snapshot([r.line for r in resolved_lines]),
+                }
+            },
+        )
+
         session.commit()
         return JournalEntryResult(journal_entry_id=entry.journal_entry_id, temporary_no=entry.temporary_no)
 
@@ -352,6 +410,7 @@ def update_journal_entry(
     document_date: datetime.date,
     description: str,
     lines: list[LineInput],
+    changed_by_user_id: int | None = None,
 ) -> None:
     real_lines = _validate_lines(lines)
 
@@ -367,6 +426,8 @@ def update_journal_entry(
         if company is None:
             raise ValueError("شرکت نامعتبر است.")
         resolved_lines = _resolve_lines(session, company, real_lines)
+
+        before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 
         entry.document_date = document_date
         entry.description = description or None
@@ -404,10 +465,28 @@ def update_journal_entry(
                         detail_account_id=detail_account_id,
                     )
                 )
+
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=changed_by_user_id,
+            entity_type="JournalEntry",
+            entity_id=journal_entry_id,
+            action="UPDATE",
+            changes={
+                "before": before_snapshot,
+                "after": {
+                    "document_date": document_date.isoformat(),
+                    "description": description,
+                    "lines": _lines_snapshot([r.line for r in resolved_lines]),
+                },
+            },
+        )
+
         session.commit()
 
 
-def delete_journal_entry(journal_entry_id: int, company_id: int) -> None:
+def delete_journal_entry(journal_entry_id: int, company_id: int, changed_by_user_id: int | None = None) -> None:
     with new_session() as session:
         entry = session.get(JournalEntry, journal_entry_id)
         if entry is None or entry.company_id != company_id:
@@ -415,6 +494,8 @@ def delete_journal_entry(journal_entry_id: int, company_id: int) -> None:
         status = session.get(JournalEntryStatus, entry.status_id)
         if status is None or status.code != "TEMPORARY":
             raise ValueError("فقط سندهای با وضعیت موقت قابل حذف‌اند.")
+
+        before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 
         line_ids = list(
             session.scalars(
@@ -427,4 +508,15 @@ def delete_journal_entry(journal_entry_id: int, company_id: int) -> None:
             )
         session.execute(JournalEntryLine.__table__.delete().where(JournalEntryLine.journal_entry_id == journal_entry_id))
         session.delete(entry)
+
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=changed_by_user_id,
+            entity_type="JournalEntry",
+            entity_id=journal_entry_id,
+            action="DELETE",
+            changes={"before": before_snapshot},
+        )
+
         session.commit()

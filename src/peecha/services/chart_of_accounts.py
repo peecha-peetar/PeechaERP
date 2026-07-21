@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import AccountCategory, AccountNature, AccountType, ChartOfAccount, JournalEntryLine
 from peecha.db.models.core import Translation
+from peecha.services import audit as audit_service
 
 MAX_ACCOUNT_LEVEL = 3
 
@@ -84,6 +85,7 @@ def create_account(
     is_postable: bool,
     language_id: int,
     parent_account_id: int | None = None,
+    changed_by_user_id: int | None = None,
 ) -> ChartOfAccount:
     with new_session() as session:
         nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
@@ -127,6 +129,26 @@ def create_account(
                 value=name,
             )
         )
+
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=changed_by_user_id,
+            entity_type="ChartOfAccount",
+            entity_id=account.account_id,
+            action="CREATE",
+            changes={
+                "after": {
+                    "full_code": full_code,
+                    "name": name,
+                    "nature_code": nature_code,
+                    "category_code": category_code,
+                    "account_type_code": account_type_code,
+                    "is_postable": is_postable,
+                }
+            },
+        )
+
         session.commit()
         session.refresh(account)
         session.expunge(account)
@@ -142,6 +164,7 @@ def update_account(
     account_type_code: str,
     is_postable: bool,
     language_id: int,
+    changed_by_user_id: int | None = None,
 ) -> ChartOfAccount:
     """ویرایشِ حساب — عمداً فقط نام/ماهیت/دسته/نوع/قابل‌ثبت‌بودن قابل‌تغییرند؛
     کد و والد (که full_code و سطحِ کل زیردرخت را تعیین می‌کنند) در این
@@ -157,6 +180,9 @@ def update_account(
         if nature is None or category is None or account_type is None:
             raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
 
+        before_nature_id, before_category_id = account.nature_id, account.category_id
+        before_account_type_id, before_is_postable = account.account_type_id, account.is_postable
+
         account.nature_id = nature.nature_id
         account.category_id = category.category_id
         account.account_type_id = account_type.account_type_id
@@ -170,6 +196,7 @@ def update_account(
                 Translation.language_id == language_id,
             )
         )
+        before_name = translation.value if translation is not None else None
         if translation is None:
             session.add(
                 Translation(
@@ -183,13 +210,38 @@ def update_account(
         else:
             translation.value = name
 
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=changed_by_user_id,
+            entity_type="ChartOfAccount",
+            entity_id=account_id,
+            action="UPDATE",
+            changes={
+                "before": {
+                    "name": before_name,
+                    "nature_id": before_nature_id,
+                    "category_id": before_category_id,
+                    "account_type_id": before_account_type_id,
+                    "is_postable": before_is_postable,
+                },
+                "after": {
+                    "name": name,
+                    "nature_code": nature_code,
+                    "category_code": category_code,
+                    "account_type_code": account_type_code,
+                    "is_postable": is_postable,
+                },
+            },
+        )
+
         session.commit()
         session.refresh(account)
         session.expunge(account)
         return account
 
 
-def delete_account(account_id: int, company_id: int) -> None:
+def delete_account(account_id: int, company_id: int, changed_by_user_id: int | None = None) -> None:
     with new_session() as session:
         account = session.get(ChartOfAccount, account_id)
         if account is None or account.company_id != company_id:
@@ -206,6 +258,16 @@ def delete_account(account_id: int, company_id: int) -> None:
         )
         if line_count:
             raise ValueError("این حساب در سندهای حسابداری استفاده شده؛ قابل حذف نیست.")
+
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=changed_by_user_id,
+            entity_type="ChartOfAccount",
+            entity_id=account_id,
+            action="DELETE",
+            changes={"before": {"full_code": account.full_code, "is_postable": account.is_postable}},
+        )
 
         session.execute(
             Translation.__table__.delete().where(
