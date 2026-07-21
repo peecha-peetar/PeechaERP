@@ -13,7 +13,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha.config import DatabaseConfig, load_database_config, save_database_config, test_connection
 from peecha.db.base import reset_engine
-from peecha.db.schema_bootstrap import initialize_schema, is_initialized
+from peecha.db.schema_bootstrap import apply_pending_schema_files
 from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
@@ -74,11 +74,11 @@ class ConnectionSettingsScreen(KeyboardShortcutMixin, MDScreen):
 
         engine = create_engine(config.sqlalchemy_url, future=True)
         try:
-            if is_initialized(engine):
+            applied = apply_pending_schema_files(engine)
+            if applied:
+                self._set_status(tr("جدول‌های دیتابیس با موفقیت ساخته/به‌روزرسانی شدند."), ok=True)
+            else:
                 self._set_status(tr("جدول‌ها از قبل ساخته شده‌اند؛ کاری لازم نبود."), ok=True)
-                return
-            initialize_schema(engine)
-            self._set_status(tr("جدول‌های دیتابیس با موفقیت ساخته شدند."), ok=True)
         except SQLAlchemyError as exc:
             self._set_status(f"ساخت جدول‌ها ناموفق بود: {exc.__cause__ or exc}", ok=False)
         finally:

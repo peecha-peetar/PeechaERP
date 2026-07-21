@@ -10,8 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from peecha import session
-from peecha.db.base import new_session
+from peecha.db.base import get_engine, new_session
 from peecha.db.models.security import UserCompany
+from peecha.db.schema_bootstrap import apply_pending_schema_files
 from peecha.services.auth import authenticate, has_any_user
 from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
@@ -29,6 +30,11 @@ class LoginScreen(KeyboardShortcutMixin, MDScreen):
         # فوکوس خودکار روی اولین فیلد: کاربر بدون لمس ماوس هم بتواند تایپ را شروع کند
         self.ids.username_field.focus = True
         try:
+            # اگر این دیتابیس با نسخه‌ی قدیمی‌تری از برنامه ساخته شده و
+            # جدولِ تازه‌ای (مثلاً audit.activity_log) بعداً به schema
+            # اضافه شده، همین‌جا خودکار ساخته می‌شود — بدونِ نیاز به این‌که
+            # کاربر دستی به «تنظیماتِ اتصال» برود و «ساختِ جدول‌ها» را بزند.
+            apply_pending_schema_files(get_engine())
             no_users = not has_any_user()
         except SQLAlchemyError:
             self.ids.bootstrap_button.opacity = 0
