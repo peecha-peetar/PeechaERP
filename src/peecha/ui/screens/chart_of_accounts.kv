@@ -3,6 +3,25 @@
 #:import theme peecha.ui.theme
 #:import dp kivy.metrics.dp
 
+# ردیفِ چک‌باکسِ یک نوع‌بُعدِ تفصیلی در فرمِ حساب — طبقِ قراردادِ RTL همه‌جای
+# این فایل، چک‌باکس (اولین چیز از راست، چون فرزندِ اول‌اعلام‌شده چپ‌ترین
+# می‌شود) قبل از لیبل اعلام می‌شود، مثلِ <_RoleUserRow> در roles.kv.
+<_DimensionCheckRow>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    spacing: "8dp"
+
+    MDCheckbox:
+        id: check
+        size_hint: None, None
+        size: "24dp", "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    PLabel:
+        text: root.label_text
+        valign: "middle"
+
 # ردیفِ جدولِ کدینگ حسابداری — چهار ستون: کد | نام حساب | سطح | وضعیت +
 # دو آیکونِ ویرایش/حذف. عرضِ ستون‌های نسبی اینجا و در هدر (پایین‌تر در
 # <ChartOfAccountsScreen>) باید دقیقاً یکی باشد وگرنه ستون‌های ردیف زیر
@@ -218,6 +237,28 @@
                 PLabel:
                     text: ((app.ui_language_code or True) and shape(tr("قابل ثبت سند (Postable)")))
                     valign: "middle"
+
+            BoxLayout:
+                id: dimension_types_section
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                spacing: "4dp"
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("ابعادِ تفصیلیِ الزامی")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    size_hint_y: None
+                    height: self.texture_size[1]
+
+                BoxLayout:
+                    id: dimension_types_box
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "2dp"
 
             Widget:
 

@@ -26,17 +26,19 @@ from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.dialog import MDDialog
+from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_labels as field_labels_service
 from peecha.services import journal_entries as je_service
 from peecha.ui import numerals, theme
 from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
-from peecha.ui.widgets import PTextField
+from peecha.ui.widgets import PSelectField, PTextField, open_rtl_dropdown
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "journal_entry.kv")
 Builder.load_file(_KV_PATH)
@@ -282,7 +284,62 @@ class LineDescriptionField(PTextField):
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
 
 
+class _LineDimensionsContent(MDBoxLayout):
+    """محتوایِ دیالوگِ انتخابِ ابعادِ تفصیلیِ یک ردیف — برای هر نوع‌بُعدِ
+    الزامیِ حسابِ انتخاب‌شده، یک PSelectField می‌سازد که با کلیک، منویِ
+    حساب‌های تفصیلیِ فعالِ همان نوع را (open_rtl_dropdown) باز می‌کند."""
+
+    def __init__(self, required_dimensions: list[dimensions_service.RequiredDimension], initial_values: dict[int, int], **kwargs):
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("spacing", dp(12))
+        super().__init__(**kwargs)
+        self.bind(minimum_height=self.setter("height"))
+        self.values: dict[int, int] = dict(initial_values)
+        self._menus: dict[int, MDDropdownMenu] = {}
+        for dim in required_dimensions:
+            row = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(66), spacing=dp(4))
+            row.add_widget(
+                Factory.PLabel(
+                    text=shape(dim.code), font_style="Caption", size_hint_y=None, height=dp(20), valign="middle"
+                )
+            )
+            select = PSelectField(text=self._label_for(dim, initial_values.get(dim.dimension_type_id)))
+            select.bind(on_release=lambda _inst, d=dim, s=select: self._open_menu(d, s))
+            row.add_widget(select)
+            self.add_widget(row)
+
+    def _label_for(self, dim: dimensions_service.RequiredDimension, detail_account_id: int | None) -> str:
+        if detail_account_id is not None:
+            match = next((d for d in dim.detail_accounts if d.detail_account_id == detail_account_id), None)
+            if match is not None:
+                return shape(match.code)
+        return shape(tr("— انتخاب کنید —"))
+
+    def _open_menu(self, dim: dimensions_service.RequiredDimension, select_widget: PSelectField) -> None:
+        items = [
+            {
+                "text": shape(d.code),
+                "on_release": lambda detail_id=d.detail_account_id, code=d.code: self._choose(
+                    dim.dimension_type_id, detail_id, code, select_widget
+                ),
+            }
+            for d in dim.detail_accounts
+        ]
+        self._menus[dim.dimension_type_id] = open_rtl_dropdown(select_widget, items, width_mult=3)
+
+    def _choose(self, dimension_type_id: int, detail_account_id: int, code: str, select_widget: PSelectField) -> None:
+        menu = self._menus.get(dimension_type_id)
+        if menu is not None:
+            menu.dismiss()
+        self.values[dimension_type_id] = detail_account_id
+        select_widget.text = shape(code)
+
+
 class JournalEntryLineRow(MDBoxLayout):
+    has_required_dims = BooleanProperty(False)
+    dims_complete = BooleanProperty(True)
+
     def __init__(
         self, account_options, on_change, on_remove, on_validate, description_suggestions, on_amount_text, **kwargs
     ):
@@ -302,6 +359,10 @@ class JournalEntryLineRow(MDBoxLayout):
         self.description_field.focus_next = self.ids.debit_field
         self.ids.debit_field.focus_previous = self.description_field
 
+        self.dimension_values: dict[int, int] = {}
+        self._required_dimensions: list[dimensions_service.RequiredDimension] = []
+        self._dimensions_dialog: MDDialog | None = None
+
     @property
     def account_id(self) -> int | None:
         return self.account_field.account_id
@@ -312,8 +373,49 @@ class JournalEntryLineRow(MDBoxLayout):
     def _account_selected(self) -> None:
         # طبق درخواستِ صریح: بعدِ انتخابِ حساب، فوکوس به فیلدِ شرحِ همین
         # ردیف می‌رود (نه مستقیم به بدهکار).
+        self.dimension_values = {}
+        self.load_required_dimensions()
         self._on_change()
         self.description_field.focus = True
+
+    def load_required_dimensions(self) -> None:
+        # با انتخابِ یک حسابِ تازه (یا بارگذاریِ سند برای ویرایش)، نوع‌بُعدهای
+        # الزامیِ همان حساب دوباره از سرویس خوانده می‌شود — چون هر حساب
+        # ممکن است نوع‌بُعدهای متفاوتی الزامی کرده باشد.
+        self._required_dimensions = (
+            dimensions_service.get_required_dimensions_for_account(self.account_id) if self.account_id else []
+        )
+        self.has_required_dims = bool(self._required_dimensions)
+        self._update_dims_complete()
+
+    def _update_dims_complete(self) -> None:
+        self.dims_complete = all(
+            dim.dimension_type_id in self.dimension_values for dim in self._required_dimensions
+        )
+
+    def open_dimensions_dialog(self) -> None:
+        if not self._required_dimensions:
+            return
+        if self._dimensions_dialog is not None:
+            self._dimensions_dialog.dismiss()
+
+        content = _LineDimensionsContent(self._required_dimensions, self.dimension_values)
+
+        def _apply(*_args) -> None:
+            self.dimension_values = dict(content.values)
+            self._dimensions_dialog.dismiss()
+            self._update_dims_complete()
+
+        self._dimensions_dialog = MDDialog(
+            title=shape(tr("ابعادِ تفصیلیِ ردیف")),
+            type="custom",
+            content_cls=content,
+            buttons=[
+                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._dimensions_dialog.dismiss()),
+                MDRaisedButton(text=shape(tr("تایید")), on_release=_apply),
+            ],
+        )
+        self._dimensions_dialog.open()
 
     def on_debit_changed(self) -> None:
         if self.ids.debit_field.text.strip():
@@ -575,6 +677,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     description=row.description_field.value.strip(),
                     debit=debit,
                     credit=credit,
+                    details=dict(row.dimension_values),
                 )
             )
         return lines
@@ -647,6 +750,9 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             account = accounts_by_id.get(ln.account_id)
             if account is not None:
                 row.set_account(account)
+                row.load_required_dimensions()
+                row.dimension_values = dict(ln.details)
+                row._update_dims_complete()
             row.description_field.set_value(ln.description)
             row.ids.debit_field.text = str(ln.debit) if ln.debit else ""
             row.ids.credit_field.text = str(ln.credit) if ln.credit else ""

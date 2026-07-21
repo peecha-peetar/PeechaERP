@@ -14,17 +14,20 @@ from __future__ import annotations
 
 import datetime
 import decimal
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import jdatetime
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
+    AccountDetailDimension,
     ChartOfAccount,
+    DetailAccount,
     FiscalYear,
     JournalEntry,
     JournalEntryLine,
+    JournalEntryLineDetail,
     JournalEntryStatus,
     JournalEntryType,
 )
@@ -37,6 +40,9 @@ class LineInput:
     description: str
     debit: decimal.Decimal
     credit: decimal.Decimal
+    # نگاشتِ dimension_type_id -> detail_account_id — برای ردیف‌هایی که
+    # حسابشان نوع‌بُعدِ تفصیلیِ الزامی دارد (acc.account_detail_dimensions).
+    details: dict[int, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -73,12 +79,38 @@ def _validate_accounts(session, company_id: int, real_lines: list[LineInput]) ->
     account_ids = [ln.account_id for ln in real_lines]
     accounts = session.scalars(select(ChartOfAccount).where(ChartOfAccount.account_id.in_(account_ids))).all()
     accounts_by_id = {a.account_id: a for a in accounts}
+
+    required_by_account: dict[int, set[int]] = {}
+    if account_ids:
+        rows = session.execute(
+            select(AccountDetailDimension.account_id, AccountDetailDimension.dimension_type_id).where(
+                AccountDetailDimension.account_id.in_(account_ids), AccountDetailDimension.is_required.is_(True)
+            )
+        ).all()
+        for account_id, dimension_type_id in rows:
+            required_by_account.setdefault(account_id, set()).add(dimension_type_id)
+
     for ln in real_lines:
         account = accounts_by_id.get(ln.account_id)
         if account is None or account.company_id != company_id:
             raise ValueError("یکی از حساب‌های انتخاب‌شده نامعتبر است.")
         if not account.is_postable:
             raise ValueError(f"حساب «{account.full_code}» قابل ثبت سند نیست.")
+
+        required = required_by_account.get(ln.account_id, set())
+        missing = required - set(ln.details.keys())
+        if missing:
+            raise ValueError(f"برای حساب «{account.full_code}» انتخابِ ابعادِ تفصیلیِ الزامی فراموش شده است.")
+
+    detail_account_ids = {value for ln in real_lines for value in ln.details.values()}
+    if detail_account_ids:
+        valid_detail_accounts = session.scalars(
+            select(DetailAccount.detail_account_id).where(
+                DetailAccount.detail_account_id.in_(detail_account_ids), DetailAccount.company_id == company_id
+            )
+        ).all()
+        if set(valid_detail_accounts) != detail_account_ids:
+            raise ValueError("یکی از حساب‌های تفصیلیِ انتخاب‌شده نامعتبر است.")
 
 
 def fiscal_year_bounds(
@@ -153,18 +185,26 @@ def create_journal_entry(
         session.flush()
 
         for line_no, ln in enumerate(real_lines, start=1):
-            session.add(
-                JournalEntryLine(
-                    journal_entry_id=entry.journal_entry_id,
-                    line_no=line_no,
-                    account_id=ln.account_id,
-                    description=ln.description or None,
-                    currency_id=company.base_currency_id,
-                    exchange_rate=decimal.Decimal(1),
-                    debit_amount_fc=ln.debit,
-                    credit_amount_fc=ln.credit,
-                )
+            line = JournalEntryLine(
+                journal_entry_id=entry.journal_entry_id,
+                line_no=line_no,
+                account_id=ln.account_id,
+                description=ln.description or None,
+                currency_id=company.base_currency_id,
+                exchange_rate=decimal.Decimal(1),
+                debit_amount_fc=ln.debit,
+                credit_amount_fc=ln.credit,
             )
+            session.add(line)
+            session.flush()
+            for dimension_type_id, detail_account_id in ln.details.items():
+                session.add(
+                    JournalEntryLineDetail(
+                        line_id=line.line_id,
+                        dimension_type_id=dimension_type_id,
+                        detail_account_id=detail_account_id,
+                    )
+                )
 
         session.commit()
         return JournalEntryResult(journal_entry_id=entry.journal_entry_id, temporary_no=entry.temporary_no)
@@ -228,12 +268,27 @@ def get_journal_entry_lines(journal_entry_id: int) -> list[LineInput]:
             .where(JournalEntryLine.journal_entry_id == journal_entry_id)
             .order_by(JournalEntryLine.line_no)
         ).all()
+
+        line_ids = [ln.line_id for ln in lines]
+        details_by_line: dict[int, dict[int, int]] = {}
+        if line_ids:
+            rows = session.execute(
+                select(
+                    JournalEntryLineDetail.line_id,
+                    JournalEntryLineDetail.dimension_type_id,
+                    JournalEntryLineDetail.detail_account_id,
+                ).where(JournalEntryLineDetail.line_id.in_(line_ids))
+            ).all()
+            for line_id, dimension_type_id, detail_account_id in rows:
+                details_by_line.setdefault(line_id, {})[dimension_type_id] = detail_account_id
+
         return [
             LineInput(
                 account_id=ln.account_id,
                 description=ln.description or "",
                 debit=ln.debit_amount_fc,
                 credit=ln.credit_amount_fc,
+                details=details_by_line.get(ln.line_id, {}),
             )
             for ln in lines
         ]
@@ -261,22 +316,39 @@ def update_journal_entry(
         entry.document_date = document_date
         entry.description = description or None
 
+        old_line_ids = list(
+            session.scalars(
+                select(JournalEntryLine.line_id).where(JournalEntryLine.journal_entry_id == entry.journal_entry_id)
+            ).all()
+        )
+        if old_line_ids:
+            session.execute(
+                JournalEntryLineDetail.__table__.delete().where(JournalEntryLineDetail.line_id.in_(old_line_ids))
+            )
         session.execute(JournalEntryLine.__table__.delete().where(JournalEntryLine.journal_entry_id == entry.journal_entry_id))
 
         company = session.get(Company, company_id)
         for line_no, ln in enumerate(real_lines, start=1):
-            session.add(
-                JournalEntryLine(
-                    journal_entry_id=entry.journal_entry_id,
-                    line_no=line_no,
-                    account_id=ln.account_id,
-                    description=ln.description or None,
-                    currency_id=company.base_currency_id,
-                    exchange_rate=decimal.Decimal(1),
-                    debit_amount_fc=ln.debit,
-                    credit_amount_fc=ln.credit,
-                )
+            line = JournalEntryLine(
+                journal_entry_id=entry.journal_entry_id,
+                line_no=line_no,
+                account_id=ln.account_id,
+                description=ln.description or None,
+                currency_id=company.base_currency_id,
+                exchange_rate=decimal.Decimal(1),
+                debit_amount_fc=ln.debit,
+                credit_amount_fc=ln.credit,
             )
+            session.add(line)
+            session.flush()
+            for dimension_type_id, detail_account_id in ln.details.items():
+                session.add(
+                    JournalEntryLineDetail(
+                        line_id=line.line_id,
+                        dimension_type_id=dimension_type_id,
+                        detail_account_id=detail_account_id,
+                    )
+                )
         session.commit()
 
 
@@ -289,6 +361,15 @@ def delete_journal_entry(journal_entry_id: int, company_id: int) -> None:
         if status is None or status.code != "TEMPORARY":
             raise ValueError("فقط سندهای با وضعیت موقت قابل حذف‌اند.")
 
+        line_ids = list(
+            session.scalars(
+                select(JournalEntryLine.line_id).where(JournalEntryLine.journal_entry_id == journal_entry_id)
+            ).all()
+        )
+        if line_ids:
+            session.execute(
+                JournalEntryLineDetail.__table__.delete().where(JournalEntryLineDetail.line_id.in_(line_ids))
+            )
         session.execute(JournalEntryLine.__table__.delete().where(JournalEntryLine.journal_entry_id == journal_entry_id))
         session.delete(entry)
         session.commit()

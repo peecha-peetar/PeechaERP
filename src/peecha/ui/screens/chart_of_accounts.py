@@ -18,6 +18,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_labels as field_labels_service
 from peecha.ui import numerals, theme
 from peecha.ui.i18n import tr
@@ -73,6 +74,14 @@ class AccountRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
 Factory.register("AccountRowWidget", cls=AccountRowWidget)
 
 
+class _DimensionCheckRow(MDBoxLayout):
+    label_text = StringProperty("")
+
+    def __init__(self, dimension_type_id: int, **kwargs):
+        super().__init__(**kwargs)
+        self.dimension_type_id = dimension_type_id
+
+
 class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -85,15 +94,38 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._menus: dict[str, MDDropdownMenu] = {}
         self._editing_account_id: int | None = None
         self._delete_dialog: MDDialog | None = None
+        self._dimension_types: list[dimensions_service.DimensionTypeRow] = []
+        self._dimension_check_rows: list[_DimensionCheckRow] = []
 
     def on_pre_enter(self, *args):
         self._set_dropdown_text("nature_button", _NATURE_OPTIONS, self._nature_code)
         self._set_dropdown_text("category_button", _CATEGORY_OPTIONS, self._category_code)
         self._set_dropdown_text("account_type_button", _ACCOUNT_TYPE_OPTIONS, self._account_type_code)
         self.apply_field_labels()
+        self._build_dimension_checklist(selected_ids=[])
         self.refresh_list()
         self._select_parent(self._parent_account_id)
         self.bind_shortcuts()
+
+    def _build_dimension_checklist(self, selected_ids: list[int]) -> None:
+        self.ids.dimension_types_box.clear_widgets()
+        self._dimension_check_rows = []
+        company_id = session.current_company.company_id if session.current_company else None
+        self._dimension_types = dimensions_service.list_active_dimension_types(company_id) if company_id else []
+        if not self._dimension_types:
+            self.ids.dimension_types_section.opacity = 0
+            self.ids.dimension_types_section.disabled = True
+            return
+        self.ids.dimension_types_section.opacity = 1
+        self.ids.dimension_types_section.disabled = False
+        for dim in self._dimension_types:
+            row = _DimensionCheckRow(dimension_type_id=dim.dimension_type_id, label_text=shape(dim.code))
+            row.ids.check.active = dim.dimension_type_id in selected_ids
+            self.ids.dimension_types_box.add_widget(row)
+            self._dimension_check_rows.append(row)
+
+    def _selected_dimension_type_ids(self) -> list[int]:
+        return [row.dimension_type_id for row in self._dimension_check_rows if row.ids.check.active]
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
@@ -266,6 +298,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._set_status(
             tr("در حال ویرایش «{}» — Escape برای لغو.").format(f"{numerals.to_persian_digits(row.full_code)} — {row.name}")
         )
+        self._build_dimension_checklist(selected_ids=dimensions_service.get_account_dimension_type_ids(account_id))
         self.refresh_list()
 
     def cancel_edit(self) -> None:
@@ -281,6 +314,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.cancel_edit_button.size_hint_y = None
         self.ids.cancel_edit_button.height = "0dp"
         self._set_status(tr(""))
+        self._build_dimension_checklist(selected_ids=[])
         self.refresh_list()
 
     def save_account(self) -> None:
@@ -316,6 +350,11 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     is_postable=self.ids.is_postable_checkbox.active,
                     language_id=language_id,
                 )
+                dimensions_service.set_account_dimension_types(
+                    account_id=self._editing_account_id,
+                    company_id=session.current_company.company_id,
+                    dimension_type_ids=self._selected_dimension_type_ids(),
+                )
             except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
                 self._set_status(tr("خطا: {}").format(exc))
                 return
@@ -330,7 +369,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             self._set_status(tr("کد و نام حساب را وارد کنید."))
             return
         try:
-            coa_service.create_account(
+            account = coa_service.create_account(
                 company_id=session.current_company.company_id,
                 segment_code=segment_code,
                 name=name,
@@ -341,12 +380,18 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                 language_id=language_id,
                 parent_account_id=self._parent_account_id,
             )
+            dimensions_service.set_account_dimension_types(
+                account_id=account.account_id,
+                company_id=session.current_company.company_id,
+                dimension_type_ids=self._selected_dimension_type_ids(),
+            )
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
             self._set_status(tr("خطا: {}").format(exc))
             return
 
         self.ids.segment_code_field.text = ""
         self.ids.name_field.text = ""
+        self._build_dimension_checklist(selected_ids=[])
         self.refresh_list()
 
     def confirm_delete(self, account_id: int) -> None:

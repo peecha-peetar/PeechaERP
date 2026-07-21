@@ -1,0 +1,314 @@
+#:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
+#:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
+
+# نکته‌ی مهمِ RTL (همه‌جای این فایل): مثلِ بقیه‌ی صفحه‌ها، ترتیبِ اعلامِ
+# ستون‌های افقی عمداً برعکسِ ترتیبِ منطقیِ خواندنِ راست‌به‌چپ است.
+<DimensionTypeRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.request_delete()
+
+    AnchorLayout:
+        size_hint_x: 0.22
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: theme.SUCCESS if root.is_active_row else theme.TEXT_DISABLED
+
+    PLabel:
+        text: root.count_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        halign: "right"
+        valign: "middle"
+        size_hint_x: 0.18
+
+    PLabel:
+        text: root.code_text
+        valign: "middle"
+        size_hint_x: 0.6
+
+<DetailAccountRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.request_delete()
+
+    AnchorLayout:
+        size_hint_x: 0.28
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: theme.SUCCESS if root.is_active_row else theme.TEXT_DISABLED
+
+    PLabel:
+        text: root.code_text
+        valign: "middle"
+        size_hint_x: 0.72
+
+<DetailDimensionsScreen>:
+    name: "detail_dimensions"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "horizontal"
+        padding: "24dp"
+        spacing: "20dp"
+
+        PCard:
+            size_hint_x: 0.68
+            spacing: "12dp"
+
+            PLabel:
+                id: accounts_title
+                text: ((app.ui_language_code or True) and shape(tr("حساب‌های تفصیلی")))
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                id: accounts_empty_label
+                text: ((app.ui_language_code or True) and shape(tr("ابتدا از پنلِ روبه‌رو یک نوع‌بُعد (مثلاً «مرکز هزینه») بسازید یا انتخاب کنید.")))
+
+            BoxLayout:
+                id: accounts_panel
+                orientation: "vertical"
+                spacing: "12dp"
+                disabled: True
+                opacity: 0
+
+                PHintLabel:
+                    id: account_status_label
+                    text: ""
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "48dp"
+                    spacing: "12dp"
+
+                    PTextField:
+                        id: account_code_field
+                        hint_text: ((app.ui_language_code or True) and shape(tr("کدِ حسابِ تفصیلی (مثلاً مرکزِ هزینه‌ی فروش)")))
+                        size_hint_x: 0.6
+                        focus_next: account_save_button
+                        on_text_validate: root.save_detail_account()
+
+                    MDCheckbox:
+                        id: account_active_checkbox
+                        active: True
+                        size_hint: None, None
+                        size: "24dp", "24dp"
+                        pos_hint: {"center_y": 0.5}
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("فعال")))
+                        valign: "middle"
+                        size_hint_x: None
+                        width: "50dp"
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "40dp"
+                    spacing: "8dp"
+
+                    PRaisedButton:
+                        id: account_save_button
+                        text: ((app.ui_language_code or True) and shape(tr("افزودن")))
+                        on_release: root.save_detail_account()
+                        focus_previous: account_code_field
+                        focus_next: account_cancel_button
+
+                    PFlatButton:
+                        id: account_cancel_button
+                        text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        opacity: 0
+                        disabled: True
+                        size_hint_x: None
+                        width: "0dp"
+                        on_release: root.cancel_account_edit()
+                        focus_previous: account_save_button
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "28dp"
+                    padding: ["12dp", "0dp"]
+
+                    Widget:
+                        size_hint_x: None
+                        width: "28dp"
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        halign: "right"
+                        valign: "middle"
+                        size_hint_x: 0.28
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("کد")))
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        valign: "middle"
+                        size_hint_x: 0.72
+
+                RecycleView:
+                    id: accounts_list
+                    viewclass: "DetailAccountRowWidget"
+
+                    RecycleBoxLayout:
+                        orientation: "vertical"
+                        default_size_hint: 1, None
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "2dp"
+
+        PCard:
+            size_hint_x: 0.32
+            spacing: "14dp"
+
+            PLabel:
+                text: ((app.ui_language_code or True) and shape(tr("نوع‌های بُعدِ تفصیلی")))
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                text: ((app.ui_language_code or True) and shape(tr("مثلاً مرکزِ هزینه، پروژه، مشتری — هر سند می‌تواند بر اساسِ این ابعاد تفکیک شود.")))
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+            PLabel:
+                id: type_form_title
+                text: ((app.ui_language_code or True) and shape(tr("افزودنِ نوع‌بُعدِ تازه")))
+                font_style: "Subtitle1"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PTextField:
+                id: type_code_field
+                hint_text: ((app.ui_language_code or True) and shape(tr("کد (مثلاً COST_CENTER)")))
+                focus_next: type_save_button
+                on_text_validate: root.save_dimension_type()
+
+            BoxLayout:
+                size_hint_y: None
+                height: "36dp"
+                spacing: "8dp"
+
+                MDCheckbox:
+                    id: type_active_checkbox
+                    active: True
+                    size_hint: None, None
+                    size: "24dp", "24dp"
+                    pos_hint: {"center_y": 0.5}
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("فعال")))
+                    valign: "middle"
+
+            BoxLayout:
+                size_hint_y: None
+                height: "40dp"
+                spacing: "8dp"
+
+                PRaisedButton:
+                    id: type_save_button
+                    text: ((app.ui_language_code or True) and shape(tr("افزودن")))
+                    on_release: root.save_dimension_type()
+                    focus_previous: type_code_field
+                    focus_next: type_cancel_button
+
+                PFlatButton:
+                    id: type_cancel_button
+                    text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    opacity: 0
+                    disabled: True
+                    size_hint_y: None
+                    height: "0dp"
+                    on_release: root.cancel_type_edit()
+                    focus_previous: type_save_button
+
+            BoxLayout:
+                id: grid_header
+                size_hint_y: None
+                height: "28dp"
+                padding: ["12dp", "0dp"]
+
+                Widget:
+                    size_hint_x: None
+                    width: "28dp"
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.22
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("تعداد")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.18
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.6
+
+            RecycleView:
+                id: types_list
+                viewclass: "DimensionTypeRowWidget"
+
+                RecycleBoxLayout:
+                    orientation: "vertical"
+                    default_size_hint: 1, None
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "2dp"
