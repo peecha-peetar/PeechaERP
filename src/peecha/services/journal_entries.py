@@ -31,7 +31,9 @@ from peecha.db.models.accounting import (
     JournalEntryStatus,
     JournalEntryType,
 )
-from peecha.db.models.core import Company
+from peecha.db.models.core import Company, CompanyCurrency
+
+_BASE_QUANT = decimal.Decimal("0.01")
 
 
 @dataclass
@@ -43,6 +45,9 @@ class LineInput:
     # نگاشتِ dimension_type_id -> detail_account_id — برای ردیف‌هایی که
     # حسابشان نوع‌بُعدِ تفصیلیِ الزامی دارد (acc.account_detail_dimensions).
     details: dict[int, int] = field(default_factory=dict)
+    # None یعنی ارزِ پایه‌ی شرکت (نرخ همیشه ۱، نیازی به exchange_rate نیست).
+    currency_id: int | None = None
+    exchange_rate: decimal.Decimal | None = None
 
 
 @dataclass
@@ -61,21 +66,31 @@ class JournalEntrySummary:
     total_amount: decimal.Decimal
 
 
-def _validate_lines(lines: list[LineInput]) -> tuple[list[LineInput], decimal.Decimal]:
+def _validate_lines(lines: list[LineInput]) -> list[LineInput]:
     real_lines = [ln for ln in lines if ln.debit != 0 or ln.credit != 0]
     if len(real_lines) < 2:
         raise ValueError("سند حسابداری باید حداقل دو ردیف (یک بدهکار و یک بستانکار) داشته باشد.")
     for ln in real_lines:
         if (ln.debit != 0) == (ln.credit != 0):
             raise ValueError("هر ردیف باید یا بدهکار یا بستانکار باشد، نه هر دو یا هیچ‌کدام.")
-    total_debit = sum((ln.debit for ln in real_lines), decimal.Decimal(0))
-    total_credit = sum((ln.credit for ln in real_lines), decimal.Decimal(0))
-    if total_debit != total_credit:
-        raise ValueError(f"سند متعادل نیست: جمع بدهکار {total_debit} با جمع بستانکار {total_credit} برابر نیست.")
-    return real_lines, total_debit
+    return real_lines
 
 
-def _validate_accounts(session, company_id: int, real_lines: list[LineInput]) -> None:
+def _base_amount(amount: decimal.Decimal, exchange_rate: decimal.Decimal) -> decimal.Decimal:
+    return (amount * exchange_rate).quantize(_BASE_QUANT, rounding=decimal.ROUND_HALF_UP)
+
+
+@dataclass
+class _ResolvedLine:
+    line: LineInput
+    currency_id: int
+    exchange_rate: decimal.Decimal
+
+
+def _resolve_lines(session, company: Company, real_lines: list[LineInput]) -> list[_ResolvedLine]:
+    """اعتبارسنجیِ حساب‌ها/ابعادِ تفصیلی + تعیینِ ارز و نرخِ هر ردیف — ارزِ
+    مشخص‌نشده یعنی ارزِ پایه (نرخ ۱)؛ ارزِ غیرِپایه باید هم برای شرکت فعال
+    باشد و هم (اگر حساب به ارزِ خاصی محدود شده) با ارزِ حساب یکی باشد."""
     account_ids = [ln.account_id for ln in real_lines]
     accounts = session.scalars(select(ChartOfAccount).where(ChartOfAccount.account_id.in_(account_ids))).all()
     accounts_by_id = {a.account_id: a for a in accounts}
@@ -90,9 +105,18 @@ def _validate_accounts(session, company_id: int, real_lines: list[LineInput]) ->
         for account_id, dimension_type_id in rows:
             required_by_account.setdefault(account_id, set()).add(dimension_type_id)
 
+    enabled_currency_ids = {company.base_currency_id} | set(
+        session.scalars(
+            select(CompanyCurrency.currency_id).where(
+                CompanyCurrency.company_id == company.company_id, CompanyCurrency.is_active.is_(True)
+            )
+        ).all()
+    )
+
+    resolved: list[_ResolvedLine] = []
     for ln in real_lines:
         account = accounts_by_id.get(ln.account_id)
-        if account is None or account.company_id != company_id:
+        if account is None or account.company_id != company.company_id:
             raise ValueError("یکی از حساب‌های انتخاب‌شده نامعتبر است.")
         if not account.is_postable:
             raise ValueError(f"حساب «{account.full_code}» قابل ثبت سند نیست.")
@@ -102,15 +126,40 @@ def _validate_accounts(session, company_id: int, real_lines: list[LineInput]) ->
         if missing:
             raise ValueError(f"برای حساب «{account.full_code}» انتخابِ ابعادِ تفصیلیِ الزامی فراموش شده است.")
 
+        currency_id = ln.currency_id or company.base_currency_id
+        if account.currency_id is not None and account.currency_id != currency_id:
+            raise ValueError(f"حساب «{account.full_code}» فقط با ارزِ مشخص‌شده‌ی خودش قابل ثبت است.")
+        if currency_id not in enabled_currency_ids:
+            raise ValueError(f"ارزِ انتخاب‌شده برای ردیفِ حساب «{account.full_code}» برای این شرکت فعال نیست.")
+
+        if currency_id == company.base_currency_id:
+            exchange_rate = decimal.Decimal(1)
+        else:
+            if not ln.exchange_rate or ln.exchange_rate <= 0:
+                raise ValueError(f"نرخِ ارز برای ردیفِ حساب «{account.full_code}» مشخص نشده است.")
+            exchange_rate = ln.exchange_rate
+
+        resolved.append(_ResolvedLine(line=ln, currency_id=currency_id, exchange_rate=exchange_rate))
+
     detail_account_ids = {value for ln in real_lines for value in ln.details.values()}
     if detail_account_ids:
         valid_detail_accounts = session.scalars(
             select(DetailAccount.detail_account_id).where(
-                DetailAccount.detail_account_id.in_(detail_account_ids), DetailAccount.company_id == company_id
+                DetailAccount.detail_account_id.in_(detail_account_ids), DetailAccount.company_id == company.company_id
             )
         ).all()
         if set(valid_detail_accounts) != detail_account_ids:
             raise ValueError("یکی از حساب‌های تفصیلیِ انتخاب‌شده نامعتبر است.")
+
+    total_debit = sum((_base_amount(r.line.debit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
+    total_credit = sum((_base_amount(r.line.credit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
+    if total_debit != total_credit:
+        raise ValueError(
+            f"سند متعادل نیست: جمع بدهکار (معادلِ ارزِ پایه) {total_debit} "
+            f"با جمع بستانکار {total_credit} برابر نیست."
+        )
+
+    return resolved
 
 
 def fiscal_year_bounds(
@@ -144,14 +193,14 @@ def create_journal_entry(
     description: str,
     lines: list[LineInput],
 ) -> JournalEntryResult:
-    real_lines, _total = _validate_lines(lines)
+    real_lines = _validate_lines(lines)
 
     with new_session() as session:
         company = session.get(Company, company_id)
         if company is None:
             raise ValueError("شرکت نامعتبر است.")
 
-        _validate_accounts(session, company_id, real_lines)
+        resolved_lines = _resolve_lines(session, company, real_lines)
 
         entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == "NORMAL"))
         status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "TEMPORARY"))
@@ -184,14 +233,15 @@ def create_journal_entry(
         session.add(entry)
         session.flush()
 
-        for line_no, ln in enumerate(real_lines, start=1):
+        for line_no, resolved in enumerate(resolved_lines, start=1):
+            ln = resolved.line
             line = JournalEntryLine(
                 journal_entry_id=entry.journal_entry_id,
                 line_no=line_no,
                 account_id=ln.account_id,
                 description=ln.description or None,
-                currency_id=company.base_currency_id,
-                exchange_rate=decimal.Decimal(1),
+                currency_id=resolved.currency_id,
+                exchange_rate=resolved.exchange_rate,
                 debit_amount_fc=ln.debit,
                 credit_amount_fc=ln.credit,
             )
@@ -289,6 +339,8 @@ def get_journal_entry_lines(journal_entry_id: int) -> list[LineInput]:
                 debit=ln.debit_amount_fc,
                 credit=ln.credit_amount_fc,
                 details=details_by_line.get(ln.line_id, {}),
+                currency_id=ln.currency_id,
+                exchange_rate=ln.exchange_rate,
             )
             for ln in lines
         ]
@@ -301,7 +353,7 @@ def update_journal_entry(
     description: str,
     lines: list[LineInput],
 ) -> None:
-    real_lines, _total = _validate_lines(lines)
+    real_lines = _validate_lines(lines)
 
     with new_session() as session:
         entry = session.get(JournalEntry, journal_entry_id)
@@ -311,7 +363,10 @@ def update_journal_entry(
         if status is None or status.code != "TEMPORARY":
             raise ValueError("فقط سندهای با وضعیت موقت قابل ویرایش‌اند.")
 
-        _validate_accounts(session, company_id, real_lines)
+        company = session.get(Company, company_id)
+        if company is None:
+            raise ValueError("شرکت نامعتبر است.")
+        resolved_lines = _resolve_lines(session, company, real_lines)
 
         entry.document_date = document_date
         entry.description = description or None
@@ -327,15 +382,15 @@ def update_journal_entry(
             )
         session.execute(JournalEntryLine.__table__.delete().where(JournalEntryLine.journal_entry_id == entry.journal_entry_id))
 
-        company = session.get(Company, company_id)
-        for line_no, ln in enumerate(real_lines, start=1):
+        for line_no, resolved in enumerate(resolved_lines, start=1):
+            ln = resolved.line
             line = JournalEntryLine(
                 journal_entry_id=entry.journal_entry_id,
                 line_no=line_no,
                 account_id=ln.account_id,
                 description=ln.description or None,
-                currency_id=company.base_currency_id,
-                exchange_rate=decimal.Decimal(1),
+                currency_id=resolved.currency_id,
+                exchange_rate=resolved.exchange_rate,
                 debit_amount_fc=ln.debit,
                 credit_amount_fc=ln.credit,
             )

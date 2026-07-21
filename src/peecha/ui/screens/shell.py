@@ -59,6 +59,7 @@ NAV_ITEMS = [
         "icon": "cog-outline",
         "children": [
             {"code": "SET_LANG", "label": "زبان‌ها", "icon": "translate", "screen": "languages"},
+            {"code": "SET_CURRENCY", "label": "ارزها", "icon": "cash-multiple", "screen": "currencies"},
             {"code": "SET_COMPANY", "label": "شرکت‌ها", "icon": "domain", "screen": "companies"},
             {"code": "SET_FY", "label": "سال‌های مالی", "icon": "calendar-blank-outline", "screen": "fiscal_years"},
             {"code": "SET_USERS", "label": "کاربران", "icon": "account-multiple-outline", "screen": "users"},
@@ -107,6 +108,7 @@ class ShellScreen(MDScreen):
     def _build_content_screens(self) -> None:
         from peecha.ui.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
         from peecha.ui.screens.companies import CompaniesScreen  # noqa: PLC0415
+        from peecha.ui.screens.currencies import CurrenciesScreen  # noqa: PLC0415
         from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
         from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
         from peecha.ui.screens.field_labels import FieldLabelsScreen  # noqa: PLC0415
@@ -124,6 +126,7 @@ class ShellScreen(MDScreen):
         content.add_widget(JournalEntryScreen())
         content.add_widget(DetailDimensionsScreen())
         content.add_widget(LanguagesScreen())
+        content.add_widget(CurrenciesScreen())
         content.add_widget(CompaniesScreen())
         content.add_widget(FiscalYearsScreen())
         content.add_widget(TranslationsScreen())

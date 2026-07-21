@@ -31,6 +31,7 @@ from kivymd.uix.screen import MDScreen
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_labels as field_labels_service
 from peecha.services import journal_entries as je_service
@@ -336,12 +337,104 @@ class _LineDimensionsContent(MDBoxLayout):
         select_widget.text = shape(code)
 
 
+class _LineCurrencyContent(MDBoxLayout):
+    """محتوایِ دیالوگِ انتخابِ ارزِ یک ردیف — با انتخابِ ارزِ غیرِپایه، فیلدِ
+    نرخِ تبدیل ظاهر می‌شود و در صورتِ نبودنِ مقدار، از آخرین نرخِ ثبت‌شده
+    برای همان ارز/تاریخ (currencies_service.get_latest_rate) پیش‌پر می‌شود."""
+
+    def __init__(
+        self,
+        transactable_currencies: list[currencies_service.CurrencyRow],
+        base_currency_id: int,
+        company_id: int,
+        document_date: datetime.date,
+        initial_currency_id: int | None,
+        initial_rate: decimal.Decimal | None,
+        **kwargs,
+    ):
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("spacing", dp(12))
+        super().__init__(**kwargs)
+        self.bind(minimum_height=self.setter("height"))
+        self._currencies = transactable_currencies
+        self._currencies_by_id = {c.currency_id: c for c in transactable_currencies}
+        self.base_currency_id = base_currency_id
+        self.company_id = company_id
+        self.document_date = document_date
+        self.currency_id = initial_currency_id or base_currency_id
+        self._menu: MDDropdownMenu | None = None
+
+        currency_row = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(66), spacing=dp(4))
+        currency_row.add_widget(
+            Factory.PLabel(text=shape(tr("ارزِ ردیف")), font_style="Caption", size_hint_y=None, height=dp(20))
+        )
+        self.currency_select = PSelectField(text=self._label_for_currency(self.currency_id))
+        self.currency_select.bind(on_release=self._open_currency_menu)
+        currency_row.add_widget(self.currency_select)
+        self.add_widget(currency_row)
+
+        self.rate_row = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(66), spacing=dp(4))
+        self.rate_row.add_widget(
+            Factory.PLabel(
+                text=shape(tr("نرخِ تبدیل به ارزِ پایه")), font_style="Caption", size_hint_y=None, height=dp(20)
+            )
+        )
+        self.rate_field = PTextField(persian_digits=True)
+        if initial_rate is not None:
+            self.rate_field.text = numerals.to_persian_digits(str(initial_rate))
+        self.rate_row.add_widget(self.rate_field)
+        self.add_widget(self.rate_row)
+        self._refresh_rate_visibility()
+
+    def _label_for_currency(self, currency_id: int) -> str:
+        currency = self._currencies_by_id.get(currency_id)
+        return shape(currency.iso_code if currency else "")
+
+    def _open_currency_menu(self, *_args) -> None:
+        items = [
+            {"text": shape(c.iso_code), "on_release": lambda cid=c.currency_id: self._choose_currency(cid)}
+            for c in self._currencies
+        ]
+        self._menu = open_rtl_dropdown(self.currency_select, items, width_mult=3)
+
+    def _choose_currency(self, currency_id: int) -> None:
+        if self._menu is not None:
+            self._menu.dismiss()
+        self.currency_id = currency_id
+        self.currency_select.text = self._label_for_currency(currency_id)
+        self._refresh_rate_visibility()
+        if currency_id != self.base_currency_id and not self.rate_field.text.strip():
+            latest = currencies_service.get_latest_rate(self.company_id, currency_id, self.document_date)
+            if latest is not None:
+                self.rate_field.text = numerals.to_persian_digits(str(latest))
+
+    def _refresh_rate_visibility(self) -> None:
+        is_base = self.currency_id == self.base_currency_id
+        self.rate_row.opacity = 0 if is_base else 1
+        self.rate_row.disabled = is_base
+        self.rate_row.height = 0 if is_base else dp(66)
+
+
 class JournalEntryLineRow(MDBoxLayout):
     has_required_dims = BooleanProperty(False)
     dims_complete = BooleanProperty(True)
+    has_multi_currency = BooleanProperty(False)
+    currency_is_base = BooleanProperty(True)
 
     def __init__(
-        self, account_options, on_change, on_remove, on_validate, description_suggestions, on_amount_text, **kwargs
+        self,
+        account_options,
+        on_change,
+        on_remove,
+        on_validate,
+        description_suggestions,
+        on_amount_text,
+        transactable_currencies,
+        base_currency_id,
+        company_id,
+        get_document_date,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self._on_change = on_change
@@ -362,6 +455,15 @@ class JournalEntryLineRow(MDBoxLayout):
         self.dimension_values: dict[int, int] = {}
         self._required_dimensions: list[dimensions_service.RequiredDimension] = []
         self._dimensions_dialog: MDDialog | None = None
+
+        self.transactable_currencies = transactable_currencies
+        self.base_currency_id = base_currency_id
+        self.company_id = company_id
+        self._get_document_date = get_document_date
+        self.line_currency_id: int | None = None
+        self.line_exchange_rate: decimal.Decimal | None = None
+        self.has_multi_currency = len(transactable_currencies) > 1
+        self._currency_dialog: MDDialog | None = None
 
     @property
     def account_id(self) -> int | None:
@@ -416,6 +518,48 @@ class JournalEntryLineRow(MDBoxLayout):
             ],
         )
         self._dimensions_dialog.open()
+
+    def open_currency_dialog(self) -> None:
+        if not self.has_multi_currency:
+            return
+        if self._currency_dialog is not None:
+            self._currency_dialog.dismiss()
+
+        content = _LineCurrencyContent(
+            transactable_currencies=self.transactable_currencies,
+            base_currency_id=self.base_currency_id,
+            company_id=self.company_id,
+            document_date=self._get_document_date(),
+            initial_currency_id=self.line_currency_id,
+            initial_rate=self.line_exchange_rate,
+        )
+
+        def _apply(*_args) -> None:
+            if content.currency_id == self.base_currency_id:
+                self.line_currency_id = None
+                self.line_exchange_rate = None
+            else:
+                self.line_currency_id = content.currency_id
+                try:
+                    self.line_exchange_rate = numerals.parse_decimal(content.rate_field.text)
+                except ValueError:
+                    self.line_exchange_rate = None
+            self._currency_dialog.dismiss()
+            self._update_currency_state()
+
+        self._currency_dialog = MDDialog(
+            title=shape(tr("ارزِ ردیف")),
+            type="custom",
+            content_cls=content,
+            buttons=[
+                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._currency_dialog.dismiss()),
+                MDRaisedButton(text=shape(tr("تایید")), on_release=_apply),
+            ],
+        )
+        self._currency_dialog.open()
+
+    def _update_currency_state(self) -> None:
+        self.currency_is_base = self.line_currency_id is None
 
     def on_debit_changed(self) -> None:
         if self.ids.debit_field.text.strip():
@@ -491,6 +635,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         super().__init__(**kwargs)
         self._account_options: list[coa_service.AccountRow] = []
         self._description_suggestions: list[str] = []
+        self._transactable_currencies: list[currencies_service.CurrencyRow] = []
+        self._base_currency_id: int | None = None
         self._rows: list[JournalEntryLineRow] = []
         self._editing_entry_id: int | None = None
         self._delete_dialog: MDDialog | None = None
@@ -550,9 +696,21 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         if session.current_company is None:
             self._account_options = []
             self._description_suggestions = []
+            self._transactable_currencies = []
+            self._base_currency_id = None
         else:
             self._account_options = coa_service.list_postable_accounts(session.current_company.company_id)
             self._description_suggestions = je_service.list_recent_line_descriptions(session.current_company.company_id)
+            self._transactable_currencies = currencies_service.list_transactable_currencies(
+                session.current_company.company_id
+            )
+            self._base_currency_id = session.current_company.base_currency_id
+
+    def _get_document_date(self) -> datetime.date:
+        try:
+            return numerals.parse_jalali_date(self.ids.date_field.text)
+        except ValueError:
+            return datetime.date.today()
 
     def _reset_form(self) -> None:
         # توجه: پیام وضعیت (مثلاً «سند ثبت شد») را عمداً اینجا پاک نمی‌کنیم؛
@@ -598,6 +756,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             on_validate=self._focus_after_row,
             description_suggestions=lambda: self._description_suggestions,
             on_amount_text=self.update_amount_words,
+            transactable_currencies=self._transactable_currencies,
+            base_currency_id=self._base_currency_id,
+            company_id=session.current_company.company_id if session.current_company else None,
+            get_document_date=self._get_document_date,
         )
         self._rows.append(row)
         self.ids.lines_box.add_widget(row)
@@ -678,6 +840,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     debit=debit,
                     credit=credit,
                     details=dict(row.dimension_values),
+                    currency_id=row.line_currency_id,
+                    exchange_rate=row.line_exchange_rate,
                 )
             )
         return lines
@@ -753,6 +917,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                 row.load_required_dimensions()
                 row.dimension_values = dict(ln.details)
                 row._update_dims_complete()
+            if ln.currency_id is not None and ln.currency_id != self._base_currency_id:
+                row.line_currency_id = ln.currency_id
+                row.line_exchange_rate = ln.exchange_rate
+            row._update_currency_state()
             row.description_field.set_value(ln.description)
             row.ids.debit_field.text = str(ln.debit) if ln.debit else ""
             row.ids.credit_field.text = str(ln.credit) if ln.credit else ""

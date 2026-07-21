@@ -1,0 +1,346 @@
+#:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
+#:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
+
+# نکته‌ی مهمِ RTL (همه‌جای این فایل): مثلِ بقیه‌ی صفحه‌ها، ترتیبِ اعلامِ
+# ستون‌های افقی عمداً برعکسِ ترتیبِ منطقیِ خواندنِ راست‌به‌چپ است.
+<CurrencyRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.request_delete()
+
+    AnchorLayout:
+        size_hint_x: 0.2
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: theme.SUCCESS if root.is_active_row else theme.TEXT_DISABLED
+
+    PLabel:
+        text: root.decimals_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        halign: "right"
+        valign: "middle"
+        size_hint_x: 0.16
+
+    PLabel:
+        text: root.symbol_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.32
+
+    PLabel:
+        text: root.code_text
+        valign: "middle"
+        size_hint_x: 0.32
+
+<ExchangeRateRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.HOVER if root.zebra else (0, 0, 0, 0)
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.request_delete()
+
+    PLabel:
+        text: root.rate_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.5
+
+    PLabel:
+        text: root.date_text
+        valign: "middle"
+        size_hint_x: 0.5
+
+<CurrenciesScreen>:
+    name: "currencies"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "horizontal"
+        padding: "24dp"
+        spacing: "20dp"
+
+        PCard:
+            size_hint_x: 0.68
+            spacing: "12dp"
+
+            PLabel:
+                id: rates_title
+                text: ((app.ui_language_code or True) and shape(tr("تاریخچه‌ی نرخِ ارز")))
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                id: rates_empty_label
+                text: ((app.ui_language_code or True) and shape(tr("ابتدا از پنلِ روبه‌رو یک ارز بسازید یا انتخاب کنید.")))
+
+            PHintLabel:
+                id: rates_base_hint
+                text: ""
+                opacity: 0
+
+            BoxLayout:
+                id: rates_panel
+                orientation: "vertical"
+                spacing: "12dp"
+                disabled: True
+                opacity: 0
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "36dp"
+                    spacing: "8dp"
+
+                    MDCheckbox:
+                        id: company_enabled_checkbox
+                        size_hint: None, None
+                        size: "24dp", "24dp"
+                        pos_hint: {"center_y": 0.5}
+                        on_active: root.toggle_company_enabled(self.active)
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("این ارز برایِ شرکتِ جاری فعال است")))
+                        valign: "middle"
+
+                PHintLabel:
+                    id: rates_status_label
+                    text: ""
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "48dp"
+                    spacing: "12dp"
+
+                    PTextField:
+                        id: rate_date_field
+                        hint_text: ((app.ui_language_code or True) and shape(tr("تاریخ (۱۴۰۴/۰۱/۰۱)")))
+                        persian_digits: True
+                        size_hint_x: 0.4
+                        focus_next: rate_value_field
+                        on_text_validate: rate_value_field.focus = True
+
+                    PTextField:
+                        id: rate_value_field
+                        hint_text: ((app.ui_language_code or True) and shape(tr("نرخِ تبدیل به ارزِ پایه")))
+                        persian_digits: True
+                        size_hint_x: 0.4
+                        focus_next: save_rate_button
+                        on_text_validate: root.save_rate()
+
+                    PRaisedButton:
+                        id: save_rate_button
+                        text: ((app.ui_language_code or True) and shape(tr("ثبتِ نرخ")))
+                        size_hint_x: 0.2
+                        on_release: root.save_rate()
+                        focus_previous: rate_value_field
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: "28dp"
+                    padding: ["12dp", "0dp"]
+
+                    Widget:
+                        size_hint_x: None
+                        width: "28dp"
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("نرخ")))
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        valign: "middle"
+                        size_hint_x: 0.5
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("تاریخ")))
+                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: theme.TEXT_SECONDARY
+                        valign: "middle"
+                        size_hint_x: 0.5
+
+                RecycleView:
+                    id: rates_list
+                    viewclass: "ExchangeRateRowWidget"
+
+                    RecycleBoxLayout:
+                        orientation: "vertical"
+                        default_size_hint: 1, None
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "2dp"
+
+        PCard:
+            size_hint_x: 0.32
+            spacing: "14dp"
+
+            PLabel:
+                text: ((app.ui_language_code or True) and shape(tr("ارزها")))
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+            PLabel:
+                id: form_title
+                text: ((app.ui_language_code or True) and shape(tr("افزودنِ ارزِ تازه")))
+                font_style: "Subtitle1"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            BoxLayout:
+                size_hint_y: None
+                height: "48dp"
+                spacing: "8dp"
+
+                PTextField:
+                    id: code_field
+                    hint_text: ((app.ui_language_code or True) and shape(tr("کد (مثلاً USD)")))
+                    size_hint_x: 0.5
+                    focus_next: symbol_field
+                    on_text_validate: root.save_currency()
+
+                PTextField:
+                    id: symbol_field
+                    hint_text: ((app.ui_language_code or True) and shape(tr("نماد (اختیاری)")))
+                    size_hint_x: 0.5
+                    focus_next: decimals_field
+                    focus_previous: code_field
+                    on_text_validate: root.save_currency()
+
+            PTextField:
+                id: decimals_field
+                text: "۲"
+                hint_text: ((app.ui_language_code or True) and shape(tr("رقم اعشارِ ارز")))
+                persian_digits: True
+                focus_next: save_button
+                focus_previous: symbol_field
+                on_text_validate: root.save_currency()
+
+            BoxLayout:
+                size_hint_y: None
+                height: "36dp"
+                spacing: "8dp"
+
+                MDCheckbox:
+                    id: active_checkbox
+                    active: True
+                    size_hint: None, None
+                    size: "24dp", "24dp"
+                    pos_hint: {"center_y": 0.5}
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("فعال")))
+                    valign: "middle"
+
+            BoxLayout:
+                size_hint_y: None
+                height: "40dp"
+                spacing: "8dp"
+
+                PRaisedButton:
+                    id: save_button
+                    text: ((app.ui_language_code or True) and shape(tr("افزودن")))
+                    on_release: root.save_currency()
+                    focus_previous: decimals_field
+                    focus_next: cancel_edit_button
+
+                PFlatButton:
+                    id: cancel_edit_button
+                    text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    opacity: 0
+                    disabled: True
+                    size_hint_y: None
+                    height: "0dp"
+                    on_release: root.cancel_edit()
+                    focus_previous: save_button
+
+            BoxLayout:
+                id: grid_header
+                size_hint_y: None
+                height: "28dp"
+                padding: ["12dp", "0dp"]
+
+                Widget:
+                    size_hint_x: None
+                    width: "28dp"
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.2
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("اعشار")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.16
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("نماد")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.32
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.32
+
+            RecycleView:
+                id: currencies_list
+                viewclass: "CurrencyRowWidget"
+
+                RecycleBoxLayout:
+                    orientation: "vertical"
+                    default_size_hint: 1, None
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "2dp"
