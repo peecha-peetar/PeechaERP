@@ -1,6 +1,7 @@
 # این پروژه با pyproject.toml پکیج می‌شود (pip install -e .).
 # این فایل فقط برای راحتیِ تنظیم سریعِ Interpreter در PyCharm است و باید با
 # dependencies در pyproject.toml هم‌گام بماند.
+PySide6>=6.6
 kivy>=2.3,<3.0
 kivymd>=1.2,<2.0
 arabic-reshaper>=3.0
