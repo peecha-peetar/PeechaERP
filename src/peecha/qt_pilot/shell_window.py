@@ -198,12 +198,20 @@ class MainWindow(QMainWindow):
     # --- ثبت‌نامِ صفحات -----------------------------------------------------
     def _register_screens(self) -> None:
         from peecha.qt_pilot.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
+        from peecha.qt_pilot.screens.companies import CompaniesScreen  # noqa: PLC0415
+        from peecha.qt_pilot.screens.currencies import CurrenciesScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.dashboard import DashboardScreen  # noqa: PLC0415
+        from peecha.qt_pilot.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
+        from peecha.qt_pilot.screens.languages import LanguagesScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
 
         self.register_screen("dashboard", DashboardScreen())
         self.register_screen("placeholder", PlaceholderScreen())
         self.register_screen("chart_of_accounts", ChartOfAccountsScreen())
+        self.register_screen("languages", LanguagesScreen())
+        self.register_screen("currencies", CurrenciesScreen())
+        self.register_screen("companies", CompaniesScreen())
+        self.register_screen("fiscal_years", FiscalYearsScreen())
 
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget
