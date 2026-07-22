@@ -25,6 +25,17 @@
         text: root.label_text
         valign: "middle"
 
+# ردیفِ یک نتیجه‌ی جستجو در منوی کشوییِ _DimensionSearchField (مرکز هزینه/پروژه).
+<_DimensionOptionRow>:
+    size_hint_y: None
+    height: "36dp"
+    padding: ["10dp", "0dp"]
+    md_bg_color: theme.SELECTED if root.highlighted else (0, 0, 0, 0)
+
+    PLabel:
+        text: root.label_text
+        valign: "middle"
+
 # نکته‌ی مهمِ RTL (همه‌جای این فایل): در BoxLayout افقیِ Kivy فرزندِ
 # اول‌اعلام‌شده همیشه چپ‌ترین می‌شود (تست مستقیم تایید کرد، Kivy خودش پرچم
 # RTL برای BoxLayout ندارد)؛ برای این‌که ستون‌ها/فیلدها به ترتیب درستِ
@@ -71,21 +82,19 @@
         text_color: theme.TEXT_SECONDARY if root.currency_is_base else theme.ACCENT
         on_release: root.open_currency_dialog()
 
-    PTextField:
+    PAmountField:
         id: credit_field
         hint_text: ((app.ui_language_code or True) and shape(tr("بستانکار")))
         size_hint_x: 0.13
-        persian_digits: True
         on_text: root.on_credit_changed()
         on_text_validate: root.request_next()
         on_focus: root.on_amount_focus(self)
         focus_previous: debit_field
 
-    PTextField:
+    PAmountField:
         id: debit_field
         hint_text: ((app.ui_language_code or True) and shape(tr("بدهکار")))
         size_hint_x: 0.13
-        persian_digits: True
         on_text: root.on_debit_changed()
         # طبق درخواستِ صریح: اگر بدهکار پر شده باشد Enter به ردیفِ بعد
         # می‌رود؛ اگر صفر/خالی باشد (یعنی این ردیف بستانکار است) Enter به

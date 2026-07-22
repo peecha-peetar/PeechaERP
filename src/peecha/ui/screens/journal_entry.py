@@ -38,7 +38,7 @@ from peecha.ui import numerals, theme
 from peecha.ui.i18n import tr
 from peecha.ui.rtl import shape
 from peecha.ui.shortcuts import KeyboardShortcutMixin
-from peecha.ui.widgets import PSelectField, PTextField, open_rtl_dropdown
+from peecha.ui.widgets import PAmountField, PSelectField, PTextField, open_rtl_dropdown
 
 _KV_PATH = os.path.join(os.path.dirname(__file__), "journal_entry.kv")
 Builder.load_file(_KV_PATH)
@@ -234,6 +234,21 @@ class PersonSearchField(PTextField):
     def _on_focus_changed(self, _instance, focused: bool) -> None:
         if not focused:
             self._dropdown.dismiss()
+            return
+        # طبق درخواستِ صریح: بعدِ ورودِ حساب، همین که فوکوس به تفصیلی
+        # می‌رسد، فهرستِ کاملِ تفصیلی‌ها بلافاصله باز/جستجوپذیر باشد — نه
+        # فقط با اولین کاراکترِ تایپ‌شده (که رفتارِ AccountSearchField
+        # است، عمداً به‌خاطرِ باگِ لایه‌بندیِ ردیفِ تازه‌ساخته). چون فوکوسِ
+        # این فیلد همیشه از طریقِ انتخابِ واقعیِ یک حساب می‌آید (نه فوکوسِ
+        # خودکارِ فرم روی ردیفِ تازه)، آن مشکل اینجا مصداق ندارد؛ بازهم برای
+        # اطمینان، بازکردن به فریمِ بعد موکول می‌شود.
+        from kivy.clock import Clock  # noqa: PLC0415
+
+        Clock.schedule_once(self._open_full_list_if_still_focused, 0)
+
+    def _open_full_list_if_still_focused(self, _dt=None) -> None:
+        if self.focus and self._dropdown.attach_to is None:
+            self._filter_and_show("")
 
     def _on_text_changed(self, _instance, value: str) -> None:
         if self._suppress_filter:
@@ -413,56 +428,180 @@ class LineDescriptionField(PTextField):
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
 
 
+class _DimensionOptionRow(ButtonBehavior, MDBoxLayout):
+    """یک ردیفِ نتیجه‌ی جستجوی _DimensionSearchField — مشابهِ _AccountOptionRow."""
+
+    label_text = StringProperty("")
+    highlighted = BooleanProperty(False)
+
+    def __init__(self, detail_account: dimensions_service.DetailAccountRow, on_choose, **kwargs):
+        super().__init__(**kwargs)
+        self.detail_account = detail_account
+        self._on_choose = on_choose
+
+    def on_release(self) -> None:
+        self._on_choose(self.detail_account)
+
+
+class _DimensionSearchField(PTextField):
+    """فیلدِ جستجوی یک نوع‌بُعدِ تفصیلیِ الزامی (مرکز هزینه/پروژه/...) —
+    طبقِ درخواستِ صریح، دقیقاً همان الگویِ AccountSearchField/
+    PersonSearchField: با فوکوس‌گرفتن فهرستِ کامل بلافاصله باز می‌شود،
+    تایپ فیلتر می‌کند، بالا/پایین بینِ نتایج، Enter انتخاب می‌کند."""
+
+    def __init__(
+        self, detail_accounts: list[dimensions_service.DetailAccountRow], on_select, **kwargs
+    ):
+        kwargs.setdefault("auto_shape_display", False)
+        super().__init__(**kwargs)
+        self.detail_accounts = detail_accounts
+        self._on_select = on_select
+        self.selected_detail_account_id: int | None = None
+        self._results: list[dimensions_service.DetailAccountRow] = []
+        self._highlighted_index = -1
+        self._suppress_filter = False
+        self._dropdown = DropDown(auto_width=False, max_height=dp(200))
+        self._dropdown.width = dp(260)
+        self.bind(text=self._on_text_changed)
+        self.bind(focus=self._on_focus_changed)
+
+    def set_selected(self, detail_account: dimensions_service.DetailAccountRow) -> None:
+        self.selected_detail_account_id = detail_account.detail_account_id
+        self._suppress_filter = True
+        self.text = shape(detail_account.code)
+        self._suppress_filter = False
+
+    def _on_focus_changed(self, _instance, focused: bool) -> None:
+        if not focused:
+            self._dropdown.dismiss()
+            return
+        from kivy.clock import Clock  # noqa: PLC0415
+
+        Clock.schedule_once(self._open_full_list_if_still_focused, 0)
+
+    def _open_full_list_if_still_focused(self, _dt=None) -> None:
+        if self.focus and self._dropdown.attach_to is None:
+            self._filter_and_show("")
+
+    def _on_text_changed(self, _instance, value: str) -> None:
+        if self._suppress_filter:
+            return
+        self.selected_detail_account_id = None
+        self._filter_and_show(value)
+
+    def _filter_and_show(self, query: str) -> None:
+        query_norm = numerals.to_ascii_digits(query).strip()
+        if not query_norm:
+            self._results = list(self.detail_accounts)
+        else:
+            self._results = [
+                d for d in self.detail_accounts if query_norm in d.code or (d.name and query_norm in d.name)
+            ]
+        self._highlighted_index = 0 if self._results else -1
+        self._rebuild_dropdown()
+        if self._results and self.focus:
+            if self._dropdown.attach_to is None:
+                self._dropdown.open(self)
+        else:
+            self._dropdown.dismiss()
+
+    def _rebuild_dropdown(self) -> None:
+        self._dropdown.clear_widgets()
+        for i, d in enumerate(self._results):
+            self._dropdown.add_widget(
+                _DimensionOptionRow(
+                    detail_account=d,
+                    on_choose=self._select,
+                    label_text=shape(f"{d.code} — {d.name}" if d.name else d.code),
+                    highlighted=(i == self._highlighted_index),
+                )
+            )
+
+    def _move_highlight(self, delta: int) -> None:
+        if not self._results:
+            return
+        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
+        self._rebuild_dropdown()
+
+    def _select(self, detail_account: dimensions_service.DetailAccountRow) -> None:
+        self.set_selected(detail_account)
+        self._dropdown.dismiss()
+        self._on_select(detail_account)
+
+    def keyboard_on_key_down(self, window, keycode, text, modifiers):
+        key = keycode[0]
+        if key == 273:  # بالا
+            self._move_highlight(-1)
+            return True
+        if key == 274:  # پایین
+            self._move_highlight(1)
+            return True
+        if key in (13, 271):  # اینتر / اینترِ صفحه‌کلیدِ عددی
+            if self._results and 0 <= self._highlighted_index < len(self._results):
+                self._select(self._results[self._highlighted_index])
+            elif self.focus_next:
+                self.focus_next.focus = True
+            return True
+        if key == 27 and self._dropdown.attach_to is not None:
+            self._dropdown.dismiss()
+            return True
+        return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
+
 class _LineDimensionsContent(MDBoxLayout):
     """محتوایِ دیالوگِ انتخابِ ابعادِ تفصیلیِ یک ردیف — برای هر نوع‌بُعدِ
-    الزامیِ حسابِ انتخاب‌شده، یک PSelectField می‌سازد که با کلیک، منویِ
-    حساب‌های تفصیلیِ فعالِ همان نوع را (open_rtl_dropdown) باز می‌کند."""
+    الزامیِ حسابِ انتخاب‌شده (مثلاً ابتدا مرکز هزینه، سپس پروژه)، یک
+    _DimensionSearchField می‌سازد (طبقِ درخواستِ صریح، دقیقاً همان الگویِ
+    جستجوی زنده‌ی کد حساب/تفصیلی، نه یک منویِ کلیکی). Enter از هر فیلد به
+    فیلدِ نوع‌بُعدِ بعدی می‌رود؛ بعدِ انتخابِ آخرین نوع‌بُعد، on_complete
+    صدا زده می‌شود (بدونِ نیاز به کلیکِ دستیِ «تایید»)."""
 
-    def __init__(self, required_dimensions: list[dimensions_service.RequiredDimension], initial_values: dict[int, int], **kwargs):
+    def __init__(
+        self,
+        required_dimensions: list[dimensions_service.RequiredDimension],
+        initial_values: dict[int, int],
+        on_complete,
+        **kwargs,
+    ):
         kwargs.setdefault("orientation", "vertical")
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("spacing", dp(12))
         super().__init__(**kwargs)
         self.bind(minimum_height=self.setter("height"))
         self.values: dict[int, int] = dict(initial_values)
-        self._menus: dict[int, MDDropdownMenu] = {}
-        for dim in required_dimensions:
+        self._on_complete = on_complete
+        self.search_fields: list[_DimensionSearchField] = []
+
+        for index, dim in enumerate(required_dimensions):
             row = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(66), spacing=dp(4))
             row.add_widget(
                 Factory.PLabel(
                     text=shape(dim.code), font_style="Caption", size_hint_y=None, height=dp(20), valign="middle"
                 )
             )
-            select = PSelectField(text=self._label_for(dim, initial_values.get(dim.dimension_type_id)))
-            select.bind(on_release=lambda _inst, d=dim, s=select: self._open_menu(d, s))
-            row.add_widget(select)
+            field = _DimensionSearchField(
+                detail_accounts=dim.detail_accounts,
+                on_select=lambda detail, i=index, d=dim: self._field_selected(i, d, detail),
+            )
+            initial_id = initial_values.get(dim.dimension_type_id)
+            initial_match = next((d for d in dim.detail_accounts if d.detail_account_id == initial_id), None)
+            if initial_match is not None:
+                field.set_selected(initial_match)
+            row.add_widget(field)
             self.add_widget(row)
+            self.search_fields.append(field)
 
-    def _label_for(self, dim: dimensions_service.RequiredDimension, detail_account_id: int | None) -> str:
-        if detail_account_id is not None:
-            match = next((d for d in dim.detail_accounts if d.detail_account_id == detail_account_id), None)
-            if match is not None:
-                return shape(match.code)
-        return shape(tr("— انتخاب کنید —"))
+        for index, field in enumerate(self.search_fields):
+            field.focus_next = self.search_fields[index + 1] if index + 1 < len(self.search_fields) else None
 
-    def _open_menu(self, dim: dimensions_service.RequiredDimension, select_widget: PSelectField) -> None:
-        items = [
-            {
-                "text": shape(d.code),
-                "on_release": lambda detail_id=d.detail_account_id, code=d.code: self._choose(
-                    dim.dimension_type_id, detail_id, code, select_widget
-                ),
-            }
-            for d in dim.detail_accounts
-        ]
-        self._menus[dim.dimension_type_id] = open_rtl_dropdown(select_widget, items, width_mult=3)
-
-    def _choose(self, dimension_type_id: int, detail_account_id: int, code: str, select_widget: PSelectField) -> None:
-        menu = self._menus.get(dimension_type_id)
-        if menu is not None:
-            menu.dismiss()
-        self.values[dimension_type_id] = detail_account_id
-        select_widget.text = shape(code)
+    def _field_selected(
+        self, index: int, dim: dimensions_service.RequiredDimension, detail_account: dimensions_service.DetailAccountRow
+    ) -> None:
+        self.values[dim.dimension_type_id] = detail_account.detail_account_id
+        if index + 1 < len(self.search_fields):
+            self.search_fields[index + 1].focus = True
+        else:
+            self._on_complete()
 
 
 class _LineCurrencyContent(MDBoxLayout):
@@ -508,7 +647,7 @@ class _LineCurrencyContent(MDBoxLayout):
                 text=shape(tr("نرخِ تبدیل به ارزِ پایه")), font_style="Caption", size_hint_y=None, height=dp(20)
             )
         )
-        self.rate_field = PTextField(persian_digits=True)
+        self.rate_field = PAmountField()
         if initial_rate is not None:
             self.rate_field.text = numerals.to_persian_digits(str(initial_rate))
         self.rate_row.add_widget(self.rate_field)
@@ -689,17 +828,20 @@ class JournalEntryLineRow(MDBoxLayout):
         if self._dimensions_dialog is not None:
             self._dimensions_dialog.dismiss()
 
-        content = _LineDimensionsContent(self._required_dimensions, self.dimension_values)
-
-        def _apply(*_args) -> None:
+        def _complete(*_args) -> None:
+            # طبق درخواستِ صریح: بعدِ انتخابِ آخرین نوع‌بُعدِ الزامی (مرکز
+            # هزینه، سپس پروژه در صورتِ وجود)، فوکوس مستقیم به بدهکار
+            # می‌رود — نه شرحِ ردیف.
             self.dimension_values = dict(content.values)
             self._dimensions_dialog.dismiss()
             self._update_dims_complete()
-            self.description_field.focus = True
+            self.ids.debit_field.focus = True
+
+        content = _LineDimensionsContent(self._required_dimensions, self.dimension_values, on_complete=_complete)
 
         def _cancel(*_args) -> None:
             self._dimensions_dialog.dismiss()
-            self.description_field.focus = True
+            self.ids.debit_field.focus = True
 
         self._dimensions_dialog = MDDialog(
             title=shape(tr("ابعادِ تفصیلیِ ردیف")),
@@ -707,10 +849,15 @@ class JournalEntryLineRow(MDBoxLayout):
             content_cls=content,
             buttons=[
                 MDFlatButton(text=shape(tr("لغو")), on_release=_cancel),
-                MDRaisedButton(text=shape(tr("تایید")), on_release=_apply),
+                MDRaisedButton(text=shape(tr("تایید")), on_release=_complete),
             ],
         )
         self._dimensions_dialog.open()
+
+        if content.search_fields:
+            from kivy.clock import Clock  # noqa: PLC0415
+
+            Clock.schedule_once(lambda _dt: setattr(content.search_fields[0], "focus", True), 0)
 
     def open_currency_dialog(self) -> None:
         if not self.has_multi_currency:
@@ -975,13 +1122,25 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
     def _focus_after_row(self, row: JournalEntryLineRow) -> None:
         """Enter در فیلد بدهکار/بستانکارِ آخرین ردیف: ردیف جدید اضافه و
         فوکوس به آن منتقل می‌شود (مثل صفحه‌گسترده) — Enter در بقیه‌ی
-        ردیف‌ها فقط به ردیف بعدی می‌رود."""
+        ردیف‌ها فقط به ردیف بعدی می‌رود.
+
+        طبق درخواستِ صریح، شرحِ ردیف باید به ردیفِ بعدی منتقل شود؛ چون فرمِ
+        تازه با دو ردیفِ خالیِ از پیش‌ساخته شروع می‌شود (_reset_form)، اغلب
+        کاربر اصلاً add_line() را صدا نمی‌زند (فقط بینِ همین دو ردیفِ
+        موجود جابه‌جا می‌شود) — پس این انتقال اینجا هم لازم است، نه فقط در
+        add_line(). فقط وقتی ردیفِ مقصد هنوز شرحی ندارد پر می‌شود، تا شرحِ
+        از قبل‌واردشده‌ی خودِ آن ردیف پاک نشود."""
         if row is self._rows[-1]:
             self.add_line()
             self._rows[-1].account_field.focus = True
         else:
             idx = self._rows.index(row)
-            self._rows[idx + 1].account_field.focus = True
+            next_row = self._rows[idx + 1]
+            if not next_row.description_field.value.strip():
+                previous_description = row.description_field.value.strip()
+                if previous_description:
+                    next_row.description_field.set_value(previous_description)
+            next_row.account_field.focus = True
 
     def _recalculate(self) -> None:
         total_debit = decimal.Decimal(0)

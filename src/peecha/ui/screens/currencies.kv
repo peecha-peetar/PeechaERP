@@ -159,10 +159,9 @@
                         focus_next: rate_value_field
                         on_text_validate: rate_value_field.focus = True
 
-                    PTextField:
+                    PAmountField:
                         id: rate_value_field
                         hint_text: ((app.ui_language_code or True) and shape(tr("نرخِ تبدیل به ارزِ پایه")))
-                        persian_digits: True
                         size_hint_x: 0.4
                         focus_next: save_rate_button
                         on_text_validate: root.save_rate()

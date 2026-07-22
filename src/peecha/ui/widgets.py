@@ -284,6 +284,75 @@ class PTextField(MDTextField):
             self._apply_shaped_display()
 
 
+class PAmountField(PTextField):
+    """فیلدِ مبلغ/عدد: هم‌زمان با تایپ، بخشِ صحیح هر سه رقم با کاما جدا
+    می‌شود (طبق درخواستِ صریح: «همزمان با ورود مبلغ سه رقم سه رقم جدا
+    کنه») — مثلِ اکسل/نرم‌افزارهای حسابداری. بخشِ اعشاری (اگر رقمی با نقطه
+    تایپ کند، مثلِ نرخِ تبدیلِ ارز) دست‌نخورده می‌ماند، فقط گروه‌بندی نمی‌شود.
+
+    چون numerals.parse_decimal از قبل کاماها را قبل از تبدیل به Decimal حذف
+    می‌کند (replace(",", ""))، همه‌ی کدهای موجودی که مقدارِ این فیلدها را
+    می‌خوانند بدونِ هیچ تغییری با متنِ کاما‌دار هم درست کار می‌کنند."""
+
+    def __init__(self, **kwargs):
+        # اعداد نیازی به بازچینیِ بصریِ RTL (شکل‌دهیِ حروف) ندارند؛ خاموش‌کردنِ
+        # auto_shape_display از تداخلِ آن مکانیزم با گروه‌بندیِ زنده‌ی اینجا
+        # جلوگیری می‌کند.
+        kwargs.setdefault("persian_digits", True)
+        kwargs.setdefault("auto_shape_display", False)
+        super().__init__(**kwargs)
+        self._suppress_grouping = False
+        self._group_scheduled = False
+        self.bind(text=self._schedule_group_thousands)
+
+    def _schedule_group_thousands(self, _instance, _value: str) -> None:
+        # طبقِ تستِ مستقیم: اگر گروه‌بندی همین‌جا (هم‌زمان با خودِ رویدادِ
+        # text) انجام شود، چون _persianize_on_text (والدِ PTextField) هم
+        # روی همین رویداد بایند شده و ممکن است self.text را تودرتو دوباره
+        # عوض کند، رقم‌ها جابه‌جا/قاطی می‌شوند (Kivy در حالتِ تودرتو مقدارِ
+        # قدیمی را به observerِ بعدی پاس می‌دهد). برای اجتناب از این
+        # مسابقه‌ی تودرتو، گروه‌بندیِ واقعی به فریمِ بعد موکول می‌شود — یعنی
+        # بعد از این‌که همه‌ی observerهای دیگر (persianize و ...) کاملاً
+        # ته‌نشین شده‌اند؛ با یک تاخیرِ نامحسوس (کمتر از یک فریم).
+        if self._suppress_grouping or self._group_scheduled:
+            return
+        self._group_scheduled = True
+        from kivy.clock import Clock  # noqa: PLC0415
+
+        Clock.schedule_once(self._group_thousands_now, 0)
+
+    def _group_thousands_now(self, _dt=None) -> None:
+        self._group_scheduled = False
+        from peecha.ui import numerals  # noqa: PLC0415
+
+        current = self.text
+        cleaned = "".join(ch for ch in numerals.to_ascii_digits(current) if ch.isdigit() or ch == ".")
+        if not cleaned:
+            if current:
+                self._suppress_grouping = True
+                self.text = ""
+                self._suppress_grouping = False
+            return
+
+        if "." in cleaned:
+            integer_part, _, fractional_part = cleaned.partition(".")
+        else:
+            integer_part, fractional_part = cleaned, None
+
+        grouped_integer = f"{int(integer_part):,}" if integer_part else ""
+        result = grouped_integer if fractional_part is None else f"{grouped_integer}.{fractional_part}"
+        result = numerals.to_persian_digits(result)
+        if result == current:
+            return
+
+        chars_from_end = len(current) - self.cursor_index()
+        self._suppress_grouping = True
+        self.text = result
+        self._suppress_grouping = False
+        new_index = max(0, len(result) - chars_from_end)
+        self.cursor = self.get_cursor_from_index(new_index)
+
+
 class PRibbonButton(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
     """دکمه‌ی ریبونِ میان‌برِ سریع (آیکون بالا + برچسبِ کوتاه پایین) — طبقِ
     بازطراحیِ الهام‌گرفته از نرم‌افزارهای حسابداریِ کلاسیک: زیرِ نوارِ بالا،
@@ -487,6 +556,7 @@ def open_rtl_dropdown(caller, items: list[dict], width_mult: int = 3) -> MDDropd
 Factory.register("PCard", cls=PCard)
 Factory.register("PDropdownItem", cls=PDropdownItem)
 Factory.register("PTextField", cls=PTextField)
+Factory.register("PAmountField", cls=PAmountField)
 Factory.register("PNavItem", cls=PNavItem)
 Factory.register("PNavGroupLabel", cls=PNavGroupLabel)
 Factory.register("PSelectField", cls=PSelectField)
