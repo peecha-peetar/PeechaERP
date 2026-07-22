@@ -131,148 +131,162 @@
     name: "journal_entry"
     md_bg_color: theme.BACKGROUND
 
-    ScrollView:
-        BoxLayout:
-            orientation: "vertical"
+    BoxLayout:
+        # طبق درخواستِ صریح: هدر و فوترِ سند ثابت بمانند، فقط خودِ فهرستِ
+        # ردیف‌ها بالا/پایین برود — قبلاً کل صفحه (هدر+ردیف‌ها+فوتر) در یک
+        # ScrollView واحد بود، پس با زیادشدنِ ردیف‌ها هدر (تاریخ/شرح سند) و
+        # فوتر (جمع بدهکار/بستانکار، دکمه‌ی ثبت) هم از دید خارج می‌شدند.
+        # این‌جا سه PCardِ جدا: هدر (ثابت)، ردیف‌ها (کشسان، خودش اسکرول
+        # می‌کند)، فوتر (ثابت) — همان الگویِ chart_of_accounts/
+        # journal_entries_list.
+        orientation: "vertical"
+        padding: "24dp"
+        spacing: "12dp"
+
+        PCard:
             size_hint_y: None
             height: self.minimum_height
-            padding: "24dp"
-            spacing: "12dp"
 
-            PCard:
+            PLabel:
+                id: form_title
+                text: ((app.ui_language_code or True) and shape(tr("صدور سند حسابداری")))
+                font_style: "H5"
                 size_hint_y: None
-                height: self.minimum_height
+                height: self.texture_size[1]
+
+            BoxLayout:
+                size_hint_y: None
+                height: "48dp"
+                spacing: "12dp"
+
+                PTextField:
+                    id: description_field
+                    hint_text: ((app.ui_language_code or True) and shape(tr("شرح سند")))
+                    size_hint_x: 0.7
+                    focus_previous: date_field
+                    # طبق درخواستِ صریح: با Enter به اولین فیلدِ حسابِ
+                    # ردیف‌ها می‌رود (focus_next پویا در _relink_row_focus
+                    # به‌روز می‌شود، پس همیشه به ردیفِ درستی اشاره دارد).
+                    on_text_validate: self.focus_next.focus = True if self.focus_next else None
+
+                PTextField:
+                    id: date_field
+                    hint_text: ((app.ui_language_code or True) and shape(tr("تاریخ سند (۱۴۰۳/۰۴/۲۸)")))
+                    size_hint_x: 0.3
+                    persian_digits: True
+                    focus_next: description_field
+                    # طبق درخواستِ صریح: نقطه‌ی شروعِ کیبوردِ سند تاریخ
+                    # است؛ Enter به شرحِ سند می‌رود.
+                    on_text_validate: self.focus_next.focus = True
+
+            BoxLayout:
+                size_hint_y: None
+                height: "48dp"
+                spacing: "12dp"
+
+                PHintLabel:
+                    id: registration_at_label
+                    text: ""
+                    size_hint_x: 0.3
+
+                MDCheckbox:
+                    id: draft_checkbox
+                    size_hint: None, None
+                    size: "24dp", "24dp"
+                    pos_hint: {"center_y": 0.5}
 
                 PLabel:
-                    id: form_title
-                    text: ((app.ui_language_code or True) and shape(tr("صدور سند حسابداری")))
-                    font_style: "H5"
-                    size_hint_y: None
-                    height: self.texture_size[1]
+                    text: ((app.ui_language_code or True) and shape(tr("ذخیره به عنوان پیش‌نویس")))
+                    valign: "middle"
+                    size_hint_x: None
+                    width: "170dp"
 
-                BoxLayout:
-                    size_hint_y: None
-                    height: "48dp"
-                    spacing: "12dp"
+                PTextField:
+                    id: alternative_number_field
+                    hint_text: ((app.ui_language_code or True) and shape(tr("شماره عطف/بایگانی")))
+                    size_hint_x: 0.3
+                    focus_previous: description_field
+                    on_text_validate: self.focus_next.focus = True if self.focus_next else None
 
-                    PTextField:
-                        id: description_field
-                        hint_text: ((app.ui_language_code or True) and shape(tr("شرح سند")))
-                        size_hint_x: 0.7
-                        focus_previous: date_field
-                        # طبق درخواستِ صریح: با Enter به اولین فیلدِ حسابِ
-                        # ردیف‌ها می‌رود (focus_next پویا در _relink_row_focus
-                        # به‌روز می‌شود، پس همیشه به ردیفِ درستی اشاره دارد).
-                        on_text_validate: self.focus_next.focus = True if self.focus_next else None
+        PCard:
+            PLabel:
+                text: ((app.ui_language_code or True) and shape(tr("ردیف‌ها")))
+                font_style: "Subtitle1"
+                size_hint_y: None
+                height: self.texture_size[1]
 
-                    PTextField:
-                        id: date_field
-                        hint_text: ((app.ui_language_code or True) and shape(tr("تاریخ سند (۱۴۰۳/۰۴/۲۸)")))
-                        size_hint_x: 0.3
-                        persian_digits: True
-                        focus_next: description_field
-                        # طبق درخواستِ صریح: نقطه‌ی شروعِ کیبوردِ سند تاریخ
-                        # است؛ Enter به شرحِ سند می‌رود.
-                        on_text_validate: self.focus_next.focus = True
+            # هدرِ ستون‌ها: عرض هر ستون دقیقاً باید با size_hint_x معادلش
+            # در <JournalEntryLineRow> یکی باشد وگرنه زیر هم نمی‌نشینند.
+            # نکته‌ی مهم: سه‌تا آیکونِ ابتدای هر ردیف (بستن/ابعاد/ارز) عرضِ
+            # ثابت (پیکسلی) دارند، نه size_hint_x — پس این جایگاهِ خالیِ
+            # هم‌ارزشان در هدر هم باید یک Widget با عرضِ ثابتِ دقیقاً برابر
+            # باشد (نه یک Widget با size_hint پیش‌فرض که با بقیه‌ی ستون‌ها
+            # رقابتِ نسبی می‌کند و باعثِ جابه‌جاشدنِ کل هدر می‌شود): آیکونِ
+            # بستن (پیش‌فرضِ ۴۸dp‌ی MDIconButton) + ۸dp فاصله + آیکونِ ابعاد
+            # (۳۶dp) + ۸dp فاصله + آیکونِ ارز (۳۶dp) + ۸dp فاصله تا فیلدِ
+            # بستانکار = ۱۴۴dp.
+            BoxLayout:
+                size_hint_y: None
+                height: "24dp"
+                spacing: "8dp"
 
-                BoxLayout:
-                    size_hint_y: None
-                    height: "48dp"
-                    spacing: "12dp"
-
-                    PHintLabel:
-                        id: registration_at_label
-                        text: ""
-                        size_hint_x: 0.3
-
-                    MDCheckbox:
-                        id: draft_checkbox
-                        size_hint: None, None
-                        size: "24dp", "24dp"
-                        pos_hint: {"center_y": 0.5}
-
-                    PLabel:
-                        text: ((app.ui_language_code or True) and shape(tr("ذخیره به عنوان پیش‌نویس")))
-                        valign: "middle"
-                        size_hint_x: None
-                        width: "170dp"
-
-                    PTextField:
-                        id: alternative_number_field
-                        hint_text: ((app.ui_language_code or True) and shape(tr("شماره عطف/بایگانی")))
-                        size_hint_x: 0.3
-                        focus_previous: description_field
-                        on_text_validate: self.focus_next.focus = True if self.focus_next else None
+                Widget:
+                    size_hint_x: None
+                    width: "144dp"
 
                 PLabel:
-                    text: ((app.ui_language_code or True) and shape(tr("ردیف‌ها")))
-                    font_style: "Subtitle1"
-                    size_hint_y: None
-                    height: self.texture_size[1]
+                    text: ((app.ui_language_code or True) and shape(tr("بستانکار")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.13
 
-                # هدرِ ستون‌ها: عرض هر ستون دقیقاً باید با size_hint_x معادلش
-                # در <JournalEntryLineRow> یکی باشد وگرنه زیر هم نمی‌نشینند.
-                # نکته‌ی مهم: سه‌تا آیکونِ ابتدای هر ردیف (بستن/ابعاد/ارز) عرضِ
-                # ثابت (پیکسلی) دارند، نه size_hint_x — پس این جایگاهِ خالیِ
-                # هم‌ارزشان در هدر هم باید یک Widget با عرضِ ثابتِ دقیقاً برابر
-                # باشد (نه یک Widget با size_hint پیش‌فرض که با بقیه‌ی ستون‌ها
-                # رقابتِ نسبی می‌کند و باعثِ جابه‌جاشدنِ کل هدر می‌شود): آیکونِ
-                # بستن (پیش‌فرضِ ۴۸dp‌ی MDIconButton) + ۸dp فاصله + آیکونِ ابعاد
-                # (۳۶dp) + ۸dp فاصله + آیکونِ ارز (۳۶dp) + ۸dp فاصله تا فیلدِ
-                # بستانکار = ۱۴۴dp.
-                BoxLayout:
-                    size_hint_y: None
-                    height: "24dp"
-                    spacing: "8dp"
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("بدهکار")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.13
 
-                    Widget:
-                        size_hint_x: None
-                        width: "144dp"
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("شرح ردیف")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.30
 
-                    PLabel:
-                        text: ((app.ui_language_code or True) and shape(tr("بستانکار")))
-                        font_style: "Caption"
-                        bold: True
-                        theme_text_color: "Custom"
-                        text_color: theme.TEXT_SECONDARY
-                        valign: "middle"
-                        size_hint_x: 0.13
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("تفصیلی")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.16
 
-                    PLabel:
-                        text: ((app.ui_language_code or True) and shape(tr("بدهکار")))
-                        font_style: "Caption"
-                        bold: True
-                        theme_text_color: "Custom"
-                        text_color: theme.TEXT_SECONDARY
-                        valign: "middle"
-                        size_hint_x: 0.13
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("حساب")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.20
 
-                    PLabel:
-                        text: ((app.ui_language_code or True) and shape(tr("شرح ردیف")))
-                        font_style: "Caption"
-                        bold: True
-                        theme_text_color: "Custom"
-                        text_color: theme.TEXT_SECONDARY
-                        valign: "middle"
-                        size_hint_x: 0.30
-
-                    PLabel:
-                        text: ((app.ui_language_code or True) and shape(tr("تفصیلی")))
-                        font_style: "Caption"
-                        bold: True
-                        theme_text_color: "Custom"
-                        text_color: theme.TEXT_SECONDARY
-                        valign: "middle"
-                        size_hint_x: 0.16
-
-                    PLabel:
-                        text: ((app.ui_language_code or True) and shape(tr("حساب")))
-                        font_style: "Caption"
-                        bold: True
-                        theme_text_color: "Custom"
-                        text_color: theme.TEXT_SECONDARY
-                        valign: "middle"
-                        size_hint_x: 0.20
+            # فقط همین ScrollView (نه کلِ صفحه) بالا/پایین می‌رود — طبق
+            # درخواستِ صریح، هدر/فوترِ سند ثابت می‌مانند.
+            ScrollView:
+                do_scroll_x: False
+                bar_width: "8dp"
+                scroll_type: ["bars", "content"]
+                bar_color: theme.ACCENT
+                bar_inactive_color: theme.BORDER[0], theme.BORDER[1], theme.BORDER[2], 0.6
 
                 BoxLayout:
                     id: lines_box
@@ -281,93 +295,97 @@
                     height: self.minimum_height
                     spacing: "6dp"
 
-                PFlatButton:
-                    id: add_line_button
-                    text: ((app.ui_language_code or True) and shape(tr("+ افزودن ردیف")))
-                    theme_text_color: "Custom"
-                    text_color: theme.ACCENT
-                    size_hint_y: None
-                    height: "36dp"
-                    on_release: root.add_line()
-                    focus_next: save_button
+            PFlatButton:
+                id: add_line_button
+                text: ((app.ui_language_code or True) and shape(tr("+ افزودن ردیف")))
+                theme_text_color: "Custom"
+                text_color: theme.ACCENT
+                size_hint_y: None
+                height: "36dp"
+                on_release: root.add_line()
+                focus_next: save_button
+
+        PCard:
+            size_hint_y: None
+            height: self.minimum_height
+
+            MDBoxLayout:
+                size_hint_y: None
+                height: "56dp"
+                padding: ["16dp", "0dp"]
+                spacing: "20dp"
+                radius: [14, 14, 14, 14]
+                md_bg_color: theme.HOVER
 
                 MDBoxLayout:
-                    size_hint_y: None
-                    height: "56dp"
-                    padding: ["16dp", "0dp"]
-                    spacing: "20dp"
-                    radius: [14, 14, 14, 14]
-                    md_bg_color: theme.HOVER
-
-                    MDBoxLayout:
-                        id: balance_chip
-                        size_hint: None, None
-                        size: self.minimum_width, dp(30)
-                        padding: ["14dp", "0dp"]
-                        radius: [15, 15, 15, 15]
-                        md_bg_color: theme.DANGER[0], theme.DANGER[1], theme.DANGER[2], 0.12
-                        pos_hint: {"center_y": 0.5}
-
-                        PLabel:
-                            id: balance_label
-                            text: ""
-                            theme_text_color: "Custom"
-                            text_color: theme.DANGER
-                            halign: "center"
-                            valign: "middle"
-                            # adaptive_width: توضیح در dashboard.kv/widgets.kv
-                            adaptive_width: True
-
-                    Widget:
+                    id: balance_chip
+                    size_hint: None, None
+                    size: self.minimum_width, dp(30)
+                    padding: ["14dp", "0dp"]
+                    radius: [15, 15, 15, 15]
+                    md_bg_color: theme.DANGER[0], theme.DANGER[1], theme.DANGER[2], 0.12
+                    pos_hint: {"center_y": 0.5}
 
                     PLabel:
-                        id: total_credit_label
+                        id: balance_label
                         text: ""
                         theme_text_color: "Custom"
-                        text_color: theme.TEXT_PRIMARY
+                        text_color: theme.DANGER
+                        halign: "center"
                         valign: "middle"
+                        # adaptive_width: توضیح در dashboard.kv/widgets.kv
+                        adaptive_width: True
 
-                    PLabel:
-                        id: total_debit_label
-                        text: ""
-                        theme_text_color: "Custom"
-                        text_color: theme.TEXT_PRIMARY
-                        valign: "middle"
+                Widget:
 
-                # طبق درخواستِ صریح: مبلغِ واردشده (در هر فیلدِ بدهکار/بستانکار
-                # از هر ردیف) به‌صورتِ زنده زیرِ فرم به حروف نمایش داده می‌شود.
-                PHintLabel:
-                    id: amount_words_label
+                PLabel:
+                    id: total_credit_label
                     text: ""
                     theme_text_color: "Custom"
-                    text_color: theme.TEXT_SECONDARY
+                    text_color: theme.TEXT_PRIMARY
+                    valign: "middle"
 
-                PHintLabel:
-                    id: status_label
+                PLabel:
+                    id: total_debit_label
                     text: ""
                     theme_text_color: "Custom"
-                    text_color: theme.TEXT_SECONDARY
+                    text_color: theme.TEXT_PRIMARY
+                    valign: "middle"
 
-                BoxLayout:
+            # طبق درخواستِ صریح: مبلغِ واردشده (در هر فیلدِ بدهکار/بستانکار
+            # از هر ردیف) به‌صورتِ زنده زیرِ فرم به حروف نمایش داده می‌شود.
+            PHintLabel:
+                id: amount_words_label
+                text: ""
+                theme_text_color: "Custom"
+                text_color: theme.TEXT_SECONDARY
+
+            PHintLabel:
+                id: status_label
+                text: ""
+                theme_text_color: "Custom"
+                text_color: theme.TEXT_SECONDARY
+
+            BoxLayout:
+                size_hint_y: None
+                height: "48dp"
+                spacing: "8dp"
+
+                PFlatButton:
+                    id: cancel_edit_button
+                    text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    opacity: 0
+                    disabled: True
+                    focus_previous: save_button
                     size_hint_y: None
-                    height: "48dp"
-                    spacing: "8dp"
+                    height: "0dp"
+                    on_release: root.cancel_edit()
 
-                    PFlatButton:
-                        id: cancel_edit_button
-                        text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
-                        theme_text_color: "Custom"
-                        text_color: theme.TEXT_SECONDARY
-                        opacity: 0
-                        disabled: True
-                        focus_previous: save_button
-                        size_hint_y: None
-                        height: "0dp"
-                        on_release: root.cancel_edit()
-
-                    PRaisedButton:
-                        id: save_button
-                        text: ((app.ui_language_code or True) and shape(tr("ثبت سند")))
-                        on_release: root.save_entry()
-                        focus_previous: add_line_button
-                        focus_next: cancel_edit_button
+                PRaisedButton:
+                    id: save_button
+                    text: ((app.ui_language_code or True) and shape(tr("ثبت سند")))
+                    on_release: root.save_entry()
+                    focus_previous: add_line_button
+                    focus_next: cancel_edit_button
