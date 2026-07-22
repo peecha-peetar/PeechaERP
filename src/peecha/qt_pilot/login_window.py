@@ -21,50 +21,51 @@ from peecha import session
 from peecha.db.base import new_session
 from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
+from peecha.qt_pilot import theme
 from peecha.services.auth import authenticate
 
-_STYLE = """
-QWidget#root {
-    background-color: #F6F5FB;
-}
-QWidget#card {
-    background-color: #FFFFFF;
+_STYLE = f"""
+QWidget#root {{
+    background-color: {theme.BACKGROUND};
+}}
+QWidget#card {{
+    background-color: {theme.SURFACE};
     border-radius: 16px;
-}
-QLabel#title {
+}}
+QLabel#title {{
     font-size: 28px;
     font-weight: bold;
-    color: #14173A;
-}
-QLabel#heading {
+    color: {theme.TEXT_PRIMARY};
+}}
+QLabel#heading {{
     font-size: 20px;
     font-weight: bold;
-    color: #14173A;
-}
-QLabel#status {
-    color: #E5484D;
-}
-QLineEdit {
-    background-color: #F4F3FA;
-    border: 1px solid #E4E1F5;
+    color: {theme.TEXT_PRIMARY};
+}}
+QLabel#status {{
+    color: {theme.DANGER};
+}}
+QLineEdit {{
+    background-color: {theme.HOVER};
+    border: 1px solid {theme.BORDER};
     border-radius: 10px;
     padding: 10px 14px;
     font-size: 14px;
-    color: #14173A;
-}
-QLineEdit:focus {
-    border: 1px solid #6D5CE6;
-}
-QPushButton#loginButton {
-    background-color: #6D5CE6;
+    color: {theme.TEXT_PRIMARY};
+}}
+QLineEdit:focus {{
+    border: 1px solid {theme.ACCENT};
+}}
+QPushButton#loginButton {{
+    background-color: {theme.ACCENT};
     color: white;
     border-radius: 20px;
     padding: 10px 0px;
     font-size: 15px;
-}
-QPushButton#loginButton:hover {
-    background-color: #5b4cd6;
-}
+}}
+QPushButton#loginButton:hover {{
+    background-color: {theme.ACCENT_HOVER};
+}}
 """
 
 
@@ -134,10 +135,11 @@ class LoginWindow(QWidget):
 
         session.current_user = user
         self._load_default_company(user.user_id)
-        from peecha.qt_pilot.accounts_window import AccountsWindow  # noqa: PLC0415
+        from peecha.qt_pilot.shell_window import MainWindow  # noqa: PLC0415
 
-        self._accounts_window = AccountsWindow()
-        self._accounts_window.show()
+        self._main_window = MainWindow()
+        self._main_window.load_context_switcher()
+        self._main_window.show()
         self.close()
 
     def _load_default_company(self, user_id: int) -> None:
