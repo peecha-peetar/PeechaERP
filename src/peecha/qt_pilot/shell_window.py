@@ -203,6 +203,11 @@ class MainWindow(QMainWindow):
         from peecha.qt_pilot.screens.dashboard import DashboardScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.languages import LanguagesScreen  # noqa: PLC0415
+        from peecha.qt_pilot.screens.person_group_screens import (  # noqa: PLC0415
+            CustomersScreen,
+            PersonnelScreen,
+            SuppliersScreen,
+        )
         from peecha.qt_pilot.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.roles import RolesScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.users import UsersScreen  # noqa: PLC0415
@@ -216,6 +221,9 @@ class MainWindow(QMainWindow):
         self.register_screen("fiscal_years", FiscalYearsScreen())
         self.register_screen("users", UsersScreen())
         self.register_screen("roles", RolesScreen())
+        self.register_screen("customers", CustomersScreen())
+        self.register_screen("suppliers", SuppliersScreen())
+        self.register_screen("personnel", PersonnelScreen())
 
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget
