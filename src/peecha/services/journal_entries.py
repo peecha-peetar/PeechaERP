@@ -23,6 +23,7 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
     AccountNature,
+    AccountPersonGroup,
     ChartOfAccount,
     DetailAccount,
     FiscalYear,
@@ -163,6 +164,19 @@ def _resolve_lines(
         for account_id, dimension_type_id in rows:
             required_by_account.setdefault(account_id, set()).add(dimension_type_id)
 
+    # طبقِ درخواستِ صریح: یک معین می‌تواند به گروهِ تفصیلیِ خاصی (مشتری/
+    # تامین‌کننده/پرسنل) محدود شود — اگر محدود بود، «بدون تفصیلی» دیگر کافی
+    # نیست و انتخابِ الزامی از همان گروه لازم است.
+    required_person_groups_by_account: dict[int, set[int]] = {}
+    if account_ids:
+        rows = session.execute(
+            select(AccountPersonGroup.account_id, AccountPersonGroup.person_group_id).where(
+                AccountPersonGroup.account_id.in_(account_ids)
+            )
+        ).all()
+        for account_id, person_group_id in rows:
+            required_person_groups_by_account.setdefault(account_id, set()).add(person_group_id)
+
     enabled_currency_ids = {company.base_currency_id} | set(
         session.scalars(
             select(CompanyCurrency.currency_id).where(
@@ -185,6 +199,16 @@ def _resolve_lines(
     )
     no_detail_account_id = no_detail_account.detail_account_id
 
+    all_provided_detail_ids = {v for ln in real_lines for v in ln.details.values()}
+    detail_accounts_by_id: dict[int, DetailAccount] = {}
+    if all_provided_detail_ids:
+        detail_accounts_by_id = {
+            d.detail_account_id: d
+            for d in session.scalars(
+                select(DetailAccount).where(DetailAccount.detail_account_id.in_(all_provided_detail_ids))
+            ).all()
+        }
+
     resolved: list[_ResolvedLine] = []
     for ln in real_lines:
         account = accounts_by_id.get(ln.account_id)
@@ -204,7 +228,19 @@ def _resolve_lines(
         if missing:
             raise ValueError(f"برای حساب «{account.full_code}» انتخابِ ابعادِ تفصیلیِ الزامی فراموش شده است.")
 
-        if person_dimension_type_id not in ln.details:
+        required_person_groups = required_person_groups_by_account.get(ln.account_id)
+        person_detail_account_id = ln.details.get(person_dimension_type_id)
+        if required_person_groups:
+            person_row = detail_accounts_by_id.get(person_detail_account_id) if person_detail_account_id else None
+            if (
+                person_row is None
+                or person_row.code == dimensions_service.NO_DETAIL_CODE
+                or person_row.person_group_id not in required_person_groups
+            ):
+                raise ValueError(
+                    f"برایِ حساب «{account.full_code}» انتخابِ یک تفصیلیِ اشخاص از گروهِ مجازِ همین حساب الزامی است."
+                )
+        elif person_dimension_type_id not in ln.details:
             ln.details[person_dimension_type_id] = no_detail_account_id
 
         currency_id = ln.currency_id or company.base_currency_id

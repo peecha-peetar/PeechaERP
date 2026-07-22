@@ -132,6 +132,7 @@ class DetailAccount(Base):
     dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
     code: Mapped[str] = mapped_column(String(30))
     name: Mapped[str | None] = mapped_column(String(200))
+    person_group_id: Mapped[int | None] = mapped_column(ForeignKey("acc.person_groups.person_group_id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -144,6 +145,73 @@ class AccountDetailDimension(Base):
         ForeignKey("acc.detail_dimension_types.dimension_type_id"), primary_key=True
     )
     is_required: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class PersonGroup(Base):
+    """گروهِ تفصیلیِ اشخاص (مشتری/تامین‌کننده/پرسنل) — طبقه‌بندیِ هر شخص،
+    و مبنایِ محدودکردنِ یک معین به گروهِ خاصی (acc.account_person_groups)."""
+
+    __tablename__ = "person_groups"
+    __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "acc"})
+
+    person_group_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(20))  # CUSTOMER, SUPPLIER, PERSONNEL
+    name: Mapped[str] = mapped_column(String(100))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AccountPersonGroup(Base):
+    """کدام معین‌ها به کدام گروه(ها)ی تفصیلی محدودند."""
+
+    __tablename__ = "account_person_groups"
+    __table_args__ = {"schema": "acc"}
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"), primary_key=True)
+    person_group_id: Mapped[int] = mapped_column(ForeignKey("acc.person_groups.person_group_id"), primary_key=True)
+
+
+class CustomerDetail(Base):
+    __tablename__ = "customer_details"
+    __table_args__ = {"schema": "acc"}
+
+    detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"), primary_key=True)
+    economic_code: Mapped[str | None] = mapped_column(String(30))
+    national_id: Mapped[str | None] = mapped_column(String(20))
+    phone: Mapped[str | None] = mapped_column(String(30))
+    mobile: Mapped[str | None] = mapped_column(String(30))
+    address: Mapped[str | None] = mapped_column(String(400))
+    credit_limit: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class SupplierDetail(Base):
+    __tablename__ = "supplier_details"
+    __table_args__ = {"schema": "acc"}
+
+    detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"), primary_key=True)
+    economic_code: Mapped[str | None] = mapped_column(String(30))
+    national_id: Mapped[str | None] = mapped_column(String(20))
+    phone: Mapped[str | None] = mapped_column(String(30))
+    mobile: Mapped[str | None] = mapped_column(String(30))
+    address: Mapped[str | None] = mapped_column(String(400))
+    bank_account_no: Mapped[str | None] = mapped_column(String(40))
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class PersonnelDetail(Base):
+    __tablename__ = "personnel_details"
+    __table_args__ = {"schema": "acc"}
+
+    detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"), primary_key=True)
+    national_id: Mapped[str | None] = mapped_column(String(20))
+    personnel_no: Mapped[str | None] = mapped_column(String(30))
+    position_title: Mapped[str | None] = mapped_column(String(100))
+    phone: Mapped[str | None] = mapped_column(String(30))
+    mobile: Mapped[str | None] = mapped_column(String(30))
+    hire_date: Mapped[datetime.date | None] = mapped_column(Date)
+    bank_account_no: Mapped[str | None] = mapped_column(String(40))
+    notes: Mapped[str | None] = mapped_column(String(500))
 
 
 class JournalEntryType(Base):

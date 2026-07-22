@@ -22,6 +22,22 @@
         text: root.label_text
         valign: "middle"
 
+<_PersonGroupCheckRow>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    spacing: "8dp"
+
+    MDCheckbox:
+        id: check
+        size_hint: None, None
+        size: "24dp", "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    PLabel:
+        text: root.label_text
+        valign: "middle"
+
 # ردیفِ جدولِ کدینگ حسابداری — چهار ستون: کد | نام حساب | سطح | وضعیت +
 # دو آیکونِ ویرایش/حذف. عرضِ ستون‌های نسبی اینجا و در هدر (پایین‌تر در
 # <ChartOfAccountsScreen>) باید دقیقاً یکی باشد وگرنه ستون‌های ردیف زیر
@@ -255,6 +271,31 @@
 
                 BoxLayout:
                     id: dimension_types_box
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "2dp"
+
+            BoxLayout:
+                id: person_groups_section
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                spacing: "4dp"
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("محدودکردنِ تفصیلی به گروه (اختیاری)")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    size_hint_y: None
+                    height: self.texture_size[1]
+
+                PHintLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("اگر گروهی انتخاب نشود، تفصیلی برای این حساب آزاد است (پیش‌فرض «بدون تفصیلی»).")))
+
+                BoxLayout:
+                    id: person_groups_box
                     orientation: "vertical"
                     size_hint_y: None
                     height: self.minimum_height

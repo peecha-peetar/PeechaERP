@@ -234,6 +234,20 @@ class PersonSearchField(PTextField):
         self.bind(text=self._on_text_changed)
         self.bind(focus=self._on_focus_changed)
 
+    def set_options(self, person_options: list[dimensions_service.DetailAccountRow]) -> None:
+        """طبقِ محدودیتِ گروهِ تفصیلیِ حسابِ انتخاب‌شده (اگر حسابی به گروهِ
+        خاصی محدود شده باشد)، فهرستِ اشخاصِ قابل‌جستجو را عوض می‌کند —
+        بدونِ تأثیر روی self.person_options در JournalEntryLineRow (که
+        همیشه فهرستِ کاملِ همه‌ی اشخاص را برای بازخوانیِ سندِ ویرایشی نگه
+        می‌دارد)."""
+        self.person_options = person_options
+
+    def clear_selection(self) -> None:
+        self.detail_account_id = None
+        self._suppress_filter = True
+        self.text = ""
+        self._suppress_filter = False
+
     def _on_focus_changed(self, _instance, focused: bool) -> None:
         if not focused:
             self._dropdown.dismiss()
@@ -654,6 +668,24 @@ class JournalEntryLineRow(MDBoxLayout):
             dimensions_service.get_required_dimensions_for_account(self.account_id) if self.account_id else []
         )
         self.has_required_dims = bool(self._required_dimensions)
+
+        # طبقِ درخواستِ صریح: اگر معینِ انتخاب‌شده به گروهِ تفصیلیِ خاصی
+        # (مثلاً مشتری) محدود شده باشد، فهرستِ قابل‌جستجوی ستونِ تفصیلی فقط
+        # همان گروه می‌شود و «بدون تفصیلی» دیگر پیش‌فرض/کافی نیست — انتخاب
+        # الزامی می‌شود (خطای دقیق در صورتِ فراموشی، هنگامِ ثبت از سرویس می‌آید).
+        required_groups = (
+            dimensions_service.get_required_person_groups_for_account(self.account_id) if self.account_id else []
+        )
+        if required_groups:
+            allowed_group_ids = {g.person_group_id for g in required_groups}
+            self.person_field.set_options([p for p in self.person_options if p.person_group_id in allowed_group_ids])
+            self.person_field.hint_text = shape(tr("تفصیلی (الزامی — {})").format("، ".join(g.name for g in required_groups)))
+            self.person_field.clear_selection()
+            self.dimension_values.pop(self.person_dimension_type_id, None)
+        else:
+            self.person_field.set_options(self.person_options)
+            self.person_field.hint_text = shape(tr("تفصیلی"))
+
         self._update_dims_complete()
 
     def _update_dims_complete(self) -> None:

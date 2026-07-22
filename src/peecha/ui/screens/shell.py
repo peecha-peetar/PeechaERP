@@ -14,6 +14,7 @@ import datetime
 import os
 
 from kivy.lang import Builder
+from kivy.properties import BooleanProperty
 from kivymd.uix.menu import MDDropdownMenu
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.screenmanager import MDScreenManager
@@ -43,7 +44,9 @@ NAV_ITEMS = [
         "icon": "cash-multiple",
         "children": [
             {"code": "GL_COA", "label": "کدینگ حسابداری", "icon": "format-list-bulleted", "screen": "chart_of_accounts"},
-            {"code": "GL_PERSONS", "label": "اشخاص", "icon": "account-multiple-outline", "screen": "persons"},
+            {"code": "GL_CUSTOMERS", "label": "مشتریان", "icon": "account-cash-outline", "screen": "customers"},
+            {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "icon": "truck-outline", "screen": "suppliers"},
+            {"code": "GL_PERSONNEL", "label": "پرسنل", "icon": "badge-account-outline", "screen": "personnel"},
             {"code": "GL_JE", "label": "صدور سند", "icon": "file-document-edit-outline", "screen": "journal_entry"},
             {"code": "GL_DIM", "label": "مراکز هزینه و ابعادِ تفصیلی", "icon": "shape-outline", "screen": "detail_dimensions"},
         ],
@@ -88,6 +91,10 @@ def _flatten_nav_items() -> list[dict]:
 
 
 class ShellScreen(MDScreen):
+    # طبق درخواستِ صریح: نوار کناری وقتی لازم نیست خودکار جمع می‌شود تا
+    # فضای بیشتری برای فرم‌ها بماند — پیش‌فرضِ اولیه جمع‌شده است.
+    sidebar_collapsed = BooleanProperty(True)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._company_options: list[companies_service.CompanyRow] = []
@@ -118,7 +125,11 @@ class ShellScreen(MDScreen):
         from peecha.ui.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
         from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
         from peecha.ui.screens.languages import LanguagesScreen  # noqa: PLC0415
-        from peecha.ui.screens.persons import PersonsScreen  # noqa: PLC0415
+        from peecha.ui.screens.person_group_screens import (  # noqa: PLC0415
+            CustomersScreen,
+            PersonnelScreen,
+            SuppliersScreen,
+        )
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
         from peecha.ui.screens.roles import RolesScreen  # noqa: PLC0415
         from peecha.ui.screens.translations import TranslationsScreen  # noqa: PLC0415
@@ -127,7 +138,9 @@ class ShellScreen(MDScreen):
         content: MDScreenManager = self.ids.content_manager
         content.add_widget(DashboardScreen())
         content.add_widget(ChartOfAccountsScreen())
-        content.add_widget(PersonsScreen())
+        content.add_widget(CustomersScreen())
+        content.add_widget(SuppliersScreen())
+        content.add_widget(PersonnelScreen())
         content.add_widget(JournalEntryScreen())
         content.add_widget(DetailDimensionsScreen())
         content.add_widget(LanguagesScreen())
@@ -160,23 +173,35 @@ class ShellScreen(MDScreen):
 
         for item in NAV_ITEMS:
             if "children" in item:
-                group_label = PNavGroupLabel(icon=item["icon"], text=shape(tr(item["label"])), expanded=False)
+                group_label = PNavGroupLabel(
+                    icon=item["icon"], text=shape(tr(item["label"])), expanded=False, collapsed=self.sidebar_collapsed
+                )
                 group_label.bind(on_release=lambda _inst, code=item["code"]: self._toggle_group(code))
                 self.ids.nav_list.add_widget(group_label)
                 self._group_labels[item["code"]] = group_label
 
                 children_widgets = []
                 for child in item["children"]:
-                    nav_item = PNavItem(icon=child["icon"], text=shape(tr(child["label"])), sub=True)
+                    nav_item = PNavItem(
+                        icon=child["icon"], text=shape(tr(child["label"])), sub=True, collapsed=self.sidebar_collapsed
+                    )
                     nav_item.bind(on_release=lambda _inst, code=child["code"]: self._select_nav(code))
                     self.ids.nav_list.add_widget(nav_item)
                     children_widgets.append(nav_item)
                 self._group_children[item["code"]] = children_widgets
                 self._set_group_expanded(item["code"], expanded=False)
             else:
-                nav_item = PNavItem(icon=item["icon"], text=shape(tr(item["label"])))
+                nav_item = PNavItem(icon=item["icon"], text=shape(tr(item["label"])), collapsed=self.sidebar_collapsed)
                 nav_item.bind(on_release=lambda _inst, code=item["code"]: self._select_nav(code))
                 self.ids.nav_list.add_widget(nav_item)
+
+    def toggle_sidebar(self) -> None:
+        self.sidebar_collapsed = not self.sidebar_collapsed
+        from peecha.ui.widgets import PNavGroupLabel, PNavItem  # noqa: PLC0415
+
+        for widget in self.ids.nav_list.children:
+            if isinstance(widget, (PNavItem, PNavGroupLabel)):
+                widget.collapsed = self.sidebar_collapsed
 
     def _set_group_expanded(self, group_code: str, *, expanded: bool) -> None:
         label = self._group_labels.get(group_code)

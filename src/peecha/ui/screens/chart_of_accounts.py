@@ -82,6 +82,14 @@ class _DimensionCheckRow(MDBoxLayout):
         self.dimension_type_id = dimension_type_id
 
 
+class _PersonGroupCheckRow(MDBoxLayout):
+    label_text = StringProperty("")
+
+    def __init__(self, person_group_id: int, **kwargs):
+        super().__init__(**kwargs)
+        self.person_group_id = person_group_id
+
+
 class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -96,6 +104,8 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._delete_dialog: MDDialog | None = None
         self._dimension_types: list[dimensions_service.DimensionTypeRow] = []
         self._dimension_check_rows: list[_DimensionCheckRow] = []
+        self._person_groups: list[dimensions_service.PersonGroupRow] = []
+        self._person_group_check_rows: list[_PersonGroupCheckRow] = []
 
     def on_pre_enter(self, *args):
         self._set_dropdown_text("nature_button", _NATURE_OPTIONS, self._nature_code)
@@ -103,6 +113,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self._set_dropdown_text("account_type_button", _ACCOUNT_TYPE_OPTIONS, self._account_type_code)
         self.apply_field_labels()
         self._build_dimension_checklist(selected_ids=[])
+        self._build_person_group_checklist(selected_ids=[])
         self.refresh_list()
         self._select_parent(self._parent_account_id)
         self.bind_shortcuts()
@@ -126,6 +137,20 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
 
     def _selected_dimension_type_ids(self) -> list[int]:
         return [row.dimension_type_id for row in self._dimension_check_rows if row.ids.check.active]
+
+    def _build_person_group_checklist(self, selected_ids: list[int]) -> None:
+        self.ids.person_groups_box.clear_widgets()
+        self._person_group_check_rows = []
+        company_id = session.current_company.company_id if session.current_company else None
+        self._person_groups = dimensions_service.list_person_groups(company_id) if company_id else []
+        for group in self._person_groups:
+            row = _PersonGroupCheckRow(person_group_id=group.person_group_id, label_text=shape(group.name))
+            row.ids.check.active = group.person_group_id in selected_ids
+            self.ids.person_groups_box.add_widget(row)
+            self._person_group_check_rows.append(row)
+
+    def _selected_person_group_ids(self) -> list[int]:
+        return [row.person_group_id for row in self._person_group_check_rows if row.ids.check.active]
 
     def on_leave(self, *args):
         self.unbind_shortcuts()
@@ -299,6 +324,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
             tr("در حال ویرایش «{}» — Escape برای لغو.").format(f"{numerals.to_persian_digits(row.full_code)} — {row.name}")
         )
         self._build_dimension_checklist(selected_ids=dimensions_service.get_account_dimension_type_ids(account_id))
+        self._build_person_group_checklist(selected_ids=dimensions_service.get_account_person_group_ids(account_id))
         self.refresh_list()
 
     def cancel_edit(self) -> None:
@@ -315,6 +341,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.cancel_edit_button.height = "0dp"
         self._set_status(tr(""))
         self._build_dimension_checklist(selected_ids=[])
+        self._build_person_group_checklist(selected_ids=[])
         self.refresh_list()
 
     def save_account(self) -> None:
@@ -356,6 +383,11 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     company_id=session.current_company.company_id,
                     dimension_type_ids=self._selected_dimension_type_ids(),
                 )
+                dimensions_service.set_account_person_groups(
+                    account_id=self._editing_account_id,
+                    company_id=session.current_company.company_id,
+                    person_group_ids=self._selected_person_group_ids(),
+                )
             except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
                 self._set_status(tr("خطا: {}").format(exc))
                 return
@@ -387,6 +419,11 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                 company_id=session.current_company.company_id,
                 dimension_type_ids=self._selected_dimension_type_ids(),
             )
+            dimensions_service.set_account_person_groups(
+                account_id=account.account_id,
+                company_id=session.current_company.company_id,
+                person_group_ids=self._selected_person_group_ids(),
+            )
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
             self._set_status(tr("خطا: {}").format(exc))
             return
@@ -394,6 +431,7 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.segment_code_field.text = ""
         self.ids.name_field.text = ""
         self._build_dimension_checklist(selected_ids=[])
+        self._build_person_group_checklist(selected_ids=[])
         self.refresh_list()
 
     def confirm_delete(self, account_id: int) -> None:

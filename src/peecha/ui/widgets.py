@@ -294,6 +294,10 @@ class PNavItem(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
     text = StringProperty("")
     selected = BooleanProperty(False)
     sub = BooleanProperty(False)
+    # طبقِ درخواستِ صریح: نوار کناری باید بتواند به یک ریلِ فقط-آیکون جمع
+    # شود تا فضای بیشتری برای فرم‌ها بماند — وقتی collapsed=True است، برچسبِ
+    # متنی مخفی می‌شود و فقط آیکون وسط‌چین می‌ماند.
+    collapsed = BooleanProperty(False)
 
 
 class PNavGroupLabel(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
@@ -304,6 +308,7 @@ class PNavGroupLabel(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
     icon = StringProperty("circle-outline")
     text = StringProperty("")
     expanded = BooleanProperty(False)
+    collapsed = BooleanProperty(False)
 
 
 class PSelectField(PressFeedbackBehavior, KeyboardActivatedButtonBehavior, ButtonBehavior, MDBoxLayout):

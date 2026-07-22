@@ -48,6 +48,7 @@ def bootstrap_system(username: str, full_name: str, password: str, company_name:
         db_session.add(company)
         db_session.flush()
         dimensions_service.ensure_person_dimension(db_session, company.company_id)
+        dimensions_service.ensure_person_groups(db_session, company.company_id)
 
         user = User(
             username=username,
