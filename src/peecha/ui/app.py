@@ -14,6 +14,7 @@ from kivy.lang import Builder
 from kivy.properties import StringProperty
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.screenmanager import FadeTransition
+from kivy.utils import platform as kivy_platform
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
@@ -44,6 +45,18 @@ def _register_persian_font() -> str:
 
 class PeechaApp(MDApp):
     font_name = "Roboto"  # در build() با نتیجه‌ی _register_persian_font جایگزین می‌شود
+
+    # نکته‌ی فنیِ ویندوز (توضیحِ کامل در rtl.py): رویِ ویندوز، SDL2_ttفِ
+    # همراهِ kivy_deps.sdl2 خودش با HarfBuzz حروفِ فارسی را می‌چسباند و
+    # جهتِ متن را هم برمی‌گرداند — ولی فقط وقتی صریحاً به آن بگوییم متن
+    # راست‌به‌چپ/عربی است (تأییدشده با تستِ زنده). برای همین رویِ ویندوز
+    # این دو مقدار به هر PLabel/PTextField/... داده می‌شود تا خودِ Kivy
+    # کارِ شکل‌دهی را انجام دهد (و rtl.shape() دیگر دستی این‌کار را
+    # نمی‌کند)؛ رویِ بقیه‌ی سیستم‌عامل‌ها (بدونِ HarfBuzزِ خودکار) مقدارِ
+    # پیش‌فرضِ Kivy می‌ماند و rtl.shape() مثلِ قبل کارش را انجام می‌دهد.
+    text_font_direction = "rtl" if kivy_platform == "win" else "ltr"
+    text_font_script = "Arab" if kivy_platform == "win" else "Latn"
+
     # طبق درخواستِ صریح: با تعویضِ زبان از هدر، متن‌های ثابتِ اعلام‌شده در
     # KV (که shape(tr("...")) استفاده می‌کنند) هم باید زنده ترجمه شوند. چون
     # session.current_language یک property ساده‌ی پایتونی است (نه Kivy

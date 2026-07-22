@@ -19,6 +19,8 @@
 # از سمت چپ (انتهای بصریِ متنِ راست‌چین) کوتاه می‌شود.
 <PLabel@MDLabel>:
     font_name: app.font_name
+    font_direction: app.text_font_direction
+    font_script_name: app.text_font_script
     halign: "right"
     max_lines: 1
     shorten: True
@@ -26,6 +28,8 @@
 
 <PTitleLabel@MDLabel>:
     font_name: app.font_name
+    font_direction: app.text_font_direction
+    font_script_name: app.text_font_script
     font_style: "H5"
     halign: "right"
     max_lines: 1
@@ -36,6 +40,8 @@
 
 <PHintLabel@MDLabel>:
     font_name: app.font_name
+    font_direction: app.text_font_direction
+    font_script_name: app.text_font_script
     halign: "right"
     theme_text_color: "Hint"
     max_lines: 1
@@ -51,6 +57,8 @@
     font_name: app.font_name
     font_name_hint_text: app.font_name
     font_name_helper_text: app.font_name
+    font_direction: app.text_font_direction
+    font_script_name: app.text_font_script
     halign: "right"
     size_hint_y: None
     height: "48dp"
@@ -90,6 +98,8 @@
 # دکمه یکی باشد.
 <PRaisedButton>:
     font_name: app.font_name
+    font_direction: app.text_font_direction
+    font_script_name: app.text_font_script
     elevation: 0
     rounded_button: True
     md_bg_color: theme.ACCENT
@@ -102,6 +112,8 @@
 
 <PFlatButton>:
     font_name: app.font_name
+    font_direction: app.text_font_direction
+    font_script_name: app.text_font_script
     rounded_button: True
     canvas.after:
         Color:

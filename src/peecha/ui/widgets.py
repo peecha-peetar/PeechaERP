@@ -4,8 +4,10 @@ KivyMD 1.2 برای MDTextField دو لیبل داخلی (hint/helper شناور
 می‌سازد که halign‌شان مستقیم در کد پایتونِ خودِ KivyMD با "left" هاردکد
 شده (`set_objects_labels()` در textfield.py) — هیچ property عمومی برای
 override کردنش در KV نیست (فقط فونتشان از طریق font_name_hint_text/
-font_name_helper_text قابل‌تنظیم است، نه جهتشان). برای همین این‌جا این دو
-لیبل را بعد از ساخته‌شدن مستقیم در پایتون راست‌چین می‌کنیم.
+font_name_helper_text قابل‌تنظیم است، نه جهت/اسکریپتشان). برای همین این‌جا
+این دو لیبل را بعد از ساخته‌شدن مستقیم در پایتون راست‌چین می‌کنیم و
+font_direction/font_script_name را هم (طبقِ توضیحِ ویندوز در rtl.py) از
+روی app می‌گیریم.
 """
 
 from __future__ import annotations
@@ -154,10 +156,16 @@ class PTextField(MDTextField):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        from kivymd.app import MDApp  # noqa: PLC0415
+
+        app = MDApp.get_running_app()
         for label_attr in ("_hint_text_label", "_helper_text_label", "_max_length_label"):
             label = getattr(self, label_attr, None)
             if label is not None:
                 label.halign = "right"
+                if app is not None:
+                    label.font_direction = app.text_font_direction
+                    label.font_script_name = app.text_font_script
         self._raw_value = self.text
         self._showing_shaped = False
         self._suppress_raw_tracking = False
