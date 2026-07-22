@@ -82,19 +82,35 @@ NAV_ITEMS = [
 ]
 
 
-# طبقِ بازطراحیِ الهام‌گرفته از ریبونِ نرم‌افزارهای حسابداریِ کلاسیک: زیرِ
-# نوارِ بالا یک ردیفِ افقیِ آیکون+برچسبِ کوتاه برایِ پراستفاده‌ترین صفحات
-# (نه همه‌ی صفحات — آن‌ها همچنان در منویِ درختیِ نوار کناری هستند).
-_RIBBON_CODES = [
-    "dashboard", "GL_COA", "GL_JE_LIST", "GL_JE", "GL_CUSTOMERS", "GL_SUPPLIERS", "GL_PERSONNEL", "SET_CURRENCY",
-    "SET_AUDIT_LOG",
-]
+# طبقِ درخواستِ صریح: ریبونِ زیرِ نوارِ بالا دیگر یک فهرستِ ثابتِ میان‌برهای
+# پراستفاده نیست — با کلیک روی هر منویِ نوارِ کناری (چه سرآیتمِ یک گروه،
+# چه یک زیرآیتم)، ریبون زنده به زیرآیتم‌هایِ همان گروهِ اصلی عوض می‌شود؛
+# برایِ آیتم‌های سطح‌بالایِ بدونِ زیرمجموعه (مثلِ داشبورد)، ریبون فقط همان
+# یک آیتم را نشان می‌دهد چون زیرمجموعه‌ای برایش وجود ندارد.
 _RIBBON_LABEL_OVERRIDES = {
     "GL_COA": "کدینگ",
     "GL_JE_LIST": "اسناد",
     "GL_JE": "سند جدید",
     "SET_AUDIT_LOG": "رد حسابرسی",
 }
+
+
+def _ribbon_group_key_and_items(code: str) -> tuple[str, list[dict]]:
+    """گروهِ اصلیِ حاویِ این کد و زیرآیتم‌هایش را برمی‌گرداند — برایِ ریبون.
+
+    اگر کد زیرآیتمِ یک گروه باشد، زیرآیتم‌هایِ همان گروه برگردانده می‌شود؛
+    اگر یک آیتمِ سطح‌بالایِ بدونِ زیرمجموعه باشد (مثلِ داشبورد)، خودش
+    به‌تنهایی؛ کلید برگشتی (کدِ گروه یا خودِ کد) برایِ تشخیصِ «آیا گروه
+    عوض شده یا نه» در ShellScreen._render_ribbon استفاده می‌شود."""
+    for item in NAV_ITEMS:
+        if "children" in item:
+            if item["code"] == code:
+                return item["code"], item["children"]
+            if any(child["code"] == code for child in item["children"]):
+                return item["code"], item["children"]
+        elif item["code"] == code:
+            return item["code"], [item]
+    return code, []
 
 
 def _flatten_nav_items() -> list[dict]:
@@ -125,6 +141,8 @@ class ShellScreen(MDScreen):
         self._group_children: dict[str, list] = {}
         self._group_labels: dict[str, object] = {}
         self._ribbon_buttons: dict[str, object] = {}
+        self._ribbon_group_key: str | None = None
+        self._active_code: str | None = None
 
     def on_pre_enter(self, *args):
         if not self.ids.content_manager.screen_names:
@@ -132,26 +150,33 @@ class ShellScreen(MDScreen):
             self._sync_translation_files()
         if not self.ids.nav_list.children:
             self._build_nav_items()
-        if not self.ids.ribbon_list.children:
-            self._build_ribbon()
         self.ids.user_label.text = shape(session.current_user.full_name if session.current_user else "")
         self._load_context_switcher()
         self._select_nav("dashboard")
 
-    def _build_ribbon(self) -> None:
+    def _render_ribbon(self, items: list[dict], group_key: str) -> None:
+        # طبق درخواستِ صریح: ریبون با هر کلیکِ رویِ یک منویِ نوارِ کناری،
+        # به زیرآیتم‌هایِ همان گروهِ اصلی عوض می‌شود — اگر گروه با قبلی فرق
+        # نکرده، فقط وضعیتِ selected دکمه‌ها به‌روز می‌شود (بدونِ بازساختنِ
+        # ویجت‌ها)، وگرنه کاملاً از نو ساخته می‌شود.
+        if self._ribbon_group_key == group_key:
+            for code, button in self._ribbon_buttons.items():
+                button.selected = code == self._active_code
+            return
+
         from peecha.ui.widgets import PRibbonButton  # noqa: PLC0415
 
-        self._ribbon_buttons: dict[str, PRibbonButton] = {}
-        flat_by_code = {item["code"]: item for item in _flatten_nav_items()}
-        for code in _RIBBON_CODES:
-            item = flat_by_code.get(code)
-            if item is None:
-                continue
+        self.ids.ribbon_list.clear_widgets()
+        self._ribbon_buttons = {}
+        for item in items:
+            code = item["code"]
             label = _RIBBON_LABEL_OVERRIDES.get(code, item["label"])
             button = PRibbonButton(icon=item["icon"], text=shape(tr(label)))
+            button.selected = code == self._active_code
             button.bind(on_release=lambda _inst, c=code: self._select_nav(c))
             self.ids.ribbon_list.add_widget(button)
             self._ribbon_buttons[code] = button
+        self._ribbon_group_key = group_key
 
     def _build_content_screens(self) -> None:
         from peecha.ui.screens.audit_log import AuditLogScreen  # noqa: PLC0415
@@ -265,6 +290,11 @@ class ShellScreen(MDScreen):
         if label is None:
             return
         self._set_group_expanded(group_code, expanded=not label.expanded)
+        # طبق درخواستِ صریح: کلیک روی خودِ سرآیتمِ گروه (نه فقط زیرآیتم‌هایش)
+        # هم باید ریبون را به زیرآیتم‌هایِ همین گروه عوض کند — حتی وقتی این
+        # کلیک فقط برای جمع‌کردنِ درخت است، نه رفتن به صفحه‌ی دیگر.
+        group_key, ribbon_items = _ribbon_group_key_and_items(group_code)
+        self._render_ribbon(ribbon_items, group_key)
 
     def _expand_group_containing(self, code: str) -> None:
         """گروهی که این کد در آن است را باز می‌کند — مثلاً وقتی مستقیم به
@@ -291,8 +321,9 @@ class ShellScreen(MDScreen):
             nav_item.selected = widget["code"] == code
         self._expand_group_containing(code)
 
-        for ribbon_code, button in self._ribbon_buttons.items():
-            button.selected = ribbon_code == code
+        self._active_code = code
+        group_key, ribbon_items = _ribbon_group_key_and_items(code)
+        self._render_ribbon(ribbon_items, group_key)
 
         target_screen_name = item["screen"] or "placeholder"
         if target_screen_name == "placeholder":
