@@ -440,6 +440,7 @@ class UnifiedDetailAccountRow:
     detail_account_id: int
     dimension_type_id: int
     group_name: str
+    person_group_code: str | None  # CUSTOMER/SUPPLIER/PERSONNEL برایِ مسیریابیِ فرمِ درست؛ برایِ گروه‌های عمومی None
     level_no: int
     full_code: str
     name: str | None
@@ -469,9 +470,11 @@ def list_all_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
         for r in all_rows:
             if r.dimension_type_id == person_dimension_type_id and r.code == NO_DETAIL_CODE:
                 continue  # ردیفِ سیستمیِ «بدون تفصیلی» برایِ کاربر معنادار نیست
+            person_group_code = None
             if r.person_group_id is not None:
                 group = person_groups_by_id.get(r.person_group_id)
                 group_name = group.name if group is not None else "?"
+                person_group_code = group.code if group is not None else None
             else:
                 group = dimension_types_by_id.get(r.dimension_type_id)
                 group_name = group.code if group is not None else "?"
@@ -480,6 +483,7 @@ def list_all_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
                     detail_account_id=r.detail_account_id,
                     dimension_type_id=r.dimension_type_id,
                     group_name=group_name,
+                    person_group_code=person_group_code,
                     level_no=r.level_no,
                     full_code=full_codes.get(r.detail_account_id, r.code),
                     name=r.name,

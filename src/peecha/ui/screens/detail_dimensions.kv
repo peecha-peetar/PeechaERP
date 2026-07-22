@@ -85,6 +85,46 @@
         valign: "middle"
         size_hint_x: 0.72
 
+# ردیفِ ویرایشِ یک فیلدِ اختصاصیِ گروه (کلید/برچسب/نوع/الزامی/حذف) — طبقِ
+# درخواستِ صریح، کاربر خودش برایِ گروهِ تازه‌تعریف‌شده (مثلِ «بانک») این‌ها
+# را تعریف می‌کند.
+<GroupFieldEditRow>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "40dp"
+    spacing: "6dp"
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "12sp"
+        size_hint_x: None
+        width: "36dp"
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.remove()
+
+    MDCheckbox:
+        id: required_checkbox
+        size_hint: None, None
+        size: "24dp", "24dp"
+        pos_hint: {"center_y": 0.5}
+
+    PSelectField:
+        id: kind_button
+        text: ""
+        size_hint_x: 0.24
+        on_release: root.open_kind_menu()
+
+    PTextField:
+        id: label_field
+        hint_text: ((app.ui_language_code or True) and shape(tr("برچسب")))
+        size_hint_x: 0.32
+
+    PTextField:
+        id: key_field
+        hint_text: ((app.ui_language_code or True) and shape(tr("کلید (انگلیسی)")))
+        size_hint_x: 0.32
+
 <DetailDimensionsScreen>:
     name: "detail_dimensions"
     md_bg_color: theme.BACKGROUND
@@ -144,6 +184,23 @@
                         valign: "middle"
                         size_hint_x: None
                         width: "50dp"
+
+                # طبقِ درخواستِ صریح («تا ۴ سطح تفصیلی»): انتخابِ والد، برایِ
+                # ساختنِ سلسله‌مراتب — اختیاری، پیش‌فرض «بدون والد» یعنی سطحِ ۱.
+                PSelectField:
+                    id: account_parent_button
+                    text: ""
+                    on_release: root.open_parent_menu()
+
+                # فیلدهای اختصاصیِ همین گروه (اگر تعریف شده باشند) — طبقِ
+                # درخواستِ صریح، پویا بر اساسِ acc.detail_group_fields ساخته
+                # می‌شود (در پایتون، چون تعدادشان متغیر است).
+                BoxLayout:
+                    id: account_extra_fields_box
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "4dp"
 
                 BoxLayout:
                     size_hint_y: None
@@ -346,6 +403,8 @@
             RecycleView:
                 id: types_list
                 viewclass: "DimensionTypeRowWidget"
+                size_hint_y: None
+                height: "200dp"
                 bar_width: "8dp"
                 scroll_type: ["bars", "content"]
                 bar_color: theme.ACCENT
@@ -357,3 +416,94 @@
                     size_hint_y: None
                     height: self.minimum_height
                     spacing: "0dp"
+
+            # طبقِ درخواستِ صریح: پیکربندیِ سطح‌ها و فیلدهای اختصاصیِ گروهِ
+            # انتخاب‌شده — چون تعدادِ فیلدها متغیر است و ممکن است طولانی شود،
+            # این بخش در ScrollViewِ خودش (مستقل از بقیه‌ی صفحه) بالا/پایین می‌رود.
+            ScrollView:
+                do_scroll_x: False
+                bar_width: "8dp"
+                scroll_type: ["bars", "content"]
+                bar_color: theme.ACCENT
+                bar_inactive_color: theme.BORDER[0], theme.BORDER[1], theme.BORDER[2], 0.6
+
+                BoxLayout:
+                    id: group_config_panel
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "10dp"
+                    disabled: True
+                    opacity: 0
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("پیکربندیِ سطح‌های کد (اختیاری، تا ۴ سطح)")))
+                        font_style: "Subtitle1"
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    PHintLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("طولِ کدِ هر سطح — خالی یعنی بدونِ محدودیتِ طول.")))
+
+                    BoxLayout:
+                        size_hint_y: None
+                        height: "48dp"
+                        spacing: "6dp"
+
+                        PTextField:
+                            id: level_4_length_field
+                            hint_text: ((app.ui_language_code or True) and shape(tr("سطح ۴")))
+                            persian_digits: True
+
+                        PTextField:
+                            id: level_3_length_field
+                            hint_text: ((app.ui_language_code or True) and shape(tr("سطح ۳")))
+                            persian_digits: True
+
+                        PTextField:
+                            id: level_2_length_field
+                            hint_text: ((app.ui_language_code or True) and shape(tr("سطح ۲")))
+                            persian_digits: True
+
+                        PTextField:
+                            id: level_1_length_field
+                            hint_text: ((app.ui_language_code or True) and shape(tr("سطح ۱")))
+                            persian_digits: True
+
+                    PFlatButton:
+                        text: ((app.ui_language_code or True) and shape(tr("ذخیره‌ی پیکربندیِ سطح‌ها")))
+                        theme_text_color: "Custom"
+                        text_color: theme.ACCENT
+                        size_hint_y: None
+                        height: "36dp"
+                        on_release: root.save_group_levels()
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("فیلدهای اختصاصیِ این گروه")))
+                        font_style: "Subtitle1"
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    PHintLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("مثلاً برایِ «بانک»: شماره حساب؛ برایِ «کالا»: واحدِ سنجش.")))
+
+                    BoxLayout:
+                        id: group_fields_box
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: "4dp"
+
+                    PFlatButton:
+                        text: ((app.ui_language_code or True) and shape(tr("+ افزودنِ فیلد")))
+                        theme_text_color: "Custom"
+                        text_color: theme.ACCENT
+                        size_hint_y: None
+                        height: "36dp"
+                        on_release: root.add_group_field_row()
+
+                    PRaisedButton:
+                        text: ((app.ui_language_code or True) and shape(tr("ذخیره‌ی فیلدها")))
+                        size_hint_y: None
+                        height: "40dp"
+                        on_release: root.save_group_fields()

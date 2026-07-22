@@ -1,0 +1,174 @@
+#:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
+#:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
+
+# ردیفِ فهرستِ واحدِ تفصیلی‌ها — نامِ گروه | سطح | کد | نام | وضعیت
+# (ترتیبِ منطقی، از راست).
+<DetailAccountUnifiedRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "36dp"
+    padding: ["10dp", "0dp"]
+    md_bg_color: theme.GRID_ROW_ALT if root.zebra else theme.SURFACE
+    canvas.after:
+        Color:
+            rgba: theme.GRID_BORDER
+        Line:
+            points: [self.x, self.y, self.x + self.width, self.y]
+            width: 1
+
+    AnchorLayout:
+        size_hint_x: 0.14
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: root.status_badge_color
+
+    PLabel:
+        text: root.name_text
+        valign: "middle"
+        size_hint_x: 0.30
+
+    PLabel:
+        text: root.code_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.20
+
+    PLabel:
+        text: root.level_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        halign: "right"
+        valign: "middle"
+        size_hint_x: 0.10
+
+    PLabel:
+        text: root.group_text
+        bold: True
+        valign: "middle"
+        size_hint_x: 0.26
+
+
+<DetailAccountsListScreen>:
+    name: "detail_accounts_list"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "vertical"
+        padding: "24dp"
+        spacing: "16dp"
+
+        PCard:
+            size_hint_y: None
+            height: self.minimum_height
+
+            PLabel:
+                text: ((app.ui_language_code or True) and shape(tr("تفصیلی‌ها")))
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                text: ((app.ui_language_code or True) and shape(tr("همه‌ی مشتریان/تامین‌کنندگان/پرسنل/مراکزِ هزینه/پروژه‌ها و گروه‌های دیگرِ تفصیلی، یک‌جا — کلیک روی هر ردیف فرمِ مربوطه را باز می‌کند.")))
+
+            BoxLayout:
+                size_hint_y: None
+                height: "48dp"
+                spacing: "12dp"
+
+                PTextField:
+                    id: search_field
+                    hint_text: ((app.ui_language_code or True) and shape(tr("جستجو در نوعِ تفصیلی، کد یا نام")))
+                    size_hint_x: 0.5
+                    on_text: root.filter_entries()
+
+                Widget:
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+        PCard:
+            BoxLayout:
+                id: grid_header
+                size_hint_y: None
+                height: "36dp"
+                padding: ["10dp", "0dp"]
+                canvas.before:
+                    Color:
+                        rgba: theme.GRID_HEADER_BG
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                    Color:
+                        rgba: theme.GRID_BORDER
+                    Line:
+                        points: [self.x, self.y, self.x + self.width, self.y]
+                        width: 1
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.14
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("نام")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.30
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.20
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("سطح")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.10
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("نوعِ تفصیلی")))
+                    font_style: "Caption"
+                    bold: True
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.26
+
+            RecycleView:
+                id: entries_list
+                viewclass: "DetailAccountUnifiedRowWidget"
+                bar_width: "8dp"
+                scroll_type: ["bars", "content"]
+                bar_color: theme.ACCENT
+                bar_inactive_color: theme.BORDER[0], theme.BORDER[1], theme.BORDER[2], 0.6
+
+                RecycleBoxLayout:
+                    orientation: "vertical"
+                    default_size_hint: 1, None
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "0dp"

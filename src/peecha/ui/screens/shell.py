@@ -44,6 +44,12 @@ NAV_ITEMS = [
         "icon": "cash-multiple",
         "children": [
             {"code": "GL_COA", "label": "کدینگ حسابداری", "icon": "format-list-bulleted", "screen": "chart_of_accounts"},
+            {
+                "code": "GL_TAFSILI",
+                "label": "تفصیلی‌ها",
+                "icon": "format-list-bulleted-type",
+                "screen": "detail_accounts_list",
+            },
             {"code": "GL_CUSTOMERS", "label": "مشتریان", "icon": "account-cash-outline", "screen": "customers"},
             {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "icon": "truck-outline", "screen": "suppliers"},
             {"code": "GL_PERSONNEL", "label": "پرسنل", "icon": "badge-account-outline", "screen": "personnel"},
@@ -184,6 +190,7 @@ class ShellScreen(MDScreen):
         from peecha.ui.screens.companies import CompaniesScreen  # noqa: PLC0415
         from peecha.ui.screens.currencies import CurrenciesScreen  # noqa: PLC0415
         from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
+        from peecha.ui.screens.detail_accounts_list import DetailAccountsListScreen  # noqa: PLC0415
         from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
         from peecha.ui.screens.field_labels import FieldLabelsScreen  # noqa: PLC0415
         from peecha.ui.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
@@ -203,6 +210,7 @@ class ShellScreen(MDScreen):
         content: MDScreenManager = self.ids.content_manager
         content.add_widget(DashboardScreen())
         content.add_widget(ChartOfAccountsScreen())
+        content.add_widget(DetailAccountsListScreen())
         content.add_widget(CustomersScreen())
         content.add_widget(SuppliersScreen())
         content.add_widget(PersonnelScreen())
