@@ -631,7 +631,14 @@ class JournalEntryLineRow(MDBoxLayout):
         if self.person_field.detail_account_id is not None:
             self.dimension_values[self.person_dimension_type_id] = self.person_field.detail_account_id
         self._on_change()
-        self.description_field.focus = True
+        # طبق درخواستِ صریح: اگر حسابِ این ردیف نوع‌بُعدِ تفصیلیِ الزامی
+        # (مثلاً مرکز هزینه/پروژه) دارد و هنوز کامل نشده، دیالوگِ انتخابش
+        # همین‌جا در ادامه‌ی جریانِ کیبورد باز می‌شود؛ فوکوس به شرحِ ردیف
+        # فقط بعدِ تکمیل/لغوِ آن دیالوگ می‌رود (در open_dimensions_dialog).
+        if self.has_required_dims and not self.dims_complete:
+            self.open_dimensions_dialog()
+        else:
+            self.description_field.focus = True
 
     def _account_selected(self) -> None:
         # طبق درخواستِ صریح: بعدِ انتخابِ حساب، فوکوس به ستونِ تفصیلی
@@ -688,13 +695,18 @@ class JournalEntryLineRow(MDBoxLayout):
             self.dimension_values = dict(content.values)
             self._dimensions_dialog.dismiss()
             self._update_dims_complete()
+            self.description_field.focus = True
+
+        def _cancel(*_args) -> None:
+            self._dimensions_dialog.dismiss()
+            self.description_field.focus = True
 
         self._dimensions_dialog = MDDialog(
             title=shape(tr("ابعادِ تفصیلیِ ردیف")),
             type="custom",
             content_cls=content,
             buttons=[
-                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._dimensions_dialog.dismiss()),
+                MDFlatButton(text=shape(tr("لغو")), on_release=_cancel),
                 MDRaisedButton(text=shape(tr("تایید")), on_release=_apply),
             ],
         )
@@ -906,6 +918,13 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self.ids.amount_words_label.text = shape(numerals.amount_to_words(value))
 
     def add_line(self) -> None:
+        # طبق درخواستِ صریح: شرحِ ردیفِ قبلی به ردیفِ تازه منتقل می‌شود (چون
+        # معمولاً بدهکار/بستانکارِ یک سند همان شرح را دارند) — کاربر
+        # می‌تواند در صورتِ نیاز تغییرش دهد. edit_entry() بلافاصله بعدِ این
+        # فراخوانی مقدارِ واقعیِ هر ردیف را با set_value() جایگزین می‌کند،
+        # پس این پیش‌پرکردن مزاحمِ بارگذاریِ سندِ ویرایشی نمی‌شود.
+        previous_description = self._rows[-1].description_field.value.strip() if self._rows else ""
+
         row = JournalEntryLineRow(
             account_options=self._account_options,
             on_change=self._recalculate,
@@ -923,6 +942,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self._rows.append(row)
         self.ids.lines_box.add_widget(row)
         self._apply_line_labels(row)
+        if previous_description:
+            row.description_field.set_value(previous_description)
         self._relink_row_focus()
 
     def _remove_line(self, row: JournalEntryLineRow) -> None:
@@ -935,12 +956,15 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
     def _relink_row_focus(self) -> None:
         """زنجیره‌ی Tab بین ردیف‌های پویا را دوباره می‌سازد — چون هر بار
         ردیفی اضافه/حذف می‌شود، فیلد آخرِ سطرِ قبل باید به اولین فیلدِ سطرِ
-        بعد وصل شود، و این با focus_next ایستا در KV ممکن نیست."""
-        self.ids.description_field.focus_next = self.ids.alternative_number_field
+        بعد وصل شود، و این با focus_next ایستا در KV ممکن نیست.
+
+        طبق درخواستِ صریح: زنجیره‌ی سریعِ Enter از شرحِ سند مستقیم به ستونِ
+        حسابِ ردیفِ اول می‌رود (نه شماره‌ی عطف/بایگانی — که یک فیلدِ
+        کم‌استفاده‌ی جانبی است و فقط با ماوس/کلیک در دسترس می‌ماند)."""
         if not self._rows:
-            self.ids.alternative_number_field.focus_next = self.ids.add_line_button
+            self.ids.description_field.focus_next = self.ids.add_line_button
             return
-        self.ids.alternative_number_field.focus_next = self._rows[0].account_field
+        self.ids.description_field.focus_next = self._rows[0].account_field
         for i, row in enumerate(self._rows):
             if i + 1 < len(self._rows):
                 row.ids.credit_field.focus_next = self._rows[i + 1].account_field
@@ -974,7 +998,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
 
         balanced = total_debit == total_credit and total_debit > 0
         chip_color = theme.SUCCESS if balanced else theme.DANGER
-        self.ids.balance_label.text = shape(tr("متعادل") if balanced else tr("نامتعادل"))
+        self.ids.balance_label.text = shape(tr("تراز") if balanced else tr("غیر تراز"))
         self.ids.balance_label.text_color = chip_color
         self.ids.balance_chip.md_bg_color = (chip_color[0], chip_color[1], chip_color[2], 0.12)
 

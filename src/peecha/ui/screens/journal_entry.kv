@@ -74,7 +74,7 @@
     PTextField:
         id: credit_field
         hint_text: ((app.ui_language_code or True) and shape(tr("بستانکار")))
-        size_hint_x: 0.14
+        size_hint_x: 0.13
         persian_digits: True
         on_text: root.on_credit_changed()
         on_text_validate: root.request_next()
@@ -84,7 +84,7 @@
     PTextField:
         id: debit_field
         hint_text: ((app.ui_language_code or True) and shape(tr("بدهکار")))
-        size_hint_x: 0.14
+        size_hint_x: 0.13
         persian_digits: True
         on_text: root.on_debit_changed()
         # طبق درخواستِ صریح: اگر بدهکار پر شده باشد Enter به ردیفِ بعد
@@ -101,7 +101,7 @@
     # پایتون ساخته و همین‌جا جاگذاری می‌شود (JournalEntryLineRow.__init__).
     BoxLayout:
         id: description_slot
-        size_hint_x: 0.20
+        size_hint_x: 0.30
 
     # جایگاهِ PersonSearchField (ستونِ تفصیلی) — طبقِ درخواستِ صریح، تفصیلیِ
     # حسابِ انتخاب‌شده باید کنارِ خودِ حساب و همیشه قابل‌انتخاب باشد (نه پشتِ
@@ -109,14 +109,14 @@
     # پایتون ساخته و همین‌جا جاگذاری می‌شود (JournalEntryLineRow.__init__).
     BoxLayout:
         id: person_slot
-        size_hint_x: 0.18
+        size_hint_x: 0.16
 
     # جایگاهِ AccountSearchField — چون این ویجت به داده‌ی مخصوصِ هر نمونه
     # (فهرستِ حساب‌ها، کال‌بکِ انتخاب) نیاز دارد که در KV قابل‌تعریف نیست،
     # در پایتون ساخته و همین‌جا جاگذاری می‌شود (JournalEntryLineRow.__init__).
     BoxLayout:
         id: account_slot
-        size_hint_x: 0.24
+        size_hint_x: 0.20
 
 <JournalEntryScreen>:
     name: "journal_entry"
@@ -227,7 +227,7 @@
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
-                        size_hint_x: 0.14
+                        size_hint_x: 0.13
 
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("بدهکار")))
@@ -236,7 +236,7 @@
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
-                        size_hint_x: 0.14
+                        size_hint_x: 0.13
 
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("شرح ردیف")))
@@ -245,7 +245,7 @@
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
-                        size_hint_x: 0.20
+                        size_hint_x: 0.30
 
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("تفصیلی")))
@@ -254,7 +254,7 @@
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
-                        size_hint_x: 0.18
+                        size_hint_x: 0.16
 
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("حساب")))
@@ -263,7 +263,7 @@
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
-                        size_hint_x: 0.24
+                        size_hint_x: 0.20
 
                 BoxLayout:
                     id: lines_box
