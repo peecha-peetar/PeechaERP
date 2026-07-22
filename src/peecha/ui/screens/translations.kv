@@ -16,9 +16,9 @@
 
     MDIconButton:
         icon: "content-save-outline"
-        icon_size: "18sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "28dp"
+        width: "36dp"
         theme_text_color: "Custom"
         text_color: theme.ACCENT
         on_release: root.save()
@@ -40,9 +40,9 @@
     MDIconButton:
         id: select_checkbox
         icon: "checkbox-marked" if root.is_checked else "checkbox-blank-outline"
-        icon_size: "18sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "28dp"
+        width: "36dp"
         theme_text_color: "Custom"
         text_color: theme.ACCENT if root.is_checked else theme.TEXT_SECONDARY
         on_release: root.toggle_checked()
@@ -162,10 +162,14 @@
             RecycleView:
                 id: rows_list
                 viewclass: "_TranslationRow"
+                bar_width: "8dp"
+                scroll_type: ["bars", "content"]
+                bar_color: theme.ACCENT
+                bar_inactive_color: theme.BORDER[0], theme.BORDER[1], theme.BORDER[2], 0.6
 
                 RecycleBoxLayout:
                     orientation: "vertical"
                     default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
-                    spacing: "2dp"
+                    spacing: "0dp"

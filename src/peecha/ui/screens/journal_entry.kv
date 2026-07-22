@@ -47,9 +47,9 @@
     # الزامی داشته باشد؛ رنگش هشدارمی‌دهد اگر هنوز همه‌ی ابعاد پر نشده باشند.
     MDIconButton:
         icon: "shape-outline"
-        icon_size: "18sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "28dp"
+        width: "36dp"
         opacity: 1 if root.has_required_dims else 0
         disabled: not root.has_required_dims
         theme_text_color: "Custom"
@@ -62,9 +62,9 @@
     # آیا ردیف با ارزِ پایه ثبت می‌شود یا ارزِ دیگری انتخاب شده.
     MDIconButton:
         icon: "cash-multiple"
-        icon_size: "18sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "28dp"
+        width: "36dp"
         opacity: 1 if root.has_multi_currency else 0
         disabled: not root.has_multi_currency
         theme_text_color: "Custom"
@@ -124,16 +124,21 @@
 <JournalEntryRowWidget>:
     orientation: "horizontal"
     size_hint_y: None
-    height: "32dp"
-    padding: ["12dp", "0dp"]
-    radius: [8, 8, 8, 8]
-    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+    height: "36dp"
+    padding: ["10dp", "0dp"]
+    md_bg_color: theme.SELECTED if root.selected else (theme.GRID_ROW_ALT if root.zebra else theme.SURFACE)
+    canvas.after:
+        Color:
+            rgba: theme.GRID_BORDER
+        Line:
+            points: [self.x, self.y, self.x + self.width, self.y]
+            width: 1
 
     MDIconButton:
         icon: "trash-can-outline"
-        icon_size: "18sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "28dp"
+        width: "36dp"
         opacity: 1 if root.editable else 0
         disabled: not root.editable
         theme_text_color: "Custom"
@@ -142,9 +147,9 @@
 
     MDIconButton:
         icon: "pencil-outline"
-        icon_size: "18sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "28dp"
+        width: "36dp"
         opacity: 1 if root.editable else 0
         disabled: not root.editable
         theme_text_color: "Custom"
@@ -429,16 +434,28 @@
                 BoxLayout:
                     id: entries_header
                     size_hint_y: None
-                    height: "28dp"
-                    spacing: "8dp"
+                    height: "36dp"
+                    padding: ["10dp", "0dp"]
+                    canvas.before:
+                        Color:
+                            rgba: theme.GRID_HEADER_BG
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                        Color:
+                            rgba: theme.GRID_BORDER
+                        Line:
+                            points: [self.x, self.y, self.x + self.width, self.y]
+                            width: 1
 
                     Widget:
                         size_hint_x: None
-                        width: "56dp"
+                        width: "72dp"
 
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                         font_style: "Caption"
+                        bold: True
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         halign: "right"
@@ -448,6 +465,7 @@
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("مبلغ")))
                         font_style: "Caption"
+                        bold: True
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
@@ -457,6 +475,7 @@
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("شرح")))
                         font_style: "Caption"
+                        bold: True
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
@@ -465,6 +484,7 @@
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("تاریخ")))
                         font_style: "Caption"
+                        bold: True
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
@@ -473,6 +493,7 @@
                     PLabel:
                         text: ((app.ui_language_code or True) and shape(tr("شماره")))
                         font_style: "Caption"
+                        bold: True
                         theme_text_color: "Custom"
                         text_color: theme.TEXT_SECONDARY
                         valign: "middle"
@@ -483,10 +504,14 @@
                     viewclass: "JournalEntryRowWidget"
                     size_hint_y: None
                     height: "480dp"
+                    bar_width: "8dp"
+                    scroll_type: ["bars", "content"]
+                    bar_color: theme.ACCENT
+                    bar_inactive_color: theme.BORDER[0], theme.BORDER[1], theme.BORDER[2], 0.6
 
                     RecycleBoxLayout:
                         orientation: "vertical"
                         default_size_hint: 1, None
                         size_hint_y: None
                         height: self.minimum_height
-                        spacing: "2dp"
+                        spacing: "0dp"

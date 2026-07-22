@@ -71,16 +71,21 @@
 <RoleRowWidget>:
     orientation: "horizontal"
     size_hint_y: None
-    height: "32dp"
-    padding: ["12dp", "0dp"]
-    radius: [8, 8, 8, 8]
-    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+    height: "36dp"
+    padding: ["10dp", "0dp"]
+    md_bg_color: theme.SELECTED if root.selected else (theme.GRID_ROW_ALT if root.zebra else theme.SURFACE)
+    canvas.after:
+        Color:
+            rgba: theme.GRID_BORDER
+        Line:
+            points: [self.x, self.y, self.x + self.width, self.y]
+            width: 1
 
     MDIconButton:
         icon: "pencil-outline"
-        icon_size: "18sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "28dp"
+        width: "36dp"
         theme_text_color: "Custom"
         text_color: theme.ACCENT
         on_release: root.on_release()
@@ -165,13 +170,17 @@
             RecycleView:
                 id: roles_list
                 viewclass: "RoleRowWidget"
+                bar_width: "8dp"
+                scroll_type: ["bars", "content"]
+                bar_color: theme.ACCENT
+                bar_inactive_color: theme.BORDER[0], theme.BORDER[1], theme.BORDER[2], 0.6
 
                 RecycleBoxLayout:
                     orientation: "vertical"
                     default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
-                    spacing: "2dp"
+                    spacing: "0dp"
 
         PCard:
             size_hint_x: 0.68
@@ -334,7 +343,7 @@
                                 orientation: "vertical"
                                 size_hint_y: None
                                 height: self.minimum_height
-                                spacing: "2dp"
+                                spacing: "0dp"
 
                         BoxLayout:
                             orientation: "vertical"
@@ -353,4 +362,4 @@
                                 orientation: "vertical"
                                 size_hint_y: None
                                 height: self.minimum_height
-                                spacing: "2dp"
+                                spacing: "0dp"

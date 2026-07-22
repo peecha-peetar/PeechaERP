@@ -53,7 +53,7 @@
 <AccountRowWidget>:
     orientation: "horizontal"
     size_hint_y: None
-    height: "30dp"
+    height: "36dp"
     padding: ["10dp", "0dp"]
     md_bg_color: theme.SELECTED if root.selected else (theme.GRID_ROW_ALT if root.zebra else theme.SURFACE)
     canvas.after:
@@ -65,18 +65,18 @@
 
     MDIconButton:
         icon: "trash-can-outline"
-        icon_size: "16sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "24dp"
+        width: "36dp"
         theme_text_color: "Custom"
         text_color: theme.DANGER
         on_release: root.request_delete()
 
     MDIconButton:
         icon: "pencil-outline"
-        icon_size: "16sp"
+        icon_size: "12sp"
         size_hint_x: None
-        width: "24dp"
+        width: "36dp"
         theme_text_color: "Custom"
         text_color: theme.ACCENT
         on_release: root.on_release()
@@ -158,7 +158,7 @@
 
                 Widget:
                     size_hint_x: None
-                    width: "48dp"
+                    width: "72dp"
 
                 PLabel:
                     text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
