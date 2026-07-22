@@ -202,8 +202,10 @@ class MainWindow(QMainWindow):
         from peecha.qt_pilot.screens.currencies import CurrenciesScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.dashboard import DashboardScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
+        from peecha.qt_pilot.screens.audit_log import AuditLogScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.detail_accounts_list import DetailAccountsListScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
+        from peecha.qt_pilot.screens.field_labels import FieldLabelsScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.journal_entries_list import JournalEntriesListScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
         from peecha.qt_pilot.screens.languages import LanguagesScreen  # noqa: PLC0415
@@ -232,6 +234,14 @@ class MainWindow(QMainWindow):
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
         self.register_screen("journal_entry", JournalEntryScreen())
         self.register_screen("journal_entries_list", JournalEntriesListScreen(self))
+        self.register_screen("field_labels", FieldLabelsScreen())
+        self.register_screen("audit_log", AuditLogScreen())
+        # نکته: صفحه‌ی «ترجمه‌ها»‌یِ Kivy مخصوصِ کاتالوگِ رشته‌هایِ ثابتِ
+        # KV (فایل‌هایِ src/peecha/locales/*.json) بود — این مکانیزم کاملاً
+        # مخصوصِ همان معماریِ Kivyِ بازنشسته‌شده است (رشته‌های تایپ‌شده در
+        # کدِ پایتونیِ Qt نیازی به چنین کاتالوگی ندارند)، پس عمداً بدونِ
+        # جایگزین مانده — کلیک روی «ترجمه‌ها» به‌طورِ خودکار Placeholder
+        # نشان می‌دهد.
 
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget
@@ -255,7 +265,7 @@ class MainWindow(QMainWindow):
         screen = self._screens.get(target_screen_name)
         if screen is None:
             screen = self._screens["placeholder"]
-        if target_screen_name == "placeholder" and hasattr(screen, "set_module_name"):
+        if screen is self._screens["placeholder"]:
             screen.set_module_name(item["label"])
 
         self.stack.setCurrentWidget(screen)
