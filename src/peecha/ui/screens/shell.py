@@ -47,7 +47,13 @@ NAV_ITEMS = [
             {"code": "GL_CUSTOMERS", "label": "مشتریان", "icon": "account-cash-outline", "screen": "customers"},
             {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "icon": "truck-outline", "screen": "suppliers"},
             {"code": "GL_PERSONNEL", "label": "پرسنل", "icon": "badge-account-outline", "screen": "personnel"},
-            {"code": "GL_JE", "label": "صدور سند", "icon": "file-document-edit-outline", "screen": "journal_entry"},
+            {
+                "code": "GL_JE_LIST",
+                "label": "اسناد حسابداری",
+                "icon": "file-document-multiple-outline",
+                "screen": "journal_entries_list",
+            },
+            {"code": "GL_JE", "label": "صدور سند جدید", "icon": "file-document-edit-outline", "screen": "journal_entry"},
             {"code": "GL_DIM", "label": "مراکز هزینه و ابعادِ تفصیلی", "icon": "shape-outline", "screen": "detail_dimensions"},
         ],
     },
@@ -80,9 +86,15 @@ NAV_ITEMS = [
 # نوارِ بالا یک ردیفِ افقیِ آیکون+برچسبِ کوتاه برایِ پراستفاده‌ترین صفحات
 # (نه همه‌ی صفحات — آن‌ها همچنان در منویِ درختیِ نوار کناری هستند).
 _RIBBON_CODES = [
-    "dashboard", "GL_COA", "GL_JE", "GL_CUSTOMERS", "GL_SUPPLIERS", "GL_PERSONNEL", "SET_CURRENCY", "SET_AUDIT_LOG",
+    "dashboard", "GL_COA", "GL_JE_LIST", "GL_JE", "GL_CUSTOMERS", "GL_SUPPLIERS", "GL_PERSONNEL", "SET_CURRENCY",
+    "SET_AUDIT_LOG",
 ]
-_RIBBON_LABEL_OVERRIDES = {"GL_COA": "کدینگ", "SET_AUDIT_LOG": "رد حسابرسی"}
+_RIBBON_LABEL_OVERRIDES = {
+    "GL_COA": "کدینگ",
+    "GL_JE_LIST": "اسناد",
+    "GL_JE": "سند جدید",
+    "SET_AUDIT_LOG": "رد حسابرسی",
+}
 
 
 def _flatten_nav_items() -> list[dict]:
@@ -150,6 +162,7 @@ class ShellScreen(MDScreen):
         from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
         from peecha.ui.screens.field_labels import FieldLabelsScreen  # noqa: PLC0415
         from peecha.ui.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
+        from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen  # noqa: PLC0415
         from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
         from peecha.ui.screens.languages import LanguagesScreen  # noqa: PLC0415
         from peecha.ui.screens.person_group_screens import (  # noqa: PLC0415
@@ -168,6 +181,7 @@ class ShellScreen(MDScreen):
         content.add_widget(CustomersScreen())
         content.add_widget(SuppliersScreen())
         content.add_widget(PersonnelScreen())
+        content.add_widget(JournalEntriesListScreen())
         content.add_widget(JournalEntryScreen())
         content.add_widget(DetailDimensionsScreen())
         content.add_widget(LanguagesScreen())
@@ -284,6 +298,15 @@ class ShellScreen(MDScreen):
         if target_screen_name == "placeholder":
             content.get_screen("placeholder").set_module_name(item["label"])
         content.current = target_screen_name
+
+    def open_screen(self, code: str, *, then=None) -> None:
+        """رفتن به یک ماژول از داخلِ خودِ یک صفحه‌ی محتوا (نه از کلیکِ کاربر
+        روی نوار کناری) — مثلاً وقتی فهرستِ اسناد با کلیک روی یک ردیف کاربر
+        را به فرمِ صدور سند برای ویرایش می‌برد. اگر then داده شود، بلافاصله
+        بعدِ رفتن به صفحه‌ی مقصد با خودِ آن صفحه صدا زده می‌شود."""
+        self._select_nav(code)
+        if then is not None:
+            then(self.ids.content_manager.current_screen)
 
     # --- سوییچرِ «شرکتِ فعال / سالِ مالیِ فعال / زبان» در هدر -------------------
     # طبق درخواستِ صریح کاربر: جایی مشخص (اینجا هدر) که کاربر از میانِ
