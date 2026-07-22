@@ -8,7 +8,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import func, select
 
@@ -20,6 +21,8 @@ from peecha.db.models.accounting import (
     CustomerDetail,
     DetailAccount,
     DetailDimensionType,
+    DetailGroupField,
+    DetailGroupLevel,
     JournalEntryLineDetail,
     PersonGroup,
     PersonnelDetail,
@@ -34,6 +37,14 @@ from peecha.db.models.accounting import (
 PERSON_DIMENSION_CODE = "PERSON"
 NO_DETAIL_CODE = "NONE"
 NO_DETAIL_LABEL = "بدون تفصیلی"
+
+# طبقِ درخواستِ صریح: حسابِ تفصیلی می‌تواند تا ۴ سطح سلسله‌مراتب داشته باشد
+# (مثلِ گروه/کل/معین/تفصیلیِ خودِ کدینگِ حسابداری، اما این‌جا برایِ خودِ
+# تفصیلی) — طولِ کدِ هر سطح اختیاری و به‌ازایِ هر گروه جداگانه قابل‌تعریف
+# است (acc.detail_group_levels)؛ گروهی که پیکربندی نداشته باشد همچنان
+# تخت/بدونِ محدودیتِ طول می‌ماند (سازگار با گروه‌های موجود).
+MAX_DETAIL_LEVEL = 4
+_VALID_FIELD_KINDS = ("text", "decimal", "date", "boolean")
 
 
 @dataclass
@@ -52,6 +63,10 @@ class DetailAccountRow:
     name: str | None
     is_active: bool
     person_group_id: int | None = None
+    parent_detail_account_id: int | None = None
+    level_no: int = 1
+    full_code: str = ""
+    extra_fields: dict[str, Any] = field(default_factory=dict)
 
 
 def list_dimension_types(company_id: int, *, include_system: bool = False) -> list[DimensionTypeRow]:
@@ -128,6 +143,39 @@ def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:
         session.commit()
 
 
+def _compute_full_codes(rows: list[DetailAccount]) -> dict[int, str]:
+    """کدِ کاملِ هر حسابِ تفصیلی را از زنجیره‌ی والدهایش می‌سازد (مثلِ
+    full_code در کدینگِ حسابداری) — چون سلسله‌مراتب همیشه درونِ همان گروه
+    است، والدها همیشه در همین فهرست حاضرند (نیازی به کوئریِ اضافه نیست)."""
+    by_id = {r.detail_account_id: r for r in rows}
+    cache: dict[int, str] = {}
+
+    def resolve(row: DetailAccount) -> str:
+        if row.detail_account_id in cache:
+            return cache[row.detail_account_id]
+        parent = by_id.get(row.parent_detail_account_id) if row.parent_detail_account_id else None
+        full = f"{resolve(parent)}-{row.code}" if parent is not None else row.code
+        cache[row.detail_account_id] = full
+        return full
+
+    return {r.detail_account_id: resolve(r) for r in rows}
+
+
+def _to_detail_account_row(r: DetailAccount, full_codes: dict[int, str]) -> DetailAccountRow:
+    return DetailAccountRow(
+        detail_account_id=r.detail_account_id,
+        dimension_type_id=r.dimension_type_id,
+        code=r.code,
+        name=r.name,
+        is_active=r.is_active,
+        person_group_id=r.person_group_id,
+        parent_detail_account_id=r.parent_detail_account_id,
+        level_no=r.level_no,
+        full_code=full_codes.get(r.detail_account_id, r.code),
+        extra_fields=dict(r.extra_fields or {}),
+    )
+
+
 def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[DetailAccountRow]:
     with new_session() as session:
         rows = session.scalars(
@@ -135,25 +183,57 @@ def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[Detail
             .where(DetailAccount.company_id == company_id, DetailAccount.dimension_type_id == dimension_type_id)
             .order_by(DetailAccount.code)
         ).all()
-        return [
-            DetailAccountRow(
-                detail_account_id=r.detail_account_id,
-                dimension_type_id=r.dimension_type_id,
-                code=r.code,
-                name=r.name,
-                is_active=r.is_active,
-            )
-            for r in rows
-        ]
+        full_codes = _compute_full_codes(rows)
+        return [_to_detail_account_row(r, full_codes) for r in rows]
 
 
-def create_detail_account(company_id: int, dimension_type_id: int, code: str, name: str | None = None) -> DetailAccount:
+def _validate_code_length(session, dimension_type_id: int, level_no: int, segment_code: str) -> None:
+    """اگر این گروه برایِ این سطح طولِ کدی پیکربندی کرده باشد (اختیاری،
+    acc.detail_group_levels)، طولِ کدِ واردشده باید دقیقاً همان باشد."""
+    level_config = session.get(DetailGroupLevel, (dimension_type_id, level_no))
+    if level_config is not None and len(segment_code) != level_config.code_length:
+        raise ValueError(
+            f"طولِ کدِ سطحِ {level_no} برایِ این گروه باید دقیقاً {level_config.code_length} رقم باشد."
+        )
+
+
+def create_detail_account(
+    company_id: int,
+    dimension_type_id: int,
+    code: str,
+    name: str | None = None,
+    parent_detail_account_id: int | None = None,
+    extra_fields: dict | None = None,
+) -> DetailAccount:
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
             raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+
+        segment_code = code.strip()
+        level_no = 1
+        if parent_detail_account_id is not None:
+            parent = session.get(DetailAccount, parent_detail_account_id)
+            if (
+                parent is None
+                or parent.company_id != company_id
+                or parent.dimension_type_id != dimension_type_id
+            ):
+                raise ValueError("حسابِ تفصیلیِ والد نامعتبر است.")
+            if parent.level_no >= MAX_DETAIL_LEVEL:
+                raise ValueError(f"حسابِ تفصیلی حداکثر {MAX_DETAIL_LEVEL} سطح می‌تواند داشته باشد.")
+            level_no = parent.level_no + 1
+
+        _validate_code_length(session, dimension_type_id, level_no, segment_code)
+
         detail_account = DetailAccount(
-            company_id=company_id, dimension_type_id=dimension_type_id, code=code.strip(), name=(name or None)
+            company_id=company_id,
+            dimension_type_id=dimension_type_id,
+            code=segment_code,
+            name=(name or None),
+            parent_detail_account_id=parent_detail_account_id,
+            level_no=level_no,
+            extra_fields=dict(extra_fields or {}),
         )
         session.add(detail_account)
         session.commit()
@@ -163,15 +243,24 @@ def create_detail_account(company_id: int, dimension_type_id: int, code: str, na
 
 
 def update_detail_account(
-    detail_account_id: int, company_id: int, code: str, is_active: bool, name: str | None = None
+    detail_account_id: int,
+    company_id: int,
+    code: str,
+    is_active: bool,
+    name: str | None = None,
+    extra_fields: dict | None = None,
 ) -> None:
     with new_session() as session:
         detail_account = session.get(DetailAccount, detail_account_id)
         if detail_account is None or detail_account.company_id != company_id:
             raise ValueError("حسابِ تفصیلی نامعتبر است.")
-        detail_account.code = code.strip()
+        segment_code = code.strip()
+        _validate_code_length(session, detail_account.dimension_type_id, detail_account.level_no, segment_code)
+        detail_account.code = segment_code
         detail_account.name = name or None
         detail_account.is_active = is_active
+        if extra_fields is not None:
+            detail_account.extra_fields = dict(extra_fields)
         session.commit()
 
 
@@ -223,6 +312,184 @@ def set_account_dimension_types(account_id: int, company_id: int, dimension_type
         session.commit()
 
 
+# --- پیکربندیِ سلسله‌مراتبِ هر گروهِ تفصیلی (تا ۴ سطح) ----------------------
+# طبقِ درخواستِ صریح: «بتوان برای چهار سطح تفصیلی تعداد کد در گروه تفصیلی
+# مشخص کرد» — این پیکربندی اختیاری است؛ گروهی که این‌جا ردیفی نداشته باشد
+# همچنان تخت/بدونِ محدودیتِ طول می‌ماند (سازگار با گروه‌های موجود مثلِ
+# مشتری/مرکز هزینه).
+
+
+@dataclass
+class GroupLevelRow:
+    level_no: int
+    code_length: int
+
+
+def list_group_levels(dimension_type_id: int) -> list[GroupLevelRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(DetailGroupLevel)
+            .where(DetailGroupLevel.dimension_type_id == dimension_type_id)
+            .order_by(DetailGroupLevel.level_no)
+        ).all()
+        return [GroupLevelRow(level_no=r.level_no, code_length=r.code_length) for r in rows]
+
+
+def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, int]) -> None:
+    """جایگزینیِ کاملِ پیکربندیِ سطح‌های این گروه — levels یعنی
+    {شماره‌ی سطح (۱ تا ۴): تعدادِ رقمِ کد}؛ سطحی که در دیکشنری نباشد
+    بدونِ محدودیتِ طول می‌ماند."""
+    with new_session() as session:
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        if dimension_type is None or dimension_type.company_id != company_id:
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
+
+        session.execute(
+            DetailGroupLevel.__table__.delete().where(DetailGroupLevel.dimension_type_id == dimension_type_id)
+        )
+        for level_no, code_length in levels.items():
+            if not (1 <= level_no <= MAX_DETAIL_LEVEL):
+                raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_DETAIL_LEVEL} باشد.")
+            if not (1 <= code_length <= 10):
+                raise ValueError("تعدادِ رقمِ کد باید بینِ ۱ تا ۱۰ باشد.")
+            session.add(
+                DetailGroupLevel(dimension_type_id=dimension_type_id, level_no=level_no, code_length=code_length)
+            )
+        session.commit()
+
+
+# --- فیلدهای اختصاصیِ قابل‌تعریفِ هر گروهِ تفصیلی --------------------------
+# طبقِ درخواستِ صریح: «بتوان گروه تفصیلی هم تعریف کرد و ویژگی‌های یک گروه
+# تفصیلی مثل مشتری را بگیرد» — برایِ گروه‌های تازه‌تعریف‌شده (مثلِ بانک/
+# کالا)، کاربر خودش فیلدهای اختصاصی تعریف می‌کند (نه هاردکد در کد، مثلِ
+# customer_details/supplier_details/personnel_details که مخصوصِ آن سه
+# گروهِ سیستمی‌اند)؛ مقدارِشان در DetailAccount.extra_fields ذخیره می‌شود.
+
+
+@dataclass
+class GroupFieldRow:
+    detail_group_field_id: int
+    field_key: str
+    label: str
+    kind: str
+    is_required: bool
+    sort_order: int
+
+
+def list_group_fields(dimension_type_id: int) -> list[GroupFieldRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(DetailGroupField)
+            .where(DetailGroupField.dimension_type_id == dimension_type_id)
+            .order_by(DetailGroupField.sort_order, DetailGroupField.detail_group_field_id)
+        ).all()
+        return [
+            GroupFieldRow(
+                detail_group_field_id=r.detail_group_field_id,
+                field_key=r.field_key,
+                label=r.label,
+                kind=r.kind,
+                is_required=r.is_required,
+                sort_order=r.sort_order,
+            )
+            for r in rows
+        ]
+
+
+def set_group_fields(dimension_type_id: int, company_id: int, fields: list[dict]) -> None:
+    """جایگزینیِ کاملِ فهرستِ فیلدهای اختصاصیِ این گروه — هر آیتمِ fields:
+    {"field_key": ..., "label": ..., "kind": "text"|"decimal"|"date"|"boolean", "is_required": bool}."""
+    with new_session() as session:
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        if dimension_type is None or dimension_type.company_id != company_id:
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
+
+        session.execute(
+            DetailGroupField.__table__.delete().where(DetailGroupField.dimension_type_id == dimension_type_id)
+        )
+        for i, f in enumerate(fields):
+            kind = f["kind"]
+            if kind not in _VALID_FIELD_KINDS:
+                raise ValueError(f"نوعِ فیلدِ نامعتبر: {kind}")
+            field_key = f["field_key"].strip()
+            if not field_key:
+                raise ValueError("کلیدِ فیلد نمی‌تواند خالی باشد.")
+            session.add(
+                DetailGroupField(
+                    dimension_type_id=dimension_type_id,
+                    field_key=field_key,
+                    label=f["label"].strip(),
+                    kind=kind,
+                    is_required=bool(f.get("is_required", False)),
+                    sort_order=f.get("sort_order", i),
+                )
+            )
+        session.commit()
+
+
+# --- فهرستِ واحدِ همه‌ی تفصیلی‌ها (همه‌ی گروه‌ها، یک‌جا) ---------------------
+# طبقِ درخواستِ صریح: «تمامِ تفصیلی‌ها در یک فرم» با ستونِ نوعِ تفصیلی و
+# ستونِ سطح — این تابع مشتری/تامین‌کننده/پرسنل (از person_groups) و
+# مرکزِهزینه/پروژه/گروه‌های دیگرِ کاربرساخته (از detail_dimension_types) را
+# یک‌جا برمی‌گرداند؛ ردیفِ سیستمیِ «بدون تفصیلی» و خودِ نوعِ‌بُعدِ سیستمیِ
+# PERSON (که خودش گروه نیست، فقط بستر است) کنار گذاشته می‌شوند.
+
+
+@dataclass
+class UnifiedDetailAccountRow:
+    detail_account_id: int
+    dimension_type_id: int
+    group_name: str
+    level_no: int
+    full_code: str
+    name: str | None
+    is_active: bool
+
+
+def list_all_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
+    with new_session() as session:
+        person_dimension_type_id = ensure_person_dimension(session, company_id)
+        session.commit()
+
+        all_rows = session.scalars(select(DetailAccount).where(DetailAccount.company_id == company_id)).all()
+        full_codes = _compute_full_codes(all_rows)
+
+        dimension_types_by_id = {
+            t.dimension_type_id: t
+            for t in session.scalars(
+                select(DetailDimensionType).where(DetailDimensionType.company_id == company_id)
+            ).all()
+        }
+        person_groups_by_id = {
+            g.person_group_id: g
+            for g in session.scalars(select(PersonGroup).where(PersonGroup.company_id == company_id)).all()
+        }
+
+        result: list[UnifiedDetailAccountRow] = []
+        for r in all_rows:
+            if r.dimension_type_id == person_dimension_type_id and r.code == NO_DETAIL_CODE:
+                continue  # ردیفِ سیستمیِ «بدون تفصیلی» برایِ کاربر معنادار نیست
+            if r.person_group_id is not None:
+                group = person_groups_by_id.get(r.person_group_id)
+                group_name = group.name if group is not None else "?"
+            else:
+                group = dimension_types_by_id.get(r.dimension_type_id)
+                group_name = group.code if group is not None else "?"
+            result.append(
+                UnifiedDetailAccountRow(
+                    detail_account_id=r.detail_account_id,
+                    dimension_type_id=r.dimension_type_id,
+                    group_name=group_name,
+                    level_no=r.level_no,
+                    full_code=full_codes.get(r.detail_account_id, r.code),
+                    name=r.name,
+                    is_active=r.is_active,
+                )
+            )
+        result.sort(key=lambda row: (row.group_name, row.full_code))
+        return result
+
+
 @dataclass
 class RequiredDimension:
     dimension_type_id: int
@@ -262,25 +529,24 @@ def get_required_dimensions_for_account(account_id: int) -> list[RequiredDimensi
             dimension_type = types_by_id.get(dimension_type_id)
             if dimension_type is None or not dimension_type.is_active:
                 continue
-            detail_rows = session.scalars(
-                select(DetailAccount)
-                .where(DetailAccount.dimension_type_id == dimension_type_id, DetailAccount.is_active.is_(True))
-                .order_by(DetailAccount.code)
+            # همه‌ی ردیف‌های فعالِ این گروه (برایِ محاسبه‌ی full_code و
+            # تشخیصِ برگ نیاز به کلِ درخت داریم، نه فقط برگ‌ها).
+            all_rows = session.scalars(
+                select(DetailAccount).where(DetailAccount.dimension_type_id == dimension_type_id)
             ).all()
+            full_codes = _compute_full_codes(all_rows)
+            parent_ids = {r.parent_detail_account_id for r in all_rows if r.parent_detail_account_id is not None}
+            # طبقِ درخواستِ صریح: در سلسله‌مراتبِ تا ۴سطحی، فقط برگ‌ها
+            # (پایین‌ترین سطح، مثلِ معینِ کدینگِ حسابداری) در سند قابل‌انتخاب‌اند؛
+            # گروه‌های تختِ موجود (مشتری/مرکز هزینه و ...) چون فرزندی ندارند،
+            # همه‌شان همچنان برگ محسوب می‌شوند — رفتارشان دست‌نخورده می‌ماند.
+            leaf_rows = [r for r in all_rows if r.is_active and r.detail_account_id not in parent_ids]
+            leaf_rows.sort(key=lambda r: r.code)
             result.append(
                 RequiredDimension(
                     dimension_type_id=dimension_type_id,
                     code=dimension_type.code,
-                    detail_accounts=[
-                        DetailAccountRow(
-                            detail_account_id=d.detail_account_id,
-                            dimension_type_id=d.dimension_type_id,
-                            code=d.code,
-                            name=d.name,
-                            is_active=d.is_active,
-                        )
-                        for d in detail_rows
-                    ],
+                    detail_accounts=[_to_detail_account_row(r, full_codes) for r in leaf_rows],
                 )
             )
         return result
@@ -356,17 +622,8 @@ def list_persons(company_id: int) -> list[DetailAccountRow]:
             .where(DetailAccount.company_id == company_id, DetailAccount.dimension_type_id == dimension_type_id)
             .order_by(DetailAccount.code)
         ).all()
-        return [
-            DetailAccountRow(
-                detail_account_id=r.detail_account_id,
-                dimension_type_id=r.dimension_type_id,
-                code=r.code,
-                name=r.name,
-                is_active=r.is_active,
-                person_group_id=r.person_group_id,
-            )
-            for r in rows
-        ]
+        full_codes = _compute_full_codes(rows)
+        return [_to_detail_account_row(r, full_codes) for r in rows]
 
 
 def list_active_persons(company_id: int) -> list[DetailAccountRow]:

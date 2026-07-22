@@ -8,6 +8,8 @@ from __future__ import annotations
 import datetime
 import decimal
 
+from typing import Any
+
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -20,6 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from peecha.db.base import Base
@@ -134,6 +137,44 @@ class DetailAccount(Base):
     name: Mapped[str | None] = mapped_column(String(200))
     person_group_id: Mapped[int | None] = mapped_column(ForeignKey("acc.person_groups.person_group_id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    parent_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    level_no: Mapped[int] = mapped_column(SmallInteger, default=1)
+    extra_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+    parent: Mapped[DetailAccount | None] = relationship(remote_side="DetailAccount.detail_account_id")
+
+
+class DetailGroupLevel(Base):
+    """طولِ کدِ هر سطح (۱ تا ۴) به تفکیکِ گروهِ تفصیلی — اختیاری؛ گروهی که
+    ردیفی این‌جا نداشته باشد تخت/بدونِ محدودیتِ طول می‌ماند (سازگار با
+    گروه‌های موجود مثلِ مشتری/مرکز هزینه که پیش از این ویژگی ساخته شده‌اند)."""
+
+    __tablename__ = "detail_group_levels"
+    __table_args__ = {"schema": "acc"}
+
+    dimension_type_id: Mapped[int] = mapped_column(
+        ForeignKey("acc.detail_dimension_types.dimension_type_id"), primary_key=True
+    )
+    level_no: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    code_length: Mapped[int] = mapped_column(SmallInteger)
+
+
+class DetailGroupField(Base):
+    """تعریفِ فیلدِ اختصاصیِ یک گروهِ تفصیلی — طبقِ درخواستِ صریح، کاربر
+    باید بتواند برایِ گروهِ تازه‌تعریف‌شده (مثلاً «بانک») ویژگی‌هایی شبیهِ
+    مشتری تعریف کند؛ مقدارِ هر فیلد در DetailAccount.extra_fields (JSONB،
+    کلید=field_key) ذخیره می‌شود."""
+
+    __tablename__ = "detail_group_fields"
+    __table_args__ = (UniqueConstraint("dimension_type_id", "field_key"), {"schema": "acc"})
+
+    detail_group_field_id: Mapped[int] = mapped_column(primary_key=True)
+    dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
+    field_key: Mapped[str] = mapped_column(String(50))
+    label: Mapped[str] = mapped_column(String(100))
+    kind: Mapped[str] = mapped_column(String(20))  # text | decimal | date | boolean
+    is_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(SmallInteger, default=0)
 
 
 class AccountDetailDimension(Base):
