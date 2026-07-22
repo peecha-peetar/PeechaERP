@@ -44,8 +44,15 @@ from peecha.ui.widgets import PSelectField, PTextField, open_rtl_dropdown
 _KV_PATH = os.path.join(os.path.dirname(__file__), "journal_entry.kv")
 Builder.load_file(_KV_PATH)
 
-_STATUS_LABELS = {"TEMPORARY": "موقت", "PERMANENT": "دائم", "REVERSED": "برگشت‌خورده", "CANCELLED": "ابطال‌شده"}
+_STATUS_LABELS = {
+    "DRAFT": "پیش‌نویس",
+    "TEMPORARY": "موقت",
+    "PERMANENT": "دائم",
+    "REVERSED": "برگشت‌خورده",
+    "CANCELLED": "ابطال‌شده",
+}
 _STATUS_COLORS = {
+    "DRAFT": theme.TEXT_DISABLED,
     "TEMPORARY": theme.WARNING,
     "PERMANENT": theme.SUCCESS,
     "REVERSED": theme.DANGER,
@@ -721,6 +728,9 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self._rows = []
         self.ids.date_field.text = numerals.format_jalali_date(datetime.date.today())
         self.ids.description_field.text = ""
+        self.ids.alternative_number_field.text = ""
+        self.ids.draft_checkbox.active = False
+        self.ids.registration_at_label.text = ""
         self.ids.amount_words_label.text = ""
         self.ids.form_title.text = shape(tr("صدور سند حسابداری"))
         self.ids.save_button.text = shape(tr("ثبت سند"))
@@ -777,10 +787,11 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         """زنجیره‌ی Tab بین ردیف‌های پویا را دوباره می‌سازد — چون هر بار
         ردیفی اضافه/حذف می‌شود، فیلد آخرِ سطرِ قبل باید به اولین فیلدِ سطرِ
         بعد وصل شود، و این با focus_next ایستا در KV ممکن نیست."""
+        self.ids.description_field.focus_next = self.ids.alternative_number_field
         if not self._rows:
-            self.ids.description_field.focus_next = self.ids.add_line_button
+            self.ids.alternative_number_field.focus_next = self.ids.add_line_button
             return
-        self.ids.description_field.focus_next = self._rows[0].account_field
+        self.ids.alternative_number_field.focus_next = self._rows[0].account_field
         for i, row in enumerate(self._rows):
             if i + 1 < len(self._rows):
                 row.ids.credit_field.focus_next = self._rows[i + 1].account_field
@@ -861,6 +872,9 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         if lines is None:
             return
 
+        alternative_number = self.ids.alternative_number_field.value.strip()
+        as_draft = self.ids.draft_checkbox.active
+
         try:
             if self._editing_entry_id is not None:
                 je_service.update_journal_entry(
@@ -870,8 +884,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     description=self.ids.description_field.value.strip(),
                     lines=lines,
                     changed_by_user_id=session.current_user.user_id,
+                    alternative_number=alternative_number,
+                    as_draft=as_draft,
                 )
-                message = "سند به‌روزرسانی شد."
+                message = "سند به‌صورتِ پیش‌نویس ذخیره شد." if as_draft else "سند به‌روزرسانی شد."
             else:
                 result = je_service.create_journal_entry(
                     company_id=session.current_company.company_id,
@@ -879,8 +895,14 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                     document_date=document_date,
                     description=self.ids.description_field.value.strip(),
                     lines=lines,
+                    alternative_number=alternative_number,
+                    as_draft=as_draft,
                 )
-                message = f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
+                message = (
+                    f"سند به‌صورتِ پیش‌نویس با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ذخیره شد."
+                    if as_draft
+                    else f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
+                )
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای اعتبارسنجی/دیتابیس به کاربر
             self._set_status(tr("خطا: {}").format(exc), is_error=True)
             return
@@ -908,6 +930,11 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self._rows = []
         self.ids.date_field.text = numerals.format_jalali_date(entry.document_date)
         self.ids.description_field.set_value(entry.description)
+        self.ids.alternative_number_field.set_value(entry.alternative_number)
+        self.ids.draft_checkbox.active = entry.status_code == "DRAFT"
+        self.ids.registration_at_label.text = shape(
+            tr("تاریخِ ثبت: {}").format(numerals.format_jalali_datetime(entry.registration_at))
+        )
         accounts_by_id = {a.account_id: a for a in self._account_options}
         for ln in lines:
             self.add_line()
@@ -1017,7 +1044,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                 "status_text": shape(tr(_STATUS_LABELS.get(entry.status_code, entry.status_code))),
                 "status_badge_color": _STATUS_COLORS.get(entry.status_code, theme.TEXT_DISABLED),
                 "zebra": i % 2 == 1,
-                "editable": entry.status_code == "TEMPORARY",
+                "editable": entry.status_code in ("TEMPORARY", "DRAFT"),
                 "selected": entry.journal_entry_id == self._editing_entry_id,
             }
             for i, entry in enumerate(entries)

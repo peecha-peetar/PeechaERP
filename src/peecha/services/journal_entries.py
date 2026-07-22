@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
+    AccountNature,
     ChartOfAccount,
     DetailAccount,
     FiscalYear,
@@ -47,6 +48,7 @@ def _lines_snapshot(lines) -> list[dict]:
             "credit": str(ln.credit),
             "currency_id": ln.currency_id,
             "exchange_rate": str(ln.exchange_rate) if ln.exchange_rate is not None else None,
+            "tax_code": ln.tax_code,
         }
         for ln in lines
     ]
@@ -61,9 +63,12 @@ def _snapshot_existing_entry(session, journal_entry_id: int) -> dict:
         .where(JournalEntryLine.journal_entry_id == journal_entry_id)
         .order_by(JournalEntryLine.line_no)
     ).all()
+    status = session.get(JournalEntryStatus, entry.status_id)
     return {
         "document_date": entry.document_date.isoformat(),
         "description": entry.description,
+        "alternative_number": entry.alternative_number,
+        "status": status.code if status is not None else None,
         "lines": [
             {
                 "account_id": ln.account_id,
@@ -72,6 +77,7 @@ def _snapshot_existing_entry(session, journal_entry_id: int) -> dict:
                 "credit": str(ln.credit_amount_fc),
                 "currency_id": ln.currency_id,
                 "exchange_rate": str(ln.exchange_rate),
+                "tax_code": ln.tax_code,
             }
             for ln in lines
         ],
@@ -90,6 +96,7 @@ class LineInput:
     # None یعنی ارزِ پایه‌ی شرکت (نرخ همیشه ۱، نیازی به exchange_rate نیست).
     currency_id: int | None = None
     exchange_rate: decimal.Decimal | None = None
+    tax_code: str | None = None
 
 
 @dataclass
@@ -106,11 +113,13 @@ class JournalEntrySummary:
     description: str
     status_code: str
     total_amount: decimal.Decimal
+    alternative_number: str
+    registration_at: datetime.datetime
 
 
-def _validate_lines(lines: list[LineInput]) -> list[LineInput]:
+def _validate_lines(lines: list[LineInput], *, require_balance: bool = True) -> list[LineInput]:
     real_lines = [ln for ln in lines if ln.debit != 0 or ln.credit != 0]
-    if len(real_lines) < 2:
+    if require_balance and len(real_lines) < 2:
         raise ValueError("سند حسابداری باید حداقل دو ردیف (یک بدهکار و یک بستانکار) داشته باشد.")
     for ln in real_lines:
         if (ln.debit != 0) == (ln.credit != 0):
@@ -129,13 +138,19 @@ class _ResolvedLine:
     exchange_rate: decimal.Decimal
 
 
-def _resolve_lines(session, company: Company, real_lines: list[LineInput]) -> list[_ResolvedLine]:
+def _resolve_lines(
+    session, company: Company, real_lines: list[LineInput], *, require_balance: bool = True
+) -> list[_ResolvedLine]:
     """اعتبارسنجیِ حساب‌ها/ابعادِ تفصیلی + تعیینِ ارز و نرخِ هر ردیف — ارزِ
     مشخص‌نشده یعنی ارزِ پایه (نرخ ۱)؛ ارزِ غیرِپایه باید هم برای شرکت فعال
-    باشد و هم (اگر حساب به ارزِ خاصی محدود شده) با ارزِ حساب یکی باشد."""
+    باشد و هم (اگر حساب به ارزِ خاصی محدود شده) با ارزِ حساب یکی باشد.
+    require_balance=False برای سندِ پیش‌نویس: حساب/بُعد/ارز هنوز اعتبارسنجی
+    می‌شوند (چون مقادیرِ نامعتبر هیچ‌وقت نباید ذخیره شوند)، فقط شرطِ تساویِ
+    جمعِ بدهکار/بستانکار موقتاً نادیده گرفته می‌شود."""
     account_ids = [ln.account_id for ln in real_lines]
     accounts = session.scalars(select(ChartOfAccount).where(ChartOfAccount.account_id.in_(account_ids))).all()
     accounts_by_id = {a.account_id: a for a in accounts}
+    nature_codes = dict(session.execute(select(AccountNature.nature_id, AccountNature.code)).all())
 
     required_by_account: dict[int, set[int]] = {}
     if account_ids:
@@ -162,6 +177,12 @@ def _resolve_lines(session, company: Company, real_lines: list[LineInput]) -> li
             raise ValueError("یکی از حساب‌های انتخاب‌شده نامعتبر است.")
         if not account.is_postable:
             raise ValueError(f"حساب «{account.full_code}» قابل ثبت سند نیست.")
+
+        nature_code = nature_codes.get(account.nature_id)
+        if nature_code == "DEBIT" and ln.credit != 0:
+            raise ValueError(f"حساب «{account.full_code}» فقط بدهکار است؛ نمی‌تواند بستانکار شود.")
+        if nature_code == "CREDIT" and ln.debit != 0:
+            raise ValueError(f"حساب «{account.full_code}» فقط بستانکار است؛ نمی‌تواند بدهکار شود.")
 
         required = required_by_account.get(ln.account_id, set())
         missing = required - set(ln.details.keys())
@@ -193,13 +214,14 @@ def _resolve_lines(session, company: Company, real_lines: list[LineInput]) -> li
         if set(valid_detail_accounts) != detail_account_ids:
             raise ValueError("یکی از حساب‌های تفصیلیِ انتخاب‌شده نامعتبر است.")
 
-    total_debit = sum((_base_amount(r.line.debit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
-    total_credit = sum((_base_amount(r.line.credit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
-    if total_debit != total_credit:
-        raise ValueError(
-            f"سند متعادل نیست: جمع بدهکار (معادلِ ارزِ پایه) {total_debit} "
-            f"با جمع بستانکار {total_credit} برابر نیست."
-        )
+    if require_balance:
+        total_debit = sum((_base_amount(r.line.debit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
+        total_credit = sum((_base_amount(r.line.credit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
+        if total_debit != total_credit:
+            raise ValueError(
+                f"سند متعادل نیست: جمع بدهکار (معادلِ ارزِ پایه) {total_debit} "
+                f"با جمع بستانکار {total_credit} برابر نیست."
+            )
 
     return resolved
 
@@ -234,18 +256,22 @@ def create_journal_entry(
     document_date: datetime.date,
     description: str,
     lines: list[LineInput],
+    alternative_number: str = "",
+    as_draft: bool = False,
 ) -> JournalEntryResult:
-    real_lines = _validate_lines(lines)
+    require_balance = not as_draft
+    real_lines = _validate_lines(lines, require_balance=require_balance)
 
     with new_session() as session:
         company = session.get(Company, company_id)
         if company is None:
             raise ValueError("شرکت نامعتبر است.")
 
-        resolved_lines = _resolve_lines(session, company, real_lines)
+        resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance)
 
+        status_code = "DRAFT" if as_draft else "TEMPORARY"
         entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == "NORMAL"))
-        status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "TEMPORARY"))
+        status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == status_code))
         if entry_type is None or status is None:
             raise ValueError("داده‌ی پایه‌ی نوع/وضعیت سند در دیتابیس یافت نشد.")
 
@@ -267,6 +293,7 @@ def create_journal_entry(
             temporary_no=next_no,
             permanent_no=None,
             document_date=document_date,
+            alternative_number=alternative_number or None,
             entry_type_id=entry_type.entry_type_id,
             status_id=status.status_id,
             description=description or None,
@@ -282,6 +309,7 @@ def create_journal_entry(
                 line_no=line_no,
                 account_id=ln.account_id,
                 description=ln.description or None,
+                tax_code=ln.tax_code or None,
                 currency_id=resolved.currency_id,
                 exchange_rate=resolved.exchange_rate,
                 debit_amount_fc=ln.debit,
@@ -309,6 +337,8 @@ def create_journal_entry(
                 "after": {
                     "document_date": document_date.isoformat(),
                     "description": description,
+                    "alternative_number": alternative_number or None,
+                    "status": status_code,
                     "lines": _lines_snapshot([r.line for r in resolved_lines]),
                 }
             },
@@ -345,6 +375,8 @@ def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
                 description=e.description or "",
                 status_code=status_codes[e.status_id],
                 total_amount=totals.get(e.journal_entry_id, decimal.Decimal(0)),
+                alternative_number=e.alternative_number or "",
+                registration_at=e.created_at,
             )
             for e in entries
         ]
@@ -399,6 +431,7 @@ def get_journal_entry_lines(journal_entry_id: int) -> list[LineInput]:
                 details=details_by_line.get(ln.line_id, {}),
                 currency_id=ln.currency_id,
                 exchange_rate=ln.exchange_rate,
+                tax_code=ln.tax_code,
             )
             for ln in lines
         ]
@@ -411,26 +444,36 @@ def update_journal_entry(
     description: str,
     lines: list[LineInput],
     changed_by_user_id: int | None = None,
+    alternative_number: str = "",
+    as_draft: bool = False,
 ) -> None:
-    real_lines = _validate_lines(lines)
+    require_balance = not as_draft
+    real_lines = _validate_lines(lines, require_balance=require_balance)
 
     with new_session() as session:
         entry = session.get(JournalEntry, journal_entry_id)
         if entry is None or entry.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         status = session.get(JournalEntryStatus, entry.status_id)
-        if status is None or status.code != "TEMPORARY":
-            raise ValueError("فقط سندهای با وضعیت موقت قابل ویرایش‌اند.")
+        if status is None or status.code not in ("TEMPORARY", "DRAFT"):
+            raise ValueError("فقط سندهای با وضعیت موقت یا پیش‌نویس قابل ویرایش‌اند.")
 
         company = session.get(Company, company_id)
         if company is None:
             raise ValueError("شرکت نامعتبر است.")
-        resolved_lines = _resolve_lines(session, company, real_lines)
+        resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance)
 
         before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 
+        status_code = "DRAFT" if as_draft else "TEMPORARY"
+        new_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == status_code))
+        if new_status is None:
+            raise ValueError("داده‌ی پایه‌ی وضعیتِ سند در دیتابیس یافت نشد.")
+
         entry.document_date = document_date
         entry.description = description or None
+        entry.alternative_number = alternative_number or None
+        entry.status_id = new_status.status_id
 
         old_line_ids = list(
             session.scalars(
@@ -450,6 +493,7 @@ def update_journal_entry(
                 line_no=line_no,
                 account_id=ln.account_id,
                 description=ln.description or None,
+                tax_code=ln.tax_code or None,
                 currency_id=resolved.currency_id,
                 exchange_rate=resolved.exchange_rate,
                 debit_amount_fc=ln.debit,
@@ -478,6 +522,8 @@ def update_journal_entry(
                 "after": {
                     "document_date": document_date.isoformat(),
                     "description": description,
+                    "alternative_number": alternative_number or None,
+                    "status": status_code,
                     "lines": _lines_snapshot([r.line for r in resolved_lines]),
                 },
             },
@@ -492,8 +538,8 @@ def delete_journal_entry(journal_entry_id: int, company_id: int, changed_by_user
         if entry is None or entry.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         status = session.get(JournalEntryStatus, entry.status_id)
-        if status is None or status.code != "TEMPORARY":
-            raise ValueError("فقط سندهای با وضعیت موقت قابل حذف‌اند.")
+        if status is None or status.code not in ("TEMPORARY", "DRAFT"):
+            raise ValueError("فقط سندهای با وضعیت موقت یا پیش‌نویس قابل حذف‌اند.")
 
         before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 

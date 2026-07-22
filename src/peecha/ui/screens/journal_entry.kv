@@ -226,6 +226,35 @@
                         # است؛ Enter به شرحِ سند می‌رود.
                         on_text_validate: self.focus_next.focus = True
 
+                BoxLayout:
+                    size_hint_y: None
+                    height: "48dp"
+                    spacing: "12dp"
+
+                    PHintLabel:
+                        id: registration_at_label
+                        text: ""
+                        size_hint_x: 0.3
+
+                    MDCheckbox:
+                        id: draft_checkbox
+                        size_hint: None, None
+                        size: "24dp", "24dp"
+                        pos_hint: {"center_y": 0.5}
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("ذخیره به عنوان پیش‌نویس")))
+                        valign: "middle"
+                        size_hint_x: None
+                        width: "170dp"
+
+                    PTextField:
+                        id: alternative_number_field
+                        hint_text: ((app.ui_language_code or True) and shape(tr("شماره عطف/بایگانی")))
+                        size_hint_x: 0.3
+                        focus_previous: description_field
+                        on_text_validate: self.focus_next.focus = True if self.focus_next else None
+
                 PLabel:
                     text: ((app.ui_language_code or True) and shape(tr("ردیف‌ها")))
                     font_style: "Subtitle1"

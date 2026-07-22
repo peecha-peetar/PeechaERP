@@ -171,6 +171,8 @@ class JournalEntry(Base):
     temporary_no: Mapped[int]
     permanent_no: Mapped[int | None]  # فقط سرویس تایید (کارتابل) این را پر می‌کند؛ پس از آن غیرقابل‌تغییر (تریگر DB)
     document_date: Mapped[datetime.date] = mapped_column(Date)
+    alternative_number: Mapped[str | None] = mapped_column(String(50))  # شماره عطف/بایگانیِ دستی
+    source_system: Mapped[str] = mapped_column(String(20), default="MANUAL")
     entry_type_id: Mapped[int] = mapped_column(ForeignKey("acc.journal_entry_types.entry_type_id"))
     status_id: Mapped[int] = mapped_column(ForeignKey("acc.journal_entry_statuses.status_id"))
     description: Mapped[str | None]
@@ -200,6 +202,7 @@ class JournalEntryLine(Base):
     line_no: Mapped[int] = mapped_column(SmallInteger)
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
     description: Mapped[str | None]
+    tax_code: Mapped[str | None] = mapped_column(String(30))
     currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     exchange_rate: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     debit_amount_fc: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
