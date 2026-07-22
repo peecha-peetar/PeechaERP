@@ -1,0 +1,180 @@
+#:import shape peecha.ui.rtl.shape
+#:import tr peecha.ui.i18n.tr
+#:import theme peecha.ui.theme
+#:import dp kivy.metrics.dp
+
+# نکته‌ی مهمِ RTL: ترتیبِ اعلام عمداً برعکسِ ترتیبِ منطقیِ ستون‌هاست تا
+# «نام» (اولین چیزِ خوانده‌شده) راست‌ترین بیفتد.
+<PersonRowWidget>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: "32dp"
+    padding: ["12dp", "0dp"]
+    radius: [8, 8, 8, 8]
+    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+
+    MDIconButton:
+        icon: "trash-can-outline"
+        icon_size: "18sp"
+        size_hint_x: None
+        width: "28dp"
+        opacity: 0 if root.is_system_row else 1
+        disabled: root.is_system_row
+        theme_text_color: "Custom"
+        text_color: theme.DANGER
+        on_release: root.request_delete()
+
+    AnchorLayout:
+        size_hint_x: 0.16
+        anchor_x: "right"
+        anchor_y: "center"
+
+        PBadge:
+            text: root.status_text
+            badge_color: theme.SUCCESS if root.is_active_row else theme.TEXT_DISABLED
+
+    PLabel:
+        text: root.code_text
+        theme_text_color: "Custom"
+        text_color: theme.TEXT_SECONDARY
+        valign: "middle"
+        size_hint_x: 0.24
+
+    PLabel:
+        text: root.name_text
+        valign: "middle"
+        size_hint_x: 0.6
+
+<PersonsScreen>:
+    name: "persons"
+    md_bg_color: theme.BACKGROUND
+
+    BoxLayout:
+        orientation: "horizontal"
+        padding: "24dp"
+        spacing: "20dp"
+
+        PCard:
+            size_hint_x: 0.66
+
+            PLabel:
+                text: ((app.ui_language_code or True) and shape(tr("اشخاص (تفصیلیِ اشخاص)")))
+                font_style: "H5"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PHintLabel:
+                text: ((app.ui_language_code or True) and shape(tr("مشتری، تامین‌کننده، پرسنل و هر شخصِ دیگری که در سند حسابداری تفکیک می‌شود؛ ردیفِ «بدون تفصیلی» پیش‌فرضِ خودکارِ هر ردیفی است که شخصِ خاصی نداشته باشد.")))
+
+            PHintLabel:
+                id: status_label
+                text: ""
+
+            BoxLayout:
+                id: grid_header
+                size_hint_y: None
+                height: "28dp"
+                padding: ["12dp", "0dp"]
+
+                Widget:
+                    size_hint_x: None
+                    width: "28dp"
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    halign: "right"
+                    valign: "middle"
+                    size_hint_x: 0.16
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("کد")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.24
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("نام")))
+                    font_style: "Caption"
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    valign: "middle"
+                    size_hint_x: 0.6
+
+            RecycleView:
+                id: persons_list
+                viewclass: "PersonRowWidget"
+
+                RecycleBoxLayout:
+                    orientation: "vertical"
+                    default_size_hint: 1, None
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "2dp"
+
+        PCard:
+            size_hint_x: 0.34
+            spacing: "14dp"
+
+            PLabel:
+                id: form_title
+                text: ((app.ui_language_code or True) and shape(tr("افزودنِ شخصِ تازه")))
+                font_style: "Subtitle1"
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            PTextField:
+                id: name_field
+                hint_text: ((app.ui_language_code or True) and shape(tr("نام (مثلاً شرکت آلفا)")))
+                focus_next: code_field
+
+            PTextField:
+                id: code_field
+                hint_text: ((app.ui_language_code or True) and shape(tr("کد (مثلاً C001)")))
+                focus_next: save_button
+                focus_previous: name_field
+                on_text_validate: root.save_person()
+
+            BoxLayout:
+                size_hint_y: None
+                height: "36dp"
+                spacing: "8dp"
+
+                MDCheckbox:
+                    id: active_checkbox
+                    active: True
+                    size_hint: None, None
+                    size: "24dp", "24dp"
+                    pos_hint: {"center_y": 0.5}
+
+                PLabel:
+                    text: ((app.ui_language_code or True) and shape(tr("فعال")))
+                    valign: "middle"
+
+            BoxLayout:
+                size_hint_y: None
+                height: "40dp"
+                spacing: "8dp"
+
+                PRaisedButton:
+                    id: save_button
+                    text: ((app.ui_language_code or True) and shape(tr("افزودن")))
+                    on_release: root.save_person()
+                    focus_previous: code_field
+                    focus_next: cancel_edit_button
+
+                PFlatButton:
+                    id: cancel_edit_button
+                    text: ((app.ui_language_code or True) and shape(tr("لغو ویرایش (Esc)")))
+                    theme_text_color: "Custom"
+                    text_color: theme.TEXT_SECONDARY
+                    opacity: 0
+                    disabled: True
+                    size_hint_y: None
+                    height: "0dp"
+                    on_release: root.cancel_edit()
+                    focus_previous: save_button

@@ -43,6 +43,7 @@ NAV_ITEMS = [
         "icon": "cash-multiple",
         "children": [
             {"code": "GL_COA", "label": "کدینگ حسابداری", "icon": "format-list-bulleted", "screen": "chart_of_accounts"},
+            {"code": "GL_PERSONS", "label": "اشخاص", "icon": "account-multiple-outline", "screen": "persons"},
             {"code": "GL_JE", "label": "صدور سند", "icon": "file-document-edit-outline", "screen": "journal_entry"},
             {"code": "GL_DIM", "label": "مراکز هزینه و ابعادِ تفصیلی", "icon": "shape-outline", "screen": "detail_dimensions"},
         ],
@@ -117,6 +118,7 @@ class ShellScreen(MDScreen):
         from peecha.ui.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
         from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
         from peecha.ui.screens.languages import LanguagesScreen  # noqa: PLC0415
+        from peecha.ui.screens.persons import PersonsScreen  # noqa: PLC0415
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
         from peecha.ui.screens.roles import RolesScreen  # noqa: PLC0415
         from peecha.ui.screens.translations import TranslationsScreen  # noqa: PLC0415
@@ -125,6 +127,7 @@ class ShellScreen(MDScreen):
         content: MDScreenManager = self.ids.content_manager
         content.add_widget(DashboardScreen())
         content.add_widget(ChartOfAccountsScreen())
+        content.add_widget(PersonsScreen())
         content.add_widget(JournalEntryScreen())
         content.add_widget(DetailDimensionsScreen())
         content.add_widget(LanguagesScreen())

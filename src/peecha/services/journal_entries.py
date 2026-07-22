@@ -34,6 +34,7 @@ from peecha.db.models.accounting import (
 )
 from peecha.db.models.core import Company, CompanyCurrency
 from peecha.services import audit as audit_service
+from peecha.services import detail_dimensions as dimensions_service
 
 _BASE_QUANT = decimal.Decimal("0.01")
 
@@ -170,6 +171,20 @@ def _resolve_lines(
         ).all()
     )
 
+    # تفصیلیِ اشخاص برخلافِ نوع‌بُعدهای اختیاری (مرکزِ هزینه/پروژه) برایِ
+    # هر ردیف الزامی است — اگر کاربر شخصی انتخاب نکرده باشد، همین‌جا
+    # مقدارِ پیش‌فرضِ «بدون تفصیلی» جایگزین می‌شود تا ترازِ سطحِ تفصیلی
+    # همیشه کامل بماند.
+    person_dimension_type_id = dimensions_service.ensure_person_dimension(session, company.company_id)
+    no_detail_account = session.scalar(
+        select(DetailAccount).where(
+            DetailAccount.company_id == company.company_id,
+            DetailAccount.dimension_type_id == person_dimension_type_id,
+            DetailAccount.code == dimensions_service.NO_DETAIL_CODE,
+        )
+    )
+    no_detail_account_id = no_detail_account.detail_account_id
+
     resolved: list[_ResolvedLine] = []
     for ln in real_lines:
         account = accounts_by_id.get(ln.account_id)
@@ -188,6 +203,9 @@ def _resolve_lines(
         missing = required - set(ln.details.keys())
         if missing:
             raise ValueError(f"برای حساب «{account.full_code}» انتخابِ ابعادِ تفصیلیِ الزامی فراموش شده است.")
+
+        if person_dimension_type_id not in ln.details:
+            ln.details[person_dimension_type_id] = no_detail_account_id
 
         currency_id = ln.currency_id or company.base_currency_id
         if account.currency_id is not None and account.currency_id != currency_id:

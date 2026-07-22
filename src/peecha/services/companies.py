@@ -11,6 +11,7 @@ from sqlalchemy import select
 from peecha.db.base import new_session
 from peecha.db.models.core import Company, Currency, Language
 from peecha.db.models.security import UserCompany
+from peecha.services import detail_dimensions as dimensions_service
 
 
 @dataclass
@@ -159,6 +160,8 @@ def create_company(
             is_active=True,
         )
         session.add(company)
+        session.flush()
+        dimensions_service.ensure_person_dimension(session, company.company_id)
         session.commit()
         session.refresh(company)
         session.expunge(company)

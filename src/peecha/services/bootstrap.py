@@ -12,6 +12,7 @@ from sqlalchemy import select
 from peecha.db.base import new_session
 from peecha.db.models.core import Company, Currency, Language
 from peecha.db.models.security import User, UserCompany
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services.auth import hash_password
 
 
@@ -46,6 +47,7 @@ def bootstrap_system(username: str, full_name: str, password: str, company_name:
         )
         db_session.add(company)
         db_session.flush()
+        dimensions_service.ensure_person_dimension(db_session, company.company_id)
 
         user = User(
             username=username,

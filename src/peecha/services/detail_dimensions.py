@@ -21,6 +21,15 @@ from peecha.db.models.accounting import (
     JournalEntryLineDetail,
 )
 
+# نوع‌بُعدِ سیستمی/رزروشده‌ی «تفصیلیِ اشخاص» — بر خلافِ نوع‌بُعدهایی مثلِ
+# مرکزِ هزینه/پروژه که کاربر خودش می‌سازد، این یکی برای هر شرکت خودکار
+# ساخته می‌شود (008_person_dimension.sql برای شرکت‌های موجود، و
+# ensure_person_dimension برای شرکت‌های تازه) و همیشه در هر ردیفِ سند
+# حاضر است — با پیش‌فرضِ NO_DETAIL_CODE اگر شخصِ خاصی انتخاب نشده باشد.
+PERSON_DIMENSION_CODE = "PERSON"
+NO_DETAIL_CODE = "NONE"
+NO_DETAIL_LABEL = "بدون تفصیلی"
+
 
 @dataclass
 class DimensionTypeRow:
@@ -35,16 +44,16 @@ class DetailAccountRow:
     detail_account_id: int
     dimension_type_id: int
     code: str
+    name: str | None
     is_active: bool
 
 
-def list_dimension_types(company_id: int) -> list[DimensionTypeRow]:
+def list_dimension_types(company_id: int, *, include_system: bool = False) -> list[DimensionTypeRow]:
     with new_session() as session:
-        types = session.scalars(
-            select(DetailDimensionType)
-            .where(DetailDimensionType.company_id == company_id)
-            .order_by(DetailDimensionType.code)
-        ).all()
+        query = select(DetailDimensionType).where(DetailDimensionType.company_id == company_id)
+        if not include_system:
+            query = query.where(DetailDimensionType.code != PERSON_DIMENSION_CODE)
+        types = session.scalars(query.order_by(DetailDimensionType.code)).all()
         counts = dict(
             session.execute(
                 select(DetailAccount.dimension_type_id, func.count())
@@ -125,18 +134,21 @@ def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[Detail
                 detail_account_id=r.detail_account_id,
                 dimension_type_id=r.dimension_type_id,
                 code=r.code,
+                name=r.name,
                 is_active=r.is_active,
             )
             for r in rows
         ]
 
 
-def create_detail_account(company_id: int, dimension_type_id: int, code: str) -> DetailAccount:
+def create_detail_account(company_id: int, dimension_type_id: int, code: str, name: str | None = None) -> DetailAccount:
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
             raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
-        detail_account = DetailAccount(company_id=company_id, dimension_type_id=dimension_type_id, code=code.strip())
+        detail_account = DetailAccount(
+            company_id=company_id, dimension_type_id=dimension_type_id, code=code.strip(), name=(name or None)
+        )
         session.add(detail_account)
         session.commit()
         session.refresh(detail_account)
@@ -144,12 +156,15 @@ def create_detail_account(company_id: int, dimension_type_id: int, code: str) ->
         return detail_account
 
 
-def update_detail_account(detail_account_id: int, company_id: int, code: str, is_active: bool) -> None:
+def update_detail_account(
+    detail_account_id: int, company_id: int, code: str, is_active: bool, name: str | None = None
+) -> None:
     with new_session() as session:
         detail_account = session.get(DetailAccount, detail_account_id)
         if detail_account is None or detail_account.company_id != company_id:
             raise ValueError("حسابِ تفصیلی نامعتبر است.")
         detail_account.code = code.strip()
+        detail_account.name = name or None
         detail_account.is_active = is_active
         session.commit()
 
@@ -255,6 +270,7 @@ def get_required_dimensions_for_account(account_id: int) -> list[RequiredDimensi
                             detail_account_id=d.detail_account_id,
                             dimension_type_id=d.dimension_type_id,
                             code=d.code,
+                            name=d.name,
                             is_active=d.is_active,
                         )
                         for d in detail_rows
@@ -262,3 +278,135 @@ def get_required_dimensions_for_account(account_id: int) -> list[RequiredDimensi
                 )
             )
         return result
+
+
+# --- تفصیلیِ اشخاص (سیستمی/همیشه‌حاضر) ------------------------------------
+
+
+def ensure_person_dimension(session, company_id: int) -> int:
+    """نوعِ‌بُعدِ PERSON و حسابِ تفصیلیِ پیش‌فرضِ «بدون تفصیلی» را برای این
+    شرکت تضمین می‌کند (اگر نبود می‌سازد) و شناسه‌ی نوعِ‌بُعد را برمی‌گرداند.
+    باید با همان session/تراکنشِ ساختِ شرکت صدا زده شود (bootstrap یا
+    companies.create_company) تا هر شرکتِ تازه از همان لحظه‌ی ساخت این را
+    داشته باشد؛ برای شرکت‌های موجودِ قبل از این ویژگی هم
+    008_person_dimension.sql همین کار را یک‌بار برایِ همه انجام داده."""
+    dimension_type = session.scalar(
+        select(DetailDimensionType).where(
+            DetailDimensionType.company_id == company_id, DetailDimensionType.code == PERSON_DIMENSION_CODE
+        )
+    )
+    if dimension_type is None:
+        dimension_type = DetailDimensionType(company_id=company_id, code=PERSON_DIMENSION_CODE, is_active=True)
+        session.add(dimension_type)
+        session.flush()
+
+    no_detail = session.scalar(
+        select(DetailAccount).where(
+            DetailAccount.company_id == company_id,
+            DetailAccount.dimension_type_id == dimension_type.dimension_type_id,
+            DetailAccount.code == NO_DETAIL_CODE,
+        )
+    )
+    if no_detail is None:
+        session.add(
+            DetailAccount(
+                company_id=company_id,
+                dimension_type_id=dimension_type.dimension_type_id,
+                code=NO_DETAIL_CODE,
+                name=NO_DETAIL_LABEL,
+                is_active=True,
+            )
+        )
+        session.flush()
+
+    return dimension_type.dimension_type_id
+
+
+def get_person_dimension_type_id(company_id: int) -> int:
+    with new_session() as session:
+        return ensure_person_dimension(session, company_id)
+
+
+def get_no_detail_account_id(company_id: int) -> int:
+    with new_session() as session:
+        dimension_type_id = ensure_person_dimension(session, company_id)
+        session.commit()
+        no_detail = session.scalar(
+            select(DetailAccount).where(
+                DetailAccount.company_id == company_id,
+                DetailAccount.dimension_type_id == dimension_type_id,
+                DetailAccount.code == NO_DETAIL_CODE,
+            )
+        )
+        return no_detail.detail_account_id
+
+
+def list_persons(company_id: int) -> list[DetailAccountRow]:
+    with new_session() as session:
+        dimension_type_id = ensure_person_dimension(session, company_id)
+        session.commit()
+        rows = session.scalars(
+            select(DetailAccount)
+            .where(DetailAccount.company_id == company_id, DetailAccount.dimension_type_id == dimension_type_id)
+            .order_by(DetailAccount.code)
+        ).all()
+        return [
+            DetailAccountRow(
+                detail_account_id=r.detail_account_id,
+                dimension_type_id=r.dimension_type_id,
+                code=r.code,
+                name=r.name,
+                is_active=r.is_active,
+            )
+            for r in rows
+        ]
+
+
+def list_active_persons(company_id: int) -> list[DetailAccountRow]:
+    return [row for row in list_persons(company_id) if row.is_active]
+
+
+def create_person(company_id: int, code: str, name: str) -> DetailAccount:
+    with new_session() as session:
+        dimension_type_id = ensure_person_dimension(session, company_id)
+        detail_account = DetailAccount(
+            company_id=company_id, dimension_type_id=dimension_type_id, code=code.strip(), name=name.strip() or None
+        )
+        session.add(detail_account)
+        session.commit()
+        session.refresh(detail_account)
+        session.expunge(detail_account)
+        return detail_account
+
+
+def update_person(detail_account_id: int, company_id: int, code: str, name: str, is_active: bool) -> None:
+    with new_session() as session:
+        detail_account = session.get(DetailAccount, detail_account_id)
+        if detail_account is None or detail_account.company_id != company_id:
+            raise ValueError("شخص نامعتبر است.")
+        if detail_account.code == NO_DETAIL_CODE:
+            raise ValueError("کدِ سیستمیِ «بدون تفصیلی» قابلِ ویرایش نیست.")
+        detail_account.code = code.strip()
+        detail_account.name = name.strip() or None
+        detail_account.is_active = is_active
+        session.commit()
+
+
+def delete_person(detail_account_id: int, company_id: int) -> None:
+    with new_session() as session:
+        detail_account = session.get(DetailAccount, detail_account_id)
+        if detail_account is None or detail_account.company_id != company_id:
+            raise ValueError("شخص نامعتبر است.")
+        if detail_account.code == NO_DETAIL_CODE:
+            raise ValueError("کدِ سیستمیِ «بدون تفصیلی» قابلِ حذف نیست.")
+
+        usage_count = session.scalar(
+            select(func.count())
+            .select_from(JournalEntryLineDetail)
+            .where(JournalEntryLineDetail.detail_account_id == detail_account_id)
+        )
+        if usage_count:
+            raise ValueError("این شخص در سندهای حسابداری استفاده شده؛ قابل حذف نیست.")
+
+        session.delete(detail_account)
+        session.commit()

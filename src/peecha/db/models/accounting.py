@@ -131,6 +131,7 @@ class DetailAccount(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
     dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
     code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str | None] = mapped_column(String(200))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

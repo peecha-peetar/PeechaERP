@@ -191,6 +191,130 @@ class AccountSearchField(PTextField):
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
 
 
+def _person_label(row: dimensions_service.DetailAccountRow) -> str:
+    if row.code == dimensions_service.NO_DETAIL_CODE:
+        return row.name or dimensions_service.NO_DETAIL_LABEL
+    return f"{row.code} — {row.name}" if row.name else row.code
+
+
+class _PersonOptionRow(ButtonBehavior, MDBoxLayout):
+    """یک ردیف از نتایجِ جستجوی زنده‌ی PersonSearchField — مشابهِ _AccountOptionRow."""
+
+    label_text = StringProperty("")
+    highlighted = BooleanProperty(False)
+
+    def __init__(self, person_row: dimensions_service.DetailAccountRow, on_choose, **kwargs):
+        super().__init__(**kwargs)
+        self.person_row = person_row
+        self._on_choose = on_choose
+
+    def on_release(self) -> None:
+        self._on_choose(self.person_row)
+
+
+class PersonSearchField(PTextField):
+    """فیلدِ تفصیلیِ اشخاص — دقیقاً همان الگویِ جستجوی زنده‌ی AccountSearchField
+    (فیلترِ بلافاصله با هر کاراکتر، بالا/پایین بینِ نتایج، Enter برایِ
+    انتخاب) اما رویِ فهرستِ اشخاص؛ طبق درخواستِ صریح، این ستون همیشه کنارِ
+    ستونِ حساب نمایش داده می‌شود (نه پشتِ آیکون مثلِ بقیه‌ی ابعاد) و همیشه
+    یک مقدار دارد — پیش‌فرض «بدون تفصیلی»، نه خالی."""
+
+    def __init__(self, person_options: list[dimensions_service.DetailAccountRow], on_select, **kwargs):
+        kwargs.setdefault("hint_text", shape(tr("تفصیلی")))
+        kwargs.setdefault("auto_shape_display", False)
+        super().__init__(**kwargs)
+        self.person_options = person_options
+        self._on_select = on_select
+        self.detail_account_id: int | None = None
+        self._results: list[dimensions_service.DetailAccountRow] = []
+        self._highlighted_index = -1
+        self._suppress_filter = False
+        self._dropdown = DropDown(auto_width=False, max_height=dp(240))
+        self._dropdown.width = dp(300)
+        self.bind(text=self._on_text_changed)
+        self.bind(focus=self._on_focus_changed)
+
+    def _on_focus_changed(self, _instance, focused: bool) -> None:
+        if not focused:
+            self._dropdown.dismiss()
+
+    def _on_text_changed(self, _instance, value: str) -> None:
+        if self._suppress_filter:
+            return
+        self.detail_account_id = None
+        self._filter_and_show(value)
+
+    def _filter_and_show(self, query: str) -> None:
+        query_norm = query.strip()
+        if not query_norm:
+            self._results = list(self.person_options)
+        else:
+            self._results = [
+                row
+                for row in self.person_options
+                if query_norm in row.code or (row.name and query_norm in row.name)
+            ]
+        self._highlighted_index = 0 if self._results else -1
+        self._rebuild_dropdown()
+        if self._results and self.focus:
+            if self._dropdown.attach_to is None:
+                self._dropdown.open(self)
+        else:
+            self._dropdown.dismiss()
+
+    def _rebuild_dropdown(self) -> None:
+        self._dropdown.clear_widgets()
+        for i, row in enumerate(self._results):
+            self._dropdown.add_widget(
+                _PersonOptionRow(
+                    person_row=row,
+                    on_choose=self._select,
+                    label_text=shape(_person_label(row)),
+                    highlighted=(i == self._highlighted_index),
+                )
+            )
+
+    def _move_highlight(self, delta: int) -> None:
+        if not self._results:
+            return
+        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
+        self._rebuild_dropdown()
+
+    def _select(self, person_row: dimensions_service.DetailAccountRow) -> None:
+        self.set_selected(person_row)
+        self._dropdown.dismiss()
+        self._on_select()
+
+    def set_selected(self, person_row: dimensions_service.DetailAccountRow) -> None:
+        self.detail_account_id = person_row.detail_account_id
+        self._suppress_filter = True
+        self.text = shape(_person_label(person_row))
+        self._suppress_filter = False
+
+    def keyboard_on_key_down(self, window, keycode, text, modifiers):
+        key = keycode[0]
+        if key == 273:  # بالا
+            self._move_highlight(-1)
+            return True
+        if key == 274:  # پایین
+            self._move_highlight(1)
+            return True
+        if key in (13, 271):  # اینتر / اینترِ صفحه‌کلیدِ عددی
+            if self._results and 0 <= self._highlighted_index < len(self._results):
+                self._select(self._results[self._highlighted_index])
+            elif self.focus_next:
+                # طبق طراحیِ صریح: تفصیلی همیشه یک مقدارِ معتبر دارد (پیش‌فرض
+                # «بدون تفصیلی»)، پس بر خلافِ AccountSearchField (که انتخاب
+                # در آن الزامی است)، اگر کاربر چیزی تایپ نکرده Enter باید
+                # همان مقدارِ فعلی را بپذیرد و به فیلدِ بعد برود.
+                self.focus_next.focus = True
+            return True
+        if key == 27 and self._dropdown.attach_to is not None:
+            self._dropdown.dismiss()
+            return True
+        return super().keyboard_on_key_down(window, keycode, text, modifiers)
+
+
 class _SuggestionRow(ButtonBehavior, MDBoxLayout):
     """یک ردیفِ نتیجه‌ی پیشنهادِ شرح — مشابهِ _AccountOptionRow."""
 
@@ -441,6 +565,8 @@ class JournalEntryLineRow(MDBoxLayout):
         base_currency_id,
         company_id,
         get_document_date,
+        person_options,
+        person_dimension_type_id,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -451,17 +577,28 @@ class JournalEntryLineRow(MDBoxLayout):
         self.account_field = AccountSearchField(account_options=account_options, on_select=self._account_selected)
         self.ids.account_slot.add_widget(self.account_field)
 
+        self.person_options = person_options
+        self.person_dimension_type_id = person_dimension_type_id
+        self._none_person = next(
+            (p for p in person_options if p.code == dimensions_service.NO_DETAIL_CODE), None
+        )
+        self.person_field = PersonSearchField(person_options=person_options, on_select=self._person_selected)
+        self.ids.person_slot.add_widget(self.person_field)
+
         self.description_field = LineDescriptionField(suggestions_provider=description_suggestions)
         self.ids.description_slot.add_widget(self.description_field)
 
-        self.account_field.focus_next = self.description_field
-        self.description_field.focus_previous = self.account_field
+        self.account_field.focus_next = self.person_field
+        self.person_field.focus_previous = self.account_field
+        self.person_field.focus_next = self.description_field
+        self.description_field.focus_previous = self.person_field
         self.description_field.focus_next = self.ids.debit_field
         self.ids.debit_field.focus_previous = self.description_field
 
         self.dimension_values: dict[int, int] = {}
         self._required_dimensions: list[dimensions_service.RequiredDimension] = []
         self._dimensions_dialog: MDDialog | None = None
+        self._reset_person_to_default()
 
         self.transactable_currencies = transactable_currencies
         self.base_currency_id = base_currency_id
@@ -479,13 +616,35 @@ class JournalEntryLineRow(MDBoxLayout):
     def set_account(self, account_row: coa_service.AccountRow) -> None:
         self.account_field.set_selected(account_row)
 
-    def _account_selected(self) -> None:
-        # طبق درخواستِ صریح: بعدِ انتخابِ حساب، فوکوس به فیلدِ شرحِ همین
-        # ردیف می‌رود (نه مستقیم به بدهکار).
-        self.dimension_values = {}
-        self.load_required_dimensions()
+    def _reset_person_to_default(self) -> None:
+        if self._none_person is not None:
+            self.person_field.set_selected(self._none_person)
+            self.dimension_values[self.person_dimension_type_id] = self._none_person.detail_account_id
+
+    def set_person_by_id(self, detail_account_id: int | None) -> None:
+        """پیش‌پرکردنِ ستونِ تفصیلی هنگامِ بارگذاریِ سند برای ویرایش."""
+        person = next((p for p in self.person_options if p.detail_account_id == detail_account_id), None)
+        if person is None:
+            self._reset_person_to_default()
+            return
+        self.person_field.set_selected(person)
+        self.dimension_values[self.person_dimension_type_id] = person.detail_account_id
+
+    def _person_selected(self) -> None:
+        if self.person_field.detail_account_id is not None:
+            self.dimension_values[self.person_dimension_type_id] = self.person_field.detail_account_id
         self._on_change()
         self.description_field.focus = True
+
+    def _account_selected(self) -> None:
+        # طبق درخواستِ صریح: بعدِ انتخابِ حساب، فوکوس به ستونِ تفصیلی
+        # می‌رود (نه مستقیم به شرح) — تفصیلی هم به «بدون تفصیلی» بازنشانی
+        # می‌شود چون معمولاً برایِ حسابِ تازه‌انتخاب‌شده معنی‌ای ندارد.
+        self.dimension_values = {}
+        self._reset_person_to_default()
+        self.load_required_dimensions()
+        self._on_change()
+        self.person_field.focus = True
 
     def load_required_dimensions(self) -> None:
         # با انتخابِ یک حسابِ تازه (یا بارگذاریِ سند برای ویرایش)، نوع‌بُعدهای
@@ -644,6 +803,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
         self._description_suggestions: list[str] = []
         self._transactable_currencies: list[currencies_service.CurrencyRow] = []
         self._base_currency_id: int | None = None
+        self._person_options: list[dimensions_service.DetailAccountRow] = []
+        self._person_dimension_type_id: int | None = None
         self._rows: list[JournalEntryLineRow] = []
         self._editing_entry_id: int | None = None
         self._delete_dialog: MDDialog | None = None
@@ -705,6 +866,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             self._description_suggestions = []
             self._transactable_currencies = []
             self._base_currency_id = None
+            self._person_options = []
+            self._person_dimension_type_id = None
         else:
             self._account_options = coa_service.list_postable_accounts(session.current_company.company_id)
             self._description_suggestions = je_service.list_recent_line_descriptions(session.current_company.company_id)
@@ -712,6 +875,10 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                 session.current_company.company_id
             )
             self._base_currency_id = session.current_company.base_currency_id
+            self._person_options = dimensions_service.list_active_persons(session.current_company.company_id)
+            self._person_dimension_type_id = dimensions_service.get_person_dimension_type_id(
+                session.current_company.company_id
+            )
 
     def _get_document_date(self) -> datetime.date:
         try:
@@ -770,6 +937,8 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
             base_currency_id=self._base_currency_id,
             company_id=session.current_company.company_id if session.current_company else None,
             get_document_date=self._get_document_date,
+            person_options=self._person_options,
+            person_dimension_type_id=self._person_dimension_type_id,
         )
         self._rows.append(row)
         self.ids.lines_box.add_widget(row)
@@ -949,6 +1118,7 @@ class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
                 row.line_currency_id = ln.currency_id
                 row.line_exchange_rate = ln.exchange_rate
             row._update_currency_state()
+            row.set_person_by_id(ln.details.get(self._person_dimension_type_id))
             row.description_field.set_value(ln.description)
             row.ids.debit_field.text = str(ln.debit) if ln.debit else ""
             row.ids.credit_field.text = str(ln.credit) if ln.credit else ""
