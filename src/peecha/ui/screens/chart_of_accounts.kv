@@ -47,52 +47,63 @@
 # چپ‌ترین می‌شود (تست مستقیم تایید کرد)، برای این‌که «کد» (اولین ستونِ
 # منطقی از راست) واقعاً راست‌ترین بیفتد، باید در KV آخر از همه اعلام شود؛
 # ترتیب اینجا عمداً برعکسِ ترتیب منطقیِ ستون‌هاست.
+# طبقِ بازطراحیِ الهام‌گرفته از جدولِ فشرده/صفحه‌گسترده‌ایِ نرم‌افزارهای
+# حسابداریِ کلاسیک: بدونِ گردیِ گوشه/بجِ رنگی، ردیفِ نازک با خطِ جداکننده‌ی
+# پایین و رنگِ متنِ سطح‌بندی‌شده (گروه/کل/معین) به‌جایِ بجِ رنگی.
 <AccountRowWidget>:
     orientation: "horizontal"
     size_hint_y: None
-    height: "32dp"
-    padding: ["12dp", "0dp"]
-    radius: [8, 8, 8, 8]
-    md_bg_color: theme.SELECTED if root.selected else (theme.HOVER if root.zebra else (0, 0, 0, 0))
+    height: "30dp"
+    padding: ["10dp", "0dp"]
+    md_bg_color: theme.SELECTED if root.selected else (theme.GRID_ROW_ALT if root.zebra else theme.SURFACE)
+    canvas.after:
+        Color:
+            rgba: theme.GRID_BORDER
+        Line:
+            points: [self.x, self.y, self.x + self.width, self.y]
+            width: 1
 
     MDIconButton:
         icon: "trash-can-outline"
-        icon_size: "18sp"
+        icon_size: "16sp"
         size_hint_x: None
-        width: "28dp"
+        width: "24dp"
         theme_text_color: "Custom"
         text_color: theme.DANGER
         on_release: root.request_delete()
 
     MDIconButton:
         icon: "pencil-outline"
-        icon_size: "18sp"
+        icon_size: "16sp"
         size_hint_x: None
-        width: "28dp"
+        width: "24dp"
         theme_text_color: "Custom"
         text_color: theme.ACCENT
         on_release: root.on_release()
 
-    AnchorLayout:
-        size_hint_x: 0.20
-        anchor_x: "right"
-        anchor_y: "center"
+    PLabel:
+        text: root.status_text
+        font_style: "Caption"
+        theme_text_color: "Custom"
+        text_color: root.status_badge_color
+        halign: "right"
+        valign: "middle"
+        size_hint_x: 0.16
 
-        PBadge:
-            text: root.status_text
-            badge_color: root.status_badge_color
-
-    AnchorLayout:
-        size_hint_x: 0.15
-        anchor_x: "right"
-        anchor_y: "center"
-
-        PBadge:
-            text: root.level_text
-            badge_color: root.level_badge_color
+    PLabel:
+        text: root.level_text
+        font_style: "Caption"
+        theme_text_color: "Custom"
+        text_color: root.level_badge_color
+        halign: "right"
+        valign: "middle"
+        size_hint_x: 0.13
 
     PLabel:
         text: root.name_text
+        theme_text_color: "Custom"
+        text_color: root.name_color
+        bold: root.name_bold
         valign: "middle"
         size_hint_x: 0.43
 
@@ -131,34 +142,48 @@
             BoxLayout:
                 id: grid_header
                 size_hint_y: None
-                height: "32dp"
-                padding: ["12dp", "0dp"]
+                height: "30dp"
+                padding: ["10dp", "0dp"]
+                canvas.before:
+                    Color:
+                        rgba: theme.GRID_HEADER_BG
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                    Color:
+                        rgba: theme.GRID_BORDER
+                    Line:
+                        points: [self.x, self.y, self.x + self.width, self.y]
+                        width: 1
 
                 Widget:
                     size_hint_x: None
-                    width: "56dp"
+                    width: "48dp"
 
                 PLabel:
                     text: ((app.ui_language_code or True) and shape(tr("وضعیت")))
                     font_style: "Caption"
+                    bold: True
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
                     halign: "right"
                     valign: "middle"
-                    size_hint_x: 0.20
+                    size_hint_x: 0.16
 
                 PLabel:
                     text: ((app.ui_language_code or True) and shape(tr("سطح")))
                     font_style: "Caption"
+                    bold: True
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
                     halign: "right"
                     valign: "middle"
-                    size_hint_x: 0.15
+                    size_hint_x: 0.13
 
                 PLabel:
                     text: ((app.ui_language_code or True) and shape(tr("نام حساب")))
                     font_style: "Caption"
+                    bold: True
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
                     valign: "middle"
@@ -167,6 +192,7 @@
                 PLabel:
                     text: ((app.ui_language_code or True) and shape(tr("کد")))
                     font_style: "Caption"
+                    bold: True
                     theme_text_color: "Custom"
                     text_color: theme.TEXT_SECONDARY
                     valign: "middle"
@@ -175,13 +201,19 @@
             RecycleView:
                 id: accounts_list
                 viewclass: "AccountRowWidget"
+                canvas.before:
+                    Color:
+                        rgba: theme.GRID_BORDER
+                    Line:
+                        rectangle: (self.x, self.y, self.width, self.height)
+                        width: 1
 
                 RecycleBoxLayout:
                     orientation: "vertical"
                     default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
-                    spacing: "2dp"
+                    spacing: "0dp"
 
         PCard:
             size_hint_x: 0.38

@@ -14,18 +14,51 @@
             padding: "32dp"
             spacing: "24dp"
 
-            PLabel:
-                text: ((app.ui_language_code or True) and shape(tr("داشبورد اصلی")))
-                font_style: "H4"
+            # بنرِ خوش‌آمدگویی — طبقِ بازطراحیِ مدرن: به‌جای فقط یک عنوانِ ساده،
+            # یک نوارِ رنگیِ برجسته با آیکونِ برند، حسِ «صفحه‌ی اصلی» را
+            # پررنگ‌تر می‌کند (روحیه‌ی پنلِ بزرگِ بالای صفحه‌ی مرجع، بدونِ
+            # تصویرِ تزئینیِ اضافه).
+            MDBoxLayout:
                 size_hint_y: None
-                height: self.texture_size[1]
+                height: "92dp"
+                padding: ["24dp", "0dp"]
+                spacing: "16dp"
+                radius: [18, 18, 18, 18]
+                md_bg_color: theme.PRIMARY
 
-            PLabel:
-                text: ((app.ui_language_code or True) and shape(tr("خلاصه‌ی وضعیت سیستم")))
-                theme_text_color: "Custom"
-                text_color: theme.TEXT_SECONDARY
-                size_hint_y: None
-                height: self.texture_size[1]
+                MDBoxLayout:
+                    size_hint: None, None
+                    size: "52dp", "52dp"
+                    pos_hint: {"center_y": 0.5}
+                    radius: [16, 16, 16, 16]
+                    md_bg_color: theme.ACCENT
+
+                    MDIcon:
+                        icon: "chart-donut"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 1
+                        halign: "center"
+                        valign: "middle"
+
+                BoxLayout:
+                    orientation: "vertical"
+                    spacing: "4dp"
+                    pos_hint: {"center_y": 0.5}
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("داشبورد اصلی")))
+                        font_style: "H5"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 1
+                        size_hint_y: None
+                        height: self.texture_size[1]
+
+                    PLabel:
+                        text: ((app.ui_language_code or True) and shape(tr("خلاصه‌ی وضعیت سیستم")))
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 0.65
+                        size_hint_y: None
+                        height: self.texture_size[1]
 
             BoxLayout:
                 size_hint_y: None

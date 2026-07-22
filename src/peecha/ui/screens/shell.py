@@ -76,6 +76,15 @@ NAV_ITEMS = [
 ]
 
 
+# طبقِ بازطراحیِ الهام‌گرفته از ریبونِ نرم‌افزارهای حسابداریِ کلاسیک: زیرِ
+# نوارِ بالا یک ردیفِ افقیِ آیکون+برچسبِ کوتاه برایِ پراستفاده‌ترین صفحات
+# (نه همه‌ی صفحات — آن‌ها همچنان در منویِ درختیِ نوار کناری هستند).
+_RIBBON_CODES = [
+    "dashboard", "GL_COA", "GL_JE", "GL_CUSTOMERS", "GL_SUPPLIERS", "GL_PERSONNEL", "SET_CURRENCY", "SET_AUDIT_LOG",
+]
+_RIBBON_LABEL_OVERRIDES = {"GL_COA": "کدینگ", "SET_AUDIT_LOG": "رد حسابرسی"}
+
+
 def _flatten_nav_items() -> list[dict]:
     """فهرست تخت (بدون تو در تو) از همه‌ی آیتم‌های قابل‌کلیک — هم آیتم‌های
     سطح‌بالای بدون فرزند، هم هرکدام از زیرآیتم‌های یک گروه؛ خودِ سرآیتمِ
@@ -103,6 +112,7 @@ class ShellScreen(MDScreen):
         self._menu: MDDropdownMenu | None = None
         self._group_children: dict[str, list] = {}
         self._group_labels: dict[str, object] = {}
+        self._ribbon_buttons: dict[str, object] = {}
 
     def on_pre_enter(self, *args):
         if not self.ids.content_manager.screen_names:
@@ -110,9 +120,26 @@ class ShellScreen(MDScreen):
             self._sync_translation_files()
         if not self.ids.nav_list.children:
             self._build_nav_items()
+        if not self.ids.ribbon_list.children:
+            self._build_ribbon()
         self.ids.user_label.text = shape(session.current_user.full_name if session.current_user else "")
         self._load_context_switcher()
         self._select_nav("dashboard")
+
+    def _build_ribbon(self) -> None:
+        from peecha.ui.widgets import PRibbonButton  # noqa: PLC0415
+
+        self._ribbon_buttons: dict[str, PRibbonButton] = {}
+        flat_by_code = {item["code"]: item for item in _flatten_nav_items()}
+        for code in _RIBBON_CODES:
+            item = flat_by_code.get(code)
+            if item is None:
+                continue
+            label = _RIBBON_LABEL_OVERRIDES.get(code, item["label"])
+            button = PRibbonButton(icon=item["icon"], text=shape(tr(label)))
+            button.bind(on_release=lambda _inst, c=code: self._select_nav(c))
+            self.ids.ribbon_list.add_widget(button)
+            self._ribbon_buttons[code] = button
 
     def _build_content_screens(self) -> None:
         from peecha.ui.screens.audit_log import AuditLogScreen  # noqa: PLC0415
@@ -249,6 +276,9 @@ class ShellScreen(MDScreen):
         for widget, nav_item in zip(flat_items, clickable_widgets, strict=True):
             nav_item.selected = widget["code"] == code
         self._expand_group_containing(code)
+
+        for ribbon_code, button in self._ribbon_buttons.items():
+            button.selected = ribbon_code == code
 
         target_screen_name = item["screen"] or "placeholder"
         if target_screen_name == "placeholder":

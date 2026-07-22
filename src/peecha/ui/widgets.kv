@@ -217,6 +217,38 @@
 # مصرف‌کننده‌شان shell.py است) رنگ‌بندیِ روشن گرفتند: متنِ خاکستریِ روشن
 # برای حالتِ عادی، و یک قرصِ رنگی (accent) با متنِ سفید برای آیتمِ انتخاب‌شده
 # — به‌جای رنگِ آبیِ کم‌رنگِ قبلی که تفاوتش به‌سختی دیده می‌شد.
+# دکمه‌ی ریبونِ میان‌برِ سریع — آیکون بالا/برچسب پایین، مثلِ ردیفِ آیکون‌های
+# نرم‌افزارهای حسابداریِ کلاسیک (کالا/طرف حساب/فاکتور/...) اما با پالتِ تازه.
+<PRibbonButton>:
+    orientation: "vertical"
+    size_hint: None, 1
+    width: "76dp"
+    padding: ["4dp", "8dp"]
+    spacing: "4dp"
+    radius: [12, 12, 12, 12]
+    md_bg_color: theme.SELECTED if root.selected else (0, 0, 0, 0)
+
+    MDIcon:
+        icon: root.icon
+        font_size: "22sp"
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT if root.selected else theme.TEXT_SECONDARY
+        halign: "center"
+        valign: "middle"
+        size_hint_y: None
+        height: "26dp"
+
+    PLabel:
+        text: root.text
+        font_style: "Caption"
+        halign: "center"
+        theme_text_color: "Custom"
+        text_color: theme.ACCENT if root.selected else theme.TEXT_SECONDARY
+        bold: root.selected
+        valign: "top"
+        size_hint_y: None
+        height: self.texture_size[1]
+
 <PNavItem>:
     orientation: "horizontal"
     size_hint_y: None
@@ -279,19 +311,28 @@
 
 <PCard>:
     orientation: "vertical"
-    padding: "20dp"
+    padding: "18dp"
     spacing: "12dp"
-    radius: [20, 20, 20, 20]
+    radius: [16, 16, 16, 16]
     md_bg_color: theme.SURFACE
 
 <PStatCard>:
     orientation: "vertical"
     size_hint_y: None
     height: "156dp"
-    padding: "20dp"
+    padding: "18dp"
     spacing: "8dp"
-    radius: [20, 20, 20, 20]
+    radius: [16, 16, 16, 16]
     md_bg_color: theme.SURFACE
+    # نوارِ رنگیِ باریکِ بالای کارت — طبقِ بازطراحیِ مدرن، هر KPI رنگِ
+    # آیکونِ خودش را به‌عنوانِ یک اکسنتِ ظریفِ بالای کارت هم تکرار می‌کند.
+    canvas.after:
+        Color:
+            rgba: root.icon_bg_color
+        RoundedRectangle:
+            pos: self.x, self.y + self.height - dp(4)
+            size: self.width, dp(4)
+            radius: [16, 16, 0, 0]
 
     BoxLayout:
         size_hint_y: None

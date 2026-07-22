@@ -36,6 +36,10 @@ _CATEGORY_OPTIONS = [
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _LEVEL_BADGE_COLORS = {1: theme.TEXT_SECONDARY, 2: theme.INFO, 3: theme.ACCENT}
+# طبقِ بازطراحیِ جدولِ فشرده/صفحه‌گسترده‌ای: هر سطح (گروه/کل/معین) رنگِ
+# متنِ خودش را دارد (مثلِ نرم‌افزارهای حسابداریِ کلاسیک که ردیف‌های گروه
+# را با رنگِ متفاوت مشخص می‌کردند)، نه یک بجِ رنگی.
+_LEVEL_TEXT_COLORS = {1: theme.LEVEL_GROUP, 2: theme.LEVEL_KOL, 3: theme.LEVEL_MOEIN}
 _NO_PARENT_LABEL = "— بدون والد (سطح گروه) —"
 
 
@@ -53,6 +57,8 @@ class AccountRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
     account_id = NumericProperty(0)
     code_text = StringProperty("")
     name_text = StringProperty("")
+    name_color = ListProperty([0, 0, 0, 1])
+    name_bold = BooleanProperty(False)
     level_text = StringProperty("")
     level_badge_color = ListProperty([0, 0, 0, 1])
     status_text = StringProperty("")
@@ -278,6 +284,8 @@ class ChartOfAccountsScreen(KeyboardShortcutMixin, MDScreen):
                     "on_delete": self.confirm_delete,
                     "code_text": numerals.to_persian_digits(row.full_code),
                     "name_text": shape(f"{'    ' * (row.account_level - 1)}{row.name}"),
+                    "name_color": _LEVEL_TEXT_COLORS[row.account_level],
+                    "name_bold": row.account_level < coa_service.MAX_ACCOUNT_LEVEL,
                     "level_text": shape(tr(_LEVEL_LABELS[row.account_level])),
                     "level_badge_color": _LEVEL_BADGE_COLORS[row.account_level],
                     "status_text": shape(tr("قابل ثبت") if row.is_postable else tr("گروه‌بندی")),

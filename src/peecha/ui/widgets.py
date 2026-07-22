@@ -284,6 +284,17 @@ class PTextField(MDTextField):
             self._apply_shaped_display()
 
 
+class PRibbonButton(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
+    """دکمه‌ی ریبونِ میان‌برِ سریع (آیکون بالا + برچسبِ کوتاه پایین) — طبقِ
+    بازطراحیِ الهام‌گرفته از نرم‌افزارهای حسابداریِ کلاسیک: زیرِ نوارِ بالا،
+    میان‌برهای پراستفاده به‌صورتِ یک ردیفِ افقیِ آیکون+برچسب نمایش داده
+    می‌شوند (جدا از منویِ درختیِ کاملِ نوار کناری)."""
+
+    icon = StringProperty("circle-outline")
+    text = StringProperty("")
+    selected = BooleanProperty(False)
+
+
 class PNavItem(PressFeedbackBehavior, ButtonBehavior, MDBoxLayout):
     """آیتم منوی نوار کناری — طبق docs/ui-ux-guidelines.md بخش ۵/۱۰.
 
