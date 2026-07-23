@@ -9,9 +9,11 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QSpinBox, QVBoxL
 
 from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
+_DETAIL_LEVEL_LABELS = {1: "سطحِ ۱", 2: "سطحِ ۲", 3: "سطحِ ۳", 4: "سطحِ ۴"}
 
 
 class AccountingCodingSettingsScreen(QWidget):
@@ -71,6 +73,48 @@ class AccountingCodingSettingsScreen(QWidget):
         self.save_button.clicked.connect(self._save)
         outer.addWidget(self.save_button)
 
+        detail_title = QLabel("تعدادِ رقمِ سطوحِ تفصیلی")
+        detail_title.setObjectName("pageTitle")
+        outer.addWidget(detail_title)
+
+        detail_hint = QLabel(
+            "طبقِ درخواستِ صریح، تعدادِ رقمِ هر سطحِ تفصیلی (کالا/بانک/مشتری/تامین‌کننده/...) سراسری و "
+            "برایِ همه‌ی گروه‌ها یکسان است — فقط بازه‌ی از-تا مخصوصِ هر گروه در صفحه‌ی «پیکربندیِ "
+            "گروه‌هایِ تفصیلی» تنظیم می‌شود. مقدارِ صفر یعنی بدونِ محدودیتِ طول."
+        )
+        detail_hint.setObjectName("sectionHint")
+        detail_hint.setWordWrap(True)
+        outer.addWidget(detail_hint)
+
+        detail_card = QWidget()
+        detail_card.setObjectName("card")
+        detail_grid = QGridLayout(detail_card)
+        detail_grid.setContentsMargins(18, 18, 18, 18)
+        detail_grid.setSpacing(10)
+
+        detail_grid.addWidget(QLabel("سطح"), 0, 0)
+        detail_grid.addWidget(QLabel("تعدادِ رقم"), 0, 1)
+
+        self._detail_level_widgets: dict[int, QSpinBox] = {}
+        for row, level in enumerate(sorted(_DETAIL_LEVEL_LABELS), start=1):
+            detail_grid.addWidget(QLabel(_DETAIL_LEVEL_LABELS[level]), row, 0)
+            code_length = QSpinBox()
+            code_length.setRange(0, 10)
+            detail_grid.addWidget(code_length, row, 1)
+            self._detail_level_widgets[level] = code_length
+
+        outer.addWidget(detail_card)
+
+        self.detail_status_label = QLabel("")
+        self.detail_status_label.setObjectName("statusError")
+        self.detail_status_label.setWordWrap(True)
+        outer.addWidget(self.detail_status_label)
+
+        self.save_detail_button = QPushButton("ذخیره‌ی تعدادِ رقمِ سطوحِ تفصیلی")
+        self.save_detail_button.setObjectName("primaryButton")
+        self.save_detail_button.clicked.connect(self._save_detail_digits)
+        outer.addWidget(self.save_detail_button)
+
         outer.addStretch(1)
 
     def _company_id(self) -> int | None:
@@ -78,6 +122,7 @@ class AccountingCodingSettingsScreen(QWidget):
 
     def refresh(self) -> None:
         self.status_label.setText("")
+        self.detail_status_label.setText("")
         company_id = self._company_id()
         if company_id is None:
             return
@@ -99,6 +144,17 @@ class AccountingCodingSettingsScreen(QWidget):
             self.status_label.setObjectName("sectionHint")
             self.status_label.setStyleSheet("")
             self.status_label.setText("این شرکت سند دارد؛ تنظیماتِ کدینگِ حساب‌ها دیگر قابلِ‌تغییر نیست.")
+
+        detail_rows_by_level = {r.level_no: r for r in dimensions_service.list_level_digit_config(company_id)}
+        for level, code_length in self._detail_level_widgets.items():
+            row = detail_rows_by_level.get(level)
+            code_length.setValue(row.code_length if row and row.code_length is not None else 0)
+            code_length.setEnabled(not locked)
+        self.save_detail_button.setEnabled(not locked)
+        if locked:
+            self.detail_status_label.setObjectName("sectionHint")
+            self.detail_status_label.setStyleSheet("")
+            self.detail_status_label.setText("این شرکت سند دارد؛ تعدادِ رقمِ سطوحِ تفصیلی دیگر قابلِ‌تغییر نیست.")
 
     def _save(self) -> None:
         company_id = self._company_id()
@@ -122,3 +178,20 @@ class AccountingCodingSettingsScreen(QWidget):
         self.status_label.setObjectName("statusOk")
         self.status_label.setStyleSheet("")
         self.status_label.setText("تنظیماتِ کدینگ ذخیره شد.")
+
+    def _save_detail_digits(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        config = {level: code_length.value() or None for level, code_length in self._detail_level_widgets.items()}
+        try:
+            dimensions_service.set_level_digit_config(company_id, config)
+        except ValueError as exc:
+            self.detail_status_label.setObjectName("statusError")
+            self.detail_status_label.setStyleSheet("")
+            self.detail_status_label.setText(str(exc))
+            return
+        self.refresh()
+        self.detail_status_label.setObjectName("statusOk")
+        self.detail_status_label.setStyleSheet("")
+        self.detail_status_label.setText("تعدادِ رقمِ سطوحِ تفصیلی ذخیره شد.")

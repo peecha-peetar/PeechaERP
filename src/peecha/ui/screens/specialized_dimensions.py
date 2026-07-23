@@ -97,6 +97,7 @@ class SpecializedDimensionScreenBase(QWidget):
 
         grid.addWidget(QLabel("والد"), 0, 0)
         self.parent_combo = QComboBox()
+        self.parent_combo.currentIndexChanged.connect(self._on_parent_combo_changed)
         grid.addWidget(self.parent_combo, 0, 1)
 
         grid.addWidget(QLabel("کد"), 1, 0)
@@ -161,12 +162,15 @@ class SpecializedDimensionScreenBase(QWidget):
     def _reload(self) -> None:
         rows = dimensions_service.list_detail_accounts(self._company_id(), self._dimension_type_id)
         self._rows_by_id = {r.detail_account_id: r for r in rows}
+        max_level_no = dimensions_service.get_group_max_level_no(self._dimension_type_id)
 
+        self.parent_combo.blockSignals(True)
         self.parent_combo.clear()
         self.parent_combo.addItem("— بدونِ والد (سطحِ ۱) —", None)
         for r in rows:
-            if r.level_no < dimensions_service.MAX_DETAIL_LEVEL and r.detail_account_id != self._editing_id:
+            if r.level_no < max_level_no and r.detail_account_id != self._editing_id:
                 self.parent_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
+        self.parent_combo.blockSignals(False)
 
         self.table.setRowCount(len(rows))
         for row_index, r in enumerate(rows):
@@ -177,6 +181,26 @@ class SpecializedDimensionScreenBase(QWidget):
                 self.table.setItem(row_index, col_index, item)
 
         self._render_extra_fields()
+        if self._editing_id is None:
+            self._suggest_code_for_current_parent()
+
+    def _on_parent_combo_changed(self, _index: int) -> None:
+        if self._editing_id is not None:
+            return
+        self._suggest_code_for_current_parent()
+
+    def _suggest_code_for_current_parent(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._dimension_type_id is None:
+            return
+        parent_id = self.parent_combo.currentData()
+        level_no = 1
+        if parent_id is not None:
+            parent = self._rows_by_id.get(parent_id)
+            if parent is None:
+                return
+            level_no = parent.level_no + 1
+        self.code_field.setText(dimensions_service.suggest_next_code(company_id, self._dimension_type_id, level_no))
 
     def _render_extra_fields(self, values: dict | None = None) -> None:
         while self.extra_fields_container.count():
@@ -274,6 +298,7 @@ class SpecializedDimensionScreenBase(QWidget):
         if self.parent_combo.count():
             self.parent_combo.setCurrentIndex(0)
         self._render_extra_fields()
+        self._suggest_code_for_current_parent()
         self.delete_button.setVisible(False)
         self.table.clearSelection()
 

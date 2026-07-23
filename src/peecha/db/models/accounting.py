@@ -132,6 +132,20 @@ class ChartOfAccountLevelConfig(Base):
     range_to: Mapped[int | None] = mapped_column(BigInteger)
 
 
+class DetailLevelDigitConfig(Base):
+    """تعدادِ رقمِ سراسریِ هر سطحِ تفصیلی (۱ تا ۴) — یکسان برایِ همه‌ی
+    گروه‌ها (کالا/بانک/مشتری/...)؛ فقط بازه‌ی از-تا مخصوصِ هر گروه می‌ماند
+    (acc.detail_group_levels). اختیاری؛ سطحی که ردیفی این‌جا نداشته باشد
+    بدونِ محدودیتِ طول می‌ماند. هم‌الگو با acc.chart_of_account_level_config."""
+
+    __tablename__ = "detail_level_digit_config"
+    __table_args__ = {"schema": "acc"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    level_no: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    code_length: Mapped[int | None] = mapped_column(SmallInteger)
+
+
 class DetailDimensionType(Base):
     __tablename__ = "detail_dimension_types"
     __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "acc"})
@@ -140,6 +154,8 @@ class DetailDimensionType(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
     code: Mapped[str] = mapped_column(String(30))  # CUSTOMER, VENDOR, COST_CENTER, PROJECT, ...
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # سقفِ تعدادِ سطحِ سلسله‌مراتبِ حساب‌هایِ تفصیلیِ این گروه (۱ تا ۴).
+    max_level_no: Mapped[int] = mapped_column(SmallInteger, default=4)
 
 
 class DetailAccount(Base):
@@ -175,7 +191,6 @@ class DetailGroupLevel(Base):
     # غیرِصفر می‌گیرد تا مشتری/تامین‌کننده/پرسنل مستقل از هم پیکربندی شوند.
     person_group_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=0)
     level_no: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
-    code_length: Mapped[int] = mapped_column(SmallInteger)
     range_from: Mapped[int | None] = mapped_column(BigInteger)
     range_to: Mapped[int | None] = mapped_column(BigInteger)
 
@@ -222,6 +237,9 @@ class PersonGroup(Base):
 
     person_group_id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    # سقفِ تعدادِ سطحِ سلسله‌مراتبِ اشخاصِ این گروه (۱ تا ۴)؛ پیش‌فرض ۱ یعنی
+    # تخت (رفتارِ فعلی)، مدیر می‌تواند بالا ببرد (مثلاً مشتری=۲).
+    max_level_no: Mapped[int] = mapped_column(SmallInteger, default=1)
     code: Mapped[str] = mapped_column(String(20))  # CUSTOMER, SUPPLIER, PERSONNEL
     name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -1,5 +1,7 @@
-"""پیکربندیِ گروه‌هایِ تفصیلی — ساختِ گروهِ تازه + تنظیمِ تعدادِ رقم/بازه‌ی
-از-تا/فیلدهایِ اختصاصیِ هر گروه (تا ۴ سطح).
+"""پیکربندیِ گروه‌هایِ تفصیلی — ساختِ گروهِ تازه + تنظیمِ تعدادِ سطح/بازه‌یِ
+از-تا/فیلدهایِ اختصاصیِ هر گروه (تا ۴ سطح). طبقِ درخواستِ صریح، تعدادِ رقمِ
+هر سطح سراسری شده (تنظیماتِ «کدینگِ حسابداری») و اینجا فقط بازه و سقفِ
+تعدادِ سطحِ هر گروه تنظیم می‌شود.
 
 طبقِ درخواستِ صریح: این بخش از صفحه‌ی قدیمیِ سه‌ستونیِ «مراکزِ هزینه و
 ابعادِ تفصیلی» جدا شده — آن صفحه فقط به ثبتِ خودِ حساب‌هایِ تفصیلیِ
@@ -170,29 +172,42 @@ class DimensionGroupConfigScreen(QWidget):
         self.lock_hint_label.setWordWrap(True)
         layout.addWidget(self.lock_hint_label)
 
-        layout.addWidget(QLabel("تعدادِ رقم و بازه‌ی از-تا برایِ هر سطح (صفر = بدونِ محدودیت)"))
+        max_level_row = QHBoxLayout()
+        max_level_row.addWidget(QLabel("تعدادِ سطحِ این گروه"))
+        self.max_level_spin = QSpinBox()
+        self.max_level_spin.setRange(1, _LEVEL_COUNT)
+        max_level_row.addWidget(self.max_level_spin)
+        self.save_max_level_button = QPushButton("ذخیره")
+        self.save_max_level_button.setObjectName("flatButton")
+        self.save_max_level_button.clicked.connect(self._save_max_level)
+        max_level_row.addWidget(self.save_max_level_button)
+        max_level_row.addStretch(1)
+        layout.addLayout(max_level_row)
+
+        layout.addWidget(
+            QLabel(
+                "بازه‌ی از-تا برایِ هر سطح (صفر = بدونِ محدودیت) — تعدادِ رقمِ هر سطح سراسری است و در "
+                "تنظیماتِ «کدینگِ حسابداری» مشخص می‌شود، این‌جا فقط بازه مخصوصِ همین گروه است."
+            )
+        )
         levels_grid = QGridLayout()
         levels_grid.setSpacing(6)
         levels_grid.addWidget(QLabel("سطح"), 0, 0)
-        levels_grid.addWidget(QLabel("تعدادِ رقم"), 0, 1)
-        levels_grid.addWidget(QLabel("از"), 0, 2)
-        levels_grid.addWidget(QLabel("تا"), 0, 3)
-        self._level_widgets: dict[int, tuple[QSpinBox, QSpinBox, QSpinBox]] = {}
+        levels_grid.addWidget(QLabel("از"), 0, 1)
+        levels_grid.addWidget(QLabel("تا"), 0, 2)
+        self._level_widgets: dict[int, tuple[QSpinBox, QSpinBox]] = {}
         for row, level_no in enumerate(range(1, _LEVEL_COUNT + 1), start=1):
             levels_grid.addWidget(QLabel(f"سطحِ {level_no}"), row, 0)
-            code_length = QSpinBox()
-            code_length.setRange(0, 10)
             range_from = QSpinBox()
             range_from.setRange(0, 999_999_999)
             range_to = QSpinBox()
             range_to.setRange(0, 999_999_999)
-            levels_grid.addWidget(code_length, row, 1)
-            levels_grid.addWidget(range_from, row, 2)
-            levels_grid.addWidget(range_to, row, 3)
-            self._level_widgets[level_no] = (code_length, range_from, range_to)
+            levels_grid.addWidget(range_from, row, 1)
+            levels_grid.addWidget(range_to, row, 2)
+            self._level_widgets[level_no] = (range_from, range_to)
         layout.addLayout(levels_grid)
 
-        self.save_levels_button = QPushButton("ذخیره‌ی پیکربندیِ سطوح")
+        self.save_levels_button = QPushButton("ذخیره‌ی بازه‌یِ سطوح")
         self.save_levels_button.setObjectName("flatButton")
         self.save_levels_button.clicked.connect(self._save_levels)
         layout.addWidget(self.save_levels_button)
@@ -277,19 +292,34 @@ class DimensionGroupConfigScreen(QWidget):
             )
         self.config_title.setText(f"پیکربندیِ گروهِ «{label}»")
         self.config_panel.setEnabled(True)
+        self.max_level_spin.setValue(dimensions_service.get_group_max_level_no(dimension_type_id, person_group_id))
         self._load_levels()
         self._load_fields()
 
         company_id = self._company_id()
         locked = company_id is not None and je_service.company_has_any_entries(company_id)
-        for code_length, range_from, range_to in self._level_widgets.values():
-            code_length.setEnabled(not locked)
+        for range_from, range_to in self._level_widgets.values():
             range_from.setEnabled(not locked)
             range_to.setEnabled(not locked)
         self.save_levels_button.setEnabled(not locked)
+        self.max_level_spin.setEnabled(not locked)
+        self.save_max_level_button.setEnabled(not locked)
         self.lock_hint_label.setText(
-            "این شرکت سند دارد؛ تنظیماتِ رقم/بازه دیگر قابلِ‌تغییر نیست." if locked else ""
+            "این شرکت سند دارد؛ تنظیماتِ رقم/بازه/تعدادِ سطح دیگر قابلِ‌تغییر نیست." if locked else ""
         )
+
+    def _save_max_level(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
+            return
+        try:
+            dimensions_service.set_group_max_level_no(
+                self._selected_type_id, company_id, self.max_level_spin.value(), self._selected_person_group_id
+            )
+        except ValueError as exc:
+            self.type_status_label.setText(str(exc))
+            return
+        self.type_status_label.setText("")
 
     # --- سطوح ------------------------------------------------------------
     def _load_levels(self) -> None:
@@ -297,9 +327,8 @@ class DimensionGroupConfigScreen(QWidget):
             row.level_no: row
             for row in dimensions_service.list_group_levels(self._selected_type_id, self._selected_person_group_id)
         }
-        for level_no, (code_length, range_from, range_to) in self._level_widgets.items():
+        for level_no, (range_from, range_to) in self._level_widgets.items():
             row = rows.get(level_no)
-            code_length.setValue(row.code_length if row else 0)
             range_from.setValue(row.range_from if row and row.range_from is not None else 0)
             range_to.setValue(row.range_to if row and row.range_to is not None else 0)
 
@@ -309,12 +338,11 @@ class DimensionGroupConfigScreen(QWidget):
             return
         levels = {
             level_no: {
-                "code_length": code_length.value(),
                 "range_from": range_from.value() or None,
                 "range_to": range_to.value() or None,
             }
-            for level_no, (code_length, range_from, range_to) in self._level_widgets.items()
-            if code_length.value() > 0
+            for level_no, (range_from, range_to) in self._level_widgets.items()
+            if range_from.value() > 0 or range_to.value() > 0
         }
         try:
             dimensions_service.set_group_levels(

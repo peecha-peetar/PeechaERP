@@ -10,7 +10,12 @@ customer_details/...) دست‌نخورده می‌مانند؛ یک بخشِ ف
 عمومی/قابل‌پیکربندی (همان مکانیزمِ acc.detail_group_fields که کالا/بانک/...
 دارند، حالا با person_group_id مربوط به هرکدام از این سه گروه) به‌عنوانِ
 لایه‌ی افزودنی زیرِ فرم اضافه شده — مقدارشان در DetailAccount.extra_fields
-ذخیره می‌شود."""
+ذخیره می‌شود.
+
+طبقِ درخواستِ صریحِ بعدی: «مشتریان دو تا سطح داره» — این سه گروه هم مثلِ
+کالا/بانک/... تا سقفِ person_groups.max_level_no سلسله‌مراتب (والد/فرزند)
+دارند؛ انتخابگرِ والد + پیشنهادِ خودکارِ کدِ بعدی (suggest_next_code) به
+فرمِ مشترک اضافه شده — دقیقاً هم‌الگو با specialized_dimensions.py."""
 
 from __future__ import annotations
 
@@ -21,6 +26,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDateEdit,
     QDoubleSpinBox,
     QGridLayout,
@@ -53,7 +59,7 @@ _FIELD_LABELS = {
     "hire_date": "تاریخِ استخدام",
 }
 
-_COLUMNS = ["وضعیت", "نام", "کد"]
+_COLUMNS = ["وضعیت", "نام", "کد", "سطح"]
 
 
 class PersonGroupScreenBase(QWidget):
@@ -111,6 +117,12 @@ class PersonGroupScreenBase(QWidget):
         grid = QGridLayout()
         grid.setSpacing(8)
         row = 0
+
+        grid.addWidget(QLabel("والد"), row, 0)
+        self.parent_combo = QComboBox()
+        self.parent_combo.currentIndexChanged.connect(self._on_parent_combo_changed)
+        grid.addWidget(self.parent_combo, row, 1)
+        row += 1
 
         grid.addWidget(QLabel("کد"), row, 0)
         self.code_field = QLineEdit()
@@ -184,7 +196,15 @@ class PersonGroupScreenBase(QWidget):
     def _list_rows(self, company_id: int) -> list[dict]:
         raise NotImplementedError
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
+    def _create(
+        self,
+        company_id: int,
+        code: str,
+        name: str,
+        extra: dict,
+        custom_fields: dict,
+        parent_detail_account_id: int | None,
+    ) -> None:
         raise NotImplementedError
 
     def _update(
@@ -210,12 +230,14 @@ class PersonGroupScreenBase(QWidget):
             self._person_group_id = None
         rows = self._list_rows(company_id) if company_id is not None else []
         self._rows_by_id = {r["detail_account_id"]: r for r in rows}
+
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             values = [
                 "فعال" if row["is_active"] else "غیرفعال",
                 row["name"] or "—",
-                row["code"],
+                row["full_code"],
+                str(row["level_no"]),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -227,15 +249,56 @@ class PersonGroupScreenBase(QWidget):
         detail_account_id = self.table.item(row, 0).data(Qt.UserRole)
         self._load_into_form(detail_account_id)
 
+    def _rebuild_parent_combo(self) -> None:
+        max_level_no = (
+            dimensions_service.get_group_max_level_no(self._dimension_type_id, self._person_group_id)
+            if self._dimension_type_id is not None and self._person_group_id is not None
+            else 1
+        )
+        self.parent_combo.blockSignals(True)
+        self.parent_combo.clear()
+        self.parent_combo.addItem("— بدونِ والد (سطحِ ۱) —", None)
+        for r in self._rows_by_id.values():
+            if r["level_no"] < max_level_no and r["detail_account_id"] != self._editing_id:
+                self.parent_combo.addItem(f"{r['full_code']} — {r['name'] or ''}", r["detail_account_id"])
+        self.parent_combo.blockSignals(False)
+
+    def _on_parent_combo_changed(self, _index: int) -> None:
+        if self._editing_id is not None:
+            return
+        self._suggest_code_for_current_parent()
+
+    def _suggest_code_for_current_parent(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._dimension_type_id is None or self._person_group_id is None:
+            return
+        parent_id = self.parent_combo.currentData()
+        level_no = 1
+        if parent_id is not None:
+            parent = self._rows_by_id.get(parent_id)
+            if parent is None:
+                return
+            level_no = parent["level_no"] + 1
+        self.code_field.setText(
+            dimensions_service.suggest_next_code(company_id, self._dimension_type_id, level_no, self._person_group_id)
+        )
+
     def _load_into_form(self, detail_account_id: int) -> None:
         row = self._rows_by_id.get(detail_account_id)
         if row is None:
             return
         self._editing_id = detail_account_id
+        self._rebuild_parent_combo()  # برایِ به‌روزکردنِ فهرستِ والدهایِ مجاز (بدونِ خودش)
         self.form_title.setText(f"ویرایشِ «{row['name'] or row['code']}»")
         self.code_field.setText(row["code"])
         self.name_field.setText(row["name"] or "")
         self.active_checkbox.setChecked(row["is_active"])
+        if row.get("parent_detail_account_id") is not None:
+            index = self.parent_combo.findData(row["parent_detail_account_id"])
+            self.parent_combo.setCurrentIndex(index if index >= 0 else 0)
+        else:
+            self.parent_combo.setCurrentIndex(0)
+        self.parent_combo.setEnabled(False)
         for field_key, kind in self.FIELD_SPECS:
             widget = self._extra_widgets[field_key]
             value = row.get(field_key)
@@ -259,6 +322,10 @@ class PersonGroupScreenBase(QWidget):
         self.form_title.setText("افزودنِ موردِ تازه")
         if not keep_status:
             self.status_label.setText("")
+        self._rebuild_parent_combo()
+        self.parent_combo.setEnabled(True)
+        if self.parent_combo.count():
+            self.parent_combo.setCurrentIndex(0)
         self.code_field.clear()
         self.name_field.clear()
         self.active_checkbox.setChecked(True)
@@ -271,6 +338,7 @@ class PersonGroupScreenBase(QWidget):
             else:
                 widget.clear()
         self._render_custom_fields()
+        self._suggest_code_for_current_parent()
         self.save_button.setText("افزودن")
         self.cancel_button.setVisible(False)
         self.delete_button.setVisible(False)
@@ -370,7 +438,7 @@ class PersonGroupScreenBase(QWidget):
                     self._editing_id, company_id, code, name, self.active_checkbox.isChecked(), extra, custom_fields
                 )
             else:
-                self._create(company_id, code, name, extra, custom_fields)
+                self._create(company_id, code, name, extra, custom_fields, self.parent_combo.currentData())
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
             self.status_label.setText(f"خطا: {exc}")
             return
@@ -426,8 +494,11 @@ class CustomersScreen(PersonGroupScreenBase):
     def _list_rows(self, company_id: int) -> list[dict]:
         return dimensions_service.list_customers(company_id)
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
-        dimensions_service.create_customer(company_id=company_id, code=code, name=name, custom_fields=custom_fields, **extra)
+    def _create(self, company_id, code, name, extra, custom_fields, parent_detail_account_id) -> None:
+        dimensions_service.create_customer(
+            company_id=company_id, code=code, name=name, custom_fields=custom_fields,
+            parent_detail_account_id=parent_detail_account_id, **extra,
+        )
 
     def _update(self, detail_account_id, company_id, code, name, is_active, extra, custom_fields) -> None:
         dimensions_service.update_customer(
@@ -455,8 +526,11 @@ class SuppliersScreen(PersonGroupScreenBase):
     def _list_rows(self, company_id: int) -> list[dict]:
         return dimensions_service.list_suppliers(company_id)
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
-        dimensions_service.create_supplier(company_id=company_id, code=code, name=name, custom_fields=custom_fields, **extra)
+    def _create(self, company_id, code, name, extra, custom_fields, parent_detail_account_id) -> None:
+        dimensions_service.create_supplier(
+            company_id=company_id, code=code, name=name, custom_fields=custom_fields,
+            parent_detail_account_id=parent_detail_account_id, **extra,
+        )
 
     def _update(self, detail_account_id, company_id, code, name, is_active, extra, custom_fields) -> None:
         dimensions_service.update_supplier(
@@ -483,8 +557,11 @@ class PersonnelScreen(PersonGroupScreenBase):
     def _list_rows(self, company_id: int) -> list[dict]:
         return dimensions_service.list_personnel(company_id)
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
-        dimensions_service.create_personnel(company_id=company_id, code=code, name=name, custom_fields=custom_fields, **extra)
+    def _create(self, company_id, code, name, extra, custom_fields, parent_detail_account_id) -> None:
+        dimensions_service.create_personnel(
+            company_id=company_id, code=code, name=name, custom_fields=custom_fields,
+            parent_detail_account_id=parent_detail_account_id, **extra,
+        )
 
     def _update(self, detail_account_id, company_id, code, name, is_active, extra, custom_fields) -> None:
         dimensions_service.update_personnel(

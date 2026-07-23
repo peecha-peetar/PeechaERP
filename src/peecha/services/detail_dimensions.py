@@ -23,6 +23,7 @@ from peecha.db.models.accounting import (
     DetailDimensionType,
     DetailGroupField,
     DetailGroupLevel,
+    DetailLevelDigitConfig,
     JournalEntryLineDetail,
     PersonGroup,
     PersonnelDetail,
@@ -191,30 +192,91 @@ def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[Detail
 
 
 def _validate_code_length(
-    session, dimension_type_id: int, level_no: int, segment_code: str, person_group_id: int = 0
+    session, company_id: int, dimension_type_id: int, level_no: int, segment_code: str, person_group_id: int = 0
 ) -> None:
-    """اگر این گروه برایِ این سطح طولِ کد/بازه‌ی از-تا پیکربندی کرده باشد
-    (اختیاری، acc.detail_group_levels)، کدِ واردشده باید دقیقاً همان طول و
-    (اگر بازه هم تنظیم شده) رقمی و در همان بازه باشد.
+    """طبقِ درخواستِ صریح: «تعداد ارقام در همه گروهها مشابه هم باشه فقط
+    بازه فرق داشته باشه» — طولِ کدِ هر سطح از acc.detail_level_digit_config
+    (سراسری/یکسان برایِ همه‌ی گروه‌هایِ این شرکت) خوانده می‌شود؛ بازه‌ی
+    از-تا همچنان مخصوصِ همین گروه (acc.detail_group_levels) می‌ماند.
 
     person_group_id=0 یعنی «بدونِ محدودیت به گروهِ خاصِ اشخاص» (همه‌ی
     گروه‌ها بجز مشتری/تامین‌کننده/پرسنل)؛ آن سه گروه شناسه‌ی واقعیِ
-    person_group_id خودشان را می‌دهند تا مستقل از هم اعتبارسنجی شوند."""
-    level_config = session.get(DetailGroupLevel, (dimension_type_id, person_group_id, level_no))
-    if level_config is None:
-        return
-    if len(segment_code) != level_config.code_length:
-        raise ValueError(
-            f"طولِ کدِ سطحِ {level_no} برایِ این گروه باید دقیقاً {level_config.code_length} رقم باشد."
-        )
-    if level_config.range_from is not None or level_config.range_to is not None:
+    person_group_id خودشان را می‌دهند تا بازه‌شان مستقل از هم بماند."""
+    digit_config = session.get(DetailLevelDigitConfig, (company_id, level_no))
+    if digit_config is not None and digit_config.code_length is not None:
+        if len(segment_code) != digit_config.code_length:
+            raise ValueError(f"طولِ کدِ سطحِ {level_no} باید دقیقاً {digit_config.code_length} رقم باشد.")
+
+    range_config = session.get(DetailGroupLevel, (dimension_type_id, person_group_id, level_no))
+    if range_config is not None and (range_config.range_from is not None or range_config.range_to is not None):
         if not segment_code.isdigit():
             raise ValueError(f"کدِ سطحِ {level_no} برایِ این گروه باید رقمی باشد (بازه‌ی از-تا تنظیم شده).")
         value = int(segment_code)
-        if level_config.range_from is not None and value < level_config.range_from:
-            raise ValueError(f"کدِ سطحِ {level_no} باید حداقل {level_config.range_from} باشد.")
-        if level_config.range_to is not None and value > level_config.range_to:
-            raise ValueError(f"کدِ سطحِ {level_no} باید حداکثر {level_config.range_to} باشد.")
+        if range_config.range_from is not None and value < range_config.range_from:
+            raise ValueError(f"کدِ سطحِ {level_no} باید حداقل {range_config.range_from} باشد.")
+        if range_config.range_to is not None and value > range_config.range_to:
+            raise ValueError(f"کدِ سطحِ {level_no} باید حداکثر {range_config.range_to} باشد.")
+
+
+def _get_group_max_level_no(session, dimension_type_id: int, person_group_id: int = 0) -> int:
+    """سقفِ تعدادِ سطحِ سلسله‌مراتبِ این گروه — برایِ مشتری/تامین‌کننده/پرسنل
+    از acc.person_groups.max_level_no، برایِ بقیه‌ی گروه‌ها از
+    acc.detail_dimension_types.max_level_no."""
+    if person_group_id:
+        group = session.get(PersonGroup, person_group_id)
+        return group.max_level_no if group is not None else 1
+    dimension_type = session.get(DetailDimensionType, dimension_type_id)
+    return dimension_type.max_level_no if dimension_type is not None else MAX_DETAIL_LEVEL
+
+
+def get_group_max_level_no(dimension_type_id: int, person_group_id: int = 0) -> int:
+    with new_session() as session:
+        return _get_group_max_level_no(session, dimension_type_id, person_group_id)
+
+
+def set_group_max_level_no(dimension_type_id: int, company_id: int, max_level_no: int, person_group_id: int = 0) -> None:
+    if not (1 <= max_level_no <= MAX_DETAIL_LEVEL):
+        raise ValueError(f"تعدادِ سطح باید بینِ ۱ تا {MAX_DETAIL_LEVEL} باشد.")
+    with new_session() as session:
+        if person_group_id:
+            group = session.get(PersonGroup, person_group_id)
+            if group is None or group.company_id != company_id:
+                raise ValueError("گروه نامعتبر است.")
+            group.max_level_no = max_level_no
+        else:
+            dimension_type = session.get(DetailDimensionType, dimension_type_id)
+            if dimension_type is None or dimension_type.company_id != company_id:
+                raise ValueError("گروه نامعتبر است.")
+            dimension_type.max_level_no = max_level_no
+        session.commit()
+
+
+def suggest_next_code(company_id: int, dimension_type_id: int, level_no: int, person_group_id: int = 0) -> str:
+    """پیشنهادِ کدِ بعدی برایِ این سطح: بزرگ‌ترینِ کدِ عددیِ موجود در همین
+    نوع‌بُعد + ۱ (چونuq_detail_accounts رویِ کلِ dimension_type_id یکتاست، نه
+    فقط هم‌سطح‌ها)؛ اگر حسابی نبود، از range_fromِ همین سطح/گروه (اگر
+    تنظیم شده) شروع می‌شود وگرنه از ۱، و با تعدادِ رقمِ سراسریِ همین سطح
+    (اگر تنظیم شده) صفر-پَد می‌شود. پیشنهاد است، نه اجبار — کاربر می‌تواند
+    آن را در فرم عوض کند."""
+    with new_session() as session:
+        existing_codes = session.scalars(
+            select(DetailAccount.code).where(
+                DetailAccount.company_id == company_id,
+                DetailAccount.dimension_type_id == dimension_type_id,
+            )
+        ).all()
+        numeric_codes = [int(c) for c in existing_codes if c.isdigit()]
+
+        range_config = session.get(DetailGroupLevel, (dimension_type_id, person_group_id, level_no))
+        range_from = range_config.range_from if range_config is not None else None
+        base = range_from if range_from is not None else 1
+
+        next_value = max(numeric_codes, default=base - 1) + 1
+        next_value = max(next_value, base)
+
+        digit_config = session.get(DetailLevelDigitConfig, (company_id, level_no))
+        code_length = digit_config.code_length if digit_config is not None else None
+        return str(next_value).zfill(code_length) if code_length else str(next_value)
 
 
 def create_detail_account(
@@ -230,6 +292,7 @@ def create_detail_account(
         if dimension_type is None or dimension_type.company_id != company_id:
             raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
 
+        max_level_no = _get_group_max_level_no(session, dimension_type_id)
         segment_code = code.strip()
         level_no = 1
         if parent_detail_account_id is not None:
@@ -240,11 +303,11 @@ def create_detail_account(
                 or parent.dimension_type_id != dimension_type_id
             ):
                 raise ValueError("حسابِ تفصیلیِ والد نامعتبر است.")
-            if parent.level_no >= MAX_DETAIL_LEVEL:
-                raise ValueError(f"حسابِ تفصیلی حداکثر {MAX_DETAIL_LEVEL} سطح می‌تواند داشته باشد.")
+            if parent.level_no >= max_level_no:
+                raise ValueError(f"این گروه حداکثر {max_level_no} سطح می‌تواند داشته باشد.")
             level_no = parent.level_no + 1
 
-        _validate_code_length(session, dimension_type_id, level_no, segment_code)
+        _validate_code_length(session, company_id, dimension_type_id, level_no, segment_code)
 
         detail_account = DetailAccount(
             company_id=company_id,
@@ -275,7 +338,7 @@ def update_detail_account(
         if detail_account is None or detail_account.company_id != company_id:
             raise ValueError("حسابِ تفصیلی نامعتبر است.")
         segment_code = code.strip()
-        _validate_code_length(session, detail_account.dimension_type_id, detail_account.level_no, segment_code)
+        _validate_code_length(session, company_id, detail_account.dimension_type_id, detail_account.level_no, segment_code)
         detail_account.code = segment_code
         detail_account.name = name or None
         detail_account.is_active = is_active
@@ -332,17 +395,67 @@ def set_account_dimension_types(account_id: int, company_id: int, dimension_type
         session.commit()
 
 
-# --- پیکربندیِ سلسله‌مراتبِ هر گروهِ تفصیلی (تا ۴ سطح) ----------------------
-# طبقِ درخواستِ صریح: «بتوان برای چهار سطح تفصیلی تعداد کد در گروه تفصیلی
-# مشخص کرد» — این پیکربندی اختیاری است؛ گروهی که این‌جا ردیفی نداشته باشد
-# همچنان تخت/بدونِ محدودیتِ طول می‌ماند (سازگار با گروه‌های موجود مثلِ
-# مشتری/مرکز هزینه).
+# --- تعدادِ رقمِ سراسریِ هر سطحِ تفصیلی (یکسان برایِ همه‌ی گروه‌ها) ---------
+# طبقِ درخواستِ صریح: «تعداد ارقام در همه گروهها مشابه هم باشه فقط بازه فرق
+# داشته باشه» — این تنظیم مخصوصِ یک گروه نیست، برایِ کلِ شرکت و همه‌ی
+# گروه‌هایِ تفصیلی (کالا/بانک/مشتری/...) یکسان است.
+
+
+@dataclass
+class LevelDigitConfigRow:
+    level_no: int
+    code_length: int | None
+
+
+def list_level_digit_config(company_id: int) -> list[LevelDigitConfigRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(DetailLevelDigitConfig)
+            .where(DetailLevelDigitConfig.company_id == company_id)
+            .order_by(DetailLevelDigitConfig.level_no)
+        ).all()
+        return [LevelDigitConfigRow(level_no=r.level_no, code_length=r.code_length) for r in rows]
+
+
+def set_level_digit_config(company_id: int, config: dict[int, int | None]) -> None:
+    """جایگزینیِ کاملِ تعدادِ رقمِ سراسریِ هر سطح — config یعنی {شماره‌ی سطح
+    (۱ تا ۴): تعدادِ رقم یا None برایِ بدونِ محدودیت}.
+
+    طبقِ درخواستِ صریح: بعدِ اولین سندِ شرکت، این تنظیمات دیگر قابلِ‌تغییر
+    نیستند (تا کدهایِ ثبت‌شده‌ی موجود ناسازگار نشوند) — هم‌الگو با
+    chart_of_accounts.set_account_level_config."""
+    with new_session() as session:
+        # importِ داخلِ تابع: journal_entries از detail_dimensions در سطحِ
+        # ماژول import می‌کند، پس import سطحِ ماژول در جهتِ عکس یک وابستگیِ
+        # چرخشی می‌ساخت.
+        from peecha.services import journal_entries as je_service  # noqa: PLC0415
+
+        if je_service.company_has_any_entries(company_id):
+            raise ValueError("این شرکت سند دارد؛ تعدادِ رقمِ سطوحِ تفصیلی دیگر قابلِ‌تغییر نیست.")
+
+        session.execute(
+            DetailLevelDigitConfig.__table__.delete().where(DetailLevelDigitConfig.company_id == company_id)
+        )
+        for level_no, code_length in config.items():
+            if not (1 <= level_no <= MAX_DETAIL_LEVEL):
+                raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_DETAIL_LEVEL} باشد.")
+            if code_length is not None and not (1 <= code_length <= 10):
+                raise ValueError("تعدادِ رقمِ کد باید بینِ ۱ تا ۱۰ باشد.")
+            if code_length is None:
+                continue
+            session.add(DetailLevelDigitConfig(company_id=company_id, level_no=level_no, code_length=code_length))
+        session.commit()
+
+
+# --- پیکربندیِ بازه‌یِ از-تایِ هر سطحِ هر گروهِ تفصیلی (تا ۴ سطح) -----------
+# طبقِ درخواستِ صریح: «فقط بازه فرق داشته باشه» — تعدادِ رقم سراسری شد
+# (بالا)، ولی بازه‌ی از-تا همچنان مخصوصِ هر گروه (و برایِ اشخاص، مخصوصِ هر
+# زیرگروه) می‌ماند.
 
 
 @dataclass
 class GroupLevelRow:
     level_no: int
-    code_length: int
     range_from: int | None = None
     range_to: int | None = None
 
@@ -357,16 +470,14 @@ def list_group_levels(dimension_type_id: int, person_group_id: int = 0) -> list[
             )
             .order_by(DetailGroupLevel.level_no)
         ).all()
-        return [
-            GroupLevelRow(level_no=r.level_no, code_length=r.code_length, range_from=r.range_from, range_to=r.range_to)
-            for r in rows
-        ]
+        return [GroupLevelRow(level_no=r.level_no, range_from=r.range_from, range_to=r.range_to) for r in rows]
 
 
 def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, dict], person_group_id: int = 0) -> None:
-    """جایگزینیِ کاملِ پیکربندیِ سطح‌های این گروه — levels یعنی
-    {شماره‌ی سطح (۱ تا ۴): {"code_length": ..., "range_from": ..|None,
-    "range_to": ..|None}}؛ سطحی که در دیکشنری نباشد بدونِ محدودیت می‌ماند.
+    """جایگزینیِ کاملِ پیکربندیِ بازه‌یِ سطح‌های این گروه — levels یعنی
+    {شماره‌ی سطح (۱ تا ۴): {"range_from": ..|None, "range_to": ..|None}}؛
+    سطحی که در دیکشنری نباشد (یا هر دو بازه‌اش None باشد) بدونِ محدودیتِ
+    بازه می‌ماند.
 
     person_group_id غیرِصفر یعنی این پیکربندی مخصوصِ یکی از زیرگروه‌هایِ
     اشخاص (مشتری/تامین‌کننده/پرسنل) است — مستقل از بقیه‌یِ زیرگروه‌ها و از
@@ -396,19 +507,17 @@ def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, 
         for level_no, config in levels.items():
             if not (1 <= level_no <= MAX_DETAIL_LEVEL):
                 raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_DETAIL_LEVEL} باشد.")
-            code_length = config["code_length"]
-            if not (1 <= code_length <= 10):
-                raise ValueError("تعدادِ رقمِ کد باید بینِ ۱ تا ۱۰ باشد.")
             range_from = config.get("range_from")
             range_to = config.get("range_to")
             if range_from is not None and range_to is not None and range_from > range_to:
                 raise ValueError("مقدارِ «از» نمی‌تواند بزرگ‌تر از «تا» باشد.")
+            if range_from is None and range_to is None:
+                continue
             session.add(
                 DetailGroupLevel(
                     dimension_type_id=dimension_type_id,
                     person_group_id=person_group_id,
                     level_no=level_no,
-                    code_length=code_length,
                     range_from=range_from,
                     range_to=range_to,
                 )
@@ -818,6 +927,7 @@ def _group_row_to_person_row(
     detail_account: DetailAccount,
     extra,
     extra_field_names: tuple[str, ...],
+    full_code: str,
 ) -> dict:
     row = {
         "detail_account_id": detail_account.detail_account_id,
@@ -827,6 +937,11 @@ def _group_row_to_person_row(
         # فیلدهایِ اختصاصیِ عمومی/قابلِ‌پیکربندی (DetailGroupField)، جدا از
         # فیلدهایِ هاردکدِ SQL بالا — برایِ پیش‌پر کردنِ فرمِ ویرایش.
         "custom_fields": dict(detail_account.extra_fields or {}),
+        # طبقِ درخواستِ صریح، مشتری/تامین‌کننده/پرسنل هم می‌توانند تا سقفِ
+        # max_level_noِ خودشان سلسله‌مراتب داشته باشند (مثلِ کالا/بانک).
+        "parent_detail_account_id": detail_account.parent_detail_account_id,
+        "level_no": detail_account.level_no,
+        "full_code": full_code,
     }
     for field_name in extra_field_names:
         row[field_name] = getattr(extra, field_name, None) if extra is not None else None
@@ -847,6 +962,7 @@ def _list_group_persons(company_id: int, group_code: str, detail_model, extra_fi
             )
             .order_by(DetailAccount.code)
         ).all()
+        full_codes = _compute_full_codes(rows)
         detail_account_ids = [r.detail_account_id for r in rows]
         extras_by_id = {
             e.detail_account_id: e
@@ -855,7 +971,10 @@ def _list_group_persons(company_id: int, group_code: str, detail_model, extra_fi
             ).all()
         }
         return [
-            _group_row_to_person_row(r, extras_by_id.get(r.detail_account_id), extra_field_names) for r in rows
+            _group_row_to_person_row(
+                r, extras_by_id.get(r.detail_account_id), extra_field_names, full_codes.get(r.detail_account_id, r.code)
+            )
+            for r in rows
         ]
 
 
@@ -867,12 +986,28 @@ def _create_group_person(
     detail_model,
     model_fields: dict,
     custom_fields: dict | None = None,
+    parent_detail_account_id: int | None = None,
 ) -> int:
     with new_session() as session:
         dimension_type_id = ensure_person_dimension(session, company_id)
         person_group_id = ensure_person_groups(session, company_id)[group_code]
 
-        _validate_code_length(session, dimension_type_id, 1, code.strip(), person_group_id=person_group_id)
+        max_level_no = _get_group_max_level_no(session, dimension_type_id, person_group_id)
+        level_no = 1
+        if parent_detail_account_id is not None:
+            parent = session.get(DetailAccount, parent_detail_account_id)
+            if (
+                parent is None
+                or parent.company_id != company_id
+                or parent.dimension_type_id != dimension_type_id
+                or parent.person_group_id != person_group_id
+            ):
+                raise ValueError("والدِ انتخاب‌شده نامعتبر است.")
+            if parent.level_no >= max_level_no:
+                raise ValueError(f"این گروه حداکثر {max_level_no} سطح می‌تواند داشته باشد.")
+            level_no = parent.level_no + 1
+
+        _validate_code_length(session, company_id, dimension_type_id, level_no, code.strip(), person_group_id=person_group_id)
 
         detail_account = DetailAccount(
             company_id=company_id,
@@ -880,6 +1015,8 @@ def _create_group_person(
             person_group_id=person_group_id,
             code=code.strip(),
             name=name.strip() or None,
+            parent_detail_account_id=parent_detail_account_id,
+            level_no=level_no,
             extra_fields=dict(custom_fields or {}),
         )
         session.add(detail_account)
@@ -906,6 +1043,7 @@ def _update_group_person(
 
         _validate_code_length(
             session,
+            company_id,
             detail_account.dimension_type_id,
             detail_account.level_no,
             code.strip(),
@@ -966,8 +1104,17 @@ def list_customers(company_id: int) -> list[dict]:
     return _list_group_persons(company_id, CUSTOMER_GROUP_CODE, CustomerDetail, _CUSTOMER_FIELDS)
 
 
-def create_customer(company_id: int, code: str, name: str, custom_fields: dict | None = None, **extra_fields) -> int:
-    return _create_group_person(company_id, CUSTOMER_GROUP_CODE, code, name, CustomerDetail, extra_fields, custom_fields)
+def create_customer(
+    company_id: int,
+    code: str,
+    name: str,
+    custom_fields: dict | None = None,
+    parent_detail_account_id: int | None = None,
+    **extra_fields,
+) -> int:
+    return _create_group_person(
+        company_id, CUSTOMER_GROUP_CODE, code, name, CustomerDetail, extra_fields, custom_fields, parent_detail_account_id
+    )
 
 
 def update_customer(
@@ -990,8 +1137,17 @@ def list_suppliers(company_id: int) -> list[dict]:
     return _list_group_persons(company_id, SUPPLIER_GROUP_CODE, SupplierDetail, _SUPPLIER_FIELDS)
 
 
-def create_supplier(company_id: int, code: str, name: str, custom_fields: dict | None = None, **extra_fields) -> int:
-    return _create_group_person(company_id, SUPPLIER_GROUP_CODE, code, name, SupplierDetail, extra_fields, custom_fields)
+def create_supplier(
+    company_id: int,
+    code: str,
+    name: str,
+    custom_fields: dict | None = None,
+    parent_detail_account_id: int | None = None,
+    **extra_fields,
+) -> int:
+    return _create_group_person(
+        company_id, SUPPLIER_GROUP_CODE, code, name, SupplierDetail, extra_fields, custom_fields, parent_detail_account_id
+    )
 
 
 def update_supplier(
@@ -1014,8 +1170,17 @@ def list_personnel(company_id: int) -> list[dict]:
     return _list_group_persons(company_id, PERSONNEL_GROUP_CODE, PersonnelDetail, _PERSONNEL_FIELDS)
 
 
-def create_personnel(company_id: int, code: str, name: str, custom_fields: dict | None = None, **extra_fields) -> int:
-    return _create_group_person(company_id, PERSONNEL_GROUP_CODE, code, name, PersonnelDetail, extra_fields, custom_fields)
+def create_personnel(
+    company_id: int,
+    code: str,
+    name: str,
+    custom_fields: dict | None = None,
+    parent_detail_account_id: int | None = None,
+    **extra_fields,
+) -> int:
+    return _create_group_person(
+        company_id, PERSONNEL_GROUP_CODE, code, name, PersonnelDetail, extra_fields, custom_fields, parent_detail_account_id
+    )
 
 
 def update_personnel(
