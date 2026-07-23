@@ -64,6 +64,7 @@ from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 from peecha import numerals
+from peecha.ui.widgets import JalaliDateEdit
 
 _COL_ROW_NO = 0
 _COL_ACCOUNT = 1
@@ -226,47 +227,6 @@ def _make_searchable_combo(options: list[tuple[int, str]]) -> QComboBox:
     line_edit.textEdited.connect(lambda text, c=combo: _normalize_typed_digits(c, text))
     line_edit.editingFinished.connect(lambda c=combo: _clear_if_unmatched(c))
     return combo
-
-
-class _JalaliDateEdit(QLineEdit):
-    """فیلدِ متنیِ تاریخِ شمسی با ارقامِ فارسی — معادلِ رفتارِ تاریخ‌گیرِ
-    Kivy (که هم آن یک فیلدِ متنی بود، نه پاپ‌آپِ تقویم)."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setPlaceholderText("تاریخِ سند (۱۴۰۳/۰۴/۲۸)")
-        self._date = datetime.date.today()
-        self._refresh_text()
-        self.textEdited.connect(self._on_text_edited)
-        self.editingFinished.connect(self._on_editing_finished)
-
-    def _refresh_text(self) -> None:
-        self.setText(numerals.format_jalali_date(self._date))
-        self.setCursorPosition(0)
-
-    def _on_text_edited(self, text: str) -> None:
-        converted = numerals.to_persian_digits(numerals.to_ascii_digits(text))
-        if converted != text:
-            cursor = self.cursorPosition()
-            self.setText(converted)
-            self.setCursorPosition(cursor)
-
-    def _on_editing_finished(self) -> None:
-        try:
-            self._date = numerals.parse_jalali_date(self.text())
-        except ValueError:
-            pass
-        self._refresh_text()
-
-    def date(self) -> datetime.date:
-        try:
-            return numerals.parse_jalali_date(self.text())
-        except ValueError:
-            return self._date
-
-    def setDate(self, value: datetime.date) -> None:
-        self._date = value
-        self._refresh_text()
 
 
 class _DimensionsDialog(QDialog):
@@ -570,7 +530,7 @@ class JournalEntryScreen(QWidget):
         header_layout.addWidget(self.registration_label, 0, 3, 1, 1, Qt.AlignLeft)
 
         header_layout.addWidget(QLabel("تاریخِ سند"), 1, 0)
-        self.date_field = _JalaliDateEdit()
+        self.date_field = JalaliDateEdit("تاریخِ سند (۱۴۰۳/۰۴/۲۸)")
         self.date_field.setMaximumWidth(140)
         header_layout.addWidget(self.date_field, 1, 1)
 

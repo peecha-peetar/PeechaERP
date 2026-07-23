@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import datetime
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QDateEdit,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,8 +16,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import fiscal_years as fiscal_years_service
+from peecha.ui.widgets import JalaliDateEdit
 
 _COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
 
@@ -68,14 +67,12 @@ class FiscalYearsScreen(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        hint = QLabel("یک تاریخِ دلخواه در سالِ موردنظر را انتخاب کنید — بازه‌ی کامل خودکار محاسبه می‌شود.")
+        hint = QLabel("یک تاریخِ دلخواهِ شمسی در سالِ موردنظر را وارد کنید — بازه‌ی کامل خودکار محاسبه می‌شود.")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.date_field = QDateEdit()
-        self.date_field.setCalendarPopup(True)
-        self.date_field.setDate(datetime.date.today())
+        self.date_field = JalaliDateEdit()
         layout.addWidget(self.date_field)
 
         self.status_label = QLabel("")
@@ -102,9 +99,9 @@ class FiscalYearsScreen(QWidget):
         for row_index, fy in enumerate(self._rows):
             values = [
                 "بسته" if fy.is_closed else "باز",
-                fy.end_date.isoformat(),
-                fy.start_date.isoformat(),
-                fy.code,
+                numerals.format_jalali_date(fy.end_date),
+                numerals.format_jalali_date(fy.start_date),
+                numerals.to_persian_digits(fy.code),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -136,8 +133,7 @@ class FiscalYearsScreen(QWidget):
             self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
             return
         company = app_session.current_company
-        qdate = self.date_field.date()
-        on_date = datetime.date(qdate.year(), qdate.month(), qdate.day())
+        on_date = self.date_field.date()
         try:
             fiscal_years_service.create_fiscal_year_for_date(
                 company_id, company.fiscal_year_start_month, company.fiscal_year_start_day, on_date
