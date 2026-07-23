@@ -39,13 +39,19 @@ def _register_font() -> str:
     واقعی‌اش را برمی‌گرداند؛ وگرنه فونتِ پیش‌فرضِ سیستم را نگه می‌دارد —
     برخلافِ Kivy، Qt خودش برایِ گلیفِ فارسی به فونتِ سیستم (که معمولاً
     پشتیبانی دارد) بازمی‌گردد، پس نبودِ این فونت اینجا کرش/جعبه‌ی خالی
-    نمی‌سازد، فقط ظاهرِ فونت را عوض می‌کند."""
+    نمی‌سازد، فقط ظاهرِ فونت را عوض می‌کند.
+
+    نکته‌ی مهم: فایلِ اسمی «Vazirmatn-Regular.ttf» ممکن است در واقع یک
+    فونتِ دیگر باشد (مثلاً یک placeholder اشتباهاً commit‌شده) — نامِ
+    خانواده‌ای که QFontDatabase برمی‌گرداند را با «vazir» چک می‌کنیم؛
+    اگر مطابقت نداشت، آن را نادیده می‌گیریم تا یک فونتِ اشتباه/غیرِفارسی
+    بی‌صدا جایِ Vazirmatn را نگیرد."""
     if os.path.exists(_VAZIRMATN_REGULAR):
         font_id = QFontDatabase.addApplicationFont(_VAZIRMATN_REGULAR)
         if os.path.exists(_VAZIRMATN_BOLD):
             QFontDatabase.addApplicationFont(_VAZIRMATN_BOLD)
         families = QFontDatabase.applicationFontFamilies(font_id)
-        if families:
+        if families and "vazir" in families[0].lower():
             return families[0]
     return "Tahoma"
 
@@ -60,7 +66,10 @@ def main() -> None:
 
     font_family = get_font_family()
     app.setFont(QFont(font_family, 10.5))
-    app.setStyleSheet(theme.GLOBAL_QSS)
+    # علاوه بر QApplication.setFont، فونت را صریحاً در QSS هم می‌گذاریم —
+    # بعضی کنترل‌های استایل‌شده (مثلِ سرستونِ جدول) به‌طورِ قابلِ‌اتکا فقط
+    # به font-family در stylesheet واکنش نشان می‌دهند، نه setFont برنامه.
+    app.setStyleSheet(f'* {{ font-family: "{font_family}"; }}\n' + theme.GLOBAL_QSS)
 
     from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
 

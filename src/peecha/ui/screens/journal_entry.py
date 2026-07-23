@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -50,6 +51,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -420,7 +422,16 @@ class JournalEntryScreen(QWidget):
         self._editing_journal_entry_id: int | None = None
         self._editing_registration_at: datetime.datetime | None = None
 
-        outer = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        # نکته: کلِ صفحه در یک QScrollArea قرار می‌گیرد — وگرنه اگر پنجره
+        # کوچک باشد یا ردیف‌ها زیاد شوند، فوتر (شاملِ دکمه‌ی ذخیره) بدونِ
+        # هیچ راهی برایِ اسکرول‌کردن، خارج از دیدرس می‌ماند (باگی که گزارش شد).
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        outer = QVBoxLayout(content)
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(12)
 
@@ -476,16 +487,24 @@ class JournalEntryScreen(QWidget):
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setDefaultSectionSize(44)
+        self.table.setMinimumHeight(160)
         header = self.table.horizontalHeader()
+        # طبقِ بازخورد: حساب/تفصیلی نباید غالب/بزرگ‌تر از بقیه باشند —
+        # عرضِ ثابتِ متعادل می‌گیرند؛ شرحِ ردیف (تنها ستونِ Stretch) بیشترین
+        # فضا را می‌گیرد؛ بدهکار/بستانکار عرضِ ثابتِ بزرگ‌تر برایِ خوانایی.
         header.setSectionResizeMode(_COL_ROW_NO, QHeaderView.Fixed)
-        header.setSectionResizeMode(_COL_ACCOUNT, QHeaderView.Stretch)
-        header.setSectionResizeMode(_COL_PERSON, QHeaderView.Stretch)
+        header.setSectionResizeMode(_COL_ACCOUNT, QHeaderView.Interactive)
+        header.setSectionResizeMode(_COL_PERSON, QHeaderView.Interactive)
         header.setSectionResizeMode(_COL_DESC, QHeaderView.Stretch)
-        header.setSectionResizeMode(_COL_DEBIT, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(_COL_CREDIT, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(_COL_DEBIT, QHeaderView.Interactive)
+        header.setSectionResizeMode(_COL_CREDIT, QHeaderView.Interactive)
         header.setSectionResizeMode(_COL_DIMENSIONS, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(_COL_REMOVE, QHeaderView.Fixed)
         self.table.setColumnWidth(_COL_ROW_NO, 44)
+        self.table.setColumnWidth(_COL_ACCOUNT, 220)
+        self.table.setColumnWidth(_COL_PERSON, 190)
+        self.table.setColumnWidth(_COL_DEBIT, 140)
+        self.table.setColumnWidth(_COL_CREDIT, 140)
         self.table.setColumnWidth(_COL_REMOVE, 40)
         table_card_layout.addWidget(self.table)
         outer.addWidget(table_card, stretch=1)
@@ -525,6 +544,9 @@ class JournalEntryScreen(QWidget):
         footer.addWidget(new_button)
 
         outer.addLayout(footer)
+
+        scroll.setWidget(content)
+        root_layout.addWidget(scroll)
 
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save)
         QShortcut(QKeySequence("Escape"), self, activated=self._reset_form)
@@ -582,14 +604,16 @@ class JournalEntryScreen(QWidget):
 
     def focus_next_row_after(self, row: _LineRow) -> None:
         """زنجیره‌ی Enter: بستانکار (یا بدهکارِ پرشده) -> ردیفِ بعدی؛ اگر
-        ردیفِ بعدی وجود نداشته باشد، تازه ساخته می‌شود (با شرحِ همان ردیف،
-        تا لازم نباشد دوباره تایپ شود) — رفتارِ صفحه‌کلید-محورِ Kivy."""
+        ردیفِ بعدی وجود نداشته باشد، تازه ساخته می‌شود. شرحِ ردیف همیشه
+        (چه ردیفِ بعدی موجود باشد چه تازه ساخته شود) به ردیفِ بعدی منتقل
+        می‌شود — تا لازم نباشد دوباره تایپ شود."""
+        description = row.description_field.text()
         if row is self._line_rows[-1]:
-            description = row.description_field.text()
             target = self.add_line()
-            target.description_field.setText(description)
         else:
             target = self._line_rows[self._line_rows.index(row) + 1]
+        if description and not target.description_field.text():
+            target.description_field.setText(description)
         self.table.setCurrentCell(self._line_rows.index(target), _COL_ACCOUNT)
         target.account_combo.setFocus()
         target.account_combo.lineEdit().selectAll()

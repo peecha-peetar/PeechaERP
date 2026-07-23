@@ -148,8 +148,8 @@ QLabel#avatarBadge {{
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     background-color: {HOVER};
     border: 1.5px solid {BORDER};
-    border-radius: 11px;
-    padding: 9px 14px;
+    border-radius: 4px;
+    padding: 8px 10px;
     font-size: 13px;
     color: {TEXT_PRIMARY};
     selection-background-color: {ACCENT};
@@ -351,6 +351,28 @@ QTreeWidget#sidebar::branch {{
 QWidget#headerBar {{
     background-color: {SURFACE};
     border-bottom: 1px solid {DIVIDER};
+}}
+
+/* --- ریبون (میان‌برهایِ گروهِ فعال، زیرِ هدر) ------------------------------- */
+QWidget#ribbonBar {{
+    background-color: {SURFACE};
+    border-bottom: 1px solid {DIVIDER};
+}}
+QPushButton#ribbonButton {{
+    background-color: transparent;
+    color: {TEXT_SECONDARY};
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-weight: 600;
+    font-size: 12px;
+    border: none;
+}}
+QPushButton#ribbonButton:hover {{
+    background-color: {HOVER};
+}}
+QPushButton#ribbonButton[active="true"] {{
+    background-color: {SELECTED};
+    color: {ACCENT};
 }}
 
 QCheckBox {{
