@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
 
 PRIMARY = "#14173A"
@@ -89,6 +90,20 @@ def avatar_color_for(text: str) -> str:
     if not text:
         return ACCENT
     return AVATAR_COLORS[sum(ord(ch) for ch in text) % len(AVATAR_COLORS)]
+
+
+def emoji_icon(glyph: str, size: int = 22) -> QIcon:
+    """رندرِ یک ایموجی/گلیف به QIcon — بدونِ نیازِ به فایلِ آیکونِ خارجی؛
+    برایِ نوارِ کناری در حالتِ جمع‌شده (فقط-آیکون) استفاده می‌شود."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    font = painter.font()
+    font.setPixelSize(int(size * 0.72))
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+    painter.end()
+    return QIcon(pixmap)
 
 
 GLOBAL_QSS = f"""
@@ -288,6 +303,19 @@ QListWidget::item:hover {{
 }}
 
 /* --- نوارِ کناری (درختِ ناوبری) ------------------------------------------- */
+QWidget#sidebarContainer {{
+    background-color: {PRIMARY};
+}}
+QPushButton#sidebarToggle {{
+    background-color: transparent;
+    color: rgba(255, 255, 255, 0.85);
+    border-radius: 8px;
+    font-size: 15px;
+    padding: 0px;
+}}
+QPushButton#sidebarToggle:hover {{
+    background-color: {PRIMARY_HOVER};
+}}
 QTreeWidget#sidebar {{
     background-color: {PRIMARY};
     color: rgba(255, 255, 255, 0.78);
