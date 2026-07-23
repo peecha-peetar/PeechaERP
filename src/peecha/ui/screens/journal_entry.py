@@ -16,10 +16,12 @@
 همان ردیف)، و نگه‌داشتنِ ارزِ ردیف‌هایِ موجود (تا ویرایشِ یک سندِ
 چندارزی، ردیف‌هایش را بی‌صدا به ارزِ پایه تبدیل نکند).
 
-نکته: در Kivy، زنجیره‌ی Enter/جستجویِ زنده‌ی حساب/تفصیلی به‌خاطرِ نبودِ
-Tab-order بومی، کدِ دستیِ زیادی لازم داشت. در Qt این‌کار خودکار است:
-QComboBox قابل‌ویرایش+تکمیل‌خودکار جستجویِ زنده می‌دهد و Tab-order بومیِ Qt
-خودش حرکتِ منطقیِ بینِ فیلدها را انجام می‌دهد.
+زنجیره‌ی Enter (طبقِ درخواستِ صریح، تمامِ فرم را پوشش می‌دهد):
+تاریخ -> شرحِ سند -> شماره‌ی عطف -> حسابِ ردیفِ اول -> تفصیلی (اگر
+حساب بپذیرد) -> [پنجره‌ی ابعادِ دیگر مثلِ مرکزِ هزینه/پروژه به‌طورِ
+خودکار باز می‌شود اگر حساب نیاز داشته باشد] -> شرحِ ردیف -> بدهکار ->
+(اگر بدهکار صفر باشد) بستانکار -> ردیفِ بعدی (اگر نبود، ساخته می‌شود).
+هر بار که صفحه از سایدبار باز شود، فوکوس دوباره رویِ تاریخ می‌رود.
 
 ساده‌سازیِ عمدیِ این مرحله از مهاجرت: ردیفِ *تازه* با ارزِ پایه‌ی شرکت
 ثبت می‌شود (بدونِ انتخابِ ارز/نرخِ اختصاصی) — ردیف‌هایی که از یک سندِ
@@ -216,26 +218,28 @@ class _LineRow:
 
         self.account_combo = _make_searchable_combo(screen.account_options)
         self.account_combo.currentIndexChanged.connect(self._on_account_changed)
+        self.account_combo.lineEdit().returnPressed.connect(self._on_account_return)
 
         self.person_combo = _make_searchable_combo([])
+        self.person_combo.lineEdit().returnPressed.connect(self._on_person_return)
 
         self.description_field = QLineEdit()
         self._attach_description_completer()
-        self.description_field.returnPressed.connect(lambda: screen.maybe_add_row_after(self))
+        self.description_field.returnPressed.connect(lambda: self.debit_field.setFocus())
 
         self.debit_field = QDoubleSpinBox()
         self.debit_field.setRange(0, 10**12)
         self.debit_field.setGroupSeparatorShown(True)
         self.debit_field.setDecimals(0)
         self.debit_field.valueChanged.connect(self._on_debit_changed)
-        self.debit_field.lineEdit().returnPressed.connect(lambda: screen.maybe_add_row_after(self))
+        self.debit_field.lineEdit().returnPressed.connect(self._on_debit_return)
 
         self.credit_field = QDoubleSpinBox()
         self.credit_field.setRange(0, 10**12)
         self.credit_field.setGroupSeparatorShown(True)
         self.credit_field.setDecimals(0)
         self.credit_field.valueChanged.connect(self._on_credit_changed)
-        self.credit_field.lineEdit().returnPressed.connect(lambda: screen.maybe_add_row_after(self))
+        self.credit_field.lineEdit().returnPressed.connect(lambda: screen.focus_next_row_after(self))
 
         # نکته: به‌جایِ setVisible(False/True)، از enabled+متن استفاده
         # می‌کنیم — چون QTableWidget هر بارِ محاسبه‌ی geometryِ ادیتورها
@@ -296,6 +300,35 @@ class _LineRow:
     def _on_account_changed(self, _index: int) -> None:
         self.account_id = self.account_combo.currentData()
         self._refresh_dimension_ui()
+
+    def _on_account_return(self) -> None:
+        """زنجیره‌ی Enter: حساب -> تفصیلی (اگر حسابی انتخاب شده باشد)."""
+        if self.account_id is None:
+            return
+        self.person_combo.setFocus()
+        self.person_combo.lineEdit().selectAll()
+
+    def _on_person_return(self) -> None:
+        """زنجیره‌ی Enter: تفصیلی -> (اگر ابعادِ دیگری مثلِ مرکزِ هزینه/
+        پروژه هم لازم باشد) پنجره‌ی ابعاد به‌طورِ خودکار باز می‌شود -> شرحِ
+        ردیف."""
+        if self._required_dimensions and not self._extra_dimensions_complete():
+            self._open_dimensions_dialog()
+        self.description_field.setFocus()
+        self.description_field.selectAll()
+
+    def _extra_dimensions_complete(self) -> bool:
+        required_ids = {d.dimension_type_id for d in self._required_dimensions}
+        return required_ids <= set(self._extra_dimension_values.keys())
+
+    def _on_debit_return(self) -> None:
+        """زنجیره‌ی Enter: اگر بدهکار صفر/خالی بماند برو به بستانکار، وگرنه
+        (چون ردیف بدهکار پر شده) مستقیم به ردیفِ بعدی."""
+        if self.debit_field.value() == 0:
+            self.credit_field.setFocus()
+            self.credit_field.lineEdit().selectAll()
+        else:
+            self._screen.focus_next_row_after(self)
 
     def _refresh_dimension_ui(self) -> None:
         if self.account_id is None:
@@ -409,16 +442,21 @@ class JournalEntryScreen(QWidget):
         self.date_field = _JalaliDateEdit()
         header_layout.addWidget(self.date_field, 1, 1)
 
-        header_layout.addWidget(QLabel("شماره‌ی عطف"), 1, 2)
-        self.alt_number_field = QLineEdit()
-        header_layout.addWidget(self.alt_number_field, 1, 3)
-
-        header_layout.addWidget(QLabel("شرحِ سند"), 2, 0)
+        header_layout.addWidget(QLabel("شرحِ سند"), 1, 2)
         self.description_field = QLineEdit()
-        header_layout.addWidget(self.description_field, 2, 1, 1, 2)
+        header_layout.addWidget(self.description_field, 1, 3)
+
+        header_layout.addWidget(QLabel("شماره‌ی عطف"), 2, 0)
+        self.alt_number_field = QLineEdit()
+        header_layout.addWidget(self.alt_number_field, 2, 1)
 
         self.draft_checkbox = QCheckBox("پیش‌نویس (نامتعادل هم قابلِ‌ذخیره)")
         header_layout.addWidget(self.draft_checkbox, 2, 3)
+
+        # زنجیره‌ی Enter در هدر: تاریخ -> شرحِ سند -> شماره‌ی عطف -> ردیفِ اول.
+        self.date_field.returnPressed.connect(lambda: self.description_field.setFocus())
+        self.description_field.returnPressed.connect(lambda: self.alt_number_field.setFocus())
+        self.alt_number_field.returnPressed.connect(self._focus_first_row_account)
 
         outer.addWidget(header_card)
 
@@ -503,6 +541,10 @@ class JournalEntryScreen(QWidget):
         self.recent_line_descriptions = je_service.list_recent_line_descriptions(self.company_id)
         if not self._line_rows:
             self._reset_form()
+        # هر بار که این صفحه (از سایدبار) باز می‌شود، فوکوس رویِ تاریخ
+        # می‌رود — شروعِ زنجیره‌ی Enter از اولین فیلد.
+        self.date_field.setFocus()
+        self.date_field.selectAll()
 
     def _reset_form(self) -> None:
         self._editing_journal_entry_id = None
@@ -538,17 +580,25 @@ class JournalEntryScreen(QWidget):
         self._renumber_rows()
         return row
 
-    def maybe_add_row_after(self, row: _LineRow) -> None:
-        """اگر Enter در آخرین ردیف زده شود، ردیفِ تازه‌ای اضافه و شرحِ همان
-        ردیف را در آن کپی می‌کند تا لازم نباشد دوباره تایپ شود — دقیقاً
-        رفتارِ صفحه‌کلید-محورِ نسخه‌ی Kivy."""
-        if row is not self._line_rows[-1]:
-            return
-        description = row.description_field.text()
-        new_row = self.add_line()
-        new_row.description_field.setText(description)
-        self.table.setCurrentCell(len(self._line_rows) - 1, _COL_ACCOUNT)
-        new_row.account_combo.setFocus()
+    def focus_next_row_after(self, row: _LineRow) -> None:
+        """زنجیره‌ی Enter: بستانکار (یا بدهکارِ پرشده) -> ردیفِ بعدی؛ اگر
+        ردیفِ بعدی وجود نداشته باشد، تازه ساخته می‌شود (با شرحِ همان ردیف،
+        تا لازم نباشد دوباره تایپ شود) — رفتارِ صفحه‌کلید-محورِ Kivy."""
+        if row is self._line_rows[-1]:
+            description = row.description_field.text()
+            target = self.add_line()
+            target.description_field.setText(description)
+        else:
+            target = self._line_rows[self._line_rows.index(row) + 1]
+        self.table.setCurrentCell(self._line_rows.index(target), _COL_ACCOUNT)
+        target.account_combo.setFocus()
+        target.account_combo.lineEdit().selectAll()
+
+    def _focus_first_row_account(self) -> None:
+        if self._line_rows:
+            self.table.setCurrentCell(0, _COL_ACCOUNT)
+            self._line_rows[0].account_combo.setFocus()
+            self._line_rows[0].account_combo.lineEdit().selectAll()
 
     def remove_line(self, row: _LineRow, *, force: bool = False) -> None:
         if not force and len(self._line_rows) <= 2:
