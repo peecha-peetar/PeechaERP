@@ -33,7 +33,7 @@ import datetime
 import decimal
 import re
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -42,7 +42,6 @@ from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -64,7 +63,7 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
-from peecha.ui import numerals
+from peecha import numerals
 
 _COL_ROW_NO = 0
 _COL_ACCOUNT = 1
@@ -102,42 +101,120 @@ def _normalize_typed_digits(combo: QComboBox, text: str) -> None:
         line_edit.setCursorPosition(cursor)
 
 
-def _live_group_amount(spin: QDoubleSpinBox) -> None:
-    """گروه‌بندیِ سه‌رقمیِ زنده حینِ تایپ — QDoubleSpinBox حتی با
-    setGroupSeparatorShown(True) فقط *بعدِ* تأیید/ازدست‌دادنِ فوکوس
-    گروه‌بندی می‌کند، نه حینِ خودِ تایپ؛ این تابع با هر تغییرِ متن (اگر
-    اعشار نداشته باشد) دوباره ویرگول‌ها را می‌گذارد و مکان‌نما را متناسب
-    نگه می‌دارد."""
-    line_edit = spin.lineEdit()
-    text = line_edit.text()
-    if "." in text:
-        return
-    cursor = line_edit.cursorPosition()
-    raw_digits = re.sub(r"[^0-9]", "", text)
-    if not raw_digits:
-        return
-    digits_before_cursor = len(re.sub(r"[^0-9]", "", text[:cursor]))
-    grouped = f"{int(raw_digits):,}"
-    if grouped == text:
-        return
-    new_cursor = len(grouped)
-    seen_digits = 0
-    for i, ch in enumerate(grouped):
-        if ch.isdigit():
-            seen_digits += 1
-        if seen_digits >= digits_before_cursor:
-            new_cursor = i + 1
-            break
-    line_edit.setText(grouped)
-    line_edit.setCursorPosition(new_cursor)
-
-
 def _clear_if_unmatched(combo: QComboBox) -> None:
     """اگر با ترکِ فیلد، متنِ تایپ‌شده دقیقاً با هیچ گزینه‌ای یکی نباشد،
     انتخاب را به حالتِ خالی برمی‌گرداند — وگرنه ممکن است یک متنِ‌ ناقص/غلط
-    با یک account_id قبلی/نامعتبر همراه بماند و سند به حسابِ اشتباه ثبت شود."""
+    با یک account_id قبلی/نامعتبر همراه بماند و سند به حسابِ اشتباه ثبت شود.
+
+    نکته: مکان‌نما همیشه به ابتدایِ متن برمی‌گردد — وگرنه فیلد رویِ آخرِ
+    متنِ تایپ‌شده اسکرول‌شده می‌ماند و شروعِ برچسبِ حساب/تفصیلی (که معمولاً
+    مهم‌تر است) دیده نمی‌شود."""
     if combo.findText(combo.currentText(), Qt.MatchExactly) < 0:
         combo.setCurrentIndex(0)
+    combo.lineEdit().setCursorPosition(0)
+
+
+class _AmountField(QLineEdit):
+    """فیلدِ مبلغ با ارقامِ فارسیِ زنده + گروه‌بندیِ سه‌رقمی — جایگزینِ
+    QDoubleSpinBox که همیشه ارقامِ ASCII نشان می‌داد (حتی با زبانِ فارسی)
+    و فقط بعدِ تأیید/ازدست‌دادنِ فوکوس گروه‌بندی می‌کرد، نه حینِ تایپ.
+
+    رابطِ (.value/.setValue/.valueChanged) با QDoubleSpinBoxِ قبلی سازگار
+    نگه داشته شده تا محلِ استفاده تغییرِ کمی نیاز داشته باشد."""
+
+    valueChanged = Signal(float)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._value = 0.0
+        self._decimals = 0
+        self.setAlignment(Qt.AlignCenter)
+        self._set_display()
+        self.textEdited.connect(self._on_text_edited)
+        self.editingFinished.connect(self._set_display)
+
+    def setDecimals(self, decimals: int) -> None:
+        self._decimals = decimals
+        self._set_display()
+
+    def setRange(self, _minimum: float, _maximum: float) -> None:
+        pass  # فقط برایِ سازگاریِ رابط؛ این فیلد مقدارِ منفی تولید نمی‌کند.
+
+    def setGroupSeparatorShown(self, _shown: bool) -> None:
+        pass  # این فیلد همیشه گروه‌بندی‌شده نمایش می‌دهد.
+
+    def value(self) -> float:
+        return self._value
+
+    def setValue(self, value: float) -> None:
+        value = float(value)
+        changed = value != self._value
+        self._value = value
+        self._set_display()
+        if changed:
+            self.valueChanged.emit(self._value)
+
+    def _quantize(self, value: float) -> decimal.Decimal:
+        quant = decimal.Decimal(1).scaleb(-self._decimals) if self._decimals else decimal.Decimal(1)
+        return decimal.Decimal(str(value)).quantize(quant, rounding=decimal.ROUND_HALF_UP)
+
+    def _format(self, value: float) -> str:
+        quantized = self._quantize(value)
+        text = f"{quantized:,.{self._decimals}f}" if self._decimals else f"{int(quantized):,}"
+        return numerals.to_persian_digits(text)
+
+    def _set_display(self) -> None:
+        self.blockSignals(True)
+        self.setText(self._format(self._value))
+        self.setCursorPosition(0)
+        self.blockSignals(False)
+
+    def _on_text_edited(self, text: str) -> None:
+        cursor = self.cursorPosition()
+        ascii_text = numerals.to_ascii_digits(text)
+        digits_before_cursor = len(re.sub(r"[^0-9]", "", ascii_text[:cursor]))
+        raw = re.sub(r"[^0-9.]", "", ascii_text)
+        if self._decimals == 0:
+            raw = raw.replace(".", "")
+        elif raw.count(".") > 1:
+            first, rest = raw.split(".", 1)
+            raw = first + "." + rest.replace(".", "")
+
+        if raw in ("", "."):
+            self._value = 0.0
+            grouped = raw
+        else:
+            if "." in raw:
+                int_part, frac_part = raw.split(".", 1)
+                frac_part = frac_part[: self._decimals]
+            else:
+                int_part, frac_part = raw, None
+            int_part = int_part.lstrip("0") or "0"
+            grouped = f"{int(int_part):,}"
+            if frac_part is not None:
+                grouped += "." + frac_part
+            elif raw.endswith("."):
+                grouped += "."
+            self._value = float(raw) if raw not in ("", ".") else 0.0
+
+        if digits_before_cursor == 0:
+            new_cursor = 0
+        else:
+            new_cursor = len(grouped)
+            seen_digits = 0
+            for i, ch in enumerate(grouped):
+                if ch.isdigit():
+                    seen_digits += 1
+                if seen_digits >= digits_before_cursor:
+                    new_cursor = i + 1
+                    break
+
+        persian = numerals.to_persian_digits(grouped)
+        self.blockSignals(True)
+        self.setText(persian)
+        self.setCursorPosition(new_cursor)
+        self.blockSignals(False)
+        self.valueChanged.emit(self._value)
 
 
 def _make_searchable_combo(options: list[tuple[int, str]]) -> QComboBox:
@@ -165,6 +242,7 @@ class _JalaliDateEdit(QLineEdit):
 
     def _refresh_text(self) -> None:
         self.setText(numerals.format_jalali_date(self._date))
+        self.setCursorPosition(0)
 
     def _on_text_edited(self, text: str) -> None:
         converted = numerals.to_persian_digits(numerals.to_ascii_digits(text))
@@ -260,22 +338,17 @@ class _LineRow:
         self.description_field = QLineEdit()
         self._attach_description_completer()
         self.description_field.returnPressed.connect(lambda: self.debit_field.setFocus())
+        self.description_field.editingFinished.connect(lambda: self.description_field.setCursorPosition(0))
 
-        self.debit_field = QDoubleSpinBox()
-        self.debit_field.setRange(0, 10**12)
-        self.debit_field.setGroupSeparatorShown(True)
+        self.debit_field = _AmountField()
         self.debit_field.setDecimals(screen.currency_decimal_places)
         self.debit_field.valueChanged.connect(self._on_debit_changed)
-        self.debit_field.lineEdit().returnPressed.connect(self._on_debit_return)
-        self.debit_field.lineEdit().textEdited.connect(lambda _t, s=self.debit_field: _live_group_amount(s))
+        self.debit_field.returnPressed.connect(self._on_debit_return)
 
-        self.credit_field = QDoubleSpinBox()
-        self.credit_field.setRange(0, 10**12)
-        self.credit_field.setGroupSeparatorShown(True)
+        self.credit_field = _AmountField()
         self.credit_field.setDecimals(screen.currency_decimal_places)
         self.credit_field.valueChanged.connect(self._on_credit_changed)
-        self.credit_field.lineEdit().returnPressed.connect(lambda: screen.focus_next_row_after(self))
-        self.credit_field.lineEdit().textEdited.connect(lambda _t, s=self.credit_field: _live_group_amount(s))
+        self.credit_field.returnPressed.connect(lambda: screen.focus_next_row_after(self))
 
         # نکته: به‌جایِ setVisible(False/True)، از enabled+متن استفاده
         # می‌کنیم — چون QTableWidget هر بارِ محاسبه‌ی geometryِ ادیتورها
@@ -366,7 +439,7 @@ class _LineRow:
         (چون ردیف بدهکار پر شده) مستقیم به ردیفِ بعدی."""
         if self.debit_field.value() == 0:
             self.credit_field.setFocus()
-            self.credit_field.lineEdit().selectAll()
+            self.credit_field.selectAll()
         else:
             self._screen.focus_next_row_after(self)
 
@@ -430,6 +503,7 @@ class _LineRow:
             self.account_combo.addItem(account_label, line.account_id)
             index = self.account_combo.count() - 1
         self.account_combo.setCurrentIndex(index)
+        self.account_combo.lineEdit().setCursorPosition(0)
         self.account_id = line.account_id
         self.currency_id = line.currency_id
         self.exchange_rate = line.exchange_rate
@@ -444,8 +518,10 @@ class _LineRow:
             idx = self.person_combo.findData(person_detail_id)
             if idx >= 0:
                 self.person_combo.setCurrentIndex(idx)
+        self.person_combo.lineEdit().setCursorPosition(0)
 
         self.description_field.setText(line.description or "")
+        self.description_field.setCursorPosition(0)
         self.debit_field.setValue(float(line.debit))
         self.credit_field.setValue(float(line.credit))
 
@@ -462,6 +538,9 @@ class JournalEntryScreen(QWidget):
         self._line_rows: list[_LineRow] = []
         self._editing_journal_entry_id: int | None = None
         self._editing_registration_at: datetime.datetime | None = None
+        # widget -> (ردیف، نامِ فیلد) — برایِ ناوبریِ کلیدهایِ بالا/پایین
+        # بینِ ردیف‌هایِ سند.
+        self._nav_widgets: dict[QWidget, tuple[_LineRow, str]] = {}
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -492,23 +571,35 @@ class JournalEntryScreen(QWidget):
 
         header_layout.addWidget(QLabel("تاریخِ سند"), 1, 0)
         self.date_field = _JalaliDateEdit()
+        self.date_field.setMaximumWidth(140)
         header_layout.addWidget(self.date_field, 1, 1)
 
         header_layout.addWidget(QLabel("شرحِ سند"), 1, 2)
         self.description_field = QLineEdit()
+        self.description_field.setMinimumWidth(280)
         header_layout.addWidget(self.description_field, 1, 3)
 
         header_layout.addWidget(QLabel("شماره‌ی عطف"), 2, 0)
         self.alt_number_field = QLineEdit()
+        self.alt_number_field.setMaximumWidth(140)
         header_layout.addWidget(self.alt_number_field, 2, 1)
 
-        self.draft_checkbox = QCheckBox("پیش‌نویس (نامتعادل هم قابلِ‌ذخیره)")
+        self.draft_checkbox = QCheckBox("پیش‌نویس (غیرِتراز هم قابلِ‌ذخیره)")
         header_layout.addWidget(self.draft_checkbox, 2, 3)
+
+        # ستونِ شرحِ سند (۳) بیشترینِ فضایِ اضافه را می‌گیرد — طبقِ بازخورد،
+        # تاریخ/شماره‌یِ عطف (ستونِ ۱) عرضِ کوچکِ ثابت کافی است.
+        header_layout.setColumnStretch(0, 0)
+        header_layout.setColumnStretch(1, 0)
+        header_layout.setColumnStretch(2, 0)
+        header_layout.setColumnStretch(3, 1)
 
         # زنجیره‌ی Enter در هدر: تاریخ -> شرحِ سند -> شماره‌ی عطف -> ردیفِ اول.
         self.date_field.returnPressed.connect(lambda: self.description_field.setFocus())
         self.description_field.returnPressed.connect(lambda: self.alt_number_field.setFocus())
         self.alt_number_field.returnPressed.connect(self._focus_first_row_account)
+        self.description_field.editingFinished.connect(lambda: self.description_field.setCursorPosition(0))
+        self.alt_number_field.editingFinished.connect(lambda: self.alt_number_field.setCursorPosition(0))
 
         outer.addWidget(header_card)
 
@@ -649,8 +740,70 @@ class JournalEntryScreen(QWidget):
         row.install(self.table.rowCount() - 1)
         row._refresh_dimension_ui()
         self._line_rows.append(row)
+        self._register_row_nav(row)
         self._renumber_rows()
         return row
+
+    def _register_row_nav(self, row: _LineRow) -> None:
+        """کلیدهایِ بالا/پایین را رویِ فیلدهایِ این ردیف قابل‌شنیدن می‌کند
+        تا بشود بینِ ردیف‌هایِ پرشده جابه‌جا شد (طبقِ بازخورد)."""
+        self._register_nav_widget(row.account_combo.lineEdit(), row, "account")
+        self._register_nav_widget(row.person_combo.lineEdit(), row, "person")
+        self._register_nav_widget(row.description_field, row, "description")
+        self._register_nav_widget(row.debit_field, row, "debit")
+        self._register_nav_widget(row.credit_field, row, "credit")
+
+    def _register_nav_widget(self, widget: QWidget, row: _LineRow, field: str) -> None:
+        self._nav_widgets[widget] = (row, field)
+        widget.installEventFilter(self)
+
+    def _unregister_row_nav(self, row: _LineRow) -> None:
+        for widget in (
+            row.account_combo.lineEdit(),
+            row.person_combo.lineEdit(),
+            row.description_field,
+            row.debit_field,
+            row.credit_field,
+        ):
+            self._nav_widgets.pop(widget, None)
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Up, Qt.Key_Down):
+            entry = self._nav_widgets.get(obj)
+            if entry is not None:
+                row, field = entry
+                # اگر پاپ‌آپِ تکمیلِ خودکار (رویِ همین فیلد) باز است، بالا/
+                # پایین باید بینِ گزینه‌هایِ آن پاپ‌آپ حرکت کند، نه بینِ ردیف‌ها.
+                completer = obj.completer()
+                popup_open = completer is not None and completer.popup().isVisible()
+                if not popup_open:
+                    direction = -1 if event.key() == Qt.Key_Up else 1
+                    self._move_row_focus(row, field, direction)
+                    return True
+        return super().eventFilter(obj, event)
+
+    def _move_row_focus(self, row: _LineRow, field: str, direction: int) -> None:
+        index = self._line_rows.index(row)
+        target_index = index + direction
+        if not (0 <= target_index < len(self._line_rows)):
+            return
+        target_row = self._line_rows[target_index]
+        column = {
+            "account": _COL_ACCOUNT,
+            "person": _COL_PERSON,
+            "description": _COL_DESC,
+            "debit": _COL_DEBIT,
+            "credit": _COL_CREDIT,
+        }[field]
+        self.table.setCurrentCell(target_index, column)
+        if field in ("account", "person"):
+            widget = target_row.account_combo if field == "account" else target_row.person_combo
+            widget.setFocus()
+            widget.lineEdit().selectAll()
+        else:
+            widget = getattr(target_row, f"{field}_field")
+            widget.setFocus()
+            widget.selectAll()
 
     def focus_next_row_after(self, row: _LineRow) -> None:
         """زنجیره‌ی Enter: بستانکار (یا بدهکارِ پرشده) -> ردیفِ بعدی؛ اگر
@@ -670,6 +823,7 @@ class JournalEntryScreen(QWidget):
             target = self._line_rows[self._line_rows.index(row) + 1]
         if description and not target.description_field.text():
             target.description_field.setText(description)
+            target.description_field.setCursorPosition(0)
         self.table.setCurrentCell(self._line_rows.index(target), _COL_ACCOUNT)
         target.account_combo.setFocus()
         target.account_combo.lineEdit().selectAll()
@@ -686,6 +840,7 @@ class JournalEntryScreen(QWidget):
         index = self._line_rows.index(row)
         self.table.removeRow(index)
         self._line_rows.remove(row)
+        self._unregister_row_nav(row)
         self._renumber_rows()
         self.update_balance()
 
@@ -796,7 +951,9 @@ class JournalEntryScreen(QWidget):
         if summary is not None:
             self.date_field.setDate(summary.document_date)
             self.description_field.setText(summary.description or "")
+            self.description_field.setCursorPosition(0)
             self.alt_number_field.setText(summary.alternative_number or "")
+            self.alt_number_field.setCursorPosition(0)
             self.draft_checkbox.setChecked(summary.status_code == "DRAFT")
 
         for row in list(self._line_rows):

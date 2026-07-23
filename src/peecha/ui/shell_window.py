@@ -28,7 +28,8 @@ from peecha import session
 from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
-from peecha.ui import numerals, theme
+from peecha import numerals
+from peecha.ui import theme
 
 # همان NAV_ITEMS طبقِ shell.py (نسخه‌ی Kivy) — عمداً اینجا هم تکرار شده
 # تا این ماژول به‌هیچ‌وجه کیویی import نکند (هدفِ کلِ این مهاجرت).

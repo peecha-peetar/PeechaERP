@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 import jdatetime
 from sqlalchemy import func, select
 
+from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
@@ -273,8 +274,8 @@ def _resolve_lines(
         total_credit = sum((_base_amount(r.line.credit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
         if total_debit != total_credit:
             raise ValueError(
-                f"سند متعادل نیست: جمع بدهکار (معادلِ ارزِ پایه) {total_debit} "
-                f"با جمع بستانکار {total_credit} برابر نیست."
+                f"سند تراز نیست: جمع بدهکار (معادلِ ارزِ پایه) {numerals.format_amount(total_debit)} "
+                f"با جمع بستانکار {numerals.format_amount(total_credit)} برابر نیست."
             )
 
     return resolved
