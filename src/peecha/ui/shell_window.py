@@ -8,6 +8,7 @@ QTreeWidget/QComboBox به‌طورِ بومی راست‌چین و جهت‌د�
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -16,7 +17,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPushButton,
-    QSizePolicy,
     QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -28,6 +28,7 @@ from peecha import session
 from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
+from peecha.ui import theme
 
 # همان NAV_ITEMS طبقِ shell.py (نسخه‌ی Kivy) — عمداً اینجا هم تکرار شده
 # تا این ماژول به‌هیچ‌وجه کیویی import نکند (هدفِ کلِ این مهاجرت).
@@ -118,13 +119,27 @@ class MainWindow(QMainWindow):
     def _build_header(self) -> QWidget:
         header = QWidget()
         header.setObjectName("headerBar")
-        header.setFixedHeight(64)
+        header.setFixedHeight(68)
         layout = QHBoxLayout(header)
-        layout.setContentsMargins(20, 8, 20, 8)
+        layout.setContentsMargins(24, 8, 24, 8)
         layout.setSpacing(16)
 
+        brand = QLabel("پیچا")
+        brand_font = QFont()
+        brand_font.setPointSize(15)
+        brand_font.setBold(True)
+        brand.setFont(brand_font)
+        brand.setStyleSheet(f"color: {theme.ACCENT};")
+        layout.addWidget(brand)
+
+        divider0 = QFrame()
+        divider0.setFrameShape(QFrame.VLine)
+        divider0.setFixedHeight(24)
+        divider0.setStyleSheet(f"color: {theme.DIVIDER};")
+        layout.addWidget(divider0)
+
         search = QLineEdit()
-        search.setPlaceholderText("جستجو در سیستم...")
+        search.setPlaceholderText("⌕  جستجو در سیستم...")
         search.setFixedWidth(320)
         layout.addWidget(search)
 
@@ -146,9 +161,19 @@ class MainWindow(QMainWindow):
         divider = QFrame()
         divider.setFrameShape(QFrame.VLine)
         divider.setFixedHeight(28)
+        divider.setStyleSheet(f"color: {theme.DIVIDER};")
         layout.addWidget(divider)
 
+        self.avatar_badge = QLabel("")
+        self.avatar_badge.setObjectName("avatarBadge")
+        self.avatar_badge.setFixedSize(32, 32)
+        self.avatar_badge.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.avatar_badge)
+
         self.user_label = QLabel("")
+        user_font = QFont()
+        user_font.setBold(True)
+        self.user_label.setFont(user_font)
         layout.addWidget(self.user_label)
 
         logout_button = QPushButton("خروج")
@@ -170,8 +195,11 @@ class MainWindow(QMainWindow):
     # --- نوارِ کناری --------------------------------------------------------
     def _build_sidebar(self) -> QTreeWidget:
         tree = QTreeWidget()
+        tree.setObjectName("sidebar")
         tree.setHeaderHidden(True)
-        tree.setFixedWidth(260)
+        tree.setFixedWidth(272)
+        tree.setIndentation(14)
+        tree.setUniformRowHeights(True)
         tree.itemClicked.connect(self._on_tree_item_clicked)
 
         for item in NAV_ITEMS:
@@ -246,6 +274,7 @@ class MainWindow(QMainWindow):
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget
         self.stack.addWidget(widget)
+        theme.apply_card_shadows(widget)
 
     def get_screen(self, name: str) -> QWidget | None:
         return self._screens.get(name)
@@ -286,6 +315,12 @@ class MainWindow(QMainWindow):
             session.current_company = companies_service.get_company_model(first.company_id) if first else None
 
         self.user_label.setText(session.current_user.full_name)
+        initial = session.current_user.full_name.strip()[:1] or "؟"
+        self.avatar_badge.setText(initial)
+        avatar_color = theme.avatar_color_for(session.current_user.full_name)
+        self.avatar_badge.setStyleSheet(
+            f"background-color: {avatar_color}; color: white; font-weight: 700; border-radius: 16px;"
+        )
 
         self.company_combo.blockSignals(True)
         self.company_combo.clear()

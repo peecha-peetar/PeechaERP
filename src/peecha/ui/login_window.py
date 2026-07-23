@@ -1,8 +1,7 @@
-"""پنجره‌ی ورود — نمونه‌ی آزمایشیِ Qt6.
+"""پنجره‌ی ورود.
 
 هیچ shape()/reshape/bidi دستی لازم نیست: Qt خودش موتورِ متنِ کاملِ
-bidi/شکل‌دهیِ عربی/فارسی دارد (بر خلافِ Kivy) — همین یکی از دلایلِ اصلیِ
-این آزمایش است."""
+bidi/شکل‌دهیِ عربی/فارسی دارد (بر خلافِ Kivy)."""
 
 from __future__ import annotations
 
@@ -24,47 +23,19 @@ from peecha.db.models.security import UserCompany
 from peecha.ui import theme
 from peecha.services.auth import authenticate
 
+# استایلِ محلی فقط برایِ عناصرِ اختصاصیِ این صفحه (برند/عنوان)؛ کارت،
+# فیلدها و دکمه با objectNameهایِ شناخته‌شده از QSS سراسری (theme.GLOBAL_QSS)
+# استفاده می‌کنند تا هم‌شکلِ بقیه‌ی برنامه باشند.
 _STYLE = f"""
-QWidget#root {{
-    background-color: {theme.BACKGROUND};
-}}
-QWidget#card {{
-    background-color: {theme.SURFACE};
-    border-radius: 16px;
-}}
-QLabel#title {{
-    font-size: 28px;
-    font-weight: bold;
-    color: {theme.TEXT_PRIMARY};
+QLabel#brandTitle {{
+    font-size: 30px;
+    font-weight: 800;
+    color: {theme.ACCENT};
 }}
 QLabel#heading {{
-    font-size: 20px;
-    font-weight: bold;
+    font-size: 18px;
+    font-weight: 700;
     color: {theme.TEXT_PRIMARY};
-}}
-QLabel#status {{
-    color: {theme.DANGER};
-}}
-QLineEdit {{
-    background-color: {theme.HOVER};
-    border: 1px solid {theme.BORDER};
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-size: 14px;
-    color: {theme.TEXT_PRIMARY};
-}}
-QLineEdit:focus {{
-    border: 1px solid {theme.ACCENT};
-}}
-QPushButton#loginButton {{
-    background-color: {theme.ACCENT};
-    color: white;
-    border-radius: 20px;
-    padding: 10px 0px;
-    font-size: 15px;
-}}
-QPushButton#loginButton:hover {{
-    background-color: {theme.ACCENT_HOVER};
 }}
 """
 
@@ -72,8 +43,7 @@ QPushButton#loginButton:hover {{
 class LoginWindow(QWidget):
     def __init__(self, font_family: str) -> None:
         super().__init__()
-        self.setObjectName("root")
-        self.setWindowTitle("پیچا — نمونه‌ی Qt6")
+        self.setWindowTitle("پیچا")
         self.resize(420, 620)
         self.setStyleSheet(_STYLE)
 
@@ -83,14 +53,14 @@ class LoginWindow(QWidget):
         outer.setAlignment(Qt.AlignTop)
 
         title = QLabel("پیچا")
-        title.setObjectName("title")
+        title.setObjectName("brandTitle")
         title.setAlignment(Qt.AlignCenter)
         outer.addWidget(title)
 
         card = QWidget()
         card.setObjectName("card")
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(28, 28, 28, 28)
+        card_layout.setContentsMargins(28, 32, 28, 32)
         card_layout.setSpacing(16)
 
         heading = QLabel("ورود به سیستم")
@@ -107,16 +77,20 @@ class LoginWindow(QWidget):
         card_layout.addWidget(self.password_field)
 
         self.status_label = QLabel("")
-        self.status_label.setObjectName("status")
+        self.status_label.setObjectName("statusError")
         self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setWordWrap(True)
         card_layout.addWidget(self.status_label)
 
         login_button = QPushButton("ورود")
-        login_button.setObjectName("loginButton")
+        login_button.setObjectName("primaryButton")
+        login_button.setMinimumHeight(42)
+        login_button.setCursor(Qt.PointingHandCursor)
         login_button.clicked.connect(self._attempt_login)
         card_layout.addWidget(login_button)
 
         outer.addWidget(card)
+        theme.apply_card_shadows(self)
 
         self.password_field.returnPressed.connect(self._attempt_login)
         self.username_field.setFocus()

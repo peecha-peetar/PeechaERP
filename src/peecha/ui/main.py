@@ -53,9 +53,13 @@ def _register_font() -> str:
 def main() -> None:
     app = QApplication(sys.argv)
     app.setLayoutDirection(Qt.RightToLeft)
+    # سبکِ پایه‌ی Fusion — تخت و یک‌دست رویِ همه‌ی سیستم‌عامل‌ها؛ بر خلافِ
+    # سبکِ بومیِ ویندوز/مک که ظاهرِ کارت/دکمه‌های مدرنِ QSSِ ما را با
+    # جلوه‌های پیش‌فرضِ خودش (سایه/حاشیه‌ی متفاوت) قاطی می‌کند.
+    app.setStyle("Fusion")
 
     font_family = get_font_family()
-    app.setFont(QFont(font_family, 11))
+    app.setFont(QFont(font_family, 10.5))
     app.setStyleSheet(theme.GLOBAL_QSS)
 
     from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
