@@ -618,7 +618,9 @@ class JournalEntryScreen(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.verticalHeader().setDefaultSectionSize(44)
+        # طبقِ بازخورد: ارتفاعِ ردیف ۴۴ کافی نبود — فیلدها (با پدینگ+حاشیه)
+        # حسِ فشرده/نصفه داشتند؛ ۵۲ فضایِ عمودیِ راحت‌تری به متن می‌دهد.
+        self.table.verticalHeader().setDefaultSectionSize(52)
         self.table.setMinimumHeight(160)
         header = self.table.horizontalHeader()
         # طبقِ بازخورد: حساب/تفصیلی نباید غالب/بزرگ‌تر از بقیه باشند —

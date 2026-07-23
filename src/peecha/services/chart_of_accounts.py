@@ -13,9 +13,17 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import AccountCategory, AccountNature, AccountType, ChartOfAccount, JournalEntryLine
+from peecha.db.models.accounting import (
+    AccountCategory,
+    AccountNature,
+    AccountType,
+    ChartOfAccount,
+    ChartOfAccountLevelConfig,
+    JournalEntryLine,
+)
 from peecha.db.models.core import Translation
 from peecha.services import audit as audit_service
+from peecha.services import journal_entries as je_service
 
 MAX_ACCOUNT_LEVEL = 3
 
@@ -75,6 +83,26 @@ def list_postable_accounts(company_id: int) -> list[AccountRow]:
     return [row for row in list_accounts(company_id) if row.is_postable]
 
 
+def _validate_segment_code(session, company_id: int, account_level: int, segment_code: str) -> None:
+    """اگر برایِ این سطح تنظیماتِ رقم/بازه در acc.chart_of_account_level_config
+    وجود داشته باشد (اختیاری)، کدِ واردشده باید دقیقاً همان طول و (اگر بازه
+    هم تنظیم شده) رقمی و در همان بازه باشد. طبقِ درخواستِ صریح، این تنظیمات
+    از ابتدا ست می‌شوند و بعدِ اولین سندِ شرکت دیگر قابلِ‌تغییر نیستند."""
+    level_config = session.get(ChartOfAccountLevelConfig, (company_id, account_level))
+    if level_config is None:
+        return
+    if level_config.code_length is not None and len(segment_code) != level_config.code_length:
+        raise ValueError(f"طولِ کدِ سطحِ {account_level} باید دقیقاً {level_config.code_length} رقم باشد.")
+    if level_config.range_from is not None or level_config.range_to is not None:
+        if not segment_code.isdigit():
+            raise ValueError(f"کدِ سطحِ {account_level} باید رقمی باشد (بازه‌ی از-تا تنظیم شده).")
+        value = int(segment_code)
+        if level_config.range_from is not None and value < level_config.range_from:
+            raise ValueError(f"کدِ سطحِ {account_level} باید حداقل {level_config.range_from} باشد.")
+        if level_config.range_to is not None and value > level_config.range_to:
+            raise ValueError(f"کدِ سطحِ {account_level} باید حداکثر {level_config.range_to} باشد.")
+
+
 def create_account(
     company_id: int,
     segment_code: str,
@@ -105,6 +133,14 @@ def create_account(
                 raise ValueError("حساب سطح معین دیگر نمی‌تواند زیرشاخه بگیرد.")
             account_level = parent.account_level + 1
             full_code = f"{parent.full_code}-{segment_code}"
+
+        # طبقِ درخواستِ صریح: فقط حساب‌هایِ سطحِ آخر (معین) قابلِ ثبتِ سندند —
+        # چون افزودنِ زیرشاخه به سطحِ آخر از قبل مسدود است، این تضمین می‌کند
+        # حساب‌هایِ postable همیشه برگ بمانند.
+        if is_postable and account_level != MAX_ACCOUNT_LEVEL:
+            raise ValueError(f"فقط حساب‌هایِ سطحِ {MAX_ACCOUNT_LEVEL} (معین) می‌توانند قابلِ ثبتِ سند باشند.")
+
+        _validate_segment_code(session, company_id, account_level, segment_code)
 
         account = ChartOfAccount(
             company_id=company_id,
@@ -168,11 +204,23 @@ def update_account(
 ) -> ChartOfAccount:
     """ویرایشِ حساب — عمداً فقط نام/ماهیت/دسته/نوع/قابل‌ثبت‌بودن قابل‌تغییرند؛
     کد و والد (که full_code و سطحِ کل زیردرخت را تعیین می‌کنند) در این
-    نسخه ثابت می‌مانند تا ویرایش نیاز به بازمحاسبه‌ی زنجیره‌ای نداشته باشد."""
+    نسخه ثابت می‌مانند تا ویرایش نیاز به بازمحاسبه‌ی زنجیره‌ای نداشته باشد.
+
+    طبقِ درخواستِ صریح: اگر این حساب حتی یک سطرِ سند داشته باشد، اصلاً
+    قابلِ‌ویرایش نیست (نه فقط کد/والد که از قبل ثابت بودند)."""
     with new_session() as session:
         account = session.get(ChartOfAccount, account_id)
         if account is None or account.company_id != company_id:
             raise ValueError("حساب نامعتبر است.")
+
+        line_count = session.scalar(
+            select(func.count()).select_from(JournalEntryLine).where(JournalEntryLine.account_id == account_id)
+        )
+        if line_count:
+            raise ValueError("این حساب در سندهای حسابداری استفاده شده؛ قابلِ‌ویرایش نیست.")
+
+        if is_postable and account.account_level != MAX_ACCOUNT_LEVEL:
+            raise ValueError(f"فقط حساب‌هایِ سطحِ {MAX_ACCOUNT_LEVEL} (معین) می‌توانند قابلِ ثبتِ سند باشند.")
 
         nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
         category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
@@ -276,4 +324,75 @@ def delete_account(account_id: int, company_id: int, changed_by_user_id: int | N
             )
         )
         session.delete(account)
+        session.commit()
+
+
+def account_has_posted_lines(account_id: int) -> bool:
+    """برایِ UI: پیش از تلاشِ ذخیره، فرم را غیرفعال کند اگر این حساب سند
+    دارد — منبعِ حقیقتِ نهایی همچنان چکِ داخلِ update_account است."""
+    with new_session() as session:
+        return (
+            session.scalar(
+                select(func.count()).select_from(JournalEntryLine).where(JournalEntryLine.account_id == account_id)
+            )
+            > 0
+        )
+
+
+@dataclass
+class AccountLevelConfigRow:
+    account_level: int
+    code_length: int | None
+    range_from: int | None
+    range_to: int | None
+
+
+def list_account_level_config(company_id: int) -> list[AccountLevelConfigRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(ChartOfAccountLevelConfig)
+            .where(ChartOfAccountLevelConfig.company_id == company_id)
+            .order_by(ChartOfAccountLevelConfig.account_level)
+        ).all()
+        return [
+            AccountLevelConfigRow(
+                account_level=r.account_level, code_length=r.code_length, range_from=r.range_from, range_to=r.range_to
+            )
+            for r in rows
+        ]
+
+
+def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
+    """جایگزینیِ کاملِ تنظیماتِ کدینگِ حساب‌ها — levels یعنی {شماره‌ی سطح
+    (۱ تا ۳): {"code_length": ..|None, "range_from": ..|None, "range_to":
+    ..|None}}. طبقِ درخواستِ صریح: «تعداد ارقام حساب‌ها از ابتدا ست شود و
+    اگر سندی ثبت شود دیگر قابل تغییر نباشد»."""
+    with new_session() as session:
+        if je_service.company_has_any_entries(company_id):
+            raise ValueError("این شرکت سند دارد؛ تنظیماتِ کدینگِ حساب‌ها دیگر قابلِ‌تغییر نیست.")
+
+        session.execute(
+            ChartOfAccountLevelConfig.__table__.delete().where(ChartOfAccountLevelConfig.company_id == company_id)
+        )
+        for account_level, config in levels.items():
+            if not (1 <= account_level <= MAX_ACCOUNT_LEVEL):
+                raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_ACCOUNT_LEVEL} باشد.")
+            code_length = config.get("code_length")
+            if code_length is not None and not (1 <= code_length <= 10):
+                raise ValueError("تعدادِ رقمِ کد باید بینِ ۱ تا ۱۰ باشد.")
+            range_from = config.get("range_from")
+            range_to = config.get("range_to")
+            if range_from is not None and range_to is not None and range_from > range_to:
+                raise ValueError("مقدارِ «از» نمی‌تواند بزرگ‌تر از «تا» باشد.")
+            if code_length is None and range_from is None and range_to is None:
+                continue
+            session.add(
+                ChartOfAccountLevelConfig(
+                    company_id=company_id,
+                    account_level=account_level,
+                    code_length=code_length,
+                    range_from=range_from,
+                    range_to=range_to,
+                )
+            )
         session.commit()

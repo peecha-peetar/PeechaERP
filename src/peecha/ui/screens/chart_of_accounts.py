@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -27,6 +29,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.ui import theme
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import detail_dimensions as dimensions_service
 
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
@@ -151,6 +154,7 @@ class ChartOfAccountsScreen(QWidget):
         row += 1
 
         self.is_postable_checkbox = QCheckBox("قابلِ ثبتِ سند")
+        self.is_postable_checkbox.toggled.connect(self._update_dimension_checklists_visibility)
         grid.addWidget(self.is_postable_checkbox, row, 1)
         row += 1
 
@@ -160,15 +164,38 @@ class ChartOfAccountsScreen(QWidget):
         self.level_preview_label.setObjectName("sectionHint")
         layout.addWidget(self.level_preview_label)
 
+        # طبقِ درخواستِ صریح: در فرمِ حسابِ سطحِ آخر (قابلِ ثبتِ سند)، فهرستِ
+        # نوع‌بُعدهایِ تفصیلی + گروه‌هایِ اشخاصِ مجاز نمایش داده می‌شود تا
+        # مشخص شود کدام‌ها به این معین مرتبط‌اند — فقط برایِ حسابِ
+        # از-قبل-ذخیره‌شده (چون ذخیره‌شان به account_id نیاز دارد).
+        self.dimension_types_label = QLabel("نوع‌بُعدهایِ تفصیلیِ الزامی")
+        self.dimension_types_label.setObjectName("sectionHint")
+        layout.addWidget(self.dimension_types_label)
+        self.dimension_types_list = QListWidget()
+        self.dimension_types_list.setMaximumHeight(110)
+        layout.addWidget(self.dimension_types_list)
+
+        self.person_groups_label = QLabel("گروهِ تفصیلیِ اشخاصِ مجاز (هیچ‌کدام = آزاد)")
+        self.person_groups_label.setObjectName("sectionHint")
+        layout.addWidget(self.person_groups_label)
+        self.person_groups_list = QListWidget()
+        self.person_groups_list.setMaximumHeight(90)
+        layout.addWidget(self.person_groups_list)
+
+        self.save_dimensions_button = QPushButton("ذخیره‌ی نوع‌هایِ تفصیلی")
+        self.save_dimensions_button.setObjectName("flatButton")
+        self.save_dimensions_button.clicked.connect(self._save_dimensions)
+        layout.addWidget(self.save_dimensions_button)
+
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
         buttons_layout = QHBoxLayout()
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
-        save_button.clicked.connect(self._save)
-        buttons_layout.addWidget(save_button)
+        self.save_button = QPushButton("ذخیره")
+        self.save_button.setObjectName("primaryButton")
+        self.save_button.clicked.connect(self._save)
+        buttons_layout.addWidget(self.save_button)
 
         cancel_button = QPushButton("انصراف")
         cancel_button.setObjectName("flatButton")
@@ -251,6 +278,28 @@ class ChartOfAccountsScreen(QWidget):
         self.parent_combo.setEnabled(False)
         self.delete_button.setVisible(True)
 
+        # طبقِ درخواستِ صریح: فقط سطحِ آخر (معین) می‌تواند قابلِ ثبتِ سند
+        # باشد.
+        is_leaf_level = account.account_level == coa_service.MAX_ACCOUNT_LEVEL
+        self.is_postable_checkbox.setEnabled(is_leaf_level)
+
+        # طبقِ درخواستِ صریح: حسابی که سندی رویش ثبت شده، اصلاً قابلِ‌ویرایش
+        # نیست.
+        locked = coa_service.account_has_posted_lines(account.account_id)
+        for widget in (self.name_field, self.nature_combo, self.category_combo, self.account_type_combo):
+            widget.setEnabled(not locked)
+        if locked:
+            self.is_postable_checkbox.setEnabled(False)
+        self.delete_button.setEnabled(not locked)
+        self.save_button.setEnabled(not locked)
+        if locked:
+            self.status_label.setObjectName("sectionHint")
+            self.status_label.setStyleSheet("")
+            self.status_label.setText("این حساب در سندهای حسابداری استفاده شده؛ قابلِ‌ویرایش نیست.")
+
+        self._populate_dimension_checklists(account.account_id if is_leaf_level else None)
+        self._update_dimension_checklists_visibility()
+
     def _reset_form(self) -> None:
         self._editing_account_id = None
         self.form_title.setText("حسابِ جدید")
@@ -260,13 +309,20 @@ class ChartOfAccountsScreen(QWidget):
         self.parent_combo.setEnabled(True)
         self.parent_combo.setCurrentIndex(0)
         self.name_field.clear()
+        for widget in (self.name_field, self.nature_combo, self.category_combo, self.account_type_combo):
+            widget.setEnabled(True)
         self.nature_combo.setCurrentIndex(0)
         self.category_combo.setCurrentIndex(0)
         self.account_type_combo.setCurrentIndex(0)
+        self.is_postable_checkbox.setEnabled(True)
         self.is_postable_checkbox.setChecked(False)
         self.delete_button.setVisible(False)
+        self.delete_button.setEnabled(True)
+        self.save_button.setEnabled(True)
         self.level_preview_label.setVisible(True)
         self.table.clearSelection()
+        self._populate_dimension_checklists(None)
+        self._update_dimension_checklists_visibility()
 
     def _update_level_preview(self) -> None:
         parent_id = self.parent_combo.currentData()
@@ -276,6 +332,74 @@ class ChartOfAccountsScreen(QWidget):
             parent = next((r for r in self._parent_options if r.account_id == parent_id), None)
             level = (parent.account_level + 1) if parent is not None else 1
         self.level_preview_label.setText(f"سطحِ حسابِ جدید: {_LEVEL_LABELS[level]}")
+        if self._editing_account_id is None:
+            is_leaf_level = level == coa_service.MAX_ACCOUNT_LEVEL
+            self.is_postable_checkbox.setEnabled(is_leaf_level)
+            if not is_leaf_level:
+                self.is_postable_checkbox.setChecked(False)
+
+    # --- چک‌لیستِ نوع‌بُعدهایِ تفصیلی/گروه‌هایِ اشخاصِ مجاز -------------------
+    def _update_dimension_checklists_visibility(self) -> None:
+        visible = self._editing_account_id is not None and self.is_postable_checkbox.isChecked()
+        for widget in (
+            self.dimension_types_label,
+            self.dimension_types_list,
+            self.person_groups_label,
+            self.person_groups_list,
+            self.save_dimensions_button,
+        ):
+            widget.setVisible(visible)
+
+    def _populate_dimension_checklists(self, account_id: int | None) -> None:
+        company_id = self._company_id()
+        self.dimension_types_list.clear()
+        self.person_groups_list.clear()
+        if company_id is None:
+            return
+
+        required_type_ids = set(dimensions_service.get_account_dimension_type_ids(account_id)) if account_id else set()
+        for dim in dimensions_service.list_active_dimension_types(company_id):
+            item = QListWidgetItem(dim.code)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if dim.dimension_type_id in required_type_ids else Qt.Unchecked)
+            item.setData(Qt.UserRole, dim.dimension_type_id)
+            self.dimension_types_list.addItem(item)
+
+        required_group_ids = set(dimensions_service.get_account_person_group_ids(account_id)) if account_id else set()
+        for group in dimensions_service.list_person_groups(company_id):
+            item = QListWidgetItem(group.name)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if group.person_group_id in required_group_ids else Qt.Unchecked)
+            item.setData(Qt.UserRole, group.person_group_id)
+            self.person_groups_list.addItem(item)
+
+    def _save_dimensions(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        dimension_type_ids = [
+            self.dimension_types_list.item(i).data(Qt.UserRole)
+            for i in range(self.dimension_types_list.count())
+            if self.dimension_types_list.item(i).checkState() == Qt.Checked
+        ]
+        person_group_ids = [
+            self.person_groups_list.item(i).data(Qt.UserRole)
+            for i in range(self.person_groups_list.count())
+            if self.person_groups_list.item(i).checkState() == Qt.Checked
+        ]
+        try:
+            dimensions_service.set_account_dimension_types(self._editing_account_id, company_id, dimension_type_ids)
+            dimensions_service.set_account_person_groups(self._editing_account_id, company_id, person_group_ids)
+        except ValueError as exc:
+            self.status_label.setObjectName("statusError")
+            self.status_label.setStyleSheet("")
+            self.status_label.setText(str(exc))
+            return
+        self.status_label.setObjectName("statusOk")
+        self.status_label.setStyleSheet("")
+        self.status_label.setText("نوع‌هایِ تفصیلی ذخیره شد.")
 
     def _current_language_id(self) -> int | None:
         return session.current_company.default_language_id if session.current_company else None

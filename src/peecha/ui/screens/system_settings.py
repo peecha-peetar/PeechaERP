@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
 
+from peecha.ui.screens.accounting_coding import AccountingCodingSettingsScreen
 from peecha.ui.screens.audit_log import AuditLogScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
@@ -31,11 +32,19 @@ class SystemSettingsScreen(QWidget):
         outer.addWidget(title)
 
         tabs = QTabWidget()
+        # طبقِ درخواستِ صریح: کدینگِ حسابداری باید اولین کاری باشد که در
+        # تنظیماتِ حسابداری انجام می‌شود — به همین دلیل اولین تب است.
+        tabs.addTab(self._build_coding_tab(), "کدینگِ حسابداری")
         tabs.addTab(self._build_general_tab(), "عمومی")
         tabs.addTab(self._build_users_tab(), "کاربران و دسترسی‌ها")
         tabs.addTab(self._build_accounting_data_tab(), "داده‌های حسابداری")
         tabs.addTab(self._build_security_tab(), "امنیت")
         outer.addWidget(tabs, stretch=1)
+
+    def _build_coding_tab(self) -> QWidget:
+        screen = AccountingCodingSettingsScreen()
+        self._sub_screens.append(screen)
+        return screen
 
     def _sub_tabs(self, pages: list[tuple[str, QWidget]]) -> QTabWidget:
         inner = QTabWidget()

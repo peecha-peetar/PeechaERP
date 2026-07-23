@@ -35,7 +35,10 @@ from peecha.db.models.accounting import (
 # ensure_person_dimension برای شرکت‌های تازه) و همیشه در هر ردیفِ سند
 # حاضر است — با پیش‌فرضِ NO_DETAIL_CODE اگر شخصِ خاصی انتخاب نشده باشد.
 PERSON_DIMENSION_CODE = "PERSON"
-NO_DETAIL_CODE = "NONE"
+# طبقِ درخواستِ صریح: کدِ تفصیلیِ پیش‌فرض («بدون تفصیلی») باید «۰۰۰۰۰۰»
+# باشد (نه یک کدِ متنیِ دلخواه مثلِ "NONE") — 011_coding_settings.sql
+# رکوردهایِ already-seeded را هم به همین کد به‌روز کرده.
+NO_DETAIL_CODE = "000000"
 NO_DETAIL_LABEL = "بدون تفصیلی"
 
 # طبقِ درخواستِ صریح: حسابِ تفصیلی می‌تواند تا ۴ سطح سلسله‌مراتب داشته باشد
@@ -188,13 +191,24 @@ def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[Detail
 
 
 def _validate_code_length(session, dimension_type_id: int, level_no: int, segment_code: str) -> None:
-    """اگر این گروه برایِ این سطح طولِ کدی پیکربندی کرده باشد (اختیاری،
-    acc.detail_group_levels)، طولِ کدِ واردشده باید دقیقاً همان باشد."""
+    """اگر این گروه برایِ این سطح طولِ کد/بازه‌ی از-تا پیکربندی کرده باشد
+    (اختیاری، acc.detail_group_levels)، کدِ واردشده باید دقیقاً همان طول و
+    (اگر بازه هم تنظیم شده) رقمی و در همان بازه باشد."""
     level_config = session.get(DetailGroupLevel, (dimension_type_id, level_no))
-    if level_config is not None and len(segment_code) != level_config.code_length:
+    if level_config is None:
+        return
+    if len(segment_code) != level_config.code_length:
         raise ValueError(
             f"طولِ کدِ سطحِ {level_no} برایِ این گروه باید دقیقاً {level_config.code_length} رقم باشد."
         )
+    if level_config.range_from is not None or level_config.range_to is not None:
+        if not segment_code.isdigit():
+            raise ValueError(f"کدِ سطحِ {level_no} برایِ این گروه باید رقمی باشد (بازه‌ی از-تا تنظیم شده).")
+        value = int(segment_code)
+        if level_config.range_from is not None and value < level_config.range_from:
+            raise ValueError(f"کدِ سطحِ {level_no} باید حداقل {level_config.range_from} باشد.")
+        if level_config.range_to is not None and value > level_config.range_to:
+            raise ValueError(f"کدِ سطحِ {level_no} باید حداکثر {level_config.range_to} باشد.")
 
 
 def create_detail_account(
@@ -323,6 +337,8 @@ def set_account_dimension_types(account_id: int, company_id: int, dimension_type
 class GroupLevelRow:
     level_no: int
     code_length: int
+    range_from: int | None = None
+    range_to: int | None = None
 
 
 def list_group_levels(dimension_type_id: int) -> list[GroupLevelRow]:
@@ -332,28 +348,53 @@ def list_group_levels(dimension_type_id: int) -> list[GroupLevelRow]:
             .where(DetailGroupLevel.dimension_type_id == dimension_type_id)
             .order_by(DetailGroupLevel.level_no)
         ).all()
-        return [GroupLevelRow(level_no=r.level_no, code_length=r.code_length) for r in rows]
+        return [
+            GroupLevelRow(level_no=r.level_no, code_length=r.code_length, range_from=r.range_from, range_to=r.range_to)
+            for r in rows
+        ]
 
 
-def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, int]) -> None:
+def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, dict]) -> None:
     """جایگزینیِ کاملِ پیکربندیِ سطح‌های این گروه — levels یعنی
-    {شماره‌ی سطح (۱ تا ۴): تعدادِ رقمِ کد}؛ سطحی که در دیکشنری نباشد
-    بدونِ محدودیتِ طول می‌ماند."""
+    {شماره‌ی سطح (۱ تا ۴): {"code_length": ..., "range_from": ..|None,
+    "range_to": ..|None}}؛ سطحی که در دیکشنری نباشد بدونِ محدودیت می‌ماند.
+
+    طبقِ درخواستِ صریح: بعدِ اولین سندِ شرکت، این تنظیمات دیگر قابلِ‌تغییر
+    نیستند (تا کدهایِ ثبت‌شده‌ی موجود ناسازگار نشوند)."""
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
             raise ValueError("گروهِ تفصیلی نامعتبر است.")
 
+        # importِ داخلِ تابع: journal_entries از detail_dimensions در سطحِ
+        # ماژول import می‌کند، پس import سطحِ ماژول در جهتِ عکس یک وابستگیِ
+        # چرخشی می‌ساخت.
+        from peecha.services import journal_entries as je_service  # noqa: PLC0415
+
+        if je_service.company_has_any_entries(company_id):
+            raise ValueError("این شرکت سند دارد؛ تنظیماتِ کدینگِ تفصیلی دیگر قابلِ‌تغییر نیست.")
+
         session.execute(
             DetailGroupLevel.__table__.delete().where(DetailGroupLevel.dimension_type_id == dimension_type_id)
         )
-        for level_no, code_length in levels.items():
+        for level_no, config in levels.items():
             if not (1 <= level_no <= MAX_DETAIL_LEVEL):
                 raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_DETAIL_LEVEL} باشد.")
+            code_length = config["code_length"]
             if not (1 <= code_length <= 10):
                 raise ValueError("تعدادِ رقمِ کد باید بینِ ۱ تا ۱۰ باشد.")
+            range_from = config.get("range_from")
+            range_to = config.get("range_to")
+            if range_from is not None and range_to is not None and range_from > range_to:
+                raise ValueError("مقدارِ «از» نمی‌تواند بزرگ‌تر از «تا» باشد.")
             session.add(
-                DetailGroupLevel(dimension_type_id=dimension_type_id, level_no=level_no, code_length=code_length)
+                DetailGroupLevel(
+                    dimension_type_id=dimension_type_id,
+                    level_no=level_no,
+                    code_length=code_length,
+                    range_from=range_from,
+                    range_to=range_to,
+                )
             )
         session.commit()
 
@@ -632,6 +673,63 @@ def list_persons(company_id: int) -> list[DetailAccountRow]:
 
 def list_active_persons(company_id: int) -> list[DetailAccountRow]:
     return [row for row in list_persons(company_id) if row.is_active]
+
+
+# --- ۷ نوع‌بُعدِ «فرمِ خاص»یِ تازه (کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/ -----
+# مرکزِهزینه/پروژه) -----------------------------------------------------
+# طبقِ درخواستِ صریح، این‌ها مثلِ مشتری/تامین‌کننده/پرسنل صفحه‌ی اختصاصیِ
+# خودشان را دارند و برایِ هر شرکت به‌طورِ خودکار ساخته می‌شوند — با این
+# تفاوت که (بر خلافِ مشتری/تامین‌کننده/پرسنل که همه زیرگروهِ نوع‌بُعدِ
+# سیستمیِ PERSON‌اند) این ۷ تا خودشان نوع‌بُعدِ مستقل‌اند، چون کالا/
+# دارایی‌ثابت/... اصلاً شخص نیستند. فیلدهایِ اختصاصیِ هرکدام (اگر لازم شد)
+# از همان مکانیزمِ عمومیِ acc.detail_group_fields/extra_fields JSONB
+# تعریف می‌شود، نه ستونِ SQL هاردکد.
+
+INVENTORY_ITEM_CODE = "INVENTORY_ITEM"
+FIXED_ASSET_CODE = "FIXED_ASSET"
+BANK_ACCOUNT_CODE = "BANK_ACCOUNT"
+CASH_BOX_CODE = "CASH_BOX"
+PETTY_CASH_CODE = "PETTY_CASH"
+COST_CENTER_CODE = "COST_CENTER"
+PROJECT_CODE = "PROJECT"
+
+SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
+    INVENTORY_ITEM_CODE: "کالا",
+    FIXED_ASSET_CODE: "دارایی ثابت",
+    BANK_ACCOUNT_CODE: "بانک",
+    CASH_BOX_CODE: "صندوق",
+    PETTY_CASH_CODE: "تنخواه",
+    COST_CENTER_CODE: "مرکز هزینه",
+    PROJECT_CODE: "پروژه",
+}
+
+
+def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
+    """این ۷ نوع‌بُعد را برای این شرکت تضمین می‌کند (اگر نبود می‌سازد) و
+    نگاشتِ کد→شناسه را برمی‌گرداند — باید با همان session/تراکنشِ ساختِ
+    شرکت صدا زده شود (مثلِ ensure_person_dimension/ensure_person_groups)؛
+    برایِ شرکت‌هایِ موجود، 011_coding_settings.sql همین کار را یک‌بار
+    برایِ همه انجام داده."""
+    existing = {
+        t.code: t.dimension_type_id
+        for t in session.scalars(
+            select(DetailDimensionType).where(DetailDimensionType.company_id == company_id)
+        ).all()
+    }
+    for code in SPECIALIZED_DIMENSION_LABELS:
+        if code not in existing:
+            dimension_type = DetailDimensionType(company_id=company_id, code=code, is_active=True)
+            session.add(dimension_type)
+            session.flush()
+            existing[code] = dimension_type.dimension_type_id
+    return existing
+
+
+def get_specialized_dimension_type_id(company_id: int, code: str) -> int:
+    with new_session() as session:
+        dimension_type_id = ensure_specialized_dimensions(session, company_id)[code]
+        session.commit()
+        return dimension_type_id
 
 
 # --- گروه‌های تفصیلیِ اشخاص (مشتری/تامین‌کننده/پرسنل) ----------------------

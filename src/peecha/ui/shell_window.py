@@ -44,6 +44,13 @@ NAV_ITEMS = [
             {"code": "GL_CUSTOMERS", "label": "مشتریان", "screen": "customers"},
             {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "screen": "suppliers"},
             {"code": "GL_PERSONNEL", "label": "پرسنل", "screen": "personnel"},
+            {"code": "GL_INVENTORY_ITEMS", "label": "کالا", "screen": "inventory_items"},
+            {"code": "GL_FIXED_ASSETS", "label": "دارایی ثابت", "screen": "fixed_assets"},
+            {"code": "GL_BANK_ACCOUNTS", "label": "بانک", "screen": "bank_accounts"},
+            {"code": "GL_CASH_BOXES", "label": "صندوق", "screen": "cash_boxes"},
+            {"code": "GL_PETTY_CASHES", "label": "تنخواه", "screen": "petty_cashes"},
+            {"code": "GL_COST_CENTERS", "label": "مرکز هزینه", "screen": "cost_centers"},
+            {"code": "GL_PROJECTS", "label": "پروژه", "screen": "projects"},
             {"code": "GL_JE_LIST", "label": "اسناد حسابداری", "screen": "journal_entries_list"},
             {"code": "GL_JE", "label": "صدور سند جدید", "screen": "journal_entry"},
             {"code": "GL_DIM", "label": "مراکز هزینه و ابعادِ تفصیلی", "screen": "detail_dimensions"},
@@ -335,6 +342,15 @@ class MainWindow(QMainWindow):
             SuppliersScreen,
         )
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
+        from peecha.ui.screens.specialized_dimensions import (  # noqa: PLC0415
+            BankAccountsScreen,
+            CashBoxesScreen,
+            CostCentersScreen,
+            FixedAssetsScreen,
+            InventoryItemsScreen,
+            PettyCashesScreen,
+            ProjectsScreen,
+        )
         from peecha.ui.screens.system_settings import SystemSettingsScreen  # noqa: PLC0415
 
         self.register_screen("dashboard", DashboardScreen())
@@ -344,6 +360,13 @@ class MainWindow(QMainWindow):
         self.register_screen("customers", CustomersScreen())
         self.register_screen("suppliers", SuppliersScreen())
         self.register_screen("personnel", PersonnelScreen())
+        self.register_screen("inventory_items", InventoryItemsScreen())
+        self.register_screen("fixed_assets", FixedAssetsScreen())
+        self.register_screen("bank_accounts", BankAccountsScreen())
+        self.register_screen("cash_boxes", CashBoxesScreen())
+        self.register_screen("petty_cashes", PettyCashesScreen())
+        self.register_screen("cost_centers", CostCentersScreen())
+        self.register_screen("projects", ProjectsScreen())
         self.register_screen("detail_dimensions", DetailDimensionsScreen())
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
         self.register_screen("journal_entry", JournalEntryScreen())

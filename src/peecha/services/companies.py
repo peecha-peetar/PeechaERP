@@ -163,6 +163,7 @@ def create_company(
         session.flush()
         dimensions_service.ensure_person_dimension(session, company.company_id)
         dimensions_service.ensure_person_groups(session, company.company_id)
+        dimensions_service.ensure_specialized_dimensions(session, company.company_id)
         session.commit()
         session.refresh(company)
         session.expunge(company)

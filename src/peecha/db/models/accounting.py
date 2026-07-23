@@ -11,6 +11,7 @@ import decimal
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Computed,
@@ -116,6 +117,21 @@ class CompanyAccountingSettings(Base):
     retained_earnings_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
 
 
+class ChartOfAccountLevelConfig(Base):
+    """تنظیماتِ رقم/بازه‌یِ هر سطحِ کدینگِ حساب‌ها — اختیاری؛ سطحی که ردیفی
+    این‌جا نداشته باشد بدونِ محدودیت می‌ماند. بعدِ اولینِ سندِ شرکت، سرویس
+    اجازه‌ی تغییرِ این تنظیمات را نمی‌دهد (چکِ تراکنشی، نه اینجا)."""
+
+    __tablename__ = "chart_of_account_level_config"
+    __table_args__ = {"schema": "acc"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    account_level: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    code_length: Mapped[int | None] = mapped_column(SmallInteger)
+    range_from: Mapped[int | None] = mapped_column(BigInteger)
+    range_to: Mapped[int | None] = mapped_column(BigInteger)
+
+
 class DetailDimensionType(Base):
     __tablename__ = "detail_dimension_types"
     __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "acc"})
@@ -157,6 +173,8 @@ class DetailGroupLevel(Base):
     )
     level_no: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     code_length: Mapped[int] = mapped_column(SmallInteger)
+    range_from: Mapped[int | None] = mapped_column(BigInteger)
+    range_to: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class DetailGroupField(Base):

@@ -41,6 +41,19 @@ from peecha.services import detail_dimensions as dimensions_service
 _BASE_QUANT = decimal.Decimal("0.01")
 
 
+def company_has_any_entries(company_id: int) -> bool:
+    """آیا این شرکت حتی یک سند ثبت‌شده دارد — برایِ قفل‌کردنِ تنظیماتِ
+    کدینگ (تعدادِ رقم/بازه‌ی حساب‌ها و گروه‌هایِ تفصیلی) بعدِ اولین سند،
+    طبقِ درخواستِ صریح."""
+    with new_session() as session:
+        return (
+            session.scalar(
+                select(func.count()).select_from(JournalEntry).where(JournalEntry.company_id == company_id)
+            )
+            > 0
+        )
+
+
 def _lines_snapshot(lines) -> list[dict]:
     """نسخه‌ی قابلِ‌سریالایز (JSON) از ردیف‌های سند — برایِ ردِ حسابرسی."""
     return [
