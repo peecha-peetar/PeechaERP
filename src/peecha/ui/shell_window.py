@@ -110,7 +110,6 @@ class MainWindow(QMainWindow):
         outer.setSpacing(0)
 
         outer.addWidget(self._build_header())
-        outer.addWidget(self._build_ribbon())
 
         body = QWidget()
         body_layout = QHBoxLayout(body)
@@ -194,42 +193,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(logout_button)
 
         return header
-
-    # --- ریبون (میان‌برهایِ گروهِ فعال، زیرِ هدر) -----------------------------
-    def _build_ribbon(self) -> QWidget:
-        ribbon = QWidget()
-        ribbon.setObjectName("ribbonBar")
-        ribbon.setFixedHeight(0)
-        layout = QHBoxLayout(ribbon)
-        layout.setContentsMargins(20, 0, 20, 0)
-        layout.setSpacing(8)
-        self._ribbon_layout = layout
-        self._ribbon_bar = ribbon
-        self._ribbon_buttons: dict[str, QPushButton] = {}
-        return ribbon
-
-    def _update_ribbon(self, code: str) -> None:
-        while self._ribbon_layout.count():
-            child = self._ribbon_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        self._ribbon_buttons = {}
-
-        group = next((item for item in NAV_ITEMS if any(c["code"] == code for c in item.get("children", []))), None)
-        if group is None:
-            self._ribbon_bar.setFixedHeight(0)
-            return
-
-        for child in group["children"]:
-            button = QPushButton(child["label"])
-            button.setObjectName("ribbonButton")
-            button.setProperty("active", child["code"] == code)
-            button.setCursor(Qt.PointingHandCursor)
-            button.clicked.connect(lambda _checked=False, c=child["code"]: self.open_screen(c))
-            self._ribbon_layout.addWidget(button)
-            self._ribbon_buttons[child["code"]] = button
-        self._ribbon_layout.addStretch(1)
-        self._ribbon_bar.setFixedHeight(44)
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
@@ -398,7 +361,6 @@ class MainWindow(QMainWindow):
         tree_item = self._tree_items_by_code.get(code)
         if tree_item is not None:
             self.sidebar.setCurrentItem(tree_item)
-        self._update_ribbon(code)
 
         target_screen_name = item["screen"] or "placeholder"
         screen = self._screens.get(target_screen_name)

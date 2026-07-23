@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget
 
 from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
@@ -21,7 +21,16 @@ class AccountingCodingSettingsScreen(QWidget):
         super().__init__()
         self._level_widgets: dict[int, tuple[QSpinBox, QSpinBox, QSpinBox]] = {}
 
-        outer = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        # صفحه در یک QScrollArea قرار می‌گیرد — وگرنه با دو کارت (کدینگِ
+        # حساب‌ها + سطوحِ تفصیلی) رویِ هم، در پنجره‌هایِ کوچک‌تر بخشِ پایینی
+        # (ازجمله دکمه‌ی ذخیره) بدونِ راهی برایِ اسکرول‌کردن خارج از دیدرس می‌ماند.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        outer = QVBoxLayout(content)
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(12)
 
@@ -116,6 +125,8 @@ class AccountingCodingSettingsScreen(QWidget):
         outer.addWidget(self.save_detail_button)
 
         outer.addStretch(1)
+        scroll.setWidget(content)
+        root_layout.addWidget(scroll)
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
