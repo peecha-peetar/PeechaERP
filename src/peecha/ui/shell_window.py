@@ -28,7 +28,7 @@ from peecha import session
 from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
-from peecha.ui import theme
+from peecha.ui import numerals, theme
 
 # همان NAV_ITEMS طبقِ shell.py (نسخه‌ی Kivy) — عمداً اینجا هم تکرار شده
 # تا این ماژول به‌هیچ‌وجه کیویی import نکند (هدفِ کلِ این مهاجرت).
@@ -140,10 +140,10 @@ class MainWindow(QMainWindow):
         divider0.setStyleSheet(f"color: {theme.DIVIDER};")
         layout.addWidget(divider0)
 
-        search = QLineEdit()
-        search.setPlaceholderText("⌕  جستجو در سیستم...")
-        search.setFixedWidth(320)
-        layout.addWidget(search)
+        self.search_field = QLineEdit()
+        self.search_field.setPlaceholderText("⌕  جستجو در سیستم...")
+        self.search_field.setFixedWidth(320)
+        layout.addWidget(self.search_field)
 
         layout.addStretch(1)
 
@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
             fiscal_years = fiscal_years_service.list_fiscal_years(session.current_company.company_id)
             self.fiscal_year_combo.clear()
             for fy in fiscal_years:
-                self.fiscal_year_combo.addItem(fy.code, fy.fiscal_year_id)
+                self.fiscal_year_combo.addItem(numerals.to_persian_digits(fy.code), fy.fiscal_year_id)
 
     def _on_company_changed(self, index: int) -> None:
         if index < 0:
