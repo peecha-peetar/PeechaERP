@@ -1,6 +1,6 @@
-"""نقطه‌ی ورودِ نمونه‌ی آزمایشیِ Qt6.
+"""نقطه‌ی ورودِ برنامه‌ی پیچا (Qt6).
 
-اجرا: python -m peecha.qt_pilot.main
+اجرا: python -m peecha.ui.main
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import QApplication
 
-from peecha.qt_pilot import theme
+from peecha.ui import theme
 
 _ASSETS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
@@ -58,7 +58,7 @@ def main() -> None:
     app.setFont(QFont(font_family, 11))
     app.setStyleSheet(theme.GLOBAL_QSS)
 
-    from peecha.qt_pilot.login_window import LoginWindow  # noqa: PLC0415
+    from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
 
     window = LoginWindow(font_family)
     window.show()

@@ -1,315 +1,223 @@
-"""صفحه‌ی نقش‌ها و دسترسی‌ها — تعریفِ نقش‌های درختیِ شرکتِ جاری، برای هر نقش
-یک شبکه‌ی دسترسیِ VIEW/CREATE/EDIT/DELETE روی فرم‌های برنامه (سرویس roles.py،
-جدول sec.role_form_permissions)، و تخصیصِ کاربران به نقش (sec.user_roles).
-هر تغییرِ چک‌باکسِ دسترسی/تخصیص بلافاصله ذخیره می‌شود (بدون دکمه‌ی ذخیره‌ی
-جدا) — چون هرکدام مستقل و کوچک است، شبیهِ toggle باز/بسته‌کردنِ سال مالی."""
+"""نقش‌ها و دسترسی‌ها — معادلِ Qt برایِ roles.py/.kv در Kivy."""
 
 from __future__ import annotations
 
-import os
-
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.screen import MDScreen
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from peecha import session
-from peecha.services import field_labels as field_labels_service
 from peecha.services import roles as roles_service
-from peecha.ui import theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "roles.kv")
-Builder.load_file(_KV_PATH)
-
-_NO_PARENT_LABEL = "— بدون والد —"
 _ACTIONS = ["VIEW", "CREATE", "EDIT", "DELETE"]
 
 
-class RoleRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    role_id = NumericProperty(0)
-    code_text = StringProperty("")
-    parent_text = StringProperty("")
-    status_text = StringProperty("")
-    is_active_row = BooleanProperty(True)
-    zebra = BooleanProperty(False)
-    selected = BooleanProperty(False)
-    on_edit = ObjectProperty(None)
-
-    def on_release(self) -> None:
-        if self.on_edit is not None:
-            self.on_edit(self.role_id)
-
-
-Factory.register("RoleRowWidget", cls=RoleRowWidget)
-
-
-class _PermissionRow(MDBoxLayout):
-    label_text = StringProperty("")
-
-    def __init__(self, form_id: int, on_toggle, **kwargs):
-        super().__init__(**kwargs)
-        self.form_id = form_id
-        self._on_toggle = on_toggle
-
-    def toggle(self, action_code: str, active: bool) -> None:
-        self._on_toggle(self.form_id, action_code, active)
-
-
-class _RoleUserRow(MDBoxLayout):
-    label_text = StringProperty("")
-
-    def __init__(self, user_id: int, on_toggle, **kwargs):
-        super().__init__(**kwargs)
-        self.user_id = user_id
-        self._on_toggle = on_toggle
-
-    def toggle(self, active: bool) -> None:
-        self._on_toggle(self.user_id, active)
-
-
-class RolesScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._rows_by_id: dict[int, roles_service.RoleRow] = {}
-        self._role_options: list[roles_service.RoleRow] = []
+class RolesScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._roles: list[roles_service.RoleRow] = []
         self._forms: list[roles_service.FormOption] = []
-        self._parent_role_id: int | None = None
         self._editing_role_id: int | None = None
-        self._menu: MDDropdownMenu | None = None
+        self._permission_checkboxes: dict[tuple[int, str], QCheckBox] = {}
 
-    def on_pre_enter(self, *args):
-        self._forms = roles_service.list_forms()
-        self.apply_field_labels()
-        self.refresh_list()
-        # طبق درخواستِ صریح: با برگشتن به این صفحه، انتخابِ والد/شبکه‌ی
-        # دسترسی/تخصیصِ کاربرانِ نیمه‌کاره نباید پاک شود — با وضعیتِ فعلی
-        # (نه با None ثابت) دوباره ساخته می‌شود.
-        self._select_parent(self._parent_role_id)
-        self._build_permissions_grid(self._editing_role_id)
-        self._build_users_checklist(self._editing_role_id)
-        self.bind_shortcuts()
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
+        outer.addWidget(self._build_roles_panel(), stretch=1)
+        outer.addWidget(self._build_detail_panel(), stretch=3)
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
+    def _build_roles_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
 
-    def apply_field_labels(self) -> None:
-        language_id = session.current_language.language_id if session.current_language else None
-        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("roles", language_id).items()}
-        self.ids.code_field.hint_text = shape(labels["code"])
+        title = QLabel("نقش‌ها")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
-    def on_shortcut_save(self) -> None:
-        self.save_role()
+        self.role_list = QListWidget()
+        self.role_list.itemClicked.connect(self._on_role_selected)
+        layout.addWidget(self.role_list)
 
-    def on_shortcut_cancel(self) -> bool:
-        if self._editing_role_id is not None:
-            self.cancel_edit()
-            return True
-        return False
+        layout.addWidget(QLabel("کدِ نقشِ جدید"))
+        self.new_role_code_field = QLineEdit()
+        layout.addWidget(self.new_role_code_field)
 
-    def _set_status(self, message: str, *, is_error: bool = False) -> None:
-        self.ids.status_label.text = shape(message)
-        self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
+        layout.addWidget(QLabel("والد (اختیاری)"))
+        self.parent_role_combo = QComboBox()
+        layout.addWidget(self.parent_role_combo)
 
-    def _current_company_id(self) -> int | None:
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        create_button = QPushButton("افزودنِ نقش")
+        create_button.setObjectName("primaryButton")
+        create_button.clicked.connect(self._create_role)
+        layout.addWidget(create_button)
+
+        self.is_active_checkbox = QCheckBox("فعال")
+        self.is_active_checkbox.setChecked(True)
+        self.is_active_checkbox.toggled.connect(self._on_active_toggled)
+        layout.addWidget(self.is_active_checkbox)
+
+        layout.addStretch(1)
+        return panel
+
+    def _build_detail_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+
+        self.detail_title = QLabel("یک نقش را از فهرست انتخاب کنید")
+        self.detail_title.setObjectName("pageTitle")
+        layout.addWidget(self.detail_title)
+
+        tabs = QTabWidget()
+        layout.addWidget(tabs, stretch=1)
+
+        self.permission_table = QTableWidget(0, 1 + len(_ACTIONS))
+        self.permission_table.setHorizontalHeaderLabels(["فرم"] + _ACTIONS)
+        self.permission_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.permission_table.verticalHeader().setVisible(False)
+        self.permission_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        tabs.addTab(self.permission_table, "دسترسیِ فرم‌ها")
+
+        self.users_list = QListWidget()
+        tabs.addTab(self.users_list, "کاربرانِ این نقش")
+
+        return panel
+
+    def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
 
-    def open_parent_menu(self) -> None:
-        items = [
-            {"text": shape(tr(_NO_PARENT_LABEL)), "on_release": lambda: (self._menu.dismiss(), self._select_parent(None))}
-        ]
-        for row in self._role_options:
-            if row.role_id == self._editing_role_id:
-                continue  # نقش نمی‌تواند والدِ خودش باشد
-            items.append(
-                {
-                    "text": shape(row.code),
-                    "on_release": lambda rid=row.role_id: (self._menu.dismiss(), self._select_parent(rid)),
-                }
-            )
-        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+    def refresh(self) -> None:
+        self._forms = roles_service.list_forms()
+        company_id = self._company_id()
+        self._roles = roles_service.list_roles(company_id) if company_id is not None else []
 
-        self._menu = open_rtl_dropdown(self.ids.parent_button, items, width_mult=3)
+        self.role_list.clear()
+        for role in self._roles:
+            item = QListWidgetItem(role.code + ("" if role.is_active else " (غیرفعال)"))
+            item.setData(Qt.UserRole, role.role_id)
+            self.role_list.addItem(item)
 
-    def _select_parent(self, role_id: int | None) -> None:
-        self._parent_role_id = role_id
-        if role_id is None:
-            self.ids.parent_button.text = shape(tr(_NO_PARENT_LABEL))
-            return
-        parent = next((r for r in self._role_options if r.role_id == role_id), None)
-        self.ids.parent_button.text = shape(parent.code if parent else tr(_NO_PARENT_LABEL))
+        self.parent_role_combo.clear()
+        self.parent_role_combo.addItem("— بدونِ والد —", None)
+        for role in self._roles:
+            self.parent_role_combo.addItem(role.code, role.role_id)
 
-    def refresh_list(self) -> None:
-        company_id = self._current_company_id()
-        if company_id is None:
-            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
-            self.ids.roles_list.data = []
-            return
+        self._editing_role_id = None
+        self.detail_title.setText("یک نقش را از فهرست انتخاب کنید")
+        self.permission_table.setRowCount(0)
+        self.users_list.clear()
 
-        rows = roles_service.list_roles(company_id)
-        self._rows_by_id = {r.role_id: r for r in rows}
-        self._role_options = rows
-        if not rows:
-            self.ids.roles_list.data = [
-                {"viewclass": "PEmptyState", "icon": "shield-account-outline", "text": shape(tr("هنوز نقشی تعریف نشده است."))}
-            ]
-            return
-
-        self.ids.roles_list.data = [
-            {
-                "role_id": row.role_id,
-                "on_edit": self.edit_role,
-                "code_text": row.code,
-                "parent_text": shape(row.parent_code or "—"),
-                "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                "is_active_row": row.is_active,
-                "zebra": i % 2 == 1,
-                "selected": row.role_id == self._editing_role_id,
-            }
-            for i, row in enumerate(rows)
-        ]
-
-    def edit_role(self, role_id: int) -> None:
-        row = self._rows_by_id.get(role_id)
-        if row is None:
+    def _on_role_selected(self, item: QListWidgetItem) -> None:
+        role_id = item.data(Qt.UserRole)
+        role = next((r for r in self._roles if r.role_id == role_id), None)
+        if role is None:
             return
         self._editing_role_id = role_id
-        self.ids.code_field.set_value(row.code)
-        self.ids.code_field.disabled = True
-        self._select_parent(row.parent_role_id)
-        self.ids.is_active_checkbox.active = row.is_active
-        self.ids.form_title.text = shape(tr("ویرایش نقش «{}»").format(row.code))
-        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
-        self.ids.cancel_edit_button.opacity = 1
-        self.ids.cancel_edit_button.disabled = False
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.code))
-        self._build_permissions_grid(role_id)
-        self._build_users_checklist(role_id)
-        self.refresh_list()
+        self.detail_title.setText(f"نقش: {role.code}")
+        self.is_active_checkbox.blockSignals(True)
+        self.is_active_checkbox.setChecked(role.is_active)
+        self.is_active_checkbox.blockSignals(False)
+        self._render_permission_table(role_id)
+        self._render_users_list(role_id)
 
-    def cancel_edit(self) -> None:
-        self._editing_role_id = None
-        self.ids.code_field.text = ""
-        self.ids.code_field.disabled = False
-        self._select_parent(None)
-        self.ids.is_active_checkbox.active = True
-        self.ids.form_title.text = shape(tr("افزودن نقش جدید"))
-        self.ids.save_button.text = shape(tr("افزودن نقش"))
-        self.ids.cancel_edit_button.opacity = 0
-        self.ids.cancel_edit_button.disabled = True
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "0dp"
-        self._set_status(tr(""))
-        self._build_permissions_grid(None)
-        self._build_users_checklist(None)
-        self.refresh_list()
-
-    def save_role(self) -> None:
-        company_id = self._current_company_id()
-        if company_id is None:
-            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
-            return
-
-        if self._editing_role_id is not None:
-            try:
-                roles_service.update_role(
-                    role_id=self._editing_role_id,
-                    company_id=company_id,
-                    parent_role_id=self._parent_role_id,
-                    is_active=self.ids.is_active_checkbox.active,
-                )
-            except Exception as exc:  # noqa: BLE001
-                self._set_status(tr("خطا: {}").format(exc), is_error=True)
-                return
-            self.cancel_edit()
-            return
-
-        code = self.ids.code_field.value.strip()
-        if not code:
-            self._set_status(tr("کدِ نقش را وارد کنید."), is_error=True)
-            return
-        try:
-            role = roles_service.create_role(company_id=company_id, code=code, parent_role_id=self._parent_role_id)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-        self._set_status(f"نقش «{role.code}» ساخته شد؛ حالا دسترسی‌های آن را تنظیم کنید.")
-        self.refresh_list()
-        self.edit_role(role.role_id)
-
-    # --- شبکه‌ی دسترسی (VIEW/CREATE/EDIT/DELETE روی هر فرم) ------------------
-
-    def _build_permissions_grid(self, role_id: int | None) -> None:
-        self.ids.permissions_grid_box.clear_widgets()
-        if role_id is None:
-            from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
-
-            self.ids.permissions_grid_box.add_widget(
-                PEmptyState(
-                    icon="shield-off-outline",
-                    text=shape(tr("ابتدا یک نقش را ذخیره یا برای ویرایش انتخاب کنید.")),
-                )
-            )
-            return
+    def _render_permission_table(self, role_id: int) -> None:
         allowed = roles_service.get_role_permissions(role_id)
-        for form in self._forms:
-            row = _PermissionRow(
-                form_id=form.form_id,
-                on_toggle=lambda form_id, action_code, active: self._set_permission(role_id, form_id, action_code, active),
-                label_text=shape(
-                    f"{tr(roles_service.MODULE_LABELS.get(form.module_code, form.module_code))} — {tr(form.label)}"
-                ),
-            )
-            for action_code in _ACTIONS:
-                checkbox = row.ids[f"check_{action_code.lower()}"]
-                checkbox.active = (form.form_id, action_code) in allowed
-                checkbox.bind(
-                    active=lambda _inst, active, r=row, a=action_code: r.toggle(a, active)
+        self._permission_checkboxes = {}
+        self.permission_table.setRowCount(len(self._forms))
+        for row_index, form in enumerate(self._forms):
+            label_item = QTableWidgetItem(f"{form.label} ({form.module_code})")
+            self.permission_table.setItem(row_index, 0, label_item)
+            for col_index, action_code in enumerate(_ACTIONS, start=1):
+                checkbox = QCheckBox()
+                checkbox.setChecked((form.form_id, action_code) in allowed)
+                checkbox.toggled.connect(
+                    lambda checked, fid=form.form_id, ac=action_code: self._toggle_permission(fid, ac, checked)
                 )
-            self.ids.permissions_grid_box.add_widget(row)
+                self.permission_table.setCellWidget(row_index, col_index, checkbox)
+                self._permission_checkboxes[(form.form_id, action_code)] = checkbox
 
-    def _set_permission(self, role_id: int, form_id: int, action_code: str, is_allowed: bool) -> None:
-        try:
-            roles_service.set_role_permission(role_id, form_id, action_code, is_allowed)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-
-    # --- تخصیصِ کاربران به نقش ------------------------------------------------
-
-    def _build_users_checklist(self, role_id: int | None) -> None:
-        self.ids.role_users_box.clear_widgets()
-        company_id = self._current_company_id()
-        if role_id is None or company_id is None:
-            from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
-
-            self.ids.role_users_box.add_widget(
-                PEmptyState(icon="account-off-outline", text=shape(tr("نقشی برای تخصیصِ کاربر انتخاب نشده است.")))
-            )
+    def _toggle_permission(self, form_id: int, action_code: str, checked: bool) -> None:
+        if self._editing_role_id is None:
             return
-        rows = roles_service.list_role_users(role_id, company_id)
-        for user_row in rows:
-            row = _RoleUserRow(
-                user_id=user_row.user_id,
-                on_toggle=lambda user_id, active: self._set_user_role(role_id, user_id, active),
-                label_text=shape(user_row.full_name),
-            )
-            row.ids.check.active = user_row.assigned
-            row.ids.check.bind(active=lambda _inst, active, r=row: r.toggle(active))
-            self.ids.role_users_box.add_widget(row)
+        roles_service.set_role_permission(self._editing_role_id, form_id, action_code, checked)
 
-    def _set_user_role(self, role_id: int, user_id: int, assigned: bool) -> None:
-        company_id = self._current_company_id()
+    def _render_users_list(self, role_id: int) -> None:
+        company_id = self._company_id()
         if company_id is None:
             return
+        self.users_list.clear()
+        for row in roles_service.list_role_users(role_id, company_id):
+            item = QListWidgetItem(row.full_name)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if row.assigned else Qt.Unchecked)
+            item.setData(Qt.UserRole, row.user_id)
+            self.users_list.addItem(item)
+        self.users_list.itemChanged.connect(self._on_user_assignment_changed)
+
+    def _on_user_assignment_changed(self, item: QListWidgetItem) -> None:
+        if self._editing_role_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        user_id = item.data(Qt.UserRole)
+        roles_service.set_user_role(user_id, self._editing_role_id, company_id, item.checkState() == Qt.Checked)
+
+    def _on_active_toggled(self, checked: bool) -> None:
+        if self._editing_role_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        role = next((r for r in self._roles if r.role_id == self._editing_role_id), None)
+        if role is None:
+            return
         try:
-            roles_service.set_user_role(user_id, role_id, company_id, assigned)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
+            roles_service.update_role(self._editing_role_id, company_id, role.parent_role_id, checked)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.refresh()
+
+    def _create_role(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
+            return
+        code = self.new_role_code_field.text().strip()
+        if not code:
+            self.status_label.setText("کدِ نقش را وارد کنید.")
+            return
+        try:
+            roles_service.create_role(company_id, code, self.parent_role_combo.currentData())
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.status_label.setText("")
+        self.new_role_code_field.clear()
+        self.refresh()

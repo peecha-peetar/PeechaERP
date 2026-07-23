@@ -4,17 +4,12 @@ version = "0.1.0"
 description = "پیچا — نرم‌افزار حسابداری/ERP چندشرکتی، چندارزی، چندزبانه"
 requires-python = ">=3.11"
 dependencies = [
-    "PySide6>=6.6",           # رابطِ کاربریِ اصلی (Qt6) — طبقِ تصمیمِ مهاجرت از Kivy
-    "kivy>=2.3,<3.0",         # نسخه‌ی قدیمیِ Kivy — تا تصمیمِ نهایی درباره‌ی حذفِ کامل نگه داشته شده
-    "kivymd>=1.2,<2.0",       # KivyMD 2.0 هنوز فقط از git master نصب می‌شود؛ وقتی روی PyPI پایدار شد ارتقا بدهید
-    "arabic-reshaper>=3.0",   # شکل‌دهی حروف فارسی/عربی (فقط برایِ نسخه‌ی قدیمیِ Kivy لازم است؛ Qt6 خودش بومی دارد)
-    "python-bidi>=0.4",       # ترتیبِ نمایشِ RTL همراهِ arabic-reshaper (فقط برایِ نسخه‌ی قدیمیِ Kivy)
+    "PySide6>=6.6",           # رابطِ کاربریِ اصلی (Qt6)
     "sqlalchemy>=2.0",
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
     "alembic>=1.13",
     "jdatetime>=5.0",         # تقویم شمسی (پیش‌فرض طبق docs/ui-ux-guidelines.md بخش ۱)
-    "requests>=2.31",         # فراخوانیِ سرویسِ ترجمه‌ی زنده (LibreTranslate) از صفحه‌ی ترجمه‌ها
 ]
 
 [project.optional-dependencies]

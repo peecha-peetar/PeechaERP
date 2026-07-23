@@ -1,22 +1,20 @@
-"""صفحه‌ی موقت برای ماژول‌هایی که هنوز ساخته نشده‌اند."""
+"""صفحه‌ی موقت برایِ ماژول‌هایی که هنوز به Qt مهاجرت نکرده‌اند."""
 
 from __future__ import annotations
 
-import os
-
-from kivy.lang import Builder
-from kivy.properties import StringProperty
-from kivymd.uix.screen import MDScreen
-
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-
-_KV_PATH = os.path.join(os.path.dirname(__file__), "placeholder.kv")
-Builder.load_file(_KV_PATH)
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
-class PlaceholderScreen(MDScreen):
-    message = StringProperty("")
+class PlaceholderScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignCenter)
+        self._label = QLabel("")
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setStyleSheet("font-size: 16px; color: #6B6B85;")
+        layout.addWidget(self._label)
 
     def set_module_name(self, module_name: str) -> None:
-        self.message = shape(tr("ماژول «{}» به‌زودی اضافه می‌شود.").format(tr(module_name)))
+        self._label.setText(f"ماژول «{module_name}» به‌زودی به Qt6 مهاجرت می‌کند.")

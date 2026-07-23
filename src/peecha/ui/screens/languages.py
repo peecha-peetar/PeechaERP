@@ -1,251 +1,218 @@
-"""صفحه‌ی مدیریت زبان‌ها — تعریفِ زبان‌های قابل‌استفاده در کل سیستم
-(core.languages)، پایه‌ی چندزبانگی برای شرکت‌ها/کاربران/ترجمه‌ها."""
+"""مدیریتِ زبان‌ها — معادلِ Qt برایِ languages.py/.kv در Kivy."""
 
 from __future__ import annotations
 
-import os
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.screen import MDScreen
-
-from peecha import session
-from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
-from peecha.ui import theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "languages.kv")
-Builder.load_file(_KV_PATH)
+_COLUMNS = ["فعال", "پیش‌فرض", "راست‌به‌چپ", "ترتیب", "نامِ بومی", "کد"]
 
 
-class LanguageRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    language_id = NumericProperty(0)
-    code_text = StringProperty("")
-    name_text = StringProperty("")
-    direction_text = StringProperty("")
-    default_text = StringProperty("")
-    status_text = StringProperty("")
-    is_active_row = BooleanProperty(True)
-    zebra = BooleanProperty(False)
-    selected = BooleanProperty(False)
-    on_edit = ObjectProperty(None)
-    on_delete = ObjectProperty(None)
+class LanguagesScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._rows: list[languages_service.LanguageRow] = []
+        self._editing_id: int | None = None
 
-    def on_release(self) -> None:
-        if self.on_edit is not None:
-            self.on_edit(self.language_id)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
+        outer.addWidget(self._build_list_panel(), stretch=3)
+        outer.addWidget(self._build_form_panel(), stretch=1)
 
-    def request_delete(self) -> None:
-        if self.on_delete is not None:
-            self.on_delete(self.language_id)
+    def _build_list_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
 
+        title = QLabel("زبان‌ها")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
-Factory.register("LanguageRowWidget", cls=LanguageRowWidget)
+        self.table = QTableWidget(0, len(_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.table.cellClicked.connect(self._on_row_clicked)
+        layout.addWidget(self.table)
+        return panel
 
+    def _build_form_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
 
-class LanguagesScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._rows_by_id: dict[int, languages_service.LanguageRow] = {}
-        self._editing_language_id: int | None = None
-        self._delete_dialog: MDDialog | None = None
+        self.form_title = QLabel("زبانِ جدید")
+        self.form_title.setObjectName("pageTitle")
+        layout.addWidget(self.form_title)
 
-    def on_pre_enter(self, *args):
-        self.apply_field_labels()
-        self.refresh_list()
-        self.bind_shortcuts()
+        layout.addWidget(QLabel("کد (مثلاً fa)"))
+        self.code_field = QLineEdit()
+        layout.addWidget(self.code_field)
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
+        layout.addWidget(QLabel("نامِ بومی"))
+        self.native_name_field = QLineEdit()
+        layout.addWidget(self.native_name_field)
 
-    def apply_field_labels(self) -> None:
-        language_id = session.current_language.language_id if session.current_language else None
-        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("languages", language_id).items()}
-        self.ids.code_field.hint_text = shape(labels["code"])
-        self.ids.name_field.hint_text = shape(labels["native_name"])
-        self.ids.sort_order_field.hint_text = shape(labels["sort_order"])
+        layout.addWidget(QLabel("ترتیبِ نمایش"))
+        self.sort_order_field = QSpinBox()
+        self.sort_order_field.setRange(0, 999)
+        layout.addWidget(self.sort_order_field)
 
-    def on_shortcut_save(self) -> None:
-        self.save_language()
+        self.is_rtl_checkbox = QCheckBox("راست‌به‌چپ")
+        layout.addWidget(self.is_rtl_checkbox)
 
-    def on_shortcut_cancel(self) -> bool:
-        if self._editing_language_id is not None:
-            self.cancel_edit()
-            return True
-        return False
+        self.is_default_checkbox = QCheckBox("زبانِ پیش‌فرض")
+        layout.addWidget(self.is_default_checkbox)
 
-    def on_shortcut_delete(self) -> bool:
-        if self._editing_language_id is not None:
-            self.confirm_delete(self._editing_language_id)
-            return True
-        return False
+        self.is_active_checkbox = QCheckBox("فعال")
+        self.is_active_checkbox.setChecked(True)
+        layout.addWidget(self.is_active_checkbox)
 
-    def _set_status(self, message: str) -> None:
-        self.ids.status_label.text = shape(message)
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
 
-    def refresh_list(self) -> None:
-        rows = languages_service.list_languages()
-        self._rows_by_id = {r.language_id: r for r in rows}
-        self.ids.grid_header.opacity = 1 if rows else 0
-        if not rows:
-            self.ids.languages_list.data = [
-                {"viewclass": "PEmptyState", "icon": "translate", "text": shape(tr("هنوز زبانی تعریف نشده است."))}
+        buttons = QHBoxLayout()
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        buttons.addWidget(save_button)
+
+        cancel_button = QPushButton("انصراف")
+        cancel_button.setObjectName("flatButton")
+        cancel_button.clicked.connect(self._reset_form)
+        buttons.addWidget(cancel_button)
+
+        self.delete_button = QPushButton("حذف")
+        self.delete_button.setObjectName("dangerButton")
+        self.delete_button.clicked.connect(self._delete)
+        self.delete_button.setVisible(False)
+        buttons.addWidget(self.delete_button)
+
+        layout.addLayout(buttons)
+        layout.addStretch(1)
+        return panel
+
+    def refresh(self) -> None:
+        self._reset_form()
+        self._rows = languages_service.list_languages()
+        self.table.setRowCount(len(self._rows))
+        for row_index, lang in enumerate(self._rows):
+            values = [
+                "بله" if lang.is_active else "خیر",
+                "بله" if lang.is_default else "خیر",
+                "بله" if lang.is_rtl else "خیر",
+                str(lang.sort_order),
+                lang.native_name,
+                lang.code,
             ]
-        else:
-            self.ids.languages_list.data = [
-                {
-                    "language_id": row.language_id,
-                    "on_edit": self.edit_language,
-                    "on_delete": self.confirm_delete,
-                    "code_text": row.code,
-                    "name_text": shape(row.native_name),
-                    "direction_text": shape(tr("راست‌به‌چپ") if row.is_rtl else tr("چپ‌به‌راست")),
-                    "default_text": shape(tr("پیش‌فرض") if row.is_default else ""),
-                    "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                    "is_active_row": row.is_active,
-                    "zebra": i % 2 == 1,
-                    "selected": row.language_id == self._editing_language_id,
-                }
-                for i, row in enumerate(rows)
-            ]
-        if self._editing_language_id is not None and self._editing_language_id not in self._rows_by_id:
-            self.cancel_edit()
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, lang.language_id)
+                self.table.setItem(row_index, col_index, item)
 
-    def edit_language(self, language_id: int) -> None:
-        row = self._rows_by_id.get(language_id)
-        if row is None:
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        language_id = self.table.item(row, 0).data(Qt.UserRole)
+        lang = next((r for r in self._rows if r.language_id == language_id), None)
+        if lang is not None:
+            self._load_into_form(lang)
+
+    def _load_into_form(self, lang: languages_service.LanguageRow) -> None:
+        self._editing_id = lang.language_id
+        self.form_title.setText(f"ویرایشِ زبان — {lang.native_name}")
+        self.status_label.setText("")
+        self.code_field.setText(lang.code)
+        self.code_field.setEnabled(False)
+        self.native_name_field.setText(lang.native_name)
+        self.sort_order_field.setValue(lang.sort_order)
+        self.is_rtl_checkbox.setChecked(lang.is_rtl)
+        self.is_default_checkbox.setChecked(lang.is_default)
+        self.is_active_checkbox.setChecked(lang.is_active)
+        self.delete_button.setVisible(True)
+
+    def _reset_form(self) -> None:
+        self._editing_id = None
+        self.form_title.setText("زبانِ جدید")
+        self.status_label.setText("")
+        self.code_field.clear()
+        self.code_field.setEnabled(True)
+        self.native_name_field.clear()
+        self.sort_order_field.setValue(0)
+        self.is_rtl_checkbox.setChecked(False)
+        self.is_default_checkbox.setChecked(False)
+        self.is_active_checkbox.setChecked(True)
+        self.delete_button.setVisible(False)
+        self.table.clearSelection()
+
+    def _save(self) -> None:
+        native_name = self.native_name_field.text().strip()
+        if not native_name:
+            self.status_label.setText("نامِ بومی را وارد کنید.")
             return
-        self._editing_language_id = language_id
-        self.ids.code_field.set_value(row.code)
-        self.ids.code_field.disabled = True
-        self.ids.name_field.set_value(row.native_name)
-        self.ids.name_field.focus = True
-        self.ids.sort_order_field.text = str(row.sort_order)
-        self.ids.is_rtl_checkbox.active = row.is_rtl
-        self.ids.is_default_checkbox.active = row.is_default
-        self.ids.is_active_checkbox.active = row.is_active
-        self.ids.form_title.text = shape(tr("ویرایش زبان «{}»").format(row.native_name))
-        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
-        self.ids.cancel_edit_button.opacity = 1
-        self.ids.cancel_edit_button.disabled = False
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.native_name))
-        self.refresh_list()
 
-    def cancel_edit(self) -> None:
-        self._editing_language_id = None
-        self.ids.code_field.text = ""
-        self.ids.code_field.disabled = False
-        self.ids.name_field.text = ""
-        self.ids.sort_order_field.text = ""
-        self.ids.is_rtl_checkbox.active = False
-        self.ids.is_default_checkbox.active = False
-        self.ids.is_active_checkbox.active = True
-        self.ids.form_title.text = shape(tr("افزودن زبان جدید"))
-        self.ids.save_button.text = shape(tr("افزودن زبان"))
-        self.ids.cancel_edit_button.opacity = 0
-        self.ids.cancel_edit_button.disabled = True
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "0dp"
-        self._set_status(tr(""))
-        self.refresh_list()
-
-    def save_language(self) -> None:
-        from peecha.ui import numerals  # noqa: PLC0415
-
-        name = self.ids.name_field.value.strip()
-        sort_order_text = numerals.to_ascii_digits(self.ids.sort_order_field.text.strip())
-        sort_order = int(sort_order_text) if sort_order_text.isdigit() else 0
-
-        if self._editing_language_id is not None:
-            if not name:
-                self._set_status(tr("نام زبان را وارد کنید."))
-                return
-            try:
+        try:
+            if self._editing_id is not None:
                 languages_service.update_language(
-                    language_id=self._editing_language_id,
-                    native_name=name,
-                    is_rtl=self.ids.is_rtl_checkbox.active,
-                    is_default=self.ids.is_default_checkbox.active,
-                    is_active=self.ids.is_active_checkbox.active,
-                    sort_order=sort_order,
+                    self._editing_id,
+                    native_name,
+                    self.is_rtl_checkbox.isChecked(),
+                    self.is_default_checkbox.isChecked(),
+                    self.is_active_checkbox.isChecked(),
+                    self.sort_order_field.value(),
                 )
-            except Exception as exc:  # noqa: BLE001
-                self._set_status(tr("خطا: {}").format(exc))
-                return
-            self.cancel_edit()
+            else:
+                code = self.code_field.text().strip()
+                if not code:
+                    self.status_label.setText("کد را وارد کنید.")
+                    return
+                languages_service.create_language(
+                    code,
+                    native_name,
+                    self.is_rtl_checkbox.isChecked(),
+                    self.is_default_checkbox.isChecked(),
+                    self.sort_order_field.value(),
+                )
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
             return
 
-        code = self.ids.code_field.value.strip()
-        if not code or not name:
-            self._set_status(tr("کد و نام زبان را وارد کنید."))
+        self.refresh()
+
+    def _delete(self) -> None:
+        if self._editing_id is None:
             return
-        try:
-            languages_service.create_language(
-                code=code,
-                native_name=name,
-                is_rtl=self.ids.is_rtl_checkbox.active,
-                is_default=self.ids.is_default_checkbox.active,
-                sort_order=sort_order,
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc))
-            return
-
-        # طبق درخواستِ صریح: به‌محضِ ساختِ زبانِ تازه، خودکار ترجمه شود و
-        # در فایلِ جداگانه‌ی همان زبان ذخیره شود (نه فقط دیتابیس) تا بعداً
-        # با ویرایشِ همان فایل قابل‌اصلاح باشد.
-        from peecha.services import i18n_translations as i18n_translations_service  # noqa: PLC0415
-
-        i18n_translations_service.generate_translation_file(code)
-
-        self.ids.code_field.text = ""
-        self.ids.name_field.text = ""
-        self.ids.sort_order_field.text = ""
-        self.ids.is_rtl_checkbox.active = False
-        self.ids.is_default_checkbox.active = False
-        self.refresh_list()
-
-    def confirm_delete(self, language_id: int) -> None:
-        row = self._rows_by_id.get(language_id)
-        if row is None:
-            return
-
-        if self._delete_dialog is not None:
-            self._delete_dialog.dismiss()
-
-        def _do_delete(*_args) -> None:
-            self._delete_dialog.dismiss()
-            self._perform_delete(language_id)
-
-        self._delete_dialog = MDDialog(
-            title=shape(tr("حذف زبان")),
-            text=shape(tr("زبان «{}» حذف شود؟ این کار قابل بازگشت نیست.").format(row.native_name)),
-            buttons=[
-                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._delete_dialog.dismiss()),
-                MDRaisedButton(text=shape(tr("حذف")), md_bg_color=theme.DANGER, on_release=_do_delete),
-            ],
+        confirm = QMessageBox.question(
+            self, "حذفِ زبان", "این زبان حذف شود؟", QMessageBox.Yes | QMessageBox.No
         )
-        self._delete_dialog.open()
-
-    def _perform_delete(self, language_id: int) -> None:
-        try:
-            languages_service.delete_language(language_id)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc))
+        if confirm != QMessageBox.Yes:
             return
-        if self._editing_language_id == language_id:
-            self.cancel_edit()
-        else:
-            self._set_status(tr("زبان حذف شد."))
-            self.refresh_list()
+        try:
+            languages_service.delete_language(self._editing_id)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.refresh()

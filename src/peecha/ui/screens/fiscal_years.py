@@ -1,131 +1,148 @@
-"""صفحه‌ی مدیریت سال‌های مالیِ شرکتِ جاری — هر سالِ مالی با واردکردنِ یک
-تاریخِ دلخواه در همان سال ساخته می‌شود (بازه‌ی دقیق طبق الگوی شروع سال مالیِ
-شرکت خودکار محاسبه و ۱۲ دوره‌ی ماهانه هم ساخته می‌شود)."""
+"""مدیریتِ سال‌های مالی — معادلِ Qt برایِ fiscal_years.py/.kv در Kivy."""
 
 from __future__ import annotations
 
 import datetime
-import os
 
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.screen import MDScreen
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QDateEdit,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-from peecha import session
-from peecha.services import field_labels as field_labels_service
+from peecha import session as app_session
 from peecha.services import fiscal_years as fiscal_years_service
-from peecha.ui import numerals, theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "fiscal_years.kv")
-Builder.load_file(_KV_PATH)
+_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
 
 
-class FiscalYearRowWidget(RecycleDataViewBehavior, MDBoxLayout):
-    fiscal_year_id = NumericProperty(0)
-    code_text = StringProperty("")
-    range_text = StringProperty("")
-    periods_text = StringProperty("")
-    status_text = StringProperty("")
-    is_closed_row = BooleanProperty(False)
-    zebra = BooleanProperty(False)
-    on_toggle = ObjectProperty(None)
+class FiscalYearsScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._rows: list[fiscal_years_service.FiscalYearRow] = []
 
-    def toggle(self) -> None:
-        if self.on_toggle is not None:
-            self.on_toggle(self.fiscal_year_id, not self.is_closed_row)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
+        outer.addWidget(self._build_list_panel(), stretch=3)
+        outer.addWidget(self._build_form_panel(), stretch=1)
 
+    def _build_list_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
 
-Factory.register("FiscalYearRowWidget", cls=FiscalYearRowWidget)
+        title = QLabel("سال‌های مالی")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
+        self.table = QTableWidget(0, len(_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.cellClicked.connect(self._on_row_clicked)
+        layout.addWidget(self.table)
+        return panel
 
-class FiscalYearsScreen(KeyboardShortcutMixin, MDScreen):
-    def on_pre_enter(self, *args):
-        self.ids.on_date_field.text = numerals.format_jalali_date(datetime.date.today())
-        self.apply_field_labels()
-        self.refresh_list()
-        self.bind_shortcuts()
+    def _build_form_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
+        title = QLabel("افزودنِ سالِ مالیِ جدید")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
-    def apply_field_labels(self) -> None:
-        language_id = session.current_language.language_id if session.current_language else None
-        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("fiscal_years", language_id).items()}
-        self.ids.on_date_field.hint_text = shape(labels["on_date"])
+        hint = QLabel("یک تاریخِ دلخواه در سالِ موردنظر را انتخاب کنید — بازه‌ی کامل خودکار محاسبه می‌شود.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
 
-    def on_shortcut_save(self) -> None:
-        self.save_fiscal_year()
+        self.date_field = QDateEdit()
+        self.date_field.setCalendarPopup(True)
+        self.date_field.setDate(datetime.date.today())
+        layout.addWidget(self.date_field)
 
-    def _set_status(self, message: str, *, is_error: bool = False) -> None:
-        self.ids.status_label.text = shape(message)
-        self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
 
-    def refresh_list(self) -> None:
-        if session.current_company is None:
-            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
-            self.ids.grid_header.opacity = 0
-            self.ids.years_list.data = []
-            return
+        create_button = QPushButton("ایجادِ سالِ مالی")
+        create_button.setObjectName("primaryButton")
+        create_button.clicked.connect(self._create)
+        layout.addWidget(create_button)
 
-        rows = fiscal_years_service.list_fiscal_years(session.current_company.company_id)
-        self.ids.grid_header.opacity = 1 if rows else 0
-        if not rows:
-            self.ids.years_list.data = [
-                {"viewclass": "PEmptyState", "icon": "calendar-blank-outline", "text": shape(tr("هنوز سالِ مالی‌ای تعریف نشده است."))}
+        layout.addStretch(1)
+        return panel
+
+    def _company_id(self) -> int | None:
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        self.status_label.setText("")
+        company_id = self._company_id()
+        self._rows = fiscal_years_service.list_fiscal_years(company_id) if company_id is not None else []
+        self.table.setRowCount(len(self._rows))
+        for row_index, fy in enumerate(self._rows):
+            values = [
+                "بسته" if fy.is_closed else "باز",
+                fy.end_date.isoformat(),
+                fy.start_date.isoformat(),
+                fy.code,
             ]
-            return
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, fy.fiscal_year_id)
+                self.table.setItem(row_index, col_index, item)
 
-        self.ids.years_list.data = [
-            {
-                "fiscal_year_id": row.fiscal_year_id,
-                "on_toggle": self._toggle_closed,
-                "code_text": numerals.to_persian_digits(row.code),
-                "range_text": shape(
-                    f"{numerals.format_jalali_date(row.start_date)} تا "
-                    f"{numerals.format_jalali_date(row.end_date)}"
-                ),
-                "periods_text": numerals.to_persian_digits(f"{row.period_count} دوره"),
-                "status_text": shape(tr("بسته") if row.is_closed else tr("باز")),
-                "is_closed_row": row.is_closed,
-                "zebra": i % 2 == 1,
-            }
-            for i, row in enumerate(rows)
-        ]
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        fiscal_year_id = self.table.item(row, 0).data(Qt.UserRole)
+        fy = next((r for r in self._rows if r.fiscal_year_id == fiscal_year_id), None)
+        if fy is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "تغییرِ وضعیت",
+            f"سالِ مالیِ «{fy.code}» {'باز' if fy.is_closed else 'بسته'} شود؟",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        fiscal_years_service.set_closed(fy.fiscal_year_id, company_id, not fy.is_closed)
+        self.refresh()
 
-    def save_fiscal_year(self) -> None:
-        if session.current_company is None:
-            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
+    def _create(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
             return
+        company = app_session.current_company
+        qdate = self.date_field.date()
+        on_date = datetime.date(qdate.year(), qdate.month(), qdate.day())
         try:
-            on_date = numerals.parse_jalali_date(self.ids.on_date_field.text)
-        except ValueError as exc:
-            self._set_status(str(exc), is_error=True)
-            return
-        try:
-            fiscal_year = fiscal_years_service.create_fiscal_year_for_date(
-                company_id=session.current_company.company_id,
-                start_month=session.current_company.fiscal_year_start_month,
-                start_day=session.current_company.fiscal_year_start_day,
-                on_date=on_date,
+            fiscal_years_service.create_fiscal_year_for_date(
+                company_id, company.fiscal_year_start_month, company.fiscal_year_start_day, on_date
             )
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
             return
-        self._set_status(f"سالِ مالیِ «{numerals.to_persian_digits(fiscal_year.code)}» ساخته شد.")
-        self.refresh_list()
-
-    def _toggle_closed(self, fiscal_year_id: int, is_closed: bool) -> None:
-        if session.current_company is None:
-            return
-        try:
-            fiscal_years_service.set_closed(fiscal_year_id, session.current_company.company_id, is_closed)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-        self.refresh_list()
+        self.refresh()

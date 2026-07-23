@@ -1,1349 +1,393 @@
-"""صفحه‌ی صدور سند حسابداری: هدر سند + ردیف‌های بدهکار/بستانکار پویا +
-فهرست اسناد اخیر (با ویرایش/حذف).
+"""صدور سند — معادلِ Qt برایِ journal_entry.py/.kv در Kivy.
 
-هر ردیف یک JournalEntryLineRow است (تعریف در همین فایل، نه widgets.py،
-چون فقط همین صفحه از آن استفاده می‌کند). موازنه‌ی بدهکار/بستانکار به‌صورت
-زنده با هر تغییرِ مبلغ محاسبه می‌شود؛ اعتبارسنجیِ نهایی (شامل قابل‌ثبت‌بودنِ
-حساب و برابریِ دقیق مبالغ) در services/journal_entries.py انجام می‌شود.
+نکته‌ی مهم: در Kivy، زنجیره‌ی Enter/جستجویِ زنده‌ی حساب/تفصیلی به‌خاطرِ
+نبودِ Tab-order بومی، کدِ دستیِ زیادی لازم داشت (rtl.py، شرح کاملِ
+Kivy-property-observer، و غیره). در Qt این‌کار خودکار است: QComboBox
+قابل‌ویرایش+تکمیل‌خودکار جستجویِ زنده می‌دهد و Tab-order بومیِ Qt خودش
+حرکتِ منطقیِ بینِ فیلدها را انجام می‌دهد — نیازی به کدِ اضافه نیست.
 
-فقط سندهای با وضعیت TEMPORARY قابل ویرایش/حذف‌اند (چون هنوز جریان تاییدِ
-کارتابل ساخته نشده، همه‌ی سندها فعلاً TEMPORARY هستند، طبق طراحی دیتابیس:
-«موقت: قابل ویرایش/ادغام»)."""
+ساده‌سازیِ عمدیِ این مرحله از مهاجرت: هر ردیف با ارزِ پایه‌ی شرکت ثبت
+می‌شود (بدونِ انتخابِ ارز/نرخِ اختصاصیِ هر ردیف — که در Kivy وجود داشت)؛
+این می‌تواند در قدمِ بعدیِ مهاجرت اضافه شود."""
 
 from __future__ import annotations
 
 import datetime
 import decimal
-import os
 
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.metrics import dp
-from kivy.properties import BooleanProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.dropdown import DropDown
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.screen import MDScreen
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QCompleter,
+    QDateEdit,
+    QDoubleSpinBox,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
-from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.services import field_labels as field_labels_service
 from peecha.services import journal_entries as je_service
-from peecha.ui import numerals, theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
-from peecha.ui.widgets import PAmountField, PSelectField, PTextField, open_rtl_dropdown
-
-_KV_PATH = os.path.join(os.path.dirname(__file__), "journal_entry.kv")
-Builder.load_file(_KV_PATH)
-
-class _AccountOptionRow(ButtonBehavior, MDBoxLayout):
-    """یک ردیف از نتایجِ جستجوی زنده‌ی AccountSearchField."""
-
-    label_text = StringProperty("")
-    highlighted = BooleanProperty(False)
-
-    def __init__(self, account_row: coa_service.AccountRow, on_choose, **kwargs):
-        super().__init__(**kwargs)
-        self.account_row = account_row
-        self._on_choose = on_choose
-
-    def on_release(self) -> None:
-        self._on_choose(self.account_row)
 
 
-class AccountSearchField(PTextField):
-    """فیلدِ کدِ حساب با جستجوی همزمان: طبق درخواستِ صریح، با هر کاراکترِ
-    تایپ‌شده نتایج بلافاصله فیلتر می‌شوند (روی full_code و نام)، بالا/پایین
-    بینِ نتایجِ نمایش‌داده‌شده حرکت می‌کند و Enter نتیجه‌ی هایلایت‌شده را
-    انتخاب می‌کند. چون هر نمونه به داده‌ی مخصوصِ خودش (فهرستِ حساب‌ها،
-    کال‌بکِ انتخاب) نیاز دارد که در KV قابل‌تعریف نیست، در پایتون
-    (JournalEntryLineRow) ساخته و در یک جایگاهِ KV جاگذاری می‌شود، نه
-    مستقیم در KV اعلام می‌شود."""
+def _fill_searchable_combo(combo: QComboBox, options: list[tuple[int, str]]) -> None:
+    combo.clear()
+    combo.addItem("", None)
+    for value, label in options:
+        combo.addItem(label, value)
+    combo.setEditable(True)
+    combo.setInsertPolicy(QComboBox.NoInsert)
+    completer = QCompleter([label for _v, label in options])
+    completer.setCaseSensitivity(Qt.CaseInsensitive)
+    completer.setFilterMode(Qt.MatchContains)
+    combo.setCompleter(completer)
 
-    def __init__(self, account_options: list[coa_service.AccountRow], on_select, **kwargs):
-        kwargs.setdefault("persian_digits", True)
-        kwargs.setdefault("hint_text", shape(tr("جستجوی کد یا نام حساب")))
-        # خودش با انتخاب یک نتیجه مستقیم self.text = shape(...) می‌کند؛ اگر
-        # PTextField هم روی این (متنِ از قبل shape‌شده) دوباره shape() صدا
-        # بزند، خرابش می‌کند — پس مکانیزمِ خودکارِ کلاسِ پایه اینجا خاموش است.
-        kwargs.setdefault("auto_shape_display", False)
-        super().__init__(**kwargs)
-        self.account_options = account_options
-        self._on_select = on_select
+
+class _LineRowWidget(QWidget):
+    def __init__(self, screen: "JournalEntryScreen") -> None:
+        super().__init__()
+        self._screen = screen
+        self._dimension_combos: dict[int, QComboBox] = {}
+        self._person_combo: QComboBox | None = None
+        self._person_group_ids: list[int] = []
         self.account_id: int | None = None
-        self._results: list[coa_service.AccountRow] = []
-        self._highlighted_index = -1
-        self._suppress_filter = False
-        self._dropdown = DropDown(auto_width=False, max_height=dp(240))
-        self._dropdown.width = dp(340)
-        self.bind(text=self._on_text_changed)
-        self.bind(focus=self._on_focus_changed)
 
-    def _on_focus_changed(self, _instance, focused: bool) -> None:
-        # عمداً با گرفتنِ فوکوس منو باز نمی‌شود (فقط با تایپِ کاراکتر، طبق
-        # درخواستِ صریح) — چون فوکوسِ خودکارِ فرم روی ردیفِ تازه‌ساخته (در
-        # _reset_form/_focus_after_row) در همان فریمی می‌افتد که Kivy هنوز
-        # موقعیتِ نهاییِ ویجت را layout نکرده؛ بازکردنِ منو در آن لحظه با
-        # مختصاتِ نادرست محاسبه می‌شود (با تست مستقیم پیدا شد: منو روی نوار
-        # کناری می‌افتد). با اولین کاراکترِ واقعی که کاربر تایپ می‌کند، لایه‌بندی
-        # قطعاً تمام شده و این مشکل وجود ندارد.
-        if not focused:
-            self._dropdown.dismiss()
+        self.setObjectName("card")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(6)
 
-    def _on_text_changed(self, _instance, value: str) -> None:
-        if self._suppress_filter:
+        top_row = QHBoxLayout()
+        self.remove_button = QPushButton("حذفِ ردیف")
+        self.remove_button.setObjectName("dangerButton")
+        self.remove_button.clicked.connect(lambda: screen.remove_line(self))
+        top_row.addWidget(self.remove_button)
+        top_row.addStretch(1)
+        outer.addLayout(top_row)
+
+        grid = QGridLayout()
+        grid.setSpacing(6)
+
+        grid.addWidget(QLabel("حساب"), 0, 0)
+        self.account_combo = QComboBox()
+        _fill_searchable_combo(self.account_combo, screen.account_options)
+        self.account_combo.currentIndexChanged.connect(self._on_account_changed)
+        grid.addWidget(self.account_combo, 0, 1, 1, 3)
+
+        grid.addWidget(QLabel("شرحِ ردیف"), 1, 0)
+        self.description_field = QLineEdit()
+        grid.addWidget(self.description_field, 1, 1, 1, 3)
+
+        grid.addWidget(QLabel("بدهکار"), 2, 0)
+        self.debit_field = QDoubleSpinBox()
+        self.debit_field.setRange(0, 10**12)
+        self.debit_field.setGroupSeparatorShown(True)
+        self.debit_field.setDecimals(0)
+        self.debit_field.valueChanged.connect(self._on_debit_changed)
+        grid.addWidget(self.debit_field, 2, 1)
+
+        grid.addWidget(QLabel("بستانکار"), 2, 2)
+        self.credit_field = QDoubleSpinBox()
+        self.credit_field.setRange(0, 10**12)
+        self.credit_field.setGroupSeparatorShown(True)
+        self.credit_field.setDecimals(0)
+        self.credit_field.valueChanged.connect(self._on_credit_changed)
+        grid.addWidget(self.credit_field, 2, 3)
+
+        outer.addLayout(grid)
+
+        self.dimensions_container = QVBoxLayout()
+        outer.addLayout(self.dimensions_container)
+
+        self._render_dimension_fields()
+
+    def _on_debit_changed(self, value: float) -> None:
+        if value:
+            self.credit_field.blockSignals(True)
+            self.credit_field.setValue(0)
+            self.credit_field.blockSignals(False)
+        self._screen.update_balance()
+
+    def _on_credit_changed(self, value: float) -> None:
+        if value:
+            self.debit_field.blockSignals(True)
+            self.debit_field.setValue(0)
+            self.debit_field.blockSignals(False)
+        self._screen.update_balance()
+
+    def _on_account_changed(self, _index: int) -> None:
+        self.account_id = self.account_combo.currentData()
+        self._render_dimension_fields()
+
+    def _render_dimension_fields(self) -> None:
+        while self.dimensions_container.count():
+            child = self.dimensions_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._dimension_combos = {}
+        self._person_combo = None
+
+        if self.account_id is None:
             return
-        self.account_id = None
-        self._filter_and_show(value)
 
-    def _filter_and_show(self, query: str) -> None:
-        query_norm = numerals.to_ascii_digits(query).strip()
-        if not query_norm:
-            self._results = list(self.account_options)
-        else:
-            self._results = [
-                row for row in self.account_options if query_norm in row.full_code or query_norm in row.name
-            ]
-        self._highlighted_index = 0 if self._results else -1
-        self._rebuild_dropdown()
-        if self._results and self.focus:
-            # چون persian_digits=True با هر تایپِ رقم یک‌بار دیگر خودش را
-            # صدا می‌زند (تبدیل رقم → بازتنظیمِ text → دوباره این متد، طبق
-            # همان الگوی موجود در PTextField._persianize_on_text)، اگر منو
-            # از قبل باز باشد نباید دوباره open() صدا زده شود — DropDown
-            # با فراخوانیِ تودرتوی open() روی همان ویجت کرش می‌کند (تست
-            # مستقیم تایید کرد: «قبلاً یک والد دارد»).
-            if self._dropdown.attach_to is None:
-                self._dropdown.open(self)
-        else:
-            self._dropdown.dismiss()
-
-    def _rebuild_dropdown(self) -> None:
-        self._dropdown.clear_widgets()
-        for i, row in enumerate(self._results):
-            self._dropdown.add_widget(
-                _AccountOptionRow(
-                    account_row=row,
-                    on_choose=self._select,
-                    label_text=shape(f"{numerals.to_persian_digits(row.full_code)} — {row.name}"),
-                    highlighted=(i == self._highlighted_index),
-                )
-            )
-
-    def _move_highlight(self, delta: int) -> None:
-        if not self._results:
-            return
-        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
-        self._rebuild_dropdown()
-
-    def _select(self, account_row: coa_service.AccountRow) -> None:
-        self.set_selected(account_row)
-        self._dropdown.dismiss()
-        self._on_select()
-
-    def set_selected(self, account_row: coa_service.AccountRow) -> None:
-        """پیش‌پرکردنِ فیلد (مثلاً هنگام بارگذاریِ سند برای ویرایش) بدونِ
-        بازکردنِ منو یا صدازدنِ on_select."""
-        self.account_id = account_row.account_id
-        self._suppress_filter = True
-        self.text = shape(f"{numerals.to_persian_digits(account_row.full_code)} — {account_row.name}")
-        self._suppress_filter = False
-
-    def keyboard_on_key_down(self, window, keycode, text, modifiers):
-        key = keycode[0]
-        if key == 273:  # بالا
-            self._move_highlight(-1)
-            return True
-        if key == 274:  # پایین
-            self._move_highlight(1)
-            return True
-        if key in (13, 271):  # اینتر / اینترِ صفحه‌کلیدِ عددی
-            if self._results and 0 <= self._highlighted_index < len(self._results):
-                self._select(self._results[self._highlighted_index])
-            return True
-        if key == 27 and self._dropdown.attach_to is not None:  # Escape فقط منو را می‌بندد، نه کل فرم را
-            self._dropdown.dismiss()
-            return True
-        return super().keyboard_on_key_down(window, keycode, text, modifiers)
-
-
-def _person_label(row: dimensions_service.DetailAccountRow) -> str:
-    if row.code == dimensions_service.NO_DETAIL_CODE:
-        return row.name or dimensions_service.NO_DETAIL_LABEL
-    return f"{row.code} — {row.name}" if row.name else row.code
-
-
-class _PersonOptionRow(ButtonBehavior, MDBoxLayout):
-    """یک ردیف از نتایجِ جستجوی زنده‌ی PersonSearchField — مشابهِ _AccountOptionRow."""
-
-    label_text = StringProperty("")
-    highlighted = BooleanProperty(False)
-
-    def __init__(self, person_row: dimensions_service.DetailAccountRow, on_choose, **kwargs):
-        super().__init__(**kwargs)
-        self.person_row = person_row
-        self._on_choose = on_choose
-
-    def on_release(self) -> None:
-        self._on_choose(self.person_row)
-
-
-class PersonSearchField(PTextField):
-    """فیلدِ تفصیلیِ اشخاص — دقیقاً همان الگویِ جستجوی زنده‌ی AccountSearchField
-    (فیلترِ بلافاصله با هر کاراکتر، بالا/پایین بینِ نتایج، Enter برایِ
-    انتخاب) اما رویِ فهرستِ اشخاص؛ طبق درخواستِ صریح، این ستون همیشه کنارِ
-    ستونِ حساب نمایش داده می‌شود (نه پشتِ آیکون مثلِ بقیه‌ی ابعاد) و همیشه
-    یک مقدار دارد — پیش‌فرض «بدون تفصیلی»، نه خالی."""
-
-    def __init__(self, person_options: list[dimensions_service.DetailAccountRow], on_select, **kwargs):
-        kwargs.setdefault("hint_text", shape(tr("تفصیلی")))
-        kwargs.setdefault("auto_shape_display", False)
-        super().__init__(**kwargs)
-        self.person_options = person_options
-        self._on_select = on_select
-        self.detail_account_id: int | None = None
-        self._results: list[dimensions_service.DetailAccountRow] = []
-        self._highlighted_index = -1
-        self._suppress_filter = False
-        self._dropdown = DropDown(auto_width=False, max_height=dp(240))
-        self._dropdown.width = dp(300)
-        self.bind(text=self._on_text_changed)
-        self.bind(focus=self._on_focus_changed)
-
-    def set_options(self, person_options: list[dimensions_service.DetailAccountRow]) -> None:
-        """طبقِ محدودیتِ گروهِ تفصیلیِ حسابِ انتخاب‌شده (اگر حسابی به گروهِ
-        خاصی محدود شده باشد)، فهرستِ اشخاصِ قابل‌جستجو را عوض می‌کند —
-        بدونِ تأثیر روی self.person_options در JournalEntryLineRow (که
-        همیشه فهرستِ کاملِ همه‌ی اشخاص را برای بازخوانیِ سندِ ویرایشی نگه
-        می‌دارد)."""
-        self.person_options = person_options
-
-    def clear_selection(self) -> None:
-        self.detail_account_id = None
-        self._suppress_filter = True
-        self.text = ""
-        self._suppress_filter = False
-
-    def _on_focus_changed(self, _instance, focused: bool) -> None:
-        if not focused:
-            self._dropdown.dismiss()
-            return
-        # طبق درخواستِ صریح: بعدِ ورودِ حساب، همین که فوکوس به تفصیلی
-        # می‌رسد، فهرستِ کاملِ تفصیلی‌ها بلافاصله باز/جستجوپذیر باشد — نه
-        # فقط با اولین کاراکترِ تایپ‌شده (که رفتارِ AccountSearchField
-        # است، عمداً به‌خاطرِ باگِ لایه‌بندیِ ردیفِ تازه‌ساخته). چون فوکوسِ
-        # این فیلد همیشه از طریقِ انتخابِ واقعیِ یک حساب می‌آید (نه فوکوسِ
-        # خودکارِ فرم روی ردیفِ تازه)، آن مشکل اینجا مصداق ندارد؛ بازهم برای
-        # اطمینان، بازکردن به فریمِ بعد موکول می‌شود.
-        from kivy.clock import Clock  # noqa: PLC0415
-
-        Clock.schedule_once(self._open_full_list_if_still_focused, 0)
-
-    def _open_full_list_if_still_focused(self, _dt=None) -> None:
-        if self.focus and self._dropdown.attach_to is None:
-            self._filter_and_show("")
-
-    def _on_text_changed(self, _instance, value: str) -> None:
-        if self._suppress_filter:
-            return
-        self.detail_account_id = None
-        self._filter_and_show(value)
-
-    def _filter_and_show(self, query: str) -> None:
-        query_norm = query.strip()
-        if not query_norm:
-            self._results = list(self.person_options)
-        else:
-            self._results = [
-                row
-                for row in self.person_options
-                if query_norm in row.code or (row.name and query_norm in row.name)
-            ]
-        self._highlighted_index = 0 if self._results else -1
-        self._rebuild_dropdown()
-        if self._results and self.focus:
-            if self._dropdown.attach_to is None:
-                self._dropdown.open(self)
-        else:
-            self._dropdown.dismiss()
-
-    def _rebuild_dropdown(self) -> None:
-        self._dropdown.clear_widgets()
-        for i, row in enumerate(self._results):
-            self._dropdown.add_widget(
-                _PersonOptionRow(
-                    person_row=row,
-                    on_choose=self._select,
-                    label_text=shape(_person_label(row)),
-                    highlighted=(i == self._highlighted_index),
-                )
-            )
-
-    def _move_highlight(self, delta: int) -> None:
-        if not self._results:
-            return
-        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
-        self._rebuild_dropdown()
-
-    def _select(self, person_row: dimensions_service.DetailAccountRow) -> None:
-        self.set_selected(person_row)
-        self._dropdown.dismiss()
-        self._on_select()
-
-    def set_selected(self, person_row: dimensions_service.DetailAccountRow) -> None:
-        self.detail_account_id = person_row.detail_account_id
-        self._suppress_filter = True
-        self.text = shape(_person_label(person_row))
-        self._suppress_filter = False
-
-    def keyboard_on_key_down(self, window, keycode, text, modifiers):
-        key = keycode[0]
-        if key == 273:  # بالا
-            self._move_highlight(-1)
-            return True
-        if key == 274:  # پایین
-            self._move_highlight(1)
-            return True
-        if key in (13, 271):  # اینتر / اینترِ صفحه‌کلیدِ عددی
-            if self._results and 0 <= self._highlighted_index < len(self._results):
-                self._select(self._results[self._highlighted_index])
-            elif self.focus_next:
-                # طبق طراحیِ صریح: تفصیلی همیشه یک مقدارِ معتبر دارد (پیش‌فرض
-                # «بدون تفصیلی»)، پس بر خلافِ AccountSearchField (که انتخاب
-                # در آن الزامی است)، اگر کاربر چیزی تایپ نکرده Enter باید
-                # همان مقدارِ فعلی را بپذیرد و به فیلدِ بعد برود.
-                self.focus_next.focus = True
-            return True
-        if key == 27 and self._dropdown.attach_to is not None:
-            self._dropdown.dismiss()
-            return True
-        return super().keyboard_on_key_down(window, keycode, text, modifiers)
-
-
-class _SuggestionRow(ButtonBehavior, MDBoxLayout):
-    """یک ردیفِ نتیجه‌ی پیشنهادِ شرح — مشابهِ _AccountOptionRow."""
-
-    label_text = StringProperty("")
-    highlighted = BooleanProperty(False)
-
-    def __init__(self, suggestion_text: str, on_choose, **kwargs):
-        super().__init__(**kwargs)
-        self.suggestion_text = suggestion_text
-        self._on_choose = on_choose
-
-    def on_release(self) -> None:
-        self._on_choose(self.suggestion_text)
-
-
-class LineDescriptionField(PTextField):
-    """فیلدِ شرحِ ردیف با پیشنهادِ زنده از شرح‌های قبلاً واردشده‌ی همین
-    شرکت (طبق درخواستِ صریح: «در هنگام تایپ خودش هم کلمه پیشنهاد بده»).
-    انتخابِ یک پیشنهاد (کلیک یا Enترِ روی گزینه‌ی هایلایت‌شده) هم مقدار را
-    می‌گذارد هم — دقیقاً مثلِ AccountSearchField — بلافاصله به فیلدِ بعدی
-    (بدهکار) می‌رود؛ اگر منویی باز نباشد، Enterِ معمولی هم به همان فیلدِ
-    بعدی می‌رود (با focus_next که JournalEntryLineRow وصل می‌کند)."""
-
-    def __init__(self, suggestions_provider, **kwargs):
-        kwargs.setdefault("hint_text", shape(tr("شرح ردیف")))
-        super().__init__(**kwargs)
-        self._suggestions_provider = suggestions_provider
-        self._results: list[str] = []
-        self._highlighted_index = -1
-        self._dropdown = DropDown(auto_width=False, max_height=dp(180))
-        self._dropdown.width = dp(280)
-        self.bind(text=self._on_text_changed)
-        self.bind(focus=self._on_focus_changed)
-        self.bind(on_text_validate=self._on_default_validate)
-
-    def _on_focus_changed(self, _instance, focused: bool) -> None:
-        if not focused:
-            self._dropdown.dismiss()
-
-    def _on_text_changed(self, _instance, value: str) -> None:
-        query = value.strip()
-        if not query:
-            self._results = []
-            self._dropdown.dismiss()
-            return
-        suggestions = self._suggestions_provider()
-        self._results = [s for s in suggestions if query in s and s != query][:8]
-        self._highlighted_index = 0 if self._results else -1
-        self._rebuild_dropdown()
-        if self._results and self.focus:
-            if self._dropdown.attach_to is None:
-                self._dropdown.open(self)
-        else:
-            self._dropdown.dismiss()
-
-    def _rebuild_dropdown(self) -> None:
-        self._dropdown.clear_widgets()
-        for i, text in enumerate(self._results):
-            self._dropdown.add_widget(
-                _SuggestionRow(
-                    suggestion_text=text,
-                    on_choose=self._select,
-                    label_text=shape(text),
-                    highlighted=(i == self._highlighted_index),
-                )
-            )
-
-    def _move_highlight(self, delta: int) -> None:
-        if not self._results:
-            return
-        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
-        self._rebuild_dropdown()
-
-    def _select(self, text: str) -> None:
-        self.set_value(text)
-        self._dropdown.dismiss()
-        self._results = []
-        if self.focus_next:
-            self.focus_next.focus = True
-
-    def _on_default_validate(self, *_args) -> None:
-        if self.focus_next:
-            self.focus_next.focus = True
-
-    def keyboard_on_key_down(self, window, keycode, text, modifiers):
-        key = keycode[0]
-        if key == 273 and self._dropdown.attach_to is not None:  # بالا
-            self._move_highlight(-1)
-            return True
-        if key == 274 and self._dropdown.attach_to is not None:  # پایین
-            self._move_highlight(1)
-            return True
-        if key in (13, 271) and self._dropdown.attach_to is not None and self._results:
-            self._select(self._results[self._highlighted_index])
-            return True
-        if key == 27 and self._dropdown.attach_to is not None:  # Escape فقط منو را می‌بندد
-            self._dropdown.dismiss()
-            return True
-        return super().keyboard_on_key_down(window, keycode, text, modifiers)
-
-
-class _DimensionOptionRow(ButtonBehavior, MDBoxLayout):
-    """یک ردیفِ نتیجه‌ی جستجوی _DimensionSearchField — مشابهِ _AccountOptionRow."""
-
-    label_text = StringProperty("")
-    highlighted = BooleanProperty(False)
-
-    def __init__(self, detail_account: dimensions_service.DetailAccountRow, on_choose, **kwargs):
-        super().__init__(**kwargs)
-        self.detail_account = detail_account
-        self._on_choose = on_choose
-
-    def on_release(self) -> None:
-        self._on_choose(self.detail_account)
-
-
-class _DimensionSearchField(PTextField):
-    """فیلدِ جستجوی یک نوع‌بُعدِ تفصیلیِ الزامی (مرکز هزینه/پروژه/...) —
-    طبقِ درخواستِ صریح، دقیقاً همان الگویِ AccountSearchField/
-    PersonSearchField: با فوکوس‌گرفتن فهرستِ کامل بلافاصله باز می‌شود،
-    تایپ فیلتر می‌کند، بالا/پایین بینِ نتایج، Enter انتخاب می‌کند."""
-
-    def __init__(
-        self, detail_accounts: list[dimensions_service.DetailAccountRow], on_select, **kwargs
-    ):
-        kwargs.setdefault("auto_shape_display", False)
-        super().__init__(**kwargs)
-        self.detail_accounts = detail_accounts
-        self._on_select = on_select
-        self.selected_detail_account_id: int | None = None
-        self._results: list[dimensions_service.DetailAccountRow] = []
-        self._highlighted_index = -1
-        self._suppress_filter = False
-        self._dropdown = DropDown(auto_width=False, max_height=dp(200))
-        self._dropdown.width = dp(260)
-        self.bind(text=self._on_text_changed)
-        self.bind(focus=self._on_focus_changed)
-
-    def set_selected(self, detail_account: dimensions_service.DetailAccountRow) -> None:
-        self.selected_detail_account_id = detail_account.detail_account_id
-        self._suppress_filter = True
-        self.text = shape(detail_account.code)
-        self._suppress_filter = False
-
-    def _on_focus_changed(self, _instance, focused: bool) -> None:
-        if not focused:
-            self._dropdown.dismiss()
-            return
-        from kivy.clock import Clock  # noqa: PLC0415
-
-        Clock.schedule_once(self._open_full_list_if_still_focused, 0)
-
-    def _open_full_list_if_still_focused(self, _dt=None) -> None:
-        if self.focus and self._dropdown.attach_to is None:
-            self._filter_and_show("")
-
-    def _on_text_changed(self, _instance, value: str) -> None:
-        if self._suppress_filter:
-            return
-        self.selected_detail_account_id = None
-        self._filter_and_show(value)
-
-    def _filter_and_show(self, query: str) -> None:
-        query_norm = numerals.to_ascii_digits(query).strip()
-        if not query_norm:
-            self._results = list(self.detail_accounts)
-        else:
-            self._results = [
-                d for d in self.detail_accounts if query_norm in d.code or (d.name and query_norm in d.name)
-            ]
-        self._highlighted_index = 0 if self._results else -1
-        self._rebuild_dropdown()
-        if self._results and self.focus:
-            if self._dropdown.attach_to is None:
-                self._dropdown.open(self)
-        else:
-            self._dropdown.dismiss()
-
-    def _rebuild_dropdown(self) -> None:
-        self._dropdown.clear_widgets()
-        for i, d in enumerate(self._results):
-            self._dropdown.add_widget(
-                _DimensionOptionRow(
-                    detail_account=d,
-                    on_choose=self._select,
-                    label_text=shape(f"{d.code} — {d.name}" if d.name else d.code),
-                    highlighted=(i == self._highlighted_index),
-                )
-            )
-
-    def _move_highlight(self, delta: int) -> None:
-        if not self._results:
-            return
-        self._highlighted_index = (self._highlighted_index + delta) % len(self._results)
-        self._rebuild_dropdown()
-
-    def _select(self, detail_account: dimensions_service.DetailAccountRow) -> None:
-        self.set_selected(detail_account)
-        self._dropdown.dismiss()
-        self._on_select(detail_account)
-
-    def keyboard_on_key_down(self, window, keycode, text, modifiers):
-        key = keycode[0]
-        if key == 273:  # بالا
-            self._move_highlight(-1)
-            return True
-        if key == 274:  # پایین
-            self._move_highlight(1)
-            return True
-        if key in (13, 271):  # اینتر / اینترِ صفحه‌کلیدِ عددی
-            if self._results and 0 <= self._highlighted_index < len(self._results):
-                self._select(self._results[self._highlighted_index])
-            elif self.focus_next:
-                self.focus_next.focus = True
-            return True
-        if key == 27 and self._dropdown.attach_to is not None:
-            self._dropdown.dismiss()
-            return True
-        return super().keyboard_on_key_down(window, keycode, text, modifiers)
-
-
-class _LineDimensionsContent(MDBoxLayout):
-    """محتوایِ دیالوگِ انتخابِ ابعادِ تفصیلیِ یک ردیف — برای هر نوع‌بُعدِ
-    الزامیِ حسابِ انتخاب‌شده (مثلاً ابتدا مرکز هزینه، سپس پروژه)، یک
-    _DimensionSearchField می‌سازد (طبقِ درخواستِ صریح، دقیقاً همان الگویِ
-    جستجوی زنده‌ی کد حساب/تفصیلی، نه یک منویِ کلیکی). Enter از هر فیلد به
-    فیلدِ نوع‌بُعدِ بعدی می‌رود؛ بعدِ انتخابِ آخرین نوع‌بُعد، on_complete
-    صدا زده می‌شود (بدونِ نیاز به کلیکِ دستیِ «تایید»)."""
-
-    def __init__(
-        self,
-        required_dimensions: list[dimensions_service.RequiredDimension],
-        initial_values: dict[int, int],
-        on_complete,
-        **kwargs,
-    ):
-        kwargs.setdefault("orientation", "vertical")
-        kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("spacing", dp(12))
-        super().__init__(**kwargs)
-        self.bind(minimum_height=self.setter("height"))
-        self.values: dict[int, int] = dict(initial_values)
-        self._on_complete = on_complete
-        self.search_fields: list[_DimensionSearchField] = []
-
-        for index, dim in enumerate(required_dimensions):
-            row = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(66), spacing=dp(4))
-            row.add_widget(
-                Factory.PLabel(
-                    text=shape(dim.code), font_style="Caption", size_hint_y=None, height=dp(20), valign="middle"
-                )
-            )
-            field = _DimensionSearchField(
-                detail_accounts=dim.detail_accounts,
-                on_select=lambda detail, i=index, d=dim: self._field_selected(i, d, detail),
-            )
-            initial_id = initial_values.get(dim.dimension_type_id)
-            initial_match = next((d for d in dim.detail_accounts if d.detail_account_id == initial_id), None)
-            if initial_match is not None:
-                field.set_selected(initial_match)
-            row.add_widget(field)
-            self.add_widget(row)
-            self.search_fields.append(field)
-
-        for index, field in enumerate(self.search_fields):
-            field.focus_next = self.search_fields[index + 1] if index + 1 < len(self.search_fields) else None
-
-    def _field_selected(
-        self, index: int, dim: dimensions_service.RequiredDimension, detail_account: dimensions_service.DetailAccountRow
-    ) -> None:
-        self.values[dim.dimension_type_id] = detail_account.detail_account_id
-        if index + 1 < len(self.search_fields):
-            self.search_fields[index + 1].focus = True
-        else:
-            self._on_complete()
-
-
-class _LineCurrencyContent(MDBoxLayout):
-    """محتوایِ دیالوگِ انتخابِ ارزِ یک ردیف — با انتخابِ ارزِ غیرِپایه، فیلدِ
-    نرخِ تبدیل ظاهر می‌شود و در صورتِ نبودنِ مقدار، از آخرین نرخِ ثبت‌شده
-    برای همان ارز/تاریخ (currencies_service.get_latest_rate) پیش‌پر می‌شود."""
-
-    def __init__(
-        self,
-        transactable_currencies: list[currencies_service.CurrencyRow],
-        base_currency_id: int,
-        company_id: int,
-        document_date: datetime.date,
-        initial_currency_id: int | None,
-        initial_rate: decimal.Decimal | None,
-        **kwargs,
-    ):
-        kwargs.setdefault("orientation", "vertical")
-        kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("spacing", dp(12))
-        super().__init__(**kwargs)
-        self.bind(minimum_height=self.setter("height"))
-        self._currencies = transactable_currencies
-        self._currencies_by_id = {c.currency_id: c for c in transactable_currencies}
-        self.base_currency_id = base_currency_id
-        self.company_id = company_id
-        self.document_date = document_date
-        self.currency_id = initial_currency_id or base_currency_id
-        self._menu: MDDropdownMenu | None = None
-
-        currency_row = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(66), spacing=dp(4))
-        currency_row.add_widget(
-            Factory.PLabel(text=shape(tr("ارزِ ردیف")), font_style="Caption", size_hint_y=None, height=dp(20))
-        )
-        self.currency_select = PSelectField(text=self._label_for_currency(self.currency_id))
-        self.currency_select.bind(on_release=self._open_currency_menu)
-        currency_row.add_widget(self.currency_select)
-        self.add_widget(currency_row)
-
-        self.rate_row = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(66), spacing=dp(4))
-        self.rate_row.add_widget(
-            Factory.PLabel(
-                text=shape(tr("نرخِ تبدیل به ارزِ پایه")), font_style="Caption", size_hint_y=None, height=dp(20)
-            )
-        )
-        self.rate_field = PAmountField()
-        if initial_rate is not None:
-            self.rate_field.text = numerals.to_persian_digits(str(initial_rate))
-        self.rate_row.add_widget(self.rate_field)
-        self.add_widget(self.rate_row)
-        self._refresh_rate_visibility()
-
-    def _label_for_currency(self, currency_id: int) -> str:
-        currency = self._currencies_by_id.get(currency_id)
-        return shape(currency.iso_code if currency else "")
-
-    def _open_currency_menu(self, *_args) -> None:
-        items = [
-            {"text": shape(c.iso_code), "on_release": lambda cid=c.currency_id: self._choose_currency(cid)}
-            for c in self._currencies
+        self._person_group_ids = [
+            g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(self.account_id)
         ]
-        self._menu = open_rtl_dropdown(self.currency_select, items, width_mult=3)
+        company_id = self._screen.company_id
+        persons = dimensions_service.list_active_persons(company_id)
+        if self._person_group_ids:
+            persons = [p for p in persons if p.person_group_id in self._person_group_ids]
 
-    def _choose_currency(self, currency_id: int) -> None:
-        if self._menu is not None:
-            self._menu.dismiss()
-        self.currency_id = currency_id
-        self.currency_select.text = self._label_for_currency(currency_id)
-        self._refresh_rate_visibility()
-        if currency_id != self.base_currency_id and not self.rate_field.text.strip():
-            latest = currencies_service.get_latest_rate(self.company_id, currency_id, self.document_date)
-            if latest is not None:
-                self.rate_field.text = numerals.to_persian_digits(str(latest))
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.addWidget(QLabel("تفصیلی"))
+        person_combo = QComboBox()
+        _fill_searchable_combo(person_combo, [(p.detail_account_id, f"{p.full_code} — {p.name or ''}") for p in persons])
+        row_layout.addWidget(person_combo)
+        self.dimensions_container.addWidget(row)
+        self._person_combo = person_combo
 
-    def _refresh_rate_visibility(self) -> None:
-        is_base = self.currency_id == self.base_currency_id
-        self.rate_row.opacity = 0 if is_base else 1
-        self.rate_row.disabled = is_base
-        self.rate_row.height = 0 if is_base else dp(66)
+        for required_dim in dimensions_service.get_required_dimensions_for_account(self.account_id):
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(QLabel(required_dim.code))
+            combo = QComboBox()
+            _fill_searchable_combo(
+                combo, [(d.detail_account_id, f"{d.full_code} — {d.name or ''}") for d in required_dim.detail_accounts]
+            )
+            row_layout.addWidget(combo)
+            self.dimensions_container.addWidget(row)
+            self._dimension_combos[required_dim.dimension_type_id] = combo
 
+    def collect_details(self) -> dict[int, int]:
+        details: dict[int, int] = {}
+        if self._person_combo is not None:
+            person_detail_id = self._person_combo.currentData()
+            if person_detail_id is not None:
+                details[dimensions_service.get_person_dimension_type_id(self._screen.company_id)] = person_detail_id
+        for dimension_type_id, combo in self._dimension_combos.items():
+            detail_id = combo.currentData()
+            if detail_id is not None:
+                details[dimension_type_id] = detail_id
+        return details
 
-class JournalEntryLineRow(MDBoxLayout):
-    has_required_dims = BooleanProperty(False)
-    dims_complete = BooleanProperty(True)
-    has_multi_currency = BooleanProperty(False)
-    currency_is_base = BooleanProperty(True)
-
-    def __init__(
-        self,
-        account_options,
-        on_change,
-        on_remove,
-        on_validate,
-        description_suggestions,
-        on_amount_text,
-        transactable_currencies,
-        base_currency_id,
-        company_id,
-        get_document_date,
-        person_options,
-        person_dimension_type_id,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self._on_change = on_change
-        self._on_remove = on_remove
-        self._on_validate = on_validate
-        self._on_amount_text = on_amount_text
-        self.account_field = AccountSearchField(account_options=account_options, on_select=self._account_selected)
-        self.ids.account_slot.add_widget(self.account_field)
-
-        self.person_options = person_options
-        self.person_dimension_type_id = person_dimension_type_id
-        self._none_person = next(
-            (p for p in person_options if p.code == dimensions_service.NO_DETAIL_CODE), None
+    def to_line_input(self) -> je_service.LineInput | None:
+        if self.account_id is None:
+            return None
+        debit = decimal.Decimal(str(self.debit_field.value()))
+        credit = decimal.Decimal(str(self.credit_field.value()))
+        if debit == 0 and credit == 0:
+            return None
+        return je_service.LineInput(
+            account_id=self.account_id,
+            description=self.description_field.text().strip(),
+            debit=debit,
+            credit=credit,
+            details=self.collect_details(),
         )
-        self.person_field = PersonSearchField(person_options=person_options, on_select=self._person_selected)
-        self.ids.person_slot.add_widget(self.person_field)
 
-        self.description_field = LineDescriptionField(suggestions_provider=description_suggestions)
-        self.ids.description_slot.add_widget(self.description_field)
+    def load_from(self, line: je_service.LineInput, account_label: str) -> None:
+        index = self.account_combo.findData(line.account_id)
+        if index < 0:
+            self.account_combo.addItem(account_label, line.account_id)
+            index = self.account_combo.count() - 1
+        self.account_combo.setCurrentIndex(index)
+        self.account_id = line.account_id
+        self._render_dimension_fields()
+        self.description_field.setText(line.description or "")
+        self.debit_field.setValue(float(line.debit))
+        self.credit_field.setValue(float(line.credit))
+        for dimension_type_id, detail_account_id in line.details.items():
+            combo = self._dimension_combos.get(dimension_type_id)
+            if combo is not None:
+                idx = combo.findData(detail_account_id)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+            elif self._person_combo is not None:
+                idx = self._person_combo.findData(detail_account_id)
+                if idx >= 0:
+                    self._person_combo.setCurrentIndex(idx)
 
-        self.account_field.focus_next = self.person_field
-        self.person_field.focus_previous = self.account_field
-        self.person_field.focus_next = self.description_field
-        self.description_field.focus_previous = self.person_field
-        self.description_field.focus_next = self.ids.debit_field
-        self.ids.debit_field.focus_previous = self.description_field
 
-        self.dimension_values: dict[int, int] = {}
-        self._required_dimensions: list[dimensions_service.RequiredDimension] = []
-        self._dimensions_dialog: MDDialog | None = None
-        self._reset_person_to_default()
+class JournalEntryScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.company_id: int | None = None
+        self.account_options: list[tuple[int, str]] = []
+        self._line_rows: list[_LineRowWidget] = []
+        self._editing_journal_entry_id: int | None = None
 
-        self.transactable_currencies = transactable_currencies
-        self.base_currency_id = base_currency_id
-        self.company_id = company_id
-        self._get_document_date = get_document_date
-        self.line_currency_id: int | None = None
-        self.line_exchange_rate: decimal.Decimal | None = None
-        self.has_multi_currency = len(transactable_currencies) > 1
-        self._currency_dialog: MDDialog | None = None
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(12)
 
-    @property
-    def account_id(self) -> int | None:
-        return self.account_field.account_id
+        header_card = QWidget()
+        header_card.setObjectName("card")
+        header_layout = QGridLayout(header_card)
+        header_layout.setContentsMargins(18, 18, 18, 18)
+        header_layout.setSpacing(8)
 
-    def set_account(self, account_row: coa_service.AccountRow) -> None:
-        self.account_field.set_selected(account_row)
+        self.form_title = QLabel("صدورِ سندِ جدید")
+        self.form_title.setObjectName("pageTitle")
+        header_layout.addWidget(self.form_title, 0, 0, 1, 4)
 
-    def _reset_person_to_default(self) -> None:
-        if self._none_person is not None:
-            self.person_field.set_selected(self._none_person)
-            self.dimension_values[self.person_dimension_type_id] = self._none_person.detail_account_id
+        header_layout.addWidget(QLabel("تاریخِ سند"), 1, 0)
+        self.date_field = QDateEdit()
+        self.date_field.setCalendarPopup(True)
+        self.date_field.setDate(datetime.date.today())
+        header_layout.addWidget(self.date_field, 1, 1)
 
-    def set_person_by_id(self, detail_account_id: int | None) -> None:
-        """پیش‌پرکردنِ ستونِ تفصیلی هنگامِ بارگذاریِ سند برای ویرایش."""
-        person = next((p for p in self.person_options if p.detail_account_id == detail_account_id), None)
-        if person is None:
-            self._reset_person_to_default()
+        header_layout.addWidget(QLabel("شماره‌ی عطف"), 1, 2)
+        self.alt_number_field = QLineEdit()
+        header_layout.addWidget(self.alt_number_field, 1, 3)
+
+        header_layout.addWidget(QLabel("شرحِ سند"), 2, 0)
+        self.description_field = QLineEdit()
+        header_layout.addWidget(self.description_field, 2, 1, 1, 2)
+
+        self.draft_checkbox = QCheckBox("پیش‌نویس (نامتعادل هم قابلِ‌ذخیره)")
+        header_layout.addWidget(self.draft_checkbox, 2, 3)
+
+        outer.addWidget(header_card)
+
+        add_line_button = QPushButton("+ افزودنِ ردیف")
+        add_line_button.setObjectName("flatButton")
+        add_line_button.clicked.connect(lambda: self.add_line())
+        outer.addWidget(add_line_button)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        self.lines_container_widget = QWidget()
+        self.lines_container = QVBoxLayout(self.lines_container_widget)
+        self.lines_container.addStretch(1)
+        scroll.setWidget(self.lines_container_widget)
+        outer.addWidget(scroll, stretch=1)
+
+        footer = QHBoxLayout()
+        self.balance_label = QLabel("")
+        footer.addWidget(self.balance_label)
+        footer.addStretch(1)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        footer.addWidget(self.status_label)
+
+        save_button = QPushButton("ثبتِ سند")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        footer.addWidget(save_button)
+
+        new_button = QPushButton("سندِ جدید")
+        new_button.setObjectName("flatButton")
+        new_button.clicked.connect(lambda: self._reset_form())
+        footer.addWidget(new_button)
+
+        outer.addLayout(footer)
+
+    def refresh(self) -> None:
+        self.company_id = session.current_company.company_id if session.current_company else None
+        if self.company_id is None:
             return
-        self.person_field.set_selected(person)
-        self.dimension_values[self.person_dimension_type_id] = person.detail_account_id
-
-    def _person_selected(self) -> None:
-        if self.person_field.detail_account_id is not None:
-            self.dimension_values[self.person_dimension_type_id] = self.person_field.detail_account_id
-        self._on_change()
-        # طبق درخواستِ صریح: اگر حسابِ این ردیف نوع‌بُعدِ تفصیلیِ الزامی
-        # (مثلاً مرکز هزینه/پروژه) دارد و هنوز کامل نشده، دیالوگِ انتخابش
-        # همین‌جا در ادامه‌ی جریانِ کیبورد باز می‌شود؛ فوکوس به شرحِ ردیف
-        # فقط بعدِ تکمیل/لغوِ آن دیالوگ می‌رود (در open_dimensions_dialog).
-        if self.has_required_dims and not self.dims_complete:
-            self.open_dimensions_dialog()
-        else:
-            self.description_field.focus = True
-
-    def _account_selected(self) -> None:
-        # طبق درخواستِ صریح: بعدِ انتخابِ حساب، فوکوس به ستونِ تفصیلی
-        # می‌رود (نه مستقیم به شرح) — تفصیلی هم به «بدون تفصیلی» بازنشانی
-        # می‌شود چون معمولاً برایِ حسابِ تازه‌انتخاب‌شده معنی‌ای ندارد.
-        self.dimension_values = {}
-        self._reset_person_to_default()
-        self.load_required_dimensions()
-        self._on_change()
-        self.person_field.focus = True
-
-    def load_required_dimensions(self) -> None:
-        # با انتخابِ یک حسابِ تازه (یا بارگذاریِ سند برای ویرایش)، نوع‌بُعدهای
-        # الزامیِ همان حساب دوباره از سرویس خوانده می‌شود — چون هر حساب
-        # ممکن است نوع‌بُعدهای متفاوتی الزامی کرده باشد.
-        self._required_dimensions = (
-            dimensions_service.get_required_dimensions_for_account(self.account_id) if self.account_id else []
-        )
-        self.has_required_dims = bool(self._required_dimensions)
-
-        # طبقِ درخواستِ صریح: اگر معینِ انتخاب‌شده به گروهِ تفصیلیِ خاصی
-        # (مثلاً مشتری) محدود شده باشد، فهرستِ قابل‌جستجوی ستونِ تفصیلی فقط
-        # همان گروه می‌شود و «بدون تفصیلی» دیگر پیش‌فرض/کافی نیست — انتخاب
-        # الزامی می‌شود (خطای دقیق در صورتِ فراموشی، هنگامِ ثبت از سرویس می‌آید).
-        required_groups = (
-            dimensions_service.get_required_person_groups_for_account(self.account_id) if self.account_id else []
-        )
-        if required_groups:
-            allowed_group_ids = {g.person_group_id for g in required_groups}
-            self.person_field.set_options([p for p in self.person_options if p.person_group_id in allowed_group_ids])
-            self.person_field.hint_text = shape(tr("تفصیلی (الزامی — {})").format("، ".join(g.name for g in required_groups)))
-            self.person_field.clear_selection()
-            self.dimension_values.pop(self.person_dimension_type_id, None)
-        else:
-            self.person_field.set_options(self.person_options)
-            self.person_field.hint_text = shape(tr("تفصیلی"))
-
-        self._update_dims_complete()
-
-    def _update_dims_complete(self) -> None:
-        self.dims_complete = all(
-            dim.dimension_type_id in self.dimension_values for dim in self._required_dimensions
-        )
-
-    def open_dimensions_dialog(self) -> None:
-        if not self._required_dimensions:
-            return
-        if self._dimensions_dialog is not None:
-            self._dimensions_dialog.dismiss()
-
-        def _complete(*_args) -> None:
-            # طبق درخواستِ صریح: بعدِ انتخابِ آخرین نوع‌بُعدِ الزامی (مرکز
-            # هزینه، سپس پروژه در صورتِ وجود)، فوکوس مستقیم به بدهکار
-            # می‌رود — نه شرحِ ردیف.
-            self.dimension_values = dict(content.values)
-            self._dimensions_dialog.dismiss()
-            self._update_dims_complete()
-            self.ids.debit_field.focus = True
-
-        content = _LineDimensionsContent(self._required_dimensions, self.dimension_values, on_complete=_complete)
-
-        def _cancel(*_args) -> None:
-            self._dimensions_dialog.dismiss()
-            self.ids.debit_field.focus = True
-
-        self._dimensions_dialog = MDDialog(
-            title=shape(tr("ابعادِ تفصیلیِ ردیف")),
-            type="custom",
-            content_cls=content,
-            buttons=[
-                MDFlatButton(text=shape(tr("لغو")), on_release=_cancel),
-                MDRaisedButton(text=shape(tr("تایید")), on_release=_complete),
-            ],
-        )
-        self._dimensions_dialog.open()
-
-        if content.search_fields:
-            from kivy.clock import Clock  # noqa: PLC0415
-
-            Clock.schedule_once(lambda _dt: setattr(content.search_fields[0], "focus", True), 0)
-
-    def open_currency_dialog(self) -> None:
-        if not self.has_multi_currency:
-            return
-        if self._currency_dialog is not None:
-            self._currency_dialog.dismiss()
-
-        content = _LineCurrencyContent(
-            transactable_currencies=self.transactable_currencies,
-            base_currency_id=self.base_currency_id,
-            company_id=self.company_id,
-            document_date=self._get_document_date(),
-            initial_currency_id=self.line_currency_id,
-            initial_rate=self.line_exchange_rate,
-        )
-
-        def _apply(*_args) -> None:
-            if content.currency_id == self.base_currency_id:
-                self.line_currency_id = None
-                self.line_exchange_rate = None
-            else:
-                self.line_currency_id = content.currency_id
-                try:
-                    self.line_exchange_rate = numerals.parse_decimal(content.rate_field.text)
-                except ValueError:
-                    self.line_exchange_rate = None
-            self._currency_dialog.dismiss()
-            self._update_currency_state()
-
-        self._currency_dialog = MDDialog(
-            title=shape(tr("ارزِ ردیف")),
-            type="custom",
-            content_cls=content,
-            buttons=[
-                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._currency_dialog.dismiss()),
-                MDRaisedButton(text=shape(tr("تایید")), on_release=_apply),
-            ],
-        )
-        self._currency_dialog.open()
-
-    def _update_currency_state(self) -> None:
-        self.currency_is_base = self.line_currency_id is None
-
-    def on_debit_changed(self) -> None:
-        if self.ids.debit_field.text.strip():
-            self.ids.credit_field.text = ""
-        self._on_change()
-        self._on_amount_text(self.ids.debit_field.text)
-
-    def on_credit_changed(self) -> None:
-        if self.ids.credit_field.text.strip():
-            self.ids.debit_field.text = ""
-        self._on_change()
-        self._on_amount_text(self.ids.credit_field.text)
-
-    def on_amount_focus(self, field) -> None:
-        # طبق درخواستِ صریح، «لایو» یعنی همان لحظه‌ی رفتن روی فیلد هم مبلغِ
-        # موجود (نه فقط تایپِ تازه) به حروف نمایش داده شود.
-        if field.focus:
-            self._on_amount_text(field.text)
-
-    def on_debit_validate(self) -> None:
-        # طبق درخواستِ صریح: اگر بدهکار مقداری غیرصفر دارد، Enter به ردیفِ
-        # بعد می‌رود؛ اگر خالی/صفر است (این ردیف قرار است بستانکار باشد)
-        # Enter فقط به فیلدِ بستانکارِ همین ردیف می‌رود.
-        raw = numerals.to_ascii_digits(self.ids.debit_field.text).strip()
-        if raw and raw != "0":
-            self.request_next()
-        else:
-            self.ids.credit_field.focus = True
-
-    def request_next(self) -> None:
-        self._on_validate(self)
-
-    def remove_line(self) -> None:
-        self._on_remove(self)
-
-
-class JournalEntryScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._account_options: list[coa_service.AccountRow] = []
-        self._description_suggestions: list[str] = []
-        self._transactable_currencies: list[currencies_service.CurrencyRow] = []
-        self._base_currency_id: int | None = None
-        self._person_options: list[dimensions_service.DetailAccountRow] = []
-        self._person_dimension_type_id: int | None = None
-        self._rows: list[JournalEntryLineRow] = []
-        self._editing_entry_id: int | None = None
-        self._delete_dialog: MDDialog | None = None
-        self._field_labels: dict[str, str] = {}
-        self._form_initialized = False
-
-    def on_pre_enter(self, *args):
-        self._load_accounts()
-        self.apply_field_labels()
-        # طبق درخواستِ صریح: با رفتن به فرمِ دیگر و برگشتن به این صفحه،
-        # اطلاعاتِ نیمه‌واردشده نباید پاک شود — پس _reset_form() فقط بارِ
-        # اولی که این صفحه باز می‌شود صدا زده می‌شود، نه هر بار. (بازنشانیِ
-        # آگاهانه/عمدی همچنان از طریق cancel_edit()/Escape یا بعدِ ثبتِ
-        # موفق ممکن است.)
-        if not self._form_initialized:
+        accounts = coa_service.list_postable_accounts(self.company_id)
+        self.account_options = [(a.account_id, f"{a.full_code} — {a.name}") for a in accounts]
+        if not self._line_rows:
             self._reset_form()
-            self._form_initialized = True
-        self._set_status(tr(""))
-        self.bind_shortcuts()
-
-    def apply_field_labels(self) -> None:
-        language_id = session.current_language.language_id if session.current_language else None
-        self._field_labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("journal_entry", language_id).items()}
-        self.ids.description_field.hint_text = shape(self._field_labels["description"])
-        self.ids.date_field.hint_text = shape(self._field_labels["date"])
-        for row in self._rows:
-            self._apply_line_labels(row)
-
-    def _apply_line_labels(self, row: JournalEntryLineRow) -> None:
-        if not self._field_labels:
-            return
-        row.account_field.hint_text = shape(self._field_labels["line_account"])
-        row.description_field.hint_text = shape(self._field_labels["line_description"])
-        row.ids.debit_field.hint_text = shape(self._field_labels["line_debit"])
-        row.ids.credit_field.hint_text = shape(self._field_labels["line_credit"])
-
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
-
-    def on_shortcut_save(self) -> None:
-        self.save_entry()
-
-    def on_shortcut_cancel(self) -> bool:
-        if self._editing_entry_id is not None:
-            self.cancel_edit()
-            return True
-        return False
-
-    def on_shortcut_delete(self) -> bool:
-        if self._editing_entry_id is not None:
-            self.confirm_delete(self._editing_entry_id)
-            return True
-        return False
-
-    def _load_accounts(self) -> None:
-        if session.current_company is None:
-            self._account_options = []
-            self._description_suggestions = []
-            self._transactable_currencies = []
-            self._base_currency_id = None
-            self._person_options = []
-            self._person_dimension_type_id = None
-        else:
-            self._account_options = coa_service.list_postable_accounts(session.current_company.company_id)
-            self._description_suggestions = je_service.list_recent_line_descriptions(session.current_company.company_id)
-            self._transactable_currencies = currencies_service.list_transactable_currencies(
-                session.current_company.company_id
-            )
-            self._base_currency_id = session.current_company.base_currency_id
-            self._person_options = dimensions_service.list_active_persons(session.current_company.company_id)
-            self._person_dimension_type_id = dimensions_service.get_person_dimension_type_id(
-                session.current_company.company_id
-            )
-
-    def _get_document_date(self) -> datetime.date:
-        try:
-            return numerals.parse_jalali_date(self.ids.date_field.text)
-        except ValueError:
-            return datetime.date.today()
 
     def _reset_form(self) -> None:
-        # توجه: پیام وضعیت (مثلاً «سند ثبت شد») را عمداً اینجا پاک نمی‌کنیم؛
-        # save_entry() بعد از ثبت موفق همین متد را صدا می‌زند تا فرم برای سند
-        # بعدی خالی شود، اما پیام موفقیت باید روی صفحه باقی بماند.
-        self._editing_entry_id = None
-        self.ids.lines_box.clear_widgets()
-        self._rows = []
-        self.ids.date_field.text = numerals.format_jalali_date(datetime.date.today())
-        self.ids.description_field.text = ""
-        self.ids.alternative_number_field.text = ""
-        self.ids.draft_checkbox.active = False
-        self.ids.registration_at_label.text = ""
-        self.ids.amount_words_label.text = ""
-        self.ids.form_title.text = shape(tr("صدور سند حسابداری"))
-        self.ids.save_button.text = shape(tr("ثبت سند"))
-        self.ids.cancel_edit_button.opacity = 0
-        self.ids.cancel_edit_button.disabled = True
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "0dp"
+        self._editing_journal_entry_id = None
+        self.form_title.setText("صدورِ سندِ جدید")
+        self.date_field.setDate(datetime.date.today())
+        self.alt_number_field.clear()
+        self.description_field.clear()
+        self.draft_checkbox.setChecked(False)
+        self.status_label.setText("")
+        for row in list(self._line_rows):
+            self.remove_line(row, force=True)
         self.add_line()
         self.add_line()
-        self._recalculate()
-        # طبق درخواستِ صریح: نقطه‌ی شروعِ کیبوردِ سند تاریخ است — با Enter
-        # به شرحِ سند، بعد به کدِ حسابِ ردیفِ اول می‌رود (زنجیره‌ی focus_next).
-        self.ids.date_field.focus = True
 
-    def update_amount_words(self, raw_text: str) -> None:
-        # طبق درخواستِ صریح: مبلغِ واردشده به‌صورتِ زنده زیرِ فرم به حروف
-        # نمایش داده می‌شود؛ اگر مقدار خالی/صفر/نامعتبر باشد برچسب خالی می‌شود.
-        try:
-            value = numerals.parse_decimal(raw_text)
-        except ValueError:
-            self.ids.amount_words_label.text = ""
+    def add_line(self) -> _LineRowWidget:
+        row = _LineRowWidget(self)
+        self._line_rows.append(row)
+        self.lines_container.insertWidget(self.lines_container.count() - 1, row)
+        return row
+
+    def remove_line(self, row: _LineRowWidget, *, force: bool = False) -> None:
+        if not force and len(self._line_rows) <= 2:
             return
-        if not value:
-            self.ids.amount_words_label.text = ""
-            return
-        self.ids.amount_words_label.text = shape(numerals.amount_to_words(value))
+        self._line_rows.remove(row)
+        self.lines_container.removeWidget(row)
+        row.deleteLater()
+        self.update_balance()
 
-    def add_line(self) -> None:
-        # طبق درخواستِ صریح: شرحِ ردیفِ قبلی به ردیفِ تازه منتقل می‌شود (چون
-        # معمولاً بدهکار/بستانکارِ یک سند همان شرح را دارند) — کاربر
-        # می‌تواند در صورتِ نیاز تغییرش دهد. edit_entry() بلافاصله بعدِ این
-        # فراخوانی مقدارِ واقعیِ هر ردیف را با set_value() جایگزین می‌کند،
-        # پس این پیش‌پرکردن مزاحمِ بارگذاریِ سندِ ویرایشی نمی‌شود.
-        previous_description = self._rows[-1].description_field.value.strip() if self._rows else ""
-
-        row = JournalEntryLineRow(
-            account_options=self._account_options,
-            on_change=self._recalculate,
-            on_remove=self._remove_line,
-            on_validate=self._focus_after_row,
-            description_suggestions=lambda: self._description_suggestions,
-            on_amount_text=self.update_amount_words,
-            transactable_currencies=self._transactable_currencies,
-            base_currency_id=self._base_currency_id,
-            company_id=session.current_company.company_id if session.current_company else None,
-            get_document_date=self._get_document_date,
-            person_options=self._person_options,
-            person_dimension_type_id=self._person_dimension_type_id,
-        )
-        self._rows.append(row)
-        self.ids.lines_box.add_widget(row)
-        self._apply_line_labels(row)
-        if previous_description:
-            row.description_field.set_value(previous_description)
-        self._relink_row_focus()
-
-    def _remove_line(self, row: JournalEntryLineRow) -> None:
-        if row in self._rows:
-            self._rows.remove(row)
-            self.ids.lines_box.remove_widget(row)
-            self._relink_row_focus()
-            self._recalculate()
-
-    def _relink_row_focus(self) -> None:
-        """زنجیره‌ی Tab بین ردیف‌های پویا را دوباره می‌سازد — چون هر بار
-        ردیفی اضافه/حذف می‌شود، فیلد آخرِ سطرِ قبل باید به اولین فیلدِ سطرِ
-        بعد وصل شود، و این با focus_next ایستا در KV ممکن نیست.
-
-        طبق درخواستِ صریح: زنجیره‌ی سریعِ Enter از شرحِ سند مستقیم به ستونِ
-        حسابِ ردیفِ اول می‌رود (نه شماره‌ی عطف/بایگانی — که یک فیلدِ
-        کم‌استفاده‌ی جانبی است و فقط با ماوس/کلیک در دسترس می‌ماند)."""
-        if not self._rows:
-            self.ids.description_field.focus_next = self.ids.add_line_button
-            return
-        self.ids.description_field.focus_next = self._rows[0].account_field
-        for i, row in enumerate(self._rows):
-            if i + 1 < len(self._rows):
-                row.ids.credit_field.focus_next = self._rows[i + 1].account_field
-                self._rows[i + 1].account_field.focus_previous = row.ids.credit_field
-            else:
-                row.ids.credit_field.focus_next = self.ids.add_line_button
-
-    def _focus_after_row(self, row: JournalEntryLineRow) -> None:
-        """Enter در فیلد بدهکار/بستانکارِ آخرین ردیف: ردیف جدید اضافه و
-        فوکوس به آن منتقل می‌شود (مثل صفحه‌گسترده) — Enter در بقیه‌ی
-        ردیف‌ها فقط به ردیف بعدی می‌رود.
-
-        طبق درخواستِ صریح، شرحِ ردیف باید به ردیفِ بعدی منتقل شود؛ چون فرمِ
-        تازه با دو ردیفِ خالیِ از پیش‌ساخته شروع می‌شود (_reset_form)، اغلب
-        کاربر اصلاً add_line() را صدا نمی‌زند (فقط بینِ همین دو ردیفِ
-        موجود جابه‌جا می‌شود) — پس این انتقال اینجا هم لازم است، نه فقط در
-        add_line(). فقط وقتی ردیفِ مقصد هنوز شرحی ندارد پر می‌شود، تا شرحِ
-        از قبل‌واردشده‌ی خودِ آن ردیف پاک نشود."""
-        if row is self._rows[-1]:
-            self.add_line()
-            self._rows[-1].account_field.focus = True
+    def update_balance(self) -> None:
+        total_debit = sum((decimal.Decimal(str(r.debit_field.value())) for r in self._line_rows), decimal.Decimal(0))
+        total_credit = sum((decimal.Decimal(str(r.credit_field.value())) for r in self._line_rows), decimal.Decimal(0))
+        if total_debit == total_credit and total_debit > 0:
+            self.balance_label.setText(f"تراز — بدهکار: {total_debit} | بستانکار: {total_credit}")
+            self.balance_label.setObjectName("statusOk")
         else:
-            idx = self._rows.index(row)
-            next_row = self._rows[idx + 1]
-            if not next_row.description_field.value.strip():
-                previous_description = row.description_field.value.strip()
-                if previous_description:
-                    next_row.description_field.set_value(previous_description)
-            next_row.account_field.focus = True
+            self.balance_label.setText(f"غیرِ تراز — بدهکار: {total_debit} | بستانکار: {total_credit}")
+            self.balance_label.setObjectName("statusError")
+        self.balance_label.setStyleSheet("")
 
-    def _recalculate(self) -> None:
-        total_debit = decimal.Decimal(0)
-        total_credit = decimal.Decimal(0)
-        for row in self._rows:
-            try:
-                total_debit += numerals.parse_decimal(row.ids.debit_field.text)
-                total_credit += numerals.parse_decimal(row.ids.credit_field.text)
-            except ValueError:
-                pass  # حین تایپ مقدار ناقص عادی است؛ فقط در ثبت نهایی خطا نشان داده می‌شود
-
-        self.ids.total_debit_label.text = shape(tr("جمع بدهکار: {}").format(numerals.format_amount(total_debit)))
-        self.ids.total_credit_label.text = shape(tr("جمع بستانکار: {}").format(numerals.format_amount(total_credit)))
-
-        balanced = total_debit == total_credit and total_debit > 0
-        chip_color = theme.SUCCESS if balanced else theme.DANGER
-        self.ids.balance_label.text = shape(tr("تراز") if balanced else tr("غیر تراز"))
-        self.ids.balance_label.text_color = chip_color
-        self.ids.balance_chip.md_bg_color = (chip_color[0], chip_color[1], chip_color[2], 0.12)
-
-    def _set_status(self, message: str, *, is_error: bool = False) -> None:
-        self.ids.status_label.text = shape(message)
-        self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
-
-    def _collect_lines(self) -> list[je_service.LineInput] | None:
-        lines: list[je_service.LineInput] = []
-        for row in self._rows:
-            if row.account_id is None:
-                continue
-            try:
-                debit = numerals.parse_decimal(row.ids.debit_field.text)
-                credit = numerals.parse_decimal(row.ids.credit_field.text)
-            except ValueError as exc:
-                self._set_status(str(exc), is_error=True)
-                return None
-            lines.append(
-                je_service.LineInput(
-                    account_id=row.account_id,
-                    description=row.description_field.value.strip(),
-                    debit=debit,
-                    credit=credit,
-                    details=dict(row.dimension_values),
-                    currency_id=row.line_currency_id,
-                    exchange_rate=row.line_exchange_rate,
-                )
-            )
-        return lines
-
-    def save_entry(self) -> None:
-        if session.current_company is None or session.current_user is None:
-            self._set_status(tr("کاربر یا شرکت جاری نامعتبر است."), is_error=True)
+    def _save(self) -> None:
+        if self.company_id is None or session.current_user is None:
+            self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
             return
+
+        lines = [ln for row in self._line_rows if (ln := row.to_line_input()) is not None]
+        qdate = self.date_field.date()
+        document_date = datetime.date(qdate.year(), qdate.month(), qdate.day())
+        description = self.description_field.text().strip()
+        alt_number = self.alt_number_field.text().strip()
+        as_draft = self.draft_checkbox.isChecked()
 
         try:
-            document_date = numerals.parse_jalali_date(self.ids.date_field.text)
-        except ValueError as exc:
-            self._set_status(str(exc), is_error=True)
-            return
-
-        lines = self._collect_lines()
-        if lines is None:
-            return
-
-        alternative_number = self.ids.alternative_number_field.value.strip()
-        as_draft = self.ids.draft_checkbox.active
-
-        try:
-            if self._editing_entry_id is not None:
+            if self._editing_journal_entry_id is not None:
                 je_service.update_journal_entry(
-                    journal_entry_id=self._editing_entry_id,
-                    company_id=session.current_company.company_id,
-                    document_date=document_date,
-                    description=self.ids.description_field.value.strip(),
-                    lines=lines,
-                    changed_by_user_id=session.current_user.user_id,
-                    alternative_number=alternative_number,
-                    as_draft=as_draft,
+                    self._editing_journal_entry_id, self.company_id, document_date, description, lines,
+                    changed_by_user_id=session.current_user.user_id, alternative_number=alt_number, as_draft=as_draft,
                 )
-                message = "سند به‌صورتِ پیش‌نویس ذخیره شد." if as_draft else "سند به‌روزرسانی شد."
             else:
-                result = je_service.create_journal_entry(
-                    company_id=session.current_company.company_id,
-                    created_by_user_id=session.current_user.user_id,
-                    document_date=document_date,
-                    description=self.ids.description_field.value.strip(),
-                    lines=lines,
-                    alternative_number=alternative_number,
-                    as_draft=as_draft,
+                je_service.create_journal_entry(
+                    self.company_id, session.current_user.user_id, document_date, description, lines,
+                    alternative_number=alt_number, as_draft=as_draft,
                 )
-                message = (
-                    f"سند به‌صورتِ پیش‌نویس با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ذخیره شد."
-                    if as_draft
-                    else f"سند با شماره‌ی موقت {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
-                )
-        except Exception as exc:  # noqa: BLE001 - نمایش هر خطای اعتبارسنجی/دیتابیس به کاربر
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
             return
 
+        self.status_label.setText("")
         self._reset_form()
-        self._set_status(message)
 
-    def edit_entry(self, journal_entry_id: int) -> None:
-        if session.current_company is None:
+    def edit_journal_entry(self, journal_entry_id: int) -> None:
+        if self.company_id is None:
             return
-        try:
-            lines = je_service.get_journal_entry_lines(journal_entry_id)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-
-        entries = je_service.list_journal_entries(session.current_company.company_id)
-        entry = next((e for e in entries if e.journal_entry_id == journal_entry_id), None)
-        if entry is None:
-            return
-
-        self._editing_entry_id = journal_entry_id
-        self.ids.lines_box.clear_widgets()
-        self._rows = []
-        self.ids.date_field.text = numerals.format_jalali_date(entry.document_date)
-        self.ids.description_field.set_value(entry.description)
-        self.ids.alternative_number_field.set_value(entry.alternative_number)
-        self.ids.draft_checkbox.active = entry.status_code == "DRAFT"
-        self.ids.registration_at_label.text = shape(
-            tr("تاریخِ ثبت: {}").format(numerals.format_jalali_datetime(entry.registration_at))
-        )
-        accounts_by_id = {a.account_id: a for a in self._account_options}
-        for ln in lines:
+        self._editing_journal_entry_id = journal_entry_id
+        self.form_title.setText(f"ویرایشِ سند")
+        for row in list(self._line_rows):
+            self.remove_line(row, force=True)
+        lines = je_service.get_journal_entry_lines(journal_entry_id)
+        accounts_by_id = {a[0]: a[1] for a in self.account_options}
+        for line in lines:
+            row = self.add_line()
+            row.load_from(line, accounts_by_id.get(line.account_id, "?"))
+        if len(self._line_rows) < 2:
             self.add_line()
-            row = self._rows[-1]
-            account = accounts_by_id.get(ln.account_id)
-            if account is not None:
-                row.set_account(account)
-                row.load_required_dimensions()
-                row.dimension_values = dict(ln.details)
-                row._update_dims_complete()
-            if ln.currency_id is not None and ln.currency_id != self._base_currency_id:
-                row.line_currency_id = ln.currency_id
-                row.line_exchange_rate = ln.exchange_rate
-            row._update_currency_state()
-            row.set_person_by_id(ln.details.get(self._person_dimension_type_id))
-            row.description_field.set_value(ln.description)
-            row.ids.debit_field.text = str(ln.debit) if ln.debit else ""
-            row.ids.credit_field.text = str(ln.credit) if ln.credit else ""
-        if not lines:
-            self.add_line()
-            self.add_line()
-        self._recalculate()
-
-        temp_no_fa = numerals.to_persian_digits(str(entry.temporary_no))
-        self.ids.form_title.text = shape(tr("ویرایش سند «{}»").format(temp_no_fa))
-        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
-        self.ids.cancel_edit_button.opacity = 1
-        self.ids.cancel_edit_button.disabled = False
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(tr("در حال ویرایش سند شماره‌ی موقت {} — Escape برای لغو.").format(temp_no_fa))
-        self.ids.date_field.focus = True
-
-    def cancel_edit(self) -> None:
-        self._reset_form()
-        self._set_status(tr(""))
-
-    def confirm_delete(self, journal_entry_id: int) -> None:
-        if session.current_company is None:
-            return
-        entries = je_service.list_journal_entries(session.current_company.company_id)
-        entry = next((e for e in entries if e.journal_entry_id == journal_entry_id), None)
-        if entry is None:
-            return
-
-        if self._delete_dialog is not None:
-            self._delete_dialog.dismiss()
-
-        def _do_delete(*_args) -> None:
-            self._delete_dialog.dismiss()
-            self._perform_delete(journal_entry_id)
-
-        self._delete_dialog = MDDialog(
-            title=shape(tr("حذف سند")),
-            text=shape(
-                tr("سند با شماره‌ی موقت {} حذف شود؟ این کار قابل بازگشت نیست.").format(
-                    numerals.to_persian_digits(str(entry.temporary_no))
-                )
-            ),
-            buttons=[
-                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._delete_dialog.dismiss()),
-                MDRaisedButton(text=shape(tr("حذف")), md_bg_color=theme.DANGER, on_release=_do_delete),
-            ],
-        )
-        self._delete_dialog.open()
-
-    def _perform_delete(self, journal_entry_id: int) -> None:
-        if session.current_company is None:
-            return
-        try:
-            je_service.delete_journal_entry(
-                journal_entry_id,
-                session.current_company.company_id,
-                changed_by_user_id=session.current_user.user_id if session.current_user else None,
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-        if self._editing_entry_id == journal_entry_id:
-            self._reset_form()
-        self._set_status(tr("سند حذف شد."))
+        self.update_balance()

@@ -1,295 +1,282 @@
-"""صفحه‌ی مدیریت شرکت‌ها — تعریفِ شرکت‌های سیستم (چندشرکتی)، هرکدام با
-ارزِ پایه و زبانِ پیش‌فرضِ خودشان."""
+"""مدیریتِ شرکت‌ها — معادلِ Qt برایِ companies.py/.kv در Kivy."""
 
 from __future__ import annotations
 
-import os
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.screen import MDScreen
-
-from peecha import session
 from peecha.services import companies as companies_service
-from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
-from peecha.ui import numerals, theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "companies.kv")
-Builder.load_file(_KV_PATH)
+_COLUMNS = ["فعال", "زبانِ پیش‌فرض", "ارزِ پایه", "نامِ نمایشی", "کد"]
 
 
-class CompanyRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    company_id = NumericProperty(0)
-    code_text = StringProperty("")
-    name_text = StringProperty("")
-    currency_text = StringProperty("")
-    language_text = StringProperty("")
-    status_text = StringProperty("")
-    is_active_row = BooleanProperty(True)
-    zebra = BooleanProperty(False)
-    selected = BooleanProperty(False)
-    on_edit = ObjectProperty(None)
-
-    def on_release(self) -> None:
-        if self.on_edit is not None:
-            self.on_edit(self.company_id)
-
-
-Factory.register("CompanyRowWidget", cls=CompanyRowWidget)
-
-
-class CompaniesScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._rows_by_id: dict[int, companies_service.CompanyRow] = {}
+class CompaniesScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._rows: list[companies_service.CompanyRow] = []
+        self._editing_id: int | None = None
         self._currency_options: list[companies_service.CurrencyOption] = []
         self._language_options: list[languages_service.LanguageRow] = []
-        self._currency_id: int | None = None
-        self._language_id: int | None = None
-        self._editing_company_id: int | None = None
-        self._menus: dict[str, MDDropdownMenu] = {}
 
-    def on_pre_enter(self, *args):
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
+        outer.addWidget(self._build_list_panel(), stretch=3)
+        outer.addWidget(self._build_form_panel(), stretch=2)
+
+    def _build_list_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel("شرکت‌ها")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+
+        self.table = QTableWidget(0, len(_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.cellClicked.connect(self._on_row_clicked)
+        layout.addWidget(self.table)
+        return panel
+
+    def _build_form_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(8)
+
+        self.form_title = QLabel("شرکتِ جدید")
+        self.form_title.setObjectName("pageTitle")
+        layout.addWidget(self.form_title)
+
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        row = 0
+
+        grid.addWidget(QLabel("کد"), row, 0)
+        self.code_field = QLineEdit()
+        grid.addWidget(self.code_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("نامِ حقوقی"), row, 0)
+        self.legal_name_field = QLineEdit()
+        grid.addWidget(self.legal_name_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("نامِ نمایشی"), row, 0)
+        self.display_name_field = QLineEdit()
+        grid.addWidget(self.display_name_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("ارزِ پایه"), row, 0)
+        self.currency_combo = QComboBox()
+        grid.addWidget(self.currency_combo, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("زبانِ پیش‌فرض"), row, 0)
+        self.language_combo = QComboBox()
+        grid.addWidget(self.language_combo, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("ماهِ شروعِ سالِ مالی"), row, 0)
+        self.fy_month_field = QSpinBox()
+        self.fy_month_field.setRange(1, 12)
+        self.fy_month_field.setValue(1)
+        grid.addWidget(self.fy_month_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("روزِ شروعِ سالِ مالی"), row, 0)
+        self.fy_day_field = QSpinBox()
+        self.fy_day_field.setRange(1, 31)
+        self.fy_day_field.setValue(1)
+        grid.addWidget(self.fy_day_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("کدِ اقتصادی"), row, 0)
+        self.economic_code_field = QLineEdit()
+        grid.addWidget(self.economic_code_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("شماره‌ی ثبت"), row, 0)
+        self.registration_no_field = QLineEdit()
+        grid.addWidget(self.registration_no_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("شناسه‌ی ملی"), row, 0)
+        self.national_id_field = QLineEdit()
+        grid.addWidget(self.national_id_field, row, 1)
+        row += 1
+
+        self.is_active_checkbox = QCheckBox("فعال")
+        self.is_active_checkbox.setChecked(True)
+        grid.addWidget(self.is_active_checkbox, row, 1)
+        row += 1
+
+        layout.addLayout(grid)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        buttons = QHBoxLayout()
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        buttons.addWidget(save_button)
+
+        cancel_button = QPushButton("انصراف")
+        cancel_button.setObjectName("flatButton")
+        cancel_button.clicked.connect(self._reset_form)
+        buttons.addWidget(cancel_button)
+
+        layout.addLayout(buttons)
+        layout.addStretch(1)
+        return panel
+
+    def refresh(self) -> None:
         self._currency_options = companies_service.list_currencies()
         self._language_options = languages_service.list_languages()
-        if self._currency_id is None and self._currency_options:
-            self._currency_id = self._currency_options[0].currency_id
-        if self._language_id is None and self._language_options:
-            default_lang = next((l for l in self._language_options if l.is_default), self._language_options[0])
-            self._language_id = default_lang.language_id
-        self._refresh_dropdown_texts()
-        self.apply_field_labels()
-        self.refresh_list()
-        self.bind_shortcuts()
+        self._fill_combo(self.currency_combo, [(c.currency_id, c.iso_code) for c in self._currency_options])
+        self._fill_combo(self.language_combo, [(l.language_id, l.native_name) for l in self._language_options])
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
-
-    def apply_field_labels(self) -> None:
-        language_id = session.current_language.language_id if session.current_language else None
-        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("companies", language_id).items()}
-        self.ids.code_field.hint_text = shape(labels["code"])
-        self.ids.legal_name_field.hint_text = shape(labels["legal_name"])
-        self.ids.display_name_field.hint_text = shape(labels["display_name"])
-        self.ids.economic_code_field.hint_text = shape(labels["economic_code"])
-        self.ids.registration_no_field.hint_text = shape(labels["registration_no"])
-        self.ids.national_id_field.hint_text = shape(labels["national_id"])
-        self.ids.fy_start_day_field.hint_text = shape(labels["fy_start_day"])
-        self.ids.fy_start_month_field.hint_text = shape(labels["fy_start_month"])
-
-    def on_shortcut_save(self) -> None:
-        self.save_company()
-
-    def on_shortcut_cancel(self) -> bool:
-        if self._editing_company_id is not None:
-            self.cancel_edit()
-            return True
-        return False
-
-    def _refresh_dropdown_texts(self) -> None:
-        currency = next((c for c in self._currency_options if c.currency_id == self._currency_id), None)
-        self.ids.currency_button.text = shape(currency.iso_code if currency else "— انتخاب ارز —")
-        self.ids.currency_decimals_field.text = (
-            numerals.to_persian_digits(str(currency.decimal_places)) if currency else ""
-        )
-        language = next((l for l in self._language_options if l.language_id == self._language_id), None)
-        self.ids.language_button.text = shape(language.native_name if language else "— انتخاب زبان —")
-
-    def save_currency_decimals(self) -> None:
-        if self._currency_id is None:
-            return
-        raw = numerals.to_ascii_digits(self.ids.currency_decimals_field.text).strip()
-        try:
-            decimal_places = int(raw)
-            companies_service.update_currency_decimal_places(self._currency_id, decimal_places)
-        except ValueError as exc:
-            self._set_status(str(exc))
-            return
-        self._currency_options = companies_service.list_currencies()
-        self._refresh_dropdown_texts()
-        self._set_status(tr("رقم اعشارِ ارز ذخیره شد."))
-
-    def open_currency_menu(self) -> None:
-        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
-
-        items = [
-            {
-                "text": shape(c.iso_code),
-                "on_release": lambda cid=c.currency_id: (menu.dismiss(), self._select_currency(cid)),
-            }
-            for c in self._currency_options
-        ]
-        menu = open_rtl_dropdown(self.ids.currency_button, items, width_mult=3)
-        self._menus["currency"] = menu
-
-    def _select_currency(self, currency_id: int) -> None:
-        self._currency_id = currency_id
-        self._refresh_dropdown_texts()
-
-    def open_language_menu(self) -> None:
-        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
-
-        items = [
-            {
-                "text": shape(l.native_name),
-                "on_release": lambda lid=l.language_id: (menu.dismiss(), self._select_language(lid)),
-            }
-            for l in self._language_options
-        ]
-        menu = open_rtl_dropdown(self.ids.language_button, items, width_mult=3)
-        self._menus["language"] = menu
-
-    def _select_language(self, language_id: int) -> None:
-        self._language_id = language_id
-        self._refresh_dropdown_texts()
-
-    def _set_status(self, message: str) -> None:
-        self.ids.status_label.text = shape(message)
-
-    def refresh_list(self) -> None:
-        rows = companies_service.list_companies()
-        self._rows_by_id = {r.company_id: r for r in rows}
-        self.ids.grid_header.opacity = 1 if rows else 0
-        if not rows:
-            self.ids.companies_list.data = [
-                {"viewclass": "PEmptyState", "icon": "domain", "text": shape(tr("هنوز شرکتی تعریف نشده است."))}
+        self._reset_form()
+        self._rows = companies_service.list_companies()
+        self.table.setRowCount(len(self._rows))
+        for row_index, company in enumerate(self._rows):
+            values = [
+                "بله" if company.is_active else "خیر",
+                company.default_language_name,
+                company.base_currency_code,
+                company.display_name,
+                company.code,
             ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, company.company_id)
+                self.table.setItem(row_index, col_index, item)
+
+    @staticmethod
+    def _fill_combo(combo: QComboBox, options: list[tuple[int, str]]) -> None:
+        combo.clear()
+        for value, label in options:
+            combo.addItem(label, value)
+
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        company_id = self.table.item(row, 0).data(Qt.UserRole)
+        company = next((r for r in self._rows if r.company_id == company_id), None)
+        if company is not None:
+            self._load_into_form(company)
+
+    def _load_into_form(self, company: companies_service.CompanyRow) -> None:
+        self._editing_id = company.company_id
+        self.form_title.setText(f"ویرایشِ شرکت — {company.display_name}")
+        self.status_label.setText("")
+        self.code_field.setText(company.code)
+        self.code_field.setEnabled(False)
+        self.legal_name_field.setText(company.legal_name)
+        self.display_name_field.setText(company.display_name)
+        self._select_combo(self.currency_combo, company.base_currency_id)
+        self._select_combo(self.language_combo, company.default_language_id)
+        self.fy_month_field.setValue(company.fiscal_year_start_month)
+        self.fy_day_field.setValue(company.fiscal_year_start_day)
+        self.economic_code_field.setText(company.economic_code or "")
+        self.registration_no_field.setText(company.registration_no or "")
+        self.national_id_field.setText(company.national_id or "")
+        self.is_active_checkbox.setChecked(company.is_active)
+
+    @staticmethod
+    def _select_combo(combo: QComboBox, value: int) -> None:
+        index = combo.findData(value)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+
+    def _reset_form(self) -> None:
+        self._editing_id = None
+        self.form_title.setText("شرکتِ جدید")
+        self.status_label.setText("")
+        self.code_field.clear()
+        self.code_field.setEnabled(True)
+        self.legal_name_field.clear()
+        self.display_name_field.clear()
+        if self.currency_combo.count():
+            self.currency_combo.setCurrentIndex(0)
+        if self.language_combo.count():
+            self.language_combo.setCurrentIndex(0)
+        self.fy_month_field.setValue(1)
+        self.fy_day_field.setValue(1)
+        self.economic_code_field.clear()
+        self.registration_no_field.clear()
+        self.national_id_field.clear()
+        self.is_active_checkbox.setChecked(True)
+        self.table.clearSelection()
+
+    def _save(self) -> None:
+        legal_name = self.legal_name_field.text().strip()
+        display_name = self.display_name_field.text().strip()
+        if not legal_name or not display_name:
+            self.status_label.setText("نامِ حقوقی و نامِ نمایشی را وارد کنید.")
             return
 
-        self.ids.companies_list.data = [
-            {
-                "company_id": row.company_id,
-                "on_edit": self.edit_company,
-                "code_text": row.code,
-                "name_text": shape(row.display_name),
-                "currency_text": row.base_currency_code,
-                "language_text": shape(row.default_language_name),
-                "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                "is_active_row": row.is_active,
-                "zebra": i % 2 == 1,
-                "selected": row.company_id == self._editing_company_id,
-            }
-            for i, row in enumerate(rows)
-        ]
+        base_currency_id = self.currency_combo.currentData()
+        default_language_id = self.language_combo.currentData()
 
-    def edit_company(self, company_id: int) -> None:
-        row = self._rows_by_id.get(company_id)
-        if row is None:
-            return
-        self._editing_company_id = company_id
-        self.ids.code_field.set_value(row.code)
-        self.ids.code_field.disabled = True
-        self.ids.legal_name_field.set_value(row.legal_name)
-        self.ids.display_name_field.set_value(row.display_name)
-        self.ids.display_name_field.focus = True
-        self.ids.economic_code_field.set_value(row.economic_code or "")
-        self.ids.registration_no_field.set_value(row.registration_no or "")
-        self.ids.national_id_field.set_value(row.national_id or "")
-        self.ids.fy_start_month_field.text = numerals.to_persian_digits(str(row.fiscal_year_start_month))
-        self.ids.fy_start_day_field.text = numerals.to_persian_digits(str(row.fiscal_year_start_day))
-        self._currency_id = row.base_currency_id
-        self._language_id = row.default_language_id
-        self._refresh_dropdown_texts()
-        self.ids.is_active_checkbox.active = row.is_active
-        self.ids.form_title.text = shape(tr("ویرایش شرکت «{}»").format(row.display_name))
-        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
-        self.ids.cancel_edit_button.opacity = 1
-        self.ids.cancel_edit_button.disabled = False
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.display_name))
-        self.refresh_list()
-
-    def cancel_edit(self) -> None:
-        self._editing_company_id = None
-        self.ids.code_field.text = ""
-        self.ids.code_field.disabled = False
-        self.ids.legal_name_field.text = ""
-        self.ids.display_name_field.text = ""
-        self.ids.economic_code_field.text = ""
-        self.ids.registration_no_field.text = ""
-        self.ids.national_id_field.text = ""
-        self.ids.fy_start_month_field.text = "۱"
-        self.ids.fy_start_day_field.text = "۱"
-        self.ids.is_active_checkbox.active = True
-        self.ids.form_title.text = shape(tr("افزودن شرکت جدید"))
-        self.ids.save_button.text = shape(tr("افزودن شرکت"))
-        self.ids.cancel_edit_button.opacity = 0
-        self.ids.cancel_edit_button.disabled = True
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "0dp"
-        self._set_status(tr(""))
-        self.refresh_list()
-
-    def save_company(self) -> None:
-        legal_name = self.ids.legal_name_field.value.strip()
-        display_name = self.ids.display_name_field.value.strip()
-        if self._currency_id is None or self._language_id is None:
-            self._set_status(tr("ابتدا یک ارزِ پایه و زبانِ پیش‌فرض تعریف کنید."))
-            return
         try:
-            fy_month = int(numerals.to_ascii_digits(self.ids.fy_start_month_field.text.strip()) or "1")
-            fy_day = int(numerals.to_ascii_digits(self.ids.fy_start_day_field.text.strip()) or "1")
-        except ValueError:
-            self._set_status(tr("ماه/روزِ شروعِ سال مالی نامعتبر است."))
-            return
-        if not (1 <= fy_month <= 12) or not (1 <= fy_day <= 31):
-            self._set_status(tr("ماه باید بین ۱ تا ۱۲ و روز باید بین ۱ تا ۳۱ باشد."))
-            return
-
-        if self._editing_company_id is not None:
-            if not legal_name or not display_name:
-                self._set_status(tr("نام حقوقی و نام نمایشی را وارد کنید."))
-                return
-            try:
+            if self._editing_id is not None:
                 companies_service.update_company(
-                    company_id=self._editing_company_id,
-                    legal_name=legal_name,
-                    display_name=display_name,
-                    base_currency_id=self._currency_id,
-                    default_language_id=self._language_id,
-                    fiscal_year_start_month=fy_month,
-                    fiscal_year_start_day=fy_day,
-                    is_active=self.ids.is_active_checkbox.active,
-                    economic_code=self.ids.economic_code_field.value.strip(),
-                    registration_no=self.ids.registration_no_field.value.strip(),
-                    national_id=self.ids.national_id_field.value.strip(),
+                    self._editing_id,
+                    legal_name,
+                    display_name,
+                    base_currency_id,
+                    default_language_id,
+                    self.fy_month_field.value(),
+                    self.fy_day_field.value(),
+                    self.is_active_checkbox.isChecked(),
+                    economic_code=self.economic_code_field.text().strip() or None,
+                    registration_no=self.registration_no_field.text().strip() or None,
+                    national_id=self.national_id_field.text().strip() or None,
                 )
-            except Exception as exc:  # noqa: BLE001
-                self._set_status(tr("خطا: {}").format(exc))
-                return
-            self.cancel_edit()
+            else:
+                code = self.code_field.text().strip()
+                if not code:
+                    self.status_label.setText("کد را وارد کنید.")
+                    return
+                companies_service.create_company(
+                    code,
+                    legal_name,
+                    display_name,
+                    base_currency_id,
+                    default_language_id,
+                    self.fy_month_field.value(),
+                    self.fy_day_field.value(),
+                    economic_code=self.economic_code_field.text().strip() or None,
+                    registration_no=self.registration_no_field.text().strip() or None,
+                    national_id=self.national_id_field.text().strip() or None,
+                )
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
             return
 
-        code = self.ids.code_field.value.strip()
-        if not code or not legal_name or not display_name:
-            self._set_status(tr("کد، نام حقوقی و نام نمایشی را وارد کنید."))
-            return
-        try:
-            companies_service.create_company(
-                code=code,
-                legal_name=legal_name,
-                display_name=display_name,
-                base_currency_id=self._currency_id,
-                default_language_id=self._language_id,
-                fiscal_year_start_month=fy_month,
-                fiscal_year_start_day=fy_day,
-                economic_code=self.ids.economic_code_field.value.strip(),
-                registration_no=self.ids.registration_no_field.value.strip(),
-                national_id=self.ids.national_id_field.value.strip(),
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc))
-            return
-
-        self.cancel_edit()
-        self._set_status(tr("شرکت با موفقیت اضافه شد."))
+        self.refresh()

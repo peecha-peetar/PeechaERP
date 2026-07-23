@@ -159,8 +159,8 @@ class MainWindow(QMainWindow):
         return header
 
     def _logout(self) -> None:
-        from peecha.qt_pilot.login_window import LoginWindow  # noqa: PLC0415
-        from peecha.qt_pilot.main import get_font_family  # noqa: PLC0415
+        from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
+        from peecha.ui.main import get_font_family  # noqa: PLC0415
 
         session.log_out()
         self._login_window = LoginWindow(get_font_family())
@@ -197,26 +197,26 @@ class MainWindow(QMainWindow):
 
     # --- ثبت‌نامِ صفحات -----------------------------------------------------
     def _register_screens(self) -> None:
-        from peecha.qt_pilot.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.companies import CompaniesScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.currencies import CurrenciesScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.dashboard import DashboardScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.audit_log import AuditLogScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.detail_accounts_list import DetailAccountsListScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.field_labels import FieldLabelsScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.journal_entries_list import JournalEntriesListScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.languages import LanguagesScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.person_group_screens import (  # noqa: PLC0415
+        from peecha.ui.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
+        from peecha.ui.screens.companies import CompaniesScreen  # noqa: PLC0415
+        from peecha.ui.screens.currencies import CurrenciesScreen  # noqa: PLC0415
+        from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
+        from peecha.ui.screens.fiscal_years import FiscalYearsScreen  # noqa: PLC0415
+        from peecha.ui.screens.audit_log import AuditLogScreen  # noqa: PLC0415
+        from peecha.ui.screens.detail_accounts_list import DetailAccountsListScreen  # noqa: PLC0415
+        from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
+        from peecha.ui.screens.field_labels import FieldLabelsScreen  # noqa: PLC0415
+        from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen  # noqa: PLC0415
+        from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
+        from peecha.ui.screens.languages import LanguagesScreen  # noqa: PLC0415
+        from peecha.ui.screens.person_group_screens import (  # noqa: PLC0415
             CustomersScreen,
             PersonnelScreen,
             SuppliersScreen,
         )
-        from peecha.qt_pilot.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.roles import RolesScreen  # noqa: PLC0415
-        from peecha.qt_pilot.screens.users import UsersScreen  # noqa: PLC0415
+        from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
+        from peecha.ui.screens.roles import RolesScreen  # noqa: PLC0415
+        from peecha.ui.screens.users import UsersScreen  # noqa: PLC0415
 
         self.register_screen("dashboard", DashboardScreen())
         self.register_screen("placeholder", PlaceholderScreen())

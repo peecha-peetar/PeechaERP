@@ -1,146 +1,102 @@
-"""صفحه‌ی ردِ حسابرسی — فهرستِ فقط‌خواندنیِ رویدادهای مهمِ کسب‌وکاری (ایجاد/
-ویرایش/حذفِ حساب‌های کدینگ و اسنادِ حسابداری، فعلاً)؛ چون خودِ جدول
-audit.activity_log در دیتابیس با تریگر از UPDATE/DELETE محافظت می‌شود
-(006_audit_log.sql)، این صفحه هم عمداً هیچ فرمِ افزودن/ویرایشی ندارد —
-فقط نمایش و فیلتر."""
+"""ردِ حسابرسی — معادلِ Qt برایِ audit_log.py/.kv در Kivy.
+
+فقط‌خواندنی (طبقِ ماهیتِ تغییرناپذیرِ خودِ جدول)."""
 
 from __future__ import annotations
 
 import json
-import os
 
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.button import MDFlatButton
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.screen import MDScreen
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QComboBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from peecha import session
 from peecha.services import audit as audit_service
-from peecha.ui import numerals, theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "audit_log.kv")
-Builder.load_file(_KV_PATH)
-
-_ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف"}
-_ACTION_COLORS = {"CREATE": theme.SUCCESS, "UPDATE": theme.INFO, "DELETE": theme.DANGER}
-_ALL_TYPES_LABEL = "همه‌ی انواع"
+_COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوعِ موجودیت"]
 
 
-class AuditLogRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    log_id = NumericProperty(0)
-    date_text = StringProperty("")
-    user_text = StringProperty("")
-    entity_text = StringProperty("")
-    entity_id_text = StringProperty("")
-    action_text = StringProperty("")
-    action_badge_color = ListProperty([0, 0, 0, 1])
-    zebra = BooleanProperty(False)
-    on_show = ObjectProperty(None)
+class AuditLogScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._rows: list[audit_service.ActivityLogRow] = []
 
-    def on_release(self) -> None:
-        if self.on_show is not None:
-            self.on_show(self.log_id)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(12)
 
+        title = QLabel("ردِ حسابرسی")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
-Factory.register("AuditLogRowWidget", cls=AuditLogRowWidget)
+        hint = QLabel("رویدادهای ایجاد/ویرایش/حذفِ اطلاعاتِ کسب‌وکاری — فقط‌خواندنی و تغییرناپذیر.")
+        hint.setObjectName("sectionHint")
+        layout.addWidget(hint)
 
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("نوعِ موجودیت"))
+        self.entity_type_combo = QComboBox()
+        self.entity_type_combo.currentIndexChanged.connect(self._apply_filter)
+        filter_row.addWidget(self.entity_type_combo)
+        filter_row.addStretch(1)
+        layout.addLayout(filter_row)
 
-class AuditLogScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._entity_type: str | None = None
-        self._entity_types: list[str] = []
-        self._rows_by_id: dict[int, audit_service.ActivityLogRow] = {}
-        self._menu: MDDropdownMenu | None = None
-        self._detail_dialog: MDDialog | None = None
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("sectionHint")
+        layout.addWidget(self.status_label)
 
-    def on_pre_enter(self, *args):
-        self._entity_types = audit_service.list_entity_types()
-        self._set_type_text()
-        self.refresh_list()
-        self.bind_shortcuts()
+        self.table = QTableWidget(0, len(_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.table.cellDoubleClicked.connect(self._show_changes)
+        layout.addWidget(self.table, stretch=1)
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
-
-    def _current_company_id(self) -> int | None:
+    def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
 
-    def _set_status(self, message: str) -> None:
-        self.ids.status_label.text = shape(message)
+    def refresh(self) -> None:
+        entity_types = audit_service.list_entity_types()
+        self.entity_type_combo.blockSignals(True)
+        self.entity_type_combo.clear()
+        self.entity_type_combo.addItem("همه‌ی انواع", None)
+        for et in entity_types:
+            self.entity_type_combo.addItem(et, et)
+        self.entity_type_combo.blockSignals(False)
+        self._apply_filter()
 
-    def _set_type_text(self) -> None:
-        self.ids.type_button.text = shape(tr(self._entity_type) if self._entity_type else tr(_ALL_TYPES_LABEL))
-
-    def open_type_menu(self) -> None:
-        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
-
-        items = [
-            {"text": shape(tr(_ALL_TYPES_LABEL)), "on_release": lambda: (self._menu.dismiss(), self._select_type(None))}
-        ]
-        for entity_type in self._entity_types:
-            items.append(
-                {
-                    "text": shape(entity_type),
-                    "on_release": lambda value=entity_type: (self._menu.dismiss(), self._select_type(value)),
-                }
-            )
-        self._menu = open_rtl_dropdown(self.ids.type_button, items, width_mult=3)
-
-    def _select_type(self, entity_type: str | None) -> None:
-        self._entity_type = entity_type
-        self._set_type_text()
-        self.refresh_list()
-
-    def refresh_list(self) -> None:
-        rows = audit_service.list_activity_log(company_id=self._current_company_id(), entity_type=self._entity_type)
-        self._rows_by_id = {r.log_id: r for r in rows}
-        self._set_status(tr("{} رویداد یافت شد.").format(numerals.to_persian_digits(str(len(rows)))))
-
-        if not rows:
-            self.ids.log_list.data = [
-                {"viewclass": "PEmptyState", "icon": "history", "text": shape(tr("هنوز رویدادی ثبت نشده است."))}
+    def _apply_filter(self) -> None:
+        company_id = self._company_id()
+        entity_type = self.entity_type_combo.currentData()
+        self._rows = audit_service.list_activity_log(company_id, entity_type)
+        self.status_label.setText("هنوز رویدادی ثبت نشده است." if not self._rows else f"{len(self._rows)} رویداد یافت شد.")
+        self.table.setRowCount(len(self._rows))
+        for row_index, r in enumerate(self._rows):
+            values = [
+                r.created_at.strftime("%Y-%m-%d %H:%M"),
+                r.user_full_name or "سیستم",
+                r.action,
+                str(r.entity_id),
+                r.entity_type,
             ]
-            return
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, r.changes)
+                self.table.setItem(row_index, col_index, item)
 
-        self.ids.log_list.data = [
-            {
-                "log_id": row.log_id,
-                "on_show": self.show_details,
-                "date_text": numerals.format_jalali_datetime(row.created_at),
-                "user_text": shape(row.user_full_name or tr("سیستم")),
-                "entity_text": shape(row.entity_type),
-                "entity_id_text": numerals.to_persian_digits(str(row.entity_id)),
-                "action_text": shape(tr(_ACTION_LABELS.get(row.action, row.action))),
-                "action_badge_color": _ACTION_COLORS.get(row.action, theme.TEXT_DISABLED),
-                "zebra": i % 2 == 1,
-            }
-            for i, row in enumerate(rows)
-        ]
+    def _show_changes(self, row: int, _column: int) -> None:
+        from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
 
-    def show_details(self, log_id: int) -> None:
-        row = self._rows_by_id.get(log_id)
-        if row is None:
-            return
-        if self._detail_dialog is not None:
-            self._detail_dialog.dismiss()
-
-        pretty = json.dumps(row.changes, ensure_ascii=False, indent=2)
-        action_label = tr(_ACTION_LABELS.get(row.action, row.action))
-        title = f"{action_label} — {row.entity_type} #{row.entity_id}"
-
-        self._detail_dialog = MDDialog(
-            title=title,
-            text=pretty,
-            buttons=[MDFlatButton(text=shape(tr("بستن")), on_release=lambda *_: self._detail_dialog.dismiss())],
-        )
-        self._detail_dialog.open()
+        changes = self.table.item(row, 0).data(Qt.UserRole)
+        QMessageBox.information(self, "جزئیاتِ تغییرات", json.dumps(changes, ensure_ascii=False, indent=2, default=str))

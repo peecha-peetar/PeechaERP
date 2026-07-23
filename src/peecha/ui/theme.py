@@ -1,87 +1,41 @@
-"""پالت رسمی پیچا — دقیقاً طبق جدول‌های بخش ۳/۴ در docs/ui-ux-guidelines.md.
-
-منبع واحد این مقادیر همین فایل است؛ هم از پایتون و هم مستقیم از KV
-(`#:import theme peecha.ui.theme`) استفاده می‌شود تا رنگ‌ها در دو جا به‌صورت
-غیرهم‌گام تکرار نشوند.
-"""
+"""پالتِ رنگیِ Qt — عیناً همان مقادیرِ هگزِ `peecha.ui.theme` (پالتِ «آئورا»)،
+اینجا مستقیم به‌صورتِ رشته‌ی هگز (نه RGBA کسری) چون QSS/Qt رنگ‌ها را با
+`#RRGGBB` می‌خواهد."""
 
 from __future__ import annotations
 
+PRIMARY = "#14173A"
+PRIMARY_HOVER = "#1F234E"
+PRIMARY_LIGHT = "#EEECFC"
+ACCENT = "#6D5CE6"
+ACCENT_HOVER = "#5B4CD6"
+SUCCESS = "#15A672"
+WARNING = "#F5A524"
+DANGER = "#E5484D"
+INFO = "#0EA5E9"
 
-def hex_to_rgba(hex_code: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
-    hex_code = hex_code.lstrip("#")
-    r = int(hex_code[0:2], 16) / 255
-    g = int(hex_code[2:4], 16) / 255
-    b = int(hex_code[4:6], 16) / 255
-    return (r, g, b, alpha)
+CHART_PURPLE = "#9333EA"
+CHART_ORANGE = "#F97316"
+CHART_TEAL = "#14B8A6"
 
+BACKGROUND = "#F6F5FB"
+SURFACE = "#FFFFFF"
+HOVER = "#F4F3FA"
+SELECTED = "#EEECFC"
+BORDER = "#E6E4F0"
+DIVIDER = "#ECEAF3"
 
-# رنگ‌های برند/اکشن — پالتِ «آئورا» (بازطراحیِ مدرن): از ساختارِ نرم‌افزارهای
-# حسابداریِ کلاسیک (ریبون/منویِ درختی/جدولِ فشرده) الهام گرفته شده، اما با
-# زبانِ رنگیِ تازه — نویِ عمیقِ بنفش‌گرا برایِ نوارِ کناری/ریبون، و بنفشِ
-# زنده به‌عنوانِ اکسنتِ اصلی به‌جایِ آبیِ معمولیِ رایج.
-PRIMARY = hex_to_rgba("14173A")
-PRIMARY_HOVER = hex_to_rgba("1F234E")
-PRIMARY_LIGHT = hex_to_rgba("EEECFC")
-ACCENT = hex_to_rgba("6D5CE6")
-SUCCESS = hex_to_rgba("15A672")
-WARNING = hex_to_rgba("F5A524")
-DANGER = hex_to_rgba("E5484D")
-INFO = hex_to_rgba("0EA5E9")
+TEXT_PRIMARY = "#18162B"
+TEXT_SECONDARY = "#6B6B85"
+TEXT_DISABLED = "#A3A2B8"
 
-# اکسنت‌های اضافیِ نمودار (دسته‌ی سوم/چهارم به بعد)
-CHART_PURPLE = hex_to_rgba("9333EA")
-CHART_ORANGE = hex_to_rgba("F97316")
-CHART_TEAL = hex_to_rgba("14B8A6")
+GRID_HEADER_BG = "#EFEDF9"
+GRID_BORDER = "#E1DEEF"
+GRID_ROW_ALT = "#FAF9FD"
+LEVEL_GROUP = "#4C1D95"
+LEVEL_KOL = "#0F766E"
+LEVEL_MOEIN = TEXT_PRIMARY
 
-# سطح/پس‌زمینه (تم روشن)
-BACKGROUND = hex_to_rgba("F6F5FB")
-SURFACE = hex_to_rgba("FFFFFF")
-HOVER = hex_to_rgba("F4F3FA")
-SELECTED = hex_to_rgba("EEECFC")
-BORDER = hex_to_rgba("E6E4F0")
-DIVIDER = hex_to_rgba("ECEAF3")
-
-# متن
-TEXT_PRIMARY = hex_to_rgba("18162B")
-TEXT_SECONDARY = hex_to_rgba("6B6B85")
-TEXT_DISABLED = hex_to_rgba("A3A2B8")
-
-# --- سبکِ جدولِ فشرده/صفحه‌گسترده‌ای (کدینگِ حسابداری و فهرست‌های مشابه) ---
-# طبقِ درخواستِ صریح: ردیف‌های سطح‌بندی‌شده (گروه/کل/معین) باید مثلِ
-# نرم‌افزارهای حسابداریِ کلاسیک با رنگ از هم جدا شوند، اما با پالتِ تازه.
-GRID_HEADER_BG = hex_to_rgba("EFEDF9")
-GRID_BORDER = hex_to_rgba("E1DEEF")
-GRID_ROW_ALT = hex_to_rgba("FAF9FD")
-LEVEL_GROUP = hex_to_rgba("4C1D95")  # سطحِ گروه — بنفشِ تیره و بولد
-LEVEL_KOL = hex_to_rgba("0F766E")  # سطحِ کل — سبزآبیِ تیره
-LEVEL_MOEIN = TEXT_PRIMARY  # سطحِ معین — رنگِ متنِ عادی
-
-# RGBA در بازه‌ی ۰..۱ (فرمت مورد انتظار KivyMD) — نگاشت قدیمی برای سازگاری با کدهای موجود
-SEMANTIC_COLORS: dict[str, dict[str, tuple[float, float, float, float]]] = {
-    "light": {
-        "primary": ACCENT,
-        "success": SUCCESS,
-        "warning": WARNING,
-        "danger": DANGER,
-        "info": INFO,
-        "background": BACKGROUND,
-        "surface": SURFACE,
-        "text": TEXT_PRIMARY,
-    },
-    "dark": {
-        "primary": hex_to_rgba("5B8DEF"),
-        "success": hex_to_rgba("34D399"),
-        "warning": hex_to_rgba("FBBF24"),
-        "danger": hex_to_rgba("F87171"),
-        "info": hex_to_rgba("38BDF8"),
-        "background": hex_to_rgba("0F1115"),
-        "surface": hex_to_rgba("1A1D23"),
-        "text": hex_to_rgba("E5E7EB"),
-    },
-}
-
-# نگاشت وضعیت سند/کارتابل به نقش رنگ semantic — طبق docs/ui-ux-guidelines.md بخش ۳
 STATUS_COLOR_ROLE: dict[str, str] = {
     "TEMPORARY": "warning",
     "PERMANENT": "success",
@@ -92,7 +46,117 @@ STATUS_COLOR_ROLE: dict[str, str] = {
     "REJECTED": "danger",
 }
 
+_ROLE_COLORS = {
+    "success": SUCCESS,
+    "warning": WARNING,
+    "danger": DANGER,
+    "info": INFO,
+}
 
-def status_color(status_code: str, theme_style: str = "light") -> tuple[float, float, float, float]:
+
+def status_color(status_code: str) -> str:
     role = STATUS_COLOR_ROLE.get(status_code, "info")
-    return SEMANTIC_COLORS[theme_style][role]
+    return _ROLE_COLORS[role]
+
+
+DONUT_COLORS = [ACCENT, SUCCESS, CHART_PURPLE, CHART_ORANGE, WARNING]
+
+# استایلِ سراسری — طبقِ همان زبانِ بصریِ Kivy (کارت‌های گرد، فیلدهایِ
+# fill-style، دکمه‌هایِ pill) اما با ابزارِ QSS.
+GLOBAL_QSS = f"""
+QWidget {{
+    background-color: {BACKGROUND};
+    color: {TEXT_PRIMARY};
+}}
+QWidget#card, QFrame#card {{
+    background-color: {SURFACE};
+    border-radius: 16px;
+}}
+QLabel#pageTitle {{
+    font-size: 22px;
+    font-weight: bold;
+    color: {TEXT_PRIMARY};
+}}
+QLabel#sectionHint {{
+    color: {TEXT_SECONDARY};
+    font-size: 12px;
+}}
+QLabel#statusError {{
+    color: {DANGER};
+}}
+QLabel#statusOk {{
+    color: {SUCCESS};
+}}
+QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
+    background-color: {HOVER};
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: {TEXT_PRIMARY};
+}}
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+    border: 1px solid {ACCENT};
+}}
+QPushButton {{
+    border-radius: 16px;
+    padding: 8px 18px;
+    font-size: 13px;
+}}
+QPushButton#primaryButton {{
+    background-color: {ACCENT};
+    color: white;
+}}
+QPushButton#primaryButton:hover {{
+    background-color: {ACCENT_HOVER};
+}}
+QPushButton#flatButton {{
+    background-color: transparent;
+    color: {ACCENT};
+}}
+QPushButton#flatButton:hover {{
+    background-color: {HOVER};
+}}
+QPushButton#dangerButton {{
+    background-color: transparent;
+    color: {DANGER};
+}}
+QTableWidget {{
+    background-color: {SURFACE};
+    border: none;
+    gridline-color: {GRID_BORDER};
+    font-size: 13px;
+}}
+QHeaderView::section {{
+    background-color: {GRID_HEADER_BG};
+    color: {TEXT_SECONDARY};
+    padding: 8px;
+    border: none;
+    font-weight: bold;
+}}
+QTreeWidget {{
+    background-color: {PRIMARY};
+    color: rgba(255, 255, 255, 0.75);
+    border: none;
+    font-size: 13px;
+    outline: none;
+}}
+QTreeWidget::item {{
+    padding: 8px 6px;
+    border-radius: 8px;
+}}
+QTreeWidget::item:selected {{
+    background-color: {ACCENT};
+    color: white;
+}}
+QTreeWidget::item:hover:!selected {{
+    background-color: {PRIMARY_HOVER};
+}}
+QWidget#headerBar {{
+    background-color: {SURFACE};
+    border-bottom: 1px solid {DIVIDER};
+}}
+QCheckBox {{
+    spacing: 6px;
+}}
+"""

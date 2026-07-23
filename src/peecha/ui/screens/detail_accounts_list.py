@@ -1,132 +1,108 @@
-"""صفحه‌ی فهرستِ واحدِ همه‌ی «تفصیلی‌ها» — طبقِ درخواستِ صریح: تفصیلی
-(مشتری/تامین‌کننده/پرسنل/بانک/صندوق‌وتنخواه/دارایی‌ثابت/کالا/...)، مرکزِ
-هزینه و پروژه همگی مفهوماً «گروهِ تفصیلی»‌اند و باید در یک فهرستِ واحد،
-با ستونِ نوعِ تفصیلی و ستونِ سطح، دیده شوند. کلیک روی هر ردیف، بسته به
-نوعِ گروهش، فرمِ درست را باز می‌کند (مشتری/تامین‌کننده/پرسنل → صفحه‌ی
-اختصاصیِ خودشان؛ بقیه → صفحه‌ی مدیریتِ ابعادِ تفصیلی، با انتخابِ خودکارِ
-گروه و بازکردنِ فرمِ ویرایش)."""
+"""فهرستِ واحدِ همه‌ی تفصیلی‌ها — معادلِ Qt برایِ detail_accounts_list.py/.kv
+در Kivy. کلیک روی هر ردیف بسته به نوعِ گروهش، صفحه‌ی درست را باز می‌کند."""
 
 from __future__ import annotations
 
-import os
-
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.screen import MDScreen
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.ui import theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-
-_KV_PATH = os.path.join(os.path.dirname(__file__), "detail_accounts_list.kv")
-Builder.load_file(_KV_PATH)
 
 _GROUP_SCREEN_BY_PERSON_CODE = {
-    "CUSTOMER": "GL_CUSTOMERS",
-    "SUPPLIER": "GL_SUPPLIERS",
-    "PERSONNEL": "GL_PERSONNEL",
+    "CUSTOMER": "customers",
+    "SUPPLIER": "suppliers",
+    "PERSONNEL": "personnel",
 }
 
-
-class DetailAccountUnifiedRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    detail_account_id = NumericProperty(0)
-    dimension_type_id = NumericProperty(0)
-    person_group_code = StringProperty("")
-    group_text = StringProperty("")
-    level_text = StringProperty("")
-    code_text = StringProperty("")
-    name_text = StringProperty("")
-    status_text = StringProperty("")
-    status_badge_color = ListProperty([0, 0, 0, 1])
-    zebra = BooleanProperty(False)
-    on_open = ObjectProperty(None)
-
-    def on_release(self) -> None:
-        if self.on_open is not None:
-            self.on_open(self.dimension_type_id, self.detail_account_id, self.person_group_code or None)
+_COLUMNS = ["وضعیت", "نام", "کد", "سطح", "نوعِ تفصیلی"]
 
 
-Factory.register("DetailAccountUnifiedRowWidget", cls=DetailAccountUnifiedRowWidget)
-
-
-class DetailAccountsListScreen(MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+class DetailAccountsListScreen(QWidget):
+    def __init__(self, main_window) -> None:
+        super().__init__()
+        self._main_window = main_window
         self._entries: list[dimensions_service.UnifiedDetailAccountRow] = []
 
-    def on_pre_enter(self, *args):
-        self.refresh_list()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
 
-    def _current_company_id(self) -> int | None:
-        return session.current_company.company_id if session.current_company else None
+        title = QLabel("تفصیلی‌ها")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
-    def refresh_list(self) -> None:
-        company_id = self._current_company_id()
+        hint = QLabel(
+            "همه‌ی مشتریان/تامین‌کنندگان/پرسنل/مراکزِ هزینه/پروژه‌ها و گروه‌های دیگرِ تفصیلی، یک‌جا — "
+            "کلیک روی هر ردیف فرمِ مربوطه را باز می‌کند."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.search_field = QLineEdit()
+        self.search_field.setPlaceholderText("جستجو در نوعِ تفصیلی، کد یا نام")
+        self.search_field.textChanged.connect(self._apply_filter)
+        layout.addWidget(self.search_field)
+
+        self.table = QTableWidget(0, len(_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.cellClicked.connect(self._on_row_clicked)
+        layout.addWidget(self.table, stretch=1)
+
+    def refresh(self) -> None:
+        company_id = session.current_company.company_id if session.current_company else None
         self._entries = dimensions_service.list_all_detail_accounts(company_id) if company_id is not None else []
         self._apply_filter()
 
-    def filter_entries(self) -> None:
-        self._apply_filter()
-
     def _apply_filter(self) -> None:
-        query = self.ids.search_field.text.strip()
-        if not query:
-            filtered = self._entries
-        else:
-            filtered = [
-                e
-                for e in self._entries
-                if query in e.group_name
-                or query in e.full_code
-                or (e.name and query in e.name)
-            ]
-
-        self.ids.status_label.text = (
-            "" if not self._entries else shape(tr("{} ردیف").format(len(filtered)))
-        )
-
-        if not filtered:
-            self.ids.entries_list.data = [
-                {
-                    "viewclass": "PEmptyState",
-                    "icon": "shape-outline",
-                    "text": shape(tr("تفصیلی‌ای یافت نشد.") if self._entries else tr("هنوز هیچ تفصیلی‌ای تعریف نشده است.")),
-                }
-            ]
-            return
-
-        self.ids.entries_list.data = [
-            {
-                "detail_account_id": e.detail_account_id,
-                "dimension_type_id": e.dimension_type_id,
-                "person_group_code": e.person_group_code or "",
-                "on_open": self.open_entry,
-                "group_text": shape(e.group_name),
-                "level_text": str(e.level_no),
-                "code_text": e.full_code,
-                "name_text": shape(e.name or "—"),
-                "status_text": shape(tr("فعال") if e.is_active else tr("غیرفعال")),
-                "status_badge_color": theme.SUCCESS if e.is_active else theme.TEXT_DISABLED,
-                "zebra": i % 2 == 1,
-            }
-            for i, e in enumerate(filtered)
+        query = self.search_field.text().strip()
+        filtered = [
+            e for e in self._entries
+            if not query or query in e.group_name or query in e.full_code or (e.name and query in e.name)
         ]
+        self.table.setRowCount(len(filtered))
+        for row_index, e in enumerate(filtered):
+            values = [
+                "فعال" if e.is_active else "غیرفعال",
+                e.name or "—",
+                e.full_code,
+                str(e.level_no),
+                e.group_name,
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code))
+                self.table.setItem(row_index, col_index, item)
+
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        dimension_type_id, detail_account_id, person_group_code = self.table.item(row, 0).data(Qt.UserRole)
+        self.open_entry(dimension_type_id, detail_account_id, person_group_code)
 
     def open_entry(self, dimension_type_id: int, detail_account_id: int, person_group_code: str | None) -> None:
-        from kivymd.app import MDApp  # noqa: PLC0415
-
-        shell = MDApp.get_running_app().root.get_screen("shell")
         target_code = _GROUP_SCREEN_BY_PERSON_CODE.get(person_group_code or "")
+        nav_code = {
+            "customers": "GL_CUSTOMERS",
+            "suppliers": "GL_SUPPLIERS",
+            "personnel": "GL_PERSONNEL",
+        }.get(target_code, "GL_DIM")
+
         if target_code is not None:
-            shell.open_screen(target_code, then=lambda screen: screen.edit_person(detail_account_id))
+            self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_person(detail_account_id))
         else:
-            shell.open_screen(
-                "GL_DIM",
-                then=lambda screen: screen.select_type_and_edit(dimension_type_id, detail_account_id),
+            self._main_window.open_screen(
+                nav_code, then=lambda screen: screen.select_type_and_edit(dimension_type_id, detail_account_id)
             )

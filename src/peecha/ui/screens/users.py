@@ -1,261 +1,289 @@
-"""صفحه‌ی مدیریت کاربران — تعریفِ کاربر + دسترسیِ او به یک یا چند شرکت
-(چندشرکتی). نقش/دسترسیِ ریزتر (منو/فرم/اکشن) در صفحه‌ی «نقش‌ها و دسترسی‌ها»
-تعریف می‌شود؛ اینجا فقط سطحِ حساب‌کاربری + کدام شرکت‌ها."""
+"""مدیریتِ کاربران — معادلِ Qt برایِ users.py/.kv در Kivy."""
 
 from __future__ import annotations
 
-import os
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.screen import MDScreen
-
-from peecha import session
-from peecha.services import field_labels as field_labels_service
 from peecha.services import users as users_service
-from peecha.ui import theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "users.kv")
-Builder.load_file(_KV_PATH)
+_COLUMNS = ["فعال", "مدیرِ کل", "شرکت‌ها", "نامِ کامل", "نامِ کاربری"]
 
 
-class UserRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    user_id = NumericProperty(0)
-    username_text = StringProperty("")
-    name_text = StringProperty("")
-    role_text = StringProperty("")
-    status_text = StringProperty("")
-    is_active_row = BooleanProperty(True)
-    zebra = BooleanProperty(False)
-    selected = BooleanProperty(False)
-    on_edit = ObjectProperty(None)
-
-    def on_release(self) -> None:
-        if self.on_edit is not None:
-            self.on_edit(self.user_id)
-
-
-Factory.register("UserRowWidget", cls=UserRowWidget)
-
-
-class _CompanyCheckRow(MDBoxLayout):
-    label_text = StringProperty("")
-
-    def __init__(self, company_id: int, **kwargs):
-        super().__init__(**kwargs)
-        self.company_id = company_id
-
-
-class UsersScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._rows_by_id: dict[int, users_service.UserRow] = {}
+class UsersScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._rows: list[users_service.UserRow] = []
+        self._editing_id: int | None = None
         self._company_options: list[tuple[int, str]] = []
-        self._language_options: list[tuple[int, str]] = []
-        self._company_checks: list[_CompanyCheckRow] = []
-        self._language_id: int | None = None
-        self._editing_user_id: int | None = None
-        self._menu: MDDropdownMenu | None = None
 
-    def on_pre_enter(self, *args):
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
+        outer.addWidget(self._build_list_panel(), stretch=3)
+        outer.addWidget(self._build_form_panel(), stretch=2)
+
+    def _build_list_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel("کاربران")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+
+        self.table = QTableWidget(0, len(_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.cellClicked.connect(self._on_row_clicked)
+        layout.addWidget(self.table)
+        return panel
+
+    def _build_form_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(8)
+
+        self.form_title = QLabel("کاربرِ جدید")
+        self.form_title.setObjectName("pageTitle")
+        layout.addWidget(self.form_title)
+
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        row = 0
+
+        grid.addWidget(QLabel("نامِ کاربری"), row, 0)
+        self.username_field = QLineEdit()
+        grid.addWidget(self.username_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("نامِ کامل"), row, 0)
+        self.full_name_field = QLineEdit()
+        grid.addWidget(self.full_name_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("ایمیل"), row, 0)
+        self.email_field = QLineEdit()
+        grid.addWidget(self.email_field, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("زبانِ پیش‌فرض"), row, 0)
+        self.language_combo = QComboBox()
+        grid.addWidget(self.language_combo, row, 1)
+        row += 1
+
+        grid.addWidget(QLabel("رمزِ عبور"), row, 0)
+        self.password_field = QLineEdit()
+        self.password_field.setEchoMode(QLineEdit.Password)
+        self.password_field.setPlaceholderText("(برایِ عدمِ تغییر، خالی بگذارید)")
+        grid.addWidget(self.password_field, row, 1)
+        row += 1
+
+        self.is_super_admin_checkbox = QCheckBox("مدیرِ کلِ سیستم")
+        grid.addWidget(self.is_super_admin_checkbox, row, 1)
+        row += 1
+
+        self.is_active_checkbox = QCheckBox("فعال")
+        self.is_active_checkbox.setChecked(True)
+        grid.addWidget(self.is_active_checkbox, row, 1)
+        row += 1
+
+        layout.addLayout(grid)
+
+        layout.addWidget(QLabel("دسترسی به شرکت‌ها"))
+        self.company_list = QListWidget()
+        self.company_list.setMaximumHeight(120)
+        layout.addWidget(self.company_list)
+
+        grid2 = QGridLayout()
+        grid2.addWidget(QLabel("شرکتِ پیش‌فرض"), 0, 0)
+        self.default_company_combo = QComboBox()
+        grid2.addWidget(self.default_company_combo, 0, 1)
+        layout.addLayout(grid2)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        buttons = QHBoxLayout()
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        buttons.addWidget(save_button)
+
+        cancel_button = QPushButton("انصراف")
+        cancel_button.setObjectName("flatButton")
+        cancel_button.clicked.connect(self._reset_form)
+        buttons.addWidget(cancel_button)
+
+        layout.addLayout(buttons)
+        layout.addStretch(1)
+        return panel
+
+    def refresh(self) -> None:
         self._company_options = users_service.list_companies_for_picker()
         self._language_options = users_service.list_languages_for_picker()
-        if self._language_id is None and self._language_options:
-            self._language_id = self._language_options[0][0]
-        # طبق درخواستِ صریح: با برگشتن به این صفحه، شرکت‌های تیک‌خورده‌ی
-        # فرمِ نیمه‌کاره نباید پاک شود — قبل از بازسازیِ چک‌لیست، انتخابِ
-        # فعلی را نگه می‌داریم (اولین بارِ ورود، self._company_checks هنوز
-        # خالی است پس چیزی برای نگه‌داشتن نیست).
-        previously_checked = set(self._checked_company_ids()) if self._company_checks else None
-        self._rebuild_company_checklist(previously_checked)
-        self._refresh_language_text()
-        self.apply_field_labels()
-        self.refresh_list()
-        self.bind_shortcuts()
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
+        self.language_combo.clear()
+        self.language_combo.addItem("—", None)
+        for lang_id, name in self._language_options:
+            self.language_combo.addItem(name, lang_id)
 
-    def apply_field_labels(self) -> None:
-        language_id = session.current_language.language_id if session.current_language else None
-        labels = {k: tr(v) for k, v in field_labels_service.get_labels_map("users", language_id).items()}
-        self.ids.username_field.hint_text = shape(labels["username"])
-        self.ids.full_name_field.hint_text = shape(labels["full_name"])
-        self.ids.email_field.hint_text = shape(labels["email"])
-        self.ids.password_field.hint_text = shape(labels["password"])
-
-    def on_shortcut_save(self) -> None:
-        self.save_user()
-
-    def on_shortcut_cancel(self) -> bool:
-        if self._editing_user_id is not None:
-            self.cancel_edit()
-            return True
-        return False
-
-    def _rebuild_company_checklist(self, checked_ids: set[int] | None = None) -> None:
-        checked_ids = checked_ids or set()
-        self.ids.companies_checklist_box.clear_widgets()
-        self._company_checks = []
-        for company_id, display_name in self._company_options:
-            row = _CompanyCheckRow(company_id=company_id, label_text=shape(display_name))
-            row.ids.check.active = company_id in checked_ids
-            self.ids.companies_checklist_box.add_widget(row)
-            self._company_checks.append(row)
-
-    def _checked_company_ids(self) -> list[int]:
-        return [row.company_id for row in self._company_checks if row.ids.check.active]
-
-    def _refresh_language_text(self) -> None:
-        name = next((n for lid, n in self._language_options if lid == self._language_id), "— انتخاب زبان —")
-        self.ids.language_button.text = shape(name)
-
-    def open_language_menu(self) -> None:
-        items = [
-            {
-                "text": shape(name),
-                "on_release": lambda lid=lid: (self._menu.dismiss(), self._select_language(lid)),
-            }
-            for lid, name in self._language_options
-        ]
-        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
-
-        self._menu = open_rtl_dropdown(self.ids.language_button, items, width_mult=3)
-
-    def _select_language(self, language_id: int) -> None:
-        self._language_id = language_id
-        self._refresh_language_text()
-
-    def _set_status(self, message: str, *, is_error: bool = False) -> None:
-        self.ids.status_label.text = shape(message)
-        self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
-
-    def refresh_list(self) -> None:
-        rows = users_service.list_users()
-        self._rows_by_id = {r.user_id: r for r in rows}
-        self.ids.grid_header.opacity = 1 if rows else 0
-        if not rows:
-            self.ids.users_list.data = [
-                {"viewclass": "PEmptyState", "icon": "account-multiple-outline", "text": shape(tr("هنوز کاربری تعریف نشده است."))}
+        self._reset_form()
+        self._rows = users_service.list_users()
+        self.table.setRowCount(len(self._rows))
+        company_names = dict(self._company_options)
+        for row_index, user in enumerate(self._rows):
+            company_labels = "، ".join(company_names.get(cid, "?") for cid in user.company_ids)
+            values = [
+                "بله" if user.is_active else "خیر",
+                "بله" if user.is_super_admin else "خیر",
+                company_labels or "—",
+                user.full_name,
+                user.username,
             ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, user.user_id)
+                self.table.setItem(row_index, col_index, item)
+
+    def _rebuild_company_widgets(self, selected_ids: set[int] | None = None) -> None:
+        selected_ids = selected_ids or set()
+        self.company_list.clear()
+        for company_id, name in self._company_options:
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if company_id in selected_ids else Qt.Unchecked)
+            item.setData(Qt.UserRole, company_id)
+            self.company_list.addItem(item)
+
+        self.default_company_combo.clear()
+        self.default_company_combo.addItem("—", None)
+        for company_id, name in self._company_options:
+            if company_id in selected_ids or not selected_ids:
+                self.default_company_combo.addItem(name, company_id)
+
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        user_id = self.table.item(row, 0).data(Qt.UserRole)
+        user = next((r for r in self._rows if r.user_id == user_id), None)
+        if user is not None:
+            self._load_into_form(user)
+
+    def _load_into_form(self, user: users_service.UserRow) -> None:
+        self._editing_id = user.user_id
+        self.form_title.setText(f"ویرایشِ کاربر — {user.username}")
+        self.status_label.setText("")
+        self.username_field.setText(user.username)
+        self.username_field.setEnabled(False)
+        self.full_name_field.setText(user.full_name)
+        self.email_field.setText(user.email or "")
+        self.password_field.clear()
+        if user.default_language_id is not None:
+            index = self.language_combo.findData(user.default_language_id)
+            self.language_combo.setCurrentIndex(index if index >= 0 else 0)
+        else:
+            self.language_combo.setCurrentIndex(0)
+        self.is_super_admin_checkbox.setChecked(user.is_super_admin)
+        self.is_active_checkbox.setChecked(user.is_active)
+        self._rebuild_company_widgets(set(user.company_ids))
+        if user.default_company_id is not None:
+            index = self.default_company_combo.findData(user.default_company_id)
+            self.default_company_combo.setCurrentIndex(index if index >= 0 else 0)
+
+    def _reset_form(self) -> None:
+        self._editing_id = None
+        self.form_title.setText("کاربرِ جدید")
+        self.status_label.setText("")
+        self.username_field.clear()
+        self.username_field.setEnabled(True)
+        self.full_name_field.clear()
+        self.email_field.clear()
+        self.password_field.clear()
+        self.language_combo.setCurrentIndex(0)
+        self.is_super_admin_checkbox.setChecked(False)
+        self.is_active_checkbox.setChecked(True)
+        self._rebuild_company_widgets(set())
+        self.table.clearSelection()
+
+    def _selected_company_ids(self) -> list[int]:
+        ids = []
+        for i in range(self.company_list.count()):
+            item = self.company_list.item(i)
+            if item.checkState() == Qt.Checked:
+                ids.append(item.data(Qt.UserRole))
+        return ids
+
+    def _save(self) -> None:
+        full_name = self.full_name_field.text().strip()
+        if not full_name:
+            self.status_label.setText("نامِ کامل را وارد کنید.")
             return
 
-        self.ids.users_list.data = [
-            {
-                "user_id": row.user_id,
-                "on_edit": self.edit_user,
-                "username_text": row.username,
-                "name_text": shape(row.full_name),
-                "role_text": shape(tr("مدیر کل") if row.is_super_admin else tr("کاربر")),
-                "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                "is_active_row": row.is_active,
-                "zebra": i % 2 == 1,
-                "selected": row.user_id == self._editing_user_id,
-            }
-            for i, row in enumerate(rows)
-        ]
+        email = self.email_field.text().strip() or None
+        language_id = self.language_combo.currentData()
+        is_super_admin = self.is_super_admin_checkbox.isChecked()
+        is_active = self.is_active_checkbox.isChecked()
+        company_ids = self._selected_company_ids()
+        default_company_id = self.default_company_combo.currentData()
+        password = self.password_field.text()
 
-    def edit_user(self, user_id: int) -> None:
-        row = self._rows_by_id.get(user_id)
-        if row is None:
-            return
-        self._editing_user_id = user_id
-        self.ids.username_field.set_value(row.username)
-        self.ids.username_field.disabled = True
-        self.ids.full_name_field.set_value(row.full_name)
-        self.ids.full_name_field.focus = True
-        self.ids.email_field.set_value(row.email or "")
-        self.ids.password_field.text = ""
-        self.ids.password_field.hint_text = shape(tr("رمز عبور جدید (اختیاری)"))
-        self._language_id = row.default_language_id
-        self._refresh_language_text()
-        self.ids.is_super_admin_checkbox.active = row.is_super_admin
-        self.ids.is_active_checkbox.active = row.is_active
-        self._rebuild_company_checklist(set(row.company_ids))
-        self.ids.form_title.text = shape(tr("ویرایش کاربر «{}»").format(row.full_name))
-        self.ids.save_button.text = shape(tr("ذخیره تغییرات"))
-        self.ids.cancel_edit_button.opacity = 1
-        self.ids.cancel_edit_button.disabled = False
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "36dp"
-        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.full_name))
-
-    def cancel_edit(self) -> None:
-        self._editing_user_id = None
-        self.ids.username_field.text = ""
-        self.ids.username_field.disabled = False
-        self.ids.full_name_field.text = ""
-        self.ids.email_field.text = ""
-        self.ids.password_field.text = ""
-        self.apply_field_labels()
-        self.ids.is_super_admin_checkbox.active = False
-        self.ids.is_active_checkbox.active = True
-        self._rebuild_company_checklist()
-        self.ids.form_title.text = shape(tr("افزودن کاربر جدید"))
-        self.ids.save_button.text = shape(tr("افزودن کاربر"))
-        self.ids.cancel_edit_button.opacity = 0
-        self.ids.cancel_edit_button.disabled = True
-        self.ids.cancel_edit_button.size_hint_y = None
-        self.ids.cancel_edit_button.height = "0dp"
-        self._set_status(tr(""))
-
-    def save_user(self) -> None:
-        full_name = self.ids.full_name_field.value.strip()
-        email = self.ids.email_field.value.strip()
-        password = self.ids.password_field.text
-        company_ids = self._checked_company_ids()
-        default_company_id = company_ids[0] if company_ids else None
-
-        if self._editing_user_id is not None:
-            if not full_name:
-                self._set_status(tr("نام کامل را وارد کنید."))
-                return
-            try:
+        try:
+            if self._editing_id is not None:
                 users_service.update_user(
-                    user_id=self._editing_user_id,
-                    full_name=full_name,
-                    email=email,
-                    default_language_id=self._language_id,
-                    is_super_admin=self.ids.is_super_admin_checkbox.active,
-                    is_active=self.ids.is_active_checkbox.active,
-                    company_ids=company_ids,
-                    default_company_id=default_company_id,
+                    self._editing_id,
+                    full_name,
+                    email,
+                    language_id,
+                    is_super_admin,
+                    is_active,
+                    company_ids,
+                    default_company_id,
                     new_password=password or None,
                 )
-            except Exception as exc:  # noqa: BLE001
-                self._set_status(tr("خطا: {}").format(exc), is_error=True)
-                return
-            self.cancel_edit()
-            self.refresh_list()
+            else:
+                username = self.username_field.text().strip()
+                if not username:
+                    self.status_label.setText("نامِ کاربری را وارد کنید.")
+                    return
+                if len(password) < 6:
+                    self.status_label.setText("رمزِ عبور باید حداقل ۶ کاراکتر باشد.")
+                    return
+                users_service.create_user(
+                    username,
+                    full_name,
+                    password,
+                    email,
+                    language_id,
+                    is_super_admin,
+                    company_ids,
+                    default_company_id,
+                )
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
             return
 
-        username = self.ids.username_field.value.strip()
-        if not username or not full_name or not password:
-            self._set_status(tr("نام‌کاربری، نام کامل و رمز عبور را وارد کنید."), is_error=True)
-            return
-        try:
-            users_service.create_user(
-                username=username,
-                full_name=full_name,
-                password=password,
-                email=email,
-                default_language_id=self._language_id,
-                is_super_admin=self.ids.is_super_admin_checkbox.active,
-                company_ids=company_ids,
-                default_company_id=default_company_id,
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-
-        self.cancel_edit()
-        self._set_status(tr("کاربر با موفقیت اضافه شد."))
-        self.refresh_list()
+        self.refresh()

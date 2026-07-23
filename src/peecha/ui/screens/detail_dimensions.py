@@ -1,669 +1,505 @@
-"""صفحه‌ی مدیریتِ ابعادِ تفصیلی/مراکزِ هزینه.
+"""مدیریتِ ابعادِ تفصیلی — معادلِ Qt برایِ detail_dimensions.py/.kv در Kivy.
 
-پنلِ راست: فهرستِ «نوع‌بُعد»ها (مثلِ مرکزِ هزینه، پروژه، مشتری) — هرکدام
-یک ردیف در acc.detail_dimension_types. با انتخابِ یک نوع‌بُعد، پنلِ چپ
-حساب‌های تفصیلیِ همان نوع را نشان می‌دهد (acc.detail_accounts) — دقیقاً
-همان الگویِ فهرست/فرمِ اصلی‌شده در chart_of_accounts.py/roles.py، فقط
-تودرتو (نوع‌بُعد → حساب‌های تفصیلی‌اش)."""
+سه ستون: (۱) فهرستِ گروه‌های تفصیلی + ساختِ گروهِ تازه، (۲) پیکربندیِ
+سطوح/فیلدهایِ اختصاصیِ گروهِ انتخاب‌شده، (۳) فرمِ حسابِ تفصیلی
+(سلسله‌مراتبی، با انتخابِ والد) + فهرستِ حساب‌هایِ همان گروه."""
 
 from __future__ import annotations
 
-import os
+import datetime
+import decimal
 
-from kivy.factory import Factory
-from kivy.lang import Builder
-from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.screen import MDScreen
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QDateEdit,
+    QDoubleSpinBox,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.ui import numerals, theme
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
-from peecha.ui.widgets import open_rtl_dropdown
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "detail_dimensions.kv")
-Builder.load_file(_KV_PATH)
-
-_FIELD_KIND_LABELS = {"text": "متن", "decimal": "عدد اعشاری", "date": "تاریخ", "boolean": "بله/خیر"}
+_FIELD_KIND_OPTIONS = [("text", "متن"), ("decimal", "عدد اعشاری"), ("date", "تاریخ"), ("boolean", "بله/خیر")]
 
 
-class DimensionTypeRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    dimension_type_id = NumericProperty(0)
-    code_text = StringProperty("")
-    count_text = StringProperty("")
-    status_text = StringProperty("")
-    is_active_row = BooleanProperty(True)
-    zebra = BooleanProperty(False)
-    selected = BooleanProperty(False)
-    on_edit = ObjectProperty(None)
-    on_delete = ObjectProperty(None)
-
-    def on_release(self) -> None:
-        if self.on_edit is not None:
-            self.on_edit(self.dimension_type_id)
-
-    def request_delete(self) -> None:
-        if self.on_delete is not None:
-            self.on_delete(self.dimension_type_id)
-
-
-Factory.register("DimensionTypeRowWidget", cls=DimensionTypeRowWidget)
-
-
-class DetailAccountRowWidget(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
-    detail_account_id = NumericProperty(0)
-    code_text = StringProperty("")
-    status_text = StringProperty("")
-    is_active_row = BooleanProperty(True)
-    zebra = BooleanProperty(False)
-    selected = BooleanProperty(False)
-    on_edit = ObjectProperty(None)
-    on_delete = ObjectProperty(None)
-
-    def on_release(self) -> None:
-        if self.on_edit is not None:
-            self.on_edit(self.detail_account_id)
-
-    def request_delete(self) -> None:
-        if self.on_delete is not None:
-            self.on_delete(self.detail_account_id)
-
-
-Factory.register("DetailAccountRowWidget", cls=DetailAccountRowWidget)
-
-
-class GroupFieldEditRow(MDBoxLayout):
-    """یک ردیفِ ویرایشِ فیلدِ اختصاصیِ گروه (کلید/برچسب/نوع/الزامی/حذف) —
-    طبقِ درخواستِ صریح: کاربر باید بتواند برایِ گروهِ تازه‌تعریف‌شده (مثلِ
-    «بانک») خودش فیلدهای اختصاصی تعریف کند."""
-
-    def __init__(self, on_remove, initial: dimensions_service.GroupFieldRow | None = None, **kwargs):
-        super().__init__(**kwargs)
+class _GroupFieldRowWidget(QWidget):
+    def __init__(self, on_remove, initial: dimensions_service.GroupFieldRow | None = None) -> None:
+        super().__init__()
         self._on_remove = on_remove
-        self._menu: MDDropdownMenu | None = None
-        self.kind = initial.kind if initial else "text"
-        self.ids.key_field.text = initial.field_key if initial else ""
-        self.ids.label_field.text = initial.label if initial else ""
-        self.ids.required_checkbox.active = initial.is_required if initial else False
-        self.ids.kind_button.text = shape(_FIELD_KIND_LABELS[self.kind])
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-    def open_kind_menu(self) -> None:
-        items = [
-            {"text": shape(label), "on_release": lambda k=kind: self._choose_kind(k)}
-            for kind, label in _FIELD_KIND_LABELS.items()
-        ]
-        self._menu = open_rtl_dropdown(self.ids.kind_button, items, width_mult=3)
+        self.key_field = QLineEdit()
+        self.key_field.setPlaceholderText("کلید (مثلاً account_no)")
+        layout.addWidget(self.key_field)
 
-    def _choose_kind(self, kind: str) -> None:
-        if self._menu is not None:
-            self._menu.dismiss()
-        self.kind = kind
-        self.ids.kind_button.text = shape(_FIELD_KIND_LABELS[kind])
+        self.label_field = QLineEdit()
+        self.label_field.setPlaceholderText("عنوان")
+        layout.addWidget(self.label_field)
 
-    def remove(self) -> None:
-        self._on_remove(self)
+        self.kind_combo = QComboBox()
+        for code, label in _FIELD_KIND_OPTIONS:
+            self.kind_combo.addItem(label, code)
+        layout.addWidget(self.kind_combo)
+
+        self.required_checkbox = QCheckBox("اجباری")
+        layout.addWidget(self.required_checkbox)
+
+        remove_button = QPushButton("حذف")
+        remove_button.setObjectName("dangerButton")
+        remove_button.clicked.connect(lambda: self._on_remove(self))
+        layout.addWidget(remove_button)
+
+        if initial is not None:
+            self.key_field.setText(initial.field_key)
+            self.label_field.setText(initial.label)
+            index = self.kind_combo.findData(initial.kind)
+            self.kind_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.required_checkbox.setChecked(initial.is_required)
 
     def to_field_dict(self, sort_order: int) -> dict:
         return {
-            "field_key": self.ids.key_field.value.strip(),
-            "label": self.ids.label_field.value.strip(),
-            "kind": self.kind,
-            "is_required": self.ids.required_checkbox.active,
+            "field_key": self.key_field.text().strip(),
+            "label": self.label_field.text().strip(),
+            "kind": self.kind_combo.currentData(),
+            "is_required": self.required_checkbox.isChecked(),
             "sort_order": sort_order,
         }
 
 
-class DetailDimensionsScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._types_by_id: dict[int, dimensions_service.DimensionTypeRow] = {}
-        self._editing_type_id: int | None = None
+class DetailDimensionsScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._types: list[dimensions_service.DimensionTypeRow] = []
         self._selected_type_id: int | None = None
         self._accounts_by_id: dict[int, dimensions_service.DetailAccountRow] = {}
         self._editing_account_id: int | None = None
-        self._delete_dialog: MDDialog | None = None
-        self._group_field_rows: list[GroupFieldEditRow] = []
-        self._parent_options: list[dimensions_service.DetailAccountRow] = []
         self._selected_parent_id: int | None = None
-        self._parent_menu: MDDropdownMenu | None = None
+        self._field_rows: list[_GroupFieldRowWidget] = []
+        self._extra_widgets: dict[str, QWidget] = {}
 
-    def on_pre_enter(self, *args):
-        self.refresh_types()
-        self.bind_shortcuts()
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
+        outer.addWidget(self._build_types_panel(), stretch=2)
+        outer.addWidget(self._build_config_panel(), stretch=3)
+        outer.addWidget(self._build_account_panel(), stretch=3)
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
+    # --- ستونِ ۱: گروه‌ها -----------------------------------------------
+    def _build_types_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
 
-    def on_shortcut_save(self) -> None:
-        if self._selected_type_id is not None and self.ids.account_code_field.focus:
-            self.save_detail_account()
-        else:
-            self.save_dimension_type()
+        title = QLabel("گروه‌هایِ تفصیلی")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
-    def on_shortcut_cancel(self) -> bool:
-        if self._editing_account_id is not None:
-            self.cancel_account_edit()
-            return True
-        if self._editing_type_id is not None:
-            self.cancel_type_edit()
-            return True
-        return False
+        self.types_list = QListWidget()
+        self.types_list.itemClicked.connect(self._on_type_selected)
+        layout.addWidget(self.types_list)
 
-    def _current_company_id(self) -> int | None:
+        layout.addWidget(QLabel("کدِ گروهِ تازه"))
+        self.new_type_code_field = QLineEdit()
+        layout.addWidget(self.new_type_code_field)
+
+        self.type_status_label = QLabel("")
+        self.type_status_label.setObjectName("statusError")
+        self.type_status_label.setWordWrap(True)
+        layout.addWidget(self.type_status_label)
+
+        create_button = QPushButton("افزودنِ گروه")
+        create_button.setObjectName("primaryButton")
+        create_button.clicked.connect(self._create_type)
+        layout.addWidget(create_button)
+
+        layout.addStretch(1)
+        return panel
+
+    # --- ستونِ ۲: پیکربندیِ سطوح/فیلدها ------------------------------------
+    def _build_config_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        self.config_panel = panel
+        panel.setEnabled(False)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+
+        self.config_title = QLabel("پیکربندیِ گروه")
+        self.config_title.setObjectName("pageTitle")
+        layout.addWidget(self.config_title)
+
+        layout.addWidget(QLabel("طولِ کدِ هر سطح (خالی = بدونِ محدودیت)"))
+        levels_grid = QGridLayout()
+        self.level_fields: dict[int, QSpinBox] = {}
+        for level_no in range(1, 5):
+            levels_grid.addWidget(QLabel(f"سطحِ {level_no}"), 0, level_no - 1)
+            spin = QSpinBox()
+            spin.setRange(0, 10)
+            spin.setSpecialValueText(" ")
+            levels_grid.addWidget(spin, 1, level_no - 1)
+            self.level_fields[level_no] = spin
+        layout.addLayout(levels_grid)
+
+        save_levels_button = QPushButton("ذخیره‌ی پیکربندیِ سطوح")
+        save_levels_button.setObjectName("flatButton")
+        save_levels_button.clicked.connect(self._save_levels)
+        layout.addWidget(save_levels_button)
+
+        layout.addWidget(QLabel("فیلدهایِ اختصاصیِ این گروه"))
+        self.fields_container = QVBoxLayout()
+        fields_widget = QWidget()
+        fields_widget.setLayout(self.fields_container)
+        layout.addWidget(fields_widget)
+
+        add_field_button = QPushButton("+ افزودنِ فیلد")
+        add_field_button.setObjectName("flatButton")
+        add_field_button.clicked.connect(lambda: self._add_field_row())
+        layout.addWidget(add_field_button)
+
+        save_fields_button = QPushButton("ذخیره‌ی فیلدها")
+        save_fields_button.setObjectName("primaryButton")
+        save_fields_button.clicked.connect(self._save_fields)
+        layout.addWidget(save_fields_button)
+
+        layout.addStretch(1)
+        return panel
+
+    # --- ستونِ ۳: حساب‌هایِ تفصیلی ------------------------------------------
+    def _build_account_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("card")
+        self.account_panel = panel
+        panel.setEnabled(False)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+
+        self.account_form_title = QLabel("حسابِ تفصیلیِ جدید")
+        self.account_form_title.setObjectName("pageTitle")
+        layout.addWidget(self.account_form_title)
+
+        grid = QGridLayout()
+        grid.addWidget(QLabel("والد"), 0, 0)
+        self.parent_combo = QComboBox()
+        grid.addWidget(self.parent_combo, 0, 1)
+
+        grid.addWidget(QLabel("کد"), 1, 0)
+        self.account_code_field = QLineEdit()
+        grid.addWidget(self.account_code_field, 1, 1)
+
+        grid.addWidget(QLabel("نام"), 2, 0)
+        self.account_name_field = QLineEdit()
+        grid.addWidget(self.account_name_field, 2, 1)
+
+        self.account_active_checkbox = QCheckBox("فعال")
+        self.account_active_checkbox.setChecked(True)
+        grid.addWidget(self.account_active_checkbox, 3, 1)
+        layout.addLayout(grid)
+
+        layout.addWidget(QLabel("فیلدهایِ اختصاصی"))
+        self.extra_fields_container = QVBoxLayout()
+        extra_widget = QWidget()
+        extra_widget.setLayout(self.extra_fields_container)
+        layout.addWidget(extra_widget)
+
+        self.account_status_label = QLabel("")
+        self.account_status_label.setObjectName("statusError")
+        self.account_status_label.setWordWrap(True)
+        layout.addWidget(self.account_status_label)
+
+        buttons = QHBoxLayout()
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save_account)
+        buttons.addWidget(save_button)
+        cancel_button = QPushButton("انصراف")
+        cancel_button.setObjectName("flatButton")
+        cancel_button.clicked.connect(self._cancel_account_edit)
+        buttons.addWidget(cancel_button)
+        layout.addLayout(buttons)
+
+        self.accounts_table = QTableWidget(0, 4)
+        self.accounts_table.setHorizontalHeaderLabels(["وضعیت", "نام", "کدِ کامل", "سطح"])
+        self.accounts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.accounts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.accounts_table.verticalHeader().setVisible(False)
+        self.accounts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.accounts_table.cellClicked.connect(self._on_account_row_clicked)
+        layout.addWidget(self.accounts_table, stretch=1)
+
+        return panel
+
+    # --- بارگذاری --------------------------------------------------------
+    def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
 
-    def _set_status(self, message: str, *, is_error: bool = False) -> None:
-        self.ids.status_label.text = shape(message)
-        self.ids.status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
-
-    def _set_account_status(self, message: str, *, is_error: bool = False) -> None:
-        self.ids.account_status_label.text = shape(message)
-        self.ids.account_status_label.text_color = theme.DANGER if is_error else theme.TEXT_SECONDARY
-
-    def select_type_and_edit(self, dimension_type_id: int, detail_account_id: int) -> None:
-        """برایِ کلیک از فهرستِ واحدِ «تفصیلی‌ها»: این گروه را انتخاب و
-        مستقیم فرمِ ویرایشِ همین حسابِ تفصیلی را باز می‌کند."""
-        self.refresh_types()
-        self._select_type(dimension_type_id)
-        self.edit_detail_account(detail_account_id)
-
-    # --- نوع‌بُعدها -----------------------------------------------------------
-
-    def refresh_types(self) -> None:
-        company_id = self._current_company_id()
-        if company_id is None:
-            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
-            self.ids.types_list.data = []
-            return
-
-        rows = dimensions_service.list_dimension_types(company_id)
-        self._types_by_id = {r.dimension_type_id: r for r in rows}
-        if not rows:
-            self.ids.types_list.data = [
-                {
-                    "viewclass": "PEmptyState",
-                    "icon": "shape-outline",
-                    "text": shape(tr("هنوز نوع‌بُعدی (مثلاً مرکز هزینه) تعریف نشده است.")),
-                }
-            ]
-        else:
-            self.ids.types_list.data = [
-                {
-                    "dimension_type_id": row.dimension_type_id,
-                    "on_edit": self.edit_dimension_type,
-                    "on_delete": self.confirm_delete_type,
-                    "code_text": row.code,
-                    "count_text": str(row.detail_account_count),
-                    "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                    "is_active_row": row.is_active,
-                    "zebra": i % 2 == 1,
-                    "selected": row.dimension_type_id == self._editing_type_id,
-                }
-                for i, row in enumerate(rows)
-            ]
-
-        if self._selected_type_id is not None and self._selected_type_id not in self._types_by_id:
-            self._select_type(None)
-        elif self._selected_type_id is not None:
-            self.refresh_accounts()
-
-    def edit_dimension_type(self, dimension_type_id: int) -> None:
-        row = self._types_by_id.get(dimension_type_id)
-        if row is None:
-            return
-        self._editing_type_id = dimension_type_id
-        self.ids.type_code_field.set_value(row.code)
-        self.ids.type_active_checkbox.active = row.is_active
-        self.ids.type_form_title.text = shape(tr("ویرایش نوع‌بُعد «{}»").format(row.code))
-        self.ids.type_save_button.text = shape(tr("ذخیره تغییرات"))
-        self.ids.type_cancel_button.opacity = 1
-        self.ids.type_cancel_button.disabled = False
-        self.ids.type_cancel_button.size_hint_y = None
-        self.ids.type_cancel_button.height = "36dp"
-        self._set_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.code))
-        self.refresh_types()
-        self._select_type(dimension_type_id)
-
-    def cancel_type_edit(self) -> None:
-        self._editing_type_id = None
-        self.ids.type_code_field.text = ""
-        self.ids.type_active_checkbox.active = True
-        self.ids.type_form_title.text = shape(tr("افزودنِ نوع‌بُعدِ تازه"))
-        self.ids.type_save_button.text = shape(tr("افزودن"))
-        self.ids.type_cancel_button.opacity = 0
-        self.ids.type_cancel_button.disabled = True
-        self.ids.type_cancel_button.size_hint_y = None
-        self.ids.type_cancel_button.height = "0dp"
-        self._set_status(tr(""))
-        self.refresh_types()
-
-    def save_dimension_type(self) -> None:
-        company_id = self._current_company_id()
-        if company_id is None:
-            self._set_status(tr("هیچ شرکتی انتخاب نشده است."), is_error=True)
-            return
-
-        if self._editing_type_id is not None:
-            code = self.ids.type_code_field.value.strip()
-            if not code:
-                self._set_status(tr("کدِ نوع‌بُعد را وارد کنید."), is_error=True)
-                return
-            try:
-                dimensions_service.update_dimension_type(
-                    dimension_type_id=self._editing_type_id,
-                    company_id=company_id,
-                    code=code,
-                    is_active=self.ids.type_active_checkbox.active,
-                )
-            except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
-                self._set_status(tr("خطا: {}").format(exc), is_error=True)
-                return
-            self.cancel_type_edit()
-            return
-
-        code = self.ids.type_code_field.value.strip()
-        if not code:
-            self._set_status(tr("کدِ نوع‌بُعد را وارد کنید."), is_error=True)
-            return
-        try:
-            dimension_type = dimensions_service.create_dimension_type(company_id=company_id, code=code)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-        self.ids.type_code_field.text = ""
-        self._set_status(f"نوع‌بُعد «{dimension_type.code}» ساخته شد؛ حالا حساب‌های تفصیلیِ آن را اضافه کنید.")
-        self.refresh_types()
-        self._select_type(dimension_type.dimension_type_id)
-
-    def confirm_delete_type(self, dimension_type_id: int) -> None:
-        row = self._types_by_id.get(dimension_type_id)
-        if row is None:
-            return
-        if self._delete_dialog is not None:
-            self._delete_dialog.dismiss()
-
-        def _do_delete(*_args) -> None:
-            self._delete_dialog.dismiss()
-            self._perform_delete_type(dimension_type_id)
-
-        self._delete_dialog = MDDialog(
-            title=shape(tr("حذف نوع‌بُعد")),
-            text=shape(tr("نوع‌بُعد «{}» حذف شود؟ این کار قابل بازگشت نیست.").format(row.code)),
-            buttons=[
-                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._delete_dialog.dismiss()),
-                MDRaisedButton(text=shape(tr("حذف")), md_bg_color=theme.DANGER, on_release=_do_delete),
-            ],
-        )
-        self._delete_dialog.open()
-
-    def _perform_delete_type(self, dimension_type_id: int) -> None:
-        company_id = self._current_company_id()
-        if company_id is None:
-            return
-        try:
-            dimensions_service.delete_dimension_type(dimension_type_id, company_id)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-        if self._editing_type_id == dimension_type_id:
-            self.cancel_type_edit()
-        else:
-            self._set_status(tr("نوع‌بُعد حذف شد."))
-            self.refresh_types()
-
-    # --- حساب‌های تفصیلیِ نوع‌بُعدِ انتخاب‌شده ----------------------------------
-
-    def _select_type(self, dimension_type_id: int | None) -> None:
-        self._selected_type_id = dimension_type_id
-        self._editing_account_id = None
-        self._reset_account_extra_fields()
-        self.ids.account_code_field.text = ""
-        self.ids.account_active_checkbox.active = True
-        self.ids.account_save_button.text = shape(tr("افزودن"))
-        self.ids.account_cancel_button.opacity = 0
-        self.ids.account_cancel_button.disabled = True
-        self.ids.account_cancel_button.size_hint_y = None
-        self.ids.account_cancel_button.height = "0dp"
-        self._set_account_status(tr(""))
-        if dimension_type_id is None:
-            self.ids.accounts_panel.opacity = 0
-            self.ids.accounts_panel.disabled = True
-            self.ids.accounts_empty_label.opacity = 1
-            self.ids.accounts_list.data = []
-            self.ids.group_config_panel.opacity = 0
-            self.ids.group_config_panel.disabled = True
-            return
-        row = self._types_by_id.get(dimension_type_id)
-        self.ids.accounts_panel.opacity = 1
-        self.ids.accounts_panel.disabled = False
-        self.ids.accounts_empty_label.opacity = 0
-        self.ids.accounts_title.text = shape(tr("حساب‌های تفصیلیِ «{}»").format(row.code if row else ""))
-        self.ids.group_config_panel.opacity = 1
-        self.ids.group_config_panel.disabled = False
-        self._load_group_levels()
-        self._load_group_fields()
-        self.refresh_accounts()
-
-    # --- پیکربندیِ سطح‌های کد ---------------------------------------------
-
-    def _load_group_levels(self) -> None:
-        levels_by_no = {
-            level.level_no: level.code_length for level in dimensions_service.list_group_levels(self._selected_type_id)
-        }
-        for level_no in range(1, dimensions_service.MAX_DETAIL_LEVEL + 1):
-            field = self.ids.get(f"level_{level_no}_length_field")
-            if field is not None:
-                length = levels_by_no.get(level_no)
-                field.text = numerals.to_persian_digits(str(length)) if length else ""
-
-    def save_group_levels(self) -> None:
+    def refresh(self) -> None:
+        company_id = self._company_id()
+        self._types = dimensions_service.list_dimension_types(company_id) if company_id is not None else []
+        self.types_list.clear()
+        for t in self._types:
+            item = QListWidgetItem(f"{t.code} ({t.detail_account_count})")
+            item.setData(Qt.UserRole, t.dimension_type_id)
+            self.types_list.addItem(item)
         if self._selected_type_id is None:
-            return
-        company_id = self._current_company_id()
+            self.config_panel.setEnabled(False)
+            self.account_panel.setEnabled(False)
+
+    def _create_type(self) -> None:
+        company_id = self._company_id()
         if company_id is None:
             return
-        levels: dict[int, int] = {}
-        for level_no in range(1, dimensions_service.MAX_DETAIL_LEVEL + 1):
-            field = self.ids.get(f"level_{level_no}_length_field")
-            if field is None:
-                continue
-            raw = numerals.to_ascii_digits(field.text).strip()
-            if raw:
-                try:
-                    levels[level_no] = int(raw)
-                except ValueError:
-                    self._set_status(tr("طولِ کدِ سطحِ {} باید عددِ صحیح باشد.").format(level_no), is_error=True)
-                    return
+        code = self.new_type_code_field.text().strip()
+        if not code:
+            self.type_status_label.setText("کد را وارد کنید.")
+            return
+        try:
+            new_type = dimensions_service.create_dimension_type(company_id, code)
+        except ValueError as exc:
+            self.type_status_label.setText(str(exc))
+            return
+        self.type_status_label.setText("")
+        self.new_type_code_field.clear()
+        self.refresh()
+        self._select_type(new_type.dimension_type_id)
+
+    def _on_type_selected(self, item: QListWidgetItem) -> None:
+        self._select_type(item.data(Qt.UserRole))
+
+    def _select_type(self, dimension_type_id: int) -> None:
+        self._selected_type_id = dimension_type_id
+        dim_type = next((t for t in self._types if t.dimension_type_id == dimension_type_id), None)
+        if dim_type is None:
+            return
+        self.config_title.setText(f"پیکربندیِ گروهِ «{dim_type.code}»")
+        self.config_panel.setEnabled(True)
+        self.account_panel.setEnabled(True)
+        self._load_levels()
+        self._load_fields()
+        self._cancel_account_edit()
+        self._reload_accounts()
+
+    # --- سطوح ------------------------------------------------------------
+    def _load_levels(self) -> None:
+        levels = {row.level_no: row.code_length for row in dimensions_service.list_group_levels(self._selected_type_id)}
+        for level_no, spin in self.level_fields.items():
+            spin.setValue(levels.get(level_no, 0))
+
+    def _save_levels(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
+            return
+        levels = {level_no: spin.value() for level_no, spin in self.level_fields.items() if spin.value() > 0}
         try:
             dimensions_service.set_group_levels(self._selected_type_id, company_id, levels)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
+        except ValueError as exc:
+            self.type_status_label.setText(str(exc))
+
+    # --- فیلدهایِ اختصاصیِ گروه --------------------------------------------
+    def _load_fields(self) -> None:
+        while self.fields_container.count():
+            child = self.fields_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._field_rows = []
+        for field_row in dimensions_service.list_group_fields(self._selected_type_id):
+            self._add_field_row(field_row)
+
+    def _add_field_row(self, initial: dimensions_service.GroupFieldRow | None = None) -> None:
+        row_widget = _GroupFieldRowWidget(self._remove_field_row, initial)
+        self.fields_container.addWidget(row_widget)
+        self._field_rows.append(row_widget)
+
+    def _remove_field_row(self, row_widget: _GroupFieldRowWidget) -> None:
+        self._field_rows.remove(row_widget)
+        self.fields_container.removeWidget(row_widget)
+        row_widget.deleteLater()
+
+    def _save_fields(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
             return
-        self._set_status(tr("پیکربندیِ سطح‌ها ذخیره شد."))
-
-    # --- فیلدهای اختصاصیِ گروه ---------------------------------------------
-
-    def _load_group_fields(self) -> None:
-        self.ids.group_fields_box.clear_widgets()
-        self._group_field_rows = []
-        for row in dimensions_service.list_group_fields(self._selected_type_id):
-            self._add_group_field_widget(row)
-
-    def _add_group_field_widget(self, initial: dimensions_service.GroupFieldRow | None = None) -> None:
-        widget = GroupFieldEditRow(on_remove=self._remove_group_field_widget, initial=initial)
-        self._group_field_rows.append(widget)
-        self.ids.group_fields_box.add_widget(widget)
-
-    def add_group_field_row(self) -> None:
-        self._add_group_field_widget()
-
-    def _remove_group_field_widget(self, widget: GroupFieldEditRow) -> None:
-        if widget in self._group_field_rows:
-            self._group_field_rows.remove(widget)
-            self.ids.group_fields_box.remove_widget(widget)
-
-    def save_group_fields(self) -> None:
-        if self._selected_type_id is None:
-            return
-        company_id = self._current_company_id()
-        if company_id is None:
-            return
-        fields = [row.to_field_dict(i) for i, row in enumerate(self._group_field_rows)]
+        fields = [row.to_field_dict(i) for i, row in enumerate(self._field_rows)]
         for f in fields:
             if not f["field_key"] or not f["label"]:
-                self._set_status(tr("کلید و برچسبِ همه‌ی فیلدها را پر کنید."), is_error=True)
+                self.type_status_label.setText("کلید و عنوانِ همه‌ی فیلدها را پر کنید.")
                 return
         try:
             dimensions_service.set_group_fields(self._selected_type_id, company_id, fields)
-        except Exception as exc:  # noqa: BLE001
-            self._set_status(tr("خطا: {}").format(exc), is_error=True)
+        except ValueError as exc:
+            self.type_status_label.setText(str(exc))
             return
-        self._set_status(tr("فیلدهای اختصاصی ذخیره شد."))
-        self._load_group_fields()
+        self.type_status_label.setText("")
+        self._load_fields()
+        self._render_extra_fields()
 
-    # --- والد (سلسله‌مراتب) و فیلدهای اختصاصیِ فرمِ حسابِ تفصیلی -----------------
-
-    def _reset_account_extra_fields(self) -> None:
-        self._selected_parent_id = None
-        self.ids.account_parent_button.text = shape(tr("— بدون والد (سطح ۱) —"))
-        self.ids.account_extra_fields_box.clear_widgets()
-
-    def open_parent_menu(self) -> None:
-        if self._selected_type_id is None:
-            return
-        company_id = self._current_company_id()
-        if company_id is None:
-            return
-        all_rows = dimensions_service.list_detail_accounts(company_id, self._selected_type_id)
-        # طبقِ درخواستِ صریح (تا ۴ سطح): فقط ردیف‌هایی که هنوز به سقفِ سطح
-        # نرسیده‌اند می‌توانند والدِ سطحِ بعدی باشند؛ خودِ ردیفِ درحالِ‌ویرایش
-        # هم از فهرست کنار گذاشته می‌شود (نمی‌تواند والدِ خودش باشد).
-        self._parent_options = [
-            r
-            for r in all_rows
-            if r.level_no < dimensions_service.MAX_DETAIL_LEVEL and r.detail_account_id != self._editing_account_id
-        ]
-        items = [
-            {
-                "text": shape(tr("— بدون والد (سطح ۱) —")),
-                "on_release": lambda: self._choose_parent(None, tr("— بدون والد (سطح ۱) —")),
-            }
-        ] + [
-            {
-                "text": shape(f"{r.full_code} — {r.name}" if r.name else r.full_code),
-                "on_release": lambda pid=r.detail_account_id, label=(f"{r.full_code} — {r.name}" if r.name else r.full_code): self._choose_parent(pid, label),
-            }
-            for r in self._parent_options
-        ]
-        self._parent_menu = open_rtl_dropdown(self.ids.account_parent_button, items, width_mult=3)
-
-    def _choose_parent(self, parent_id: int | None, label: str) -> None:
-        if self._parent_menu is not None:
-            self._parent_menu.dismiss()
-        self._selected_parent_id = parent_id
-        self.ids.account_parent_button.text = shape(label)
-
-    def _render_account_extra_fields(self, values: dict | None = None) -> None:
-        self.ids.account_extra_fields_box.clear_widgets()
-        if self._selected_type_id is None:
-            return
-        values = values or {}
-        for field_def in dimensions_service.list_group_fields(self._selected_type_id):
-            row = MDBoxLayout(orientation="vertical", size_hint_y=None, height="52dp", spacing="2dp")
-            row.add_widget(
-                Factory.PLabel(
-                    text=shape(field_def.label), font_style="Caption", size_hint_y=None, height="18dp", valign="middle"
-                )
-            )
-            if field_def.kind == "boolean":
-                check_row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height="28dp", spacing="8dp")
-                checkbox = Factory.MDCheckbox(
-                    active=bool(values.get(field_def.field_key, False)), size_hint=(None, None), size=("24dp", "24dp")
-                )
-                check_row.add_widget(checkbox)
-                row.add_widget(check_row)
-                row.extra_field_widget = checkbox
-                row.extra_field_kind = "boolean"
-            else:
-                text_field = Factory.PTextField()
-                text_field.set_value(str(values.get(field_def.field_key) or ""))
-                row.add_widget(text_field)
-                row.extra_field_widget = text_field
-                row.extra_field_kind = field_def.kind
-            row.field_key = field_def.field_key
-            self.ids.account_extra_fields_box.add_widget(row)
-
-    def _collect_account_extra_fields(self) -> dict:
-        result: dict[str, object] = {}
-        for row in self.ids.account_extra_fields_box.children:
-            key = getattr(row, "field_key", None)
-            if key is None:
-                continue
-            widget = row.extra_field_widget
-            if row.extra_field_kind == "boolean":
-                result[key] = widget.active
-            else:
-                result[key] = widget.value.strip()
-        return result
-
-    def refresh_accounts(self) -> None:
-        company_id = self._current_company_id()
-        if company_id is None or self._selected_type_id is None:
-            self.ids.accounts_list.data = []
-            return
+    # --- فرمِ حسابِ تفصیلی --------------------------------------------------
+    def _reload_accounts(self) -> None:
+        company_id = self._company_id()
         rows = dimensions_service.list_detail_accounts(company_id, self._selected_type_id)
         self._accounts_by_id = {r.detail_account_id: r for r in rows}
-        if not rows:
-            self.ids.accounts_list.data = [
-                {
-                    "viewclass": "PEmptyState",
-                    "icon": "shape-plus-outline",
-                    "text": shape(tr("هنوز حسابِ تفصیلی‌ای برای این نوع‌بُعد تعریف نشده است.")),
-                }
-            ]
-        else:
-            self.ids.accounts_list.data = [
-                {
-                    "detail_account_id": row.detail_account_id,
-                    "on_edit": self.edit_detail_account,
-                    "on_delete": self.confirm_delete_account,
-                    "code_text": row.code,
-                    "status_text": shape(tr("فعال") if row.is_active else tr("غیرفعال")),
-                    "is_active_row": row.is_active,
-                    "zebra": i % 2 == 1,
-                    "selected": row.detail_account_id == self._editing_account_id,
-                }
-                for i, row in enumerate(rows)
-            ]
-        if self._editing_account_id is not None and self._editing_account_id not in self._accounts_by_id:
-            self.cancel_account_edit()
+
+        self.parent_combo.clear()
+        self.parent_combo.addItem("— بدونِ والد (سطحِ ۱) —", None)
+        for r in rows:
+            if r.level_no < dimensions_service.MAX_DETAIL_LEVEL and r.detail_account_id != self._editing_account_id:
+                self.parent_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
+
+        self.accounts_table.setRowCount(len(rows))
+        for row_index, r in enumerate(rows):
+            values = ["فعال" if r.is_active else "غیرفعال", r.name or "—", r.full_code, str(r.level_no)]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, r.detail_account_id)
+                self.accounts_table.setItem(row_index, col_index, item)
+
+        self._render_extra_fields()
+
+    def _render_extra_fields(self, values: dict | None = None) -> None:
+        while self.extra_fields_container.count():
+            child = self.extra_fields_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._extra_widgets = {}
+        if self._selected_type_id is None:
+            return
+        for field_def in dimensions_service.list_group_fields(self._selected_type_id):
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(QLabel(field_def.label))
+            widget: QWidget
+            if field_def.kind == "boolean":
+                widget = QCheckBox()
+            elif field_def.kind == "decimal":
+                widget = QDoubleSpinBox()
+                widget.setRange(0, 10_000_000_000)
+                widget.setDecimals(2)
+            elif field_def.kind == "date":
+                widget = QDateEdit()
+                widget.setCalendarPopup(True)
+                widget.setSpecialValueText(" ")
+                widget.setDate(widget.minimumDate())
+            else:
+                widget = QLineEdit()
+            row_layout.addWidget(widget)
+            self.extra_fields_container.addWidget(row)
+            self._extra_widgets[field_def.field_key] = (widget, field_def.kind)
+
+            if values is not None and field_def.field_key in values and values[field_def.field_key] is not None:
+                value = values[field_def.field_key]
+                if field_def.kind == "boolean":
+                    widget.setChecked(bool(value))
+                elif field_def.kind == "decimal":
+                    widget.setValue(float(value))
+                elif field_def.kind == "date" and isinstance(value, datetime.date):
+                    widget.setDate(value)
+                else:
+                    widget.setText(str(value))
+
+    def _collect_extra_fields(self) -> dict:
+        result = {}
+        for key, (widget, kind) in self._extra_widgets.items():
+            if kind == "boolean":
+                result[key] = widget.isChecked()
+            elif kind == "decimal":
+                result[key] = decimal.Decimal(str(widget.value())) if widget.value() else None
+            elif kind == "date":
+                qdate = widget.date()
+                result[key] = None if qdate == widget.minimumDate() else datetime.date(qdate.year(), qdate.month(), qdate.day())
+            else:
+                text = widget.text().strip()
+                result[key] = text or None
+        return result
+
+    def _on_account_row_clicked(self, row: int, _column: int) -> None:
+        detail_account_id = self.accounts_table.item(row, 0).data(Qt.UserRole)
+        self.edit_detail_account(detail_account_id)
 
     def edit_detail_account(self, detail_account_id: int) -> None:
-        row = self._accounts_by_id.get(detail_account_id)
-        if row is None:
+        account = self._accounts_by_id.get(detail_account_id)
+        if account is None:
             return
         self._editing_account_id = detail_account_id
-        self.ids.account_code_field.set_value(row.code)
-        self.ids.account_active_checkbox.active = row.is_active
-        self.ids.account_save_button.text = shape(tr("ذخیره تغییرات"))
-        self.ids.account_cancel_button.opacity = 1
-        self.ids.account_cancel_button.disabled = False
-        self.ids.account_cancel_button.size_hint_y = None
-        self.ids.account_cancel_button.height = "36dp"
-        self._set_account_status(tr("در حال ویرایش «{}» — Escape برای لغو.").format(row.code))
-        self._selected_parent_id = row.parent_detail_account_id
-        if row.parent_detail_account_id is not None:
-            parent_row = self._accounts_by_id.get(row.parent_detail_account_id)
-            label = (
-                f"{parent_row.full_code} — {parent_row.name}" if parent_row and parent_row.name else (parent_row.full_code if parent_row else "")
-            )
-            self.ids.account_parent_button.text = shape(label)
+        self._reload_accounts()  # برایِ به‌روزکردنِ فهرستِ والدهای مجاز (بدونِ خودش)
+        self.account_form_title.setText(f"ویرایشِ «{account.full_code}»")
+        self.account_code_field.setText(account.code)
+        self.account_name_field.setText(account.name or "")
+        self.account_active_checkbox.setChecked(account.is_active)
+        if account.parent_detail_account_id is not None:
+            index = self.parent_combo.findData(account.parent_detail_account_id)
+            self.parent_combo.setCurrentIndex(index if index >= 0 else 0)
         else:
-            self.ids.account_parent_button.text = shape(tr("— بدون والد (سطح ۱) —"))
-        self._render_account_extra_fields(row.extra_fields)
-        self.refresh_accounts()
+            self.parent_combo.setCurrentIndex(0)
+        self.parent_combo.setEnabled(False)
+        self._render_extra_fields(account.extra_fields)
 
-    def cancel_account_edit(self) -> None:
+    def _cancel_account_edit(self) -> None:
         self._editing_account_id = None
-        self.ids.account_code_field.text = ""
-        self.ids.account_active_checkbox.active = True
-        self.ids.account_save_button.text = shape(tr("افزودن"))
-        self.ids.account_cancel_button.opacity = 0
-        self.ids.account_cancel_button.disabled = True
-        self.ids.account_cancel_button.size_hint_y = None
-        self.ids.account_cancel_button.height = "0dp"
-        self._set_account_status(tr(""))
         self._selected_parent_id = None
-        self.ids.account_parent_button.text = shape(tr("— بدون والد (سطح ۱) —"))
-        self._render_account_extra_fields()
-        self.refresh_accounts()
+        self.account_form_title.setText("حسابِ تفصیلیِ جدید")
+        self.account_status_label.setText("")
+        self.account_code_field.clear()
+        self.account_name_field.clear()
+        self.account_active_checkbox.setChecked(True)
+        self.parent_combo.setEnabled(True)
+        if self.parent_combo.count():
+            self.parent_combo.setCurrentIndex(0)
+        self._render_extra_fields()
+        self.accounts_table.clearSelection()
 
-    def save_detail_account(self) -> None:
-        company_id = self._current_company_id()
+    def _save_account(self) -> None:
+        company_id = self._company_id()
         if company_id is None or self._selected_type_id is None:
-            self._set_account_status(tr("ابتدا یک نوع‌بُعد را انتخاب کنید."), is_error=True)
             return
-
-        code = self.ids.account_code_field.value.strip()
+        code = self.account_code_field.text().strip()
         if not code:
-            self._set_account_status(tr("کدِ حسابِ تفصیلی را وارد کنید."), is_error=True)
+            self.account_status_label.setText("کد را وارد کنید.")
             return
-        extra_fields = self._collect_account_extra_fields()
+        name = self.account_name_field.text().strip() or None
+        extra_fields = self._collect_extra_fields()
 
-        if self._editing_account_id is not None:
-            try:
+        try:
+            if self._editing_account_id is not None:
                 dimensions_service.update_detail_account(
-                    detail_account_id=self._editing_account_id,
-                    company_id=company_id,
-                    code=code,
-                    is_active=self.ids.account_active_checkbox.active,
-                    extra_fields=extra_fields,
+                    self._editing_account_id, company_id, code, self.account_active_checkbox.isChecked(),
+                    name=name, extra_fields=extra_fields,
                 )
-            except Exception as exc:  # noqa: BLE001
-                self._set_account_status(tr("خطا: {}").format(exc), is_error=True)
-                return
-            self.cancel_account_edit()
-            self.refresh_types()
+            else:
+                dimensions_service.create_detail_account(
+                    company_id, self._selected_type_id, code, name=name,
+                    parent_detail_account_id=self.parent_combo.currentData(), extra_fields=extra_fields,
+                )
+        except ValueError as exc:
+            self.account_status_label.setText(str(exc))
             return
 
-        try:
-            dimensions_service.create_detail_account(
-                company_id=company_id,
-                dimension_type_id=self._selected_type_id,
-                code=code,
-                parent_detail_account_id=self._selected_parent_id,
-                extra_fields=extra_fields,
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._set_account_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-        self.ids.account_code_field.text = ""
-        self._render_account_extra_fields()
-        self._set_account_status(tr("حسابِ تفصیلی افزوده شد."))
-        self.refresh_accounts()
-        self.refresh_types()
+        self._cancel_account_edit()
+        self.refresh()
+        self._select_type(self._selected_type_id)
 
-    def confirm_delete_account(self, detail_account_id: int) -> None:
-        row = self._accounts_by_id.get(detail_account_id)
-        if row is None:
-            return
-        if self._delete_dialog is not None:
-            self._delete_dialog.dismiss()
-
-        def _do_delete(*_args) -> None:
-            self._delete_dialog.dismiss()
-            self._perform_delete_account(detail_account_id)
-
-        self._delete_dialog = MDDialog(
-            title=shape(tr("حذف حسابِ تفصیلی")),
-            text=shape(tr("حسابِ تفصیلیِ «{}» حذف شود؟ این کار قابل بازگشت نیست.").format(row.code)),
-            buttons=[
-                MDFlatButton(text=shape(tr("لغو")), on_release=lambda *_: self._delete_dialog.dismiss()),
-                MDRaisedButton(text=shape(tr("حذف")), md_bg_color=theme.DANGER, on_release=_do_delete),
-            ],
-        )
-        self._delete_dialog.open()
-
-    def _perform_delete_account(self, detail_account_id: int) -> None:
-        company_id = self._current_company_id()
-        if company_id is None:
-            return
-        try:
-            dimensions_service.delete_detail_account(detail_account_id, company_id)
-        except Exception as exc:  # noqa: BLE001
-            self._set_account_status(tr("خطا: {}").format(exc), is_error=True)
-            return
-        if self._editing_account_id == detail_account_id:
-            self.cancel_account_edit()
-        else:
-            self._set_account_status(tr("حسابِ تفصیلی حذف شد."))
-            self.refresh_accounts()
-        self.refresh_types()
+    # --- برایِ ناوبری از فهرستِ واحدِ تفصیلی‌ها -----------------------------
+    def select_type_and_edit(self, dimension_type_id: int, detail_account_id: int) -> None:
+        self.refresh()
+        self._select_type(dimension_type_id)
+        self.edit_detail_account(detail_account_id)

@@ -1,35 +1,22 @@
-"""صفحه‌ی «عنوان فیلدها» — مدیریتِ عنوانِ فیلدهای فرم‌ها به‌تفکیکِ زبان.
-
-یک فرم + یک زبان انتخاب می‌شود، بعد فهرستِ فیلدهای همان فرم با عنوانِ
-پیش‌فرض (فارسیِ هاردکدشده در کد) و عنوانِ قابل‌ویرایش برای همان زبان نشان
-داده می‌شود. اگر برای زبانی هنوز چیزی ثبت نشده، عنوانِ پیش‌فرض نمایش داده
-می‌شود (نه خالی) — دقیقاً طبق درخواستِ صریح."""
+"""عنوانِ فیلدها — معادلِ Qt برایِ field_labels.py/.kv در Kivy."""
 
 from __future__ import annotations
 
-import os
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from kivy.lang import Builder
-from kivy.properties import StringProperty
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.screen import MDScreen
-
-from peecha import session
 from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
-from peecha.services import roles as roles_service
-from peecha.ui.i18n import tr
-from peecha.ui.rtl import shape
-from peecha.ui.shortcuts import KeyboardShortcutMixin
 
-_KV_PATH = os.path.join(os.path.dirname(__file__), "field_labels.kv")
-Builder.load_file(_KV_PATH)
-
-# فقط فرم‌هایی که فیلدِ قابل‌ترجمه دارند (نه صفحاتِ پیش از ورود — چون
-# سوییچرِ زبان فقط بعد از ورود در هدر در دسترس است و آن صفحات هنوز
-# «زبانِ فعال»ی ندارند).
-_MANAGED_FORMS = [
+_FORM_CODES = [
     "chart_of_accounts",
     "journal_entry",
     "languages",
@@ -38,130 +25,119 @@ _MANAGED_FORMS = [
     "users",
     "roles",
 ]
+_FORM_LABELS = {
+    "chart_of_accounts": "کدینگِ حساب‌ها",
+    "journal_entry": "صدورِ سند",
+    "languages": "زبان‌ها",
+    "companies": "شرکت‌ها",
+    "fiscal_years": "سال‌های مالی",
+    "users": "کاربران",
+    "roles": "نقش‌ها",
+}
 
 
-class _FieldEditRow(MDBoxLayout):
-    default_label_text = StringProperty("")
+class _FieldEditRow(QWidget):
+    def __init__(self, field_id: int, default_label: str, current_label: str | None, on_save, on_reset) -> None:
+        super().__init__()
+        self._field_id = field_id
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-    def __init__(self, field_id: int, current_label: str, has_override: bool, on_save, on_reset, **kwargs):
-        super().__init__(**kwargs)
-        self.field_id = field_id
-        self._on_save = on_save
-        self._on_reset = on_reset
-        self.ids.value_field.set_value(current_label)
-        self.ids.reset_button.disabled = not has_override
-        self.ids.reset_button.opacity = 1 if has_override else 0.35
+        layout.addWidget(QLabel(default_label))
 
-    def save(self) -> None:
-        self._on_save(self.field_id, self.ids.value_field.value)
+        self.value_field = QLineEdit()
+        self.value_field.setText(current_label or default_label)
+        layout.addWidget(self.value_field)
 
-    def reset(self) -> None:
-        self._on_reset(self.field_id)
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("flatButton")
+        save_button.clicked.connect(lambda: on_save(field_id, self.value_field.text().strip()))
+        layout.addWidget(save_button)
+
+        reset_button = QPushButton("بازگشت به پیش‌فرض")
+        reset_button.setObjectName("flatButton")
+        reset_button.clicked.connect(lambda: on_reset(field_id))
+        layout.addWidget(reset_button)
 
 
-class FieldLabelsScreen(KeyboardShortcutMixin, MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._form_code = _MANAGED_FORMS[0]
-        self._language_options: list[languages_service.LanguageRow] = []
+class FieldLabelsScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
         self._language_id: int | None = None
-        self._menu: MDDropdownMenu | None = None
+        self._rows: list[_FieldEditRow] = []
 
-    def on_pre_enter(self, *args):
-        self._language_options = languages_service.list_languages()
-        if self._language_id is None or not any(l.language_id == self._language_id for l in self._language_options):
-            preferred = session.current_language.language_id if session.current_language else None
-            chosen = next((l for l in self._language_options if l.language_id == preferred), None)
-            chosen = chosen or next((l for l in self._language_options if l.is_default), None)
-            chosen = chosen or (self._language_options[0] if self._language_options else None)
-            self._language_id = chosen.language_id if chosen else None
-        self._refresh_form_text()
-        self._refresh_language_text()
-        self.refresh_list()
-        self.bind_shortcuts()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(12)
 
-    def on_leave(self, *args):
-        self.unbind_shortcuts()
+        title = QLabel("عنوانِ فیلدها")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
 
-    def _set_status(self, message: str) -> None:
-        self.ids.status_label.text = shape(message)
+        selectors = QHBoxLayout()
+        selectors.addWidget(QLabel("فرم"))
+        self.form_combo = QComboBox()
+        for code in _FORM_CODES:
+            self.form_combo.addItem(_FORM_LABELS.get(code, code), code)
+        self.form_combo.currentIndexChanged.connect(self._reload_list)
+        selectors.addWidget(self.form_combo)
 
-    def _refresh_form_text(self) -> None:
-        label = roles_service.FORM_LABELS.get(self._form_code, self._form_code)
-        self.ids.form_button.text = shape(tr(label))
+        selectors.addWidget(QLabel("زبان"))
+        self.language_combo = QComboBox()
+        self.language_combo.currentIndexChanged.connect(self._reload_list)
+        selectors.addWidget(self.language_combo)
+        selectors.addStretch(1)
+        layout.addLayout(selectors)
 
-    def open_form_menu(self) -> None:
-        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        layout.addWidget(self.status_label)
 
-        items = [
-            {
-                "text": shape(tr(roles_service.FORM_LABELS.get(code, code))),
-                "on_release": lambda c=code: (self._menu.dismiss(), self._select_form(c)),
-            }
-            for code in _MANAGED_FORMS
-        ]
-        self._menu = open_rtl_dropdown(self.ids.form_button, items, width_mult=3)
+        self.rows_container = QVBoxLayout()
+        rows_widget = QWidget()
+        rows_widget.setLayout(self.rows_container)
+        layout.addWidget(rows_widget)
+        layout.addStretch(1)
 
-    def _select_form(self, form_code: str) -> None:
-        self._form_code = form_code
-        self._refresh_form_text()
-        self.refresh_list()
+    def refresh(self) -> None:
+        languages = languages_service.list_languages()
+        self.language_combo.blockSignals(True)
+        self.language_combo.clear()
+        for lang in languages:
+            self.language_combo.addItem(lang.native_name, lang.language_id)
+        self.language_combo.blockSignals(False)
+        self._reload_list()
 
-    def _refresh_language_text(self) -> None:
-        row = next((l for l in self._language_options if l.language_id == self._language_id), None)
-        self.ids.language_button.text = shape(row.native_name if row else tr("— زبانی تعریف نشده —"))
+    def _current_form_code(self) -> str | None:
+        return self.form_combo.currentData()
 
-    def open_language_menu(self) -> None:
-        if not self._language_options:
+    def _reload_list(self) -> None:
+        while self.rows_container.count():
+            child = self.rows_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._rows = []
+
+        form_code = self._current_form_code()
+        language_id = self.language_combo.currentData()
+        if form_code is None or language_id is None:
             return
-        from peecha.ui.widgets import open_rtl_dropdown  # noqa: PLC0415
 
-        items = [
-            {
-                "text": shape(l.native_name),
-                "on_release": lambda lid=l.language_id: (self._menu.dismiss(), self._select_language(lid)),
-            }
-            for l in self._language_options
-        ]
-        self._menu = open_rtl_dropdown(self.ids.language_button, items, width_mult=3)
-
-    def _select_language(self, language_id: int) -> None:
-        self._language_id = language_id
-        self._refresh_language_text()
-        self.refresh_list()
-
-    def refresh_list(self) -> None:
-        self.ids.fields_list.clear_widgets()
-        if self._language_id is None:
-            self._set_status(tr("ابتدا یک زبان تعریف کنید."))
-            return
-        self._set_status(tr(""))
-
-        from peecha.ui.widgets import PEmptyState  # noqa: PLC0415
-
-        rows = field_labels_service.list_fields(self._form_code, self._language_id)
-        if not rows:
-            self.ids.fields_list.add_widget(
-                PEmptyState(icon="form-textbox", text=shape(tr("این فرم فیلدی برای مدیریتِ عنوان ندارد.")))
-            )
-        for row in rows:
-            self.ids.fields_list.add_widget(
-                _FieldEditRow(
-                    field_id=row.field_id,
-                    current_label=row.label or row.default_label,
-                    has_override=row.label is not None,
-                    on_save=self._save_label,
-                    on_reset=self._reset_label,
-                    default_label_text=shape(tr("پیش‌فرض: {}").format(row.default_label)),
-                )
-            )
+        for field in field_labels_service.list_fields(form_code, language_id):
+            row = _FieldEditRow(field.field_id, field.default_label, field.label, self._save_label, self._reset_label)
+            self.rows_container.addWidget(row)
+            self._rows.append(row)
 
     def _save_label(self, field_id: int, label: str) -> None:
-        field_labels_service.set_label(field_id, self._language_id, label)
-        self._set_status(tr("ذخیره شد."))
-        self.refresh_list()
+        language_id = self.language_combo.currentData()
+        if language_id is None:
+            return
+        field_labels_service.set_label(field_id, language_id, label or None)
+        self.status_label.setText("")
 
     def _reset_label(self, field_id: int) -> None:
-        field_labels_service.set_label(field_id, self._language_id, None)
-        self._set_status(tr("به عنوانِ پیش‌فرض بازگشت."))
-        self.refresh_list()
+        language_id = self.language_combo.currentData()
+        if language_id is None:
+            return
+        field_labels_service.set_label(field_id, language_id, None)
+        self._reload_list()

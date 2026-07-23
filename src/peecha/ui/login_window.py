@@ -21,7 +21,7 @@ from peecha import session
 from peecha.db.base import new_session
 from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
-from peecha.qt_pilot import theme
+from peecha.ui import theme
 from peecha.services.auth import authenticate
 
 _STYLE = f"""
@@ -135,7 +135,7 @@ class LoginWindow(QWidget):
 
         session.current_user = user
         self._load_default_company(user.user_id)
-        from peecha.qt_pilot.shell_window import MainWindow  # noqa: PLC0415
+        from peecha.ui.shell_window import MainWindow  # noqa: PLC0415
 
         self._main_window = MainWindow()
         self._main_window.load_context_switcher()
