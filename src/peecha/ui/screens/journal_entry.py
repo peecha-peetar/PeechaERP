@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -60,6 +61,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 from peecha.ui import numerals
@@ -98,6 +100,36 @@ def _normalize_typed_digits(combo: QComboBox, text: str) -> None:
         cursor = line_edit.cursorPosition()
         line_edit.setText(converted)
         line_edit.setCursorPosition(cursor)
+
+
+def _live_group_amount(spin: QDoubleSpinBox) -> None:
+    """گروه‌بندیِ سه‌رقمیِ زنده حینِ تایپ — QDoubleSpinBox حتی با
+    setGroupSeparatorShown(True) فقط *بعدِ* تأیید/ازدست‌دادنِ فوکوس
+    گروه‌بندی می‌کند، نه حینِ خودِ تایپ؛ این تابع با هر تغییرِ متن (اگر
+    اعشار نداشته باشد) دوباره ویرگول‌ها را می‌گذارد و مکان‌نما را متناسب
+    نگه می‌دارد."""
+    line_edit = spin.lineEdit()
+    text = line_edit.text()
+    if "." in text:
+        return
+    cursor = line_edit.cursorPosition()
+    raw_digits = re.sub(r"[^0-9]", "", text)
+    if not raw_digits:
+        return
+    digits_before_cursor = len(re.sub(r"[^0-9]", "", text[:cursor]))
+    grouped = f"{int(raw_digits):,}"
+    if grouped == text:
+        return
+    new_cursor = len(grouped)
+    seen_digits = 0
+    for i, ch in enumerate(grouped):
+        if ch.isdigit():
+            seen_digits += 1
+        if seen_digits >= digits_before_cursor:
+            new_cursor = i + 1
+            break
+    line_edit.setText(grouped)
+    line_edit.setCursorPosition(new_cursor)
 
 
 def _clear_if_unmatched(combo: QComboBox) -> None:
@@ -232,16 +264,18 @@ class _LineRow:
         self.debit_field = QDoubleSpinBox()
         self.debit_field.setRange(0, 10**12)
         self.debit_field.setGroupSeparatorShown(True)
-        self.debit_field.setDecimals(0)
+        self.debit_field.setDecimals(screen.currency_decimal_places)
         self.debit_field.valueChanged.connect(self._on_debit_changed)
         self.debit_field.lineEdit().returnPressed.connect(self._on_debit_return)
+        self.debit_field.lineEdit().textEdited.connect(lambda _t, s=self.debit_field: _live_group_amount(s))
 
         self.credit_field = QDoubleSpinBox()
         self.credit_field.setRange(0, 10**12)
         self.credit_field.setGroupSeparatorShown(True)
-        self.credit_field.setDecimals(0)
+        self.credit_field.setDecimals(screen.currency_decimal_places)
         self.credit_field.valueChanged.connect(self._on_credit_changed)
         self.credit_field.lineEdit().returnPressed.connect(lambda: screen.focus_next_row_after(self))
+        self.credit_field.lineEdit().textEdited.connect(lambda _t, s=self.credit_field: _live_group_amount(s))
 
         # نکته: به‌جایِ setVisible(False/True)، از enabled+متن استفاده
         # می‌کنیم — چون QTableWidget هر بارِ محاسبه‌ی geometryِ ادیتورها
@@ -284,7 +318,9 @@ class _LineRow:
             self.credit_field.blockSignals(True)
             self.credit_field.setValue(0)
             self.credit_field.blockSignals(False)
-            self.debit_field.setToolTip(numerals.amount_to_words(decimal.Decimal(str(value))))
+            self.debit_field.setToolTip(
+                numerals.amount_to_words(decimal.Decimal(str(value)), unit=self._screen.currency_symbol or "ریال")
+            )
         else:
             self.debit_field.setToolTip("")
         self._screen.update_balance()
@@ -294,7 +330,9 @@ class _LineRow:
             self.debit_field.blockSignals(True)
             self.debit_field.setValue(0)
             self.debit_field.blockSignals(False)
-            self.credit_field.setToolTip(numerals.amount_to_words(decimal.Decimal(str(value))))
+            self.credit_field.setToolTip(
+                numerals.amount_to_words(decimal.Decimal(str(value)), unit=self._screen.currency_symbol or "ریال")
+            )
         else:
             self.credit_field.setToolTip("")
         self._screen.update_balance()
@@ -418,6 +456,9 @@ class JournalEntryScreen(QWidget):
         self.company_id: int | None = None
         self.account_options: list[tuple[int, str]] = []
         self.recent_line_descriptions: list[str] = []
+        # طبقِ ارزِ پایه‌ی شرکت (تنظیماتِ ارزها) — نه یک عددِ ثابت.
+        self.currency_decimal_places = 0
+        self.currency_symbol: str | None = None
         self._line_rows: list[_LineRow] = []
         self._editing_journal_entry_id: int | None = None
         self._editing_registration_at: datetime.datetime | None = None
@@ -561,6 +602,15 @@ class JournalEntryScreen(QWidget):
         accounts = coa_service.list_postable_accounts(self.company_id)
         self.account_options = [(a.account_id, f"{a.full_code} — {a.name}") for a in accounts]
         self.recent_line_descriptions = je_service.list_recent_line_descriptions(self.company_id)
+
+        base_currency_id = session.current_company.base_currency_id
+        currency = next((c for c in currencies_service.list_all_currencies() if c.currency_id == base_currency_id), None)
+        self.currency_decimal_places = currency.decimal_places if currency else 0
+        self.currency_symbol = currency.symbol if currency else None
+        for row in self._line_rows:
+            row.debit_field.setDecimals(self.currency_decimal_places)
+            row.credit_field.setDecimals(self.currency_decimal_places)
+
         if not self._line_rows:
             self._reset_form()
         # هر بار که این صفحه (از سایدبار) باز می‌شود، فوکوس رویِ تاریخ
@@ -606,7 +656,13 @@ class JournalEntryScreen(QWidget):
         """زنجیره‌ی Enter: بستانکار (یا بدهکارِ پرشده) -> ردیفِ بعدی؛ اگر
         ردیفِ بعدی وجود نداشته باشد، تازه ساخته می‌شود. شرحِ ردیف همیشه
         (چه ردیفِ بعدی موجود باشد چه تازه ساخته شود) به ردیفِ بعدی منتقل
-        می‌شود — تا لازم نباشد دوباره تایپ شود."""
+        می‌شود — تا لازم نباشد دوباره تایپ شود.
+
+        نکته: اگر ردیفِ فعلی هنوز ناقص است (حساب انتخاب نشده، یا هم بدهکار
+        و هم بستانکار صفرند)، هیچ ردیفِ تازه‌ای ساخته نمی‌شود — تا Enterِ
+        تصادفی رویِ ردیفِ خالی، ردیف‌هایِ اضافیِ بی‌مصرف نسازد."""
+        if row.account_id is None or (row.debit_field.value() == 0 and row.credit_field.value() == 0):
+            return
         description = row.description_field.text()
         if row is self._line_rows[-1]:
             target = self.add_line()
@@ -642,17 +698,20 @@ class JournalEntryScreen(QWidget):
     def update_balance(self) -> None:
         total_debit = sum((decimal.Decimal(str(r.debit_field.value())) for r in self._line_rows), decimal.Decimal(0))
         total_credit = sum((decimal.Decimal(str(r.credit_field.value())) for r in self._line_rows), decimal.Decimal(0))
+        debit_text = numerals.format_money(total_debit, self.currency_decimal_places, self.currency_symbol)
+        credit_text = numerals.format_money(total_credit, self.currency_decimal_places, self.currency_symbol)
         if total_debit == total_credit and total_debit > 0:
-            self.balance_label.setText(f"تراز — بدهکار: {total_debit} | بستانکار: {total_credit}")
+            self.balance_label.setText(f"تراز — بدهکار: {debit_text} | بستانکار: {credit_text}")
             self.balance_label.setObjectName("statusOk")
         else:
-            self.balance_label.setText(f"غیرِ تراز — بدهکار: {total_debit} | بستانکار: {total_credit}")
+            self.balance_label.setText(f"غیرِ تراز — بدهکار: {debit_text} | بستانکار: {credit_text}")
             self.balance_label.setObjectName("statusError")
         self.balance_label.setStyleSheet("")
 
         reference_amount = total_debit if total_debit > 0 else total_credit
         if reference_amount > 0:
-            self.amount_words_label.setText(f"مبلغ به حروف: {numerals.amount_to_words(reference_amount)}")
+            unit = self.currency_symbol or "ریال"
+            self.amount_words_label.setText(f"مبلغ به حروف: {numerals.amount_to_words(reference_amount, unit=unit)}")
         else:
             self.amount_words_label.setText("")
 

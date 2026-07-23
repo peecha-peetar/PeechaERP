@@ -32,6 +32,15 @@ def format_amount(value: decimal.Decimal | int) -> str:
     return to_persian_digits(f"{value:,}")
 
 
+def format_money(value: decimal.Decimal | int, decimal_places: int = 0, symbol: str | None = None) -> str:
+    """نمایشِ مبلغ برایِ ارزِ فعالِ شرکت — تعدادِ رقمِ اعشار طبقِ تنظیماتِ
+    همان ارز (نه یک عددِ ثابت)، با گروه‌بندیِ سه‌رقمی و ارقامِ فارسی."""
+    quant = decimal.Decimal(1).scaleb(-decimal_places) if decimal_places > 0 else decimal.Decimal(1)
+    quantized = decimal.Decimal(value).quantize(quant, rounding=decimal.ROUND_HALF_UP)
+    text = to_persian_digits(f"{quantized:,}")
+    return f"{text} {symbol}" if symbol else text
+
+
 def parse_decimal(text: str) -> decimal.Decimal:
     normalized = to_ascii_digits(text).strip().replace(",", "")
     if not normalized:

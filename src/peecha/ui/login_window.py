@@ -113,7 +113,7 @@ class LoginWindow(QWidget):
 
         self._main_window = MainWindow()
         self._main_window.load_context_switcher()
-        self._main_window.show()
+        self._main_window.showMaximized()
         self.close()
 
     def _load_default_company(self, user_id: int) -> None:
