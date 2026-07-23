@@ -7,12 +7,15 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
 
-PRIMARY = "#14173A"
-PRIMARY_HOVER = "#1F234E"
-PRIMARY_LIGHT = "#EEECFC"
-ACCENT = "#6D5CE6"
-ACCENT_HOVER = "#5B4CD6"
-ACCENT_PRESSED = "#4C3DC4"
+# پالت طبقِ استایلِ مرجعِ کاربر (برنامه‌ی دیگرشان) — تک‌رنگِ سرمه‌ای
+# #020025 هم برایِ «primary» (نوارِ کناری/تولتیپ) هم برایِ «accent»
+# (دکمه‌ها/تمرکز/انتخاب) به‌کار می‌رود، به‌جایِ پالتِ بنفشِ قبلی.
+PRIMARY = "#020025"
+PRIMARY_HOVER = "#303050"
+PRIMARY_LIGHT = "#E0E0F0"
+ACCENT = "#020025"
+ACCENT_HOVER = "#303050"
+ACCENT_PRESSED = "#000014"
 SUCCESS = "#15A672"
 WARNING = "#F5A524"
 DANGER = "#E5484D"
@@ -22,20 +25,20 @@ CHART_PURPLE = "#9333EA"
 CHART_ORANGE = "#F97316"
 CHART_TEAL = "#14B8A6"
 
-BACKGROUND = "#F3F2FA"
+BACKGROUND = "#F9F9FC"
 SURFACE = "#FFFFFF"
-HOVER = "#F4F3FA"
-SELECTED = "#EEECFC"
-BORDER = "#E6E4F0"
-DIVIDER = "#ECEAF3"
+HOVER = "#E0E0F0"
+SELECTED = "#D6D6EE"
+BORDER = "#CCCCCC"
+DIVIDER = "#E0E0E0"
 
-TEXT_PRIMARY = "#18162B"
-TEXT_SECONDARY = "#6B6B85"
-TEXT_DISABLED = "#A3A2B8"
+TEXT_PRIMARY = "#020025"
+TEXT_SECONDARY = "#5A5A7A"
+TEXT_DISABLED = "#666666"
 
-GRID_HEADER_BG = "#F7F6FC"
-GRID_BORDER = "#EDEBF7"
-GRID_ROW_ALT = "#FBFAFE"
+GRID_HEADER_BG = "#F0F0F5"
+GRID_BORDER = "#E0E0E0"
+GRID_ROW_ALT = "#F7F7FA"
 LEVEL_GROUP = "#4C1D95"
 LEVEL_KOL = "#0F766E"
 LEVEL_MOEIN = TEXT_PRIMARY
@@ -146,8 +149,8 @@ QLabel#avatarBadge {{
 
 /* --- فیلدهایِ ورودی -------------------------------------------------- */
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
-    background-color: {HOVER};
-    border: 1.5px solid {BORDER};
+    background-color: {SURFACE};
+    border: 1px solid {BORDER};
     border-radius: 4px;
     padding: 8px 10px;
     font-size: 13px;
@@ -155,7 +158,7 @@ QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     selection-background-color: {ACCENT};
 }}
 QLineEdit:hover, QComboBox:hover, QDateEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
-    border: 1.5px solid {TEXT_SECONDARY};
+    border: 1px solid {TEXT_SECONDARY};
 }}
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border: 1.5px solid {ACCENT};
@@ -197,13 +200,21 @@ QCalendarWidget QAbstractItemView:enabled {{
     selection-color: white;
 }}
 
-/* --- دکمه‌ها ----------------------------------------------------------- */
+/* --- دکمه‌ها (طبقِ استایلِ مرجع: گوشه‌یِ کمترِگرد، تک‌رنگِ سرمه‌ای) ------ */
 QPushButton {{
-    border-radius: 18px;
-    padding: 9px 20px;
+    border-radius: 6px;
+    padding: 8px 16px;
     font-size: 13px;
     font-weight: 600;
     border: none;
+}}
+QPushButton:disabled {{
+    background-color: {BORDER};
+    color: {TEXT_DISABLED};
+}}
+QPushButton:checked {{
+    background-color: {ACCENT_HOVER};
+    color: white;
 }}
 QPushButton#primaryButton {{
     background-color: {ACCENT};
@@ -264,24 +275,39 @@ QTableCornerButton::section {{
     border: none;
 }}
 
-/* --- تب/لیست ------------------------------------------------------------ */
+/* --- تب/لیست/گروه‌بندی ---------------------------------------------------- */
 QTabWidget::pane {{
-    border: 1px solid {DIVIDER};
-    border-radius: 12px;
+    border: 1px solid {BORDER};
+    border-radius: 6px;
     top: 4px;
+    background-color: {SURFACE};
 }}
 QTabBar::tab {{
     background-color: {HOVER};
-    color: {TEXT_SECONDARY};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER};
     padding: 8px 18px;
     margin-left: 4px;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
     font-weight: 600;
 }}
 QTabBar::tab:selected {{
     background-color: {ACCENT};
     color: white;
+}}
+QGroupBox {{
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+    margin-top: 10px;
+    background-color: {SURFACE};
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top right;
+    padding: 0 3px;
+    font-weight: bold;
+    color: {TEXT_PRIMARY};
 }}
 QListWidget {{
     background-color: {SURFACE};

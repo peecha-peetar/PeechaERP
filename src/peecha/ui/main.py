@@ -19,6 +19,8 @@ _ASSETS_DIR = os.path.join(
     "assets",
 )
 _FONT_DIR = os.path.join(_ASSETS_DIR, "fonts")
+_IRANSANS_REGULAR = os.path.join(_FONT_DIR, "IRANSans-Regular.ttf")
+_IRANSANS_BOLD = os.path.join(_FONT_DIR, "IRANSans-Bold.ttf")
 _VAZIRMATN_REGULAR = os.path.join(_FONT_DIR, "Vazirmatn-Regular.ttf")
 _VAZIRMATN_BOLD = os.path.join(_FONT_DIR, "Vazirmatn-Bold.ttf")
 
@@ -34,25 +36,40 @@ def get_font_family() -> str:
     return _font_family_cache
 
 
-def _register_font() -> str:
-    """فونتِ Vazirmatn را (اگر موجود باشد) ثبت می‌کند و نامِ خانواده‌ی
-    واقعی‌اش را برمی‌گرداند؛ وگرنه فونتِ پیش‌فرضِ سیستم را نگه می‌دارد —
-    برخلافِ Kivy، Qt خودش برایِ گلیفِ فارسی به فونتِ سیستم (که معمولاً
-    پشتیبانی دارد) بازمی‌گردد، پس نبودِ این فونت اینجا کرش/جعبه‌ی خالی
-    نمی‌سازد، فقط ظاهرِ فونت را عوض می‌کند.
+def _try_register(regular_path: str, bold_path: str, expected_substring: str) -> str | None:
+    """اگر فایلِ فونت موجود باشد، ثبتش می‌کند و نامِ خانواده‌ی واقعی را
+    برمی‌گرداند؛ فقط اگر نامِ خانواده واقعاً شاملِ expected_substring باشد
+    (وگرنه یعنی فایل placeholder/جعلی است، مثلِ اتفاقی که برایِ
+    Vazirmatn افتاد — یک .ttf با این نام اما محتوایِ DejaVu Sans)."""
+    if not os.path.exists(regular_path):
+        return None
+    font_id = QFontDatabase.addApplicationFont(regular_path)
+    if os.path.exists(bold_path):
+        QFontDatabase.addApplicationFont(bold_path)
+    families = QFontDatabase.applicationFontFamilies(font_id)
+    if families and expected_substring in families[0].lower():
+        return families[0]
+    return None
 
-    نکته‌ی مهم: فایلِ اسمی «Vazirmatn-Regular.ttf» ممکن است در واقع یک
-    فونتِ دیگر باشد (مثلاً یک placeholder اشتباهاً commit‌شده) — نامِ
-    خانواده‌ای که QFontDatabase برمی‌گرداند را با «vazir» چک می‌کنیم؛
-    اگر مطابقت نداشت، آن را نادیده می‌گیریم تا یک فونتِ اشتباه/غیرِفارسی
-    بی‌صدا جایِ Vazirmatn را نگیرد."""
-    if os.path.exists(_VAZIRMATN_REGULAR):
-        font_id = QFontDatabase.addApplicationFont(_VAZIRMATN_REGULAR)
-        if os.path.exists(_VAZIRMATN_BOLD):
-            QFontDatabase.addApplicationFont(_VAZIRMATN_BOLD)
-        families = QFontDatabase.applicationFontFamilies(font_id)
-        if families and "vazir" in families[0].lower():
-            return families[0]
+
+def _register_font() -> str:
+    """فونتِ ترجیحی را ثبت می‌کند و نامِ خانواده‌ی واقعی‌اش را برمی‌گرداند؛
+    وگرنه فونتِ پیش‌فرضِ سیستم را نگه می‌دارد — برخلافِ Kivy، Qt خودش برایِ
+    گلیفِ فارسی به فونتِ سیستم (که معمولاً پشتیبانی دارد) بازمی‌گردد، پس
+    نبودِ این فونت‌ها اینجا کرش/جعبه‌ی خالی نمی‌سازد، فقط ظاهرِ فونت را
+    عوض می‌کند.
+
+    اولویت: IRANSans (طبقِ استایلِ مرجعِ کاربر) -> Vazirmatn -> Tahoma.
+    هر دویِ IRANSans/Vazirmatn قبل از پذیرفته‌شدن با نامِ خانواده‌شان
+    اعتبارسنجی می‌شوند (نکته: فایلِ فعلیِ Vazirmatn-Regular.ttf در واقع
+    یک placeholder اشتباهاً commit‌شده است، نه فونتِ واقعی — پس عملاً به
+    Tahoma برمی‌گردد تا وقتی فایل‌هایِ واقعی جایگزین شوند)."""
+    iran_sans = _try_register(_IRANSANS_REGULAR, _IRANSANS_BOLD, "iran")
+    if iran_sans:
+        return iran_sans
+    vazirmatn = _try_register(_VAZIRMATN_REGULAR, _VAZIRMATN_BOLD, "vazir")
+    if vazirmatn:
+        return vazirmatn
     return "Tahoma"
 
 
