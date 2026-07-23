@@ -147,7 +147,7 @@ QLabel#avatarBadge {{
 /* --- فیلدهایِ ورودی -------------------------------------------------- */
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     background-color: {HOVER};
-    border: 1.5px solid transparent;
+    border: 1.5px solid {BORDER};
     border-radius: 11px;
     padding: 9px 14px;
     font-size: 13px;
@@ -155,7 +155,7 @@ QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     selection-background-color: {ACCENT};
 }}
 QLineEdit:hover, QComboBox:hover, QDateEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
-    border: 1.5px solid {BORDER};
+    border: 1.5px solid {TEXT_SECONDARY};
 }}
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border: 1.5px solid {ACCENT};
