@@ -239,6 +239,11 @@ class SpecializedDimensionScreenBase(QWidget):
         detail_account_id = self.table.item(row, 0).data(Qt.UserRole)
         self._load_into_form(detail_account_id)
 
+    # --- برایِ ناوبری از فهرستِ واحدِ تفصیلی‌ها -----------------------------
+    def edit_detail_account(self, detail_account_id: int) -> None:
+        self.refresh()
+        self._load_into_form(detail_account_id)
+
     def _load_into_form(self, detail_account_id: int) -> None:
         account = self._rows_by_id.get(detail_account_id)
         if account is None:

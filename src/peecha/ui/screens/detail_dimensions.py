@@ -1,8 +1,12 @@
-"""مدیریتِ ابعادِ تفصیلی — معادلِ Qt برایِ detail_dimensions.py/.kv در Kivy.
+"""ثبتِ حساب‌هایِ تفصیلیِ گروه‌هایِ «ساده» (بدونِ صفحه‌ی اختصاصی).
 
-سه ستون: (۱) فهرستِ گروه‌های تفصیلی + ساختِ گروهِ تازه، (۲) پیکربندیِ
-سطوح/فیلدهایِ اختصاصیِ گروهِ انتخاب‌شده، (۳) فرمِ حسابِ تفصیلی
-(سلسله‌مراتبی، با انتخابِ والد) + فهرستِ حساب‌هایِ همان گروه."""
+طبقِ درخواستِ صریح، این صفحه دیگر گروه نمی‌سازد و سطح/فیلدِ گروه را
+پیکربندی نمی‌کند — آن دو کار به‌طورِ جدا در dimension_group_config.py
+(«پیکربندیِ گروه‌هایِ تفصیلی») انجام می‌شود. این‌جا فقط برایِ گروه‌هایی که
+صفحه‌ی اختصاصیِ خودشان را ندارند (یعنی نه یکی از ۷ نوعِ «فرمِ خاص»
+کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکزِ هزینه/پروژه)، فرمِ سلسله‌مراتبیِ
+حسابِ تفصیلی (تا ۴ سطح، با انتخابِ والد) + فهرستِ همان گروه را نشان
+می‌دهد."""
 
 from __future__ import annotations
 
@@ -21,11 +25,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMessageBox,
     QPushButton,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -35,53 +35,6 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
 
-_FIELD_KIND_OPTIONS = [("text", "متن"), ("decimal", "عدد اعشاری"), ("date", "تاریخ"), ("boolean", "بله/خیر")]
-
-
-class _GroupFieldRowWidget(QWidget):
-    def __init__(self, on_remove, initial: dimensions_service.GroupFieldRow | None = None) -> None:
-        super().__init__()
-        self._on_remove = on_remove
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self.key_field = QLineEdit()
-        self.key_field.setPlaceholderText("کلید (مثلاً account_no)")
-        layout.addWidget(self.key_field)
-
-        self.label_field = QLineEdit()
-        self.label_field.setPlaceholderText("عنوان")
-        layout.addWidget(self.label_field)
-
-        self.kind_combo = QComboBox()
-        for code, label in _FIELD_KIND_OPTIONS:
-            self.kind_combo.addItem(label, code)
-        layout.addWidget(self.kind_combo)
-
-        self.required_checkbox = QCheckBox("اجباری")
-        layout.addWidget(self.required_checkbox)
-
-        remove_button = QPushButton("حذف")
-        remove_button.setObjectName("dangerButton")
-        remove_button.clicked.connect(lambda: self._on_remove(self))
-        layout.addWidget(remove_button)
-
-        if initial is not None:
-            self.key_field.setText(initial.field_key)
-            self.label_field.setText(initial.label)
-            index = self.kind_combo.findData(initial.kind)
-            self.kind_combo.setCurrentIndex(index if index >= 0 else 0)
-            self.required_checkbox.setChecked(initial.is_required)
-
-    def to_field_dict(self, sort_order: int) -> dict:
-        return {
-            "field_key": self.key_field.text().strip(),
-            "label": self.label_field.text().strip(),
-            "kind": self.kind_combo.currentData(),
-            "is_required": self.required_checkbox.isChecked(),
-            "sort_order": sort_order,
-        }
-
 
 class DetailDimensionsScreen(QWidget):
     def __init__(self) -> None:
@@ -90,101 +43,50 @@ class DetailDimensionsScreen(QWidget):
         self._selected_type_id: int | None = None
         self._accounts_by_id: dict[int, dimensions_service.DetailAccountRow] = {}
         self._editing_account_id: int | None = None
-        self._selected_parent_id: int | None = None
-        self._field_rows: list[_GroupFieldRowWidget] = []
-        self._extra_widgets: dict[str, QWidget] = {}
+        self._extra_widgets: dict[str, tuple[QWidget, str]] = {}
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(16)
-        outer.addWidget(self._build_types_panel(), stretch=2)
-        outer.addWidget(self._build_config_panel(), stretch=3)
-        outer.addWidget(self._build_account_panel(), stretch=3)
+        outer.addWidget(self._build_list_panel(), stretch=3)
+        outer.addWidget(self._build_account_panel(), stretch=2)
 
-    # --- ستونِ ۱: گروه‌ها -----------------------------------------------
-    def _build_types_panel(self) -> QWidget:
+    # --- ستونِ چپ: انتخابِ گروه + فهرستِ حساب‌ها -----------------------------
+    def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
 
-        title = QLabel("گروه‌هایِ تفصیلی")
+        title = QLabel("تفصیلی‌هایِ گروه‌هایِ ساده")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        self.types_list = QListWidget()
-        self.types_list.itemClicked.connect(self._on_type_selected)
-        layout.addWidget(self.types_list)
+        hint = QLabel(
+            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
 
-        layout.addWidget(QLabel("کدِ گروهِ تازه"))
-        self.new_type_code_field = QLineEdit()
-        layout.addWidget(self.new_type_code_field)
+        layout.addWidget(QLabel("گروه"))
+        self.group_combo = QComboBox()
+        self.group_combo.currentIndexChanged.connect(self._on_group_changed)
+        layout.addWidget(self.group_combo)
 
-        self.type_status_label = QLabel("")
-        self.type_status_label.setObjectName("statusError")
-        self.type_status_label.setWordWrap(True)
-        layout.addWidget(self.type_status_label)
+        self.accounts_table = QTableWidget(0, 4)
+        self.accounts_table.setHorizontalHeaderLabels(["وضعیت", "نام", "کدِ کامل", "سطح"])
+        self.accounts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.accounts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.accounts_table.verticalHeader().setVisible(False)
+        self.accounts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.accounts_table.cellClicked.connect(self._on_account_row_clicked)
+        layout.addWidget(self.accounts_table, stretch=1)
 
-        create_button = QPushButton("افزودنِ گروه")
-        create_button.setObjectName("primaryButton")
-        create_button.clicked.connect(self._create_type)
-        layout.addWidget(create_button)
-
-        layout.addStretch(1)
         return panel
 
-    # --- ستونِ ۲: پیکربندیِ سطوح/فیلدها ------------------------------------
-    def _build_config_panel(self) -> QWidget:
-        panel = QWidget()
-        panel.setObjectName("card")
-        self.config_panel = panel
-        panel.setEnabled(False)
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(10)
-
-        self.config_title = QLabel("پیکربندیِ گروه")
-        self.config_title.setObjectName("pageTitle")
-        layout.addWidget(self.config_title)
-
-        layout.addWidget(QLabel("طولِ کدِ هر سطح (خالی = بدونِ محدودیت)"))
-        levels_grid = QGridLayout()
-        self.level_fields: dict[int, QSpinBox] = {}
-        for level_no in range(1, 5):
-            levels_grid.addWidget(QLabel(f"سطحِ {level_no}"), 0, level_no - 1)
-            spin = QSpinBox()
-            spin.setRange(0, 10)
-            spin.setSpecialValueText(" ")
-            levels_grid.addWidget(spin, 1, level_no - 1)
-            self.level_fields[level_no] = spin
-        layout.addLayout(levels_grid)
-
-        save_levels_button = QPushButton("ذخیره‌ی پیکربندیِ سطوح")
-        save_levels_button.setObjectName("flatButton")
-        save_levels_button.clicked.connect(self._save_levels)
-        layout.addWidget(save_levels_button)
-
-        layout.addWidget(QLabel("فیلدهایِ اختصاصیِ این گروه"))
-        self.fields_container = QVBoxLayout()
-        fields_widget = QWidget()
-        fields_widget.setLayout(self.fields_container)
-        layout.addWidget(fields_widget)
-
-        add_field_button = QPushButton("+ افزودنِ فیلد")
-        add_field_button.setObjectName("flatButton")
-        add_field_button.clicked.connect(lambda: self._add_field_row())
-        layout.addWidget(add_field_button)
-
-        save_fields_button = QPushButton("ذخیره‌ی فیلدها")
-        save_fields_button.setObjectName("primaryButton")
-        save_fields_button.clicked.connect(self._save_fields)
-        layout.addWidget(save_fields_button)
-
-        layout.addStretch(1)
-        return panel
-
-    # --- ستونِ ۳: حساب‌هایِ تفصیلی ------------------------------------------
+    # --- ستونِ راست: فرمِ حسابِ تفصیلی ---------------------------------------
     def _build_account_panel(self) -> QWidget:
         panel = QWidget()
         panel.setObjectName("card")
@@ -238,15 +140,7 @@ class DetailDimensionsScreen(QWidget):
         buttons.addWidget(cancel_button)
         layout.addLayout(buttons)
 
-        self.accounts_table = QTableWidget(0, 4)
-        self.accounts_table.setHorizontalHeaderLabels(["وضعیت", "نام", "کدِ کامل", "سطح"])
-        self.accounts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.accounts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.accounts_table.verticalHeader().setVisible(False)
-        self.accounts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.accounts_table.cellClicked.connect(self._on_account_row_clicked)
-        layout.addWidget(self.accounts_table, stretch=1)
-
+        layout.addStretch(1)
         return panel
 
     # --- بارگذاری --------------------------------------------------------
@@ -255,103 +149,37 @@ class DetailDimensionsScreen(QWidget):
 
     def refresh(self) -> None:
         company_id = self._company_id()
-        self._types = dimensions_service.list_dimension_types(company_id) if company_id is not None else []
-        self.types_list.clear()
+        # فقط گروه‌هایِ «ساده» (بدونِ صفحه‌ی اختصاصیِ خودشان) این‌جا نمایان‌اند.
+        self._types = [
+            t
+            for t in (dimensions_service.list_dimension_types(company_id) if company_id is not None else [])
+            if t.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
+        ]
+        previous_id = self._selected_type_id
+        self.group_combo.blockSignals(True)
+        self.group_combo.clear()
+        self.group_combo.addItem("— انتخابِ گروه —", None)
         for t in self._types:
-            item = QListWidgetItem(f"{t.code} ({t.detail_account_count})")
-            item.setData(Qt.UserRole, t.dimension_type_id)
-            self.types_list.addItem(item)
-        if self._selected_type_id is None:
-            self.config_panel.setEnabled(False)
+            self.group_combo.addItem(f"{t.code} ({t.detail_account_count})", t.dimension_type_id)
+        self.group_combo.blockSignals(False)
+
+        if previous_id is not None and any(t.dimension_type_id == previous_id for t in self._types):
+            self.group_combo.setCurrentIndex(self.group_combo.findData(previous_id))
+        else:
+            self._selected_type_id = None
             self.account_panel.setEnabled(False)
 
-    def _create_type(self) -> None:
-        company_id = self._company_id()
-        if company_id is None:
-            return
-        code = self.new_type_code_field.text().strip()
-        if not code:
-            self.type_status_label.setText("کد را وارد کنید.")
-            return
-        try:
-            new_type = dimensions_service.create_dimension_type(company_id, code)
-        except ValueError as exc:
-            self.type_status_label.setText(str(exc))
-            return
-        self.type_status_label.setText("")
-        self.new_type_code_field.clear()
-        self.refresh()
-        self._select_type(new_type.dimension_type_id)
+    def _on_group_changed(self) -> None:
+        self._select_type(self.group_combo.currentData())
 
-    def _on_type_selected(self, item: QListWidgetItem) -> None:
-        self._select_type(item.data(Qt.UserRole))
-
-    def _select_type(self, dimension_type_id: int) -> None:
+    def _select_type(self, dimension_type_id: int | None) -> None:
         self._selected_type_id = dimension_type_id
-        dim_type = next((t for t in self._types if t.dimension_type_id == dimension_type_id), None)
-        if dim_type is None:
+        if dimension_type_id is None:
+            self.account_panel.setEnabled(False)
             return
-        self.config_title.setText(f"پیکربندیِ گروهِ «{dim_type.code}»")
-        self.config_panel.setEnabled(True)
         self.account_panel.setEnabled(True)
-        self._load_levels()
-        self._load_fields()
         self._cancel_account_edit()
         self._reload_accounts()
-
-    # --- سطوح ------------------------------------------------------------
-    def _load_levels(self) -> None:
-        levels = {row.level_no: row.code_length for row in dimensions_service.list_group_levels(self._selected_type_id)}
-        for level_no, spin in self.level_fields.items():
-            spin.setValue(levels.get(level_no, 0))
-
-    def _save_levels(self) -> None:
-        company_id = self._company_id()
-        if company_id is None or self._selected_type_id is None:
-            return
-        levels = {level_no: spin.value() for level_no, spin in self.level_fields.items() if spin.value() > 0}
-        try:
-            dimensions_service.set_group_levels(self._selected_type_id, company_id, levels)
-        except ValueError as exc:
-            self.type_status_label.setText(str(exc))
-
-    # --- فیلدهایِ اختصاصیِ گروه --------------------------------------------
-    def _load_fields(self) -> None:
-        while self.fields_container.count():
-            child = self.fields_container.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        self._field_rows = []
-        for field_row in dimensions_service.list_group_fields(self._selected_type_id):
-            self._add_field_row(field_row)
-
-    def _add_field_row(self, initial: dimensions_service.GroupFieldRow | None = None) -> None:
-        row_widget = _GroupFieldRowWidget(self._remove_field_row, initial)
-        self.fields_container.addWidget(row_widget)
-        self._field_rows.append(row_widget)
-
-    def _remove_field_row(self, row_widget: _GroupFieldRowWidget) -> None:
-        self._field_rows.remove(row_widget)
-        self.fields_container.removeWidget(row_widget)
-        row_widget.deleteLater()
-
-    def _save_fields(self) -> None:
-        company_id = self._company_id()
-        if company_id is None or self._selected_type_id is None:
-            return
-        fields = [row.to_field_dict(i) for i, row in enumerate(self._field_rows)]
-        for f in fields:
-            if not f["field_key"] or not f["label"]:
-                self.type_status_label.setText("کلید و عنوانِ همه‌ی فیلدها را پر کنید.")
-                return
-        try:
-            dimensions_service.set_group_fields(self._selected_type_id, company_id, fields)
-        except ValueError as exc:
-            self.type_status_label.setText(str(exc))
-            return
-        self.type_status_label.setText("")
-        self._load_fields()
-        self._render_extra_fields()
 
     # --- فرمِ حسابِ تفصیلی --------------------------------------------------
     def _reload_accounts(self) -> None:
@@ -456,7 +284,6 @@ class DetailDimensionsScreen(QWidget):
 
     def _cancel_account_edit(self) -> None:
         self._editing_account_id = None
-        self._selected_parent_id = None
         self.account_form_title.setText("حسابِ تفصیلیِ جدید")
         self.account_status_label.setText("")
         self.account_code_field.clear()
@@ -501,5 +328,7 @@ class DetailDimensionsScreen(QWidget):
     # --- برایِ ناوبری از فهرستِ واحدِ تفصیلی‌ها -----------------------------
     def select_type_and_edit(self, dimension_type_id: int, detail_account_id: int) -> None:
         self.refresh()
-        self._select_type(dimension_type_id)
+        index = self.group_combo.findData(dimension_type_id)
+        if index >= 0:
+            self.group_combo.setCurrentIndex(index)
         self.edit_detail_account(detail_account_id)

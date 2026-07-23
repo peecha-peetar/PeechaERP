@@ -53,7 +53,8 @@ NAV_ITEMS = [
             {"code": "GL_PROJECTS", "label": "پروژه", "screen": "projects"},
             {"code": "GL_JE_LIST", "label": "اسناد حسابداری", "screen": "journal_entries_list"},
             {"code": "GL_JE", "label": "صدور سند جدید", "screen": "journal_entry"},
-            {"code": "GL_DIM", "label": "مراکز هزینه و ابعادِ تفصیلی", "screen": "detail_dimensions"},
+            {"code": "GL_DIM_CONFIG", "label": "پیکربندیِ گروه‌هایِ تفصیلی", "screen": "dimension_group_config"},
+            {"code": "GL_DIM", "label": "تفصیلی‌هایِ گروه‌هایِ ساده", "screen": "detail_dimensions"},
         ],
     },
     {"code": "INV", "label": "انبار و موجودی", "screen": None},
@@ -334,6 +335,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
         from peecha.ui.screens.detail_accounts_list import DetailAccountsListScreen  # noqa: PLC0415
         from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
+        from peecha.ui.screens.dimension_group_config import DimensionGroupConfigScreen  # noqa: PLC0415
         from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen  # noqa: PLC0415
         from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
         from peecha.ui.screens.person_group_screens import (  # noqa: PLC0415
@@ -367,6 +369,7 @@ class MainWindow(QMainWindow):
         self.register_screen("petty_cashes", PettyCashesScreen())
         self.register_screen("cost_centers", CostCentersScreen())
         self.register_screen("projects", ProjectsScreen())
+        self.register_screen("dimension_group_config", DimensionGroupConfigScreen())
         self.register_screen("detail_dimensions", DetailDimensionsScreen())
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
         self.register_screen("journal_entry", JournalEntryScreen())

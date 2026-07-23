@@ -24,6 +24,19 @@ _GROUP_SCREEN_BY_PERSON_CODE = {
     "PERSONNEL": "personnel",
 }
 
+# طبقِ درخواستِ صریح: ۷ نوعِ «فرمِ خاص» صفحه‌ی اختصاصیِ خودشان را دارند —
+# کلیک روی ردیفِ آن‌ها در فهرستِ واحد باید به همان صفحه برود، نه صفحه‌ی
+# عمومیِ گروه‌هایِ «ساده» (GL_DIM).
+_NAV_CODE_BY_DIMENSION_CODE = {
+    "INVENTORY_ITEM": "GL_INVENTORY_ITEMS",
+    "FIXED_ASSET": "GL_FIXED_ASSETS",
+    "BANK_ACCOUNT": "GL_BANK_ACCOUNTS",
+    "CASH_BOX": "GL_CASH_BOXES",
+    "PETTY_CASH": "GL_PETTY_CASHES",
+    "COST_CENTER": "GL_COST_CENTERS",
+    "PROJECT": "GL_PROJECTS",
+}
+
 _COLUMNS = ["وضعیت", "نام", "کد", "سطح", "نوعِ تفصیلی"]
 
 
@@ -85,24 +98,29 @@ class DetailAccountsListScreen(QWidget):
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code))
+                item.setData(Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code, e.group_name))
                 self.table.setItem(row_index, col_index, item)
 
     def _on_row_clicked(self, row: int, _column: int) -> None:
-        dimension_type_id, detail_account_id, person_group_code = self.table.item(row, 0).data(Qt.UserRole)
-        self.open_entry(dimension_type_id, detail_account_id, person_group_code)
+        dimension_type_id, detail_account_id, person_group_code, group_name = self.table.item(row, 0).data(Qt.UserRole)
+        self.open_entry(dimension_type_id, detail_account_id, person_group_code, group_name)
 
-    def open_entry(self, dimension_type_id: int, detail_account_id: int, person_group_code: str | None) -> None:
+    def open_entry(
+        self, dimension_type_id: int, detail_account_id: int, person_group_code: str | None, group_name: str = ""
+    ) -> None:
         target_code = _GROUP_SCREEN_BY_PERSON_CODE.get(person_group_code or "")
-        nav_code = {
-            "customers": "GL_CUSTOMERS",
-            "suppliers": "GL_SUPPLIERS",
-            "personnel": "GL_PERSONNEL",
-        }.get(target_code, "GL_DIM")
-
         if target_code is not None:
+            nav_code = {"customers": "GL_CUSTOMERS", "suppliers": "GL_SUPPLIERS", "personnel": "GL_PERSONNEL"}[target_code]
             self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_person(detail_account_id))
-        else:
+            return
+
+        specialized_nav_code = _NAV_CODE_BY_DIMENSION_CODE.get(group_name)
+        if specialized_nav_code is not None:
             self._main_window.open_screen(
-                nav_code, then=lambda screen: screen.select_type_and_edit(dimension_type_id, detail_account_id)
+                specialized_nav_code, then=lambda screen: screen.edit_detail_account(detail_account_id)
             )
+            return
+
+        self._main_window.open_screen(
+            "GL_DIM", then=lambda screen: screen.select_type_and_edit(dimension_type_id, detail_account_id)
+        )
