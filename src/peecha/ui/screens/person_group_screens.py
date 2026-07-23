@@ -2,7 +2,15 @@
 
 یک کلاسِ پایه (فهرست + فرمِ ساخت/ویرایش/حذف) + سه زیرکلاسِ نازک که فقط
 FIELD_SPECS و متدهایِ سرویسِ خودشان را مشخص می‌کنند — دقیقاً همان الگویِ
-Kivy (PersonGroupScreenBase)."""
+Kivy (PersonGroupScreenBase).
+
+طبقِ درخواستِ صریح: «همه گروه‌های تفصیلی حتی مشتری/تامین‌کننده/پرسنل هم
+بتوان فیلدهای اختصاصیِ خودشان را داشت» — فیلدهایِ هاردکدِ بالا (FIELD_SPECS،
+customer_details/...) دست‌نخورده می‌مانند؛ یک بخشِ فیلدهایِ اختصاصیِ
+عمومی/قابل‌پیکربندی (همان مکانیزمِ acc.detail_group_fields که کالا/بانک/...
+دارند، حالا با person_group_id مربوط به هرکدام از این سه گروه) به‌عنوانِ
+لایه‌ی افزودنی زیرِ فرم اضافه شده — مقدارشان در DetailAccount.extra_fields
+ذخیره می‌شود."""
 
 from __future__ import annotations
 
@@ -50,6 +58,7 @@ _COLUMNS = ["وضعیت", "نام", "کد"]
 
 class PersonGroupScreenBase(QWidget):
     FIELD_SPECS: tuple[tuple[str, str], ...] = ()  # (field_key, kind) — kind: text/decimal/date
+    GROUP_CODE: str = ""  # CUSTOMER/SUPPLIER/PERSONNEL — برایِ حلِ person_group_id
     EMPTY_TEXT = ""
 
     def __init__(self) -> None:
@@ -57,6 +66,9 @@ class PersonGroupScreenBase(QWidget):
         self._rows_by_id: dict[int, dict] = {}
         self._editing_id: int | None = None
         self._extra_widgets: dict[str, QWidget] = {}
+        self._dimension_type_id: int | None = None
+        self._person_group_id: int | None = None
+        self._custom_field_widgets: dict[str, tuple[QWidget, str]] = {}
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
@@ -135,6 +147,12 @@ class PersonGroupScreenBase(QWidget):
 
         layout.addLayout(grid)
 
+        layout.addWidget(QLabel("فیلدهایِ اختصاصیِ تعریف‌شده"))
+        self.custom_fields_container = QVBoxLayout()
+        custom_fields_widget = QWidget()
+        custom_fields_widget.setLayout(self.custom_fields_container)
+        layout.addWidget(custom_fields_widget)
+
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
@@ -166,10 +184,12 @@ class PersonGroupScreenBase(QWidget):
     def _list_rows(self, company_id: int) -> list[dict]:
         raise NotImplementedError
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict) -> None:
+    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
         raise NotImplementedError
 
-    def _update(self, detail_account_id: int, company_id: int, code: str, name: str, is_active: bool, extra: dict) -> None:
+    def _update(
+        self, detail_account_id: int, company_id: int, code: str, name: str, is_active: bool, extra: dict, custom_fields: dict
+    ) -> None:
         raise NotImplementedError
 
     def _delete_row(self, detail_account_id: int, company_id: int) -> None:
@@ -182,6 +202,12 @@ class PersonGroupScreenBase(QWidget):
     def refresh(self) -> None:
         self.status_label.setText("")
         company_id = self._company_id()
+        if company_id is not None:
+            self._dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+            self._person_group_id = dimensions_service.get_person_group_id(company_id, self.GROUP_CODE)
+        else:
+            self._dimension_type_id = None
+            self._person_group_id = None
         rows = self._list_rows(company_id) if company_id is not None else []
         self._rows_by_id = {r["detail_account_id"]: r for r in rows}
         self.table.setRowCount(len(rows))
@@ -222,6 +248,7 @@ class PersonGroupScreenBase(QWidget):
                     widget.setDate(widget.minimumDate())
             else:
                 widget.setText(str(value) if value is not None else "")
+        self._render_custom_fields(row.get("custom_fields"))
         self.save_button.setText("ذخیره‌ی تغییرات")
         self.cancel_button.setVisible(True)
         self.delete_button.setVisible(True)
@@ -243,10 +270,68 @@ class PersonGroupScreenBase(QWidget):
                 widget.setDate(widget.minimumDate())
             else:
                 widget.clear()
+        self._render_custom_fields()
         self.save_button.setText("افزودن")
         self.cancel_button.setVisible(False)
         self.delete_button.setVisible(False)
         self.table.clearSelection()
+
+    def _render_custom_fields(self, values: dict | None = None) -> None:
+        while self.custom_fields_container.count():
+            child = self.custom_fields_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._custom_field_widgets = {}
+        if self._dimension_type_id is None or self._person_group_id is None:
+            return
+        for field_def in dimensions_service.list_group_fields(self._dimension_type_id, self._person_group_id):
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(QLabel(field_def.label))
+            widget: QWidget
+            if field_def.kind == "boolean":
+                widget = QCheckBox()
+            elif field_def.kind == "decimal":
+                widget = QDoubleSpinBox()
+                widget.setRange(0, 10_000_000_000)
+                widget.setDecimals(2)
+            elif field_def.kind == "date":
+                widget = QDateEdit()
+                widget.setCalendarPopup(True)
+                widget.setSpecialValueText(" ")
+                widget.setDate(widget.minimumDate())
+            else:
+                widget = QLineEdit()
+            row_layout.addWidget(widget)
+            self.custom_fields_container.addWidget(row)
+            self._custom_field_widgets[field_def.field_key] = (widget, field_def.kind)
+
+            if values is not None and field_def.field_key in values and values[field_def.field_key] is not None:
+                value = values[field_def.field_key]
+                if field_def.kind == "boolean":
+                    widget.setChecked(bool(value))
+                elif field_def.kind == "decimal":
+                    widget.setValue(float(value))
+                elif field_def.kind == "date" and isinstance(value, datetime.date):
+                    widget.setDate(value)
+                else:
+                    widget.setText(str(value))
+
+    def _collect_custom_fields(self) -> dict:
+        result: dict = {}
+        for key, (widget, kind) in self._custom_field_widgets.items():
+            if kind == "boolean":
+                result[key] = widget.isChecked()
+            elif kind == "decimal":
+                result[key] = float(widget.value()) if widget.value() else None
+            elif kind == "date":
+                qdate = widget.date()
+                result[key] = None if qdate == widget.minimumDate() else datetime.date(qdate.year(), qdate.month(), qdate.day())
+            else:
+                text = widget.text().strip()
+                result[key] = text or None
+        return result
 
     def _collect_extra_fields(self) -> dict:
         extra: dict = {}
@@ -278,11 +363,14 @@ class PersonGroupScreenBase(QWidget):
             return
 
         extra = self._collect_extra_fields()
+        custom_fields = self._collect_custom_fields()
         try:
             if self._editing_id is not None:
-                self._update(self._editing_id, company_id, code, name, self.active_checkbox.isChecked(), extra)
+                self._update(
+                    self._editing_id, company_id, code, name, self.active_checkbox.isChecked(), extra, custom_fields
+                )
             else:
-                self._create(company_id, code, name, extra)
+                self._create(company_id, code, name, extra, custom_fields)
         except Exception as exc:  # noqa: BLE001 - نمایش هر خطای دیتابیس به کاربر
             self.status_label.setText(f"خطا: {exc}")
             return
@@ -328,6 +416,7 @@ _PERSONNEL_FIELD_SPECS = (
 
 class CustomersScreen(PersonGroupScreenBase):
     FIELD_SPECS = _CUSTOMER_FIELD_SPECS
+    GROUP_CODE = dimensions_service.CUSTOMER_GROUP_CODE
     EMPTY_TEXT = "هنوز مشتری‌ای تعریف نشده است."
 
     def __init__(self) -> None:
@@ -337,13 +426,13 @@ class CustomersScreen(PersonGroupScreenBase):
     def _list_rows(self, company_id: int) -> list[dict]:
         return dimensions_service.list_customers(company_id)
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict) -> None:
-        dimensions_service.create_customer(company_id=company_id, code=code, name=name, **extra)
+    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
+        dimensions_service.create_customer(company_id=company_id, code=code, name=name, custom_fields=custom_fields, **extra)
 
-    def _update(self, detail_account_id, company_id, code, name, is_active, extra) -> None:
+    def _update(self, detail_account_id, company_id, code, name, is_active, extra, custom_fields) -> None:
         dimensions_service.update_customer(
             detail_account_id=detail_account_id, company_id=company_id, code=code, name=name,
-            is_active=is_active, **extra,
+            is_active=is_active, custom_fields=custom_fields, **extra,
         )
 
     def _delete_row(self, detail_account_id: int, company_id: int) -> None:
@@ -356,6 +445,7 @@ class CustomersScreen(PersonGroupScreenBase):
 
 class SuppliersScreen(PersonGroupScreenBase):
     FIELD_SPECS = _SUPPLIER_FIELD_SPECS
+    GROUP_CODE = dimensions_service.SUPPLIER_GROUP_CODE
     EMPTY_TEXT = "هنوز تامین‌کننده‌ای تعریف نشده است."
 
     def __init__(self) -> None:
@@ -365,13 +455,13 @@ class SuppliersScreen(PersonGroupScreenBase):
     def _list_rows(self, company_id: int) -> list[dict]:
         return dimensions_service.list_suppliers(company_id)
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict) -> None:
-        dimensions_service.create_supplier(company_id=company_id, code=code, name=name, **extra)
+    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
+        dimensions_service.create_supplier(company_id=company_id, code=code, name=name, custom_fields=custom_fields, **extra)
 
-    def _update(self, detail_account_id, company_id, code, name, is_active, extra) -> None:
+    def _update(self, detail_account_id, company_id, code, name, is_active, extra, custom_fields) -> None:
         dimensions_service.update_supplier(
             detail_account_id=detail_account_id, company_id=company_id, code=code, name=name,
-            is_active=is_active, **extra,
+            is_active=is_active, custom_fields=custom_fields, **extra,
         )
 
     def _delete_row(self, detail_account_id: int, company_id: int) -> None:
@@ -383,6 +473,7 @@ class SuppliersScreen(PersonGroupScreenBase):
 
 class PersonnelScreen(PersonGroupScreenBase):
     FIELD_SPECS = _PERSONNEL_FIELD_SPECS
+    GROUP_CODE = dimensions_service.PERSONNEL_GROUP_CODE
     EMPTY_TEXT = "هنوز پرسنلی تعریف نشده است."
 
     def __init__(self) -> None:
@@ -392,13 +483,13 @@ class PersonnelScreen(PersonGroupScreenBase):
     def _list_rows(self, company_id: int) -> list[dict]:
         return dimensions_service.list_personnel(company_id)
 
-    def _create(self, company_id: int, code: str, name: str, extra: dict) -> None:
-        dimensions_service.create_personnel(company_id=company_id, code=code, name=name, **extra)
+    def _create(self, company_id: int, code: str, name: str, extra: dict, custom_fields: dict) -> None:
+        dimensions_service.create_personnel(company_id=company_id, code=code, name=name, custom_fields=custom_fields, **extra)
 
-    def _update(self, detail_account_id, company_id, code, name, is_active, extra) -> None:
+    def _update(self, detail_account_id, company_id, code, name, is_active, extra, custom_fields) -> None:
         dimensions_service.update_personnel(
             detail_account_id=detail_account_id, company_id=company_id, code=code, name=name,
-            is_active=is_active, **extra,
+            is_active=is_active, custom_fields=custom_fields, **extra,
         )
 
     def _delete_row(self, detail_account_id: int, company_id: int) -> None:

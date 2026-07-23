@@ -171,6 +171,9 @@ class DetailGroupLevel(Base):
     dimension_type_id: Mapped[int] = mapped_column(
         ForeignKey("acc.detail_dimension_types.dimension_type_id"), primary_key=True
     )
+    # ۰ = بدونِ محدودیت به گروهِ خاصِ اشخاص؛ فقط برایِ نوع‌بُعدِ PERSON مقداری
+    # غیرِصفر می‌گیرد تا مشتری/تامین‌کننده/پرسنل مستقل از هم پیکربندی شوند.
+    person_group_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=0)
     level_no: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     code_length: Mapped[int] = mapped_column(SmallInteger)
     range_from: Mapped[int | None] = mapped_column(BigInteger)
@@ -184,10 +187,14 @@ class DetailGroupField(Base):
     کلید=field_key) ذخیره می‌شود."""
 
     __tablename__ = "detail_group_fields"
-    __table_args__ = (UniqueConstraint("dimension_type_id", "field_key"), {"schema": "acc"})
+    __table_args__ = (
+        UniqueConstraint("dimension_type_id", "person_group_id", "field_key"),
+        {"schema": "acc"},
+    )
 
     detail_group_field_id: Mapped[int] = mapped_column(primary_key=True)
     dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
+    person_group_id: Mapped[int] = mapped_column(SmallInteger, default=0)
     field_key: Mapped[str] = mapped_column(String(50))
     label: Mapped[str] = mapped_column(String(100))
     kind: Mapped[str] = mapped_column(String(20))  # text | decimal | date | boolean

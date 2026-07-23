@@ -190,11 +190,17 @@ def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[Detail
         return [_to_detail_account_row(r, full_codes) for r in rows]
 
 
-def _validate_code_length(session, dimension_type_id: int, level_no: int, segment_code: str) -> None:
+def _validate_code_length(
+    session, dimension_type_id: int, level_no: int, segment_code: str, person_group_id: int = 0
+) -> None:
     """اگر این گروه برایِ این سطح طولِ کد/بازه‌ی از-تا پیکربندی کرده باشد
     (اختیاری، acc.detail_group_levels)، کدِ واردشده باید دقیقاً همان طول و
-    (اگر بازه هم تنظیم شده) رقمی و در همان بازه باشد."""
-    level_config = session.get(DetailGroupLevel, (dimension_type_id, level_no))
+    (اگر بازه هم تنظیم شده) رقمی و در همان بازه باشد.
+
+    person_group_id=0 یعنی «بدونِ محدودیت به گروهِ خاصِ اشخاص» (همه‌ی
+    گروه‌ها بجز مشتری/تامین‌کننده/پرسنل)؛ آن سه گروه شناسه‌ی واقعیِ
+    person_group_id خودشان را می‌دهند تا مستقل از هم اعتبارسنجی شوند."""
+    level_config = session.get(DetailGroupLevel, (dimension_type_id, person_group_id, level_no))
     if level_config is None:
         return
     if len(segment_code) != level_config.code_length:
@@ -341,11 +347,14 @@ class GroupLevelRow:
     range_to: int | None = None
 
 
-def list_group_levels(dimension_type_id: int) -> list[GroupLevelRow]:
+def list_group_levels(dimension_type_id: int, person_group_id: int = 0) -> list[GroupLevelRow]:
     with new_session() as session:
         rows = session.scalars(
             select(DetailGroupLevel)
-            .where(DetailGroupLevel.dimension_type_id == dimension_type_id)
+            .where(
+                DetailGroupLevel.dimension_type_id == dimension_type_id,
+                DetailGroupLevel.person_group_id == person_group_id,
+            )
             .order_by(DetailGroupLevel.level_no)
         ).all()
         return [
@@ -354,10 +363,14 @@ def list_group_levels(dimension_type_id: int) -> list[GroupLevelRow]:
         ]
 
 
-def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, dict]) -> None:
+def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, dict], person_group_id: int = 0) -> None:
     """جایگزینیِ کاملِ پیکربندیِ سطح‌های این گروه — levels یعنی
     {شماره‌ی سطح (۱ تا ۴): {"code_length": ..., "range_from": ..|None,
     "range_to": ..|None}}؛ سطحی که در دیکشنری نباشد بدونِ محدودیت می‌ماند.
+
+    person_group_id غیرِصفر یعنی این پیکربندی مخصوصِ یکی از زیرگروه‌هایِ
+    اشخاص (مشتری/تامین‌کننده/پرسنل) است — مستقل از بقیه‌یِ زیرگروه‌ها و از
+    پیکربندیِ عمومیِ (person_group_id=0) همان دیمنشن‌تایپ.
 
     طبقِ درخواستِ صریح: بعدِ اولین سندِ شرکت، این تنظیمات دیگر قابلِ‌تغییر
     نیستند (تا کدهایِ ثبت‌شده‌ی موجود ناسازگار نشوند)."""
@@ -375,7 +388,10 @@ def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, 
             raise ValueError("این شرکت سند دارد؛ تنظیماتِ کدینگِ تفصیلی دیگر قابلِ‌تغییر نیست.")
 
         session.execute(
-            DetailGroupLevel.__table__.delete().where(DetailGroupLevel.dimension_type_id == dimension_type_id)
+            DetailGroupLevel.__table__.delete().where(
+                DetailGroupLevel.dimension_type_id == dimension_type_id,
+                DetailGroupLevel.person_group_id == person_group_id,
+            )
         )
         for level_no, config in levels.items():
             if not (1 <= level_no <= MAX_DETAIL_LEVEL):
@@ -390,6 +406,7 @@ def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, 
             session.add(
                 DetailGroupLevel(
                     dimension_type_id=dimension_type_id,
+                    person_group_id=person_group_id,
                     level_no=level_no,
                     code_length=code_length,
                     range_from=range_from,
@@ -417,11 +434,14 @@ class GroupFieldRow:
     sort_order: int
 
 
-def list_group_fields(dimension_type_id: int) -> list[GroupFieldRow]:
+def list_group_fields(dimension_type_id: int, person_group_id: int = 0) -> list[GroupFieldRow]:
     with new_session() as session:
         rows = session.scalars(
             select(DetailGroupField)
-            .where(DetailGroupField.dimension_type_id == dimension_type_id)
+            .where(
+                DetailGroupField.dimension_type_id == dimension_type_id,
+                DetailGroupField.person_group_id == person_group_id,
+            )
             .order_by(DetailGroupField.sort_order, DetailGroupField.detail_group_field_id)
         ).all()
         return [
@@ -437,16 +457,22 @@ def list_group_fields(dimension_type_id: int) -> list[GroupFieldRow]:
         ]
 
 
-def set_group_fields(dimension_type_id: int, company_id: int, fields: list[dict]) -> None:
+def set_group_fields(dimension_type_id: int, company_id: int, fields: list[dict], person_group_id: int = 0) -> None:
     """جایگزینیِ کاملِ فهرستِ فیلدهای اختصاصیِ این گروه — هر آیتمِ fields:
-    {"field_key": ..., "label": ..., "kind": "text"|"decimal"|"date"|"boolean", "is_required": bool}."""
+    {"field_key": ..., "label": ..., "kind": "text"|"decimal"|"date"|"boolean", "is_required": bool}.
+
+    person_group_id غیرِصفر یعنی این فیلدها فقط مخصوصِ یکی از زیرگروه‌هایِ
+    اشخاص‌اند (مثلاً فیلدِ اختصاصیِ تازه‌ای فقط برایِ مشتری، نه تامین‌کننده)."""
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
             raise ValueError("گروهِ تفصیلی نامعتبر است.")
 
         session.execute(
-            DetailGroupField.__table__.delete().where(DetailGroupField.dimension_type_id == dimension_type_id)
+            DetailGroupField.__table__.delete().where(
+                DetailGroupField.dimension_type_id == dimension_type_id,
+                DetailGroupField.person_group_id == person_group_id,
+            )
         )
         for i, f in enumerate(fields):
             kind = f["kind"]
@@ -458,6 +484,7 @@ def set_group_fields(dimension_type_id: int, company_id: int, fields: list[dict]
             session.add(
                 DetailGroupField(
                     dimension_type_id=dimension_type_id,
+                    person_group_id=person_group_id,
                     field_key=field_key,
                     label=f["label"].strip(),
                     kind=kind,
@@ -797,6 +824,9 @@ def _group_row_to_person_row(
         "code": detail_account.code,
         "name": detail_account.name,
         "is_active": detail_account.is_active,
+        # فیلدهایِ اختصاصیِ عمومی/قابلِ‌پیکربندی (DetailGroupField)، جدا از
+        # فیلدهایِ هاردکدِ SQL بالا — برایِ پیش‌پر کردنِ فرمِ ویرایش.
+        "custom_fields": dict(detail_account.extra_fields or {}),
     }
     for field_name in extra_field_names:
         row[field_name] = getattr(extra, field_name, None) if extra is not None else None
@@ -835,21 +865,26 @@ def _create_group_person(
     code: str,
     name: str,
     detail_model,
-    extra_fields: dict,
+    model_fields: dict,
+    custom_fields: dict | None = None,
 ) -> int:
     with new_session() as session:
         dimension_type_id = ensure_person_dimension(session, company_id)
         person_group_id = ensure_person_groups(session, company_id)[group_code]
+
+        _validate_code_length(session, dimension_type_id, 1, code.strip(), person_group_id=person_group_id)
+
         detail_account = DetailAccount(
             company_id=company_id,
             dimension_type_id=dimension_type_id,
             person_group_id=person_group_id,
             code=code.strip(),
             name=name.strip() or None,
+            extra_fields=dict(custom_fields or {}),
         )
         session.add(detail_account)
         session.flush()
-        session.add(detail_model(detail_account_id=detail_account.detail_account_id, **extra_fields))
+        session.add(detail_model(detail_account_id=detail_account.detail_account_id, **model_fields))
         session.commit()
         return detail_account.detail_account_id
 
@@ -861,21 +896,33 @@ def _update_group_person(
     name: str,
     is_active: bool,
     detail_model,
-    extra_fields: dict,
+    model_fields: dict,
+    custom_fields: dict | None = None,
 ) -> None:
     with new_session() as session:
         detail_account = session.get(DetailAccount, detail_account_id)
         if detail_account is None or detail_account.company_id != company_id:
             raise ValueError("شخص نامعتبر است.")
+
+        _validate_code_length(
+            session,
+            detail_account.dimension_type_id,
+            detail_account.level_no,
+            code.strip(),
+            person_group_id=detail_account.person_group_id or 0,
+        )
+
         detail_account.code = code.strip()
         detail_account.name = name.strip() or None
         detail_account.is_active = is_active
+        if custom_fields is not None:
+            detail_account.extra_fields = dict(custom_fields)
 
         extra = session.get(detail_model, detail_account_id)
         if extra is None:
-            session.add(detail_model(detail_account_id=detail_account_id, **extra_fields))
+            session.add(detail_model(detail_account_id=detail_account_id, **model_fields))
         else:
-            for field_name, value in extra_fields.items():
+            for field_name, value in model_fields.items():
                 setattr(extra, field_name, value)
         session.commit()
 
@@ -919,12 +966,20 @@ def list_customers(company_id: int) -> list[dict]:
     return _list_group_persons(company_id, CUSTOMER_GROUP_CODE, CustomerDetail, _CUSTOMER_FIELDS)
 
 
-def create_customer(company_id: int, code: str, name: str, **extra_fields) -> int:
-    return _create_group_person(company_id, CUSTOMER_GROUP_CODE, code, name, CustomerDetail, extra_fields)
+def create_customer(company_id: int, code: str, name: str, custom_fields: dict | None = None, **extra_fields) -> int:
+    return _create_group_person(company_id, CUSTOMER_GROUP_CODE, code, name, CustomerDetail, extra_fields, custom_fields)
 
 
-def update_customer(detail_account_id: int, company_id: int, code: str, name: str, is_active: bool, **extra_fields) -> None:
-    _update_group_person(detail_account_id, company_id, code, name, is_active, CustomerDetail, extra_fields)
+def update_customer(
+    detail_account_id: int,
+    company_id: int,
+    code: str,
+    name: str,
+    is_active: bool,
+    custom_fields: dict | None = None,
+    **extra_fields,
+) -> None:
+    _update_group_person(detail_account_id, company_id, code, name, is_active, CustomerDetail, extra_fields, custom_fields)
 
 
 def delete_customer(detail_account_id: int, company_id: int) -> None:
@@ -935,12 +990,20 @@ def list_suppliers(company_id: int) -> list[dict]:
     return _list_group_persons(company_id, SUPPLIER_GROUP_CODE, SupplierDetail, _SUPPLIER_FIELDS)
 
 
-def create_supplier(company_id: int, code: str, name: str, **extra_fields) -> int:
-    return _create_group_person(company_id, SUPPLIER_GROUP_CODE, code, name, SupplierDetail, extra_fields)
+def create_supplier(company_id: int, code: str, name: str, custom_fields: dict | None = None, **extra_fields) -> int:
+    return _create_group_person(company_id, SUPPLIER_GROUP_CODE, code, name, SupplierDetail, extra_fields, custom_fields)
 
 
-def update_supplier(detail_account_id: int, company_id: int, code: str, name: str, is_active: bool, **extra_fields) -> None:
-    _update_group_person(detail_account_id, company_id, code, name, is_active, SupplierDetail, extra_fields)
+def update_supplier(
+    detail_account_id: int,
+    company_id: int,
+    code: str,
+    name: str,
+    is_active: bool,
+    custom_fields: dict | None = None,
+    **extra_fields,
+) -> None:
+    _update_group_person(detail_account_id, company_id, code, name, is_active, SupplierDetail, extra_fields, custom_fields)
 
 
 def delete_supplier(detail_account_id: int, company_id: int) -> None:
@@ -951,12 +1014,20 @@ def list_personnel(company_id: int) -> list[dict]:
     return _list_group_persons(company_id, PERSONNEL_GROUP_CODE, PersonnelDetail, _PERSONNEL_FIELDS)
 
 
-def create_personnel(company_id: int, code: str, name: str, **extra_fields) -> int:
-    return _create_group_person(company_id, PERSONNEL_GROUP_CODE, code, name, PersonnelDetail, extra_fields)
+def create_personnel(company_id: int, code: str, name: str, custom_fields: dict | None = None, **extra_fields) -> int:
+    return _create_group_person(company_id, PERSONNEL_GROUP_CODE, code, name, PersonnelDetail, extra_fields, custom_fields)
 
 
-def update_personnel(detail_account_id: int, company_id: int, code: str, name: str, is_active: bool, **extra_fields) -> None:
-    _update_group_person(detail_account_id, company_id, code, name, is_active, PersonnelDetail, extra_fields)
+def update_personnel(
+    detail_account_id: int,
+    company_id: int,
+    code: str,
+    name: str,
+    is_active: bool,
+    custom_fields: dict | None = None,
+    **extra_fields,
+) -> None:
+    _update_group_person(detail_account_id, company_id, code, name, is_active, PersonnelDetail, extra_fields, custom_fields)
 
 
 def delete_personnel(detail_account_id: int, company_id: int) -> None:

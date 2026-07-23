@@ -7,7 +7,18 @@
 سطوح این‌جا آمده. گروه‌هایِ «فرمِ خاص» (کالا/دارایی‌ثابت/بانک/صندوق/
 تنخواه/مرکزِ هزینه/پروژه) هم این‌جا قابلِ‌پیکربندی‌اند (چون سطوح/فیلدهایِ
 اختصاصیِ آن‌ها هم از همین acc.detail_group_levels/detail_group_fields
-می‌آید)، فقط ثبتِ خودِ حساب‌هایشان در صفحه‌ی اختصاصیِ خودشان انجام می‌شود."""
+می‌آید)، فقط ثبتِ خودِ حساب‌هایشان در صفحه‌ی اختصاصیِ خودشان انجام می‌شود.
+
+طبقِ درخواستِ صریحِ بعدی: «همه گروه‌های تفصیلی حتی مشتری/تامین‌کننده/
+پرسنل» هم باید این‌جا قابلِ‌پیکربندی باشند. مشکل: این سه، برخلافِ بقیه،
+یک نوع‌بُعدِ مستقل نیستند — هرسه زیرِ همان نوع‌بُعدِ سیستمیِ PERSON‌اند و
+فقط با person_group_id از هم جدا می‌شوند (acc.person_groups). پس هر
+آیتمِ این فهرست حالا یک سه‌تایی نگه می‌دارد: (dimension_type_id,
+person_group_id, برچسبِ نمایشی) — برایِ گروه‌هایِ معمولی person_group_id
+همیشه ۰ (بدونِ محدودیت) است؛ برایِ مشتری/تامین‌کننده/پرسنل، همه
+dimension_type_id یکسان (PERSON) ولی person_group_id واقعیِ خودشان را
+دارند تا acc.detail_group_levels/detail_group_fields (که با ستونِ تازه‌ی
+person_group_id کلید می‌خورند) مستقل از هم پیکربندی شوند."""
 
 from __future__ import annotations
 
@@ -33,6 +44,12 @@ from peecha.services import journal_entries as je_service
 
 _FIELD_KIND_OPTIONS = [("text", "متن"), ("decimal", "عدد اعشاری"), ("date", "تاریخ"), ("boolean", "بله/خیر")]
 _LEVEL_COUNT = 4
+
+_PERSON_GROUP_LIST_FUNCS = {
+    dimensions_service.CUSTOMER_GROUP_CODE: dimensions_service.list_customers,
+    dimensions_service.SUPPLIER_GROUP_CODE: dimensions_service.list_suppliers,
+    dimensions_service.PERSONNEL_GROUP_CODE: dimensions_service.list_personnel,
+}
 
 
 class _GroupFieldRowWidget(QWidget):
@@ -85,6 +102,7 @@ class DimensionGroupConfigScreen(QWidget):
         super().__init__()
         self._types: list[dimensions_service.DimensionTypeRow] = []
         self._selected_type_id: int | None = None
+        self._selected_person_group_id: int = 0
         self._field_rows: list[_GroupFieldRowWidget] = []
 
         outer = QHBoxLayout(self)
@@ -105,7 +123,9 @@ class DimensionGroupConfigScreen(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        hint = QLabel("کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکزِ هزینه/پروژه + گروه‌هایِ ساده‌یِ دلخواه.")
+        hint = QLabel(
+            "کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکزِ هزینه/پروژه + مشتری/تامین‌کننده/پرسنل + گروه‌هایِ ساده‌یِ دلخواه."
+        )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -207,8 +227,18 @@ class DimensionGroupConfigScreen(QWidget):
         for t in self._types:
             label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(t.code, t.code)
             item = QListWidgetItem(f"{label} ({t.detail_account_count})")
-            item.setData(Qt.UserRole, t.dimension_type_id)
+            item.setData(Qt.UserRole, (t.dimension_type_id, 0, label))
             self.types_list.addItem(item)
+
+        if company_id is not None:
+            person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+            for group in dimensions_service.list_person_groups(company_id):
+                list_func = _PERSON_GROUP_LIST_FUNCS.get(group.code)
+                count = len(list_func(company_id)) if list_func else 0
+                item = QListWidgetItem(f"{group.name} ({count})")
+                item.setData(Qt.UserRole, (person_dimension_type_id, group.person_group_id, group.name))
+                self.types_list.addItem(item)
+
         if self._selected_type_id is None:
             self.config_panel.setEnabled(False)
 
@@ -228,17 +258,23 @@ class DimensionGroupConfigScreen(QWidget):
         self.type_status_label.setText("")
         self.new_type_code_field.clear()
         self.refresh()
-        self._select_type(new_type.dimension_type_id)
+        label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(new_type.code, new_type.code)
+        self._select_type(new_type.dimension_type_id, 0, label)
 
     def _on_type_selected(self, item: QListWidgetItem) -> None:
-        self._select_type(item.data(Qt.UserRole))
+        dimension_type_id, person_group_id, label = item.data(Qt.UserRole)
+        self._select_type(dimension_type_id, person_group_id, label)
 
-    def _select_type(self, dimension_type_id: int) -> None:
+    def _select_type(self, dimension_type_id: int, person_group_id: int = 0, label: str | None = None) -> None:
         self._selected_type_id = dimension_type_id
-        dim_type = next((t for t in self._types if t.dimension_type_id == dimension_type_id), None)
-        if dim_type is None:
-            return
-        label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim_type.code, dim_type.code)
+        self._selected_person_group_id = person_group_id
+        if label is None:
+            dim_type = next((t for t in self._types if t.dimension_type_id == dimension_type_id), None)
+            label = (
+                dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim_type.code, dim_type.code)
+                if dim_type is not None
+                else str(dimension_type_id)
+            )
         self.config_title.setText(f"پیکربندیِ گروهِ «{label}»")
         self.config_panel.setEnabled(True)
         self._load_levels()
@@ -257,7 +293,10 @@ class DimensionGroupConfigScreen(QWidget):
 
     # --- سطوح ------------------------------------------------------------
     def _load_levels(self) -> None:
-        rows = {row.level_no: row for row in dimensions_service.list_group_levels(self._selected_type_id)}
+        rows = {
+            row.level_no: row
+            for row in dimensions_service.list_group_levels(self._selected_type_id, self._selected_person_group_id)
+        }
         for level_no, (code_length, range_from, range_to) in self._level_widgets.items():
             row = rows.get(level_no)
             code_length.setValue(row.code_length if row else 0)
@@ -278,7 +317,9 @@ class DimensionGroupConfigScreen(QWidget):
             if code_length.value() > 0
         }
         try:
-            dimensions_service.set_group_levels(self._selected_type_id, company_id, levels)
+            dimensions_service.set_group_levels(
+                self._selected_type_id, company_id, levels, self._selected_person_group_id
+            )
         except ValueError as exc:
             self.type_status_label.setText(str(exc))
             return
@@ -291,7 +332,7 @@ class DimensionGroupConfigScreen(QWidget):
             if child.widget():
                 child.widget().deleteLater()
         self._field_rows = []
-        for field_row in dimensions_service.list_group_fields(self._selected_type_id):
+        for field_row in dimensions_service.list_group_fields(self._selected_type_id, self._selected_person_group_id):
             self._add_field_row(field_row)
 
     def _add_field_row(self, initial: dimensions_service.GroupFieldRow | None = None) -> None:
@@ -314,7 +355,9 @@ class DimensionGroupConfigScreen(QWidget):
                 self.type_status_label.setText("کلید و عنوانِ همه‌ی فیلدها را پر کنید.")
                 return
         try:
-            dimensions_service.set_group_fields(self._selected_type_id, company_id, fields)
+            dimensions_service.set_group_fields(
+                self._selected_type_id, company_id, fields, self._selected_person_group_id
+            )
         except ValueError as exc:
             self.type_status_label.setText(str(exc))
             return
