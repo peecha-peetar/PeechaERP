@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -108,5 +109,39 @@ def test_connection(config: DatabaseConfig) -> tuple[bool, str]:
             conn.execute(text("SELECT 1"))
         engine.dispose()
         return True, "اتصال موفق بود."
+    except SQLAlchemyError as exc:
+        return False, str(exc.__cause__ or exc)
+
+
+def create_database_if_missing(config: DatabaseConfig) -> tuple[bool, str]:
+    """اگر خودِ دیتابیس (نه فقط جدول‌هایش) وجود نداشته باشد (مثلاً کاربر
+    کاملاً drop‌اش کرده)، همین‌جا با اتصال به دیتابیسِ نگهداریِ postgres
+    می‌سازدش. برخلافِ apply_pending_schema_files (که فقط جدول‌هایِ داخلِ
+    یک دیتابیسِ از-قبل-موجود را می‌سازد)، CREATE DATABASE در پستگرس باید
+    خارج از تراکنش اجرا شود — به همین دلیل isolation_level=AUTOCOMMIT."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.exc import SQLAlchemyError
+
+    # CREATE DATABASE نمی‌تواند پارامتری باشد (SQLAlchemy فقط برایِ مقادیر
+    # جای‌گذاری می‌کند، نه شناسه‌ها) — به‌جایِ درج مستقیم در متنِ SQL، نامِ
+    # دیتابیس را با یک الگویِ شناسه‌ی امن اعتبارسنجی می‌کنیم.
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", config.name):
+        return False, "نامِ دیتابیس باید فقط شاملِ حروفِ لاتین/رقم/زیرخط باشد و با حرف یا زیرخط شروع شود."
+
+    maintenance_config = DatabaseConfig(
+        host=config.host, port=config.port, name="postgres", user=config.user, password=config.password
+    )
+    try:
+        engine = create_engine(maintenance_config.sqlalchemy_url, future=True, isolation_level="AUTOCOMMIT")
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": config.name}
+            ).first()
+            if exists is not None:
+                engine.dispose()
+                return True, "دیتابیس از قبل وجود دارد؛ کاری لازم نبود."
+            conn.execute(text(f'CREATE DATABASE "{config.name}"'))
+        engine.dispose()
+        return True, "دیتابیس با موفقیت ساخته شد."
     except SQLAlchemyError as exc:
         return False, str(exc.__cause__ or exc)
