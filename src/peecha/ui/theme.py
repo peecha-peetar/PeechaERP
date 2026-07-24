@@ -66,6 +66,17 @@ def status_color(status_code: str) -> str:
     return _ROLE_COLORS[role]
 
 
+def set_status_label(label, text: str, *, ok: bool) -> None:
+    """رنگِ سبز/قرمزِ پیامِ موفقیت/خطا را مستقیماً رویِ خودِ ویجت اعمال
+    می‌کند — نه با تغییرِ objectName به «statusOk»/«statusError» (که Qt
+    بعدِ نمایشِ اولیه‌ی ویجت، خودکار رفرش/repolish نمی‌کند و نتیجه‌اش این
+    بود که پیامِ موفقیت هم با همان رنگِ قرمزِ اولیه نمایش داده می‌شد — دقیقاً
+    مثلِ پیامِ خطا، که باعث می‌شد کاربر فکر کند ذخیره‌سازی شکست خورده)."""
+    color = SUCCESS if ok else DANGER
+    label.setStyleSheet(f"color: {color}; font-weight: 600;")
+    label.setText(text)
+
+
 DONUT_COLORS = [ACCENT, SUCCESS, CHART_PURPLE, CHART_ORANGE, WARNING]
 
 # رنگ‌های چرخشیِ آواتار/نشان — برایِ حروفِ اول (کاربر/گروه/...)

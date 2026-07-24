@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
+from peecha.ui import theme
 from peecha.ui.widgets import ZeroPaddedSpinBox
 
 _FIELD_KIND_OPTIONS = [("text", "متن"), ("decimal", "عدد اعشاری"), ("date", "تاریخ"), ("boolean", "بله/خیر")]
@@ -277,7 +278,7 @@ class DimensionGroupConfigScreen(QWidget):
         except ValueError as exc:
             self._show_type_status(str(exc), ok=False)
             return
-        self._show_type_status("", ok=False)
+        self._show_type_status("گروهِ تازه ایجاد شد.", ok=True)
         self.new_type_code_field.clear()
         self.refresh()
         label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(new_type.code, new_type.code)
@@ -447,9 +448,7 @@ class DimensionGroupConfigScreen(QWidget):
             self._validate_range_live(level_no)
 
     def _show_type_status(self, text: str, *, ok: bool) -> None:
-        self.type_status_label.setObjectName("statusOk" if ok else "statusError")
-        self.type_status_label.setStyleSheet("")
-        self.type_status_label.setText(text)
+        theme.set_status_label(self.type_status_label, text, ok=ok)
 
     # --- فیلدهایِ اختصاصیِ گروه --------------------------------------------
     def _load_fields(self) -> None:

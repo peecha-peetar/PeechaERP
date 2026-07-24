@@ -414,13 +414,9 @@ class ChartOfAccountsScreen(QWidget):
             dimensions_service.set_account_dimension_types(self._editing_account_id, company_id, dimension_type_ids)
             dimensions_service.set_account_person_groups(self._editing_account_id, company_id, person_group_ids)
         except ValueError as exc:
-            self.status_label.setObjectName("statusError")
-            self.status_label.setStyleSheet("")
-            self.status_label.setText(str(exc))
+            theme.set_status_label(self.status_label, str(exc), ok=False)
             return
-        self.status_label.setObjectName("statusOk")
-        self.status_label.setStyleSheet("")
-        self.status_label.setText("نوع‌هایِ تفصیلی ذخیره شد.")
+        theme.set_status_label(self.status_label, "نوع‌هایِ تفصیلی ذخیره شد.", ok=True)
 
     def _current_language_id(self) -> int | None:
         return session.current_company.default_language_id if session.current_company else None

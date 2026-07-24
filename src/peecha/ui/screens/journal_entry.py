@@ -64,6 +64,7 @@ from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 from peecha import numerals
+from peecha.ui import theme
 from peecha.ui.widgets import JalaliDateEdit
 
 _COL_ROW_NO = 0
@@ -941,12 +942,13 @@ class JournalEntryScreen(QWidget):
         debit_text = numerals.format_money(total_debit, self.currency_decimal_places, self.currency_symbol)
         credit_text = numerals.format_money(total_credit, self.currency_decimal_places, self.currency_symbol)
         if total_debit == total_credit and total_debit > 0:
-            self.balance_label.setText(f"تراز — بدهکار: {debit_text} | بستانکار: {credit_text}")
-            self.balance_label.setObjectName("statusOk")
+            theme.set_status_label(
+                self.balance_label, f"تراز — بدهکار: {debit_text} | بستانکار: {credit_text}", ok=True
+            )
         else:
-            self.balance_label.setText(f"غیرِ تراز — بدهکار: {debit_text} | بستانکار: {credit_text}")
-            self.balance_label.setObjectName("statusError")
-        self.balance_label.setStyleSheet("")
+            theme.set_status_label(
+                self.balance_label, f"غیرِ تراز — بدهکار: {debit_text} | بستانکار: {credit_text}", ok=False
+            )
 
         reference_amount = total_debit if total_debit > 0 else total_credit
         if reference_amount > 0:
@@ -957,9 +959,7 @@ class JournalEntryScreen(QWidget):
 
     def _save(self) -> None:
         if self.company_id is None or session.current_user is None:
-            self.status_label.setObjectName("statusError")
-            self.status_label.setStyleSheet("")
-            self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
+            theme.set_status_label(self.status_label, "ابتدا یک شرکت را انتخاب کنید.", ok=False)
             return
 
         lines = [ln for row in self._line_rows if (ln := row.to_line_input()) is not None]
@@ -987,17 +987,13 @@ class JournalEntryScreen(QWidget):
                 )
                 temp_no = result.temporary_no
         except ValueError as exc:
-            self.status_label.setObjectName("statusError")
-            self.status_label.setStyleSheet("")
-            self.status_label.setText(str(exc))
+            theme.set_status_label(self.status_label, str(exc), ok=False)
             return
 
         self._reset_form()
         draft_note = "به‌صورتِ پیش‌نویس " if as_draft else ""
         temp_no_text = numerals.to_persian_digits(str(temp_no)) if temp_no is not None else "؟"
-        self.status_label.setObjectName("statusOk")
-        self.status_label.setStyleSheet("")
-        self.status_label.setText(f"سند {draft_note}با شماره‌ی موقتِ {temp_no_text} ثبت شد.")
+        theme.set_status_label(self.status_label, f"سند {draft_note}با شماره‌ی موقتِ {temp_no_text} ثبت شد.", ok=True)
 
     def _delete_current_entry(self) -> None:
         if self._editing_journal_entry_id is None or self.company_id is None or session.current_user is None:
@@ -1014,14 +1010,10 @@ class JournalEntryScreen(QWidget):
         try:
             je_service.delete_journal_entry(self._editing_journal_entry_id, self.company_id, session.current_user.user_id)
         except ValueError as exc:
-            self.status_label.setObjectName("statusError")
-            self.status_label.setStyleSheet("")
-            self.status_label.setText(str(exc))
+            theme.set_status_label(self.status_label, str(exc), ok=False)
             return
         self._reset_form()
-        self.status_label.setObjectName("statusOk")
-        self.status_label.setStyleSheet("")
-        self.status_label.setText("سند حذف شد.")
+        theme.set_status_label(self.status_label, "سند حذف شد.", ok=True)
 
     def edit_journal_entry(self, journal_entry_id: int) -> None:
         if self.company_id is None:

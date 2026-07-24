@@ -11,6 +11,7 @@ from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
+from peecha.ui import theme
 from peecha.ui.widgets import ZeroPaddedSpinBox
 
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
@@ -188,14 +189,10 @@ class AccountingCodingSettingsScreen(QWidget):
         try:
             coa_service.set_account_level_config(company_id, levels)
         except ValueError as exc:
-            self.status_label.setObjectName("statusError")
-            self.status_label.setStyleSheet("")
-            self.status_label.setText(str(exc))
+            theme.set_status_label(self.status_label, str(exc), ok=False)
             return
         self.refresh()
-        self.status_label.setObjectName("statusOk")
-        self.status_label.setStyleSheet("")
-        self.status_label.setText("تنظیماتِ کدینگ ذخیره شد.")
+        theme.set_status_label(self.status_label, "تنظیماتِ کدینگ ذخیره شد.", ok=True)
 
     def _save_detail_digits(self) -> None:
         company_id = self._company_id()
@@ -205,11 +202,7 @@ class AccountingCodingSettingsScreen(QWidget):
         try:
             dimensions_service.set_level_digit_config(company_id, config)
         except ValueError as exc:
-            self.detail_status_label.setObjectName("statusError")
-            self.detail_status_label.setStyleSheet("")
-            self.detail_status_label.setText(str(exc))
+            theme.set_status_label(self.detail_status_label, str(exc), ok=False)
             return
         self.refresh()
-        self.detail_status_label.setObjectName("statusOk")
-        self.detail_status_label.setStyleSheet("")
-        self.detail_status_label.setText("تعدادِ رقمِ سطوحِ تفصیلی ذخیره شد.")
+        theme.set_status_label(self.detail_status_label, "تعدادِ رقمِ سطوحِ تفصیلی ذخیره شد.", ok=True)
