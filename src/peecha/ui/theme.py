@@ -406,7 +406,7 @@ QScrollArea#ribbonScroll {{
 QWidget#ribbonBar {{
     background-color: {SURFACE};
 }}
-QPushButton#ribbonButton {{
+QPushButton#ribbonButton, QToolButton#ribbonButton {{
     background-color: transparent;
     color: {TEXT_SECONDARY};
     border-radius: 8px;
@@ -415,12 +415,16 @@ QPushButton#ribbonButton {{
     font-size: 13px;
     border: none;
 }}
-QPushButton#ribbonButton:hover {{
+QPushButton#ribbonButton:hover, QToolButton#ribbonButton:hover {{
     background-color: {RIBBON_HOVER};
 }}
 QPushButton#ribbonButton[active="true"] {{
     background-color: {SELECTED};
     color: {ACCENT};
+}}
+QToolButton#ribbonButton::menu-indicator {{
+    image: none;
+    width: 0;
 }}
 
 QCheckBox {{

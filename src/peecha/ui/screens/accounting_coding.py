@@ -1,7 +1,13 @@
 """تنظیماتِ کدینگِ حسابداری — تعدادِ رقم + بازه‌یِ از-تا برایِ هر سطحِ کدینگِ
 حساب‌ها (گروه/کل/معین). طبقِ درخواستِ صریح، این تنظیمات باید پیش از هر
 کارِ دیگری در حسابداری انجام شود و بعدِ اولین سندِ شرکت دیگر قابلِ‌تغییر
-نیست — چون کدهایِ ثبت‌شده‌ی موجود با تغییرِ طول/بازه ناسازگار می‌شوند."""
+نیست — چون کدهایِ ثبت‌شده‌ی موجود با تغییرِ طول/بازه ناسازگار می‌شوند.
+
+طبقِ درخواستِ صریحِ بعدی: تبِ «کدینگِ حسابداری» در تنظیماتِ سیستم حالا
+خودش دو زیرتب دارد — این فایل دو صفحه‌ی مستقل را تعریف می‌کند
+(AccountingCodingSettingsScreen برایِ کدینگِ حساب‌ها، و
+DetailLevelDigitSettingsScreen برایِ تعدادِ رقمِ سطوحِ تفصیلی) که در
+system_settings.py با _sub_tabs کنارِ هم قرار می‌گیرند."""
 
 from __future__ import annotations
 
@@ -25,9 +31,6 @@ class AccountingCodingSettingsScreen(QWidget):
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
-        # صفحه در یک QScrollArea قرار می‌گیرد — وگرنه با دو کارت (کدینگِ
-        # حساب‌ها + سطوحِ تفصیلی) رویِ هم، در پنجره‌هایِ کوچک‌تر بخشِ پایینی
-        # (ازجمله دکمه‌ی ذخیره) بدونِ راهی برایِ اسکرول‌کردن خارج از دیدرس می‌ماند.
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -99,6 +102,72 @@ class AccountingCodingSettingsScreen(QWidget):
         self.save_button.clicked.connect(self._save)
         outer.addWidget(self.save_button)
 
+        outer.addStretch(1)
+        scroll.setWidget(content)
+        root_layout.addWidget(scroll)
+
+    def _company_id(self) -> int | None:
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        self.status_label.setText("")
+        company_id = self._company_id()
+        if company_id is None:
+            return
+
+        rows_by_level = {r.account_level: r for r in coa_service.list_account_level_config(company_id)}
+        for level, (code_length, range_from, range_to) in self._level_widgets.items():
+            row = rows_by_level.get(level)
+            code_length.setValue(row.code_length if row and row.code_length is not None else 0)
+            range_from.setValue(row.range_from if row and row.range_from is not None else 0)
+            range_to.setValue(row.range_to if row and row.range_to is not None else 0)
+
+        locked = je_service.company_has_any_entries(company_id)
+        for code_length, range_from, range_to in self._level_widgets.values():
+            code_length.setEnabled(not locked)
+            range_from.setEnabled(not locked)
+            range_to.setEnabled(not locked)
+        self.save_button.setEnabled(not locked)
+        if locked:
+            self.status_label.setObjectName("sectionHint")
+            self.status_label.setStyleSheet("")
+            self.status_label.setText("این شرکت سند دارد؛ تنظیماتِ کدینگِ حساب‌ها دیگر قابلِ‌تغییر نیست.")
+
+    def _save(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        levels: dict[int, dict] = {}
+        for level, (code_length, range_from, range_to) in self._level_widgets.items():
+            levels[level] = {
+                "code_length": code_length.value() or None,
+                "range_from": range_from.value() or None,
+                "range_to": range_to.value() or None,
+            }
+        try:
+            coa_service.set_account_level_config(company_id, levels)
+        except ValueError as exc:
+            theme.set_status_label(self.status_label, str(exc), ok=False)
+            return
+        self.refresh()
+        theme.set_status_label(self.status_label, "تنظیماتِ کدینگ ذخیره شد.", ok=True)
+
+
+class DetailLevelDigitSettingsScreen(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._detail_level_widgets: dict[int, QSpinBox] = {}
+
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        outer = QVBoxLayout(content)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(12)
+
         detail_title = QLabel("تعدادِ رقمِ سطوحِ تفصیلی")
         detail_title.setObjectName("pageTitle")
         outer.addWidget(detail_title)
@@ -121,7 +190,6 @@ class AccountingCodingSettingsScreen(QWidget):
         detail_grid.addWidget(QLabel("سطح"), 0, 0)
         detail_grid.addWidget(QLabel("تعدادِ رقم"), 0, 1)
 
-        self._detail_level_widgets: dict[int, QSpinBox] = {}
         for row, level in enumerate(sorted(_DETAIL_LEVEL_LABELS), start=1):
             detail_grid.addWidget(QLabel(_DETAIL_LEVEL_LABELS[level]), row, 0)
             code_length = QSpinBox()
@@ -149,30 +217,12 @@ class AccountingCodingSettingsScreen(QWidget):
         return app_session.current_company.company_id if app_session.current_company else None
 
     def refresh(self) -> None:
-        self.status_label.setText("")
         self.detail_status_label.setText("")
         company_id = self._company_id()
         if company_id is None:
             return
 
-        rows_by_level = {r.account_level: r for r in coa_service.list_account_level_config(company_id)}
-        for level, (code_length, range_from, range_to) in self._level_widgets.items():
-            row = rows_by_level.get(level)
-            code_length.setValue(row.code_length if row and row.code_length is not None else 0)
-            range_from.setValue(row.range_from if row and row.range_from is not None else 0)
-            range_to.setValue(row.range_to if row and row.range_to is not None else 0)
-
         locked = je_service.company_has_any_entries(company_id)
-        for code_length, range_from, range_to in self._level_widgets.values():
-            code_length.setEnabled(not locked)
-            range_from.setEnabled(not locked)
-            range_to.setEnabled(not locked)
-        self.save_button.setEnabled(not locked)
-        if locked:
-            self.status_label.setObjectName("sectionHint")
-            self.status_label.setStyleSheet("")
-            self.status_label.setText("این شرکت سند دارد؛ تنظیماتِ کدینگِ حساب‌ها دیگر قابلِ‌تغییر نیست.")
-
         detail_rows_by_level = {r.level_no: r for r in dimensions_service.list_level_digit_config(company_id)}
         for level, code_length in self._detail_level_widgets.items():
             row = detail_rows_by_level.get(level)
@@ -183,25 +233,6 @@ class AccountingCodingSettingsScreen(QWidget):
             self.detail_status_label.setObjectName("sectionHint")
             self.detail_status_label.setStyleSheet("")
             self.detail_status_label.setText("این شرکت سند دارد؛ تعدادِ رقمِ سطوحِ تفصیلی دیگر قابلِ‌تغییر نیست.")
-
-    def _save(self) -> None:
-        company_id = self._company_id()
-        if company_id is None:
-            return
-        levels: dict[int, dict] = {}
-        for level, (code_length, range_from, range_to) in self._level_widgets.items():
-            levels[level] = {
-                "code_length": code_length.value() or None,
-                "range_from": range_from.value() or None,
-                "range_to": range_to.value() or None,
-            }
-        try:
-            coa_service.set_account_level_config(company_id, levels)
-        except ValueError as exc:
-            theme.set_status_label(self.status_label, str(exc), ok=False)
-            return
-        self.refresh()
-        theme.set_status_label(self.status_label, "تنظیماتِ کدینگ ذخیره شد.", ok=True)
 
     def _save_detail_digits(self) -> None:
         company_id = self._company_id()

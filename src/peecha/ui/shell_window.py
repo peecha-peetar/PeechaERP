@@ -16,9 +16,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -87,6 +89,12 @@ _NAV_ICONS = {
     "REPORTS": "📈",
     "SETTINGS": "⚙️",
 }
+
+# طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده‌ی گوشه‌ی ریبون، تنظیماتِ مخصوصِ همان
+# بخش را مستقیم (به‌جایِ تبِ پیش‌فرض) در «تنظیماتِ سیستم» باز می‌کند —
+# نگاشتِ کدِ گروه به ایندکسِ تبِ مربوطه (فقط بخش‌هایی که واقعاً تنظیماتِ
+# اختصاصی دارند نگاشته می‌شوند؛ بقیه هنوز صفحه ندارند).
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
 
 
 def _flatten_nav_items() -> list[dict]:
@@ -261,8 +269,10 @@ class MainWindow(QMainWindow):
             self._ribbon_scroll.setFixedHeight(0)
             return
 
-        # طبقِ درخواستِ صریح: انواعِ تفصیلی از ریبون حذف شدند (فقط از
-        # ساید‌بار در دسترس‌اند) تا دکمه‌هایِ باقی‌مانده فضایِ بیشتری بگیرند.
+        # طبقِ درخواستِ صریح: انواعِ تفصیلی از دکمه‌هایِ تخت ریبون حذف شدند
+        # (فقط از ساید‌بار در دسترس‌اند) تا دکمه‌هایِ باقی‌مانده فضایِ
+        # بیشتری بگیرند — ولی طبقِ بازخوردِ بعدی، به‌جایِ حذفِ کامل، همان‌ها
+        # به‌صورتِ یک دکمه‌ی منویِ «تفصیلی» بازمی‌گردند (پایین‌تر).
         ribbon_children = [c for c in group["children"] if c.get("in_ribbon", True)]
         for child in ribbon_children:
             button = QPushButton(child["label"])
@@ -272,7 +282,39 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda _checked=False, c=child["code"]: self.open_screen(c))
             self._ribbon_layout.addWidget(button)
             self._ribbon_buttons[child["code"]] = button
+
+        hidden_children = [c for c in group["children"] if not c.get("in_ribbon", True)]
+        if hidden_children:
+            menu_button = QToolButton()
+            menu_button.setText("تفصیلی ▾")
+            menu_button.setObjectName("ribbonButton")
+            menu_button.setCursor(Qt.PointingHandCursor)
+            menu_button.setPopupMode(QToolButton.InstantPopup)
+            menu_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            menu = QMenu(menu_button)
+            for child in hidden_children:
+                menu.addAction(child["label"], lambda _checked=False, c=child["code"]: self.open_screen(c))
+            menu_button.setMenu(menu)
+            self._ribbon_layout.addWidget(menu_button)
+
         self._ribbon_layout.addStretch(1)
+
+        # طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده‌یِ گوشه‌ی ریبون — تنظیماتِ
+        # مخصوصِ همین بخش را مستقیم (تبِ مربوطه در «تنظیماتِ سیستم») باز
+        # می‌کند. فقط بخش‌هایی که واقعاً نگاشته شده‌اند این دکمه را دارند.
+        settings_tab_index = _SETTINGS_TAB_BY_GROUP_CODE.get(group["code"])
+        if settings_tab_index is not None:
+            gear_button = QPushButton("⚙")
+            gear_button.setObjectName("ribbonButton")
+            gear_button.setCursor(Qt.PointingHandCursor)
+            gear_button.setToolTip(f"تنظیماتِ «{group['label']}»")
+            gear_button.clicked.connect(
+                lambda _checked=False, idx=settings_tab_index: self.open_screen(
+                    "SETTINGS", then=lambda screen: screen.select_tab(idx)
+                )
+            )
+            self._ribbon_layout.addWidget(gear_button)
+
         self._ribbon_scroll.setFixedHeight(44)
 
     def _logout(self) -> None:

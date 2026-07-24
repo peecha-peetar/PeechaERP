@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
 
-from peecha.ui.screens.accounting_coding import AccountingCodingSettingsScreen
+from peecha.ui.screens.accounting_coding import AccountingCodingSettingsScreen, DetailLevelDigitSettingsScreen
 from peecha.ui.screens.audit_log import AuditLogScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
@@ -31,20 +31,26 @@ class SystemSettingsScreen(QWidget):
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
-        tabs = QTabWidget()
+        self.tabs = QTabWidget()
         # طبقِ درخواستِ صریح: کدینگِ حسابداری باید اولین کاری باشد که در
         # تنظیماتِ حسابداری انجام می‌شود — به همین دلیل اولین تب است.
-        tabs.addTab(self._build_coding_tab(), "کدینگِ حسابداری")
-        tabs.addTab(self._build_general_tab(), "عمومی")
-        tabs.addTab(self._build_users_tab(), "کاربران و دسترسی‌ها")
-        tabs.addTab(self._build_accounting_data_tab(), "داده‌های حسابداری")
-        tabs.addTab(self._build_security_tab(), "امنیت")
-        outer.addWidget(tabs, stretch=1)
+        self.tabs.addTab(self._build_coding_tab(), "کدینگِ حسابداری")
+        self.tabs.addTab(self._build_general_tab(), "عمومی")
+        self.tabs.addTab(self._build_users_tab(), "کاربران و دسترسی‌ها")
+        self.tabs.addTab(self._build_accounting_data_tab(), "داده‌های حسابداری")
+        self.tabs.addTab(self._build_security_tab(), "امنیت")
+        outer.addWidget(self.tabs, stretch=1)
 
     def _build_coding_tab(self) -> QWidget:
-        screen = AccountingCodingSettingsScreen()
-        self._sub_screens.append(screen)
-        return screen
+        # طبقِ درخواستِ صریح: زیرفرم‌هایِ این بخش (کدینگِ حساب‌ها + تعدادِ
+        # رقمِ سطوحِ تفصیلی) در زیرتب‌هایِ جداگانه باز شوند، نه رویِ هم
+        # در یک صفحه‌ی اسکرول‌شونده.
+        return self._sub_tabs(
+            [
+                ("کدینگِ حساب‌ها", AccountingCodingSettingsScreen()),
+                ("تعدادِ رقمِ سطوحِ تفصیلی", DetailLevelDigitSettingsScreen()),
+            ]
+        )
 
     def _sub_tabs(self, pages: list[tuple[str, QWidget]]) -> QTabWidget:
         inner = QTabWidget()
@@ -93,3 +99,8 @@ class SystemSettingsScreen(QWidget):
         for widget in self._sub_screens:
             if hasattr(widget, "refresh"):
                 widget.refresh()
+
+    def select_tab(self, index: int) -> None:
+        """برایِ دکمه‌ی چرخ‌دنده‌یِ ریبون — پرش مستقیم به تبِ تنظیماتِ همان
+        بخش (مثلاً «کدینگِ حسابداری» برایِ بخشِ «مالی و حسابداری»)."""
+        self.tabs.setCurrentIndex(index)
