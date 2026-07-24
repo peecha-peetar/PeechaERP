@@ -270,14 +270,14 @@ class DimensionGroupConfigScreen(QWidget):
             return
         code = self.new_type_code_field.text().strip()
         if not code:
-            self.type_status_label.setText("کد را وارد کنید.")
+            self._show_type_status("کد را وارد کنید.", ok=False)
             return
         try:
             new_type = dimensions_service.create_dimension_type(company_id, code)
         except ValueError as exc:
-            self.type_status_label.setText(str(exc))
+            self._show_type_status(str(exc), ok=False)
             return
-        self.type_status_label.setText("")
+        self._show_type_status("", ok=False)
         self.new_type_code_field.clear()
         self.refresh()
         label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(new_type.code, new_type.code)
@@ -355,9 +355,12 @@ class DimensionGroupConfigScreen(QWidget):
                 self._selected_type_id, company_id, self.max_level_spin.value(), self._selected_person_group_id
             )
         except ValueError as exc:
-            self.type_status_label.setText(str(exc))
+            self._show_type_status(str(exc), ok=False)
             return
-        self.type_status_label.setText("")
+        except Exception as exc:  # noqa: BLE001
+            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ سقفِ سطح: {exc}", ok=False)
+            return
+        self._show_type_status("تعدادِ سطحِ گروه ذخیره شد.", ok=True)
 
     # --- سطوح ------------------------------------------------------------
     def _load_levels(self) -> None:
@@ -415,7 +418,10 @@ class DimensionGroupConfigScreen(QWidget):
                 self._selected_type_id, company_id, self.max_level_spin.value(), self._selected_person_group_id
             )
         except ValueError as exc:
-            self.type_status_label.setText(str(exc))
+            self._show_type_status(str(exc), ok=False)
+            return
+        except Exception as exc:  # noqa: BLE001 — هیچ خطایی نباید بدونِ پیام به کاربر بی‌صدا بمونه
+            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ سقفِ سطح: {exc}", ok=False)
             return
         max_level_no = self.max_level_spin.value()
         levels = {
@@ -431,9 +437,19 @@ class DimensionGroupConfigScreen(QWidget):
                 self._selected_type_id, company_id, levels, self._selected_person_group_id
             )
         except ValueError as exc:
-            self.type_status_label.setText(str(exc))
+            self._show_type_status(str(exc), ok=False)
             return
-        self.type_status_label.setText("")
+        except Exception as exc:  # noqa: BLE001
+            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ بازه‌یِ سطوح: {exc}", ok=False)
+            return
+        self._show_type_status("بازه‌یِ سطوح ذخیره شد.", ok=True)
+        for level_no in self._level_widgets:
+            self._validate_range_live(level_no)
+
+    def _show_type_status(self, text: str, *, ok: bool) -> None:
+        self.type_status_label.setObjectName("statusOk" if ok else "statusError")
+        self.type_status_label.setStyleSheet("")
+        self.type_status_label.setText(text)
 
     # --- فیلدهایِ اختصاصیِ گروه --------------------------------------------
     def _load_fields(self) -> None:
@@ -462,14 +478,17 @@ class DimensionGroupConfigScreen(QWidget):
         fields = [row.to_field_dict(i) for i, row in enumerate(self._field_rows)]
         for f in fields:
             if not f["field_key"] or not f["label"]:
-                self.type_status_label.setText("کلید و عنوانِ همه‌ی فیلدها را پر کنید.")
+                self._show_type_status("کلید و عنوانِ همه‌ی فیلدها را پر کنید.", ok=False)
                 return
         try:
             dimensions_service.set_group_fields(
                 self._selected_type_id, company_id, fields, self._selected_person_group_id
             )
         except ValueError as exc:
-            self.type_status_label.setText(str(exc))
+            self._show_type_status(str(exc), ok=False)
             return
-        self.type_status_label.setText("")
+        except Exception as exc:  # noqa: BLE001
+            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ فیلدها: {exc}", ok=False)
+            return
+        self._show_type_status("فیلدها ذخیره شد.", ok=True)
         self._load_fields()
