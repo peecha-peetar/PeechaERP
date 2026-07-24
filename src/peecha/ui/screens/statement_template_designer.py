@@ -175,6 +175,10 @@ class _RowEditorDialog(QDialog):
 
         layout.addStretch(1)
 
+        self.error_label = QLabel("")
+        self.error_label.setObjectName("statusError")
+        layout.addWidget(self.error_label)
+
         buttons_row = QHBoxLayout()
         buttons_row.addStretch(1)
         cancel_button = QPushButton("انصراف")
@@ -182,7 +186,7 @@ class _RowEditorDialog(QDialog):
         buttons_row.addWidget(cancel_button)
         save_button = QPushButton("ذخیره")
         save_button.setObjectName("primaryButton")
-        save_button.clicked.connect(self.accept)
+        save_button.clicked.connect(self._on_save_clicked)
         buttons_row.addWidget(save_button)
         layout.addLayout(buttons_row)
 
@@ -203,6 +207,22 @@ class _RowEditorDialog(QDialog):
             widget.setVisible(row_type == "ACCOUNTS")
         for widget in (self.formula_label, self.formula_widget):
             widget.setVisible(row_type == "FORMULA")
+
+    def _on_save_clicked(self) -> None:
+        # طبقِ بازخوردِ کاربر: قبلاً اگر برچسب خالی می‌ماند، دیالوگ بی‌سروصدا
+        # بسته می‌شد و هیچ ردیفی هم ساخته نمی‌شد (جدولِ اصلی خالی می‌ماند)،
+        # بدونِ هیچ پیامی — حالا پیش از بستنِ دیالوگ اعتبارسنجی می‌شود.
+        if not self.label_field.text().strip():
+            theme.set_status_label(self.error_label, "برچسبِ ردیف را وارد کنید.", ok=False)
+            return
+        row_type = self.row_type_combo.currentData()
+        if row_type == "ACCOUNTS" and not self.accounts_widget.refs():
+            theme.set_status_label(self.error_label, "دستِ‌کم یک حساب اضافه کنید.", ok=False)
+            return
+        if row_type == "FORMULA" and not self.formula_widget.refs():
+            theme.set_status_label(self.error_label, "دستِ‌کم یک ردیفِ دیگر برایِ فرمول اضافه کنید.", ok=False)
+            return
+        self.accept()
 
 
 class StatementTemplateDesignerScreen(QWidget):
