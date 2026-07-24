@@ -25,8 +25,10 @@ person_group_id کلید می‌خورند) مستقل از هم پیکربند�
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QGridLayout,
     QHBoxLayout,
@@ -108,6 +110,7 @@ class DimensionGroupConfigScreen(QWidget):
         self._selected_type_id: int | None = None
         self._selected_person_group_id: int = 0
         self._field_rows: list[_GroupFieldRowWidget] = []
+        self._current_color: str | None = None
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
@@ -173,6 +176,22 @@ class DimensionGroupConfigScreen(QWidget):
         self.lock_hint_label.setObjectName("sectionHint")
         self.lock_hint_label.setWordWrap(True)
         layout.addWidget(self.lock_hint_label)
+
+        # طبقِ درخواستِ صریح: هر گروهِ تفصیلی می‌تواند رنگِ اختصاصیِ خودش را
+        # داشته باشد — این رنگ در فهرستِ تفصیلی‌ها (نمایِ درختی) و کمبویِ
+        # تفصیلیِ فرمِ صدورِ سند هم استفاده می‌شود.
+        color_row = QHBoxLayout()
+        color_row.addWidget(QLabel("رنگِ این گروه"))
+        self.color_button = QPushButton("")
+        self.color_button.setFixedSize(30, 26)
+        self.color_button.clicked.connect(self._pick_color)
+        color_row.addWidget(self.color_button)
+        clear_color_button = QPushButton("حذفِ رنگ")
+        clear_color_button.setObjectName("flatButton")
+        clear_color_button.clicked.connect(self._clear_color)
+        color_row.addWidget(clear_color_button)
+        color_row.addStretch(1)
+        layout.addLayout(color_row)
 
         # طبقِ بازخوردِ کاربر: قبلاً «تعدادِ سطح» و «بازه‌ی سطوح» دو دکمه‌ی
         # ذخیره‌یِ جدا داشتند — کاربر با کلیک‌کردنِ فقط دکمه‌یِ کنارِ «تعدادِ
@@ -253,6 +272,8 @@ class DimensionGroupConfigScreen(QWidget):
             label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(t.code, t.code)
             item = QListWidgetItem(f"{label} ({t.detail_account_count})")
             item.setData(Qt.UserRole, (t.dimension_type_id, 0, label))
+            if t.color:
+                item.setForeground(QBrush(QColor(t.color)))
             self.types_list.addItem(item)
 
         if company_id is not None:
@@ -262,6 +283,8 @@ class DimensionGroupConfigScreen(QWidget):
                 count = len(list_func(company_id)) if list_func else 0
                 item = QListWidgetItem(f"{group.name} ({count})")
                 item.setData(Qt.UserRole, (person_dimension_type_id, group.person_group_id, group.name))
+                if group.color:
+                    item.setForeground(QBrush(QColor(group.color)))
                 self.types_list.addItem(item)
 
         if self._selected_type_id is None:
@@ -302,6 +325,8 @@ class DimensionGroupConfigScreen(QWidget):
             )
         self.config_title.setText(f"پیکربندیِ گروهِ «{label}»")
         self.config_panel.setEnabled(True)
+        self._current_color = dimensions_service.get_group_color(dimension_type_id, person_group_id)
+        self._apply_color_swatch(self._current_color)
 
         company_id = self._company_id()
         digit_config_by_level = (
@@ -434,6 +459,45 @@ class DimensionGroupConfigScreen(QWidget):
 
     def _show_type_status(self, text: str, *, ok: bool) -> None:
         theme.set_status_label(self.type_status_label, text, ok=ok)
+
+    # --- رنگِ گروه ---------------------------------------------------------
+    def _apply_color_swatch(self, color: str | None) -> None:
+        self.color_button.setStyleSheet(
+            f"background-color: {color or '#FFFFFF'}; border: 1px solid {theme.BORDER}; border-radius: 4px;"
+        )
+
+    def _pick_color(self) -> None:
+        if self._selected_type_id is None:
+            return
+        initial = QColor(self._current_color) if self._current_color else QColor(Qt.white)
+        color = QColorDialog.getColor(initial, self, "انتخابِ رنگِ گروه")
+        if not color.isValid():
+            return
+        self._save_color(color.name())
+
+    def _clear_color(self) -> None:
+        if self._selected_type_id is None:
+            return
+        self._save_color(None)
+
+    def _save_color(self, color: str | None) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
+            return
+        try:
+            if self._selected_person_group_id:
+                dimensions_service.set_person_group_color(self._selected_person_group_id, company_id, color)
+            else:
+                dimensions_service.set_dimension_type_color(self._selected_type_id, company_id, color)
+        except ValueError as exc:
+            self._show_type_status(str(exc), ok=False)
+            return
+        self._current_color = color
+        self._apply_color_swatch(color)
+        self._show_type_status("رنگِ گروه ذخیره شد.", ok=True)
+        selected_type_id, selected_person_group_id = self._selected_type_id, self._selected_person_group_id
+        self.refresh()
+        self._select_type(selected_type_id, selected_person_group_id)
 
     # --- فیلدهایِ اختصاصیِ گروه --------------------------------------------
     def _load_fields(self) -> None:

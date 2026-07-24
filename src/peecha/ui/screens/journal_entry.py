@@ -42,6 +42,7 @@ from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QCompleter,
@@ -106,6 +107,15 @@ def _normalize_typed_digits(combo: QComboBox, text: str) -> None:
         cursor = line_edit.cursorPosition()
         line_edit.setText(converted)
         line_edit.setCursorPosition(cursor)
+
+
+def _display_name_only(text: str) -> str:
+    """طبقِ درخواستِ صریح: در نوارِ خلاصه، فقط نامِ انتخاب‌شده (بدونِ کدِ
+    جلویِ آن) نمایش داده شود — چون تمامِ کمبوهایِ این فرم با الگویِ ثابتِ
+    «کد — نام» ساخته می‌شوند، جداکردن از رویِ آخرین رخدادِ « — » کافی است."""
+    if " — " in text:
+        return text.rsplit(" — ", 1)[-1].strip()
+    return text.strip()
 
 
 def _clear_if_unmatched(combo: QComboBox) -> None:
@@ -266,14 +276,17 @@ class _LineRow:
 
         self.detail_combo = _make_searchable_combo([])
         self.detail_combo.lineEdit().returnPressed.connect(self._on_detail_return)
+        self.detail_combo.currentIndexChanged.connect(lambda _i: self._screen._refresh_preview_strip())
 
         self.cost_center_combo = _make_searchable_combo([])
         self.cost_center_combo.setEnabled(False)
         self.cost_center_combo.lineEdit().returnPressed.connect(self._on_cost_center_return)
+        self.cost_center_combo.currentIndexChanged.connect(lambda _i: self._screen._refresh_preview_strip())
 
         self.project_combo = _make_searchable_combo([])
         self.project_combo.setEnabled(False)
         self.project_combo.lineEdit().returnPressed.connect(self._on_project_return)
+        self.project_combo.currentIndexChanged.connect(lambda _i: self._screen._refresh_preview_strip())
 
         self.description_field = QLineEdit()
         self._attach_description_completer()
@@ -344,6 +357,7 @@ class _LineRow:
     def _on_account_changed(self, _index: int) -> None:
         self.account_id = self.account_combo.currentData()
         self._refresh_dimension_ui()
+        self._screen._refresh_preview_strip()
 
     def _on_account_return(self) -> None:
         """زنجیره‌ی Enter: حساب -> تفصیلی (اگر حسابی انتخاب شده باشد)."""
@@ -409,24 +423,40 @@ class _LineRow:
         person_group_ids = [
             g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(self.account_id)
         ]
-        persons = dimensions_service.list_active_persons(self._screen.company_id)
-        if person_group_ids:
-            persons = [p for p in persons if p.person_group_id in person_group_ids]
-        self._detail_dimension_type_by_id = {p.detail_account_id: person_dimension_type_id for p in persons}
-        detail_options = [(p.detail_account_id, f"{p.full_code} — {p.name or ''}") for p in persons]
-
         other_dims = [
             d
             for d in self._required_dimensions
             if d.code not in (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
         ]
+        # طبقِ بازخوردِ صریح: اگر این حساب هرنوع الزامِ تفصیلی داشته باشد
+        # (چه محدودیتِ گروهِ شخص، چه نوع‌بُعدِ دیگری مثلِ صندوق)، گزینه‌ی
+        # «بدون تفصیلی» اصلاً نباید پیشنهاد شود — انتخابِ واقعی الزامی است.
+        # وگرنه (حسابی که هیچ الزامی ندارد)، «بدون تفصیلی» به‌طورِ پیش‌فرض
+        # انتخاب می‌شود (نه فقط در فهرست باشد).
+        has_requirement = bool(person_group_ids) or bool(other_dims)
+
+        persons = dimensions_service.list_active_persons(self._screen.company_id)
+        if person_group_ids:
+            persons = [p for p in persons if p.person_group_id in person_group_ids]
+        elif has_requirement:
+            persons = [p for p in persons if p.code != dimensions_service.NO_DETAIL_CODE]
+        self._detail_dimension_type_by_id = {p.detail_account_id: person_dimension_type_id for p in persons}
+        detail_options = [(p.detail_account_id, f"{p.full_code} — {p.name or ''}") for p in persons]
+
         for dim in other_dims:
             label_prefix = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code)
             for d in dim.detail_accounts:
                 self._detail_dimension_type_by_id[d.detail_account_id] = dim.dimension_type_id
                 detail_options.append((d.detail_account_id, f"{label_prefix}: {d.full_code} — {d.name or ''}"))
         _fill_options(self.detail_combo, detail_options)
-        self.detail_combo.setToolTip("تفصیلی (الزامی)" if person_group_ids or other_dims else "")
+        self.detail_combo.setToolTip("تفصیلی (الزامی)" if has_requirement else "")
+
+        if not has_requirement:
+            no_detail_id = next((p.detail_account_id for p in persons if p.code == dimensions_service.NO_DETAIL_CODE), None)
+            if no_detail_id is not None:
+                idx = self.detail_combo.findData(no_detail_id)
+                if idx >= 0:
+                    self.detail_combo.setCurrentIndex(idx)
 
         cost_center_dim = next(
             (d for d in self._required_dimensions if d.code == dimensions_service.COST_CENTER_CODE), None
@@ -551,6 +581,8 @@ class JournalEntryScreen(QWidget):
         # widget -> (ردیف، نامِ فیلد) — برایِ ناوبریِ کلیدهایِ بالا/پایین
         # بینِ ردیف‌هایِ سند.
         self._nav_widgets: dict[QWidget, tuple[_LineRow, str]] = {}
+        # ردیفِ «جاری» برایِ نوارِ خلاصه — آخرین ردیفی که فوکوس داشته.
+        self._active_row: _LineRow | None = None
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -612,6 +644,33 @@ class JournalEntryScreen(QWidget):
         self.alt_number_field.editingFinished.connect(lambda: self.alt_number_field.setCursorPosition(0))
 
         outer.addWidget(header_card)
+
+        # طبقِ درخواستِ صریح: نوارِ خلاصه‌یِ عناوینِ انتخاب‌شده (بدونِ کد) —
+        # حساب/تفصیلی/مرکزِ هزینه/پروژه‌یِ ردیفِ جاری (آخرین ردیفی که فوکوس
+        # داشته)، با رنگِ متفاوت برایِ حساب در برابرِ تفصیلی/مرکزِ هزینه/پروژه.
+        preview_card = QWidget()
+        preview_card.setObjectName("card")
+        preview_layout = QHBoxLayout(preview_card)
+        preview_layout.setContentsMargins(14, 10, 14, 10)
+        preview_layout.setSpacing(24)
+        self._preview_value_labels: dict[str, QLabel] = {}
+        for key, title in (
+            ("account", "حساب"),
+            ("detail", "تفصیلی"),
+            ("cost_center", "مرکزِ هزینه"),
+            ("project", "پروژه"),
+        ):
+            value_color = theme.PRIMARY if key == "account" else theme.SUCCESS
+            label = QLabel()
+            label.setTextFormat(Qt.RichText)
+            label.setText(
+                f'<span style="color:{theme.TEXT_SECONDARY};">{title}: </span>'
+                f'<span style="color:{value_color}; font-weight:600;">—</span>'
+            )
+            self._preview_value_labels[key] = label
+            preview_layout.addWidget(label)
+        preview_layout.addStretch(1)
+        outer.addWidget(preview_card)
 
         add_line_button = QPushButton("+ افزودنِ ردیف")
         add_line_button.setObjectName("flatButton")
@@ -702,6 +761,8 @@ class JournalEntryScreen(QWidget):
         QShortcut(QKeySequence("Escape"), self, activated=self._reset_form)
         QShortcut(QKeySequence("Ctrl+Delete"), self, activated=self._delete_current_entry)
 
+        QApplication.instance().focusChanged.connect(self._on_focus_changed)
+
         self._update_footer_for_mode()
 
     def refresh(self) -> None:
@@ -760,15 +821,26 @@ class JournalEntryScreen(QWidget):
         self._line_rows.append(row)
         self._register_row_nav(row)
         self._renumber_rows()
+        if self._active_row is None:
+            self._active_row = row
+            self._refresh_preview_strip()
         return row
 
     def _register_row_nav(self, row: _LineRow) -> None:
         """کلیدهایِ بالا/پایین را رویِ فیلدهایِ این ردیف قابل‌شنیدن می‌کند
-        تا بشود بینِ ردیف‌هایِ پرشده جابه‌جا شد (طبقِ بازخورد)."""
-        self._register_nav_widget(row.account_combo.lineEdit(), row, "account")
-        self._register_nav_widget(row.detail_combo.lineEdit(), row, "detail")
-        self._register_nav_widget(row.cost_center_combo.lineEdit(), row, "cost_center")
-        self._register_nav_widget(row.project_combo.lineEdit(), row, "project")
+        تا بشود بینِ ردیف‌هایِ پرشده جابه‌جا شد (طبقِ بازخورد).
+
+        نکته: خودِ QComboBox (نه فقط lineEdit) هم رجیستر می‌شود — چون
+        QApplication.focusChanged برایِ یک کمبویِ editable، خودِ کمبو را
+        به‌عنوانِ ویجتِ فوکوس‌دار گزارش می‌کند (نه lineEdit داخلی‌اش)."""
+        for combo, field in (
+            (row.account_combo, "account"),
+            (row.detail_combo, "detail"),
+            (row.cost_center_combo, "cost_center"),
+            (row.project_combo, "project"),
+        ):
+            self._register_nav_widget(combo.lineEdit(), row, field)
+            self._register_nav_widget(combo, row, field)
         self._register_nav_widget(row.description_field, row, "description")
         self._register_nav_widget(row.debit_field, row, "debit")
         self._register_nav_widget(row.credit_field, row, "credit")
@@ -780,14 +852,31 @@ class JournalEntryScreen(QWidget):
     def _unregister_row_nav(self, row: _LineRow) -> None:
         for widget in (
             row.account_combo.lineEdit(),
+            row.account_combo,
             row.detail_combo.lineEdit(),
+            row.detail_combo,
             row.cost_center_combo.lineEdit(),
+            row.cost_center_combo,
             row.project_combo.lineEdit(),
+            row.project_combo,
             row.description_field,
             row.debit_field,
             row.credit_field,
         ):
             self._nav_widgets.pop(widget, None)
+
+    def _on_focus_changed(self, _old: QWidget | None, new: QWidget | None) -> None:
+        """طبقِ درخواستِ صریح: نوارِ خلاصه باید ردیفِ «جاری» را دنبال کند —
+        QApplication.focusChanged (به‌جایِ eventFilter رویِ QEvent.FocusIn)
+        چون زیرِ QPAیِ offscreen، فوکوس‌شدنِ لاین‌ادیتِ داخلیِ یک کمبویِ
+        editable همیشه به‌عنوانِ رخدادِ FocusIn به خودِ آن ویجت نمی‌رسد، ولی
+        این سیگنالِ سراسری همیشه قابل‌اتکاست."""
+        entry = self._nav_widgets.get(new)
+        if entry is not None:
+            row, _field = entry
+            if row is not self._active_row:
+                self._active_row = row
+                self._refresh_preview_strip()
 
     def eventFilter(self, obj, event) -> bool:
         if event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Up, Qt.Key_Down):
@@ -803,6 +892,32 @@ class JournalEntryScreen(QWidget):
                     self._move_row_focus(row, field, direction)
                     return True
         return super().eventFilter(obj, event)
+
+    def _refresh_preview_strip(self) -> None:
+        """طبقِ درخواستِ صریح: نمایشِ عناوینِ حساب/تفصیلی/مرکزِ هزینه/پروژه‌یِ
+        ردیفِ جاری، بدونِ کد، در نوارِ خلاصه‌یِ بالایِ جدول."""
+        row = self._active_row if self._active_row in self._line_rows else (
+            self._line_rows[0] if self._line_rows else None
+        )
+        combos = (
+            {
+                "account": row.account_combo,
+                "detail": row.detail_combo,
+                "cost_center": row.cost_center_combo,
+                "project": row.project_combo,
+            }
+            if row is not None
+            else {}
+        )
+        for key, label in self._preview_value_labels.items():
+            combo = combos.get(key)
+            name = _display_name_only(combo.currentText()) if combo is not None else ""
+            value_color = theme.PRIMARY if key == "account" else theme.SUCCESS
+            title = {"account": "حساب", "detail": "تفصیلی", "cost_center": "مرکزِ هزینه", "project": "پروژه"}[key]
+            label.setText(
+                f'<span style="color:{theme.TEXT_SECONDARY};">{title}: </span>'
+                f'<span style="color:{value_color}; font-weight:600;">{name or "—"}</span>'
+            )
 
     def _move_row_focus(self, row: _LineRow, field: str, direction: int) -> None:
         index = self._line_rows.index(row)
@@ -873,6 +988,9 @@ class JournalEntryScreen(QWidget):
         self._unregister_row_nav(row)
         self._renumber_rows()
         self.update_balance()
+        if self._active_row is row:
+            self._active_row = None
+            self._refresh_preview_strip()
 
     def _renumber_rows(self) -> None:
         for i in range(len(self._line_rows)):

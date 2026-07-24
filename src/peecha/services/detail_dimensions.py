@@ -57,6 +57,7 @@ class DimensionTypeRow:
     code: str
     is_active: bool
     detail_account_count: int
+    color: str | None = None
 
 
 @dataclass
@@ -92,6 +93,7 @@ def list_dimension_types(company_id: int, *, include_system: bool = False) -> li
                 code=t.code,
                 is_active=t.is_active,
                 detail_account_count=counts.get(t.dimension_type_id, 0),
+                color=t.color,
             )
             for t in types
         ]
@@ -119,6 +121,36 @@ def update_dimension_type(dimension_type_id: int, company_id: int, code: str, is
         dimension_type.code = code.strip().upper()
         dimension_type.is_active = is_active
         session.commit()
+
+
+def set_dimension_type_color(dimension_type_id: int, company_id: int, color: str | None) -> None:
+    """طبقِ درخواستِ صریح: در هنگامِ پیکربندیِ یک گروهِ تفصیلی بتوان رنگِ
+    اختصاصیِ آن را مشخص کرد — این رنگ در فهرستِ واحدِ تفصیلی‌ها (نمایِ
+    درختی) و کمبویِ تفصیلیِ فرمِ صدورِ سند استفاده می‌شود."""
+    with new_session() as session:
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        if dimension_type is None or dimension_type.company_id != company_id:
+            raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+        dimension_type.color = color or None
+        session.commit()
+
+
+def set_person_group_color(person_group_id: int, company_id: int, color: str | None) -> None:
+    with new_session() as session:
+        group = session.get(PersonGroup, person_group_id)
+        if group is None or group.company_id != company_id:
+            raise ValueError("گروه نامعتبر است.")
+        group.color = color or None
+        session.commit()
+
+
+def get_group_color(dimension_type_id: int, person_group_id: int = 0) -> str | None:
+    with new_session() as session:
+        if person_group_id:
+            group = session.get(PersonGroup, person_group_id)
+            return group.color if group is not None else None
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        return dimension_type.color if dimension_type is not None else None
 
 
 def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:
@@ -731,6 +763,9 @@ class UnifiedDetailAccountRow:
     full_code: str
     name: str | None
     is_active: bool
+    parent_detail_account_id: int | None = None
+    code: str = ""
+    color: str | None = None
 
 
 def list_all_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
@@ -757,13 +792,16 @@ def list_all_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
             if r.dimension_type_id == person_dimension_type_id and r.code == NO_DETAIL_CODE:
                 continue  # ردیفِ سیستمیِ «بدون تفصیلی» برایِ کاربر معنادار نیست
             person_group_code = None
+            color = None
             if r.person_group_id is not None:
                 group = person_groups_by_id.get(r.person_group_id)
                 group_name = group.name if group is not None else "?"
                 person_group_code = group.code if group is not None else None
+                color = group.color if group is not None else None
             else:
                 group = dimension_types_by_id.get(r.dimension_type_id)
                 group_name = group.code if group is not None else "?"
+                color = group.color if group is not None else None
             result.append(
                 UnifiedDetailAccountRow(
                     detail_account_id=r.detail_account_id,
@@ -774,6 +812,9 @@ def list_all_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
                     full_code=full_codes.get(r.detail_account_id, r.code),
                     name=r.name,
                     is_active=r.is_active,
+                    parent_detail_account_id=r.parent_detail_account_id,
+                    code=r.code,
+                    color=color,
                 )
             )
         result.sort(key=lambda row: (row.group_name, row.full_code))
@@ -996,6 +1037,7 @@ class PersonGroupRow:
     code: str
     name: str
     is_active: bool
+    color: str | None = None
 
 
 def ensure_person_groups(session, company_id: int) -> dict[str, int]:
@@ -1022,7 +1064,7 @@ def list_person_groups(company_id: int) -> list[PersonGroupRow]:
         rows = session.scalars(
             select(PersonGroup).where(PersonGroup.company_id == company_id).order_by(PersonGroup.person_group_id)
         ).all()
-        return [PersonGroupRow(g.person_group_id, g.code, g.name, g.is_active) for g in rows]
+        return [PersonGroupRow(g.person_group_id, g.code, g.name, g.is_active, g.color) for g in rows]
 
 
 def get_person_group_id(company_id: int, code: str) -> int:
@@ -1332,7 +1374,7 @@ def get_required_person_groups_for_account(account_id: int) -> list[PersonGroupR
         if not group_ids:
             return []
         groups = session.scalars(select(PersonGroup).where(PersonGroup.person_group_id.in_(group_ids))).all()
-        return [PersonGroupRow(g.person_group_id, g.code, g.name, g.is_active) for g in groups]
+        return [PersonGroupRow(g.person_group_id, g.code, g.name, g.is_active, g.color) for g in groups]
 
 
 def set_account_person_groups(account_id: int, company_id: int, person_group_ids: list[int]) -> None:

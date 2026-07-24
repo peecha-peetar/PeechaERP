@@ -156,6 +156,9 @@ class DetailDimensionType(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # سقفِ تعدادِ سطحِ سلسله‌مراتبِ حساب‌هایِ تفصیلیِ این گروه (۱ تا ۴).
     max_level_no: Mapped[int] = mapped_column(SmallInteger, default=4)
+    # رنگِ اختصاصیِ این گروه (مثلاً "#15A672") — طبقِ درخواستِ صریح، در فهرستِ
+    # تفصیلی‌ها و کمبویِ تفصیلیِ سندِ حسابداری استفاده می‌شود.
+    color: Mapped[str | None] = mapped_column(String(7))
 
 
 class DetailAccount(Base):
@@ -243,6 +246,8 @@ class PersonGroup(Base):
     code: Mapped[str] = mapped_column(String(20))  # CUSTOMER, SUPPLIER, PERSONNEL
     name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # رنگِ اختصاصیِ این زیرگروه — هم‌الگو با DetailDimensionType.color.
+    color: Mapped[str | None] = mapped_column(String(7))
 
 
 class AccountPersonGroup(Base):

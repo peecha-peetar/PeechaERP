@@ -1,21 +1,29 @@
 """فهرستِ واحدِ همه‌ی تفصیلی‌ها — معادلِ Qt برایِ detail_accounts_list.py/.kv
-در Kivy. کلیک روی هر ردیف بسته به نوعِ گروهش، صفحه‌ی درست را باز می‌کند."""
+در Kivy. کلیک روی هر ردیف بسته به نوعِ گروهش، صفحه‌ی درست را باز می‌کند.
+
+طبقِ بازخوردِ صریح: این فهرست حالا یک نمایِ درختی است — هر گروهِ تفصیلی
+(کالا/بانک/صندوق/... و مشتری/تامین‌کننده/پرسنل/گروه‌هایِ ساده) یک گرهِ
+سرگروه دارد که با رنگِ اختصاصیِ همان گروه (اگر تنظیم شده) رنگ‌آمیزی
+می‌شود؛ به‌طورِ پیش‌فرض فقط برگ‌ها (پایین‌ترین سطحِ هر گروه) زیرِ همان
+گره نشان داده می‌شوند — چون در سلسله‌مراتبِ چندسطحی معمولاً فقط برگ‌ها
+در عمل قابل‌انتخاب‌اند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح» کاربر را به سلسله‌مراتبِ
+کاملِ والد/فرزند سوییچ می‌دهد."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView,
+    QCheckBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMenu,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -42,7 +50,14 @@ _NAV_CODE_BY_DIMENSION_CODE = {
     "PROJECT": "GL_PROJECTS",
 }
 
-_COLUMNS = ["وضعیت", "نام", "کد", "سطح", "نوعِ تفصیلی"]
+_COLUMNS = ["نام", "کد", "سطح", "وضعیت"]
+
+
+def _group_label(group_name: str) -> str:
+    """گروه‌هایِ اشخاص از قبل با نامِ فارسی (مثلِ «مشتری») ذخیره شده‌اند؛
+    گروه‌هایِ عمومی با کدِ خام (مثلِ «CASH_BOX») که این‌جا به برچسبِ فارسی
+    ترجمه می‌شود — کدِ خام برایِ مسیریابی دست‌نخورده می‌ماند."""
+    return dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(group_name, group_name)
 
 
 class DetailAccountsListScreen(QWidget):
@@ -78,47 +93,128 @@ class DetailAccountsListScreen(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
+        filter_row = QHBoxLayout()
         self.search_field = QLineEdit()
         self.search_field.setPlaceholderText("جستجو در نوعِ تفصیلی، کد یا نام")
         self.search_field.textChanged.connect(self._apply_filter)
-        layout.addWidget(self.search_field)
+        filter_row.addWidget(self.search_field, stretch=1)
 
-        self.table = QTableWidget(0, len(_COLUMNS))
-        self.table.setHorizontalHeaderLabels(_COLUMNS)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.cellClicked.connect(self._on_row_clicked)
-        layout.addWidget(self.table, stretch=1)
+        # طبقِ درخواستِ صریح: به‌طورِ پیش‌فرض فقط سطوحِ آخر (برگ‌ها) نمایش
+        # داده می‌شوند؛ با این چک‌باکس می‌توان کلِ سلسله‌مراتب را دید.
+        self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
+        self.show_all_levels_checkbox.toggled.connect(self._apply_filter)
+        filter_row.addWidget(self.show_all_levels_checkbox)
+        layout.addLayout(filter_row)
+
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(len(_COLUMNS))
+        self.tree.setHeaderLabels(_COLUMNS)
+        self.tree.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self.tree, stretch=1)
 
     def refresh(self) -> None:
         company_id = session.current_company.company_id if session.current_company else None
         self._entries = dimensions_service.list_all_detail_accounts(company_id) if company_id is not None else []
         self._apply_filter()
 
-    def _apply_filter(self) -> None:
-        query = self.search_field.text().strip()
-        filtered = [
-            e for e in self._entries
-            if not query or query in e.group_name or query in e.full_code or (e.name and query in e.name)
-        ]
-        self.table.setRowCount(len(filtered))
-        for row_index, e in enumerate(filtered):
-            values = [
-                "فعال" if e.is_active else "غیرفعال",
-                e.name or "—",
-                e.full_code,
-                str(e.level_no),
-                e.group_name,
-            ]
-            for col_index, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code, e.group_name))
-                self.table.setItem(row_index, col_index, item)
+    def _matches_query(self, e: dimensions_service.UnifiedDetailAccountRow, query: str) -> bool:
+        if not query:
+            return True
+        return query in _group_label(e.group_name) or query in e.full_code or bool(e.name and query in e.name)
 
-    def _on_row_clicked(self, row: int, _column: int) -> None:
-        dimension_type_id, detail_account_id, person_group_code, group_name = self.table.item(row, 0).data(Qt.UserRole)
+    def _apply_filter(self) -> None:
+        self.tree.clear()
+        query = self.search_field.text().strip()
+        show_all_levels = self.show_all_levels_checkbox.isChecked()
+
+        by_group: dict[tuple[int, str | None], list[dimensions_service.UnifiedDetailAccountRow]] = {}
+        for e in self._entries:
+            by_group.setdefault((e.dimension_type_id, e.person_group_code), []).append(e)
+
+        for key in sorted(by_group, key=lambda k: _group_label(by_group[k][0].group_name)):
+            entries = by_group[key]
+            if show_all_levels:
+                self._add_group_hierarchy(entries, query)
+            else:
+                self._add_group_leaves(entries, query)
+
+        self.tree.expandAll()
+        for i in range(len(_COLUMNS)):
+            self.tree.resizeColumnToContents(i)
+
+    def _make_group_item(self, group_name: str, color: str | None) -> QTreeWidgetItem:
+        item = QTreeWidgetItem([_group_label(group_name), "", "", ""])
+        font = item.font(0)
+        font.setBold(True)
+        item.setFont(0, font)
+        if color:
+            for col in range(len(_COLUMNS)):
+                item.setForeground(col, QBrush(QColor(color)))
+        self.tree.addTopLevelItem(item)
+        return item
+
+    def _make_leaf_item(
+        self, parent: QTreeWidgetItem, e: dimensions_service.UnifiedDetailAccountRow, color: str | None
+    ) -> QTreeWidgetItem:
+        item = QTreeWidgetItem(
+            [e.name or "—", e.full_code, str(e.level_no), "فعال" if e.is_active else "غیرفعال"]
+        )
+        item.setData(0, Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code, e.group_name))
+        if color:
+            for col in range(len(_COLUMNS)):
+                item.setForeground(col, QBrush(QColor(color)))
+        parent.addChild(item)
+        return item
+
+    def _add_group_leaves(
+        self, entries: list[dimensions_service.UnifiedDetailAccountRow], query: str
+    ) -> None:
+        parent_ids = {e.parent_detail_account_id for e in entries if e.parent_detail_account_id is not None}
+        leaves = [e for e in entries if e.detail_account_id not in parent_ids]
+        matched = [e for e in leaves if self._matches_query(e, query)]
+        if not matched:
+            return
+        color = next((e.color for e in entries if e.color), None)
+        group_item = self._make_group_item(entries[0].group_name, color)
+        for e in sorted(matched, key=lambda r: r.full_code):
+            self._make_leaf_item(group_item, e, color)
+
+    def _add_group_hierarchy(
+        self, entries: list[dimensions_service.UnifiedDetailAccountRow], query: str
+    ) -> None:
+        by_id = {e.detail_account_id: e for e in entries}
+        matched_ids = {e.detail_account_id for e in entries if self._matches_query(e, query)}
+        if not matched_ids:
+            return
+        included_ids = set(matched_ids)
+        for matched_id in matched_ids:
+            cur = by_id.get(matched_id)
+            while cur is not None and cur.parent_detail_account_id is not None:
+                included_ids.add(cur.parent_detail_account_id)
+                cur = by_id.get(cur.parent_detail_account_id)
+
+        children_by_parent: dict[int | None, list[dimensions_service.UnifiedDetailAccountRow]] = {}
+        for e in entries:
+            if e.detail_account_id in included_ids:
+                children_by_parent.setdefault(e.parent_detail_account_id, []).append(e)
+        for siblings in children_by_parent.values():
+            siblings.sort(key=lambda r: r.full_code)
+
+        color = next((e.color for e in entries if e.color), None)
+        group_item = self._make_group_item(entries[0].group_name, color)
+
+        def add_children(parent_item: QTreeWidgetItem, parent_id: int | None) -> None:
+            for e in children_by_parent.get(parent_id, []):
+                leaf_item = self._make_leaf_item(parent_item, e, color)
+                add_children(leaf_item, e.detail_account_id)
+
+        add_children(group_item, None)
+
+    def _on_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        data = item.data(0, Qt.UserRole)
+        if data is None:
+            return  # گرهِ سرگروه — چیزی برایِ باز کردن نیست
+        dimension_type_id, detail_account_id, person_group_code, group_name = data
         self.open_entry(dimension_type_id, detail_account_id, person_group_code, group_name)
 
     def open_entry(
