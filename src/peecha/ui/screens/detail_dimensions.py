@@ -14,20 +14,19 @@ import datetime
 import decimal
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -75,13 +74,17 @@ class DetailDimensionsScreen(QWidget):
         self.group_combo.currentIndexChanged.connect(self._on_group_changed)
         layout.addWidget(self.group_combo)
 
-        self.accounts_table = QTableWidget(0, 4)
-        self.accounts_table.setHorizontalHeaderLabels(["وضعیت", "نام", "کدِ کامل", "سطح"])
-        self.accounts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.accounts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.accounts_table.verticalHeader().setVisible(False)
-        self.accounts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.accounts_table.cellClicked.connect(self._on_account_row_clicked)
+        # طبقِ درخواستِ صریح: نمایِ درختی + رنگِ گروه — به‌طورِ پیش‌فرض فقط
+        # سطوحِ آخر (برگ‌ها) نشان داده می‌شوند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح»
+        # کلِ سلسله‌مراتبِ والد/فرزند را نشان می‌دهد.
+        self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
+        self.show_all_levels_checkbox.toggled.connect(lambda _checked: self._rebuild_accounts_tree())
+        layout.addWidget(self.show_all_levels_checkbox)
+
+        self.accounts_table = QTreeWidget()
+        self.accounts_table.setColumnCount(4)
+        self.accounts_table.setHeaderLabels(["وضعیت", "نام", "کدِ کامل", "سطح"])
+        self.accounts_table.itemClicked.connect(self._on_account_item_clicked)
         layout.addWidget(self.accounts_table, stretch=1)
 
         return panel
@@ -197,17 +200,55 @@ class DetailDimensionsScreen(QWidget):
                 self.parent_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
         self.parent_combo.blockSignals(False)
 
-        self.accounts_table.setRowCount(len(rows))
-        for row_index, r in enumerate(rows):
-            values = ["فعال" if r.is_active else "غیرفعال", r.name or "—", r.full_code, str(r.level_no)]
-            for col_index, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, r.detail_account_id)
-                self.accounts_table.setItem(row_index, col_index, item)
+        self._rebuild_accounts_tree(rows)
 
         self._render_extra_fields()
         if self._editing_account_id is None:
             self._suggest_code_for_current_parent()
+
+    def _make_account_tree_item(self, r: dimensions_service.DetailAccountRow, color: str | None) -> QTreeWidgetItem:
+        item = QTreeWidgetItem(["فعال" if r.is_active else "غیرفعال", r.name or "—", r.full_code, str(r.level_no)])
+        item.setData(0, Qt.UserRole, r.detail_account_id)
+        if color:
+            for col in range(4):
+                item.setForeground(col, QBrush(QColor(color)))
+        return item
+
+    def _rebuild_accounts_tree(self, rows: list[dimensions_service.DetailAccountRow] | None = None) -> None:
+        """طبقِ درخواستِ صریح: نمایِ درختی + رنگِ گروه — به‌طورِ پیش‌فرض فقط
+        برگ‌ها (سطحِ آخر) نشان داده می‌شوند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح»
+        سلسله‌مراتبِ کاملِ والد/فرزند را می‌سازد."""
+        if rows is None:
+            rows = list(self._accounts_by_id.values())
+        self.accounts_table.clear()
+        color = dimensions_service.get_group_color(self._selected_type_id) if self._selected_type_id else None
+
+        if self.show_all_levels_checkbox.isChecked():
+            children_by_parent: dict[int | None, list[dimensions_service.DetailAccountRow]] = {}
+            for r in rows:
+                children_by_parent.setdefault(r.parent_detail_account_id, []).append(r)
+            for siblings in children_by_parent.values():
+                siblings.sort(key=lambda row: row.full_code)
+
+            def add_children(parent_item: QTreeWidgetItem | None, parent_id: int | None) -> None:
+                for r in children_by_parent.get(parent_id, []):
+                    item = self._make_account_tree_item(r, color)
+                    if parent_item is None:
+                        self.accounts_table.addTopLevelItem(item)
+                    else:
+                        parent_item.addChild(item)
+                    add_children(item, r.detail_account_id)
+
+            add_children(None, None)
+            self.accounts_table.expandAll()
+        else:
+            parent_ids = {r.parent_detail_account_id for r in rows if r.parent_detail_account_id is not None}
+            leaves = [r for r in rows if r.detail_account_id not in parent_ids]
+            for r in sorted(leaves, key=lambda row: row.full_code):
+                self.accounts_table.addTopLevelItem(self._make_account_tree_item(r, color))
+
+        for col in range(4):
+            self.accounts_table.resizeColumnToContents(col)
 
     def _on_parent_combo_changed(self, _index: int) -> None:
         if self._editing_account_id is not None:
@@ -284,8 +325,10 @@ class DetailDimensionsScreen(QWidget):
                 result[key] = text or None
         return result
 
-    def _on_account_row_clicked(self, row: int, _column: int) -> None:
-        detail_account_id = self.accounts_table.item(row, 0).data(Qt.UserRole)
+    def _on_account_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        detail_account_id = item.data(0, Qt.UserRole)
+        if detail_account_id is None:
+            return
         self.edit_detail_account(detail_account_id)
 
     def edit_detail_account(self, detail_account_id: int) -> None:

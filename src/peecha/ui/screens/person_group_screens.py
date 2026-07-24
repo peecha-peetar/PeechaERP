@@ -23,21 +23,20 @@ import datetime
 import decimal
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -93,14 +92,18 @@ class PersonGroupScreenBase(QWidget):
         self.list_title.setObjectName("pageTitle")
         layout.addWidget(self.list_title)
 
-        self.table = QTableWidget(0, len(_COLUMNS))
-        self.table.setHorizontalHeaderLabels(_COLUMNS)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.cellClicked.connect(self._on_row_clicked)
-        layout.addWidget(self.table)
+        # طبقِ درخواستِ صریح: نمایِ درختی + رنگِ گروه — به‌طورِ پیش‌فرض فقط
+        # سطوحِ آخر (برگ‌ها) نشان داده می‌شوند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح»
+        # کلِ سلسله‌مراتبِ والد/فرزند را نشان می‌دهد.
+        self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
+        self.show_all_levels_checkbox.toggled.connect(lambda _checked: self._rebuild_tree())
+        layout.addWidget(self.show_all_levels_checkbox)
+
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(len(_COLUMNS))
+        self.tree.setHeaderLabels(_COLUMNS)
+        self.tree.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self.tree)
         return panel
 
     def _build_form_panel(self) -> QWidget:
@@ -231,22 +234,60 @@ class PersonGroupScreenBase(QWidget):
         rows = self._list_rows(company_id) if company_id is not None else []
         self._rows_by_id = {r["detail_account_id"]: r for r in rows}
 
-        self.table.setRowCount(len(rows))
-        for row_index, row in enumerate(rows):
-            values = [
-                "فعال" if row["is_active"] else "غیرفعال",
-                row["name"] or "—",
-                row["full_code"],
-                str(row["level_no"]),
-            ]
-            for col_index, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, row["detail_account_id"])
-                self.table.setItem(row_index, col_index, item)
+        self._rebuild_tree()
         self._reset_form(keep_status=True)
 
-    def _on_row_clicked(self, row: int, _column: int) -> None:
-        detail_account_id = self.table.item(row, 0).data(Qt.UserRole)
+    def _make_tree_item(self, row: dict, color: str | None) -> QTreeWidgetItem:
+        item = QTreeWidgetItem(
+            ["فعال" if row["is_active"] else "غیرفعال", row["name"] or "—", row["full_code"], str(row["level_no"])]
+        )
+        item.setData(0, Qt.UserRole, row["detail_account_id"])
+        if color:
+            for col in range(len(_COLUMNS)):
+                item.setForeground(col, QBrush(QColor(color)))
+        return item
+
+    def _rebuild_tree(self) -> None:
+        """طبقِ درخواستِ صریح: نمایِ درختی + رنگِ گروه — به‌طورِ پیش‌فرض فقط
+        برگ‌ها (سطحِ آخر) نشان داده می‌شوند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح»
+        سلسله‌مراتبِ کاملِ والد/فرزند را می‌سازد."""
+        self.tree.clear()
+        color = (
+            dimensions_service.get_group_color(0, self._person_group_id) if self._person_group_id else None
+        )
+        rows = list(self._rows_by_id.values())
+
+        if self.show_all_levels_checkbox.isChecked():
+            children_by_parent: dict[int | None, list[dict]] = {}
+            for r in rows:
+                children_by_parent.setdefault(r.get("parent_detail_account_id"), []).append(r)
+            for siblings in children_by_parent.values():
+                siblings.sort(key=lambda row: row["full_code"])
+
+            def add_children(parent_item: QTreeWidgetItem | None, parent_id: int | None) -> None:
+                for r in children_by_parent.get(parent_id, []):
+                    item = self._make_tree_item(r, color)
+                    if parent_item is None:
+                        self.tree.addTopLevelItem(item)
+                    else:
+                        parent_item.addChild(item)
+                    add_children(item, r["detail_account_id"])
+
+            add_children(None, None)
+            self.tree.expandAll()
+        else:
+            parent_ids = {r.get("parent_detail_account_id") for r in rows if r.get("parent_detail_account_id") is not None}
+            leaves = [r for r in rows if r["detail_account_id"] not in parent_ids]
+            for r in sorted(leaves, key=lambda row: row["full_code"]):
+                self.tree.addTopLevelItem(self._make_tree_item(r, color))
+
+        for col in range(len(_COLUMNS)):
+            self.tree.resizeColumnToContents(col)
+
+    def _on_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        detail_account_id = item.data(0, Qt.UserRole)
+        if detail_account_id is None:
+            return
         self._load_into_form(detail_account_id)
 
     def _rebuild_parent_combo(self) -> None:
@@ -342,7 +383,7 @@ class PersonGroupScreenBase(QWidget):
         self.save_button.setText("افزودن")
         self.cancel_button.setVisible(False)
         self.delete_button.setVisible(False)
-        self.table.clearSelection()
+        self.tree.clearSelection()
 
     def _render_custom_fields(self, values: dict | None = None) -> None:
         while self.custom_fields_container.count():

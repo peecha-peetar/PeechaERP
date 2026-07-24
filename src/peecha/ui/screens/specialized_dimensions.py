@@ -18,21 +18,20 @@ import datetime
 import decimal
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -71,14 +70,18 @@ class SpecializedDimensionScreenBase(QWidget):
         self.list_title.setObjectName("pageTitle")
         layout.addWidget(self.list_title)
 
-        self.table = QTableWidget(0, len(_COLUMNS))
-        self.table.setHorizontalHeaderLabels(_COLUMNS)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.cellClicked.connect(self._on_row_clicked)
-        layout.addWidget(self.table)
+        # طبقِ درخواستِ صریح: نمایِ درختی + رنگِ گروه — به‌طورِ پیش‌فرض فقط
+        # سطوحِ آخر (برگ‌ها) نشان داده می‌شوند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح»
+        # کلِ سلسله‌مراتبِ والد/فرزند را نشان می‌دهد.
+        self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
+        self.show_all_levels_checkbox.toggled.connect(lambda _checked: self._reload())
+        layout.addWidget(self.show_all_levels_checkbox)
+
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(len(_COLUMNS))
+        self.tree.setHeaderLabels(_COLUMNS)
+        self.tree.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self.tree)
         return panel
 
     def _build_form_panel(self) -> QWidget:
@@ -154,7 +157,7 @@ class SpecializedDimensionScreenBase(QWidget):
         company_id = self._company_id()
         if company_id is None:
             self._dimension_type_id = None
-            self.table.setRowCount(0)
+            self.tree.clear()
             return
         self._dimension_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, self.DIMENSION_CODE)
         self._reload()
@@ -176,17 +179,53 @@ class SpecializedDimensionScreenBase(QWidget):
                 self.parent_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
         self.parent_combo.blockSignals(False)
 
-        self.table.setRowCount(len(rows))
-        for row_index, r in enumerate(rows):
-            values = ["فعال" if r.is_active else "غیرفعال", r.name or "—", r.full_code, str(r.level_no)]
-            for col_index, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, r.detail_account_id)
-                self.table.setItem(row_index, col_index, item)
+        self._rebuild_tree(rows)
 
         self._render_extra_fields()
         if self._editing_id is None:
             self._suggest_code_for_current_parent()
+
+    def _make_tree_item(self, r: dimensions_service.DetailAccountRow, color: str | None) -> QTreeWidgetItem:
+        item = QTreeWidgetItem(["فعال" if r.is_active else "غیرفعال", r.name or "—", r.full_code, str(r.level_no)])
+        item.setData(0, Qt.UserRole, r.detail_account_id)
+        if color:
+            for col in range(len(_COLUMNS)):
+                item.setForeground(col, QBrush(QColor(color)))
+        return item
+
+    def _rebuild_tree(self, rows: list[dimensions_service.DetailAccountRow]) -> None:
+        """طبقِ درخواستِ صریح: نمایِ درختی + رنگِ گروه — به‌طورِ پیش‌فرض فقط
+        برگ‌ها (سطحِ آخر) نشان داده می‌شوند؛ چک‌باکسِ «نمایشِ همه‌یِ سطوح»
+        سلسله‌مراتبِ کاملِ والد/فرزند را می‌سازد."""
+        self.tree.clear()
+        color = dimensions_service.get_group_color(self._dimension_type_id) if self._dimension_type_id else None
+
+        if self.show_all_levels_checkbox.isChecked():
+            children_by_parent: dict[int | None, list[dimensions_service.DetailAccountRow]] = {}
+            for r in rows:
+                children_by_parent.setdefault(r.parent_detail_account_id, []).append(r)
+            for siblings in children_by_parent.values():
+                siblings.sort(key=lambda row: row.full_code)
+
+            def add_children(parent_item: QTreeWidgetItem | None, parent_id: int | None) -> None:
+                for r in children_by_parent.get(parent_id, []):
+                    item = self._make_tree_item(r, color)
+                    if parent_item is None:
+                        self.tree.addTopLevelItem(item)
+                    else:
+                        parent_item.addChild(item)
+                    add_children(item, r.detail_account_id)
+
+            add_children(None, None)
+            self.tree.expandAll()
+        else:
+            parent_ids = {r.parent_detail_account_id for r in rows if r.parent_detail_account_id is not None}
+            leaves = [r for r in rows if r.detail_account_id not in parent_ids]
+            for r in sorted(leaves, key=lambda row: row.full_code):
+                self.tree.addTopLevelItem(self._make_tree_item(r, color))
+
+        for col in range(len(_COLUMNS)):
+            self.tree.resizeColumnToContents(col)
 
     def _on_parent_combo_changed(self, _index: int) -> None:
         if self._editing_id is not None:
@@ -263,8 +302,10 @@ class SpecializedDimensionScreenBase(QWidget):
                 result[key] = text or None
         return result
 
-    def _on_row_clicked(self, row: int, _column: int) -> None:
-        detail_account_id = self.table.item(row, 0).data(Qt.UserRole)
+    def _on_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        detail_account_id = item.data(0, Qt.UserRole)
+        if detail_account_id is None:
+            return
         self._load_into_form(detail_account_id)
 
     # --- برایِ ناوبری از فهرستِ واحدِ تفصیلی‌ها -----------------------------
@@ -304,7 +345,7 @@ class SpecializedDimensionScreenBase(QWidget):
         self._render_extra_fields()
         self._suggest_code_for_current_parent()
         self.delete_button.setVisible(False)
-        self.table.clearSelection()
+        self.tree.clearSelection()
 
     def _save(self) -> None:
         company_id = self._company_id()
