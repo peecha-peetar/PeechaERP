@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -44,7 +45,6 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.services import journal_entries as je_service
 from peecha.ui import theme
 from peecha.ui.widgets import ZeroPaddedSpinBox
 
@@ -176,6 +176,31 @@ class DimensionGroupConfigScreen(QWidget):
         self.lock_hint_label.setObjectName("sectionHint")
         self.lock_hint_label.setWordWrap(True)
         layout.addWidget(self.lock_hint_label)
+
+        # طبقِ درخواستِ صریح: عنوانِ گروه در هر شرایطی (حتی اگر حساب‌هایِ
+        # تفصیلی‌اش سند داشته باشند) باید قابلِ‌اصلاح باشد — بر خلافِ
+        # سطح/بازه که بعدِ سنددارشدنِ همین گروه قفل می‌شود. برایِ ۷ نوعِ
+        # سیستمی (کالا/بانک/...) این فیلد غیرفعال می‌ماند چون عنوانشان
+        # ثابت/سیستمی است (نه چیزی که مدیر تعریف کرده باشد).
+        title_row = QHBoxLayout()
+        title_row.addWidget(QLabel("عنوانِ گروه"))
+        self.title_field = QLineEdit()
+        title_row.addWidget(self.title_field, stretch=1)
+        save_title_button = QPushButton("ذخیره‌یِ عنوان")
+        save_title_button.setObjectName("flatButton")
+        save_title_button.clicked.connect(self._save_title)
+        title_row.addWidget(save_title_button)
+        layout.addLayout(title_row)
+
+        # طبقِ درخواستِ صریح: گروهِ سادهِ کاربرساخته که هیچ‌کدام از
+        # حساب‌هایِ تفصیلی‌اش سند ندارند، باید کاملاً قابلِ‌حذف باشد.
+        delete_row = QHBoxLayout()
+        delete_row.addStretch(1)
+        self.delete_group_button = QPushButton("حذفِ کاملِ این گروه")
+        self.delete_group_button.setObjectName("dangerButton")
+        self.delete_group_button.clicked.connect(self._delete_group)
+        delete_row.addWidget(self.delete_group_button)
+        layout.addLayout(delete_row)
 
         # طبقِ درخواستِ صریح: هر گروهِ تفصیلی می‌تواند رنگِ اختصاصیِ خودش را
         # داشته باشد — این رنگ در فهرستِ تفصیلی‌ها (نمایِ درختی) و کمبویِ
@@ -328,6 +353,16 @@ class DimensionGroupConfigScreen(QWidget):
         self._current_color = dimensions_service.get_group_color(dimension_type_id, person_group_id)
         self._apply_color_swatch(self._current_color)
 
+        self.title_field.setText(label)
+        dim_type = next((t for t in self._types if t.dimension_type_id == dimension_type_id), None)
+        is_specialized_system_type = (
+            person_group_id == 0 and dim_type is not None and dim_type.code in dimensions_service.SPECIALIZED_DIMENSION_LABELS
+        )
+        self.title_field.setEnabled(not is_specialized_system_type)
+        self._is_custom_simple_group = (
+            person_group_id == 0 and dim_type is not None and dim_type.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
+        )
+
         company_id = self._company_id()
         digit_config_by_level = (
             {r.level_no: r.code_length for r in dimensions_service.list_level_digit_config(company_id)}
@@ -345,7 +380,11 @@ class DimensionGroupConfigScreen(QWidget):
         self._load_levels()
         self._load_fields()
 
-        locked = company_id is not None and je_service.company_has_any_entries(company_id)
+        has_usage = (
+            company_id is not None
+            and dimensions_service.group_has_any_usage(dimension_type_id, company_id, person_group_id)
+        )
+        locked = has_usage
         self._levels_locked = locked
         self._apply_level_enablement(self.max_level_spin.value())
         # _load_levels (بالا) رنگِ زنده را با enablementِ گروهِ قبلی محاسبه
@@ -355,8 +394,11 @@ class DimensionGroupConfigScreen(QWidget):
         self.save_levels_button.setEnabled(not locked)
         self.max_level_spin.setEnabled(not locked)
         self.lock_hint_label.setText(
-            "این شرکت سند دارد؛ تنظیماتِ رقم/بازه/تعدادِ سطح دیگر قابلِ‌تغییر نیست." if locked else ""
+            "حساب‌هایِ تفصیلیِ همین گروه سند دارند؛ تنظیماتِ رقم/بازه/تعدادِ سطحِ این گروه دیگر قابلِ‌تغییر نیست."
+            if locked
+            else ""
         )
+        self.delete_group_button.setEnabled(self._is_custom_simple_group and not has_usage)
 
     def _on_max_level_changed(self, value: int) -> None:
         self._apply_level_enablement(value)
@@ -459,6 +501,55 @@ class DimensionGroupConfigScreen(QWidget):
 
     def _show_type_status(self, text: str, *, ok: bool) -> None:
         theme.set_status_label(self.type_status_label, text, ok=ok)
+
+    # --- عنوان + حذفِ کاملِ گروه ---------------------------------------------
+    def _save_title(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
+            return
+        new_title = self.title_field.text().strip()
+        if not new_title:
+            self._show_type_status("عنوان را وارد کنید.", ok=False)
+            return
+        try:
+            if self._selected_person_group_id:
+                dimensions_service.set_person_group_name(self._selected_person_group_id, company_id, new_title)
+            else:
+                dim_type = next((t for t in self._types if t.dimension_type_id == self._selected_type_id), None)
+                if dim_type is None:
+                    return
+                dimensions_service.update_dimension_type(
+                    self._selected_type_id, company_id, new_title, dim_type.is_active
+                )
+        except ValueError as exc:
+            self._show_type_status(str(exc), ok=False)
+            return
+        self._show_type_status("عنوان ذخیره شد.", ok=True)
+        selected_type_id, selected_person_group_id = self._selected_type_id, self._selected_person_group_id
+        self.refresh()
+        self._select_type(selected_type_id, selected_person_group_id)
+
+    def _delete_group(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "حذفِ کاملِ گروه",
+            "این گروه به‌همراهِ همه‌یِ حساب‌هایِ تفصیلی/سطوح/فیلدهایِ اختصاصی‌اش حذف شود؟ این کار قابلِ‌بازگشت نیست.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            dimensions_service.delete_custom_group_completely(self._selected_type_id, company_id)
+        except ValueError as exc:
+            self._show_type_status(str(exc), ok=False)
+            return
+        self._selected_type_id = None
+        self._selected_person_group_id = 0
+        self._show_type_status("گروه کاملاً حذف شد.", ok=True)
+        self.refresh()
 
     # --- رنگِ گروه ---------------------------------------------------------
     def _apply_color_swatch(self, color: str | None) -> None:

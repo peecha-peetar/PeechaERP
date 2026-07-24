@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
@@ -118,6 +118,8 @@ def update_dimension_type(dimension_type_id: int, company_id: int, code: str, is
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
             raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+        if dimension_type.code in SPECIALIZED_DIMENSION_LABELS or dimension_type.code == PERSON_DIMENSION_CODE:
+            raise ValueError("عنوانِ گروه‌هایِ سیستمی (کالا/بانک/... و اشخاص) قابلِ‌تغییر نیست.")
         dimension_type.code = code.strip().upper()
         dimension_type.is_active = is_active
         session.commit()
@@ -175,6 +177,94 @@ def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:
         if usage_count:
             raise ValueError("این نوعِ بُعد روی حساب‌های کدینگ استفاده شده؛ ابتدا آن ارتباط را حذف کنید.")
 
+        session.delete(dimension_type)
+        session.commit()
+
+
+def group_has_any_usage(dimension_type_id: int, company_id: int, person_group_id: int = 0) -> bool:
+    """آیا حتی یکی از حساب‌هایِ تفصیلیِ همین گروه (نه کلِ شرکت) در سندی
+    استفاده شده — طبقِ درخواستِ صریح، قفلِ ویرایشِ سطح/بازه/سقفِ سطح باید
+    مخصوصِ همین گروه باشد، نه قفلِ سراسریِ «شرکت سند دارد»."""
+    with new_session() as session:
+        query = select(DetailAccount.detail_account_id).where(
+            DetailAccount.company_id == company_id, DetailAccount.dimension_type_id == dimension_type_id
+        )
+        if person_group_id:
+            query = query.where(DetailAccount.person_group_id == person_group_id)
+        else:
+            query = query.where(DetailAccount.person_group_id.is_(None))
+        account_ids = session.scalars(query).all()
+        if not account_ids:
+            return False
+        return (
+            session.scalar(
+                select(func.count())
+                .select_from(JournalEntryLineDetail)
+                .where(JournalEntryLineDetail.detail_account_id.in_(account_ids))
+            )
+            > 0
+        )
+
+
+def set_person_group_name(person_group_id: int, company_id: int, name: str) -> None:
+    """طبقِ درخواستِ صریح: عنوانِ گروه (اینجا برایِ مشتری/تامین‌کننده/پرسنل)
+    باید در هر شرایطی (حتی وقتی حساب‌هایِ تفصیلی‌اش سند دارند) قابلِ‌اصلاح
+    باشد — بر خلافِ سطح/بازه که بعدِ سنددارشدن قفل می‌شود."""
+    with new_session() as session:
+        group = session.get(PersonGroup, person_group_id)
+        if group is None or group.company_id != company_id:
+            raise ValueError("گروه نامعتبر است.")
+        name = name.strip()
+        if not name:
+            raise ValueError("نام نمی‌تواند خالی باشد.")
+        group.name = name
+        session.commit()
+
+
+def delete_custom_group_completely(dimension_type_id: int, company_id: int) -> None:
+    """حذفِ کاملِ یک گروهِ «سادهِ کاربرساخته» — طبقِ درخواستِ صریح: اگر
+    زیرمجموعه‌هایِ آن (حساب‌هایِ تفصیلی) سند نداشته باشند، کاملِ گروه
+    (حساب‌های تفصیلی + سطوح + فیلدهایِ اختصاصی + خودِ نوع‌بُعد) حذف شود.
+    فقط برای گروه‌هایِ سادهِ کاربرساخته مجاز است — ۷ نوعِ فرمِ خاص
+    (کالا/بانک/...) و مشتری/تامین‌کننده/پرسنل فیکسچرهایِ خودکارساخته‌اند
+    که صفحه‌ی اختصاصیِ خودشان به وجودشان متکی است."""
+    with new_session() as session:
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        if dimension_type is None or dimension_type.company_id != company_id:
+            raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+        if dimension_type.code in SPECIALIZED_DIMENSION_LABELS or dimension_type.code == PERSON_DIMENSION_CODE:
+            raise ValueError("این گروه سیستمی است و قابلِ‌حذفِ کامل نیست.")
+
+        account_ids = session.scalars(
+            select(DetailAccount.detail_account_id).where(DetailAccount.dimension_type_id == dimension_type_id)
+        ).all()
+        if account_ids:
+            usage_count = session.scalar(
+                select(func.count())
+                .select_from(JournalEntryLineDetail)
+                .where(JournalEntryLineDetail.detail_account_id.in_(account_ids))
+            )
+            if usage_count:
+                raise ValueError("این گروه دارای حساب‌هایِ تفصیلیِ سنددار است؛ ابتدا سندهایِ مربوطه را حذف کنید.")
+
+        usage_on_coding = session.scalar(
+            select(func.count())
+            .select_from(AccountDetailDimension)
+            .where(AccountDetailDimension.dimension_type_id == dimension_type_id)
+        )
+        if usage_on_coding:
+            raise ValueError("این نوعِ بُعد روی حساب‌های کدینگ استفاده شده؛ ابتدا آن ارتباط را حذف کنید.")
+
+        # حذفِ حساب‌هایِ تفصیلی از عمیق‌ترین سطح به سمتِ ریشه — چون
+        # parent_detail_account_id یک FKِ خودارجاع (RESTRICT پیش‌فرض) است.
+        for level_no in range(MAX_DETAIL_LEVEL, 0, -1):
+            session.execute(
+                delete(DetailAccount).where(
+                    DetailAccount.dimension_type_id == dimension_type_id, DetailAccount.level_no == level_no
+                )
+            )
+        session.execute(delete(DetailGroupLevel).where(DetailGroupLevel.dimension_type_id == dimension_type_id))
+        session.execute(delete(DetailGroupField).where(DetailGroupField.dimension_type_id == dimension_type_id))
         session.delete(dimension_type)
         session.commit()
 

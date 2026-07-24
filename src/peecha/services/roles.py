@@ -6,7 +6,14 @@ get-or-create که برای سال مالی در journal_entries.py استفاد
 
 فقط ۴ اکشنِ VIEW/CREATE/EDIT/DELETE در این نسخه قابل‌تنظیم‌اند (نه همه‌ی
 ۷ اکشنِ جدولِ permission_actions) — چون فقط همین‌ها در فرم‌های فعلی برنامه
-واقعاً معنا دارند (چاپ/خروجی/تایید هنوز به هیچ صفحه‌ای وصل نشده)."""
+واقعاً معنا دارند (چاپ/خروجی/تایید هنوز به هیچ صفحه‌ای وصل نشده).
+
+طبقِ بازخوردِ صریح: قبلاً `_FORMS` یک فهرستِ دستیِ جداگانه بود که با
+اضافه‌شدنِ صفحه‌هایِ تازه (در طولِ توسعه) به‌روز نمی‌شد و آن صفحاتِ تازه
+هیچ‌وقت در جدولِ دسترسیِ نقش‌ها ظاهر نمی‌شدند — حالا از
+`peecha.nav_catalog` (همان تکِ منبعِ حقیقتی که ناوبریِ shell_window.py هم
+از آن می‌خواند) ساخته می‌شود تا افزودنِ آیتمِ تازه به NAV_ITEMS به‌طورِ
+خودکار در جدولِ دسترسی‌ها هم ظاهر شود."""
 
 from __future__ import annotations
 
@@ -25,8 +32,9 @@ from peecha.db.models.security import (
     User,
     UserRole,
 )
+from peecha.nav_catalog import build_form_catalog
 
-# (کدِ ماژول، برچسبِ فارسی، آیکون، ترتیب) — همان ماژول‌های شِل (shell.py NAV_ITEMS)
+# (کدِ ماژول، برچسبِ فارسی، آیکون، ترتیب) — همان ماژول‌های شِل (shell_window.py NAV_ITEMS)
 _MODULES = [
     ("DASH", "داشبورد", "view-dashboard-outline", 0),
     ("GL", "مالی و حسابداری", "cash-multiple", 1),
@@ -39,19 +47,9 @@ _MODULES = [
     ("SETTINGS", "مدیریت سیستم", "cog-outline", 8),
 ]
 
-# (کدِ فرم = همان name صفحه‌ی Kivy، کدِ ماژول، برچسبِ فارسی)
-_FORMS = [
-    ("dashboard", "DASH", "داشبورد"),
-    ("chart_of_accounts", "GL", "کدینگ حسابداری"),
-    ("journal_entry", "GL", "صدور سند"),
-    ("languages", "SETTINGS", "زبان‌ها"),
-    ("companies", "SETTINGS", "شرکت‌ها"),
-    ("fiscal_years", "SETTINGS", "سال‌های مالی"),
-    ("users", "SETTINGS", "کاربران"),
-    ("roles", "SETTINGS", "نقش‌ها و دسترسی‌ها"),
-    ("field_labels", "SETTINGS", "عنوانِ فیلدها"),
-    ("translations", "SETTINGS", "ترجمه‌ها"),
-]
+# (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()
+# ساخته می‌شود (نگاهِ بالا برایِ چرایی).
+_FORMS = build_form_catalog()
 
 FORM_LABELS: dict[str, str] = {code: label for code, _module, label in _FORMS}
 MODULE_LABELS: dict[str, str] = {code: label for code, label, _icon, _sort in _MODULES}

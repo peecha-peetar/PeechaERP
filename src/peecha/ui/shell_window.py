@@ -34,47 +34,12 @@ from peecha.services import languages as languages_service
 from peecha import numerals
 from peecha.ui import theme
 
-# همان NAV_ITEMS طبقِ shell.py (نسخه‌ی Kivy) — عمداً اینجا هم تکرار شده
-# تا این ماژول به‌هیچ‌وجه کیویی import نکند (هدفِ کلِ این مهاجرت).
-NAV_ITEMS = [
-    {"code": "dashboard", "label": "داشبورد", "screen": "dashboard"},
-    {
-        "code": "GL",
-        "label": "مالی و حسابداری",
-        "children": [
-            {"code": "GL_COA", "label": "کدینگ حسابداری", "screen": "chart_of_accounts"},
-            # طبقِ درخواستِ صریح: انواعِ تفصیلی از ریبون حذف شدند (همچنان از
-            # ساید‌بار در دسترس‌اند؛ دکمه‌ی «تفصیلیِ جدید» در خودِ صفحه‌ی
-            # «تفصیلی‌ها» میان‌بُرِ ساختِ رکوردِ تازه برایِ هرکدام را می‌دهد) —
-            # تا دکمه‌هایِ باقی‌مانده (کدینگ/اسناد/صدورِ سند) فضایِ بیشتری
-            # داشته باشند و ریبون کمتر شلوغ باشد.
-            {"code": "GL_TAFSILI", "label": "تفصیلی‌ها", "screen": "detail_accounts_list", "in_ribbon": False},
-            {"code": "GL_CUSTOMERS", "label": "مشتریان", "screen": "customers", "in_ribbon": False},
-            {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "screen": "suppliers", "in_ribbon": False},
-            {"code": "GL_PERSONNEL", "label": "پرسنل", "screen": "personnel", "in_ribbon": False},
-            {"code": "GL_INVENTORY_ITEMS", "label": "کالا", "screen": "inventory_items", "in_ribbon": False},
-            {"code": "GL_FIXED_ASSETS", "label": "دارایی ثابت", "screen": "fixed_assets", "in_ribbon": False},
-            {"code": "GL_BANK_ACCOUNTS", "label": "بانک", "screen": "bank_accounts", "in_ribbon": False},
-            {"code": "GL_CASH_BOXES", "label": "صندوق", "screen": "cash_boxes", "in_ribbon": False},
-            {"code": "GL_PETTY_CASHES", "label": "تنخواه", "screen": "petty_cashes", "in_ribbon": False},
-            {"code": "GL_COST_CENTERS", "label": "مرکز هزینه", "screen": "cost_centers", "in_ribbon": False},
-            {"code": "GL_PROJECTS", "label": "پروژه", "screen": "projects", "in_ribbon": False},
-            {"code": "GL_JE_LIST", "label": "اسناد حسابداری", "screen": "journal_entries_list"},
-            {"code": "GL_JE", "label": "صدور سند جدید", "screen": "journal_entry"},
-            {"code": "GL_DIM_CONFIG", "label": "پیکربندیِ گروه‌هایِ تفصیلی", "screen": "dimension_group_config", "in_ribbon": False},
-            {"code": "GL_DIM", "label": "تفصیلی‌هایِ گروه‌هایِ ساده", "screen": "detail_dimensions", "in_ribbon": False},
-        ],
-    },
-    {"code": "INV", "label": "انبار و موجودی", "screen": None},
-    {"code": "SALES", "label": "فروش و بازاریابی", "screen": None},
-    {"code": "PURCH", "label": "خرید و تدارکات", "screen": None},
-    {"code": "HR", "label": "منابع انسانی", "screen": None},
-    {"code": "INVOICES", "label": "فاکتورها", "screen": None},
-    {"code": "REPORTS", "label": "گزارش‌ها", "screen": None},
-    # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ
-    # تب‌هایِ سازمان‌یافته درونِ یک صفحه‌ی واحد («system_settings») جمع شده‌اند.
-    {"code": "SETTINGS", "label": "تنظیمات سیستم", "screen": "system_settings"},
-]
+# NAV_ITEMS حالا در peecha/nav_catalog.py متمرکز شده — طبقِ بازخوردِ صریح
+# (نقش‌ها/دسترسی‌ها با اضافه‌شدنِ صفحه‌یِ تازه در جدول به‌روز نمی‌شد)، همان
+# فهرست حالا تکِ منبعِ حقیقتِ هم برایِ این ناوبری و هم برایِ کاتالوگِ
+# فرم‌هایِ services/roles.py است.
+from peecha.nav_catalog import NAV_ITEMS
+from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
 
 # گلیفِ آیکونِ هر آیتمِ سطحِ بالا — برایِ حالتِ جمع‌شده‌ی نوارِ کناری (فقط
 # آیکون) که rendered می‌شود؛ فایلِ آیکونِ خارجی لازم نیست (theme.emoji_icon).
@@ -95,16 +60,6 @@ _NAV_ICONS = {
 # نگاشتِ کدِ گروه به ایندکسِ تبِ مربوطه (فقط بخش‌هایی که واقعاً تنظیماتِ
 # اختصاصی دارند نگاشته می‌شوند؛ بقیه هنوز صفحه ندارند).
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
-
-
-def _flatten_nav_items() -> list[dict]:
-    flat: list[dict] = []
-    for item in NAV_ITEMS:
-        if "children" in item:
-            flat.extend(item["children"])
-        else:
-            flat.append(item)
-    return flat
 
 
 class MainWindow(QMainWindow):
