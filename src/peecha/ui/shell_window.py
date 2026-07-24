@@ -312,6 +312,30 @@ class MainWindow(QMainWindow):
             menu = QMenu(menu_button)
             for child in hidden_children:
                 menu.addAction(_label_of(child), lambda _checked=False, c=child["code"]: self.open_screen(c))
+
+            # طبقِ گزارشِ صریح: گروه‌هایِ سادهِ کاربرساخته (که خودشان صفحه‌ی
+            # اختصاصی ندارند و فقط درونِ «تفصیلی‌هایِ گروه‌هایِ ساده» قابلِ‌
+            # مشاهده‌اند) هم باید در همین منو ظاهر شوند — وگرنه بعدِ ساختنِ
+            # گروهِ تازه، هیچ میان‌بری در ریبون برایش نبود.
+            if group["code"] == "GL" and company_id is not None:
+                custom_groups = [
+                    t
+                    for t in dimensions_service.list_dimension_types(company_id)
+                    if t.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
+                ]
+                if custom_groups:
+                    menu.addSeparator()
+                    for t in custom_groups:
+                        menu.addAction(
+                            t.code,
+                            lambda _checked=False, tid=t.dimension_type_id: self.open_screen(
+                                "GL_DIM",
+                                then=lambda screen, tid=tid: screen.group_combo.setCurrentIndex(
+                                    screen.group_combo.findData(tid)
+                                ),
+                            ),
+                        )
+
             menu_button.setMenu(menu)
             self._ribbon_layout.addWidget(menu_button)
 
