@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QCompleter,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -54,6 +55,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -583,18 +585,17 @@ class JournalEntryScreen(QWidget):
         # ردیفِ «جاری» برایِ نوارِ خلاصه — آخرین ردیفی که فوکوس داشته.
         self._active_row: _LineRow | None = None
 
-        # طبقِ گزارشِ صریح (با عکسِ واقعی تأیید شد): قبلاً کلِ صفحه (هدر +
-        # ردیف‌ها + فوتر) در یک QScrollAreaِ واحد بود — این دقیقاً همان
-        # باگی بود که یک‌بار پیش‌تر (در نسخه‌ی قدیمیِ Kivyِ همین فرم) پیدا
-        # و رفع شده بود ولی در مهاجرتِ Qt6 دوباره برگشته بود: sizeHintِ
-        # ویجتِ داخلیِ آن QScrollArea گاهی پیش از polishِ کاملِ فرزندانش
-        # محاسبه/کش می‌شد و فوتر (دکمه‌ی «ثبتِ سند») از پایینِ همان
-        # ارتفاعِ کش‌شده قطع می‌شد — با هیچ رویدادِ resizeِ معمولی هم درست
-        # نمی‌شد. راه‌حلِ درست (هم‌راستا با journal_entries_list.py/
-        # chart_of_accounts.py که همین الگو را دارند): فقط خودِ جدولِ
-        # ردیف‌ها (QTableWidget که اسکرولِ داخلیِ خودش را دارد) کشسان
-        # باشد؛ هدر و فوتر مستقیماً در چیدمانِ اصلی (بدونِ QScrollAreaِ
-        # اضافه) ثابت بمانند.
+        # طبقِ گزارشِ صریح (با اعدادِ واقعیِ فرستاده‌شده تأیید شد): قبلاً
+        # کلِ صفحه (هدر+ردیف‌ها+فوتر) در یک QScrollAreaِ واحد بود که فوتر
+        # را از دیدرس خارج می‌کرد؛ حذفِ کاملِ آن QScrollArea هم رگرسیونِ
+        # تازه‌ای ساخت (چون فونتِ فارسیِ واقعیِ کاربر بلندتر از فونتِ
+        # آزمایشیِ ماست، حداقلِ ارتفاعِ کلِ صفحه از ارتفاعِ واقعیِ
+        # صفحه‌نمایش بیشتر می‌شد و دیگر هیچ اسکرولی برایِ رسیدن به فوتر
+        # نبود). راه‌حلِ درست (هم‌راستا با فیکسِ قدیمیِ Kivyِ همین فرم):
+        # فقط کارتِ ردیف‌ها درونِ یک QScrollAreaِ اختصاصی با حداقل‌ارتفاعِ
+        # کم قرار می‌گیرد — هدر و فوتر مستقیماً در چیدمانِ اصلی و همیشه
+        # ثابت/قابلِ‌مشاهده‌اند، مستقل از اینکه فونت/صفحه‌نمایش چقدر بلند/
+        # کوتاه باشد.
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(24, 24, 24, 24)
         root_layout.setSpacing(12)
@@ -719,7 +720,26 @@ class JournalEntryScreen(QWidget):
         self.table.setColumnWidth(_COL_CREDIT, 140)
         self.table.setColumnWidth(_COL_REMOVE, 40)
         table_card_layout.addWidget(self.table)
-        outer.addWidget(table_card, stretch=1)
+
+        # طبقِ گزارشِ صریح (با اعدادِ واقعی تأیید شد): حذفِ کاملِ
+        # QScrollAreaِ دورِ صفحه (تلاشِ قبلی) یک رگرسیونِ تازه ساخت —
+        # چون فونتِ فارسیِ واقعی (Vazirmatn، lineSpacing≈۲۳px) بلندتر از
+        # فونتِ آزمایشیِ ماست، حداقلِ ارتفاعِ لازمِ کلِ صفحه (هدر+پیش‌نمایش+
+        # جدول+فوتر) از ارتفاعِ واقعیِ صفحه‌نمایشِ کاربر (۸۵۲px) بیشتر
+        # می‌شد و چون دیگر هیچ اسکرولی نبود، فوتر کاملاً خارج از دیدرس
+        # می‌ماند. راه‌حلِ درست (هم‌راستا با فیکسِ قدیمیِ Kivy): فقط
+        # کارتِ ردیف‌ها درونِ یک QScrollAreaِ اختصاصی با حداقل‌ارتفاعِ کم
+        # قرار می‌گیرد — این‌طوری حداقلِ ارتفاعِ کلِ صفحه هرگز به حداقلِ
+        # ارتفاعِ خودِ جدول (که می‌تواند زیاد باشد) وابسته نیست، ولی وقتی
+        # فضا کافی است (اکثرِ اوقات)، جدول با stretch=1 همان فضایِ اضافه
+        # را می‌گیرد؛ هدر و فوتر همچنان مستقیماً در چیدمانِ اصلی و همیشه
+        # قابلِ‌مشاهده‌اند.
+        table_scroll = QScrollArea()
+        table_scroll.setWidgetResizable(True)
+        table_scroll.setFrameShape(QFrame.NoFrame)
+        table_scroll.setMinimumHeight(120)
+        table_scroll.setWidget(table_card)
+        outer.addWidget(table_scroll, stretch=1)
 
         self.amount_words_label = QLabel("")
         self.amount_words_label.setObjectName("sectionHint")

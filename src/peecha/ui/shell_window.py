@@ -74,6 +74,27 @@ _NAV_ICONS = {
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
 
 
+class _CurrentOnlyStackedWidget(QStackedWidget):
+    """QStackedWidgِ معمولی، اندازه‌ی خودش را از رویِ بزرگ‌ترینِ صفحه‌یِ
+    ثبت‌شده (نه لزوماً همانی که الان نمایش داده می‌شود) محاسبه می‌کند —
+    طبقِ گزارشِ صریح (با اعدادِ واقعی تأیید شد): همین رفتار باعث می‌شد
+    پنجره‌یِ اصلی همیشه به‌اندازه‌یِ بزرگ‌ترین صفحه (مثلاً «پیکربندیِ
+    گروه‌هایِ تفصیلی» یا «تنظیماتِ سیستم»، ۱۳۴۶×۸۵۷) مجبور به رشد شود —
+    حتی وقتی صفحه‌یِ کوچکی مثلِ «صدورِ سند» بازِ است — و چون این عددِ
+    بزرگ‌شده گاهی از ارتفاعِ واقعیِ صفحه‌نمایشِ کاربر بیشتر می‌شد، پنجره
+    (و هرچه ته‌اش بود، مثلِ فوترِ دکمه‌ها) از دیدرس خارج می‌ماند. این
+    زیرکلاس sizeHint/minimumSizeHint را فقط از رویِ صفحه‌یِ درحالِ‌نمایش
+    برمی‌گرداند تا اندازه‌یِ پنجره با نیازِ واقعیِ همان صفحه هماهنگ بماند."""
+
+    def sizeHint(self):  # noqa: N802 — نامِ متدِ Qt
+        current = self.currentWidget()
+        return current.sizeHint() if current is not None else super().sizeHint()
+
+    def minimumSizeHint(self):  # noqa: N802
+        current = self.currentWidget()
+        return current.minimumSizeHint() if current is not None else super().minimumSizeHint()
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -100,7 +121,7 @@ class MainWindow(QMainWindow):
 
         body_layout.addWidget(self._build_sidebar())
 
-        self.stack = QStackedWidget()
+        self.stack = _CurrentOnlyStackedWidget()
         body_layout.addWidget(self.stack, stretch=1)
 
         outer.addWidget(body, stretch=1)
@@ -550,6 +571,9 @@ class MainWindow(QMainWindow):
             screen.set_module_name(item["label"])
 
         self.stack.setCurrentWidget(screen)
+        # _CurrentOnlyStackedWidget فقط اندازه‌ی همین صفحه را برمی‌گرداند —
+        # updateGeometry مطمئن می‌شود چیدمانِ بیرونی بلافاصله با آن هماهنگ شود.
+        self.stack.updateGeometry()
         if hasattr(screen, "refresh"):
             screen.refresh()
         # طبقِ گزارشِ صریح: هر بار با ساید‌بار به منویِ تازه‌ای سوییچ می‌شد،
