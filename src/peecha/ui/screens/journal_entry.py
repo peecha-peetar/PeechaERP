@@ -709,8 +709,10 @@ class JournalEntryScreen(QWidget):
         header.setSectionResizeMode(_COL_CREDIT, QHeaderView.Interactive)
         header.setSectionResizeMode(_COL_REMOVE, QHeaderView.Fixed)
         self.table.setColumnWidth(_COL_ROW_NO, 44)
-        self.table.setColumnWidth(_COL_ACCOUNT, 220)
-        self.table.setColumnWidth(_COL_DETAIL, 190)
+        # طبقِ درخواستِ صریح: عرضِ حساب/تفصیلی کم شد تا شرحِ ردیف (تنها
+        # ستونِ Stretch) فضایِ بیشتری داشته باشد.
+        self.table.setColumnWidth(_COL_ACCOUNT, 170)
+        self.table.setColumnWidth(_COL_DETAIL, 150)
         # طبقِ بازخوردِ صریح: عرضِ مرکزِ هزینه/پروژه خیلی زیاد بود — چون
         # این دو دیگر گزینه‌یِ تنهایِ همه‌ی ابعاد نیستند (بقیه به ستونِ
         # تفصیلی منتقل شدند)، عرضِ کوچک‌تر برایشان کافی است.
