@@ -114,23 +114,42 @@ class DimensionGroupConfigScreen(QWidget):
         self._field_rows: list[_GroupFieldRowWidget] = []
         self._current_color: str | None = None
 
-        outer = QHBoxLayout(self)
+        # طبقِ گزارشِ صریح: قبلاً فهرستِ گروه‌ها و فرمِ پیکربندی کنارِ هم
+        # (چیدمانِ افقی) بودند — این باعث می‌شد فرمِ پیکربندی (که خودش
+        # چندین ستون دارد: سطح/از/تا) عرضِ کافی نداشته باشد و علاوه بر
+        # اسکرولِ عمودی، اسکرولِ افقی هم لازم شود. حالا فهرستِ گروه‌ها
+        # یک نوارِ باریک/افقیِ ثابت‌ارتفاع در بالا است و فرمِ پیکربندی
+        # تمامِ عرضِ صفحه را در اختیار دارد (فقط اسکرولِ عمودی، طبقِ
+        # استانداردِ ریسپانسیو).
+        outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(16)
-        outer.addWidget(self._build_types_panel(), stretch=2)
-        outer.addWidget(self._build_config_panel(), stretch=3)
+        outer.addWidget(self._build_types_panel())
+        outer.addWidget(self._build_config_panel(), stretch=1)
 
-    # --- ستونِ ۱: گروه‌ها ---------------------------------------------------
+    # --- نوارِ بالا: گروه‌ها (افقی) ------------------------------------------
     def _build_types_panel(self) -> QWidget:
         panel = QWidget()
         panel.setObjectName("card")
+        panel.setMaximumHeight(190)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(10)
+        layout.setContentsMargins(18, 12, 18, 12)
+        layout.setSpacing(8)
 
+        header_row = QHBoxLayout()
         title = QLabel("گروه‌هایِ تفصیلی")
         title.setObjectName("pageTitle")
-        layout.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch(1)
+        header_row.addWidget(QLabel("کدِ گروهِ تازه"))
+        self.new_type_code_field = QLineEdit()
+        self.new_type_code_field.setFixedWidth(160)
+        header_row.addWidget(self.new_type_code_field)
+        create_button = QPushButton("افزودنِ گروه")
+        create_button.setObjectName("primaryButton")
+        create_button.clicked.connect(self._create_type)
+        header_row.addWidget(create_button)
+        layout.addLayout(header_row)
 
         hint = QLabel(
             "کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/مرکزِ هزینه/پروژه + مشتری/تامین‌کننده/پرسنل + گروه‌هایِ ساده‌یِ دلخواه."
@@ -139,25 +158,23 @@ class DimensionGroupConfigScreen(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
+        # طبقِ درخواستِ صریح: فهرستِ گروه‌ها به‌جایِ ستونِ عمودیِ بلند،
+        # به‌صورتِ افقی (چیده‌شده/wrap‌شونده در چند ردیف) نمایش داده
+        # می‌شود — با ارتفاعِ ثابت، خودش در صورتِ زیادبودنِ گروه‌ها
+        # عمودی اسکرول می‌کند، بدونِ آنکه به فرمِ پیکربندیِ زیرش فشار بیاورد.
         self.types_list = QListWidget()
+        self.types_list.setFlow(QListWidget.LeftToRight)
+        self.types_list.setWrapping(True)
+        self.types_list.setResizeMode(QListWidget.Adjust)
+        self.types_list.setFixedHeight(72)
         self.types_list.itemClicked.connect(self._on_type_selected)
         layout.addWidget(self.types_list)
-
-        layout.addWidget(QLabel("کدِ گروهِ تازه"))
-        self.new_type_code_field = QLineEdit()
-        layout.addWidget(self.new_type_code_field)
 
         self.type_status_label = QLabel("")
         self.type_status_label.setObjectName("statusError")
         self.type_status_label.setWordWrap(True)
         layout.addWidget(self.type_status_label)
 
-        create_button = QPushButton("افزودنِ گروه")
-        create_button.setObjectName("primaryButton")
-        create_button.clicked.connect(self._create_type)
-        layout.addWidget(create_button)
-
-        layout.addStretch(1)
         return panel
 
     # --- ستونِ ۲: پیکربندیِ سطوح/فیلدها --------------------------------------
@@ -246,12 +263,15 @@ class DimensionGroupConfigScreen(QWidget):
         max_level_row.addStretch(1)
         layout.addLayout(max_level_row)
 
-        layout.addWidget(
-            QLabel(
-                "بازه‌ی از-تا برایِ هر سطح (صفر = بدونِ محدودیت) — تعدادِ رقمِ هر سطح سراسری است و در "
-                "تنظیماتِ «کدینگِ حسابداری» مشخص می‌شود، این‌جا فقط بازه مخصوصِ همین گروه است."
-            )
+        # طبقِ گزارشِ صریح: نبودِ setWordWrap رویِ این برچسبِ طولانی، عرضِ
+        # کلِ پنل را (برایِ جادادنِ متن در یک خط) بیش‌ازحد زیاد می‌کرد —
+        # همان علتِ اسکرولِ افقیِ ناخواسته.
+        range_hint = QLabel(
+            "بازه‌ی از-تا برایِ هر سطح (صفر = بدونِ محدودیت) — تعدادِ رقمِ هر سطح سراسری است و در "
+            "تنظیماتِ «کدینگِ حسابداری» مشخص می‌شود، این‌جا فقط بازه مخصوصِ همین گروه است."
         )
+        range_hint.setWordWrap(True)
+        layout.addWidget(range_hint)
         levels_grid = QGridLayout()
         levels_grid.setSpacing(6)
         levels_grid.addWidget(QLabel("سطح"), 0, 0)
