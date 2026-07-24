@@ -69,9 +69,18 @@ class AccountingCodingSettingsScreen(QWidget):
             range_to.setRange(0, 999_999_999)
             # طبقِ بازخوردِ صریح: کدهایی مثلِ «۰۰۱» نباید با تغییرِ تعدادِ
             # رقم به «۱» تبدیل شوند — با هر تغییرِ تعدادِ رقم، نمایشِ بازه هم
-            # بی‌درنگ صفر-پَد می‌شود.
+            # بی‌درنگ صفر-پَد می‌شود. همچنین طبقِ بازخوردِ بعدی: تا این‌جا
+            # فقط نمایش صفر-پَد می‌شد ولی خودِ بازه هنوز می‌توانست از
+            # تعدادِ رقمِ انتخاب‌شده بیشتر مقدار بگیرد (مثلاً تعدادِ رقم=۱ ولی
+            # بازه‌ای مثلِ ۹۹) — این‌جا سقفِ مجازِ اسپین‌باکس هم هم‌زمان با
+            # تعدادِ رقم محدود می‌شود تا اصلاً نتوان چنین مقداری تایپ کرد.
             code_length.valueChanged.connect(
-                lambda digits, rf=range_from, rt=range_to: (rf.set_digits(digits), rt.set_digits(digits))
+                lambda digits, rf=range_from, rt=range_to: (
+                    rf.set_digits(digits),
+                    rt.set_digits(digits),
+                    rf.setRange(0, 10**digits - 1 if digits > 0 else 999_999_999),
+                    rt.setRange(0, 10**digits - 1 if digits > 0 else 999_999_999),
+                )
             )
             grid.addWidget(code_length, row, 1)
             grid.addWidget(range_from, row, 2)

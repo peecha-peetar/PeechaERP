@@ -384,6 +384,18 @@ def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
             range_to = config.get("range_to")
             if range_from is not None and range_to is not None and range_from > range_to:
                 raise ValueError("مقدارِ «از» نمی‌تواند بزرگ‌تر از «تا» باشد.")
+            if code_length is not None:
+                max_value = 10**code_length - 1
+                if range_from is not None and range_from > max_value:
+                    raise ValueError(
+                        f"مقدارِ «از» در سطحِ {account_level} نمی‌تواند بیشتر از {max_value} باشد "
+                        f"(تعدادِ رقمِ این سطح {code_length} رقم است)."
+                    )
+                if range_to is not None and range_to > max_value:
+                    raise ValueError(
+                        f"مقدارِ «تا» در سطحِ {account_level} نمی‌تواند بیشتر از {max_value} باشد "
+                        f"(تعدادِ رقمِ این سطح {code_length} رقم است)."
+                    )
             if code_length is None and range_from is None and range_to is None:
                 continue
             session.add(
