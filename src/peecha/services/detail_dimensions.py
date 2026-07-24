@@ -479,6 +479,57 @@ def _dimension_group_label(code: str, person_group_name: str | None) -> str:
     return SPECIALIZED_DIMENSION_LABELS.get(code, code)
 
 
+def _fetch_other_ranges(session, company_id: int) -> list:
+    return session.execute(
+        select(
+            DetailGroupLevel.dimension_type_id,
+            DetailGroupLevel.person_group_id,
+            DetailGroupLevel.level_no,
+            DetailGroupLevel.range_from,
+            DetailGroupLevel.range_to,
+            DetailDimensionType.code,
+            PersonGroup.name,
+        )
+        .join(DetailDimensionType, DetailGroupLevel.dimension_type_id == DetailDimensionType.dimension_type_id)
+        .outerjoin(PersonGroup, DetailGroupLevel.person_group_id == PersonGroup.person_group_id)
+        .where(
+            DetailDimensionType.company_id == company_id,
+            or_(DetailGroupLevel.range_from.is_not(None), DetailGroupLevel.range_to.is_not(None)),
+        )
+    ).all()
+
+
+def check_range_conflict(
+    company_id: int,
+    dimension_type_id: int,
+    level_no: int,
+    range_from: int | None,
+    range_to: int | None,
+    person_group_id: int = 0,
+) -> str | None:
+    """بدونِ هیچ اثرِ جانبی (بدونِ ذخیره)، چک می‌کند آیا این بازه با بازه‌یِ
+    ذخیره‌شده‌یِ همین سطح در گروهِ تفصیلیِ دیگری هم‌پوشانی دارد یا نه —
+    برایِ اعتبارسنجیِ زنده (رنگِ قرمز/سبز) در UI حینِ تایپ، پیش از کلیکِ
+    دکمه‌ی ذخیره. اگر هم‌پوشانی باشد پیامِ خطا برمی‌گرداند، وگرنه None."""
+    if range_from is None and range_to is None:
+        return None
+    new_from = range_from if range_from is not None else 0
+    new_to = range_to if range_to is not None else 999_999_999
+    with new_session() as session:
+        other_ranges = _fetch_other_ranges(session, company_id)
+        for other in other_ranges:
+            if other.level_no != level_no:
+                continue
+            if other.dimension_type_id == dimension_type_id and other.person_group_id == person_group_id:
+                continue
+            other_from = other.range_from if other.range_from is not None else 0
+            other_to = other.range_to if other.range_to is not None else 999_999_999
+            if new_from <= other_to and other_from <= new_to:
+                other_label = _dimension_group_label(other.code, other.name)
+                return f"بازه‌ی سطحِ {level_no} با بازه‌ی «{other_label}» هم‌پوشانی دارد."
+    return None
+
+
 def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, dict], person_group_id: int = 0) -> None:
     """جایگزینیِ کاملِ پیکربندیِ بازه‌یِ سطح‌های این گروه — levels یعنی
     {شماره‌ی سطح (۱ تا ۴): {"range_from": ..|None, "range_to": ..|None}}؛
@@ -522,23 +573,7 @@ def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, 
         # بازه‌هایِ همه‌ی گروه‌هایِ دیگرِ همین شرکت که برایِ (هر) سطحی بازه
         # تنظیم کرده‌اند — برایِ چکِ هم‌پوشانی؛ گروه‌هایی که اصلاً بازه
         # تنظیم نکرده‌اند مشمولِ این چک نیستند.
-        other_ranges = session.execute(
-            select(
-                DetailGroupLevel.dimension_type_id,
-                DetailGroupLevel.person_group_id,
-                DetailGroupLevel.level_no,
-                DetailGroupLevel.range_from,
-                DetailGroupLevel.range_to,
-                DetailDimensionType.code,
-                PersonGroup.name,
-            )
-            .join(DetailDimensionType, DetailGroupLevel.dimension_type_id == DetailDimensionType.dimension_type_id)
-            .outerjoin(PersonGroup, DetailGroupLevel.person_group_id == PersonGroup.person_group_id)
-            .where(
-                DetailDimensionType.company_id == company_id,
-                or_(DetailGroupLevel.range_from.is_not(None), DetailGroupLevel.range_to.is_not(None)),
-            )
-        ).all()
+        other_ranges = _fetch_other_ranges(session, company_id)
 
         session.execute(
             DetailGroupLevel.__table__.delete().where(

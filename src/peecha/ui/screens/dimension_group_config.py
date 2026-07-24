@@ -204,6 +204,11 @@ class DimensionGroupConfigScreen(QWidget):
             range_from.setRange(0, 999_999_999)
             range_to = ZeroPaddedSpinBox()
             range_to.setRange(0, 999_999_999)
+            # طبقِ درخواستِ صریح: بصورتِ زنده (حینِ تایپ، پیش از ذخیره) اگر
+            # بازه با بازه‌ی گروهِ دیگری هم‌پوشانی داشته باشد قرمز، وگرنه
+            # سبز — تا کاربر پیش از کلیکِ «ذخیره» متوجهِ تداخل بشود.
+            range_from.valueChanged.connect(lambda _v, lvl=level_no: self._validate_range_live(lvl))
+            range_to.valueChanged.connect(lambda _v, lvl=level_no: self._validate_range_live(lvl))
             levels_grid.addWidget(range_from, row, 1)
             levels_grid.addWidget(range_to, row, 2)
             self._level_widgets[level_no] = (range_from, range_to)
@@ -315,6 +320,10 @@ class DimensionGroupConfigScreen(QWidget):
         locked = company_id is not None and je_service.company_has_any_entries(company_id)
         self._levels_locked = locked
         self._apply_level_enablement(self.max_level_spin.value())
+        # _load_levels (بالا) رنگِ زنده را با enablementِ گروهِ قبلی محاسبه
+        # کرده بود — حالا که enablementِ همین گروه اعمال شد، دوباره محاسبه می‌شود.
+        for level_no in self._level_widgets:
+            self._validate_range_live(level_no)
         self.save_levels_button.setEnabled(not locked)
         self.max_level_spin.setEnabled(not locked)
         self.save_max_level_button.setEnabled(not locked)
@@ -324,6 +333,8 @@ class DimensionGroupConfigScreen(QWidget):
 
     def _on_max_level_changed(self, value: int) -> None:
         self._apply_level_enablement(value)
+        for level_no in self._level_widgets:
+            self._validate_range_live(level_no)
 
     def _apply_level_enablement(self, max_level_no: int) -> None:
         # طبقِ درخواستِ صریح: سطوحِ فراتر از سقفِ این گروه (مثلاً سطحِ ۳/۴
@@ -358,10 +369,53 @@ class DimensionGroupConfigScreen(QWidget):
             row = rows.get(level_no)
             range_from.setValue(row.range_from if row and row.range_from is not None else 0)
             range_to.setValue(row.range_to if row and row.range_to is not None else 0)
+            self._validate_range_live(level_no)
+
+    def _validate_range_live(self, level_no: int) -> None:
+        company_id = self._company_id()
+        range_from, range_to = self._level_widgets[level_no]
+        # سطوحِ غیرفعال (فراتر از سقفِ گروه) رنگِ خاکستریِ خودشان (از QSS
+        # سراسری) را نگه می‌دارند — رنگِ زنده فقط برایِ سطوحِ قابلِ‌ویرایش است.
+        if not range_from.isEnabled():
+            range_from.setStyleSheet("")
+            range_to.setStyleSheet("")
+            return
+        if company_id is None or self._selected_type_id is None:
+            range_from.setStyleSheet("")
+            range_to.setStyleSheet("")
+            return
+        from_value = range_from.value() or None
+        to_value = range_to.value() or None
+        if from_value is None and to_value is None:
+            range_from.setStyleSheet("")
+            range_to.setStyleSheet("")
+            return
+        conflict = dimensions_service.check_range_conflict(
+            company_id, self._selected_type_id, level_no, from_value, to_value, self._selected_person_group_id
+        )
+        color = "#e53e3e" if conflict else "#38a169"
+        style = f"border: 2px solid {color};"
+        range_from.setStyleSheet(style)
+        range_to.setStyleSheet(style)
+        range_from.setToolTip(conflict or "")
+        range_to.setToolTip(conflict or "")
 
     def _save_levels(self) -> None:
         company_id = self._company_id()
         if company_id is None or self._selected_type_id is None:
+            return
+        # اگر «تعدادِ سطح» در UI تغییر کرده ولی دکمه‌ی «ذخیره»یِ خودش کلیک
+        # نشده باشد، این دو مقدار (سقفِ نمایش‌داده‌شده در فرم، و سقفِ
+        # ذخیره‌شده در دیتابیس) از هم جدا می‌افتند — و چون پایین‌تر فقط
+        # سطوحِ «تا همین سقف» ذخیره می‌شوند، بازه‌یِ سطوحِ بالاترِ ذخیره‌شده‌یِ
+        # قبلی بی‌سروصدا پاک می‌شد. با ذخیره‌یِ سقف همین‌جا (پیش از فیلترکردن)
+        # این دو همیشه هم‌زمان و هماهنگ می‌مانند.
+        try:
+            dimensions_service.set_group_max_level_no(
+                self._selected_type_id, company_id, self.max_level_spin.value(), self._selected_person_group_id
+            )
+        except ValueError as exc:
+            self.type_status_label.setText(str(exc))
             return
         max_level_no = self.max_level_spin.value()
         levels = {

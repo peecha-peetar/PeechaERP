@@ -129,10 +129,24 @@ class MainWindow(QMainWindow):
         self.open_screen("dashboard")
 
     # --- هدر --------------------------------------------------------------
+    # طبقِ بازخوردِ صریح: در پنجره‌هایِ کم‌عرض (مثلاً بعدِ تمام‌صفحه‌کردن رویِ
+    # مانیتورهایِ کوچک‌تر از عرضِ طراحی‌شده‌ی برنامه)، چون هدر عناصرِ
+    # عرض‌ثابتِ زیادی دارد (جستجو/زبان/سالِ‌مالی/شرکت/آواتار/خروج) و درونِ
+    # QScrollArea نبود، این عناصر به‌جایِ اسکرول‌شدن از کادرِ هدر بیرون
+    # می‌زدند و انگار «ناپدید» می‌شدند — دقیقاً همان مشکلی که ریبونِ زیرِ
+    # هدر قبلاً با همین راه‌حل (QScrollAreaِ افقی) حل شده بود؛ همان الگو
+    # این‌جا هم اعمال می‌شود.
     def _build_header(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setObjectName("headerScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFixedHeight(68)
+
         header = QWidget()
         header.setObjectName("headerBar")
-        header.setFixedHeight(68)
         layout = QHBoxLayout(header)
         layout.setContentsMargins(24, 8, 24, 8)
         layout.setSpacing(16)
@@ -194,7 +208,8 @@ class MainWindow(QMainWindow):
         logout_button.clicked.connect(self._logout)
         layout.addWidget(logout_button)
 
-        return header
+        scroll.setWidget(header)
+        return scroll
 
     # --- ریبون (میان‌برهایِ گروهِ فعال، زیرِ هدر) -----------------------------
     # طبقِ بازخوردِ صریح، ریبون دوباره برگشته — اما این‌بار درونِ یک

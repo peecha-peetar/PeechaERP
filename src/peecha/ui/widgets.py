@@ -69,8 +69,17 @@ class ZeroPaddedSpinBox(QSpinBox):
         self.lineEdit().setText(self.textFromValue(self.value()))
 
     def textFromValue(self, value: int) -> str:
-        return str(value).zfill(self._digits) if self._digits > 0 else str(value)
+        text = str(value).zfill(self._digits) if self._digits > 0 else str(value)
+        return numerals.to_persian_digits(text)
 
     def valueFromText(self, text: str) -> int:
-        text = text.strip()
+        text = numerals.to_ascii_digits(text).strip()
         return int(text) if text else 0
+
+    def validate(self, text: str, pos: int) -> object:
+        from PySide6.QtGui import QValidator
+
+        normalized = numerals.to_ascii_digits(text)
+        if normalized == "" or normalized.isdigit():
+            return (QValidator.State.Acceptable, text, pos)
+        return (QValidator.State.Invalid, text, pos)
