@@ -109,30 +109,37 @@ class MainWindow(QMainWindow):
         self.open_screen("dashboard")
         self._did_initial_relayout = False
 
-    # طبقِ گزارشِ صریح (با عکسِ واقعیِ قبل/بعد تأیید شد): هنگامِ بازشدنِ
-    # اولیه‌ی برنامه، فوترِ فرم‌ها (مثلاً دکمه‌های «ثبتِ سند») اصلاً رنگ‌آمیزی/
-    # رسم نمی‌شد و فقط با یک‌بار خروج از حالتِ تمام‌صفحه و برگشتن به آن درست
-    # می‌شد. تلاشِ اولِ ما (resize(+۱px) و بلافاصله resize برگشت) کافی نبود
-    # چون Qt دو فراخوانیِ پیاپیِ resize را — بدونِ آنکه رویدادها بینِ آن‌ها
-    # واقعاً پردازش شوند — در هم ادغام می‌کند و درنتیجه هیچ رویدادِ resizeِ
-    # واقعی صادر نمی‌شود (همان اتفاقی که تمام‌صفحه‌کردنِ دستی، با یک
-    # رویدادِ resizeِ واقعیِ سیستم‌عامل، آن را می‌شکاند). این‌بار بینِ دو
-    # resize صریحاً processEvents می‌زنیم تا هرکدام واقعاً پردازش/رسم شوند.
+    # طبقِ گزارشِ صریح (با عکسِ واقعیِ کاربر روی ویندوزِ واقعی تأیید شد):
+    # فوترِ فرم‌ها (مثلاً «ثبتِ سند») اصلاً رسم نمی‌شد و حتی یک‌بار
+    # ماکسیمایزکردنِ واقعی هم کافی نبود — فقط خروجِ کاملِ از تمام‌صفحه و
+    # بازگشتِ دوباره درستش می‌کرد. این یعنی مشکل از رویدادِ resizeِ خودِ
+    # پنجره نبود (نوکِ resize یا حتی ماکسیمایزِ واقعی امتحان و رد شد)،
+    # بلکه از خودِ صفحه است: هر صفحه (مثلِ journal_entry.py) کلِ محتوایش
+    # را در یک QScrollArea می‌گذارد؛ sizeHintِ ویجتِ داخلیِ آن اسکرول‌اِریا
+    # گاهی پیش از polishِ کاملِ فرزندانش محاسبه و کش می‌شود و دیگر خودکار
+    # دوباره محاسبه نمی‌شود — نتیجه: ارتفاعِ محتوایِ محاسبه‌شده کوتاه‌تر از
+    # واقعی است و فوتر از پایینِ همان ارتفاعِ کش‌شده قطع می‌شود. ترفندِ
+    # شناخته‌شده برایِ اجبارِ Qt به بازمحاسبه: خاموش/روشن‌کردنِ
+    # setWidgetResizable — این‌جا رویِ خودِ صفحه‌یِ درحالِ‌نمایش (نه کلِ
+    # پنجره) اعمال می‌شود، هم بعدِ اولین نمایش و هم بعدِ هر سوییچِ صفحه.
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if not self._did_initial_relayout:
             self._did_initial_relayout = True
-            # با تأخیرِ کوتاه (نه ۰): تا سیستم‌عامل واقعاً پنجره را map/رسم
-            # کرده باشد، وگرنه نوکِ resize پیش از رسمِ اولیه هیچ اثری ندارد.
             QTimer.singleShot(60, self._force_relayout)
 
     def _force_relayout(self) -> None:
+        screen = self.stack.currentWidget()
+        if screen is None:
+            return
         app = QApplication.instance()
-        size = self.size()
-        self.resize(size.width(), size.height() + 1)
-        if app is not None:
-            app.processEvents()
-        self.resize(size)
+        for scroll_area in screen.findChildren(QScrollArea):
+            scroll_area.setWidgetResizable(False)
+            scroll_area.setWidgetResizable(True)
+            inner = scroll_area.widget()
+            if inner is not None:
+                inner.updateGeometry()
+        screen.updateGeometry()
         if app is not None:
             app.processEvents()
 

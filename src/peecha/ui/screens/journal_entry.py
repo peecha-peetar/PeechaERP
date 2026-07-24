@@ -47,7 +47,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QCompleter,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -55,7 +54,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -585,18 +583,22 @@ class JournalEntryScreen(QWidget):
         # ردیفِ «جاری» برایِ نوارِ خلاصه — آخرین ردیفی که فوکوس داشته.
         self._active_row: _LineRow | None = None
 
+        # طبقِ گزارشِ صریح (با عکسِ واقعی تأیید شد): قبلاً کلِ صفحه (هدر +
+        # ردیف‌ها + فوتر) در یک QScrollAreaِ واحد بود — این دقیقاً همان
+        # باگی بود که یک‌بار پیش‌تر (در نسخه‌ی قدیمیِ Kivyِ همین فرم) پیدا
+        # و رفع شده بود ولی در مهاجرتِ Qt6 دوباره برگشته بود: sizeHintِ
+        # ویجتِ داخلیِ آن QScrollArea گاهی پیش از polishِ کاملِ فرزندانش
+        # محاسبه/کش می‌شد و فوتر (دکمه‌ی «ثبتِ سند») از پایینِ همان
+        # ارتفاعِ کش‌شده قطع می‌شد — با هیچ رویدادِ resizeِ معمولی هم درست
+        # نمی‌شد. راه‌حلِ درست (هم‌راستا با journal_entries_list.py/
+        # chart_of_accounts.py که همین الگو را دارند): فقط خودِ جدولِ
+        # ردیف‌ها (QTableWidget که اسکرولِ داخلیِ خودش را دارد) کشسان
+        # باشد؛ هدر و فوتر مستقیماً در چیدمانِ اصلی (بدونِ QScrollAreaِ
+        # اضافه) ثابت بمانند.
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        # نکته: کلِ صفحه در یک QScrollArea قرار می‌گیرد — وگرنه اگر پنجره
-        # کوچک باشد یا ردیف‌ها زیاد شوند، فوتر (شاملِ دکمه‌ی ذخیره) بدونِ
-        # هیچ راهی برایِ اسکرول‌کردن، خارج از دیدرس می‌ماند (باگی که گزارش شد).
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        content = QWidget()
-        outer = QVBoxLayout(content)
-        outer.setContentsMargins(24, 24, 24, 24)
-        outer.setSpacing(12)
+        root_layout.setContentsMargins(24, 24, 24, 24)
+        root_layout.setSpacing(12)
+        outer = root_layout
 
         header_card = QWidget()
         header_card.setObjectName("card")
@@ -754,9 +756,6 @@ class JournalEntryScreen(QWidget):
         footer.addWidget(new_button)
 
         outer.addLayout(footer)
-
-        scroll.setWidget(content)
-        root_layout.addWidget(scroll)
 
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save)
         QShortcut(QKeySequence("Escape"), self, activated=self._reset_form)
