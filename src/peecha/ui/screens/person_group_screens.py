@@ -228,6 +228,15 @@ class PersonGroupScreenBase(QWidget):
         if company_id is not None:
             self._dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
             self._person_group_id = dimensions_service.get_person_group_id(company_id, self.GROUP_CODE)
+            # طبقِ گزارشِ صریح: بعدِ تغییرِ نامِ گروه (در پیکربندیِ
+            # گروه‌هایِ تفصیلی)، عنوانِ همین صفحه هم باید همان نامِ تازه را
+            # نشان دهد — نه برچسبِ ثابتِ تعیین‌شده در __init__ زیرکلاس.
+            group = next(
+                (g for g in dimensions_service.list_person_groups(company_id) if g.person_group_id == self._person_group_id),
+                None,
+            )
+            if group is not None:
+                self.list_title.setText(group.name)
         else:
             self._dimension_type_id = None
             self._person_group_id = None

@@ -426,6 +426,19 @@ QToolButton#ribbonButton::menu-indicator {{
     image: none;
     width: 0;
 }}
+/* طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده‌یِ گوشه‌یِ ریبون تقریباً ۲ برابرِ
+   اندازه‌ی دکمه‌هایِ معمولِ ریبون (فونتِ ۱۳px -> ۲۶px). */
+QPushButton#ribbonGearButton {{
+    background-color: transparent;
+    color: {TEXT_SECONDARY};
+    border-radius: 10px;
+    padding: 4px 16px;
+    font-size: 26px;
+    border: none;
+}}
+QPushButton#ribbonGearButton:hover {{
+    background-color: {RIBBON_HOVER};
+}}
 
 QCheckBox {{
     spacing: 8px;

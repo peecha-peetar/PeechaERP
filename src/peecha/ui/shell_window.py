@@ -7,7 +7,7 @@ QTreeWidget/QComboBox به‌طورِ بومی راست‌چین و جهت‌د�
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
@@ -29,10 +29,21 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import companies as companies_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha import numerals
 from peecha.ui import theme
+
+# طبقِ درخواستِ صریح: عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/تامین‌کننده/
+# پرسنل) در ریبون باید بعدِ تغییرِ نامشان (dimension_group_config.py) به‌روز
+# بماند، نه برچسبِ ثابتِ قدیمیِ NAV_ITEMS — نگاشتِ کدِ آیتمِ ناوبری به کدِ
+# گروهِ اشخاصِ متناظر برایِ خواندنِ نامِ زنده از دیتابیس.
+_PERSON_GROUP_NAV_CODE_TO_GROUP_CODE = {
+    "GL_CUSTOMERS": dimensions_service.CUSTOMER_GROUP_CODE,
+    "GL_SUPPLIERS": dimensions_service.SUPPLIER_GROUP_CODE,
+    "GL_PERSONNEL": dimensions_service.PERSONNEL_GROUP_CODE,
+}
 
 # NAV_ITEMS حالا در peecha/nav_catalog.py متمرکز شده — طبقِ بازخوردِ صریح
 # (نقش‌ها/دسترسی‌ها با اضافه‌شدنِ صفحه‌یِ تازه در جدول به‌روز نمی‌شد)، همان
@@ -95,6 +106,30 @@ class MainWindow(QMainWindow):
 
         self._register_screens()
         self.open_screen("dashboard")
+        self._did_initial_relayout = False
+
+    # طبقِ گزارشِ صریح: هنگامِ بازشدنِ اولیه‌ی برنامه، فوترِ فرم‌ها (مثلاً
+    # دکمه‌های پایینِ فهرست‌ها) دیده نمی‌شد و فقط با یک‌بار خروج از حالتِ
+    # تمام‌صفحه و برگشتن به آن درست می‌شد — چون Qt چیدمانِ اولیه را با
+    # اندازه‌گیریِ فونت/محتوایِ پیش از «polish»یِ کاملِ ویجت‌ها محاسبه
+    # می‌کند و بدونِ یک رویدادِ resizeِ واقعی، آن محاسبه هرگز دوباره انجام
+    # نمی‌شود. به‌جایِ اینکه از کاربر بخواهیم دستی این کار را تکرار کند،
+    # بعدِ اولین نمایشِ واقعیِ پنجره یک رویدادِ resize به خودمان می‌فرستیم.
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._did_initial_relayout:
+            self._did_initial_relayout = True
+            QTimer.singleShot(0, self._force_relayout)
+
+    def _force_relayout(self) -> None:
+        # نوکِ کوچکِ اندازه (۱px) و برگشت، دقیقاً همان اثری را دارد که
+        # خروج از تمام‌صفحه/برگشتن به آن داشت — چون resize(size) وقتی
+        # اندازه از قبل همان است هیچ رویدادی صادر نمی‌کند، ولی نوکِ +۱ و
+        # برگشت، دو رویدادِ resizeِ واقعی صادر می‌کند و کلِ درختِ چیدمان
+        # را با اندازه‌هایِ نهاییِ محاسبه‌شده از نو می‌سازد.
+        size = self.size()
+        self.resize(size.width(), size.height() + 1)
+        self.resize(size)
 
     # --- هدر --------------------------------------------------------------
     # طبقِ بازخوردِ صریح: در پنجره‌هایِ کم‌عرض (مثلاً بعدِ تمام‌صفحه‌کردن رویِ
@@ -224,13 +259,29 @@ class MainWindow(QMainWindow):
             self._ribbon_scroll.setFixedHeight(0)
             return
 
+        # طبقِ درخواستِ صریح: عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/
+        # تامین‌کننده/پرسنل) اگر تغییرِ نام داده باشند، باید همین‌جا زنده
+        # خوانده شود — نه برچسبِ ثابتِ NAV_ITEMS.
+        company_id = session.current_company.company_id if session.current_company else None
+        dynamic_labels: dict[str, str] = {}
+        if company_id is not None:
+            names_by_group_code = {g.code: g.name for g in dimensions_service.list_person_groups(company_id)}
+            for nav_code, group_code in _PERSON_GROUP_NAV_CODE_TO_GROUP_CODE.items():
+                if group_code in names_by_group_code:
+                    dynamic_labels[nav_code] = names_by_group_code[group_code]
+
+        def _label_of(child: dict) -> str:
+            return dynamic_labels.get(child["code"], child["label"])
+
         # طبقِ درخواستِ صریح: انواعِ تفصیلی از دکمه‌هایِ تخت ریبون حذف شدند
         # (فقط از ساید‌بار در دسترس‌اند) تا دکمه‌هایِ باقی‌مانده فضایِ
         # بیشتری بگیرند — ولی طبقِ بازخوردِ بعدی، به‌جایِ حذفِ کامل، همان‌ها
-        # به‌صورتِ یک دکمه‌ی منویِ «تفصیلی» بازمی‌گردند (پایین‌تر).
+        # به‌صورتِ یک دکمه‌ی منویِ «گروه‌هایِ تفصیلی» بازمی‌گردند (پایین‌تر)
+        # و طبقِ بازخوردِ جدیدتر، از ساید‌بار هم کاملاً حذف شده‌اند (فقط در
+        # همین منویِ ریبون در دسترس‌اند — نگاهِ _build_sidebar).
         ribbon_children = [c for c in group["children"] if c.get("in_ribbon", True)]
         for child in ribbon_children:
-            button = QPushButton(child["label"])
+            button = QPushButton(_label_of(child))
             button.setObjectName("ribbonButton")
             button.setProperty("active", child["code"] == code)
             button.setCursor(Qt.PointingHandCursor)
@@ -241,14 +292,14 @@ class MainWindow(QMainWindow):
         hidden_children = [c for c in group["children"] if not c.get("in_ribbon", True)]
         if hidden_children:
             menu_button = QToolButton()
-            menu_button.setText("تفصیلی ▾")
+            menu_button.setText("گروه‌هایِ تفصیلی ▾")
             menu_button.setObjectName("ribbonButton")
             menu_button.setCursor(Qt.PointingHandCursor)
             menu_button.setPopupMode(QToolButton.InstantPopup)
             menu_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             menu = QMenu(menu_button)
             for child in hidden_children:
-                menu.addAction(child["label"], lambda _checked=False, c=child["code"]: self.open_screen(c))
+                menu.addAction(_label_of(child), lambda _checked=False, c=child["code"]: self.open_screen(c))
             menu_button.setMenu(menu)
             self._ribbon_layout.addWidget(menu_button)
 
@@ -259,8 +310,11 @@ class MainWindow(QMainWindow):
         # می‌کند. فقط بخش‌هایی که واقعاً نگاشته شده‌اند این دکمه را دارند.
         settings_tab_index = _SETTINGS_TAB_BY_GROUP_CODE.get(group["code"])
         if settings_tab_index is not None:
+            # طبقِ درخواستِ صریح: این دکمه تقریباً ۲ برابرِ اندازه‌یِ قبلی‌اش
+            # شود — objectNameِ اختصاصی (نه «ribbonButton»یِ مشترک) تا
+            # فونت/پدینگِ بزرگ‌ترش رویِ بقیه‌یِ دکمه‌هایِ ریبون اثر نگذارد.
             gear_button = QPushButton("⚙")
-            gear_button.setObjectName("ribbonButton")
+            gear_button.setObjectName("ribbonGearButton")
             gear_button.setCursor(Qt.PointingHandCursor)
             gear_button.setToolTip(f"تنظیماتِ «{group['label']}»")
             gear_button.clicked.connect(
@@ -270,7 +324,7 @@ class MainWindow(QMainWindow):
             )
             self._ribbon_layout.addWidget(gear_button)
 
-        self._ribbon_scroll.setFixedHeight(44)
+        self._ribbon_scroll.setFixedHeight(56)
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
@@ -320,7 +374,14 @@ class MainWindow(QMainWindow):
             node.setIcon(0, theme.emoji_icon(_NAV_ICONS.get(item["code"], "•")))
             tree.addTopLevelItem(node)
             self._tree_items_by_code[item["code"]] = node
+            # طبقِ درخواستِ صریح: گروه‌هایِ تفصیلی (کالا/بانک/مشتری/.../
+            # پیکربندیِ گروه‌ها) از ساید‌بار حذف شدند — فقط از منویِ
+            # جمع‌شونده‌یِ «گروه‌هایِ تفصیلی»یِ ریبون در دسترس‌اند (نگاهِ
+            # _update_ribbon)؛ یعنی این‌جا فقط زیرمجموعه‌هایِ in_ribbon
+            # (پیش‌فرض True) به ساید‌بار اضافه می‌شوند.
             for child in item.get("children", []):
+                if not child.get("in_ribbon", True):
+                    continue
                 child_node = QTreeWidgetItem([child["label"]])
                 child_node.setData(0, Qt.UserRole, child["code"])
                 child_node.setData(0, Qt.UserRole + 1, child["label"])
@@ -455,6 +516,11 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(screen)
         if hasattr(screen, "refresh"):
             screen.refresh()
+        # طبقِ گزارشِ صریح: هر بار با ساید‌بار به منویِ تازه‌ای سوییچ می‌شد،
+        # چیدمانِ فرمِ بازشده به‌هم می‌ریخت و آیتم‌هایِ فوتر در دسترس
+        # نبودند — همان دلیلِ _force_relayout در showEvent، این‌جا هم بعدِ
+        # هر سوییچ لازم است (نه فقط بارِ اول).
+        QTimer.singleShot(0, self._force_relayout)
         if then is not None:
             then(screen)
 
