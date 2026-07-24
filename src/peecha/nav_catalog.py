@@ -42,7 +42,13 @@ NAV_ITEMS = [
     {"code": "PURCH", "label": "خرید و تدارکات", "screen": None},
     {"code": "HR", "label": "منابع انسانی", "screen": None},
     {"code": "INVOICES", "label": "فاکتورها", "screen": None},
-    {"code": "REPORTS", "label": "گزارش‌ها", "screen": None},
+    {
+        "code": "REPORTS",
+        "label": "گزارش‌ها",
+        "children": [
+            {"code": "REPORTS_TRIAL_BALANCE", "label": "تراز آزمایشی", "screen": "report_trial_balance"},
+        ],
+    },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ
     # تب‌هایِ سازمان‌یافته درونِ یک صفحه‌ی واحد («system_settings») جمع شده‌اند.
     {"code": "SETTINGS", "label": "تنظیمات سیستم", "screen": "system_settings"},

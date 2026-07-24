@@ -10,6 +10,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "alembic>=1.13",
     "jdatetime>=5.0",         # تقویم شمسی (پیش‌فرض طبق docs/ui-ux-guidelines.md بخش ۱)
+    "openpyxl>=3.1",          # خروجیِ Excel برایِ ماژولِ گزارش‌ها
 ]
 
 [project.optional-dependencies]
