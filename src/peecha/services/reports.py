@@ -260,3 +260,58 @@ def compute_detail_balances(
             )
         )
     return rows
+
+
+@dataclass
+class JournalBookLineRow:
+    document_date: datetime.date
+    temporary_no: int
+    description: str
+    account_full_code: str
+    account_name: str
+    debit: decimal.Decimal
+    credit: decimal.Decimal
+
+
+def list_journal_book_lines(
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    *,
+    include_draft: bool = False,
+) -> list[JournalBookLineRow]:
+    """دفترِ روزنامه: ردیف‌هایِ سند+سطر به‌ترتیبِ تاریخ/شماره/شماره‌یِ ردیف —
+    برایِ تحریرِ دفاترِ قانونی."""
+    accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(company_id)}
+    with new_session() as session:
+        query = (
+            select(JournalEntryLine, JournalEntry.document_date, JournalEntry.temporary_no, JournalEntry.description)
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .where(JournalEntry.company_id == company_id)
+        )
+        if date_from is not None:
+            query = query.where(JournalEntry.document_date >= date_from)
+        if date_to is not None:
+            query = query.where(JournalEntry.document_date <= date_to)
+        if not include_draft:
+            query = query.join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id).where(
+                JournalEntryStatus.code != "DRAFT"
+            )
+        query = query.order_by(JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no)
+        rows = session.execute(query).all()
+
+    result: list[JournalBookLineRow] = []
+    for line, document_date, temporary_no, entry_description in rows:
+        account = accounts_by_id.get(line.account_id)
+        result.append(
+            JournalBookLineRow(
+                document_date=document_date,
+                temporary_no=temporary_no,
+                description=line.description or entry_description or "",
+                account_full_code=account.full_code if account else "",
+                account_name=account.name if account else "",
+                debit=line.debit_amount_base,
+                credit=line.credit_amount_base,
+            )
+        )
+    return result
