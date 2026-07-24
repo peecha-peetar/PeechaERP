@@ -7,7 +7,16 @@ credit_amount_base) مانده/گردشِ حساب‌ها را می‌سازد.
 
 طبقِ محدودیتِ شناخته‌شده: در سیستمِ فعلی هیچ سندِ اختتامیه‌ای وجود ندارد، پس
 «مانده‌ی اول» همیشه یعنی «جمعِ همه‌چیز پیش از تاریخِ شروعِ بازه» (نه مانده‌ی
-بعدِ یک بستنِ رسمی)."""
+بعدِ یک بستنِ رسمی).
+
+طبقِ درخواستِ صریح، هر تابعِ سطحِ سند/گردش سه فیلترِ پیشرفته‌یِ مشترک را
+می‌پذیرد:
+- status_filter: "EXCLUDE_DRAFT" (پیش‌فرض، بدونِ پیش‌نویس) | "ALL" (شاملِ
+  پیش‌نویس) | "DRAFT_ONLY" (فقط پیش‌نویس).
+- cost_center_id: محدودکردنِ گردش به یک حسابِ تفصیلیِ مشخص (معمولاً مرکزِ
+  هزینه یا پروژه) — از رویِ acc.journal_entry_line_details.
+- document_no_filter: محدودکردن به یک شماره‌یِ سندِ (temporary_no) مشخص.
+"""
 
 from __future__ import annotations
 
@@ -31,6 +40,15 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 
 _ZERO = decimal.Decimal("0")
+
+
+def _apply_status_filter(query, status_filter: str):
+    if status_filter == "ALL":
+        return query
+    query = query.join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id)
+    if status_filter == "DRAFT_ONLY":
+        return query.where(JournalEntryStatus.code == "DRAFT")
+    return query.where(JournalEntryStatus.code != "DRAFT")  # "EXCLUDE_DRAFT"
 
 
 @dataclass
@@ -64,7 +82,9 @@ def _raw_account_sums(
     company_id: int,
     date_from: datetime.date | None,
     date_to: datetime.date | None,
-    include_draft: bool,
+    status_filter: str,
+    *,
+    cost_center_id: int | None = None,
 ) -> dict[int, tuple[decimal.Decimal, decimal.Decimal]]:
     query = (
         select(
@@ -75,14 +95,15 @@ def _raw_account_sums(
         .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
         .where(JournalEntry.company_id == company_id)
     )
+    if cost_center_id is not None:
+        query = query.join(
+            JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id
+        ).where(JournalEntryLineDetail.detail_account_id == cost_center_id)
     if date_from is not None:
         query = query.where(JournalEntry.document_date >= date_from)
     if date_to is not None:
         query = query.where(JournalEntry.document_date <= date_to)
-    if not include_draft:
-        query = query.join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id).where(
-            JournalEntryStatus.code != "DRAFT"
-        )
+    query = _apply_status_filter(query, status_filter)
     query = query.group_by(JournalEntryLine.account_id)
     return {
         account_id: (decimal.Decimal(debit), decimal.Decimal(credit))
@@ -96,7 +117,7 @@ def _raw_detail_sums(
     dimension_type_id: int,
     date_from: datetime.date | None,
     date_to: datetime.date | None,
-    include_draft: bool,
+    status_filter: str,
 ) -> dict[int, tuple[decimal.Decimal, decimal.Decimal]]:
     query = (
         select(
@@ -112,10 +133,7 @@ def _raw_detail_sums(
         query = query.where(JournalEntry.document_date >= date_from)
     if date_to is not None:
         query = query.where(JournalEntry.document_date <= date_to)
-    if not include_draft:
-        query = query.join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id).where(
-            JournalEntryStatus.code != "DRAFT"
-        )
+    query = _apply_status_filter(query, status_filter)
     query = query.group_by(JournalEntryLineDetail.detail_account_id)
     return {
         detail_account_id: (decimal.Decimal(debit), decimal.Decimal(credit))
@@ -161,7 +179,8 @@ def compute_account_balances(
     date_from: datetime.date | None,
     date_to: datetime.date | None,
     *,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
+    cost_center_id: int | None = None,
 ) -> list[AccountBalanceRow]:
     """مانده/گردشِ همه‌یِ حساب‌ها (هر سه سطحِ گروه/کل/معین)، رول‌آپ‌شده از
     رویِ حساب‌هایِ قابلِ‌ثبتِ سند (سطحِ معین) که تنها سطحی هستند که مستقیماً
@@ -177,11 +196,15 @@ def compute_account_balances(
             ).all()
         )
         opening_leaf = (
-            _raw_account_sums(session, company_id, None, _day_before(date_from), include_draft)
+            _raw_account_sums(
+                session, company_id, None, _day_before(date_from), status_filter, cost_center_id=cost_center_id
+            )
             if date_from is not None
             else {}
         )
-        period_leaf = _raw_account_sums(session, company_id, date_from, date_to, include_draft)
+        period_leaf = _raw_account_sums(
+            session, company_id, date_from, date_to, status_filter, cost_center_id=cost_center_id
+        )
 
     opening_rolled = _rollup_sums(ids, parent_map, opening_leaf)
     period_rolled = _rollup_sums(ids, parent_map, period_leaf)
@@ -217,7 +240,7 @@ def compute_detail_balances(
     date_from: datetime.date | None,
     date_to: datetime.date | None,
     *,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
 ) -> list[AccountBalanceRow]:
     """معادلِ compute_account_balances ولی در سطحِ حساب‌هایِ تفصیلیِ یک
     نوع‌بُعدِ مشخص (مثلاً مشتریان یا مراکزِ هزینه)، رول‌آپ‌شده رویِ سلسله‌مراتبِ
@@ -230,11 +253,11 @@ def compute_detail_balances(
 
     with new_session() as session:
         opening_leaf = (
-            _raw_detail_sums(session, company_id, dimension_type_id, None, _day_before(date_from), include_draft)
+            _raw_detail_sums(session, company_id, dimension_type_id, None, _day_before(date_from), status_filter)
             if date_from is not None
             else {}
         )
-        period_leaf = _raw_detail_sums(session, company_id, dimension_type_id, date_from, date_to, include_draft)
+        period_leaf = _raw_detail_sums(session, company_id, dimension_type_id, date_from, date_to, status_filter)
 
     opening_rolled = _rollup_sums(ids, parent_map, opening_leaf)
     period_rolled = _rollup_sums(ids, parent_map, period_leaf)
@@ -280,7 +303,9 @@ def list_journal_book_lines(
     date_from: datetime.date | None,
     date_to: datetime.date | None,
     *,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
+    cost_center_id: int | None = None,
+    document_no_filter: int | None = None,
 ) -> list[JournalBookLineRow]:
     """دفترِ روزنامه: ردیف‌هایِ سند+سطر به‌ترتیبِ تاریخ/شماره/شماره‌یِ ردیف —
     برایِ تحریرِ دفاترِ قانونی."""
@@ -291,14 +316,17 @@ def list_journal_book_lines(
             .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
             .where(JournalEntry.company_id == company_id)
         )
+        if cost_center_id is not None:
+            query = query.join(
+                JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id
+            ).where(JournalEntryLineDetail.detail_account_id == cost_center_id)
+        if document_no_filter is not None:
+            query = query.where(JournalEntry.temporary_no == document_no_filter)
         if date_from is not None:
             query = query.where(JournalEntry.document_date >= date_from)
         if date_to is not None:
             query = query.where(JournalEntry.document_date <= date_to)
-        if not include_draft:
-            query = query.join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id).where(
-                JournalEntryStatus.code != "DRAFT"
-            )
+        query = _apply_status_filter(query, status_filter)
         query = query.order_by(JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no)
         rows = session.execute(query).all()
 
@@ -337,7 +365,9 @@ def list_ledger_entries(
     *,
     account_id: int | None = None,
     detail_account_id: int | None = None,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
+    cost_center_id: int | None = None,
+    document_no_filter: int | None = None,
 ) -> tuple[decimal.Decimal, decimal.Decimal, list[LedgerLineRow]]:
     """گردشِ زمانیِ یک حسابِ کدینگیِ مشخص (account_id) یا یک حسابِ تفصیلیِ
     مشخص (detail_account_id)، با مانده‌یِ رواگرد — برایِ دفترِ کل/معین/تفصیلی
@@ -363,10 +393,12 @@ def list_ledger_entries(
                 ).where(JournalEntryLineDetail.detail_account_id == detail_account_id)
             else:
                 opening_query = opening_query.where(JournalEntryLine.account_id == account_id)
-            if not include_draft:
-                opening_query = opening_query.join(
-                    JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
-                ).where(JournalEntryStatus.code != "DRAFT")
+            if cost_center_id is not None:
+                cc_alias = select(JournalEntryLineDetail.line_id).where(
+                    JournalEntryLineDetail.detail_account_id == cost_center_id
+                )
+                opening_query = opening_query.where(JournalEntryLine.line_id.in_(cc_alias))
+            opening_query = _apply_status_filter(opening_query, status_filter)
             debit_sum, credit_sum = session.execute(opening_query).one()
             opening_debit, opening_credit = decimal.Decimal(debit_sum), decimal.Decimal(credit_sum)
 
@@ -381,14 +413,18 @@ def list_ledger_entries(
             ).where(JournalEntryLineDetail.detail_account_id == detail_account_id)
         else:
             line_query = line_query.where(JournalEntryLine.account_id == account_id)
+        if cost_center_id is not None:
+            cc_alias = select(JournalEntryLineDetail.line_id).where(
+                JournalEntryLineDetail.detail_account_id == cost_center_id
+            )
+            line_query = line_query.where(JournalEntryLine.line_id.in_(cc_alias))
+        if document_no_filter is not None:
+            line_query = line_query.where(JournalEntry.temporary_no == document_no_filter)
         if date_from is not None:
             line_query = line_query.where(JournalEntry.document_date >= date_from)
         if date_to is not None:
             line_query = line_query.where(JournalEntry.document_date <= date_to)
-        if not include_draft:
-            line_query = line_query.join(
-                JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
-            ).where(JournalEntryStatus.code != "DRAFT")
+        line_query = _apply_status_filter(line_query, status_filter)
         line_query = line_query.order_by(
             JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no
         )
@@ -414,12 +450,12 @@ def list_ledger_entries(
 
 
 def _net_income(
-    company_id: int, date_from: datetime.date | None, date_to: datetime.date, include_draft: bool
+    company_id: int, date_from: datetime.date | None, date_to: datetime.date, status_filter: str
 ) -> decimal.Decimal:
     """سودِ خالصِ یک بازه — جمعِ سطحِ گروه (۱) کافی است، چون رول‌آپِ گروه
     از قبل شاملِ همه‌یِ زیرمجموعه‌هایِ همان دسته‌بندی است (دوباره‌شماری در
     سطوحِ پایین‌تر رخ نمی‌دهد)."""
-    balances = compute_account_balances(company_id, date_from, date_to, include_draft=include_draft)
+    balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
     total_revenue = sum(
         (r.period_credit - r.period_debit for r in balances if r.category_code == "REVENUE" and r.account_level == 1),
         _ZERO,
@@ -453,7 +489,8 @@ def compute_income_statement(
     date_from: datetime.date,
     date_to: datetime.date,
     *,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
+    cost_center_id: int | None = None,
 ) -> IncomeStatementResult:
     """صورتِ سود و زیان — حساب‌هایِ REVENUE/EXPENSE در سطحِ کل، به‌همراهِ
     مقایسه با همان بازه در یک سالِ پیش (برایِ مقایسه‌یِ روندی، نه سالِ مالیِ
@@ -461,8 +498,12 @@ def compute_income_statement(
     previous_from = date_from - datetime.timedelta(days=365)
     previous_to = date_to - datetime.timedelta(days=365)
 
-    current_balances = compute_account_balances(company_id, date_from, date_to, include_draft=include_draft)
-    previous_balances = compute_account_balances(company_id, previous_from, previous_to, include_draft=include_draft)
+    current_balances = compute_account_balances(
+        company_id, date_from, date_to, status_filter=status_filter, cost_center_id=cost_center_id
+    )
+    previous_balances = compute_account_balances(
+        company_id, previous_from, previous_to, status_filter=status_filter, cost_center_id=cost_center_id
+    )
     previous_by_id = {r.account_id: r for r in previous_balances}
 
     rows: list[IncomeStatementRow] = []
@@ -491,11 +532,19 @@ def compute_income_statement(
         )
 
     total_revenue = sum(
-        (r.period_credit - r.period_debit for r in current_balances if r.category_code == "REVENUE" and r.account_level == 1),
+        (
+            r.period_credit - r.period_debit
+            for r in current_balances
+            if r.category_code == "REVENUE" and r.account_level == 1
+        ),
         _ZERO,
     )
     total_expense = sum(
-        (r.period_debit - r.period_credit for r in current_balances if r.category_code == "EXPENSE" and r.account_level == 1),
+        (
+            r.period_debit - r.period_credit
+            for r in current_balances
+            if r.category_code == "EXPENSE" and r.account_level == 1
+        ),
         _ZERO,
     )
     return IncomeStatementResult(
@@ -526,7 +575,8 @@ def compute_balance_sheet(
     company_id: int,
     as_of_date: datetime.date,
     *,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
+    cost_center_id: int | None = None,
 ) -> BalanceSheetResult:
     """ترازنامه — حساب‌هایِ ترازنامه‌ای (account_type=PERMANENT) در سطحِ کل،
     تا as_of_date. چون سیستم سندِ اختتامیه ندارد و هیچ حسابِ «سودِ انباشته»یِ
@@ -534,7 +584,9 @@ def compute_balance_sheet(
     مالیِ جاری — چون مرزِ سالِ مالی این‌جا معنایِ حسابداریِ واقعی ندارد) به‌عنوانِ
     یک ردیفِ محاسبه‌شده به حقوقِ صاحبانِ سهام اضافه می‌شود؛ این تنها راهی است
     که ترازنامه همیشه (دارایی = بدهی + حقوقِ صاحبانِ سهام) بماند."""
-    balances = compute_account_balances(company_id, None, as_of_date, include_draft=include_draft)
+    balances = compute_account_balances(
+        company_id, None, as_of_date, status_filter=status_filter, cost_center_id=cost_center_id
+    )
 
     asset_rows: list[BalanceSheetRow] = []
     liability_rows: list[BalanceSheetRow] = []
@@ -557,7 +609,7 @@ def compute_balance_sheet(
             equity_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, balance))
             total_equity += balance
 
-    accumulated_earnings = _net_income(company_id, None, as_of_date, include_draft)
+    accumulated_earnings = _net_income(company_id, None, as_of_date, status_filter)
     total_equity += accumulated_earnings
 
     return BalanceSheetResult(
@@ -586,7 +638,9 @@ def compute_cash_flow_direct(
     date_from: datetime.date | None,
     date_to: datetime.date | None,
     *,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
+    cost_center_id: int | None = None,
+    document_no_filter: int | None = None,
 ) -> tuple[decimal.Decimal, list[CashFlowLineRow]]:
     """صورتِ گردشِ وجوهِ نقد به روشِ مستقیم — از رویِ حساب‌هایِ نیازمندِ بُعدِ
     صندوق/بانک: دریافت=بدهکار، پرداخت=بستانکار، شرح از طرفِ مقابلِ سند.
@@ -631,10 +685,12 @@ def compute_cash_flow_direct(
                     JournalEntry.document_date < date_from,
                 )
             )
-            if not include_draft:
-                opening_query = opening_query.join(
-                    JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
-                ).where(JournalEntryStatus.code != "DRAFT")
+            if cost_center_id is not None:
+                cc_alias = select(JournalEntryLineDetail.line_id).where(
+                    JournalEntryLineDetail.detail_account_id == cost_center_id
+                )
+                opening_query = opening_query.where(JournalEntryLine.line_id.in_(cc_alias))
+            opening_query = _apply_status_filter(opening_query, status_filter)
             od, oc = session.execute(opening_query).one()
             opening_balance = decimal.Decimal(od) - decimal.Decimal(oc)
 
@@ -647,14 +703,18 @@ def compute_cash_flow_direct(
                 .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
                 .where(JournalEntry.company_id == company_id, JournalEntryLine.account_id.in_(cash_account_ids))
             )
+            if cost_center_id is not None:
+                cc_alias = select(JournalEntryLineDetail.line_id).where(
+                    JournalEntryLineDetail.detail_account_id == cost_center_id
+                )
+                line_query = line_query.where(JournalEntryLine.line_id.in_(cc_alias))
+            if document_no_filter is not None:
+                line_query = line_query.where(JournalEntry.temporary_no == document_no_filter)
             if date_from is not None:
                 line_query = line_query.where(JournalEntry.document_date >= date_from)
             if date_to is not None:
                 line_query = line_query.where(JournalEntry.document_date <= date_to)
-            if not include_draft:
-                line_query = line_query.join(
-                    JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
-                ).where(JournalEntryStatus.code != "DRAFT")
+            line_query = _apply_status_filter(line_query, status_filter)
             line_query = line_query.order_by(
                 JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no
             )
@@ -703,11 +763,11 @@ def compute_equity_changes(
     date_from: datetime.date,
     date_to: datetime.date,
     *,
-    include_draft: bool = False,
+    status_filter: str = "EXCLUDE_DRAFT",
 ) -> list[EquityChangeRow]:
     """صورتِ تغییراتِ حقوقِ صاحبانِ سهام — حساب‌هایِ EQUITY در سطحِ کل:
     مانده‌ی اول + افزایش (گردشِ بستانکار) - کاهش (گردشِ بدهکار) = مانده‌ی آخر."""
-    balances = compute_account_balances(company_id, date_from, date_to, include_draft=include_draft)
+    balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
     rows: list[EquityChangeRow] = []
     for r in balances:
         if r.category_code != "EQUITY" or r.account_level != 2:

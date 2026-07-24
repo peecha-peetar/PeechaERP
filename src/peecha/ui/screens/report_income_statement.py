@@ -9,7 +9,7 @@ import decimal
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
 from peecha.services import reports as reports_service
-from peecha.ui.screens.reports_common import ReportScreenBase
+from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range
 
 _CATEGORY_LABELS = {"REVENUE": "درآمدها", "EXPENSE": "هزینه‌ها"}
 
@@ -17,8 +17,9 @@ _CATEGORY_LABELS = {"REVENUE": "درآمدها", "EXPENSE": "هزینه‌ها"}
 class IncomeStatementScreen(ReportScreenBase):
     def __init__(self) -> None:
         super().__init__("صورتِ سود و زیان")
+        self.enable_code_range_filter()
+        self.enable_cost_center_filter()
         self._currency_decimal_places = 0
-        self._currency_symbol: str | None = None
 
     def refresh(self) -> None:
         company = session.current_company
@@ -29,18 +30,26 @@ class IncomeStatementScreen(ReportScreenBase):
                 None,
             )
         self._currency_decimal_places = currency.decimal_places if currency else 0
-        self._currency_symbol = currency.symbol if currency else None
         super().refresh()
 
     def _fmt(self, value: decimal.Decimal) -> str:
-        return numerals.format_money(value, self._currency_decimal_places, self._currency_symbol)
+        return numerals.format_money(value, self._currency_decimal_places, None)
 
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
-        result = reports_service.compute_income_statement(company_id, date_from, date_to)
+        code_from, code_to = self.code_range()
+        result = reports_service.compute_income_statement(
+            company_id,
+            date_from,
+            date_to,
+            status_filter=self.status_filter(),
+            cost_center_id=self.cost_center_id(),
+        )
 
         headers = ["کد", "نام", "دسته", "دوره‌یِ جاری", "دوره‌یِ مشابهِ سالِ قبل"]
         rows: list[list] = []
         for r in result.rows:
+            if not code_in_range(r.full_code, code_from, code_to):
+                continue
             rows.append(
                 [
                     r.full_code,

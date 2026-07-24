@@ -9,14 +9,16 @@ import decimal
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
 from peecha.services import reports as reports_service
-from peecha.ui.screens.reports_common import ReportScreenBase
+from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range
 
 
 class JournalBookScreen(ReportScreenBase):
     def __init__(self) -> None:
         super().__init__("دفتر روزنامه")
+        self.enable_code_range_filter()
+        self.enable_cost_center_filter()
+        self.enable_document_no_filter()
         self._currency_decimal_places = 0
-        self._currency_symbol: str | None = None
 
     def refresh(self) -> None:
         company = session.current_company
@@ -27,14 +29,22 @@ class JournalBookScreen(ReportScreenBase):
                 None,
             )
         self._currency_decimal_places = currency.decimal_places if currency else 0
-        self._currency_symbol = currency.symbol if currency else None
         super().refresh()
 
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
-        lines = reports_service.list_journal_book_lines(company_id, date_from, date_to)
+        code_from, code_to = self.code_range()
+        lines = reports_service.list_journal_book_lines(
+            company_id,
+            date_from,
+            date_to,
+            status_filter=self.status_filter(),
+            cost_center_id=self.cost_center_id(),
+            document_no_filter=self.document_no(),
+        )
+        lines = [ln for ln in lines if code_in_range(ln.account_full_code, code_from, code_to)]
 
         def fmt(value: decimal.Decimal) -> str:
-            return numerals.format_money(value, self._currency_decimal_places, self._currency_symbol)
+            return numerals.format_money(value, self._currency_decimal_places, None)
 
         headers = ["تاریخ", "شماره‌یِ سند", "کدِ حساب", "نامِ حساب", "شرح", "بدهکار", "بستانکار"]
         rows: list[list] = []

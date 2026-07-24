@@ -22,7 +22,7 @@ from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import reports as reports_service
-from peecha.ui.screens.reports_common import ReportScreenBase, dimension_label, net_split
+from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range, dimension_label, net_split
 
 _ZERO = decimal.Decimal("0")
 
@@ -59,8 +59,10 @@ class TrialBalanceScreen(ReportScreenBase):
             self.column_mode_combo.addItem(label, mode)
         self.extra_filter_row.addWidget(self.column_mode_combo)
 
+        self.enable_code_range_filter()
+        self.enable_cost_center_filter()
+
         self._currency_decimal_places = 0
-        self._currency_symbol: str | None = None
 
     def _on_level_changed(self) -> None:
         is_detail = self.level_combo.currentData() == 4
@@ -88,7 +90,6 @@ class TrialBalanceScreen(ReportScreenBase):
                 None,
             )
         self._currency_decimal_places = currency.decimal_places if currency else 0
-        self._currency_symbol = currency.symbol if currency else None
         super().refresh()
 
     def _fiscal_year_start(self, company_id: int, on_date: datetime.date) -> datetime.date | None:
@@ -99,33 +100,45 @@ class TrialBalanceScreen(ReportScreenBase):
         level = self.level_combo.currentData()
         column_mode = self.column_mode_combo.currentData()
         dimension_type_id = self.dimension_combo.currentData() if level == 4 else None
+        status_filter = self.status_filter()
+        cost_center_id = self.cost_center_id()
+        code_from, code_to = self.code_range()
 
         if level == 4:
             if dimension_type_id is None:
                 return [], [], None
-            period_rows = reports_service.compute_detail_balances(company_id, dimension_type_id, date_from, date_to)
+            period_rows = reports_service.compute_detail_balances(
+                company_id, dimension_type_id, date_from, date_to, status_filter=status_filter
+            )
         else:
             period_rows = [
-                r for r in reports_service.compute_account_balances(company_id, date_from, date_to)
+                r
+                for r in reports_service.compute_account_balances(
+                    company_id, date_from, date_to, status_filter=status_filter, cost_center_id=cost_center_id
+                )
                 if r.account_level == level
             ]
+        period_rows = [r for r in period_rows if code_in_range(r.full_code, code_from, code_to)]
 
         annual_by_id: dict[int, reports_service.AccountBalanceRow] = {}
         if column_mode == 8:
             year_start = self._fiscal_year_start(company_id, date_to) or date_from
             if level == 4:
                 annual_rows = reports_service.compute_detail_balances(
-                    company_id, dimension_type_id, year_start, date_to
+                    company_id, dimension_type_id, year_start, date_to, status_filter=status_filter
                 )
             else:
                 annual_rows = [
-                    r for r in reports_service.compute_account_balances(company_id, year_start, date_to)
+                    r
+                    for r in reports_service.compute_account_balances(
+                        company_id, year_start, date_to, status_filter=status_filter, cost_center_id=cost_center_id
+                    )
                     if r.account_level == level
                 ]
             annual_by_id = {r.account_id: r for r in annual_rows}
 
         def fmt(value: decimal.Decimal) -> str:
-            return numerals.format_money(value, self._currency_decimal_places, self._currency_symbol)
+            return numerals.format_money(value, self._currency_decimal_places, None)
 
         headers = ["کد", "نام"]
         if column_mode == 8:

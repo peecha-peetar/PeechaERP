@@ -16,8 +16,9 @@ from peecha.ui.screens.reports_common import ReportScreenBase
 class CashFlowScreen(ReportScreenBase):
     def __init__(self) -> None:
         super().__init__("صورتِ گردشِ وجوهِ نقد (روشِ مستقیم)")
+        self.enable_cost_center_filter()
+        self.enable_document_no_filter()
         self._currency_decimal_places = 0
-        self._currency_symbol: str | None = None
 
     def refresh(self) -> None:
         company = session.current_company
@@ -28,14 +29,20 @@ class CashFlowScreen(ReportScreenBase):
                 None,
             )
         self._currency_decimal_places = currency.decimal_places if currency else 0
-        self._currency_symbol = currency.symbol if currency else None
         super().refresh()
 
     def _fmt(self, value: decimal.Decimal) -> str:
-        return numerals.format_money(value, self._currency_decimal_places, self._currency_symbol)
+        return numerals.format_money(value, self._currency_decimal_places, None)
 
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
-        opening_balance, lines = reports_service.compute_cash_flow_direct(company_id, date_from, date_to)
+        opening_balance, lines = reports_service.compute_cash_flow_direct(
+            company_id,
+            date_from,
+            date_to,
+            status_filter=self.status_filter(),
+            cost_center_id=self.cost_center_id(),
+            document_no_filter=self.document_no(),
+        )
 
         headers = ["تاریخ", "شماره‌یِ سند", "شرح", "طرفِ حساب", "دریافت", "پرداخت"]
         rows: list[list] = [["", "", "مانده‌ی نقدِ اول", "", "", self._fmt(opening_balance)]]
