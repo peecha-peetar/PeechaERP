@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
+from peecha.ui.widgets import ZeroPaddedSpinBox
 
 _FIELD_KIND_OPTIONS = [("text", "متن"), ("decimal", "عدد اعشاری"), ("date", "تاریخ"), ("boolean", "بله/خیر")]
 _LEVEL_COUNT = 4
@@ -176,6 +177,7 @@ class DimensionGroupConfigScreen(QWidget):
         max_level_row.addWidget(QLabel("تعدادِ سطحِ این گروه"))
         self.max_level_spin = QSpinBox()
         self.max_level_spin.setRange(1, _LEVEL_COUNT)
+        self.max_level_spin.valueChanged.connect(self._on_max_level_changed)
         max_level_row.addWidget(self.max_level_spin)
         self.save_max_level_button = QPushButton("ذخیره")
         self.save_max_level_button.setObjectName("flatButton")
@@ -195,12 +197,12 @@ class DimensionGroupConfigScreen(QWidget):
         levels_grid.addWidget(QLabel("سطح"), 0, 0)
         levels_grid.addWidget(QLabel("از"), 0, 1)
         levels_grid.addWidget(QLabel("تا"), 0, 2)
-        self._level_widgets: dict[int, tuple[QSpinBox, QSpinBox]] = {}
+        self._level_widgets: dict[int, tuple[ZeroPaddedSpinBox, ZeroPaddedSpinBox]] = {}
         for row, level_no in enumerate(range(1, _LEVEL_COUNT + 1), start=1):
             levels_grid.addWidget(QLabel(f"سطحِ {level_no}"), row, 0)
-            range_from = QSpinBox()
+            range_from = ZeroPaddedSpinBox()
             range_from.setRange(0, 999_999_999)
-            range_to = QSpinBox()
+            range_to = ZeroPaddedSpinBox()
             range_to.setRange(0, 999_999_999)
             levels_grid.addWidget(range_from, row, 1)
             levels_grid.addWidget(range_to, row, 2)
@@ -292,21 +294,46 @@ class DimensionGroupConfigScreen(QWidget):
             )
         self.config_title.setText(f"پیکربندیِ گروهِ «{label}»")
         self.config_panel.setEnabled(True)
+
+        company_id = self._company_id()
+        digit_config_by_level = (
+            {r.level_no: r.code_length for r in dimensions_service.list_level_digit_config(company_id)}
+            if company_id is not None
+            else {}
+        )
+        for level_no, (range_from, range_to) in self._level_widgets.items():
+            digits = digit_config_by_level.get(level_no) or 0
+            range_from.set_digits(digits)
+            range_to.set_digits(digits)
+
+        self.max_level_spin.blockSignals(True)
         self.max_level_spin.setValue(dimensions_service.get_group_max_level_no(dimension_type_id, person_group_id))
+        self.max_level_spin.blockSignals(False)
         self._load_levels()
         self._load_fields()
 
-        company_id = self._company_id()
         locked = company_id is not None and je_service.company_has_any_entries(company_id)
-        for range_from, range_to in self._level_widgets.values():
-            range_from.setEnabled(not locked)
-            range_to.setEnabled(not locked)
+        self._levels_locked = locked
+        self._apply_level_enablement(self.max_level_spin.value())
         self.save_levels_button.setEnabled(not locked)
         self.max_level_spin.setEnabled(not locked)
         self.save_max_level_button.setEnabled(not locked)
         self.lock_hint_label.setText(
             "این شرکت سند دارد؛ تنظیماتِ رقم/بازه/تعدادِ سطح دیگر قابلِ‌تغییر نیست." if locked else ""
         )
+
+    def _on_max_level_changed(self, value: int) -> None:
+        self._apply_level_enablement(value)
+
+    def _apply_level_enablement(self, max_level_no: int) -> None:
+        # طبقِ درخواستِ صریح: سطوحِ فراتر از سقفِ این گروه (مثلاً سطحِ ۳/۴
+        # وقتی «تعدادِ سطح» ۲ تنظیم شده) غیرفعال/کم‌رنگ می‌شوند — چون این
+        # گروه اصلاً نمی‌تواند حسابِ تفصیلی در آن سطوح داشته باشد.
+        locked = getattr(self, "_levels_locked", False)
+        for level_no, (range_from, range_to) in self._level_widgets.items():
+            enabled = (not locked) and level_no <= max_level_no
+            range_from.setEnabled(enabled)
+            range_to.setEnabled(enabled)
 
     def _save_max_level(self) -> None:
         company_id = self._company_id()
@@ -336,13 +363,14 @@ class DimensionGroupConfigScreen(QWidget):
         company_id = self._company_id()
         if company_id is None or self._selected_type_id is None:
             return
+        max_level_no = self.max_level_spin.value()
         levels = {
             level_no: {
                 "range_from": range_from.value() or None,
                 "range_to": range_to.value() or None,
             }
             for level_no, (range_from, range_to) in self._level_widgets.items()
-            if range_from.value() > 0 or range_to.value() > 0
+            if level_no <= max_level_no and (range_from.value() > 0 or range_to.value() > 0)
         }
         try:
             dimensions_service.set_group_levels(

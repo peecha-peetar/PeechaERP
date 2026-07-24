@@ -11,6 +11,7 @@ from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
+from peecha.ui.widgets import ZeroPaddedSpinBox
 
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _DETAIL_LEVEL_LABELS = {1: "سطحِ ۱", 2: "سطحِ ۲", 3: "سطحِ ۳", 4: "سطحِ ۴"}
@@ -61,10 +62,16 @@ class AccountingCodingSettingsScreen(QWidget):
             grid.addWidget(QLabel(_LEVEL_LABELS[level]), row, 0)
             code_length = QSpinBox()
             code_length.setRange(0, 10)
-            range_from = QSpinBox()
+            range_from = ZeroPaddedSpinBox()
             range_from.setRange(0, 999_999_999)
-            range_to = QSpinBox()
+            range_to = ZeroPaddedSpinBox()
             range_to.setRange(0, 999_999_999)
+            # طبقِ بازخوردِ صریح: کدهایی مثلِ «۰۰۱» نباید با تغییرِ تعدادِ
+            # رقم به «۱» تبدیل شوند — با هر تغییرِ تعدادِ رقم، نمایشِ بازه هم
+            # بی‌درنگ صفر-پَد می‌شود.
+            code_length.valueChanged.connect(
+                lambda digits, rf=range_from, rt=range_to: (rf.set_digits(digits), rt.set_digits(digits))
+            )
             grid.addWidget(code_length, row, 1)
             grid.addWidget(range_from, row, 2)
             grid.addWidget(range_to, row, 3)

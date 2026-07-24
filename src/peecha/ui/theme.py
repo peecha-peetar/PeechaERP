@@ -167,6 +167,10 @@ QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBo
 QLineEdit:disabled, QComboBox:disabled {{
     color: {TEXT_DISABLED};
 }}
+QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    color: {TEXT_DISABLED};
+    background-color: {BORDER};
+}}
 QComboBox::drop-down {{
     border: none;
     width: 26px;
