@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -110,6 +111,7 @@ class MainWindow(QMainWindow):
         outer.setSpacing(0)
 
         outer.addWidget(self._build_header())
+        outer.addWidget(self._build_ribbon())
 
         body = QWidget()
         body_layout = QHBoxLayout(body)
@@ -193,6 +195,56 @@ class MainWindow(QMainWindow):
         layout.addWidget(logout_button)
 
         return header
+
+    # --- ریبون (میان‌برهایِ گروهِ فعال، زیرِ هدر) -----------------------------
+    # طبقِ بازخوردِ صریح، ریبون دوباره برگشته — اما این‌بار درونِ یک
+    # QScrollArea با اسکرولِ افقی، تا هرقدر تعدادِ زیرمجموعه‌هایِ یک گروه
+    # زیاد شود (مثلاً «مالی و حسابداری» با ۱۶ زیرمجموعه)، دکمه‌ها فشرده/
+    # سرریز نشوند و چیدمانِ سایدبار را به‌هم نریزند (باگی که قبلاً گزارش شد).
+    def _build_ribbon(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setObjectName("ribbonScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFixedHeight(0)
+
+        ribbon = QWidget()
+        ribbon.setObjectName("ribbonBar")
+        layout = QHBoxLayout(ribbon)
+        layout.setContentsMargins(20, 0, 20, 0)
+        layout.setSpacing(8)
+        scroll.setWidget(ribbon)
+
+        self._ribbon_layout = layout
+        self._ribbon_bar = ribbon
+        self._ribbon_scroll = scroll
+        self._ribbon_buttons: dict[str, QPushButton] = {}
+        return scroll
+
+    def _update_ribbon(self, code: str) -> None:
+        while self._ribbon_layout.count():
+            child = self._ribbon_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._ribbon_buttons = {}
+
+        group = next((item for item in NAV_ITEMS if any(c["code"] == code for c in item.get("children", []))), None)
+        if group is None:
+            self._ribbon_scroll.setFixedHeight(0)
+            return
+
+        for child in group["children"]:
+            button = QPushButton(child["label"])
+            button.setObjectName("ribbonButton")
+            button.setProperty("active", child["code"] == code)
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(lambda _checked=False, c=child["code"]: self.open_screen(c))
+            self._ribbon_layout.addWidget(button)
+            self._ribbon_buttons[child["code"]] = button
+        self._ribbon_layout.addStretch(1)
+        self._ribbon_scroll.setFixedHeight(44)
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
@@ -361,6 +413,7 @@ class MainWindow(QMainWindow):
         tree_item = self._tree_items_by_code.get(code)
         if tree_item is not None:
             self.sidebar.setCurrentItem(tree_item)
+        self._update_ribbon(code)
 
         target_screen_name = item["screen"] or "placeholder"
         screen = self._screens.get(target_screen_name)

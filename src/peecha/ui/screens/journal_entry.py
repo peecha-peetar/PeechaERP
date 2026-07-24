@@ -69,12 +69,16 @@ from peecha.ui.widgets import JalaliDateEdit
 _COL_ROW_NO = 0
 _COL_ACCOUNT = 1
 _COL_PERSON = 2
-_COL_DESC = 3
-_COL_DEBIT = 4
-_COL_CREDIT = 5
-_COL_DIMENSIONS = 6
-_COL_REMOVE = 7
-_COLUMN_LABELS = ["ردیف", "حساب", "تفصیلی", "شرحِ ردیف", "بدهکار", "بستانکار", "ابعاد", ""]
+_COL_COST_CENTER = 3
+_COL_PROJECT = 4
+_COL_DESC = 5
+_COL_DEBIT = 6
+_COL_CREDIT = 7
+_COL_DIMENSIONS = 8
+_COL_REMOVE = 9
+_COLUMN_LABELS = [
+    "ردیف", "حساب", "تفصیلی", "مرکزِ هزینه", "پروژه", "شرحِ ردیف", "بدهکار", "بستانکار", "ابعاد", "",
+]
 
 
 def _fill_options(combo: QComboBox, options: list[tuple[int, str]]) -> None:
@@ -230,9 +234,11 @@ def _make_searchable_combo(options: list[tuple[int, str]]) -> QComboBox:
 
 
 class _DimensionsDialog(QDialog):
-    """برچسب‌زدنِ ابعادِ تفصیلیِ غیر-شخص (مثلِ مرکزِ هزینه) برایِ یک ردیف —
-    تفصیلیِ شخص خودش همیشه به‌عنوانِ ستونی در جدول نمایان است، اما بقیه‌ی
-    ابعادِ الزامی (کمتر پرکاربرد) در این پنجره تنظیم می‌شوند تا جدول شلوغ نشود."""
+    """برچسب‌زدنِ ابعادِ تفصیلیِ کم‌کاربردتر (کالا/بانک/صندوق/تنخواه/دارایی‌ثابت
+    و گروه‌هایِ سادهِ دلخواه) برایِ یک ردیف — تفصیلیِ شخص، مرکزِ هزینه و پروژه
+    هر سه ستونِ اختصاصیِ خودشان را در جدول دارند (چون پرکاربردترند و باید
+    مستقیم قابلِ‌جستجو باشند)، فقط بقیه‌ی ابعادِ الزامی در این پنجره تنظیم
+    می‌شوند تا جدول شلوغ نشود."""
 
     def __init__(
         self,
@@ -255,7 +261,7 @@ class _DimensionsDialog(QDialog):
                 index = combo.findData(current)
                 if index >= 0:
                     combo.setCurrentIndex(index)
-            form.addRow(dim.code, combo)
+            form.addRow(dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code), combo)
             self._combos[dim.dimension_type_id] = combo
         layout.addLayout(form)
 
@@ -285,7 +291,12 @@ class _LineRow:
         # می‌شود؛ ردیفِ تازه با None (=ارزِ پایه‌ی شرکت) ثبت می‌شود.
         self.currency_id: int | None = None
         self.exchange_rate: decimal.Decimal | None = None
+        # طبقِ بازخوردِ صریح: مرکزِ هزینه و پروژه هم مثلِ تفصیلیِ شخص باید
+        # ستونِ اختصاصیِ خودشان را در ردیف داشته باشند (نه اینکه در پنجره‌ی
+        # عمومیِ «ابعاد» گم شوند) — چون پرکاربردتر از بقیه‌ی ابعادند و باید
+        # مستقیماً قابلِ‌جستجو باشند.
         self._required_dimensions: list[dimensions_service.RequiredDimension] = []
+        self._other_required_dimensions: list[dimensions_service.RequiredDimension] = []
         self._extra_dimension_values: dict[int, int] = {}
 
         self.account_combo = _make_searchable_combo(screen.account_options)
@@ -294,6 +305,14 @@ class _LineRow:
 
         self.person_combo = _make_searchable_combo([])
         self.person_combo.lineEdit().returnPressed.connect(self._on_person_return)
+
+        self.cost_center_combo = _make_searchable_combo([])
+        self.cost_center_combo.setEnabled(False)
+        self.cost_center_combo.lineEdit().returnPressed.connect(self._on_cost_center_return)
+
+        self.project_combo = _make_searchable_combo([])
+        self.project_combo.setEnabled(False)
+        self.project_combo.lineEdit().returnPressed.connect(self._on_project_return)
 
         self.description_field = QLineEdit()
         self._attach_description_completer()
@@ -340,6 +359,8 @@ class _LineRow:
         table.setItem(row, _COL_ROW_NO, row_no_item)
         table.setCellWidget(row, _COL_ACCOUNT, self.account_combo)
         table.setCellWidget(row, _COL_PERSON, self.person_combo)
+        table.setCellWidget(row, _COL_COST_CENTER, self.cost_center_combo)
+        table.setCellWidget(row, _COL_PROJECT, self.project_combo)
         table.setCellWidget(row, _COL_DESC, self.description_field)
         table.setCellWidget(row, _COL_DEBIT, self.debit_field)
         table.setCellWidget(row, _COL_CREDIT, self.credit_field)
@@ -382,16 +403,36 @@ class _LineRow:
         self.person_combo.lineEdit().selectAll()
 
     def _on_person_return(self) -> None:
-        """زنجیره‌ی Enter: تفصیلی -> (اگر ابعادِ دیگری مثلِ مرکزِ هزینه/
-        پروژه هم لازم باشد) پنجره‌ی ابعاد به‌طورِ خودکار باز می‌شود -> شرحِ
-        ردیف."""
-        if self._required_dimensions and not self._extra_dimensions_complete():
+        """زنجیره‌ی Enter: تفصیلی -> مرکزِ هزینه (اگر لازم باشد) -> پروژه
+        (اگر لازم باشد) -> (اگر ابعادِ دیگری هم لازم باشد) پنجره‌ی ابعاد
+        به‌طورِ خودکار باز می‌شود -> شرحِ ردیف."""
+        if self.cost_center_combo.isEnabled():
+            self.cost_center_combo.setFocus()
+            self.cost_center_combo.lineEdit().selectAll()
+            return
+        self._advance_after_cost_center()
+
+    def _on_cost_center_return(self) -> None:
+        self._advance_after_cost_center()
+
+    def _advance_after_cost_center(self) -> None:
+        if self.project_combo.isEnabled():
+            self.project_combo.setFocus()
+            self.project_combo.lineEdit().selectAll()
+            return
+        self._advance_after_project()
+
+    def _on_project_return(self) -> None:
+        self._advance_after_project()
+
+    def _advance_after_project(self) -> None:
+        if self._other_required_dimensions and not self._extra_dimensions_complete():
             self._open_dimensions_dialog()
         self.description_field.setFocus()
         self.description_field.selectAll()
 
     def _extra_dimensions_complete(self) -> bool:
-        required_ids = {d.dimension_type_id for d in self._required_dimensions}
+        required_ids = {d.dimension_type_id for d in self._other_required_dimensions}
         return required_ids <= set(self._extra_dimension_values.keys())
 
     def _on_debit_return(self) -> None:
@@ -406,7 +447,12 @@ class _LineRow:
     def _refresh_dimension_ui(self) -> None:
         if self.account_id is None:
             _fill_options(self.person_combo, [])
+            _fill_options(self.cost_center_combo, [])
+            _fill_options(self.project_combo, [])
+            self.cost_center_combo.setEnabled(False)
+            self.project_combo.setEnabled(False)
             self._required_dimensions = []
+            self._other_required_dimensions = []
             self._extra_dimension_values = {}
             self.dimensions_button.setEnabled(False)
             self.dimensions_button.setText("—")
@@ -422,14 +468,42 @@ class _LineRow:
         self.person_combo.setToolTip("تفصیلی (الزامی)" if person_group_ids else "")
 
         self._required_dimensions = dimensions_service.get_required_dimensions_for_account(self.account_id)
-        valid_ids = {d.dimension_type_id for d in self._required_dimensions}
+
+        cost_center_dim = next(
+            (d for d in self._required_dimensions if d.code == dimensions_service.COST_CENTER_CODE), None
+        )
+        _fill_options(
+            self.cost_center_combo,
+            [(d.detail_account_id, f"{d.full_code} — {d.name or ''}") for d in cost_center_dim.detail_accounts]
+            if cost_center_dim
+            else [],
+        )
+        self.cost_center_combo.setEnabled(cost_center_dim is not None)
+        self.cost_center_combo.setToolTip("مرکزِ هزینه (الزامی)" if cost_center_dim else "")
+
+        project_dim = next((d for d in self._required_dimensions if d.code == dimensions_service.PROJECT_CODE), None)
+        _fill_options(
+            self.project_combo,
+            [(d.detail_account_id, f"{d.full_code} — {d.name or ''}") for d in project_dim.detail_accounts]
+            if project_dim
+            else [],
+        )
+        self.project_combo.setEnabled(project_dim is not None)
+        self.project_combo.setToolTip("پروژه (الزامی)" if project_dim else "")
+
+        self._other_required_dimensions = [
+            d
+            for d in self._required_dimensions
+            if d.code not in (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
+        ]
+        valid_ids = {d.dimension_type_id for d in self._other_required_dimensions}
         self._extra_dimension_values = {k: v for k, v in self._extra_dimension_values.items() if k in valid_ids}
-        has_extra_dims = bool(self._required_dimensions)
+        has_extra_dims = bool(self._other_required_dimensions)
         self.dimensions_button.setEnabled(has_extra_dims)
         self.dimensions_button.setText("ابعاد" if has_extra_dims else "—")
 
     def _open_dimensions_dialog(self) -> None:
-        dialog = _DimensionsDialog(self._required_dimensions, self._extra_dimension_values, self._table)
+        dialog = _DimensionsDialog(self._other_required_dimensions, self._extra_dimension_values, self._table)
         if dialog.exec() == QDialog.Accepted:
             self._extra_dimension_values = dialog.values()
 
@@ -438,6 +512,18 @@ class _LineRow:
         person_detail_id = self.person_combo.currentData()
         if person_detail_id is not None:
             details[dimensions_service.get_person_dimension_type_id(self._screen.company_id)] = person_detail_id
+        cost_center_detail_id = self.cost_center_combo.currentData()
+        if cost_center_detail_id is not None:
+            dimension_type_id = dimensions_service.get_specialized_dimension_type_id(
+                self._screen.company_id, dimensions_service.COST_CENTER_CODE
+            )
+            details[dimension_type_id] = cost_center_detail_id
+        project_detail_id = self.project_combo.currentData()
+        if project_detail_id is not None:
+            dimension_type_id = dimensions_service.get_specialized_dimension_type_id(
+                self._screen.company_id, dimensions_service.PROJECT_CODE
+            )
+            details[dimension_type_id] = project_detail_id
         return details
 
     def to_line_input(self) -> je_service.LineInput | None:
@@ -470,8 +556,15 @@ class _LineRow:
         self._refresh_dimension_ui()
 
         person_dimension_type_id = dimensions_service.get_person_dimension_type_id(self._screen.company_id)
+        cost_center_dimension_type_id = dimensions_service.get_specialized_dimension_type_id(
+            self._screen.company_id, dimensions_service.COST_CENTER_CODE
+        )
+        project_dimension_type_id = dimensions_service.get_specialized_dimension_type_id(
+            self._screen.company_id, dimensions_service.PROJECT_CODE
+        )
+        excluded_type_ids = {person_dimension_type_id, cost_center_dimension_type_id, project_dimension_type_id}
         self._extra_dimension_values = {
-            dim_id: detail_id for dim_id, detail_id in line.details.items() if dim_id != person_dimension_type_id
+            dim_id: detail_id for dim_id, detail_id in line.details.items() if dim_id not in excluded_type_ids
         }
         person_detail_id = line.details.get(person_dimension_type_id)
         if person_detail_id is not None:
@@ -479,6 +572,20 @@ class _LineRow:
             if idx >= 0:
                 self.person_combo.setCurrentIndex(idx)
         self.person_combo.lineEdit().setCursorPosition(0)
+
+        cost_center_detail_id = line.details.get(cost_center_dimension_type_id)
+        if cost_center_detail_id is not None:
+            idx = self.cost_center_combo.findData(cost_center_detail_id)
+            if idx >= 0:
+                self.cost_center_combo.setCurrentIndex(idx)
+        self.cost_center_combo.lineEdit().setCursorPosition(0)
+
+        project_detail_id = line.details.get(project_dimension_type_id)
+        if project_detail_id is not None:
+            idx = self.project_combo.findData(project_detail_id)
+            if idx >= 0:
+                self.project_combo.setCurrentIndex(idx)
+        self.project_combo.lineEdit().setCursorPosition(0)
 
         self.description_field.setText(line.description or "")
         self.description_field.setCursorPosition(0)
@@ -589,6 +696,8 @@ class JournalEntryScreen(QWidget):
         header.setSectionResizeMode(_COL_ROW_NO, QHeaderView.Fixed)
         header.setSectionResizeMode(_COL_ACCOUNT, QHeaderView.Interactive)
         header.setSectionResizeMode(_COL_PERSON, QHeaderView.Interactive)
+        header.setSectionResizeMode(_COL_COST_CENTER, QHeaderView.Interactive)
+        header.setSectionResizeMode(_COL_PROJECT, QHeaderView.Interactive)
         header.setSectionResizeMode(_COL_DESC, QHeaderView.Stretch)
         header.setSectionResizeMode(_COL_DEBIT, QHeaderView.Interactive)
         header.setSectionResizeMode(_COL_CREDIT, QHeaderView.Interactive)
@@ -597,6 +706,8 @@ class JournalEntryScreen(QWidget):
         self.table.setColumnWidth(_COL_ROW_NO, 44)
         self.table.setColumnWidth(_COL_ACCOUNT, 220)
         self.table.setColumnWidth(_COL_PERSON, 190)
+        self.table.setColumnWidth(_COL_COST_CENTER, 170)
+        self.table.setColumnWidth(_COL_PROJECT, 170)
         self.table.setColumnWidth(_COL_DEBIT, 140)
         self.table.setColumnWidth(_COL_CREDIT, 140)
         self.table.setColumnWidth(_COL_REMOVE, 40)
@@ -711,6 +822,8 @@ class JournalEntryScreen(QWidget):
         تا بشود بینِ ردیف‌هایِ پرشده جابه‌جا شد (طبقِ بازخورد)."""
         self._register_nav_widget(row.account_combo.lineEdit(), row, "account")
         self._register_nav_widget(row.person_combo.lineEdit(), row, "person")
+        self._register_nav_widget(row.cost_center_combo.lineEdit(), row, "cost_center")
+        self._register_nav_widget(row.project_combo.lineEdit(), row, "project")
         self._register_nav_widget(row.description_field, row, "description")
         self._register_nav_widget(row.debit_field, row, "debit")
         self._register_nav_widget(row.credit_field, row, "credit")
@@ -723,6 +836,8 @@ class JournalEntryScreen(QWidget):
         for widget in (
             row.account_combo.lineEdit(),
             row.person_combo.lineEdit(),
+            row.cost_center_combo.lineEdit(),
+            row.project_combo.lineEdit(),
             row.description_field,
             row.debit_field,
             row.credit_field,
@@ -753,13 +868,21 @@ class JournalEntryScreen(QWidget):
         column = {
             "account": _COL_ACCOUNT,
             "person": _COL_PERSON,
+            "cost_center": _COL_COST_CENTER,
+            "project": _COL_PROJECT,
             "description": _COL_DESC,
             "debit": _COL_DEBIT,
             "credit": _COL_CREDIT,
         }[field]
         self.table.setCurrentCell(target_index, column)
-        if field in ("account", "person"):
-            widget = target_row.account_combo if field == "account" else target_row.person_combo
+        combo_attrs = {
+            "account": "account_combo",
+            "person": "person_combo",
+            "cost_center": "cost_center_combo",
+            "project": "project_combo",
+        }
+        if field in combo_attrs:
+            widget = getattr(target_row, combo_attrs[field])
             widget.setFocus()
             widget.lineEdit().selectAll()
         else:

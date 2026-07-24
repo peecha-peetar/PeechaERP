@@ -165,22 +165,25 @@ class ChartOfAccountsScreen(QWidget):
         layout.addWidget(self.level_preview_label)
 
         # طبقِ درخواستِ صریح: در فرمِ حسابِ سطحِ آخر (قابلِ ثبتِ سند)، فهرستِ
-        # نوع‌بُعدهایِ تفصیلی + گروه‌هایِ اشخاصِ مجاز نمایش داده می‌شود تا
-        # مشخص شود کدام‌ها به این معین مرتبط‌اند — فقط برایِ حسابِ
-        # از-قبل-ذخیره‌شده (چون ذخیره‌شان به account_id نیاز دارد).
-        self.dimension_types_label = QLabel("نوع‌بُعدهایِ تفصیلیِ الزامی")
-        self.dimension_types_label.setObjectName("sectionHint")
-        layout.addWidget(self.dimension_types_label)
-        self.dimension_types_list = QListWidget()
-        self.dimension_types_list.setMaximumHeight(110)
-        layout.addWidget(self.dimension_types_list)
+        # تفصیلی‌هایِ الزامی نمایش داده می‌شود تا مشخص شود کدام‌ها به این
+        # معین مرتبط‌اند — فقط برایِ حسابِ از-قبل-ذخیره‌شده (چون ذخیره‌شان به
+        # account_id نیاز دارد). طبقِ بازخوردِ صریح، همه‌یِ تفصیلی‌ها
+        # (گروه‌هایِ اشخاص + نوع‌بُعدهایِ دیگر) در یک فهرستِ واحد با عنوانِ
+        # فارسی می‌آیند — فقط مرکزِ هزینه/پروژه در بخشِ جداگانه‌ای‌اند، چون
+        # در سند هم ستونِ اختصاصیِ خودشان را دارند (موازیِ تفصیلیِ دیگر).
+        self.detail_types_label = QLabel("تفصیلی‌هایِ الزامی برایِ این معین")
+        self.detail_types_label.setObjectName("sectionHint")
+        layout.addWidget(self.detail_types_label)
+        self.detail_types_list = QListWidget()
+        self.detail_types_list.setMaximumHeight(140)
+        layout.addWidget(self.detail_types_list)
 
-        self.person_groups_label = QLabel("گروهِ تفصیلیِ اشخاصِ مجاز (هیچ‌کدام = آزاد)")
-        self.person_groups_label.setObjectName("sectionHint")
-        layout.addWidget(self.person_groups_label)
-        self.person_groups_list = QListWidget()
-        self.person_groups_list.setMaximumHeight(90)
-        layout.addWidget(self.person_groups_list)
+        self.cost_project_label = QLabel("مرکزِ هزینه و پروژه (ستونِ مجزا در سند)")
+        self.cost_project_label.setObjectName("sectionHint")
+        layout.addWidget(self.cost_project_label)
+        self.cost_project_list = QListWidget()
+        self.cost_project_list.setMaximumHeight(60)
+        layout.addWidget(self.cost_project_list)
 
         self.save_dimensions_button = QPushButton("ذخیره‌ی نوع‌هایِ تفصیلی")
         self.save_dimensions_button.setObjectName("flatButton")
@@ -338,40 +341,53 @@ class ChartOfAccountsScreen(QWidget):
             if not is_leaf_level:
                 self.is_postable_checkbox.setChecked(False)
 
-    # --- چک‌لیستِ نوع‌بُعدهایِ تفصیلی/گروه‌هایِ اشخاصِ مجاز -------------------
+    # --- چک‌لیستِ تفصیلی‌هایِ الزامی -----------------------------------------
     def _update_dimension_checklists_visibility(self) -> None:
         visible = self._editing_account_id is not None and self.is_postable_checkbox.isChecked()
         for widget in (
-            self.dimension_types_label,
-            self.dimension_types_list,
-            self.person_groups_label,
-            self.person_groups_list,
+            self.detail_types_label,
+            self.detail_types_list,
+            self.cost_project_label,
+            self.cost_project_list,
             self.save_dimensions_button,
         ):
             widget.setVisible(visible)
 
     def _populate_dimension_checklists(self, account_id: int | None) -> None:
         company_id = self._company_id()
-        self.dimension_types_list.clear()
-        self.person_groups_list.clear()
+        self.detail_types_list.clear()
+        self.cost_project_list.clear()
         if company_id is None:
             return
 
         required_type_ids = set(dimensions_service.get_account_dimension_type_ids(account_id)) if account_id else set()
-        for dim in dimensions_service.list_active_dimension_types(company_id):
-            item = QListWidgetItem(dim.code)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if dim.dimension_type_id in required_type_ids else Qt.Unchecked)
-            item.setData(Qt.UserRole, dim.dimension_type_id)
-            self.dimension_types_list.addItem(item)
-
         required_group_ids = set(dimensions_service.get_account_person_group_ids(account_id)) if account_id else set()
+        cost_project_codes = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
+
+        # همه‌ی گروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل) در فهرستِ واحد،
+        # چون عنوانِ فارسی از قبل دارند و ستونِ اختصاصیِ جداگانه‌ای در سند نمی‌خواهند.
         for group in dimensions_service.list_person_groups(company_id):
             item = QListWidgetItem(group.name)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if group.person_group_id in required_group_ids else Qt.Unchecked)
-            item.setData(Qt.UserRole, group.person_group_id)
-            self.person_groups_list.addItem(item)
+            item.setData(Qt.UserRole, ("person", group.person_group_id))
+            self.detail_types_list.addItem(item)
+
+        for dim in dimensions_service.list_active_dimension_types(company_id):
+            label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code)
+            checked = Qt.Checked if dim.dimension_type_id in required_type_ids else Qt.Unchecked
+            if dim.code in cost_project_codes:
+                item = QListWidgetItem(label)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(checked)
+                item.setData(Qt.UserRole, dim.dimension_type_id)
+                self.cost_project_list.addItem(item)
+            else:
+                item = QListWidgetItem(label)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(checked)
+                item.setData(Qt.UserRole, ("dim", dim.dimension_type_id))
+                self.detail_types_list.addItem(item)
 
     def _save_dimensions(self) -> None:
         if self._editing_account_id is None:
@@ -379,16 +395,21 @@ class ChartOfAccountsScreen(QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
-        dimension_type_ids = [
-            self.dimension_types_list.item(i).data(Qt.UserRole)
-            for i in range(self.dimension_types_list.count())
-            if self.dimension_types_list.item(i).checkState() == Qt.Checked
-        ]
-        person_group_ids = [
-            self.person_groups_list.item(i).data(Qt.UserRole)
-            for i in range(self.person_groups_list.count())
-            if self.person_groups_list.item(i).checkState() == Qt.Checked
-        ]
+        dimension_type_ids = []
+        person_group_ids = []
+        for i in range(self.detail_types_list.count()):
+            item = self.detail_types_list.item(i)
+            if item.checkState() != Qt.Checked:
+                continue
+            kind, value = item.data(Qt.UserRole)
+            if kind == "dim":
+                dimension_type_ids.append(value)
+            else:
+                person_group_ids.append(value)
+        for i in range(self.cost_project_list.count()):
+            item = self.cost_project_list.item(i)
+            if item.checkState() == Qt.Checked:
+                dimension_type_ids.append(item.data(Qt.UserRole))
         try:
             dimensions_service.set_account_dimension_types(self._editing_account_id, company_id, dimension_type_ids)
             dimensions_service.set_account_person_groups(self._editing_account_id, company_id, person_group_ids)

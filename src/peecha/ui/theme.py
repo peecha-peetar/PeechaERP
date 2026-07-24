@@ -379,6 +379,31 @@ QWidget#headerBar {{
     border-bottom: 1px solid {DIVIDER};
 }}
 
+/* --- ریبون (میان‌برهایِ گروهِ فعال، زیرِ هدر) ------------------------------- */
+QScrollArea#ribbonScroll {{
+    background-color: {SURFACE};
+    border-bottom: 1px solid {DIVIDER};
+}}
+QWidget#ribbonBar {{
+    background-color: {SURFACE};
+}}
+QPushButton#ribbonButton {{
+    background-color: transparent;
+    color: {TEXT_SECONDARY};
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-weight: 600;
+    font-size: 12px;
+    border: none;
+}}
+QPushButton#ribbonButton:hover {{
+    background-color: {HOVER};
+}}
+QPushButton#ribbonButton[active="true"] {{
+    background-color: {SELECTED};
+    color: {ACCENT};
+}}
+
 QCheckBox {{
     spacing: 8px;
 }}
