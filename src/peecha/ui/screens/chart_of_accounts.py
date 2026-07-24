@@ -289,8 +289,13 @@ class ChartOfAccountsScreen(QWidget):
         # طبقِ درخواستِ صریح: حسابی که سندی رویش ثبت شده، اصلاً قابلِ‌ویرایش
         # نیست.
         locked = coa_service.account_has_posted_lines(account.account_id)
-        for widget in (self.name_field, self.nature_combo, self.category_combo, self.account_type_combo):
-            widget.setEnabled(not locked)
+        self.name_field.setEnabled(not locked)
+        # طبقِ درخواستِ صریح: ماهیت/دسته/نوعِ حساب فقط رویِ حسابِ سطحِ گروه
+        # قابلِ‌تغییر است — زیرشاخه (کل/معین) همیشه این سه را از والدِ
+        # خودش به‌ارث می‌برد، حتی اگر سندی هم نداشته باشد.
+        has_parent = account.account_level > 1
+        for widget in (self.nature_combo, self.category_combo, self.account_type_combo):
+            widget.setEnabled(not locked and not has_parent)
         if locked:
             self.is_postable_checkbox.setEnabled(False)
         self.delete_button.setEnabled(not locked)
@@ -331,6 +336,7 @@ class ChartOfAccountsScreen(QWidget):
         parent_id = self.parent_combo.currentData()
         if parent_id is None:
             level = 1
+            parent = None
         else:
             parent = next((r for r in self._parent_options if r.account_id == parent_id), None)
             level = (parent.account_level + 1) if parent is not None else 1
@@ -340,6 +346,20 @@ class ChartOfAccountsScreen(QWidget):
             self.is_postable_checkbox.setEnabled(is_leaf_level)
             if not is_leaf_level:
                 self.is_postable_checkbox.setChecked(False)
+            self._apply_nature_inheritance(parent)
+
+    def _apply_nature_inheritance(self, parent: coa_service.AccountRow | None) -> None:
+        # طبقِ درخواستِ صریح: ماهیت/دسته/نوعِ حساب فقط رویِ حسابِ سطحِ گروه
+        # (بدونِ والد) قابلِ‌انتخاب است — با انتخابِ یک والد، این سه فیلد
+        # از همان والد پر و غیرفعال می‌شوند تا زیردرخت همیشه با گروهِ
+        # خودش هم‌خوان بماند.
+        has_parent = parent is not None
+        if has_parent:
+            _select_combo_value(self.nature_combo, parent.nature_code)
+            _select_combo_value(self.category_combo, parent.category_code)
+            _select_combo_value(self.account_type_combo, parent.account_type_code)
+        for widget in (self.nature_combo, self.category_combo, self.account_type_combo):
+            widget.setEnabled(not has_parent)
 
     # --- چک‌لیستِ تفصیلی‌هایِ الزامی -----------------------------------------
     def _update_dimension_checklists_visibility(self) -> None:

@@ -116,15 +116,19 @@ def create_account(
     changed_by_user_id: int | None = None,
 ) -> ChartOfAccount:
     with new_session() as session:
-        nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
-        category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
-        account_type = session.scalar(select(AccountType).where(AccountType.code == account_type_code))
-        if nature is None or category is None or account_type is None:
-            raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
-
+        # طبقِ درخواستِ صریح: ماهیت/دسته/نوعِ حساب فقط در سطحِ گروه (بدونِ
+        # والد) انتخاب می‌شود — هر زیرشاخه (کل/معین) همین سه مقدار را از
+        # والدِ خودش به‌ارث می‌برد؛ مقدارهایِ ورودی برایِ زیرشاخه‌ها نادیده
+        # گرفته می‌شوند تا کل زیردرخت همیشه با گروهِ خودش هم‌خوان بماند.
         if parent_account_id is None:
             account_level = 1
             full_code = segment_code
+            nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
+            category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
+            account_type = session.scalar(select(AccountType).where(AccountType.code == account_type_code))
+            if nature is None or category is None or account_type is None:
+                raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
+            nature_id, category_id, account_type_id = nature.nature_id, category.category_id, account_type.account_type_id
         else:
             parent = session.get(ChartOfAccount, parent_account_id)
             if parent is None or parent.company_id != company_id:
@@ -133,6 +137,7 @@ def create_account(
                 raise ValueError("حساب سطح معین دیگر نمی‌تواند زیرشاخه بگیرد.")
             account_level = parent.account_level + 1
             full_code = f"{parent.full_code}-{segment_code}"
+            nature_id, category_id, account_type_id = parent.nature_id, parent.category_id, parent.account_type_id
 
         # طبقِ درخواستِ صریح: فقط حساب‌هایِ سطحِ آخر (معین) قابلِ ثبتِ سندند —
         # چون افزودنِ زیرشاخه به سطحِ آخر از قبل مسدود است، این تضمین می‌کند
@@ -148,9 +153,9 @@ def create_account(
             segment_code=segment_code,
             full_code=full_code,
             account_level=account_level,
-            nature_id=nature.nature_id,
-            category_id=category.category_id,
-            account_type_id=account_type.account_type_id,
+            nature_id=nature_id,
+            category_id=category_id,
+            account_type_id=account_type_id,
             is_postable=is_postable,
         )
         session.add(account)
@@ -166,6 +171,13 @@ def create_account(
             )
         )
 
+        # طبقِ‌بالا: برایِ زیرشاخه‌ها مقدارهایِ اعمال‌شده از والد به‌ارث
+        # رسیده‌اند (نه لزوماً همان nature_code/... ورودی) — برایِ ثبتِ
+        # درستِ رخداد در ردِ حسابرسی، کدهایِ واقعاً اعمال‌شده جدا خوانده می‌شوند.
+        applied_nature = session.get(AccountNature, nature_id)
+        applied_category = session.get(AccountCategory, category_id)
+        applied_account_type = session.get(AccountType, account_type_id)
+
         audit_service.log_activity(
             session,
             company_id=company_id,
@@ -177,9 +189,9 @@ def create_account(
                 "after": {
                     "full_code": full_code,
                     "name": name,
-                    "nature_code": nature_code,
-                    "category_code": category_code,
-                    "account_type_code": account_type_code,
+                    "nature_code": applied_nature.code,
+                    "category_code": applied_category.code,
+                    "account_type_code": applied_account_type.code,
                     "is_postable": is_postable,
                 }
             },
@@ -189,6 +201,20 @@ def create_account(
         session.refresh(account)
         session.expunge(account)
         return account
+
+
+def _descendant_accounts(session, account_id: int) -> list[ChartOfAccount]:
+    """همه‌ی زیرشاخه‌هایِ این حساب (فرزند و نوه، به‌صورتِ بازگشتی) —
+    برایِ کَسکِیدکردنِ ماهیت/دسته/نوعِ حسابِ سطحِ گروه به کلِ زیردرخت."""
+    result: list[ChartOfAccount] = []
+    frontier = [account_id]
+    while frontier:
+        children = session.scalars(
+            select(ChartOfAccount).where(ChartOfAccount.parent_account_id.in_(frontier))
+        ).all()
+        result.extend(children)
+        frontier = [c.account_id for c in children]
+    return result
 
 
 def update_account(
@@ -207,7 +233,15 @@ def update_account(
     نسخه ثابت می‌مانند تا ویرایش نیاز به بازمحاسبه‌ی زنجیره‌ای نداشته باشد.
 
     طبقِ درخواستِ صریح: اگر این حساب حتی یک سطرِ سند داشته باشد، اصلاً
-    قابلِ‌ویرایش نیست (نه فقط کد/والد که از قبل ثابت بودند)."""
+    قابلِ‌ویرایش نیست (نه فقط کد/والد که از قبل ثابت بودند).
+
+    طبقِ درخواستِ صریحِ بعدی: ماهیت/دسته/نوعِ حساب فقط رویِ حسابِ سطحِ گروه
+    (بدونِ والد) قابلِ‌تغییرند — هر زیرشاخه (کل/معین) این سه مقدار را از
+    والدِ خودش به‌ارث می‌برد و نمی‌تواند مستقل از آن تغییر کند. با ویرایشِ
+    یک حسابِ گروه، این سه مقدار رویِ کلِ زیردرخت (کل‌ها و معین‌هایِ زیرش)
+    هم به‌روزرسانی می‌شود — مگر اینکه یکی از آن‌ها سند داشته باشد، که در
+    آن صورت کلِ عملیات (نه فقط همان زیرشاخه) رد می‌شود، چون کَسکِیدِ نصفه
+    زیردرخت را ناسازگار می‌کند."""
     with new_session() as session:
         account = session.get(ChartOfAccount, account_id)
         if account is None or account.company_id != company_id:
@@ -222,19 +256,45 @@ def update_account(
         if is_postable and account.account_level != MAX_ACCOUNT_LEVEL:
             raise ValueError(f"فقط حساب‌هایِ سطحِ {MAX_ACCOUNT_LEVEL} (معین) می‌توانند قابلِ ثبتِ سند باشند.")
 
-        nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
-        category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
-        account_type = session.scalar(select(AccountType).where(AccountType.code == account_type_code))
-        if nature is None or category is None or account_type is None:
-            raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
+        descendants: list[ChartOfAccount] = []
+        if account.parent_account_id is not None:
+            # زیرشاخه: ماهیت/دسته/نوع مستقل نیست — همیشه با والدِ فعلی
+            # هم‌خوان می‌ماند، صرفِ‌نظر از ورودیِ کاربر.
+            parent = session.get(ChartOfAccount, account.parent_account_id)
+            nature_id, category_id, account_type_id = parent.nature_id, parent.category_id, parent.account_type_id
+        else:
+            nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
+            category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
+            account_type = session.scalar(select(AccountType).where(AccountType.code == account_type_code))
+            if nature is None or category is None or account_type is None:
+                raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
+            nature_id, category_id, account_type_id = nature.nature_id, category.category_id, account_type.account_type_id
+
+            descendants = _descendant_accounts(session, account_id)
+            if descendants:
+                descendant_ids = [d.account_id for d in descendants]
+                descendant_line_count = session.scalar(
+                    select(func.count())
+                    .select_from(JournalEntryLine)
+                    .where(JournalEntryLine.account_id.in_(descendant_ids))
+                )
+                if descendant_line_count:
+                    raise ValueError(
+                        "یکی از زیرشاخه‌هایِ این گروه در سندهای حسابداری استفاده شده؛ "
+                        "چون ماهیت/دسته/نوعِ حساب رویِ کلِ زیردرخت اعمال می‌شود، این ویرایش ممکن نیست."
+                    )
 
         before_nature_id, before_category_id = account.nature_id, account.category_id
         before_account_type_id, before_is_postable = account.account_type_id, account.is_postable
 
-        account.nature_id = nature.nature_id
-        account.category_id = category.category_id
-        account.account_type_id = account_type.account_type_id
+        account.nature_id = nature_id
+        account.category_id = category_id
+        account.account_type_id = account_type_id
         account.is_postable = is_postable
+        for descendant in descendants:
+            descendant.nature_id = nature_id
+            descendant.category_id = category_id
+            descendant.account_type_id = account_type_id
 
         translation = session.scalar(
             select(Translation).where(
@@ -275,13 +335,27 @@ def update_account(
                 },
                 "after": {
                     "name": name,
-                    "nature_code": nature_code,
-                    "category_code": category_code,
-                    "account_type_code": account_type_code,
+                    "nature_id": nature_id,
+                    "category_id": category_id,
+                    "account_type_id": account_type_id,
                     "is_postable": is_postable,
                 },
             },
         )
+        if descendants:
+            audit_service.log_activity(
+                session,
+                company_id=company_id,
+                user_id=changed_by_user_id,
+                entity_type="ChartOfAccount",
+                entity_id=account_id,
+                action="UPDATE",
+                changes={
+                    "after": {
+                        "cascaded_nature_category_type_to_descendants": [d.account_id for d in descendants],
+                    }
+                },
+            )
 
         session.commit()
         session.refresh(account)
