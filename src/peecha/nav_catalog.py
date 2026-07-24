@@ -53,6 +53,14 @@ NAV_ITEMS = [
                 "label": "دفتر کل / معین / تفصیلی",
                 "screen": "report_account_ledger",
             },
+            {"code": "REPORTS_INCOME_STATEMENT", "label": "صورتِ سود و زیان", "screen": "report_income_statement"},
+            {"code": "REPORTS_BALANCE_SHEET", "label": "ترازنامه", "screen": "report_balance_sheet"},
+            {"code": "REPORTS_CASH_FLOW", "label": "صورتِ گردشِ وجوهِ نقد", "screen": "report_cash_flow"},
+            {
+                "code": "REPORTS_EQUITY_CHANGES",
+                "label": "تغییرات در حقوقِ صاحبانِ سهام",
+                "screen": "report_equity_changes",
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ

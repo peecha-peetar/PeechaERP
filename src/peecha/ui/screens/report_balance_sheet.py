@@ -1,0 +1,60 @@
+"""ترازنامه — دارایی‌ها/بدهی‌ها/حقوقِ صاحبانِ سهام تا یک تاریخِ مشخص
+(«تا تاریخ» در نوارِ فیلترِ مشترک به‌عنوانِ تاریخِ ترازنامه استفاده می‌شود؛
+«از تاریخ» در این گزارش اثری ندارد، چون ترازنامه مانده‌یِ تجمعی است، نه
+گردشِ یک بازه)."""
+
+from __future__ import annotations
+
+import datetime
+import decimal
+
+from peecha import numerals, session
+from peecha.services import currencies as currencies_service
+from peecha.services import reports as reports_service
+from peecha.ui.screens.reports_common import ReportScreenBase
+
+
+class BalanceSheetScreen(ReportScreenBase):
+    def __init__(self) -> None:
+        super().__init__("ترازنامه (تا «تا تاریخ»)")
+        self._currency_decimal_places = 0
+        self._currency_symbol: str | None = None
+
+    def refresh(self) -> None:
+        company = session.current_company
+        currency = None
+        if company is not None:
+            currency = next(
+                (c for c in currencies_service.list_all_currencies() if c.currency_id == company.base_currency_id),
+                None,
+            )
+        self._currency_decimal_places = currency.decimal_places if currency else 0
+        self._currency_symbol = currency.symbol if currency else None
+        super().refresh()
+
+    def _fmt(self, value: decimal.Decimal) -> str:
+        return numerals.format_money(value, self._currency_decimal_places, self._currency_symbol)
+
+    def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
+        result = reports_service.compute_balance_sheet(company_id, date_to)
+
+        headers = ["کد", "نام", "مبلغ"]
+        rows: list[list] = []
+        rows.append(["", "دارایی‌ها", ""])
+        for r in result.asset_rows:
+            rows.append([r.full_code, r.name, self._fmt(r.balance)])
+        rows.append(["", "جمعِ دارایی‌ها", self._fmt(result.total_assets)])
+
+        rows.append(["", "بدهی‌ها", ""])
+        for r in result.liability_rows:
+            rows.append([r.full_code, r.name, self._fmt(r.balance)])
+        rows.append(["", "جمعِ بدهی‌ها", self._fmt(result.total_liabilities)])
+
+        rows.append(["", "حقوقِ صاحبانِ سهام", ""])
+        for r in result.equity_rows:
+            rows.append([r.full_code, r.name, self._fmt(r.balance)])
+        rows.append(["", "سودِ (زیانِ) انباشته", self._fmt(result.accumulated_earnings)])
+        rows.append(["", "جمعِ حقوقِ صاحبانِ سهام", self._fmt(result.total_equity)])
+
+        footer = ["", "جمعِ بدهی‌ها + حقوقِ صاحبانِ سهام", self._fmt(result.total_liabilities + result.total_equity)]
+        return headers, rows, footer

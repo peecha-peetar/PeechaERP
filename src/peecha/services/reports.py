@@ -19,7 +19,9 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
+    AccountDetailDimension,
     ChartOfAccount,
+    DetailDimensionType,
     JournalEntry,
     JournalEntryLine,
     JournalEntryLineDetail,
@@ -409,3 +411,315 @@ def list_ledger_entries(
             )
         )
     return opening_debit, opening_credit, result
+
+
+def _net_income(
+    company_id: int, date_from: datetime.date | None, date_to: datetime.date, include_draft: bool
+) -> decimal.Decimal:
+    """سودِ خالصِ یک بازه — جمعِ سطحِ گروه (۱) کافی است، چون رول‌آپِ گروه
+    از قبل شاملِ همه‌یِ زیرمجموعه‌هایِ همان دسته‌بندی است (دوباره‌شماری در
+    سطوحِ پایین‌تر رخ نمی‌دهد)."""
+    balances = compute_account_balances(company_id, date_from, date_to, include_draft=include_draft)
+    total_revenue = sum(
+        (r.period_credit - r.period_debit for r in balances if r.category_code == "REVENUE" and r.account_level == 1),
+        _ZERO,
+    )
+    total_expense = sum(
+        (r.period_debit - r.period_credit for r in balances if r.category_code == "EXPENSE" and r.account_level == 1),
+        _ZERO,
+    )
+    return total_revenue - total_expense
+
+
+@dataclass
+class IncomeStatementRow:
+    full_code: str
+    name: str
+    category_code: str  # REVENUE | EXPENSE
+    current_amount: decimal.Decimal
+    previous_amount: decimal.Decimal
+
+
+@dataclass
+class IncomeStatementResult:
+    rows: list[IncomeStatementRow]
+    total_revenue: decimal.Decimal
+    total_expense: decimal.Decimal
+    net_income: decimal.Decimal
+
+
+def compute_income_statement(
+    company_id: int,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    *,
+    include_draft: bool = False,
+) -> IncomeStatementResult:
+    """صورتِ سود و زیان — حساب‌هایِ REVENUE/EXPENSE در سطحِ کل، به‌همراهِ
+    مقایسه با همان بازه در یک سالِ پیش (برایِ مقایسه‌یِ روندی، نه سالِ مالیِ
+    قانونی — چون سیستم مفهومِ صریحِ «سالِ مالیِ قبل» را جدول‌بندی‌شده ندارد)."""
+    previous_from = date_from - datetime.timedelta(days=365)
+    previous_to = date_to - datetime.timedelta(days=365)
+
+    current_balances = compute_account_balances(company_id, date_from, date_to, include_draft=include_draft)
+    previous_balances = compute_account_balances(company_id, previous_from, previous_to, include_draft=include_draft)
+    previous_by_id = {r.account_id: r for r in previous_balances}
+
+    rows: list[IncomeStatementRow] = []
+    for r in current_balances:
+        if r.category_code not in ("REVENUE", "EXPENSE") or r.account_level != 2:
+            continue
+        if r.category_code == "REVENUE":
+            current_amount = r.period_credit - r.period_debit
+        else:
+            current_amount = r.period_debit - r.period_credit
+        prev = previous_by_id.get(r.account_id)
+        if prev is None:
+            previous_amount = _ZERO
+        elif r.category_code == "REVENUE":
+            previous_amount = prev.period_credit - prev.period_debit
+        else:
+            previous_amount = prev.period_debit - prev.period_credit
+        rows.append(
+            IncomeStatementRow(
+                full_code=r.full_code,
+                name=r.name,
+                category_code=r.category_code,
+                current_amount=current_amount,
+                previous_amount=previous_amount,
+            )
+        )
+
+    total_revenue = sum(
+        (r.period_credit - r.period_debit for r in current_balances if r.category_code == "REVENUE" and r.account_level == 1),
+        _ZERO,
+    )
+    total_expense = sum(
+        (r.period_debit - r.period_credit for r in current_balances if r.category_code == "EXPENSE" and r.account_level == 1),
+        _ZERO,
+    )
+    return IncomeStatementResult(
+        rows=rows, total_revenue=total_revenue, total_expense=total_expense, net_income=total_revenue - total_expense
+    )
+
+
+@dataclass
+class BalanceSheetRow:
+    full_code: str
+    name: str
+    category_code: str  # ASSET | LIABILITY | EQUITY
+    balance: decimal.Decimal
+
+
+@dataclass
+class BalanceSheetResult:
+    asset_rows: list[BalanceSheetRow]
+    liability_rows: list[BalanceSheetRow]
+    equity_rows: list[BalanceSheetRow]
+    total_assets: decimal.Decimal
+    total_liabilities: decimal.Decimal
+    total_equity: decimal.Decimal
+    accumulated_earnings: decimal.Decimal
+
+
+def compute_balance_sheet(
+    company_id: int,
+    as_of_date: datetime.date,
+    *,
+    include_draft: bool = False,
+) -> BalanceSheetResult:
+    """ترازنامه — حساب‌هایِ ترازنامه‌ای (account_type=PERMANENT) در سطحِ کل،
+    تا as_of_date. چون سیستم سندِ اختتامیه ندارد و هیچ حسابِ «سودِ انباشته»یِ
+    واقعی هرگز بستانکار نمی‌شود، سودِ خالصِ *تجمعیِ از ابتدا* (نه فقط سالِ
+    مالیِ جاری — چون مرزِ سالِ مالی این‌جا معنایِ حسابداریِ واقعی ندارد) به‌عنوانِ
+    یک ردیفِ محاسبه‌شده به حقوقِ صاحبانِ سهام اضافه می‌شود؛ این تنها راهی است
+    که ترازنامه همیشه (دارایی = بدهی + حقوقِ صاحبانِ سهام) بماند."""
+    balances = compute_account_balances(company_id, None, as_of_date, include_draft=include_draft)
+
+    asset_rows: list[BalanceSheetRow] = []
+    liability_rows: list[BalanceSheetRow] = []
+    equity_rows: list[BalanceSheetRow] = []
+    total_assets = total_liabilities = total_equity = _ZERO
+
+    for r in balances:
+        if r.account_type_code != "PERMANENT" or r.account_level != 2:
+            continue
+        if r.category_code == "ASSET":
+            balance = r.closing_debit - r.closing_credit
+            asset_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, balance))
+            total_assets += balance
+        elif r.category_code == "LIABILITY":
+            balance = r.closing_credit - r.closing_debit
+            liability_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, balance))
+            total_liabilities += balance
+        elif r.category_code == "EQUITY":
+            balance = r.closing_credit - r.closing_debit
+            equity_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, balance))
+            total_equity += balance
+
+    accumulated_earnings = _net_income(company_id, None, as_of_date, include_draft)
+    total_equity += accumulated_earnings
+
+    return BalanceSheetResult(
+        asset_rows=asset_rows,
+        liability_rows=liability_rows,
+        equity_rows=equity_rows,
+        total_assets=total_assets,
+        total_liabilities=total_liabilities,
+        total_equity=total_equity,
+        accumulated_earnings=accumulated_earnings,
+    )
+
+
+@dataclass
+class CashFlowLineRow:
+    document_date: datetime.date
+    temporary_no: int
+    description: str
+    counter_account_name: str
+    receipt: decimal.Decimal
+    payment: decimal.Decimal
+
+
+def compute_cash_flow_direct(
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    *,
+    include_draft: bool = False,
+) -> tuple[decimal.Decimal, list[CashFlowLineRow]]:
+    """صورتِ گردشِ وجوهِ نقد به روشِ مستقیم — از رویِ حساب‌هایِ نیازمندِ بُعدِ
+    صندوق/بانک: دریافت=بدهکار، پرداخت=بستانکار، شرح از طرفِ مقابلِ سند.
+    طبقِ محدودیتِ شناخته‌شده: چون طبقه‌بندیِ عملیاتی/سرمایه‌گذاری/تامینِ
+    مالی رویِ حساب‌ها وجود ندارد، روشِ غیرمستقیم پیاده نشده."""
+    accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(company_id)}
+    with new_session() as session:
+        cash_type_ids = list(
+            session.scalars(
+                select(DetailDimensionType.dimension_type_id).where(
+                    DetailDimensionType.company_id == company_id,
+                    DetailDimensionType.code.in_(
+                        [dimensions_service.CASH_BOX_CODE, dimensions_service.BANK_ACCOUNT_CODE]
+                    ),
+                )
+            ).all()
+        )
+        cash_account_ids = (
+            set(
+                session.scalars(
+                    select(AccountDetailDimension.account_id).where(
+                        AccountDetailDimension.dimension_type_id.in_(cash_type_ids)
+                    )
+                ).all()
+            )
+            if cash_type_ids
+            else set()
+        )
+
+        opening_balance = _ZERO
+        if date_from is not None and cash_account_ids:
+            opening_query = (
+                select(
+                    func.coalesce(func.sum(JournalEntryLine.debit_amount_base), 0),
+                    func.coalesce(func.sum(JournalEntryLine.credit_amount_base), 0),
+                )
+                .select_from(JournalEntryLine)
+                .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+                .where(
+                    JournalEntry.company_id == company_id,
+                    JournalEntryLine.account_id.in_(cash_account_ids),
+                    JournalEntry.document_date < date_from,
+                )
+            )
+            if not include_draft:
+                opening_query = opening_query.join(
+                    JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
+                ).where(JournalEntryStatus.code != "DRAFT")
+            od, oc = session.execute(opening_query).one()
+            opening_balance = decimal.Decimal(od) - decimal.Decimal(oc)
+
+        cash_lines: list = []
+        if cash_account_ids:
+            line_query = (
+                select(
+                    JournalEntryLine, JournalEntry.document_date, JournalEntry.temporary_no, JournalEntry.description
+                )
+                .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+                .where(JournalEntry.company_id == company_id, JournalEntryLine.account_id.in_(cash_account_ids))
+            )
+            if date_from is not None:
+                line_query = line_query.where(JournalEntry.document_date >= date_from)
+            if date_to is not None:
+                line_query = line_query.where(JournalEntry.document_date <= date_to)
+            if not include_draft:
+                line_query = line_query.join(
+                    JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
+                ).where(JournalEntryStatus.code != "DRAFT")
+            line_query = line_query.order_by(
+                JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no
+            )
+            cash_lines = session.execute(line_query).all()
+
+        entry_ids = {line.journal_entry_id for line, *_ in cash_lines}
+        other_lines_by_entry: dict[int, list] = {}
+        if entry_ids:
+            other_rows = session.scalars(
+                select(JournalEntryLine).where(JournalEntryLine.journal_entry_id.in_(entry_ids))
+            ).all()
+            for other_line in other_rows:
+                other_lines_by_entry.setdefault(other_line.journal_entry_id, []).append(other_line)
+
+    rows: list[CashFlowLineRow] = []
+    for line, document_date, temporary_no, entry_description in cash_lines:
+        others = [o for o in other_lines_by_entry.get(line.journal_entry_id, []) if o.line_id != line.line_id]
+        counter_names = "، ".join(
+            accounts_by_id[o.account_id].name for o in others if o.account_id in accounts_by_id
+        )
+        rows.append(
+            CashFlowLineRow(
+                document_date=document_date,
+                temporary_no=temporary_no,
+                description=line.description or entry_description or "",
+                counter_account_name=counter_names or "—",
+                receipt=line.debit_amount_base,
+                payment=line.credit_amount_base,
+            )
+        )
+    return opening_balance, rows
+
+
+@dataclass
+class EquityChangeRow:
+    full_code: str
+    name: str
+    opening_balance: decimal.Decimal
+    increases: decimal.Decimal
+    decreases: decimal.Decimal
+    closing_balance: decimal.Decimal
+
+
+def compute_equity_changes(
+    company_id: int,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    *,
+    include_draft: bool = False,
+) -> list[EquityChangeRow]:
+    """صورتِ تغییراتِ حقوقِ صاحبانِ سهام — حساب‌هایِ EQUITY در سطحِ کل:
+    مانده‌ی اول + افزایش (گردشِ بستانکار) - کاهش (گردشِ بدهکار) = مانده‌ی آخر."""
+    balances = compute_account_balances(company_id, date_from, date_to, include_draft=include_draft)
+    rows: list[EquityChangeRow] = []
+    for r in balances:
+        if r.category_code != "EQUITY" or r.account_level != 2:
+            continue
+        rows.append(
+            EquityChangeRow(
+                full_code=r.full_code,
+                name=r.name,
+                opening_balance=r.opening_credit - r.opening_debit,
+                increases=r.period_credit,
+                decreases=r.period_debit,
+                closing_balance=r.closing_credit - r.closing_debit,
+            )
+        )
+    return rows

@@ -508,6 +508,10 @@ class MainWindow(QMainWindow):
         )
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
         from peecha.ui.screens.report_account_ledger import AccountLedgerScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_balance_sheet import BalanceSheetScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_cash_flow import CashFlowScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_equity_changes import EquityChangesScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_income_statement import IncomeStatementScreen  # noqa: PLC0415
         from peecha.ui.screens.report_journal_book import JournalBookScreen  # noqa: PLC0415
         from peecha.ui.screens.report_trial_balance import TrialBalanceScreen  # noqa: PLC0415
         from peecha.ui.screens.specialized_dimensions import (  # noqa: PLC0415
@@ -543,6 +547,10 @@ class MainWindow(QMainWindow):
         self.register_screen("report_trial_balance", TrialBalanceScreen())
         self.register_screen("report_journal_book", JournalBookScreen())
         self.register_screen("report_account_ledger", AccountLedgerScreen())
+        self.register_screen("report_income_statement", IncomeStatementScreen())
+        self.register_screen("report_balance_sheet", BalanceSheetScreen())
+        self.register_screen("report_cash_flow", CashFlowScreen())
+        self.register_screen("report_equity_changes", EquityChangesScreen())
         # همه‌ی فرم‌هایِ قبلاً جداگانه‌ی «مدیریتِ سیستم» (زبان‌ها/ارزها/شرکت‌ها/
         # سال‌های مالی/کاربران/نقش‌ها/عنوانِ فیلدها/ردِ حسابرسی) اکنون به‌صورتِ
         # تب درونِ system_settings.SystemSettingsScreen زندگی می‌کنند — نکته‌ی
