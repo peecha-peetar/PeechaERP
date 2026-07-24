@@ -11,6 +11,7 @@ from peecha.ui.screens.audit_log import AuditLogScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
 from peecha.ui.screens.field_labels import FieldLabelsScreen
+from peecha.ui.screens.financial_statement_mapping import FinancialStatementMappingScreen
 from peecha.ui.screens.fiscal_years import FiscalYearsScreen
 from peecha.ui.screens.languages import LanguagesScreen
 from peecha.ui.screens.placeholder import PlaceholderScreen
@@ -49,6 +50,7 @@ class SystemSettingsScreen(QWidget):
             [
                 ("کدینگِ حساب‌ها", AccountingCodingSettingsScreen()),
                 ("تعدادِ رقمِ سطوحِ تفصیلی", DetailLevelDigitSettingsScreen()),
+                ("نگاشتِ صورت‌هایِ مالی", FinancialStatementMappingScreen()),
             ]
         )
 

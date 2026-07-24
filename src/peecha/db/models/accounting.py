@@ -85,6 +85,18 @@ class AccountType(Base):
     code: Mapped[str] = mapped_column(String(20), unique=True)  # PERMANENT | TEMPORARY
 
 
+class CashFlowSection(Base):
+    """طبقه‌بندیِ حساب از نقطه‌نظرِ صورتِ گردشِ وجوهِ نقد — عملیاتی/
+    سرمایه‌گذاری/تامینِ مالی؛ برخلافِ نوع/دسته/ماهیت، اختیاری است (فقط
+    حساب‌هایِ ترازنامه‌ایِ غیرِنقدی به آن نیاز دارند)."""
+
+    __tablename__ = "cash_flow_sections"
+    __table_args__ = {"schema": "acc"}
+
+    cash_flow_section_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(String(20), unique=True)  # OPERATING | INVESTING | FINANCING
+
+
 class ChartOfAccount(Base):
     __tablename__ = "chart_of_accounts"
     __table_args__ = (
@@ -101,6 +113,9 @@ class ChartOfAccount(Base):
     nature_id: Mapped[int] = mapped_column(ForeignKey("acc.account_natures.nature_id"))
     category_id: Mapped[int] = mapped_column(ForeignKey("acc.account_categories.category_id"))
     account_type_id: Mapped[int] = mapped_column(ForeignKey("acc.account_types.account_type_id"))
+    cash_flow_section_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.cash_flow_sections.cash_flow_section_id")
+    )
     is_postable: Mapped[bool] = mapped_column(Boolean, default=False)
     currency_id: Mapped[int | None] = mapped_column(ForeignKey("core.currencies.currency_id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

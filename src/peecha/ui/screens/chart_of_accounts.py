@@ -39,6 +39,16 @@ _CATEGORY_OPTIONS = [
     ("REVENUE", "درآمد"), ("EXPENSE", "هزینه"),
 ]
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
+# طبقِ درخواستِ صریح: برخلافِ سه فیلدِ بالا، این یکی اختیاری است — گزینه‌ی
+# اول (None) یعنی «این حساب در گردشِ وجوهِ نقدِ غیرمستقیم دیده نمی‌شود»
+# (مثلِ خودِ صندوق/بانک، یا حساب‌هایِ درآمد/هزینه که در سودِ خالص از قبل
+# لحاظ شده‌اند).
+_CASH_FLOW_SECTION_OPTIONS = [
+    (None, "— بدونِ طبقه‌بندی —"),
+    ("OPERATING", "عملیاتی"),
+    ("INVESTING", "سرمایه‌گذاری"),
+    ("FINANCING", "تامینِ مالی"),
+]
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _LEVEL_COLORS = {1: theme.LEVEL_GROUP, 2: theme.LEVEL_KOL, 3: theme.LEVEL_MOEIN}
 # طبقِ درخواستِ صریح: برچسبِ فیلدهایِ کد/نام باید متناسب با سطحِ حسابِ
@@ -168,6 +178,12 @@ class ChartOfAccountsScreen(QWidget):
         grid.addWidget(self.account_type_combo, row, 1)
         row += 1
 
+        grid.addWidget(QLabel("بخشِ گردشِ وجوهِ نقد"), row, 0)
+        self.cash_flow_section_combo = QComboBox()
+        _fill_combo(self.cash_flow_section_combo, _CASH_FLOW_SECTION_OPTIONS)
+        grid.addWidget(self.cash_flow_section_combo, row, 1)
+        row += 1
+
         self.is_postable_checkbox = QCheckBox("قابلِ ثبتِ سند")
         self.is_postable_checkbox.toggled.connect(self._update_dimension_checklists_visibility)
         grid.addWidget(self.is_postable_checkbox, row, 1)
@@ -293,6 +309,7 @@ class ChartOfAccountsScreen(QWidget):
         _select_combo_value(self.nature_combo, account.nature_code)
         _select_combo_value(self.category_combo, account.category_code)
         _select_combo_value(self.account_type_combo, account.account_type_code)
+        _select_combo_value(self.cash_flow_section_combo, account.cash_flow_section_code)
         self.is_postable_checkbox.setChecked(account.is_postable)
         self.segment_code_field.setText(account.full_code.rsplit("-", 1)[-1])
         self.segment_code_field.setEnabled(False)
@@ -312,7 +329,12 @@ class ChartOfAccountsScreen(QWidget):
         # قابلِ‌تغییر است — زیرشاخه (کل/معین) همیشه این سه را از والدِ
         # خودش به‌ارث می‌برد، حتی اگر سندی هم نداشته باشد.
         has_parent = account.account_level > 1
-        for widget in (self.nature_combo, self.category_combo, self.account_type_combo):
+        for widget in (
+            self.nature_combo,
+            self.category_combo,
+            self.account_type_combo,
+            self.cash_flow_section_combo,
+        ):
             widget.setEnabled(not locked and not has_parent)
         if locked:
             self.is_postable_checkbox.setEnabled(False)
@@ -335,11 +357,18 @@ class ChartOfAccountsScreen(QWidget):
         self.parent_combo.setEnabled(True)
         self.parent_combo.setCurrentIndex(0)
         self.name_field.clear()
-        for widget in (self.name_field, self.nature_combo, self.category_combo, self.account_type_combo):
+        for widget in (
+            self.name_field,
+            self.nature_combo,
+            self.category_combo,
+            self.account_type_combo,
+            self.cash_flow_section_combo,
+        ):
             widget.setEnabled(True)
         self.nature_combo.setCurrentIndex(0)
         self.category_combo.setCurrentIndex(0)
         self.account_type_combo.setCurrentIndex(0)
+        self.cash_flow_section_combo.setCurrentIndex(0)
         self.is_postable_checkbox.setEnabled(True)
         self.is_postable_checkbox.setChecked(False)
         self.delete_button.setVisible(False)
@@ -383,7 +412,13 @@ class ChartOfAccountsScreen(QWidget):
             _select_combo_value(self.nature_combo, parent.nature_code)
             _select_combo_value(self.category_combo, parent.category_code)
             _select_combo_value(self.account_type_combo, parent.account_type_code)
-        for widget in (self.nature_combo, self.category_combo, self.account_type_combo):
+            _select_combo_value(self.cash_flow_section_combo, parent.cash_flow_section_code)
+        for widget in (
+            self.nature_combo,
+            self.category_combo,
+            self.account_type_combo,
+            self.cash_flow_section_combo,
+        ):
             widget.setEnabled(not has_parent)
 
     # --- چک‌لیستِ تفصیلی‌هایِ الزامی -----------------------------------------
@@ -476,6 +511,7 @@ class ChartOfAccountsScreen(QWidget):
         nature_code = _combo_value(self.nature_combo)
         category_code = _combo_value(self.category_combo)
         account_type_code = _combo_value(self.account_type_combo)
+        cash_flow_section_code = _combo_value(self.cash_flow_section_combo)
         is_postable = self.is_postable_checkbox.isChecked()
 
         if not name:
@@ -494,6 +530,7 @@ class ChartOfAccountsScreen(QWidget):
                     is_postable,
                     self._current_language_id(),
                     changed_by_user_id=session.current_user.user_id if session.current_user else None,
+                    cash_flow_section_code=cash_flow_section_code,
                 )
             else:
                 segment_code = self.segment_code_field.text().strip()
@@ -511,6 +548,7 @@ class ChartOfAccountsScreen(QWidget):
                     self._current_language_id(),
                     parent_account_id=self.parent_combo.currentData(),
                     changed_by_user_id=session.current_user.user_id if session.current_user else None,
+                    cash_flow_section_code=cash_flow_section_code,
                 )
         except ValueError as exc:
             self.status_label.setText(str(exc))

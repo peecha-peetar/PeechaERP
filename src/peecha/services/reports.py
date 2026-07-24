@@ -71,6 +71,7 @@ class AccountBalanceRow:
     period_credit: decimal.Decimal
     closing_debit: decimal.Decimal
     closing_credit: decimal.Decimal
+    cash_flow_section_code: str | None = None
 
 
 def _day_before(value: datetime.date | None) -> datetime.date | None:
@@ -223,6 +224,7 @@ def compute_account_balances(
                 nature_code=a.nature_code,
                 category_code=a.category_code,
                 account_type_code=a.account_type_code,
+                cash_flow_section_code=a.cash_flow_section_code,
                 opening_debit=opening_debit,
                 opening_credit=opening_credit,
                 period_debit=period_debit,
@@ -746,6 +748,84 @@ def compute_cash_flow_direct(
             )
         )
     return opening_balance, rows
+
+
+@dataclass
+class CashFlowIndirectSectionRow:
+    full_code: str
+    name: str
+    amount: decimal.Decimal
+
+
+@dataclass
+class CashFlowIndirectResult:
+    net_income: decimal.Decimal
+    operating_rows: list[CashFlowIndirectSectionRow]
+    net_operating: decimal.Decimal
+    investing_rows: list[CashFlowIndirectSectionRow]
+    net_investing: decimal.Decimal
+    financing_rows: list[CashFlowIndirectSectionRow]
+    net_financing: decimal.Decimal
+    net_change_in_cash: decimal.Decimal
+
+
+def compute_cash_flow_indirect(
+    company_id: int,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    *,
+    status_filter: str = "EXCLUDE_DRAFT",
+) -> CashFlowIndirectResult:
+    """صورتِ گردشِ وجوهِ نقد به روشِ غیرمستقیم — از سودِ خالص شروع می‌شود و
+    با تغییرِ حساب‌هایِ ترازنامه‌ایِ برچسب‌خورده با یک بخشِ وجوهِ نقد
+    (acc.cash_flow_sections، از `financial_statement_mapping.py` تنظیم
+    می‌شود) تعدیل می‌کند. حساب‌هایِ بدونِ برچسب (از‌جمله خودِ صندوق/بانک،
+    که مبنایِ نقد است نه یک تغییرِ نقدی) نادیده گرفته می‌شوند.
+
+    قراردادِ علامت (هرسه بخش با همین قاعده): افزایشِ بدهی/حقوقِ صاحبانِ
+    سهام = ورودِ نقد (+)، افزایشِ دارایی = خروجِ نقد (-)."""
+    net_income = _net_income(company_id, date_from, date_to, status_filter)
+    balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
+
+    operating_rows: list[CashFlowIndirectSectionRow] = []
+    investing_rows: list[CashFlowIndirectSectionRow] = []
+    financing_rows: list[CashFlowIndirectSectionRow] = []
+    net_operating = net_income
+    net_investing = _ZERO
+    net_financing = _ZERO
+
+    for r in balances:
+        if r.account_level != 2 or r.cash_flow_section_code is None:
+            continue
+        if r.category_code == "ASSET":
+            amount = r.period_credit - r.period_debit  # افزایشِ دارایی (بدهکار) = خروجِ نقد
+        elif r.category_code in ("LIABILITY", "EQUITY"):
+            amount = r.period_credit - r.period_debit  # افزایشِ بدهی/سرمایه (بستانکار) = ورودِ نقد
+        else:
+            continue
+        if amount == _ZERO:
+            continue
+        row = CashFlowIndirectSectionRow(full_code=r.full_code, name=r.name, amount=amount)
+        if r.cash_flow_section_code == "OPERATING":
+            operating_rows.append(row)
+            net_operating += amount
+        elif r.cash_flow_section_code == "INVESTING":
+            investing_rows.append(row)
+            net_investing += amount
+        elif r.cash_flow_section_code == "FINANCING":
+            financing_rows.append(row)
+            net_financing += amount
+
+    return CashFlowIndirectResult(
+        net_income=net_income,
+        operating_rows=operating_rows,
+        net_operating=net_operating,
+        investing_rows=investing_rows,
+        net_investing=net_investing,
+        financing_rows=financing_rows,
+        net_financing=net_financing,
+        net_change_in_cash=net_operating + net_investing + net_financing,
+    )
 
 
 @dataclass

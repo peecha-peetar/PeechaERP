@@ -74,6 +74,7 @@ NAV_ITEMS = [
 SETTINGS_SUB_FORMS = [
     ("accounting_coding", "کدینگِ حساب‌ها"),
     ("detail_level_digits", "تعدادِ رقمِ سطوحِ تفصیلی"),
+    ("financial_statement_mapping", "نگاشتِ صورت‌هایِ مالی"),
     ("companies", "شرکت‌ها"),
     ("languages", "زبان‌ها"),
     ("currencies", "ارزها"),

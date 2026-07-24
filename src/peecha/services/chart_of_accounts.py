@@ -17,6 +17,7 @@ from peecha.db.models.accounting import (
     AccountCategory,
     AccountNature,
     AccountType,
+    CashFlowSection,
     ChartOfAccount,
     ChartOfAccountLevelConfig,
     JournalEntryLine,
@@ -38,6 +39,7 @@ class AccountRow:
     nature_code: str
     category_code: str
     account_type_code: str
+    cash_flow_section_code: str | None = None
 
 
 def list_accounts(company_id: int) -> list[AccountRow]:
@@ -62,6 +64,9 @@ def list_accounts(company_id: int) -> list[AccountRow]:
         nature_codes = dict(session.execute(select(AccountNature.nature_id, AccountNature.code)).all())
         category_codes = dict(session.execute(select(AccountCategory.category_id, AccountCategory.code)).all())
         account_type_codes = dict(session.execute(select(AccountType.account_type_id, AccountType.code)).all())
+        cash_flow_section_codes = dict(
+            session.execute(select(CashFlowSection.cash_flow_section_id, CashFlowSection.code)).all()
+        )
 
         return [
             AccountRow(
@@ -73,6 +78,7 @@ def list_accounts(company_id: int) -> list[AccountRow]:
                 nature_code=nature_codes[a.nature_id],
                 category_code=category_codes[a.category_id],
                 account_type_code=account_type_codes[a.account_type_id],
+                cash_flow_section_code=cash_flow_section_codes.get(a.cash_flow_section_id),
             )
             for a in accounts
         ]
@@ -114,12 +120,15 @@ def create_account(
     language_id: int,
     parent_account_id: int | None = None,
     changed_by_user_id: int | None = None,
+    cash_flow_section_code: str | None = None,
 ) -> ChartOfAccount:
     with new_session() as session:
         # طبقِ درخواستِ صریح: ماهیت/دسته/نوعِ حساب فقط در سطحِ گروه (بدونِ
         # والد) انتخاب می‌شود — هر زیرشاخه (کل/معین) همین سه مقدار را از
         # والدِ خودش به‌ارث می‌برد؛ مقدارهایِ ورودی برایِ زیرشاخه‌ها نادیده
         # گرفته می‌شوند تا کل زیردرخت همیشه با گروهِ خودش هم‌خوان بماند.
+        # طبقِ‌بالا، بخشِ وجوهِ نقد (cash_flow_section) هم از همان الگو
+        # پیروی می‌کند، با این فرق که nullable است (بدونِ طبقه‌بندی مجاز است).
         if parent_account_id is None:
             account_level = 1
             full_code = segment_code
@@ -129,6 +138,14 @@ def create_account(
             if nature is None or category is None or account_type is None:
                 raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
             nature_id, category_id, account_type_id = nature.nature_id, category.category_id, account_type.account_type_id
+            cash_flow_section_id = None
+            if cash_flow_section_code:
+                cash_flow_section = session.scalar(
+                    select(CashFlowSection).where(CashFlowSection.code == cash_flow_section_code)
+                )
+                if cash_flow_section is None:
+                    raise ValueError("مقدارِ بخشِ وجوهِ نقد نامعتبر است.")
+                cash_flow_section_id = cash_flow_section.cash_flow_section_id
         else:
             parent = session.get(ChartOfAccount, parent_account_id)
             if parent is None or parent.company_id != company_id:
@@ -138,6 +155,7 @@ def create_account(
             account_level = parent.account_level + 1
             full_code = f"{parent.full_code}-{segment_code}"
             nature_id, category_id, account_type_id = parent.nature_id, parent.category_id, parent.account_type_id
+            cash_flow_section_id = parent.cash_flow_section_id
 
         # طبقِ درخواستِ صریح: فقط حساب‌هایِ سطحِ آخر (معین) قابلِ ثبتِ سندند —
         # چون افزودنِ زیرشاخه به سطحِ آخر از قبل مسدود است، این تضمین می‌کند
@@ -156,6 +174,7 @@ def create_account(
             nature_id=nature_id,
             category_id=category_id,
             account_type_id=account_type_id,
+            cash_flow_section_id=cash_flow_section_id,
             is_postable=is_postable,
         )
         session.add(account)
@@ -227,6 +246,7 @@ def update_account(
     is_postable: bool,
     language_id: int,
     changed_by_user_id: int | None = None,
+    cash_flow_section_code: str | None = None,
 ) -> ChartOfAccount:
     """ویرایشِ حساب — عمداً فقط نام/ماهیت/دسته/نوع/قابل‌ثبت‌بودن قابل‌تغییرند؛
     کد و والد (که full_code و سطحِ کل زیردرخت را تعیین می‌کنند) در این
@@ -258,10 +278,11 @@ def update_account(
 
         descendants: list[ChartOfAccount] = []
         if account.parent_account_id is not None:
-            # زیرشاخه: ماهیت/دسته/نوع مستقل نیست — همیشه با والدِ فعلی
-            # هم‌خوان می‌ماند، صرفِ‌نظر از ورودیِ کاربر.
+            # زیرشاخه: ماهیت/دسته/نوع/بخشِ وجوهِ نقد مستقل نیست — همیشه با
+            # والدِ فعلی هم‌خوان می‌ماند، صرفِ‌نظر از ورودیِ کاربر.
             parent = session.get(ChartOfAccount, account.parent_account_id)
             nature_id, category_id, account_type_id = parent.nature_id, parent.category_id, parent.account_type_id
+            cash_flow_section_id = parent.cash_flow_section_id
         else:
             nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
             category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
@@ -269,6 +290,14 @@ def update_account(
             if nature is None or category is None or account_type is None:
                 raise ValueError("مقدار ماهیت/دسته/نوع حساب نامعتبر است.")
             nature_id, category_id, account_type_id = nature.nature_id, category.category_id, account_type.account_type_id
+            cash_flow_section_id = None
+            if cash_flow_section_code:
+                cash_flow_section = session.scalar(
+                    select(CashFlowSection).where(CashFlowSection.code == cash_flow_section_code)
+                )
+                if cash_flow_section is None:
+                    raise ValueError("مقدارِ بخشِ وجوهِ نقد نامعتبر است.")
+                cash_flow_section_id = cash_flow_section.cash_flow_section_id
 
             descendants = _descendant_accounts(session, account_id)
             if descendants:
@@ -290,11 +319,13 @@ def update_account(
         account.nature_id = nature_id
         account.category_id = category_id
         account.account_type_id = account_type_id
+        account.cash_flow_section_id = cash_flow_section_id
         account.is_postable = is_postable
         for descendant in descendants:
             descendant.nature_id = nature_id
             descendant.category_id = category_id
             descendant.account_type_id = account_type_id
+            descendant.cash_flow_section_id = cash_flow_section_id
 
         translation = session.scalar(
             select(Translation).where(
