@@ -174,16 +174,18 @@ class DimensionGroupConfigScreen(QWidget):
         self.lock_hint_label.setWordWrap(True)
         layout.addWidget(self.lock_hint_label)
 
+        # طبقِ بازخوردِ کاربر: قبلاً «تعدادِ سطح» و «بازه‌ی سطوح» دو دکمه‌ی
+        # ذخیره‌یِ جدا داشتند — کاربر با کلیک‌کردنِ فقط دکمه‌یِ کنارِ «تعدادِ
+        # سطح» (چون همان‌جا، کنارِ فیلدی که تازه تغییرش داده، در دسترس‌تر
+        # بود) گمان می‌کرد همه‌چیز ذخیره شده، درحالی‌که بازه‌یِ سطوح هنوز
+        # ذخیره نشده بود. حالا فقط یک دکمه‌ی ذخیره برایِ کلِ این بخش هست تا
+        # دیگر امکانِ «ذخیره‌ی نصفه» وجود نداشته باشد.
         max_level_row = QHBoxLayout()
         max_level_row.addWidget(QLabel("تعدادِ سطحِ این گروه"))
         self.max_level_spin = QSpinBox()
         self.max_level_spin.setRange(1, _LEVEL_COUNT)
         self.max_level_spin.valueChanged.connect(self._on_max_level_changed)
         max_level_row.addWidget(self.max_level_spin)
-        self.save_max_level_button = QPushButton("ذخیره")
-        self.save_max_level_button.setObjectName("flatButton")
-        self.save_max_level_button.clicked.connect(self._save_max_level)
-        max_level_row.addWidget(self.save_max_level_button)
         max_level_row.addStretch(1)
         layout.addLayout(max_level_row)
 
@@ -215,8 +217,8 @@ class DimensionGroupConfigScreen(QWidget):
             self._level_widgets[level_no] = (range_from, range_to)
         layout.addLayout(levels_grid)
 
-        self.save_levels_button = QPushButton("ذخیره‌ی بازه‌یِ سطوح")
-        self.save_levels_button.setObjectName("flatButton")
+        self.save_levels_button = QPushButton("ذخیره‌یِ تعدادِ سطح و بازه‌یِ سطوح")
+        self.save_levels_button.setObjectName("primaryButton")
         self.save_levels_button.clicked.connect(self._save_levels)
         layout.addWidget(self.save_levels_button)
 
@@ -327,7 +329,6 @@ class DimensionGroupConfigScreen(QWidget):
             self._validate_range_live(level_no)
         self.save_levels_button.setEnabled(not locked)
         self.max_level_spin.setEnabled(not locked)
-        self.save_max_level_button.setEnabled(not locked)
         self.lock_hint_label.setText(
             "این شرکت سند دارد؛ تنظیماتِ رقم/بازه/تعدادِ سطح دیگر قابلِ‌تغییر نیست." if locked else ""
         )
@@ -346,22 +347,6 @@ class DimensionGroupConfigScreen(QWidget):
             enabled = (not locked) and level_no <= max_level_no
             range_from.setEnabled(enabled)
             range_to.setEnabled(enabled)
-
-    def _save_max_level(self) -> None:
-        company_id = self._company_id()
-        if company_id is None or self._selected_type_id is None:
-            return
-        try:
-            dimensions_service.set_group_max_level_no(
-                self._selected_type_id, company_id, self.max_level_spin.value(), self._selected_person_group_id
-            )
-        except ValueError as exc:
-            self._show_type_status(str(exc), ok=False)
-            return
-        except Exception as exc:  # noqa: BLE001
-            self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ سقفِ سطح: {exc}", ok=False)
-            return
-        self._show_type_status("تعدادِ سطحِ گروه ذخیره شد.", ok=True)
 
     # --- سطوح ------------------------------------------------------------
     def _load_levels(self) -> None:
@@ -443,7 +428,7 @@ class DimensionGroupConfigScreen(QWidget):
         except Exception as exc:  # noqa: BLE001
             self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ بازه‌یِ سطوح: {exc}", ok=False)
             return
-        self._show_type_status("بازه‌یِ سطوح ذخیره شد.", ok=True)
+        self._show_type_status("تعدادِ سطح و بازه‌یِ سطوح ذخیره شد.", ok=True)
         for level_no in self._level_widgets:
             self._validate_range_live(level_no)
 
