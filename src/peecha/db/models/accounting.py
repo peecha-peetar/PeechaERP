@@ -401,3 +401,48 @@ class JournalEntryLineDetail(Base):
         ForeignKey("acc.detail_dimension_types.dimension_type_id"), primary_key=True
     )
     detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
+class StatementTemplate(Base):
+    """یک الگویِ گزارشِ سفارشی (طراحِ گزارش، فازِ ۲) — مجموعه‌ای از ردیف‌هایِ
+    ترتیب‌دار که هرکدام از جمعِ چند حساب یا چند ردیفِ دیگر ساخته می‌شود."""
+
+    __tablename__ = "statement_templates"
+    __table_args__ = {"schema": "acc"}
+
+    template_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(200))
+    statement_type: Mapped[str] = mapped_column(String(20))  # INCOME_STATEMENT|BALANCE_SHEET|CASH_FLOW|CUSTOM
+    display_order: Mapped[int] = mapped_column(default=0)
+
+
+class StatementRow(Base):
+    __tablename__ = "statement_rows"
+    __table_args__ = {"schema": "acc"}
+
+    row_id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_templates.template_id"))
+    row_order: Mapped[int]
+    label: Mapped[str] = mapped_column(String(300))
+    row_type: Mapped[str] = mapped_column(String(20))  # HEADER|ACCOUNTS|FORMULA
+    indent_level: Mapped[int] = mapped_column(SmallInteger, default=0)
+    is_bold: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class StatementRowAccount(Base):
+    __tablename__ = "statement_row_accounts"
+    __table_args__ = {"schema": "acc"}
+
+    row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"), primary_key=True)
+    sign: Mapped[int] = mapped_column(SmallInteger)
+
+
+class StatementRowRef(Base):
+    __tablename__ = "statement_row_refs"
+    __table_args__ = {"schema": "acc"}
+
+    row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
+    ref_row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
+    sign: Mapped[int] = mapped_column(SmallInteger)

@@ -38,6 +38,7 @@ from peecha.db.models.accounting import (
 )
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import statement_templates as statement_templates_service
 
 _ZERO = decimal.Decimal("0")
 
@@ -863,3 +864,82 @@ def compute_equity_changes(
             )
         )
     return rows
+
+
+@dataclass
+class CustomStatementLine:
+    label: str
+    row_type: str  # HEADER | ACCOUNTS | FORMULA
+    indent_level: int
+    is_bold: bool
+    amount: decimal.Decimal | None  # None فقط برایِ HEADER
+
+
+def compute_custom_statement(
+    template_id: int,
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date,
+    *,
+    status_filter: str = "EXCLUDE_DRAFT",
+) -> list[CustomStatementLine]:
+    """گزارشِ سفارشی (طراحِ گزارش، فازِ ۲) — هر ردیفِ ACCOUNTS از جمعِ
+    چند حسابِ دلخواه (هر سطحی: گروه/کل/معین، با علامتِ +/−) ساخته می‌شود؛
+    مانده/گردشِ هر حساب از `compute_account_balances` می‌آید که خودش برایِ
+    همه‌یِ سطوح رول‌آپ‌شده است، پس نیازی به کوئریِ تازه نیست. حسابِ
+    PERMANENT (ترازنامه‌ای) → مانده‌یِ تجمعی تا date_to؛ TEMPORARY (موقت) →
+    گردشِ همان دوره — دقیقاً همان قراردادِ compute_balance_sheet/
+    compute_income_statement. هر ردیفِ FORMULA از جمعِ چند ردیفِ دیگرِ
+    همین الگو ساخته می‌شود؛ حلِ بازگشتی+memo باعث می‌شود ترتیبِ row_order
+    برایِ محاسبه مهم نباشد (فقط برایِ نمایش) و حلقه‌هایِ فرمولی با
+    ValueError روشن رد شوند، نه کرش/بازگشتِ بی‌نهایت."""
+    rows = statement_templates_service.list_rows(template_id)
+    rows_by_id = {r.row_id: r for r in rows}
+    balances_by_id = {
+        b.account_id: b
+        for b in compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
+    }
+
+    memo: dict[int, decimal.Decimal | None] = {}
+    resolving: set[int] = set()
+
+    def resolve(row_id: int) -> decimal.Decimal | None:
+        if row_id in memo:
+            return memo[row_id]
+        if row_id in resolving:
+            raise ValueError("حلقه در فرمولِ ردیف‌هایِ الگویِ گزارش.")
+        resolving.add(row_id)
+        row = rows_by_id[row_id]
+        if row.row_type == "ACCOUNTS":
+            total = _ZERO
+            for account_id, sign in row.account_refs:
+                b = balances_by_id.get(account_id)
+                if b is None:
+                    continue
+                value = (
+                    (b.closing_debit - b.closing_credit)
+                    if b.account_type_code == "PERMANENT"
+                    else (b.period_debit - b.period_credit)
+                )
+                total += sign * value
+        elif row.row_type == "FORMULA":
+            total = _ZERO
+            for ref_row_id, sign in row.formula_refs:
+                ref_value = resolve(ref_row_id)
+                total += sign * (ref_value if ref_value is not None else _ZERO)
+        else:  # HEADER
+            total = None
+        resolving.discard(row_id)
+        memo[row_id] = total
+        return total
+
+    return [
+        CustomStatementLine(
+            label=r.label,
+            row_type=r.row_type,
+            indent_level=r.indent_level,
+            is_bold=r.is_bold,
+            amount=resolve(r.row_id) if r.row_type != "HEADER" else None,
+        )
+        for r in rows
+    ]

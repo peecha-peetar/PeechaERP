@@ -95,6 +95,12 @@ class ReportScreenBase(QWidget):
         # ردیفِ نمایش‌داده‌شده دیگر با اندیسِ اصلی یکی نیست.
         self._all_row_ids: list = []
         self._row_ids: list = []
+        # زیرکلاس‌هایی که ردیف‌هایِ بولد دارند (مثلِ report_custom_statement.py،
+        # زیرکل‌هایِ فرمولی) این را در load_report() هم‌زمان با rows پر
+        # می‌کنند — هم‌الگو با _all_row_ids/_row_ids؛ اگر خالی بماند
+        # (گزارش‌هایِ دیگر) هیچ ردیفی بولد نمی‌شود.
+        self._all_row_bold: list[bool] = []
+        self._row_bold: list[bool] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -270,6 +276,7 @@ class ReportScreenBase(QWidget):
     def _reload(self) -> None:
         company_id = self._company_id()
         self._all_row_ids = []
+        self._all_row_bold = []
         if company_id is None:
             self._headers, self._all_rows, self._footer = [], [], None
             self._apply_search_filter()
@@ -281,15 +288,20 @@ class ReportScreenBase(QWidget):
     def _apply_search_filter(self) -> None:
         query = self.search_field.text().strip()
         has_ids = len(self._all_row_ids) == len(self._all_rows)
+        has_bold = len(self._all_row_bold) == len(self._all_rows)
         if not query:
             self._rows = self._all_rows
             if has_ids:
                 self._row_ids = self._all_row_ids
+            if has_bold:
+                self._row_bold = self._all_row_bold
         else:
             indices = [i for i, row in enumerate(self._all_rows) if any(query in str(cell) for cell in row)]
             self._rows = [self._all_rows[i] for i in indices]
             if has_ids:
                 self._row_ids = [self._all_row_ids[i] for i in indices]
+            if has_bold:
+                self._row_bold = [self._all_row_bold[i] for i in indices]
         self._set_table(self._headers, self._rows, self._footer)
 
     def _set_table(self, headers: list[str], rows: list[list], footer: list | None) -> None:
@@ -299,9 +311,16 @@ class ReportScreenBase(QWidget):
             self.table.horizontalHeader().setSectionResizeMode(col_index, QHeaderView.Interactive)
         extra = 1 if footer else 0
         self.table.setRowCount(len(rows) + extra)
+        has_bold = len(self._row_bold) == len(rows)
         for row_index, row in enumerate(rows):
+            row_is_bold = has_bold and self._row_bold[row_index]
             for col_index, value in enumerate(row):
-                self.table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
+                item = QTableWidgetItem(str(value))
+                if row_is_bold:
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
+                self.table.setItem(row_index, col_index, item)
         if footer:
             footer_row = len(rows)
             for col_index, value in enumerate(footer):

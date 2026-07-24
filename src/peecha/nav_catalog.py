@@ -61,6 +61,16 @@ NAV_ITEMS = [
                 "label": "تغییرات در حقوقِ صاحبانِ سهام",
                 "screen": "report_equity_changes",
             },
+            {
+                "code": "REPORTS_CUSTOM_STATEMENT",
+                "label": "گزارشِ سفارشی (طبقِ الگو)",
+                "screen": "report_custom_statement",
+            },
+            {
+                "code": "REPORTS_STATEMENT_DESIGNER",
+                "label": "طراحیِ الگویِ گزارش",
+                "screen": "statement_template_designer",
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ
