@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
@@ -473,6 +473,12 @@ def list_group_levels(dimension_type_id: int, person_group_id: int = 0) -> list[
         return [GroupLevelRow(level_no=r.level_no, range_from=r.range_from, range_to=r.range_to) for r in rows]
 
 
+def _dimension_group_label(code: str, person_group_name: str | None) -> str:
+    if person_group_name:
+        return person_group_name
+    return SPECIALIZED_DIMENSION_LABELS.get(code, code)
+
+
 def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, dict], person_group_id: int = 0) -> None:
     """جایگزینیِ کاملِ پیکربندیِ بازه‌یِ سطح‌های این گروه — levels یعنی
     {شماره‌ی سطح (۱ تا ۴): {"range_from": ..|None, "range_to": ..|None}}؛
@@ -482,6 +488,14 @@ def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, 
     person_group_id غیرِصفر یعنی این پیکربندی مخصوصِ یکی از زیرگروه‌هایِ
     اشخاص (مشتری/تامین‌کننده/پرسنل) است — مستقل از بقیه‌یِ زیرگروه‌ها و از
     پیکربندیِ عمومیِ (person_group_id=0) همان دیمنشن‌تایپ.
+
+    طبقِ درخواستِ صریح، دو اعتبارسنجیِ تازه:
+    ۱. بازه باید با تعدادِ رقمِ سراسریِ همان سطح (اگر تنظیم شده باشد،
+       acc.detail_level_digit_config) سازگار باشد — عددی بزرگ‌تر از
+       بزرگ‌ترین مقدارِ قابل‌نمایش با آن تعداد رقم پذیرفته نمی‌شود.
+    ۲. بازه‌ی هر گروه باید مختصِ همان گروه بماند — اگر بازه‌ای برایِ
+       همین سطح، با بازه‌یِ گروهِ دیگری هم‌پوشانی داشته باشد، رد می‌شود
+       (تا مثلاً بازه‌ی بانک با بازه‌ی صندوق قاطی نشود).
 
     طبقِ درخواستِ صریح: بعدِ اولین سندِ شرکت، این تنظیمات دیگر قابلِ‌تغییر
     نیستند (تا کدهایِ ثبت‌شده‌ی موجود ناسازگار نشوند)."""
@@ -498,6 +512,34 @@ def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, 
         if je_service.company_has_any_entries(company_id):
             raise ValueError("این شرکت سند دارد؛ تنظیماتِ کدینگِ تفصیلی دیگر قابلِ‌تغییر نیست.")
 
+        digit_config_by_level = {
+            r.level_no: r.code_length
+            for r in session.scalars(
+                select(DetailLevelDigitConfig).where(DetailLevelDigitConfig.company_id == company_id)
+            ).all()
+        }
+
+        # بازه‌هایِ همه‌ی گروه‌هایِ دیگرِ همین شرکت که برایِ (هر) سطحی بازه
+        # تنظیم کرده‌اند — برایِ چکِ هم‌پوشانی؛ گروه‌هایی که اصلاً بازه
+        # تنظیم نکرده‌اند مشمولِ این چک نیستند.
+        other_ranges = session.execute(
+            select(
+                DetailGroupLevel.dimension_type_id,
+                DetailGroupLevel.person_group_id,
+                DetailGroupLevel.level_no,
+                DetailGroupLevel.range_from,
+                DetailGroupLevel.range_to,
+                DetailDimensionType.code,
+                PersonGroup.name,
+            )
+            .join(DetailDimensionType, DetailGroupLevel.dimension_type_id == DetailDimensionType.dimension_type_id)
+            .outerjoin(PersonGroup, DetailGroupLevel.person_group_id == PersonGroup.person_group_id)
+            .where(
+                DetailDimensionType.company_id == company_id,
+                or_(DetailGroupLevel.range_from.is_not(None), DetailGroupLevel.range_to.is_not(None)),
+            )
+        ).all()
+
         session.execute(
             DetailGroupLevel.__table__.delete().where(
                 DetailGroupLevel.dimension_type_id == dimension_type_id,
@@ -511,8 +553,40 @@ def set_group_levels(dimension_type_id: int, company_id: int, levels: dict[int, 
             range_to = config.get("range_to")
             if range_from is not None and range_to is not None and range_from > range_to:
                 raise ValueError("مقدارِ «از» نمی‌تواند بزرگ‌تر از «تا» باشد.")
+
+            code_length = digit_config_by_level.get(level_no)
+            if code_length is not None:
+                max_value = 10**code_length - 1
+                if range_from is not None and range_from > max_value:
+                    raise ValueError(
+                        f"مقدارِ «از» در سطحِ {level_no} نمی‌تواند بیشتر از {max_value} باشد "
+                        f"(تعدادِ رقمِ سراسریِ این سطح {code_length} رقم است)."
+                    )
+                if range_to is not None and range_to > max_value:
+                    raise ValueError(
+                        f"مقدارِ «تا» در سطحِ {level_no} نمی‌تواند بیشتر از {max_value} باشد "
+                        f"(تعدادِ رقمِ سراسریِ این سطح {code_length} رقم است)."
+                    )
+
             if range_from is None and range_to is None:
                 continue
+
+            new_from = range_from if range_from is not None else 0
+            new_to = range_to if range_to is not None else 999_999_999
+            for other in other_ranges:
+                if other.level_no != level_no:
+                    continue
+                if other.dimension_type_id == dimension_type_id and other.person_group_id == person_group_id:
+                    continue
+                other_from = other.range_from if other.range_from is not None else 0
+                other_to = other.range_to if other.range_to is not None else 999_999_999
+                if new_from <= other_to and other_from <= new_to:
+                    other_label = _dimension_group_label(other.code, other.name)
+                    raise ValueError(
+                        f"بازه‌ی سطحِ {level_no} با بازه‌ی «{other_label}» هم‌پوشانی دارد؛ "
+                        "بازه‌ی هر گروه باید مختصِ همان گروه بماند."
+                    )
+
             session.add(
                 DetailGroupLevel(
                     dimension_type_id=dimension_type_id,
