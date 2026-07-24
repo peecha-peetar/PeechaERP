@@ -35,6 +35,7 @@ from peecha.db.models.accounting import (
     JournalEntryType,
 )
 from peecha.db.models.core import Company, CompanyCurrency
+from peecha.db.models.security import User
 from peecha.services import audit as audit_service
 from peecha.services import detail_dimensions as dimensions_service
 
@@ -131,6 +132,9 @@ class JournalEntrySummary:
     total_amount: decimal.Decimal
     alternative_number: str
     registration_at: datetime.datetime
+    created_by_name: str = ""
+    company_name: str = ""
+    fiscal_year_code: str = ""
 
 
 def _validate_lines(lines: list[LineInput], *, require_balance: bool = True) -> list[LineInput]:
@@ -435,6 +439,29 @@ def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
 
         status_codes = dict(session.execute(select(JournalEntryStatus.status_id, JournalEntryStatus.code)).all())
 
+        # طبقِ درخواستِ صریح: کاربرِ صادرکننده، نامِ شرکت و سالِ مالی هم در
+        # فهرستِ اسناد نمایش داده شود.
+        company = session.get(Company, company_id)
+        company_name = company.display_name if company is not None else ""
+        user_ids = {e.created_by_user_id for e in entries}
+        user_names = (
+            dict(session.execute(select(User.user_id, User.full_name).where(User.user_id.in_(user_ids))).all())
+            if user_ids
+            else {}
+        )
+        fiscal_year_ids = {e.fiscal_year_id for e in entries}
+        fiscal_year_codes = (
+            dict(
+                session.execute(
+                    select(FiscalYear.fiscal_year_id, FiscalYear.code).where(
+                        FiscalYear.fiscal_year_id.in_(fiscal_year_ids)
+                    )
+                ).all()
+            )
+            if fiscal_year_ids
+            else {}
+        )
+
         return [
             JournalEntrySummary(
                 journal_entry_id=e.journal_entry_id,
@@ -445,6 +472,9 @@ def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
                 total_amount=totals.get(e.journal_entry_id, decimal.Decimal(0)),
                 alternative_number=e.alternative_number or "",
                 registration_at=e.created_at,
+                created_by_name=user_names.get(e.created_by_user_id, ""),
+                company_name=company_name,
+                fiscal_year_code=fiscal_year_codes.get(e.fiscal_year_id, ""),
             )
             for e in entries
         ]

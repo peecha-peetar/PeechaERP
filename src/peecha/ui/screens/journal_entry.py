@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import decimal
 import re
@@ -1106,3 +1107,38 @@ class JournalEntryScreen(QWidget):
             self.add_line()
         self.update_balance()
         self._update_footer_for_mode()
+
+    def copy_from_journal_entry(self, journal_entry_id: int, *, reverse: bool = False) -> None:
+        """طبقِ درخواستِ صریح: کپیِ سند («مشابه» یا «معکوس» — بدهکار/بستانکارِ
+        هر ردیف جابه‌جا می‌شود) — بر خلافِ edit_journal_entry، این یک سندِ
+        کاملاً تازه می‌سازد (با تاریخِ امروز)، نه ویرایشِ همان سند."""
+        if self.company_id is None:
+            return
+        summary = next(
+            (s for s in je_service.list_journal_entries(self.company_id) if s.journal_entry_id == journal_entry_id),
+            None,
+        )
+        self._editing_journal_entry_id = None
+        self._editing_registration_at = None
+        self.form_title.setText("کپیِ معکوسِ سند" if reverse else "کپیِ سند")
+        self.date_field.setDate(datetime.date.today())
+        self.alt_number_field.clear()
+        self.draft_checkbox.setChecked(False)
+        if summary is not None:
+            self.description_field.setText(summary.description or "")
+            self.description_field.setCursorPosition(0)
+
+        for row in list(self._line_rows):
+            self.remove_line(row, force=True)
+        lines = je_service.get_journal_entry_lines(journal_entry_id)
+        accounts_by_id = {a[0]: a[1] for a in self.account_options}
+        for line in lines:
+            if reverse:
+                line = dataclasses.replace(line, debit=line.credit, credit=line.debit)
+            row = self.add_line()
+            row.load_from(line, accounts_by_id.get(line.account_id, "?"))
+        if len(self._line_rows) < 2:
+            self.add_line()
+        self.update_balance()
+        self._update_footer_for_mode()
+        self.status_label.setText("")

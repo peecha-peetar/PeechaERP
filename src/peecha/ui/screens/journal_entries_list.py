@@ -1,4 +1,10 @@
-"""فهرستِ اسنادِ حسابداری — معادلِ Qt برایِ journal_entries_list.py/.kv در Kivy."""
+"""فهرستِ اسنادِ حسابداری — معادلِ Qt برایِ journal_entries_list.py/.kv در Kivy.
+
+طبقِ بازخوردِ صریح: ترتیبِ ستون‌ها (از راست) ردیف/شماره/تاریخِ شمسی/شرح/
+مبلغ (با جداکننده‌ی سه‌رقمی)/وضعیت/کاربرِ صادرکننده/نامِ شرکت/سالِ مالی است؛
+همچنین امکانِ «کپیِ مشابه» و «کپیِ معکوس» (جابه‌جاییِ بدهکار/بستانکارِ هر
+ردیف) از رویِ سندِ انتخاب‌شده اضافه شده — هر دو فرمِ صدورِ سند را با اقلامِ
+همان سند (به‌عنوانِ سندی کاملاً تازه، نه ویرایشِ همان سند) باز می‌کنند."""
 
 from __future__ import annotations
 
@@ -17,7 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import numerals, session
+from peecha.services import currencies as currencies_service
 from peecha.services import journal_entries as je_service
 
 _STATUS_LABELS = {
@@ -28,7 +35,16 @@ _STATUS_LABELS = {
     "CANCELLED": "ابطال‌شده",
 }
 
-_COLUMNS = ["وضعیت", "مبلغِ کل", "شرح", "تاریخ", "شماره"]
+_COLUMNS = ["ردیف", "شماره", "تاریخ", "شرح", "مبلغِ کل", "وضعیت", "کاربرِ صادرکننده", "نامِ شرکت", "سالِ مالی"]
+_COL_ROW_NO = 0
+_COL_NUMBER = 1
+_COL_DATE = 2
+_COL_DESC = 3
+_COL_AMOUNT = 4
+_COL_STATUS = 5
+_COL_USER = 6
+_COL_COMPANY = 7
+_COL_FISCAL_YEAR = 8
 
 
 class JournalEntriesListScreen(QWidget):
@@ -36,6 +52,8 @@ class JournalEntriesListScreen(QWidget):
         super().__init__()
         self._main_window = main_window
         self._entries: list[je_service.JournalEntrySummary] = []
+        self._currency_decimal_places = 0
+        self._currency_symbol: str | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -62,14 +80,29 @@ class JournalEntriesListScreen(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(_COL_DESC, QHeaderView.Stretch)
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
+
+        buttons = QHBoxLayout()
+        copy_button = QPushButton("کپیِ سندِ انتخاب‌شده (مشابه)")
+        copy_button.setObjectName("flatButton")
+        copy_button.clicked.connect(lambda: self._copy_selected(reverse=False))
+        buttons.addWidget(copy_button)
+
+        reverse_copy_button = QPushButton("کپیِ معکوسِ سندِ انتخاب‌شده")
+        reverse_copy_button.setObjectName("flatButton")
+        reverse_copy_button.clicked.connect(lambda: self._copy_selected(reverse=True))
+        buttons.addWidget(reverse_copy_button)
+
+        buttons.addStretch(1)
 
         delete_button = QPushButton("حذفِ سندِ انتخاب‌شده (موقت/پیش‌نویس)")
         delete_button.setObjectName("dangerButton")
         delete_button.clicked.connect(self._delete_selected)
-        layout.addWidget(delete_button)
+        buttons.addWidget(delete_button)
+
+        layout.addLayout(buttons)
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
@@ -77,6 +110,12 @@ class JournalEntriesListScreen(QWidget):
     def refresh(self) -> None:
         company_id = self._company_id()
         self._entries = je_service.list_journal_entries(company_id) if company_id is not None else []
+
+        base_currency_id = session.current_company.base_currency_id if session.current_company else None
+        currency = next((c for c in currencies_service.list_all_currencies() if c.currency_id == base_currency_id), None)
+        self._currency_decimal_places = currency.decimal_places if currency else 0
+        self._currency_symbol = currency.symbol if currency else None
+
         self._apply_filter()
 
     def _apply_filter(self) -> None:
@@ -91,11 +130,15 @@ class JournalEntriesListScreen(QWidget):
         self.table.setRowCount(len(filtered))
         for row_index, e in enumerate(filtered):
             values = [
-                _STATUS_LABELS.get(e.status_code, e.status_code),
-                str(e.total_amount),
-                e.description or "—",
-                e.document_date.isoformat(),
+                str(row_index + 1),
                 str(e.temporary_no),
+                numerals.format_jalali_date(e.document_date),
+                e.description or "—",
+                numerals.format_money(e.total_amount, self._currency_decimal_places, self._currency_symbol),
+                _STATUS_LABELS.get(e.status_code, e.status_code),
+                e.created_by_name or "—",
+                e.company_name or "—",
+                e.fiscal_year_code or "—",
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -108,6 +151,15 @@ class JournalEntriesListScreen(QWidget):
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
         journal_entry_id = self.table.item(row, 0).data(Qt.UserRole)
         self._main_window.open_screen("GL_JE", then=lambda screen: screen.edit_journal_entry(journal_entry_id))
+
+    def _copy_selected(self, *, reverse: bool) -> None:
+        selected = self.table.selectedItems()
+        if not selected:
+            return
+        journal_entry_id = selected[0].data(Qt.UserRole)
+        self._main_window.open_screen(
+            "GL_JE", then=lambda screen: screen.copy_from_journal_entry(journal_entry_id, reverse=reverse)
+        )
 
     def _delete_selected(self) -> None:
         selected = self.table.selectedItems()
