@@ -24,12 +24,14 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -85,8 +87,14 @@ class SpecializedDimensionScreenBase(QWidget):
         return panel
 
     def _build_form_panel(self) -> QWidget:
+        # طبقِ گزارشِ صریح: فیلدهایِ اختصاصی می‌توانند زیاد باشند و این
+        # پنل هیچ اسکرولی نداشت.
+        scroll = QScrollArea()
+        scroll.setObjectName("card")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(8)
@@ -146,7 +154,8 @@ class SpecializedDimensionScreenBase(QWidget):
 
         layout.addLayout(buttons)
         layout.addStretch(1)
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     # --- بارگذاری ----------------------------------------------------------
     def _company_id(self) -> int | None:

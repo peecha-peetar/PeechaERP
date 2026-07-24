@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -109,8 +111,15 @@ class ChartOfAccountsScreen(QWidget):
 
     # --- فرم ------------------------------------------------------------
     def _build_form_panel(self) -> QWidget:
+        # طبقِ گزارشِ صریح: این فرم (چک‌لیستِ نوع‌هایِ تفصیلی + گروه‌هایِ
+        # اشخاصِ مجاز + فیلدهایِ اصلیِ حساب) می‌تواند طولانی شود و هیچ
+        # اسکرولی نداشت.
+        scroll = QScrollArea()
+        scroll.setObjectName("card")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -220,7 +229,8 @@ class ChartOfAccountsScreen(QWidget):
         layout.addLayout(buttons_layout)
         layout.addStretch(1)
 
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     # --- بارگذاری/فیلتر --------------------------------------------------
     def refresh(self) -> None:

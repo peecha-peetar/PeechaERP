@@ -29,12 +29,14 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -107,8 +109,14 @@ class PersonGroupScreenBase(QWidget):
         return panel
 
     def _build_form_panel(self) -> QWidget:
+        # طبقِ گزارشِ صریح: این فرم فیلدهایِ زیادی دارد (اختصاصیِ گروه +
+        # فیلدهایِ هاردکدِ مشتری/تامین‌کننده/پرسنل) و هیچ اسکرولی نداشت.
+        scroll = QScrollArea()
+        scroll.setObjectName("card")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(8)
@@ -193,7 +201,8 @@ class PersonGroupScreenBase(QWidget):
 
         layout.addLayout(buttons)
         layout.addStretch(1)
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     # --- هوک‌های زیرکلاس ---------------------------------------------------
     def _list_rows(self, company_id: int) -> list[dict]:

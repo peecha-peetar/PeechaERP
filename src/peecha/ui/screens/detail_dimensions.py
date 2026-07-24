@@ -20,11 +20,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -91,10 +93,17 @@ class DetailDimensionsScreen(QWidget):
 
     # --- ستونِ راست: فرمِ حسابِ تفصیلی ---------------------------------------
     def _build_account_panel(self) -> QWidget:
+        # طبقِ گزارشِ صریح: فیلدهایِ اختصاصیِ گروه (extra_fields_container)
+        # می‌توانند زیاد باشند و این پنل هیچ اسکرولی نداشت — دکمه‌ی
+        # «ذخیره» می‌توانست از دیدرس خارج شود.
+        scroll = QScrollArea()
+        scroll.setObjectName("card")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        self.account_panel = scroll
+        scroll.setEnabled(False)
+
         panel = QWidget()
-        panel.setObjectName("card")
-        self.account_panel = panel
-        panel.setEnabled(False)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -145,7 +154,8 @@ class DetailDimensionsScreen(QWidget):
         layout.addLayout(buttons)
 
         layout.addStretch(1)
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     # --- بارگذاری --------------------------------------------------------
     def _company_id(self) -> int | None:

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
     QComboBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -38,6 +39,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -160,10 +162,21 @@ class DimensionGroupConfigScreen(QWidget):
 
     # --- ستونِ ۲: پیکربندیِ سطوح/فیلدها --------------------------------------
     def _build_config_panel(self) -> QWidget:
+        # طبقِ گزارشِ صریح: این پنل فیلدِ اختصاصیِ نامحدود (کاربر می‌تواند
+        # هر تعداد «+ افزودنِ فیلد» بزند) دارد و هیچ اسکرولی نداشت — با
+        # فیلدهایِ زیاد یا فونتِ بلندتر، دکمه‌ی «ذخیره‌یِ فیلدها» و حتی
+        # بخش‌هایِ بالاترِ فرم از دیدرس خارج می‌شدند و هیچ راهی برایِ
+        # رسیدن به آن‌ها نبود. حالا کلِ محتوایِ این پنل درونِ یک
+        # QScrollArea قرار گرفته — همان الگویی که accounting_coding.py
+        # از اول داشت.
+        scroll = QScrollArea()
+        scroll.setObjectName("card")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        self.config_panel = scroll
+        scroll.setEnabled(False)
+
         panel = QWidget()
-        panel.setObjectName("card")
-        self.config_panel = panel
-        panel.setEnabled(False)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -283,7 +296,8 @@ class DimensionGroupConfigScreen(QWidget):
         layout.addWidget(save_fields_button)
 
         layout.addStretch(1)
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     # --- بارگذاری ------------------------------------------------------------
     def _company_id(self) -> int | None:
