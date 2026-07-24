@@ -357,3 +357,14 @@ class DetailDimensionsScreen(QWidget):
         if index >= 0:
             self.group_combo.setCurrentIndex(index)
         self.edit_detail_account(detail_account_id)
+
+    def select_type_for_new_entry(self, dimension_type_id: int) -> None:
+        """برایِ دکمه‌ی «تفصیلیِ جدید» در فهرستِ واحد — همان گروه را انتخاب
+        می‌کند و فرم را در حالتِ «رکوردِ تازه» نگه می‌دارد. صراحتاً _select_type
+        را هم صدا می‌زند (نه فقط setCurrentIndex) چون اگر همین گروه از قبل
+        انتخاب‌شده باشد، تغییرِ ایندکس سیگنال نمی‌دهد و ریست انجام نمی‌شود."""
+        self.refresh()
+        index = self.group_combo.findData(dimension_type_id)
+        if index >= 0:
+            self.group_combo.setCurrentIndex(index)
+        self._select_type(dimension_type_id)

@@ -41,21 +41,26 @@ NAV_ITEMS = [
         "label": "مالی و حسابداری",
         "children": [
             {"code": "GL_COA", "label": "کدینگ حسابداری", "screen": "chart_of_accounts"},
-            {"code": "GL_TAFSILI", "label": "تفصیلی‌ها", "screen": "detail_accounts_list"},
-            {"code": "GL_CUSTOMERS", "label": "مشتریان", "screen": "customers"},
-            {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "screen": "suppliers"},
-            {"code": "GL_PERSONNEL", "label": "پرسنل", "screen": "personnel"},
-            {"code": "GL_INVENTORY_ITEMS", "label": "کالا", "screen": "inventory_items"},
-            {"code": "GL_FIXED_ASSETS", "label": "دارایی ثابت", "screen": "fixed_assets"},
-            {"code": "GL_BANK_ACCOUNTS", "label": "بانک", "screen": "bank_accounts"},
-            {"code": "GL_CASH_BOXES", "label": "صندوق", "screen": "cash_boxes"},
-            {"code": "GL_PETTY_CASHES", "label": "تنخواه", "screen": "petty_cashes"},
-            {"code": "GL_COST_CENTERS", "label": "مرکز هزینه", "screen": "cost_centers"},
-            {"code": "GL_PROJECTS", "label": "پروژه", "screen": "projects"},
+            # طبقِ درخواستِ صریح: انواعِ تفصیلی از ریبون حذف شدند (همچنان از
+            # ساید‌بار در دسترس‌اند؛ دکمه‌ی «تفصیلیِ جدید» در خودِ صفحه‌ی
+            # «تفصیلی‌ها» میان‌بُرِ ساختِ رکوردِ تازه برایِ هرکدام را می‌دهد) —
+            # تا دکمه‌هایِ باقی‌مانده (کدینگ/اسناد/صدورِ سند) فضایِ بیشتری
+            # داشته باشند و ریبون کمتر شلوغ باشد.
+            {"code": "GL_TAFSILI", "label": "تفصیلی‌ها", "screen": "detail_accounts_list", "in_ribbon": False},
+            {"code": "GL_CUSTOMERS", "label": "مشتریان", "screen": "customers", "in_ribbon": False},
+            {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "screen": "suppliers", "in_ribbon": False},
+            {"code": "GL_PERSONNEL", "label": "پرسنل", "screen": "personnel", "in_ribbon": False},
+            {"code": "GL_INVENTORY_ITEMS", "label": "کالا", "screen": "inventory_items", "in_ribbon": False},
+            {"code": "GL_FIXED_ASSETS", "label": "دارایی ثابت", "screen": "fixed_assets", "in_ribbon": False},
+            {"code": "GL_BANK_ACCOUNTS", "label": "بانک", "screen": "bank_accounts", "in_ribbon": False},
+            {"code": "GL_CASH_BOXES", "label": "صندوق", "screen": "cash_boxes", "in_ribbon": False},
+            {"code": "GL_PETTY_CASHES", "label": "تنخواه", "screen": "petty_cashes", "in_ribbon": False},
+            {"code": "GL_COST_CENTERS", "label": "مرکز هزینه", "screen": "cost_centers", "in_ribbon": False},
+            {"code": "GL_PROJECTS", "label": "پروژه", "screen": "projects", "in_ribbon": False},
             {"code": "GL_JE_LIST", "label": "اسناد حسابداری", "screen": "journal_entries_list"},
             {"code": "GL_JE", "label": "صدور سند جدید", "screen": "journal_entry"},
-            {"code": "GL_DIM_CONFIG", "label": "پیکربندیِ گروه‌هایِ تفصیلی", "screen": "dimension_group_config"},
-            {"code": "GL_DIM", "label": "تفصیلی‌هایِ گروه‌هایِ ساده", "screen": "detail_dimensions"},
+            {"code": "GL_DIM_CONFIG", "label": "پیکربندیِ گروه‌هایِ تفصیلی", "screen": "dimension_group_config", "in_ribbon": False},
+            {"code": "GL_DIM", "label": "تفصیلی‌هایِ گروه‌هایِ ساده", "screen": "detail_dimensions", "in_ribbon": False},
         ],
     },
     {"code": "INV", "label": "انبار و موجودی", "screen": None},
@@ -245,12 +250,21 @@ class MainWindow(QMainWindow):
                 child.widget().deleteLater()
         self._ribbon_buttons = {}
 
-        group = next((item for item in NAV_ITEMS if any(c["code"] == code for c in item.get("children", []))), None)
+        # اگر خودِ کدِ گروه (مثلِ «GL») داده شده باشد (کلیک روی سرآیتمِ
+        # ساید‌بار)، همان گروه مستقیم مطابقت می‌یابد؛ وگرنه گروهی که یکی
+        # از زیرمجموعه‌هایش این کد را دارد (کلیکِ معمولِ رویِ یک زیرمجموعه).
+        group = next(
+            (item for item in NAV_ITEMS if item.get("code") == code and item.get("children")),
+            None,
+        ) or next((item for item in NAV_ITEMS if any(c["code"] == code for c in item.get("children", []))), None)
         if group is None:
             self._ribbon_scroll.setFixedHeight(0)
             return
 
-        for child in group["children"]:
+        # طبقِ درخواستِ صریح: انواعِ تفصیلی از ریبون حذف شدند (فقط از
+        # ساید‌بار در دسترس‌اند) تا دکمه‌هایِ باقی‌مانده فضایِ بیشتری بگیرند.
+        ribbon_children = [c for c in group["children"] if c.get("in_ribbon", True)]
+        for child in ribbon_children:
             button = QPushButton(child["label"])
             button.setObjectName("ribbonButton")
             button.setProperty("active", child["code"] == code)
@@ -354,6 +368,10 @@ class MainWindow(QMainWindow):
                 top = self.sidebar.topLevelItem(i)
                 if top.childCount() > 0:
                     top.setExpanded(top is item and expand)
+            # طبقِ درخواستِ صریح: با کلیک رویِ خودِ گروه، ریبونِ همان بخش
+            # بی‌درنگ نمایش داده شود — قبلاً تا انتخابِ یکی از زیرمجموعه‌ها
+            # ریبون خالی می‌ماند.
+            self._update_ribbon(code)
             return
         flat = {i["code"]: i for i in _flatten_nav_items()}
         if code in flat:

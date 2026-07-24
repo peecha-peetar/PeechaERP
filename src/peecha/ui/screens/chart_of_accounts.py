@@ -39,6 +39,10 @@ _CATEGORY_OPTIONS = [
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _LEVEL_COLORS = {1: theme.LEVEL_GROUP, 2: theme.LEVEL_KOL, 3: theme.LEVEL_MOEIN}
+# طبقِ درخواستِ صریح: برچسبِ فیلدهایِ کد/نام باید متناسب با سطحِ حسابِ
+# درحالِ‌ساخت (بر اساسِ والدِ انتخاب‌شده) تغییر کند، نه همیشه «کدِ بخش»/«نام».
+_SEGMENT_CODE_LABELS = {1: "کدِ گروه", 2: "کدِ کل", 3: "کدِ معین"}
+_ACCOUNT_NAME_LABELS = {1: "نامِ گروه", 2: "نامِ حسابِ کل", 3: "نامِ حسابِ معین"}
 
 _COLUMNS = ["فعال؟", "قابلِ ثبت", "سطح", "نام", "کدِ کامل"]
 
@@ -125,12 +129,14 @@ class ChartOfAccountsScreen(QWidget):
         grid.addWidget(self.parent_combo, row, 1)
         row += 1
 
-        grid.addWidget(QLabel("کدِ بخش"), row, 0)
+        self.segment_code_label = QLabel("کدِ گروه")
+        grid.addWidget(self.segment_code_label, row, 0)
         self.segment_code_field = QLineEdit()
         grid.addWidget(self.segment_code_field, row, 1)
         row += 1
 
-        grid.addWidget(QLabel("نام"), row, 0)
+        self.name_label = QLabel("نامِ گروه")
+        grid.addWidget(self.name_label, row, 0)
         self.name_field = QLineEdit()
         grid.addWidget(self.name_field, row, 1)
         row += 1
@@ -271,6 +277,8 @@ class ChartOfAccountsScreen(QWidget):
         self.form_title.setText(f"ویرایشِ حساب — {account.full_code}")
         self.status_label.setText("")
         self.level_preview_label.setVisible(False)
+        self.segment_code_label.setText(_SEGMENT_CODE_LABELS[account.account_level])
+        self.name_label.setText(_ACCOUNT_NAME_LABELS[account.account_level])
         self.name_field.setText(account.name)
         _select_combo_value(self.nature_combo, account.nature_code)
         _select_combo_value(self.category_combo, account.category_code)
@@ -331,6 +339,11 @@ class ChartOfAccountsScreen(QWidget):
         self.table.clearSelection()
         self._populate_dimension_checklists(None)
         self._update_dimension_checklists_visibility()
+        # طبقِ‌بالا: اگر parent_combo از قبل هم رویِ ایندکسِ ۰ بود (مثلاً
+        # درست بعدِ ویرایشِ یک حسابِ سطحِ کل/معین)، setCurrentIndex سیگنال
+        # نمی‌دهد و برچسب‌هایِ کد/نامِ قدیمی می‌ماندند — این‌جا صراحتاً
+        # دوباره محاسبه می‌شود.
+        self._update_level_preview()
 
     def _update_level_preview(self) -> None:
         parent_id = self.parent_combo.currentData()
@@ -342,6 +355,8 @@ class ChartOfAccountsScreen(QWidget):
             level = (parent.account_level + 1) if parent is not None else 1
         self.level_preview_label.setText(f"سطحِ حسابِ جدید: {_LEVEL_LABELS[level]}")
         if self._editing_account_id is None:
+            self.segment_code_label.setText(_SEGMENT_CODE_LABELS[level])
+            self.name_label.setText(_ACCOUNT_NAME_LABELS[level])
             is_leaf_level = level == coa_service.MAX_ACCOUNT_LEVEL
             self.is_postable_checkbox.setEnabled(is_leaf_level)
             if not is_leaf_level:

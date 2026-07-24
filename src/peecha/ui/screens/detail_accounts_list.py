@@ -3,12 +3,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -50,9 +55,20 @@ class DetailAccountsListScreen(QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
+        header_row = QHBoxLayout()
         title = QLabel("تفصیلی‌ها")
         title.setObjectName("pageTitle")
-        layout.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch(1)
+
+        # طبقِ درخواستِ صریح: دکمه‌ی «تفصیلیِ جدید» با منویی از همه‌ی
+        # گروه‌هایِ تفصیلی — با انتخابِ هرکدام، همان فرمِ اختصاصی‌اش در
+        # حالتِ «رکوردِ تازه» باز می‌شود (نه لیستِ خودِ گروه‌ها).
+        self.new_entry_button = QPushButton("+ تفصیلیِ جدید")
+        self.new_entry_button.setObjectName("primaryButton")
+        self.new_entry_button.clicked.connect(self._show_new_entry_menu)
+        header_row.addWidget(self.new_entry_button)
+        layout.addLayout(header_row)
 
         hint = QLabel(
             "همه‌ی مشتریان/تامین‌کنندگان/پرسنل/مراکزِ هزینه/پروژه‌ها و گروه‌های دیگرِ تفصیلی، یک‌جا — "
@@ -124,3 +140,39 @@ class DetailAccountsListScreen(QWidget):
         self._main_window.open_screen(
             "GL_DIM", then=lambda screen: screen.select_type_and_edit(dimension_type_id, detail_account_id)
         )
+
+    # --- دکمه‌ی «تفصیلیِ جدید» ------------------------------------------------
+    def _new_entry_actions(self, company_id: int) -> list[tuple[str, Callable[[], None]]]:
+        """فهرستِ (برچسب، تابعِ ناوبری) برایِ منویِ «تفصیلیِ جدید» — جدا از
+        خودِ QMenu تا بدونِ نیاز به exec (که مودال/بلاک‌کننده است) قابلِ‌تست باشد."""
+        actions: list[tuple[str, Callable[[], None]]] = []
+        for group in dimensions_service.list_person_groups(company_id):
+            nav_code = {"CUSTOMER": "GL_CUSTOMERS", "SUPPLIER": "GL_SUPPLIERS", "PERSONNEL": "GL_PERSONNEL"}.get(
+                group.code
+            )
+            if nav_code is None:
+                continue
+            actions.append((group.name, lambda nav_code=nav_code: self._main_window.open_screen(nav_code)))
+
+        for dim_type in dimensions_service.list_dimension_types(company_id):
+            specialized_nav_code = _NAV_CODE_BY_DIMENSION_CODE.get(dim_type.code)
+            if specialized_nav_code is not None:
+                label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim_type.code, dim_type.code)
+                actions.append((label, lambda nav_code=specialized_nav_code: self._main_window.open_screen(nav_code)))
+            else:
+                actions.append((
+                    dim_type.code,
+                    lambda type_id=dim_type.dimension_type_id: self._main_window.open_screen(
+                        "GL_DIM", then=lambda screen: screen.select_type_for_new_entry(type_id)
+                    ),
+                ))
+        return actions
+
+    def _show_new_entry_menu(self) -> None:
+        company_id = session.current_company.company_id if session.current_company else None
+        if company_id is None:
+            return
+        menu = QMenu(self)
+        for label, callback in self._new_entry_actions(company_id):
+            menu.addAction(label, callback)
+        menu.exec(self.new_entry_button.mapToGlobal(self.new_entry_button.rect().bottomLeft()))

@@ -158,6 +158,10 @@ class SpecializedDimensionScreenBase(QWidget):
             return
         self._dimension_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, self.DIMENSION_CODE)
         self._reload()
+        # هر بار که این صفحه باز می‌شود (چه از ساید‌بار، چه از دکمه‌ی
+        # «تفصیلیِ جدید» در فهرستِ واحدِ تفصیلی‌ها)، فرم به‌طورِ پیش‌فرض در
+        # حالتِ «رکوردِ تازه» باشد، نه اینکه ویرایشِ قبلی را نگه دارد.
+        self._reset_form()
 
     def _reload(self) -> None:
         rows = dimensions_service.list_detail_accounts(self._company_id(), self._dimension_type_id)

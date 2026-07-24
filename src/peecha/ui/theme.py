@@ -31,6 +31,10 @@ HOVER = "#E0E0F0"
 SELECTED = "#D6D6EE"
 BORDER = "#CCCCCC"
 DIVIDER = "#E0E0E0"
+# طبقِ درخواستِ صریح: هاورِ ریبون «ملایم‌تر» از هاورِ عمومی — یک ته‌رنگِ
+# بسیار کم‌رنگِ سرمه‌ای (به‌جایِ خاکستریِ تخت)، مناسبِ دکمه‌هایِ حالا
+# فراخ‌ترِ ریبون.
+RIBBON_HOVER = "rgba(2, 0, 37, 18)"
 
 TEXT_PRIMARY = "#020025"
 TEXT_SECONDARY = "#5A5A7A"
@@ -406,13 +410,13 @@ QPushButton#ribbonButton {{
     background-color: transparent;
     color: {TEXT_SECONDARY};
     border-radius: 8px;
-    padding: 6px 14px;
+    padding: 10px 26px;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     border: none;
 }}
 QPushButton#ribbonButton:hover {{
-    background-color: {HOVER};
+    background-color: {RIBBON_HOVER};
 }}
 QPushButton#ribbonButton[active="true"] {{
     background-color: {SELECTED};
