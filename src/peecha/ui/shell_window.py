@@ -10,6 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -108,28 +109,32 @@ class MainWindow(QMainWindow):
         self.open_screen("dashboard")
         self._did_initial_relayout = False
 
-    # طبقِ گزارشِ صریح: هنگامِ بازشدنِ اولیه‌ی برنامه، فوترِ فرم‌ها (مثلاً
-    # دکمه‌های پایینِ فهرست‌ها) دیده نمی‌شد و فقط با یک‌بار خروج از حالتِ
-    # تمام‌صفحه و برگشتن به آن درست می‌شد — چون Qt چیدمانِ اولیه را با
-    # اندازه‌گیریِ فونت/محتوایِ پیش از «polish»یِ کاملِ ویجت‌ها محاسبه
-    # می‌کند و بدونِ یک رویدادِ resizeِ واقعی، آن محاسبه هرگز دوباره انجام
-    # نمی‌شود. به‌جایِ اینکه از کاربر بخواهیم دستی این کار را تکرار کند،
-    # بعدِ اولین نمایشِ واقعیِ پنجره یک رویدادِ resize به خودمان می‌فرستیم.
+    # طبقِ گزارشِ صریح (با عکسِ واقعیِ قبل/بعد تأیید شد): هنگامِ بازشدنِ
+    # اولیه‌ی برنامه، فوترِ فرم‌ها (مثلاً دکمه‌های «ثبتِ سند») اصلاً رنگ‌آمیزی/
+    # رسم نمی‌شد و فقط با یک‌بار خروج از حالتِ تمام‌صفحه و برگشتن به آن درست
+    # می‌شد. تلاشِ اولِ ما (resize(+۱px) و بلافاصله resize برگشت) کافی نبود
+    # چون Qt دو فراخوانیِ پیاپیِ resize را — بدونِ آنکه رویدادها بینِ آن‌ها
+    # واقعاً پردازش شوند — در هم ادغام می‌کند و درنتیجه هیچ رویدادِ resizeِ
+    # واقعی صادر نمی‌شود (همان اتفاقی که تمام‌صفحه‌کردنِ دستی، با یک
+    # رویدادِ resizeِ واقعیِ سیستم‌عامل، آن را می‌شکاند). این‌بار بینِ دو
+    # resize صریحاً processEvents می‌زنیم تا هرکدام واقعاً پردازش/رسم شوند.
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if not self._did_initial_relayout:
             self._did_initial_relayout = True
-            QTimer.singleShot(0, self._force_relayout)
+            # با تأخیرِ کوتاه (نه ۰): تا سیستم‌عامل واقعاً پنجره را map/رسم
+            # کرده باشد، وگرنه نوکِ resize پیش از رسمِ اولیه هیچ اثری ندارد.
+            QTimer.singleShot(60, self._force_relayout)
 
     def _force_relayout(self) -> None:
-        # نوکِ کوچکِ اندازه (۱px) و برگشت، دقیقاً همان اثری را دارد که
-        # خروج از تمام‌صفحه/برگشتن به آن داشت — چون resize(size) وقتی
-        # اندازه از قبل همان است هیچ رویدادی صادر نمی‌کند، ولی نوکِ +۱ و
-        # برگشت، دو رویدادِ resizeِ واقعی صادر می‌کند و کلِ درختِ چیدمان
-        # را با اندازه‌هایِ نهاییِ محاسبه‌شده از نو می‌سازد.
+        app = QApplication.instance()
         size = self.size()
         self.resize(size.width(), size.height() + 1)
+        if app is not None:
+            app.processEvents()
         self.resize(size)
+        if app is not None:
+            app.processEvents()
 
     # --- هدر --------------------------------------------------------------
     # طبقِ بازخوردِ صریح: در پنجره‌هایِ کم‌عرض (مثلاً بعدِ تمام‌صفحه‌کردن رویِ
@@ -519,8 +524,10 @@ class MainWindow(QMainWindow):
         # طبقِ گزارشِ صریح: هر بار با ساید‌بار به منویِ تازه‌ای سوییچ می‌شد،
         # چیدمانِ فرمِ بازشده به‌هم می‌ریخت و آیتم‌هایِ فوتر در دسترس
         # نبودند — همان دلیلِ _force_relayout در showEvent، این‌جا هم بعدِ
-        # هر سوییچ لازم است (نه فقط بارِ اول).
-        QTimer.singleShot(0, self._force_relayout)
+        # هر سوییچ لازم است (نه فقط بارِ اول). تأخیرِ کوتاه تا محتوایِ
+        # refresh (که ممکن است خودش رویدادها را صف کند) پیش از نوکِ
+        # resize کامل بنشیند.
+        QTimer.singleShot(30, self._force_relayout)
         if then is not None:
             then(screen)
 
