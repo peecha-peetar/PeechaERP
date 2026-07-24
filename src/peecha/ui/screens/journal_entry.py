@@ -439,8 +439,17 @@ class _LineRow:
         persons = dimensions_service.list_active_persons(self._screen.company_id)
         if person_group_ids:
             persons = [p for p in persons if p.person_group_id in person_group_ids]
-        elif has_requirement:
-            persons = [p for p in persons if p.code != dimensions_service.NO_DETAIL_CODE]
+        elif other_dims:
+            # طبقِ گزارشِ صریح (با عکسِ واقعی تأیید شد): این حساب نوعِ‌بُعدِ
+            # دیگری (مثلاً صندوق) را الزامی دارد ولی هیچ گروهِ شخصی برایش
+            # الزامی نشده — یعنی اشخاص اصلاً به این حساب مرتبط نیستند و
+            # نباید در فهرستِ تفصیلی بیایند (قبلاً همه‌یِ مشتری/تامین‌کننده/
+            # پرسنل، به‌عنوانِ نویزِ نامرتبط، نمایش داده می‌شدند). بکندِ
+            # سرویس (journal_entries._resolve_lines) خودش وقتی تفصیلیِ
+            # شخصی انتخاب نشده باشد و گروهِ شخصی هم الزامی نباشد، به‌طورِ
+            # خودکار «بدونِ تفصیلی» را جایگزین می‌کند — نیازی به نمایشِ
+            # آن در این فرم نیست.
+            persons = []
         self._detail_dimension_type_by_id = {p.detail_account_id: person_dimension_type_id for p in persons}
         detail_options = [(p.detail_account_id, f"{p.full_code} — {p.name or ''}") for p in persons]
 
