@@ -48,6 +48,11 @@ NAV_ITEMS = [
         "children": [
             {"code": "REPORTS_TRIAL_BALANCE", "label": "تراز آزمایشی", "screen": "report_trial_balance"},
             {"code": "REPORTS_JOURNAL_BOOK", "label": "دفتر روزنامه", "screen": "report_journal_book"},
+            {
+                "code": "REPORTS_ACCOUNT_LEDGER",
+                "label": "دفتر کل / معین / تفصیلی",
+                "screen": "report_account_ledger",
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ

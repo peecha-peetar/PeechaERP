@@ -6,6 +6,7 @@ VBoxِ بیرونی."""
 from __future__ import annotations
 
 import datetime
+import decimal
 
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -19,8 +20,27 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import session
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui import report_export
 from peecha.ui.widgets import JalaliDateEdit
+
+_ZERO = decimal.Decimal("0")
+
+
+def dimension_label(code: str) -> str:
+    """برچسبِ فارسیِ یک نوع‌بُعدِ تفصیلی برایِ فیلترهایِ گزارش — PERSON
+    (که خودش شخص نیست، فقط بسترِ مشتری/تامین‌کننده/پرسنل است) جداگانه
+    برچسب می‌گیرد، بقیه از SPECIALIZED_DIMENSION_LABELS یا کدِ خودشان."""
+    if code == dimensions_service.PERSON_DIMENSION_CODE:
+        return "اشخاص (مشتری/تامین‌کننده/پرسنل)"
+    return dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(code, code)
+
+
+def net_split(debit: decimal.Decimal, credit: decimal.Decimal) -> tuple[decimal.Decimal, decimal.Decimal]:
+    """مانده‌یِ خالص را به‌صورتِ یک‌طرفه (فقط بدهکار یا فقط بستانکار) برمی‌گرداند
+    — قراردادِ استانداردِ نمایشِ «مانده» در تراز/دفترِ کل."""
+    net = debit - credit
+    return (net, _ZERO) if net >= 0 else (_ZERO, -net)
 
 
 class ReportScreenBase(QWidget):

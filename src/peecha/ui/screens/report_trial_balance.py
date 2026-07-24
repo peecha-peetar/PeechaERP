@@ -22,7 +22,7 @@ from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import reports as reports_service
-from peecha.ui.screens.reports_common import ReportScreenBase
+from peecha.ui.screens.reports_common import ReportScreenBase, dimension_label, net_split
 
 _ZERO = decimal.Decimal("0")
 
@@ -32,17 +32,6 @@ _COLUMN_MODE_OPTIONS = [
     (4, "۴ ستونی"),
     (8, "۸ ستونی"),
 ]
-
-
-def _dimension_label(code: str) -> str:
-    if code == dimensions_service.PERSON_DIMENSION_CODE:
-        return "اشخاص (مشتری/تامین‌کننده/پرسنل)"
-    return dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(code, code)
-
-
-def _net_split(debit: decimal.Decimal, credit: decimal.Decimal) -> tuple[decimal.Decimal, decimal.Decimal]:
-    net = debit - credit
-    return (net, _ZERO) if net >= 0 else (_ZERO, -net)
 
 
 class TrialBalanceScreen(ReportScreenBase):
@@ -87,7 +76,7 @@ class TrialBalanceScreen(ReportScreenBase):
             return
         for t in dimensions_service.list_dimension_types(company_id, include_system=True):
             if t.is_active:
-                self.dimension_combo.addItem(_dimension_label(t.code), t.dimension_type_id)
+                self.dimension_combo.addItem(dimension_label(t.code), t.dimension_type_id)
 
     def refresh(self) -> None:
         self._reload_dimension_options()
@@ -158,11 +147,11 @@ class TrialBalanceScreen(ReportScreenBase):
         table_rows: list[list] = []
         totals = [_ZERO] * (len(headers) - 2)
         for r in period_rows:
-            closing_debit, closing_credit = _net_split(r.closing_debit, r.closing_credit)
+            closing_debit, closing_credit = net_split(r.closing_debit, r.closing_credit)
             if column_mode == 8:
                 annual = annual_by_id.get(r.account_id)
                 year_opening_debit, year_opening_credit = (
-                    _net_split(annual.opening_debit, annual.opening_credit) if annual else (_ZERO, _ZERO)
+                    net_split(annual.opening_debit, annual.opening_credit) if annual else (_ZERO, _ZERO)
                 )
                 year_period_debit = annual.period_debit if annual else _ZERO
                 year_period_credit = annual.period_credit if annual else _ZERO
@@ -173,7 +162,7 @@ class TrialBalanceScreen(ReportScreenBase):
                     closing_debit, closing_credit,
                 ]
             elif column_mode == 6:
-                opening_debit, opening_credit = _net_split(r.opening_debit, r.opening_credit)
+                opening_debit, opening_credit = net_split(r.opening_debit, r.opening_credit)
                 values = [opening_debit, opening_credit, r.period_debit, r.period_credit, closing_debit, closing_credit]
             else:
                 values = [r.period_debit, r.period_credit, closing_debit, closing_credit]

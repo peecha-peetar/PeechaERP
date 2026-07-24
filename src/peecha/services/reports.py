@@ -315,3 +315,97 @@ def list_journal_book_lines(
             )
         )
     return result
+
+
+@dataclass
+class LedgerLineRow:
+    document_date: datetime.date
+    temporary_no: int
+    description: str
+    debit: decimal.Decimal
+    credit: decimal.Decimal
+    running_debit: decimal.Decimal
+    running_credit: decimal.Decimal
+
+
+def list_ledger_entries(
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    *,
+    account_id: int | None = None,
+    detail_account_id: int | None = None,
+    include_draft: bool = False,
+) -> tuple[decimal.Decimal, decimal.Decimal, list[LedgerLineRow]]:
+    """گردشِ زمانیِ یک حسابِ کدینگیِ مشخص (account_id) یا یک حسابِ تفصیلیِ
+    مشخص (detail_account_id)، با مانده‌یِ رواگرد — برایِ دفترِ کل/معین/تفصیلی
+    و مرورِ حساب‌ها. دقیقاً یکی از این دو پارامتر باید داده شود."""
+    if (account_id is None) == (detail_account_id is None):
+        raise ValueError("دقیقاً یکی از account_id یا detail_account_id باید داده شود.")
+
+    with new_session() as session:
+        opening_debit, opening_credit = _ZERO, _ZERO
+        if date_from is not None:
+            opening_query = (
+                select(
+                    func.coalesce(func.sum(JournalEntryLine.debit_amount_base), 0),
+                    func.coalesce(func.sum(JournalEntryLine.credit_amount_base), 0),
+                )
+                .select_from(JournalEntryLine)
+                .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+                .where(JournalEntry.company_id == company_id, JournalEntry.document_date < date_from)
+            )
+            if detail_account_id is not None:
+                opening_query = opening_query.join(
+                    JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id
+                ).where(JournalEntryLineDetail.detail_account_id == detail_account_id)
+            else:
+                opening_query = opening_query.where(JournalEntryLine.account_id == account_id)
+            if not include_draft:
+                opening_query = opening_query.join(
+                    JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
+                ).where(JournalEntryStatus.code != "DRAFT")
+            debit_sum, credit_sum = session.execute(opening_query).one()
+            opening_debit, opening_credit = decimal.Decimal(debit_sum), decimal.Decimal(credit_sum)
+
+        line_query = (
+            select(JournalEntryLine, JournalEntry.document_date, JournalEntry.temporary_no, JournalEntry.description)
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .where(JournalEntry.company_id == company_id)
+        )
+        if detail_account_id is not None:
+            line_query = line_query.join(
+                JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id
+            ).where(JournalEntryLineDetail.detail_account_id == detail_account_id)
+        else:
+            line_query = line_query.where(JournalEntryLine.account_id == account_id)
+        if date_from is not None:
+            line_query = line_query.where(JournalEntry.document_date >= date_from)
+        if date_to is not None:
+            line_query = line_query.where(JournalEntry.document_date <= date_to)
+        if not include_draft:
+            line_query = line_query.join(
+                JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id
+            ).where(JournalEntryStatus.code != "DRAFT")
+        line_query = line_query.order_by(
+            JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no
+        )
+        rows = session.execute(line_query).all()
+
+    running_debit, running_credit = opening_debit, opening_credit
+    result: list[LedgerLineRow] = []
+    for line, document_date, temporary_no, entry_description in rows:
+        running_debit += line.debit_amount_base
+        running_credit += line.credit_amount_base
+        result.append(
+            LedgerLineRow(
+                document_date=document_date,
+                temporary_no=temporary_no,
+                description=line.description or entry_description or "",
+                debit=line.debit_amount_base,
+                credit=line.credit_amount_base,
+                running_debit=running_debit,
+                running_credit=running_credit,
+            )
+        )
+    return opening_debit, opening_credit, result
