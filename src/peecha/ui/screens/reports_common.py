@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui import report_export
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _ZERO = decimal.Decimal("0")
 
@@ -74,7 +74,7 @@ def code_in_range(full_code: str, code_from: str, code_to: str) -> bool:
     return True
 
 
-class ReportScreenBase(QWidget):
+class ReportScreenBase(FieldHelpMixin, QWidget):
     """زیرکلاس‌ها باید `load_report(company_id, date_from, date_to)` را
     override کنند و (headers, rows, footer) برگردانند؛ فیلترهایِ اختصاصیِ
     خودشان را می‌توانند به `self.extra_filter_row` اضافه کنند و در
@@ -205,6 +205,36 @@ class ReportScreenBase(QWidget):
             " QHeaderView::section { font-size: 14px; font-weight: bold; }"
         )
         layout.addWidget(self.table, stretch=1)
+
+        # طبقِ درخواستِ صریح برایِ گسترشِ راهنمایِ فیلدها به همه‌یِ صفحات:
+        # چون همه‌یِ گزارش‌ها از همین پایه ارث می‌برند، ثبتِ فیلترهایِ
+        # مشترک این‌جا کافی است تا همه‌یِ صفحاتِ گزارش را یک‌جا پوشش دهد؛
+        # زیرکلاس‌هایی که فیلترهایِ اختصاصیِ خودشان را در extra_filter_row
+        # اضافه می‌کنند، می‌توانند با self.add_field_help(...) موارد
+        # بیشتری هم ثبت کنند.
+        self.set_field_help([
+            (self.date_from, "ابتدایِ بازه‌یِ گزارش (شمسی). برایِ اکثرِ گزارش‌ها یعنی ابتدایِ همان دوره‌ای که می‌خواهید ببینید."),
+            (self.date_to, "انتهایِ بازه‌یِ گزارش (شمسی). در گزارش‌هایِ ترازنامه‌ای معمولاً همین «تا تاریخ» به‌عنوانِ تاریخِ مانده‌گیری استفاده می‌شود."),
+            (
+                self.status_combo,
+                "کدام اسنادِ حسابداری در گزارش لحاظ شوند: «بدونِ پیش‌نویس» (پیش‌فرض، فقط اسنادِ قطعی‌شده)، "
+                "«همه» (شاملِ پیش‌نویس‌هایِ هنوز ثبت‌نشده هم)، یا «فقط پیش‌نویس».",
+            ),
+            (
+                self.search_field,
+                "فیلترِ زنده رویِ نتایجِ همینِ گزارش (نه اجرایِ دوباره‌یِ گزارش) — رویِ کد، نام یا شرحِ هر ردیف جستجو می‌کند.",
+            ),
+            (self.code_from_field, "کدِ حسابِ شروعِ بازه — اختیاری؛ خالی یعنی بدونِ محدودیتِ ابتدا."),
+            (self.code_to_field, "کدِ حسابِ پایانِ بازه — اختیاری؛ خالی یعنی بدونِ محدودیتِ انتها."),
+            (self.cost_center_combo, "فقط اسنادِ مرتبط با این مرکزِ هزینه یا پروژهِ مشخص نمایش داده شوند — «همه» یعنی بدونِ این فیلتر."),
+            (self.document_no_field, "فقط سندی با همین شماره‌یِ ثبت (نه شماره‌یِ جایگزین) نمایش داده شود — اختیاری."),
+        ])
+
+    def add_field_help(self, fields: list[tuple[QWidget, str]]) -> None:
+        """زیرکلاس‌هایی که فیلترهایِ اختصاصیِ خودشان را دارند، با این متد
+        (به‌جایِ صدازدنِ set_field_help که فهرستِ پایه را جایگزین می‌کند)
+        فیلدهایِ بیشتری به همان راهنمایِ مشترک اضافه می‌کنند."""
+        self._field_help_fields = [*self._field_help_fields, *fields]
 
     # --- فعال‌سازیِ فیلترهایِ پیشرفته‌یِ اختیاری، توسطِ زیرکلاس -----------
     def enable_code_range_filter(self) -> None:

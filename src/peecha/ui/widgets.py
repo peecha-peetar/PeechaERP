@@ -357,3 +357,53 @@ class FieldHelpController(QObject):
         text = self._help_texts.get(new)
         if text is not None:
             self._panel.show_text(text)
+
+
+class FieldHelpMixin:
+    """میکسینِ سراسری برایِ فعال‌کردنِ راهنمایِ فیلدها در هر صفحه‌ای، بدونِ
+    تکرارِ شش‌هفت‌خطِ boilerplateِ نگه‌داشتنِ کنترلر/showEvent/hideEvent در
+    هر فایلِ صفحه (که در نسخه‌یِ اولِ این مکانیزم — فقط در
+    chart_of_accounts.py — دستی نوشته شده بود).
+
+    استفاده: کلاسِ صفحه این را قبل از QWidget (یا هر پایه‌ی دیگرِ Qt) ارث
+    ببرد:
+        class MyScreen(FieldHelpMixin, QWidget):
+            def __init__(self):
+                super().__init__()
+                ...  # ساختنِ فیلدها
+                self.set_field_help([
+                    (self.name_field, "توضیحِ آموزشیِ این فیلد..."),
+                    ...
+                ])
+
+    ثبتِ واقعی (ساختنِ FieldHelpController) تا اولین showEvent به تعویق
+    می‌افتد، چون در __init__ این ویجت هنوز به QStackedWidgetِ صفحه‌هایِ
+    برنامه اضافه نشده و self.parentWidget() هنوز None است — نگاهِ کنید به
+    یادداشتِ مشابه که اول در chart_of_accounts.py کشف شد."""
+
+    _field_help_fields: list[tuple[QWidget, str]] = ()
+    _field_help_controller: "FieldHelpController | None" = None
+    _field_help_registered = False
+
+    def set_field_help(self, fields: list[tuple[QWidget, str]]) -> None:
+        self._field_help_fields = fields
+
+    def showEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        super().showEvent(event)
+        if not self._field_help_fields:
+            return
+        if not self._field_help_registered:
+            self._field_help_registered = True
+            controller = FieldHelpController(FieldHelpPanel.instance(self.parentWidget()))
+            self._field_help_controller = controller
+            for widget, text in self._field_help_fields:
+                controller.register(widget, text)
+        FieldHelpPanel.instance(self.parentWidget()).activate()
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        if not self._field_help_fields:
+            return
+        parent = self.parentWidget()
+        if parent is not None:
+            FieldHelpPanel.instance(parent).deactivate()

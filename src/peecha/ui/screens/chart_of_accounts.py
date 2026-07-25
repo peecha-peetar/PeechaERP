@@ -32,7 +32,7 @@ from peecha import session
 from peecha.ui import theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.ui.widgets import FieldHelpController, FieldHelpPanel
+from peecha.ui.widgets import FieldHelpMixin
 
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
@@ -88,13 +88,12 @@ def _select_combo_value(combo: QComboBox, value: str | None) -> None:
     combo.setCurrentIndex(index if index >= 0 else 0)
 
 
-class ChartOfAccountsScreen(QWidget):
+class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[coa_service.AccountRow] = []
         self._editing_account_id: int | None = None
         self._parent_options: list[coa_service.AccountRow] = []
-        self._field_help_registered = False
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
@@ -102,29 +101,6 @@ class ChartOfAccountsScreen(QWidget):
 
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        # طبقِ یک نکته‌یِ ظریف: در زمانِ __init__، این ویجت هنوز به
-        # QStackedWidgetِ پنجره‌یِ اصلی اضافه نشده — self.parentWidget() در
-        # آن لحظه None است. پس ثبتِ راهنمایِ فیلدها (که برایِ ساختنِ
-        # FieldHelpPanel به یک پدرِ واقعی نیاز دارد) تا اولین showEvent به
-        # تعویق می‌افتد. عمداً self.parentWidget() (یعنی خودِ
-        # QStackedWidgetِ محتوا) به‌جایِ self.window() (کلِ پنجره‌یِ اصلی،
-        # شاملِ هدر/ریبون/سایدبار) استفاده می‌شود — طبقِ گزارشِ صریح، وقتی
-        # کادر رویِ کلِ پنجره جا می‌گرفت، رویِ هدر/جستجو/ریبون می‌افتاد؛
-        # با پدر=QStackedWidget، کادر فقط در محدوده‌یِ ناحیه‌یِ محتوا (زیرِ
-        # هدر/ریبون، کنارِ سایدبار، نه رویِ آن) جا می‌گیرد.
-        if not self._field_help_registered:
-            self._field_help_registered = True
-            self._register_field_help()
-        FieldHelpPanel.instance(self.parentWidget()).activate()
-
-    def hideEvent(self, event) -> None:
-        super().hideEvent(event)
-        panel = FieldHelpPanel.instance(self.parentWidget()) if self.parentWidget() is not None else None
-        if panel is not None:
-            panel.deactivate()
 
     # --- فهرست --------------------------------------------------------------
     def _build_list_panel(self) -> QWidget:
@@ -286,62 +262,56 @@ class ChartOfAccountsScreen(QWidget):
         layout.addLayout(buttons_layout)
         layout.addStretch(1)
 
+        self.set_field_help([
+            (
+                self.parent_combo,
+                "اگر حسابی که می‌سازید زیرمجموعه‌یِ یک حسابِ دیگر است، آن را این‌جا انتخاب کنید. "
+                "بدونِ والد یعنی این حساب یک «گروه» (سطحِ ۱) است. ماهیت/دسته/نوعِ حساب/بخشِ وجوهِ نقد/طبقه‌یِ "
+                "نقدینگی از والد به‌ارث می‌رسند و مستقل قابلِ‌تغییر نیستند.",
+            ),
+            (
+                self.segment_code_field,
+                "فقط کدِ همین سطح، نه کدِ کامل — کدِ کامل خودکار از کدِ والد + این کد ساخته می‌شود. "
+                "مثلاً اگر گروه «۱» باشد و این کلِ کد «۰۱» را بگیرد، کدِ کاملش «۱-۰۱» می‌شود.",
+            ),
+            (self.name_field, "نامی که در فهرستِ حساب‌ها، سندها و گزارش‌ها نمایش داده می‌شود."),
+            (
+                self.nature_combo,
+                "ماهیت یعنی طرفِ طبیعیِ افزایشِ این حساب: «بدهکار» برایِ دارایی‌ها و هزینه‌ها (که با بدهکارشدن "
+                "زیاد می‌شوند)، «بستانکار» برایِ بدهی‌ها، سرمایه و درآمد، و «دوطرفه» برایِ حساب‌هایی مثلِ صندوق/"
+                "بانک که هم بدهکار و هم بستانکار می‌شوند.",
+            ),
+            (
+                self.category_combo,
+                "این حساب به کدام دسته‌یِ اصلیِ حسابداری تعلق دارد: دارایی، بدهی، حقوقِ صاحبانِ سهام، درآمد یا "
+                "هزینه. این انتخاب مشخص می‌کند حساب در ترازنامه بیاید یا در صورتِ سود و زیان.",
+            ),
+            (
+                self.account_type_combo,
+                "«ترازنامه‌ای» یعنی مانده‌اش تا پایانِ عمرِ شرکت باقی می‌ماند (دارایی/بدهی/سرمایه) — در ترازنامه "
+                "می‌آید. «موقت» یعنی هر دوره از نو شروع می‌شود (درآمد/هزینه) — در صورتِ سود و زیان می‌آید.",
+            ),
+            (
+                self.cash_flow_section_combo,
+                "این حساب در صورتِ گردشِ وجوهِ نقدِ غیرمستقیم در کدام بخش می‌آید: «عملیاتی» (فعالیتِ روزمره)، "
+                "«سرمایه‌گذاری» (خرید/فروشِ دارایی‌هایِ ثابت)، یا «تامینِ مالی» (وام/سرمایه). اختیاری — اگر "
+                "مطمئن نیستید یا مربوط به خودِ صندوق/بانک است، بدونِ طبقه‌بندی بگذارید.",
+            ),
+            (
+                self.liquidity_class_combo,
+                "برایِ محاسبه‌یِ نسبتِ جاری/آنی در گزارشِ نسبت‌هایِ مالی: «جاری» یعنی ظرفِ حدودِ یک سال نقد یا "
+                "سررسید می‌شود (صندوق، بانک، دریافتنی/پرداختنی)؛ «جاری (موجودی)» مخصوصِ حساب‌هایِ موجودیِ کالا "
+                "است؛ «غیرِجاری» یعنی بلندمدت (دارایی‌هایِ ثابت، وامِ بلندمدت). اختیاری.",
+            ),
+            (
+                self.is_postable_checkbox,
+                "فقط حساب‌هایِ سطحِ معین (آخرین سطح، بدونِ زیرشاخه) می‌توانند رویشان سند ثبت شود. گروه و کل "
+                "فقط برایِ دسته‌بندی و جمع‌زدنِ (رول‌آپ) حساب‌هایِ زیرشان استفاده می‌شوند.",
+            ),
+        ])
+
         scroll.setWidget(panel)
         return scroll
-
-    def _register_field_help(self) -> None:
-        # طبقِ یک باگِ واقعیِ کشف‌شده در تست: بدونِ نگه‌داشتنِ یک ارجاعِ
-        # قویِ پایتونی (self._field_help_controller)، PySide6 این آبجکت را
-        # gc می‌کند و اتصالِ سیگنالِ focusChanged هم از بین می‌رود.
-        controller = FieldHelpController(FieldHelpPanel.instance(self.parentWidget()))
-        self._field_help_controller = controller
-        controller.register(
-            self.parent_combo,
-            "اگر حسابی که می‌سازید زیرمجموعه‌یِ یک حسابِ دیگر است، آن را این‌جا انتخاب کنید. "
-            "بدونِ والد یعنی این حساب یک «گروه» (سطحِ ۱) است. ماهیت/دسته/نوعِ حساب/بخشِ وجوهِ نقد/طبقه‌یِ "
-            "نقدینگی از والد به‌ارث می‌رسند و مستقل قابلِ‌تغییر نیستند.",
-        )
-        controller.register(
-            self.segment_code_field,
-            "فقط کدِ همین سطح، نه کدِ کامل — کدِ کامل خودکار از کدِ والد + این کد ساخته می‌شود. "
-            "مثلاً اگر گروه «۱» باشد و این کلِ کد «۰۱» را بگیرد، کدِ کاملش «۱-۰۱» می‌شود.",
-        )
-        controller.register(
-            self.name_field, "نامی که در فهرستِ حساب‌ها، سندها و گزارش‌ها نمایش داده می‌شود."
-        )
-        controller.register(
-            self.nature_combo,
-            "ماهیت یعنی طرفِ طبیعیِ افزایشِ این حساب: «بدهکار» برایِ دارایی‌ها و هزینه‌ها (که با بدهکارشدن "
-            "زیاد می‌شوند)، «بستانکار» برایِ بدهی‌ها، سرمایه و درآمد، و «دوطرفه» برایِ حساب‌هایی مثلِ صندوق/"
-            "بانک که هم بدهکار و هم بستانکار می‌شوند.",
-        )
-        controller.register(
-            self.category_combo,
-            "این حساب به کدام دسته‌یِ اصلیِ حسابداری تعلق دارد: دارایی، بدهی، حقوقِ صاحبانِ سهام، درآمد یا "
-            "هزینه. این انتخاب مشخص می‌کند حساب در ترازنامه بیاید یا در صورتِ سود و زیان.",
-        )
-        controller.register(
-            self.account_type_combo,
-            "«ترازنامه‌ای» یعنی مانده‌اش تا پایانِ عمرِ شرکت باقی می‌ماند (دارایی/بدهی/سرمایه) — در ترازنامه "
-            "می‌آید. «موقت» یعنی هر دوره از نو شروع می‌شود (درآمد/هزینه) — در صورتِ سود و زیان می‌آید.",
-        )
-        controller.register(
-            self.cash_flow_section_combo,
-            "این حساب در صورتِ گردشِ وجوهِ نقدِ غیرمستقیم در کدام بخش می‌آید: «عملیاتی» (فعالیتِ روزمره)، "
-            "«سرمایه‌گذاری» (خرید/فروشِ دارایی‌هایِ ثابت)، یا «تامینِ مالی» (وام/سرمایه). اختیاری — اگر "
-            "مطمئن نیستید یا مربوط به خودِ صندوق/بانک است، بدونِ طبقه‌بندی بگذارید.",
-        )
-        controller.register(
-            self.liquidity_class_combo,
-            "برایِ محاسبه‌یِ نسبتِ جاری/آنی در گزارشِ نسبت‌هایِ مالی: «جاری» یعنی ظرفِ حدودِ یک سال نقد یا "
-            "سررسید می‌شود (صندوق، بانک، دریافتنی/پرداختنی)؛ «جاری (موجودی)» مخصوصِ حساب‌هایِ موجودیِ کالا "
-            "است؛ «غیرِجاری» یعنی بلندمدت (دارایی‌هایِ ثابت، وامِ بلندمدت). اختیاری.",
-        )
-        controller.register(
-            self.is_postable_checkbox,
-            "فقط حساب‌هایِ سطحِ معین (آخرین سطح، بدونِ زیرشاخه) می‌توانند رویشان سند ثبت شود. گروه و کل "
-            "فقط برایِ دسته‌بندی و جمع‌زدنِ (رول‌آپ) حساب‌هایِ زیرشان استفاده می‌شوند.",
-        )
 
     # --- بارگذاری/فیلتر --------------------------------------------------
     def refresh(self) -> None:

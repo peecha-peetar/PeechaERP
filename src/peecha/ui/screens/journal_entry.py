@@ -69,7 +69,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 from peecha import numerals
 from peecha.ui import theme
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _COL_ROW_NO = 0
 _COL_ACCOUNT = 1
@@ -576,7 +576,7 @@ class _LineRow:
         self.credit_field.setValue(float(line.credit))
 
 
-class JournalEntryScreen(QWidget):
+class JournalEntryScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.company_id: int | None = None
@@ -793,6 +793,24 @@ class JournalEntryScreen(QWidget):
         QShortcut(QKeySequence("Ctrl+Delete"), self, activated=self._delete_current_entry)
 
         QApplication.instance().focusChanged.connect(self._on_focus_changed)
+
+        # طبقِ درخواستِ صریح برایِ گسترشِ راهنمایِ فیلدها به همه‌یِ صفحات:
+        # فعلاً فقط فیلدهایِ ثابتِ هدرِ سند (نه ردیف‌هایِ پویایِ جدول، که
+        # هربار با add_line ساخته/حذف می‌شوند) ثبت شده‌اند.
+        self.set_field_help([
+            (self.date_field, "تاریخِ سند به شمسی. اگر خالی بماند یا نامعتبر باشد، تاریخِ امروز در نظر گرفته می‌شود."),
+            (self.description_field, "شرحِ کلیِ سند — چرا این سند ثبت می‌شود؛ در دفترِ روزنامه و جستجوهایِ گزارش‌ها نمایش داده می‌شود."),
+            (
+                self.alt_number_field,
+                "شماره‌یِ جایگزین/مرجعِ این سند در سیستمِ دیگر (مثلاً شماره‌یِ فاکتور یا سندِ کاغذی) — اختیاری، "
+                "جدا از شماره‌یِ ترتیبیِ خودکارِ سند.",
+            ),
+            (
+                self.draft_checkbox,
+                "سندِ پیش‌نویس نیازی به تراز بودنِ بدهکار/بستانکار ندارد و در گزارش‌هایِ پیش‌فرض دیده نمی‌شود — "
+                "برایِ ثبتِ ناقص و تکمیلِ بعدی. سندِ قطعی (بدونِ این تیک) باید حتماً تراز باشد.",
+            ),
+        ])
 
         self._update_footer_for_mode()
 
