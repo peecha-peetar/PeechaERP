@@ -32,7 +32,7 @@ from peecha import session
 from peecha.ui import theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.ui.widgets import FieldHelpController
+from peecha.ui.widgets import FieldHelpController, FieldHelpPanel
 
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
@@ -94,6 +94,7 @@ class ChartOfAccountsScreen(QWidget):
         self._rows: list[coa_service.AccountRow] = []
         self._editing_account_id: int | None = None
         self._parent_options: list[coa_service.AccountRow] = []
+        self._field_help_registered = False
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
@@ -101,6 +102,23 @@ class ChartOfAccountsScreen(QWidget):
 
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # طبقِ یک نکته‌یِ ظریف: در زمانِ __init__، این ویجت هنوز به
+        # QStackedWidgetِ پنجره‌یِ اصلی اضافه نشده — self.window() در آن
+        # لحظه فقط خودِ همین ویجت را برمی‌گرداند، نه MainWindowِ واقعی. پس
+        # ثبتِ راهنمایِ فیلدها (که برایِ ساختنِ FieldHelpPanel به
+        # پنجره‌یِ اصلیِ واقعی نیاز دارد) تا اولین showEvent به تعویق
+        # می‌افتد.
+        if not self._field_help_registered:
+            self._field_help_registered = True
+            self._register_field_help()
+        FieldHelpPanel.instance(self.window()).activate()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        FieldHelpPanel.instance(self.window()).deactivate()
 
     # --- فهرست --------------------------------------------------------------
     def _build_list_panel(self) -> QWidget:
@@ -262,17 +280,14 @@ class ChartOfAccountsScreen(QWidget):
         layout.addLayout(buttons_layout)
         layout.addStretch(1)
 
-        self._register_field_help()
-
         scroll.setWidget(panel)
         return scroll
 
     def _register_field_help(self) -> None:
         # طبقِ یک باگِ واقعیِ کشف‌شده در تست: بدونِ نگه‌داشتنِ یک ارجاعِ
         # قویِ پایتونی (self._field_help_controller)، PySide6 این آبجکت را
-        # gc می‌کند حتی بعدِ installEventFilter — و رویدادهایِ FocusIn هرگز
-        # به eventFilter نمی‌رسند، بدونِ هیچ خطا/هشداری.
-        controller = FieldHelpController()
+        # gc می‌کند و اتصالِ سیگنالِ focusChanged هم از بین می‌رود.
+        controller = FieldHelpController(FieldHelpPanel.instance(self.window()))
         self._field_help_controller = controller
         controller.register(
             self.parent_combo,
