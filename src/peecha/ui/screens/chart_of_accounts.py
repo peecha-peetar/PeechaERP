@@ -32,7 +32,7 @@ from peecha import session
 from peecha.ui import theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.ui.widgets import FieldHelpBar, FieldHelpController
+from peecha.ui.widgets import FieldHelpController
 
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
@@ -148,11 +148,6 @@ class ChartOfAccountsScreen(QWidget):
         self.form_title = QLabel("حسابِ جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
-
-        # طبقِ درخواستِ صریح: نوارِ راهنمایِ سراسری — با فوکوس‌گرفتنِ هر
-        # فیلد (کلیک یا Tab)، توضیحِ آموزشیِ همان فیلد این‌جا می‌آید.
-        self.help_bar = FieldHelpBar()
-        layout.addWidget(self.help_bar)
 
         grid = QGridLayout()
         grid.setSpacing(8)
@@ -277,7 +272,7 @@ class ChartOfAccountsScreen(QWidget):
         # قویِ پایتونی (self._field_help_controller)، PySide6 این آبجکت را
         # gc می‌کند حتی بعدِ installEventFilter — و رویدادهایِ FocusIn هرگز
         # به eventFilter نمی‌رسند، بدونِ هیچ خطا/هشداری.
-        controller = FieldHelpController(self.help_bar)
+        controller = FieldHelpController()
         self._field_help_controller = controller
         controller.register(
             self.parent_combo,
