@@ -2,8 +2,13 @@
 
 تفاوتِ کلیدی با نسخه‌ی Kivy: هیچ تکنیکِ «ترتیبِ معکوسِ اعلامِ فرزندان»
 لازم نیست — با `app.setLayoutDirection(Qt.RightToLeft)` (در main.py)،
-خودِ Qt ترتیبِ افقیِ هر QHBoxLayout/QSplitter را آینه می‌کند، و
-QTreeWidget/QComboBox به‌طورِ بومی راست‌چین و جهت‌دار می‌شوند."""
+خودِ Qt ترتیبِ افقیِ هر QHBoxLayout را آینه می‌کند، و QComboBox به‌طورِ
+بومی راست‌چین و جهت‌دار می‌شود.
+
+ناوبریِ اصلی یک منویِ افقی (مگامنو) زیرِ هدر است، نه ساید‌بارِ عمودی —
+_build_menu_bar آیتم‌هایِ سطحِ‌بالا را نشان می‌دهد و _build_mega_panel
+با کلیک رویِ هرکدام، زیرمجموعه‌هایش را در یک پنلِ بازشونده (دسته‌بندی‌شده
+به ستون) نمایش می‌دهد."""
 
 from __future__ import annotations
 
@@ -17,13 +22,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QPushButton,
     QScrollArea,
     QStackedWidget,
     QToolButton,
-    QTreeWidget,
-    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -117,7 +119,9 @@ class MainWindow(QMainWindow):
         self.resize(1440, 900)
 
         self._screens: dict[str, QWidget] = {}
-        self._tree_items_by_code: dict[str, QTreeWidgetItem] = {}
+        self._menu_buttons: dict[str, QPushButton] = {}
+        self._mega_panel_open_code: str | None = None
+        self._current_screen_code: str | None = None
         self._company_options: list[companies_service.CompanyRow] = []
 
         central = QWidget()
@@ -127,19 +131,15 @@ class MainWindow(QMainWindow):
         outer.setSpacing(0)
 
         outer.addWidget(self._build_header())
-        outer.addWidget(self._build_ribbon())
+        outer.addWidget(self._build_menu_bar())
+        outer.addWidget(self._build_mega_panel())
 
-        body = QWidget()
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(0)
-
-        body_layout.addWidget(self._build_sidebar())
+        self.breadcrumb_label = QLabel("")
+        self.breadcrumb_label.setObjectName("breadcrumbLabel")
+        outer.addWidget(self.breadcrumb_label)
 
         self.stack = _CurrentOnlyStackedWidget()
-        body_layout.addWidget(self.stack, stretch=1)
-
-        outer.addWidget(body, stretch=1)
+        outer.addWidget(self.stack, stretch=1)
 
         self._register_screens()
         self.open_screen("dashboard")
@@ -284,54 +284,114 @@ class MainWindow(QMainWindow):
         scroll.setWidget(header)
         return scroll
 
-    # --- ریبون (میان‌برهایِ گروهِ فعال، زیرِ هدر) -----------------------------
-    # طبقِ بازخوردِ صریح، ریبون دوباره برگشته — اما این‌بار درونِ یک
-    # QScrollArea با اسکرولِ افقی، تا هرقدر تعدادِ زیرمجموعه‌هایِ یک گروه
-    # زیاد شود (مثلاً «مالی و حسابداری» با ۱۶ زیرمجموعه)، دکمه‌ها فشرده/
-    # سرریز نشوند و چیدمانِ سایدبار را به‌هم نریزند (باگی که قبلاً گزارش شد).
-    def _build_ribbon(self) -> QWidget:
+    # --- منویِ افقیِ اصلی (مگامنو) ---------------------------------------------
+    # طبقِ درخواستِ صریح: ساید‌بارِ درختیِ عمودی (که فضایِ ثابتی از عرضِ صفحه
+    # می‌گرفت و جابجایی/انتخاب در آن سخت بود) حذف شد و به‌جایش یک منویِ
+    # افقیِ سطحِ‌بالا (این‌جا) + یک «مگاپنل»یِ بازشونده (_build_mega_panel)
+    # نشسته: با کلیک رویِ هر آیتمِ سطحِ‌بالا که زیرمجموعه دارد، همه‌یِ
+    # زیرمجموعه‌هایش (در هر عمقی از زیرمنو) یک‌جا و دسته‌بندی‌شده در پنلِ
+    # پایینِ منو ظاهر می‌شوند؛ با انتخابِ یکی، پنل بسته می‌شود و کارِ اصلی
+    # کلِ عرضِ صفحه را در اختیار می‌گیرد.
+    def _build_menu_bar(self) -> QWidget:
         scroll = QScrollArea()
-        scroll.setObjectName("ribbonScroll")
+        scroll.setObjectName("menuBarScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(0)
+        scroll.setFixedHeight(48)
 
-        ribbon = QWidget()
-        ribbon.setObjectName("ribbonBar")
-        layout = QHBoxLayout(ribbon)
-        layout.setContentsMargins(20, 0, 20, 0)
-        layout.setSpacing(8)
-        scroll.setWidget(ribbon)
+        bar = QWidget()
+        bar.setObjectName("menuBar")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(20, 4, 20, 4)
+        layout.setSpacing(4)
 
-        self._ribbon_layout = layout
-        self._ribbon_bar = ribbon
-        self._ribbon_scroll = scroll
-        self._ribbon_buttons: dict[str, QPushButton] = {}
+        for item in NAV_ITEMS:
+            button = QPushButton(f"{_NAV_ICONS.get(item['code'], '•')}  {item['label']}")
+            button.setObjectName("menuButton")
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(lambda _checked=False, c=item["code"]: self._on_menu_button_clicked(c))
+            layout.addWidget(button)
+            self._menu_buttons[item["code"]] = button
+
+        layout.addStretch(1)
+        scroll.setWidget(bar)
         return scroll
 
-    def _update_ribbon(self, code: str) -> None:
-        while self._ribbon_layout.count():
-            child = self._ribbon_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        self._ribbon_buttons = {}
+    def _build_mega_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setObjectName("megaPanelScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setMaximumHeight(360)
 
-        # اگر خودِ کدِ گروه (مثلِ «GL») داده شده باشد (کلیک روی سرآیتمِ
-        # ساید‌بار)، همان گروه مستقیم مطابقت می‌یابد؛ وگرنه گروهی که یکی
-        # از نوادگانش (در هر عمقی از زیرمنو، مثلِ «گزارش‌ها ← حسابداری ←
-        # تراز آزمایشی») این کد را دارد.
-        group = next(
-            (item for item in NAV_ITEMS if item.get("code") == code and item.get("children")),
-            None,
-        ) or next(
-            (item for item in NAV_ITEMS if any(c["code"] == code for c in _leaf_nav_children(item))),
-            None,
-        )
-        if group is None:
-            self._ribbon_scroll.setFixedHeight(0)
+        panel = QWidget()
+        panel.setObjectName("megaPanel")
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(24, 16, 24, 16)
+        layout.setSpacing(32)
+        layout.setAlignment(Qt.AlignTop)
+        scroll.setWidget(panel)
+        scroll.setVisible(False)
+
+        self._mega_panel_layout = layout
+        self._mega_panel_scroll = scroll
+        return scroll
+
+    def _on_menu_button_clicked(self, code: str) -> None:
+        item = next((i for i in NAV_ITEMS if i["code"] == code), None)
+        if item is None:
             return
+        if not item.get("children"):
+            # آیتمِ سطحِ‌بالایِ بدونِ زیرمجموعه (داشبورد/تنظیمات/ماژول‌هایِ
+            # هنوز نساخته): مستقیم باز شود، مگاپنل بسته بماند.
+            self._close_mega_panel()
+            self.open_screen(code)
+            return
+        if self._mega_panel_open_code == code and self._mega_panel_scroll.isVisible():
+            self._close_mega_panel()
+            return
+        self._populate_mega_panel(item)
+        self._mega_panel_open_code = code
+        self._mega_panel_scroll.setVisible(True)
+        self._set_active_menu_button(code)
+
+    def _close_mega_panel(self) -> None:
+        self._mega_panel_scroll.setVisible(False)
+        self._mega_panel_open_code = None
+
+    def _build_mega_panel_column(self, title: str, entries: list[dict]) -> QWidget:
+        column = QWidget()
+        column_layout = QVBoxLayout(column)
+        column_layout.setContentsMargins(0, 0, 0, 0)
+        column_layout.setSpacing(2)
+        if title:
+            title_label = QLabel(title)
+            title_label.setObjectName("megaPanelColumnTitle")
+            column_layout.addWidget(title_label)
+        for entry in entries:
+            button = QPushButton(entry["label"])
+            button.setObjectName("megaPanelItem")
+            button.setProperty("active", entry.get("active", False))
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(entry["on_click"])
+            column_layout.addWidget(button)
+        column_layout.addStretch(1)
+        return column
+
+    def _populate_mega_panel(self, group: dict) -> None:
+        # نکته‌یِ مهم: takeAt فقط ویجت را از مدیریتِ layout خارج می‌کند،
+        # نه از دیدرس — بدونِ hide صریح، ویجتِ قدیمی تا لحظه‌یِ واقعیِ
+        # حذف‌شدن (deleteLater، که معوق است) سرِ جایِ قبلی‌اش «باقی‌مانده و
+        # قابلِ‌دیدن» می‌ماند و با ستون‌هایِ تازه هم‌پوشانی پیدا می‌کند.
+        while self._mega_panel_layout.count():
+            taken = self._mega_panel_layout.takeAt(0)
+            if taken.widget():
+                taken.widget().hide()
+                taken.widget().deleteLater()
 
         # طبقِ درخواستِ صریح: عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/
         # تامین‌کننده/پرسنل) اگر تغییرِ نام داده باشند، باید همین‌جا زنده
@@ -344,73 +404,70 @@ class MainWindow(QMainWindow):
                 if group_code in names_by_group_code:
                     dynamic_labels[nav_code] = names_by_group_code[group_code]
 
-        def _label_of(child: dict) -> str:
-            return dynamic_labels.get(child["code"], child["label"])
+        def _leaf_entries(leaves: list[dict]) -> list[dict]:
+            entries = []
+            for child in leaves:
+                code = child["code"]
+                label = dynamic_labels.get(code, child["label"])
+                entries.append(
+                    {
+                        "label": label,
+                        "active": code == self._current_screen_code,
+                        "on_click": lambda _checked=False, c=code: self.open_screen(c),
+                    }
+                )
+            return entries
 
-        # طبقِ درخواستِ صریح: انواعِ تفصیلی از دکمه‌هایِ تخت ریبون حذف شدند
-        # (فقط از ساید‌بار در دسترس‌اند) تا دکمه‌هایِ باقی‌مانده فضایِ
-        # بیشتری بگیرند — ولی طبقِ بازخوردِ بعدی، به‌جایِ حذفِ کامل، همان‌ها
-        # به‌صورتِ یک دکمه‌ی منویِ «گروه‌هایِ تفصیلی» بازمی‌گردند (پایین‌تر)
-        # و طبقِ بازخوردِ جدیدتر، از ساید‌بار هم کاملاً حذف شده‌اند (فقط در
-        # همین منویِ ریبون در دسترس‌اند — نگاهِ _build_sidebar).
-        ribbon_children = [c for c in _leaf_nav_children(group) if c.get("in_ribbon", True)]
-        for child in ribbon_children:
-            button = QPushButton(_label_of(child))
-            button.setObjectName("ribbonButton")
-            button.setProperty("active", child["code"] == code)
-            button.setCursor(Qt.PointingHandCursor)
-            button.clicked.connect(lambda _checked=False, c=child["code"]: self.open_screen(c))
-            self._ribbon_layout.addWidget(button)
-            self._ribbon_buttons[child["code"]] = button
+        primary_leaves = [c for c in group.get("children", []) if not c.get("children") and c.get("in_ribbon", True)]
+        subgroups = [c for c in group.get("children", []) if c.get("children")]
+        hidden_leaves = [
+            c for c in group.get("children", []) if not c.get("children") and not c.get("in_ribbon", True)
+        ]
 
-        hidden_children = [c for c in _leaf_nav_children(group) if not c.get("in_ribbon", True)]
-        if hidden_children:
-            menu_button = QToolButton()
-            menu_button.setText("گروه‌هایِ تفصیلی ▾")
-            menu_button.setObjectName("ribbonButton")
-            menu_button.setCursor(Qt.PointingHandCursor)
-            menu_button.setPopupMode(QToolButton.InstantPopup)
-            menu_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-            menu = QMenu(menu_button)
-            for child in hidden_children:
-                menu.addAction(_label_of(child), lambda _checked=False, c=child["code"]: self.open_screen(c))
+        if primary_leaves:
+            self._mega_panel_layout.addWidget(
+                self._build_mega_panel_column("میان‌برهایِ اصلی", _leaf_entries(primary_leaves))
+            )
 
-            # طبقِ گزارشِ صریح: گروه‌هایِ سادهِ کاربرساخته (که خودشان صفحه‌ی
-            # اختصاصی ندارند و فقط درونِ «تفصیلی‌هایِ گروه‌هایِ ساده» قابلِ‌
-            # مشاهده‌اند) هم باید در همین منو ظاهر شوند — وگرنه بعدِ ساختنِ
-            # گروهِ تازه، هیچ میان‌بری در ریبون برایش نبود.
-            if group["code"] == "GL" and company_id is not None:
-                custom_groups = [
-                    t
-                    for t in dimensions_service.list_dimension_types(company_id)
-                    if t.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
-                ]
-                if custom_groups:
-                    menu.addSeparator()
-                    for t in custom_groups:
-                        menu.addAction(
-                            t.code,
-                            lambda _checked=False, tid=t.dimension_type_id: self.open_screen(
-                                "GL_DIM",
-                                then=lambda screen, tid=tid: screen.group_combo.setCurrentIndex(
-                                    screen.group_combo.findData(tid)
-                                ),
+        for subgroup in subgroups:
+            self._mega_panel_layout.addWidget(
+                self._build_mega_panel_column(subgroup["label"], _leaf_entries(_leaf_nav_children(subgroup)))
+            )
+
+        # طبقِ گزارشِ صریح: گروه‌هایِ سادهِ کاربرساخته (که خودشان صفحه‌ی
+        # اختصاصی ندارند و فقط درونِ «تفصیلی‌هایِ گروه‌هایِ ساده» قابلِ‌
+        # مشاهده‌اند) هم باید در همین ستون ظاهر شوند — وگرنه بعدِ ساختنِ
+        # گروهِ تازه، هیچ میان‌بری برایش نبود.
+        hidden_entries = _leaf_entries(hidden_leaves)
+        if group["code"] == "GL" and company_id is not None:
+            custom_groups = [
+                t
+                for t in dimensions_service.list_dimension_types(company_id)
+                if t.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
+            ]
+            for t in custom_groups:
+                hidden_entries.append(
+                    {
+                        "label": t.code,
+                        "active": False,
+                        "on_click": lambda _checked=False, tid=t.dimension_type_id: self.open_screen(
+                            "GL_DIM",
+                            then=lambda screen, tid=tid: screen.group_combo.setCurrentIndex(
+                                screen.group_combo.findData(tid)
                             ),
-                        )
+                        ),
+                    }
+                )
+        if hidden_entries:
+            self._mega_panel_layout.addWidget(self._build_mega_panel_column("گروه‌هایِ تفصیلی", hidden_entries))
 
-            menu_button.setMenu(menu)
-            self._ribbon_layout.addWidget(menu_button)
+        self._mega_panel_layout.addStretch(1)
 
-        self._ribbon_layout.addStretch(1)
-
-        # طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده‌یِ گوشه‌ی ریبون — تنظیماتِ
-        # مخصوصِ همین بخش را مستقیم (تبِ مربوطه در «تنظیماتِ سیستم») باز
-        # می‌کند. فقط بخش‌هایی که واقعاً نگاشته شده‌اند این دکمه را دارند.
+        # طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده — تنظیماتِ مخصوصِ همین بخش را
+        # مستقیم (تبِ مربوطه در «تنظیماتِ سیستم») باز می‌کند. فقط بخش‌هایی
+        # که واقعاً نگاشته شده‌اند این دکمه را دارند.
         settings_tab_index = _SETTINGS_TAB_BY_GROUP_CODE.get(group["code"])
         if settings_tab_index is not None:
-            # طبقِ درخواستِ صریح: این دکمه تقریباً ۲ برابرِ اندازه‌یِ قبلی‌اش
-            # شود — objectNameِ اختصاصی (نه «ribbonButton»یِ مشترک) تا
-            # فونت/پدینگِ بزرگ‌ترش رویِ بقیه‌یِ دکمه‌هایِ ریبون اثر نگذارد.
             gear_button = QPushButton("⚙")
             gear_button.setObjectName("ribbonGearButton")
             gear_button.setCursor(Qt.PointingHandCursor)
@@ -420,9 +477,36 @@ class MainWindow(QMainWindow):
                     "SETTINGS", then=lambda screen: screen.select_tab(idx)
                 )
             )
-            self._ribbon_layout.addWidget(gear_button)
+            self._mega_panel_layout.addWidget(gear_button)
 
-        self._ribbon_scroll.setFixedHeight(56)
+    def _set_active_menu_button(self, top_level_code: str | None) -> None:
+        for code, button in self._menu_buttons.items():
+            button.setProperty("active", code == top_level_code)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+    def _find_top_level_code(self, leaf_code: str) -> str | None:
+        for item in NAV_ITEMS:
+            if item["code"] == leaf_code:
+                return item["code"]
+            if any(c["code"] == leaf_code for c in _leaf_nav_children(item)):
+                return item["code"]
+        return None
+
+    def _breadcrumb_text(self, code: str) -> str:
+        def _walk(items: list[dict], path: list[str]) -> list[str] | None:
+            for it in items:
+                new_path = path + [it["label"]]
+                if it["code"] == code:
+                    return new_path
+                if it.get("children"):
+                    found = _walk(it["children"], new_path)
+                    if found:
+                        return found
+            return None
+
+        path = _walk(NAV_ITEMS, []) or []
+        return " / ".join(path)
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
@@ -432,117 +516,6 @@ class MainWindow(QMainWindow):
         self._login_window = LoginWindow(get_font_family())
         self._login_window.show()
         self.close()
-
-    # --- نوارِ کناری --------------------------------------------------------
-    _SIDEBAR_WIDTH_EXPANDED = 272
-    _SIDEBAR_WIDTH_COLLAPSED = 64
-
-    def _build_sidebar(self) -> QWidget:
-        container = QWidget()
-        container.setObjectName("sidebarContainer")
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(0)
-
-        toggle_row = QHBoxLayout()
-        toggle_row.setContentsMargins(10, 10, 10, 6)
-        self.sidebar_toggle_button = QPushButton("☰")
-        self.sidebar_toggle_button.setObjectName("sidebarToggle")
-        self.sidebar_toggle_button.setFixedSize(32, 32)
-        self.sidebar_toggle_button.setCursor(Qt.PointingHandCursor)
-        self.sidebar_toggle_button.setToolTip("جمع‌کردنِ نوارِ کناری")
-        self.sidebar_toggle_button.clicked.connect(
-            lambda: self._set_sidebar_collapsed(not self._sidebar_collapsed)
-        )
-        toggle_row.addWidget(self.sidebar_toggle_button)
-        toggle_row.addStretch(1)
-        container_layout.addLayout(toggle_row)
-
-        tree = QTreeWidget()
-        tree.setObjectName("sidebar")
-        tree.setHeaderHidden(True)
-        tree.setIndentation(14)
-        tree.setUniformRowHeights(True)
-        tree.itemClicked.connect(self._on_tree_item_clicked)
-
-        for item in NAV_ITEMS:
-            node = QTreeWidgetItem([item["label"]])
-            node.setData(0, Qt.UserRole, item["code"])
-            node.setData(0, Qt.UserRole + 1, item["label"])
-            node.setIcon(0, theme.emoji_icon(_NAV_ICONS.get(item["code"], "•")))
-            tree.addTopLevelItem(node)
-            self._tree_items_by_code[item["code"]] = node
-            self._add_nav_children(node, item.get("children", []))
-
-        tree.expandAll()
-        self.sidebar = tree
-        container_layout.addWidget(tree, stretch=1)
-
-        self._sidebar_collapsed = False
-        self.sidebar_container = container
-        container.setFixedWidth(self._SIDEBAR_WIDTH_EXPANDED)
-        return container
-
-    def _add_nav_children(self, parent_node: QTreeWidgetItem, children: list[dict]) -> None:
-        # طبقِ درخواستِ صریح: گروه‌هایِ تفصیلی (کالا/بانک/مشتری/.../
-        # پیکربندیِ گروه‌ها) از ساید‌بار حذف شدند — فقط از منویِ
-        # جمع‌شونده‌یِ «گروه‌هایِ تفصیلی»یِ ریبون در دسترس‌اند (نگاهِ
-        # _update_ribbon)؛ یعنی این‌جا فقط زیرمجموعه‌هایِ in_ribbon
-        # (پیش‌فرض True) به ساید‌بار اضافه می‌شوند. بازگشتی است چون
-        # زیرمنوهایی مثلِ «گزارش‌ها ← حسابداری» یک لایه‌یِ تودرتویِ
-        # بیشتر دارند.
-        for child in children:
-            if not child.get("in_ribbon", True):
-                continue
-            child_node = QTreeWidgetItem([child["label"]])
-            child_node.setData(0, Qt.UserRole, child["code"])
-            child_node.setData(0, Qt.UserRole + 1, child["label"])
-            parent_node.addChild(child_node)
-            self._tree_items_by_code[child["code"]] = child_node
-            self._add_nav_children(child_node, child.get("children", []))
-
-    def _set_sidebar_collapsed(self, collapsed: bool) -> None:
-        self._sidebar_collapsed = collapsed
-        self.sidebar_container.setFixedWidth(
-            self._SIDEBAR_WIDTH_COLLAPSED if collapsed else self._SIDEBAR_WIDTH_EXPANDED
-        )
-        self.sidebar.setRootIsDecorated(not collapsed)
-        self.sidebar.setIndentation(0 if collapsed else 14)
-        for item in self._tree_items_by_code.values():
-            label = item.data(0, Qt.UserRole + 1)
-            item.setText(0, "" if collapsed else label)
-        if collapsed:
-            self.sidebar.collapseAll()
-        self.sidebar_toggle_button.setToolTip(
-            "بازکردنِ نوارِ کناری" if collapsed else "جمع‌کردنِ نوارِ کناری"
-        )
-
-    def _on_tree_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
-        code = item.data(0, Qt.UserRole)
-        if item.childCount() > 0:
-            if item.parent() is not None:
-                # زیرمنویِ تودرتو (مثلِ «حسابداری» زیرِ «گزارش‌ها»): فقط
-                # خودش باز/بسته می‌شود، بدونِ دست‌زدن به آکاردئونِ سطحِ‌بالا.
-                item.setExpanded(not item.isExpanded())
-                return
-            # آیتمِ گروهِ سطحِ‌بالا (مثلِ «مالی و حسابداری»): آکاردئونی
-            # باز/بسته می‌شود (فقط یک گروه هم‌زمان باز می‌ماند) — اگر
-            # ساید‌بار جمع بود، اول برایِ نشان‌دادنِ فرزندها باز می‌شود.
-            if self._sidebar_collapsed:
-                self._set_sidebar_collapsed(False)
-            expand = not item.isExpanded()
-            for i in range(self.sidebar.topLevelItemCount()):
-                top = self.sidebar.topLevelItem(i)
-                if top.childCount() > 0:
-                    top.setExpanded(top is item and expand)
-            # طبقِ درخواستِ صریح: با کلیک رویِ خودِ گروه، ریبونِ همان بخش
-            # بی‌درنگ نمایش داده شود — قبلاً تا انتخابِ یکی از زیرمجموعه‌ها
-            # ریبون خالی می‌ماند.
-            self._update_ribbon(code)
-            return
-        flat = {i["code"]: i for i in _flatten_nav_items()}
-        if code in flat:
-            self.open_screen(code)
 
     # --- ثبت‌نامِ صفحات -----------------------------------------------------
     def _register_screens(self) -> None:
@@ -636,10 +609,10 @@ class MainWindow(QMainWindow):
         if item is None:
             return
 
-        tree_item = self._tree_items_by_code.get(code)
-        if tree_item is not None:
-            self.sidebar.setCurrentItem(tree_item)
-        self._update_ribbon(code)
+        self._current_screen_code = code
+        self._close_mega_panel()
+        self._set_active_menu_button(self._find_top_level_code(code))
+        self.breadcrumb_label.setText(self._breadcrumb_text(code))
 
         target_screen_name = item["screen"] or "placeholder"
         screen = self._screens.get(target_screen_name)

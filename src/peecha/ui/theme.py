@@ -347,49 +347,66 @@ QListWidget::item:hover {{
     background-color: {HOVER};
 }}
 
-/* --- نوارِ کناری (درختِ ناوبری) ------------------------------------------- */
-QWidget#sidebarContainer {{
+/* --- منویِ افقیِ اصلی (مگامنو) --------------------------------------------- */
+QScrollArea#menuBarScroll {{
+    background-color: {PRIMARY};
+    border: none;
+}}
+QWidget#menuBar {{
     background-color: {PRIMARY};
 }}
-QPushButton#sidebarToggle {{
+QPushButton#menuButton {{
     background-color: transparent;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.82);
     border-radius: 8px;
-    font-size: 15px;
-    padding: 0px;
+    padding: 10px 18px;
+    font-weight: 600;
+    font-size: 13px;
+    border: none;
 }}
-QPushButton#sidebarToggle:hover {{
+QPushButton#menuButton:hover {{
     background-color: {PRIMARY_HOVER};
 }}
-QTreeWidget#sidebar {{
-    background-color: {PRIMARY};
-    color: rgba(255, 255, 255, 0.78);
-    border: none;
-    font-size: 13px;
-    padding: 10px 8px;
-    outline: none;
+QPushButton#menuButton[active="true"] {{
+    background-color: {PRIMARY_HOVER};
+    color: white;
 }}
-QTreeWidget#sidebar::item {{
-    padding: 10px 12px;
-    margin: 2px 0px;
-    border-radius: 10px;
+QScrollArea#megaPanelScroll {{
+    background-color: {SURFACE};
+    border-bottom: 1px solid {DIVIDER};
 }}
-QTreeWidget#sidebar::item:has-children {{
-    color: rgba(255, 255, 255, 0.5);
+QWidget#megaPanel {{
+    background-color: {SURFACE};
+}}
+QLabel#megaPanelColumnTitle {{
+    color: {TEXT_SECONDARY};
     font-weight: 700;
     font-size: 11px;
-    margin-top: 10px;
 }}
-QTreeWidget#sidebar::item:selected {{
-    background-color: {ACCENT};
-    color: white;
+QPushButton#megaPanelItem {{
+    background-color: transparent;
+    color: {TEXT_PRIMARY};
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-weight: 500;
+    font-size: 13px;
+    border: none;
+    text-align: right;
+}}
+QPushButton#megaPanelItem:hover {{
+    background-color: {HOVER};
+}}
+QPushButton#megaPanelItem[active="true"] {{
+    background-color: {SELECTED};
+    color: {ACCENT};
     font-weight: 600;
 }}
-QTreeWidget#sidebar::item:hover:!selected {{
-    background-color: {PRIMARY_HOVER};
-}}
-QTreeWidget#sidebar::branch {{
-    background-color: transparent;
+QLabel#breadcrumbLabel {{
+    color: {TEXT_SECONDARY};
+    font-size: 12px;
+    padding: 6px 24px;
+    background-color: {SURFACE};
+    border-bottom: 1px solid {DIVIDER};
 }}
 
 /* --- هدر --------------------------------------------------------------- */
