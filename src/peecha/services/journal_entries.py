@@ -23,7 +23,6 @@ from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
-    AccountNature,
     AccountPersonGroup,
     ChartOfAccount,
     DetailAccount,
@@ -170,7 +169,6 @@ def _resolve_lines(
     account_ids = [ln.account_id for ln in real_lines]
     accounts = session.scalars(select(ChartOfAccount).where(ChartOfAccount.account_id.in_(account_ids))).all()
     accounts_by_id = {a.account_id: a for a in accounts}
-    nature_codes = dict(session.execute(select(AccountNature.nature_id, AccountNature.code)).all())
 
     required_by_account: dict[int, set[int]] = {}
     if account_ids:
@@ -235,11 +233,19 @@ def _resolve_lines(
         if not account.is_postable:
             raise ValueError(f"حساب «{account.full_code}» قابل ثبت سند نیست.")
 
-        nature_code = nature_codes.get(account.nature_id)
-        if nature_code == "DEBIT" and ln.credit != 0:
-            raise ValueError(f"حساب «{account.full_code}» فقط بدهکار است؛ نمی‌تواند بستانکار شود.")
-        if nature_code == "CREDIT" and ln.debit != 0:
-            raise ValueError(f"حساب «{account.full_code}» فقط بستانکار است؛ نمی‌تواند بدهکار شود.")
+        # نکته‌ی مهم (باگِ پیداشده در حسابرسی): این‌جا قبلاً هر ردیفی که سمتِ
+        # مخالفِ ماهیتِ حساب بود (مثلاً بستانکارکردنِ حسابی با ماهیتِ
+        # «بدهکار») را رد می‌کرد. این با خودِ متنِ راهنمای فیلدِ ماهیت هم در
+        # تناقض بود («ماهیت یعنی این حساب *معمولاً* با بدهکار زیاد می‌شود» —
+        # یعنی گرایشِ غالب، نه قیدِ مطلق) و عملاً ثبتِ ابتدایی‌ترین اسنادِ
+        # حسابداری را غیرِممکن می‌کرد: وصولِ مطالبات (بستانکارکردنِ حسابِ
+        # دریافتنیِ بدهکار-ماهیت)، پرداختِ بدهی (بدهکارکردنِ حسابِ پرداختنیِ
+        # بستانکار-ماهیت)، برگشت از فروش، خروجِ کالا از انبار و... همه یک
+        # ردیف در سمتِ «مخالف» نیاز دارند. جایِ دیگری از سیستم هم (گزارش‌ها،
+        # ترازنامه) بر مبنایِ category_code حساب (دارایی/بدهی/...) کار
+        # می‌کند نه nature_id — یعنی ماهیت فقط برایِ نمایش/راهنماست، نه یک
+        # قیدِ حسابداری. پس این کنترل حذف شد؛ تنها قیدِ واقعیِ حسابداری
+        # همان تراز بودنِ کلِ سند است (پایین‌تر بررسی می‌شود).
 
         required = required_by_account.get(ln.account_id, set())
         missing = required - set(ln.details.keys())
@@ -322,6 +328,20 @@ def _get_or_create_fiscal_year(session, company: Company, on_date: datetime.date
     return fiscal_year
 
 
+def _ensure_fiscal_year_open(fiscal_year: FiscalYear) -> None:
+    """باگِ پیداشده در حسابرسی: صفحه‌ی سال‌هایِ مالی به کاربر اجازه‌یِ
+    «بستن» سالِ مالی را می‌دهد (fiscal_years.set_closed) و انتظارِ منطقیِ
+    هر کاربرِ حسابداری این است که بعدِ بستن، دیگر نتوان در آن سال سند ثبت/
+    ویرایش کرد؛ ولی قبل از این تابع، create/update_journal_entry اصلاً
+    is_closed را نگاه نمی‌کردند — یعنی «بستن سالِ مالی» در عمل هیچ اثری
+    نداشت. این تابع همان قیدِ ازپیش‌مستندشده در docs/accounting-module.md
+    («باز بودنِ دوره‌ی مالیِ تاریخِ سند») را واقعاً اعمال می‌کند."""
+    if fiscal_year.is_closed:
+        raise ValueError(
+            f"سالِ مالیِ «{fiscal_year.code}» بسته است؛ ثبت یا ویرایشِ سند در این سال ممکن نیست."
+        )
+
+
 def create_journal_entry(
     company_id: int,
     created_by_user_id: int,
@@ -348,6 +368,7 @@ def create_journal_entry(
             raise ValueError("داده‌ی پایه‌ی نوع/وضعیت سند در دیتابیس یافت نشد.")
 
         fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
+        _ensure_fiscal_year_open(fiscal_year)
 
         next_no = (
             session.scalar(
@@ -561,6 +582,15 @@ def update_journal_entry(
             raise ValueError("شرکت نامعتبر است.")
         resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance)
 
+        # سالِ مالیِ فعلیِ سند (پیش از ویرایش) هم اگر بسته باشد، ویرایش مجاز
+        # نیست — نه فقط سالِ مالیِ تاریخِ تازه. سپس سالِ مالیِ تاریخِ تازه هم
+        # باید باز باشد (ممکن است کاربر تاریخ را به سالِ دیگری برده باشد).
+        current_fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
+        if current_fiscal_year is not None:
+            _ensure_fiscal_year_open(current_fiscal_year)
+        new_fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
+        _ensure_fiscal_year_open(new_fiscal_year)
+
         before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 
         status_code = "DRAFT" if as_draft else "TEMPORARY"
@@ -572,6 +602,27 @@ def update_journal_entry(
         entry.description = description or None
         entry.alternative_number = alternative_number or None
         entry.status_id = new_status.status_id
+        if new_fiscal_year.fiscal_year_id != entry.fiscal_year_id:
+            # باگِ پیداشده در حسابرسی: ویرایشِ تاریخِ سند به سالِ مالیِ دیگر،
+            # fiscal_year_id را هیچ‌وقت به‌روز نمی‌کرد — یعنی سند همچنان زیرِ
+            # سالِ مالیِ قدیمی می‌ماند (کدِ سالِ مالیِ نمایش‌داده‌شده در فهرستِ
+            # اسناد غلط می‌شد) و شماره‌گذاریِ temporary_no هم دیگر با شماره‌گذاریِ
+            # سالِ مالیِ واقعی‌اش هم‌خوان نمی‌ماند. این‌جا هم fiscal_year_id
+            # به‌روز می‌شود و هم temporary_no در سالِ مالیِ جدید دوباره تخصیص
+            # می‌یابد (وگرنه ممکن بود با یک سندِ دیگر در همان سالِ مالی به یک
+            # عددِ temporary_no برخورد/تناقض کند، چون یکتاییِ این عدد در دیتابیس
+            # per (company_id, fiscal_year_id) تعریف شده).
+            entry.fiscal_year_id = new_fiscal_year.fiscal_year_id
+            next_no = (
+                session.scalar(
+                    select(func.max(JournalEntry.temporary_no)).where(
+                        JournalEntry.company_id == company_id,
+                        JournalEntry.fiscal_year_id == new_fiscal_year.fiscal_year_id,
+                    )
+                )
+                or 0
+            ) + 1
+            entry.temporary_no = next_no
 
         old_line_ids = list(
             session.scalars(
@@ -638,6 +689,9 @@ def delete_journal_entry(journal_entry_id: int, company_id: int, changed_by_user
         status = session.get(JournalEntryStatus, entry.status_id)
         if status is None or status.code not in ("TEMPORARY", "DRAFT"):
             raise ValueError("فقط سندهای با وضعیت موقت یا پیش‌نویس قابل حذف‌اند.")
+        fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
+        if fiscal_year is not None:
+            _ensure_fiscal_year_open(fiscal_year)
 
         before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 

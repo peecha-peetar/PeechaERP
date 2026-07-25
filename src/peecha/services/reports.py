@@ -879,6 +879,29 @@ class CustomStatementLine:
     amount: decimal.Decimal | None  # None فقط برایِ HEADER
 
 
+_CREDIT_NORMAL_CATEGORIES = ("LIABILITY", "EQUITY", "REVENUE")
+
+
+def _natural_signed_balance(b: AccountBalanceRow) -> decimal.Decimal:
+    """مقدارِ «طبیعی/مثبتِ معمول» یک حساب، هم‌الگو با قراردادِ همین فایل در
+    compute_balance_sheet/compute_income_statement: دارایی/هزینه بدهکار-پایه‌اند
+    (closing/period دبیت منهایِ کردیت)، بدهی/سرمایه/درآمد بستانکار-پایه‌اند
+    (closing/period کردیت منهایِ دبیت). پیش از این تابع، compute_custom_statement
+    برایِ *همه‌ی* حساب‌هایِ PERMANENT همیشه closing_debit-closing_credit و برایِ
+    همه‌ی TEMPORARY همیشه period_debit-period_credit حساب می‌کرد — یعنی هر
+    ردیفِ گزارشِ سفارشی که به یک حسابِ بدهی/سرمایه/درآمد اشاره می‌کرد، عددِ
+    منفیِ نمایشِ معمولش را می‌داد (چون این حساب‌ها ذاتاً بستانکار-پایه‌اند)،
+    درحالی‌که کاربر در طراحِ گزارش فقط علامتِ +/− را برایِ جمع/کسرِ ردیف‌ها
+    نسبت به هم انتخاب می‌کند (نه برایِ جبرانِ قراردادِ داخلیِ بدهکار/بستانکار)."""
+    if b.account_type_code == "PERMANENT":
+        debit, credit = b.closing_debit, b.closing_credit
+    else:
+        debit, credit = b.period_debit, b.period_credit
+    if b.category_code in _CREDIT_NORMAL_CATEGORIES:
+        return credit - debit
+    return debit - credit
+
+
 def compute_custom_statement(
     template_id: int,
     company_id: int,
@@ -920,12 +943,7 @@ def compute_custom_statement(
                 b = balances_by_id.get(account_id)
                 if b is None:
                     continue
-                value = (
-                    (b.closing_debit - b.closing_credit)
-                    if b.account_type_code == "PERMANENT"
-                    else (b.period_debit - b.period_credit)
-                )
-                total += sign * value
+                total += sign * _natural_signed_balance(b)
         elif row.row_type == "FORMULA":
             total = _ZERO
             for ref_row_id, sign in row.formula_refs:
