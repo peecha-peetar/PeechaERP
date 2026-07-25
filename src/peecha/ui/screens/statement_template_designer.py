@@ -491,7 +491,14 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         self.rows_table.setHorizontalHeaderLabels(_ROW_COLUMNS)
         self.rows_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.rows_table.verticalHeader().setVisible(False)
-        self.rows_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        # طبقِ همان بازخوردی که در journal_entry.py/financial_statement_mapping.py
+        # رفع شد: ارتفاعِ پیش‌فرضِ ردیف برایِ چهار دکمه‌یِ کنارِ‌هم (▲▼ ویرایش
+        # حذف) کافی نبود — دکمه‌ها بریده/نامرئی دیده می‌شدند.
+        self.rows_table.verticalHeader().setDefaultSectionSize(44)
+        header = self.rows_table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        self.rows_table.setColumnWidth(4, 232)
+        header.setSectionResizeMode(4, QHeaderView.Fixed)
         layout.addWidget(self.rows_table, stretch=1)
 
         add_row_button = QPushButton("افزودنِ ردیف")
@@ -553,13 +560,19 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         cell_layout = QHBoxLayout(cell)
         cell_layout.setContentsMargins(2, 0, 2, 0)
 
+        # طبقِ کشفِ عیب: پدینگِ سراسریِ QPushButton (۱۶px از هرطرف) بیشتر از
+        # عرضِ ثابتِ ۲۸px بود، پس گلیفِ ▲/▼ اصلاً جایی برایِ رسم‌شدن نداشت و
+        # دکمه‌ها کاملاً نامرئی می‌شدند — این‌جا پدینگِ فشرده‌تری override
+        # می‌شود، مخصوصِ همین دو دکمه‌یِ کوچکِ آیکونی.
         up_button = QPushButton("▲")
         up_button.setFixedWidth(28)
+        up_button.setStyleSheet("padding: 2px;")
         up_button.clicked.connect(lambda _checked=False, i=row_index: self._on_move_row(i, -1))
         cell_layout.addWidget(up_button)
 
         down_button = QPushButton("▼")
         down_button.setFixedWidth(28)
+        down_button.setStyleSheet("padding: 2px;")
         down_button.clicked.connect(lambda _checked=False, i=row_index: self._on_move_row(i, 1))
         cell_layout.addWidget(down_button)
 
