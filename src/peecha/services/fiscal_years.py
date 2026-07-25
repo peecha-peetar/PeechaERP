@@ -73,8 +73,22 @@ def pick_current(company_id: int, on_date: datetime.date) -> FiscalYearRow | Non
     return max(years, key=lambda y: y.end_date)
 
 
-def _clamp_day(month: int, day: int) -> int:
-    return min(day, _DAYS_IN_MONTH[month - 1])
+def _days_in_jalali_month(year: int, month: int) -> int:
+    """تعدادِ روزهایِ واقعیِ یک ماهِ جلالی در یک سالِ *مشخص* — برخلافِ
+    _DAYS_IN_MONTH (که آرایه‌ی ثابتِ jdatetime.j_days_in_month است و
+    اسفند را همیشه ۲۹روزه فرض می‌کند)، این تابع سالِ کبیسه را واقعاً
+    می‌بیند: اسفندِ سالِ کبیسه ۳۰ روز دارد. باگِ پیداشده در حسابرسی: قبلاً
+    _clamp_day مستقیم از رویِ آرایه‌ی ثابت می‌خواند، پس در هر سالِ مالیِ
+    کبیسه که fiscal_year_start_day به ۳۰ برسد (یا از آن بزرگ‌تر بود)،
+    آخرین روزِ سالِ مالی/دوره‌یِ اسفند یک روز زودتر از حدِ واقعی بریده
+    می‌شد."""
+    if month != 12:
+        return _DAYS_IN_MONTH[month - 1]
+    return 30 if jdatetime.date(year, 1, 1).isleap() else 29
+
+
+def _clamp_day(year: int, month: int, day: int) -> int:
+    return min(day, _days_in_jalali_month(year, month))
 
 
 def _generate_periods(start_month: int, start_day: int, code: str) -> list[tuple[datetime.date, datetime.date]]:
@@ -83,11 +97,11 @@ def _generate_periods(start_month: int, start_day: int, code: str) -> list[tuple
     for period_no in range(12):
         cur_month = ((start_month - 1 + period_no) % 12) + 1
         cur_year = year + (start_month - 1 + period_no) // 12
-        period_start = jdatetime.date(cur_year, cur_month, _clamp_day(cur_month, start_day))
+        period_start = jdatetime.date(cur_year, cur_month, _clamp_day(cur_year, cur_month, start_day))
 
         next_month = ((start_month - 1 + period_no + 1) % 12) + 1
         next_year = year + (start_month - 1 + period_no + 1) // 12
-        next_start = jdatetime.date(next_year, next_month, _clamp_day(next_month, start_day))
+        next_start = jdatetime.date(next_year, next_month, _clamp_day(next_year, next_month, start_day))
         period_end = next_start - datetime.timedelta(days=1)
 
         periods.append((period_start.togregorian(), period_end.togregorian()))
