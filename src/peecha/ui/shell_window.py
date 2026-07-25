@@ -212,7 +212,7 @@ class MainWindow(QMainWindow):
         self.field_help_toggle.setChecked(field_help_is_enabled())
         self.field_help_toggle.setCursor(Qt.PointingHandCursor)
         self.field_help_toggle.setText("⚙")
-        self.field_help_toggle.setToolTip("راهنمایِ فیلدها: نمایش/عدمِ‌نمایشِ کادرِ آموزشیِ فیلدها")
+        self.field_help_toggle.setToolTip("راهنمایِ فیلدها را نشان بده یا مخفی کن")
         self.field_help_toggle.setStyleSheet(
             "#fieldHelpToggle {"
             "   border: none; border-radius: 14px; padding: 4px 10px;"
