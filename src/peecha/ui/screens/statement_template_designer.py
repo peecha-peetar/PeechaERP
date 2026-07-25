@@ -32,6 +32,7 @@ from peecha import session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import statement_templates as statement_templates_service
 from peecha.ui import theme
+from peecha.ui.widgets import FieldHelpMixin
 
 _STATEMENT_TYPE_OPTIONS = [
     ("CUSTOM", "سفارشی"),
@@ -225,7 +226,7 @@ class _RowEditorDialog(QDialog):
         self.accept()
 
 
-class StatementTemplateDesignerScreen(QWidget):
+class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._templates: list[statement_templates_service.StatementTemplateRow] = []
@@ -237,6 +238,33 @@ class StatementTemplateDesignerScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_templates_panel())
         outer.addWidget(self._build_rows_panel(), stretch=1)
+
+        # نکته: دیالوگِ ویرایشِ ردیف (_RowEditorDialog) عمداً بدونِ راهنما
+        # ماند — آن دیالوگ با QDialog() بدونِ parent ساخته می‌شود (فقط با
+        # exec() نمایش داده می‌شود)، پس self.parentWidget() در آن همیشه
+        # None است؛ FieldHelpPanel.instance(None) بلافاصله در
+        # parent.installEventFilter(self) کرش می‌کند چون None متدِ
+        # installEventFilter ندارد. طبقِ راهنماییِ صریح برایِ همین حالت،
+        # به‌جایِ تغییرِ نحوه‌یِ parent‌دارشدنِ دیالوگ (که خارج از محدوده‌ی
+        # این کار است)، فقط همین صفحه‌ی اصلی راهنما گرفت.
+        self.set_field_help([
+            (
+                self.new_name_field,
+                "نامِ الگویِ تازه‌ای که می‌خواهید بسازید، مثلاً «صورتِ سود و زیانِ خلاصه».",
+            ),
+            (
+                self.new_type_combo,
+                "این الگو برایِ کدام نوع گزارش است. «سفارشی» یعنی هیچ‌کدام از گزارش‌هایِ استاندارد نیست.",
+            ),
+            (
+                self.templates_list,
+                "فهرستِ الگوهایِ ساخته‌شده. رویِ هرکدام کلیک کنید تا ردیف‌هایش را در سمتِ راست ببینید و ویرایش کنید.",
+            ),
+            (
+                self.rename_field,
+                "نامِ تازه برایِ الگویِ انتخاب‌شده. برایِ اعمال، دکمه‌ی «تغییرِ نام» را بزنید.",
+            ),
+        ])
 
     def _build_templates_panel(self) -> QWidget:
         panel = QWidget()

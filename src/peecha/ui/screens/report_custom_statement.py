@@ -24,6 +24,13 @@ class CustomStatementScreen(ReportScreenBase):
         self.template_combo = QComboBox()
         self.extra_filter_row.addWidget(self.template_combo)
 
+        self.add_field_help([
+            (
+                self.template_combo,
+                "الگویِ گزارشی که می‌خواهید اجرا کنید. الگوها در «طراحیِ الگویِ گزارش» ساخته می‌شوند؛ این صفحه فقط آن‌ها را برایِ بازه‌یِ تاریخِ دلخواه اجرا می‌کند.",
+            ),
+        ])
+
         self._currency_decimal_places = 0
 
     def refresh(self) -> None:

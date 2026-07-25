@@ -34,6 +34,22 @@ class AnomaliesScreen(ReportScreenBase):
         self.outlier_z_spin.setValue(3.0)
         self.extra_filter_row.addWidget(self.outlier_z_spin)
 
+        self.add_field_help([
+            (
+                self.stale_days_spin,
+                "پیش‌نویسی که این‌قدر روز از تاریخِ سندش گذشته و هنوز قطعی نشده، «معوق» شناخته می‌شود و در گزارش می‌آید.",
+            ),
+            (
+                self.outlier_checkbox,
+                "اگر فعال باشد، سندهایی با مبلغِ خیلی متفاوت از حدِ معمول هم در گزارش نشان داده می‌شوند.",
+            ),
+            (
+                self.outlier_z_spin,
+                "هرچه این عدد بزرگ‌تر باشد، فقط مبالغِ خیلی دور از حدِ معمول گزارش می‌شوند و سندهایِ کمتری نامتعارف تشخیص داده می‌شود. "
+                "عددِ کوچک‌تر یعنی حساسیتِ بیشتر — سندهایِ بیشتری نامتعارف شناخته می‌شوند.",
+            ),
+        ])
+
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         anomalies = reports_service.detect_document_anomalies(
             company_id,

@@ -53,6 +53,17 @@ class AccountLedgerScreen(ReportScreenBase):
         self.enable_cost_center_filter()
         self.enable_document_no_filter()
 
+        self.add_field_help([
+            (
+                self.level_combo,
+                "گزارش تا کدام سطح خلاصه شود: گروه، کل، معین یا تفصیلی. برایِ دیدنِ جزئیاتِ بیشتر، سطحِ پایین‌تر را انتخاب کنید.",
+            ),
+            (
+                self.dimension_combo,
+                "کدام نوعِ تفصیلی (کالا، بانک، مشتری و بقیه) نشان داده شود — فقط وقتی سطح روی «تفصیلی» باشد فعال می‌شود.",
+            ),
+        ])
+
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
 
         self._mode = "summary"

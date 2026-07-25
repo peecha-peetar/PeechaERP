@@ -35,6 +35,17 @@ class PeriodComparisonScreen(ReportScreenBase):
         self.period_count_spin.setValue(6)
         self.extra_filter_row.addWidget(self.period_count_spin)
 
+        self.add_field_help([
+            (
+                self.granularity_combo,
+                "هر دوره‌یِ مقایسه چقدر طول بکشد: یک ماه، یک فصل یا یک سال.",
+            ),
+            (
+                self.period_count_spin,
+                "چند دوره‌یِ متوالی کنارِ هم مقایسه شود، مثلاً ۶ ماهِ اخیر. توجه: «از تاریخ» در این گزارش استفاده نمی‌شود؛ «تا تاریخ» پایانِ آخرین دوره است.",
+            ),
+        ])
+
         self._currency_decimal_places = 0
 
     def _fmt(self, value: decimal.Decimal) -> str:

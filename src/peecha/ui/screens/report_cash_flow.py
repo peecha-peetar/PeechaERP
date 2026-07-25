@@ -30,6 +30,14 @@ class CashFlowScreen(ReportScreenBase):
         self.method_combo.currentIndexChanged.connect(self._on_method_changed)
         self.extra_filter_row.addWidget(self.method_combo)
 
+        self.add_field_help([
+            (
+                self.method_combo,
+                "«مستقیم» یعنی گزارش از رویِ سندهایِ خودِ صندوق/بانک ساخته می‌شود. "
+                "«غیرمستقیم» یعنی از سودِ خالص شروع می‌شود و با تعدیلِ حساب‌هایِ برچسب‌خورده (در «نگاشتِ صورت‌هایِ مالی») به همان نتیجه می‌رسد.",
+            ),
+        ])
+
         self._currency_decimal_places = 0
 
     def _on_method_changed(self) -> None:

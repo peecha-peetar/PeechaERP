@@ -62,6 +62,22 @@ class TrialBalanceScreen(ReportScreenBase):
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
 
+        self.add_field_help([
+            (
+                self.level_combo,
+                "گزارش تا کدام سطح خلاصه شود: گروه، کل، معین یا تفصیلی. پیش‌فرض «معین» است.",
+            ),
+            (
+                self.dimension_combo,
+                "کدام نوعِ تفصیلی (کالا، بانک، مشتری و بقیه) نشان داده شود — فقط وقتی سطح روی «تفصیلی» باشد فعال می‌شود.",
+            ),
+            (
+                self.column_mode_combo,
+                "چند ستون نشان داده شود. «۴ ستونی» فقط گردشِ دوره و مانده‌یِ آخر را دارد. "
+                "«۶ ستونی» مانده‌یِ اول را هم اضافه می‌کند. «۸ ستونی» گردشِ تجمعیِ از اولِ سالِ مالی را هم نشان می‌دهد.",
+            ),
+        ])
+
         self._currency_decimal_places = 0
 
     def _on_level_changed(self) -> None:

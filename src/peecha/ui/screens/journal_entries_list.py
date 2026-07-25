@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
 from peecha.services import journal_entries as je_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _STATUS_LABELS = {
     "DRAFT": "پیش‌نویس",
@@ -47,7 +48,7 @@ _COL_COMPANY = 7
 _COL_FISCAL_YEAR = 8
 
 
-class JournalEntriesListScreen(QWidget):
+class JournalEntriesListScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
         self._main_window = main_window
@@ -103,6 +104,13 @@ class JournalEntriesListScreen(QWidget):
         buttons.addWidget(delete_button)
 
         layout.addLayout(buttons)
+
+        self.set_field_help([
+            (
+                self.search_field,
+                "جستجو در شماره‌ی سند، شرح یا شماره‌ی عطف. برایِ بازکردنِ خودِ سند، رویِ ردیفش دابل‌کلیک کنید.",
+            ),
+        ])
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
