@@ -75,6 +75,20 @@ _NAV_ICONS = {
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
 
 
+def _leaf_nav_children(item: dict) -> list[dict]:
+    """همه‌یِ فرزندانِ برگِ یک آیتمِ ناوبری را، در هر عمقی از زیرمنوهایِ
+    تودرتو (مثلِ «گزارش‌ها ← حسابداری ← تراز آزمایشی»)، برمی‌گرداند —
+    برایِ ریبون که هنوز یک ردیفِ تختِ دکمه است، صرفِ‌نظر از این‌که ساید‌بار
+    آن‌ها را زیرِ چند لایه زیرمنو نشان می‌دهد."""
+    leaves: list[dict] = []
+    for child in item.get("children", []):
+        if child.get("children"):
+            leaves.extend(_leaf_nav_children(child))
+        else:
+            leaves.append(child)
+    return leaves
+
+
 class _CurrentOnlyStackedWidget(QStackedWidget):
     """QStackedWidgِ معمولی، اندازه‌ی خودش را از رویِ بزرگ‌ترینِ صفحه‌یِ
     ثبت‌شده (نه لزوماً همانی که الان نمایش داده می‌شود) محاسبه می‌کند —
@@ -306,11 +320,15 @@ class MainWindow(QMainWindow):
 
         # اگر خودِ کدِ گروه (مثلِ «GL») داده شده باشد (کلیک روی سرآیتمِ
         # ساید‌بار)، همان گروه مستقیم مطابقت می‌یابد؛ وگرنه گروهی که یکی
-        # از زیرمجموعه‌هایش این کد را دارد (کلیکِ معمولِ رویِ یک زیرمجموعه).
+        # از نوادگانش (در هر عمقی از زیرمنو، مثلِ «گزارش‌ها ← حسابداری ←
+        # تراز آزمایشی») این کد را دارد.
         group = next(
             (item for item in NAV_ITEMS if item.get("code") == code and item.get("children")),
             None,
-        ) or next((item for item in NAV_ITEMS if any(c["code"] == code for c in item.get("children", []))), None)
+        ) or next(
+            (item for item in NAV_ITEMS if any(c["code"] == code for c in _leaf_nav_children(item))),
+            None,
+        )
         if group is None:
             self._ribbon_scroll.setFixedHeight(0)
             return
@@ -335,7 +353,7 @@ class MainWindow(QMainWindow):
         # به‌صورتِ یک دکمه‌ی منویِ «گروه‌هایِ تفصیلی» بازمی‌گردند (پایین‌تر)
         # و طبقِ بازخوردِ جدیدتر، از ساید‌بار هم کاملاً حذف شده‌اند (فقط در
         # همین منویِ ریبون در دسترس‌اند — نگاهِ _build_sidebar).
-        ribbon_children = [c for c in group["children"] if c.get("in_ribbon", True)]
+        ribbon_children = [c for c in _leaf_nav_children(group) if c.get("in_ribbon", True)]
         for child in ribbon_children:
             button = QPushButton(_label_of(child))
             button.setObjectName("ribbonButton")
@@ -345,7 +363,7 @@ class MainWindow(QMainWindow):
             self._ribbon_layout.addWidget(button)
             self._ribbon_buttons[child["code"]] = button
 
-        hidden_children = [c for c in group["children"] if not c.get("in_ribbon", True)]
+        hidden_children = [c for c in _leaf_nav_children(group) if not c.get("in_ribbon", True)]
         if hidden_children:
             menu_button = QToolButton()
             menu_button.setText("گروه‌هایِ تفصیلی ▾")
@@ -454,19 +472,7 @@ class MainWindow(QMainWindow):
             node.setIcon(0, theme.emoji_icon(_NAV_ICONS.get(item["code"], "•")))
             tree.addTopLevelItem(node)
             self._tree_items_by_code[item["code"]] = node
-            # طبقِ درخواستِ صریح: گروه‌هایِ تفصیلی (کالا/بانک/مشتری/.../
-            # پیکربندیِ گروه‌ها) از ساید‌بار حذف شدند — فقط از منویِ
-            # جمع‌شونده‌یِ «گروه‌هایِ تفصیلی»یِ ریبون در دسترس‌اند (نگاهِ
-            # _update_ribbon)؛ یعنی این‌جا فقط زیرمجموعه‌هایِ in_ribbon
-            # (پیش‌فرض True) به ساید‌بار اضافه می‌شوند.
-            for child in item.get("children", []):
-                if not child.get("in_ribbon", True):
-                    continue
-                child_node = QTreeWidgetItem([child["label"]])
-                child_node.setData(0, Qt.UserRole, child["code"])
-                child_node.setData(0, Qt.UserRole + 1, child["label"])
-                node.addChild(child_node)
-                self._tree_items_by_code[child["code"]] = child_node
+            self._add_nav_children(node, item.get("children", []))
 
         tree.expandAll()
         self.sidebar = tree
@@ -476,6 +482,24 @@ class MainWindow(QMainWindow):
         self.sidebar_container = container
         container.setFixedWidth(self._SIDEBAR_WIDTH_EXPANDED)
         return container
+
+    def _add_nav_children(self, parent_node: QTreeWidgetItem, children: list[dict]) -> None:
+        # طبقِ درخواستِ صریح: گروه‌هایِ تفصیلی (کالا/بانک/مشتری/.../
+        # پیکربندیِ گروه‌ها) از ساید‌بار حذف شدند — فقط از منویِ
+        # جمع‌شونده‌یِ «گروه‌هایِ تفصیلی»یِ ریبون در دسترس‌اند (نگاهِ
+        # _update_ribbon)؛ یعنی این‌جا فقط زیرمجموعه‌هایِ in_ribbon
+        # (پیش‌فرض True) به ساید‌بار اضافه می‌شوند. بازگشتی است چون
+        # زیرمنوهایی مثلِ «گزارش‌ها ← حسابداری» یک لایه‌یِ تودرتویِ
+        # بیشتر دارند.
+        for child in children:
+            if not child.get("in_ribbon", True):
+                continue
+            child_node = QTreeWidgetItem([child["label"]])
+            child_node.setData(0, Qt.UserRole, child["code"])
+            child_node.setData(0, Qt.UserRole + 1, child["label"])
+            parent_node.addChild(child_node)
+            self._tree_items_by_code[child["code"]] = child_node
+            self._add_nav_children(child_node, child.get("children", []))
 
     def _set_sidebar_collapsed(self, collapsed: bool) -> None:
         self._sidebar_collapsed = collapsed
@@ -496,9 +520,14 @@ class MainWindow(QMainWindow):
     def _on_tree_item_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
         code = item.data(0, Qt.UserRole)
         if item.childCount() > 0:
-            # آیتمِ گروه (مثلِ «مالی و حسابداری»): آکاردئونی باز/بسته می‌شود
-            # (فقط یک گروه هم‌زمان باز می‌ماند) — اگر ساید‌بار جمع بود، اول
-            # برایِ نشان‌دادنِ فرزندها باز می‌شود.
+            if item.parent() is not None:
+                # زیرمنویِ تودرتو (مثلِ «حسابداری» زیرِ «گزارش‌ها»): فقط
+                # خودش باز/بسته می‌شود، بدونِ دست‌زدن به آکاردئونِ سطحِ‌بالا.
+                item.setExpanded(not item.isExpanded())
+                return
+            # آیتمِ گروهِ سطحِ‌بالا (مثلِ «مالی و حسابداری»): آکاردئونی
+            # باز/بسته می‌شود (فقط یک گروه هم‌زمان باز می‌ماند) — اگر
+            # ساید‌بار جمع بود، اول برایِ نشان‌دادنِ فرزندها باز می‌شود.
             if self._sidebar_collapsed:
                 self._set_sidebar_collapsed(False)
             expand = not item.isExpanded()

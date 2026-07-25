@@ -45,46 +45,62 @@ NAV_ITEMS = [
     {
         "code": "REPORTS",
         "label": "گزارش‌ها",
+        # طبقِ درخواستِ صریح: هر ماژول باید فقط یک آیتم زیرِ «گزارش‌ها»
+        # داشته باشد و بقیه‌یِ گزارش‌هایِ همان ماژول زیرِ همان یک آیتم
+        # (مثلِ «حسابداری») بیایند — تا فهرست شلوغ/تخت نباشد. امروز فقط
+        # ماژولِ مالی‌وحسابداری گزارش دارد؛ وقتی گزارش‌هایِ ماژول‌هایِ
+        # دیگر (فروش/انبار/...) ساخته شوند، هرکدام زیرمنویِ جداگانه‌یِ
+        # خودشان را این‌جا می‌گیرند.
         "children": [
-            {"code": "REPORTS_TRIAL_BALANCE", "label": "تراز آزمایشی", "screen": "report_trial_balance"},
-            {"code": "REPORTS_JOURNAL_BOOK", "label": "دفتر روزنامه", "screen": "report_journal_book"},
             {
-                "code": "REPORTS_ACCOUNT_LEDGER",
-                "label": "دفتر کل / معین / تفصیلی",
-                "screen": "report_account_ledger",
-            },
-            {"code": "REPORTS_INCOME_STATEMENT", "label": "صورتِ سود و زیان", "screen": "report_income_statement"},
-            {"code": "REPORTS_BALANCE_SHEET", "label": "ترازنامه", "screen": "report_balance_sheet"},
-            {"code": "REPORTS_CASH_FLOW", "label": "صورتِ گردشِ وجوهِ نقد", "screen": "report_cash_flow"},
-            {
-                "code": "REPORTS_EQUITY_CHANGES",
-                "label": "تغییرات در حقوقِ صاحبانِ سهام",
-                "screen": "report_equity_changes",
-            },
-            {
-                "code": "REPORTS_CUSTOM_STATEMENT",
-                "label": "گزارشِ سفارشی (طبقِ الگو)",
-                "screen": "report_custom_statement",
-            },
-            {
-                "code": "REPORTS_STATEMENT_DESIGNER",
-                "label": "طراحیِ الگویِ گزارش",
-                "screen": "statement_template_designer",
-            },
-            {
-                "code": "REPORTS_FINANCIAL_RATIOS",
-                "label": "نسبت‌هایِ مالی",
-                "screen": "report_financial_ratios",
-            },
-            {
-                "code": "REPORTS_PERIOD_COMPARISON",
-                "label": "مقایسه‌یِ دوره‌ای",
-                "screen": "report_period_comparison",
-            },
-            {
-                "code": "REPORTS_ANOMALIES",
-                "label": "تشخیصِ سندهایِ ناقص/آنومالی",
-                "screen": "report_anomalies",
+                "code": "REPORTS_GL",
+                "label": "حسابداری",
+                "children": [
+                    {"code": "REPORTS_TRIAL_BALANCE", "label": "تراز آزمایشی", "screen": "report_trial_balance"},
+                    {"code": "REPORTS_JOURNAL_BOOK", "label": "دفتر روزنامه", "screen": "report_journal_book"},
+                    {
+                        "code": "REPORTS_ACCOUNT_LEDGER",
+                        "label": "دفتر کل / معین / تفصیلی",
+                        "screen": "report_account_ledger",
+                    },
+                    {
+                        "code": "REPORTS_INCOME_STATEMENT",
+                        "label": "صورتِ سود و زیان",
+                        "screen": "report_income_statement",
+                    },
+                    {"code": "REPORTS_BALANCE_SHEET", "label": "ترازنامه", "screen": "report_balance_sheet"},
+                    {"code": "REPORTS_CASH_FLOW", "label": "صورتِ گردشِ وجوهِ نقد", "screen": "report_cash_flow"},
+                    {
+                        "code": "REPORTS_EQUITY_CHANGES",
+                        "label": "تغییرات در حقوقِ صاحبانِ سهام",
+                        "screen": "report_equity_changes",
+                    },
+                    {
+                        "code": "REPORTS_CUSTOM_STATEMENT",
+                        "label": "گزارشِ سفارشی (طبقِ الگو)",
+                        "screen": "report_custom_statement",
+                    },
+                    {
+                        "code": "REPORTS_STATEMENT_DESIGNER",
+                        "label": "طراحیِ الگویِ گزارش",
+                        "screen": "statement_template_designer",
+                    },
+                    {
+                        "code": "REPORTS_FINANCIAL_RATIOS",
+                        "label": "نسبت‌هایِ مالی",
+                        "screen": "report_financial_ratios",
+                    },
+                    {
+                        "code": "REPORTS_PERIOD_COMPARISON",
+                        "label": "مقایسه‌یِ دوره‌ای",
+                        "screen": "report_period_comparison",
+                    },
+                    {
+                        "code": "REPORTS_ANOMALIES",
+                        "label": "تشخیصِ سندهایِ ناقص/آنومالی",
+                        "screen": "report_anomalies",
+                    },
+                ],
             },
         ],
     },
@@ -117,25 +133,40 @@ _TOP_LEVEL_MODULE_CODE_OVERRIDE = {"dashboard": "DASH"}
 
 
 def flatten_nav_items() -> list[dict]:
+    """همه‌یِ آیتم‌هایِ برگ (دارایِ «screen») را، در هر عمقی از تودرتوییِ
+    زیرمنوها، برمی‌گرداند — منویِ «گزارش‌ها» مثلاً حالا یک لایه‌یِ زیرمنویِ
+    ماژول (مثلِ «حسابداری») هم دارد، پس بازگشتی طی می‌شود."""
     flat: list[dict] = []
-    for item in NAV_ITEMS:
-        if "children" in item:
-            flat.extend(item["children"])
-        else:
-            flat.append(item)
+
+    def _walk(items: list[dict]) -> None:
+        for item in items:
+            if item.get("children"):
+                _walk(item["children"])
+            else:
+                flat.append(item)
+
+    _walk(NAV_ITEMS)
     return flat
 
 
 def build_form_catalog() -> list[tuple[str, str, str]]:
     """(form_code, module_code, label) برایِ همه‌ی صفحاتِ برنامه — از رویِ
     NAV_ITEMS + زیرتب‌هایِ «تنظیماتِ سیستم» — تکِ منبعِ حقیقتی که
-    services/roles.py برایِ ساختِ جدولِ دسترسیِ نقش‌ها استفاده می‌کند."""
+    services/roles.py برایِ ساختِ جدولِ دسترسیِ نقش‌ها استفاده می‌کند.
+    ماژولِ هر فرم همیشه کدِ آیتمِ سطحِ‌بالا است، حتی اگر خودِ فرم چند لایه
+    زیرِ زیرمنوهایِ داخلی (مثلِ «گزارش‌ها ← حسابداری») تودرتو باشد."""
     catalog: list[tuple[str, str, str]] = []
+
+    def _walk(items: list[dict], module_code: str) -> None:
+        for item in items:
+            if item.get("children"):
+                _walk(item["children"], module_code)
+            elif item.get("screen"):
+                catalog.append((item["screen"], module_code, item["label"]))
+
     for item in NAV_ITEMS:
-        if "children" in item:
-            for child in item["children"]:
-                if child.get("screen"):
-                    catalog.append((child["screen"], item["code"], child["label"]))
+        if item.get("children"):
+            _walk(item["children"], item["code"])
         elif item.get("screen"):
             module_code = _TOP_LEVEL_MODULE_CODE_OVERRIDE.get(item["code"], item["code"])
             catalog.append((item["screen"], module_code, item["label"]))
