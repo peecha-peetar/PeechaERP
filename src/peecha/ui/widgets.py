@@ -4,21 +4,24 @@ journal_entry.py تعریف شده بود، و حالا fiscal_years.py هم ب�
 صفرهایِ ابتداییِ آن‌ها را بی‌صدا حذف می‌کند) و راهنمایِ فیلدها
 (FieldHelpController + FieldHelpPanel، طبقِ درخواستِ صریح: مکانیزمی
 سراسری که هر فرمی می‌تواند برایِ نمایشِ توضیحِ آموزشیِ هر فیلد با
-فوکوس‌گرفتنِ آن به‌کار ببرد. نسخه‌یِ اول یک نوارِ ثابتِ داخلِ فرم بود
-(ارتفاعِ فرم را عوض می‌کرد)، نسخه‌یِ دوم QToolTip بود (طبقِ بازخوردِ کاربر
-در محیطِ واقعی اصلاً نمایش داده نمی‌شد)؛ این نسخه یک پنجره‌یِ مستقلِ کوچکِ
-خودش‌دار است، ثابت در گوشه‌یِ صفحه‌نمایش، با چک‌باکسی برایِ خاموش/
-روشن‌کردنِ کلی — پس همیشه قابلِ‌مشاهده و هم قابلِ‌تنظیم است)."""
+فوکوس‌گرفتنِ آن به‌کار ببرد). سه نسخه امتحان شد تا به فرمِ فعلی رسید:
+نوارِ ثابتِ داخلِ فرم (ارتفاعِ فرم را عوض می‌کرد) → QToolTip (در محیطِ
+واقعیِ کاربر نمایش داده نمی‌شد) → پنجره‌یِ کاملاً مستقل (باگِ activeWindow
+را می‌ساخت) → نسخه‌یِ نهایی: کادرِ روکارِ فرزندِ خودِ پنجره‌یِ اصلی، با
+ظاهرِ روشن/رنگی (متفاوت از تمِ تیره‌یِ برنامه) و انیمیشنِ محوشدگی، گوشه‌یِ
+بالا-راستِ پنجره؛ کلیدِ روشن/خاموش‌کردنِ کلی (field_help_is_enabled/
+set_field_help_enabled) به دکمه‌ای در هدرِ برنامه منتقل شده، نه دیگر
+داخلِ خودِ کادر."""
 
 from __future__ import annotations
 
 import datetime
 
-from PySide6.QtCore import QEvent, QObject, QSettings, Qt
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPropertyAnimation, QSettings, Qt
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -28,6 +31,24 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals
+
+_FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
+
+
+def field_help_is_enabled() -> bool:
+    """وضعیتِ سراسریِ روشن/خاموشِ کادرِ راهنمایِ فیلدها — مستقل از اینکه
+    خودِ FieldHelpPanel تا این لحظه ساخته شده باشد یا نه، چون کلیدِ
+    روشن/خاموش‌کردن (در هدرِ برنامه) باید حتی پیش از بازکردنِ اولین
+    صفحه‌ای که از راهنما استفاده می‌کند هم قابلِ‌استفاده باشد."""
+    settings = QSettings("Peecha", "PeechaERP")
+    return bool(settings.value(_FIELD_HELP_SETTINGS_KEY, True, type=bool))
+
+
+def set_field_help_enabled(value: bool) -> None:
+    settings = QSettings("Peecha", "PeechaERP")
+    settings.setValue(_FIELD_HELP_SETTINGS_KEY, value)
+    if FieldHelpPanel._instance is not None:
+        FieldHelpPanel._instance.set_enabled(value)
 
 
 class JalaliDateEdit(QLineEdit):
@@ -105,34 +126,34 @@ class ZeroPaddedSpinBox(QSpinBox):
 
 class FieldHelpPanel(QFrame):
     """کادرِ سراسریِ راهنمایِ فیلدها — یک ویجتِ روکار (overlay)، ثابت در
-    گوشه‌یِ پنجره‌یِ اصلی (نه وابسته به layoutِ هیچ فرمی)، که با
+    گوشه‌یِ بالا-راستِ پنجره‌یِ اصلی (نه وابسته به layoutِ هیچ فرمی)، که با
     فوکوس‌گرفتنِ هر فیلدِ ثبت‌شده متنِ راهنمایِ همان فیلد را نشان می‌دهد.
 
     طبقِ بازخوردِ کاربر: نسخه‌یِ اول از QToolTip استفاده می‌کرد که در
     محیطِ واقعیِ کاربر اصلاً نمایش داده نمی‌شد. بررسی نشان داد QToolTip
     (و بعد eventFilter+QEvent.FocusIn هم) به‌طورِ کلی روی فوکوس‌هایی که
     بدونِ رویدادِ ماوس اتفاق می‌افتند، غیرِقابلِ‌اتکا هستند. تلاشِ بعدی —
-    یک پنجره‌یِ کاملاً مستقل (Qt.Tool) — باگِ بدترِ دیگری آشکار کرد: حتی با
-    WindowDoesNotAcceptFocus، آن پنجره خودش app.activeWindow() می‌شد و
-    پنجره‌یِ اصلی را از حالتِ فعال می‌انداخت — و چون Qt فوکوسِ ویجت‌هایِ
-    پنجره‌یِ غیرِفعال را دنبال نمی‌کند، هیچ رویدادِ فوکوسی اصلاً به گوشِ
-    برنامه نمی‌رسید (همان چیزی که کاربر «هیچی نشون نمیده» گزارش داد).
+    یک پنجره‌یِ کاملاً مستقل (Qt.Tool) — باگِ بدترِ دیگری آشکار کرد: آن
+    پنجره خودش app.activeWindow() می‌شد و پنجره‌یِ اصلی را از حالتِ فعال
+    می‌انداخت. راه‌حلِ نهایی: این کادر اصلاً پنجره‌یِ جدا نیست — یک
+    QWidgetِ معمولیِ فرزندِ خودِ پنجره‌یِ اصلی است (بدونِ عضویت در هیچ
+    layout)، با move()/raise_() در گوشه جا می‌گیرد.
 
-    راه‌حلِ نهایی: این کادر اصلاً پنجره‌یِ جدا نیست — یک QWidgetِ معمولیِ
-    فرزندِ خودِ پنجره‌یِ اصلی است (بدونِ عضویت در هیچ layout)، با move() در
-    گوشه‌یِ آن جا می‌گیرد و با raise_() همیشه رویِ سایرِ ویجت‌ها می‌ماند.
-    چون پنجره‌یِ جداگانه‌ای نیست، هیچ‌وقت رویِ فوکوس/فعال‌بودنِ پنجره‌یِ
-    اصلی اثر نمی‌گذارد. یک چک‌باکسِ «نمایش» هم دارد که با آن می‌شود کلاً
-    خاموشش کرد؛ وضعیت با QSettings ذخیره و در اجراهایِ بعدی هم حفظ
-    می‌شود.
+    طبقِ درخواستِ صریح برایِ ظاهرِ متمایز: به‌جایِ همرنگیِ تمِ تیره‌یِ
+    برنامه، این کادر پس‌زمینه‌یِ روشن با فونتِ تیره و لبه‌یِ رنگیِ نازک
+    دارد تا رویِ زمینه‌یِ تیره‌یِ ریبون/سایدبار به‌وضوح جلبِ‌توجه کند؛ با
+    هر به‌روزرسانیِ متن یک انیمیشنِ محوشدگیِ کوتاه (fade) هم اجرا می‌شود.
+    کلیدِ روشن/خاموش‌کردنِ کلی دیگر داخلِ خودِ کادر نیست — طبقِ درخواستِ
+    صریح به دکمه‌ی کوچکِ بالایِ صفحه (کنارِ نشانِ برند، در هدر) منتقل شده
+    (نگاهِ کنید: shell_window.py — field_help_toggle).
 
     یک نمونه‌یِ سراسریِ Singleton (از طریقِ FieldHelpPanel.instance(parent))
     برایِ کلِ برنامه کافی است — هر صفحه‌ای که فیلدهایش را با
     FieldHelpController ثبت کند، همین یک کادر را به‌روزرسانی می‌کند."""
 
     _instance: "FieldHelpPanel | None" = None
-    _SETTINGS_KEY = "field_help/enabled"
     _PLACEHOLDER = "برایِ دیدنِ راهنمایِ هر فیلد، رویِ آن کلیک کنید یا با کلیدِ Tab به آن بروید."
+    _ACCENT = "#f5a524"
 
     @classmethod
     def instance(cls, parent: QWidget) -> "FieldHelpPanel":
@@ -147,41 +168,54 @@ class FieldHelpPanel(QFrame):
         self.setObjectName("fieldHelpPanel")
         self.setFixedWidth(300)
         self.setStyleSheet(
-            "#fieldHelpPanel { background: #1f2a3c; border: 1px solid #3a4a63; border-radius: 10px; }"
-            "#fieldHelpPanel QLabel { color: #e7ecf3; }"
-            "#fieldHelpPanel QCheckBox { color: #b8c4d6; }"
+            "#fieldHelpPanel {"
+            "   background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #fbf3e6);"
+            f"   border: 1px solid {self._ACCENT};"
+            "   border-right: 4px solid " + self._ACCENT + ";"
+            "   border-radius: 14px;"
+            "}"
+            "#fieldHelpPanel QLabel#fieldHelpTitle {"
+            f"   color: {self._ACCENT}; font-weight: bold; font-size: 12px;"
+            "}"
+            "#fieldHelpPanel QLabel#fieldHelpText { color: #2c2416; }"
         )
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 10, 14, 12)
+        outer.setContentsMargins(16, 12, 16, 14)
         outer.setSpacing(6)
 
         header = QHBoxLayout()
+        header.setSpacing(6)
+        icon = QLabel("💡")
+        header.addWidget(icon)
         title = QLabel("راهنمایِ فیلد")
-        title.setStyleSheet("font-weight: bold;")
+        title.setObjectName("fieldHelpTitle")
         header.addWidget(title)
         header.addStretch(1)
-        self._settings = QSettings("Peecha", "PeechaERP")
-        is_enabled = bool(self._settings.value(self._SETTINGS_KEY, True, type=bool))
-        self.enabled_checkbox = QCheckBox("نمایش")
-        self.enabled_checkbox.setChecked(is_enabled)
-        self.enabled_checkbox.toggled.connect(self._on_toggle)
-        header.addWidget(self.enabled_checkbox)
         outer.addLayout(header)
 
         self.text_label = QLabel(self._PLACEHOLDER)
+        self.text_label.setObjectName("fieldHelpText")
         self.text_label.setWordWrap(True)
         outer.addWidget(self.text_label)
 
         self._active = False
+        self._enabled = field_help_is_enabled()
+
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self._opacity_effect)
+        self._fade_animation = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._fade_animation.setDuration(220)
+        self._fade_animation.setEasingCurve(QEasingCurve.OutCubic)
+
         parent.installEventFilter(self)
 
-    def _on_toggle(self, checked: bool) -> None:
-        self._settings.setValue(self._SETTINGS_KEY, checked)
+    def set_enabled(self, value: bool) -> None:
+        self._enabled = value
         self._sync_visibility()
 
     def is_enabled(self) -> bool:
-        return self.enabled_checkbox.isChecked()
+        return self._enabled
 
     def activate(self) -> None:
         """صدا زده می‌شود وقتی صفحه‌ای که از این راهنما استفاده می‌کند نمایان می‌شود."""
@@ -198,9 +232,19 @@ class FieldHelpPanel(QFrame):
     def show_text(self, text: str) -> None:
         self.text_label.setText(text)
         self._sync_visibility()
+        if self._active and self._enabled:
+            self._play_fade_in()
+
+    def _play_fade_in(self) -> None:
+        # طبقِ درخواستِ صریح برایِ «انیمیشنِ خاص»: با هر به‌روزرسانیِ متن،
+        # کادر کوتاه محو و دوباره ظاهر می‌شود تا تغییرِ محتوا به‌چشم بیاید.
+        self._fade_animation.stop()
+        self._fade_animation.setStartValue(0.35)
+        self._fade_animation.setEndValue(1.0)
+        self._fade_animation.start()
 
     def _sync_visibility(self) -> None:
-        if self._active and self.is_enabled():
+        if self._active and self._enabled:
             self._reposition()
             self.show()
             self.raise_()
@@ -215,15 +259,14 @@ class FieldHelpPanel(QFrame):
         return False
 
     def _reposition(self) -> None:
-        # گوشه‌یِ پایین-چپِ پنجره‌یِ اصلی: طبقِ درخواستِ صریح، جایی ثابت
-        # (نه وابسته به فرم)، دورتر از نوارِ ناوبریِ سمتِ راست.
+        # طبقِ درخواستِ صریح: گوشه‌یِ بالا-راستِ پنجره‌یِ اصلی.
         parent = self.parentWidget()
         if parent is None:
             return
         self.adjustSize()
         margin = 20
-        x = margin
-        y = parent.height() - self.height() - margin
+        x = parent.width() - self.width() - margin
+        y = margin
         self.move(x, y)
 
 

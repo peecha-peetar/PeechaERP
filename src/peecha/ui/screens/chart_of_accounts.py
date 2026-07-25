@@ -106,19 +106,25 @@ class ChartOfAccountsScreen(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         # طبقِ یک نکته‌یِ ظریف: در زمانِ __init__، این ویجت هنوز به
-        # QStackedWidgetِ پنجره‌یِ اصلی اضافه نشده — self.window() در آن
-        # لحظه فقط خودِ همین ویجت را برمی‌گرداند، نه MainWindowِ واقعی. پس
-        # ثبتِ راهنمایِ فیلدها (که برایِ ساختنِ FieldHelpPanel به
-        # پنجره‌یِ اصلیِ واقعی نیاز دارد) تا اولین showEvent به تعویق
-        # می‌افتد.
+        # QStackedWidgetِ پنجره‌یِ اصلی اضافه نشده — self.parentWidget() در
+        # آن لحظه None است. پس ثبتِ راهنمایِ فیلدها (که برایِ ساختنِ
+        # FieldHelpPanel به یک پدرِ واقعی نیاز دارد) تا اولین showEvent به
+        # تعویق می‌افتد. عمداً self.parentWidget() (یعنی خودِ
+        # QStackedWidgetِ محتوا) به‌جایِ self.window() (کلِ پنجره‌یِ اصلی،
+        # شاملِ هدر/ریبون/سایدبار) استفاده می‌شود — طبقِ گزارشِ صریح، وقتی
+        # کادر رویِ کلِ پنجره جا می‌گرفت، رویِ هدر/جستجو/ریبون می‌افتاد؛
+        # با پدر=QStackedWidget، کادر فقط در محدوده‌یِ ناحیه‌یِ محتوا (زیرِ
+        # هدر/ریبون، کنارِ سایدبار، نه رویِ آن) جا می‌گیرد.
         if not self._field_help_registered:
             self._field_help_registered = True
             self._register_field_help()
-        FieldHelpPanel.instance(self.window()).activate()
+        FieldHelpPanel.instance(self.parentWidget()).activate()
 
     def hideEvent(self, event) -> None:
         super().hideEvent(event)
-        FieldHelpPanel.instance(self.window()).deactivate()
+        panel = FieldHelpPanel.instance(self.parentWidget()) if self.parentWidget() is not None else None
+        if panel is not None:
+            panel.deactivate()
 
     # --- فهرست --------------------------------------------------------------
     def _build_list_panel(self) -> QWidget:
@@ -287,7 +293,7 @@ class ChartOfAccountsScreen(QWidget):
         # طبقِ یک باگِ واقعیِ کشف‌شده در تست: بدونِ نگه‌داشتنِ یک ارجاعِ
         # قویِ پایتونی (self._field_help_controller)، PySide6 این آبجکت را
         # gc می‌کند و اتصالِ سیگنالِ focusChanged هم از بین می‌رود.
-        controller = FieldHelpController(FieldHelpPanel.instance(self.window()))
+        controller = FieldHelpController(FieldHelpPanel.instance(self.parentWidget()))
         self._field_help_controller = controller
         controller.register(
             self.parent_combo,

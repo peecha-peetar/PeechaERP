@@ -35,6 +35,7 @@ from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha import numerals
 from peecha.ui import theme
+from peecha.ui.widgets import field_help_is_enabled, set_field_help_enabled
 
 # طبقِ درخواستِ صریح: عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/تامین‌کننده/
 # پرسنل) در ریبون باید بعدِ تغییرِ نامشان (dimension_group_config.py) به‌روز
@@ -200,6 +201,28 @@ class MainWindow(QMainWindow):
         divider0.setFixedHeight(24)
         divider0.setStyleSheet(f"color: {theme.DIVIDER};")
         layout.addWidget(divider0)
+
+        # طبقِ درخواستِ صریح: کلیدِ روشن/خاموش‌کردنِ کادرِ راهنمایِ فیلدها
+        # (widgets.FieldHelpPanel) این‌جا، بالایِ صفحه، کنارِ نشانِ برند —
+        # نه دیگر داخلِ خودِ کادر — تا همیشه در دسترس باشد، صرفِ‌نظر از
+        # اینکه کدام صفحه باز است.
+        self.field_help_toggle = QToolButton()
+        self.field_help_toggle.setObjectName("fieldHelpToggle")
+        self.field_help_toggle.setCheckable(True)
+        self.field_help_toggle.setChecked(field_help_is_enabled())
+        self.field_help_toggle.setCursor(Qt.PointingHandCursor)
+        self.field_help_toggle.setText("⚙")
+        self.field_help_toggle.setToolTip("راهنمایِ فیلدها: نمایش/عدمِ‌نمایشِ کادرِ آموزشیِ فیلدها")
+        self.field_help_toggle.setStyleSheet(
+            "#fieldHelpToggle {"
+            "   border: none; border-radius: 14px; padding: 4px 10px;"
+            "   font-size: 15px; color: #8a93a6; background: transparent;"
+            "}"
+            "#fieldHelpToggle:checked { color: #f5a524; background: rgba(245, 165, 36, 40); }"
+            "#fieldHelpToggle:hover { background: rgba(245, 165, 36, 25); }"
+        )
+        self.field_help_toggle.toggled.connect(set_field_help_enabled)
+        layout.addWidget(self.field_help_toggle)
 
         self.search_field = QLineEdit()
         self.search_field.setPlaceholderText("⌕  جستجو در سیستم...")
