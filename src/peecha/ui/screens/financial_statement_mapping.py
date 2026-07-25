@@ -47,7 +47,7 @@ _LIQUIDITY_CLASS_OPTIONS = [
 ]
 
 _COLUMNS = [
-    "کد", "نام", "دسته (سود-زیان/ترازنامه)", "نوعِ حساب", "بخشِ گردشِ وجوهِ نقد", "طبقه‌یِ نقدینگی", "",
+    "کد", "نام", "دسته‌یِ حساب", "نوعِ حساب", "بخشِ گردشِ نقد", "طبقه‌یِ نقدینگی", "",
 ]
 
 
@@ -73,11 +73,9 @@ class FinancialStatementMappingScreen(QWidget):
         layout.addWidget(title)
 
         hint = QLabel(
-            "هر گروهِ حساب (سطحِ ۱) در کدام صورتِ مالی قرار می‌گیرد: «دسته» و «نوعِ حساب» "
-            "تعیین‌کننده‌یِ صورتِ سود و زیان/ترازنامه‌اند (ASSET/LIABILITY/EQUITY و PERMANENT = ترازنامه، "
-            "REVENUE/EXPENSE و TEMPORARY = سود و زیان)؛ «بخشِ گردشِ وجوهِ نقد» فقط برایِ گزارشِ گردشِ "
-            "وجوهِ نقدِ غیرمستقیم، و «طبقه‌یِ نقدینگی» فقط برایِ نسبتِ جاری/آنی (گزارشِ نسبت‌هایِ مالی) "
-            "استفاده می‌شود. این چهار فیلد رویِ کلِ زیرشاخه‌هایِ همان گروه هم اعمال می‌شوند."
+            "مشخص کنید هر گروهِ حساب در کدام گزارشِ مالی بیاید: دارایی/بدهی/سرمایه در ترازنامه، "
+            "درآمد/هزینه در سود و زیان. «بخشِ گردشِ نقد» و «طبقه‌یِ نقدینگی» اختیاری‌اند و فقط در "
+            "گزارش‌هایِ مربوطه اثر دارند. با ذخیره، همه‌یِ زیرمجموعه‌هایِ همان گروه هم به‌روز می‌شوند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -87,7 +85,21 @@ class FinancialStatementMappingScreen(QWidget):
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        # طبقِ بازخورد: ارتفاعِ پیش‌فرضِ ردیف برایِ سه‌تا کمبوباکس+دکمه در
+        # یک ردیف کافی نبود (فیلدها فشرده/نصفه دیده می‌شدند) — هم‌الگو با
+        # همین رفعِ باگ در journal_entry.py.
+        self.table.verticalHeader().setDefaultSectionSize(48)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        # ستون‌هایِ کمبوباکس باید به‌اندازه‌یِ کافی عریض باشند، وگرنه متنِ
+        # گزینه‌هایِ بلندتر (مثلِ «حقوق صاحبانِ سهام») بریده نشان داده می‌شود.
+        combo_widths = {2: 190, 3: 130, 4: 150, 5: 150}
+        for combo_col, width in combo_widths.items():
+            self.table.setColumnWidth(combo_col, width)
+            header.setSectionResizeMode(combo_col, QHeaderView.Fixed)
+        self.table.setColumnWidth(6, 90)
+        header.setSectionResizeMode(6, QHeaderView.Fixed)
         layout.addWidget(self.table, stretch=1)
 
         self.status_label = QLabel("")
