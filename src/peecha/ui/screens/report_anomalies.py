@@ -50,6 +50,13 @@ class AnomaliesScreen(ReportScreenBase):
             ),
         ])
 
+    def extra_filters_summary(self) -> list[tuple[str, str]]:
+        parts = [("آستانه‌یِ روزِ پیش‌نویسِ معوق", str(self.stale_days_spin.value()))]
+        parts.append(("تشخیصِ تراکنشِ نامتعارف", "بله" if self.outlier_checkbox.isChecked() else "خیر"))
+        if self.outlier_checkbox.isChecked():
+            parts.append(("ضریبِ آستانه (Z)", str(self.outlier_z_spin.value())))
+        return parts
+
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         anomalies = reports_service.detect_document_anomalies(
             company_id,

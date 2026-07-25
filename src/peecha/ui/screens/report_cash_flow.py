@@ -40,6 +40,9 @@ class CashFlowScreen(ReportScreenBase):
 
         self._currency_decimal_places = 0
 
+    def extra_filters_summary(self) -> list[tuple[str, str]]:
+        return [("روش", self.method_combo.currentText())]
+
     def _on_method_changed(self) -> None:
         # فیلترِ مرکزِ هزینه/شماره‌یِ سند فقط رویِ روشِ مستقیم (که سطرهایِ
         # سندی نمایش می‌دهد) معنا دارد؛ روشِ غیرمستقیم رویِ گردشِ حساب‌هایِ

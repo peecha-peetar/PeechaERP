@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import numerals, session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
@@ -366,11 +366,54 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
     ) -> tuple[list[str], list[list], list | None]:
         raise NotImplementedError
 
+    # --- سربرگِ چاپ/PDF/Excel: نامِ شرکت + تاریخِ گزارش + فیلترها --------
+    def extra_filters_summary(self) -> list[tuple[str, str]]:
+        """زیرکلاس‌هایی که فیلترِ اختصاصیِ خودشان را دارند (extra_filter_row)
+        این متد را override می‌کنند تا همان فیلترها هم در سربرگِ چاپ/PDF/
+        Excel، به همان ترتیبی که در فرم دیده می‌شوند، ظاهر شوند."""
+        return []
+
+    def _filters_summary(self) -> list[tuple[str, str]]:
+        # طبقِ گزارشِ صریح: سربرگِ چاپ باید فیلترهایِ اِعمال‌شده را به همان
+        # ترتیبِ نمایش در فرمِ فیلتر نشان دهد — این‌جا هم به همان ترتیب
+        # (تاریخ‌ها -> وضعیت -> فیلترهایِ پیشرفته‌یِ فعال -> جستجو) ساخته
+        # می‌شود.
+        parts: list[tuple[str, str]] = [
+            ("از تاریخ", numerals.format_jalali_date(self.date_from.date())),
+            ("تا تاریخ", numerals.format_jalali_date(self.date_to.date())),
+            ("وضعیتِ سند", self.status_combo.currentText()),
+        ]
+        if self.code_from_field.isVisibleTo(self) and (
+            self.code_from_field.text().strip() or self.code_to_field.text().strip()
+        ):
+            parts.append(("بازه‌یِ کد", f"{self.code_from_field.text().strip()} تا {self.code_to_field.text().strip()}"))
+        if self.cost_center_combo.isVisibleTo(self) and self.cost_center_combo.currentData() is not None:
+            parts.append(("مرکزِ هزینه/پروژه", self.cost_center_combo.currentText()))
+        if self.document_no_field.isVisibleTo(self) and self.document_no_field.text().strip():
+            parts.append(("شماره‌یِ سند", self.document_no_field.text().strip()))
+        parts.extend(self.extra_filters_summary())
+        if self.search_field.text().strip():
+            parts.append(("جستجو در نتایج", self.search_field.text().strip()))
+        return parts
+
+    def _export_kwargs(self) -> dict:
+        return {
+            "company_name": session.current_company.display_name if session.current_company else "",
+            "report_date": numerals.format_jalali_date(datetime.date.today()),
+            "filters": self._filters_summary(),
+        }
+
     def _on_print(self) -> None:
-        report_export.print_report(self, self._title, self._headers, self._rows, self._footer)
+        report_export.print_report(
+            self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs()
+        )
 
     def _on_export_pdf(self) -> None:
-        report_export.export_report_pdf(self, self._title, self._headers, self._rows, self._footer)
+        report_export.export_report_pdf(
+            self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs()
+        )
 
     def _on_export_excel(self) -> None:
-        report_export.export_report_excel(self, self._title, self._headers, self._rows, self._footer)
+        report_export.export_report_excel(
+            self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs()
+        )

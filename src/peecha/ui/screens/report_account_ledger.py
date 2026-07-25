@@ -71,6 +71,12 @@ class AccountLedgerScreen(ReportScreenBase):
         self._ledger_target: tuple[str, int, str] | None = None
         self._currency_decimal_places = 0
 
+    def extra_filters_summary(self) -> list[tuple[str, str]]:
+        parts = [("سطح", self.level_combo.currentText())]
+        if self.dimension_combo.isVisibleTo(self) and self.dimension_combo.currentData() is not None:
+            parts.append(("نوعِ تفصیلی", self.dimension_combo.currentText()))
+        return parts
+
     def _on_level_changed(self) -> None:
         is_detail = self.level_combo.currentData() == 4
         self.dimension_label.setVisible(is_detail)

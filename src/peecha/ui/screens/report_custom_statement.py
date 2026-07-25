@@ -33,6 +33,9 @@ class CustomStatementScreen(ReportScreenBase):
 
         self._currency_decimal_places = 0
 
+    def extra_filters_summary(self) -> list[tuple[str, str]]:
+        return [("الگو", self.template_combo.currentText())]
+
     def refresh(self) -> None:
         company = session.current_company
         currency = None

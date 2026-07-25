@@ -48,6 +48,12 @@ class PeriodComparisonScreen(ReportScreenBase):
 
         self._currency_decimal_places = 0
 
+    def extra_filters_summary(self) -> list[tuple[str, str]]:
+        return [
+            ("دانه‌بندی", self.granularity_combo.currentText()),
+            ("تعدادِ دوره", str(self.period_count_spin.value())),
+        ]
+
     def _fmt(self, value: decimal.Decimal) -> str:
         return f"{value:,.0f}"
 
