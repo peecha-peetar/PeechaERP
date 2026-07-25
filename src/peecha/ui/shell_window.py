@@ -556,6 +556,7 @@ class MainWindow(QMainWindow):
             ProjectsScreen,
         )
         from peecha.ui.screens.system_settings import SystemSettingsScreen  # noqa: PLC0415
+        from peecha.ui.screens.visual_report_designer import VisualReportDesignerScreen  # noqa: PLC0415
 
         self.register_screen("dashboard", DashboardScreen())
         self.register_screen("placeholder", PlaceholderScreen())
@@ -590,6 +591,7 @@ class MainWindow(QMainWindow):
         self.register_screen("report_anomalies", AnomaliesScreen())
         self.register_screen("report_designer", ReportDesignerScreen())
         self.register_screen("report_custom_builder", ReportBuilderRunScreen())
+        self.register_screen("visual_report_designer", VisualReportDesignerScreen())
         # همه‌ی فرم‌هایِ قبلاً جداگانه‌ی «مدیریتِ سیستم» (زبان‌ها/ارزها/شرکت‌ها/
         # سال‌های مالی/کاربران/نقش‌ها/عنوانِ فیلدها/ردِ حسابرسی) اکنون به‌صورتِ
         # تب درونِ system_settings.SystemSettingsScreen زندگی می‌کنند — نکته‌ی

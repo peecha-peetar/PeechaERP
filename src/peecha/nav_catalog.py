@@ -96,6 +96,11 @@ NAV_ITEMS = [
                 "label": "گزارش‌سازِ کامل (اجرا)",
                 "screen": "report_custom_builder",
             },
+            {
+                "code": "REPORTS_VISUAL_DESIGNER",
+                "label": "طراحیِ بصریِ گزارشِ چاپی",
+                "screen": "visual_report_designer",
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ

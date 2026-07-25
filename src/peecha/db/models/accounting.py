@@ -17,6 +17,7 @@ from sqlalchemy import (
     Computed,
     Date,
     ForeignKey,
+    LargeBinary,
     Numeric,
     SmallInteger,
     String,
@@ -518,3 +519,61 @@ class ReportTemplateAccountFilter(Base):
     code_from: Mapped[str | None] = mapped_column(String(50), nullable=True)
     code_to: Mapped[str | None] = mapped_column(String(50), nullable=True)
     category_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
+class VisualReportTemplate(Base):
+    """طراحِ بصریِ گزارشِ چاپی (WYSIWYG) — رویِ یک report_templateِ موجود
+    (019) به‌عنوانِ منبعِ داده سوار می‌شود؛ خودش فقط چیدمانِ صفحه/باندها/
+    اشیا را نگه می‌دارد."""
+
+    __tablename__ = "visual_report_templates"
+    __table_args__ = {"schema": "acc"}
+
+    visual_template_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(200))
+    report_template_id: Mapped[int] = mapped_column(ForeignKey("acc.report_templates.report_template_id"))
+    page_size: Mapped[str] = mapped_column(String(10), default="A4")
+    orientation: Mapped[str] = mapped_column(String(10), default="PORTRAIT")
+    margin_top_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=15)
+    margin_bottom_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=15)
+    margin_left_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=15)
+    margin_right_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=15)
+    use_grouping: Mapped[bool] = mapped_column(Boolean, default=False)
+    display_order: Mapped[int] = mapped_column(default=0)
+
+
+class VisualReportBand(Base):
+    __tablename__ = "visual_report_bands"
+    __table_args__ = (
+        UniqueConstraint("visual_template_id", "band_type"),
+        {"schema": "acc"},
+    )
+
+    band_id: Mapped[int] = mapped_column(primary_key=True)
+    visual_template_id: Mapped[int] = mapped_column(
+        ForeignKey("acc.visual_report_templates.visual_template_id")
+    )
+    band_type: Mapped[str] = mapped_column(String(20))
+    height_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2), default=10)
+
+
+class VisualReportObject(Base):
+    __tablename__ = "visual_report_objects"
+    __table_args__ = {"schema": "acc"}
+
+    object_id: Mapped[int] = mapped_column(primary_key=True)
+    band_id: Mapped[int] = mapped_column(ForeignKey("acc.visual_report_bands.band_id"))
+    object_type: Mapped[str] = mapped_column(String(20))  # TEXT|FIELD|LINE|RECTANGLE|IMAGE
+    x_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2))
+    y_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2))
+    width_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2))
+    height_mm: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 2))
+    text_content: Mapped[str | None]
+    field_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    font_family: Mapped[str] = mapped_column(String(50), default="default")
+    font_size: Mapped[int] = mapped_column(SmallInteger, default=10)
+    font_bold: Mapped[bool] = mapped_column(Boolean, default=False)
+    text_align: Mapped[str] = mapped_column(String(10), default="RIGHT")
+    border_style: Mapped[str] = mapped_column(String(10), default="NONE")
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
