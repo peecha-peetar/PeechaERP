@@ -32,7 +32,6 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
     ChartOfAccount,
-    DetailAccount,
     DetailDimensionType,
     JournalEntry,
     JournalEntryLine,
@@ -41,7 +40,6 @@ from peecha.db.models.accounting import (
 )
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.services import report_designer as report_designer_service
 from peecha.services import statement_templates as statement_templates_service
 
 _ZERO = decimal.Decimal("0")
@@ -910,36 +908,40 @@ def _natural_signed_balance(b: AccountBalanceRow) -> decimal.Decimal:
         debit, credit = b.closing_debit, b.closing_credit
     else:
         debit, credit = b.period_debit, b.period_credit
-    return _natural_signed(debit, credit, b.category_code)
-
-
-def _natural_signed(debit: decimal.Decimal, credit: decimal.Decimal, category_code: str) -> decimal.Decimal:
-    if category_code in _CREDIT_NORMAL_CATEGORIES:
+    if b.category_code in _CREDIT_NORMAL_CATEGORIES:
         return credit - debit
     return debit - credit
 
 
-def _resolve_statement_rows(
-    rows: list["statement_templates_service.StatementRowInfo"],
-    all_balances: list[AccountBalanceRow],
-    value_fn=_natural_signed_balance,
-) -> dict[int, decimal.Decimal | None]:
-    """حلِ مقدارِ هر ردیفِ یک الگویِ حسابی (ACCOUNTS/FORMULA/HEADER) رویِ یک
-    مجموعه‌یِ مشخصِ بالانس — جدا شده تا هم compute_custom_statement (یک
-    ستون، همیشه با _natural_signed_balance) و هم compute_summary_report
-    (گزارش‌سازِ کامل، چند ستون که هرکدام می‌تواند نوعِ مقدارِ متفاوتی —
-    مانده‌ی اول/بدهکارِ دوره/... — رویِ بالانسِ دوره‌یِ خودش بخواهد) از
-    همین منطقِ حلِ ACCOUNTS/RANGE/CATEGORY/FORMULA استفاده کنند، بدونِ
-    دوباره‌نویسی. هر ردیفِ ACCOUNTS از جمعِ چند جزء ساخته می‌شود که
-    هرکدام می‌تواند یک حسابِ مشخص (ACCOUNT، هر سطحی)، یک بازه‌یِ کد در یک
-    سطحِ مشخص (RANGE) یا کلِ یک طبقه در یک سطحِ مشخص (CATEGORY) باشد،
-    هرکدام با علامتِ +/−. حلِ بازگشتی+memo باعث می‌شود ترتیبِ row_order
-    برایِ محاسبه مهم نباشد و حلقه‌هایِ فرمولی با ValueError روشن رد شوند.
+def compute_custom_statement(
+    template_id: int,
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date,
+    *,
+    status_filter: str = "EXCLUDE_DRAFT",
+) -> list[CustomStatementLine]:
+    """گزارشِ سفارشی (طراحِ گزارش، فازِ ۲ + گزارش‌سازِ پیشرفته) — هر ردیفِ
+    ACCOUNTS از جمعِ چند جزء ساخته می‌شود که هرکدام می‌تواند یک حسابِ
+    مشخص (ACCOUNT، هر سطحی: گروه/کل/معین)، یک بازه‌یِ کد در یک سطحِ
+    مشخص (RANGE) یا کلِ یک طبقه — دارایی/بدهی/سرمایه/درآمد/هزینه — در
+    یک سطحِ مشخص (CATEGORY) باشد، هرکدام با علامتِ +/−. مانده/گردشِ هر
+    حساب از `compute_account_balances` می‌آید که خودش برایِ همه‌یِ سطوح
+    رول‌آپ‌شده است، پس نیازی به کوئریِ تازه نیست. حسابِ PERMANENT
+    (ترازنامه‌ای) → مانده‌یِ تجمعی تا date_to؛ TEMPORARY (موقت) → گردشِ
+    همان دوره — دقیقاً همان قراردادِ compute_balance_sheet/
+    compute_income_statement. هر ردیفِ FORMULA از جمعِ چند ردیفِ دیگرِ
+    همین الگو ساخته می‌شود؛ حلِ بازگشتی+memo باعث می‌شود ترتیبِ row_order
+    برایِ محاسبه مهم نباشد (فقط برایِ نمایش) و حلقه‌هایِ فرمولی با
+    ValueError روشن رد شوند، نه کرش/بازگشتِ بی‌نهایت.
 
     توجه برایِ RANGE/CATEGORY: چون compute_account_balances رول‌آپِ همه‌یِ
-    سطوح را برمی‌گرداند، جمع‌زدنِ بازه/طبقه فقط رویِ حساب‌هایِ همان یک سطحِ
+    سطوح را برمی‌گرداند (یک حسابِ تفصیلی هم در بالانسِ حسابِ کل/گروهِ
+    والدش جمع شده)، جمع‌زدنِ بازه/طبقه فقط رویِ حساب‌هایِ همان یک سطحِ
     مشخص‌شده انجام می‌شود — نه همه‌یِ سطوح با هم — تا دوبار-شماری رخ ندهد."""
+    rows = statement_templates_service.list_rows(template_id)
     rows_by_id = {r.row_id: r for r in rows}
+    all_balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
     balances_by_id = {b.account_id: b for b in all_balances}
 
     memo: dict[int, decimal.Decimal | None] = {}
@@ -960,16 +962,16 @@ def _resolve_statement_rows(
                         if b.account_level == ref.account_level and code_in_range(
                             b.full_code, ref.code_from, ref.code_to
                         ):
-                            total += ref.sign * value_fn(b)
+                            total += ref.sign * _natural_signed_balance(b)
                 elif ref.selector_type == "CATEGORY":
                     for b in all_balances:
                         if b.account_level == ref.account_level and b.category_code == ref.category_code:
-                            total += ref.sign * value_fn(b)
+                            total += ref.sign * _natural_signed_balance(b)
                 else:  # ACCOUNT
                     b = balances_by_id.get(ref.account_id)
                     if b is None:
                         continue
-                    total += ref.sign * value_fn(b)
+                    total += ref.sign * _natural_signed_balance(b)
         elif row.row_type == "FORMULA":
             total = _ZERO
             for ref_row_id, sign in row.formula_refs:
@@ -981,32 +983,13 @@ def _resolve_statement_rows(
         memo[row_id] = total
         return total
 
-    for r in rows:
-        resolve(r.row_id)
-    return memo
-
-
-def compute_custom_statement(
-    template_id: int,
-    company_id: int,
-    date_from: datetime.date | None,
-    date_to: datetime.date,
-    *,
-    status_filter: str = "EXCLUDE_DRAFT",
-) -> list[CustomStatementLine]:
-    """گزارشِ سفارشی (طراحِ گزارش، فازِ ۲ + گزارش‌سازِ پیشرفته) — تک‌ستونی؛
-    برایِ نسخه‌یِ چندستونیِ همین ردیف‌ها (مانده‌ی اول/بدهکار/بستانکار/...
-    در چند دوره) بهِ compute_summary_report مراجعه کنید."""
-    rows = statement_templates_service.list_rows(template_id)
-    all_balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
-    values = _resolve_statement_rows(rows, all_balances)
     return [
         CustomStatementLine(
             label=r.label,
             row_type=r.row_type,
             indent_level=r.indent_level,
             is_bold=r.is_bold,
-            amount=values.get(r.row_id) if r.row_type != "HEADER" else None,
+            amount=resolve(r.row_id) if r.row_type != "HEADER" else None,
         )
         for r in rows
     ]
@@ -1388,391 +1371,3 @@ def detect_document_anomalies(
         if detect_outliers:
             rows.extend(_outlier_transaction_anomalies(session, company_id, date_from, date_to, outlier_z))
     return rows
-
-
-# ==== گزارش‌سازِ کامل (ستون + ردیف) =========================================
-# دو نوع: DETAIL (سطحِ سطرِ سند، ستون از کاتالوگِ ثابت + فیلترِ حسابیِ
-# اختیاری) و SUMMARY (چند ستونِ مقدار/دوره رویِ ردیف‌هایِ یک الگویِ حسابیِ
-# موجود در statement_templates). خروجیِ هردو یک جدولِ عمومیِ ReportCell/
-# ReportRow است که UI بر اساسِ kindِ هر سلول قالب‌بندی می‌کند.
-
-
-@dataclass
-class ReportCell:
-    value: object  # decimal.Decimal | str | datetime.date | None
-    kind: str  # TEXT | MONEY | DATE
-
-
-@dataclass
-class ReportRow:
-    cells: list[ReportCell]
-    is_bold: bool = False
-
-
-_SUMMARY_MEASURE_LABELS = {
-    "OPENING_BALANCE": "مانده‌یِ اول",
-    "PERIOD_DEBIT": "بدهکارِ دوره",
-    "PERIOD_CREDIT": "بستانکارِ دوره",
-    "CLOSING_BALANCE": "مانده‌یِ آخر",
-    "NATURAL_BALANCE": "مبلغ (علامتِ طبیعی)",
-}
-
-
-def _measure_value(b: AccountBalanceRow, measure_code: str) -> decimal.Decimal:
-    if measure_code == "OPENING_BALANCE":
-        return _natural_signed(b.opening_debit, b.opening_credit, b.category_code)
-    if measure_code == "PERIOD_DEBIT":
-        return b.period_debit
-    if measure_code == "PERIOD_CREDIT":
-        return b.period_credit
-    if measure_code == "CLOSING_BALANCE":
-        return _natural_signed(b.closing_debit, b.closing_credit, b.category_code)
-    return _natural_signed_balance(b)  # NATURAL_BALANCE (پیش‌فرض)
-
-
-def compute_summary_report(
-    report_template_id: int,
-    company_id: int,
-    date_from: datetime.date | None,
-    date_to: datetime.date,
-    *,
-    status_filter: str = "EXCLUDE_DRAFT",
-) -> tuple[list[str], list[ReportRow]]:
-    """گزارش‌سازِ کامل، نوعِ SUMMARY — ردیف‌ها از رویِ یک الگویِ حسابیِ
-    موجود (همان‌جا که در «طراحیِ الگویِ گزارش» ساخته می‌شود) خوانده
-    می‌شوند؛ این تابع فقط چند ستونِ مقدار/دوره را رویِ همان ردیف‌ها
-    اضافه می‌کند — هر ستون یک نوعِ مقدار رویِ یک بازه‌یِ تاریخِ مستقل دارد
-    (اگر خالی باشد، همان بازه‌یِ اجرایِ گزارش). بالانسِ هر بازه‌یِ یکتا
-    فقط یک‌بار محاسبه می‌شود (کش‌شده)، حتی اگر چند ستون هم‌بازه باشند."""
-    templates = {t.report_template_id: t for t in report_designer_service.list_templates(company_id)}
-    template = templates.get(report_template_id)
-    if template is None or template.statement_template_id is None:
-        return ["ردیف"], []
-
-    columns = report_designer_service.list_columns(report_template_id)
-    rows = statement_templates_service.list_rows(template.statement_template_id)
-
-    balances_cache: dict[tuple, list[AccountBalanceRow]] = {}
-    values_by_column: list[dict[int, decimal.Decimal | None]] = []
-    for col in columns:
-        col_from = col.date_from_override or date_from
-        col_to = col.date_to_override or date_to
-        key = (col_from, col_to)
-        if key not in balances_cache:
-            balances_cache[key] = compute_account_balances(company_id, col_from, col_to, status_filter=status_filter)
-        measure_code = col.measure_code or "NATURAL_BALANCE"
-        values_by_column.append(
-            _resolve_statement_rows(
-                rows, balances_cache[key], value_fn=lambda b, m=measure_code: _measure_value(b, m)
-            )
-        )
-
-    headers = ["ردیف"] + [c.label for c in columns]
-    report_rows: list[ReportRow] = []
-    for r in rows:
-        indent = "    " * r.indent_level
-        cells = [ReportCell(value=f"{indent}{r.label}", kind="TEXT")]
-        for values in values_by_column:
-            amount = values.get(r.row_id) if r.row_type != "HEADER" else None
-            cells.append(ReportCell(value=amount, kind="MONEY"))
-        report_rows.append(ReportRow(cells=cells, is_bold=r.is_bold))
-    return headers, report_rows
-
-
-_DETAIL_FIELD_LABELS = {
-    "DOCUMENT_DATE": "تاریخِ سند",
-    "DOCUMENT_NO": "شماره‌یِ سند",
-    "ALT_NUMBER": "شماره‌یِ جایگزین",
-    "DESCRIPTION": "شرح",
-    "ACCOUNT_CODE": "کدِ حساب",
-    "ACCOUNT_NAME": "نامِ حساب",
-    "DETAIL_NAMES": "تفصیلی‌ها",
-    "DEBIT": "بدهکار",
-    "CREDIT": "بستانکار",
-    "RUNNING_BALANCE": "مانده‌یِ رواگرد",
-    "STATUS": "وضعیتِ سند",
-}
-
-_DETAIL_FIELD_KINDS = {
-    "DOCUMENT_DATE": "DATE",
-    "DOCUMENT_NO": "TEXT",
-    "ALT_NUMBER": "TEXT",
-    "DESCRIPTION": "TEXT",
-    "ACCOUNT_CODE": "TEXT",
-    "ACCOUNT_NAME": "TEXT",
-    "DETAIL_NAMES": "TEXT",
-    "DEBIT": "MONEY",
-    "CREDIT": "MONEY",
-    "RUNNING_BALANCE": "MONEY",
-    "STATUS": "TEXT",
-}
-
-_JOURNAL_STATUS_LABELS = {
-    "DRAFT": "پیش‌نویس",
-    "TEMPORARY": "موقت",
-    "PERMANENT": "دائم",
-    "REVERSED": "برگشت‌خورده",
-    "CANCELLED": "ابطال‌شده",
-}
-
-
-def _resolve_detail_account_ids(
-    accounts: list, filters: list["report_designer_service.AccountFilterInfo"]
-) -> set[int] | None:
-    """None یعنی بدونِ محدودیت (همه‌یِ حساب‌ها)؛ چند فیلتر با OR با هم ترکیب می‌شوند."""
-    if not filters:
-        return None
-    allowed: set[int] = set()
-    for f in filters:
-        if f.selector_type == "ACCOUNT":
-            allowed.add(f.account_id)
-        elif f.selector_type == "RANGE":
-            allowed.update(
-                a.account_id
-                for a in accounts
-                if a.account_level == f.account_level and code_in_range(a.full_code, f.code_from, f.code_to)
-            )
-        else:  # CATEGORY
-            allowed.update(
-                a.account_id
-                for a in accounts
-                if a.account_level == f.account_level and a.category_code == f.category_code
-            )
-    return allowed
-
-
-@dataclass
-class _DetailLine:
-    line_id: int
-    document_date: datetime.date
-    temporary_no: int
-    alternative_number: str | None
-    description: str
-    account_id: int
-    account_full_code: str
-    account_name: str
-    debit: decimal.Decimal
-    credit: decimal.Decimal
-    status_code: str
-    detail_names: str
-
-
-def _list_detail_lines(
-    company_id: int,
-    date_from: datetime.date | None,
-    date_to: datetime.date | None,
-    account_ids: set[int] | None,
-    *,
-    status_filter: str,
-    cost_center_id: int | None,
-    document_no_filter: int | None,
-    order_by_account: bool,
-) -> list[_DetailLine]:
-    accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(company_id)}
-    with new_session() as session:
-        query = (
-            select(
-                JournalEntryLine,
-                JournalEntry.document_date,
-                JournalEntry.temporary_no,
-                JournalEntry.alternative_number,
-                JournalEntry.description,
-                JournalEntryStatus.code,
-            )
-            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
-            .join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id)
-            .where(JournalEntry.company_id == company_id)
-        )
-        if account_ids is not None:
-            if not account_ids:
-                return []
-            query = query.where(JournalEntryLine.account_id.in_(account_ids))
-        if cost_center_id is not None:
-            query = query.join(
-                JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id
-            ).where(JournalEntryLineDetail.detail_account_id == cost_center_id)
-        if document_no_filter is not None:
-            query = query.where(JournalEntry.temporary_no == document_no_filter)
-        if date_from is not None:
-            query = query.where(JournalEntry.document_date >= date_from)
-        if date_to is not None:
-            query = query.where(JournalEntry.document_date <= date_to)
-        # JournalEntryStatus از قبل بالا join شده (چونِ ستونِ code همیشه لازم
-        # است)، پس این‌جا برخلافِ سایرِ توابع نمی‌توان _apply_status_filter
-        # را صدا زد (دوباره join می‌کند و خطایِ «already joined» می‌دهد).
-        if status_filter == "DRAFT_ONLY":
-            query = query.where(JournalEntryStatus.code == "DRAFT")
-        elif status_filter != "ALL":
-            query = query.where(JournalEntryStatus.code != "DRAFT")  # "EXCLUDE_DRAFT"
-        if order_by_account:
-            query = query.join(ChartOfAccount, ChartOfAccount.account_id == JournalEntryLine.account_id).order_by(
-                ChartOfAccount.full_code,
-                JournalEntry.document_date,
-                JournalEntry.temporary_no,
-                JournalEntryLine.line_no,
-            )
-        else:
-            query = query.order_by(JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no)
-        rows = session.execute(query).all()
-
-        line_ids = [row[0].line_id for row in rows]
-        detail_names_by_line: dict[int, list[str]] = {}
-        if line_ids:
-            detail_rows = session.execute(
-                select(JournalEntryLineDetail.line_id, DetailAccount.name)
-                .join(DetailAccount, DetailAccount.detail_account_id == JournalEntryLineDetail.detail_account_id)
-                .where(JournalEntryLineDetail.line_id.in_(line_ids))
-            ).all()
-            for line_id, name in detail_rows:
-                if name:
-                    detail_names_by_line.setdefault(line_id, []).append(name)
-
-    result: list[_DetailLine] = []
-    for line, document_date, temporary_no, alternative_number, entry_description, status_code in rows:
-        account = accounts_by_id.get(line.account_id)
-        result.append(
-            _DetailLine(
-                line_id=line.line_id,
-                document_date=document_date,
-                temporary_no=temporary_no,
-                alternative_number=alternative_number,
-                description=line.description or entry_description or "",
-                account_id=line.account_id,
-                account_full_code=account.full_code if account else "",
-                account_name=account.name if account else "",
-                debit=line.debit_amount_base,
-                credit=line.credit_amount_base,
-                status_code=status_code,
-                detail_names="، ".join(detail_names_by_line.get(line.line_id, [])),
-            )
-        )
-    return result
-
-
-def _detail_field_value(line: _DetailLine, field_code: str):
-    if field_code == "DOCUMENT_DATE":
-        return line.document_date
-    if field_code == "DOCUMENT_NO":
-        return str(line.temporary_no)
-    if field_code == "ALT_NUMBER":
-        return line.alternative_number or ""
-    if field_code == "DESCRIPTION":
-        return line.description
-    if field_code == "ACCOUNT_CODE":
-        return line.account_full_code
-    if field_code == "ACCOUNT_NAME":
-        return line.account_name
-    if field_code == "DETAIL_NAMES":
-        return line.detail_names
-    if field_code == "DEBIT":
-        return line.debit if line.debit else None
-    if field_code == "CREDIT":
-        return line.credit if line.credit else None
-    if field_code == "STATUS":
-        return _JOURNAL_STATUS_LABELS.get(line.status_code, line.status_code)
-    return ""  # RUNNING_BALANCE جداگانه پر می‌شود
-
-
-def compute_detail_report(
-    report_template_id: int,
-    company_id: int,
-    date_from: datetime.date | None,
-    date_to: datetime.date,
-    *,
-    status_filter: str = "EXCLUDE_DRAFT",
-    cost_center_id: int | None = None,
-    document_no_filter: int | None = None,
-) -> tuple[list[str], list[ReportRow]]:
-    """گزارش‌سازِ کامل، نوعِ DETAIL — یک ردیف به‌ازایِ هر سطرِ سند (مثلِ
-    دفترِ روزنامه/کل) با ستون‌هایِ دلخواهِ کاربر از یک کاتالوگِ ثابت.
-    اگر group_by_account فعال باشد، زیرِ سطرهایِ هر حساب یک ردیفِ جمعِ
-    فرعی (با مانده‌یِ رواگردِ همان حساب) می‌آید؛ ستونِ RUNNING_BALANCE
-    بدونِ group_by_account همیشه خالی است، چون معنایِ رواگرد بینِ چند
-    حسابِ مختلف مبهم است."""
-    templates = {t.report_template_id: t for t in report_designer_service.list_templates(company_id)}
-    template = templates.get(report_template_id)
-    if template is None:
-        return [], []
-
-    columns = report_designer_service.list_columns(report_template_id)
-    account_filters = report_designer_service.list_account_filters(report_template_id)
-    accounts = coa_service.list_accounts(company_id)
-    accounts_by_id = {a.account_id: a for a in accounts}
-    account_ids = _resolve_detail_account_ids(accounts, account_filters)
-
-    lines = _list_detail_lines(
-        company_id,
-        date_from,
-        date_to,
-        account_ids,
-        status_filter=status_filter,
-        cost_center_id=cost_center_id,
-        document_no_filter=document_no_filter,
-        order_by_account=template.group_by_account,
-    )
-
-    headers = [c.label for c in columns]
-    has_running_balance = any(c.field_code == "RUNNING_BALANCE" for c in columns)
-
-    opening_by_account: dict[int, decimal.Decimal] = {}
-    if template.group_by_account and has_running_balance:
-        opening_balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
-        for b in opening_balances:
-            opening_by_account[b.account_id] = _natural_signed(b.opening_debit, b.opening_credit, b.category_code)
-
-    report_rows: list[ReportRow] = []
-    running_by_account: dict[int, decimal.Decimal] = dict(opening_by_account)
-    current_account_id: int | None = None
-    subtotal_debit = _ZERO
-    subtotal_credit = _ZERO
-
-    def emit_subtotal(account_id: int) -> None:
-        account = accounts_by_id.get(account_id)
-        label_emitted = False
-        cells: list[ReportCell] = []
-        for col in columns:
-            if col.field_code == "DEBIT":
-                cells.append(ReportCell(value=subtotal_debit, kind="MONEY"))
-            elif col.field_code == "CREDIT":
-                cells.append(ReportCell(value=subtotal_credit, kind="MONEY"))
-            elif col.field_code == "RUNNING_BALANCE":
-                cells.append(ReportCell(value=running_by_account.get(account_id), kind="MONEY"))
-            elif not label_emitted and col.field_code in ("ACCOUNT_CODE", "ACCOUNT_NAME", "DESCRIPTION"):
-                label = f"{account.full_code} — {account.name}" if account else ""
-                cells.append(ReportCell(value=f"جمعِ {label}", kind="TEXT"))
-                label_emitted = True
-            else:
-                # None (نه رشته‌ی خالی)، چون kindِ این ستون هرچه باشد
-                # (DATE/MONEY/TEXT) — UI فقط None را «بدونِ مقدار» فرمت
-                # می‌کند؛ رشته‌ی خالی برایِ ستونِ DATE باعثِ خطایِ
-                # jdatetime.fromgregorian می‌شد.
-                cells.append(ReportCell(value=None, kind=_DETAIL_FIELD_KINDS.get(col.field_code, "TEXT")))
-        report_rows.append(ReportRow(cells=cells, is_bold=True))
-
-    for line in lines:
-        if template.group_by_account and current_account_id is not None and line.account_id != current_account_id:
-            emit_subtotal(current_account_id)
-            subtotal_debit = _ZERO
-            subtotal_credit = _ZERO
-        current_account_id = line.account_id
-        subtotal_debit += line.debit
-        subtotal_credit += line.credit
-        if template.group_by_account and has_running_balance:
-            account = accounts_by_id.get(line.account_id)
-            category_code = account.category_code if account else "ASSET"
-            delta = _natural_signed(line.debit, line.credit, category_code)
-            running_by_account[line.account_id] = running_by_account.get(line.account_id, _ZERO) + delta
-
-        cells = []
-        for col in columns:
-            if col.field_code == "RUNNING_BALANCE":
-                value = running_by_account.get(line.account_id) if template.group_by_account else None
-            else:
-                value = _detail_field_value(line, col.field_code)
-            cells.append(ReportCell(value=value, kind=_DETAIL_FIELD_KINDS.get(col.field_code, "TEXT")))
-        report_rows.append(ReportRow(cells=cells))
-
-    if template.group_by_account and current_account_id is not None:
-        emit_subtotal(current_account_id)
-
-    return headers, report_rows
