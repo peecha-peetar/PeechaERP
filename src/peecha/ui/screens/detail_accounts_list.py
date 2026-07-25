@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _GROUP_SCREEN_BY_PERSON_CODE = {
     "CUSTOMER": "customers",
@@ -60,7 +61,7 @@ def _group_label(group_name: str) -> str:
     return dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(group_name, group_name)
 
 
-class DetailAccountsListScreen(QWidget):
+class DetailAccountsListScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
         self._main_window = main_window
@@ -111,6 +112,17 @@ class DetailAccountsListScreen(QWidget):
         self.tree.setHeaderLabels(_COLUMNS)
         self.tree.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.tree, stretch=1)
+
+        self.set_field_help([
+            (
+                self.search_field,
+                "جستجو در نوعِ گروه، کد یا نام، رویِ همه‌یِ تفصیلی‌ها با هم — کالا، بانک، مشتری و بقیه.",
+            ),
+            (
+                self.show_all_levels_checkbox,
+                "به‌طورِ پیش‌فرض فقط آخرین سطح (برگ‌ها) نشان داده می‌شود. با این تیک، کلِ درختِ والد و فرزندِ هر گروه را می‌بینید.",
+            ),
+        ])
 
     def refresh(self) -> None:
         company_id = session.current_company.company_id if session.current_company else None

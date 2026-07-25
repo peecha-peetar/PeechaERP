@@ -18,13 +18,13 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 from peecha.ui import theme
-from peecha.ui.widgets import ZeroPaddedSpinBox
+from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
 
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _DETAIL_LEVEL_LABELS = {1: "سطحِ ۱", 2: "سطحِ ۲", 3: "سطحِ ۳", 4: "سطحِ ۴"}
 
 
-class AccountingCodingSettingsScreen(QWidget):
+class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._level_widgets: dict[int, tuple[QSpinBox, QSpinBox, QSpinBox]] = {}
@@ -106,6 +106,23 @@ class AccountingCodingSettingsScreen(QWidget):
         scroll.setWidget(content)
         root_layout.addWidget(scroll)
 
+        level_help = []
+        for level, (code_length, range_from, range_to) in self._level_widgets.items():
+            name = _LEVEL_LABELS[level]
+            level_help.append((
+                code_length,
+                f"تعدادِ رقمِ کدِ سطحِ «{name}». مثلاً اگر ۲ بگذارید، کدِ این سطح همیشه دو رقمی است، مثلِ «۰۱».",
+            ))
+            level_help.append((
+                range_from,
+                f"کمترین کدِ مجاز برایِ سطحِ «{name}». صفر یعنی بدونِ محدودیتِ ابتدا.",
+            ))
+            level_help.append((
+                range_to,
+                f"بیشترین کدِ مجاز برایِ سطحِ «{name}». صفر یعنی بدونِ محدودیتِ انتها.",
+            ))
+        self.set_field_help(level_help)
+
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
 
@@ -153,7 +170,7 @@ class AccountingCodingSettingsScreen(QWidget):
         theme.set_status_label(self.status_label, "تنظیماتِ کدینگ ذخیره شد.", ok=True)
 
 
-class DetailLevelDigitSettingsScreen(QWidget):
+class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._detail_level_widgets: dict[int, QSpinBox] = {}
@@ -212,6 +229,15 @@ class DetailLevelDigitSettingsScreen(QWidget):
         outer.addStretch(1)
         scroll.setWidget(content)
         root_layout.addWidget(scroll)
+
+        self.set_field_help([
+            (
+                code_length,
+                f"تعدادِ رقمِ کدِ «{_DETAIL_LEVEL_LABELS[level]}» برایِ همه‌یِ گروه‌هایِ تفصیلی — کالا، بانک، مشتری و بقیه. "
+                "این عدد سراسری است، یعنی برایِ همه‌یِ گروه‌ها یکسان است. بازه‌یِ از-تایِ هر گروه جداگانه در «پیکربندیِ گروه‌هایِ تفصیلی» تنظیم می‌شود.",
+            )
+            for level, code_length in self._detail_level_widgets.items()
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
