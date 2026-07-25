@@ -26,6 +26,7 @@ from peecha.services import roles as roles_service
 from peecha.ui.widgets import FieldHelpMixin
 
 _ACTIONS = ["VIEW", "CREATE", "EDIT", "DELETE"]
+_ACTION_LABELS = {"VIEW": "دیدن", "CREATE": "ساختن", "EDIT": "ویرایش", "DELETE": "حذف"}
 
 
 class RolesScreen(FieldHelpMixin, QWidget):
@@ -56,8 +57,8 @@ class RolesScreen(FieldHelpMixin, QWidget):
             ),
             (
                 self.permission_table,
-                "برایِ هر فرمِ برنامه مشخص کنید این نقش اجازه‌یِ دیدن (VIEW)، ساختن (CREATE)، ویرایش (EDIT) "
-                "یا حذف (DELETE) را دارد یا نه. هر کاربرِ دارایِ این نقش، فقط همین دسترسی‌ها را می‌گیرد.",
+                "برایِ هر فرمِ برنامه مشخص کنید این نقش اجازه‌یِ دیدن، ساختن، ویرایش یا حذف را دارد یا نه. "
+                "هر کاربرِ دارایِ این نقش، فقط همین دسترسی‌ها را می‌گیرد.",
             ),
             (
                 self.users_list,
@@ -121,7 +122,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         layout.addWidget(tabs, stretch=1)
 
         self.permission_table = QTableWidget(0, 1 + len(_ACTIONS))
-        self.permission_table.setHorizontalHeaderLabels(["فرم"] + _ACTIONS)
+        self.permission_table.setHorizontalHeaderLabels(["فرم"] + [_ACTION_LABELS[a] for a in _ACTIONS])
         self.permission_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.permission_table.verticalHeader().setVisible(False)
         self.permission_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)

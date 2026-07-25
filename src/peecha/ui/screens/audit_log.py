@@ -25,6 +25,9 @@ from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوعِ موجودیت"]
 
+_ACTION_LABELS = {"CREATE": "ایجاد", "UPDATE": "ویرایش", "DELETE": "حذف"}
+_ENTITY_TYPE_LABELS = {"ChartOfAccount": "حساب", "JournalEntry": "سندِ حسابداری"}
+
 
 class AuditLogScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
@@ -81,7 +84,7 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self.entity_type_combo.clear()
         self.entity_type_combo.addItem("همه‌ی انواع", None)
         for et in entity_types:
-            self.entity_type_combo.addItem(et, et)
+            self.entity_type_combo.addItem(_ENTITY_TYPE_LABELS.get(et, et), et)
         self.entity_type_combo.blockSignals(False)
         self._apply_filter()
 
@@ -95,9 +98,9 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
             values = [
                 r.created_at.strftime("%Y-%m-%d %H:%M"),
                 r.user_full_name or "سیستم",
-                r.action,
+                _ACTION_LABELS.get(r.action, r.action),
                 str(r.entity_id),
-                r.entity_type,
+                _ENTITY_TYPE_LABELS.get(r.entity_type, r.entity_type),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)

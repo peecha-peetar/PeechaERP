@@ -173,7 +173,7 @@ def export_report_excel(
         import openpyxl
         from openpyxl.styles import Font
     except ImportError:
-        QMessageBox.warning(parent_widget, "خطا", "کتابخانه‌یِ openpyxl نصب نیست.")
+        QMessageBox.warning(parent_widget, "خطا", "امکانِ ساختِ فایلِ Excel روی این سیستم فراهم نیست.")
         return
 
     path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیره‌یِ Excel", f"{title}.xlsx", "Excel (*.xlsx)")
