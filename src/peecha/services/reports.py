@@ -1742,7 +1742,11 @@ def compute_detail_report(
                 cells.append(ReportCell(value=f"جمعِ {label}", kind="TEXT"))
                 label_emitted = True
             else:
-                cells.append(ReportCell(value="", kind=_DETAIL_FIELD_KINDS.get(col.field_code, "TEXT")))
+                # None (نه رشته‌ی خالی)، چون kindِ این ستون هرچه باشد
+                # (DATE/MONEY/TEXT) — UI فقط None را «بدونِ مقدار» فرمت
+                # می‌کند؛ رشته‌ی خالی برایِ ستونِ DATE باعثِ خطایِ
+                # jdatetime.fromgregorian می‌شد.
+                cells.append(ReportCell(value=None, kind=_DETAIL_FIELD_KINDS.get(col.field_code, "TEXT")))
         report_rows.append(ReportRow(cells=cells, is_bold=True))
 
     for line in lines:
