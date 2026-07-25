@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import datetime
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPropertyAnimation, QSettings, Qt
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QSettings, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -147,6 +147,13 @@ class FieldHelpPanel(QFrame):
     صریح به دکمه‌ی کوچکِ بالایِ صفحه (کنارِ نشانِ برند، در هدر) منتقل شده
     (نگاهِ کنید: shell_window.py — field_help_toggle).
 
+    طبقِ درخواستِ صریح: با ماوس (از هر جایِ کادر — کلیک-و-بکش) قابلِ‌جابجایی
+    است؛ آخرین مکانِ دلخواهِ کاربر با QSettings ذخیره و در همه‌یِ صفحه‌ها/
+    اجراهایِ بعدی به‌کار می‌رود (نه فقط گوشه‌یِ پیش‌فرض). چون فرزندهایِ
+    کادر (آیکن/عنوان/متن) صرفاً QLabelِ نمایشی‌اند،
+    WA_TransparentForMouseEvents رویِ آن‌ها گذاشته شده تا کلیکِ رویِ متن هم
+    به خودِ کادر برسد و درگ از هرجایِ کارت کار کند.
+
     یک نمونه‌یِ سراسریِ Singleton (از طریقِ FieldHelpPanel.instance(parent))
     برایِ کلِ برنامه کافی است — هر صفحه‌ای که فیلدهایش را با
     FieldHelpController ثبت کند، همین یک کادر را به‌روزرسانی می‌کند."""
@@ -154,6 +161,7 @@ class FieldHelpPanel(QFrame):
     _instance: "FieldHelpPanel | None" = None
     _PLACEHOLDER = "برایِ دیدنِ راهنمایِ هر فیلد، رویِ آن کلیک کنید یا با کلیدِ Tab به آن بروید."
     _ACCENT = "#f5a524"
+    _POSITION_SETTINGS_KEY = "field_help/position"
 
     @classmethod
     def instance(cls, parent: QWidget) -> "FieldHelpPanel":
@@ -187,9 +195,11 @@ class FieldHelpPanel(QFrame):
         header = QHBoxLayout()
         header.setSpacing(6)
         icon = QLabel("💡")
+        icon.setAttribute(Qt.WA_TransparentForMouseEvents)
         header.addWidget(icon)
         title = QLabel("راهنمایِ فیلد")
         title.setObjectName("fieldHelpTitle")
+        title.setAttribute(Qt.WA_TransparentForMouseEvents)
         header.addWidget(title)
         header.addStretch(1)
         outer.addLayout(header)
@@ -197,10 +207,14 @@ class FieldHelpPanel(QFrame):
         self.text_label = QLabel(self._PLACEHOLDER)
         self.text_label.setObjectName("fieldHelpText")
         self.text_label.setWordWrap(True)
+        self.text_label.setAttribute(Qt.WA_TransparentForMouseEvents)
         outer.addWidget(self.text_label)
 
         self._active = False
         self._enabled = field_help_is_enabled()
+        self._drag_offset: QPoint | None = None
+        self._custom_position = self._load_position()
+        self.setCursor(Qt.SizeAllCursor)
 
         self._opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self._opacity_effect)
@@ -258,12 +272,52 @@ class FieldHelpPanel(QFrame):
             self._reposition()
         return False
 
+    # --- جابجاییِ کادر با ماوس --------------------------------------------
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_offset = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_offset is not None and (event.buttons() & Qt.LeftButton):
+            parent = self.parentWidget()
+            new_pos = self.mapToParent(event.position().toPoint() - self._drag_offset)
+            if parent is not None:
+                new_pos.setX(max(0, min(new_pos.x(), max(0, parent.width() - self.width()))))
+                new_pos.setY(max(0, min(new_pos.y(), max(0, parent.height() - self.height()))))
+            self.move(new_pos)
+            self._custom_position = new_pos
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and self._drag_offset is not None:
+            self._drag_offset = None
+            self._save_position()
+        super().mouseReleaseEvent(event)
+
+    def _save_position(self) -> None:
+        settings = QSettings("Peecha", "PeechaERP")
+        settings.setValue(self._POSITION_SETTINGS_KEY, self.pos())
+
+    def _load_position(self) -> QPoint | None:
+        settings = QSettings("Peecha", "PeechaERP")
+        value = settings.value(self._POSITION_SETTINGS_KEY, None)
+        return value if isinstance(value, QPoint) else None
+
     def _reposition(self) -> None:
-        # طبقِ درخواستِ صریح: گوشه‌یِ بالا-راستِ پنجره‌یِ اصلی.
         parent = self.parentWidget()
         if parent is None:
             return
         self.adjustSize()
+        if self._custom_position is not None:
+            # طبقِ درخواستِ صریح: اگر کاربر قبلاً کادر را جابجا کرده، همان
+            # مکانِ دلخواه (با کلمپ‌کردن درونِ محدوده‌یِ ناحیه‌یِ محتوا، برایِ
+            # وقتی اندازه‌یِ پنجره کوچک‌تر از قبل شده) استفاده می‌شود.
+            x = max(0, min(self._custom_position.x(), max(0, parent.width() - self.width())))
+            y = max(0, min(self._custom_position.y(), max(0, parent.height() - self.height())))
+            self.move(x, y)
+            return
+        # پیش‌فرض (پیش از هر جابجاییِ دستی): گوشه‌یِ بالا-راستِ ناحیه‌یِ محتوا.
         margin = 20
         x = parent.width() - self.width() - margin
         y = margin
