@@ -534,7 +534,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_anomalies import AnomaliesScreen  # noqa: PLC0415
         from peecha.ui.screens.report_balance_sheet import BalanceSheetScreen  # noqa: PLC0415
         from peecha.ui.screens.report_cash_flow import CashFlowScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_custom_builder import ReportBuilderRunScreen  # noqa: PLC0415
         from peecha.ui.screens.report_custom_statement import CustomStatementScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_designer import ReportDesignerScreen  # noqa: PLC0415
         from peecha.ui.screens.report_equity_changes import EquityChangesScreen  # noqa: PLC0415
         from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen  # noqa: PLC0415
         from peecha.ui.screens.report_income_statement import IncomeStatementScreen  # noqa: PLC0415
@@ -586,6 +588,8 @@ class MainWindow(QMainWindow):
         self.register_screen("report_financial_ratios", FinancialRatiosScreen())
         self.register_screen("report_period_comparison", PeriodComparisonScreen())
         self.register_screen("report_anomalies", AnomaliesScreen())
+        self.register_screen("report_designer", ReportDesignerScreen())
+        self.register_screen("report_custom_builder", ReportBuilderRunScreen())
         # همه‌ی فرم‌هایِ قبلاً جداگانه‌ی «مدیریتِ سیستم» (زبان‌ها/ارزها/شرکت‌ها/
         # سال‌های مالی/کاربران/نقش‌ها/عنوانِ فیلدها/ردِ حسابرسی) اکنون به‌صورتِ
         # تب درونِ system_settings.SystemSettingsScreen زندگی می‌کنند — نکته‌ی

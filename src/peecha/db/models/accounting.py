@@ -471,3 +471,50 @@ class StatementRowRef(Base):
     row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
     ref_row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
     sign: Mapped[int] = mapped_column(SmallInteger)
+
+
+class ReportTemplate(Base):
+    """گزارش‌سازِ کامل — یا DETAIL (سطحِ سطرِ سند، ستون‌هایِ دلخواه از
+    کاتالوگِ فیلدها) یا SUMMARY (چند ستونِ مقدار/دوره رویِ ردیف‌هایِ یک
+    الگویِ حسابیِ موجود در acc.statement_templates)."""
+
+    __tablename__ = "report_templates"
+    __table_args__ = {"schema": "acc"}
+
+    report_template_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(200))
+    report_kind: Mapped[str] = mapped_column(String(10))  # DETAIL | SUMMARY
+    group_by_account: Mapped[bool] = mapped_column(Boolean, default=False)
+    statement_template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.statement_templates.template_id"), nullable=True
+    )
+    display_order: Mapped[int] = mapped_column(default=0)
+
+
+class ReportTemplateColumn(Base):
+    __tablename__ = "report_template_columns"
+    __table_args__ = {"schema": "acc"}
+
+    column_id: Mapped[int] = mapped_column(primary_key=True)
+    report_template_id: Mapped[int] = mapped_column(ForeignKey("acc.report_templates.report_template_id"))
+    column_order: Mapped[int]
+    label: Mapped[str] = mapped_column(String(200))
+    field_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    measure_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    date_from_override: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    date_to_override: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+
+
+class ReportTemplateAccountFilter(Base):
+    __tablename__ = "report_template_account_filters"
+    __table_args__ = {"schema": "acc"}
+
+    filter_id: Mapped[int] = mapped_column(primary_key=True)
+    report_template_id: Mapped[int] = mapped_column(ForeignKey("acc.report_templates.report_template_id"))
+    selector_type: Mapped[str] = mapped_column(String(10))  # ACCOUNT | RANGE | CATEGORY
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"), nullable=True)
+    account_level: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    code_from: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    code_to: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    category_code: Mapped[str | None] = mapped_column(String(20), nullable=True)

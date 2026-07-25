@@ -86,6 +86,16 @@ NAV_ITEMS = [
                 "label": "تشخیصِ سندهایِ ناقص/آنومالی",
                 "screen": "report_anomalies",
             },
+            {
+                "code": "REPORTS_BUILDER",
+                "label": "گزارش‌سازِ کامل (طراحی)",
+                "screen": "report_designer",
+            },
+            {
+                "code": "REPORTS_BUILDER_RUN",
+                "label": "گزارش‌سازِ کامل (اجرا)",
+                "screen": "report_custom_builder",
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ
