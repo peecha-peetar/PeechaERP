@@ -45,6 +45,17 @@ from peecha.services import statement_templates as statement_templates_service
 _ZERO = decimal.Decimal("0")
 
 
+def code_in_range(full_code: str, code_from: str, code_to: str) -> bool:
+    """بررسیِ اینکه یک کدِ کامل در بازه‌یِ [code_from, code_to] است — رشته‌ای
+    (نه عددی)، چون کدها هم‌طول/zero-padded ذخیره می‌شوند. اگر یکی از دو
+    سرِ بازه خالی باشد، همان طرف بدونِ محدودیت است."""
+    if code_from and full_code < code_from:
+        return False
+    if code_to and full_code > code_to:
+        return False
+    return True
+
+
 def _apply_status_filter(query, status_filter: str):
     if status_filter == "ALL":
         return query
@@ -910,22 +921,28 @@ def compute_custom_statement(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> list[CustomStatementLine]:
-    """گزارشِ سفارشی (طراحِ گزارش، فازِ ۲) — هر ردیفِ ACCOUNTS از جمعِ
-    چند حسابِ دلخواه (هر سطحی: گروه/کل/معین، با علامتِ +/−) ساخته می‌شود؛
-    مانده/گردشِ هر حساب از `compute_account_balances` می‌آید که خودش برایِ
-    همه‌یِ سطوح رول‌آپ‌شده است، پس نیازی به کوئریِ تازه نیست. حسابِ
-    PERMANENT (ترازنامه‌ای) → مانده‌یِ تجمعی تا date_to؛ TEMPORARY (موقت) →
-    گردشِ همان دوره — دقیقاً همان قراردادِ compute_balance_sheet/
+    """گزارشِ سفارشی (طراحِ گزارش، فازِ ۲ + گزارش‌سازِ پیشرفته) — هر ردیفِ
+    ACCOUNTS از جمعِ چند جزء ساخته می‌شود که هرکدام می‌تواند یک حسابِ
+    مشخص (ACCOUNT، هر سطحی: گروه/کل/معین)، یک بازه‌یِ کد در یک سطحِ
+    مشخص (RANGE) یا کلِ یک طبقه — دارایی/بدهی/سرمایه/درآمد/هزینه — در
+    یک سطحِ مشخص (CATEGORY) باشد، هرکدام با علامتِ +/−. مانده/گردشِ هر
+    حساب از `compute_account_balances` می‌آید که خودش برایِ همه‌یِ سطوح
+    رول‌آپ‌شده است، پس نیازی به کوئریِ تازه نیست. حسابِ PERMANENT
+    (ترازنامه‌ای) → مانده‌یِ تجمعی تا date_to؛ TEMPORARY (موقت) → گردشِ
+    همان دوره — دقیقاً همان قراردادِ compute_balance_sheet/
     compute_income_statement. هر ردیفِ FORMULA از جمعِ چند ردیفِ دیگرِ
     همین الگو ساخته می‌شود؛ حلِ بازگشتی+memo باعث می‌شود ترتیبِ row_order
     برایِ محاسبه مهم نباشد (فقط برایِ نمایش) و حلقه‌هایِ فرمولی با
-    ValueError روشن رد شوند، نه کرش/بازگشتِ بی‌نهایت."""
+    ValueError روشن رد شوند، نه کرش/بازگشتِ بی‌نهایت.
+
+    توجه برایِ RANGE/CATEGORY: چون compute_account_balances رول‌آپِ همه‌یِ
+    سطوح را برمی‌گرداند (یک حسابِ تفصیلی هم در بالانسِ حسابِ کل/گروهِ
+    والدش جمع شده)، جمع‌زدنِ بازه/طبقه فقط رویِ حساب‌هایِ همان یک سطحِ
+    مشخص‌شده انجام می‌شود — نه همه‌یِ سطوح با هم — تا دوبار-شماری رخ ندهد."""
     rows = statement_templates_service.list_rows(template_id)
     rows_by_id = {r.row_id: r for r in rows}
-    balances_by_id = {
-        b.account_id: b
-        for b in compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
-    }
+    all_balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
+    balances_by_id = {b.account_id: b for b in all_balances}
 
     memo: dict[int, decimal.Decimal | None] = {}
     resolving: set[int] = set()
@@ -939,11 +956,22 @@ def compute_custom_statement(
         row = rows_by_id[row_id]
         if row.row_type == "ACCOUNTS":
             total = _ZERO
-            for account_id, sign in row.account_refs:
-                b = balances_by_id.get(account_id)
-                if b is None:
-                    continue
-                total += sign * _natural_signed_balance(b)
+            for ref in row.account_refs:
+                if ref.selector_type == "RANGE":
+                    for b in all_balances:
+                        if b.account_level == ref.account_level and code_in_range(
+                            b.full_code, ref.code_from, ref.code_to
+                        ):
+                            total += ref.sign * _natural_signed_balance(b)
+                elif ref.selector_type == "CATEGORY":
+                    for b in all_balances:
+                        if b.account_level == ref.account_level and b.category_code == ref.category_code:
+                            total += ref.sign * _natural_signed_balance(b)
+                else:  # ACCOUNT
+                    b = balances_by_id.get(ref.account_id)
+                    if b is None:
+                        continue
+                    total += ref.sign * _natural_signed_balance(b)
         elif row.row_type == "FORMULA":
             total = _ZERO
             for ref_row_id, sign in row.formula_refs:

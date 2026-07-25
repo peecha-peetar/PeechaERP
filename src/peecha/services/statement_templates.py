@@ -28,6 +28,22 @@ class StatementTemplateRow:
 
 
 @dataclass
+class AccountRefInfo:
+    """جزءِ حسابیِ یک ردیفِ ACCOUNTS — گزارش‌سازِ پیشرفته: به‌جایِ فقط
+    دستی‌چین‌کردنِ تک‌تکِ حساب‌ها (ACCOUNT)، می‌تواند یک بازه‌یِ کد در یک
+    سطح (RANGE) یا کلِ یک طبقه (دارایی/بدهی/...) در یک سطح (CATEGORY)
+    هم باشد؛ فقط فیلدهایِ مربوط به همان selector_type پر می‌شوند."""
+
+    selector_type: str  # ACCOUNT | RANGE | CATEGORY
+    sign: int
+    account_id: int | None = None
+    account_level: int | None = None
+    code_from: str | None = None
+    code_to: str | None = None
+    category_code: str | None = None
+
+
+@dataclass
 class StatementRowInfo:
     row_id: int
     row_order: int
@@ -35,7 +51,7 @@ class StatementRowInfo:
     row_type: str
     indent_level: int
     is_bold: bool
-    account_refs: list[tuple[int, int]] = field(default_factory=list)  # (account_id, sign)
+    account_refs: list[AccountRefInfo] = field(default_factory=list)
     formula_refs: list[tuple[int, int]] = field(default_factory=list)  # (ref_row_id, sign)
 
 
@@ -97,15 +113,23 @@ def list_rows(template_id: int) -> list[StatementRowInfo]:
         ).all()
         row_ids = [r.row_id for r in rows]
 
-        account_refs_by_row: dict[int, list[tuple[int, int]]] = {}
+        account_refs_by_row: dict[int, list[AccountRefInfo]] = {}
         formula_refs_by_row: dict[int, list[tuple[int, int]]] = {}
         if row_ids:
-            for row_id, account_id, sign in session.execute(
-                select(StatementRowAccount.row_id, StatementRowAccount.account_id, StatementRowAccount.sign).where(
-                    StatementRowAccount.row_id.in_(row_ids)
-                )
+            for ref in session.scalars(
+                select(StatementRowAccount).where(StatementRowAccount.row_id.in_(row_ids))
             ).all():
-                account_refs_by_row.setdefault(row_id, []).append((account_id, sign))
+                account_refs_by_row.setdefault(ref.row_id, []).append(
+                    AccountRefInfo(
+                        selector_type=ref.selector_type,
+                        sign=ref.sign,
+                        account_id=ref.account_id,
+                        account_level=ref.account_level,
+                        code_from=ref.code_from,
+                        code_to=ref.code_to,
+                        category_code=ref.category_code,
+                    )
+                )
             for row_id, ref_row_id, sign in session.execute(
                 select(StatementRowRef.row_id, StatementRowRef.ref_row_id, StatementRowRef.sign).where(
                     StatementRowRef.row_id.in_(row_ids)
@@ -194,12 +218,23 @@ def reorder_rows(template_id: int, ordered_row_ids: list[int]) -> None:
         session.commit()
 
 
-def set_row_accounts(row_id: int, refs: list[tuple[int, int]]) -> None:
-    """جایگزینیِ کاملِ اجزایِ حسابیِ یک ردیف. `refs` = [(account_id, sign), ...]."""
+def set_row_accounts(row_id: int, refs: list[AccountRefInfo]) -> None:
+    """جایگزینیِ کاملِ اجزایِ حسابیِ یک ردیف."""
     with new_session() as session:
         session.execute(delete(StatementRowAccount).where(StatementRowAccount.row_id == row_id))
-        for account_id, sign in refs:
-            session.add(StatementRowAccount(row_id=row_id, account_id=account_id, sign=sign))
+        for ref in refs:
+            session.add(
+                StatementRowAccount(
+                    row_id=row_id,
+                    sign=ref.sign,
+                    selector_type=ref.selector_type,
+                    account_id=ref.account_id,
+                    account_level=ref.account_level,
+                    code_from=ref.code_from,
+                    code_to=ref.code_to,
+                    category_code=ref.category_code,
+                )
+            )
         session.commit()
 
 

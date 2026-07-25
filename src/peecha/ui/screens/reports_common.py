@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services.reports import code_in_range
 from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
@@ -61,17 +62,6 @@ def net_split(debit: decimal.Decimal, credit: decimal.Decimal) -> tuple[decimal.
     — قراردادِ استانداردِ نمایشِ «مانده» در تراز/دفترِ کل."""
     net = debit - credit
     return (net, _ZERO) if net >= 0 else (_ZERO, -net)
-
-
-def code_in_range(full_code: str, code_from: str, code_to: str) -> bool:
-    """بررسیِ اینکه یک کدِ کامل در بازه‌یِ [code_from, code_to] است — رشته‌ای
-    (نه عددی)، چون کدها هم‌طول/zero-padded ذخیره می‌شوند. اگر یکی از دو
-    سرِ بازه خالی باشد، همان طرف بدونِ محدودیت است."""
-    if code_from and full_code < code_from:
-        return False
-    if code_to and full_code > code_to:
-        return False
-    return True
 
 
 class ReportScreenBase(FieldHelpMixin, QWidget):

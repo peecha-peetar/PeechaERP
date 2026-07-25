@@ -444,12 +444,24 @@ class StatementRow(Base):
 
 
 class StatementRowAccount(Base):
+    """جزءِ یک ردیفِ ACCOUNTS — یا یک حسابِ مشخص (ACCOUNT)، یا یک بازه‌یِ کد
+    در یک سطح (RANGE)، یا کلِ یک طبقه (دارایی/بدهی/...) در یک سطح
+    (CATEGORY)؛ فقط ستون‌هایِ مربوط به همان selector_type پر می‌شوند."""
+
     __tablename__ = "statement_row_accounts"
     __table_args__ = {"schema": "acc"}
 
-    row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"), primary_key=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"), primary_key=True)
+    ref_id: Mapped[int] = mapped_column(primary_key=True)
+    row_id: Mapped[int] = mapped_column(ForeignKey("acc.statement_rows.row_id"))
     sign: Mapped[int] = mapped_column(SmallInteger)
+    selector_type: Mapped[str] = mapped_column(String(10), default="ACCOUNT")  # ACCOUNT|RANGE|CATEGORY
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.chart_of_accounts.account_id"), nullable=True
+    )
+    account_level: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    code_from: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    code_to: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    category_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
 
 class StatementRowRef(Base):

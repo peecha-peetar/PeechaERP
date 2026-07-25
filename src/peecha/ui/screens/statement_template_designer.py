@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import statement_templates as statement_templates_service
+from peecha.services.statement_templates import AccountRefInfo
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin
 
@@ -50,6 +51,22 @@ _ROW_TYPE_OPTIONS = [
 _ROW_TYPE_LABELS = dict(_ROW_TYPE_OPTIONS)
 
 _ROW_COLUMNS = ["نوع", "برچسب", "تورفتگی", "بولد", ""]
+
+_ACCOUNT_SELECTOR_OPTIONS = [
+    ("ACCOUNT", "حسابِ مشخص"),
+    ("RANGE", "بازه‌یِ کد"),
+    ("CATEGORY", "طبقه‌یِ حساب"),
+]
+_ACCOUNT_LEVEL_OPTIONS = [(1, "گروه"), (2, "کل"), (3, "معین"), (4, "تفصیلی")]
+_ACCOUNT_LEVEL_LABELS = dict(_ACCOUNT_LEVEL_OPTIONS)
+_CATEGORY_OPTIONS = [
+    ("ASSET", "دارایی"),
+    ("LIABILITY", "بدهی"),
+    ("EQUITY", "حقوق صاحبان سهام"),
+    ("REVENUE", "درآمد"),
+    ("EXPENSE", "هزینه"),
+]
+_CATEGORY_LABELS = dict(_CATEGORY_OPTIONS)
 
 
 class _RefListWidget(QWidget):
@@ -128,6 +145,153 @@ class _RefListWidget(QWidget):
         return list(self._refs)
 
 
+class _AccountRefListWidget(QWidget):
+    """لیستِ اجزایِ حسابیِ یک ردیفِ ACCOUNTS — گزارش‌سازِ پیشرفته: هر جزء
+    یا یک حسابِ مشخص، یا یک بازه‌یِ کد در یک سطح، یا کلِ یک طبقه (دارایی/
+    بدهی/...) در یک سطح است؛ کنترل‌هایِ ورودی بسته به نوعِ انتخابی
+    نمایش/مخفی می‌شوند."""
+
+    def __init__(self, account_options: list[tuple[int, str]]) -> None:
+        super().__init__()
+        self._refs: list[AccountRefInfo] = []
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        type_row = QHBoxLayout()
+        type_row.addWidget(QLabel("نوع:"))
+        self.selector_type_combo = QComboBox()
+        for code, label in _ACCOUNT_SELECTOR_OPTIONS:
+            self.selector_type_combo.addItem(label, code)
+        self.selector_type_combo.currentIndexChanged.connect(self._on_selector_type_changed)
+        type_row.addWidget(self.selector_type_combo)
+        layout.addLayout(type_row)
+
+        self.account_combo = QComboBox()
+        self.account_combo.setEditable(True)
+        self.account_combo.addItem("", None)
+        for account_id, label in account_options:
+            self.account_combo.addItem(label, account_id)
+        completer = QCompleter([label for _id, label in account_options])
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        self.account_combo.setCompleter(completer)
+        layout.addWidget(self.account_combo)
+
+        range_row = QHBoxLayout()
+        self.level_combo = QComboBox()
+        for level, label in _ACCOUNT_LEVEL_OPTIONS:
+            self.level_combo.addItem(label, level)
+        range_row.addWidget(self.level_combo)
+        self.code_from_field = QLineEdit()
+        self.code_from_field.setPlaceholderText("از کدِ...")
+        range_row.addWidget(self.code_from_field)
+        self.code_to_field = QLineEdit()
+        self.code_to_field.setPlaceholderText("تا کدِ...")
+        range_row.addWidget(self.code_to_field)
+        layout.addLayout(range_row)
+
+        self.category_combo = QComboBox()
+        for code, label in _CATEGORY_OPTIONS:
+            self.category_combo.addItem(label, code)
+        layout.addWidget(self.category_combo)
+
+        add_row = QHBoxLayout()
+        self.sign_combo = QComboBox()
+        self.sign_combo.addItem("جمع (+)", 1)
+        self.sign_combo.addItem("کسر (−)", -1)
+        add_row.addWidget(self.sign_combo)
+        add_button = QPushButton("افزودن")
+        add_button.setObjectName("flatButton")
+        add_button.clicked.connect(self._on_add)
+        add_row.addWidget(add_button)
+        layout.addLayout(add_row)
+
+        self.list_widget = QListWidget()
+        self.list_widget.setMaximumHeight(110)
+        layout.addWidget(self.list_widget)
+
+        remove_button = QPushButton("حذفِ موردِ انتخاب‌شده")
+        remove_button.setObjectName("flatButton")
+        remove_button.clicked.connect(self._on_remove_selected)
+        layout.addWidget(remove_button)
+
+        self._on_selector_type_changed()
+
+    def _on_selector_type_changed(self) -> None:
+        selector_type = self.selector_type_combo.currentData()
+        self.account_combo.setVisible(selector_type == "ACCOUNT")
+        for widget in (self.level_combo, self.code_from_field, self.code_to_field):
+            widget.setVisible(selector_type == "RANGE")
+        self.category_combo.setVisible(selector_type == "CATEGORY")
+        if selector_type == "CATEGORY":
+            self.level_combo.setVisible(True)
+
+    def _describe(self, ref: AccountRefInfo) -> str:
+        sign_label = "+" if ref.sign == 1 else "−"
+        if ref.selector_type == "RANGE":
+            level_label = _ACCOUNT_LEVEL_LABELS.get(ref.account_level, "")
+            return f"{sign_label}  بازه ({level_label}): {ref.code_from} تا {ref.code_to}"
+        if ref.selector_type == "CATEGORY":
+            level_label = _ACCOUNT_LEVEL_LABELS.get(ref.account_level, "")
+            category_label = _CATEGORY_LABELS.get(ref.category_code, ref.category_code)
+            return f"{sign_label}  طبقه ({level_label}): {category_label}"
+        account_label = self.account_combo.itemText(self.account_combo.findData(ref.account_id))
+        return f"{sign_label}  {account_label or ref.account_id}"
+
+    def _on_add(self) -> None:
+        selector_type = self.selector_type_combo.currentData()
+        sign = self.sign_combo.currentData()
+        if selector_type == "ACCOUNT":
+            account_id = self.account_combo.currentData()
+            if account_id is None:
+                return
+            self._refs.append(AccountRefInfo(selector_type="ACCOUNT", sign=sign, account_id=account_id))
+        elif selector_type == "RANGE":
+            code_from = self.code_from_field.text().strip()
+            code_to = self.code_to_field.text().strip()
+            if not code_from or not code_to:
+                return
+            self._refs.append(
+                AccountRefInfo(
+                    selector_type="RANGE",
+                    sign=sign,
+                    account_level=self.level_combo.currentData(),
+                    code_from=code_from,
+                    code_to=code_to,
+                )
+            )
+        else:  # CATEGORY
+            self._refs.append(
+                AccountRefInfo(
+                    selector_type="CATEGORY",
+                    sign=sign,
+                    account_level=self.level_combo.currentData(),
+                    category_code=self.category_combo.currentData(),
+                )
+            )
+        self._refresh_list()
+
+    def _on_remove_selected(self) -> None:
+        row = self.list_widget.currentRow()
+        if row < 0:
+            return
+        del self._refs[row]
+        self._refresh_list()
+
+    def _refresh_list(self) -> None:
+        self.list_widget.clear()
+        for ref in self._refs:
+            self.list_widget.addItem(self._describe(ref))
+
+    def set_refs(self, refs: list[AccountRefInfo]) -> None:
+        self._refs = list(refs)
+        self._refresh_list()
+
+    def refs(self) -> list[AccountRefInfo]:
+        return list(self._refs)
+
+
 class _RowEditorDialog(QDialog):
     def __init__(
         self,
@@ -137,7 +301,7 @@ class _RowEditorDialog(QDialog):
     ) -> None:
         super().__init__()
         self.setWindowTitle("ویرایشِ ردیف" if existing else "افزودنِ ردیفِ تازه")
-        self.resize(520, 480)
+        self.resize(560, 620)
 
         layout = QVBoxLayout(self)
 
@@ -164,9 +328,11 @@ class _RowEditorDialog(QDialog):
         options_row.addStretch(1)
         layout.addLayout(options_row)
 
-        self.accounts_label = QLabel("اجزایِ حساب (هر سطحی: گروه/کل/معین):")
+        self.accounts_label = QLabel(
+            "اجزایِ حساب: حسابِ مشخص، بازه‌یِ کد یا کلِ یک طبقه (دارایی/بدهی/...) در یک سطح:"
+        )
         layout.addWidget(self.accounts_label)
-        self.accounts_widget = _RefListWidget(account_options)
+        self.accounts_widget = _AccountRefListWidget(account_options)
         layout.addWidget(self.accounts_widget)
 
         self.formula_label = QLabel("اجزایِ فرمول (جمعِ ردیف‌هایِ دیگرِ همین الگو):")
