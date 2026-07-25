@@ -35,9 +35,10 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui.widgets import FieldHelpMixin
 
 
-class DetailDimensionsScreen(QWidget):
+class DetailDimensionsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._types: list[dimensions_service.DimensionTypeRow] = []
@@ -51,6 +52,32 @@ class DetailDimensionsScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_account_panel(), stretch=2)
+
+        self.set_field_help([
+            (
+                self.group_combo,
+                "گروهِ تفصیلی‌ای که می‌خواهید برایش رکورد بسازید یا ویرایش کنید. "
+                "ساختنِ گروهِ تازه و تنظیمِ سطح/فیلدهایش در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود، نه این‌جا.",
+            ),
+            (
+                self.show_all_levels_checkbox,
+                "به‌طورِ پیش‌فرض فقط آخرین سطح (برگ‌ها) نشان داده می‌شود. با این تیک، کلِ درختِ والد و فرزند را می‌بینید.",
+            ),
+            (
+                self.parent_combo,
+                "اگر این حساب زیرمجموعه‌یِ یک حسابِ دیگر است، آن را این‌جا انتخاب کنید. "
+                "بدونِ والد یعنی این حساب در سطحِ اول قرار می‌گیرد.",
+            ),
+            (
+                self.account_code_field,
+                "کدِ این حساب. برنامه بعدِ انتخابِ والد یک کدِ پیشنهادی خودش پر می‌کند، ولی می‌توانید تغییرش دهید.",
+            ),
+            (self.account_name_field, "نامی که در فهرست‌ها و سندها برایِ این حساب نشان داده می‌شود."),
+            (
+                self.account_active_checkbox,
+                "حساب‌هایِ غیرِفعال از فهرستِ انتخاب در سندها کنار گذاشته می‌شوند، ولی سوابقِ قبلی‌شان می‌ماند.",
+            ),
+        ])
 
     # --- ستونِ چپ: انتخابِ گروه + فهرستِ حساب‌ها -----------------------------
     def _build_list_panel(self) -> QWidget:

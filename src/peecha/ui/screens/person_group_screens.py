@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _FIELD_LABELS = {
     "economic_code": "کدِ اقتصادی",
@@ -60,10 +61,28 @@ _FIELD_LABELS = {
     "hire_date": "تاریخِ استخدام",
 }
 
+# طبقِ درخواستِ صریح برایِ راهنمایِ آموزشیِ فیلدها: چون فیلدهایِ اختصاصی
+# (FIELD_SPECS) با یک حلقه ساخته می‌شوند نه تک‌تک، متنِ راهنمایِ هرکدام
+# این‌جا با field_key نگه‌داشته شده تا در __init__ به‌طورِ خودکار به
+# ویجتِ متناظرش وصل شود.
+_FIELD_HELP_TEXTS = {
+    "economic_code": "کدِ اقتصادی که سازمانِ امور مالیاتی به این طرفِ حساب داده. برایِ صدورِ فاکتورِ رسمی لازم است.",
+    "national_id": "شناسه یا کدِ ملیِ این طرفِ حساب — شناسه‌یِ یکتایِ او برایِ اسنادِ رسمی.",
+    "phone": "شماره‌ی تلفنِ ثابت.",
+    "mobile": "شماره‌ی موبایل.",
+    "address": "آدرسِ پستی.",
+    "credit_limit": "سقفِ اعتباری که به این مشتری داده می‌شود. این عدد فقط اطلاعاتی است و در حالِ حاضر جلویِ فروشِ بیشتر را نمی‌گیرد.",
+    "notes": "یادداشتِ آزاد برایِ هر توضیحِ اضافه.",
+    "bank_account_no": "شماره‌حسابِ بانکیِ این طرفِ حساب — برایِ پرداخت/دریافتِ وجه.",
+    "personnel_no": "شماره‌ی پرسنلیِ این کارمند در سیستمِ حقوق و دستمزد.",
+    "position_title": "سمتِ شغلیِ این کارمند.",
+    "hire_date": "تاریخِ استخدامِ این کارمند.",
+}
+
 _COLUMNS = ["وضعیت", "نام", "کد", "سطح"]
 
 
-class PersonGroupScreenBase(QWidget):
+class PersonGroupScreenBase(FieldHelpMixin, QWidget):
     FIELD_SPECS: tuple[tuple[str, str], ...] = ()  # (field_key, kind) — kind: text/decimal/date
     GROUP_CODE: str = ""  # CUSTOMER/SUPPLIER/PERSONNEL — برایِ حلِ person_group_id
     EMPTY_TEXT = ""
@@ -82,6 +101,28 @@ class PersonGroupScreenBase(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
+
+        extra_help = [
+            (self._extra_widgets[field_key], _FIELD_HELP_TEXTS.get(field_key, _FIELD_LABELS.get(field_key, field_key)))
+            for field_key, _kind in self.FIELD_SPECS
+        ]
+        self.set_field_help([
+            (
+                self.parent_combo,
+                "اگر این رکورد زیرمجموعه‌یِ یک رکوردِ دیگر است، آن را این‌جا انتخاب کنید. "
+                "بدونِ والد یعنی این رکورد در سطحِ اول قرار می‌گیرد.",
+            ),
+            (
+                self.code_field,
+                "کدِ این رکورد. برنامه بعدِ انتخابِ والد یک کدِ پیشنهادی خودش پر می‌کند، ولی می‌توانید تغییرش دهید.",
+            ),
+            (self.name_field, "نامی که در فهرست‌ها و سندها نمایش داده می‌شود."),
+            *extra_help,
+            (
+                self.active_checkbox,
+                "رکوردهایِ غیرِفعال از فهرستِ انتخاب در سندهایِ تازه کنار گذاشته می‌شوند، ولی سوابقِ قبلی‌شان می‌ماند.",
+            ),
+        ])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()

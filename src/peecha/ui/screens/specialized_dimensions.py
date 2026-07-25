@@ -40,11 +40,12 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["وضعیت", "نام", "کدِ کامل", "سطح"]
 
 
-class SpecializedDimensionScreenBase(QWidget):
+class SpecializedDimensionScreenBase(FieldHelpMixin, QWidget):
     DIMENSION_CODE: str = ""
     TITLE: str = ""
 
@@ -60,6 +61,27 @@ class SpecializedDimensionScreenBase(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
+
+        self.set_field_help([
+            (
+                self.show_all_levels_checkbox,
+                "به‌طورِ پیش‌فرض فقط آخرین سطح (برگ‌ها) نشان داده می‌شود. با این تیک، کلِ درختِ والد و فرزند را می‌بینید.",
+            ),
+            (
+                self.parent_combo,
+                f"اگر این «{self.TITLE}» زیرمجموعه‌یِ یک موردِ دیگر است، آن را این‌جا انتخاب کنید. "
+                "بدونِ والد یعنی این مورد در سطحِ اول قرار می‌گیرد.",
+            ),
+            (
+                self.code_field,
+                "کدِ این مورد. برنامه بعدِ انتخابِ والد یک کدِ پیشنهادی خودش پر می‌کند، ولی می‌توانید تغییرش دهید.",
+            ),
+            (self.name_field, "نامی که در فهرست‌ها و سندها نمایش داده می‌شود."),
+            (
+                self.active_checkbox,
+                "مواردِ غیرِفعال از فهرستِ انتخاب در سندهایِ تازه کنار گذاشته می‌شوند، ولی سوابقِ قبلی‌شان می‌ماند.",
+            ),
+        ])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()

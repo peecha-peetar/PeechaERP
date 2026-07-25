@@ -48,7 +48,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui import theme
-from peecha.ui.widgets import ZeroPaddedSpinBox
+from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
 
 _FIELD_KIND_OPTIONS = [("text", "متن"), ("decimal", "عدد اعشاری"), ("date", "تاریخ"), ("boolean", "بله/خیر")]
 _LEVEL_COUNT = 4
@@ -105,7 +105,7 @@ class _GroupFieldRowWidget(QWidget):
         }
 
 
-class DimensionGroupConfigScreen(QWidget):
+class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._types: list[dimensions_service.DimensionTypeRow] = []
@@ -126,6 +126,42 @@ class DimensionGroupConfigScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_types_panel())
         outer.addWidget(self._build_config_panel(), stretch=1)
+
+        level_help = [
+            (
+                widgets[0],
+                f"کمترین کدِ مجاز برایِ سطحِ {level_no} از این گروه. صفر یعنی بدونِ محدودیتِ ابتدا.",
+            )
+            for level_no, widgets in self._level_widgets.items()
+        ] + [
+            (
+                widgets[1],
+                f"بیشترین کدِ مجاز برایِ سطحِ {level_no} از این گروه. صفر یعنی بدونِ محدودیتِ انتها.",
+            )
+            for level_no, widgets in self._level_widgets.items()
+        ]
+        self.set_field_help([
+            (
+                self.new_type_code_field,
+                "کدِ گروهِ تفصیلیِ تازه‌ای که می‌خواهید بسازید، مثلاً «مرکزِ فروش». بعدِ کلیکِ «افزودنِ گروه» ساخته می‌شود.",
+            ),
+            (
+                self.types_list,
+                "فهرستِ همه‌یِ گروه‌هایِ تفصیلی — کالا، بانک، مرکزِ هزینه، مشتری و مانندِ آن. "
+                "رویِ هرکدام کلیک کنید تا پیکربندی‌اش را پایین ببینید و تغییر دهید.",
+            ),
+            (
+                self.title_field,
+                "نامِ نمایشیِ این گروه. برایِ گروه‌هایِ سیستمی مثلِ کالا و بانک قابلِ‌تغییر نیست، "
+                "چون نامشان ثابت است. برایِ گروه‌هایِ دلخواه همیشه قابلِ‌تغییر است.",
+            ),
+            (
+                self.max_level_spin,
+                "این گروه چند سطح دارد، حداکثر تا ۴ سطح. مثلاً «مرکزِ هزینه» می‌تواند دو سطح داشته باشد: "
+                "دسته‌یِ کلی و زیرِمجموعه‌اش. اگر حساب‌هایِ این گروه سند داشته باشند، این عدد دیگر قابلِ‌تغییر نیست.",
+            ),
+            *level_help,
+        ])
 
     # --- نوارِ بالا: گروه‌ها (افقی) ------------------------------------------
     def _build_types_panel(self) -> QWidget:
