@@ -19,12 +19,12 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha import session as app_session
 from peecha.services import fiscal_years as fiscal_years_service
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
 
 
-class FiscalYearsScreen(QWidget):
+class FiscalYearsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[fiscal_years_service.FiscalYearRow] = []
@@ -34,6 +34,16 @@ class FiscalYearsScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=1)
+
+        self.set_field_help([
+            (
+                self.date_field,
+                "هر تاریخِ دلخواه از سالِ مالی‌ای که می‌خواهید بسازید را وارد کنید. لازم نیست اولِ سال باشد. "
+                "برنامه با استفاده از «ماه و روزِ شروعِ سالِ مالی» شرکت، بازه‌ی کاملِ آن سال را خودش حساب می‌کند. "
+                "نکته: لازم نیست حتماً از این‌جا سالِ مالی بسازید — با ثبتِ اولین سند در یک تاریخ، اگر سالِ "
+                "مالی‌اش وجود نداشته باشد، خودکار ساخته می‌شود.",
+            ),
+        ])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()

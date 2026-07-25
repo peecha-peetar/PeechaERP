@@ -23,11 +23,12 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import roles as roles_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _ACTIONS = ["VIEW", "CREATE", "EDIT", "DELETE"]
 
 
-class RolesScreen(QWidget):
+class RolesScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._roles: list[roles_service.RoleRow] = []
@@ -40,6 +41,29 @@ class RolesScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_roles_panel(), stretch=1)
         outer.addWidget(self._build_detail_panel(), stretch=3)
+
+        self.set_field_help([
+            (self.role_list, "فهرستِ نقش‌هایِ این شرکت. برایِ دیدن و تغییرِ دسترسی‌هایِ هر نقش، رویِ آن کلیک کنید."),
+            (self.new_role_code_field, "کدِ نقشِ تازه، مثلاً «حسابدار» یا «انباردار». بعدِ ساختن قابلِ‌تغییر نیست."),
+            (
+                self.parent_role_combo,
+                "نقشِ والد فقط برایِ سازمان‌دهی و نمایشِ سلسله‌مراتب است. "
+                "دسترسی‌هایِ هر نقش را باید جداگانه مشخص کنید — از والد به‌طورِ خودکار ارث نمی‌رسد.",
+            ),
+            (
+                self.is_active_checkbox,
+                "نقشِ غیرِفعال دیگر قابلِ‌تخصیص به کاربرانِ تازه نیست. کاربرانی که از قبل این نقش را دارند تحتِ‌تأثیر قرار نمی‌گیرند.",
+            ),
+            (
+                self.permission_table,
+                "برایِ هر فرمِ برنامه مشخص کنید این نقش اجازه‌یِ دیدن (VIEW)، ساختن (CREATE)، ویرایش (EDIT) "
+                "یا حذف (DELETE) را دارد یا نه. هر کاربرِ دارایِ این نقش، فقط همین دسترسی‌ها را می‌گیرد.",
+            ),
+            (
+                self.users_list,
+                "کاربرانی که این نقش را دارند تیک‌خورده‌اند. با تیک‌زدن یا برداشتنِ تیک، نقش را به کاربر می‌دهید یا از او می‌گیرید.",
+            ),
+        ])
 
     def _build_roles_panel(self) -> QWidget:
         panel = QWidget()

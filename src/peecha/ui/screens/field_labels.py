@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _FORM_CODES = [
     "chart_of_accounts",
@@ -60,7 +61,7 @@ class _FieldEditRow(QWidget):
         layout.addWidget(reset_button)
 
 
-class FieldLabelsScreen(QWidget):
+class FieldLabelsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._language_id: int | None = None
@@ -98,6 +99,15 @@ class FieldLabelsScreen(QWidget):
         rows_widget.setLayout(self.rows_container)
         layout.addWidget(rows_widget)
         layout.addStretch(1)
+
+        self.set_field_help([
+            (self.form_combo, "فرمی که می‌خواهید نامِ فیلدهایش را تغییر دهید."),
+            (
+                self.language_combo,
+                "زبانی که این تغییرِ نام برایش اعمال می‌شود. هر زبان می‌تواند نامِ جداگانه‌ای برایِ همان فیلد داشته باشد؛ "
+                "این نام فقط جایِ نمایش را عوض می‌کند، خودِ فیلد در پایگاه‌داده تغییر نمی‌کند.",
+            ),
+        ])
 
     def refresh(self) -> None:
         languages = languages_service.list_languages()

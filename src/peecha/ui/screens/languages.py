@@ -20,11 +20,12 @@ from PySide6.QtWidgets import (
 )
 
 from peecha.services import languages as languages_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["فعال", "پیش‌فرض", "راست‌به‌چپ", "ترتیب", "نامِ بومی", "کد"]
 
 
-class LanguagesScreen(QWidget):
+class LanguagesScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[languages_service.LanguageRow] = []
@@ -35,6 +36,33 @@ class LanguagesScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=1)
+
+        self.set_field_help([
+            (
+                self.code_field,
+                "کدِ کوتاهِ زبان، مثلاً fa برایِ فارسی یا en برایِ انگلیسی. بعدِ ساختن قابلِ‌تغییر نیست.",
+            ),
+            (
+                self.native_name_field,
+                "نامِ زبان به خودِ همان زبان، مثلاً «فارسی» یا English. همین نام در فهرستِ انتخابِ زبان نشان داده می‌شود.",
+            ),
+            (
+                self.sort_order_field,
+                "ترتیبِ نمایشِ این زبان در فهرست‌هایِ انتخابِ زبان. عددِ کوچک‌تر بالاتر می‌آید.",
+            ),
+            (
+                self.is_rtl_checkbox,
+                "اگر این زبان راست‌به‌چپ نوشته می‌شود (مثلِ فارسی یا عربی) تیک بزنید. جهتِ متن و چیدمانِ فرم‌ها را تغییر می‌دهد.",
+            ),
+            (
+                self.is_default_checkbox,
+                "زبانِ پیش‌فرضِ کلِ سیستم — وقتی کاربر یا شرکتی زبانِ خاصی انتخاب نکرده باشد، همین زبان استفاده می‌شود.",
+            ),
+            (
+                self.is_active_checkbox,
+                "زبانِ غیرِفعال دیگر در فهرستِ انتخابِ زبان نشان داده نمی‌شود.",
+            ),
+        ])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()

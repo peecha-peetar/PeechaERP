@@ -22,11 +22,12 @@ from PySide6.QtWidgets import (
 )
 
 from peecha.services import users as users_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["فعال", "مدیرِ کل", "شرکت‌ها", "نامِ کامل", "نامِ کاربری"]
 
 
-class UsersScreen(QWidget):
+class UsersScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[users_service.UserRow] = []
@@ -38,6 +39,41 @@ class UsersScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
+
+        self.set_field_help([
+            (
+                self.username_field,
+                "نامِ کاربری برایِ ورود به سیستم. بعدِ ساختنِ کاربر قابلِ‌تغییر نیست.",
+            ),
+            (self.full_name_field, "نامِ کاملِ کاربر — همان‌جایی که در فهرست‌ها و رخدادنگارِ سیستم نشان داده می‌شود."),
+            (self.email_field, "ایمیلِ کاربر. اختیاری است و فعلاً فقط جنبه‌یِ اطلاعاتی دارد."),
+            (
+                self.language_combo,
+                "زبانی که رابطِ کاربری برایِ این کاربر با آن نمایش داده می‌شود.",
+            ),
+            (
+                self.password_field,
+                "رمزِ عبورِ کاربر. برایِ کاربرِ تازه اجباری است و باید حداقل ۶ کاراکتر باشد. "
+                "هنگامِ ویرایش، اگر خالی بگذارید رمزِ قبلی همان‌طور می‌ماند.",
+            ),
+            (
+                self.is_super_admin_checkbox,
+                "مدیرِ کلِ سیستم است یا نه. این وضعیت معمولاً فقط برایِ کاربرِ اولِ سیستم استفاده می‌شود.",
+            ),
+            (
+                self.is_active_checkbox,
+                "کاربرِ غیرِفعال دیگر نمی‌تواند وارد سیستم شود. حساب و سابقه‌اش پاک نمی‌شود.",
+            ),
+            (
+                self.company_list,
+                "این کاربر به کدام شرکت‌ها دسترسی دارد را تیک بزنید. سیستم چندشرکتی است و هر کاربر فقط "
+                "شرکت‌هایِ تیک‌خورده را در انتخابِ شرکتِ بالایِ برنامه می‌بیند.",
+            ),
+            (
+                self.default_company_combo,
+                "شرکتی که هنگامِ ورود به سیستم به‌طورِ پیش‌فرض برایِ این کاربر انتخاب می‌شود.",
+            ),
+        ])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()

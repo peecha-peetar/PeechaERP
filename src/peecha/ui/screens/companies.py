@@ -24,11 +24,12 @@ from peecha.services import companies as companies_service
 from peecha.services import company_cloning
 from peecha.services import languages as languages_service
 from peecha.ui import theme
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["فعال", "زبانِ پیش‌فرض", "ارزِ پایه", "نامِ نمایشی", "کد"]
 
 
-class CompaniesScreen(QWidget):
+class CompaniesScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[companies_service.CompanyRow] = []
@@ -41,6 +42,75 @@ class CompaniesScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
+
+        self.set_field_help([
+            (
+                self.code_field,
+                "کدِ یکتایِ این شرکت در کلِ سیستم. بعدِ ساختنِ شرکت دیگر قابلِ‌تغییر نیست. "
+                "چون همه‌جایِ برنامه با همین کد این شرکت را می‌شناسد.",
+            ),
+            (
+                self.legal_name_field,
+                "نامِ رسمی و ثبتی‌یِ شرکت. در اسنادِ رسمی و صورت‌هایِ مالیِ چاپی به‌کار می‌رود.",
+            ),
+            (
+                self.display_name_field,
+                "نامِ کوتاهی که در برنامه نمایش داده می‌شود، مثلاً در انتخابِ شرکت بالایِ صفحه. "
+                "لازم نیست با نامِ حقوقی یکی باشد.",
+            ),
+            (
+                self.currency_combo,
+                "ارزِ پایه‌یِ این شرکت. همه‌یِ مبالغِ کدینگِ حساب‌ها و اسنادِ حسابداری با این ارز ثبت می‌شوند. "
+                "هر شرکت ارزِ پایه‌یِ خودش را دارد. بعدِ ثبتِ چند سند بهتر است آن را تغییر ندهید.",
+            ),
+            (
+                self.language_combo,
+                "زبانِ پیش‌فرضِ این شرکت. برایِ نمایشِ نامِ حساب‌ها و فیلدهایِ چندزبانه استفاده می‌شود.",
+            ),
+            (
+                self.fy_month_field,
+                "ماهی که سالِ مالیِ این شرکت از آن شروع می‌شود — ۱ یعنی فروردین. "
+                "بعضی شرکت‌ها (مثلاً پیمانکاری‌ها) سالِ مالی‌شان با سالِ شمسیِ معمولی فرق دارد. "
+                "این عدد پایه‌یِ محاسبه‌یِ بازه‌یِ هر سالِ مالیِ تازه است.",
+            ),
+            (
+                self.fy_day_field,
+                "روزِ شروعِ سالِ مالی، در همان ماهِ بالا. "
+                "این دو فیلد با هم اولین روزِ سالِ مالیِ شرکت را می‌سازند.",
+            ),
+            (
+                self.economic_code_field,
+                "کدِ اقتصادیِ شرکت نزدِ سازمانِ امور مالیاتی. در فاکتورها و گزارش‌هایِ ارزش‌افزوده به‌کار می‌رود. اختیاری است.",
+            ),
+            (
+                self.registration_no_field,
+                "شماره‌یِ ثبتِ شرکت نزدِ اداره‌یِ ثبتِ شرکت‌ها. برایِ اسنادِ قانونی لازم است. اختیاری است.",
+            ),
+            (
+                self.national_id_field,
+                "شناسه‌یِ ملیِ شرکت — یک کدِ یکتایِ ۱۱رقمی. در قراردادها و مکاتباتِ رسمی به‌کار می‌رود. اختیاری است.",
+            ),
+            (
+                self.is_active_checkbox,
+                "شرکت‌هایِ غیرِفعال دیگر در فهرستِ انتخابِ شرکت بالایِ برنامه نشان داده نمی‌شوند. "
+                "داده‌هایِ قبلی‌شان (کدینگ، اسناد) پاک نمی‌شود.",
+            ),
+            (
+                self.clone_checkbox,
+                "به‌جایِ شروع از صفر، می‌توانید کدینگِ حساب‌ها یا گروه‌هایِ تفصیلیِ یک شرکتِ دیگر را کپی کنید. "
+                "خودِ اشخاص (مشتری، تامین‌کننده، پرسنل) و اسنادِ حسابداری کپی نمی‌شوند.",
+            ),
+            (self.clone_source_combo, "شرکتی که کدینگ و تفصیلی‌هایش الگویِ این شرکتِ تازه می‌شود."),
+            (
+                self.clone_coa_checkbox,
+                "اگر فعال باشد، کدِ حساب‌هایِ شرکتِ مبدأ عیناً برایِ این شرکتِ تازه ساخته می‌شود.",
+            ),
+            (
+                self.clone_dimensions_checkbox,
+                "اگر فعال باشد، حساب‌هایِ تفصیلی (کالا، بانک، صندوق، مرکزِ هزینه، پروژه و گروه‌هایِ ساده) "
+                "از شرکتِ مبدأ کپی می‌شوند.",
+            ),
+        ])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()

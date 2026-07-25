@@ -21,11 +21,12 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import audit as audit_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["تاریخ/ساعت", "کاربر", "عملیات", "شناسه", "نوعِ موجودیت"]
 
 
-class AuditLogScreen(QWidget):
+class AuditLogScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[audit_service.ActivityLogRow] = []
@@ -62,6 +63,14 @@ class AuditLogScreen(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.table.cellDoubleClicked.connect(self._show_changes)
         layout.addWidget(self.table, stretch=1)
+
+        self.set_field_help([
+            (
+                self.entity_type_combo,
+                "فقط رویدادهایِ مربوط به یک نوع اطلاعات را نشان بده، مثلاً فقط تغییراتِ حساب‌ها یا فقط اسناد. "
+                "«همه‌ی انواع» یعنی بدونِ فیلتر. برایِ دیدنِ جزئیاتِ کاملِ یک رویداد، رویِ ردیفش دابل‌کلیک کنید.",
+            ),
+        ])
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None

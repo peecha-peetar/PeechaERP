@@ -24,11 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from peecha.services import currencies as currencies_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["فعال", "رقمِ اعشار", "نماد", "کدِ ارز"]
 
 
-class CurrenciesScreen(QWidget):
+class CurrenciesScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[currencies_service.CurrencyRow] = []
@@ -39,6 +40,25 @@ class CurrenciesScreen(QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=1)
+
+        self.set_field_help([
+            (
+                self.iso_code_field,
+                "کدِ استانداردِ سه‌حرفیِ ارز — مثلاً IRR برایِ ریال یا USD برایِ دلار. "
+                "همین کد در فهرستِ «ارزِ پایه»یِ هر شرکت و همه‌جایِ برنامه استفاده می‌شود.",
+            ),
+            (self.symbol_field, "نمادِ نمایشیِ ارز، مثلاً ﷼ یا $. فقط ظاهری است و در محاسبات اثر ندارد."),
+            (
+                self.decimal_places_field,
+                "چند رقمِ اعشار برایِ مبالغِ این ارز نشان داده شود. برایِ ریال معمولاً صفر است. "
+                "برایِ دلار معمولاً ۲. تغییرِ این عدد فقط نمایش را عوض می‌کند، نه مبالغِ ذخیره‌شده را.",
+            ),
+            (
+                self.is_active_checkbox,
+                "ارزهایِ غیرِفعال دیگر در فهرستِ «ارزِ پایه» هنگامِ ساختنِ شرکتِ تازه نشان داده نمی‌شوند. "
+                "شرکت‌هایی که از قبل با این ارز کار می‌کنند مشکلی پیدا نمی‌کنند.",
+            ),
+        ])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
