@@ -71,6 +71,21 @@ NAV_ITEMS = [
                 "label": "طراحیِ الگویِ گزارش",
                 "screen": "statement_template_designer",
             },
+            {
+                "code": "REPORTS_FINANCIAL_RATIOS",
+                "label": "نسبت‌هایِ مالی",
+                "screen": "report_financial_ratios",
+            },
+            {
+                "code": "REPORTS_PERIOD_COMPARISON",
+                "label": "مقایسه‌یِ دوره‌ای",
+                "screen": "report_period_comparison",
+            },
+            {
+                "code": "REPORTS_ANOMALIES",
+                "label": "تشخیصِ سندهایِ ناقص/آنومالی",
+                "screen": "report_anomalies",
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ

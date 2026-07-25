@@ -508,12 +508,15 @@ class MainWindow(QMainWindow):
         )
         from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
         from peecha.ui.screens.report_account_ledger import AccountLedgerScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_anomalies import AnomaliesScreen  # noqa: PLC0415
         from peecha.ui.screens.report_balance_sheet import BalanceSheetScreen  # noqa: PLC0415
         from peecha.ui.screens.report_cash_flow import CashFlowScreen  # noqa: PLC0415
         from peecha.ui.screens.report_custom_statement import CustomStatementScreen  # noqa: PLC0415
         from peecha.ui.screens.report_equity_changes import EquityChangesScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen  # noqa: PLC0415
         from peecha.ui.screens.report_income_statement import IncomeStatementScreen  # noqa: PLC0415
         from peecha.ui.screens.report_journal_book import JournalBookScreen  # noqa: PLC0415
+        from peecha.ui.screens.report_period_comparison import PeriodComparisonScreen  # noqa: PLC0415
         from peecha.ui.screens.report_trial_balance import TrialBalanceScreen  # noqa: PLC0415
         from peecha.ui.screens.statement_template_designer import (  # noqa: PLC0415
             StatementTemplateDesignerScreen,
@@ -557,6 +560,9 @@ class MainWindow(QMainWindow):
         self.register_screen("report_equity_changes", EquityChangesScreen())
         self.register_screen("report_custom_statement", CustomStatementScreen())
         self.register_screen("statement_template_designer", StatementTemplateDesignerScreen())
+        self.register_screen("report_financial_ratios", FinancialRatiosScreen())
+        self.register_screen("report_period_comparison", PeriodComparisonScreen())
+        self.register_screen("report_anomalies", AnomaliesScreen())
         # همه‌ی فرم‌هایِ قبلاً جداگانه‌ی «مدیریتِ سیستم» (زبان‌ها/ارزها/شرکت‌ها/
         # سال‌های مالی/کاربران/نقش‌ها/عنوانِ فیلدها/ردِ حسابرسی) اکنون به‌صورتِ
         # تب درونِ system_settings.SystemSettingsScreen زندگی می‌کنند — نکته‌ی

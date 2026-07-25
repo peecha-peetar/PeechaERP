@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import statistics
 from dataclasses import dataclass
 
+import jdatetime
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
@@ -943,3 +945,349 @@ def compute_custom_statement(
         )
         for r in rows
     ]
+
+
+@dataclass
+class FinancialRatioRow:
+    label: str
+    value: decimal.Decimal | None  # None = غیرِقابلِ‌محاسبه (مخرج صفر)
+    is_percentage: bool
+
+
+def _safe_div(numerator: decimal.Decimal, denominator: decimal.Decimal) -> decimal.Decimal | None:
+    return (numerator / denominator) if denominator else None
+
+
+def compute_financial_ratios(
+    company_id: int,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    *,
+    status_filter: str = "EXCLUDE_DRAFT",
+) -> list[FinancialRatioRow]:
+    """نسبت‌هایِ سودآوری/اهرمی — رویِ compute_balance_sheet/compute_income_statement
+    موجود سوار می‌شود، بدونِ کوئریِ تازه. طبقِ محدودیتِ شناخته‌شده: نسبت‌هایِ
+    نقدینگی (جاری/آنی) این‌جا نیستند، چون تفکیکِ دارایی/بدهیِ «جاری» در
+    برابرِ «غیرِجاری» رویِ حساب‌ها وجود ندارد (فقط category_code/account_type/
+    cash_flow_section هست، هیچ‌کدام معادلِ جاری/غیرِجاری نیست)."""
+    bs = compute_balance_sheet(company_id, date_to, status_filter=status_filter)
+    inc = compute_income_statement(company_id, date_from, date_to, status_filter=status_filter)
+    return [
+        FinancialRatioRow("حاشیه‌یِ سودِ خالص", _safe_div(inc.net_income, inc.total_revenue), True),
+        FinancialRatioRow("بازده‌یِ دارایی‌ها (ROA)", _safe_div(inc.net_income, bs.total_assets), True),
+        FinancialRatioRow("بازده‌یِ حقوقِ صاحبانِ سهام (ROE)", _safe_div(inc.net_income, bs.total_equity), True),
+        FinancialRatioRow("نسبتِ بدهی", _safe_div(bs.total_liabilities, bs.total_assets), True),
+        FinancialRatioRow(
+            "نسبتِ بدهی به حقوقِ صاحبانِ سهام", _safe_div(bs.total_liabilities, bs.total_equity), False
+        ),
+        FinancialRatioRow("نسبتِ مالکانه", _safe_div(bs.total_equity, bs.total_assets), True),
+    ]
+
+
+_JALALI_MONTH_NAMES = [
+    "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
+    "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
+]
+
+
+def _jalali_period_label(year: int, month: int, granularity: str) -> str:
+    if granularity == "YEARLY":
+        return str(year)
+    if granularity == "QUARTERLY":
+        quarter = (month - 1) // 3 + 1
+        return f"فصلِ {quarter} {year}"
+    return f"{_JALALI_MONTH_NAMES[month - 1]} {year}"
+
+
+def generate_jalali_periods(
+    end_date: datetime.date, granularity: str, count: int
+) -> list[tuple[datetime.date, datetime.date, str]]:
+    """`count` دوره‌یِ متوالیِ جلالی (ماهانه/فصلی/سالانه) که به دوره‌یِ
+    شاملِ end_date ختم می‌شوند؛ قدیمی‌ترین دوره اول. هر دوره یک تاپلِ
+    (تاریخِ میلادیِ شروع، تاریخِ میلادیِ پایان، برچسبِ فارسی) است."""
+    step = {"MONTHLY": 1, "QUARTERLY": 3, "YEARLY": 12}[granularity]
+    end_jalali = jdatetime.date.fromgregorian(date=end_date)
+
+    if granularity == "YEARLY":
+        anchor_total = end_jalali.year * 12
+    elif granularity == "QUARTERLY":
+        quarter_start_month = (end_jalali.month - 1) // 3 * 3 + 1
+        anchor_total = end_jalali.year * 12 + (quarter_start_month - 1)
+    else:
+        anchor_total = end_jalali.year * 12 + (end_jalali.month - 1)
+
+    periods: list[tuple[datetime.date, datetime.date, str]] = []
+    for i in range(count):
+        start_total = anchor_total - i * step
+        start_year, start_month0 = divmod(start_total, 12)
+        start_month = start_month0 + 1
+        start = jdatetime.date(start_year, start_month, 1)
+
+        end_total = start_total + step
+        end_year, end_month0 = divmod(end_total, 12)
+        end_month = end_month0 + 1
+        end = jdatetime.date(end_year, end_month, 1) - datetime.timedelta(days=1)
+
+        label = _jalali_period_label(start_year, start_month, granularity)
+        periods.append((start.togregorian(), end.togregorian(), label))
+
+    periods.reverse()
+    return periods
+
+
+@dataclass
+class PeriodComparisonRow:
+    full_code: str
+    name: str
+    category_code: str  # REVENUE | EXPENSE
+    amounts: list[decimal.Decimal]
+
+
+@dataclass
+class PeriodComparisonResult:
+    period_labels: list[str]
+    rows: list[PeriodComparisonRow]
+    net_income_by_period: list[decimal.Decimal]
+
+
+def compute_period_comparison(
+    company_id: int,
+    periods: list[tuple[datetime.date, datetime.date, str]],
+    *,
+    status_filter: str = "EXCLUDE_DRAFT",
+) -> PeriodComparisonResult:
+    """مقایسه‌یِ دوره‌ای (ماه‌به‌ماه/فصل‌به‌فصل/سال‌به‌سال) — برایِ هر دوره،
+    مانده/گردشِ حساب‌هایِ REVENUE/EXPENSهِ سطحِ ۱ را رول‌آپ‌شده می‌گیرد
+    (هم‌الگو با compute_income_statement)."""
+    balances_by_period = [
+        compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
+        for date_from, date_to, _label in periods
+    ]
+
+    sample_by_account: dict[int, AccountBalanceRow] = {}
+    for balances in balances_by_period:
+        for r in balances:
+            if r.category_code in ("REVENUE", "EXPENSE") and r.account_level == 1:
+                sample_by_account.setdefault(r.account_id, r)
+
+    rows: list[PeriodComparisonRow] = []
+    for account_id, sample in sorted(sample_by_account.items(), key=lambda kv: kv[1].full_code):
+        amounts: list[decimal.Decimal] = []
+        for balances in balances_by_period:
+            r = next((b for b in balances if b.account_id == account_id), None)
+            if r is None:
+                amounts.append(_ZERO)
+                continue
+            if sample.category_code == "REVENUE":
+                amounts.append(r.period_credit - r.period_debit)
+            else:
+                amounts.append(r.period_debit - r.period_credit)
+        rows.append(PeriodComparisonRow(sample.full_code, sample.name, sample.category_code, amounts))
+
+    net_income_by_period = [
+        _net_income(company_id, date_from, date_to, status_filter) for date_from, date_to, _label in periods
+    ]
+
+    return PeriodComparisonResult(
+        period_labels=[label for _f, _t, label in periods],
+        rows=rows,
+        net_income_by_period=net_income_by_period,
+    )
+
+
+@dataclass
+class AnomalyRow:
+    kind_label: str
+    document_date: datetime.date | None
+    temporary_no: int | None
+    description: str
+    detail: str
+
+
+def _stale_draft_anomalies(
+    session, company_id: int, date_from: datetime.date | None, date_to: datetime.date | None, stale_draft_days: int
+) -> list[AnomalyRow]:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cutoff = now - datetime.timedelta(days=stale_draft_days)
+    query = (
+        select(JournalEntry)
+        .join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id)
+        .where(
+            JournalEntry.company_id == company_id,
+            JournalEntryStatus.code == "DRAFT",
+            JournalEntry.created_at <= cutoff,
+        )
+    )
+    if date_from is not None:
+        query = query.where(JournalEntry.document_date >= date_from)
+    if date_to is not None:
+        query = query.where(JournalEntry.document_date <= date_to)
+    rows: list[AnomalyRow] = []
+    for entry in session.scalars(query).all():
+        age_days = (now - entry.created_at).days
+        rows.append(
+            AnomalyRow(
+                kind_label="اسنادِ موقتِ معوق",
+                document_date=entry.document_date,
+                temporary_no=entry.temporary_no,
+                description=entry.description or "—",
+                detail=f"{age_days} روز در وضعیتِ پیش‌نویس مانده است.",
+            )
+        )
+    return rows
+
+
+def _entries_in_range(session, company_id: int, date_from: datetime.date | None, date_to: datetime.date | None):
+    query = select(JournalEntry).where(JournalEntry.company_id == company_id)
+    if date_from is not None:
+        query = query.where(JournalEntry.document_date >= date_from)
+    if date_to is not None:
+        query = query.where(JournalEntry.document_date <= date_to)
+    return session.scalars(query).all()
+
+
+def _missing_description_anomalies(
+    session, company_id: int, date_from: datetime.date | None, date_to: datetime.date | None
+) -> list[AnomalyRow]:
+    entries = [e for e in _entries_in_range(session, company_id, date_from, date_to) if not e.description]
+    if not entries:
+        return []
+    entry_ids = [e.journal_entry_id for e in entries]
+    lines = session.scalars(select(JournalEntryLine).where(JournalEntryLine.journal_entry_id.in_(entry_ids))).all()
+    entries_with_line_desc = {line.journal_entry_id for line in lines if line.description}
+    rows: list[AnomalyRow] = []
+    for entry in entries:
+        if entry.journal_entry_id in entries_with_line_desc:
+            continue
+        rows.append(
+            AnomalyRow(
+                kind_label="سندهایِ بدونِ شرح",
+                document_date=entry.document_date,
+                temporary_no=entry.temporary_no,
+                description="—",
+                detail="نه سند و نه هیچ‌کدام از سطرهایش شرح دارند.",
+            )
+        )
+    return rows
+
+
+def _possible_duplicate_anomalies(
+    session, company_id: int, date_from: datetime.date | None, date_to: datetime.date | None
+) -> list[AnomalyRow]:
+    entries = _entries_in_range(session, company_id, date_from, date_to)
+    if not entries:
+        return []
+    entry_ids = [e.journal_entry_id for e in entries]
+    lines = session.scalars(select(JournalEntryLine).where(JournalEntryLine.journal_entry_id.in_(entry_ids))).all()
+    lines_by_entry: dict[int, list] = {}
+    for line in lines:
+        lines_by_entry.setdefault(line.journal_entry_id, []).append(line)
+
+    groups: dict[tuple, list] = {}
+    for entry in entries:
+        entry_lines = lines_by_entry.get(entry.journal_entry_id, [])
+        total_debit = sum((line.debit_amount_base for line in entry_lines), _ZERO)
+        account_ids = frozenset(line.account_id for line in entry_lines)
+        key = (entry.document_date, total_debit, account_ids)
+        groups.setdefault(key, []).append(entry)
+
+    rows: list[AnomalyRow] = []
+    for group_entries in groups.values():
+        if len(group_entries) < 2:
+            continue
+        numbers = "، ".join(str(e.temporary_no) for e in group_entries)
+        for entry in group_entries:
+            rows.append(
+                AnomalyRow(
+                    kind_label="احتمالِ سندِ تکراری",
+                    document_date=entry.document_date,
+                    temporary_no=entry.temporary_no,
+                    description=entry.description or "—",
+                    detail=f"با شماره‌هایِ {numbers} هم‌تاریخ، هم‌مبلغ و هم‌حساب است.",
+                )
+            )
+    return rows
+
+
+def _outlier_transaction_anomalies(
+    session,
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    outlier_z: float,
+) -> list[AnomalyRow]:
+    query = (
+        select(JournalEntryLine, JournalEntry.document_date, JournalEntry.temporary_no, JournalEntry.description)
+        .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+        .where(JournalEntry.company_id == company_id)
+    )
+    if date_from is not None:
+        query = query.where(JournalEntry.document_date >= date_from)
+    if date_to is not None:
+        query = query.where(JournalEntry.document_date <= date_to)
+    line_rows = session.execute(query).all()
+
+    # به‌ازایِ هر حساب، لیستِ (ردیفِ خام، مبلغ) را نگه می‌داریم — نه فقط
+    # مبلغ‌ها — چون آمارِ هر تراکنش باید leave-one-out باشد (میانگین/
+    # انحرافِ‌معیارِ *بقیه‌یِ* تراکنش‌هایِ همان حساب، نه شاملِ خودش)؛ وگرنه
+    # خودِ مبلغِ پرت آن‌قدر انحرافِ‌معیار را بالا می‌برد که دیگر پرت به‌نظر
+    # نمی‌رسد (باگی که در تستِ واقعی پیدا شد: یک تراکنشِ ۵۰۰۰۰تایی میانِ
+    # ۵ تراکنشِ ~۱۰۰تایی، وقتی خودش هم در میانگین/انحراف حساب می‌شد،
+    # اصلاً تشخیص داده نمی‌شد).
+    entries_by_account: dict[int, list[tuple]] = {}
+    for row in line_rows:
+        line = row[0]
+        amount = line.debit_amount_base or line.credit_amount_base
+        if amount:
+            entries_by_account.setdefault(line.account_id, []).append((row, amount))
+
+    accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(company_id)}
+    rows: list[AnomalyRow] = []
+    for account_id, entries in entries_by_account.items():
+        if len(entries) < 5:
+            continue
+        amounts_float = [float(a) for _row, a in entries]
+        for idx, (row, amount) in enumerate(entries):
+            others = amounts_float[:idx] + amounts_float[idx + 1 :]
+            mean = statistics.mean(others)
+            stdev = statistics.pstdev(others)
+            if stdev == 0 or float(amount) <= mean + outlier_z * stdev:
+                continue
+            line, document_date, temporary_no, entry_description = row
+            account = accounts_by_id.get(account_id)
+            rows.append(
+                AnomalyRow(
+                    kind_label="تراکنشِ نامتعارف",
+                    document_date=document_date,
+                    temporary_no=temporary_no,
+                    description=line.description or entry_description or "—",
+                    detail=(
+                        f"مبلغِ {amount:,.0f} برایِ حسابِ «{account.name if account else ''}» نسبت به میانگینِ "
+                        f"سایرِ تراکنش‌هایِ آن حساب ({mean:,.0f}) بسیار بزرگ است."
+                    ),
+                )
+            )
+    return rows
+
+
+def detect_document_anomalies(
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    *,
+    stale_draft_days: int = 7,
+    detect_outliers: bool = True,
+    outlier_z: float = 3.0,
+) -> list[AnomalyRow]:
+    """چهار بررسیِ مشخص و صادقانه (نه یک «موتورِ AI مبهم»): اسنادِ موقتِ
+    معوق، سندهایِ بدونِ شرح، احتمالِ سندِ تکراری، تراکنشِ نامتعارفِ آماری.
+    عمداً بدونِ status_filter — این چک‌ها ذاتاً رویِ همه‌یِ وضعیت‌ها کار
+    می‌کنند (چکِ اول دقیقاً هدفش خودِ پیش‌نویس‌هاست)."""
+    with new_session() as session:
+        rows: list[AnomalyRow] = []
+        rows.extend(_stale_draft_anomalies(session, company_id, date_from, date_to, stale_draft_days))
+        rows.extend(_missing_description_anomalies(session, company_id, date_from, date_to))
+        rows.extend(_possible_duplicate_anomalies(session, company_id, date_from, date_to))
+        if detect_outliers:
+            rows.extend(_outlier_transaction_anomalies(session, company_id, date_from, date_to, outlier_z))
+    return rows
