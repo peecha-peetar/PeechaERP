@@ -97,6 +97,18 @@ class CashFlowSection(Base):
     code: Mapped[str] = mapped_column(String(20), unique=True)  # OPERATING | INVESTING | FINANCING
 
 
+class LiquidityClass(Base):
+    """طبقه‌بندیِ حساب از نقطه‌نظرِ نقدینگی — جاری/غیرِجاری/موجودی؛
+    اختیاری، فقط برایِ حساب‌هایِ دارایی/بدهی که در نسبتِ جاری/آنی
+    (گزارشِ نسبت‌هایِ مالی) باید دیده شوند."""
+
+    __tablename__ = "liquidity_classes"
+    __table_args__ = {"schema": "acc"}
+
+    liquidity_class_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(String(20), unique=True)  # CURRENT | CURRENT_INVENTORY | NON_CURRENT
+
+
 class ChartOfAccount(Base):
     __tablename__ = "chart_of_accounts"
     __table_args__ = (
@@ -116,6 +128,7 @@ class ChartOfAccount(Base):
     cash_flow_section_id: Mapped[int | None] = mapped_column(
         ForeignKey("acc.cash_flow_sections.cash_flow_section_id")
     )
+    liquidity_class_id: Mapped[int | None] = mapped_column(ForeignKey("acc.liquidity_classes.liquidity_class_id"))
     is_postable: Mapped[bool] = mapped_column(Boolean, default=False)
     currency_id: Mapped[int | None] = mapped_column(ForeignKey("core.currencies.currency_id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

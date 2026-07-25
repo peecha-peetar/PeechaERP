@@ -39,8 +39,16 @@ _CASH_FLOW_SECTION_OPTIONS = [
     ("INVESTING", "سرمایه‌گذاری"),
     ("FINANCING", "تامینِ مالی"),
 ]
+_LIQUIDITY_CLASS_OPTIONS = [
+    (None, "— بدونِ طبقه‌بندی —"),
+    ("CURRENT", "جاری"),
+    ("CURRENT_INVENTORY", "جاری (موجودی)"),
+    ("NON_CURRENT", "غیرِجاری"),
+]
 
-_COLUMNS = ["کد", "نام", "دسته (سود-زیان/ترازنامه)", "نوعِ حساب", "بخشِ گردشِ وجوهِ نقد", ""]
+_COLUMNS = [
+    "کد", "نام", "دسته (سود-زیان/ترازنامه)", "نوعِ حساب", "بخشِ گردشِ وجوهِ نقد", "طبقه‌یِ نقدینگی", "",
+]
 
 
 def _fill_combo(combo: QComboBox, options: list[tuple[str | None, str]], current: str | None) -> None:
@@ -68,7 +76,8 @@ class FinancialStatementMappingScreen(QWidget):
             "هر گروهِ حساب (سطحِ ۱) در کدام صورتِ مالی قرار می‌گیرد: «دسته» و «نوعِ حساب» "
             "تعیین‌کننده‌یِ صورتِ سود و زیان/ترازنامه‌اند (ASSET/LIABILITY/EQUITY و PERMANENT = ترازنامه، "
             "REVENUE/EXPENSE و TEMPORARY = سود و زیان)؛ «بخشِ گردشِ وجوهِ نقد» فقط برایِ گزارشِ گردشِ "
-            "وجوهِ نقدِ غیرمستقیم استفاده می‌شود. این سه فیلد رویِ کلِ زیرشاخه‌هایِ همان گروه هم اعمال می‌شوند."
+            "وجوهِ نقدِ غیرمستقیم، و «طبقه‌یِ نقدینگی» فقط برایِ نسبتِ جاری/آنی (گزارشِ نسبت‌هایِ مالی) "
+            "استفاده می‌شود. این چهار فیلد رویِ کلِ زیرشاخه‌هایِ همان گروه هم اعمال می‌شوند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -111,18 +120,22 @@ class FinancialStatementMappingScreen(QWidget):
             _fill_combo(cash_flow_combo, _CASH_FLOW_SECTION_OPTIONS, account.cash_flow_section_code)
             self.table.setCellWidget(row_index, 4, cash_flow_combo)
 
+            liquidity_class_combo = QComboBox()
+            _fill_combo(liquidity_class_combo, _LIQUIDITY_CLASS_OPTIONS, account.liquidity_class_code)
+            self.table.setCellWidget(row_index, 5, liquidity_class_combo)
+
             save_button = QPushButton("ذخیره")
             save_button.setObjectName("flatButton")
             save_button.clicked.connect(
                 lambda _checked=False, r=row_index: self._save_row(
-                    r, category_combo, account_type_combo, cash_flow_combo
+                    r, category_combo, account_type_combo, cash_flow_combo, liquidity_class_combo
                 )
             )
             cell = QWidget()
             cell_layout = QHBoxLayout(cell)
             cell_layout.setContentsMargins(4, 0, 4, 0)
             cell_layout.addWidget(save_button)
-            self.table.setCellWidget(row_index, 5, cell)
+            self.table.setCellWidget(row_index, 6, cell)
 
     def _save_row(
         self,
@@ -130,6 +143,7 @@ class FinancialStatementMappingScreen(QWidget):
         category_combo: QComboBox,
         account_type_combo: QComboBox,
         cash_flow_combo: QComboBox,
+        liquidity_class_combo: QComboBox,
     ) -> None:
         company_id = self._company_id()
         if company_id is None or row_index >= len(self._rows):
@@ -147,6 +161,7 @@ class FinancialStatementMappingScreen(QWidget):
                 session.current_company.default_language_id if session.current_company else None,
                 changed_by_user_id=session.current_user.user_id if session.current_user else None,
                 cash_flow_section_code=cash_flow_combo.currentData(),
+                liquidity_class_code=liquidity_class_combo.currentData(),
             )
         except ValueError as exc:
             theme.set_status_label(self.status_label, str(exc), ok=False)

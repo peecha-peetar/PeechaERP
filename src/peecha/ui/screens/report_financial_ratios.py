@@ -1,7 +1,7 @@
-"""نسبت‌هایِ مالی — سودآوری/اهرمی، رویِ compute_balance_sheet/
-compute_income_statement موجود سوار می‌شود. طبقِ محدودیتِ شناخته‌شده:
-نسبت‌هایِ نقدینگی (جاری/آنی) این‌جا نیستند چون تفکیکِ دارایی/بدهیِ
-«جاری» در برابرِ «غیرِجاری» رویِ حساب‌ها وجود ندارد."""
+"""نسبت‌هایِ مالی — سودآوری/اهرمی/نقدینگی، رویِ compute_balance_sheet/
+compute_income_statement موجود سوار می‌شود. نسبت‌هایِ نقدینگی (جاری/آنی)
+فقط برایِ حساب‌هایی محاسبه می‌شوند که «طبقه‌یِ نقدینگی»شان در کدینگِ
+حسابداری/نگاشتِ صورت‌هایِ مالی تنظیم شده باشد."""
 
 from __future__ import annotations
 
@@ -19,8 +19,10 @@ class FinancialRatiosScreen(ReportScreenBase):
         super().__init__("نسبت‌هایِ مالی")
 
         hint = QLabel(
-            "نسبت‌هایِ نقدینگی (جاری/آنی) این‌جا نیستند — چون تفکیکِ دارایی/بدهیِ «جاری» در برابرِ «غیرِجاری» "
-            "رویِ حساب‌ها هنوز تعریف نشده. «تا تاریخ» = تاریخِ ترازنامه؛ بازه‌یِ «از–تا تاریخ» = دوره‌یِ سود-زیان."
+            "نسبتِ جاری/آنی فقط برایِ حساب‌هایی محاسبه می‌شود که «طبقه‌یِ نقدینگی»شان در کدینگِ حسابداری یا "
+            "نگاشتِ صورت‌هایِ مالی تنظیم شده باشد (جاری/جاری-موجودی برایِ دارایی، جاری برایِ بدهی)؛ اگر هیچ "
+            "حسابی طبقه‌بندی نشده باشد، این دو نسبت «—» نشان داده می‌شوند. «تا تاریخ» = تاریخِ ترازنامه؛ "
+            "بازه‌یِ «از–تا تاریخ» = دوره‌یِ سود-زیان."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -35,9 +37,11 @@ class FinancialRatiosScreen(ReportScreenBase):
         for r in rows_data:
             if r.value is None:
                 value_text = "—"
-            elif r.is_percentage:
+            elif r.kind == "PERCENTAGE":
                 value_text = f"{r.value * decimal.Decimal(100):,.1f}٪"
-            else:
+            elif r.kind == "CURRENCY":
+                value_text = f"{r.value:,.0f}"
+            else:  # RATIO
                 value_text = f"{r.value:,.2f}"
             rows.append([r.label, value_text])
         return headers, rows, None

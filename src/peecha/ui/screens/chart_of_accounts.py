@@ -49,6 +49,16 @@ _CASH_FLOW_SECTION_OPTIONS = [
     ("INVESTING", "سرمایه‌گذاری"),
     ("FINANCING", "تامینِ مالی"),
 ]
+# طبقِ همان الگویِ بالا: اختیاری — فقط حساب‌هایِ دارایی/بدهی که باید در
+# نسبتِ جاری/آنی (گزارشِ نسبت‌هایِ مالی) دیده شوند طبقه‌بندی می‌شوند.
+# CURRENT_INVENTORY زیرمجموعه‌یِ دارایی‌هایِ جاری است ولی از دارایی‌هایِ
+# آنی (Quick Assets) کم می‌شود.
+_LIQUIDITY_CLASS_OPTIONS = [
+    (None, "— بدونِ طبقه‌بندی —"),
+    ("CURRENT", "جاری"),
+    ("CURRENT_INVENTORY", "جاری (موجودی)"),
+    ("NON_CURRENT", "غیرِجاری"),
+]
 _LEVEL_LABELS = {1: "گروه", 2: "کل", 3: "معین"}
 _LEVEL_COLORS = {1: theme.LEVEL_GROUP, 2: theme.LEVEL_KOL, 3: theme.LEVEL_MOEIN}
 # طبقِ درخواستِ صریح: برچسبِ فیلدهایِ کد/نام باید متناسب با سطحِ حسابِ
@@ -184,6 +194,12 @@ class ChartOfAccountsScreen(QWidget):
         grid.addWidget(self.cash_flow_section_combo, row, 1)
         row += 1
 
+        grid.addWidget(QLabel("طبقه‌یِ نقدینگی"), row, 0)
+        self.liquidity_class_combo = QComboBox()
+        _fill_combo(self.liquidity_class_combo, _LIQUIDITY_CLASS_OPTIONS)
+        grid.addWidget(self.liquidity_class_combo, row, 1)
+        row += 1
+
         self.is_postable_checkbox = QCheckBox("قابلِ ثبتِ سند")
         self.is_postable_checkbox.toggled.connect(self._update_dimension_checklists_visibility)
         grid.addWidget(self.is_postable_checkbox, row, 1)
@@ -310,6 +326,7 @@ class ChartOfAccountsScreen(QWidget):
         _select_combo_value(self.category_combo, account.category_code)
         _select_combo_value(self.account_type_combo, account.account_type_code)
         _select_combo_value(self.cash_flow_section_combo, account.cash_flow_section_code)
+        _select_combo_value(self.liquidity_class_combo, account.liquidity_class_code)
         self.is_postable_checkbox.setChecked(account.is_postable)
         self.segment_code_field.setText(account.full_code.rsplit("-", 1)[-1])
         self.segment_code_field.setEnabled(False)
@@ -334,6 +351,7 @@ class ChartOfAccountsScreen(QWidget):
             self.category_combo,
             self.account_type_combo,
             self.cash_flow_section_combo,
+            self.liquidity_class_combo,
         ):
             widget.setEnabled(not locked and not has_parent)
         if locked:
@@ -363,12 +381,14 @@ class ChartOfAccountsScreen(QWidget):
             self.category_combo,
             self.account_type_combo,
             self.cash_flow_section_combo,
+            self.liquidity_class_combo,
         ):
             widget.setEnabled(True)
         self.nature_combo.setCurrentIndex(0)
         self.category_combo.setCurrentIndex(0)
         self.account_type_combo.setCurrentIndex(0)
         self.cash_flow_section_combo.setCurrentIndex(0)
+        self.liquidity_class_combo.setCurrentIndex(0)
         self.is_postable_checkbox.setEnabled(True)
         self.is_postable_checkbox.setChecked(False)
         self.delete_button.setVisible(False)
@@ -413,11 +433,13 @@ class ChartOfAccountsScreen(QWidget):
             _select_combo_value(self.category_combo, parent.category_code)
             _select_combo_value(self.account_type_combo, parent.account_type_code)
             _select_combo_value(self.cash_flow_section_combo, parent.cash_flow_section_code)
+            _select_combo_value(self.liquidity_class_combo, parent.liquidity_class_code)
         for widget in (
             self.nature_combo,
             self.category_combo,
             self.account_type_combo,
             self.cash_flow_section_combo,
+            self.liquidity_class_combo,
         ):
             widget.setEnabled(not has_parent)
 
@@ -512,6 +534,7 @@ class ChartOfAccountsScreen(QWidget):
         category_code = _combo_value(self.category_combo)
         account_type_code = _combo_value(self.account_type_combo)
         cash_flow_section_code = _combo_value(self.cash_flow_section_combo)
+        liquidity_class_code = _combo_value(self.liquidity_class_combo)
         is_postable = self.is_postable_checkbox.isChecked()
 
         if not name:
@@ -531,6 +554,7 @@ class ChartOfAccountsScreen(QWidget):
                     self._current_language_id(),
                     changed_by_user_id=session.current_user.user_id if session.current_user else None,
                     cash_flow_section_code=cash_flow_section_code,
+                    liquidity_class_code=liquidity_class_code,
                 )
             else:
                 segment_code = self.segment_code_field.text().strip()
@@ -549,6 +573,7 @@ class ChartOfAccountsScreen(QWidget):
                     parent_account_id=self.parent_combo.currentData(),
                     changed_by_user_id=session.current_user.user_id if session.current_user else None,
                     cash_flow_section_code=cash_flow_section_code,
+                    liquidity_class_code=liquidity_class_code,
                 )
         except ValueError as exc:
             self.status_label.setText(str(exc))

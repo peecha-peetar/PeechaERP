@@ -75,6 +75,7 @@ class AccountBalanceRow:
     closing_debit: decimal.Decimal
     closing_credit: decimal.Decimal
     cash_flow_section_code: str | None = None
+    liquidity_class_code: str | None = None
 
 
 def _day_before(value: datetime.date | None) -> datetime.date | None:
@@ -228,6 +229,7 @@ def compute_account_balances(
                 category_code=a.category_code,
                 account_type_code=a.account_type_code,
                 cash_flow_section_code=a.cash_flow_section_code,
+                liquidity_class_code=a.liquidity_class_code,
                 opening_debit=opening_debit,
                 opening_credit=opening_credit,
                 period_debit=period_debit,
@@ -951,11 +953,35 @@ def compute_custom_statement(
 class FinancialRatioRow:
     label: str
     value: decimal.Decimal | None  # None = غیرِقابلِ‌محاسبه (مخرج صفر)
-    is_percentage: bool
+    kind: str  # PERCENTAGE | RATIO | CURRENCY
 
 
 def _safe_div(numerator: decimal.Decimal, denominator: decimal.Decimal) -> decimal.Decimal | None:
     return (numerator / denominator) if denominator else None
+
+
+def _liquidity_totals(
+    company_id: int, date_to: datetime.date, status_filter: str
+) -> tuple[decimal.Decimal, decimal.Decimal, decimal.Decimal]:
+    """دارایی‌هایِ جاری، سهمِ موجودی از آن‌ها، و بدهی‌هایِ جاری — از رویِ
+    liquidity_class_code که در «نگاشتِ صورت‌هایِ مالی»/کدینگِ حسابداری
+    تنظیم می‌شود (CURRENT/CURRENT_INVENTORY برایِ دارایی، CURRENT برایِ
+    بدهی؛ NULL یعنی در نسبتِ جاری/آنی دیده نمی‌شود)."""
+    balances = compute_account_balances(company_id, None, date_to, status_filter=status_filter)
+    current_assets = _ZERO
+    inventory_assets = _ZERO
+    current_liabilities = _ZERO
+    for r in balances:
+        if r.account_level != 2:
+            continue
+        if r.category_code == "ASSET" and r.liquidity_class_code in ("CURRENT", "CURRENT_INVENTORY"):
+            amount = r.closing_debit - r.closing_credit
+            current_assets += amount
+            if r.liquidity_class_code == "CURRENT_INVENTORY":
+                inventory_assets += amount
+        elif r.category_code == "LIABILITY" and r.liquidity_class_code == "CURRENT":
+            current_liabilities += r.closing_credit - r.closing_debit
+    return current_assets, inventory_assets, current_liabilities
 
 
 def compute_financial_ratios(
@@ -965,22 +991,30 @@ def compute_financial_ratios(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> list[FinancialRatioRow]:
-    """نسبت‌هایِ سودآوری/اهرمی — رویِ compute_balance_sheet/compute_income_statement
-    موجود سوار می‌شود، بدونِ کوئریِ تازه. طبقِ محدودیتِ شناخته‌شده: نسبت‌هایِ
-    نقدینگی (جاری/آنی) این‌جا نیستند، چون تفکیکِ دارایی/بدهیِ «جاری» در
-    برابرِ «غیرِجاری» رویِ حساب‌ها وجود ندارد (فقط category_code/account_type/
-    cash_flow_section هست، هیچ‌کدام معادلِ جاری/غیرِجاری نیست)."""
+    """نسبت‌هایِ سودآوری/اهرمی/نقدینگی — رویِ compute_balance_sheet/
+    compute_income_statement موجود سوار می‌شود. نسبت‌هایِ نقدینگی (جاری/
+    آنی) فقط برایِ حساب‌هایی محاسبه می‌شوند که liquidity_class_code‌شان
+    در کدینگِ حسابداری/نگاشتِ صورت‌هایِ مالی تنظیم شده باشد — اگر هیچ
+    حسابی طبقه‌بندی نشده باشد، این دو نسبت None برمی‌گردند (نه صفرِ
+    گمراه‌کننده)."""
     bs = compute_balance_sheet(company_id, date_to, status_filter=status_filter)
     inc = compute_income_statement(company_id, date_from, date_to, status_filter=status_filter)
+    current_assets, inventory_assets, current_liabilities = _liquidity_totals(company_id, date_to, status_filter)
+    quick_assets = current_assets - inventory_assets
     return [
-        FinancialRatioRow("حاشیه‌یِ سودِ خالص", _safe_div(inc.net_income, inc.total_revenue), True),
-        FinancialRatioRow("بازده‌یِ دارایی‌ها (ROA)", _safe_div(inc.net_income, bs.total_assets), True),
-        FinancialRatioRow("بازده‌یِ حقوقِ صاحبانِ سهام (ROE)", _safe_div(inc.net_income, bs.total_equity), True),
-        FinancialRatioRow("نسبتِ بدهی", _safe_div(bs.total_liabilities, bs.total_assets), True),
+        FinancialRatioRow("حاشیه‌یِ سودِ خالص", _safe_div(inc.net_income, inc.total_revenue), "PERCENTAGE"),
+        FinancialRatioRow("بازده‌یِ دارایی‌ها (ROA)", _safe_div(inc.net_income, bs.total_assets), "PERCENTAGE"),
         FinancialRatioRow(
-            "نسبتِ بدهی به حقوقِ صاحبانِ سهام", _safe_div(bs.total_liabilities, bs.total_equity), False
+            "بازده‌یِ حقوقِ صاحبانِ سهام (ROE)", _safe_div(inc.net_income, bs.total_equity), "PERCENTAGE"
         ),
-        FinancialRatioRow("نسبتِ مالکانه", _safe_div(bs.total_equity, bs.total_assets), True),
+        FinancialRatioRow("نسبتِ بدهی", _safe_div(bs.total_liabilities, bs.total_assets), "PERCENTAGE"),
+        FinancialRatioRow(
+            "نسبتِ بدهی به حقوقِ صاحبانِ سهام", _safe_div(bs.total_liabilities, bs.total_equity), "RATIO"
+        ),
+        FinancialRatioRow("نسبتِ مالکانه", _safe_div(bs.total_equity, bs.total_assets), "PERCENTAGE"),
+        FinancialRatioRow("نسبتِ جاری", _safe_div(current_assets, current_liabilities), "RATIO"),
+        FinancialRatioRow("نسبتِ آنی", _safe_div(quick_assets, current_liabilities), "RATIO"),
+        FinancialRatioRow("سرمایه‌یِ در گردش", current_assets - current_liabilities, "CURRENCY"),
     ]
 
 
