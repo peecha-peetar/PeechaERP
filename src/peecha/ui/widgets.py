@@ -1,15 +1,20 @@
 """ویجت‌هایِ اشتراکی بینِ چند صفحه — فیلدِ تاریخِ شمسی (که قبلاً فقط در
 journal_entry.py تعریف شده بود، و حالا fiscal_years.py هم به آن نیاز دارد)
 و اسپین‌باکسِ صفر-پَدشونده (برایِ کدهایی مثلِ «۰۰۱» که QSpinBoxِ معمولی
-صفرهایِ ابتداییِ آن‌ها را بی‌صدا حذف می‌کند)."""
+صفرهایِ ابتداییِ آن‌ها را بی‌صدا حذف می‌کند) و نوارِ راهنمایِ فیلدها
+(FieldHelpBar/FieldHelpController، طبقِ درخواستِ صریح: مکانیزمی سراسری
+که هر فرمی می‌تواند برایِ نمایشِ توضیحِ آموزشیِ هر فیلد با فوکوس‌گرفتنِ
+آن به‌کار ببرد)."""
 
 from __future__ import annotations
 
 import datetime
 
-from PySide6.QtWidgets import QLineEdit, QSpinBox
+from PySide6.QtCore import QEvent, QObject
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QSpinBox, QWidget
 
 from peecha import numerals
+from peecha.ui import theme
 
 
 class JalaliDateEdit(QLineEdit):
@@ -83,3 +88,68 @@ class ZeroPaddedSpinBox(QSpinBox):
         if normalized == "" or normalized.isdigit():
             return (QValidator.State.Acceptable, text, pos)
         return (QValidator.State.Invalid, text, pos)
+
+
+class FieldHelpBar(QWidget):
+    """نوارِ راهنمایِ فیلدها — با فوکوس‌گرفتنِ هر فیلدِ ثبت‌شده (کلیک یا Tab)،
+    متنِ آموزشیِ همان فیلد این‌جا نشان داده می‌شود. طراحیِ سراسری: هر
+    فرمی می‌تواند یک FieldHelpBar بسازد و فیلدهایش را با
+    FieldHelpController.register ثبت کند، بدونِ اینکه خودِ ویجت‌هایِ فیلد
+    (QLineEdit/QComboBox/QCheckBox/...) نیاز به تغییر داشته باشند."""
+
+    def __init__(
+        self, default_text: str = "برایِ راهنمایی، رویِ هر فیلد کلیک کنید یا با Tab به آن بروید."
+    ) -> None:
+        super().__init__()
+        self._default_text = default_text
+        self.setObjectName("fieldHelpBar")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 6, 10, 6)
+        icon_label = QLabel("💡")
+        layout.addWidget(icon_label)
+        self._text_label = QLabel(default_text)
+        self._text_label.setWordWrap(True)
+        layout.addWidget(self._text_label, stretch=1)
+        self.setStyleSheet(
+            f"QWidget#fieldHelpBar {{ background-color: {theme.INFO}22; "
+            f"border: 1px solid {theme.INFO}; border-radius: 6px; }}"
+            f"QWidget#fieldHelpBar QLabel {{ background: transparent; border: none; color: {theme.TEXT_PRIMARY}; }}"
+        )
+
+    def show_help(self, text: str) -> None:
+        self._text_label.setText(text)
+
+    def show_default(self) -> None:
+        self._text_label.setText(self._default_text)
+
+
+class FieldHelpController(QObject):
+    """اتصال‌دهنده‌یِ فیلدها به یک FieldHelpBar. با installEventFilter رویِ
+    هر ویجتِ ثبت‌شده کار می‌کند (نه با override کردنِ کلاس‌هایِ ویجت)،
+    چون فوکوس‌گرفتن (کلیک یا Tab) رویِ QLineEdit/QComboBox/QCheckBox/
+    QSpinBox و... همه یکسان با QEvent.FocusIn قابلِ‌تشخیص است — همین
+    باعث می‌شود این مکانیزم بدونِ تغییر در خودِ فیلدها، در هر فرمی
+    قابلِ‌استفاده باشد.
+
+    نکته‌یِ مهم برایِ هر صفحه‌ای که این را استفاده می‌کند: حتماً نمونه را
+    رویِ self نگه دارید (مثلاً self._field_help_controller = ...)؛
+    installEventFilter به‌تنهایی یک ارجاعِ قویِ پایتونی نمی‌سازد، و بدونِ
+    نگه‌داشتنِ صریح، PySide6 این آبجکت را gc می‌کند و رویدادهایِ FocusIn
+    بدونِ هیچ خطایی دیگر به eventFilter نمی‌رسند (باگی که در تستِ واقعی
+    پیدا شد)."""
+
+    def __init__(self, help_bar: FieldHelpBar) -> None:
+        super().__init__()
+        self._help_bar = help_bar
+        self._help_texts: dict[QWidget, str] = {}
+
+    def register(self, widget: QWidget, text: str) -> None:
+        self._help_texts[widget] = text
+        widget.installEventFilter(self)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.FocusIn:
+            text = self._help_texts.get(watched)
+            if text is not None:
+                self._help_bar.show_help(text)
+        return False

@@ -32,6 +32,7 @@ from peecha import session
 from peecha.ui import theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui.widgets import FieldHelpBar, FieldHelpController
 
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
@@ -148,6 +149,11 @@ class ChartOfAccountsScreen(QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
+        # طبقِ درخواستِ صریح: نوارِ راهنمایِ سراسری — با فوکوس‌گرفتنِ هر
+        # فیلد (کلیک یا Tab)، توضیحِ آموزشیِ همان فیلد این‌جا می‌آید.
+        self.help_bar = FieldHelpBar()
+        layout.addWidget(self.help_bar)
+
         grid = QGridLayout()
         grid.setSpacing(8)
         row = 0
@@ -261,8 +267,65 @@ class ChartOfAccountsScreen(QWidget):
         layout.addLayout(buttons_layout)
         layout.addStretch(1)
 
+        self._register_field_help()
+
         scroll.setWidget(panel)
         return scroll
+
+    def _register_field_help(self) -> None:
+        # طبقِ یک باگِ واقعیِ کشف‌شده در تست: بدونِ نگه‌داشتنِ یک ارجاعِ
+        # قویِ پایتونی (self._field_help_controller)، PySide6 این آبجکت را
+        # gc می‌کند حتی بعدِ installEventFilter — و رویدادهایِ FocusIn هرگز
+        # به eventFilter نمی‌رسند، بدونِ هیچ خطا/هشداری.
+        controller = FieldHelpController(self.help_bar)
+        self._field_help_controller = controller
+        controller.register(
+            self.parent_combo,
+            "اگر حسابی که می‌سازید زیرمجموعه‌یِ یک حسابِ دیگر است، آن را این‌جا انتخاب کنید. "
+            "بدونِ والد یعنی این حساب یک «گروه» (سطحِ ۱) است. ماهیت/دسته/نوعِ حساب/بخشِ وجوهِ نقد/طبقه‌یِ "
+            "نقدینگی از والد به‌ارث می‌رسند و مستقل قابلِ‌تغییر نیستند.",
+        )
+        controller.register(
+            self.segment_code_field,
+            "فقط کدِ همین سطح، نه کدِ کامل — کدِ کامل خودکار از کدِ والد + این کد ساخته می‌شود. "
+            "مثلاً اگر گروه «۱» باشد و این کلِ کد «۰۱» را بگیرد، کدِ کاملش «۱-۰۱» می‌شود.",
+        )
+        controller.register(
+            self.name_field, "نامی که در فهرستِ حساب‌ها، سندها و گزارش‌ها نمایش داده می‌شود."
+        )
+        controller.register(
+            self.nature_combo,
+            "ماهیت یعنی طرفِ طبیعیِ افزایشِ این حساب: «بدهکار» برایِ دارایی‌ها و هزینه‌ها (که با بدهکارشدن "
+            "زیاد می‌شوند)، «بستانکار» برایِ بدهی‌ها، سرمایه و درآمد، و «دوطرفه» برایِ حساب‌هایی مثلِ صندوق/"
+            "بانک که هم بدهکار و هم بستانکار می‌شوند.",
+        )
+        controller.register(
+            self.category_combo,
+            "این حساب به کدام دسته‌یِ اصلیِ حسابداری تعلق دارد: دارایی، بدهی، حقوقِ صاحبانِ سهام، درآمد یا "
+            "هزینه. این انتخاب مشخص می‌کند حساب در ترازنامه بیاید یا در صورتِ سود و زیان.",
+        )
+        controller.register(
+            self.account_type_combo,
+            "«ترازنامه‌ای» یعنی مانده‌اش تا پایانِ عمرِ شرکت باقی می‌ماند (دارایی/بدهی/سرمایه) — در ترازنامه "
+            "می‌آید. «موقت» یعنی هر دوره از نو شروع می‌شود (درآمد/هزینه) — در صورتِ سود و زیان می‌آید.",
+        )
+        controller.register(
+            self.cash_flow_section_combo,
+            "این حساب در صورتِ گردشِ وجوهِ نقدِ غیرمستقیم در کدام بخش می‌آید: «عملیاتی» (فعالیتِ روزمره)، "
+            "«سرمایه‌گذاری» (خرید/فروشِ دارایی‌هایِ ثابت)، یا «تامینِ مالی» (وام/سرمایه). اختیاری — اگر "
+            "مطمئن نیستید یا مربوط به خودِ صندوق/بانک است، بدونِ طبقه‌بندی بگذارید.",
+        )
+        controller.register(
+            self.liquidity_class_combo,
+            "برایِ محاسبه‌یِ نسبتِ جاری/آنی در گزارشِ نسبت‌هایِ مالی: «جاری» یعنی ظرفِ حدودِ یک سال نقد یا "
+            "سررسید می‌شود (صندوق، بانک، دریافتنی/پرداختنی)؛ «جاری (موجودی)» مخصوصِ حساب‌هایِ موجودیِ کالا "
+            "است؛ «غیرِجاری» یعنی بلندمدت (دارایی‌هایِ ثابت، وامِ بلندمدت). اختیاری.",
+        )
+        controller.register(
+            self.is_postable_checkbox,
+            "فقط حساب‌هایِ سطحِ معین (آخرین سطح، بدونِ زیرشاخه) می‌توانند رویشان سند ثبت شود. گروه و کل "
+            "فقط برایِ دسته‌بندی و جمع‌زدنِ (رول‌آپ) حساب‌هایِ زیرشان استفاده می‌شوند.",
+        )
 
     # --- بارگذاری/فیلتر --------------------------------------------------
     def refresh(self) -> None:
