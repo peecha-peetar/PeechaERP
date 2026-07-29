@@ -125,6 +125,7 @@ class MainWindow(QMainWindow):
         self._company_options: list[companies_service.CompanyRow] = []
 
         central = QWidget()
+        self._central = central
         self.setCentralWidget(central)
         outer = QVBoxLayout(central)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -132,7 +133,6 @@ class MainWindow(QMainWindow):
 
         outer.addWidget(self._build_header())
         outer.addWidget(self._build_menu_bar())
-        outer.addWidget(self._build_mega_panel())
 
         self.breadcrumb_label = QLabel("")
         self.breadcrumb_label.setObjectName("breadcrumbLabel")
@@ -140,6 +140,14 @@ class MainWindow(QMainWindow):
 
         self.stack = _CurrentOnlyStackedWidget()
         outer.addWidget(self.stack, stretch=1)
+
+        # طبقِ درخواستِ صریح: مگاپنل نباید در چیدمانِ عمودی جا بگیرد (که
+        # باعث می‌شد بازشدنش فرمِ زیرش را به‌پایین هل بدهد و اندازه‌اش
+        # به‌هم بریزد) — به‌جایش یک ویجتِ شناور و بدونِ مدیریتِ layout است،
+        # با geometryِ دستی رویِ خودِ ناحیه‌یِ محتوا (self.stack) قرار
+        # می‌گیرد و رویش می‌نشیند، بدونِ اینکه فضایی از آن بگیرد یا اندازه‌اش
+        # را تغییر دهد.
+        self._build_mega_panel()
 
         self._register_screens()
         self.open_screen("dashboard")
@@ -178,6 +186,14 @@ class MainWindow(QMainWindow):
         screen.updateGeometry()
         if app is not None:
             app.processEvents()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        super().resizeEvent(event)
+        # مگاپنل چون بیرونِ چیدمانِ عمودی است (geometryِ دستی)، با تغییرِ
+        # اندازه‌یِ پنجره خودش را جا به‌جا نمی‌کند — اگر همین الان باز است
+        # باید دوباره روی ناحیه‌یِ تازه‌یِ self.stack جا بگیرد.
+        if hasattr(self, "_mega_panel_scroll") and self._mega_panel_scroll.isVisible():
+            self._position_mega_panel()
 
     # --- هدر --------------------------------------------------------------
     # طبقِ بازخوردِ صریح: در پنجره‌هایِ کم‌عرض (مثلاً بعدِ تمام‌صفحه‌کردن رویِ
@@ -317,16 +333,21 @@ class MainWindow(QMainWindow):
 
         layout.addStretch(1)
         scroll.setWidget(bar)
+        self._menu_bar_scroll = scroll
         return scroll
 
-    def _build_mega_panel(self) -> QWidget:
-        scroll = QScrollArea()
+    def _build_mega_panel(self) -> None:
+        # طبقِ درخواستِ صریح: مگاپنل، ویجتِ فرزندِ خودِ central است اما در
+        # هیچ layoutِ آن مدیریت نمی‌شود — با setGeometryِ دستی (نگاهِ
+        # _position_mega_panel) دقیقاً رویِ ناحیه‌یِ self.stack می‌نشیند و
+        # با raise_ رویِ آن رسم می‌شود، بدونِ اینکه فضایی از چیدمانِ عمودی
+        # بگیرد یا اندازه‌یِ فرمِ زیرش را تغییر دهد.
+        scroll = QScrollArea(self._central)
         scroll.setObjectName("megaPanelScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setMaximumHeight(360)
 
         panel = QWidget()
         panel.setObjectName("megaPanel")
@@ -339,7 +360,14 @@ class MainWindow(QMainWindow):
 
         self._mega_panel_layout = layout
         self._mega_panel_scroll = scroll
-        return scroll
+
+    def _position_mega_panel(self) -> None:
+        y = self._menu_bar_scroll.y() + self._menu_bar_scroll.height()
+        width = self._central.width()
+        available_height = max(0, self._central.height() - y)
+        height = min(360, available_height)
+        self._mega_panel_scroll.setGeometry(0, y, width, height)
+        self._mega_panel_scroll.raise_()
 
     def _on_menu_button_clicked(self, code: str) -> None:
         item = next((i for i in NAV_ITEMS if i["code"] == code), None)
@@ -356,6 +384,7 @@ class MainWindow(QMainWindow):
             return
         self._populate_mega_panel(item)
         self._mega_panel_open_code = code
+        self._position_mega_panel()
         self._mega_panel_scroll.setVisible(True)
         self._set_active_menu_button(code)
 
