@@ -354,7 +354,10 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(24, 16, 24, 16)
         layout.setSpacing(32)
-        layout.setAlignment(Qt.AlignTop)
+        # طبقِ درخواستِ صریح: ستون‌ها باید چیدمانِ مرتب و چسبیده‌به‌سمتِ‌راست
+        # داشته باشند، نه پخش‌شده با یک فاصله‌یِ بزرگِ خالی تا دکمه‌یِ
+        # چرخ‌دنده در سمتِ چپ.
+        layout.setAlignment(Qt.AlignRight | Qt.AlignTop)
         scroll.setWidget(panel)
         scroll.setVisible(False)
 
@@ -489,8 +492,6 @@ class MainWindow(QMainWindow):
                 )
         if hidden_entries:
             self._mega_panel_layout.addWidget(self._build_mega_panel_column("گروه‌هایِ تفصیلی", hidden_entries))
-
-        self._mega_panel_layout.addStretch(1)
 
         # طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده — تنظیماتِ مخصوصِ همین بخش را
         # مستقیم (تبِ مربوطه در «تنظیماتِ سیستم») باز می‌کند. فقط بخش‌هایی
