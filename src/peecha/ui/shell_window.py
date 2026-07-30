@@ -354,10 +354,7 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(panel)
         layout.setContentsMargins(24, 16, 24, 16)
         layout.setSpacing(32)
-        # طبقِ درخواستِ صریح: ستون‌ها باید چیدمانِ مرتب و چسبیده‌به‌سمتِ‌راست
-        # داشته باشند، نه پخش‌شده با یک فاصله‌یِ بزرگِ خالی تا دکمه‌یِ
-        # چرخ‌دنده در سمتِ چپ.
-        layout.setAlignment(Qt.AlignRight | Qt.AlignTop)
+        layout.setAlignment(Qt.AlignTop)
         scroll.setWidget(panel)
         scroll.setVisible(False)
 
@@ -508,6 +505,16 @@ class MainWindow(QMainWindow):
                 )
             )
             self._mega_panel_layout.addWidget(gear_button)
+
+        # نکته‌یِ مهم: در QHBoxLayout، فضایِ خالیِ بی‌ادعا (بدونِ هیچ
+        # stretchی) همیشه در «آخرین جایگاهِ چیدمان» (اسلاتِ سمتِ چپ) قرار
+        # می‌گیرد — صرف‌نظر از راست‌چین‌بودنِ برنامه. یعنی setAlignment
+        # رویِ خودِ این layout (چون زیرلایه‌یِ یک لایهٔ دیگر نیست، بلکه
+        # مستقیم رویِ خودِ ویجتِ پنل نشسته) هیچ اثری نداشت. راهِ درست: یک
+        # stretch به‌عنوانِ آخرین آیتم (بعدِ دکمه‌ی چرخ‌دنده) که خودش در
+        # همان اسلاتِ سمتِ چپ می‌نشیند و کلِ ستون‌ها + دکمه‌ی چرخ‌دنده را
+        # به‌سمتِ راست هل می‌دهد.
+        self._mega_panel_layout.addStretch(1)
 
     def _set_active_menu_button(self, top_level_code: str | None) -> None:
         for code, button in self._menu_buttons.items():

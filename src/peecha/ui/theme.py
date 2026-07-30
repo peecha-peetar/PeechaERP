@@ -372,11 +372,11 @@ QPushButton#menuButton[active="true"] {{
     color: white;
 }}
 QScrollArea#megaPanelScroll {{
-    background-color: rgba(255, 255, 255, 190);
+    background-color: rgba(255, 255, 255, 165);
     border-bottom: 1px solid {DIVIDER};
 }}
 QWidget#megaPanel {{
-    background-color: rgba(255, 255, 255, 190);
+    background-color: rgba(255, 255, 255, 165);
 }}
 QLabel#megaPanelColumnTitle {{
     color: {TEXT_SECONDARY};
