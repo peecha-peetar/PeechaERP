@@ -137,7 +137,7 @@ GLOBAL_QSS = f"""
 QWidget {{
     background-color: {BACKGROUND};
     color: {TEXT_PRIMARY};
-    font-size: 13px;
+    font-size: 14px;
 }}
 QWidget#card, QFrame#card {{
     background-color: {SURFACE};
@@ -145,14 +145,14 @@ QWidget#card, QFrame#card {{
     border: 1px solid {DIVIDER};
 }}
 QLabel#pageTitle {{
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 800;
     color: {TEXT_PRIMARY};
     letter-spacing: 0.2px;
 }}
 QLabel#sectionHint {{
     color: {TEXT_SECONDARY};
-    font-size: 12px;
+    font-size: 13px;
 }}
 QLabel#statusError {{
     color: {DANGER};
@@ -175,7 +175,7 @@ QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     border: 1.5px solid {BORDER};
     border-radius: 10px;
     padding: 8px 12px;
-    font-size: 13px;
+    font-size: 14px;
     color: {TEXT_PRIMARY};
     selection-background-color: {ACCENT};
 }}
@@ -231,7 +231,7 @@ QCalendarWidget QAbstractItemView:enabled {{
 QPushButton {{
     border-radius: 10px;
     padding: 9px 18px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     border: none;
 }}
@@ -275,7 +275,7 @@ QTableWidget {{
     background-color: {SURFACE};
     border: none;
     gridline-color: {GRID_BORDER};
-    font-size: 13px;
+    font-size: 14px;
     selection-background-color: {SELECTED};
     selection-color: {TEXT_PRIMARY};
     alternate-background-color: {GRID_ROW_ALT};
@@ -295,7 +295,7 @@ QHeaderView::section {{
     border: none;
     border-bottom: 2px solid {GRID_BORDER};
     font-weight: 700;
-    font-size: 12px;
+    font-size: 13px;
 }}
 QTableCornerButton::section {{
     background-color: {GRID_HEADER_BG};
@@ -387,9 +387,7 @@ QWidget#sidebarContainer {{
 QPushButton#sidebarGroupHeader {{
     color: {TEXT_PRIMARY};
     font-weight: 700;
-    font-size: 13px;
-    text-align: right;
-    padding: 0 14px;
+    font-size: 14px;
 }}
 QPushButton#sidebarGroupHeader:hover {{
     color: {ACCENT_PRESSED};
@@ -397,16 +395,22 @@ QPushButton#sidebarGroupHeader:hover {{
 QPushButton#sidebarGroupHeader[active="true"] {{
     color: {ACCENT};
 }}
+QPushButton#sidebarGearButton {{
+    color: {TEXT_SECONDARY};
+    font-size: 14px;
+}}
+QPushButton#sidebarGearButton:hover {{
+    color: {ACCENT};
+}}
 QLabel#sidebarSubGroupTitle {{
     color: {TEXT_SECONDARY};
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
 }}
 QPushButton#sidebarLeafItem {{
     color: {TEXT_SECONDARY};
-    font-size: 12.5px;
+    font-size: 13.5px;
     font-weight: 500;
-    text-align: right;
 }}
 QPushButton#sidebarLeafItem:hover {{
     color: {ACCENT_PRESSED};
@@ -422,8 +426,28 @@ QMdiArea#mdiArea {{
     border: none;
 }}
 QMdiSubWindow {{
+    background-color: transparent;
+}}
+QWidget#mdiFormWrapper {{
     background-color: {SURFACE};
-    border-radius: 12px;
+    border: 1px solid {DIVIDER};
+}}
+QWidget#mdiTitleBar {{
+    background-color: {SURFACE};
+    border-bottom: 1px solid {DIVIDER};
+}}
+QWidget#mdiTitleBar[active="true"] {{
+    background-color: {ACCENT_LIGHT};
+}}
+QLabel#mdiTitleLabel {{
+    color: {TEXT_PRIMARY};
+    font-weight: 700;
+    font-size: 13px;
+    background: transparent;
+}}
+QPushButton#mdiTitleBarButton {{
+    color: {TEXT_SECONDARY};
+    font-size: 12px;
 }}
 
 QCheckBox {{

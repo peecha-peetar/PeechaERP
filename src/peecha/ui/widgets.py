@@ -27,7 +27,7 @@ from PySide6.QtCore import (
     QSettings,
     Qt,
 )
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -38,8 +38,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
-    QStyle,
-    QStyleOptionButton,
     QVBoxLayout,
     QWidget,
 )
@@ -453,6 +451,9 @@ class HoverButton(QPushButton):
         hover_color: str,
         active_color: str | None = None,
         radius: int = 10,
+        text_align: Qt.AlignmentFlag = Qt.AlignCenter,
+        indent: int = 0,
+        margin: int = 14,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -462,6 +463,9 @@ class HoverButton(QPushButton):
         self._active_color = QColor(active_color) if active_color else self._hover_color
         self._bg_color = QColor(self._base_color)
         self._active_hover_color: QColor | None = None
+        self._text_align = text_align
+        self._indent = indent
+        self._margin = margin
 
         self._animation = QPropertyAnimation(self, b"bgColor", self)
         self._animation.setDuration(140)
@@ -502,19 +506,26 @@ class HoverButton(QPushButton):
         self._animation.start()
 
     def paintEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        # طبقِ باگِ واقعیِ کشف‌شده: تراز کردنِ متن با drawControl(CE_PushButtonLabel)
+        # + QSSِ text-align برایِ حالتِ «راست» قابلِ‌اتکا نبود (متن به‌جایِ
+        # چسبیدن به لبه‌ی راست، از چپ می‌چید) — رسمِ دستیِ متن با
+        # drawText و Qt.AlignRight/Center، مستقل از این رفتارِ نامشخصِ
+        # استایل، تضمین‌شده کار می‌کند.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         painter.setBrush(self._bg_color)
         painter.drawRoundedRect(self.rect(), self._radius, self._radius)
-        painter.end()
 
-        option = QStyleOptionButton()
-        self.initStyleOption(option)
-        label_painter = QPainter(self)
-        label_painter.setRenderHint(QPainter.Antialiasing)
-        self.style().drawControl(QStyle.CE_PushButtonLabel, option, label_painter, self)
-        label_painter.end()
+        painter.setPen(self.palette().color(QPalette.ButtonText))
+        painter.setFont(self.font())
+        # باگِ واقعیِ دیگر: حاشیه‌ی ثابتِ ۱۴px برایِ دکمه‌هایِ کوچکِ آیکون‌تنها
+        # (مثلِ کنترل‌هایِ تیتربارِ ۲۸×۲۸) یعنی عرضِ ناحیه‌ی متن صفر/منفی
+        # می‌شد — گلیف اصلاً رسم نمی‌شد (نامرئی، نه فقط کمرنگ). حالا حاشیه
+        # قابلِ‌تنظیم است (پیش‌فرض ۱۴ برایِ دکمه‌هایِ متنیِ عریض).
+        text_rect = self.rect().adjusted(self._margin, 0, -(self._margin + self._indent), 0)
+        painter.drawText(text_rect, int(self._text_align) | Qt.AlignVCenter, self.text())
+        painter.end()
 
 
 class KpiCard(QFrame):

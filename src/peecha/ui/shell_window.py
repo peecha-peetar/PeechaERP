@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, QTimer, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRect, QSize, Qt
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QComboBox,
@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMdiArea,
     QMdiSubWindow,
+    QMenu,
     QPushButton,
     QScrollArea,
     QToolButton,
@@ -43,7 +44,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
-from peecha.nav_catalog import NAV_ITEMS
+from peecha.nav_catalog import NAV_ITEMS, QUICK_ACCESS_ITEMS
 from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -71,21 +72,6 @@ _NAV_ICONS = {
 }
 
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
-
-# طبقِ عکسِ مرجعِ کاربر: یک ردیفِ افقیِ کاشی‌هایِ میان‌بر برایِ
-# پرکاربردترین فرم‌ها، بالایِ ساید‌بار — گلچینِ دستی از NAV_ITEMS (کدِ
-# آیتم، گلیف).
-_QUICK_ACCESS_ITEMS = [
-    ("GL_JE", "📝"),
-    ("GL_COA", "🗂️"),
-    ("GL_JE_LIST", "📚"),
-    ("GL_CUSTOMERS", "🤝"),
-    ("GL_SUPPLIERS", "🚚"),
-    ("GL_BANK_ACCOUNTS", "🏦"),
-    ("GL_CASH_BOXES", "🧰"),
-    ("REPORTS_TRIAL_BALANCE", "⚖️"),
-    ("SETTINGS", "⚙️"),
-]
 
 
 def _leaf_nav_children(item: dict) -> list[dict]:
@@ -171,16 +157,31 @@ class _SidebarGroup(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(2)
+
         self.header = HoverButton(
             "",
             hover_color=theme.HOVER,
             active_color=theme.ACCENT_LIGHT,
             radius=10,
+            text_align=Qt.AlignRight,
         )
         self.header.setObjectName("sidebarGroupHeader")
         self.header.setMinimumHeight(42)
         self._update_header_text(icon, item["label"], expanded=False)
-        outer.addWidget(self.header)
+        header_row.addWidget(self.header, stretch=1)
+
+        if gear_click is not None:
+            gear_button = HoverButton("⚙", hover_color=theme.HOVER, radius=8, margin=4)
+            gear_button.setObjectName("sidebarGearButton")
+            gear_button.setFixedSize(30, 30)
+            gear_button.setToolTip(f"تنظیمات «{item['label']}»")
+            gear_button.clicked.connect(gear_click)
+            header_row.addWidget(gear_button)
+
+        outer.addLayout(header_row)
 
         if self._has_children:
             self.body = QWidget()
@@ -228,11 +229,12 @@ class _SidebarGroup(QWidget):
                     hover_color=theme.HOVER,
                     active_color=theme.ACCENT_LIGHT,
                     radius=8,
+                    text_align=Qt.AlignRight,
+                    indent=depth * 14,
                 )
                 button.setObjectName("sidebarLeafItem")
                 button.setProperty("depth", depth)
                 button.setMinimumHeight(34)
-                button.setStyleSheet(f"padding-right: {18 + depth * 14}px;")
                 button.clicked.connect(lambda _checked=False, c=code: on_leaf_click(c))
                 layout.addWidget(button)
                 self._entries[code] = button
@@ -270,15 +272,205 @@ class _SidebarGroup(QWidget):
         return found
 
 
-class _PersistentMdiSubWindow(QMdiSubWindow):
-    """زیرپنجره‌یِ MDI که با دکمه‌یِ × واقعاً بسته/نابود نمی‌شود — فقط
-    مخفی می‌شود، تا نمونه‌یِ singletonِ صفحه (با هر state ای که دارد) زنده
-    بماند و با بازکردنِ دوباره از ساید‌بار/ریبون همان‌جا که بود ادامه پیدا
-    کند (نه از نو ساخته شود)."""
+_RESIZE_MARGIN = 6
+_MIN_SUBWINDOW_SIZE = QSize(420, 320)
+
+
+class _MdiTitleBar(QWidget):
+    """تیتربارِ کاملاً سفارشی برایِ فرم‌هایِ شناور — طبقِ درخواستِ صریح
+    (تیتربارِ بومیِ Fusion با بقیه‌ی برنامه هم‌خوان نبود). قابلِ‌درگ (کلیک
+    و کشیدن از هرجایِ نوار جز دکمه‌ها) برایِ جابه‌جاییِ پنجره، و
+    دوبار-کلیک برایِ maximize/restore — دقیقاً رفتارِ متعارفِ تیتربار."""
+
+    def __init__(self, title: str, icon: str, sub_window: "_FramelessMdiSubWindow") -> None:
+        super().__init__()
+        self.setObjectName("mdiTitleBar")
+        self.setFixedHeight(42)
+        self._sub_window = sub_window
+        self._drag_offset = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(14, 0, 8, 0)
+        layout.setSpacing(6)
+
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet("font-size: 14px; background: transparent;")
+        layout.addWidget(icon_label)
+
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("mdiTitleLabel")
+        layout.addWidget(self.title_label)
+        layout.addStretch(1)
+
+        self.minimize_btn = self._make_control_button("—", theme.HOVER)
+        self.minimize_btn.clicked.connect(sub_window.showMinimized)
+        layout.addWidget(self.minimize_btn)
+
+        self.maximize_btn = self._make_control_button("▢", theme.HOVER)
+        self.maximize_btn.clicked.connect(self._toggle_maximize)
+        layout.addWidget(self.maximize_btn)
+
+        self.close_btn = self._make_control_button("✕", "#FDECEC")
+        self.close_btn.clicked.connect(sub_window.close)
+        layout.addWidget(self.close_btn)
+
+    def _make_control_button(self, glyph: str, hover_color: str) -> HoverButton:
+        button = HoverButton(glyph, hover_color=hover_color, radius=8, margin=4)
+        button.setObjectName("mdiTitleBarButton")
+        button.setFixedSize(28, 28)
+        return button
+
+    def _toggle_maximize(self) -> None:
+        if self._sub_window.isMaximized():
+            self._sub_window.showNormal()
+        else:
+            self._sub_window.showMaximized()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint()
+            self._sub_window.mdiArea().setActiveSubWindow(self._sub_window)
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._drag_offset is not None and (event.buttons() & Qt.LeftButton) and not self._sub_window.isMaximized():
+            current = event.globalPosition().toPoint()
+            delta = current - self._drag_offset
+            self._sub_window.move(self._sub_window.pos() + delta)
+            self._drag_offset = current
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        self._toggle_maximize()
+
+
+class _FramelessMdiSubWindow(QMdiSubWindow):
+    """زیرپنجره‌یِ MDI بدونِ چارچومِ بومیِ Qt — تیتربارِ خودمان
+    (_MdiTitleBar) استفاده می‌شود. نکته‌یِ فنیِ کشف‌شده حینِ توسعه:
+    Qt.FramelessWindowHint هم‌زمان تشخیصِ resize-by-edge-drag بومیِ خودِ
+    QMdiSubWindow را هم غیرفعال می‌کند (تأییدشده با تست: بعدِ حذفِ
+    چارچوب، نشانگرِ ماوس نزدیکِ لبه دیگر به شکلِ تغییرِاندازه برنمی‌گشت)
+    — پس این کلاس آن رفتار را دستی، رویِ خودِ زیرپنجره، بازسازی می‌کند.
+
+    با دکمه‌ی × واقعاً بسته/نابود نمی‌شود — فقط مخفی می‌شود، تا نمونه‌یِ
+    singletonِ صفحه (با هر state ای که دارد) زنده بماند و با بازکردنِ
+    دوباره از ساید‌بار/ریبون همان‌جا که بود ادامه پیدا کند."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setMouseTracking(True)
+        self.setMinimumSize(_MIN_SUBWINDOW_SIZE)
+        self._resize_dir: str | None = None
+        self._resize_start_geo = None
+        self._resize_start_pos = None
+
+    def _edge_at(self, pos) -> str | None:
+        if self.isMaximized():
+            return None
+        rect = self.rect()
+        left = pos.x() <= _RESIZE_MARGIN
+        right = pos.x() >= rect.width() - _RESIZE_MARGIN
+        top = pos.y() <= _RESIZE_MARGIN
+        bottom = pos.y() >= rect.height() - _RESIZE_MARGIN
+        if top and left:
+            return "tl"
+        if top and right:
+            return "tr"
+        if bottom and left:
+            return "bl"
+        if bottom and right:
+            return "br"
+        if left:
+            return "l"
+        if right:
+            return "r"
+        if top:
+            return "t"
+        if bottom:
+            return "b"
+        return None
+
+    _CURSOR_BY_EDGE = {
+        "l": Qt.SizeHorCursor,
+        "r": Qt.SizeHorCursor,
+        "t": Qt.SizeVerCursor,
+        "b": Qt.SizeVerCursor,
+        "tl": Qt.SizeFDiagCursor,
+        "br": Qt.SizeFDiagCursor,
+        "tr": Qt.SizeBDiagCursor,
+        "bl": Qt.SizeBDiagCursor,
+    }
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        pos = event.position().toPoint()
+        if self._resize_dir is not None and (event.buttons() & Qt.LeftButton):
+            self._perform_resize(event.globalPosition().toPoint())
+            return
+        edge = self._edge_at(pos)
+        self.setCursor(self._CURSOR_BY_EDGE.get(edge, Qt.ArrowCursor))
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            edge = self._edge_at(event.position().toPoint())
+            if edge is not None:
+                self._resize_dir = edge
+                self._resize_start_geo = self.geometry()
+                self._resize_start_pos = event.globalPosition().toPoint()
+                return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._resize_dir = None
+        super().mouseReleaseEvent(event)
+
+    def _perform_resize(self, global_pos) -> None:
+        delta = global_pos - self._resize_start_pos
+        geo = QRect(self._resize_start_geo)
+        min_w, min_h = _MIN_SUBWINDOW_SIZE.width(), _MIN_SUBWINDOW_SIZE.height()
+        if "l" in self._resize_dir:
+            new_left = geo.left() + delta.x()
+            if geo.right() - new_left >= min_w:
+                geo.setLeft(new_left)
+        if "r" in self._resize_dir:
+            new_right = geo.right() + delta.x()
+            if new_right - geo.left() >= min_w:
+                geo.setRight(new_right)
+        if "t" in self._resize_dir:
+            new_top = geo.top() + delta.y()
+            if geo.bottom() - new_top >= min_h:
+                geo.setTop(new_top)
+        if "b" in self._resize_dir:
+            new_bottom = geo.bottom() + delta.y()
+            if new_bottom - geo.top() >= min_h:
+                geo.setBottom(new_bottom)
+        self.setGeometry(geo)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         event.ignore()
         self.hide()
+
+
+class _MdiFormWrapper(QWidget):
+    """محتوایِ واقعیِ زیرپنجره — تیتربارِ سفارشی (بالا) + خودِ صفحه
+    (پایین). این ویجت، نه خودِ صفحه، رویِ QMdiSubWindow.setWidget
+    می‌نشیند."""
+
+    def __init__(self, title: str, icon: str, screen: QWidget, sub_window: _FramelessMdiSubWindow) -> None:
+        super().__init__()
+        self.setObjectName("mdiFormWrapper")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self.title_bar = _MdiTitleBar(title, icon, sub_window)
+        outer.addWidget(self.title_bar)
+        outer.addWidget(screen, stretch=1)
 
 
 class MainWindow(QMainWindow):
@@ -289,7 +481,7 @@ class MainWindow(QMainWindow):
 
         self._screens: dict[str, QWidget] = {}
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
-        self._mdi_subwindows: dict[str, _PersistentMdiSubWindow] = {}
+        self._mdi_subwindows: dict[str, _FramelessMdiSubWindow] = {}
         self._current_screen_code: str | None = None
         self._company_options: list[companies_service.CompanyRow] = []
         self._cascade_index = 0
@@ -400,6 +592,17 @@ class MainWindow(QMainWindow):
         self.user_label.setFont(user_font)
         layout.addWidget(self.user_label)
 
+        self.open_windows_button = QToolButton()
+        self.open_windows_button.setObjectName("fieldHelpToggle")
+        self.open_windows_button.setText("🗔")
+        self.open_windows_button.setToolTip("فرم‌هایِ بازِ جاری")
+        self.open_windows_button.setCursor(Qt.PointingHandCursor)
+        self.open_windows_button.setPopupMode(QToolButton.InstantPopup)
+        self.open_windows_menu = QMenu(self.open_windows_button)
+        self.open_windows_menu.aboutToShow.connect(self._populate_open_windows_menu)
+        self.open_windows_button.setMenu(self.open_windows_menu)
+        layout.addWidget(self.open_windows_button)
+
         logout_button = QPushButton("خروج")
         logout_button.setObjectName("flatButton")
         logout_button.clicked.connect(self._logout)
@@ -433,7 +636,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         flat_items_by_code = {i["code"]: i for i in _flatten_nav_items()}
-        for code, icon in _QUICK_ACCESS_ITEMS:
+        for code, icon in QUICK_ACCESS_ITEMS:
             if code == "SETTINGS":
                 label = "تنظیمات"
             else:
@@ -507,7 +710,51 @@ class MainWindow(QMainWindow):
         # background-color در QSS (آن قانون بی‌اثر می‌ماند) — این‌جا صریحاً
         # ست می‌شود تا با پالتِ روشنِ برنامه هماهنگ باشد، نه خاکستریِ پیش‌فرضِ Fusion.
         self.mdi_area.setBackground(QBrush(QColor(theme.BACKGROUND)))
+        self.mdi_area.subWindowActivated.connect(self._on_subwindow_activated)
         return self.mdi_area
+
+    def _on_subwindow_activated(self, active_sub_window) -> None:
+        """طبقِ نگرانیِ صریح («وقتی همه‌ی فرم‌ها روی هم بازِ می‌شوند به
+        مشکل نمی‌خورد؟»): فرمِ درحالِ‌فعالیت با ته‌رنگِ اکسنت روی تیتربارش
+        از بقیه‌ی فرم‌هایِ بازِ پشتِ‌سرش متمایز می‌شود — تا در انبوهِ
+        پنجره‌هایِ روی‌هم، همیشه واضح باشد کدام فرم الان کارِ کاربر است."""
+        for sub_window in self.mdi_area.subWindowList():
+            wrapper = sub_window.widget()
+            title_bar = getattr(wrapper, "title_bar", None)
+            if title_bar is None:
+                continue
+            title_bar.setProperty("active", sub_window is active_sub_window)
+            title_bar.style().unpolish(title_bar)
+            title_bar.style().polish(title_bar)
+
+    def _populate_open_windows_menu(self) -> None:
+        """طبقِ نگرانیِ صریح دربابِ انبوهِ فرم‌هایِ روی‌هم — فهرستِ همه‌ی
+        فرم‌هایِ بازِ جاری (با امکانِ کلیک برایِ رفتنِ مستقیم به هرکدام)،
+        بدونِ نیازِ کاربر به جابه‌جاکردنِ دستیِ پنجره‌ها برایِ پیداکردنِ
+        فرمِ موردِنظر."""
+        self.open_windows_menu.clear()
+        visible_subs = [sw for sw in self.mdi_area.subWindowList() if sw.isVisible()]
+        if not visible_subs:
+            empty_action = self.open_windows_menu.addAction("هیچ فرمی باز نیست")
+            empty_action.setEnabled(False)
+            return
+
+        active = self.mdi_area.activeSubWindow()
+        for sub_window in visible_subs:
+            marker = "◉ " if sub_window is active else "○ "
+            action = self.open_windows_menu.addAction(marker + sub_window.windowTitle())
+            action.triggered.connect(lambda _checked=False, sw=sub_window: self._focus_subwindow(sw))
+
+        self.open_windows_menu.addSeparator()
+        cascade_action = self.open_windows_menu.addAction("مرتب‌سازیِ آبشاری")
+        cascade_action.triggered.connect(self.mdi_area.cascadeSubWindows)
+        tile_action = self.open_windows_menu.addAction("مرتب‌سازیِ کاشی‌ای")
+        tile_action.triggered.connect(self.mdi_area.tileSubWindows)
+
+    def _focus_subwindow(self, sub_window: QMdiSubWindow) -> None:
+        sub_window.show()
+        sub_window.raise_()
+        self.mdi_area.setActiveSubWindow(sub_window)
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow
@@ -616,8 +863,10 @@ class MainWindow(QMainWindow):
 
         sub_window = self._mdi_subwindows.get(target_screen_name)
         if sub_window is None:
-            sub_window = _PersistentMdiSubWindow()
-            sub_window.setWidget(screen)
+            sub_window = _FramelessMdiSubWindow()
+            icon = _NAV_ICONS.get(self._find_top_level_code(code), "📄")
+            wrapper = _MdiFormWrapper(item["label"], icon, screen, sub_window)
+            sub_window.setWidget(wrapper)
             sub_window.setAttribute(Qt.WA_DeleteOnClose, False)
             self.mdi_area.addSubWindow(sub_window)
             self._size_new_subwindow(sub_window)
@@ -645,20 +894,14 @@ class MainWindow(QMainWindow):
         for group in self._sidebar_groups.values():
             group.set_active_leaf(code)
 
-    def _breadcrumb_text(self, code: str) -> str:
-        def _walk(items: list[dict], path: list[str]) -> list[str] | None:
-            for it in items:
-                new_path = path + [it["label"]]
-                if it["code"] == code:
-                    return new_path
-                if it.get("children"):
-                    found = _walk(it["children"], new_path)
-                    if found:
-                        return found
-            return None
+    def _find_top_level_code(self, leaf_code: str) -> str | None:
+        for item in NAV_ITEMS:
+            if item["code"] == leaf_code:
+                return item["code"]
+            if any(c["code"] == leaf_code for c in _leaf_nav_children(item)):
+                return item["code"]
+        return None
 
-        path = _walk(NAV_ITEMS, []) or []
-        return " / ".join(path)
 
     # --- سوییچرِ زمینه -------------------------------------------------------
     def load_context_switcher(self) -> None:

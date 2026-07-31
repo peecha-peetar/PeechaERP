@@ -82,7 +82,7 @@ def main() -> None:
     app.setStyle("Fusion")
 
     font_family = get_font_family()
-    app.setFont(QFont(font_family, 10.5))
+    app.setFont(QFont(font_family, 11.5))
     # علاوه بر QApplication.setFont، فونت را صریحاً در QSS هم می‌گذاریم —
     # بعضی کنترل‌های استایل‌شده (مثلِ سرستونِ جدول) به‌طورِ قابلِ‌اتکا فقط
     # به font-family در stylesheet واکنش نشان می‌دهند، نه setFont برنامه.
