@@ -276,9 +276,13 @@ def update_account(
     (بدونِ والد) قابلِ‌تغییرند — هر زیرشاخه (کل/معین) این سه مقدار را از
     والدِ خودش به‌ارث می‌برد و نمی‌تواند مستقل از آن تغییر کند. با ویرایشِ
     یک حسابِ گروه، این سه مقدار رویِ کلِ زیردرخت (کل‌ها و معین‌هایِ زیرش)
-    هم به‌روزرسانی می‌شود — مگر اینکه یکی از آن‌ها سند داشته باشد، که در
-    آن صورت کلِ عملیات (نه فقط همان زیرشاخه) رد می‌شود، چون کَسکِیدِ نصفه
-    زیردرخت را ناسازگار می‌کند."""
+    هم به‌روزرسانی می‌شود.
+
+    طبقِ درخواستِ صریحِ بعدی‌تر: این ویرایش/کَسکید باید «در هر حالتی»
+    ممکن باشد — حتی اگر یکی از زیرشاخه‌ها از قبل سند داشته باشد (چک/ردِ
+    قبلی که کلِ عملیات را در آن حالت رد می‌کرد، حذف شد؛ فقط ویرایشِ خودِ
+    این حسابِ مشخص، اگر مستقیماً سند داشته باشد، طبقِ قاعده‌یِ بالاترِ
+    همین تابع همچنان رد می‌شود — آن قاعده مستقل و بدون‌تغییر است)."""
     with new_session() as session:
         account = session.get(ChartOfAccount, account_id)
         if account is None or account.company_id != company_id:
@@ -325,19 +329,11 @@ def update_account(
                     raise ValueError("مقدارِ طبقه‌یِ نقدینگی نامعتبر است.")
                 liquidity_class_id = liquidity_class.liquidity_class_id
 
+            # طبقِ درخواستِ صریح: ویرایشِ ماهیت/دسته/نوع/بخشِ‌وجوهِ‌نقد/طبقه‌یِ‌نقدینگیِ
+            # گروه، در هر حالتی مجاز است و رویِ کلِ زیردرخت (کل/معین‌هایِ
+            # زیرش) کَسکید می‌شود — حتی اگر زیرشاخه‌ای از قبل سند داشته
+            # باشد؛ دیگر رد نمی‌شود.
             descendants = _descendant_accounts(session, account_id)
-            if descendants:
-                descendant_ids = [d.account_id for d in descendants]
-                descendant_line_count = session.scalar(
-                    select(func.count())
-                    .select_from(JournalEntryLine)
-                    .where(JournalEntryLine.account_id.in_(descendant_ids))
-                )
-                if descendant_line_count:
-                    raise ValueError(
-                        "یکی از زیرشاخه‌هایِ این گروه در سندهای حسابداری استفاده شده؛ "
-                        "چون ماهیت/دسته/نوعِ حساب رویِ کلِ زیردرخت اعمال می‌شود، این ویرایش ممکن نیست."
-                    )
 
         before_nature_id, before_category_id = account.nature_id, account.category_id
         before_account_type_id, before_is_postable = account.account_type_id, account.is_postable
