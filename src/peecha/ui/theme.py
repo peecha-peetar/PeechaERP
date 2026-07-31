@@ -41,8 +41,6 @@ HOVER = "#F1F1F8"
 SELECTED = "#E6E4FB"
 BORDER = "#E4E4EE"
 DIVIDER = "#EDEDF4"
-# هاورِ ریبون/منو: ته‌رنگِ بسیار کم‌رنگِ نیلی (متناسب با اکسنتِ تازه).
-RIBBON_HOVER = "rgba(79, 70, 229, 16)"
 
 TEXT_PRIMARY = "#15162B"
 TEXT_SECONDARY = "#6B6F85"
@@ -361,117 +359,71 @@ QListWidget::item:hover {{
     background-color: {HOVER};
 }}
 
-/* --- منویِ افقیِ اصلی (مگامنو) — روشن و هوادار، به‌جایِ نوارِ تیره‌یِ قبلی --- */
-QScrollArea#menuBarScroll {{
-    background-color: {SURFACE};
-    border: none;
-    border-bottom: 1px solid {DIVIDER};
-}}
-QWidget#menuBar {{
-    background-color: {SURFACE};
-}}
-QPushButton#menuButton {{
-    background-color: transparent;
-    color: {TEXT_SECONDARY};
-    border-radius: 10px;
-    padding: 10px 18px;
-    font-weight: 600;
-    font-size: 13px;
-    border: none;
-}}
-QPushButton#menuButton:hover {{
-    background-color: {ACCENT_LIGHT};
-    color: {ACCENT_PRESSED};
-}}
-QPushButton#menuButton[active="true"] {{
-    background-color: {ACCENT};
-    color: white;
-}}
-QScrollArea#megaPanelScroll {{
-    background-color: rgba(255, 255, 255, 235);
-    border-bottom: 1px solid {DIVIDER};
-}}
-QWidget#megaPanel {{
-    background-color: rgba(255, 255, 255, 235);
-}}
-QLabel#megaPanelColumnTitle {{
-    color: {TEXT_SECONDARY};
-    font-weight: 700;
-    font-size: 11px;
-}}
-QPushButton#megaPanelItem {{
-    background-color: transparent;
-    color: {TEXT_PRIMARY};
-    border-radius: 9px;
-    padding: 7px 12px;
-    font-weight: 500;
-    font-size: 13px;
-    border: none;
-    text-align: right;
-}}
-QPushButton#megaPanelItem:hover {{
-    background-color: {ACCENT_LIGHT};
-    color: {ACCENT_PRESSED};
-}}
-QPushButton#megaPanelItem[active="true"] {{
-    background-color: {SELECTED};
-    color: {ACCENT};
-    font-weight: 600;
-}}
-QLabel#breadcrumbLabel {{
-    color: {TEXT_SECONDARY};
-    font-size: 12px;
-    padding: 6px 24px;
-    background-color: {SURFACE};
-    border-bottom: 1px solid {DIVIDER};
-}}
-
 /* --- هدر --------------------------------------------------------------- */
 QWidget#headerBar {{
     background-color: {SURFACE};
     border-bottom: 1px solid {DIVIDER};
 }}
 
-/* --- ریبون (میان‌برهایِ گروهِ فعال، زیرِ هدر) ------------------------------- */
-QScrollArea#ribbonScroll {{
+/* --- ریبونِ میان‌برهایِ پرکاربرد (کاشی‌هایِ آیکون‌دار، زیرِ هدر) --------------- */
+QScrollArea#quickAccessScroll {{
     background-color: {SURFACE};
+    border: none;
     border-bottom: 1px solid {DIVIDER};
 }}
-QWidget#ribbonBar {{
+QWidget#quickAccessBar {{
     background-color: {SURFACE};
 }}
-QPushButton#ribbonButton, QToolButton#ribbonButton {{
-    background-color: transparent;
-    color: {TEXT_SECONDARY};
-    border-radius: 10px;
-    padding: 10px 26px;
-    font-weight: 600;
-    font-size: 13px;
+
+/* --- ساید‌بار (ناوبریِ اصلی، دائمی و جمع‌شونده) ------------------------------ */
+QScrollArea#sidebarScroll {{
+    background-color: {SURFACE};
     border: none;
+    border-left: 1px solid {DIVIDER};
 }}
-QPushButton#ribbonButton:hover, QToolButton#ribbonButton:hover {{
-    background-color: {RIBBON_HOVER};
+QWidget#sidebarContainer {{
+    background-color: {SURFACE};
+}}
+QPushButton#sidebarGroupHeader {{
+    color: {TEXT_PRIMARY};
+    font-weight: 700;
+    font-size: 13px;
+    text-align: right;
+    padding: 0 14px;
+}}
+QPushButton#sidebarGroupHeader:hover {{
     color: {ACCENT_PRESSED};
 }}
-QPushButton#ribbonButton[active="true"] {{
-    background-color: {SELECTED};
+QPushButton#sidebarGroupHeader[active="true"] {{
     color: {ACCENT};
 }}
-QToolButton#ribbonButton::menu-indicator {{
-    image: none;
-    width: 0;
-}}
-QPushButton#ribbonGearButton {{
-    background-color: transparent;
+QLabel#sidebarSubGroupTitle {{
     color: {TEXT_SECONDARY};
-    border-radius: 10px;
-    padding: 4px 16px;
-    font-size: 26px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+QPushButton#sidebarLeafItem {{
+    color: {TEXT_SECONDARY};
+    font-size: 12.5px;
+    font-weight: 500;
+    text-align: right;
+}}
+QPushButton#sidebarLeafItem:hover {{
+    color: {ACCENT_PRESSED};
+}}
+QPushButton#sidebarLeafItem[active="true"] {{
+    color: {ACCENT};
+    font-weight: 700;
+}}
+
+/* --- ناحیه‌ی کاریِ MDI (فرم‌هایِ شناور) --------------------------------------- */
+QMdiArea#mdiArea {{
+    background-color: {BACKGROUND};
     border: none;
 }}
-QPushButton#ribbonGearButton:hover {{
-    background-color: {RIBBON_HOVER};
-    color: {ACCENT};
+QMdiSubWindow {{
+    background-color: {SURFACE};
+    border-radius: 12px;
 }}
 
 QCheckBox {{

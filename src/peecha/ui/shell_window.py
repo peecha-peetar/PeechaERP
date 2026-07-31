@@ -5,18 +5,27 @@
 خودِ Qt ترتیبِ افقیِ هر QHBoxLayout را آینه می‌کند، و QComboBox به‌طورِ
 بومی راست‌چین و جهت‌دار می‌شود.
 
-ناوبریِ اصلی یک منویِ افقی (مگامنو) زیرِ هدر است —
-_build_menu_bar آیتم‌هایِ سطحِ‌بالا را نشان می‌دهد و _build_mega_panel
-با کلیک رویِ هرکدام، زیرمجموعه‌هایش را در یک پنلِ شناور (دسته‌بندی‌شده
-به ستون) نمایش می‌دهد.
+طبقِ بازخوردِ صریح (با دو تصویرِ مرجع از یک نرم‌افزارِ حسابداریِ قدیمی):
+ناوبریِ اصلی سه لایه دارد —
+۱) یک ساید‌بارِ دائمی و جمع‌شونده (Sidebar) با گروه‌هایِ آکاردئونی، سمتِ
+   راستِ صفحه؛
+۲) یک ریبونِ افقیِ میان‌برهایِ پرکاربرد (کاشی‌هایِ آیکون‌دار) زیرِ هدر؛
+۳) صفحه‌ها به‌جایِ جایگزینیِ کاملِ محتوا، به‌صورتِ «فرمِ شناور» (MDI —
+   قابلِ‌درگ/تغییرِاندازه/بستن، با تیتربارِ خودش) رویِ یک ناحیه‌یِ کاریِ
+   مشترک باز می‌شوند — دقیقاً همان الگویِ عکسِ مرجع، فقط با ظاهرِ روشن و
+   مدرنِ ۲۰۲۶ به‌جایِ رنگِ سرمه‌ایِ تخت/فونتِ ریزِ قدیمی. برایِ این لایه از
+   ویجتِ بومیِ Qt به‌همین منظور (QMdiArea/QMdiSubWindow) استفاده شده —
+   نه شبیه‌سازیِ دستی.
+
+مگاپنلِ افقیِ قبلی (پاپ‌آپِ بازشونده‌یِ زیرِ منویِ بالا) طبقِ همین بازخورد
+به‌طورِ کامل کنار گذاشته شد.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QTimer, Qt
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, QTimer, Qt
+from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
-    QApplication,
     QComboBox,
     QFrame,
     QGraphicsDropShadowEffect,
@@ -24,9 +33,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMdiArea,
+    QMdiSubWindow,
     QPushButton,
     QScrollArea,
-    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -62,6 +72,21 @@ _NAV_ICONS = {
 
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
 
+# طبقِ عکسِ مرجعِ کاربر: یک ردیفِ افقیِ کاشی‌هایِ میان‌بر برایِ
+# پرکاربردترین فرم‌ها، بالایِ ساید‌بار — گلچینِ دستی از NAV_ITEMS (کدِ
+# آیتم، گلیف).
+_QUICK_ACCESS_ITEMS = [
+    ("GL_JE", "📝"),
+    ("GL_COA", "🗂️"),
+    ("GL_JE_LIST", "📚"),
+    ("GL_CUSTOMERS", "🤝"),
+    ("GL_SUPPLIERS", "🚚"),
+    ("GL_BANK_ACCOUNTS", "🏦"),
+    ("GL_CASH_BOXES", "🧰"),
+    ("REPORTS_TRIAL_BALANCE", "⚖️"),
+    ("SETTINGS", "⚙️"),
+]
+
 
 def _leaf_nav_children(item: dict) -> list[dict]:
     leaves: list[dict] = []
@@ -73,120 +98,187 @@ def _leaf_nav_children(item: dict) -> list[dict]:
     return leaves
 
 
-class FloatingMegaPanel(QWidget):
-    """پنل مگامنوی شناور واقعی با چیدمان وسط‌چین و راست‌به‌چپ (RTL)."""
+class _QuickAccessTile(QFrame):
+    """کاشیِ ریبونِ میان‌بر — آیکون + برچسب، با سایه‌ای که رویِ هاور
+    بلندتر می‌شود (همان الگویِ widgets.KpiCard، مقیاسِ کوچک‌تر)."""
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    def __init__(self, icon: str, label: str, on_click) -> None:
+        super().__init__()
+        self.setObjectName("quickTile")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(84, 74)
+        self._on_click = on_click
 
-        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 10, 6, 8)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignCenter)
 
-        self.container = QFrame(self)
-        self.container.setObjectName("megaPanelContainer")
-        self.container.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self.container.setStyleSheet(f"""
-            QFrame#megaPanelContainer {{
-                background-color: {theme.SURFACE};
-                border: 1px solid {theme.DIVIDER};
-                border-radius: 16px;
-            }}
-            QLabel#megaPanelColumnTitle {{
-                color: {theme.TEXT_SECONDARY};
-                font-size: 11px;
-                font-weight: 700;
-                padding-bottom: 6px;
-            }}
-            QPushButton#megaPanelItem {{
-                color: {theme.TEXT_PRIMARY};
-                padding: 9px 14px;
-                text-align: center;
-                font-size: 12px;
-                font-weight: 500;
-                min-width: 170px;
-            }}
-            QPushButton#megaPanelItem:hover {{
-                color: {theme.ACCENT_PRESSED};
-            }}
-            QPushButton#megaPanelItem[active="true"] {{
-                color: {theme.ACCENT};
-                font-weight: 700;
-            }}
-            QPushButton#ribbonGearButton {{
-                color: {theme.TEXT_SECONDARY};
-                padding: 6px 12px;
-                font-size: 15px;
-            }}
-        """)
+        icon_label = QLabel(icon)
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setStyleSheet("font-size: 20px; background: transparent;")
+        layout.addWidget(icon_label)
 
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(36)
-        shadow.setXOffset(0)
-        shadow.setYOffset(10)
-        shadow.setColor(QColor(79, 70, 229, 45))
-        self.container.setGraphicsEffect(shadow)
+        text_label = QLabel(label)
+        text_label.setAlignment(Qt.AlignCenter)
+        text_label.setWordWrap(True)
+        text_label.setStyleSheet(f"font-size: 10px; font-weight: 600; color: {theme.TEXT_SECONDARY}; background: transparent;")
+        layout.addWidget(text_label)
 
-        self.root_layout = QVBoxLayout(self)
-        self.root_layout.setContentsMargins(0, 0, 0, 0)
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(0)
+        self._shadow.setXOffset(0)
+        self._shadow.setYOffset(0)
+        self._shadow.setColor(QColor(79, 70, 229, 0))
+        self.setGraphicsEffect(self._shadow)
+        self._anim = QPropertyAnimation(self._shadow, b"blurRadius", self)
+        self._anim.setDuration(150)
 
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFrameShape(QFrame.NoFrame)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.scroll_area.setStyleSheet("background: transparent;")
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            self._on_click()
+        super().mousePressEvent(event)
 
-        self.content_widget = QWidget()
-        self.content_widget.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self.setStyleSheet(f"QFrame#quickTile {{ background-color: {theme.ACCENT_LIGHT}; border-radius: 14px; }}")
+        self._anim.stop()
+        self._anim.setStartValue(self._shadow.blurRadius())
+        self._anim.setEndValue(22)
+        self._anim.start()
+        self._shadow.setColor(QColor(79, 70, 229, 60))
+        super().enterEvent(event)
 
-        self.content_layout = QHBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(16, 16, 16, 16)
-        self.content_layout.setSpacing(20)
-
-        self.scroll_area.setWidget(self.content_widget)
-
-        container_layout = QVBoxLayout(self.container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.addWidget(self.scroll_area)
-
-        self.root_layout.addWidget(self.container)
-
-    def show_below(self, target_button: QWidget) -> None:
-        self.content_widget.adjustSize()
-        self.container.adjustSize()
-
-        needed_width = self.content_widget.sizeHint().width() + 10
-        needed_height = self.content_widget.sizeHint().height() + 10
-
-        max_h = 450
-        final_h = min(needed_height, max_h)
-
-        self.setFixedSize(needed_width, final_h)
-
-        # محاسبه مرکز افقی دکمه در مختصات مانیتور
-        btn_top_left = target_button.mapToGlobal(QPoint(0, 0))
-        btn_center_x = btn_top_left.x() + (target_button.width() // 2)
-
-        # قرار دادن مرکز پنل دقیقاً روی مرکز افقی دکمه (وسط‌چین کامل)
-        x_pos = btn_center_x - (needed_width // 2)
-        y_pos = btn_top_left.y() + target_button.height() + 4
-
-        # تنظیم پوزیشن و نمایش
-        self.move(int(x_pos), int(y_pos))
-        self.show()
-        self.raise_()
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self.setStyleSheet("QFrame#quickTile { background-color: transparent; border-radius: 14px; }")
+        self._anim.stop()
+        self._anim.setStartValue(self._shadow.blurRadius())
+        self._anim.setEndValue(0)
+        self._anim.start()
+        super().leaveEvent(event)
 
 
-class _CurrentOnlyStackedWidget(QStackedWidget):
-    def sizeHint(self):
-        current = self.currentWidget()
-        return current.sizeHint() if current is not None else super().sizeHint()
+class _SidebarGroup(QWidget):
+    """یک گروهِ آکاردئونیِ ساید‌بار — سرتیترِ آیکون‌دار که با کلیک، بدنه‌ی
+    زیرِ خودش (فهرستِ آیتم‌هایِ برگ) را با انیمیشنِ ارتفاع باز/بسته
+    می‌کند. آیتم‌هایِ بدونِ فرزند مستقیم یک دکمه‌ی تک‌سطحی‌اند (بدونِ فلش)."""
 
-    def minimumSizeHint(self):
-        current = self.currentWidget()
-        return current.minimumSizeHint() if current is not None else super().minimumSizeHint()
+    def __init__(self, item: dict, icon: str, on_leaf_click, gear_click=None) -> None:
+        super().__init__()
+        self._entries: dict[str, HoverButton] = {}
+        self._has_children = bool(item.get("children"))
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self.header = HoverButton(
+            "",
+            hover_color=theme.HOVER,
+            active_color=theme.ACCENT_LIGHT,
+            radius=10,
+        )
+        self.header.setObjectName("sidebarGroupHeader")
+        self.header.setMinimumHeight(42)
+        self._update_header_text(icon, item["label"], expanded=False)
+        outer.addWidget(self.header)
+
+        if self._has_children:
+            self.body = QWidget()
+            self.body.setObjectName("sidebarGroupBody")
+            body_layout = QVBoxLayout(self.body)
+            body_layout.setContentsMargins(0, 2, 0, 6)
+            body_layout.setSpacing(1)
+            self._populate_body(item, body_layout, on_leaf_click, depth=1)
+            self.body.setMaximumHeight(0)
+            outer.addWidget(self.body)
+
+            self._expanded = False
+            self._anim = QPropertyAnimation(self.body, b"maximumHeight", self)
+            self._anim.setDuration(180)
+            self._anim.setEasingCurve(QEasingCurve.OutCubic)
+            self.header.clicked.connect(self.toggle)
+        else:
+            self.body = None
+            self.header.clicked.connect(lambda _checked=False, c=item["code"]: on_leaf_click(c))
+            self._entries[item["code"]] = self.header
+
+        self._icon = icon
+        self._label = item["label"]
+        self._gear_click = gear_click
+
+    def _update_header_text(self, icon: str, label: str, *, expanded: bool) -> None:
+        chevron = "⌄" if expanded else "❯" if self._has_children_hint() else ""
+        self.header.setText(f"{icon}  {label}" + (f"   {chevron}" if chevron else ""))
+
+    def _has_children_hint(self) -> bool:
+        return getattr(self, "_has_children", False)
+
+    def _populate_body(self, item: dict, layout: QVBoxLayout, on_leaf_click, depth: int) -> None:
+        for child in item.get("children", []):
+            if child.get("children"):
+                sub_title = QLabel(child["label"])
+                sub_title.setObjectName("sidebarSubGroupTitle")
+                sub_title.setContentsMargins(18 + depth * 10, 8, 12, 2)
+                layout.addWidget(sub_title)
+                self._populate_body(child, layout, on_leaf_click, depth=depth + 1)
+            else:
+                code = child["code"]
+                button = HoverButton(
+                    child["label"],
+                    hover_color=theme.HOVER,
+                    active_color=theme.ACCENT_LIGHT,
+                    radius=8,
+                )
+                button.setObjectName("sidebarLeafItem")
+                button.setProperty("depth", depth)
+                button.setMinimumHeight(34)
+                button.setStyleSheet(f"padding-right: {18 + depth * 14}px;")
+                button.clicked.connect(lambda _checked=False, c=code: on_leaf_click(c))
+                layout.addWidget(button)
+                self._entries[code] = button
+
+    def toggle(self) -> None:
+        if self.body is None:
+            return
+        self.set_expanded(not self._expanded)
+
+    def set_expanded(self, expanded: bool) -> None:
+        if self.body is None or expanded == self._expanded:
+            return
+        self._expanded = expanded
+        self.body.setMaximumHeight(16777215 if not expanded else 0)  # اجازه‌ی محاسبه‌ی sizeHint واقعی
+        target = self.body.sizeHint().height() if expanded else 0
+        self._anim.stop()
+        self._anim.setStartValue(self.body.maximumHeight() if not expanded else 0)
+        self._anim.setEndValue(target)
+        self._anim.start()
+        self._update_header_text(self._icon, self._label, expanded=expanded)
+        self.header.set_active(expanded)
+
+    def set_active_leaf(self, code: str | None) -> bool:
+        """اگر یکی از آیتم‌هایِ این گروه با کد مچ شود، آن را برجسته و
+        گروه را باز می‌کند؛ برمی‌گرداند که آیا مچی پیدا شد یا نه."""
+        found = code in self._entries
+        for entry_code, button in self._entries.items():
+            is_active = entry_code == code
+            button.setProperty("active", is_active)
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.set_active(is_active)
+        if found and self.body is not None:
+            self.set_expanded(True)
+        return found
+
+
+class _PersistentMdiSubWindow(QMdiSubWindow):
+    """زیرپنجره‌یِ MDI که با دکمه‌یِ × واقعاً بسته/نابود نمی‌شود — فقط
+    مخفی می‌شود، تا نمونه‌یِ singletonِ صفحه (با هر state ای که دارد) زنده
+    بماند و با بازکردنِ دوباره از ساید‌بار/ریبون همان‌جا که بود ادامه پیدا
+    کند (نه از نو ساخته شود)."""
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        event.ignore()
+        self.hide()
 
 
 class MainWindow(QMainWindow):
@@ -196,10 +288,11 @@ class MainWindow(QMainWindow):
         self.resize(1440, 900)
 
         self._screens: dict[str, QWidget] = {}
-        self._menu_buttons: dict[str, QPushButton] = {}
-        self._mega_panel_open_code: str | None = None
+        self._sidebar_groups: dict[str, _SidebarGroup] = {}
+        self._mdi_subwindows: dict[str, _PersistentMdiSubWindow] = {}
         self._current_screen_code: str | None = None
         self._company_options: list[companies_service.CompanyRow] = []
+        self._cascade_index = 0
 
         central = QWidget()
         self._central = central
@@ -209,42 +302,17 @@ class MainWindow(QMainWindow):
         outer.setSpacing(0)
 
         outer.addWidget(self._build_header())
-        outer.addWidget(self._build_menu_bar())
+        outer.addWidget(self._build_quick_access_bar())
 
-        self.breadcrumb_label = QLabel("")
-        self.breadcrumb_label.setObjectName("breadcrumbLabel")
-        outer.addWidget(self.breadcrumb_label)
-
-        self.stack = _CurrentOnlyStackedWidget()
-        outer.addWidget(self.stack, stretch=1)
-
-        self._mega_panel_popup = FloatingMegaPanel(self)
-        self._mega_panel_layout = self._mega_panel_popup.content_layout
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        body.addWidget(self._build_sidebar())
+        body.addWidget(self._build_mdi_area(), stretch=1)
+        outer.addLayout(body, stretch=1)
 
         self._register_screens()
         self.open_screen("dashboard")
-        self._did_initial_relayout = False
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        if not self._did_initial_relayout:
-            self._did_initial_relayout = True
-            QTimer.singleShot(60, self._force_relayout)
-
-    def _force_relayout(self) -> None:
-        screen = self.stack.currentWidget()
-        if screen is None:
-            return
-        app = QApplication.instance()
-        for scroll_area in screen.findChildren(QScrollArea):
-            scroll_area.setWidgetResizable(False)
-            scroll_area.setWidgetResizable(True)
-            inner = scroll_area.widget()
-            if inner is not None:
-                inner.updateGeometry()
-        screen.updateGeometry()
-        if app is not None:
-            app.processEvents()
 
     # --- هدر --------------------------------------------------------------
     def _build_header(self) -> QWidget:
@@ -339,10 +407,6 @@ class MainWindow(QMainWindow):
 
         scroll.setWidget(header)
 
-        # طبقِ درخواستِ صریح برایِ حسِ «مدرنِ ۲۰۲۶»: به‌جایِ خطِ مرزِ سختِ قبلی
-        # زیرِ هدر (theme.py هنوز border-bottom دارد)، یک سایه‌یِ بسیار لطیف
-        # هم اضافه شده تا هدر رویِ محتوایِ زیرینش «شناور/برجسته» به‌نظر برسد،
-        # نه یک نوارِ مسطحِ چسبیده.
         header_shadow = QGraphicsDropShadowEffect(scroll)
         header_shadow.setBlurRadius(18)
         header_shadow.setXOffset(0)
@@ -352,219 +416,98 @@ class MainWindow(QMainWindow):
 
         return scroll
 
-    # --- منویِ افقیِ اصلی (مگامنو) ---------------------------------------------
-    def _build_menu_bar(self) -> QWidget:
+    # --- ریبونِ میان‌برهایِ پرکاربرد -------------------------------------------
+    def _build_quick_access_bar(self) -> QWidget:
         scroll = QScrollArea()
-        scroll.setObjectName("menuBarScroll")
+        scroll.setObjectName("quickAccessScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(48)
+        scroll.setFixedHeight(92)
 
         bar = QWidget()
-        bar.setObjectName("menuBar")
+        bar.setObjectName("quickAccessBar")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(20, 4, 20, 4)
-        layout.setSpacing(4)
+        layout.setContentsMargins(20, 8, 20, 8)
+        layout.setSpacing(10)
 
-        for item in NAV_ITEMS:
-            button = HoverButton(
-                f"{_NAV_ICONS.get(item['code'], '•')}  {item['label']}",
-                hover_color=theme.ACCENT_LIGHT,
-                active_color=theme.ACCENT,
-                radius=10,
-            )
-            button.setObjectName("menuButton")
-            button.clicked.connect(lambda _checked=False, c=item["code"]: self._on_menu_button_clicked(c))
-            layout.addWidget(button)
-            self._menu_buttons[item["code"]] = button
+        flat_items_by_code = {i["code"]: i for i in _flatten_nav_items()}
+        for code, icon in _QUICK_ACCESS_ITEMS:
+            if code == "SETTINGS":
+                label = "تنظیمات"
+            else:
+                item = flat_items_by_code.get(code)
+                if item is None:
+                    continue
+                label = item["label"]
+            tile = _QuickAccessTile(icon, label, lambda c=code: self.open_screen(c))
+            layout.addWidget(tile)
 
         layout.addStretch(1)
         scroll.setWidget(bar)
-        self._menu_bar_scroll = scroll
         return scroll
 
-    def _on_menu_button_clicked(self, code: str) -> None:
-        item = next((i for i in NAV_ITEMS if i["code"] == code), None)
-        if item is None:
-            return
-        if not item.get("children"):
-            self._close_mega_panel()
-            self.open_screen(code)
-            return
-        if self._mega_panel_open_code == code and self._mega_panel_popup.isVisible():
-            self._close_mega_panel()
-            return
+    # --- ساید‌بار (ناوبریِ اصلی) ------------------------------------------------
+    def _build_sidebar(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setObjectName("sidebarScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setFixedWidth(268)
 
-        self._populate_mega_panel(item)
-        self._mega_panel_open_code = code
+        container = QWidget()
+        container.setObjectName("sidebarContainer")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(10, 12, 10, 12)
+        layout.setSpacing(2)
 
-        target_btn = self._menu_buttons.get(code)
-        if target_btn:
-            self._mega_panel_popup.show_below(target_btn)
-        self._set_active_menu_button(code)
-
-    def _close_mega_panel(self) -> None:
-        if self._mega_panel_popup.isVisible():
-            self._mega_panel_popup.close()
-        self._mega_panel_open_code = None
-
-    def _build_mega_panel_column(self, title: str, entries: list[dict]) -> QWidget:
-        column = QWidget()
-        column.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        column_layout = QVBoxLayout(column)
-        column_layout.setContentsMargins(0, 0, 0, 0)
-        column_layout.setSpacing(6)
-
-        if title:
-            title_label = QLabel(title)
-            title_label.setObjectName("megaPanelColumnTitle")
-            title_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            column_layout.addWidget(title_label)
-
-        for entry in entries:
-            button = HoverButton(
-                entry["label"],
-                hover_color=theme.ACCENT_LIGHT,
-                active_color=theme.SELECTED,
-                radius=9,
-            )
-            button.setObjectName("megaPanelItem")
-            active = entry.get("active", False)
-            button.setProperty("active", active)
-            button.set_active(active)
-            button.clicked.connect(entry["on_click"])
-            column_layout.addWidget(button)
-
-        column_layout.addStretch(1)
-        return column
-
-    def _populate_mega_panel(self, group: dict) -> None:
-        # پاکسازی آیتم‌های قبلی
-        while self._mega_panel_layout.count():
-            taken = self._mega_panel_layout.takeAt(0)
-            if taken.widget():
-                taken.widget().hide()
-                taken.widget().deleteLater()
-
-        company_id = session.current_company.company_id if session.current_company else None
-        dynamic_labels: dict[str, str] = {}
-        if company_id is not None:
-            names_by_group_code = {g.code: g.name for g in dimensions_service.list_person_groups(company_id)}
-            for nav_code, group_code in _PERSON_GROUP_NAV_CODE_TO_GROUP_CODE.items():
-                if group_code in names_by_group_code:
-                    dynamic_labels[nav_code] = names_by_group_code[group_code]
-
-        def _leaf_entries(leaves: list[dict]) -> list[dict]:
-            entries = []
-            for child in leaves:
-                code = child["code"]
-                label = dynamic_labels.get(code, child["label"])
-                entries.append(
-                    {
-                        "label": label,
-                        "active": code == self._current_screen_code,
-                        "on_click": lambda _checked=False, c=code: self.open_screen(c),
-                    }
-                )
-            return entries
-
-        primary_leaves = [c for c in group.get("children", []) if not c.get("children") and c.get("in_ribbon", True)]
-        subgroups = [c for c in group.get("children", []) if c.get("children")]
-        hidden_leaves = [
-            c for c in group.get("children", []) if not c.get("children") and not c.get("in_ribbon", True)
-        ]
-
-        if primary_leaves:
-            self._mega_panel_layout.addWidget(
-                self._build_mega_panel_column("میان‌برهای اصلی", _leaf_entries(primary_leaves))
-            )
-
-        for subgroup in subgroups:
-            self._mega_panel_layout.addWidget(
-                self._build_mega_panel_column(subgroup["label"], _leaf_entries(_leaf_nav_children(subgroup)))
-            )
-
-        hidden_entries = _leaf_entries(hidden_leaves)
-        if group["code"] == "GL" and company_id is not None:
-            custom_groups = [
-                t
-                for t in dimensions_service.list_dimension_types(company_id)
-                if t.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
-            ]
-            for t in custom_groups:
-                dimension_type_id = t.dimension_type_id
-                hidden_entries.append(
-                    {
-                        "label": t.code,
-                        "active": False,
-                        "on_click": lambda _checked=False, tid=dimension_type_id: self.open_screen(
-                            "GL_DIM",
-                            then=lambda screen, target_tid=tid: screen.group_combo.setCurrentIndex(
-                                screen.group_combo.findData(target_tid)
-                            ),
-                        ),
-                    }
-                )
-        if hidden_entries:
-            self._mega_panel_layout.addWidget(self._build_mega_panel_column("گروه‌های تفصیلی", hidden_entries))
-
-        settings_tab_index = _SETTINGS_TAB_BY_GROUP_CODE.get(group["code"])
-        if settings_tab_index is not None:
-            gear_button = HoverButton("⚙", hover_color=theme.ACCENT_LIGHT, radius=10)
-            gear_button.setObjectName("ribbonGearButton")
-            gear_button.setToolTip(f"تنظیمات «{group['label']}»")
-            gear_button.clicked.connect(
-                lambda _checked=False, idx=settings_tab_index: self.open_screen(
-                    "SETTINGS", then=lambda screen: screen.select_tab(idx)
-                )
-            )
-            self._mega_panel_layout.addWidget(gear_button)
-
-        # طبقِ گزارشِ صریح: سوییچ‌کردنِ مستقیم بینِ دو منویِ سطحِ‌بالایِ متفاوت
-        # (بدونِ بستنِ مگاپنل بینِ‌شان) یک باکسِ ریز و خالی نشان می‌داد — چون
-        # پاپ‌آپ همان لحظه قبلاً visible بود، Qt دیگر رویدادِ show را برایِ
-        # ستون‌هایِ تازه‌ساخته‌شده cascade نمی‌کند (این cascade فقط زمانی
-        # خودکار اتفاق می‌افتد که خودِ پاپ‌آپ از حالتِ پنهان به آشکار برود،
-        # مثلِ اولین‌بارِ بازشدن یا بعدِ یک close/show واقعی). show صریح روی
-        # هر ویجتِ تازه، صرفِ‌نظر از تاریخچه‌یِ visibility پاپ‌آپ، درستش می‌کند.
-        for i in range(self._mega_panel_layout.count()):
-            item_widget = self._mega_panel_layout.itemAt(i).widget()
-            if item_widget is not None:
-                item_widget.show()
-
-    def _set_active_menu_button(self, top_level_code: str | None) -> None:
-        for code, button in self._menu_buttons.items():
-            is_active = code == top_level_code
-            button.setProperty("active", is_active)
-            button.style().unpolish(button)
-            button.style().polish(button)
-            if isinstance(button, HoverButton):
-                button.set_active(is_active)
-
-    def _find_top_level_code(self, leaf_code: str) -> str | None:
         for item in NAV_ITEMS:
-            if item["code"] == leaf_code:
-                return item["code"]
-            if any(c["code"] == leaf_code for c in _leaf_nav_children(item)):
-                return item["code"]
-        return None
+            gear_click = None
+            if item["code"] in _SETTINGS_TAB_BY_GROUP_CODE:
+                idx = _SETTINGS_TAB_BY_GROUP_CODE[item["code"]]
+                gear_click = lambda _checked=False, i=idx: self.open_screen(
+                    "SETTINGS", then=lambda screen: screen.select_tab(i)
+                )
+            group = _SidebarGroup(item, _NAV_ICONS.get(item["code"], "•"), self.open_screen, gear_click)
+            layout.addWidget(group)
+            self._sidebar_groups[item["code"]] = group
 
-    def _breadcrumb_text(self, code: str) -> str:
-        def _walk(items: list[dict], path: list[str]) -> list[str] | None:
-            for it in items:
-                new_path = path + [it["label"]]
-                if it["code"] == code:
-                    return new_path
-                if it.get("children"):
-                    found = _walk(it["children"], new_path)
-                    if found:
-                        return found
-            return None
+        layout.addStretch(1)
+        scroll.setWidget(container)
+        self._sidebar_scroll = scroll
+        return scroll
 
-        path = _walk(NAV_ITEMS, []) or []
-        return " / ".join(path)
+    def refresh_sidebar_dynamic_labels(self) -> None:
+        """عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل) را —
+        اگر شرکتِ جاری آن‌ها را تغییرِنام داده باشد — در دکمه‌هایِ ساید‌بار
+        به‌روز می‌کند."""
+        company_id = session.current_company.company_id if session.current_company else None
+        if company_id is None:
+            return
+        names_by_group_code = {g.code: g.name for g in dimensions_service.list_person_groups(company_id)}
+        gl_group = self._sidebar_groups.get("GL")
+        if gl_group is None:
+            return
+        for nav_code, group_code in _PERSON_GROUP_NAV_CODE_TO_GROUP_CODE.items():
+            button = gl_group._entries.get(nav_code)
+            new_name = names_by_group_code.get(group_code)
+            if button is not None and new_name:
+                button.setText(new_name)
+
+    # --- ناحیه‌ی کاریِ MDI (فرم‌هایِ شناور) --------------------------------------
+    def _build_mdi_area(self) -> QWidget:
+        self.mdi_area = QMdiArea()
+        self.mdi_area.setObjectName("mdiArea")
+        self.mdi_area.setActivationOrder(QMdiArea.ActivationHistoryOrder)
+        self.mdi_area.setViewMode(QMdiArea.SubWindowView)
+        # QMdiArea پس‌زمینه‌اش را از رویِ یک QBrushِ اختصاصی رسم می‌کند، نه
+        # background-color در QSS (آن قانون بی‌اثر می‌ماند) — این‌جا صریحاً
+        # ست می‌شود تا با پالتِ روشنِ برنامه هماهنگ باشد، نه خاکستریِ پیش‌فرضِ Fusion.
+        self.mdi_area.setBackground(QBrush(QColor(theme.BACKGROUND)))
+        return self.mdi_area
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow
@@ -649,7 +592,6 @@ class MainWindow(QMainWindow):
 
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget
-        self.stack.addWidget(widget)
         theme.apply_card_shadows(widget)
 
     def get_screen(self, name: str) -> QWidget | None:
@@ -663,9 +605,7 @@ class MainWindow(QMainWindow):
             return
 
         self._current_screen_code = code
-        self._close_mega_panel()
-        self._set_active_menu_button(self._find_top_level_code(code))
-        self.breadcrumb_label.setText(self._breadcrumb_text(code))
+        self._highlight_active_leaf(code)
 
         target_screen_name = item["screen"] or "placeholder"
         screen = self._screens.get(target_screen_name)
@@ -674,14 +614,51 @@ class MainWindow(QMainWindow):
         if screen is self._screens["placeholder"]:
             screen.set_module_name(item["label"])
 
-        self.stack.setCurrentWidget(screen)
-        self.stack.updateGeometry()
+        sub_window = self._mdi_subwindows.get(target_screen_name)
+        if sub_window is None:
+            sub_window = _PersistentMdiSubWindow()
+            sub_window.setWidget(screen)
+            sub_window.setAttribute(Qt.WA_DeleteOnClose, False)
+            self.mdi_area.addSubWindow(sub_window)
+            self._size_new_subwindow(sub_window)
+            self._mdi_subwindows[target_screen_name] = sub_window
+        sub_window.setWindowTitle(item["label"])
+        sub_window.show()
+        sub_window.raise_()
+        self.mdi_area.setActiveSubWindow(sub_window)
+
         if hasattr(screen, "refresh"):
             screen.refresh()
-
-        QTimer.singleShot(30, self._force_relayout)
         if then is not None:
             then(screen)
+
+    def _size_new_subwindow(self, sub_window: QMdiSubWindow) -> None:
+        area_size = self.mdi_area.size()
+        width = max(760, int(area_size.width() * 0.86))
+        height = max(560, int(area_size.height() * 0.86))
+        sub_window.resize(QSize(width, height))
+        offset = (self._cascade_index % 6) * 26
+        sub_window.move(offset, offset)
+        self._cascade_index += 1
+
+    def _highlight_active_leaf(self, code: str) -> None:
+        for group in self._sidebar_groups.values():
+            group.set_active_leaf(code)
+
+    def _breadcrumb_text(self, code: str) -> str:
+        def _walk(items: list[dict], path: list[str]) -> list[str] | None:
+            for it in items:
+                new_path = path + [it["label"]]
+                if it["code"] == code:
+                    return new_path
+                if it.get("children"):
+                    found = _walk(it["children"], new_path)
+                    if found:
+                        return found
+            return None
+
+        path = _walk(NAV_ITEMS, []) or []
+        return " / ".join(path)
 
     # --- سوییچرِ زمینه -------------------------------------------------------
     def load_context_switcher(self) -> None:
@@ -723,6 +700,8 @@ class MainWindow(QMainWindow):
             for fy in fiscal_years:
                 self.fiscal_year_combo.addItem(numerals.to_persian_digits(fy.code), fy.fiscal_year_id)
 
+        self.refresh_sidebar_dynamic_labels()
+
     def _on_company_changed(self, index: int) -> None:
         if index < 0:
             return
@@ -732,6 +711,7 @@ class MainWindow(QMainWindow):
         if session.current_company is not None and session.current_company.company_id == company_id:
             return
         session.current_company = companies_service.get_company_model(company_id)
-        current = self.stack.currentWidget()
-        if hasattr(current, "refresh"):
-            current.refresh()
+        self.refresh_sidebar_dynamic_labels()
+        active_sub = self.mdi_area.activeSubWindow()
+        if active_sub is not None and hasattr(active_sub.widget(), "refresh"):
+            active_sub.widget().refresh()
