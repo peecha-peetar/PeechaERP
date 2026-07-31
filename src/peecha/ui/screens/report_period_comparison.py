@@ -9,7 +9,7 @@ import decimal
 from PySide6.QtWidgets import QComboBox, QLabel, QSpinBox
 
 from peecha.services import reports as reports_service
-from peecha.ui.screens.reports_common import ReportScreenBase
+from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range
 
 _GRANULARITY_OPTIONS = [("MONTHLY", "ماهانه"), ("QUARTERLY", "فصلی"), ("YEARLY", "سالانه")]
 
@@ -34,6 +34,8 @@ class PeriodComparisonScreen(ReportScreenBase):
         self.period_count_spin.setRange(2, 12)
         self.period_count_spin.setValue(6)
         self.extra_filter_row.addWidget(self.period_count_spin)
+
+        self.enable_code_range_filter()
 
         self.add_field_help([
             (
@@ -64,11 +66,14 @@ class PeriodComparisonScreen(ReportScreenBase):
         result = reports_service.compute_period_comparison(
             company_id, periods, status_filter=self.status_filter()
         )
+        code_from, code_to = self.code_range()
 
         headers = ["کد", "نام", *result.period_labels]
         rows: list[list] = []
         self._all_row_bold = []
         for r in result.rows:
+            if not code_in_range(r.full_code, code_from, code_to):
+                continue
             rows.append([r.full_code, r.name, *[self._fmt(a) for a in r.amounts]])
             self._all_row_bold.append(False)
 
