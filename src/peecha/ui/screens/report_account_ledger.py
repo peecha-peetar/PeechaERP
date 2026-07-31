@@ -78,12 +78,17 @@ class AccountLedgerScreen(ReportScreenBase):
             parts.append(("نوعِ تفصیلی", self.dimension_combo.currentText()))
         return parts
 
+    def code_range_account_level(self) -> int | None:
+        return self.level_combo.currentData()
+
     def _on_level_changed(self) -> None:
         is_detail = self.level_combo.currentData() == 4
         self.dimension_label.setVisible(is_detail)
         self.dimension_combo.setVisible(is_detail)
         if is_detail and self.dimension_combo.count() == 0:
             self._reload_dimension_options()
+        if self.code_from_field.isVisibleTo(self):
+            self._reload_code_range_options()
         self._reset_drill()
 
     def _reset_drill(self) -> None:

@@ -21,6 +21,10 @@ class IncomeStatementScreen(ReportScreenBase):
         self.enable_cost_center_filter()
         self._currency_decimal_places = 0
 
+    def code_range_account_level(self) -> int | None:
+        # ردیف‌هایِ سود و زیان همیشه حساب‌هایِ سطحِ گروه (رول‌آپ‌شده) هستند.
+        return 1
+
     def refresh(self) -> None:
         company = session.current_company
         currency = None

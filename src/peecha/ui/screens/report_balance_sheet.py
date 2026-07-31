@@ -21,6 +21,10 @@ class BalanceSheetScreen(ReportScreenBase):
         self.enable_cost_center_filter()
         self._currency_decimal_places = 0
 
+    def code_range_account_level(self) -> int | None:
+        # ردیف‌هایِ ترازنامه همیشه حساب‌هایِ سطحِ کل (رول‌آپ‌شده) هستند.
+        return 2
+
     def refresh(self) -> None:
         company = session.current_company
         currency = None

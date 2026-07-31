@@ -170,10 +170,10 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         advanced_row = QHBoxLayout()
         self.code_from_label = QLabel("از کدِ حساب:")
         self.code_from_field = _LiveAccountCodeField()
-        self.code_from_field.setMaximumWidth(220)
+        self.code_from_field.setMaximumWidth(340)
         self.code_to_label = QLabel("تا کدِ حساب:")
         self.code_to_field = _LiveAccountCodeField()
-        self.code_to_field.setMaximumWidth(220)
+        self.code_to_field.setMaximumWidth(340)
         self.cost_center_label = QLabel("مرکزِ هزینه/پروژه:")
         self.cost_center_combo = QComboBox()
         self.document_no_label = QLabel("شماره‌یِ سند:")
@@ -302,14 +302,24 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
                     f"{row.group_name}: {row.full_code} — {row.name or ''}", row.detail_account_id
                 )
 
+    def code_range_account_level(self) -> int | None:
+        """زیرکلاس‌هایی که کمبویِ «سطح» (گروه/کل/معین/تفصیلی) دارند این را
+        override می‌کنند تا طبقِ درخواستِ صریح، فهرستِ زنده‌ی کدِ حساب فقط
+        به همان سطحِ انتخاب‌شده محدود بماند (نه همه‌ی سطوح با هم). مقدارِ
+        پیش‌فرض None یعنی بدونِ محدودیت (گزارش‌هایی که سطح ندارند)."""
+        return None
+
     def _reload_code_range_options(self) -> None:
         company_id = self._company_id()
         if company_id is None:
             return
-        # طبقِ درخواستِ صریح، همه‌ی سطوح (گروه/کل/معین) قابلِ‌جستجو/انتخاب‌اند —
-        # تفصیلی از جدولِ دیگری می‌آید و فقط در گزارش‌هایی که سطحِ تفصیلی
-        # دارند (تراز/دفترِ حساب‌ها) با تایپِ دستیِ کد همچنان قابلِ‌فیلتر است.
-        options = [(a.full_code, a.name) for a in coa_service.list_accounts(company_id)]
+        level = self.code_range_account_level()
+        accounts = coa_service.list_accounts(company_id)
+        # تفصیلی (سطحِ ۴) از جدولِ دیگری می‌آید و در این فهرستِ زنده
+        # نیست؛ برایِ آن سطح، تایپِ دستیِ کد همچنان کار می‌کند.
+        if level in (1, 2, 3):
+            accounts = [a for a in accounts if a.account_level == level]
+        options = [(a.full_code, a.name) for a in accounts]
         self.code_from_field.set_options(options)
         self.code_to_field.set_options(options)
 

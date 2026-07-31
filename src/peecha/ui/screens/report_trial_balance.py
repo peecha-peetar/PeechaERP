@@ -87,12 +87,17 @@ class TrialBalanceScreen(ReportScreenBase):
         parts.append(("حالتِ ستونی", self.column_mode_combo.currentText()))
         return parts
 
+    def code_range_account_level(self) -> int | None:
+        return self.level_combo.currentData()
+
     def _on_level_changed(self) -> None:
         is_detail = self.level_combo.currentData() == 4
         self.dimension_label.setVisible(is_detail)
         self.dimension_combo.setVisible(is_detail)
         if is_detail and self.dimension_combo.count() == 0:
             self._reload_dimension_options()
+        if self.code_from_field.isVisibleTo(self):
+            self._reload_code_range_options()
 
     def _reload_dimension_options(self) -> None:
         company_id = self._company_id()

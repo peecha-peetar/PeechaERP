@@ -493,16 +493,28 @@ class CurrenciesScreen(FieldHelpMixin, QWidget):
         symbol = self.symbol_field.text().strip() or None
         decimal_places = self.decimal_places_field.value()
 
+        created_currency = None
         try:
             if self._editing_id is not None:
                 currencies_service.update_currency(
                     self._editing_id, iso_code, symbol, decimal_places, self.is_active_checkbox.isChecked()
                 )
             else:
-                currencies_service.create_currency(iso_code, symbol, decimal_places)
+                created_currency = currencies_service.create_currency(iso_code, symbol, decimal_places)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
+
+        # طبقِ گزارشِ صریح («ارزهایی که تعریف کردیم در بالای سند نمی‌آید»):
+        # ارزِ تازه‌ساخته باید بلافاصله برایِ شرکتِ جاری هم فعال شود، وگرنه
+        # فقط سراسری تعریف شده و تا وقتی کسی جداگانه رویِ ردیفش کلیک و
+        # تیکِ «فعال برایِ شرکتِ جاری» را نزند، در فرمِ سند نمی‌آید.
+        company_id = self._company_id()
+        if created_currency is not None and company_id is not None:
+            try:
+                currencies_service.set_company_currency(company_id, created_currency.currency_id, True)
+            except ValueError:
+                pass
 
         self.refresh()
 

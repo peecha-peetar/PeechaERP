@@ -20,6 +20,10 @@ class JournalBookScreen(ReportScreenBase):
         self.enable_document_no_filter()
         self._currency_decimal_places = 0
 
+    def code_range_account_level(self) -> int | None:
+        # سطرهایِ دفترِ روزنامه همیشه رویِ حساب‌هایِ قابلِ‌ثبتِ سند (سطحِ معین) هستند.
+        return 3
+
     def refresh(self) -> None:
         company = session.current_company
         currency = None

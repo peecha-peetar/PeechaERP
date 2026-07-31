@@ -1491,10 +1491,11 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             self._refresh_preview_strip()
 
     def _copy_previous_row_amount(self) -> None:
-        """طبقِ اصلاحِ صریح (میان‌برِ F4): رقمِ همان ستونی که الان فوکوس
-        رویش است (بدهکار یا بستانکار) از ردیفِ *قبلیِ* همین ستون، رویِ
-        ردیفِ فعال (ردیفی که فوکوس واقعاً در آن است) کپی می‌شود — نه رویِ
-        ردیفِ زیرِ ماوس، و نه همیشه از ردیفِ اول."""
+        """طبقِ اصلاحِ دومِ صریح (میان‌برِ F4): مقصد همان ستونی است که الان
+        فوکوس رویش است (بدهکار یا بستانکار) — مبدأ هم رقمِ غیرِصفرِ ردیفِ
+        *قبلی* است، در هر کدام از دو ستونش که باشد (نه لزوماً هم‌نامِ
+        مقصد؛ مثلاً اگر ردیفِ قبلی در بدهکار پر شده و الان در بستانکارِ
+        ردیفِ فعال هستید، همان عدد در بستانکار قرار می‌گیرد)."""
         focus_widget = QApplication.instance().focusWidget()
         target_row: _LineRow | None = None
         field: str | None = None
@@ -1515,10 +1516,11 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         if index == 0:
             return
         previous_row = self._line_rows[index - 1]
-        source_field = previous_row.debit_field if field == "debit" else previous_row.credit_field
+        source_value = previous_row.debit_field.value() or previous_row.credit_field.value()
+        if not source_value:
+            return
         target_field = target_row.debit_field if field == "debit" else target_row.credit_field
-        if source_field.value():
-            target_field.setValue(source_field.value())
+        target_field.setValue(source_value)
 
     def _renumber_rows(self) -> None:
         for i in range(len(self._line_rows)):

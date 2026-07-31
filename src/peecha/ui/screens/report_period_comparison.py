@@ -56,6 +56,10 @@ class PeriodComparisonScreen(ReportScreenBase):
             ("تعدادِ دوره", str(self.period_count_spin.value())),
         ]
 
+    def code_range_account_level(self) -> int | None:
+        # ردیف‌هایِ این گزارش همیشه حساب‌هایِ سطحِ گروه (رول‌آپ‌شده) هستند.
+        return 1
+
     def _fmt(self, value: decimal.Decimal) -> str:
         return f"{value:,.0f}"
 
