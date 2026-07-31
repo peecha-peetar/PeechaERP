@@ -47,6 +47,10 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QCompleter,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -130,6 +134,100 @@ def _clear_if_unmatched(combo: QComboBox) -> None:
     if combo.findText(combo.currentText(), Qt.MatchExactly) < 0:
         combo.setCurrentIndex(0)
     combo.lineEdit().setCursorPosition(0)
+
+
+def _excel_column_letter(index: int) -> str:
+    letters = ""
+    n = index + 1
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+
+# نامِ فیلدِ مقصد -> کلیدواژه‌هایِ فارسی برایِ حدسِ خودکارِ ستونِ متناظر از
+# رویِ متنِ هدرِ اکسل (اولین ستونی که کلیدواژه در آن دیده شود انتخاب می‌شود).
+_IMPORT_TARGET_FIELDS: list[tuple[str, str, bool]] = [
+    ("account_code", "کدِ حساب", True),
+    ("description", "شرحِ ردیف", False),
+    ("debit", "بدهکار", False),
+    ("credit", "بستانکار", False),
+    ("detail_code", "کدِ تفصیلی (اختیاری)", False),
+]
+_IMPORT_GUESS_KEYWORDS: dict[str, list[str]] = {
+    "account_code": ["کد حساب", "کدحساب", "حساب"],
+    "description": ["شرح"],
+    "debit": ["بدهکار", "بدهک"],
+    "credit": ["بستانکار", "بستانک"],
+    "detail_code": ["تفصیل"],
+}
+
+
+class _ExcelImportMappingDialog(QDialog):
+    """طبقِ درخواستِ صریح: «فرمی باز شود از یک طرف ستون‌هایِ فایلِ اکسل و
+    از طرفِ دیگر ستون‌هایِ سند، نظیربه‌نظیر ارتباط داده شوند» — هر فیلدِ
+    مقصد یک کمبو دارد که هر ستونِ اکسل (با متنِ هدر یا حرفِ ستون) را
+    می‌توان به آن نسبت داد."""
+
+    def __init__(self, header_row: tuple, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ایمپورتِ ردیف‌ها از اکسل — تناظرِ ستون‌ها")
+        self.setMinimumWidth(480)
+
+        self._column_labels: list[str] = []
+        for i, value in enumerate(header_row):
+            letter = _excel_column_letter(i)
+            text = str(value).strip() if value is not None else ""
+            self._column_labels.append(f"{letter}: {text}" if text else f"ستونِ {letter}")
+
+        layout = QVBoxLayout(self)
+
+        self.header_checkbox = QCheckBox("ردیفِ اولِ فایل، عنوانِ ستون‌هاست (وارد نشود)")
+        self.header_checkbox.setChecked(True)
+        layout.addWidget(self.header_checkbox)
+
+        hint = QLabel("هر ستونِ سند را به یکی از ستون‌هایِ فایلِ اکسل نسبت دهید:")
+        hint.setObjectName("sectionHint")
+        layout.addWidget(hint)
+
+        form = QFormLayout()
+        self.field_combos: dict[str, QComboBox] = {}
+        for key, label, required in _IMPORT_TARGET_FIELDS:
+            combo = QComboBox()
+            combo.addItem("— هیچ‌کدام —", None)
+            for i, col_label in enumerate(self._column_labels):
+                combo.addItem(col_label, i)
+            guessed = self._guess_column(key, header_row)
+            if guessed is not None:
+                combo.setCurrentIndex(guessed + 1)
+            form.addRow(("* " if required else "") + label + ":", combo)
+            self.field_combos[key] = combo
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _guess_column(self, field_key: str, header_row: tuple) -> int | None:
+        keywords = _IMPORT_GUESS_KEYWORDS.get(field_key, [])
+        for i, value in enumerate(header_row):
+            text = str(value).strip() if value is not None else ""
+            if any(kw in text for kw in keywords):
+                return i
+        return None
+
+    def _on_accept(self) -> None:
+        if self.field_combos["account_code"].currentData() is None:
+            QMessageBox.warning(self, "ناقص", "باید ستونِ «کدِ حساب» مشخص شود.")
+            return
+        self.accept()
+
+    def mapping(self) -> dict[str, int | None]:
+        return {key: combo.currentData() for key, combo in self.field_combos.items()}
+
+    def skip_header_row(self) -> bool:
+        return self.header_checkbox.isChecked()
 
 
 class _AmountField(QLineEdit):
@@ -731,6 +829,11 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         table_card_layout.setSpacing(4)
 
         table_toolbar = QHBoxLayout()
+        import_excel_button = QPushButton("📥 ایمپورتِ ردیف‌ها از اکسل")
+        import_excel_button.setObjectName("flatButton")
+        import_excel_button.setMaximumHeight(28)
+        import_excel_button.clicked.connect(self._on_import_excel)
+        table_toolbar.addWidget(import_excel_button)
         add_line_button = QPushButton("+ افزودنِ ردیف")
         add_line_button.setObjectName("flatButton")
         add_line_button.setMaximumHeight(28)
@@ -938,6 +1041,115 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             self._active_row = row
             self._refresh_preview_strip()
         return row
+
+    def _on_import_excel(self) -> None:
+        """طبقِ درخواستِ صریح: ایمپورتِ ردیف‌هایِ سند از یک فایلِ اکسل —
+        فرمِ تناظرِ ستون‌ها باز می‌شود، سپس ردیف‌هایِ معتبر به همین سندِ
+        بازِ فعلی اضافه می‌شوند (بدونِ لمسِ فیلدهایِ هدرِ سند)."""
+        if self.company_id is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ فایلِ اکسل", "", "Excel Files (*.xlsx)")
+        if not path:
+            return
+
+        import openpyxl
+
+        try:
+            workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+            worksheet = workbook.active
+            rows = [row for row in worksheet.iter_rows(values_only=True) if any(c is not None for c in row)]
+        except Exception as exc:
+            QMessageBox.critical(self, "خطا در خواندنِ فایل", f"فایلِ اکسل قابلِ‌خواندن نبود:\n{exc}")
+            return
+        if not rows:
+            QMessageBox.warning(self, "فایلِ خالی", "فایلِ انتخاب‌شده هیچ ردیفی ندارد.")
+            return
+
+        dialog = _ExcelImportMappingDialog(rows[0], self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        mapping = dialog.mapping()
+        data_rows = rows[1:] if dialog.skip_header_row() else rows
+
+        accounts_by_code = {a.full_code: a for a in coa_service.list_postable_accounts(self.company_id)}
+        details_by_code = {
+            d.full_code: d for d in dimensions_service.list_all_detail_accounts(self.company_id) if d.is_active
+        }
+
+        def cell(row: tuple, field: str) -> object | None:
+            idx = mapping.get(field)
+            if idx is None or idx >= len(row):
+                return None
+            return row[idx]
+
+        resolved: list[tuple] = []
+        errors: list[str] = []
+        for offset, row in enumerate(data_rows):
+            excel_row_no = offset + (2 if dialog.skip_header_row() else 1)
+            account_code = str(cell(row, "account_code") or "").strip()
+            if not account_code:
+                errors.append(f"ردیفِ {excel_row_no}: کدِ حساب خالی است.")
+                continue
+            account = accounts_by_code.get(account_code)
+            if account is None:
+                errors.append(f"ردیفِ {excel_row_no}: حسابی با کدِ «{account_code}» پیدا نشد.")
+                continue
+
+            try:
+                debit = numerals.parse_decimal(str(cell(row, "debit") or ""))
+                credit = numerals.parse_decimal(str(cell(row, "credit") or ""))
+            except ValueError:
+                errors.append(f"ردیفِ {excel_row_no}: مبلغِ بدهکار/بستانکار نامعتبر است.")
+                continue
+            if debit == 0 and credit == 0:
+                errors.append(f"ردیفِ {excel_row_no}: هر دویِ بدهکار/بستانکار خالی است.")
+                continue
+
+            description = str(cell(row, "description") or "").strip()
+
+            details: dict[int, int] = {}
+            detail_code = str(cell(row, "detail_code") or "").strip()
+            if detail_code:
+                detail = details_by_code.get(detail_code)
+                if detail is None:
+                    errors.append(f"ردیفِ {excel_row_no}: تفصیلی با کدِ «{detail_code}» پیدا نشد (بدونِ تفصیلی وارد شد).")
+                else:
+                    details[detail.dimension_type_id] = detail.detail_account_id
+
+            resolved.append((account, description, debit, credit, details))
+
+        if errors:
+            preview = "\n".join(errors[:30])
+            if len(errors) > 30:
+                preview += f"\n… و {len(errors) - 30} موردِ دیگر."
+            proceed = QMessageBox.question(
+                self,
+                "خطاهایِ ایمپورت",
+                f"{len(errors)} ردیف با خطا مواجه شد:\n\n{preview}\n\n"
+                f"آیا {len(resolved)} ردیفِ معتبرِ باقی‌مانده وارد شوند؟",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if proceed != QMessageBox.Yes:
+                return
+        if not resolved:
+            QMessageBox.warning(self, "بدونِ ردیفِ معتبر", "هیچ ردیفِ قابلِ‌ایمپورتی در فایل پیدا نشد.")
+            return
+
+        for account, description, debit, credit, details in resolved:
+            line_input = je_service.LineInput(
+                account_id=account.account_id,
+                description=description,
+                debit=debit,
+                credit=credit,
+                details=details,
+                currency_id=None,
+                exchange_rate=None,
+            )
+            row_widget = self.add_line()
+            row_widget.load_from(line_input, f"{account.full_code} — {account.name}")
+        self.update_balance()
+        self._refresh_preview_strip()
+        QMessageBox.information(self, "ایمپورت انجام شد", f"{len(resolved)} ردیف از فایلِ اکسل اضافه شد.")
 
     def _register_row_nav(self, row: _LineRow) -> None:
         """کلیدهایِ بالا/پایین را رویِ فیلدهایِ این ردیف قابل‌شنیدن می‌کند
