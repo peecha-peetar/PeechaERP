@@ -605,16 +605,23 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         # کم قرار می‌گیرد — هدر و فوتر مستقیماً در چیدمانِ اصلی و همیشه
         # ثابت/قابلِ‌مشاهده‌اند، مستقل از اینکه فونت/صفحه‌نمایش چقدر بلند/
         # کوتاه باشد.
+        # طبقِ گزارشِ صریح («فرمِ سند جدید فضایِ کمی برایِ ردیف‌ها دارد، چون
+        # هدر خیلی فضا اشغال کرده»): حاشیه/فاصله‌هایِ هدر/پیش‌نمایش فشرده‌تر
+        # شدند و دکمه‌ی «افزودنِ ردیف» از یک ردیفِ کاملاً جداگانه در چیدمانِ
+        # اصلی (که هم خودش هم فاصله‌یِ قبل/بعدش را از بودجه‌یِ ثابت می‌گرفت)
+        # به داخلِ خودِ کارتِ جدول منتقل شد — این‌طوری کلِ بودجه‌یِ ثابت
+        # (غیرِ stretch) کم شد و جدول (تنها ناحیه‌یِ stretch=1) فضایِ
+        # بیشتری از ارتفاعِ واقعیِ صفحه می‌گیرد.
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(24, 24, 24, 24)
-        root_layout.setSpacing(12)
+        root_layout.setContentsMargins(16, 14, 16, 14)
+        root_layout.setSpacing(8)
         outer = root_layout
 
         header_card = QWidget()
         header_card.setObjectName("card")
         header_layout = QGridLayout(header_card)
-        header_layout.setContentsMargins(18, 18, 18, 18)
-        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(12, 10, 12, 10)
+        header_layout.setSpacing(6)
 
         self.form_title = QLabel("صدورِ سندِ جدید")
         self.form_title.setObjectName("pageTitle")
@@ -664,7 +671,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         preview_card = QWidget()
         preview_card.setObjectName("card")
         preview_layout = QHBoxLayout(preview_card)
-        preview_layout.setContentsMargins(14, 10, 14, 10)
+        preview_layout.setContentsMargins(14, 6, 14, 6)
         preview_layout.setSpacing(24)
         self._preview_value_labels: dict[str, QLabel] = {}
         for key, title in (
@@ -685,15 +692,20 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         preview_layout.addStretch(1)
         outer.addWidget(preview_card)
 
-        add_line_button = QPushButton("+ افزودنِ ردیف")
-        add_line_button.setObjectName("flatButton")
-        add_line_button.clicked.connect(lambda: self.add_line())
-        outer.addWidget(add_line_button)
-
         table_card = QWidget()
         table_card.setObjectName("card")
         table_card_layout = QVBoxLayout(table_card)
         table_card_layout.setContentsMargins(6, 6, 6, 6)
+        table_card_layout.setSpacing(4)
+
+        table_toolbar = QHBoxLayout()
+        add_line_button = QPushButton("+ افزودنِ ردیف")
+        add_line_button.setObjectName("flatButton")
+        add_line_button.setMaximumHeight(28)
+        add_line_button.clicked.connect(lambda: self.add_line())
+        table_toolbar.addStretch(1)
+        table_toolbar.addWidget(add_line_button)
+        table_card_layout.addLayout(table_toolbar)
 
         self.table = QTableWidget(0, len(_COLUMN_LABELS))
         self.table.setHorizontalHeaderLabels(_COLUMN_LABELS)

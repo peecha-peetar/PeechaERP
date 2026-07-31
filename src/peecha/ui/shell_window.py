@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRect, QSize, Qt
+from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QComboBox,
@@ -361,6 +361,8 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
     singletonِ صفحه (با هر state ای که دارد) زنده بماند و با بازکردنِ
     دوباره از ساید‌بار/ریبون همان‌جا که بود ادامه پیدا کند."""
 
+    maximized_changed = Signal(bool)
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint)
@@ -455,6 +457,12 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
     def closeEvent(self, event) -> None:  # noqa: N802
         event.ignore()
         self.hide()
+        self.maximized_changed.emit(False)
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        if event.type() == QEvent.WindowStateChange:
+            self.maximized_changed.emit(self.isMaximized())
+        super().changeEvent(event)
 
 
 class _MdiFormWrapper(QFrame):
@@ -658,6 +666,7 @@ class MainWindow(QMainWindow):
 
         layout.addStretch(1)
         scroll.setWidget(bar)
+        self._quick_access_scroll = scroll
         return scroll
 
     # --- ساید‌بار (ناوبریِ اصلی) ------------------------------------------------
@@ -735,6 +744,21 @@ class MainWindow(QMainWindow):
             title_bar.setProperty("active", sub_window is active_sub_window)
             title_bar.style().unpolish(title_bar)
             title_bar.style().polish(title_bar)
+        self._update_chrome_visibility()
+
+    def _update_chrome_visibility(self, *_args) -> None:
+        """طبقِ گزارشِ صریح («فرم‌ها وقتی تمام‌صفحه می‌شن، فقط تویِ یک
+        کانتینرِ محدود جا می‌گیرن، چون هدرِ برنامه و ساید‌بار همچنان
+        نمایش داده می‌شن»): وقتی حداقل یک فرمِ شناور maximize شده باشد،
+        ریبونِ میان‌بر و ساید‌بار موقتاً مخفی می‌شوند تا ناحیه‌یِ MDI کلِ
+        عرض/ارتفاعِ زیرِ هدرِ اصلی را در اختیارِ فرمِ maximize‌شده بگذارد؛
+        با خارج‌شدن از حالتِ maximize (یا بستنِ فرم)، هردو دوباره
+        نمایش داده می‌شوند."""
+        any_maximized = any(
+            sw.isVisible() and sw.isMaximized() for sw in self._mdi_subwindows.values()
+        )
+        self._quick_access_scroll.setVisible(not any_maximized)
+        self._sidebar_scroll.setVisible(not any_maximized)
 
     def _populate_open_windows_menu(self) -> None:
         """طبقِ نگرانیِ صریح دربابِ انبوهِ فرم‌هایِ روی‌هم — فهرستِ همه‌ی
@@ -877,6 +901,7 @@ class MainWindow(QMainWindow):
             wrapper = _MdiFormWrapper(item["label"], icon, screen, sub_window)
             sub_window.setWidget(wrapper)
             sub_window.setAttribute(Qt.WA_DeleteOnClose, False)
+            sub_window.maximized_changed.connect(self._update_chrome_visibility)
             self.mdi_area.addSubWindow(sub_window)
             self._size_new_subwindow(sub_window)
             self._mdi_subwindows[target_screen_name] = sub_window
