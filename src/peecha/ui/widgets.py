@@ -506,11 +506,6 @@ class HoverButton(QPushButton):
         self._animation.start()
 
     def paintEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
-        # طبقِ باگِ واقعیِ کشف‌شده: تراز کردنِ متن با drawControl(CE_PushButtonLabel)
-        # + QSSِ text-align برایِ حالتِ «راست» قابلِ‌اتکا نبود (متن به‌جایِ
-        # چسبیدن به لبه‌ی راست، از چپ می‌چید) — رسمِ دستیِ متن با
-        # drawText و Qt.AlignRight/Center، مستقل از این رفتارِ نامشخصِ
-        # استایل، تضمین‌شده کار می‌کند.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
@@ -519,12 +514,26 @@ class HoverButton(QPushButton):
 
         painter.setPen(self.palette().color(QPalette.ButtonText))
         painter.setFont(self.font())
-        # باگِ واقعیِ دیگر: حاشیه‌ی ثابتِ ۱۴px برایِ دکمه‌هایِ کوچکِ آیکون‌تنها
-        # (مثلِ کنترل‌هایِ تیتربارِ ۲۸×۲۸) یعنی عرضِ ناحیه‌ی متن صفر/منفی
-        # می‌شد — گلیف اصلاً رسم نمی‌شد (نامرئی، نه فقط کمرنگ). حالا حاشیه
-        # قابلِ‌تنظیم است (پیش‌فرض ۱۴ برایِ دکمه‌هایِ متنیِ عریض).
-        text_rect = self.rect().adjusted(self._margin, 0, -(self._margin + self._indent), 0)
-        painter.drawText(text_rect, int(self._text_align) | Qt.AlignVCenter, self.text())
+        # باگِ واقعیِ کشف‌شده (با گزارشِ عکسِ واقعیِ کاربر روی ویندوز، که
+        # آفلاین/لینوکس آن را نشان نمی‌داد): دادنِ Qt.AlignRight به
+        # drawText(rect, alignment, ...) قابلِ‌اتکا نیست — ظاهراً بسته به
+        # پلتفرم/تایمینگِ layoutDirection می‌تواند برعکس (چسبیده‌به‌چپ)
+        # رندر شود. برایِ رفعِ قطعی، دیگر به هیچ پرچمِ alignmentِ Qt متکی
+        # نیستیم — خودمان با QFontMetrics عرضِ متن را حساب می‌کنیم و
+        # مختصاتِ x را دستی، مستقیماً نسبت به لبه‌یِ راست/چپ/وسطِ ناحیه،
+        # محاسبه می‌کنیم.
+        metrics = painter.fontMetrics()
+        text = self.text()
+        text_width = metrics.horizontalAdvance(text)
+        area = self.rect().adjusted(self._margin, 0, -(self._margin + self._indent), 0)
+        if self._text_align == Qt.AlignRight:
+            x = area.right() - text_width
+        elif self._text_align == Qt.AlignLeft:
+            x = area.left()
+        else:
+            x = area.left() + (area.width() - text_width) // 2
+        baseline_y = area.top() + (area.height() + metrics.ascent() - metrics.descent()) // 2
+        painter.drawText(x, baseline_y, text)
         painter.end()
 
 
