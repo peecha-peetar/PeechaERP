@@ -40,7 +40,7 @@ import decimal
 import re
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QCursor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -150,6 +150,26 @@ class _AmountField(QLineEdit):
         self._set_display()
         self.textEdited.connect(self._on_text_edited)
         self.editingFinished.connect(self._set_display)
+
+    def focusInEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        """باگِ واقعیِ گزارش‌شده: وقتی این فیلد (که همیشه «۰» نمایش می‌دهد)
+        با Enter/کلیک فوکوس می‌گرفت، متنِ «۰» انتخاب نمی‌شد — پس رقمِ
+        تازه‌یِ کاربر کنارِ همان صفر می‌نشست (مثلاً «۵۰» به‌جایِ «۵۰۰۰»)،
+        نه جایگزینش. حالا با هر فوکوس، کلِ متن انتخاب می‌شود تا تایپِ رقمِ
+        بعدی همیشه جایگزینِ مقدارِ قبلی شود."""
+        super().focusInEvent(event)
+        self.selectAll()
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        """طبقِ درخواستِ صریح: زدنِ «+» سه صفر به مقدارِ فعلی اضافه می‌کند —
+        میان‌بری برایِ واردکردنِ سریعِ مبلغ‌هایِ گِردِ بزرگ (مثلاً تایپِ
+        «۵» سپس «+» یعنی ۵٬۰۰۰، «+»ِ دوباره یعنی ۵٬۰۰۰٬۰۰۰)."""
+        if event.text() == "+":
+            self.setValue(self._value * 1000)
+            self.setCursorPosition(0)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def setDecimals(self, decimals: int) -> None:
         self._decimals = decimals
@@ -639,6 +659,13 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         header_layout.addWidget(QLabel("شرحِ سند"), 1, 2)
         self.description_field = QLineEdit()
         self.description_field.setMinimumWidth(280)
+        # طبقِ درخواستِ صریح: شرح‌هایِ قبلاً واردشده برایِ «شرحِ سند» هم مثلِ
+        # شرحِ ردیف ذخیره/پیشنهاد شوند — مدلِ این completer در refresh()
+        # با آخرین فهرست به‌روزرسانی می‌شود.
+        self._entry_description_completer = QCompleter([])
+        self._entry_description_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._entry_description_completer.setFilterMode(Qt.MatchContains)
+        self.description_field.setCompleter(self._entry_description_completer)
         header_layout.addWidget(self.description_field, 1, 3)
 
         header_layout.addWidget(QLabel("شماره‌ی عطف"), 2, 0)
@@ -662,6 +689,11 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self.alt_number_field.returnPressed.connect(self._focus_first_row_account)
         self.description_field.editingFinished.connect(lambda: self.description_field.setCursorPosition(0))
         self.alt_number_field.editingFinished.connect(lambda: self.alt_number_field.setCursorPosition(0))
+        # طبقِ درخواستِ صریح: شماره‌یِ اتوماتیکِ سند (پیش‌بینیِ چیزی که
+        # واقعاً هنگامِ ذخیره تخصیص می‌یابد) بالایِ فرم نمایش داده شود —
+        # چون تاریخِ سند رویِ سالِ مالی (و درنتیجه شماره‌گذاری) اثر دارد،
+        # با هر تغییرِ تاریخ هم دوباره محاسبه می‌شود.
+        self.date_field.editingFinished.connect(self._refresh_next_number_preview)
 
         outer.addWidget(header_card)
 
@@ -803,6 +835,10 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save)
         QShortcut(QKeySequence("Escape"), self, activated=self._reset_form)
         QShortcut(QKeySequence("Ctrl+Delete"), self, activated=self._delete_current_entry)
+        # طبقِ درخواستِ صریح: با F4، رقمِ ردیفِ اول (بدهکار یا هرکدام غیرِصفر
+        # است) به ردیفی که ماوس رویش است کپی می‌شود — برایِ اسنادِ ساده‌یِ
+        # دوطرفه که معمولاً هر دو ردیف مبلغِ یکسان دارند.
+        QShortcut(QKeySequence("F4"), self, activated=self._copy_first_row_amount_to_row_under_mouse)
 
         QApplication.instance().focusChanged.connect(self._on_focus_changed)
 
@@ -835,6 +871,11 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         accounts = coa_service.list_postable_accounts(self.company_id)
         self.account_options = [(a.account_id, f"{a.full_code} — {a.name}") for a in accounts]
         self.recent_line_descriptions = je_service.list_recent_line_descriptions(self.company_id)
+        recent_entry_descriptions = je_service.list_recent_entry_descriptions(self.company_id)
+        self._entry_description_completer = QCompleter(recent_entry_descriptions)
+        self._entry_description_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._entry_description_completer.setFilterMode(Qt.MatchContains)
+        self.description_field.setCompleter(self._entry_description_completer)
 
         base_currency_id = session.current_company.base_currency_id
         currency = next((c for c in currencies_service.list_all_currencies() if c.currency_id == base_currency_id), None)
@@ -874,7 +915,16 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         if editing and self._editing_registration_at is not None:
             self.registration_label.setText(f"تاریخِ ثبت: {numerals.format_jalali_datetime(self._editing_registration_at)}")
         else:
-            self.registration_label.setText("")
+            self._refresh_next_number_preview()
+
+    def _refresh_next_number_preview(self) -> None:
+        """طبقِ درخواستِ صریح: شماره‌ای که این سندِ تازه (اگر همین حالا
+        ذخیره شود) خواهد گرفت، بالایِ فرم نشان داده شود — فقط برایِ سندِ
+        تازه (نه در حالِ ویرایش، که خودش شماره‌یِ واقعی/ثابت دارد)."""
+        if self._editing_journal_entry_id is not None or self.company_id is None:
+            return
+        next_no = je_service.peek_next_temporary_no(self.company_id, self.date_field.date())
+        self.registration_label.setText(f"شماره‌ی سند: {numerals.to_persian_digits(str(next_no))}")
 
     def add_line(self) -> _LineRow:
         row = _LineRow(self, self.table)
@@ -1054,6 +1104,29 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         if self._active_row is row:
             self._active_row = None
             self._refresh_preview_strip()
+
+    def _copy_first_row_amount_to_row_under_mouse(self) -> None:
+        """طبقِ درخواستِ صریح (میان‌برِ F4): رقمِ ردیفِ اول به ردیفی که
+        نشانگرِ ماوس رویش است کپی می‌شود."""
+        if not self._line_rows:
+            return
+        viewport_pos = self.table.viewport().mapFromGlobal(QCursor.pos())
+        row_index = self.table.rowAt(viewport_pos.y())
+        if row_index < 0 or row_index >= len(self._line_rows):
+            return
+        self._copy_first_row_amount_to(self._line_rows[row_index])
+
+    def _copy_first_row_amount_to(self, target_row: "_LineRow") -> None:
+        """هسته‌ی مستقل از موقعیتِ ماوس (برایِ قابلِ‌تست‌بودن) — رقمِ
+        غیرِصفرِ ردیفِ اول (بدهکار یا بستانکار، هرکدام که پر باشد) در
+        همان ستون رویِ ردیفِ هدف قرار می‌گیرد."""
+        source_row = self._line_rows[0]
+        if target_row is source_row:
+            return
+        if source_row.debit_field.value():
+            target_row.debit_field.setValue(source_row.debit_field.value())
+        elif source_row.credit_field.value():
+            target_row.credit_field.setValue(source_row.credit_field.value())
 
     def _renumber_rows(self) -> None:
         for i in range(len(self._line_rows)):

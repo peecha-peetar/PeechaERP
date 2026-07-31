@@ -316,6 +316,36 @@ def fiscal_year_bounds(
     return str(year), start.togregorian(), end.togregorian()
 
 
+def peek_next_temporary_no(company_id: int, document_date: datetime.date) -> int:
+    """پیش‌نمایشِ شماره‌یِ موقتی که سندِ تازه (اگر همین حالا ذخیره شود)
+    خواهد گرفت — طبقِ درخواستِ صریح، بالایِ فرمِ سندِ جدید نمایش داده
+    می‌شود، پیش از ذخیره. کاملاً read-only است (برخلافِ
+    _get_or_create_fiscal_year که در مسیرِ ذخیره‌یِ واقعی صدا زده می‌شود،
+    این تابع سالِ مالیِ تازه نمی‌سازد — اگر سالِ مالیِ این تاریخ هنوز
+    وجود نداشته باشد، یعنی این اولین سندِ آن سال خواهد بود، پس ۱ برمی‌گردد)."""
+    with new_session() as session:
+        company = session.get(Company, company_id)
+        if company is None:
+            return 1
+        code, _start, _end = fiscal_year_bounds(
+            company.fiscal_year_start_month, company.fiscal_year_start_day, document_date
+        )
+        fiscal_year = session.scalar(
+            select(FiscalYear).where(FiscalYear.company_id == company_id, FiscalYear.code == code)
+        )
+        if fiscal_year is None:
+            return 1
+        return (
+            session.scalar(
+                select(func.max(JournalEntry.temporary_no)).where(
+                    JournalEntry.company_id == company_id,
+                    JournalEntry.fiscal_year_id == fiscal_year.fiscal_year_id,
+                )
+            )
+            or 0
+        ) + 1
+
+
 def _get_or_create_fiscal_year(session, company: Company, on_date: datetime.date) -> FiscalYear:
     code, start, end = fiscal_year_bounds(company.fiscal_year_start_month, company.fiscal_year_start_day, on_date)
     fiscal_year = session.scalar(
@@ -510,6 +540,24 @@ def list_recent_line_descriptions(company_id: int, limit: int = 300) -> list[str
             .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
             .where(JournalEntry.company_id == company_id, JournalEntryLine.description.isnot(None))
             .order_by(JournalEntryLine.line_id.desc())
+            .limit(limit)
+        ).all()
+        seen: dict[str, None] = {}
+        for (description,) in rows:
+            text = (description or "").strip()
+            if text and text not in seen:
+                seen[text] = None
+        return list(seen.keys())
+
+
+def list_recent_entry_descriptions(company_id: int, limit: int = 300) -> list[str]:
+    """فهرستِ متمایزِ شرح‌هایِ قبلاً واردشده برایِ سرِ سند (نه ردیف‌ها) —
+    طبقِ درخواستِ صریح، برایِ پیشنهادِ زنده هنگامِ تایپِ «شرحِ سند»."""
+    with new_session() as session:
+        rows = session.execute(
+            select(JournalEntry.description)
+            .where(JournalEntry.company_id == company_id, JournalEntry.description.isnot(None))
+            .order_by(JournalEntry.journal_entry_id.desc())
             .limit(limit)
         ).all()
         seen: dict[str, None] = {}
