@@ -33,7 +33,7 @@ _CATEGORY_OPTIONS = [
     ("REVENUE", "درآمد"), ("COGS", "بهایِ تمام‌شده"), ("EXPENSE", "هزینه"),
     ("STATISTICAL", "حساب‌هایِ آماری"),
 ]
-_ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
+_ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت"), ("STATISTICAL", "انتظامی")]
 _CASH_FLOW_SECTION_OPTIONS = [
     (None, "— بدونِ طبقه‌بندی —"),
     ("OPERATING", "عملیاتی"),
