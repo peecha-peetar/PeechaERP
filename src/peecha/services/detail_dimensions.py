@@ -565,13 +565,38 @@ def list_level_digit_config(company_id: int) -> list[LevelDigitConfigRow]:
         return [LevelDigitConfigRow(level_no=r.level_no, code_length=r.code_length) for r in rows]
 
 
+def detail_level_has_accounts(company_id: int, level_no: int) -> bool:
+    """آیا حداقل یک حسابِ تفصیلی در این سطح از قبل وجود دارد — طبقِ
+    بازخوردِ صریح، هم‌الگو با chart_of_accounts.account_level_has_accounts:
+    تعدادِ رقمِ هر سطح به‌محضِ اینکه خودِ آن سطح حساب داشته باشد قفل
+    می‌شود، نه فقط وقتی کلِ شرکت سند دارد."""
+    with new_session() as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(DetailAccount)
+            .where(DetailAccount.company_id == company_id, DetailAccount.level_no == level_no)
+        )
+        return bool(count)
+
+
+def get_locked_detail_levels(company_id: int) -> set[int]:
+    """سطح‌هایی که تعدادِ رقمشان دیگر قابلِ‌تغییر نیست."""
+    from peecha.services import journal_entries as je_service  # noqa: PLC0415
+
+    if je_service.company_has_any_entries(company_id):
+        return set(range(1, MAX_DETAIL_LEVEL + 1))
+    return {level for level in range(1, MAX_DETAIL_LEVEL + 1) if detail_level_has_accounts(company_id, level)}
+
+
 def set_level_digit_config(company_id: int, config: dict[int, int | None]) -> None:
     """جایگزینیِ کاملِ تعدادِ رقمِ سراسریِ هر سطح — config یعنی {شماره‌ی سطح
     (۱ تا ۴): تعدادِ رقم یا None برایِ بدونِ محدودیت}.
 
     طبقِ درخواستِ صریح: بعدِ اولین سندِ شرکت، این تنظیمات دیگر قابلِ‌تغییر
     نیستند (تا کدهایِ ثبت‌شده‌ی موجود ناسازگار نشوند) — هم‌الگو با
-    chart_of_accounts.set_account_level_config."""
+    chart_of_accounts.set_account_level_config. طبقِ بازخوردِ بعدی، هر
+    سطح به‌محضِ اینکه *خودش* حسابِ تفصیلی داشته باشد هم دیگر قابلِ‌تغییر
+    نیست، نه فقط وقتی کلِ شرکت سند دارد."""
     with new_session() as session:
         # importِ داخلِ تابع: journal_entries از detail_dimensions در سطحِ
         # ماژول import می‌کند، پس import سطحِ ماژول در جهتِ عکس یک وابستگیِ
@@ -581,14 +606,35 @@ def set_level_digit_config(company_id: int, config: dict[int, int | None]) -> No
         if je_service.company_has_any_entries(company_id):
             raise ValueError("این شرکت سند دارد؛ تعدادِ رقمِ سطوحِ تفصیلی دیگر قابلِ‌تغییر نیست.")
 
-        session.execute(
-            DetailLevelDigitConfig.__table__.delete().where(DetailLevelDigitConfig.company_id == company_id)
-        )
+        # نکته: با select(...) رویِ ستون‌هایِ خام، هیچ آبجکتِ ORM‌ای در
+        # identity mapِ سشن ثبت نمی‌شود — وگرنه پایین‌تر که همین ردیف‌ها
+        # را bulk-delete و دوباره می‌سازیم، SQLAlchemy هشدارِ تداخل می‌داد.
+        existing_by_level = {
+            row.level_no: row
+            for row in session.execute(
+                select(DetailLevelDigitConfig.level_no, DetailLevelDigitConfig.code_length).where(
+                    DetailLevelDigitConfig.company_id == company_id
+                )
+            ).all()
+        }
+
         for level_no, code_length in config.items():
             if not (1 <= level_no <= MAX_DETAIL_LEVEL):
                 raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_DETAIL_LEVEL} باشد.")
             if code_length is not None and not (1 <= code_length <= 10):
                 raise ValueError("تعدادِ رقمِ کد باید بینِ ۱ تا ۱۰ باشد.")
+
+            existing = existing_by_level.get(level_no)
+            existing_code_length = existing.code_length if existing else None
+            if code_length != existing_code_length and detail_level_has_accounts(company_id, level_no):
+                raise ValueError(
+                    f"برایِ سطحِ {level_no} قبلاً حسابِ تفصیلی تعریف شده؛ تعدادِ رقمِ این سطح دیگر قابلِ‌تغییر نیست."
+                )
+
+        session.execute(
+            DetailLevelDigitConfig.__table__.delete().where(DetailLevelDigitConfig.company_id == company_id)
+        )
+        for level_no, code_length in config.items():
             if code_length is None:
                 continue
             session.add(DetailLevelDigitConfig(company_id=company_id, level_no=level_no, code_length=code_length))

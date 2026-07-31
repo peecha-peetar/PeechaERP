@@ -15,26 +15,16 @@ NAV_ITEMS = [
         "label": "مالی و حسابداری",
         "children": [
             {"code": "GL_COA", "label": "کدینگ حسابداری", "screen": "chart_of_accounts"},
-            # طبقِ درخواستِ صریح: انواعِ تفصیلی از ریبون حذف شدند (همچنان از
-            # ساید‌بار در دسترس‌اند؛ دکمه‌ی «تفصیلیِ جدید» در خودِ صفحه‌ی
-            # «تفصیلی‌ها» میان‌بُرِ ساختِ رکوردِ تازه برایِ هرکدام را می‌دهد) —
-            # تا دکمه‌هایِ باقی‌مانده (کدینگ/اسناد/صدورِ سند) فضایِ بیشتری
-            # داشته باشند و ریبون کمتر شلوغ باشد.
+            # طبقِ درخواستِ صریح: تعریفِ همه‌یِ حساب‌هایِ تفصیلی (مشتری/
+            # تامین‌کننده/پرسنل، کالا/بانک/صندوق/تنخواه/دارایی‌ثابت/مرکزِ
+            # هزینه/پروژه، و گروه‌هایِ سفارشی) حالا در یک فرمِ واحد است —
+            # به‌جایِ منویِ جداگانه برایِ هرکدام، از هدرِ همان یک فرم
+            # («تعریفِ تفصیلی») نوعِ گروه انتخاب می‌شود.
             {"code": "GL_TAFSILI", "label": "تفصیلی‌ها", "screen": "detail_accounts_list", "in_ribbon": False},
-            {"code": "GL_CUSTOMERS", "label": "مشتریان", "screen": "customers", "in_ribbon": False},
-            {"code": "GL_SUPPLIERS", "label": "تامین‌کنندگان", "screen": "suppliers", "in_ribbon": False},
-            {"code": "GL_PERSONNEL", "label": "پرسنل", "screen": "personnel", "in_ribbon": False},
-            {"code": "GL_INVENTORY_ITEMS", "label": "کالا", "screen": "inventory_items", "in_ribbon": False},
-            {"code": "GL_FIXED_ASSETS", "label": "دارایی ثابت", "screen": "fixed_assets", "in_ribbon": False},
-            {"code": "GL_BANK_ACCOUNTS", "label": "بانک", "screen": "bank_accounts", "in_ribbon": False},
-            {"code": "GL_CASH_BOXES", "label": "صندوق", "screen": "cash_boxes", "in_ribbon": False},
-            {"code": "GL_PETTY_CASHES", "label": "تنخواه", "screen": "petty_cashes", "in_ribbon": False},
-            {"code": "GL_COST_CENTERS", "label": "مرکز هزینه", "screen": "cost_centers", "in_ribbon": False},
-            {"code": "GL_PROJECTS", "label": "پروژه", "screen": "projects", "in_ribbon": False},
             {"code": "GL_JE_LIST", "label": "اسناد حسابداری", "screen": "journal_entries_list"},
             {"code": "GL_JE", "label": "صدور سند جدید", "screen": "journal_entry"},
             {"code": "GL_DIM_CONFIG", "label": "پیکربندیِ گروه‌هایِ تفصیلی", "screen": "dimension_group_config", "in_ribbon": False},
-            {"code": "GL_DIM", "label": "تفصیلی‌هایِ گروه‌هایِ ساده", "screen": "detail_dimensions", "in_ribbon": False},
+            {"code": "GL_DIM", "label": "تعریفِ تفصیلی", "screen": "detail_dimensions", "in_ribbon": False},
         ],
     },
     {"code": "INV", "label": "انبار و موجودی", "screen": None},
@@ -119,10 +109,8 @@ QUICK_ACCESS_ITEMS: list[tuple[str, str]] = [
     ("GL_JE", "📝"),
     ("GL_COA", "🗂️"),
     ("GL_JE_LIST", "📚"),
-    ("GL_CUSTOMERS", "🤝"),
-    ("GL_SUPPLIERS", "🚚"),
-    ("GL_BANK_ACCOUNTS", "🏦"),
-    ("GL_CASH_BOXES", "🧰"),
+    ("GL_TAFSILI", "🤝"),
+    ("GL_DIM", "🧰"),
     ("REPORTS_TRIAL_BALANCE", "⚖️"),
     ("SETTINGS", "⚙️"),
 ]

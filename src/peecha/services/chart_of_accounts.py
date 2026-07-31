@@ -496,18 +496,58 @@ def list_account_level_config(company_id: int) -> list[AccountLevelConfigRow]:
         ]
 
 
+_ACCOUNT_LEVEL_NAMES = {1: "گروه", 2: "کل", 3: "معین"}
+
+
+def account_level_has_accounts(company_id: int, account_level: int) -> bool:
+    """آیا حداقل یک حسابِ کدینگ‌شده در این سطح از قبل وجود دارد — طبقِ
+    درخواستِ صریح، تعدادِ رقم/بازه‌یِ هر سطح به‌محضِ اینکه خودِ آن سطح
+    حساب داشته باشد قفل می‌شود؛ نه فقط وقتی کلِ شرکت سندِ حسابداری دارد
+    (چون تغییرِ طولِ کد بعدِ ساختنِ حساب‌ها با آن طول، کدهایِ موجود را
+    ناسازگار می‌کند، حتی اگر هنوز هیچ سندی ثبت نشده باشد)."""
+    with new_session() as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(ChartOfAccount)
+            .where(ChartOfAccount.company_id == company_id, ChartOfAccount.account_level == account_level)
+        )
+        return bool(count)
+
+
+def get_locked_account_levels(company_id: int) -> set[int]:
+    """سطح‌هایی که تعدادِ رقم/بازه‌شان دیگر قابلِ‌تغییر نیست."""
+    if je_service.company_has_any_entries(company_id):
+        return set(range(1, MAX_ACCOUNT_LEVEL + 1))
+    return {level for level in range(1, MAX_ACCOUNT_LEVEL + 1) if account_level_has_accounts(company_id, level)}
+
+
 def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
     """جایگزینیِ کاملِ تنظیماتِ کدینگِ حساب‌ها — levels یعنی {شماره‌ی سطح
     (۱ تا ۳): {"code_length": ..|None, "range_from": ..|None, "range_to":
     ..|None}}. طبقِ درخواستِ صریح: «تعداد ارقام حساب‌ها از ابتدا ست شود و
-    اگر سندی ثبت شود دیگر قابل تغییر نباشد»."""
+    اگر سندی ثبت شود دیگر قابل تغییر نباشد» — و طبقِ بازخوردِ بعدی، هر
+    سطح به‌محضِ اینکه *خودش* حساب داشته باشد (نه فقط وقتی کلِ شرکت سند
+    دارد) دیگر قابلِ‌تغییر نیست."""
     with new_session() as session:
         if je_service.company_has_any_entries(company_id):
             raise ValueError("این شرکت سند دارد؛ تنظیماتِ کدینگِ حساب‌ها دیگر قابلِ‌تغییر نیست.")
 
-        session.execute(
-            ChartOfAccountLevelConfig.__table__.delete().where(ChartOfAccountLevelConfig.company_id == company_id)
-        )
+        # نکته: با select(...) رویِ ستون‌هایِ خام (نه select(ChartOfAccountLevelConfig))
+        # هیچ آبجکتِ ORM‌ای در identity mapِ سشن ثبت نمی‌شود — وگرنه پایین‌تر
+        # که همین ردیف‌ها را bulk-delete و دوباره با همان PK می‌سازیم،
+        # SQLAlchemy هشدارِ «identity map conflict» می‌داد.
+        existing_by_level = {
+            row.account_level: row
+            for row in session.execute(
+                select(
+                    ChartOfAccountLevelConfig.account_level,
+                    ChartOfAccountLevelConfig.code_length,
+                    ChartOfAccountLevelConfig.range_from,
+                    ChartOfAccountLevelConfig.range_to,
+                ).where(ChartOfAccountLevelConfig.company_id == company_id)
+            ).all()
+        }
+
         for account_level, config in levels.items():
             if not (1 <= account_level <= MAX_ACCOUNT_LEVEL):
                 raise ValueError(f"شماره‌ی سطح باید بینِ ۱ تا {MAX_ACCOUNT_LEVEL} باشد.")
@@ -530,6 +570,29 @@ def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
                         f"مقدارِ «تا» در سطحِ {account_level} نمی‌تواند بیشتر از {max_value} باشد "
                         f"(تعدادِ رقمِ این سطح {code_length} رقم است)."
                     )
+
+            existing = existing_by_level.get(account_level)
+            existing_code_length = existing.code_length if existing else None
+            existing_range_from = existing.range_from if existing else None
+            existing_range_to = existing.range_to if existing else None
+            changed = (
+                code_length != existing_code_length
+                or range_from != existing_range_from
+                or range_to != existing_range_to
+            )
+            if changed and account_level_has_accounts(company_id, account_level):
+                level_name = _ACCOUNT_LEVEL_NAMES.get(account_level, str(account_level))
+                raise ValueError(
+                    f"برایِ سطحِ «{level_name}» قبلاً حساب تعریف شده؛ تعدادِ رقم/بازه‌یِ این سطح دیگر قابلِ‌تغییر نیست."
+                )
+
+        session.execute(
+            ChartOfAccountLevelConfig.__table__.delete().where(ChartOfAccountLevelConfig.company_id == company_id)
+        )
+        for account_level, config in levels.items():
+            code_length = config.get("code_length")
+            range_from = config.get("range_from")
+            range_to = config.get("range_to")
             if code_length is None and range_from is None and range_to is None:
                 continue
             session.add(

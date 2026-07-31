@@ -48,17 +48,10 @@ from peecha import numerals, session
 from peecha.nav_catalog import NAV_ITEMS, QUICK_ACCESS_ITEMS
 from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
 from peecha.services import companies as companies_service
-from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha.ui import theme
 from peecha.ui.widgets import HoverButton, field_help_is_enabled, set_field_help_enabled
-
-_PERSON_GROUP_NAV_CODE_TO_GROUP_CODE = {
-    "GL_CUSTOMERS": dimensions_service.CUSTOMER_GROUP_CODE,
-    "GL_SUPPLIERS": dimensions_service.SUPPLIER_GROUP_CODE,
-    "GL_PERSONNEL": dimensions_service.PERSONNEL_GROUP_CODE,
-}
 
 _NAV_ICONS = {
     "dashboard": "🏠",
@@ -739,23 +732,6 @@ class MainWindow(QMainWindow):
         self._sidebar_scroll = scroll
         return scroll
 
-    def refresh_sidebar_dynamic_labels(self) -> None:
-        """عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل) را —
-        اگر شرکتِ جاری آن‌ها را تغییرِنام داده باشد — در دکمه‌هایِ ساید‌بار
-        به‌روز می‌کند."""
-        company_id = session.current_company.company_id if session.current_company else None
-        if company_id is None:
-            return
-        names_by_group_code = {g.code: g.name for g in dimensions_service.list_person_groups(company_id)}
-        gl_group = self._sidebar_groups.get("GL")
-        if gl_group is None:
-            return
-        for nav_code, group_code in _PERSON_GROUP_NAV_CODE_TO_GROUP_CODE.items():
-            button = gl_group._entries.get(nav_code)
-            new_name = names_by_group_code.get(group_code)
-            if button is not None and new_name:
-                button.setText(new_name)
-
     # --- ناحیه‌ی کاریِ MDI (فرم‌هایِ شناور) --------------------------------------
     def _build_mdi_area(self) -> QWidget:
         self.mdi_area = QMdiArea()
@@ -871,11 +847,6 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.dimension_group_config import DimensionGroupConfigScreen
         from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen
         from peecha.ui.screens.journal_entry import JournalEntryScreen
-        from peecha.ui.screens.person_group_screens import (
-            CustomersScreen,
-            PersonnelScreen,
-            SuppliersScreen,
-        )
         from peecha.ui.screens.placeholder import PlaceholderScreen
         from peecha.ui.screens.report_account_ledger import AccountLedgerScreen
         from peecha.ui.screens.report_anomalies import AnomaliesScreen
@@ -888,15 +859,6 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_journal_book import JournalBookScreen
         from peecha.ui.screens.report_period_comparison import PeriodComparisonScreen
         from peecha.ui.screens.report_trial_balance import TrialBalanceScreen
-        from peecha.ui.screens.specialized_dimensions import (
-            BankAccountsScreen,
-            CashBoxesScreen,
-            CostCentersScreen,
-            FixedAssetsScreen,
-            InventoryItemsScreen,
-            PettyCashesScreen,
-            ProjectsScreen,
-        )
         from peecha.ui.screens.statement_template_designer import (
             StatementTemplateDesignerScreen,
         )
@@ -906,16 +868,6 @@ class MainWindow(QMainWindow):
         self.register_screen("placeholder", PlaceholderScreen())
         self.register_screen("chart_of_accounts", ChartOfAccountsScreen())
         self.register_screen("system_settings", SystemSettingsScreen())
-        self.register_screen("customers", CustomersScreen())
-        self.register_screen("suppliers", SuppliersScreen())
-        self.register_screen("personnel", PersonnelScreen())
-        self.register_screen("inventory_items", InventoryItemsScreen())
-        self.register_screen("fixed_assets", FixedAssetsScreen())
-        self.register_screen("bank_accounts", BankAccountsScreen())
-        self.register_screen("cash_boxes", CashBoxesScreen())
-        self.register_screen("petty_cashes", PettyCashesScreen())
-        self.register_screen("cost_centers", CostCentersScreen())
-        self.register_screen("projects", ProjectsScreen())
         self.register_screen("dimension_group_config", DimensionGroupConfigScreen())
         self.register_screen("detail_dimensions", DetailDimensionsScreen())
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
@@ -1107,8 +1059,6 @@ class MainWindow(QMainWindow):
             for fy in fiscal_years:
                 self.fiscal_year_combo.addItem(numerals.to_persian_digits(fy.code), fy.fiscal_year_id)
 
-        self.refresh_sidebar_dynamic_labels()
-
     def _on_company_changed(self, index: int) -> None:
         if index < 0:
             return
@@ -1118,7 +1068,6 @@ class MainWindow(QMainWindow):
         if session.current_company is not None and session.current_company.company_id == company_id:
             return
         session.current_company = companies_service.get_company_model(company_id)
-        self.refresh_sidebar_dynamic_labels()
         active_sub = self.mdi_area.activeSubWindow()
         if active_sub is not None and hasattr(active_sub.widget(), "refresh"):
             active_sub.widget().refresh()

@@ -16,7 +16,6 @@ from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QPushButton, QScrollA
 from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.services import journal_entries as je_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
 
@@ -139,16 +138,22 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
             range_from.setValue(row.range_from if row and row.range_from is not None else 0)
             range_to.setValue(row.range_to if row and row.range_to is not None else 0)
 
-        locked = je_service.company_has_any_entries(company_id)
-        for code_length, range_from, range_to in self._level_widgets.values():
-            code_length.setEnabled(not locked)
-            range_from.setEnabled(not locked)
-            range_to.setEnabled(not locked)
-        self.save_button.setEnabled(not locked)
-        if locked:
+        # طبقِ بازخوردِ صریح: قفل دیگر همه‌یا-هیچ نیست — هر سطح به‌محضِ
+        # اینکه *خودش* حساب داشته باشد (نه فقط وقتی کلِ شرکت سند دارد)
+        # جداگانه قفل می‌شود، تا بشود سطح‌هایی که هنوز حساب ندارند را
+        # حتی بعدِ تعریفِ سطح‌هایِ دیگر اصلاح کرد.
+        locked_levels = coa_service.get_locked_account_levels(company_id)
+        for level, (code_length, range_from, range_to) in self._level_widgets.items():
+            level_locked = level in locked_levels
+            code_length.setEnabled(not level_locked)
+            range_from.setEnabled(not level_locked)
+            range_to.setEnabled(not level_locked)
+        self.save_button.setEnabled(len(locked_levels) < len(self._level_widgets))
+        if locked_levels:
+            names = "، ".join(_LEVEL_LABELS[level] for level in sorted(locked_levels))
             self.status_label.setObjectName("sectionHint")
             self.status_label.setStyleSheet("")
-            self.status_label.setText("این شرکت سند دارد؛ تنظیماتِ کدینگِ حساب‌ها دیگر قابلِ‌تغییر نیست.")
+            self.status_label.setText(f"برایِ سطحِ «{names}» قبلاً حساب تعریف شده؛ دیگر قابلِ‌تغییر نیست.")
 
     def _save(self) -> None:
         company_id = self._company_id()
@@ -248,17 +253,20 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
 
-        locked = je_service.company_has_any_entries(company_id)
+        # طبقِ بازخوردِ صریح: هم‌الگو با کدینگِ حساب‌ها، هر سطح به‌محضِ
+        # اینکه *خودش* حسابِ تفصیلی داشته باشد جداگانه قفل می‌شود.
+        locked_levels = dimensions_service.get_locked_detail_levels(company_id)
         detail_rows_by_level = {r.level_no: r for r in dimensions_service.list_level_digit_config(company_id)}
         for level, code_length in self._detail_level_widgets.items():
             row = detail_rows_by_level.get(level)
             code_length.setValue(row.code_length if row and row.code_length is not None else 0)
-            code_length.setEnabled(not locked)
-        self.save_detail_button.setEnabled(not locked)
-        if locked:
+            code_length.setEnabled(level not in locked_levels)
+        self.save_detail_button.setEnabled(len(locked_levels) < len(self._detail_level_widgets))
+        if locked_levels:
+            names = "، ".join(_DETAIL_LEVEL_LABELS[level] for level in sorted(locked_levels))
             self.detail_status_label.setObjectName("sectionHint")
             self.detail_status_label.setStyleSheet("")
-            self.detail_status_label.setText("این شرکت سند دارد؛ تعدادِ رقمِ سطوحِ تفصیلی دیگر قابلِ‌تغییر نیست.")
+            self.detail_status_label.setText(f"برایِ «{names}» قبلاً حسابِ تفصیلی تعریف شده؛ دیگر قابلِ‌تغییر نیست.")
 
     def _save_detail_digits(self) -> None:
         company_id = self._company_id()

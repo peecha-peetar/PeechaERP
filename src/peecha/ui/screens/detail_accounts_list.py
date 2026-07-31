@@ -32,26 +32,11 @@ from peecha import session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui.widgets import FieldHelpMixin
 
-_GROUP_SCREEN_BY_PERSON_CODE = {
-    "CUSTOMER": "customers",
-    "SUPPLIER": "suppliers",
-    "PERSONNEL": "personnel",
-}
-
-# طبقِ درخواستِ صریح: ۷ نوعِ «فرمِ خاص» صفحه‌ی اختصاصیِ خودشان را دارند —
-# کلیک روی ردیفِ آن‌ها در فهرستِ واحد باید به همان صفحه برود، نه صفحه‌ی
-# عمومیِ گروه‌هایِ «ساده» (GL_DIM).
-_NAV_CODE_BY_DIMENSION_CODE = {
-    "INVENTORY_ITEM": "GL_INVENTORY_ITEMS",
-    "FIXED_ASSET": "GL_FIXED_ASSETS",
-    "BANK_ACCOUNT": "GL_BANK_ACCOUNTS",
-    "CASH_BOX": "GL_CASH_BOXES",
-    "PETTY_CASH": "GL_PETTY_CASHES",
-    "COST_CENTER": "GL_COST_CENTERS",
-    "PROJECT": "GL_PROJECTS",
-}
-
-_COLUMNS = ["نام", "کد", "سطح", "وضعیت"]
+# طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
+# فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها؛ چونی که
+# QTreeWidget زیرِ RTL هم مثلِ QTableWidget، ستونِ اندیسِ ۰ در لبه‌یِ
+# فیزیکیِ راست ظاهر می‌شود، پس «کد» باید ستونِ اول باشد نه «نام».
+_COLUMNS = ["کد", "نام", "سطح", "وضعیت"]
 
 
 def _group_label(group_name: str) -> str:
@@ -169,7 +154,7 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         self, parent: QTreeWidgetItem, e: dimensions_service.UnifiedDetailAccountRow, color: str | None
     ) -> QTreeWidgetItem:
         item = QTreeWidgetItem(
-            [e.name or "—", e.full_code, str(e.level_no), "فعال" if e.is_active else "غیرفعال"]
+            [e.full_code, e.name or "—", str(e.level_no), "فعال" if e.is_active else "غیرفعال"]
         )
         item.setData(0, Qt.UserRole, (e.dimension_type_id, e.detail_account_id, e.person_group_code, e.group_name))
         if color:
@@ -226,27 +211,16 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         data = item.data(0, Qt.UserRole)
         if data is None:
             return  # گرهِ سرگروه — چیزی برایِ باز کردن نیست
-        dimension_type_id, detail_account_id, person_group_code, group_name = data
-        self.open_entry(dimension_type_id, detail_account_id, person_group_code, group_name)
+        dimension_type_id, detail_account_id, person_group_code, _group_name = data
+        self.open_entry(dimension_type_id, detail_account_id, person_group_code)
 
-    def open_entry(
-        self, dimension_type_id: int, detail_account_id: int, person_group_code: str | None, group_name: str = ""
-    ) -> None:
-        target_code = _GROUP_SCREEN_BY_PERSON_CODE.get(person_group_code or "")
-        if target_code is not None:
-            nav_code = {"customers": "GL_CUSTOMERS", "suppliers": "GL_SUPPLIERS", "personnel": "GL_PERSONNEL"}[target_code]
-            self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_person(detail_account_id))
-            return
-
-        specialized_nav_code = _NAV_CODE_BY_DIMENSION_CODE.get(group_name)
-        if specialized_nav_code is not None:
-            self._main_window.open_screen(
-                specialized_nav_code, then=lambda screen: screen.edit_detail_account(detail_account_id)
-            )
-            return
-
+    def open_entry(self, dimension_type_id: int, detail_account_id: int, person_group_code: str | None) -> None:
+        # طبقِ درخواستِ صریح («تعریفِ تفصیلی‌ها همه در یک فرم باشد»): همه‌ی
+        # انواع (اشخاص و ۷ نوعِ خاص و گروه‌هایِ ساده) حالا از همینِ یک فرمِ
+        # واحد («GL_DIM») باز می‌شوند، نه صفحه‌هایِ جداگانه‌یِ قبلی.
+        combo_data = ("person", person_group_code) if person_group_code else ("dim", dimension_type_id)
         self._main_window.open_screen(
-            "GL_DIM", then=lambda screen: screen.select_type_and_edit(dimension_type_id, detail_account_id)
+            "GL_DIM", then=lambda screen: screen.select_type_and_edit(combo_data, detail_account_id)
         )
 
     # --- دکمه‌ی «تفصیلیِ جدید» ------------------------------------------------
@@ -255,25 +229,23 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         خودِ QMenu تا بدونِ نیاز به exec (که مودال/بلاک‌کننده است) قابلِ‌تست باشد."""
         actions: list[tuple[str, Callable[[], None]]] = []
         for group in dimensions_service.list_person_groups(company_id):
-            nav_code = {"CUSTOMER": "GL_CUSTOMERS", "SUPPLIER": "GL_SUPPLIERS", "PERSONNEL": "GL_PERSONNEL"}.get(
-                group.code
-            )
-            if nav_code is None:
-                continue
-            actions.append((group.name, lambda nav_code=nav_code: self._main_window.open_screen(nav_code)))
+            combo_data = ("person", group.code)
+            actions.append((
+                group.name,
+                lambda combo_data=combo_data: self._main_window.open_screen(
+                    "GL_DIM", then=lambda screen: screen.select_type_for_new_entry(combo_data)
+                ),
+            ))
 
         for dim_type in dimensions_service.list_dimension_types(company_id):
-            specialized_nav_code = _NAV_CODE_BY_DIMENSION_CODE.get(dim_type.code)
-            if specialized_nav_code is not None:
-                label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim_type.code, dim_type.code)
-                actions.append((label, lambda nav_code=specialized_nav_code: self._main_window.open_screen(nav_code)))
-            else:
-                actions.append((
-                    dim_type.code,
-                    lambda type_id=dim_type.dimension_type_id: self._main_window.open_screen(
-                        "GL_DIM", then=lambda screen: screen.select_type_for_new_entry(type_id)
-                    ),
-                ))
+            label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim_type.code, dim_type.code)
+            combo_data = ("dim", dim_type.dimension_type_id)
+            actions.append((
+                label,
+                lambda combo_data=combo_data: self._main_window.open_screen(
+                    "GL_DIM", then=lambda screen: screen.select_type_for_new_entry(combo_data)
+                ),
+            ))
         return actions
 
     def _show_new_entry_menu(self) -> None:
