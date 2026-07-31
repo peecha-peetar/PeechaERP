@@ -1,50 +1,58 @@
-"""پالتِ رنگی + QSSِ سراسریِ برنامه («آئورا») — طراحیِ مدرن، تخت، با
-کارت‌هایِ سایه‌دار، فیلدهایِ گردِ fill-style، و دکمه‌هایِ pill."""
+"""پالتِ رنگی + QSSِ سراسریِ برنامه — بازطراحیِ «مدرنِ ۲۰۲۶»: پالتِ نیلی/
+بنفشِ نرم (به‌جایِ سرمه‌ایِ تخت/تیره‌یِ قبلی)، پس‌زمینه‌یِ روشن و هوادار،
+گوشه‌هایِ گردترِ کارت/دکمه/فیلد، سایه‌هایِ لطیف، و هدر/منویِ افقیِ روشن
+(به‌جایِ نوارِ تیره‌یِ قدیمی که حسِ برنامه‌هایِ enterprise کهنه می‌داد).
+
+نکته‌یِ سازگاری: تمامِ نام‌هایی که بیرون از این فایل استفاده می‌شوند
+(ACCENT، BORDER، DIVIDER، PRIMARY، SUCCESS، TEXT_PRIMARY، TEXT_SECONDARY،
+DONUT_COLORS، LEVEL_*، apply_card_shadows، avatar_color_for،
+set_status_label، GLOBAL_QSS) دست‌نخورده مانده‌اند — فقط مقدار/محتوایشان
+تازه شده."""
 
 from __future__ import annotations
+
+import hashlib
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
 
-# پالت طبقِ استایلِ مرجعِ کاربر (برنامه‌ی دیگرشان) — تک‌رنگِ سرمه‌ای
-# #020025 هم برایِ «primary» (نوارِ کناری/تولتیپ) هم برایِ «accent»
-# (دکمه‌ها/تمرکز/انتخاب) به‌کار می‌رود، به‌جایِ پالتِ بنفشِ قبلی.
-PRIMARY = "#020025"
-PRIMARY_HOVER = "#303050"
-PRIMARY_LIGHT = "#E0E0F0"
-ACCENT = "#020025"
-ACCENT_HOVER = "#303050"
-ACCENT_PRESSED = "#000014"
-SUCCESS = "#15A672"
+# --- پالتِ نیلی/بنفشِ مدرن -------------------------------------------------
+PRIMARY = "#1E1B4B"          # نیلیِ خیلی تیره — فقط برایِ تولتیپ/متن‌هایِ تأکیدی
+PRIMARY_HOVER = "#312E81"
+PRIMARY_LIGHT = "#EEF2FF"
+ACCENT = "#4F46E5"           # نیلیِ اصلی (indigo-600) — جایگزینِ سرمه‌ایِ #020025
+ACCENT_HOVER = "#4338CA"
+ACCENT_PRESSED = "#3730A3"
+ACCENT_LIGHT = "#EEF2FF"     # ته‌رنگِ خیلی کم‌رنگِ اکسنت — برایِ هاورِ نرم/پیل‌هایِ غیرفعال
+ACCENT_LIGHT_HOVER = "#E0E0FC"
+SUCCESS = "#16A672"
 WARNING = "#F5A524"
-DANGER = "#E5484D"
+DANGER = "#EF4444"
 INFO = "#0EA5E9"
 
 CHART_PURPLE = "#9333EA"
 CHART_ORANGE = "#F97316"
 CHART_TEAL = "#14B8A6"
 
-BACKGROUND = "#F9F9FC"
+BACKGROUND = "#F7F7FC"
 SURFACE = "#FFFFFF"
-HOVER = "#E0E0F0"
-SELECTED = "#D6D6EE"
-BORDER = "#CCCCCC"
-DIVIDER = "#E0E0E0"
-# طبقِ درخواستِ صریح: هاورِ ریبون «ملایم‌تر» از هاورِ عمومی — یک ته‌رنگِ
-# بسیار کم‌رنگِ سرمه‌ای (به‌جایِ خاکستریِ تخت)، مناسبِ دکمه‌هایِ حالا
-# فراخ‌ترِ ریبون.
-RIBBON_HOVER = "rgba(2, 0, 37, 18)"
+HOVER = "#F1F1F8"
+SELECTED = "#E6E4FB"
+BORDER = "#E4E4EE"
+DIVIDER = "#EDEDF4"
+# هاورِ ریبون/منو: ته‌رنگِ بسیار کم‌رنگِ نیلی (متناسب با اکسنتِ تازه).
+RIBBON_HOVER = "rgba(79, 70, 229, 16)"
 
-TEXT_PRIMARY = "#020025"
-TEXT_SECONDARY = "#5A5A7A"
-TEXT_DISABLED = "#666666"
+TEXT_PRIMARY = "#15162B"
+TEXT_SECONDARY = "#6B6F85"
+TEXT_DISABLED = "#A0A3B4"
 
-GRID_HEADER_BG = "#F0F0F5"
-GRID_BORDER = "#E0E0E0"
-GRID_ROW_ALT = "#F7F7FA"
-LEVEL_GROUP = "#4C1D95"
-LEVEL_KOL = "#0F766E"
+GRID_HEADER_BG = "#F5F5FA"
+GRID_BORDER = "#ECECF3"
+GRID_ROW_ALT = "#FAFAFD"
+LEVEL_GROUP = "#7C3AED"
+LEVEL_KOL = "#0D9488"
 LEVEL_MOEIN = TEXT_PRIMARY
 
 STATUS_COLOR_ROLE: dict[str, str] = {
@@ -73,9 +81,7 @@ def status_color(status_code: str) -> str:
 def set_status_label(label, text: str, *, ok: bool) -> None:
     """رنگِ سبز/قرمزِ پیامِ موفقیت/خطا را مستقیماً رویِ خودِ ویجت اعمال
     می‌کند — نه با تغییرِ objectName به «statusOk»/«statusError» (که Qt
-    بعدِ نمایشِ اولیه‌ی ویجت، خودکار رفرش/repolish نمی‌کند و نتیجه‌اش این
-    بود که پیامِ موفقیت هم با همان رنگِ قرمزِ اولیه نمایش داده می‌شد — دقیقاً
-    مثلِ پیامِ خطا، که باعث می‌شد کاربر فکر کند ذخیره‌سازی شکست خورده)."""
+    بعدِ نمایشِ اولیه‌ی ویجت، خودکار رفرش/repolish نمی‌کند)."""
     color = SUCCESS if ok else DANGER
     label.setStyleSheet(f"color: {color}; font-weight: 600;")
     label.setText(text)
@@ -89,30 +95,32 @@ AVATAR_COLORS = [ACCENT, SUCCESS, CHART_ORANGE, INFO, CHART_PURPLE, CHART_TEAL]
 
 def apply_card_shadows(root: QWidget) -> None:
     """سایه‌ی ملایمِ زیرِ هر ویجتِ «کارت» (objectName == "card") را — رویِ
-    خودِ آن ویجت و همه‌ی فرزندانش — اعمال می‌کند. یک نقطه‌ی مرکزی (به‌جایِ
-    تکرار در هر صفحه) که با هر صفحه‌ی تازه‌ای که ساخته می‌شود صدا زده
-    می‌شود (در shell_window.register_screen)."""
+    خودِ آن ویجت و همه‌ی فرزندانش — اعمال می‌کند؛ کارت‌هایی که خودشان از
+    قبل یک QGraphicsEffect دارند (مثلِ widgets.KpiCard، که سایه‌اش را با
+    هاور متحرک می‌کند) نادیده گرفته می‌شوند — وگرنه این افکتِ ثابت
+    جایگزینِ افکتِ متحرکشان می‌شد و انیمیشنِ هاور را (بی‌صدا، چون افکتِ
+    قدیمی از ویجت جدا می‌شد نه حذف) از کار می‌انداخت."""
     candidates = [root, *root.findChildren(QWidget)]
     for widget in candidates:
-        if widget.objectName() != "card":
+        if widget.objectName() != "card" or widget.graphicsEffect() is not None:
             continue
         effect = QGraphicsDropShadowEffect(widget)
-        effect.setBlurRadius(28)
+        effect.setBlurRadius(32)
         effect.setXOffset(0)
-        effect.setYOffset(6)
-        effect.setColor(QColor(20, 23, 58, 28))
+        effect.setYOffset(8)
+        effect.setColor(QColor(79, 70, 229, 22))
         widget.setGraphicsEffect(effect)
 
 
 def avatar_color_for(text: str) -> str:
     if not text:
         return ACCENT
-    return AVATAR_COLORS[sum(ord(ch) for ch in text) % len(AVATAR_COLORS)]
+    digest = hashlib.md5(text.encode("utf-8")).hexdigest()
+    return AVATAR_COLORS[int(digest, 16) % len(AVATAR_COLORS)]
 
 
 def emoji_icon(glyph: str, size: int = 22) -> QIcon:
-    """رندرِ یک ایموجی/گلیف به QIcon — بدونِ نیازِ به فایلِ آیکونِ خارجی؛
-    برایِ نوارِ کناری در حالتِ جمع‌شده (فقط-آیکون) استفاده می‌شود."""
+    """رندرِ یک ایموجی/گلیف به QIcon — بدونِ نیازِ به فایلِ آیکونِ خارجی."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -135,13 +143,14 @@ QWidget {{
 }}
 QWidget#card, QFrame#card {{
     background-color: {SURFACE};
-    border-radius: 18px;
+    border-radius: 16px;
     border: 1px solid {DIVIDER};
 }}
 QLabel#pageTitle {{
-    font-size: 23px;
-    font-weight: 700;
+    font-size: 24px;
+    font-weight: 800;
     color: {TEXT_PRIMARY};
+    letter-spacing: 0.2px;
 }}
 QLabel#sectionHint {{
     color: {TEXT_SECONDARY};
@@ -165,15 +174,15 @@ QLabel#avatarBadge {{
 /* --- فیلدهایِ ورودی -------------------------------------------------- */
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     background-color: {SURFACE};
-    border: 1px solid {BORDER};
-    border-radius: 4px;
-    padding: 8px 10px;
+    border: 1.5px solid {BORDER};
+    border-radius: 10px;
+    padding: 8px 12px;
     font-size: 13px;
     color: {TEXT_PRIMARY};
     selection-background-color: {ACCENT};
 }}
 QLineEdit:hover, QComboBox:hover, QDateEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
-    border: 1px solid {TEXT_SECONDARY};
+    border: 1.5px solid #C7C9E0;
 }}
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border: 1.5px solid {ACCENT};
@@ -181,22 +190,23 @@ QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBo
 }}
 QLineEdit:disabled, QComboBox:disabled {{
     color: {TEXT_DISABLED};
+    background-color: {HOVER};
 }}
 QSpinBox:disabled, QDoubleSpinBox:disabled {{
     color: {TEXT_DISABLED};
-    background-color: {BORDER};
+    background-color: {HOVER};
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 26px;
+    width: 28px;
 }}
 QComboBox QAbstractItemView {{
     background-color: {SURFACE};
     border: 1px solid {BORDER};
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 4px;
     selection-background-color: {SELECTED};
-    selection-color: {TEXT_PRIMARY};
+    selection-color: {ACCENT_PRESSED};
     outline: none;
 }}
 QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
@@ -219,16 +229,16 @@ QCalendarWidget QAbstractItemView:enabled {{
     selection-color: white;
 }}
 
-/* --- دکمه‌ها (طبقِ استایلِ مرجع: گوشه‌یِ کمترِگرد، تک‌رنگِ سرمه‌ای) ------ */
+/* --- دکمه‌ها (گردتر و نرم‌تر از نسخه‌ی قبل) -------------------------------- */
 QPushButton {{
-    border-radius: 6px;
-    padding: 8px 16px;
+    border-radius: 10px;
+    padding: 9px 18px;
     font-size: 13px;
     font-weight: 600;
     border: none;
 }}
 QPushButton:disabled {{
-    background-color: {BORDER};
+    background-color: {HOVER};
     color: {TEXT_DISABLED};
 }}
 QPushButton:checked {{
@@ -259,7 +269,7 @@ QPushButton#dangerButton {{
     font-weight: 600;
 }}
 QPushButton#dangerButton:hover {{
-    background-color: #FDEBEC;
+    background-color: #FDECEC;
 }}
 
 /* --- جدول‌ها ------------------------------------------------------------ */
@@ -297,19 +307,23 @@ QTableCornerButton::section {{
 /* --- تب/لیست/گروه‌بندی ---------------------------------------------------- */
 QTabWidget::pane {{
     border: 1px solid {BORDER};
-    border-radius: 6px;
+    border-radius: 10px;
     top: 4px;
     background-color: {SURFACE};
 }}
 QTabBar::tab {{
     background-color: {HOVER};
-    color: {TEXT_PRIMARY};
-    border: 1px solid {BORDER};
-    padding: 8px 18px;
+    color: {TEXT_SECONDARY};
+    border: none;
+    padding: 9px 20px;
     margin-left: 4px;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
     font-weight: 600;
+}}
+QTabBar::tab:hover {{
+    color: {TEXT_PRIMARY};
+    background-color: {ACCENT_LIGHT};
 }}
 QTabBar::tab:selected {{
     background-color: {ACCENT};
@@ -317,7 +331,7 @@ QTabBar::tab:selected {{
 }}
 QGroupBox {{
     border: 1px solid {BORDER};
-    border-radius: 6px;
+    border-radius: 10px;
     margin-top: 10px;
     background-color: {SURFACE};
 }}
@@ -347,36 +361,38 @@ QListWidget::item:hover {{
     background-color: {HOVER};
 }}
 
-/* --- منویِ افقیِ اصلی (مگامنو) --------------------------------------------- */
+/* --- منویِ افقیِ اصلی (مگامنو) — روشن و هوادار، به‌جایِ نوارِ تیره‌یِ قبلی --- */
 QScrollArea#menuBarScroll {{
-    background-color: {PRIMARY};
+    background-color: {SURFACE};
     border: none;
+    border-bottom: 1px solid {DIVIDER};
 }}
 QWidget#menuBar {{
-    background-color: {PRIMARY};
+    background-color: {SURFACE};
 }}
 QPushButton#menuButton {{
     background-color: transparent;
-    color: rgba(255, 255, 255, 0.82);
-    border-radius: 8px;
+    color: {TEXT_SECONDARY};
+    border-radius: 10px;
     padding: 10px 18px;
     font-weight: 600;
     font-size: 13px;
     border: none;
 }}
 QPushButton#menuButton:hover {{
-    background-color: {PRIMARY_HOVER};
+    background-color: {ACCENT_LIGHT};
+    color: {ACCENT_PRESSED};
 }}
 QPushButton#menuButton[active="true"] {{
-    background-color: {PRIMARY_HOVER};
+    background-color: {ACCENT};
     color: white;
 }}
 QScrollArea#megaPanelScroll {{
-    background-color: rgba(255, 255, 255, 165);
+    background-color: rgba(255, 255, 255, 235);
     border-bottom: 1px solid {DIVIDER};
 }}
 QWidget#megaPanel {{
-    background-color: rgba(255, 255, 255, 165);
+    background-color: rgba(255, 255, 255, 235);
 }}
 QLabel#megaPanelColumnTitle {{
     color: {TEXT_SECONDARY};
@@ -386,7 +402,7 @@ QLabel#megaPanelColumnTitle {{
 QPushButton#megaPanelItem {{
     background-color: transparent;
     color: {TEXT_PRIMARY};
-    border-radius: 8px;
+    border-radius: 9px;
     padding: 7px 12px;
     font-weight: 500;
     font-size: 13px;
@@ -394,7 +410,8 @@ QPushButton#megaPanelItem {{
     text-align: right;
 }}
 QPushButton#megaPanelItem:hover {{
-    background-color: {HOVER};
+    background-color: {ACCENT_LIGHT};
+    color: {ACCENT_PRESSED};
 }}
 QPushButton#megaPanelItem[active="true"] {{
     background-color: {SELECTED};
@@ -426,7 +443,7 @@ QWidget#ribbonBar {{
 QPushButton#ribbonButton, QToolButton#ribbonButton {{
     background-color: transparent;
     color: {TEXT_SECONDARY};
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 10px 26px;
     font-weight: 600;
     font-size: 13px;
@@ -434,6 +451,7 @@ QPushButton#ribbonButton, QToolButton#ribbonButton {{
 }}
 QPushButton#ribbonButton:hover, QToolButton#ribbonButton:hover {{
     background-color: {RIBBON_HOVER};
+    color: {ACCENT_PRESSED};
 }}
 QPushButton#ribbonButton[active="true"] {{
     background-color: {SELECTED};
@@ -443,8 +461,6 @@ QToolButton#ribbonButton::menu-indicator {{
     image: none;
     width: 0;
 }}
-/* طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده‌یِ گوشه‌یِ ریبون تقریباً ۲ برابرِ
-   اندازه‌ی دکمه‌هایِ معمولِ ریبون (فونتِ ۱۳px -> ۲۶px). */
 QPushButton#ribbonGearButton {{
     background-color: transparent;
     color: {TEXT_SECONDARY};
@@ -455,6 +471,7 @@ QPushButton#ribbonGearButton {{
 }}
 QPushButton#ribbonGearButton:hover {{
     background-color: {RIBBON_HOVER};
+    color: {ACCENT};
 }}
 
 QCheckBox {{

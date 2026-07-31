@@ -40,7 +40,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha.ui import theme
-from peecha.ui.widgets import field_help_is_enabled, set_field_help_enabled
+from peecha.ui.widgets import HoverButton, field_help_is_enabled, set_field_help_enabled
 
 _PERSON_GROUP_NAV_CODE_TO_GROUP_CODE = {
     "GL_CUSTOMERS": dimensions_service.CUSTOMER_GROUP_CODE,
@@ -88,53 +88,43 @@ class FloatingMegaPanel(QWidget):
         self.container.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.container.setStyleSheet(f"""
             QFrame#megaPanelContainer {{
-                background-color: #FFFFFF;
-                border: 1px solid {theme.BORDER};
-                border-radius: 12px;
+                background-color: {theme.SURFACE};
+                border: 1px solid {theme.DIVIDER};
+                border-radius: 16px;
             }}
             QLabel#megaPanelColumnTitle {{
                 color: {theme.TEXT_SECONDARY};
                 font-size: 11px;
-                font-weight: bold;
+                font-weight: 700;
                 padding-bottom: 6px;
             }}
             QPushButton#megaPanelItem {{
-                background-color: #F8FAFC;
                 color: {theme.TEXT_PRIMARY};
-                border: 1px solid {theme.BORDER};
-                border-radius: 6px;
-                padding: 8px 14px;
+                padding: 9px 14px;
                 text-align: center;
                 font-size: 12px;
+                font-weight: 500;
                 min-width: 170px;
             }}
             QPushButton#megaPanelItem:hover {{
-                background-color: #E0F2FE;
-                color: #0369A1;
-                border-color: #38BDF8;
+                color: {theme.ACCENT_PRESSED};
             }}
             QPushButton#megaPanelItem[active="true"] {{
-                background-color: #2563EB;
-                color: #FFFFFF;
-                border-color: #1D4ED8;
+                color: {theme.ACCENT};
+                font-weight: 700;
             }}
             QPushButton#ribbonGearButton {{
-                background-color: #F1F5F9;
-                border: 1px solid {theme.BORDER};
-                border-radius: 8px;
-                padding: 6px 10px;
-                font-size: 14px;
-            }}
-            QPushButton#ribbonGearButton:hover {{
-                background-color: #E2E8F0;
+                color: {theme.TEXT_SECONDARY};
+                padding: 6px 12px;
+                font-size: 15px;
             }}
         """)
 
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
+        shadow.setBlurRadius(36)
         shadow.setXOffset(0)
-        shadow.setYOffset(6)
-        shadow.setColor(QColor(0, 0, 0, 40))
+        shadow.setYOffset(10)
+        shadow.setColor(QColor(79, 70, 229, 45))
         self.container.setGraphicsEffect(shadow)
 
         self.root_layout = QVBoxLayout(self)
@@ -348,6 +338,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(logout_button)
 
         scroll.setWidget(header)
+
+        # طبقِ درخواستِ صریح برایِ حسِ «مدرنِ ۲۰۲۶»: به‌جایِ خطِ مرزِ سختِ قبلی
+        # زیرِ هدر (theme.py هنوز border-bottom دارد)، یک سایه‌یِ بسیار لطیف
+        # هم اضافه شده تا هدر رویِ محتوایِ زیرینش «شناور/برجسته» به‌نظر برسد،
+        # نه یک نوارِ مسطحِ چسبیده.
+        header_shadow = QGraphicsDropShadowEffect(scroll)
+        header_shadow.setBlurRadius(18)
+        header_shadow.setXOffset(0)
+        header_shadow.setYOffset(3)
+        header_shadow.setColor(QColor(21, 22, 43, 20))
+        scroll.setGraphicsEffect(header_shadow)
+
         return scroll
 
     # --- منویِ افقیِ اصلی (مگامنو) ---------------------------------------------
@@ -367,9 +369,13 @@ class MainWindow(QMainWindow):
         layout.setSpacing(4)
 
         for item in NAV_ITEMS:
-            button = QPushButton(f"{_NAV_ICONS.get(item['code'], '•')}  {item['label']}")
+            button = HoverButton(
+                f"{_NAV_ICONS.get(item['code'], '•')}  {item['label']}",
+                hover_color=theme.ACCENT_LIGHT,
+                active_color=theme.ACCENT,
+                radius=10,
+            )
             button.setObjectName("menuButton")
-            button.setCursor(Qt.PointingHandCursor)
             button.clicked.connect(lambda _checked=False, c=item["code"]: self._on_menu_button_clicked(c))
             layout.addWidget(button)
             self._menu_buttons[item["code"]] = button
@@ -418,10 +424,16 @@ class MainWindow(QMainWindow):
             column_layout.addWidget(title_label)
 
         for entry in entries:
-            button = QPushButton(entry["label"])
+            button = HoverButton(
+                entry["label"],
+                hover_color=theme.ACCENT_LIGHT,
+                active_color=theme.SELECTED,
+                radius=9,
+            )
             button.setObjectName("megaPanelItem")
-            button.setProperty("active", entry.get("active", False))
-            button.setCursor(Qt.PointingHandCursor)
+            active = entry.get("active", False)
+            button.setProperty("active", active)
+            button.set_active(active)
             button.clicked.connect(entry["on_click"])
             column_layout.addWidget(button)
 
@@ -500,9 +512,8 @@ class MainWindow(QMainWindow):
 
         settings_tab_index = _SETTINGS_TAB_BY_GROUP_CODE.get(group["code"])
         if settings_tab_index is not None:
-            gear_button = QPushButton("⚙")
+            gear_button = HoverButton("⚙", hover_color=theme.ACCENT_LIGHT, radius=10)
             gear_button.setObjectName("ribbonGearButton")
-            gear_button.setCursor(Qt.PointingHandCursor)
             gear_button.setToolTip(f"تنظیمات «{group['label']}»")
             gear_button.clicked.connect(
                 lambda _checked=False, idx=settings_tab_index: self.open_screen(
@@ -525,9 +536,12 @@ class MainWindow(QMainWindow):
 
     def _set_active_menu_button(self, top_level_code: str | None) -> None:
         for code, button in self._menu_buttons.items():
-            button.setProperty("active", code == top_level_code)
+            is_active = code == top_level_code
+            button.setProperty("active", is_active)
             button.style().unpolish(button)
             button.style().polish(button)
+            if isinstance(button, HoverButton):
+                button.set_active(is_active)
 
     def _find_top_level_code(self, leaf_code: str) -> str | None:
         for item in NAV_ITEMS:

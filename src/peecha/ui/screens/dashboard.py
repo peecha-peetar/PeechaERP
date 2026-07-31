@@ -12,27 +12,13 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QVBoxLayout, QWidget
 
 from peecha import session
 from peecha.ui import theme
+from peecha.ui.widgets import KpiCard
 from peecha.services import dashboard as dashboard_service
 
 
-class _KpiCard(QWidget):
-    def __init__(self, title: str) -> None:
-        super().__init__()
-        self.setObjectName("card")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(6)
-
-        title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px;")
-        layout.addWidget(title_label)
-
-        self.value_label = QLabel("۰")
-        self.value_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-size: 26px; font-weight: bold;")
-        layout.addWidget(self.value_label)
-
+class _KpiCard(KpiCard):
     def set_value(self, value: int) -> None:
-        self.value_label.setText(_to_persian_digits(str(value)))
+        super().set_value(_to_persian_digits(str(value)))
 
 
 _PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹"
@@ -59,10 +45,10 @@ class DashboardScreen(QWidget):
 
         cards_layout = QGridLayout()
         cards_layout.setSpacing(16)
-        self.card_companies = _KpiCard("شرکت‌ها")
-        self.card_users = _KpiCard("کاربران")
-        self.card_accounts = _KpiCard("حساب‌های کدینگ")
-        self.card_entries = _KpiCard("اسنادِ حسابداری")
+        self.card_companies = _KpiCard("شرکت‌ها", "🏢", theme.ACCENT)
+        self.card_users = _KpiCard("کاربران", "👥", theme.CHART_TEAL)
+        self.card_accounts = _KpiCard("حساب‌های کدینگ", "📚", theme.CHART_PURPLE)
+        self.card_entries = _KpiCard("اسنادِ حسابداری", "🧾", theme.WARNING)
         for i, card in enumerate(
             (self.card_companies, self.card_users, self.card_accounts, self.card_entries)
         ):

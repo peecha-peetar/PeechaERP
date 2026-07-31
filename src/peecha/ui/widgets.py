@@ -17,22 +17,49 @@ from __future__ import annotations
 
 import datetime
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QSettings, Qt
+from PySide6.QtCore import (
+    Property,
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QPropertyAnimation,
+    QSettings,
+    Qt,
+)
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QSpinBox,
+    QStyle,
+    QStyleOptionButton,
     QVBoxLayout,
     QWidget,
 )
 
 from peecha import numerals
+from peecha.ui import theme
 
 _FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
+
+
+def _tint(color: str, amount: float) -> str:
+    """رنگِ داده‌شده را با سفید مخلوط می‌کند (amount=۰..۱ سهمِ خودِ رنگ) —
+    ته‌رنگِ روشنِ قابلِ‌اتکا برایِ پس‌زمینه‌یِ نشان‌ها؛ به‌جایِ تکنیکِ ناموفقِ
+    پسوندِ آلفا رویِ کدِ هگز (Qt در QSS این را #AARRGGBB می‌خواند، نه
+    #RRGGBBAA مثلِ CSS، پس نتیجه‌اش رنگِ کاملاً غلط بود)."""
+    base = QColor(color)
+    r = round(base.red() * amount + 255 * (1 - amount))
+    g = round(base.green() * amount + 255 * (1 - amount))
+    b = round(base.blue() * amount + 255 * (1 - amount))
+    return QColor(r, g, b).name()
 
 
 def field_help_is_enabled() -> bool:
@@ -407,3 +434,155 @@ class FieldHelpMixin:
         parent = self.parentWidget()
         if parent is not None:
             FieldHelpPanel.instance(parent).deactivate()
+
+
+class HoverButton(QPushButton):
+    """QPushButton با پس‌زمینه‌یِ متحرک (fade) بینِ رنگِ عادی/هاور —
+    به‌جایِ سوییچِ آنیِ QSS. طبقِ درخواستِ صریح برایِ حسِ «مدرنِ ۲۰۲۶ با
+    هاورافکت»: خودِ QSS فقط رنگِ متن/فونت را کنترل می‌کند (background:
+    transparent در stylesheet)، و این کلاس پس‌زمینه‌ی گردِ خودش را با
+    QPropertyAnimation رویِ یک Q_PROPERTY رنگی نقاشی می‌کند — رنگِ متن/آیکن
+    را با drawControl(CE_PushButtonLabel) بدونِ چارچوبِ پیش‌فرضِ دکمه
+    می‌کشد تا پس‌زمینه‌یِ سفارشی زیرِ آن دیده شود، نه زیرِ یک مربعِ
+    استایلِ بومیِ پلتفرم."""
+
+    def __init__(
+        self,
+        *args,
+        base_color: str = "transparent",
+        hover_color: str,
+        active_color: str | None = None,
+        radius: int = 10,
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._radius = radius
+        self._base_color = QColor(base_color) if base_color != "transparent" else QColor(0, 0, 0, 0)
+        self._hover_color = QColor(hover_color)
+        self._active_color = QColor(active_color) if active_color else self._hover_color
+        self._bg_color = QColor(self._base_color)
+        self._active_hover_color: QColor | None = None
+
+        self._animation = QPropertyAnimation(self, b"bgColor", self)
+        self._animation.setDuration(140)
+        self._animation.setEasingCurve(QEasingCurve.OutCubic)
+
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFlat(True)
+        self.setAttribute(Qt.WA_Hover, True)
+
+    def _get_bg_color(self) -> QColor:
+        return self._bg_color
+
+    def _set_bg_color(self, color: QColor) -> None:
+        self._bg_color = QColor(color)
+        self.update()
+
+    bgColor = Property(QColor, _get_bg_color, _set_bg_color)
+
+    def set_active(self, active: bool) -> None:
+        """رنگِ پس‌زمینه‌یِ «فعال» (مثلاً آیتمِ منویِ جاری) بدونِ نیاز به هاور."""
+        self._active_hover_color = self._active_color if active else None
+        self._animate_to(self._active_color if active else self._base_color)
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        if self._active_hover_color is None:
+            self._animate_to(self._hover_color)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        if self._active_hover_color is None:
+            self._animate_to(self._base_color)
+        super().leaveEvent(event)
+
+    def _animate_to(self, color: QColor) -> None:
+        self._animation.stop()
+        self._animation.setStartValue(self._bg_color)
+        self._animation.setEndValue(color)
+        self._animation.start()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(self._bg_color)
+        painter.drawRoundedRect(self.rect(), self._radius, self._radius)
+        painter.end()
+
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        label_painter = QPainter(self)
+        label_painter.setRenderHint(QPainter.Antialiasing)
+        self.style().drawControl(QStyle.CE_PushButtonLabel, option, label_painter, self)
+        label_painter.end()
+
+
+class KpiCard(QFrame):
+    """کارتِ آماریِ داشبورد با آیکونِ رنگی و سایه‌ای که با هاور «بلندتر»
+    می‌شود (blur/yOffset بیشتر) — جایگزینِ کارتِ ساده‌ی متنیِ قبلی که هیچ
+    واکنشی به هاور نداشت و حسِ «فرمِ اداریِ قدیمی» می‌داد."""
+
+    def __init__(self, title: str, icon: str, color: str = theme.ACCENT) -> None:
+        super().__init__()
+        self.setObjectName("card")
+        self.setAttribute(Qt.WA_Hover, True)
+        self._color = color
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setSpacing(10)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+
+        icon_badge = QLabel(icon)
+        icon_badge.setFixedSize(38, 38)
+        icon_badge.setAlignment(Qt.AlignCenter)
+        icon_badge.setStyleSheet(
+            f"background-color: {_tint(color, 0.16)}; border-radius: 12px; font-size: 17px;"
+        )
+        header.addWidget(icon_badge)
+
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px; font-weight: 600;")
+        header.addWidget(title_label)
+        header.addStretch(1)
+        outer.addLayout(header)
+
+        self.value_label = QLabel("۰")
+        self.value_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-size: 28px; font-weight: 800;")
+        outer.addWidget(self.value_label)
+
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(24)
+        self._shadow.setXOffset(0)
+        self._shadow.setYOffset(6)
+        self._shadow.setColor(QColor(79, 70, 229, 24))
+        self.setGraphicsEffect(self._shadow)
+
+        self._blur_animation = QPropertyAnimation(self._shadow, b"blurRadius", self)
+        self._blur_animation.setDuration(160)
+        self._y_animation = QPropertyAnimation(self._shadow, b"yOffset", self)
+        self._y_animation.setDuration(160)
+
+    def set_value(self, value: str) -> None:
+        self.value_label.setText(value)
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._animate_shadow(38, 14)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._animate_shadow(24, 6)
+        super().leaveEvent(event)
+
+    def _animate_shadow(self, blur: float, y_offset: float) -> None:
+        self._blur_animation.stop()
+        self._blur_animation.setStartValue(self._shadow.blurRadius())
+        self._blur_animation.setEndValue(blur)
+        self._blur_animation.start()
+
+        self._y_animation.stop()
+        self._y_animation.setStartValue(self._shadow.yOffset())
+        self._y_animation.setEndValue(y_offset)
+        self._y_animation.start()
