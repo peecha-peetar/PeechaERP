@@ -23,10 +23,15 @@
 
 from __future__ import annotations
 
+import json
+
 from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
@@ -45,7 +50,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
-from peecha.nav_catalog import NAV_ITEMS, QUICK_ACCESS_ITEMS
+from peecha.nav_catalog import DEFAULT_QUICK_ACCESS_BY_MODULE, NAV_ITEMS
 from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
 from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
@@ -76,6 +81,16 @@ def _leaf_nav_children(item: dict) -> list[dict]:
         else:
             leaves.append(child)
     return leaves
+
+
+def _leaf_nav_children_for_module(module_code: str) -> list[dict]:
+    """همه‌یِ آیتم‌هایِ برگِ یک ماژولِ سطحِ‌بالا (برایِ فرمِ تنظیمِ ریبون) —
+    ماژولی مثلِ dashboard که خودش برگ است، لیستِ خالی برمی‌گرداند (چیزی
+    برایِ میان‌برزدن به خودش وجود ندارد)."""
+    module_item = next((item for item in NAV_ITEMS if item["code"] == module_code), None)
+    if module_item is None:
+        return []
+    return _leaf_nav_children(module_item)
 
 
 class _QuickAccessTile(QFrame):
@@ -683,22 +698,108 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 8, 20, 8)
         layout.setSpacing(10)
 
-        flat_items_by_code = {i["code"]: i for i in _flatten_nav_items()}
-        for code, icon in QUICK_ACCESS_ITEMS:
-            if code == "SETTINGS":
-                label = "تنظیمات"
-            else:
-                item = flat_items_by_code.get(code)
-                if item is None:
-                    continue
-                label = item["label"]
-            tile = _QuickAccessTile(icon, label, lambda c=code: self.open_screen(c))
-            layout.addWidget(tile)
-
-        layout.addStretch(1)
         scroll.setWidget(bar)
         self._quick_access_scroll = scroll
+        self._quick_access_bar = bar
+        self._quick_access_layout = layout
+        self._quick_access_module_code: str | None = None
+        self._refresh_quick_access_bar("dashboard")
         return scroll
+
+    def _quick_access_settings_key(self, module_code: str) -> str:
+        return f"quickAccess/{module_code}"
+
+    def _quick_access_codes_for_module(self, module_code: str) -> list[str]:
+        """کدهایِ میان‌برهایِ همین ماژول — شخصی‌سازیِ کاربر (اگر ذخیره شده)
+        وگرنه فهرستِ پیش‌فرضِ همان ماژول."""
+        settings = QSettings("Peecha", "PeechaERP")
+        stored = settings.value(self._quick_access_settings_key(module_code), None)
+        if stored is not None:
+            try:
+                return json.loads(stored)
+            except (TypeError, ValueError):
+                pass
+        default_items = DEFAULT_QUICK_ACCESS_BY_MODULE.get(module_code, [])
+        return [code for code, _icon in default_items]
+
+    def _refresh_quick_access_bar(self, module_code: str) -> None:
+        """ریبون را با میان‌برهایِ مربوط به ماژولِ فعلی دوباره می‌سازد —
+        طبقِ درخواستِ صریح، ریبون باید مرتبط با ماژولی باشد که در ساید‌بار
+        باز شده، نه یک فهرستِ ثابتِ سراسری."""
+        if module_code == self._quick_access_module_code:
+            return
+        self._quick_access_module_code = module_code
+
+        while self._quick_access_layout.count():
+            child = self._quick_access_layout.takeAt(0)
+            widget = child.widget()
+            if widget is not None:
+                # takeAt فقط از خودِ layout حذف می‌کند؛ ویجت هنوز فرزندِ bar
+                # است و تا وقتی حلقه‌ی رویداد deleteLaterِ آن را واقعاً اجرا
+                # نکند، ممکن است لحظه‌ای رویِ ریبونِ تازه هم دیده شود — پس
+                # صراحتاً hide/بی‌والد هم می‌کنیم تا فوراً از صفحه برود.
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+
+        flat_items_by_code = {i["code"]: i for i in _flatten_nav_items()}
+        icon_by_code = dict(DEFAULT_QUICK_ACCESS_BY_MODULE.get(module_code, []))
+        codes = self._quick_access_codes_for_module(module_code)
+        for code in codes:
+            item = flat_items_by_code.get(code)
+            if item is None:
+                continue
+            icon = icon_by_code.get(code, "📄")
+            tile = _QuickAccessTile(icon, item["label"], lambda c=code: self.open_screen(c))
+            self._quick_access_layout.addWidget(tile)
+
+        self._quick_access_layout.addStretch(1)
+
+        if module_code in DEFAULT_QUICK_ACCESS_BY_MODULE and _leaf_nav_children_for_module(module_code):
+            config_button = HoverButton("⚙", hover_color=theme.HOVER, radius=8, margin=4)
+            config_button.setObjectName("quickAccessConfigButton")
+            config_button.setFixedSize(30, 30)
+            config_button.setToolTip("تنظیمِ میان‌برهایِ این ماژول")
+            config_button.clicked.connect(lambda _checked=False, m=module_code: self._open_quick_access_config(m))
+            self._quick_access_layout.addWidget(config_button)
+
+    def _open_quick_access_config(self, module_code: str) -> None:
+        """طبقِ درخواستِ صریح («قابلیتِ کم‌وزیادکردنِ دکمه‌هایِ ریبون»):
+        همه‌یِ آیتم‌هایِ برگِ همین ماژول را با تیک نشان می‌دهد — کاربر
+        هرکدام را می‌تواند اضافه/کم کند."""
+        leaves = _leaf_nav_children_for_module(module_code)
+        if not leaves:
+            return
+        current_codes = set(self._quick_access_codes_for_module(module_code))
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("تنظیمِ میان‌برهایِ ریبون")
+        dialog.setLayoutDirection(Qt.RightToLeft)
+        layout = QVBoxLayout(dialog)
+        hint = QLabel("آیتم‌هایی که می‌خواهید در ریبونِ این ماژول به‌صورتِ میان‌بر دیده شوند را تیک بزنید.")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        checkboxes: list[tuple[str, QCheckBox]] = []
+        for leaf in leaves:
+            checkbox = QCheckBox(leaf["label"])
+            checkbox.setChecked(leaf["code"] in current_codes)
+            layout.addWidget(checkbox)
+            checkboxes.append((leaf["code"], checkbox))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        selected_codes = [code for code, checkbox in checkboxes if checkbox.isChecked()]
+        settings = QSettings("Peecha", "PeechaERP")
+        settings.setValue(self._quick_access_settings_key(module_code), json.dumps(selected_codes))
+        self._quick_access_module_code = None  # مجبور به بازسازی
+        self._refresh_quick_access_bar(module_code)
 
     # --- ساید‌بار (ناوبریِ اصلی) ------------------------------------------------
     def _build_sidebar(self) -> QWidget:
@@ -902,6 +1003,8 @@ class MainWindow(QMainWindow):
 
         self._current_screen_code = code
         self._highlight_active_leaf(code)
+        module_code = self._find_top_level_code(code) or code
+        self._refresh_quick_access_bar(module_code)
 
         target_screen_name = item["screen"] or "placeholder"
         screen = self._screens.get(target_screen_name)

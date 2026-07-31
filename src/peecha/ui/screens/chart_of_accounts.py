@@ -224,24 +224,22 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         # (گروه‌هایِ اشخاص + نوع‌بُعدهایِ دیگر) در یک فهرستِ واحد با عنوانِ
         # فارسی می‌آیند — فقط مرکزِ هزینه/پروژه در بخشِ جداگانه‌ای‌اند، چون
         # در سند هم ستونِ اختصاصیِ خودشان را دارند (موازیِ تفصیلیِ دیگر).
+        # طبقِ درخواستِ صریح: این چک‌لیست دیگر دکمه‌ی ذخیره‌یِ جداگانه‌ای
+        # ندارد — با همان دکمه‌ی «ذخیره»یِ اصلیِ فرم ذخیره می‌شود (_save)،
+        # و به‌جایِ اسکرولِ داخلیِ یک کادرِ کوچک، ارتفاعش با تعدادِ آیتم‌ها
+        # هم‌اندازه می‌شود (_fit_list_height) تا معمولاً نیازی به اسکرول
+        # نباشد؛ اگر خیلی زیاد شد، خودِ اسکرولِ بیرونیِ کلِ فرم کار می‌کند.
         self.detail_types_label = QLabel("تفصیلی‌هایِ الزامی برایِ این معین")
         self.detail_types_label.setObjectName("sectionHint")
         layout.addWidget(self.detail_types_label)
         self.detail_types_list = QListWidget()
-        self.detail_types_list.setMaximumHeight(140)
         layout.addWidget(self.detail_types_list)
 
         self.cost_project_label = QLabel("مرکزِ هزینه و پروژه (ستونِ مجزا در سند)")
         self.cost_project_label.setObjectName("sectionHint")
         layout.addWidget(self.cost_project_label)
         self.cost_project_list = QListWidget()
-        self.cost_project_list.setMaximumHeight(60)
         layout.addWidget(self.cost_project_list)
-
-        self.save_dimensions_button = QPushButton("ذخیره‌ی نوع‌هایِ تفصیلی")
-        self.save_dimensions_button.setObjectName("flatButton")
-        self.save_dimensions_button.clicked.connect(self._save_dimensions)
-        layout.addWidget(self.save_dimensions_button)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -505,15 +503,32 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
             self.detail_types_list,
             self.cost_project_label,
             self.cost_project_list,
-            self.save_dimensions_button,
         ):
             widget.setVisible(visible)
+
+    @staticmethod
+    def _fit_list_height(list_widget: QListWidget, *, max_height: int = 320, min_height: int = 40) -> None:
+        """طبقِ درخواستِ صریح: به‌جایِ یک کادرِ کوچکِ ثابت با اسکرولِ داخلی،
+        ارتفاعِ فهرست با تعدادِ آیتم‌هایش هم‌اندازه می‌شود — اسکرولِ کلِ
+        فرم (که خودش از قبل در یک QScrollArea است) برایِ حالت‌هایِ خیلی
+        پرتعداد کافی است."""
+        count = list_widget.count()
+        if count == 0:
+            list_widget.setFixedHeight(min_height)
+            return
+        row_height = list_widget.sizeHintForRow(0)
+        if row_height <= 0:
+            row_height = 24
+        content_height = row_height * count + 2 * list_widget.frameWidth() + 6
+        list_widget.setFixedHeight(max(min_height, min(content_height, max_height)))
 
     def _populate_dimension_checklists(self, account_id: int | None) -> None:
         company_id = self._company_id()
         self.detail_types_list.clear()
         self.cost_project_list.clear()
         if company_id is None:
+            self._fit_list_height(self.detail_types_list)
+            self._fit_list_height(self.cost_project_list)
             return
 
         required_type_ids = set(dimensions_service.get_account_dimension_type_ids(account_id)) if account_id else set()
@@ -545,8 +560,16 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
                 item.setData(Qt.UserRole, ("dim", dim.dimension_type_id))
                 self.detail_types_list.addItem(item)
 
+        self._fit_list_height(self.detail_types_list)
+        self._fit_list_height(self.cost_project_list)
+
     def _save_dimensions(self) -> None:
-        if self._editing_account_id is None:
+        """طبقِ درخواستِ صریح، این تابع دیگر پشتِ دکمه‌یِ جداگانه‌ای نیست —
+        از _save فراخوانی می‌شود (درونِ همان try/except)، فقط وقتی
+        چک‌لیست اصلاً نمایان است (یعنی حسابِ از-قبل-ذخیره‌شده‌یِ
+        قابلِ‌ثبتِ سند در حالِ ویرایش است). خطا را raise می‌کند تا _save
+        همان‌جا با پیامِ یکسان مدیریتش کند، نه با پیامِ جداگانه."""
+        if self._editing_account_id is None or not self.is_postable_checkbox.isChecked():
             return
         company_id = self._company_id()
         if company_id is None:
@@ -566,13 +589,8 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
             item = self.cost_project_list.item(i)
             if item.checkState() == Qt.Checked:
                 dimension_type_ids.append(item.data(Qt.UserRole))
-        try:
-            dimensions_service.set_account_dimension_types(self._editing_account_id, company_id, dimension_type_ids)
-            dimensions_service.set_account_person_groups(self._editing_account_id, company_id, person_group_ids)
-        except ValueError as exc:
-            theme.set_status_label(self.status_label, str(exc), ok=False)
-            return
-        theme.set_status_label(self.status_label, "نوع‌هایِ تفصیلی ذخیره شد.", ok=True)
+        dimensions_service.set_account_dimension_types(self._editing_account_id, company_id, dimension_type_ids)
+        dimensions_service.set_account_person_groups(self._editing_account_id, company_id, person_group_ids)
 
     def _current_language_id(self) -> int | None:
         return session.current_company.default_language_id if session.current_company else None
@@ -610,6 +628,10 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
                     cash_flow_section_code=cash_flow_section_code,
                     liquidity_class_code=liquidity_class_code,
                 )
+                # طبقِ درخواستِ صریح: دیگر دکمه‌ی ذخیره‌یِ جداگانه‌ای برایِ
+                # نوع‌هایِ تفصیلی نیست — همین‌جا با همان «ذخیره»یِ اصلی
+                # ذخیره می‌شود (اگر چک‌لیست اصلاً نمایان باشد).
+                self._save_dimensions()
             else:
                 segment_code = self.segment_code_field.text().strip()
                 if not segment_code:
