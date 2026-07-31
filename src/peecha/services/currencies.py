@@ -293,3 +293,39 @@ def fetch_live_rate(base_iso_code: str, target_iso_code: str) -> decimal.Decimal
         return decimal.Decimal(str(rate))
     except decimal.InvalidOperation as exc:
         raise ValueError("سرویسِ نرخِ ارز عددِ نامعتبر برگرداند.") from exc
+
+
+_NAVASAN_URL = "http://api.navasan.tech/latest/"
+
+
+def fetch_navasan_rate(api_key: str, item_key: str) -> decimal.Decimal:
+    """نرخِ یک آیتمِ مشخص (مثلاً بازارِ آزادِ دلار یا دلارِ دولتی/نیمایی)
+    را از سرویسِ اختصاصیِ ایرانیِ navasan.tech می‌گیرد — طبقِ درخواستِ
+    صریح، بر خلافِ fetch_live_rate، این سرویس امکانِ تفکیکِ نرخِ بازارِ
+    آزاد از نرخِ دولتی را دارد (بسته به نوعِ آیتمِ انتخابی).
+
+    محدودیتِ صادقانه: نام‌گذاریِ دقیقِ آیتم‌ها (مثلِ usd_sell) بینِ
+    پلن‌هایِ مختلفِ navasan.tech ممکن است فرق داشته باشد و این تابع
+    آن را حدس نمی‌زند — کلیدِ دقیق را باید از داشبوردِ حسابِ خودتان در
+    navasan.tech بردارید."""
+    if not api_key:
+        raise ValueError("کلیدِ API را وارد کنید.")
+    if not item_key:
+        raise ValueError("کلیدِ آیتمِ نرخ (مثلاً usd_sell) را وارد کنید.")
+    url = f"{_NAVASAN_URL}?api_key={api_key}"
+    try:
+        data = _http_get_json(url)
+    except Exception as exc:
+        raise ValueError(f"دریافتِ نرخ از navasan.tech ناموفق بود: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("سرویسِ navasan.tech پاسخِ نامعتبر داد.")
+    item = data.get(item_key)
+    if item is None:
+        raise ValueError(
+            f"آیتمِ «{item_key}» در پاسخِ navasan.tech پیدا نشد — کلیدِ دقیق را از داشبوردِ حسابِ خودتان بردارید."
+        )
+    value = item.get("value") if isinstance(item, dict) else item
+    try:
+        return decimal.Decimal(str(value).replace(",", "").strip())
+    except decimal.InvalidOperation as exc:
+        raise ValueError("navasan.tech عددِ نامعتبر برگرداند.") from exc

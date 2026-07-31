@@ -11,10 +11,11 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -35,6 +36,19 @@ from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _COLUMNS = ["فعال", "رقمِ اعشار", "نماد", "کدِ ارز"]
 _RATE_COLUMNS = ["تاریخ", "نرخ به ارزِ پایه"]
+
+# طبقِ درخواستِ صریح («نرخِ بازارِ آزاد یا دولتی انتخابی باشه»): navasan.tech
+# بینِ نرخِ بازارِ آزاد و دولتی/نیمایی تفکیک دارد؛ این دو گزینه فقط برایِ
+# دلار (پرکاربردترین حالت) حدسِ اولیه‌اند — نام‌گذاریِ آیتم‌ها بینِ پلن‌هایِ
+# navasan.tech فرق دارد، پس گزینه‌ی «سفارشی» هم هست تا کاربر خودش کلیدِ
+# دقیق را از داشبوردِ حسابش وارد کند.
+_NAVASAN_RATE_TYPES = [
+    ("usd_sell", "بازارِ آزاد (پیش‌فرضِ حدسی: usd_sell)"),
+    ("usd_harat_naghdi", "دولتی/نیمایی (پیش‌فرضِ حدسی: usd_harat_naghdi)"),
+    ("", "سفارشی — کلیدِ آیتم را خودم وارد می‌کنم"),
+]
+_RATE_SOURCE_GLOBAL = "GLOBAL"
+_RATE_SOURCE_NAVASAN = "NAVASAN"
 
 
 class CurrenciesScreen(FieldHelpMixin, QWidget):
@@ -194,21 +208,71 @@ class CurrenciesScreen(FieldHelpMixin, QWidget):
         new_rate_row.addWidget(self.rate_value_field, stretch=1)
         content_layout.addLayout(new_rate_row)
 
+        source_row = QHBoxLayout()
+        source_row.addWidget(QLabel("منبعِ نرخِ خودکار:"))
+        self.rate_source_combo = QComboBox()
+        self.rate_source_combo.addItem("سرویسِ عمومیِ جهانی (بدونِ کلید)", _RATE_SOURCE_GLOBAL)
+        self.rate_source_combo.addItem("navasan.tech (اختصاصیِ ریال — بازارِ آزاد/دولتی)", _RATE_SOURCE_NAVASAN)
+        self.rate_source_combo.currentIndexChanged.connect(self._on_rate_source_changed)
+        source_row.addWidget(self.rate_source_combo, stretch=1)
+        content_layout.addLayout(source_row)
+
+        self.navasan_panel = QWidget()
+        navasan_layout = QVBoxLayout(self.navasan_panel)
+        navasan_layout.setContentsMargins(0, 0, 0, 0)
+        navasan_layout.setSpacing(6)
+
+        navasan_key_row = QHBoxLayout()
+        navasan_key_row.addWidget(QLabel("کلیدِ API:"))
+        self.navasan_api_key_field = QLineEdit()
+        self.navasan_api_key_field.setEchoMode(QLineEdit.Password)
+        self.navasan_api_key_field.editingFinished.connect(self._on_navasan_api_key_changed)
+        navasan_key_row.addWidget(self.navasan_api_key_field, stretch=1)
+        navasan_layout.addLayout(navasan_key_row)
+
+        navasan_type_row = QHBoxLayout()
+        navasan_type_row.addWidget(QLabel("نوعِ نرخ:"))
+        self.navasan_rate_type_combo = QComboBox()
+        for item_key, label in _NAVASAN_RATE_TYPES:
+            self.navasan_rate_type_combo.addItem(label, item_key)
+        self.navasan_rate_type_combo.currentIndexChanged.connect(self._on_navasan_rate_type_changed)
+        navasan_type_row.addWidget(self.navasan_rate_type_combo, stretch=1)
+        navasan_layout.addLayout(navasan_type_row)
+
+        self.navasan_custom_item_field = QLineEdit()
+        self.navasan_custom_item_field.setPlaceholderText("کلیدِ آیتمِ navasan.tech، مثلاً usd_sell")
+        self.navasan_custom_item_field.editingFinished.connect(
+            lambda: QSettings("Peecha", "PeechaERP").setValue(
+                "fx/navasan_custom_item", self.navasan_custom_item_field.text().strip()
+            )
+        )
+        navasan_layout.addWidget(self.navasan_custom_item_field)
+
+        navasan_hint = QLabel(
+            "نام‌هایِ پیش‌فرضِ «بازارِ آزاد»/«دولتی» حدسی‌اند (فقط برایِ دلار). اگر جواب نداد یا ارزِ دیگری "
+            "می‌خواهید، کلیدِ دقیقِ آیتم را از داشبوردِ حسابِ خودتان در navasan.tech بردارید و این‌جا "
+            "(«سفارشی») وارد کنید."
+        )
+        navasan_hint.setObjectName("sectionHint")
+        navasan_hint.setWordWrap(True)
+        navasan_layout.addWidget(navasan_hint)
+
+        content_layout.addWidget(self.navasan_panel)
+        self.navasan_panel.setVisible(False)
+
         fetch_row = QHBoxLayout()
-        fetch_button = QPushButton("🌐 دریافتِ خودکار از اینترنت")
+        fetch_button = QPushButton("🌐 دریافتِ خودکار")
         fetch_button.setObjectName("flatButton")
         fetch_button.clicked.connect(self._on_fetch_live_rate)
         fetch_row.addWidget(fetch_button)
         fetch_row.addStretch(1)
         content_layout.addLayout(fetch_row)
 
-        fetch_hint = QLabel(
-            "نرخِ خودکار از یک سرویسِ عمومیِ نرخِ ارز گرفته می‌شود؛ برایِ ریال ممکن است در دسترس نباشد یا "
-            "با نرخِ بازارِ آزاد فرق داشته باشد — قبل از ثبت آن را بررسی کنید."
-        )
-        fetch_hint.setObjectName("sectionHint")
-        fetch_hint.setWordWrap(True)
-        content_layout.addWidget(fetch_hint)
+        self.fetch_hint = QLabel("")
+        self.fetch_hint.setObjectName("sectionHint")
+        self.fetch_hint.setWordWrap(True)
+        content_layout.addWidget(self.fetch_hint)
+        self._update_fetch_hint()
 
         self.rate_status_label = QLabel("")
         self.rate_status_label.setObjectName("statusError")
@@ -309,6 +373,21 @@ class CurrenciesScreen(FieldHelpMixin, QWidget):
         self.rate_date_field.setDate(datetime.date.today())
         self.rate_value_field.clear()
 
+        settings = QSettings("Peecha", "PeechaERP")
+        self.rate_source_combo.blockSignals(True)
+        source_index = self.rate_source_combo.findData(settings.value("fx/source", _RATE_SOURCE_GLOBAL))
+        self.rate_source_combo.setCurrentIndex(max(source_index, 0))
+        self.rate_source_combo.blockSignals(False)
+        self.navasan_api_key_field.setText(settings.value("fx/navasan_api_key", ""))
+        self.navasan_rate_type_combo.blockSignals(True)
+        type_index = self.navasan_rate_type_combo.findData(settings.value("fx/navasan_item_key", "usd_sell"))
+        self.navasan_rate_type_combo.setCurrentIndex(max(type_index, 0))
+        self.navasan_rate_type_combo.blockSignals(False)
+        self.navasan_custom_item_field.setText(settings.value("fx/navasan_custom_item", ""))
+        self._on_navasan_rate_type_changed()
+        self.navasan_panel.setVisible(self.rate_source_combo.currentData() == _RATE_SOURCE_NAVASAN)
+        self._update_fetch_hint()
+
     def _reload_rate_table(self) -> None:
         company_id = self._company_id()
         if company_id is None or self._selected_currency is None:
@@ -327,10 +406,56 @@ class CurrenciesScreen(FieldHelpMixin, QWidget):
             return
         currencies_service.set_company_currency(company_id, self._selected_currency.currency_id, checked)
 
+    def _update_fetch_hint(self) -> None:
+        if self.rate_source_combo.currentData() == _RATE_SOURCE_NAVASAN:
+            self.fetch_hint.setText(
+                "navasan.tech نرخِ اختصاصیِ ریال می‌دهد و بینِ بازارِ آزاد/دولتی تفکیک دارد — نیازمندِ کلیدِ API "
+                "است (رایگان از سایتِ خودشان بگیرید). این یک عددِ پیشنهادی است؛ قبل از ثبت بررسی کنید."
+            )
+        else:
+            self.fetch_hint.setText(
+                "نرخِ خودکار از یک سرویسِ عمومیِ نرخِ ارز گرفته می‌شود؛ برایِ ریال ممکن است در دسترس نباشد یا "
+                "با نرخِ بازارِ آزاد فرق داشته باشد — قبل از ثبت آن را بررسی کنید."
+            )
+
+    def _on_rate_source_changed(self) -> None:
+        is_navasan = self.rate_source_combo.currentData() == _RATE_SOURCE_NAVASAN
+        self.navasan_panel.setVisible(is_navasan)
+        self._update_fetch_hint()
+        QSettings("Peecha", "PeechaERP").setValue("fx/source", self.rate_source_combo.currentData())
+
+    def _on_navasan_api_key_changed(self) -> None:
+        QSettings("Peecha", "PeechaERP").setValue("fx/navasan_api_key", self.navasan_api_key_field.text().strip())
+
+    def _on_navasan_rate_type_changed(self) -> None:
+        is_custom = self.navasan_rate_type_combo.currentData() == ""
+        self.navasan_custom_item_field.setEnabled(is_custom)
+        QSettings("Peecha", "PeechaERP").setValue("fx/navasan_item_key", self.navasan_rate_type_combo.currentData())
+
+    def _navasan_item_key(self) -> str:
+        preset = self.navasan_rate_type_combo.currentData()
+        if preset:
+            return preset
+        item_key = self.navasan_custom_item_field.text().strip()
+        QSettings("Peecha", "PeechaERP").setValue("fx/navasan_custom_item", item_key)
+        return item_key
+
     def _on_fetch_live_rate(self) -> None:
         company = session.current_company
         if company is None or self._selected_currency is None:
             return
+        self.rate_status_label.setText("")
+        if self.rate_source_combo.currentData() == _RATE_SOURCE_NAVASAN:
+            try:
+                rate = currencies_service.fetch_navasan_rate(
+                    self.navasan_api_key_field.text().strip(), self._navasan_item_key()
+                )
+            except ValueError as exc:
+                self.rate_status_label.setText(str(exc))
+                return
+            self.rate_value_field.setText(numerals.format_amount(rate))
+            return
+
         base_currency = next(
             (c for c in currencies_service.list_all_currencies() if c.currency_id == company.base_currency_id), None
         )

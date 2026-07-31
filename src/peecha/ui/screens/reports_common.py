@@ -19,9 +19,11 @@ from __future__ import annotations
 import datetime
 import decimal
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QCompleter,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -34,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
+from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services.reports import code_in_range
 from peecha.ui import report_export
@@ -46,6 +49,41 @@ _STATUS_OPTIONS = [
     ("ALL", "همه (شاملِ پیش‌نویس)"),
     ("DRAFT_ONLY", "فقط پیش‌نویس"),
 ]
+
+
+class _LiveAccountCodeField(QComboBox):
+    """طبقِ درخواستِ صریح («در فیلدِ از‌کد‌تا‌حساب جستجویِ زنده باشه و
+    بتوان کد را انتخاب کرد»): کمبویِ ویرایش‌پذیری که با تایپِ کد یا نام،
+    فهرستِ حساب‌ها فیلتر می‌شود. سازگار با API قدیمیِ QLineEdit
+    (فقط .text()، که بقیه‌ی reports_common.py/زیرکلاس‌هایش استفاده
+    می‌کنند) نگه داشته شده تا نیازی به تغییرِ جایِ دیگر نباشد."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.NoInsert)
+
+    def set_options(self, accounts: list[tuple[str, str]]) -> None:
+        current = self.text()
+        self.blockSignals(True)
+        super().clear()
+        for full_code, name in accounts:
+            self.addItem(f"{full_code} — {name}" if name else full_code)
+        completer = QCompleter([self.itemText(i) for i in range(self.count())])
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        self.setCompleter(completer)
+        self.blockSignals(False)
+        self.lineEdit().setText(current)
+
+    def text(self) -> str:
+        raw = self.currentText().strip()
+        if " — " in raw:
+            return raw.split(" — ", 1)[0].strip()
+        return raw
+
+    def setText(self, text: str) -> None:
+        self.lineEdit().setText(text)
 
 
 def dimension_label(code: str) -> str:
@@ -131,11 +169,11 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         # دارد با enable_* نمایانشان می‌کند.
         advanced_row = QHBoxLayout()
         self.code_from_label = QLabel("از کدِ حساب:")
-        self.code_from_field = QLineEdit()
-        self.code_from_field.setMaximumWidth(110)
+        self.code_from_field = _LiveAccountCodeField()
+        self.code_from_field.setMaximumWidth(220)
         self.code_to_label = QLabel("تا کدِ حساب:")
-        self.code_to_field = QLineEdit()
-        self.code_to_field.setMaximumWidth(110)
+        self.code_to_field = _LiveAccountCodeField()
+        self.code_to_field.setMaximumWidth(220)
         self.cost_center_label = QLabel("مرکزِ هزینه/پروژه:")
         self.cost_center_combo = QComboBox()
         self.document_no_label = QLabel("شماره‌یِ سند:")
@@ -214,8 +252,15 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
                 self.search_field,
                 "جستجویِ زنده در همین نتایج — رویِ کد، نام یا شرحِ هر ردیف. گزارش را دوباره اجرا نمی‌کند.",
             ),
-            (self.code_from_field, "کدِ حسابِ شروعِ بازه. اختیاری است؛ اگر خالی بماند، از ابتدا محدودیتی ندارد."),
-            (self.code_to_field, "کدِ حسابِ پایانِ بازه. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد."),
+            (
+                self.code_from_field,
+                "کدِ حسابِ شروعِ بازه. با تایپِ کد یا نام، فهرستِ زنده‌ی حساب‌ها فیلتر می‌شود و می‌توانید انتخاب کنید؛ "
+                "دستی تایپ‌کردن هم جواب می‌دهد. اختیاری است؛ اگر خالی بماند، از ابتدا محدودیتی ندارد.",
+            ),
+            (
+                self.code_to_field,
+                "کدِ حسابِ پایانِ بازه — مثلِ فیلدِ «از کدِ حساب»، با جستجویِ زنده. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد.",
+            ),
             (self.cost_center_combo, "فقط اسنادِ همین مرکزِ هزینه یا پروژه نشان داده شوند. «همه» یعنی بدونِ این فیلتر."),
             (self.document_no_field, "فقط سندی با همین شماره نشان داده شود. اختیاری است."),
         ])
@@ -257,6 +302,17 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
                     f"{row.group_name}: {row.full_code} — {row.name or ''}", row.detail_account_id
                 )
 
+    def _reload_code_range_options(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        # طبقِ درخواستِ صریح، همه‌ی سطوح (گروه/کل/معین) قابلِ‌جستجو/انتخاب‌اند —
+        # تفصیلی از جدولِ دیگری می‌آید و فقط در گزارش‌هایی که سطحِ تفصیلی
+        # دارند (تراز/دفترِ حساب‌ها) با تایپِ دستیِ کد همچنان قابلِ‌فیلتر است.
+        options = [(a.full_code, a.name) for a in coa_service.list_accounts(company_id)]
+        self.code_from_field.set_options(options)
+        self.code_to_field.set_options(options)
+
     # --- خواندنِ مقدارِ فیلترها --------------------------------------------
     def status_filter(self) -> str:
         return self.status_combo.currentData()
@@ -291,6 +347,8 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         self.date_to.setDate(end)
         if self.cost_center_combo.isVisibleTo(self):
             self._reload_cost_center_options()
+        if self.code_from_field.isVisibleTo(self):
+            self._reload_code_range_options()
         self._reload()
 
     def _reload(self) -> None:

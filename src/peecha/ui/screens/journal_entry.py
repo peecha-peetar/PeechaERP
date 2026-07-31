@@ -40,7 +40,7 @@ import decimal
 import re
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QCursor, QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -153,6 +153,8 @@ _IMPORT_TARGET_FIELDS: list[tuple[str, str, bool]] = [
     ("debit", "بدهکار", False),
     ("credit", "بستانکار", False),
     ("detail_code", "کدِ تفصیلی (اختیاری)", False),
+    ("cost_center_code", "کدِ مرکزِ هزینه (اختیاری)", False),
+    ("project_code", "کدِ پروژه (اختیاری)", False),
 ]
 _IMPORT_GUESS_KEYWORDS: dict[str, list[str]] = {
     "account_code": ["کد حساب", "کدحساب", "حساب"],
@@ -160,6 +162,8 @@ _IMPORT_GUESS_KEYWORDS: dict[str, list[str]] = {
     "debit": ["بدهکار", "بدهک"],
     "credit": ["بستانکار", "بستانک"],
     "detail_code": ["تفصیل"],
+    "cost_center_code": ["مرکز"],
+    "project_code": ["پروژه"],
 }
 
 
@@ -969,10 +973,10 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save)
         QShortcut(QKeySequence("Escape"), self, activated=self._reset_form)
         QShortcut(QKeySequence("Ctrl+Delete"), self, activated=self._delete_current_entry)
-        # طبقِ درخواستِ صریح: با F4، رقمِ ردیفِ اول (بدهکار یا هرکدام غیرِصفر
-        # است) به ردیفی که ماوس رویش است کپی می‌شود — برایِ اسنادِ ساده‌یِ
-        # دوطرفه که معمولاً هر دو ردیف مبلغِ یکسان دارند.
-        QShortcut(QKeySequence("F4"), self, activated=self._copy_first_row_amount_to_row_under_mouse)
+        # طبقِ اصلاحِ صریح: با F4، وقتی فوکوس در فیلدِ بدهکار/بستانکارِ یک
+        # ردیف است، رقمِ همان ستون از ردیفِ *قبلی* رویِ همین فیلد کپی
+        # می‌شود — برایِ اسنادی که چند ردیفِ پیاپی مبلغِ یکسان دارند.
+        QShortcut(QKeySequence("F4"), self, activated=self._copy_previous_row_amount)
 
         QApplication.instance().focusChanged.connect(self._on_focus_changed)
 
@@ -1019,30 +1023,38 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self._entry_description_completer.setFilterMode(Qt.MatchContains)
         self.description_field.setCompleter(self._entry_description_completer)
 
-        self._base_currency_id = session.current_company.base_currency_id
-        transactable = currencies_service.list_transactable_currencies(self.company_id)
-        self._currency_by_id = {c.currency_id: c for c in transactable}
-        base_currency = self._currency_by_id.get(self._base_currency_id)
-        self.currency_decimal_places = base_currency.decimal_places if base_currency else 0
-        self.currency_symbol = base_currency.symbol if base_currency else None
+        # طبقِ گزارشِ صریح («اولین‌بار که فرم باز می‌شود گاهی هیچ ردیفی
+        # ساخته نمی‌شود»): این بخش نباید بتواند بقیه‌ی refresh (به‌خصوص
+        # ساختِ ردیف‌هایِ پیش‌فرض در _reset_form پایینِ همین تابع) را
+        # متوقف کند؛ هر خطایی این‌جا فقط نادیده گرفته می‌شود، نه اینکه
+        # کلِ فرم را در حالتِ بدونِ‌ردیف رها کند.
+        try:
+            self._base_currency_id = session.current_company.base_currency_id
+            transactable = currencies_service.list_transactable_currencies(self.company_id)
+            self._currency_by_id = {c.currency_id: c for c in transactable}
+            base_currency = self._currency_by_id.get(self._base_currency_id)
+            self.currency_decimal_places = base_currency.decimal_places if base_currency else 0
+            self.currency_symbol = base_currency.symbol if base_currency else None
 
-        self.header_currency_combo.blockSignals(True)
-        self.header_currency_combo.clear()
-        for c in transactable:
-            label = c.iso_code + (" (پایه)" if c.currency_id == self._base_currency_id else "")
-            self.header_currency_combo.addItem(label, c.currency_id)
-        base_index = self.header_currency_combo.findData(self._base_currency_id)
-        self.header_currency_combo.setCurrentIndex(max(base_index, 0))
-        self.header_currency_combo.blockSignals(False)
-        self.header_currency_id = None
-        self.header_exchange_rate = None
-        self.header_rate_label.setVisible(False)
-        self.header_rate_field.setVisible(False)
-        self.header_rate_fetch_button.setVisible(False)
+            self.header_currency_combo.blockSignals(True)
+            self.header_currency_combo.clear()
+            for c in transactable:
+                label = c.iso_code + (" (پایه)" if c.currency_id == self._base_currency_id else "")
+                self.header_currency_combo.addItem(label, c.currency_id)
+            base_index = self.header_currency_combo.findData(self._base_currency_id)
+            self.header_currency_combo.setCurrentIndex(max(base_index, 0))
+            self.header_currency_combo.blockSignals(False)
+            self.header_currency_id = None
+            self.header_exchange_rate = None
+            self.header_rate_label.setVisible(False)
+            self.header_rate_field.setVisible(False)
+            self.header_rate_fetch_button.setVisible(False)
 
-        for row in self._line_rows:
-            row.debit_field.setDecimals(self.currency_decimal_places)
-            row.credit_field.setDecimals(self.currency_decimal_places)
+            for row in self._line_rows:
+                row.debit_field.setDecimals(self.currency_decimal_places)
+                row.credit_field.setDecimals(self.currency_decimal_places)
+        except Exception:
+            self.header_currency_combo.blockSignals(False)
 
         if not self._line_rows:
             self._reset_form()
@@ -1202,9 +1214,16 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         data_rows = rows[1:] if dialog.skip_header_row() else rows
 
         accounts_by_code = {a.full_code: a for a in coa_service.list_postable_accounts(self.company_id)}
-        details_by_code = {
-            d.full_code: d for d in dimensions_service.list_all_detail_accounts(self.company_id) if d.is_active
-        }
+        all_details = [d for d in dimensions_service.list_all_detail_accounts(self.company_id) if d.is_active]
+        details_by_code = {d.full_code: d for d in all_details}
+        cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(
+            self.company_id, dimensions_service.COST_CENTER_CODE
+        )
+        project_type_id = dimensions_service.get_specialized_dimension_type_id(
+            self.company_id, dimensions_service.PROJECT_CODE
+        )
+        cost_center_by_code = {d.full_code: d for d in all_details if d.dimension_type_id == cost_center_type_id}
+        project_by_code = {d.full_code: d for d in all_details if d.dimension_type_id == project_type_id}
 
         def cell(row: tuple, field: str) -> object | None:
             idx = mapping.get(field)
@@ -1245,6 +1264,22 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
                     errors.append(f"ردیفِ {excel_row_no}: تفصیلی با کدِ «{detail_code}» پیدا نشد (بدونِ تفصیلی وارد شد).")
                 else:
                     details[detail.dimension_type_id] = detail.detail_account_id
+
+            cost_center_code = str(cell(row, "cost_center_code") or "").strip()
+            if cost_center_code:
+                cost_center = cost_center_by_code.get(cost_center_code)
+                if cost_center is None:
+                    errors.append(f"ردیفِ {excel_row_no}: مرکزِ هزینه با کدِ «{cost_center_code}» پیدا نشد.")
+                else:
+                    details[cost_center_type_id] = cost_center.detail_account_id
+
+            project_code = str(cell(row, "project_code") or "").strip()
+            if project_code:
+                project = project_by_code.get(project_code)
+                if project is None:
+                    errors.append(f"ردیفِ {excel_row_no}: پروژه با کدِ «{project_code}» پیدا نشد.")
+                else:
+                    details[project_type_id] = project.detail_account_id
 
             resolved.append((account, description, debit, credit, details))
 
@@ -1431,10 +1466,16 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         target.account_combo.lineEdit().selectAll()
 
     def _focus_first_row_account(self) -> None:
-        if self._line_rows:
-            self.table.setCurrentCell(0, _COL_ACCOUNT)
-            self._line_rows[0].account_combo.setFocus()
-            self._line_rows[0].account_combo.lineEdit().selectAll()
+        # طبقِ گزارشِ صریح: در حالتی نادر، بازِشدنِ اولین‌بارِ فرم بدونِ
+        # هیچ ردیفی می‌ماند (مثلاً به‌خاطرِ زمان‌بندیِ ناوبری) و زنجیره‌یِ
+        # Enter رویِ «شماره‌یِ عطف» گیر می‌کرد چون ردیفی برایِ فوکوس
+        # نبود — این‌جا به‌جایِ سکوت، خودش دو ردیفِ خالی می‌سازد.
+        if not self._line_rows:
+            self.add_line()
+            self.add_line()
+        self.table.setCurrentCell(0, _COL_ACCOUNT)
+        self._line_rows[0].account_combo.setFocus()
+        self._line_rows[0].account_combo.lineEdit().selectAll()
 
     def remove_line(self, row: _LineRow, *, force: bool = False) -> None:
         if not force and len(self._line_rows) <= 2:
@@ -1449,28 +1490,35 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             self._active_row = None
             self._refresh_preview_strip()
 
-    def _copy_first_row_amount_to_row_under_mouse(self) -> None:
-        """طبقِ درخواستِ صریح (میان‌برِ F4): رقمِ ردیفِ اول به ردیفی که
-        نشانگرِ ماوس رویش است کپی می‌شود."""
-        if not self._line_rows:
+    def _copy_previous_row_amount(self) -> None:
+        """طبقِ اصلاحِ صریح (میان‌برِ F4): رقمِ همان ستونی که الان فوکوس
+        رویش است (بدهکار یا بستانکار) از ردیفِ *قبلیِ* همین ستون، رویِ
+        ردیفِ فعال (ردیفی که فوکوس واقعاً در آن است) کپی می‌شود — نه رویِ
+        ردیفِ زیرِ ماوس، و نه همیشه از ردیفِ اول."""
+        focus_widget = QApplication.instance().focusWidget()
+        target_row: _LineRow | None = None
+        field: str | None = None
+        for row in self._line_rows:
+            if focus_widget is row.debit_field:
+                target_row, field = row, "debit"
+                break
+            if focus_widget is row.credit_field:
+                target_row, field = row, "credit"
+                break
+        if target_row is None or field is None:
             return
-        viewport_pos = self.table.viewport().mapFromGlobal(QCursor.pos())
-        row_index = self.table.rowAt(viewport_pos.y())
-        if row_index < 0 or row_index >= len(self._line_rows):
-            return
-        self._copy_first_row_amount_to(self._line_rows[row_index])
+        self._copy_previous_row_amount_to(target_row, field)
 
-    def _copy_first_row_amount_to(self, target_row: "_LineRow") -> None:
-        """هسته‌ی مستقل از موقعیتِ ماوس (برایِ قابلِ‌تست‌بودن) — رقمِ
-        غیرِصفرِ ردیفِ اول (بدهکار یا بستانکار، هرکدام که پر باشد) در
-        همان ستون رویِ ردیفِ هدف قرار می‌گیرد."""
-        source_row = self._line_rows[0]
-        if target_row is source_row:
+    def _copy_previous_row_amount_to(self, target_row: "_LineRow", field: str) -> None:
+        """هسته‌ی مستقل از فوکوس (برایِ قابلِ‌تست‌بودن)."""
+        index = self._line_rows.index(target_row)
+        if index == 0:
             return
-        if source_row.debit_field.value():
-            target_row.debit_field.setValue(source_row.debit_field.value())
-        elif source_row.credit_field.value():
-            target_row.credit_field.setValue(source_row.credit_field.value())
+        previous_row = self._line_rows[index - 1]
+        source_field = previous_row.debit_field if field == "debit" else previous_row.credit_field
+        target_field = target_row.debit_field if field == "debit" else target_row.credit_field
+        if source_field.value():
+            target_field.setValue(source_field.value())
 
     def _renumber_rows(self) -> None:
         for i in range(len(self._line_rows)):
