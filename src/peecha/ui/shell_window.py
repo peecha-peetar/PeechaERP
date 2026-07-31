@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QComboBox,
@@ -351,6 +351,8 @@ class _MdiTitleBar(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if self._drag_offset is not None:
+            self._sub_window._save_geometry()
         self._drag_offset = None
         super().mouseReleaseEvent(event)
 
@@ -380,6 +382,28 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         self._resize_dir: str | None = None
         self._resize_start_geo = None
         self._resize_start_pos = None
+        # طبقِ درخواستِ صریح: جایگاه/اندازه/حالتِ maximize هر فرم به‌ازایِ
+        # کدِ صفحه‌اش با QSettings ذخیره می‌شود تا در بازِ بعدیِ برنامه هم
+        # (نه فقط همان اجرا) بازیابی شود — MainWindow.open_screen این
+        # مقدار را بعدِ ساختِ زیرپنجره ست می‌کند.
+        self._screen_name: str | None = None
+        # باگِ واقعیِ کشف‌شده حینِ تست: changeEvent با هر WindowStateChange
+        # صدا می‌خورَد — حتی وقتی خودِ _restore_or_size_subwindow برنامه‌ای
+        # showNormal/showMaximized صدا می‌زند تا حالتِ ذخیره‌شده را برگرداند؛
+        # بدونِ این پرچم، همان صدازدنِ بازیابی بلافاصله (با geometryِ هنوز
+        # اصلاح‌نشده) دوباره ذخیره می‌شد و مقدارِ درستِ ذخیره‌شده را در هر
+        # بازِ بعدی خراب می‌کرد. این پرچم فقط ذخیره‌یِ خودکارِ حینِ بازیابی را
+        # خاموش می‌کند، نه امضایِ maximized_changed را (که ساید‌بار/ریبون
+        # همچنان باید بر اساسش به‌روز شوند).
+        self._restoring = False
+
+    def _save_geometry(self) -> None:
+        if self._screen_name is None or self._restoring:
+            return
+        settings = QSettings("Peecha", "PeechaERP")
+        settings.setValue(f"mdiWindow/{self._screen_name}/maximized", self.isMaximized())
+        if not self.isMaximized():
+            settings.setValue(f"mdiWindow/{self._screen_name}/geometry", self.geometry())
 
     def _edge_at(self, pos) -> str | None:
         if self.isMaximized():
@@ -438,6 +462,8 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if self._resize_dir is not None:
+            self._save_geometry()
         self._resize_dir = None
         super().mouseReleaseEvent(event)
 
@@ -464,6 +490,7 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         self.setGeometry(geo)
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._save_geometry()
         event.ignore()
         self.hide()
         self.maximized_changed.emit(False)
@@ -471,6 +498,7 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
     def changeEvent(self, event) -> None:  # noqa: N802
         if event.type() == QEvent.WindowStateChange:
             self.maximized_changed.emit(self.isMaximized())
+            self._save_geometry()
         super().changeEvent(event)
 
 
@@ -931,18 +959,40 @@ class MainWindow(QMainWindow):
             screen.set_module_name(item["label"])
 
         sub_window = self._mdi_subwindows.get(target_screen_name)
-        if sub_window is None:
+        is_new_subwindow = sub_window is None
+        if is_new_subwindow:
             sub_window = _FramelessMdiSubWindow()
+            sub_window._screen_name = target_screen_name
             icon = _NAV_ICONS.get(self._find_top_level_code(code), "📄")
             wrapper = _MdiFormWrapper(item["label"], icon, screen, sub_window)
             sub_window.setWidget(wrapper)
             sub_window.setAttribute(Qt.WA_DeleteOnClose, False)
             sub_window.maximized_changed.connect(self._update_chrome_visibility)
             self.mdi_area.addSubWindow(sub_window)
-            self._size_new_subwindow(sub_window)
             self._mdi_subwindows[target_screen_name] = sub_window
         sub_window.setWindowTitle(item["label"])
+        # نکته‌یِ فنیِ کشف‌شده حینِ تست: خودِ show() (نه فقط
+        # _restore_or_size_subwindow) هم می‌تواند برایِ زیرپنجره‌یِ تازه
+        # رویدادِ WindowStateChange بفرستد؛ برایِ همین پرچمِ _restoring باید
+        # از *پیش* از show() فعال شود، نه فقط دورِ _restore_or_size_subwindow —
+        # وگرنه همان show() اولیه، جایگاهِ هنوز-اصلاح‌نشده را زودتر ذخیره
+        # می‌کند و مقدارِ درستِ بعدی هرگز روی دیسک نمی‌نشیند.
+        #
+        # نکته‌یِ دیگر (رفتارِ بومیِ خودِ QMdiArea، مستقل از این ویژگی): اگر
+        # زیرپنجره‌یِ دیگری در همان لحظه maximize باشد، ممکن است زیرپنجره‌یِ
+        # تازه هم موقتاً maximize نمایش داده شود چون «maximize» در QMdiArea
+        # عملاً یک حالتِ کلیِ ناحیه است، نه صرفاً یک ویژگیِ مستقل برایِ هر
+        # زیرپنجره — دقیقاً هم‌رفتار با نرم‌افزارهایِ MDI متعارف (مثلِ
+        # مرجعِ قدیمیِ همین بازطراحی)؛ جایگاه/اندازه‌یِ ذخیره‌شده‌یِ خودِ این
+        # صفحه هرگز خراب نمی‌شود، فقط نمایشِ اولیه‌اش ممکن است از حالتِ
+        # maximizeِ زیرپنجره‌یِ دیگر پیروی کند تا کاربر خودش یکی را
+        # ازحالتِ‌maximize خارج کند.
+        if is_new_subwindow:
+            sub_window._restoring = True
         sub_window.show()
+        if is_new_subwindow:
+            self._restore_or_size_subwindow(sub_window, target_screen_name)
+            sub_window._restoring = False
         sub_window.raise_()
         self.mdi_area.setActiveSubWindow(sub_window)
 
@@ -959,6 +1009,50 @@ class MainWindow(QMainWindow):
         offset = (self._cascade_index % 6) * 26
         sub_window.move(offset, offset)
         self._cascade_index += 1
+
+    def _restore_or_size_subwindow(self, sub_window: QMdiSubWindow, screen_name: str) -> None:
+        """طبقِ درخواستِ صریح: جایگاه/اندازه/حالتِ maximize که کاربر آخرین
+        بار برایِ این صفحه تنظیم کرده (با QSettings، در _save_geometryِ
+        _FramelessMdiSubWindow) این‌جا بازیابی می‌شود — حتی بعدِ بستنِ
+        کاملِ برنامه. اگر چیزی ذخیره نشده باشد (اولین بارِ بازکردنِ این
+        صفحه)، همان چیدمانِ آبشاریِ پیش‌فرض به‌کار می‌رود."""
+        settings = QSettings("Peecha", "PeechaERP")
+        geometry = settings.value(f"mdiWindow/{screen_name}/geometry", None)
+        was_maximized = settings.value(f"mdiWindow/{screen_name}/maximized", False, type=bool)
+        # نکته‌یِ فنیِ کشف‌شده حینِ تست: QMdiArea وقتی از قبل یک زیرپنجره‌یِ
+        # دیگر (مثلاً داشبورد، چون همیشه اول باز می‌شود) maximize باشد،
+        # زیرپنجره‌یِ تازه را هم با اولین show()اش خودکار maximize نمایش
+        # می‌دهد و جایگاه/اندازه‌اش را با چیدمانِ خودش عوض می‌کند — حتی اگر
+        # حالتِ ذخیره‌شده‌یِ *همین* صفحه maximize نبوده باشد. برایِ همین،
+        # اول باید صریحاً از آن حالت خارج شویم (showNormal)، و *بعد* جایگاهِ
+        # درستِ ذخیره‌شده را ست کنیم — نه برعکس، وگرنه showNormal دوباره
+        # آن را بازنویسی می‌کند.
+        sub_window._restoring = True
+        try:
+            if was_maximized:
+                sub_window.showMaximized()
+            else:
+                sub_window.showNormal()
+                if isinstance(geometry, QRect):
+                    sub_window.setGeometry(self._clamp_to_mdi_area(geometry))
+                else:
+                    self._size_new_subwindow(sub_window)
+        finally:
+            sub_window._restoring = False
+
+    def _clamp_to_mdi_area(self, rect: QRect) -> QRect:
+        """اگر جایگاهِ ذخیره‌شده (مثلاً از یک اجرایِ قبلی با پنجره‌یِ بزرگ‌تر)
+        دیگر تویِ ناحیه‌یِ MDIِ فعلی جا نشود، خودمان با ریاضیِ ساده‌یِ
+        فیزیکی (نه با تکیه بر مکانیزمِ داخلیِ QMdiArea که تحتِ راست‌چین
+        درست عمل نمی‌کند) آن را به داخلِ مرزها می‌کشیم."""
+        area = self.mdi_area.rect()
+        width = min(rect.width(), max(area.width(), _MIN_SUBWINDOW_SIZE.width()))
+        height = min(rect.height(), max(area.height(), _MIN_SUBWINDOW_SIZE.height()))
+        max_x = max(0, area.width() - width)
+        max_y = max(0, area.height() - height)
+        x = min(max(rect.x(), 0), max_x)
+        y = min(max(rect.y(), 0), max_y)
+        return QRect(x, y, width, height)
 
     def _highlight_active_leaf(self, code: str) -> None:
         for group in self._sidebar_groups.values():
