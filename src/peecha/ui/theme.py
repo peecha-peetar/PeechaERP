@@ -426,9 +426,9 @@ QMdiArea#mdiArea {{
     border: none;
 }}
 QMdiSubWindow {{
-    background-color: transparent;
+    background-color: {SURFACE};
 }}
-QWidget#mdiFormWrapper {{
+QFrame#mdiFormWrapper {{
     background-color: {SURFACE};
     border: 1px solid {DIVIDER};
 }}

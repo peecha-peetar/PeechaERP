@@ -285,6 +285,7 @@ class _MdiTitleBar(QWidget):
     def __init__(self, title: str, icon: str, sub_window: "_FramelessMdiSubWindow") -> None:
         super().__init__()
         self.setObjectName("mdiTitleBar")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setFixedHeight(42)
         self._sub_window = sub_window
         self._drag_offset = None
@@ -456,14 +457,22 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         self.hide()
 
 
-class _MdiFormWrapper(QWidget):
+class _MdiFormWrapper(QFrame):
     """محتوایِ واقعیِ زیرپنجره — تیتربارِ سفارشی (بالا) + خودِ صفحه
     (پایین). این ویجت، نه خودِ صفحه، رویِ QMdiSubWindow.setWidget
-    می‌نشیند."""
+    می‌نشیند.
+
+    باگِ واقعیِ کشف‌شده (با گزارشِ عکسِ واقعیِ کاربر): وقتی این کلاس
+    QWidgetِ ساده بود (نه QFrame)، پس‌زمینه‌ی سفیدش از QSS اصلاً رسم
+    نمی‌شد — QWidgetِ خام برخلافِ QFrame، پس‌زمینه‌ی استایل‌شیت را بدونِ
+    WA_StyledBackground صریح نقاشی نمی‌کند — نتیجه‌اش فرمِ «شفاف» بود که
+    محتوایِ فرمِ پشتی (مثلِ نمودارِ دونات یا کارت‌هایِ KPI) از زیرش
+    دیده می‌شد."""
 
     def __init__(self, title: str, icon: str, screen: QWidget, sub_window: _FramelessMdiSubWindow) -> None:
         super().__init__()
         self.setObjectName("mdiFormWrapper")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
