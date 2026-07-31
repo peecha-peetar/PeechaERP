@@ -38,6 +38,7 @@ from peecha.db.models.accounting import (
     JournalEntryLineDetail,
     JournalEntryStatus,
 )
+from peecha.db.models.core import Currency
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import statement_templates as statement_templates_service
@@ -374,6 +375,13 @@ class LedgerLineRow:
     credit: decimal.Decimal
     running_debit: decimal.Decimal
     running_credit: decimal.Decimal
+    # طبقِ درخواستِ صریح («دفترِ معین ارزی و ریالی») — debit/credit/running_*
+    # بالا همیشه به ارزِ پایه‌اند (base_amount)؛ این سه فیلد فقط وقتی خودِ
+    # ردیف با ارزِ غیرِپایه ثبت شده معنا دارند (وگرنه currency_iso_code
+    # همان ارزِ پایه و debit_fc/credit_fc برابرِ debit/credit است).
+    currency_iso_code: str
+    debit_fc: decimal.Decimal
+    credit_fc: decimal.Decimal
 
 
 def list_ledger_entries(
@@ -447,6 +455,7 @@ def list_ledger_entries(
             JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no
         )
         rows = session.execute(line_query).all()
+        currency_codes = dict(session.execute(select(Currency.currency_id, Currency.iso_code)).all())
 
     running_debit, running_credit = opening_debit, opening_credit
     result: list[LedgerLineRow] = []
@@ -462,6 +471,9 @@ def list_ledger_entries(
                 credit=line.credit_amount_base,
                 running_debit=running_debit,
                 running_credit=running_credit,
+                currency_iso_code=currency_codes.get(line.currency_id, ""),
+                debit_fc=line.debit_amount_fc,
+                credit_fc=line.credit_amount_fc,
             )
         )
     return opening_debit, opening_credit, result

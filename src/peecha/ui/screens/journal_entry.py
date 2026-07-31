@@ -700,9 +700,16 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self.company_id: int | None = None
         self.account_options: list[tuple[int, str]] = []
         self.recent_line_descriptions: list[str] = []
-        # طبقِ ارزِ پایه‌ی شرکت (تنظیماتِ ارزها) — نه یک عددِ ثابت.
+        # طبقِ ارزِ پایه‌ی شرکت (تنظیماتِ ارزها) — نه یک عددِ ثابت. با تغییرِ
+        # «ارزِ سند» در هدر، این دو به ارزِ تازه به‌روز می‌شوند (نه فقط
+        # ارزِ پایه) — چون رقمِ اعشار/نمادِ نمایشیِ کلِ فرم را کنترل می‌کنند.
         self.currency_decimal_places = 0
         self.currency_symbol: str | None = None
+        # None یعنی ارزِ پایه (هم‌الگو با LineInput.currency_id).
+        self.header_currency_id: int | None = None
+        self.header_exchange_rate: decimal.Decimal | None = None
+        self._base_currency_id: int | None = None
+        self._currency_by_id: dict[int, currencies_service.CurrencyRow] = {}
         self._line_rows: list[_LineRow] = []
         self._editing_journal_entry_id: int | None = None
         self._editing_registration_at: datetime.datetime | None = None
@@ -773,6 +780,30 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
 
         self.draft_checkbox = QCheckBox("پیش‌نویس (غیرِتراز هم قابلِ‌ذخیره)")
         header_layout.addWidget(self.draft_checkbox, 2, 3)
+
+        # طبقِ درخواستِ صریح: ارزِ کلِ سند از بالایِ فرم انتخاب می‌شود — همه‌ی
+        # ردیف‌ها با همین ارز/نرخ ثبت می‌شوند (نه هرکدام جدا). اگر ارزِ پایه
+        # انتخاب شود، فیلدِ نرخ لازم نیست (نرخ همیشه ۱ است).
+        header_layout.addWidget(QLabel("ارزِ سند"), 3, 0)
+        self.header_currency_combo = QComboBox()
+        self.header_currency_combo.currentIndexChanged.connect(self._on_header_currency_changed)
+        header_layout.addWidget(self.header_currency_combo, 3, 1)
+
+        self.header_rate_label = QLabel("نرخ به ارزِ پایه")
+        header_layout.addWidget(self.header_rate_label, 3, 2)
+        rate_row = QHBoxLayout()
+        self.header_rate_field = QLineEdit()
+        self.header_rate_field.setMaximumWidth(120)
+        self.header_rate_field.editingFinished.connect(self._on_header_rate_changed)
+        rate_row.addWidget(self.header_rate_field)
+        self.header_rate_fetch_button = QPushButton("🌐 خودکار")
+        self.header_rate_fetch_button.setObjectName("flatButton")
+        self.header_rate_fetch_button.clicked.connect(self._on_fetch_header_rate)
+        rate_row.addWidget(self.header_rate_fetch_button)
+        header_layout.addLayout(rate_row, 3, 3)
+        self.header_rate_label.setVisible(False)
+        self.header_rate_field.setVisible(False)
+        self.header_rate_fetch_button.setVisible(False)
 
         # ستونِ شرحِ سند (۳) بیشترینِ فضایِ اضافه را می‌گیرد — طبقِ بازخورد،
         # تاریخ/شماره‌یِ عطف (ستونِ ۱) عرضِ کوچکِ ثابت کافی است.
@@ -963,6 +994,14 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
                 "سندِ پیش‌نویس لازم نیست تراز باشد و در گزارش‌هایِ پیش‌فرض دیده نمی‌شود. برایِ وقتی است که هنوز کارتان تمام نشده. "
                 "سندِ قطعی (بدونِ این تیک) باید بدهکار و بستانکارش برابر باشد.",
             ),
+            (
+                self.header_currency_combo,
+                "ارزِ کلِ این سند. اگر ارزِ پایه‌یِ شرکت نباشد، همه‌یِ ردیف‌ها با همین ارز و نرخِ تبدیل ثبت می‌شوند.",
+            ),
+            (
+                self.header_rate_field,
+                "نرخِ تبدیلِ ۱ واحدِ ارزِ سند به ارزِ پایه‌یِ شرکت. یا دستی وارد کنید یا با دکمه‌یِ «خودکار» از اینترنت بگیرید.",
+            ),
         ])
 
         self._update_footer_for_mode()
@@ -980,10 +1019,27 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self._entry_description_completer.setFilterMode(Qt.MatchContains)
         self.description_field.setCompleter(self._entry_description_completer)
 
-        base_currency_id = session.current_company.base_currency_id
-        currency = next((c for c in currencies_service.list_all_currencies() if c.currency_id == base_currency_id), None)
-        self.currency_decimal_places = currency.decimal_places if currency else 0
-        self.currency_symbol = currency.symbol if currency else None
+        self._base_currency_id = session.current_company.base_currency_id
+        transactable = currencies_service.list_transactable_currencies(self.company_id)
+        self._currency_by_id = {c.currency_id: c for c in transactable}
+        base_currency = self._currency_by_id.get(self._base_currency_id)
+        self.currency_decimal_places = base_currency.decimal_places if base_currency else 0
+        self.currency_symbol = base_currency.symbol if base_currency else None
+
+        self.header_currency_combo.blockSignals(True)
+        self.header_currency_combo.clear()
+        for c in transactable:
+            label = c.iso_code + (" (پایه)" if c.currency_id == self._base_currency_id else "")
+            self.header_currency_combo.addItem(label, c.currency_id)
+        base_index = self.header_currency_combo.findData(self._base_currency_id)
+        self.header_currency_combo.setCurrentIndex(max(base_index, 0))
+        self.header_currency_combo.blockSignals(False)
+        self.header_currency_id = None
+        self.header_exchange_rate = None
+        self.header_rate_label.setVisible(False)
+        self.header_rate_field.setVisible(False)
+        self.header_rate_fetch_button.setVisible(False)
+
         for row in self._line_rows:
             row.debit_field.setDecimals(self.currency_decimal_places)
             row.credit_field.setDecimals(self.currency_decimal_places)
@@ -1004,6 +1060,17 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self.description_field.clear()
         self.draft_checkbox.setChecked(False)
         self.status_label.setText("")
+        self.header_currency_id = None
+        self.header_exchange_rate = None
+        self.header_rate_field.clear()
+        self.header_rate_label.setVisible(False)
+        self.header_rate_field.setVisible(False)
+        self.header_rate_fetch_button.setVisible(False)
+        base_index = self.header_currency_combo.findData(self._base_currency_id)
+        if base_index >= 0:
+            self.header_currency_combo.blockSignals(True)
+            self.header_currency_combo.setCurrentIndex(base_index)
+            self.header_currency_combo.blockSignals(False)
         for row in list(self._line_rows):
             self.remove_line(row, force=True)
         self.add_line()
@@ -1031,6 +1098,8 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
 
     def add_line(self) -> _LineRow:
         row = _LineRow(self, self.table)
+        row.currency_id = self.header_currency_id
+        row.exchange_rate = self.header_exchange_rate
         self.table.insertRow(self.table.rowCount())
         row.install(self.table.rowCount() - 1)
         row._refresh_dimension_ui()
@@ -1041,6 +1110,67 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             self._active_row = row
             self._refresh_preview_strip()
         return row
+
+    def _on_header_currency_changed(self) -> None:
+        selected_id = self.header_currency_combo.currentData()
+        if selected_id is None:
+            return
+        is_base = selected_id == self._base_currency_id
+        self.header_currency_id = None if is_base else selected_id
+        self.header_rate_label.setVisible(not is_base)
+        self.header_rate_field.setVisible(not is_base)
+        self.header_rate_fetch_button.setVisible(not is_base)
+
+        currency = self._currency_by_id.get(selected_id)
+        self.currency_decimal_places = currency.decimal_places if currency else 0
+        self.currency_symbol = currency.symbol if currency else None
+        for row in self._line_rows:
+            row.debit_field.setDecimals(self.currency_decimal_places)
+            row.credit_field.setDecimals(self.currency_decimal_places)
+
+        if is_base:
+            self.header_exchange_rate = None
+        else:
+            latest = None
+            if self.company_id is not None:
+                latest = currencies_service.get_latest_rate(self.company_id, selected_id, self.date_field.date())
+            self.header_exchange_rate = latest
+            self.header_rate_field.setText(numerals.format_amount(latest) if latest is not None else "")
+
+        has_amounts = any(row.debit_field.value() or row.credit_field.value() for row in self._line_rows)
+        for row in self._line_rows:
+            row.currency_id = self.header_currency_id
+            row.exchange_rate = self.header_exchange_rate
+        if has_amounts:
+            QMessageBox.information(
+                self,
+                "تغییرِ ارزِ سند",
+                "ارزِ سند عوض شد؛ مبالغِ ردیف‌هایِ موجود تبدیل نمی‌شوند — همان عدد حالا در واحدِ ارزِ تازه در نظر گرفته می‌شود.",
+            )
+
+    def _on_header_rate_changed(self) -> None:
+        try:
+            self.header_exchange_rate = numerals.parse_decimal(self.header_rate_field.text())
+        except ValueError:
+            self.header_exchange_rate = None
+        for row in self._line_rows:
+            row.exchange_rate = self.header_exchange_rate
+
+    def _on_fetch_header_rate(self) -> None:
+        selected_id = self.header_currency_combo.currentData()
+        if selected_id is None or selected_id == self._base_currency_id:
+            return
+        base_currency = self._currency_by_id.get(self._base_currency_id)
+        target_currency = self._currency_by_id.get(selected_id)
+        if base_currency is None or target_currency is None:
+            return
+        try:
+            rate = currencies_service.fetch_live_rate(base_currency.iso_code, target_currency.iso_code)
+        except ValueError as exc:
+            QMessageBox.warning(self, "دریافتِ نرخ ناموفق بود", str(exc))
+            return
+        self.header_rate_field.setText(numerals.format_amount(rate))
+        self._on_header_rate_changed()
 
     def _on_import_excel(self) -> None:
         """طبقِ درخواستِ صریح: ایمپورتِ ردیف‌هایِ سند از یک فایلِ اکسل —
@@ -1136,14 +1266,16 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             return
 
         for account, description, debit, credit, details in resolved:
+            # ارز/نرخ از ارزِ فعلیِ سرِ سند گرفته می‌شود — نه همیشه ارزِ پایه —
+            # چون ایمپورت باید به همان سندِ بازِ فعلی (با هر ارزی که دارد) اضافه شود.
             line_input = je_service.LineInput(
                 account_id=account.account_id,
                 description=description,
                 debit=debit,
                 credit=credit,
                 details=details,
-                currency_id=None,
-                exchange_rate=None,
+                currency_id=self.header_currency_id,
+                exchange_rate=self.header_exchange_rate,
             )
             row_widget = self.add_line()
             row_widget.load_from(line_input, f"{account.full_code} — {account.name}")
@@ -1452,8 +1584,46 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             row.load_from(line, accounts_by_id.get(line.account_id, "?"))
         if len(self._line_rows) < 2:
             self.add_line()
+        self._sync_header_currency_from_lines(lines)
         self.update_balance()
         self._update_footer_for_mode()
+
+    def _sync_header_currency_from_lines(self, lines: list) -> None:
+        """طبقِ درخواستِ صریح، ارزِ سرِ سند فقط یک ارزِ کلی برایِ کلِ سند
+        است — وقتی سندی که از قبل ذخیره شده بارگذاری می‌شود، اگر همه‌ی
+        ردیف‌هایش یک ارزِ یکسان داشته باشند (چه پایه، چه غیرِپایه)، کمبویِ
+        هدر با همان هماهنگ می‌شود تا ردیفِ تازه‌ای که در همین ویرایش اضافه
+        شود هم همان ارز را بگیرد. اگر سند (نمونه‌یِ قدیمیِ نایاب) ارزهایِ
+        مختلف در ردیف‌های مختلف داشته باشد، ارزِ ردیف‌هایِ موجود دست‌نخورده
+        می‌ماند و فقط کمبویِ هدر رویِ ارزِ پایه می‌ماند."""
+        currency_ids = {line.currency_id for line in lines}
+        if len(currency_ids) != 1:
+            return
+        currency_id = next(iter(currency_ids))
+        index = self.header_currency_combo.findData(currency_id if currency_id is not None else self._base_currency_id)
+        if index < 0:
+            return
+        self.header_currency_combo.blockSignals(True)
+        self.header_currency_combo.setCurrentIndex(index)
+        self.header_currency_combo.blockSignals(False)
+        is_base = currency_id is None or currency_id == self._base_currency_id
+        self.header_currency_id = None if is_base else currency_id
+        self.header_rate_label.setVisible(not is_base)
+        self.header_rate_field.setVisible(not is_base)
+        self.header_rate_fetch_button.setVisible(not is_base)
+        currency = self._currency_by_id.get(currency_id) if currency_id is not None else None
+        if currency is not None:
+            self.currency_decimal_places = currency.decimal_places
+            self.currency_symbol = currency.symbol
+            for row in self._line_rows:
+                row.debit_field.setDecimals(self.currency_decimal_places)
+                row.credit_field.setDecimals(self.currency_decimal_places)
+        if not is_base:
+            rate = next((line.exchange_rate for line in lines if line.currency_id == currency_id), None)
+            self.header_exchange_rate = rate
+            self.header_rate_field.setText(numerals.format_amount(rate) if rate is not None else "")
+        else:
+            self.header_exchange_rate = None
 
     def copy_from_journal_entry(self, journal_entry_id: int, *, reverse: bool = False) -> None:
         """طبقِ درخواستِ صریح: کپیِ سند («مشابه» یا «معکوس» — بدهکار/بستانکارِ
@@ -1486,6 +1656,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             row.load_from(line, accounts_by_id.get(line.account_id, "?"))
         if len(self._line_rows) < 2:
             self.add_line()
+        self._sync_header_currency_from_lines(lines)
         self.update_balance()
         self._update_footer_for_mode()
         self.status_label.setText("")

@@ -70,6 +70,7 @@ class AccountLedgerScreen(ReportScreenBase):
         self._parent_id: int | None = None
         self._ledger_target: tuple[str, int, str] | None = None
         self._currency_decimal_places = 0
+        self._base_currency_iso_code = ""
 
     def extra_filters_summary(self) -> list[tuple[str, str]]:
         parts = [("سطح", self.level_combo.currentText())]
@@ -120,6 +121,7 @@ class AccountLedgerScreen(ReportScreenBase):
                 None,
             )
         self._currency_decimal_places = currency.decimal_places if currency else 0
+        self._base_currency_iso_code = currency.iso_code if currency else ""
         super().refresh()
 
     def _fmt(self, value: decimal.Decimal) -> str:
@@ -205,11 +207,15 @@ class AccountLedgerScreen(ReportScreenBase):
             document_no_filter=self.document_no(),
             **kwargs,
         )
-        headers = ["تاریخ", "شماره‌یِ سند", "شرح", "بدهکار", "بستانکار", "مانده"]
+        # طبقِ درخواستِ صریح («دفترِ معین ارزی و ریالی») — دو ستونِ آخر مبلغِ
+        # اصلیِ ردیف (به ارزِ خودش) + کدِ همان ارز را نشان می‌دهند؛ برایِ
+        # ردیف‌هایی که با ارزِ پایه ثبت شده‌اند، این دو ستون خالی می‌مانند
+        # چون بدهکار/بستانکارِ اصلی خودش همان ارزِ پایه است.
+        headers = ["تاریخ", "شماره‌یِ سند", "شرح", "بدهکار", "بستانکار", "مانده", "مبلغِ ارزی", "ارز"]
         table_rows: list[list] = []
         opening_net = opening_debit - opening_credit
         table_rows.append(
-            ["", "", f"مانده‌ی اول — {name}", "", "", self._signed(opening_net)]
+            ["", "", f"مانده‌ی اول — {name}", "", "", self._signed(opening_net), "", ""]
         )
         total_debit = _ZERO
         total_credit = _ZERO
@@ -217,6 +223,8 @@ class AccountLedgerScreen(ReportScreenBase):
             total_debit += ln.debit
             total_credit += ln.credit
             running_net = ln.running_debit - ln.running_credit
+            is_foreign = bool(ln.currency_iso_code) and ln.currency_iso_code != self._base_currency_iso_code
+            fc_amount = ln.debit_fc or ln.credit_fc
             table_rows.append(
                 [
                     numerals.format_jalali_date(ln.document_date),
@@ -225,10 +233,12 @@ class AccountLedgerScreen(ReportScreenBase):
                     self._fmt(ln.debit) if ln.debit else "",
                     self._fmt(ln.credit) if ln.credit else "",
                     self._signed(running_net),
+                    numerals.format_amount(fc_amount) if is_foreign else "",
+                    ln.currency_iso_code if is_foreign else "",
                 ]
             )
         self._all_row_ids = [0] * len(table_rows)
-        footer = ["", "", "جمعِ گردش", self._fmt(total_debit), self._fmt(total_credit), ""]
+        footer = ["", "", "جمعِ گردش", self._fmt(total_debit), self._fmt(total_credit), "", "", ""]
         return headers, table_rows, footer
 
     def _signed(self, net: decimal.Decimal) -> str:

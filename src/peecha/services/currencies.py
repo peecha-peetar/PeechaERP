@@ -256,3 +256,40 @@ def get_latest_rate(company_id: int, currency_id: int, on_date: datetime.date) -
             .order_by(ExchangeRate.rate_date.desc())
             .limit(1)
         )
+
+
+def _http_get_json(url: str, timeout: float = 8.0) -> dict:
+    """جداشده از fetch_live_rate تا در تست بدونِ اتصالِ واقعیِ اینترنت
+    قابلِ monkeypatch باشد."""
+    import json
+    import urllib.request
+
+    request = urllib.request.Request(url, headers={"User-Agent": "PeechaERP/1.0"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def fetch_live_rate(base_iso_code: str, target_iso_code: str) -> decimal.Decimal:
+    """نرخِ «۱ واحدِ ارزِ مقصد = چند واحدِ ارزِ پایه» را از یک سرویسِ عمومیِ
+    رایگانِ نرخِ ارز می‌گیرد (بدونِ نیازِ به کلیدِ API).
+
+    محدودیتِ صادقانه: این سرویس‌هایِ عمومی معمولاً نرخِ رسمی/بینِ‌بانکی
+    را می‌دهند، نه نرخِ بازارِ آزادِ ایران — برایِ ریال ممکن است در دسترس
+    نباشد یا با نرخِ واقعیِ بازار خیلی فرق داشته باشد. این تابع همیشه
+    فقط یک عددِ پیشنهادی برمی‌گرداند؛ کاربر باید قبل از ثبت آن را
+    بررسی/ویرایش کند."""
+    url = f"https://open.er-api.com/v6/latest/{target_iso_code.upper()}"
+    try:
+        data = _http_get_json(url)
+    except Exception as exc:
+        raise ValueError(f"دریافتِ نرخ از اینترنت ناموفق بود: {exc}") from exc
+    if data.get("result") != "success":
+        raise ValueError("سرویسِ نرخِ ارز پاسخِ نامعتبر داد.")
+    rates = data.get("rates") or {}
+    rate = rates.get(base_iso_code.upper())
+    if rate is None:
+        raise ValueError(f"نرخِ «{base_iso_code}» در پاسخِ سرویس پیدا نشد؛ ممکن است این ارز پشتیبانی نشود.")
+    try:
+        return decimal.Decimal(str(rate))
+    except decimal.InvalidOperation as exc:
+        raise ValueError("سرویسِ نرخِ ارز عددِ نامعتبر برگرداند.") from exc
