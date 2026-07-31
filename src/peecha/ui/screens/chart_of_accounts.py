@@ -67,7 +67,11 @@ _LEVEL_COLORS = {1: theme.LEVEL_GROUP, 2: theme.LEVEL_KOL, 3: theme.LEVEL_MOEIN}
 _SEGMENT_CODE_LABELS = {1: "کدِ گروه", 2: "کدِ کل", 3: "کدِ معین"}
 _ACCOUNT_NAME_LABELS = {1: "نامِ گروه", 2: "نامِ حسابِ کل", 3: "نامِ حسابِ معین"}
 
-_COLUMNS = ["فعال؟", "قابلِ ثبت", "سطح", "نام", "کدِ کامل"]
+# طبقِ گزارشِ صریح: ترتیبِ نمایشِ ستون‌ها راست‌چین نبود — چون QTableWidget
+# با راست‌چین بودنِ برنامه ترتیبِ افزودنِ ستون‌ها را آینه می‌کند (اولین
+# ستون در راست‌ترین جا می‌نشیند)، «کدِ کامل» (مهم‌ترین/اولین ستون از نظرِ
+# خواندن) باید *اول* در این فهرست بیاید، نه آخر.
+_COLUMNS = ["کدِ کامل", "نام", "سطح", "قابلِ ثبت", "فعال؟"]
 
 
 def _fill_combo(combo: QComboBox, options: list[tuple[str, str]]) -> None:
@@ -124,7 +128,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.itemSelectionChanged.connect(self._on_row_selected)
         layout.addWidget(self.table)
 
@@ -340,16 +344,16 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         self.table.setRowCount(len(filtered))
         for row_index, account in enumerate(filtered):
             values = [
-                "فعال" if True else "",  # حساب‌ها فیلدِ is_active ندارند در این نسخه؛ جایگزین: قابلِ‌ثبت
-                "بله" if account.is_postable else "خیر",
-                _LEVEL_LABELS[account.account_level],
-                account.name,
                 account.full_code,
+                account.name,
+                _LEVEL_LABELS[account.account_level],
+                "بله" if account.is_postable else "خیر",
+                "فعال" if True else "",  # حساب‌ها فیلدِ is_active ندارند در این نسخه؛ جایگزین: قابلِ‌ثبت
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, account.account_id)
-                if col_index == 3:
+                if col_index == 1:
                     item.setForeground(_hex_to_qcolor(_LEVEL_COLORS[account.account_level]))
                 self.table.setItem(row_index, col_index, item)
 

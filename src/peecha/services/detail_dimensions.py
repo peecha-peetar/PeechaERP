@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
@@ -483,8 +484,33 @@ def delete_detail_account(detail_account_id: int, company_id: int) -> None:
         if usage_count:
             raise ValueError("این حسابِ تفصیلی در سندهای حسابداری استفاده شده؛ قابل حذف نیست.")
 
+        # باگِ واقعیِ کشف‌شده (با عکسِ خطایِ واقعیِ کاربر): این تابعِ عمومی
+        # (که specialized_dimensions.py برایِ مرکزِ هزینه/پروژه/بانک/... صدا
+        # می‌زند) فقط acc.detail_accounts را حذف می‌کرد — اگر همان
+        # detail_account_id (مثلاً به‌خاطرِ جابه‌جاییِ گروه یا مسیرِ دیگری)
+        # ردیفِ نظیر در customer_details/supplier_details/personnel_details
+        # هم داشته باشد، حذف با نقضِ کلیدِ خارجی شکست می‌خورد. _delete_group_person
+        # این پاک‌سازی را برایِ مسیرهایِ اختصاصیِ خودش انجام می‌دهد؛ این‌جا هم
+        # همان‌طور، هرکدام از این سه جدولِ ویژه که ردیفی داشته باشند، اول
+        # پاک می‌شوند.
+        for detail_model in (CustomerDetail, SupplierDetail, PersonnelDetail):
+            extra = session.get(detail_model, detail_account_id)
+            if extra is not None:
+                session.delete(extra)
+        # نکته‌یِ فنیِ کشف‌شده حینِ تست: بدونِ relationship()یِ ORM تعریف‌شده،
+        # SQLAlchemy ترتیبِ حذفِ این جدول‌هایِ ویژه در برابرِ detail_accounts
+        # را خودکار درست تضمین نمی‌کند؛ flush()ِ صریح، این پاک‌سازی‌ها را
+        # قبل از حذفِ خودِ detail_account مطمئن می‌کند.
+        session.flush()
+
         session.delete(detail_account)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise ValueError(
+                "این حسابِ تفصیلی در جایِ دیگری استفاده شده و قابلِ حذف نیست."
+            ) from exc
 
 
 def get_account_dimension_type_ids(account_id: int) -> list[int]:
@@ -1320,11 +1346,22 @@ def _delete_group_person(detail_account_id: int, company_id: int, detail_model) 
         if usage_count:
             raise ValueError("این شخص در سندهای حسابداری استفاده شده؛ قابل حذف نیست.")
 
+        # نکته‌یِ فنیِ کشف‌شده حینِ تست: چون هیچ relationship()یِ ORM بینِ
+        # DetailAccount و این جدولِ ویژه تعریف نشده (فقط یک ستونِ FKِ خام)،
+        # SQLAlchemy نمی‌تواند ترتیبِ حذف را خودکار بر اساسِ وابستگی مرتب
+        # کند و ممکن است هر دو DELETE را در یک flush و به ترتیبِ اشتباه
+        # بفرستد (parent قبل از child) — نقضِ FK. یک flush()ِ صریح بینِ
+        # این دو حذف، ترتیب را تضمین می‌کند.
         extra = session.get(detail_model, detail_account_id)
         if extra is not None:
             session.delete(extra)
+            session.flush()
         session.delete(detail_account)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise ValueError("این شخص در جایِ دیگری استفاده شده و قابلِ حذف نیست.") from exc
 
 
 _CUSTOMER_FIELDS = ("economic_code", "national_id", "phone", "mobile", "address", "credit_limit", "notes")
