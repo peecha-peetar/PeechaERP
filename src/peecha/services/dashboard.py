@@ -28,7 +28,9 @@ CATEGORY_LABELS = {
     "LIABILITY": "بدهی",
     "EQUITY": "حقوق صاحبان سهام",
     "REVENUE": "درآمد",
+    "COGS": "بهایِ تمام‌شده",
     "EXPENSE": "هزینه",
+    "STATISTICAL": "حساب‌هایِ آماری",
 }
 
 

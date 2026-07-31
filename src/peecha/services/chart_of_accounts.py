@@ -25,7 +25,6 @@ from peecha.db.models.accounting import (
 )
 from peecha.db.models.core import Translation
 from peecha.services import audit as audit_service
-from peecha.services import journal_entries as je_service
 
 MAX_ACCOUNT_LEVEL = 3
 
@@ -515,9 +514,11 @@ def account_level_has_accounts(company_id: int, account_level: int) -> bool:
 
 
 def get_locked_account_levels(company_id: int) -> set[int]:
-    """سطح‌هایی که تعدادِ رقم/بازه‌شان دیگر قابلِ‌تغییر نیست."""
-    if je_service.company_has_any_entries(company_id):
-        return set(range(1, MAX_ACCOUNT_LEVEL + 1))
+    """سطح‌هایی که تعدادِ رقم/بازه‌شان دیگر قابلِ‌تغییر نیست — طبقِ بازخوردِ
+    صریح، فقط بر اساسِ اینکه خودِ آن سطح حساب دارد یا نه (نه اینکه کلِ
+    شرکت سند دارد یا نه؛ سندها به شناسه‌یِ حساب وصل‌اند نه به طولِ کد،
+    پس سطحی که الان هیچ حسابی ندارد، حتی اگر جایِ دیگرِ شرکت سند ثبت شده
+    باشد، بی‌خطر قابلِ‌تغییر است)."""
     return {level for level in range(1, MAX_ACCOUNT_LEVEL + 1) if account_level_has_accounts(company_id, level)}
 
 
@@ -526,11 +527,10 @@ def set_account_level_config(company_id: int, levels: dict[int, dict]) -> None:
     (۱ تا ۳): {"code_length": ..|None, "range_from": ..|None, "range_to":
     ..|None}}. طبقِ درخواستِ صریح: «تعداد ارقام حساب‌ها از ابتدا ست شود و
     اگر سندی ثبت شود دیگر قابل تغییر نباشد» — و طبقِ بازخوردِ بعدی، هر
-    سطح به‌محضِ اینکه *خودش* حساب داشته باشد (نه فقط وقتی کلِ شرکت سند
-    دارد) دیگر قابلِ‌تغییر نیست."""
+    سطح به‌محضِ اینکه *خودش* حساب داشته باشد قفل می‌شود؛ صرفاً وجودِ سندِ
+    حسابداری در جایِ دیگرِ شرکت (بدونِ ربط به این سطح) دیگر مانعِ ذخیره
+    نیست، چون سندها به شناسه‌یِ حساب وصل‌اند نه طولِ کد."""
     with new_session() as session:
-        if je_service.company_has_any_entries(company_id):
-            raise ValueError("این شرکت سند دارد؛ تنظیماتِ کدینگِ حساب‌ها دیگر قابلِ‌تغییر نیست.")
 
         # نکته: با select(...) رویِ ستون‌هایِ خام (نه select(ChartOfAccountLevelConfig))
         # هیچ آبجکتِ ORM‌ای در identity mapِ سشن ثبت نمی‌شود — وگرنه پایین‌تر

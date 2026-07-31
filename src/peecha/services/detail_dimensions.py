@@ -566,25 +566,33 @@ def list_level_digit_config(company_id: int) -> list[LevelDigitConfigRow]:
 
 
 def detail_level_has_accounts(company_id: int, level_no: int) -> bool:
-    """آیا حداقل یک حسابِ تفصیلی در این سطح از قبل وجود دارد — طبقِ
-    بازخوردِ صریح، هم‌الگو با chart_of_accounts.account_level_has_accounts:
-    تعدادِ رقمِ هر سطح به‌محضِ اینکه خودِ آن سطح حساب داشته باشد قفل
-    می‌شود، نه فقط وقتی کلِ شرکت سند دارد."""
+    """آیا حداقل یک حسابِ تفصیلیِ *واقعی* (نه ردیفِ سیستمیِ «بدون تفصیلی»)
+    در این سطح از قبل وجود دارد — طبقِ بازخوردِ صریح، هم‌الگو با
+    chart_of_accounts.account_level_has_accounts: تعدادِ رقمِ هر سطح
+    به‌محضِ اینکه خودِ آن سطح حساب داشته باشد قفل می‌شود، نه فقط وقتی کلِ
+    شرکت سند دارد. ردیفِ NO_DETAIL_CODE را باید کنار گذاشت چون این یک
+    مقدارِ پیش‌فرضِ سیستمی است که ensure_person_dimension برایِ *هر*
+    شرکتی (حتی شرکتی که کاربر هنوز هیچ تفصیلی‌ای نساخته) در سطحِ ۱
+    می‌سازد — وگرنه سطحِ ۱ برایِ همیشه، برایِ همه‌ی شرکت‌ها قفل می‌ماند."""
     with new_session() as session:
         count = session.scalar(
             select(func.count())
             .select_from(DetailAccount)
-            .where(DetailAccount.company_id == company_id, DetailAccount.level_no == level_no)
+            .where(
+                DetailAccount.company_id == company_id,
+                DetailAccount.level_no == level_no,
+                DetailAccount.code != NO_DETAIL_CODE,
+            )
         )
         return bool(count)
 
 
 def get_locked_detail_levels(company_id: int) -> set[int]:
-    """سطح‌هایی که تعدادِ رقمشان دیگر قابلِ‌تغییر نیست."""
-    from peecha.services import journal_entries as je_service  # noqa: PLC0415
-
-    if je_service.company_has_any_entries(company_id):
-        return set(range(1, MAX_DETAIL_LEVEL + 1))
+    """سطح‌هایی که تعدادِ رقمشان دیگر قابلِ‌تغییر نیست — طبقِ بازخوردِ صریح،
+    فقط بر اساسِ اینکه خودِ آن سطح حسابِ تفصیلی دارد یا نه (نه اینکه کلِ
+    شرکت سند دارد یا نه)؛ سندها به شناسه‌یِ حسابِ تفصیلی وصل‌اند نه طولِ
+    کد، پس سطحی که الان هیچ حسابی ندارد بی‌خطر قابلِ‌تغییر است، حتی اگر
+    جایِ دیگرِ شرکت سند ثبت شده باشد."""
     return {level for level in range(1, MAX_DETAIL_LEVEL + 1) if detail_level_has_accounts(company_id, level)}
 
 
@@ -592,20 +600,11 @@ def set_level_digit_config(company_id: int, config: dict[int, int | None]) -> No
     """جایگزینیِ کاملِ تعدادِ رقمِ سراسریِ هر سطح — config یعنی {شماره‌ی سطح
     (۱ تا ۴): تعدادِ رقم یا None برایِ بدونِ محدودیت}.
 
-    طبقِ درخواستِ صریح: بعدِ اولین سندِ شرکت، این تنظیمات دیگر قابلِ‌تغییر
-    نیستند (تا کدهایِ ثبت‌شده‌ی موجود ناسازگار نشوند) — هم‌الگو با
-    chart_of_accounts.set_account_level_config. طبقِ بازخوردِ بعدی، هر
-    سطح به‌محضِ اینکه *خودش* حسابِ تفصیلی داشته باشد هم دیگر قابلِ‌تغییر
-    نیست، نه فقط وقتی کلِ شرکت سند دارد."""
+    طبقِ درخواستِ صریح: هر سطح به‌محضِ اینکه *خودش* حسابِ تفصیلی داشته
+    باشد قفل می‌شود؛ صرفاً وجودِ سندِ حسابداری در جایِ دیگرِ شرکت (بدونِ
+    ربط به این سطح) دیگر مانعِ ذخیره نیست، چون سندها به شناسه‌یِ حسابِ
+    تفصیلی وصل‌اند نه طولِ کد."""
     with new_session() as session:
-        # importِ داخلِ تابع: journal_entries از detail_dimensions در سطحِ
-        # ماژول import می‌کند، پس import سطحِ ماژول در جهتِ عکس یک وابستگیِ
-        # چرخشی می‌ساخت.
-        from peecha.services import journal_entries as je_service  # noqa: PLC0415
-
-        if je_service.company_has_any_entries(company_id):
-            raise ValueError("این شرکت سند دارد؛ تعدادِ رقمِ سطوحِ تفصیلی دیگر قابلِ‌تغییر نیست.")
-
         # نکته: با select(...) رویِ ستون‌هایِ خام، هیچ آبجکتِ ORM‌ای در
         # identity mapِ سشن ثبت نمی‌شود — وگرنه پایین‌تر که همین ردیف‌ها
         # را bulk-delete و دوباره می‌سازیم، SQLAlchemy هشدارِ تداخل می‌داد.

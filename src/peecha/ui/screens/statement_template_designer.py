@@ -64,7 +64,9 @@ _CATEGORY_OPTIONS = [
     ("LIABILITY", "بدهی"),
     ("EQUITY", "حقوق صاحبان سهام"),
     ("REVENUE", "درآمد"),
+    ("COGS", "بهایِ تمام‌شده"),
     ("EXPENSE", "هزینه"),
+    ("STATISTICAL", "حساب‌هایِ آماری"),
 ]
 _CATEGORY_LABELS = dict(_CATEGORY_OPTIONS)
 

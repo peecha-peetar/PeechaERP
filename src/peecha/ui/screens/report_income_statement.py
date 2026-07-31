@@ -11,7 +11,7 @@ from peecha.services import currencies as currencies_service
 from peecha.services import reports as reports_service
 from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range
 
-_CATEGORY_LABELS = {"REVENUE": "درآمدها", "EXPENSE": "هزینه‌ها"}
+_CATEGORY_LABELS = {"REVENUE": "درآمدها", "COGS": "بهایِ تمام‌شده", "EXPENSE": "هزینه‌ها"}
 
 
 class IncomeStatementScreen(ReportScreenBase):
@@ -60,6 +60,8 @@ class IncomeStatementScreen(ReportScreenBase):
                 ]
             )
         rows.append(["", "جمعِ درآمدها", "", self._fmt(result.total_revenue), ""])
+        rows.append(["", "جمعِ بهایِ تمام‌شده", "", self._fmt(result.total_cogs), ""])
+        rows.append(["", "سودِ (زیانِ) ناخالص", "", self._fmt(result.gross_profit), ""])
         rows.append(["", "جمعِ هزینه‌ها", "", self._fmt(result.total_expense), ""])
         footer = ["", "سودِ (زیانِ) خالص", "", self._fmt(result.net_income), ""]
         return headers, rows, footer

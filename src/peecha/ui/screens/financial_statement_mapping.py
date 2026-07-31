@@ -30,7 +30,8 @@ from peecha.ui import theme
 
 _CATEGORY_OPTIONS = [
     ("ASSET", "دارایی"), ("LIABILITY", "بدهی"), ("EQUITY", "حقوق صاحبان سهام"),
-    ("REVENUE", "درآمد"), ("EXPENSE", "هزینه"),
+    ("REVENUE", "درآمد"), ("COGS", "بهایِ تمام‌شده"), ("EXPENSE", "هزینه"),
+    ("STATISTICAL", "حساب‌هایِ آماری"),
 ]
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
 _CASH_FLOW_SECTION_OPTIONS = [

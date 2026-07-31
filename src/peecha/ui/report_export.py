@@ -122,6 +122,8 @@ def print_report(
     )
     preview = QPrintPreviewDialog(printer, parent_widget)
     preview.paintRequested.connect(doc.print_)
+    # طبقِ درخواستِ صریح: فرمِ پیش‌نمایشِ چاپ به‌طورِ پیش‌فرض تمامِ صفحه باز شود.
+    preview.showMaximized()
     preview.exec()
 
 

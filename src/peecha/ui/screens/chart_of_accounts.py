@@ -37,7 +37,8 @@ from peecha.ui.widgets import FieldHelpMixin
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
     ("ASSET", "دارایی"), ("LIABILITY", "بدهی"), ("EQUITY", "حقوق صاحبان سهام"),
-    ("REVENUE", "درآمد"), ("EXPENSE", "هزینه"),
+    ("REVENUE", "درآمد"), ("COGS", "بهایِ تمام‌شده"), ("EXPENSE", "هزینه"),
+    ("STATISTICAL", "حساب‌هایِ آماری"),
 ]
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت")]
 # طبقِ درخواستِ صریح: برخلافِ سه فیلدِ بالا، این یکی اختیاری است — گزینه‌ی

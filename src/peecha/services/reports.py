@@ -472,14 +472,19 @@ def _net_income(
 ) -> decimal.Decimal:
     """سودِ خالصِ یک بازه — جمعِ سطحِ گروه (۱) کافی است، چون رول‌آپِ گروه
     از قبل شاملِ همه‌یِ زیرمجموعه‌هایِ همان دسته‌بندی است (دوباره‌شماری در
-    سطوحِ پایین‌تر رخ نمی‌دهد)."""
+    سطوحِ پایین‌تر رخ نمی‌دهد). بهایِ تمام‌شده (COGS) هم مثلِ هزینه
+    بدهکار-پایه است و از سود کم می‌شود."""
     balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
     total_revenue = sum(
         (r.period_credit - r.period_debit for r in balances if r.category_code == "REVENUE" and r.account_level == 1),
         _ZERO,
     )
     total_expense = sum(
-        (r.period_debit - r.period_credit for r in balances if r.category_code == "EXPENSE" and r.account_level == 1),
+        (
+            r.period_debit - r.period_credit
+            for r in balances
+            if r.category_code in ("EXPENSE", "COGS") and r.account_level == 1
+        ),
         _ZERO,
     )
     return total_revenue - total_expense
@@ -489,7 +494,7 @@ def _net_income(
 class IncomeStatementRow:
     full_code: str
     name: str
-    category_code: str  # REVENUE | EXPENSE
+    category_code: str  # REVENUE | COGS | EXPENSE
     current_amount: decimal.Decimal
     previous_amount: decimal.Decimal
 
@@ -498,7 +503,9 @@ class IncomeStatementRow:
 class IncomeStatementResult:
     rows: list[IncomeStatementRow]
     total_revenue: decimal.Decimal
+    total_cogs: decimal.Decimal
     total_expense: decimal.Decimal
+    gross_profit: decimal.Decimal
     net_income: decimal.Decimal
 
 
@@ -510,9 +517,12 @@ def compute_income_statement(
     status_filter: str = "EXCLUDE_DRAFT",
     cost_center_id: int | None = None,
 ) -> IncomeStatementResult:
-    """صورتِ سود و زیان — حساب‌هایِ REVENUE/EXPENSE در سطحِ کل، به‌همراهِ
+    """صورتِ سود و زیان — حساب‌هایِ REVENUE/COGS/EXPENSE در سطحِ کل، به‌همراهِ
     مقایسه با همان بازه در یک سالِ پیش (برایِ مقایسه‌یِ روندی، نه سالِ مالیِ
-    قانونی — چون سیستم مفهومِ صریحِ «سالِ مالیِ قبل» را جدول‌بندی‌شده ندارد)."""
+    قانونی — چون سیستم مفهومِ صریحِ «سالِ مالیِ قبل» را جدول‌بندی‌شده ندارد).
+    طبقِ درخواستِ صریح، «بهایِ تمام‌شده» دسته‌یِ جداگانه‌ای از «هزینه» است
+    (هردو بدهکار-پایه‌اند)، با یک جمعِ سطرِ خودش و «سودِ ناخالص» (درآمد
+    منهایِ بهایِ تمام‌شده) پیش از رسیدن به سودِ خالص."""
     previous_from = date_from - datetime.timedelta(days=365)
     previous_to = date_to - datetime.timedelta(days=365)
 
@@ -526,7 +536,7 @@ def compute_income_statement(
 
     rows: list[IncomeStatementRow] = []
     for r in current_balances:
-        if r.category_code not in ("REVENUE", "EXPENSE") or r.account_level != 2:
+        if r.category_code not in ("REVENUE", "COGS", "EXPENSE") or r.account_level != 2:
             continue
         if r.category_code == "REVENUE":
             current_amount = r.period_credit - r.period_debit
@@ -557,6 +567,14 @@ def compute_income_statement(
         ),
         _ZERO,
     )
+    total_cogs = sum(
+        (
+            r.period_debit - r.period_credit
+            for r in current_balances
+            if r.category_code == "COGS" and r.account_level == 1
+        ),
+        _ZERO,
+    )
     total_expense = sum(
         (
             r.period_debit - r.period_credit
@@ -565,8 +583,14 @@ def compute_income_statement(
         ),
         _ZERO,
     )
+    gross_profit = total_revenue - total_cogs
     return IncomeStatementResult(
-        rows=rows, total_revenue=total_revenue, total_expense=total_expense, net_income=total_revenue - total_expense
+        rows=rows,
+        total_revenue=total_revenue,
+        total_cogs=total_cogs,
+        total_expense=total_expense,
+        gross_profit=gross_profit,
+        net_income=gross_profit - total_expense,
     )
 
 
@@ -1119,7 +1143,7 @@ def generate_jalali_periods(
 class PeriodComparisonRow:
     full_code: str
     name: str
-    category_code: str  # REVENUE | EXPENSE
+    category_code: str  # REVENUE | COGS | EXPENSE
     amounts: list[decimal.Decimal]
 
 
@@ -1147,7 +1171,7 @@ def compute_period_comparison(
     sample_by_account: dict[int, AccountBalanceRow] = {}
     for balances in balances_by_period:
         for r in balances:
-            if r.category_code in ("REVENUE", "EXPENSE") and r.account_level == 1:
+            if r.category_code in ("REVENUE", "COGS", "EXPENSE") and r.account_level == 1:
                 sample_by_account.setdefault(r.account_id, r)
 
     rows: list[PeriodComparisonRow] = []
