@@ -511,6 +511,18 @@ class MainWindow(QMainWindow):
             )
             self._mega_panel_layout.addWidget(gear_button)
 
+        # طبقِ گزارشِ صریح: سوییچ‌کردنِ مستقیم بینِ دو منویِ سطحِ‌بالایِ متفاوت
+        # (بدونِ بستنِ مگاپنل بینِ‌شان) یک باکسِ ریز و خالی نشان می‌داد — چون
+        # پاپ‌آپ همان لحظه قبلاً visible بود، Qt دیگر رویدادِ show را برایِ
+        # ستون‌هایِ تازه‌ساخته‌شده cascade نمی‌کند (این cascade فقط زمانی
+        # خودکار اتفاق می‌افتد که خودِ پاپ‌آپ از حالتِ پنهان به آشکار برود،
+        # مثلِ اولین‌بارِ بازشدن یا بعدِ یک close/show واقعی). show صریح روی
+        # هر ویجتِ تازه، صرفِ‌نظر از تاریخچه‌یِ visibility پاپ‌آپ، درستش می‌کند.
+        for i in range(self._mega_panel_layout.count()):
+            item_widget = self._mega_panel_layout.itemAt(i).widget()
+            if item_widget is not None:
+                item_widget.show()
+
     def _set_active_menu_button(self, top_level_code: str | None) -> None:
         for code, button in self._menu_buttons.items():
             button.setProperty("active", code == top_level_code)
