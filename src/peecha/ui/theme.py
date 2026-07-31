@@ -433,7 +433,7 @@ QFrame#mdiFormWrapper {{
     border: 1px solid {DIVIDER};
 }}
 QWidget#mdiTitleBar {{
-    background-color: {SURFACE};
+    background-color: {HOVER};
     border-bottom: 1px solid {DIVIDER};
 }}
 QWidget#mdiTitleBar[active="true"] {{

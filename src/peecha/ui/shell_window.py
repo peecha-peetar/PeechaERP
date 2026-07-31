@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QMdiArea,
     QMdiSubWindow,
     QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QToolButton,
@@ -291,29 +292,37 @@ class _MdiTitleBar(QWidget):
         self._drag_offset = None
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 0, 8, 0)
+        layout.setContentsMargins(8, 0, 14, 0)
         layout.setSpacing(6)
 
-        icon_label = QLabel(icon)
-        icon_label.setStyleSheet("font-size: 14px; background: transparent;")
-        layout.addWidget(icon_label)
-
-        self.title_label = QLabel(title)
-        self.title_label.setObjectName("mdiTitleLabel")
-        layout.addWidget(self.title_label)
-        layout.addStretch(1)
-
-        self.minimize_btn = self._make_control_button("—", theme.HOVER)
-        self.minimize_btn.clicked.connect(sub_window.showMinimized)
-        layout.addWidget(self.minimize_btn)
+        # طبقِ درخواستِ صریح: دکمه‌هایِ گوشه (بستن/بزرگ‌کردن/کوچک‌کردن) باید
+        # سمتِ راستِ فرم باشند، نه چپ — چون چیدمانِ کلیِ برنامه راست‌چین است،
+        # این‌ها *اول* به لایه اضافه می‌شوند تا Qt (با آینه‌کردنِ خودکارِ
+        # QHBoxLayout در حالتِ RightToLeft) آن‌ها را در سمتِ راست بگذارد؛
+        # آیکون/عنوان که آخر اضافه می‌شوند، سمتِ چپ می‌مانند. دکمه‌ی بستن
+        # اول از همه اضافه می‌شود تا لبه‌یِ بیرونی (گوشه‌ی راست) باشد —
+        # هم‌راستا با قراردادِ متعارفِ «بستن، دورترین دکمه از مرکز».
+        self.close_btn = self._make_control_button("✕", "#FDECEC")
+        self.close_btn.clicked.connect(sub_window.close)
+        layout.addWidget(self.close_btn)
 
         self.maximize_btn = self._make_control_button("▢", theme.HOVER)
         self.maximize_btn.clicked.connect(self._toggle_maximize)
         layout.addWidget(self.maximize_btn)
 
-        self.close_btn = self._make_control_button("✕", "#FDECEC")
-        self.close_btn.clicked.connect(sub_window.close)
-        layout.addWidget(self.close_btn)
+        self.minimize_btn = self._make_control_button("—", theme.HOVER)
+        self.minimize_btn.clicked.connect(sub_window.showMinimized)
+        layout.addWidget(self.minimize_btn)
+
+        layout.addStretch(1)
+
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("mdiTitleLabel")
+        layout.addWidget(self.title_label)
+
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet("font-size: 14px; background: transparent;")
+        layout.addWidget(icon_label)
 
     def _make_control_button(self, glyph: str, hover_color: str) -> HoverButton:
         button = HoverButton(glyph, hover_color=hover_color, radius=8, margin=4)
@@ -502,6 +511,7 @@ class MainWindow(QMainWindow):
         self._current_screen_code: str | None = None
         self._company_options: list[companies_service.CompanyRow] = []
         self._cascade_index = 0
+        self._closing_for_logout = False
 
         central = QWidget()
         self._central = central
@@ -796,7 +806,33 @@ class MainWindow(QMainWindow):
         session.log_out()
         self._login_window = LoginWindow(get_font_family())
         self._login_window.show()
+        # طبقِ درخواستِ صریح: پیغامِ تأییدِ خروج فقط برایِ خروجِ کاملِ از
+        # برنامه (بستنِ پنجره‌ی اصلی) است، نه برایِ خروج از حساب (که خودش
+        # یک اقدامِ آگاهانه با کلیکِ دکمه‌ی «خروج» است و صفحه‌ی ورود را
+        # از قبل نشان داده) — این پرچم closeEvent را از نمایشِ دوباره‌یِ
+        # تأیید در این حالت منصرف می‌کند.
+        self._closing_for_logout = True
         self.close()
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        if self._closing_for_logout:
+            event.accept()
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle("خروج از برنامه")
+        box.setText("آیا می‌خواهید از برنامه خارج شوید؟")
+        box.setIcon(QMessageBox.Question)
+        # طبقِ درخواستِ صریح: چون زبانِ انتخاب‌شده در برنامه فارسی است،
+        # فرمِ پیام هم باید راست‌چین باشد (نه فقط چیدمانِ کلیِ برنامه).
+        box.setLayoutDirection(Qt.RightToLeft)
+        yes_button = box.addButton("بله", QMessageBox.YesRole)
+        box.addButton("خیر", QMessageBox.NoRole)
+        box.setDefaultButton(yes_button)
+        box.exec()
+        if box.clickedButton() is yes_button:
+            event.accept()
+        else:
+            event.ignore()
 
     # --- ثبت‌نامِ صفحات -----------------------------------------------------
     def _register_screens(self) -> None:
