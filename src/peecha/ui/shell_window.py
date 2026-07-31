@@ -5,19 +5,21 @@
 خودِ Qt ترتیبِ افقیِ هر QHBoxLayout را آینه می‌کند، و QComboBox به‌طورِ
 بومی راست‌چین و جهت‌دار می‌شود.
 
-ناوبریِ اصلی یک منویِ افقی (مگامنو) زیرِ هدر است، نه ساید‌بارِ عمودی —
+ناوبریِ اصلی یک منویِ افقی (مگامنو) زیرِ هدر است —
 _build_menu_bar آیتم‌هایِ سطحِ‌بالا را نشان می‌دهد و _build_mega_panel
-با کلیک رویِ هرکدام، زیرمجموعه‌هایش را در یک پنلِ بازشونده (دسته‌بندی‌شده
-به ستون) نمایش می‌دهد."""
+با کلیک رویِ هرکدام، زیرمجموعه‌هایش را در یک پنلِ شناور (دسته‌بندی‌شده
+به ستون) نمایش می‌دهد.
+"""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QPoint, QTimer, Qt
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFrame,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -30,34 +32,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import numerals, session
+from peecha.nav_catalog import NAV_ITEMS
+from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
-from peecha import numerals
 from peecha.ui import theme
 from peecha.ui.widgets import field_help_is_enabled, set_field_help_enabled
 
-# طبقِ درخواستِ صریح: عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/تامین‌کننده/
-# پرسنل) در ریبون باید بعدِ تغییرِ نامشان (dimension_group_config.py) به‌روز
-# بماند، نه برچسبِ ثابتِ قدیمیِ NAV_ITEMS — نگاشتِ کدِ آیتمِ ناوبری به کدِ
-# گروهِ اشخاصِ متناظر برایِ خواندنِ نامِ زنده از دیتابیس.
 _PERSON_GROUP_NAV_CODE_TO_GROUP_CODE = {
     "GL_CUSTOMERS": dimensions_service.CUSTOMER_GROUP_CODE,
     "GL_SUPPLIERS": dimensions_service.SUPPLIER_GROUP_CODE,
     "GL_PERSONNEL": dimensions_service.PERSONNEL_GROUP_CODE,
 }
 
-# NAV_ITEMS حالا در peecha/nav_catalog.py متمرکز شده — طبقِ بازخوردِ صریح
-# (نقش‌ها/دسترسی‌ها با اضافه‌شدنِ صفحه‌یِ تازه در جدول به‌روز نمی‌شد)، همان
-# فهرست حالا تکِ منبعِ حقیقتِ هم برایِ این ناوبری و هم برایِ کاتالوگِ
-# فرم‌هایِ services/roles.py است.
-from peecha.nav_catalog import NAV_ITEMS
-from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
-
-# گلیفِ آیکونِ هر آیتمِ سطحِ بالا — برایِ حالتِ جمع‌شده‌ی نوارِ کناری (فقط
-# آیکون) که rendered می‌شود؛ فایلِ آیکونِ خارجی لازم نیست (theme.emoji_icon).
 _NAV_ICONS = {
     "dashboard": "🏠",
     "GL": "💰",
@@ -70,18 +60,10 @@ _NAV_ICONS = {
     "SETTINGS": "⚙️",
 }
 
-# طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده‌ی گوشه‌ی ریبون، تنظیماتِ مخصوصِ همان
-# بخش را مستقیم (به‌جایِ تبِ پیش‌فرض) در «تنظیماتِ سیستم» باز می‌کند —
-# نگاشتِ کدِ گروه به ایندکسِ تبِ مربوطه (فقط بخش‌هایی که واقعاً تنظیماتِ
-# اختصاصی دارند نگاشته می‌شوند؛ بقیه هنوز صفحه ندارند).
 _SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
 
 
 def _leaf_nav_children(item: dict) -> list[dict]:
-    """همه‌یِ فرزندانِ برگِ یک آیتمِ ناوبری را، در هر عمقی از زیرمنوهایِ
-    تودرتو (مثلِ «گزارش‌ها ← حسابداری ← تراز آزمایشی»)، برمی‌گرداند —
-    برایِ ریبون که هنوز یک ردیفِ تختِ دکمه است، صرفِ‌نظر از این‌که ساید‌بار
-    آن‌ها را زیرِ چند لایه زیرمنو نشان می‌دهد."""
     leaves: list[dict] = []
     for child in item.get("children", []):
         if child.get("children"):
@@ -91,23 +73,128 @@ def _leaf_nav_children(item: dict) -> list[dict]:
     return leaves
 
 
-class _CurrentOnlyStackedWidget(QStackedWidget):
-    """QStackedWidgِ معمولی، اندازه‌ی خودش را از رویِ بزرگ‌ترینِ صفحه‌یِ
-    ثبت‌شده (نه لزوماً همانی که الان نمایش داده می‌شود) محاسبه می‌کند —
-    طبقِ گزارشِ صریح (با اعدادِ واقعی تأیید شد): همین رفتار باعث می‌شد
-    پنجره‌یِ اصلی همیشه به‌اندازه‌یِ بزرگ‌ترین صفحه (مثلاً «پیکربندیِ
-    گروه‌هایِ تفصیلی» یا «تنظیماتِ سیستم»، ۱۳۴۶×۸۵۷) مجبور به رشد شود —
-    حتی وقتی صفحه‌یِ کوچکی مثلِ «صدورِ سند» بازِ است — و چون این عددِ
-    بزرگ‌شده گاهی از ارتفاعِ واقعیِ صفحه‌نمایشِ کاربر بیشتر می‌شد، پنجره
-    (و هرچه ته‌اش بود، مثلِ فوترِ دکمه‌ها) از دیدرس خارج می‌ماند. این
-    زیرکلاس sizeHint/minimumSizeHint را فقط از رویِ صفحه‌یِ درحالِ‌نمایش
-    برمی‌گرداند تا اندازه‌یِ پنجره با نیازِ واقعیِ همان صفحه هماهنگ بماند."""
+class FloatingMegaPanel(QWidget):
+    """پنل مگامنوی شناور واقعی با چیدمان وسط‌چین و راست‌به‌چپ (RTL)."""
 
-    def sizeHint(self):  # noqa: N802 — نامِ متدِ Qt
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+
+        self.container = QFrame(self)
+        self.container.setObjectName("megaPanelContainer")
+        self.container.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.container.setStyleSheet(f"""
+            QFrame#megaPanelContainer {{
+                background-color: #FFFFFF;
+                border: 1px solid {theme.BORDER};
+                border-radius: 12px;
+            }}
+            QLabel#megaPanelColumnTitle {{
+                color: {theme.TEXT_SECONDARY};
+                font-size: 11px;
+                font-weight: bold;
+                padding-bottom: 6px;
+            }}
+            QPushButton#megaPanelItem {{
+                background-color: #F8FAFC;
+                color: {theme.TEXT_PRIMARY};
+                border: 1px solid {theme.BORDER};
+                border-radius: 6px;
+                padding: 8px 14px;
+                text-align: center;
+                font-size: 12px;
+                min-width: 170px;
+            }}
+            QPushButton#megaPanelItem:hover {{
+                background-color: #E0F2FE;
+                color: #0369A1;
+                border-color: #38BDF8;
+            }}
+            QPushButton#megaPanelItem[active="true"] {{
+                background-color: #2563EB;
+                color: #FFFFFF;
+                border-color: #1D4ED8;
+            }}
+            QPushButton#ribbonGearButton {{
+                background-color: #F1F5F9;
+                border: 1px solid {theme.BORDER};
+                border-radius: 8px;
+                padding: 6px 10px;
+                font-size: 14px;
+            }}
+            QPushButton#ribbonGearButton:hover {{
+                background-color: #E2E8F0;
+            }}
+        """)
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setXOffset(0)
+        shadow.setYOffset(6)
+        shadow.setColor(QColor(0, 0, 0, 40))
+        self.container.setGraphicsEffect(shadow)
+
+        self.root_layout = QVBoxLayout(self)
+        self.root_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setStyleSheet("background: transparent;")
+
+        self.content_widget = QWidget()
+        self.content_widget.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+
+        self.content_layout = QHBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(16, 16, 16, 16)
+        self.content_layout.setSpacing(20)
+
+        self.scroll_area.setWidget(self.content_widget)
+
+        container_layout = QVBoxLayout(self.container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.addWidget(self.scroll_area)
+
+        self.root_layout.addWidget(self.container)
+
+    def show_below(self, target_button: QWidget) -> None:
+        self.content_widget.adjustSize()
+        self.container.adjustSize()
+
+        needed_width = self.content_widget.sizeHint().width() + 10
+        needed_height = self.content_widget.sizeHint().height() + 10
+
+        max_h = 450
+        final_h = min(needed_height, max_h)
+
+        self.setFixedSize(needed_width, final_h)
+
+        # محاسبه مرکز افقی دکمه در مختصات مانیتور
+        btn_top_left = target_button.mapToGlobal(QPoint(0, 0))
+        btn_center_x = btn_top_left.x() + (target_button.width() // 2)
+
+        # قرار دادن مرکز پنل دقیقاً روی مرکز افقی دکمه (وسط‌چین کامل)
+        x_pos = btn_center_x - (needed_width // 2)
+        y_pos = btn_top_left.y() + target_button.height() + 4
+
+        # تنظیم پوزیشن و نمایش
+        self.move(int(x_pos), int(y_pos))
+        self.show()
+        self.raise_()
+
+
+class _CurrentOnlyStackedWidget(QStackedWidget):
+    def sizeHint(self):
         current = self.currentWidget()
         return current.sizeHint() if current is not None else super().sizeHint()
 
-    def minimumSizeHint(self):  # noqa: N802
+    def minimumSizeHint(self):
         current = self.currentWidget()
         return current.minimumSizeHint() if current is not None else super().minimumSizeHint()
 
@@ -141,31 +228,13 @@ class MainWindow(QMainWindow):
         self.stack = _CurrentOnlyStackedWidget()
         outer.addWidget(self.stack, stretch=1)
 
-        # طبقِ درخواستِ صریح: مگاپنل نباید در چیدمانِ عمودی جا بگیرد (که
-        # باعث می‌شد بازشدنش فرمِ زیرش را به‌پایین هل بدهد و اندازه‌اش
-        # به‌هم بریزد) — به‌جایش یک ویجتِ شناور و بدونِ مدیریتِ layout است،
-        # با geometryِ دستی رویِ خودِ ناحیه‌یِ محتوا (self.stack) قرار
-        # می‌گیرد و رویش می‌نشیند، بدونِ اینکه فضایی از آن بگیرد یا اندازه‌اش
-        # را تغییر دهد.
-        self._build_mega_panel()
+        self._mega_panel_popup = FloatingMegaPanel(self)
+        self._mega_panel_layout = self._mega_panel_popup.content_layout
 
         self._register_screens()
         self.open_screen("dashboard")
         self._did_initial_relayout = False
 
-    # طبقِ گزارشِ صریح (با عکسِ واقعیِ کاربر روی ویندوزِ واقعی تأیید شد):
-    # فوترِ فرم‌ها (مثلاً «ثبتِ سند») اصلاً رسم نمی‌شد و حتی یک‌بار
-    # ماکسیمایزکردنِ واقعی هم کافی نبود — فقط خروجِ کاملِ از تمام‌صفحه و
-    # بازگشتِ دوباره درستش می‌کرد. این یعنی مشکل از رویدادِ resizeِ خودِ
-    # پنجره نبود (نوکِ resize یا حتی ماکسیمایزِ واقعی امتحان و رد شد)،
-    # بلکه از خودِ صفحه است: هر صفحه (مثلِ journal_entry.py) کلِ محتوایش
-    # را در یک QScrollArea می‌گذارد؛ sizeHintِ ویجتِ داخلیِ آن اسکرول‌اِریا
-    # گاهی پیش از polishِ کاملِ فرزندانش محاسبه و کش می‌شود و دیگر خودکار
-    # دوباره محاسبه نمی‌شود — نتیجه: ارتفاعِ محتوایِ محاسبه‌شده کوتاه‌تر از
-    # واقعی است و فوتر از پایینِ همان ارتفاعِ کش‌شده قطع می‌شود. ترفندِ
-    # شناخته‌شده برایِ اجبارِ Qt به بازمحاسبه: خاموش/روشن‌کردنِ
-    # setWidgetResizable — این‌جا رویِ خودِ صفحه‌یِ درحالِ‌نمایش (نه کلِ
-    # پنجره) اعمال می‌شود، هم بعدِ اولین نمایش و هم بعدِ هر سوییچِ صفحه.
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if not self._did_initial_relayout:
@@ -187,22 +256,7 @@ class MainWindow(QMainWindow):
         if app is not None:
             app.processEvents()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
-        super().resizeEvent(event)
-        # مگاپنل چون بیرونِ چیدمانِ عمودی است (geometryِ دستی)، با تغییرِ
-        # اندازه‌یِ پنجره خودش را جا به‌جا نمی‌کند — اگر همین الان باز است
-        # باید دوباره روی ناحیه‌یِ تازه‌یِ self.stack جا بگیرد.
-        if hasattr(self, "_mega_panel_scroll") and self._mega_panel_scroll.isVisible():
-            self._position_mega_panel()
-
     # --- هدر --------------------------------------------------------------
-    # طبقِ بازخوردِ صریح: در پنجره‌هایِ کم‌عرض (مثلاً بعدِ تمام‌صفحه‌کردن رویِ
-    # مانیتورهایِ کوچک‌تر از عرضِ طراحی‌شده‌ی برنامه)، چون هدر عناصرِ
-    # عرض‌ثابتِ زیادی دارد (جستجو/زبان/سالِ‌مالی/شرکت/آواتار/خروج) و درونِ
-    # QScrollArea نبود، این عناصر به‌جایِ اسکرول‌شدن از کادرِ هدر بیرون
-    # می‌زدند و انگار «ناپدید» می‌شدند — دقیقاً همان مشکلی که ریبونِ زیرِ
-    # هدر قبلاً با همین راه‌حل (QScrollAreaِ افقی) حل شده بود؛ همان الگو
-    # این‌جا هم اعمال می‌شود.
     def _build_header(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setObjectName("headerScroll")
@@ -232,10 +286,6 @@ class MainWindow(QMainWindow):
         divider0.setStyleSheet(f"color: {theme.DIVIDER};")
         layout.addWidget(divider0)
 
-        # طبقِ درخواستِ صریح: کلیدِ روشن/خاموش‌کردنِ کادرِ راهنمایِ فیلدها
-        # (widgets.FieldHelpPanel) این‌جا، بالایِ صفحه، کنارِ نشانِ برند —
-        # نه دیگر داخلِ خودِ کادر — تا همیشه در دسترس باشد، صرفِ‌نظر از
-        # اینکه کدام صفحه باز است.
         self.field_help_toggle = QToolButton()
         self.field_help_toggle.setObjectName("fieldHelpToggle")
         self.field_help_toggle.setCheckable(True)
@@ -301,13 +351,6 @@ class MainWindow(QMainWindow):
         return scroll
 
     # --- منویِ افقیِ اصلی (مگامنو) ---------------------------------------------
-    # طبقِ درخواستِ صریح: ساید‌بارِ درختیِ عمودی (که فضایِ ثابتی از عرضِ صفحه
-    # می‌گرفت و جابجایی/انتخاب در آن سخت بود) حذف شد و به‌جایش یک منویِ
-    # افقیِ سطحِ‌بالا (این‌جا) + یک «مگاپنل»یِ بازشونده (_build_mega_panel)
-    # نشسته: با کلیک رویِ هر آیتمِ سطحِ‌بالا که زیرمجموعه دارد، همه‌یِ
-    # زیرمجموعه‌هایش (در هر عمقی از زیرمنو) یک‌جا و دسته‌بندی‌شده در پنلِ
-    # پایینِ منو ظاهر می‌شوند؛ با انتخابِ یکی، پنل بسته می‌شود و کارِ اصلی
-    # کلِ عرضِ صفحه را در اختیار می‌گیرد.
     def _build_menu_bar(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setObjectName("menuBarScroll")
@@ -336,71 +379,44 @@ class MainWindow(QMainWindow):
         self._menu_bar_scroll = scroll
         return scroll
 
-    def _build_mega_panel(self) -> None:
-        # طبقِ درخواستِ صریح: مگاپنل، ویجتِ فرزندِ خودِ central است اما در
-        # هیچ layoutِ آن مدیریت نمی‌شود — با setGeometryِ دستی (نگاهِ
-        # _position_mega_panel) دقیقاً رویِ ناحیه‌یِ self.stack می‌نشیند و
-        # با raise_ رویِ آن رسم می‌شود، بدونِ اینکه فضایی از چیدمانِ عمودی
-        # بگیرد یا اندازه‌یِ فرمِ زیرش را تغییر دهد.
-        scroll = QScrollArea(self._central)
-        scroll.setObjectName("megaPanelScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-
-        panel = QWidget()
-        panel.setObjectName("megaPanel")
-        layout = QHBoxLayout(panel)
-        layout.setContentsMargins(24, 16, 24, 16)
-        layout.setSpacing(32)
-        layout.setAlignment(Qt.AlignTop)
-        scroll.setWidget(panel)
-        scroll.setVisible(False)
-
-        self._mega_panel_layout = layout
-        self._mega_panel_scroll = scroll
-
-    def _position_mega_panel(self) -> None:
-        y = self._menu_bar_scroll.y() + self._menu_bar_scroll.height()
-        width = self._central.width()
-        available_height = max(0, self._central.height() - y)
-        height = min(360, available_height)
-        self._mega_panel_scroll.setGeometry(0, y, width, height)
-        self._mega_panel_scroll.raise_()
-
     def _on_menu_button_clicked(self, code: str) -> None:
         item = next((i for i in NAV_ITEMS if i["code"] == code), None)
         if item is None:
             return
         if not item.get("children"):
-            # آیتمِ سطحِ‌بالایِ بدونِ زیرمجموعه (داشبورد/تنظیمات/ماژول‌هایِ
-            # هنوز نساخته): مستقیم باز شود، مگاپنل بسته بماند.
             self._close_mega_panel()
             self.open_screen(code)
             return
-        if self._mega_panel_open_code == code and self._mega_panel_scroll.isVisible():
+        if self._mega_panel_open_code == code and self._mega_panel_popup.isVisible():
             self._close_mega_panel()
             return
+
         self._populate_mega_panel(item)
         self._mega_panel_open_code = code
-        self._position_mega_panel()
-        self._mega_panel_scroll.setVisible(True)
+
+        target_btn = self._menu_buttons.get(code)
+        if target_btn:
+            self._mega_panel_popup.show_below(target_btn)
         self._set_active_menu_button(code)
 
     def _close_mega_panel(self) -> None:
-        self._mega_panel_scroll.setVisible(False)
+        if self._mega_panel_popup.isVisible():
+            self._mega_panel_popup.close()
         self._mega_panel_open_code = None
 
     def _build_mega_panel_column(self, title: str, entries: list[dict]) -> QWidget:
         column = QWidget()
+        column.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         column_layout = QVBoxLayout(column)
         column_layout.setContentsMargins(0, 0, 0, 0)
-        column_layout.setSpacing(2)
+        column_layout.setSpacing(6)
+
         if title:
             title_label = QLabel(title)
             title_label.setObjectName("megaPanelColumnTitle")
+            title_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             column_layout.addWidget(title_label)
+
         for entry in entries:
             button = QPushButton(entry["label"])
             button.setObjectName("megaPanelItem")
@@ -408,23 +424,18 @@ class MainWindow(QMainWindow):
             button.setCursor(Qt.PointingHandCursor)
             button.clicked.connect(entry["on_click"])
             column_layout.addWidget(button)
+
         column_layout.addStretch(1)
         return column
 
     def _populate_mega_panel(self, group: dict) -> None:
-        # نکته‌یِ مهم: takeAt فقط ویجت را از مدیریتِ layout خارج می‌کند،
-        # نه از دیدرس — بدونِ hide صریح، ویجتِ قدیمی تا لحظه‌یِ واقعیِ
-        # حذف‌شدن (deleteLater، که معوق است) سرِ جایِ قبلی‌اش «باقی‌مانده و
-        # قابلِ‌دیدن» می‌ماند و با ستون‌هایِ تازه هم‌پوشانی پیدا می‌کند.
+        # پاکسازی آیتم‌های قبلی
         while self._mega_panel_layout.count():
             taken = self._mega_panel_layout.takeAt(0)
             if taken.widget():
                 taken.widget().hide()
                 taken.widget().deleteLater()
 
-        # طبقِ درخواستِ صریح: عنوانِ نمایشیِ گروه‌هایِ اشخاص (مشتری/
-        # تامین‌کننده/پرسنل) اگر تغییرِ نام داده باشند، باید همین‌جا زنده
-        # خوانده شود — نه برچسبِ ثابتِ NAV_ITEMS.
         company_id = session.current_company.company_id if session.current_company else None
         dynamic_labels: dict[str, str] = {}
         if company_id is not None:
@@ -455,7 +466,7 @@ class MainWindow(QMainWindow):
 
         if primary_leaves:
             self._mega_panel_layout.addWidget(
-                self._build_mega_panel_column("میان‌برهایِ اصلی", _leaf_entries(primary_leaves))
+                self._build_mega_panel_column("میان‌برهای اصلی", _leaf_entries(primary_leaves))
             )
 
         for subgroup in subgroups:
@@ -463,10 +474,6 @@ class MainWindow(QMainWindow):
                 self._build_mega_panel_column(subgroup["label"], _leaf_entries(_leaf_nav_children(subgroup)))
             )
 
-        # طبقِ گزارشِ صریح: گروه‌هایِ سادهِ کاربرساخته (که خودشان صفحه‌ی
-        # اختصاصی ندارند و فقط درونِ «تفصیلی‌هایِ گروه‌هایِ ساده» قابلِ‌
-        # مشاهده‌اند) هم باید در همین ستون ظاهر شوند — وگرنه بعدِ ساختنِ
-        # گروهِ تازه، هیچ میان‌بری برایش نبود.
         hidden_entries = _leaf_entries(hidden_leaves)
         if group["code"] == "GL" and company_id is not None:
             custom_groups = [
@@ -475,46 +482,34 @@ class MainWindow(QMainWindow):
                 if t.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
             ]
             for t in custom_groups:
+                dimension_type_id = t.dimension_type_id
                 hidden_entries.append(
                     {
                         "label": t.code,
                         "active": False,
-                        "on_click": lambda _checked=False, tid=t.dimension_type_id: self.open_screen(
+                        "on_click": lambda _checked=False, tid=dimension_type_id: self.open_screen(
                             "GL_DIM",
-                            then=lambda screen, tid=tid: screen.group_combo.setCurrentIndex(
-                                screen.group_combo.findData(tid)
+                            then=lambda screen, target_tid=tid: screen.group_combo.setCurrentIndex(
+                                screen.group_combo.findData(target_tid)
                             ),
                         ),
                     }
                 )
         if hidden_entries:
-            self._mega_panel_layout.addWidget(self._build_mega_panel_column("گروه‌هایِ تفصیلی", hidden_entries))
+            self._mega_panel_layout.addWidget(self._build_mega_panel_column("گروه‌های تفصیلی", hidden_entries))
 
-        # طبقِ درخواستِ صریح: دکمه‌ی چرخ‌دنده — تنظیماتِ مخصوصِ همین بخش را
-        # مستقیم (تبِ مربوطه در «تنظیماتِ سیستم») باز می‌کند. فقط بخش‌هایی
-        # که واقعاً نگاشته شده‌اند این دکمه را دارند.
         settings_tab_index = _SETTINGS_TAB_BY_GROUP_CODE.get(group["code"])
         if settings_tab_index is not None:
             gear_button = QPushButton("⚙")
             gear_button.setObjectName("ribbonGearButton")
             gear_button.setCursor(Qt.PointingHandCursor)
-            gear_button.setToolTip(f"تنظیماتِ «{group['label']}»")
+            gear_button.setToolTip(f"تنظیمات «{group['label']}»")
             gear_button.clicked.connect(
                 lambda _checked=False, idx=settings_tab_index: self.open_screen(
                     "SETTINGS", then=lambda screen: screen.select_tab(idx)
                 )
             )
             self._mega_panel_layout.addWidget(gear_button)
-
-        # نکته‌یِ مهم: در QHBoxLayout، فضایِ خالیِ بی‌ادعا (بدونِ هیچ
-        # stretchی) همیشه در «آخرین جایگاهِ چیدمان» (اسلاتِ سمتِ چپ) قرار
-        # می‌گیرد — صرف‌نظر از راست‌چین‌بودنِ برنامه. یعنی setAlignment
-        # رویِ خودِ این layout (چون زیرلایه‌یِ یک لایهٔ دیگر نیست، بلکه
-        # مستقیم رویِ خودِ ویجتِ پنل نشسته) هیچ اثری نداشت. راهِ درست: یک
-        # stretch به‌عنوانِ آخرین آیتم (بعدِ دکمه‌ی چرخ‌دنده) که خودش در
-        # همان اسلاتِ سمتِ چپ می‌نشیند و کلِ ستون‌ها + دکمه‌ی چرخ‌دنده را
-        # به‌سمتِ راست هل می‌دهد.
-        self._mega_panel_layout.addStretch(1)
 
     def _set_active_menu_button(self, top_level_code: str | None) -> None:
         for code, button in self._menu_buttons.items():
@@ -546,8 +541,8 @@ class MainWindow(QMainWindow):
         return " / ".join(path)
 
     def _logout(self) -> None:
-        from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
-        from peecha.ui.main import get_font_family  # noqa: PLC0415
+        from peecha.ui.login_window import LoginWindow
+        from peecha.ui.main import get_font_family
 
         session.log_out()
         self._login_window = LoginWindow(get_font_family())
@@ -556,34 +551,31 @@ class MainWindow(QMainWindow):
 
     # --- ثبت‌نامِ صفحات -----------------------------------------------------
     def _register_screens(self) -> None:
-        from peecha.ui.screens.chart_of_accounts import ChartOfAccountsScreen  # noqa: PLC0415
-        from peecha.ui.screens.dashboard import DashboardScreen  # noqa: PLC0415
-        from peecha.ui.screens.detail_accounts_list import DetailAccountsListScreen  # noqa: PLC0415
-        from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen  # noqa: PLC0415
-        from peecha.ui.screens.dimension_group_config import DimensionGroupConfigScreen  # noqa: PLC0415
-        from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen  # noqa: PLC0415
-        from peecha.ui.screens.journal_entry import JournalEntryScreen  # noqa: PLC0415
-        from peecha.ui.screens.person_group_screens import (  # noqa: PLC0415
+        from peecha.ui.screens.chart_of_accounts import ChartOfAccountsScreen
+        from peecha.ui.screens.dashboard import DashboardScreen
+        from peecha.ui.screens.detail_accounts_list import DetailAccountsListScreen
+        from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen
+        from peecha.ui.screens.dimension_group_config import DimensionGroupConfigScreen
+        from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen
+        from peecha.ui.screens.journal_entry import JournalEntryScreen
+        from peecha.ui.screens.person_group_screens import (
             CustomersScreen,
             PersonnelScreen,
             SuppliersScreen,
         )
-        from peecha.ui.screens.placeholder import PlaceholderScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_account_ledger import AccountLedgerScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_anomalies import AnomaliesScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_balance_sheet import BalanceSheetScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_cash_flow import CashFlowScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_custom_statement import CustomStatementScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_equity_changes import EquityChangesScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_income_statement import IncomeStatementScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_journal_book import JournalBookScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_period_comparison import PeriodComparisonScreen  # noqa: PLC0415
-        from peecha.ui.screens.report_trial_balance import TrialBalanceScreen  # noqa: PLC0415
-        from peecha.ui.screens.statement_template_designer import (  # noqa: PLC0415
-            StatementTemplateDesignerScreen,
-        )
-        from peecha.ui.screens.specialized_dimensions import (  # noqa: PLC0415
+        from peecha.ui.screens.placeholder import PlaceholderScreen
+        from peecha.ui.screens.report_account_ledger import AccountLedgerScreen
+        from peecha.ui.screens.report_anomalies import AnomaliesScreen
+        from peecha.ui.screens.report_balance_sheet import BalanceSheetScreen
+        from peecha.ui.screens.report_cash_flow import CashFlowScreen
+        from peecha.ui.screens.report_custom_statement import CustomStatementScreen
+        from peecha.ui.screens.report_equity_changes import EquityChangesScreen
+        from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen
+        from peecha.ui.screens.report_income_statement import IncomeStatementScreen
+        from peecha.ui.screens.report_journal_book import JournalBookScreen
+        from peecha.ui.screens.report_period_comparison import PeriodComparisonScreen
+        from peecha.ui.screens.report_trial_balance import TrialBalanceScreen
+        from peecha.ui.screens.specialized_dimensions import (
             BankAccountsScreen,
             CashBoxesScreen,
             CostCentersScreen,
@@ -592,7 +584,10 @@ class MainWindow(QMainWindow):
             PettyCashesScreen,
             ProjectsScreen,
         )
-        from peecha.ui.screens.system_settings import SystemSettingsScreen  # noqa: PLC0415
+        from peecha.ui.screens.statement_template_designer import (
+            StatementTemplateDesignerScreen,
+        )
+        from peecha.ui.screens.system_settings import SystemSettingsScreen
 
         self.register_screen("dashboard", DashboardScreen())
         self.register_screen("placeholder", PlaceholderScreen())
@@ -625,11 +620,6 @@ class MainWindow(QMainWindow):
         self.register_screen("report_financial_ratios", FinancialRatiosScreen())
         self.register_screen("report_period_comparison", PeriodComparisonScreen())
         self.register_screen("report_anomalies", AnomaliesScreen())
-        # همه‌ی فرم‌هایِ قبلاً جداگانه‌ی «مدیریتِ سیستم» (زبان‌ها/ارزها/شرکت‌ها/
-        # سال‌های مالی/کاربران/نقش‌ها/عنوانِ فیلدها/ردِ حسابرسی) اکنون به‌صورتِ
-        # تب درونِ system_settings.SystemSettingsScreen زندگی می‌کنند — نکته‌ی
-        # «ترجمه‌ها»یِ بدونِ معادلِ Qt هم همان‌جا (به‌عنوانِ یک تبِ Placeholder)
-        # مستند شده، نه اینجا.
 
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget
@@ -659,17 +649,10 @@ class MainWindow(QMainWindow):
             screen.set_module_name(item["label"])
 
         self.stack.setCurrentWidget(screen)
-        # _CurrentOnlyStackedWidget فقط اندازه‌ی همین صفحه را برمی‌گرداند —
-        # updateGeometry مطمئن می‌شود چیدمانِ بیرونی بلافاصله با آن هماهنگ شود.
         self.stack.updateGeometry()
         if hasattr(screen, "refresh"):
             screen.refresh()
-        # طبقِ گزارشِ صریح: هر بار با ساید‌بار به منویِ تازه‌ای سوییچ می‌شد،
-        # چیدمانِ فرمِ بازشده به‌هم می‌ریخت و آیتم‌هایِ فوتر در دسترس
-        # نبودند — همان دلیلِ _force_relayout در showEvent، این‌جا هم بعدِ
-        # هر سوییچ لازم است (نه فقط بارِ اول). تأخیرِ کوتاه تا محتوایِ
-        # refresh (که ممکن است خودش رویدادها را صف کند) پیش از نوکِ
-        # resize کامل بنشیند.
+
         QTimer.singleShot(30, self._force_relayout)
         if then is not None:
             then(screen)
