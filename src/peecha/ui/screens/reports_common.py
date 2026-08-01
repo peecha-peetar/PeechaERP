@@ -464,14 +464,19 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         }
 
     def _prompt_print_options(self) -> "report_export.PrintOptions | None":
-        """طبقِ درخواستِ صریح: پیش از هر چاپ/PDF/اکسل، فرمِ تنظیماتِ چاپ
-        (اندازه‌یِ فونت، عرضِ ستون‌ها، متنِ اضافه‌یِ هدر/فوتر) باز می‌شود؛
-        انتخابِ قبلی به‌عنوانِ پیش‌فرضِ دفعه‌یِ بعد نگه داشته می‌شود."""
+        """طبقِ درخواستِ صریح («تنظیماتِ هر گزارش ذخیره بشه، هر بار تغییر
+        نکنه»): پیش از هر چاپ/PDF/اکسل، فرمِ تنظیماتِ چاپ (اندازه‌یِ
+        فونت، عرضِ ستون‌ها، متنِ هدر/فوتر، ردیف‌درصفحه) باز می‌شود؛
+        انتخابِ کاربر با QSettings رویِ دیسک (نه فقط در حافظه‌ی همین
+        اجرا) ذخیره می‌شود — یعنی حتی بعدِ بستن‌وبازکردنِ برنامه هم
+        همان تنظیماتِ قبلی به‌عنوانِ پیش‌فرض می‌آید."""
+        defaults = getattr(self, "_last_print_options", None) or report_export.load_print_options(self._title)
         options = report_export.prompt_print_options(
-            self, self._title, self._headers, getattr(self, "_last_print_options", None), **self._export_kwargs()
+            self, self._title, self._headers, defaults, **self._export_kwargs()
         )
         if options is not None:
             self._last_print_options = options
+            report_export.save_print_options(self._title, options)
         return options
 
     def _on_print(self) -> None:

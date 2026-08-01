@@ -38,7 +38,7 @@ from __future__ import annotations
 import decimal
 from dataclasses import dataclass
 
-from PySide6.QtCore import QMarginsF, QSizeF
+from PySide6.QtCore import QMarginsF, QSettings, QSizeF
 from PySide6.QtGui import QPageLayout, QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PySide6.QtWidgets import (
@@ -81,6 +81,42 @@ class PrintOptions:
     # ۰ یعنی خودکار (تخمینِ تعدادِ ردیفی که در یک صفحه جا می‌شود)؛ عددِ
     # مثبت یعنی کاربر خودش فاصله‌یِ ردیف‌هایِ «جمعِ این صفحه» را تعیین کرده.
     rows_per_page: int = 0
+
+
+def _settings_key(title: str) -> str:
+    return f"print_options/{title}"
+
+
+def load_print_options(title: str) -> PrintOptions | None:
+    """طبقِ درخواستِ صریح («تنظیماتِ هر گزارش ذخیره بشه، هر بار تغییر
+    نکنه»): تنظیماتِ چاپِ هر گزارش با QSettings (رویِ دیسک، مستقل از
+    اجراهایِ بعدیِ برنامه) ذخیره/بازخوانی می‌شود — کلید بر اساسِ عنوانِ
+    گزارش، پس هر گزارش تنظیماتِ خودش را جدا نگه می‌دارد."""
+    settings = QSettings("Peecha", "PeechaERP")
+    key = _settings_key(title)
+    if not settings.contains(f"{key}/font_size_pt"):
+        return None
+    widths_str = settings.value(f"{key}/column_widths", "", type=str)
+    column_widths = [float(x) for x in widths_str.split(",") if x] if widths_str else None
+    return PrintOptions(
+        font_size_pt=float(settings.value(f"{key}/font_size_pt", _DEFAULT_FONT_SIZE_PT)),
+        column_widths=column_widths,
+        header_text=settings.value(f"{key}/header_text", "", type=str),
+        footer_text=settings.value(f"{key}/footer_text", "", type=str),
+        rows_per_page=int(settings.value(f"{key}/rows_per_page", 0)),
+    )
+
+
+def save_print_options(title: str, options: PrintOptions) -> None:
+    settings = QSettings("Peecha", "PeechaERP")
+    key = _settings_key(title)
+    settings.setValue(f"{key}/font_size_pt", options.font_size_pt)
+    settings.setValue(
+        f"{key}/column_widths", ",".join(str(w) for w in options.column_widths) if options.column_widths else ""
+    )
+    settings.setValue(f"{key}/header_text", options.header_text)
+    settings.setValue(f"{key}/footer_text", options.footer_text)
+    settings.setValue(f"{key}/rows_per_page", options.rows_per_page)
 
 
 def _escape(value: object) -> str:
