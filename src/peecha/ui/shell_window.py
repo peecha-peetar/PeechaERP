@@ -903,6 +903,17 @@ class MainWindow(QMainWindow):
         sub_window.show()
         sub_window.raise_()
         self.mdi_area.setActiveSubWindow(sub_window)
+        # باگِ واقعیِ کشف‌شده (با گزارشِ عکسِ واقعیِ کاربر): برخلافِ
+        # open_screen (که همیشه refresh را دوباره صدا می‌زند)، سوییچ به
+        # یک زیرپنجره‌یِ *ازقبل‌بازِ* از طریقِ منویِ «پنجره‌های باز» هرگز
+        # refresh نمی‌کرد — یعنی مثلاً اگر کاربر فرمِ سند را باز نگه دارد،
+        # برود ارزِ تازه‌ای برایِ شرکت فعال کند، و با همین منو به فرمِ سند
+        # برگردد (نه با کلیک دوباره روی نوارِ کناری)، کمبویِ «ارزِ سند»
+        # همچنان دیتایِ کهنه/خالیِ لحظه‌یِ بازشدنِ اولیه را نشان می‌داد.
+        screen_name = getattr(sub_window, "_screen_name", None)
+        screen = self._screens.get(screen_name) if screen_name else None
+        if screen is not None and hasattr(screen, "refresh"):
+            screen.refresh()
 
     def _logout(self) -> None:
         from peecha.ui.login_window import LoginWindow

@@ -14,9 +14,18 @@
    عنوانِ گزارش، و تاریخِ گزارش + فیلترهایِ اعمال‌شده.
 
 ۳. حاشیه‌یِ چاپ زیاد بود و فضایِ کناریِ خالی داشت — حاشیه‌هایِ صفحه به
-   صراحت به مقدارِ کمی (۸ میلی‌متر) تنظیم می‌شوند (پیش‌فرضِ سیستم‌عامل/
+   صراحت به مقدارِ کمی (۶ میلی‌متر) تنظیم می‌شوند (پیش‌فرضِ سیستم‌عامل/
    چاپگر می‌توانست تا ۲۰ میلی‌متر باشد که رویِ صفحه‌یِ landscape خیلی
-   محسوس بود).
+   محسوس بود). محدودیتِ صادقانه: اگر چاپگرِ فیزیکی خودش حداقلِ‌حاشیه‌یِ
+   سخت‌افزاریِ بزرگ‌تری تحمیل کند (بعضی چاپگرها این کار را می‌کنند)،
+   Qt/درایور آن مقدار را جایگزین می‌کند — این محدودیت فقط رویِ خروجیِ
+   PDF (که محدودیتِ سخت‌افزاری ندارد) همیشه دقیقاً اعمال می‌شود.
+
+۵. فونتِ متنِ چاپ/PDF قبلاً `sans-serif` خامِ عمومی بود — یعنی فونتِ
+   فارسیِ خودِ برنامه (IRANSans/Vazirmatn، طبقِ get_font_family در
+   ui/main.py) به چاپ نمی‌رسید و بسته به سیستم‌عاملِ کاربر یک فونتِ
+   دیگر (و اغلب متفاوت از چیزی که در برنامه می‌بینند) جایگزین می‌شد.
+   حالا از همان فونتِ برنامه استفاده می‌کند.
 
 ۴. گزارش‌هایِ چندصفحه‌ای «جمعِ هر صفحه» نداشتند — جمعِ کل فقط در آخرین
    صفحه (زیرِ آخرین ردیف) دیده می‌شد. حالا اگر گزارش در یک صفحه جا
@@ -40,8 +49,9 @@ from PySide6.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 
 from peecha import numerals
+from peecha.ui.main import get_font_family
 
-_PAGE_MARGIN_MM = 8.0
+_PAGE_MARGIN_MM = 6.0
 # طبقِ عنوانِ ستون تشخیص داده می‌شود که «جمعِ صفحه» برایش معنا دارد —
 # نه فقط قابلِ‌پارس‌بودنِ عدد، وگرنه ستون‌هایی مثلِ «شماره‌یِ سند» هم
 # اشتباهی جمع می‌شدند.
@@ -50,6 +60,18 @@ _AMOUNT_HEADER_KEYWORDS = ("بدهکار", "بستانکار", "بد)", "بس)",
 
 def _escape(value: object) -> str:
     return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _print_font_family() -> str:
+    """طبقِ گزارشِ صریح («فونتِ گزارش‌هایِ چاپی هم وزیر باشه»): HTML چاپ
+    قبلاً همیشه font-family:sans-serif خام داشت — یعنی فونتِ فارسیِ
+    برنامه (IRANSans/Vazirmatn، انتخاب‌شده در ui/main.py) اصلاً به چاپ/PDF
+    نمی‌رسید و بسته به سیستم‌عاملِ کاربر یک فونتِ کاملاً متفاوت (و اغلب
+    ضخیم‌تر) جایگزین می‌شد."""
+    try:
+        return get_font_family()
+    except Exception:
+        return "Tahoma"
 
 
 def _amount_column_indices(headers: list[str], rows: list[list]) -> list[int]:
@@ -119,10 +141,11 @@ def _build_html(
         footer_html = f"<tr>{footer_cells}</tr>"
 
     header_lines = _header_block_html(title, company_name, report_date, filters)
+    font_family = _print_font_family()
 
     return f"""
     <html dir="rtl"><head><meta charset="utf-8"></head>
-    <body style="font-family: sans-serif; font-size: 10pt;">
+    <body style="font-family: '{font_family}', Tahoma, sans-serif; font-size: 10pt;">
     <div style="text-align:center; margin-bottom:8px;">{header_lines}</div>
     <table border="1" cellspacing="0" cellpadding="4" width="100%" style="border-collapse: collapse;">
     <thead><tr>{head_cells}</tr></thead>
@@ -187,9 +210,10 @@ def _build_paginated_html(
             """
         )
 
+    font_family = _print_font_family()
     return f"""
     <html dir="rtl"><head><meta charset="utf-8"></head>
-    <body style="font-family: sans-serif; font-size: 10pt;">
+    <body style="font-family: '{font_family}', Tahoma, sans-serif; font-size: 10pt;">
     {"".join(page_blocks)}
     </body></html>
     """
