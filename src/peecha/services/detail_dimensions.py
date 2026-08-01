@@ -314,6 +314,15 @@ def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[Detail
         return [_to_detail_account_row(r, full_codes) for r in rows]
 
 
+def list_leaf_detail_accounts(company_id: int, dimension_type_id: int) -> list[DetailAccountRow]:
+    """هم‌الگو با get_required_dimensions_for_account: در سلسله‌مراتبِ
+    تا ۴سطحی، فقط برگ‌ها (پایین‌ترین سطح) قابلِ‌انتخاب‌اند — نه گروه‌هایِ
+    والد؛ گروه‌هایِ تختِ موجود (بدونِ فرزند) هم‌چنان برگ محسوب می‌شوند."""
+    rows = list_detail_accounts(company_id, dimension_type_id)
+    parent_ids = {r.parent_detail_account_id for r in rows if r.parent_detail_account_id is not None}
+    return [r for r in rows if r.is_active and r.detail_account_id not in parent_ids]
+
+
 def _validate_code_length(
     session, company_id: int, dimension_type_id: int, level_no: int, segment_code: str, person_group_id: int = 0
 ) -> None:

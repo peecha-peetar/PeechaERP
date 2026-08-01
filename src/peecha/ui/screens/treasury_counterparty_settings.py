@@ -81,12 +81,43 @@ class _MappingForm(QWidget):
         self._screen.refresh_mappings(self._direction)
 
 
+class _MethodMappingRow(QWidget):
+    """ردیفِ نگاشتِ معینِ یک روشِ ردیفِ پایینِ سندِ دریافت (نقد/چک/تخفیف) —
+    طبقِ درخواستِ صریح: طرفِ بدهکارِ همین ردیف‌ها، در تنظیماتِ سند."""
+
+    def __init__(self, mapping_key: str, label: str, current_account_id: int | None, account_options, on_save) -> None:
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 4)
+
+        name_label = QLabel(label)
+        name_label.setMinimumWidth(220)
+        layout.addWidget(name_label)
+
+        self.account_combo = _make_searchable_combo(account_options)
+        if current_account_id is not None:
+            index = self.account_combo.findData(current_account_id)
+            if index >= 0:
+                self.account_combo.setCurrentIndex(index)
+                self.account_combo.lineEdit().setCursorPosition(0)
+        layout.addWidget(self.account_combo, stretch=1)
+
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("flatButton")
+        save_button.clicked.connect(lambda: on_save(mapping_key, self.account_combo.currentData()))
+        layout.addWidget(save_button)
+
+
+_RECEIPT_METHOD_KEYS = ["RECEIPT_CASH", "RECEIPT_CHECK", "RECEIPT_DISCOUNT"]
+
+
 class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.company_id: int | None = None
         self._forms: dict[str, _MappingForm] = {}
         self._tables: dict[str, QTableWidget] = {}
+        self._method_mapping_rows: list[_MethodMappingRow] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -144,6 +175,29 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             help_fields.append((form, hint))
             help_fields.append((table, "برایِ حذفِ یک ردیف، رویِ آن دابل‌کلیک کنید."))
 
+        # --- روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/چک/تخفیف) ------------------
+        # طبقِ درخواستِ صریح: طرفِ بدهکارِ همین ردیف‌ها هم این‌جا تعریف شود.
+        method_card = QWidget()
+        method_card.setObjectName("card")
+        method_card_layout = QVBoxLayout(method_card)
+        method_card_layout.setContentsMargins(12, 10, 12, 10)
+        method_card_layout.setSpacing(4)
+
+        method_title = QLabel("روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/چک/تخفیف)")
+        method_title.setObjectName("sectionHint")
+        method_card_layout.addWidget(method_title)
+
+        self.method_mapping_container = QVBoxLayout()
+        self.method_mapping_container.setSpacing(2)
+        method_card_layout.addLayout(self.method_mapping_container)
+        layout.addWidget(method_card)
+        help_fields.append(
+            (
+                method_card,
+                "معینِ سمتِ بدهکارِ ردیف‌هایِ روشِ سندِ دریافت — نقدی، چکِ دریافتنی (در جریانِ وصول)، و تخفیفاتِ نقدیِ داده‌شده.",
+            )
+        )
+
         self.set_field_help(help_fields)
 
     def set_status(self, text: str) -> None:
@@ -170,6 +224,30 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         for direction, form in self._forms.items():
             form.set_options(group_options, account_options)
             self.refresh_mappings(direction)
+
+        while self.method_mapping_container.count():
+            child = self.method_mapping_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._method_mapping_rows = []
+        method_mappings_by_key = {
+            m.mapping_key: m.account_id
+            for m in treasury_service.list_account_mappings(company_id)
+            if m.mapping_key in _RECEIPT_METHOD_KEYS
+        }
+        for key in _RECEIPT_METHOD_KEYS:
+            row = _MethodMappingRow(
+                key, treasury_service.MAPPING_LABELS[key], method_mappings_by_key.get(key), account_options, self._save_method_mapping
+            )
+            self.method_mapping_container.addWidget(row)
+            self._method_mapping_rows.append(row)
+
+    def _save_method_mapping(self, mapping_key: str, account_id) -> None:
+        if self.company_id is None or account_id is None:
+            self.set_status("ابتدا یک حساب انتخاب کنید.")
+            return
+        treasury_service.set_account_mapping(self.company_id, mapping_key, account_id)
+        self.set_status("")
 
     def refresh_mappings(self, direction: str) -> None:
         if self.company_id is None:

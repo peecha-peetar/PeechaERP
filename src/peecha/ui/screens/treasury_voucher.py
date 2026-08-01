@@ -337,7 +337,8 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
     def _build_receipt_counterparty_options(self) -> list[tuple[int, str]]:
         """طبقِ درخواستِ صریح: فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ
         دریافت» (تنظیماتِ سیستم/تبِ خزانه‌داری) نگاشته شده‌اند این‌جا
-        پیشنهاد می‌شوند — نه معین، نه بقیه‌یِ تفصیلی‌ها."""
+        پیشنهاد می‌شوند — نه معین، نه بقیه‌یِ تفصیلی‌ها؛ و فقط تفصیلی‌هایِ
+        سطحِ آخر (برگ‌هایِ سلسله‌مراتب)، نه گروه‌هایِ والد."""
         self._receipt_counterparty_index = {}
         mappings = treasury_service.list_counterparty_mappings(self.company_id, "RECEIPT")
         person_mapping_by_group = {m.person_group_id: m.account_id for m in mappings if m.person_group_id is not None}
@@ -346,13 +347,13 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         options: list[tuple[int, str]] = []
         if person_mapping_by_group:
             person_type_id = dimensions_service.get_person_dimension_type_id(self.company_id)
-            for d in dimensions_service.list_detail_accounts(self.company_id, person_type_id):
+            for d in dimensions_service.list_leaf_detail_accounts(self.company_id, person_type_id):
                 if d.person_group_id in person_mapping_by_group:
                     account_id = person_mapping_by_group[d.person_group_id]
                     self._receipt_counterparty_index[d.detail_account_id] = (account_id, person_type_id)
                     options.append((d.detail_account_id, d.name or d.full_code or d.code))
         for dimension_type_id, account_id in dim_mapping_by_type.items():
-            for d in dimensions_service.list_detail_accounts(self.company_id, dimension_type_id):
+            for d in dimensions_service.list_leaf_detail_accounts(self.company_id, dimension_type_id):
                 self._receipt_counterparty_index[d.detail_account_id] = (account_id, dimension_type_id)
                 options.append((d.detail_account_id, d.name or d.full_code or d.code))
         return options
