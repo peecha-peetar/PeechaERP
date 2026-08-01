@@ -234,6 +234,7 @@ def _estimate_rows_per_page(
     headers: list[str],
     amount_col_indices: list[int],
     *,
+    page_header_html: str,
     page_size: QSizeF,
     colgroup_html: str,
     head_cells: str,
@@ -244,7 +245,15 @@ def _estimate_rows_per_page(
     اندازه‌گیریِ واقعیِ QTextDocument.pageCount(). این فقط برایِ تعیینِ
     فاصله‌یِ درجِ ردیف‌هایِ «جمعِ این صفحه» استفاده می‌شود (نه برایِ شکستِ
     اجباریِ صفحه) — پس یک تخمینِ کمی نادرست هم صفحه‌یِ خالی نمی‌سازد،
-    فقط ردیفِ جمع را یکی-دو ردیف زودتر/دیرتر می‌نشاند."""
+    فقط ردیفِ جمع را یکی-دو ردیف زودتر/دیرتر می‌نشاند.
+
+    نکته‌ی مهم (باگِ واقعیِ کشف‌شده با گزارشِ کاربر: «وسطِ صفحه‌ی دوم
+    جمعِ صفحه‌ی اول زده»): این تابع باید هدرِ *واقعیِ* همان صفحه را هم
+    در اندازه‌گیری حساب کند — فقط صفحه‌ی اول هدرِ گزارش (نامِ‌شرکت/
+    عنوان/تاریخ) دارد و این فضا واقعاً از ظرفیتِ ردیف‌هایِ همان صفحه کم
+    می‌کند؛ اگر نادیده گرفته شود، ظرفیتِ صفحه‌ی اول سرریز تخمین زده
+    می‌شود و اولین ردیفِ جمع به‌جایِ لبه‌ی صفحه‌ی اول، وسطِ صفحه‌ی دوم
+    می‌افتد (دقیقاً همان چیزی که گزارش شد)."""
     lo, hi, best = 1, len(rows), 1
     while lo <= hi:
         mid = (lo + hi) // 2
@@ -253,7 +262,7 @@ def _estimate_rows_per_page(
         fits = _fits_one_page(
             page_size,
             {
-                "page_header_html": "",
+                "page_header_html": page_header_html,
                 "colgroup_html": colgroup_html,
                 "head_cells": head_cells,
                 "body_rows_html": _rows_html(trial_rows),
@@ -280,6 +289,7 @@ def _rows_with_subtotals_html(
     page_size: QSizeF,
     colgroup_html: str,
     head_cells: str,
+    header_html: str,
     font_family: str,
     font_size_pt: float,
 ) -> str:
@@ -287,20 +297,32 @@ def _rows_with_subtotals_html(
         return _rows_html(rows)
 
     if rows_per_page_override and rows_per_page_override > 0:
-        chunk_size = rows_per_page_override
+        first_page_rows = rows_per_page_override
+        rest_page_rows = rows_per_page_override
     else:
-        chunk_size = _estimate_rows_per_page(
-            rows, headers, amount_col_indices, page_size=page_size, colgroup_html=colgroup_html,
-            head_cells=head_cells, font_family=font_family, font_size_pt=font_size_pt,
+        # ظرفیتِ صفحه‌ی اول (با احتسابِ هدرِ واقعیِ گزارش) و ظرفیتِ
+        # صفحه‌هایِ بعدی (که فقط thead تکرارشونده دارند، نه هدرِ گزارش)
+        # می‌توانند واقعاً فرق کنند — جداگانه محاسبه می‌شوند.
+        first_page_rows = _estimate_rows_per_page(
+            rows, headers, amount_col_indices, page_header_html=header_html, page_size=page_size,
+            colgroup_html=colgroup_html, head_cells=head_cells, font_family=font_family, font_size_pt=font_size_pt,
+        )
+        rest_page_rows = _estimate_rows_per_page(
+            rows, headers, amount_col_indices, page_header_html="", page_size=page_size,
+            colgroup_html=colgroup_html, head_cells=head_cells, font_family=font_family, font_size_pt=font_size_pt,
         )
 
     parts = []
-    for i in range(0, len(rows), chunk_size):
-        chunk = rows[i : i + chunk_size]
+    remaining = rows
+    is_first = True
+    while remaining:
+        chunk_size = first_page_rows if is_first else rest_page_rows
+        chunk = remaining[:chunk_size]
         parts.append(_rows_html(chunk))
-        is_last_chunk = i + chunk_size >= len(rows)
-        if not is_last_chunk:
+        remaining = remaining[chunk_size:]
+        if remaining:
             parts.append(_bold_row_html(_subtotal_row(headers, amount_col_indices, chunk)))
+        is_first = False
     return "".join(parts)
 
 
@@ -339,7 +361,7 @@ def _build_final_document(
 
     body_rows_html = _rows_with_subtotals_html(
         rows, headers, amount_col_indices, options.rows_per_page,
-        page_size=page_size, colgroup_html=colgroup_html, head_cells=head_cells,
+        page_size=page_size, colgroup_html=colgroup_html, head_cells=head_cells, header_html=header_html,
         font_family=font_family, font_size_pt=font_size_pt,
     )
     footer_row_html = _bold_row_html(footer) if footer else ""
