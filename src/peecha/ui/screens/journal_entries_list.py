@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
+from peecha.services import cartable as cartable_service
 from peecha.services import currencies as currencies_service
 from peecha.services import journal_entries as je_service
 from peecha.ui.widgets import FieldHelpMixin
@@ -212,6 +213,27 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         company_id = self._company_id()
         if company_id is None or session.current_user is None:
             return
+
+        if cartable_service.has_active_workflow(company_id, "journal_entry"):
+            confirm = QMessageBox.question(
+                self,
+                "ارسالِ سند برایِ تایید",
+                "این سند برایِ زنجیره‌ی تاییدِ کارتابل ارسال شود؟",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if confirm != QMessageBox.Yes:
+                return
+            entry = next((e for e in self._entries if e.journal_entry_id == journal_entry_id), None)
+            amount = entry.total_amount if entry is not None else None
+            cartable_service.submit_for_approval(
+                company_id, "journal_entry", journal_entry_id, "CREATE", session.current_user.user_id, amount=amount
+            )
+            QMessageBox.information(
+                self, "ارسال شد", "سند برایِ تاییدِ کارتابل ارسال شد؛ بعدِ تاییدِ همه‌ی مراحل، خودکار دائم می‌شود."
+            )
+            self.refresh()
+            return
+
         confirm = QMessageBox.question(
             self,
             "تاییدِ سند",

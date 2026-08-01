@@ -37,14 +37,15 @@ from peecha.nav_catalog import build_form_catalog
 # (کدِ ماژول، برچسبِ فارسی، آیکون، ترتیب) — همان ماژول‌های شِل (shell_window.py NAV_ITEMS)
 _MODULES = [
     ("DASH", "داشبورد", "view-dashboard-outline", 0),
-    ("GL", "مالی و حسابداری", "cash-multiple", 1),
-    ("INV", "انبار و موجودی", "package-variant-closed", 2),
-    ("SALES", "فروش و بازاریابی", "cart-outline", 3),
-    ("PURCH", "خرید و تدارکات", "truck-outline", 4),
-    ("HR", "منابع انسانی", "account-group-outline", 5),
-    ("INVOICES", "فاکتورها", "receipt-text-outline", 6),
-    ("REPORTS", "گزارش‌ها", "chart-bar", 7),
-    ("SETTINGS", "مدیریت سیستم", "cog-outline", 8),
+    ("MY_TASKS", "کارتابلِ من", "inbox-outline", 1),
+    ("GL", "مالی و حسابداری", "cash-multiple", 2),
+    ("INV", "انبار و موجودی", "package-variant-closed", 3),
+    ("SALES", "فروش و بازاریابی", "cart-outline", 4),
+    ("PURCH", "خرید و تدارکات", "truck-outline", 5),
+    ("HR", "منابع انسانی", "account-group-outline", 6),
+    ("INVOICES", "فاکتورها", "receipt-text-outline", 7),
+    ("REPORTS", "گزارش‌ها", "chart-bar", 8),
+    ("SETTINGS", "مدیریت سیستم", "cog-outline", 9),
 ]
 
 # (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()

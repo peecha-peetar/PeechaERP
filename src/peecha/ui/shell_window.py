@@ -61,6 +61,7 @@ from peecha.ui.widgets import HoverButton, field_help_is_enabled, set_field_help
 
 _NAV_ICONS = {
     "dashboard": "🏠",
+    "MY_TASKS": "📥",
     "GL": "💰",
     "INV": "📦",
     "SALES": "🛒",
@@ -981,6 +982,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.dimension_group_config import DimensionGroupConfigScreen
         from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen
         from peecha.ui.screens.journal_entry import JournalEntryScreen
+        from peecha.ui.screens.my_tasks import MyTasksScreen
         from peecha.ui.screens.placeholder import PlaceholderScreen
         from peecha.ui.screens.report_account_ledger import AccountLedgerScreen
         from peecha.ui.screens.report_anomalies import AnomaliesScreen
@@ -996,9 +998,21 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.statement_template_designer import (
             StatementTemplateDesignerScreen,
         )
+        from peecha.ui.screens.my_tasks import register_open_handler
         from peecha.ui.screens.system_settings import SystemSettingsScreen
 
+        # طبقِ درخواستِ صریح («سیستمِ کارتابلِ قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
+        # هر ماژولی که واردِ کارتابل می‌شود، فقط همین یک خط این‌جا اضافه
+        # می‌کند — بازکردنِ سندِ حسابداری با دابل‌کلیک رویِ ردیفِ «کارتابلِ من».
+        register_open_handler(
+            "journal_entry",
+            lambda main_window, source_record_id: main_window.open_screen(
+                "GL_JE", then=lambda screen: screen.edit_journal_entry(source_record_id)
+            ),
+        )
+
         self.register_screen("dashboard", DashboardScreen())
+        self.register_screen("my_tasks", MyTasksScreen(self))
         self.register_screen("placeholder", PlaceholderScreen())
         self.register_screen("chart_of_accounts", ChartOfAccountsScreen())
         self.register_screen("system_settings", SystemSettingsScreen())

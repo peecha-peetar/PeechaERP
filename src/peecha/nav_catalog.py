@@ -10,6 +10,11 @@ from __future__ import annotations
 
 NAV_ITEMS = [
     {"code": "dashboard", "label": "داشبورد", "screen": "dashboard"},
+    # طبقِ درخواستِ صریح («سیستمِ کارتابل قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
+    # این آیتم عمداً بالایِ ساید‌بار و مستقلِ از هر ماژول است — کارتابل هر
+    # کاربر می‌تواند هم‌زمان اقلامی از حسابداری/خزانه‌داری/هر ماژولِ دیگر
+    # داشته باشد، پس زیرِ هیچ‌کدام قرار نمی‌گیرد (services/cartable.py).
+    {"code": "MY_TASKS", "label": "کارتابلِ من", "screen": "my_tasks"},
     {
         "code": "GL",
         "label": "مالی و حسابداری",
@@ -109,6 +114,7 @@ NAV_ITEMS = [
 # ریبون امکانِ تیک‌زدن/بردا‌شتنِ هرکدام از آیتم‌هایِ همان ماژول را می‌دهد.
 DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
     "dashboard": [],
+    "MY_TASKS": [],
     "GL": [
         ("GL_JE", "📝"),
         ("GL_COA", "🗂️"),
@@ -146,6 +152,7 @@ SETTINGS_SUB_FORMS = [
     ("roles", "نقش‌ها و دسترسی‌ها"),
     ("field_labels", "عنوانِ فیلدها"),
     ("translations", "ترجمه‌ها"),
+    ("workflow_designer", "طراحیِ گردشِ کار"),
     ("audit_log", "امنیت (رخدادنگار)"),
 ]
 

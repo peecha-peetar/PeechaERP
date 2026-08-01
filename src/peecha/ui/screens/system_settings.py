@@ -17,6 +17,7 @@ from peecha.ui.screens.languages import LanguagesScreen
 from peecha.ui.screens.roles import RolesScreen
 from peecha.ui.screens.translations import TranslationsScreen
 from peecha.ui.screens.users import UsersScreen
+from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
 
 
 class SystemSettingsScreen(QWidget):
@@ -77,6 +78,7 @@ class SystemSettingsScreen(QWidget):
             [
                 ("کاربران", UsersScreen()),
                 ("نقش‌ها و دسترسی‌ها", RolesScreen()),
+                ("طراحیِ گردشِ کار", WorkflowDesignerScreen()),
             ]
         )
 

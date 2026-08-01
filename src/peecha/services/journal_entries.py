@@ -2,8 +2,10 @@
 
 هر سند در این مرحله با شماره‌ی موقت (temporary_no) و وضعیت TEMPORARY ثبت
 می‌شود؛ تخصیص شماره‌ی دائم (permanent_no) طبق طراحی دیتابیس فقط از طریق
-تاییدِ کارتابل انجام می‌شود (هنوز ساخته نشده) و بعد از آن دیگر قابل تغییر
-نیست (تریگر tr_journal_entries_prevent_permanent_no_change).
+approve_journal_entry انجام می‌شود — یا مستقیم (بدونِ گردشِ کارِ تعریف‌شده)
+یا از طریقِ کارتابل (services/cartable.py؛ در پایینِ همین فایل به‌عنوانِ
+handlerِ form_code="journal_entry" ثبت‌نام شده) — و بعد از آن دیگر قابل
+تغییر نیست (تریگر tr_journal_entries_prevent_permanent_no_change).
 
 سال مالی هم به‌صورت خودکار از روی fiscal_year_start_month/day شرکت و
 تاریخِ سند محاسبه و در صورت نبود ساخته می‌شود — چون هنوز صفحه‌ی مدیریت سال
@@ -970,3 +972,57 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
 
         session.commit()
         return JournalEntryResult(journal_entry_id=reversal.journal_entry_id, temporary_no=next_temp_no)
+
+
+# --- ثبت‌نامِ handlerِ کارتابل (services/cartable.py) ------------------------
+# طبقِ درخواستِ صریح («سیستمِ کارتابلِ قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
+# این‌جا فقط سه callback ثبت می‌شود، بدونِ هیچ منطقِ تازه‌ای — approve_journal_entry
+# همان تابعِ ازپیش‌تست‌شده‌ای است که قبلاً مستقیم از UI صدا زده می‌شد؛ حالا
+# وقتی گردشِ کاری برایِ form_code="journal_entry" تعریف شده باشد، آخرین
+# مرحله‌یِ تاییدِ کارتابل همین تابع را صدا می‌زند.
+
+
+def _cartable_on_approved(company_id: int, source_record_id: int, approved_by_user_id: int) -> None:
+    approve_journal_entry(source_record_id, company_id, approved_by_user_id)
+
+
+def _cartable_on_rejected(company_id: int, source_record_id: int, rejected_by_user_id: int, reason: str) -> None:
+    """سندِ ردشده به پیش‌نویس برمی‌گردد تا صادرکننده اصلاح و دوباره ارسال کند."""
+    with new_session() as session:
+        entry = session.get(JournalEntry, source_record_id)
+        if entry is None or entry.company_id != company_id:
+            return
+        draft_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "DRAFT"))
+        entry.status_id = draft_status.status_id
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=rejected_by_user_id,
+            entity_type="JournalEntry",
+            entity_id=source_record_id,
+            action="UPDATE",
+            changes={"after": {"status": "DRAFT", "rejection_reason": reason}},
+        )
+        session.commit()
+
+
+def _cartable_describe(company_id: int, source_record_id: int) -> str:
+    with new_session() as session:
+        entry = session.get(JournalEntry, source_record_id)
+        if entry is None or entry.company_id != company_id:
+            return f"سندِ حسابداری #{source_record_id}"
+        return f"سندِ حسابداری موقتِ شماره‌ی {numerals.to_persian_digits(str(entry.temporary_no))} — {entry.description or 'بدونِ شرح'}"
+
+
+def _register_cartable_handler() -> None:
+    from peecha.services import cartable as cartable_service
+
+    cartable_service.register_handler(
+        "journal_entry",
+        on_approved=_cartable_on_approved,
+        on_rejected=_cartable_on_rejected,
+        describe=_cartable_describe,
+    )
+
+
+_register_cartable_handler()
