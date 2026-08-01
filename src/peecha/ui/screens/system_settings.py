@@ -16,7 +16,6 @@ from peecha.ui.screens.fiscal_years import FiscalYearsScreen
 from peecha.ui.screens.languages import LanguagesScreen
 from peecha.ui.screens.roles import RolesScreen
 from peecha.ui.screens.translations import TranslationsScreen
-from peecha.ui.screens.treasury_auto_entry_settings import TreasuryAutoEntrySettingsScreen
 from peecha.ui.screens.users import UsersScreen
 from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
 
@@ -38,7 +37,6 @@ class SystemSettingsScreen(QWidget):
         # طبقِ درخواستِ صریح: کدینگِ حسابداری باید اولین کاری باشد که در
         # تنظیماتِ حسابداری انجام می‌شود — به همین دلیل اولین تب است.
         self.tabs.addTab(self._build_coding_tab(), "کدینگِ حسابداری")
-        self.tabs.addTab(self._build_treasury_tab(), "خزانه‌داری")
         self.tabs.addTab(self._build_general_tab(), "عمومی")
         self.tabs.addTab(self._build_users_tab(), "کاربران و دسترسی‌ها")
         self.tabs.addTab(self._build_accounting_data_tab(), "داده‌های حسابداری")
@@ -54,17 +52,6 @@ class SystemSettingsScreen(QWidget):
                 ("کدینگِ حساب‌ها", AccountingCodingSettingsScreen()),
                 ("تعدادِ رقمِ سطوحِ تفصیلی", DetailLevelDigitSettingsScreen()),
                 ("نگاشتِ صورت‌هایِ مالی", FinancialStatementMappingScreen()),
-            ]
-        )
-
-    def _build_treasury_tab(self) -> QWidget:
-        # طبقِ درخواستِ صریح: تنظیمِ سندِ اتوماتیکِ خزانه‌داری (انواعِ سندِ
-        # دریافت/پرداخت + نگاشتِ نقد/بانک/چک/تخفیف + دسته‌چک) این‌جا، زیرِ
-        # تبِ «خزانه‌داری»یِ تنظیماتِ سیستم قرار می‌گیرد — نه یک صفحه‌یِ
-        # جداگانه در ناوبریِ کناری.
-        return self._sub_tabs(
-            [
-                ("تنظیمِ سندِ اتوماتیک", TreasuryAutoEntrySettingsScreen()),
             ]
         )
 

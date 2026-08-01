@@ -213,7 +213,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.title_label.setObjectName("pageTitle")
         header_layout.addWidget(self.title_label, 0, 0, 1, 4)
 
-        header_layout.addWidget(QLabel("نوعِ سند"), 1, 0)
+        header_layout.addWidget(QLabel("طرفِ حساب / حسابِ مربوطه"), 1, 0)
         self.account_combo = _make_searchable_combo([])
         self.account_combo.currentIndexChanged.connect(self._on_account_changed)
         header_layout.addWidget(self.account_combo, 1, 1, 1, 3)
@@ -289,7 +289,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.account_combo,
-                "نوعِ سند، معینِ طرفِ حساب را خودکار تعیین می‌کند — نوع‌هایِ تازه از تنظیماتِ سیستم (تبِ خزانه‌داری) اضافه می‌شوند.",
+                "طرفِ حسابی که از او دریافت می‌کنید یا به او پرداخت می‌کنید (مثلاً حسابِ کلِ «حساب‌هایِ دریافتنی»).",
             ),
             (
                 self.table,
@@ -305,12 +305,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.company_id = self._company_id()
         if self.company_id is None:
             return
-        # طبقِ درخواستِ صریح: دیگر معین در بالایِ فرم انتخاب نمی‌شود — از
-        # بینِ «نوع‌سند»هایِ ازپیش‌تعریف‌شده در تنظیماتِ سیستم (تبِ
-        # خزانه‌داری) انتخاب می‌شود؛ معین (و تفصیلیِ ثابت، اگر پیوست شده)
-        # از رویِ همان قاعده خودکار حل می‌شود.
-        self.account_options = treasury_service.list_document_types(self.company_id, self.direction)
-        _fill_options(self.account_combo, [(row, row.name) for row in self.account_options])
+        # طبقِ گزارشِ صریح: معین‌هایی که تفصیلیِ الزامی‌شان صندوق/بانک/تنخواه
+        # است، این‌جا اصلاً به‌عنوانِ «طرفِ حساب» انتخاب‌پذیر نیستند — خودشان
+        # از طریقِ ردیف‌هایِ روش (نقد/بانک) مدیریت می‌شوند.
+        self.account_options = treasury_service.list_counterparty_account_options(self.company_id)
+        _fill_options(self.account_combo, self.account_options)
 
         base_currency_id = session.current_company.base_currency_id if session.current_company else None
         currency = next((c for c in currencies_service.list_all_currencies() if c.currency_id == base_currency_id), None)
@@ -325,23 +324,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
                 child.widget().deleteLater()
         self._detail_combos = {}
 
-        document_type = self.account_combo.currentData()
-        if document_type is None or self.company_id is None:
+        account_id = self.account_combo.currentData()
+        if account_id is None or self.company_id is None:
             return
-        for required in dimensions_service.get_required_dimensions_for_account(document_type.account_id):
-            if required.dimension_type_id == document_type.detail_dimension_type_id:
-                if document_type.fixed_detail_account_id is not None:
-                    continue  # دقیقاً یک تفصیلیِ مجاز پیوست شده — خودکار همان استفاده می‌شود
-                # طبقِ درخواستِ صریح: چند تفصیلیِ مجاز برایِ این نوعِ سند پیوست
-                # شده — فقط همان‌ها (نه همه‌ی تفصیلی‌هایِ معتبرِ معین) پیشنهاد/
-                # جستجو/انتخاب می‌شوند.
-                options = document_type.detail_options
-            else:
-                options = [(d.detail_account_id, d.name or d.full_code or d.code) for d in required.detail_accounts]
+        for required in dimensions_service.get_required_dimensions_for_account(account_id):
             label = "تفصیلیِ اشخاص" if required.code == dimensions_service.PERSON_DIMENSION_CODE else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(required.code, required.code)
             row = QHBoxLayout()
             row.addWidget(QLabel(label))
-            combo = _make_searchable_combo(options)
+            combo = _make_searchable_combo([(d.detail_account_id, d.name or d.full_code or d.code) for d in required.detail_accounts])
             row.addWidget(combo, stretch=1)
             wrapper = QWidget()
             wrapper.setLayout(row)
@@ -380,20 +370,15 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         if self.company_id is None or session.current_user is None:
             theme.set_status_label(self.status_label, "ابتدا یک شرکت را انتخاب کنید.", ok=False)
             return
-        document_type = self.account_combo.currentData()
-        if document_type is None:
-            theme.set_status_label(self.status_label, "نوعِ سند را انتخاب کنید.", ok=False)
+        account_id = self.account_combo.currentData()
+        if account_id is None:
+            theme.set_status_label(self.status_label, "طرفِ حساب / حسابِ مربوطه را انتخاب کنید.", ok=False)
             return
-        counterparty_details: dict[int, int] = {}
-        if document_type.fixed_detail_account_id is not None:
-            counterparty_details[document_type.detail_dimension_type_id] = document_type.fixed_detail_account_id
-        counterparty_details.update(
-            {
-                dimension_type_id: combo.currentData()
-                for dimension_type_id, combo in self._detail_combos.items()
-                if combo.currentData() is not None
-            }
-        )
+        counterparty_details = {
+            dimension_type_id: combo.currentData()
+            for dimension_type_id, combo in self._detail_combos.items()
+            if combo.currentData() is not None
+        }
         method_lines = [ln for row in self._method_rows if (ln := row.to_method_line()) is not None]
         if not method_lines:
             theme.set_status_label(self.status_label, "حداقل یک ردیفِ روش (با مبلغِ مثبت) لازم است.", ok=False)
@@ -404,7 +389,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
                 self.company_id,
                 session.current_user.user_id,
                 self.direction,
-                document_type.account_id,
+                account_id,
                 counterparty_details,
                 self.date_field.date(),
                 self.description_field.text().strip(),
