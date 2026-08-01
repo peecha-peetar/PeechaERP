@@ -314,24 +314,6 @@ def list_detail_accounts(company_id: int, dimension_type_id: int) -> list[Detail
         return [_to_detail_account_row(r, full_codes) for r in rows]
 
 
-def list_leaf_detail_accounts(company_id: int, dimension_type_id: int, person_group_id: int = 0) -> list[DetailAccountRow]:
-    """فقط برگ‌هایِ فعالِ یک گروهِ تفصیلی (همان‌هایی که در سند قابلِ‌انتخاب‌اند)
-    — هم‌الگو با فیلترِ برگ در get_required_dimensions_for_account، اما
-    برایِ یک گروهِ تکی و (اختیاری) محدود به یک زیرگروهِ اشخاصِ مشخص."""
-    with new_session() as session:
-        query = select(DetailAccount).where(
-            DetailAccount.company_id == company_id, DetailAccount.dimension_type_id == dimension_type_id
-        )
-        if person_group_id:
-            query = query.where(DetailAccount.person_group_id == person_group_id)
-        all_rows = session.scalars(query).all()
-        full_codes = _compute_full_codes(all_rows)
-        parent_ids = {r.parent_detail_account_id for r in all_rows if r.parent_detail_account_id is not None}
-        leaf_rows = [r for r in all_rows if r.is_active and r.detail_account_id not in parent_ids]
-        leaf_rows.sort(key=lambda r: r.code)
-        return [_to_detail_account_row(r, full_codes) for r in leaf_rows]
-
-
 def _validate_code_length(
     session, company_id: int, dimension_type_id: int, level_no: int, segment_code: str, person_group_id: int = 0
 ) -> None:
