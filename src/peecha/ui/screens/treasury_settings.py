@@ -7,7 +7,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QCompleter,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -24,6 +23,7 @@ from peecha import numerals, session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
+from peecha.ui.screens.journal_entry import _make_searchable_combo
 from peecha.ui.widgets import FieldHelpMixin
 
 _RECEIPT_KEYS = ["RECEIPT_CASH", "RECEIPT_BANK", "RECEIPT_CHECK", "RECEIPT_DISCOUNT"]
@@ -40,20 +40,12 @@ class _MappingRow(QWidget):
         name_label.setMinimumWidth(220)
         layout.addWidget(name_label)
 
-        self.account_combo = QComboBox()
-        self.account_combo.setEditable(True)
-        self.account_combo.setInsertPolicy(QComboBox.NoInsert)
-        self.account_combo.addItem("", None)
-        for account_id, account_label in account_options:
-            self.account_combo.addItem(account_label, account_id)
-        completer = QCompleter([label for _v, label in account_options])
-        completer.setCaseSensitivity(Qt.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchContains)
-        self.account_combo.setCompleter(completer)
+        self.account_combo = _make_searchable_combo(account_options)
         if current_account_id is not None:
             index = self.account_combo.findData(current_account_id)
             if index >= 0:
                 self.account_combo.setCurrentIndex(index)
+                self.account_combo.lineEdit().setCursorPosition(0)
         layout.addWidget(self.account_combo, stretch=1)
 
         save_button = QPushButton("ذخیره")
