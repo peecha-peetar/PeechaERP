@@ -14,8 +14,8 @@ from peecha.ui.screens.field_labels import FieldLabelsScreen
 from peecha.ui.screens.financial_statement_mapping import FinancialStatementMappingScreen
 from peecha.ui.screens.fiscal_years import FiscalYearsScreen
 from peecha.ui.screens.languages import LanguagesScreen
-from peecha.ui.screens.placeholder import PlaceholderScreen
 from peecha.ui.screens.roles import RolesScreen
+from peecha.ui.screens.translations import TranslationsScreen
 from peecha.ui.screens.users import UsersScreen
 
 
@@ -81,14 +81,10 @@ class SystemSettingsScreen(QWidget):
         )
 
     def _build_accounting_data_tab(self) -> QWidget:
-        # نکته: «ترجمه‌ها»یِ Kivy مخصوصِ کاتالوگِ رشته‌هایِ ثابتِ KV بود —
-        # مخصوصِ همان معماریِ بازنشسته‌شده، بدونِ معادلِ Qt، عمداً Placeholder.
-        translations = PlaceholderScreen()
-        translations.set_module_name("ترجمه‌ها")
         return self._sub_tabs(
             [
                 ("عنوانِ فیلدها", FieldLabelsScreen()),
-                ("ترجمه‌ها", translations),
+                ("ترجمه‌ها", TranslationsScreen()),
             ]
         )
 

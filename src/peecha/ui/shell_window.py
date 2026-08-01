@@ -55,6 +55,7 @@ from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
 from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
+from peecha.services import translations as translations_service
 from peecha.ui import theme
 from peecha.ui.widgets import HoverButton, field_help_is_enabled, set_field_help_enabled
 
@@ -161,6 +162,13 @@ class _SidebarGroup(QWidget):
         super().__init__()
         self._entries: dict[str, HoverButton] = {}
         self._has_children = bool(item.get("children"))
+        self._item = item
+        # طبقِ حسابرسیِ صریح («سوییچرِ زبانِ فعال هیچ اثری ندارد»): برایِ
+        # این‌که با تغییرِ زبان بتوانیم متنِ همین ویجت‌ها را بدونِ بازسازیِ
+        # کاملِ ساید‌بار عوض کنیم، نگاشتِ کد -> ویجت و کد -> متنِ فارسیِ اصلی
+        # همین‌جا نگه داشته می‌شود.
+        self._widgets_by_code: dict[str, QWidget] = {}
+        self._source_by_code: dict[str, str] = {item["code"]: item["label"]}
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -230,6 +238,8 @@ class _SidebarGroup(QWidget):
                 sub_title.setObjectName("sidebarSubGroupTitle")
                 sub_title.setContentsMargins(18 + depth * 10, 8, 12, 2)
                 layout.addWidget(sub_title)
+                self._widgets_by_code[child["code"]] = sub_title
+                self._source_by_code[child["code"]] = child["label"]
                 self._populate_body(child, layout, on_leaf_click, depth=depth + 1)
             else:
                 code = child["code"]
@@ -247,6 +257,17 @@ class _SidebarGroup(QWidget):
                 button.clicked.connect(lambda _checked=False, c=code: on_leaf_click(c))
                 layout.addWidget(button)
                 self._entries[code] = button
+                self._widgets_by_code[code] = button
+                self._source_by_code[code] = child["label"]
+
+    def retranslate(self, translate_fn) -> None:
+        """طبقِ حسابرسیِ صریح: با تغییرِ زبانِ فعال، متنِ سرتیترِ گروه،
+        زیرتیترها، و آیتم‌هایِ برگ (بدونِ بازسازیِ کاملِ ساید‌بار، تا
+        انیمیشن/حالتِ باز-بسته‌بودنِ گروه دست‌نخورده بماند) عوض می‌شود."""
+        self._label = translate_fn(self._item["code"], self._item["label"])
+        self._update_header_text(self._icon, self._label, expanded=getattr(self, "_expanded", False))
+        for code, widget in self._widgets_by_code.items():
+            widget.setText(translate_fn(code, self._source_by_code[code]))
 
     def toggle(self) -> None:
         if self.body is None:
@@ -626,6 +647,7 @@ class MainWindow(QMainWindow):
 
         self.language_combo = QComboBox()
         self.language_combo.setFixedWidth(110)
+        self.language_combo.currentIndexChanged.connect(self._on_language_changed)
         layout.addWidget(self.language_combo)
 
         self.fiscal_year_combo = QComboBox()
@@ -1163,15 +1185,24 @@ class MainWindow(QMainWindow):
         self.company_combo.blockSignals(False)
 
         languages = languages_service.list_languages()
+        self.language_combo.blockSignals(True)
         self.language_combo.clear()
         for lang in languages:
             self.language_combo.addItem(lang.native_name, lang.language_id)
+        current_language_id = session.current_language.language_id if session.current_language else None
+        if current_language_id is not None:
+            index = self.language_combo.findData(current_language_id)
+            if index >= 0:
+                self.language_combo.setCurrentIndex(index)
+        self.language_combo.blockSignals(False)
 
         if session.current_company is not None:
             fiscal_years = fiscal_years_service.list_fiscal_years(session.current_company.company_id)
             self.fiscal_year_combo.clear()
             for fy in fiscal_years:
                 self.fiscal_year_combo.addItem(numerals.to_persian_digits(fy.code), fy.fiscal_year_id)
+
+        self._retranslate_sidebar()
 
     def _on_company_changed(self, index: int) -> None:
         if index < 0:
@@ -1185,3 +1216,26 @@ class MainWindow(QMainWindow):
         active_sub = self.mdi_area.activeSubWindow()
         if active_sub is not None and hasattr(active_sub.widget(), "refresh"):
             active_sub.widget().refresh()
+
+    def _on_language_changed(self, index: int) -> None:
+        """طبقِ حسابرسیِ صریح: قبلاً این سوییچر هیچ signalای وصل نداشت —
+        session.current_language هیچ‌وقت مقداردهی نمی‌شد و ساید‌بار همیشه
+        فارسی می‌ماند، صرفِ‌نظر از انتخابِ کاربر. حالا با انتخاب، برچسبِ
+        هرگروه/آیتم/زیرگروهِ ساید‌بار با ترجمه‌یِ ذخیره‌شده در
+        services/translations.py (اگر موجود باشد) دوباره نوشته می‌شود."""
+        language_id = self.language_combo.itemData(index)
+        languages = languages_service.list_languages()
+        session.current_language = next((lang for lang in languages if lang.language_id == language_id), None)
+        self._retranslate_sidebar()
+
+    def _retranslate_sidebar(self) -> None:
+        language_id = session.current_language.language_id if session.current_language else None
+        is_default = session.current_language.is_default if session.current_language else True
+
+        def translate_fn(code: str, source_label: str) -> str:
+            if is_default:
+                return source_label
+            return translations_service.translate_label(code, source_label, language_id)
+
+        for group in self._sidebar_groups.values():
+            group.retranslate(translate_fn)
