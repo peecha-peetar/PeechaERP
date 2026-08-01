@@ -431,6 +431,17 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
     def _save_geometry(self) -> None:
         if self._screen_name is None or self._restoring:
             return
+        main_window = getattr(self, "_main_window", None)
+        if main_window is not None and getattr(main_window, "_suppressing_geometry_save", False):
+            # باگِ واقعیِ کشف‌شده (با گزارشِ صریحِ کاربر): نمایش/بازیابیِ
+            # یک زیرپنجره — به‌عنوانِ رفتارِ بومیِ QMdiArea (فقط یک
+            # زیرپنجره هم‌زمان می‌تواند maximize نمایش داده شود) — می‌تواند
+            # به‌طورِ جانبی حالتِ maximizeِ زیرپنجره‌هایِ *دیگر* را هم عوض
+            # کند و همین changeEvent را رویِ آن‌ها هم بفرستد. بدونِ این
+            # پرچم، آن تغییرِ ناخواسته این‌جا ذخیره می‌شد و ترجیحِ واقعیِ
+            # کاربر برایِ آن فرم را رویِ دیسک خراب می‌کرد — دفعه‌ی بعد که
+            # کاربر به همان فرم برمی‌گشت، دیگر maximize نبود.
+            return
         settings = QSettings("Peecha", "PeechaERP")
         settings.setValue(f"mdiWindow/{self._screen_name}/maximized", self.isMaximized())
         if not self.isMaximized():
@@ -571,6 +582,9 @@ class MainWindow(QMainWindow):
         self._company_options: list[companies_service.CompanyRow] = []
         self._cascade_index = 0
         self._closing_for_logout = False
+        # طبقِ گزارشِ صریح («فرمِ قبلی با بازشدنِ فرمِ تازه جمع می‌شود»):
+        # نگاهِ کنید به توضیحِ کاملِ این پرچم در open_screen.
+        self._suppressing_geometry_save = False
 
         central = QWidget()
         self._central = central
@@ -1089,6 +1103,7 @@ class MainWindow(QMainWindow):
         if is_new_subwindow:
             sub_window = _FramelessMdiSubWindow()
             sub_window._screen_name = target_screen_name
+            sub_window._main_window = self
             icon = _NAV_ICONS.get(self._find_top_level_code(code), "📄")
             wrapper = _MdiFormWrapper(item["label"], icon, screen, sub_window)
             sub_window.setWidget(wrapper)
@@ -1104,21 +1119,31 @@ class MainWindow(QMainWindow):
         # وگرنه همان show() اولیه، جایگاهِ هنوز-اصلاح‌نشده را زودتر ذخیره
         # می‌کند و مقدارِ درستِ بعدی هرگز روی دیسک نمی‌نشیند.
         #
-        # نکته‌یِ دیگر (رفتارِ بومیِ خودِ QMdiArea، مستقل از این ویژگی): اگر
-        # زیرپنجره‌یِ دیگری در همان لحظه maximize باشد، ممکن است زیرپنجره‌یِ
-        # تازه هم موقتاً maximize نمایش داده شود چون «maximize» در QMdiArea
-        # عملاً یک حالتِ کلیِ ناحیه است، نه صرفاً یک ویژگیِ مستقل برایِ هر
-        # زیرپنجره — دقیقاً هم‌رفتار با نرم‌افزارهایِ MDI متعارف (مثلِ
-        # مرجعِ قدیمیِ همین بازطراحی)؛ جایگاه/اندازه‌یِ ذخیره‌شده‌یِ خودِ این
-        # صفحه هرگز خراب نمی‌شود، فقط نمایشِ اولیه‌اش ممکن است از حالتِ
-        # maximizeِ زیرپنجره‌یِ دیگر پیروی کند تا کاربر خودش یکی را
-        # ازحالتِ‌maximize خارج کند.
-        if is_new_subwindow:
-            sub_window._restoring = True
-        sub_window.show()
-        if is_new_subwindow:
+        # باگِ واقعیِ کشف‌شده (طبقِ گزارشِ صریحِ کاربر: «فرمِ قبلی با
+        # بازشدنِ فرمِ تازه جمع می‌شود»): رفتارِ بومیِ خودِ QMdiArea این
+        # است که فقط یک زیرپنجره هم‌زمان می‌تواند maximize نمایش داده
+        # شود، پس نمایش/بازیابیِ *این* زیرپنجره می‌تواند به‌طورِ جانبی
+        # حالتِ maximizeِ زیرپنجره‌هایِ *دیگر* را هم عوض کند و changeEvent
+        # آن‌ها را هم صدا بزند. قبلاً این تغییرِ جانبی مستقیم در QSettings
+        # ذخیره می‌شد و ترجیحِ واقعیِ کاربر برایِ آن فرمِ دیگر را خراب
+        # می‌کرد — چون بازیابیِ حالتِ ذخیره‌شده فقط برایِ زیرپنجره‌یِ *تازه*
+        # اجرا می‌شد، فرمِ قبلاً-بازشده با برگشتنِ کاربر به آن، دیگر هرگز
+        # به حالتِ maximizeاش برنمی‌گشت. حالا: (۱) self._suppressing_geometry_save
+        # حینِ این نمایش/بازیابی، ذخیره‌یِ خودکارِ *همه‌یِ* زیرپنجره‌ها را
+        # موقتاً خاموش می‌کند (نه فقط همین یکی)، و (۲) بازیابیِ حالتِ
+        # ذخیره‌شده برایِ *هر* بازکردنی اجرا می‌شود، نه فقط اولین‌بار —
+        # پس هر فرمی که کاربر maximize کرده بود، با برگشتن به آن، دوباره
+        # درست maximize نمایش داده می‌شود.
+        self._suppressing_geometry_save = True
+        try:
+            if is_new_subwindow:
+                sub_window._restoring = True
+            sub_window.show()
             self._restore_or_size_subwindow(sub_window, target_screen_name)
-            sub_window._restoring = False
+            if is_new_subwindow:
+                sub_window._restoring = False
+        finally:
+            self._suppressing_geometry_save = False
         sub_window.raise_()
         self.mdi_area.setActiveSubWindow(sub_window)
 

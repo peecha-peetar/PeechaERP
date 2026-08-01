@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QScrollArea, QTabWidget, QVBoxLayout, QWidget
 
 from peecha.ui.screens.accounting_coding import AccountingCodingSettingsScreen, DetailLevelDigitSettingsScreen
 from peecha.ui.screens.audit_log import AuditLogScreen
@@ -56,11 +56,21 @@ class SystemSettingsScreen(QWidget):
         )
 
     def _sub_tabs(self, pages: list[tuple[str, QWidget]]) -> QTabWidget:
+        # طبقِ گزارشِ صریح («فرم‌هایِ تنظیماتِ سیستم اصلاً اسکرول ندارند»):
+        # وقتی این زیرپنجره کوچک می‌شود، محتوایِ زیرتب‌ها (که هرکدام یک
+        # صفحه‌یِ کاملِ مستقل‌اند، با حداقل‌ارتفاعِ خودشان) به‌سادگی از
+        # دیدرس خارج می‌شد و هیچ راهی برایِ رسیدن به فیلدها/دکمه‌هایِ
+        # پایینی نبود — همان الگویِ QScrollArea که در dimension_group_config.py
+        # برایِ همین مشکل استفاده شده، این‌جا هم به‌کار می‌رود.
         inner = QTabWidget()
         inner.setDocumentMode(True)
         for label, widget in pages:
             self._sub_screens.append(widget)
-            inner.addTab(widget, label)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setWidget(widget)
+            inner.addTab(scroll, label)
         return inner
 
     def _build_general_tab(self) -> QWidget:
@@ -93,7 +103,11 @@ class SystemSettingsScreen(QWidget):
     def _build_security_tab(self) -> QWidget:
         screen = AuditLogScreen()
         self._sub_screens.append(screen)
-        return screen
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(screen)
+        return scroll
 
     def refresh(self) -> None:
         for widget in self._sub_screens:
