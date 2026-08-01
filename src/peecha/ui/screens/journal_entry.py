@@ -72,7 +72,7 @@ from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 from peecha import numerals
-from peecha.ui import theme
+from peecha.ui import report_export, theme
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _COL_ROW_NO = 0
@@ -87,6 +87,14 @@ _COL_REMOVE = 8
 _COLUMN_LABELS = [
     "ردیف", "حساب", "تفصیلی", "مرکزِ هزینه", "پروژه", "شرحِ ردیف", "بدهکار", "بستانکار", "",
 ]
+
+_STATUS_LABELS = {
+    "DRAFT": "پیش‌نویس",
+    "TEMPORARY": "موقت",
+    "PERMANENT": "دائم",
+    "REVERSED": "برگشت‌خورده",
+    "CANCELLED": "ابطال‌شده",
+}
 
 
 def _fill_options(combo: QComboBox, options: list[tuple[int, str]]) -> None:
@@ -809,6 +817,12 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self.header_rate_field.setVisible(False)
         self.header_rate_fetch_button.setVisible(False)
 
+        # طبقِ درخواستِ صریح: تیکِ «چاپِ سند پس از ثبت» — اگر فعال باشد،
+        # بلافاصله پس از ثبتِ موفقِ سند، انتخابِ فرمت (چاپ/PDF/اکسل) پرسیده
+        # می‌شود و همان سندِ تازه‌ثبت‌شده صادر می‌شود.
+        self.print_after_save_checkbox = QCheckBox("چاپِ سند پس از ثبت")
+        header_layout.addWidget(self.print_after_save_checkbox, 2, 2)
+
         # ستونِ شرحِ سند (۳) بیشترینِ فضایِ اضافه را می‌گیرد — طبقِ بازخورد،
         # تاریخ/شماره‌یِ عطف (ستونِ ۱) عرضِ کوچکِ ثابت کافی است.
         header_layout.setColumnStretch(0, 0)
@@ -952,6 +966,14 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self.cancel_edit_button.setObjectName("flatButton")
         self.cancel_edit_button.clicked.connect(lambda: self._reset_form())
         footer.addWidget(self.cancel_edit_button)
+
+        # طبقِ درخواستِ صریح («پرینتِ سندِ حسابداری ساخته نشده»): چاپِ
+        # سندِ در‌حالِ‌ویرایش (سندِ ذخیره‌شده‌ای که با «ویرایش» بازشده) —
+        # روی سندِ تازه (هنوز ذخیره‌نشده) هم کار می‌کند، برایِ پیش‌نمایش.
+        self.print_voucher_button = QPushButton("🖨️ چاپِ سند")
+        self.print_voucher_button.setObjectName("flatButton")
+        self.print_voucher_button.clicked.connect(self._on_print_voucher_clicked)
+        footer.addWidget(self.print_voucher_button)
 
         self.delete_button = QPushButton("حذفِ سند")
         self.delete_button.setObjectName("dangerButton")
@@ -1522,6 +1544,105 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         target_field = target_row.debit_field if field == "debit" else target_row.credit_field
         target_field.setValue(source_value)
 
+    def _voucher_export_payload(self, *, temp_no: int | None, status_code: str) -> tuple:
+        """طبقِ درخواستِ صریح («پرینتِ سندِ حسابداری ساخته نشده»): دیتایِ
+        نمایشیِ سندِ *جاری* (چه تازه‌ثبت‌شده چه در‌حالِ‌ویرایش) را با همان
+        قالبِ headers/rows/footer/company_name/report_date/filتersِ
+        report_export.py می‌سازد — چون این ماژول از قبل چاپ/PDF/اکسل با
+        هدر/جمعِ‌صفحه را دارد، سندِ حسابداری هم دقیقاً همان زیرساخت را
+        (بدونِ تکرارِ کد) استفاده می‌کند."""
+        headers = ["ردیف", "کدِ حساب", "نامِ حساب", "تفصیلی", "شرحِ ردیف", "بدهکار", "بستانکار"]
+        rows: list[list] = []
+        total_debit = decimal.Decimal(0)
+        total_credit = decimal.Decimal(0)
+        for i, row in enumerate(self._line_rows, start=1):
+            debit = decimal.Decimal(str(row.debit_field.value()))
+            credit = decimal.Decimal(str(row.credit_field.value()))
+            if debit == 0 and credit == 0:
+                continue
+            total_debit += debit
+            total_credit += credit
+            account_text = row.account_combo.currentText()
+            code, _sep, name = account_text.partition(" — ")
+            detail_parts = [
+                combo.currentText()
+                for combo in (row.detail_combo, row.cost_center_combo, row.project_combo)
+                if combo.isEnabled() and combo.currentText().strip()
+            ]
+            rows.append(
+                [
+                    numerals.to_persian_digits(str(i)),
+                    code,
+                    name,
+                    "، ".join(detail_parts),
+                    row.description_field.text().strip(),
+                    numerals.format_money(debit, self.currency_decimal_places, self.currency_symbol) if debit else "",
+                    numerals.format_money(credit, self.currency_decimal_places, self.currency_symbol) if credit else "",
+                ]
+            )
+        footer = [
+            "", "", "", "", "جمعِ کل",
+            numerals.format_money(total_debit, self.currency_decimal_places, self.currency_symbol),
+            numerals.format_money(total_credit, self.currency_decimal_places, self.currency_symbol),
+        ]
+
+        temp_no_text = numerals.to_persian_digits(str(temp_no)) if temp_no is not None else "—"
+        filters = [
+            ("شماره‌یِ سند", temp_no_text),
+            ("تاریخِ سند", numerals.format_jalali_date(self.date_field.date())),
+            ("وضعیت", _STATUS_LABELS.get(status_code, status_code)),
+        ]
+        if self.alt_number_field.text().strip():
+            filters.append(("شماره‌یِ عطف", self.alt_number_field.text().strip()))
+        if self.description_field.text().strip():
+            filters.append(("شرحِ سند", self.description_field.text().strip()))
+
+        company_name = session.current_company.display_name if session.current_company else ""
+        title = "سندِ حسابداری"
+        report_date = numerals.format_jalali_date(datetime.date.today())
+        return title, headers, rows, footer, company_name, report_date, filters
+
+    def _export_voucher(self, payload: tuple, fmt: str) -> None:
+        title, headers, rows, footer, company_name, report_date, filters = payload
+        kwargs = dict(company_name=company_name, report_date=report_date, filters=filters)
+        if fmt == "print":
+            report_export.print_report(self, title, headers, rows, footer, **kwargs)
+        elif fmt == "pdf":
+            report_export.export_report_pdf(self, title, headers, rows, footer, **kwargs)
+        elif fmt == "excel":
+            report_export.export_report_excel(self, title, headers, rows, footer, **kwargs)
+
+    def _prompt_and_export_voucher(self, payload: tuple) -> None:
+        box = QMessageBox(self)
+        box.setWindowTitle("خروجیِ سند")
+        box.setText("سند در چه قالبی صادر شود؟")
+        print_btn = box.addButton("🖨️ چاپ", QMessageBox.ActionRole)
+        pdf_btn = box.addButton("PDF", QMessageBox.ActionRole)
+        excel_btn = box.addButton("اکسل", QMessageBox.ActionRole)
+        box.addButton("انصراف", QMessageBox.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is print_btn:
+            self._export_voucher(payload, "print")
+        elif clicked is pdf_btn:
+            self._export_voucher(payload, "pdf")
+        elif clicked is excel_btn:
+            self._export_voucher(payload, "excel")
+
+    def _on_print_voucher_clicked(self) -> None:
+        status_code = "DRAFT" if self.draft_checkbox.isChecked() else "TEMPORARY"
+        temp_no = None
+        if self._editing_journal_entry_id is not None and self.company_id is not None:
+            summary = next(
+                (s for s in je_service.list_journal_entries(self.company_id) if s.journal_entry_id == self._editing_journal_entry_id),
+                None,
+            )
+            if summary is not None:
+                temp_no = summary.temporary_no
+                status_code = summary.status_code
+        payload = self._voucher_export_payload(temp_no=temp_no, status_code=status_code)
+        self._prompt_and_export_voucher(payload)
+
     def _renumber_rows(self) -> None:
         for i in range(len(self._line_rows)):
             item = self.table.item(i, _COL_ROW_NO)
@@ -1582,10 +1703,22 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             theme.set_status_label(self.status_label, str(exc), ok=False)
             return
 
+        # طبقِ درخواستِ صریح («تیکِ چاپِ سند... بعدِ تاییدِ سند»): دیتایِ
+        # خروجی باید پیش از ریست‌شدنِ فرم (که ردیف‌ها/هدر را پاک می‌کند)
+        # جمع‌آوری شود.
+        should_print = self.print_after_save_checkbox.isChecked()
+        voucher_payload = None
+        if should_print:
+            status_code = "DRAFT" if as_draft else "TEMPORARY"
+            voucher_payload = self._voucher_export_payload(temp_no=temp_no, status_code=status_code)
+
         self._reset_form()
         draft_note = "به‌صورتِ پیش‌نویس " if as_draft else ""
         temp_no_text = numerals.to_persian_digits(str(temp_no)) if temp_no is not None else "؟"
         theme.set_status_label(self.status_label, f"سند {draft_note}با شماره‌ی موقتِ {temp_no_text} ثبت شد.", ok=True)
+
+        if voucher_payload is not None:
+            self._prompt_and_export_voucher(voucher_payload)
 
     def _delete_current_entry(self) -> None:
         if self._editing_journal_entry_id is None or self.company_id is None or session.current_user is None:
