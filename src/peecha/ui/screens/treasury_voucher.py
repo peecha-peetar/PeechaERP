@@ -330,11 +330,18 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
             return
         for required in dimensions_service.get_required_dimensions_for_account(document_type.account_id):
             if required.dimension_type_id == document_type.detail_dimension_type_id:
-                continue  # این بُعد از طریقِ تفصیلیِ ثابتِ نوعِ سند حل شده
+                if document_type.fixed_detail_account_id is not None:
+                    continue  # دقیقاً یک تفصیلیِ مجاز پیوست شده — خودکار همان استفاده می‌شود
+                # طبقِ درخواستِ صریح: چند تفصیلیِ مجاز برایِ این نوعِ سند پیوست
+                # شده — فقط همان‌ها (نه همه‌ی تفصیلی‌هایِ معتبرِ معین) پیشنهاد/
+                # جستجو/انتخاب می‌شوند.
+                options = document_type.detail_options
+            else:
+                options = [(d.detail_account_id, d.name or d.full_code or d.code) for d in required.detail_accounts]
             label = "تفصیلیِ اشخاص" if required.code == dimensions_service.PERSON_DIMENSION_CODE else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(required.code, required.code)
             row = QHBoxLayout()
             row.addWidget(QLabel(label))
-            combo = _make_searchable_combo([(d.detail_account_id, d.name or d.full_code or d.code) for d in required.detail_accounts])
+            combo = _make_searchable_combo(options)
             row.addWidget(combo, stretch=1)
             wrapper = QWidget()
             wrapper.setLayout(row)
@@ -378,8 +385,8 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
             theme.set_status_label(self.status_label, "نوعِ سند را انتخاب کنید.", ok=False)
             return
         counterparty_details: dict[int, int] = {}
-        if document_type.detail_account_id is not None:
-            counterparty_details[document_type.detail_dimension_type_id] = document_type.detail_account_id
+        if document_type.fixed_detail_account_id is not None:
+            counterparty_details[document_type.detail_dimension_type_id] = document_type.fixed_detail_account_id
         counterparty_details.update(
             {
                 dimension_type_id: combo.currentData()

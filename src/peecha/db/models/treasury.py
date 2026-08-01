@@ -26,7 +26,8 @@ class TreasuryAccountMapping(Base):
 class TreasuryDocumentType(Base):
     """«نوعِ سند» برایِ دریافت/پرداخت — طبقِ درخواستِ صریح، در فرمِ سند
     به‌جایِ انتخابِ آزادِ معین از بینِ این‌ها انتخاب می‌شود (مثلاً «دریافت
-    از مشتری»)؛ هرکدام یک معین + یک تفصیلیِ اختیاریِ ثابت."""
+    از مشتری»)؛ هرکدام یک معین + فهرستِ تفصیلی‌هایِ مجاز/پیشنهادی
+    (treasury.document_type_details)."""
 
     __tablename__ = "document_types"
     __table_args__ = {"schema": "treasury"}
@@ -36,7 +37,22 @@ class TreasuryDocumentType(Base):
     direction: Mapped[str] = mapped_column(String(10))  # RECEIPT | PAYMENT
     name: Mapped[str] = mapped_column(String(150))
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
-    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
+class TreasuryDocumentTypeDetail(Base):
+    """تفصیلی‌هایِ مجازِ یک «نوعِ سند» — صفرتا (فرمِ سند از بینِ همه‌ی
+    تفصیلی‌هایِ معتبرِ معین می‌پرسد)، یکی (خودکار همان استفاده می‌شود)، یا
+    چندتا (فرمِ سند فقط همان‌ها را جستجوپذیر پیشنهاد می‌دهد)."""
+
+    __tablename__ = "document_type_details"
+    __table_args__ = {"schema": "treasury"}
+
+    document_type_id: Mapped[int] = mapped_column(
+        ForeignKey("treasury.document_types.document_type_id"), primary_key=True
+    )
+    detail_account_id: Mapped[int] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id"), primary_key=True
+    )
 
 
 class Checkbook(Base):

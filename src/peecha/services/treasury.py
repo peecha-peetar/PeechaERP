@@ -25,6 +25,7 @@ from peecha.db.models.treasury import (
     ReceivedCheck,
     TreasuryAccountMapping,
     TreasuryDocumentType,
+    TreasuryDocumentTypeDetail,
 )
 from peecha.services import audit as audit_service
 from peecha.services import chart_of_accounts as coa_service
@@ -212,9 +213,12 @@ _SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_servi
 # --- انواعِ سند (دریافت/پرداخت) ----------------------------------------------
 # طبقِ درخواستِ صریح: در فرمِ سندِ دریافت/پرداخت به‌جایِ انتخابِ آزادِ معین،
 # از بینِ «نوع‌سند»هایِ ازپیش‌تعریف‌شده در همین‌جا انتخاب می‌شود (مثلاً
-# «دریافت از مشتری» -> معینِ حساب‌هایِ دریافتنی). اگر یک تفصیلیِ ثابت هم
-# پیوست شود، همیشه همان تفصیلی استفاده می‌شود؛ در غیرِ این صورت، فرمِ سند
-# طبقِ نیازِ خودِ معین، تفصیلیِ لازم را می‌پرسد.
+# «دریافت از مشتری» -> معینِ حساب‌هایِ دریافتنی). هرکدام می‌تواند صفر، یک
+# یا چند تفصیلیِ «مجاز» داشته باشد: صفرتا یعنی فرمِ سند از بینِ همه‌ی
+# تفصیلی‌هایِ معتبرِ معین می‌پرسد؛ دقیقاً یکی یعنی همیشه خودکار همان
+# استفاده می‌شود؛ چندتا یعنی فرمِ سند فقط همان‌ها را جستجوپذیر پیشنهاد
+# می‌دهد (طبقِ درخواستِ صریح: «تفضیلی‌هایِ انتخاب‌شده برایِ معین در نوعِ
+# سند را پیشنهاد و جستجو و انتخاب کنیم»).
 
 
 @dataclass
@@ -224,9 +228,14 @@ class DocumentTypeRow:
     name: str
     account_id: int
     account_label: str
-    detail_account_id: int | None
-    detail_label: str | None
+    detail_options: list[tuple[int, str]]  # [(detail_account_id, label), ...] — تفصیلی‌هایِ مجاز
     detail_dimension_type_id: int | None
+
+    @property
+    def fixed_detail_account_id(self) -> int | None:
+        """وقتی دقیقاً یک تفصیلیِ مجاز پیوست شده، همیشه همان خودکار
+        استفاده می‌شود — بدونِ نمایشِ فیلد در فرمِ سند."""
+        return self.detail_options[0][0] if len(self.detail_options) == 1 else None
 
 
 def list_document_types(company_id: int, direction: str | None = None) -> list[DocumentTypeRow]:
@@ -235,8 +244,19 @@ def list_document_types(company_id: int, direction: str | None = None) -> list[D
         if direction is not None:
             query = query.where(TreasuryDocumentType.direction == direction)
         rows = session.scalars(query.order_by(TreasuryDocumentType.direction, TreasuryDocumentType.document_type_id)).all()
-        data = [(r.document_type_id, r.direction, r.name, r.account_id, r.detail_account_id) for r in rows]
-        detail_ids = {d for *_r, d in data if d is not None}
+        document_type_ids = [r.document_type_id for r in rows]
+
+        details_by_type: dict[int, list[int]] = {t: [] for t in document_type_ids}
+        detail_ids: set[int] = set()
+        if document_type_ids:
+            for link in session.scalars(
+                select(TreasuryDocumentTypeDetail).where(
+                    TreasuryDocumentTypeDetail.document_type_id.in_(document_type_ids)
+                )
+            ).all():
+                details_by_type[link.document_type_id].append(link.detail_account_id)
+                detail_ids.add(link.detail_account_id)
+
         details_by_id = (
             {
                 d.detail_account_id: d
@@ -246,41 +266,33 @@ def list_document_types(company_id: int, direction: str | None = None) -> list[D
             else {}
         )
 
-    accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
-    result: list[DocumentTypeRow] = []
-    for document_type_id, direction_, name, account_id, detail_account_id in data:
-        detail = details_by_id.get(detail_account_id) if detail_account_id is not None else None
-        result.append(
-            DocumentTypeRow(
-                document_type_id=document_type_id,
-                direction=direction_,
-                name=name,
-                account_id=account_id,
-                account_label=accounts_by_id.get(account_id, ""),
-                detail_account_id=detail_account_id,
-                detail_label=(detail.name or detail.code) if detail is not None else None,
-                detail_dimension_type_id=detail.dimension_type_id if detail is not None else None,
+        accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
+        result: list[DocumentTypeRow] = []
+        for r in rows:
+            attached = [details_by_id[d] for d in details_by_type[r.document_type_id] if d in details_by_id]
+            attached.sort(key=lambda d: d.code)
+            result.append(
+                DocumentTypeRow(
+                    document_type_id=r.document_type_id,
+                    direction=r.direction,
+                    name=r.name,
+                    account_id=r.account_id,
+                    account_label=accounts_by_id.get(r.account_id, ""),
+                    detail_options=[(d.detail_account_id, d.name or d.code) for d in attached],
+                    detail_dimension_type_id=attached[0].dimension_type_id if attached else None,
+                )
             )
-        )
-    return result
+        return result
 
 
-def create_document_type(
-    company_id: int, direction: str, name: str, account_id: int, detail_account_id: int | None = None
-) -> None:
+def create_document_type(company_id: int, direction: str, name: str, account_id: int) -> None:
     if direction not in ("RECEIPT", "PAYMENT"):
         raise ValueError("جهت نامعتبر است.")
     if not name.strip():
         raise ValueError("نامِ نوعِ سند الزامی است.")
     with new_session() as session:
         session.add(
-            TreasuryDocumentType(
-                company_id=company_id,
-                direction=direction,
-                name=name.strip(),
-                account_id=account_id,
-                detail_account_id=detail_account_id,
-            )
+            TreasuryDocumentType(company_id=company_id, direction=direction, name=name.strip(), account_id=account_id)
         )
         session.commit()
 
@@ -290,8 +302,35 @@ def delete_document_type(document_type_id: int, company_id: int) -> None:
         row = session.get(TreasuryDocumentType, document_type_id)
         if row is None or row.company_id != company_id:
             raise ValueError("نوعِ سند نامعتبر است.")
-        session.delete(row)
+        session.delete(row)  # treasury.document_type_details با ON DELETE CASCADE پاک می‌شود
         session.commit()
+
+
+def add_document_type_detail(document_type_id: int, company_id: int, detail_account_id: int) -> None:
+    with new_session() as session:
+        document_type = session.get(TreasuryDocumentType, document_type_id)
+        if document_type is None or document_type.company_id != company_id:
+            raise ValueError("نوعِ سند نامعتبر است.")
+        detail = session.get(DetailAccount, detail_account_id)
+        if detail is None or detail.company_id != company_id:
+            raise ValueError("تفصیلیِ انتخاب‌شده نامعتبر است.")
+        if session.get(TreasuryDocumentTypeDetail, (document_type_id, detail_account_id)) is not None:
+            return
+        session.add(
+            TreasuryDocumentTypeDetail(document_type_id=document_type_id, detail_account_id=detail_account_id)
+        )
+        session.commit()
+
+
+def remove_document_type_detail(document_type_id: int, company_id: int, detail_account_id: int) -> None:
+    with new_session() as session:
+        document_type = session.get(TreasuryDocumentType, document_type_id)
+        if document_type is None or document_type.company_id != company_id:
+            raise ValueError("نوعِ سند نامعتبر است.")
+        link = session.get(TreasuryDocumentTypeDetail, (document_type_id, detail_account_id))
+        if link is not None:
+            session.delete(link)
+            session.commit()
 
 
 # --- سندِ چندروشیِ دریافت/پرداخت ---------------------------------------------

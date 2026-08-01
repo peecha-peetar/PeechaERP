@@ -1,8 +1,9 @@
 """تنظیمِ سندِ اتوماتیکِ خزانه‌داری — طبقِ درخواستِ صریح، این فرم زیرِ
 تبِ «خزانه‌داری»یِ تنظیماتِ سیستم قرار می‌گیرد (نه یک صفحه‌یِ جداگانه) و
 شاملِ سه بخش است: نگاشتِ ۸اسلاتیِ حساب‌هایِ روش (نقد/بانک/چک/تخفیف)،
-انواعِ سندِ دریافت/پرداخت (معین + تفصیلیِ اختیاریِ ثابت برایِ طرفِ حساب)،
-و مدیریتِ دسته‌چک."""
+انواعِ سندِ دریافت/پرداخت (معین + فهرستِ تفصیلی‌هایِ مجازِ طرفِ حساب —
+طبقِ درخواستِ صریح: «تفضیلی‌هایِ انتخاب‌شده برایِ معین در نوعِ سند» در
+فرمِ سند پیشنهاد/جستجو/انتخاب شوند)، و مدیریتِ دسته‌چک."""
 
 from __future__ import annotations
 
@@ -59,9 +60,8 @@ class _MappingRow(QWidget):
 
 
 class _DocumentTypeForm(QWidget):
-    """ردیفِ افزودنِ یک «نوعِ سند» تازه — طبقِ درخواستِ صریح: انتخابِ معین
-    و اختیاری یک تفصیلیِ ثابت (فقط اگر معین دقیقاً یک بُعدِ تفصیلی بخواهد،
-    تفصیلی هم قابلِ‌انتخاب می‌شود؛ وگرنه در خودِ فرمِ سند پرسیده می‌شود)."""
+    """ردیفِ افزودنِ یک «نوعِ سند» تازه — فقط نام + معین؛ تفصیلی‌هایِ
+    مجاز بعداً از رویِ جدولِ زیر (با انتخابِ ردیف) پیوست/حذف می‌شوند."""
 
     def __init__(self, direction: str, screen: "TreasuryAutoEntrySettingsScreen") -> None:
         super().__init__()
@@ -77,12 +77,7 @@ class _DocumentTypeForm(QWidget):
         layout.addWidget(self.name_field, stretch=1)
 
         self.account_combo = _make_searchable_combo([])
-        self.account_combo.currentIndexChanged.connect(self._on_account_changed)
         layout.addWidget(self.account_combo, stretch=1)
-
-        self.detail_combo = QComboBox()
-        self.detail_combo.setEnabled(False)
-        layout.addWidget(self.detail_combo, stretch=1)
 
         add_button = QPushButton("+ افزودن")
         add_button.setObjectName("flatButton")
@@ -92,22 +87,6 @@ class _DocumentTypeForm(QWidget):
     def set_account_options(self, options: list[tuple[int, str]]) -> None:
         _fill_options(self.account_combo, options)
 
-    def _on_account_changed(self, _index: int) -> None:
-        account_id = self.account_combo.currentData()
-        company_id = self._screen.company_id
-        self.detail_combo.clear()
-        if account_id is None or company_id is None:
-            self.detail_combo.setEnabled(False)
-            return
-        required = dimensions_service.get_required_dimensions_for_account(account_id)
-        if len(required) != 1:
-            self.detail_combo.setEnabled(False)
-            return
-        self.detail_combo.setEnabled(True)
-        self.detail_combo.addItem("(بدونِ تفصیلیِ ثابت — در فرمِ سند پرسیده شود)", None)
-        for detail in required[0].detail_accounts:
-            self.detail_combo.addItem(detail.name or detail.full_code or detail.code, detail.detail_account_id)
-
     def _add(self) -> None:
         company_id = self._screen.company_id
         name = self.name_field.text().strip()
@@ -115,9 +94,8 @@ class _DocumentTypeForm(QWidget):
         if company_id is None or not name or account_id is None:
             self._screen.set_status("نام و معین را برایِ نوعِ سند مشخص کنید.")
             return
-        detail_account_id = self.detail_combo.currentData() if self.detail_combo.isEnabled() else None
         try:
-            treasury_service.create_document_type(company_id, self._direction, name, account_id, detail_account_id)
+            treasury_service.create_document_type(company_id, self._direction, name, account_id)
         except ValueError as exc:
             self._screen.set_status(str(exc))
             return
@@ -127,6 +105,98 @@ class _DocumentTypeForm(QWidget):
         self._screen.refresh_document_types(self._direction)
 
 
+class _DocumentTypeDetailsPanel(QWidget):
+    """طبقِ درخواستِ صریح: «تفضیلی‌هایِ انتخاب‌شده برایِ معین در نوعِ سند
+    را پیشنهاد و جستجو و انتخاب کنیم» — با انتخابِ یک ردیف از جدولِ
+    انواعِ سند، این پنل تفصیلی‌هایِ مجازِ همان نوعِ سند را نشان می‌دهد و
+    امکانِ افزودن/حذف می‌دهد (صفرتا = فرمِ سند از بینِ همه می‌پرسد، یک‌تا
+    = همیشه خودکار همان، چندتا = فرمِ سند فقط همان‌ها را پیشنهاد می‌دهد)."""
+
+    def __init__(self, direction: str, screen: "TreasuryAutoEntrySettingsScreen") -> None:
+        super().__init__()
+        self._direction = direction
+        self._screen = screen
+        self._document_type: treasury_service.DocumentTypeRow | None = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(4)
+
+        self.title_label = QLabel("برایِ مدیریتِ تفصیلی‌هایِ مجاز، یک نوعِ سند را از جدولِ بالا انتخاب کنید.")
+        self.title_label.setObjectName("sectionHint")
+        layout.addWidget(self.title_label)
+
+        add_row = QHBoxLayout()
+        self.candidate_combo = _make_searchable_combo([])
+        self.candidate_combo.setEnabled(False)
+        add_row.addWidget(self.candidate_combo, stretch=1)
+        self.add_button = QPushButton("+ افزودنِ تفصیلی")
+        self.add_button.setObjectName("flatButton")
+        self.add_button.setEnabled(False)
+        self.add_button.clicked.connect(self._add_detail)
+        add_row.addWidget(self.add_button)
+        layout.addLayout(add_row)
+
+        self.attached_table = QTableWidget(0, 1)
+        self.attached_table.setHorizontalHeaderLabels(["تفصیلیِ مجاز (برایِ حذف دابل‌کلیک کنید)"])
+        self.attached_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.attached_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.attached_table.verticalHeader().setVisible(False)
+        self.attached_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.attached_table.setMaximumHeight(110)
+        self.attached_table.cellDoubleClicked.connect(self._remove_detail)
+        layout.addWidget(self.attached_table)
+
+    def set_document_type(self, document_type: treasury_service.DocumentTypeRow | None) -> None:
+        self._document_type = document_type
+        self.candidate_combo.setEnabled(False)
+        self.add_button.setEnabled(False)
+        _fill_options(self.candidate_combo, [])
+        self.attached_table.setRowCount(0)
+
+        if document_type is None:
+            self.title_label.setText("برایِ مدیریتِ تفصیلی‌هایِ مجاز، یک نوعِ سند را از جدولِ بالا انتخاب کنید.")
+            return
+
+        self.title_label.setText(f"تفصیلی‌هایِ مجازِ «{document_type.name}»")
+        attached_ids = {detail_account_id for detail_account_id, _label in document_type.detail_options}
+        self.attached_table.setRowCount(len(document_type.detail_options))
+        for row_index, (detail_account_id, label) in enumerate(document_type.detail_options):
+            item = QTableWidgetItem(label)
+            item.setData(Qt.UserRole, detail_account_id)
+            self.attached_table.setItem(row_index, 0, item)
+
+        required = dimensions_service.get_required_dimensions_for_account(document_type.account_id)
+        if len(required) != 1:
+            return
+        candidates = [
+            (d.detail_account_id, d.name or d.full_code or d.code)
+            for d in required[0].detail_accounts
+            if d.detail_account_id not in attached_ids
+        ]
+        _fill_options(self.candidate_combo, candidates)
+        self.candidate_combo.setEnabled(True)
+        self.add_button.setEnabled(True)
+
+    def _add_detail(self) -> None:
+        company_id = self._screen.company_id
+        detail_account_id = self.candidate_combo.currentData()
+        if self._document_type is None or company_id is None or detail_account_id is None:
+            self._screen.set_status("یک تفصیلی برایِ افزودن انتخاب کنید.")
+            return
+        treasury_service.add_document_type_detail(self._document_type.document_type_id, company_id, detail_account_id)
+        self._screen.set_status("")
+        self._screen.refresh_document_types(self._direction, reselect_document_type_id=self._document_type.document_type_id)
+
+    def _remove_detail(self, row: int, _column: int) -> None:
+        company_id = self._screen.company_id
+        if self._document_type is None or company_id is None:
+            return
+        detail_account_id = self.attached_table.item(row, 0).data(Qt.UserRole)
+        treasury_service.remove_document_type_detail(self._document_type.document_type_id, company_id, detail_account_id)
+        self._screen.refresh_document_types(self._direction, reselect_document_type_id=self._document_type.document_type_id)
+
+
 class TreasuryAutoEntrySettingsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -134,6 +204,7 @@ class TreasuryAutoEntrySettingsScreen(FieldHelpMixin, QWidget):
         self._mapping_rows: list[_MappingRow] = []
         self._document_type_tables: dict[str, QTableWidget] = {}
         self._document_type_forms: dict[str, _DocumentTypeForm] = {}
+        self._document_type_detail_panels: dict[str, _DocumentTypeDetailsPanel] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -167,15 +238,20 @@ class TreasuryAutoEntrySettingsScreen(FieldHelpMixin, QWidget):
             self._document_type_forms[direction] = form
 
             table = QTableWidget(0, 3)
-            table.setHorizontalHeaderLabels(["نام", "معین", "تفصیلیِ ثابت"])
+            table.setHorizontalHeaderLabels(["نام", "معین", "تفصیلی‌هایِ مجاز"])
             table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             table.setSelectionBehavior(QAbstractItemView.SelectRows)
             table.verticalHeader().setVisible(False)
             table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
             table.setMinimumHeight(120)
             table.cellDoubleClicked.connect(lambda row, _col, d=direction: self._delete_document_type(d, row))
+            table.itemSelectionChanged.connect(lambda d=direction: self._on_document_type_row_selected(d))
             card_layout.addWidget(table, stretch=1)
             self._document_type_tables[direction] = table
+
+            details_panel = _DocumentTypeDetailsPanel(direction, self)
+            card_layout.addWidget(details_panel)
+            self._document_type_detail_panels[direction] = details_panel
 
             layout.addWidget(card)
             self.set_field_help([(form, hint)])
@@ -294,18 +370,32 @@ class TreasuryAutoEntrySettingsScreen(FieldHelpMixin, QWidget):
 
         self._refresh_checkbooks(company_id)
 
-    def refresh_document_types(self, direction: str) -> None:
+    def refresh_document_types(self, direction: str, reselect_document_type_id: int | None = None) -> None:
         if self.company_id is None:
             return
         table = self._document_type_tables[direction]
         rows = treasury_service.list_document_types(self.company_id, direction)
+        table.blockSignals(True)
         table.setRowCount(len(rows))
+        reselect_row = -1
         for row_index, r in enumerate(rows):
-            values = [r.name, r.account_label, r.detail_label or "(در فرمِ سند پرسیده می‌شود)"]
+            detail_summary = "، ".join(label for _id, label in r.detail_options) if r.detail_options else "(در فرمِ سند پرسیده می‌شود)"
+            values = [r.name, r.account_label, detail_summary]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, r.document_type_id)
                 table.setItem(row_index, col_index, item)
+            if r.document_type_id == reselect_document_type_id:
+                reselect_row = row_index
+        table.blockSignals(False)
+
+        panel = self._document_type_detail_panels[direction]
+        if reselect_row >= 0:
+            table.selectRow(reselect_row)
+            panel.set_document_type(rows[reselect_row])
+        else:
+            table.clearSelection()
+            panel.set_document_type(None)
 
     def _refresh_checkbooks(self, company_id: int) -> None:
         checkbooks = treasury_service.list_checkbooks(company_id)
@@ -330,6 +420,22 @@ class TreasuryAutoEntrySettingsScreen(FieldHelpMixin, QWidget):
             return
         treasury_service.set_account_mapping(company_id, mapping_key, account_id)
         self.set_status("")
+
+    def _on_document_type_row_selected(self, direction: str) -> None:
+        if self.company_id is None:
+            return
+        table = self._document_type_tables[direction]
+        selected_rows = table.selectionModel().selectedRows() if table.selectionModel() else []
+        panel = self._document_type_detail_panels[direction]
+        if not selected_rows:
+            panel.set_document_type(None)
+            return
+        document_type_id = table.item(selected_rows[0].row(), 0).data(Qt.UserRole)
+        row = next(
+            (r for r in treasury_service.list_document_types(self.company_id, direction) if r.document_type_id == document_type_id),
+            None,
+        )
+        panel.set_document_type(row)
 
     def _delete_document_type(self, direction: str, row: int) -> None:
         if self.company_id is None:
