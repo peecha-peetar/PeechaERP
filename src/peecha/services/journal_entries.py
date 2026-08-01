@@ -26,6 +26,7 @@ from peecha.db.models.accounting import (
     AccountPersonGroup,
     ChartOfAccount,
     DetailAccount,
+    FiscalPeriod,
     FiscalYear,
     JournalEntry,
     JournalEntryLine,
@@ -372,6 +373,27 @@ def _ensure_fiscal_year_open(fiscal_year: FiscalYear) -> None:
         )
 
 
+def _ensure_fiscal_period_open(session, fiscal_year_id: int, document_date: datetime.date) -> None:
+    """طبقِ حسابرسیِ صریح: جدولِ FiscalPeriod (دوره‌هایِ ماهانه‌یِ هر سالِ
+    مالی) ساخته می‌شد ولی هیچ‌جای برنامه چک نمی‌شد — یعنی بستنِ یک دوره‌ی
+    ماهانه در عمل هیچ اثری نداشت. اگر برایِ این سالِ مالی اصلاً دوره‌ای
+    تعریف نشده باشد (مثلاً سالِ مالی به‌صورتِ خودکار از رویِ اولین سند ساخته
+    شده، نه از صفحه‌ی «سال‌های مالی»)، این چک بی‌اثر می‌ماند — دوره‌بندی
+    اختیاری است، نه اجباری."""
+    period = session.scalar(
+        select(FiscalPeriod).where(
+            FiscalPeriod.fiscal_year_id == fiscal_year_id,
+            FiscalPeriod.start_date <= document_date,
+            FiscalPeriod.end_date >= document_date,
+        )
+    )
+    if period is not None and period.is_closed:
+        raise ValueError(
+            f"دوره‌ی مالیِ شامل تاریخِ {numerals.format_jalali_date(document_date)} بسته است؛ "
+            "ثبت یا ویرایشِ سند در این دوره ممکن نیست."
+        )
+
+
 def create_journal_entry(
     company_id: int,
     created_by_user_id: int,
@@ -399,6 +421,7 @@ def create_journal_entry(
 
         fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
         _ensure_fiscal_year_open(fiscal_year)
+        _ensure_fiscal_period_open(session, fiscal_year.fiscal_year_id, document_date)
 
         next_no = (
             session.scalar(
@@ -636,8 +659,10 @@ def update_journal_entry(
         current_fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
         if current_fiscal_year is not None:
             _ensure_fiscal_year_open(current_fiscal_year)
+            _ensure_fiscal_period_open(session, current_fiscal_year.fiscal_year_id, entry.document_date)
         new_fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
         _ensure_fiscal_year_open(new_fiscal_year)
+        _ensure_fiscal_period_open(session, new_fiscal_year.fiscal_year_id, document_date)
 
         before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 
@@ -740,6 +765,7 @@ def delete_journal_entry(journal_entry_id: int, company_id: int, changed_by_user
         fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
         if fiscal_year is not None:
             _ensure_fiscal_year_open(fiscal_year)
+            _ensure_fiscal_period_open(session, fiscal_year.fiscal_year_id, entry.document_date)
 
         before_snapshot = _snapshot_existing_entry(session, journal_entry_id)
 

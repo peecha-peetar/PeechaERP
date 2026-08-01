@@ -1,4 +1,11 @@
-"""مدیریتِ سال‌های مالی — معادلِ Qt برایِ fiscal_years.py/.kv در Kivy."""
+"""مدیریتِ سال‌های مالی — معادلِ Qt برایِ fiscal_years.py/.kv در Kivy.
+
+طبقِ حسابرسیِ صریح: قبلاً این صفحه فقط بازکردن/بستنِ کلِ سالِ مالی را
+نشان می‌داد؛ جدولِ دوره‌هایِ ماهانه (FiscalPeriod) در دیتابیس ساخته
+می‌شد ولی هیچ‌جای برنامه دیده/بسته نمی‌شد. حالا با انتخابِ یک سالِ
+مالی از فهرست، ۱۲ دوره‌ی ماهانه‌اش هم پایین دیده می‌شود و هرکدام
+جداگانه قابلِ‌بستن/بازکردن است (services/journal_entries.py هم این
+وضعیت را واقعاً هنگامِ ثبت/ویرایشِ سند چک می‌کند)."""
 
 from __future__ import annotations
 
@@ -21,13 +28,16 @@ from peecha import session as app_session
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
-_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
+_YEAR_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
+_PERIOD_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "دوره"]
 
 
 class FiscalYearsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[fiscal_years_service.FiscalYearRow] = []
+        self._period_rows: list[fiscal_years_service.FiscalPeriodRow] = []
+        self._selected_fiscal_year_id: int | None = None
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
@@ -41,7 +51,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
                 "هر تاریخِ دلخواه از سالِ مالی‌ای که می‌خواهید بسازید را وارد کنید. لازم نیست اولِ سال باشد. "
                 "برنامه با استفاده از «ماه و روزِ شروعِ سالِ مالی» شرکت، بازه‌ی کاملِ آن سال را خودش حساب می‌کند. "
                 "نکته: لازم نیست حتماً از این‌جا سالِ مالی بسازید — با ثبتِ اولین سند در یک تاریخ، اگر سالِ "
-                "مالی‌اش وجود نداشته باشد، خودکار ساخته می‌شود.",
+                "مالی‌اش وجود نداشته باشد، خودکار ساخته می‌شود (بدونِ دوره‌بندیِ ماهانه).",
             ),
         ])
 
@@ -56,14 +66,40 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        self.table = QTableWidget(0, len(_COLUMNS))
-        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        hint = QLabel("روی یک سالِ مالی کلیک کنید تا دوره‌های ماهانه‌اش پایین نمایش داده شود.")
+        hint.setObjectName("sectionHint")
+        layout.addWidget(hint)
+
+        self.table = QTableWidget(0, len(_YEAR_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_YEAR_COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.table.cellClicked.connect(self._on_row_clicked)
-        layout.addWidget(self.table)
+        self.table.cellClicked.connect(self._on_year_row_clicked)
+        layout.addWidget(self.table, stretch=1)
+
+        toggle_year_row = QHBoxLayout()
+        self.toggle_year_button = QPushButton("بازکردن/بستنِ سالِ مالیِ انتخاب‌شده")
+        self.toggle_year_button.setEnabled(False)
+        self.toggle_year_button.clicked.connect(self._toggle_selected_year)
+        toggle_year_row.addWidget(self.toggle_year_button)
+        toggle_year_row.addStretch(1)
+        layout.addLayout(toggle_year_row)
+
+        self.periods_title = QLabel("دوره‌های ماهانه")
+        self.periods_title.setObjectName("sectionHint")
+        layout.addWidget(self.periods_title)
+
+        self.periods_table = QTableWidget(0, len(_PERIOD_COLUMNS))
+        self.periods_table.setHorizontalHeaderLabels(_PERIOD_COLUMNS)
+        self.periods_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.periods_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.periods_table.verticalHeader().setVisible(False)
+        self.periods_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.periods_table.cellClicked.connect(self._on_period_row_clicked)
+        layout.addWidget(self.periods_table, stretch=1)
+
         return panel
 
     def _build_form_panel(self) -> QWidget:
@@ -118,13 +154,53 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
                 item.setData(Qt.UserRole, fy.fiscal_year_id)
                 self.table.setItem(row_index, col_index, item)
 
-    def _on_row_clicked(self, row: int, _column: int) -> None:
+        if self._selected_fiscal_year_id is not None and any(
+            r.fiscal_year_id == self._selected_fiscal_year_id for r in self._rows
+        ):
+            self._load_periods(self._selected_fiscal_year_id)
+        else:
+            self._selected_fiscal_year_id = None
+            self.toggle_year_button.setEnabled(False)
+            self.periods_table.setRowCount(0)
+
+    def _selected_year_row(self) -> fiscal_years_service.FiscalYearRow | None:
+        return next((r for r in self._rows if r.fiscal_year_id == self._selected_fiscal_year_id), None)
+
+    def _on_year_row_clicked(self, row: int, _column: int) -> None:
         fiscal_year_id = self.table.item(row, 0).data(Qt.UserRole)
-        fy = next((r for r in self._rows if r.fiscal_year_id == fiscal_year_id), None)
-        if fy is None:
-            return
+        self._selected_fiscal_year_id = fiscal_year_id
+        self.toggle_year_button.setEnabled(True)
+        self._load_periods(fiscal_year_id)
+
+    def _load_periods(self, fiscal_year_id: int) -> None:
         company_id = self._company_id()
         if company_id is None:
+            return
+        try:
+            self._period_rows = fiscal_years_service.list_periods(fiscal_year_id, company_id)
+        except ValueError:
+            self._period_rows = []
+        self.periods_table.setRowCount(len(self._period_rows))
+        for row_index, period in enumerate(self._period_rows):
+            values = [
+                "بسته" if period.is_closed else "باز",
+                numerals.format_jalali_date(period.end_date),
+                numerals.format_jalali_date(period.start_date),
+                numerals.to_persian_digits(str(period.period_no)),
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, period.fiscal_period_id)
+                self.periods_table.setItem(row_index, col_index, item)
+        if not self._period_rows:
+            self.periods_title.setText("دوره‌های ماهانه — این سالِ مالی دوره‌بندی ندارد (خودکار از رویِ سند ساخته شده).")
+        else:
+            self.periods_title.setText("دوره‌های ماهانه")
+
+    def _toggle_selected_year(self) -> None:
+        fy = self._selected_year_row()
+        company_id = self._company_id()
+        if fy is None or company_id is None:
             return
         confirm = QMessageBox.question(
             self,
@@ -136,6 +212,25 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
             return
         fiscal_years_service.set_closed(fy.fiscal_year_id, company_id, not fy.is_closed)
         self.refresh()
+
+    def _on_period_row_clicked(self, row: int, _column: int) -> None:
+        fiscal_period_id = self.periods_table.item(row, 0).data(Qt.UserRole)
+        period = next((p for p in self._period_rows if p.fiscal_period_id == fiscal_period_id), None)
+        company_id = self._company_id()
+        if period is None or company_id is None:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "تغییرِ وضعیت",
+            f"دوره‌ی شماره‌ی {numerals.to_persian_digits(str(period.period_no))} "
+            f"{'باز' if period.is_closed else 'بسته'} شود؟",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        fiscal_years_service.set_period_closed(period.fiscal_period_id, company_id, not period.is_closed)
+        if self._selected_fiscal_year_id is not None:
+            self._load_periods(self._selected_fiscal_year_id)
 
     def _create(self) -> None:
         company_id = self._company_id()

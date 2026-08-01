@@ -146,3 +146,49 @@ def set_closed(fiscal_year_id: int, company_id: int, is_closed: bool) -> None:
             raise ValueError("سال مالی نامعتبر است.")
         fiscal_year.is_closed = is_closed
         session.commit()
+
+
+@dataclass
+class FiscalPeriodRow:
+    fiscal_period_id: int
+    period_no: int
+    start_date: datetime.date
+    end_date: datetime.date
+    is_closed: bool
+
+
+def list_periods(fiscal_year_id: int, company_id: int) -> list[FiscalPeriodRow]:
+    """طبقِ حسابرسیِ صریح: قبلاً هیچ راهی برایِ دیدن/بستنِ تک‌تکِ دوره‌هایِ
+    ماهانه‌یِ یک سالِ مالی نبود — این جدول در دیتابیس ساخته می‌شد ولی کاملاً
+    بلااستفاده می‌ماند."""
+    with new_session() as session:
+        fiscal_year = session.get(FiscalYear, fiscal_year_id)
+        if fiscal_year is None or fiscal_year.company_id != company_id:
+            raise ValueError("سال مالی نامعتبر است.")
+        periods = session.scalars(
+            select(FiscalPeriod)
+            .where(FiscalPeriod.fiscal_year_id == fiscal_year_id)
+            .order_by(FiscalPeriod.period_no)
+        ).all()
+        return [
+            FiscalPeriodRow(
+                fiscal_period_id=p.fiscal_period_id,
+                period_no=p.period_no,
+                start_date=p.start_date,
+                end_date=p.end_date,
+                is_closed=p.is_closed,
+            )
+            for p in periods
+        ]
+
+
+def set_period_closed(fiscal_period_id: int, company_id: int, is_closed: bool) -> None:
+    with new_session() as session:
+        period = session.get(FiscalPeriod, fiscal_period_id)
+        if period is None:
+            raise ValueError("دوره‌ی مالی نامعتبر است.")
+        fiscal_year = session.get(FiscalYear, period.fiscal_year_id)
+        if fiscal_year is None or fiscal_year.company_id != company_id:
+            raise ValueError("دوره‌ی مالی نامعتبر است.")
+        period.is_closed = is_closed
+        session.commit()
