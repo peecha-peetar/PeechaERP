@@ -375,19 +375,25 @@ def set_group_max_level_no(dimension_type_id: int, company_id: int, max_level_no
 
 
 def suggest_next_code(company_id: int, dimension_type_id: int, level_no: int, person_group_id: int = 0) -> str:
-    """پیشنهادِ کدِ بعدی برایِ این سطح: بزرگ‌ترینِ کدِ عددیِ موجود در همین
-    نوع‌بُعد + ۱ (چونuq_detail_accounts رویِ کلِ dimension_type_id یکتاست، نه
-    فقط هم‌سطح‌ها)؛ اگر حسابی نبود، از range_fromِ همین سطح/گروه (اگر
-    تنظیم شده) شروع می‌شود وگرنه از ۱، و با تعدادِ رقمِ سراسریِ همین سطح
-    (اگر تنظیم شده) صفر-پَد می‌شود. پیشنهاد است، نه اجبار — کاربر می‌تواند
-    آن را در فرم عوض کند."""
+    """پیشنهادِ کدِ بعدی برایِ این سطح: بزرگ‌ترینِ کدِ عددیِ موجود در همینِ
+    گروهِ تفصیلی و همینِ سطح (۱ یا ۲ یا هر سطحِ دیگر) + ۱ — طبقِ گزارشِ
+    صریح («آخرین کدِ همان سطح/همان گروه را در نظر بگیرد»؛ قبلاً کدهایِ
+    همه‌یِ سطوح با هم قاطی و بزرگ‌ترین‌شان مبنا می‌شد، که برایِ گروه‌هایی با
+    بیش از یک سطح بی‌معنا بود، چون کدهایِ سطحِ ۱ (مثلاً «۱»،«۲») و سطحِ ۲
+    (مثلاً «۰۱»،«۰۲») هیچ ربطی به هم ندارند). اگر حسابی در همین سطح نبود،
+    از range_fromِ همین سطح/گروه (اگر تنظیم شده) شروع می‌شود وگرنه از ۱، و
+    با تعدادِ رقمِ سراسریِ همین سطح (اگر تنظیم شده) صفر-پَد می‌شود. پیشنهاد
+    است، نه اجبار — کاربر می‌تواند آن را در فرم عوض کند."""
     with new_session() as session:
-        existing_codes = session.scalars(
-            select(DetailAccount.code).where(
-                DetailAccount.company_id == company_id,
-                DetailAccount.dimension_type_id == dimension_type_id,
-            )
-        ).all()
+        query = select(DetailAccount.code).where(
+            DetailAccount.company_id == company_id,
+            DetailAccount.dimension_type_id == dimension_type_id,
+            DetailAccount.level_no == level_no,
+        )
+        query = query.where(
+            DetailAccount.person_group_id == person_group_id if person_group_id else DetailAccount.person_group_id.is_(None)
+        )
+        existing_codes = session.scalars(query).all()
         numeric_codes = [int(c) for c in existing_codes if c.isdigit()]
 
         range_config = session.get(DetailGroupLevel, (dimension_type_id, person_group_id, level_no))
