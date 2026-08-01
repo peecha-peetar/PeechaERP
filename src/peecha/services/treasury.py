@@ -19,7 +19,14 @@ from peecha.db.models.accounting import (
     JournalEntryLine,
     JournalEntryLineDetail,
 )
-from peecha.db.models.treasury import Checkbook, CheckStatus, IssuedCheck, ReceivedCheck, TreasuryAccountMapping
+from peecha.db.models.treasury import (
+    Checkbook,
+    CheckStatus,
+    CounterpartyAccountMapping,
+    IssuedCheck,
+    ReceivedCheck,
+    TreasuryAccountMapping,
+)
 from peecha.services import audit as audit_service
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -229,6 +236,91 @@ def list_counterparty_account_options(company_id: int) -> list[tuple[int, str]]:
         for a in coa_service.list_postable_accounts(company_id)
         if a.account_id not in excluded_account_ids
     ]
+
+
+# --- نگاشتِ نوعِ تفصیلی <-> معین (دریافت/پرداخت) ------------------------------
+# طبقِ درخواستِ صریح: هر ردیف یک «نوعِ تفصیلی» (مثلاً «مشتری») را به یک
+# معینِ حساب نگاشت می‌کند — سمتِ بستانکار برایِ دریافت، سمتِ بدهکار برایِ
+# پرداخت. «نوعِ تفصیلی» یا یک گروهِ تفصیلیِ اشخاص است (person_group_id) یا
+# یک نوع‌بُعدِ غیرِشخصی (dimension_type_id) — دقیقاً یکی از این دو.
+
+
+@dataclass
+class CounterpartyMappingRow:
+    mapping_id: int
+    direction: str
+    person_group_id: int | None
+    dimension_type_id: int | None
+    group_label: str
+    account_id: int
+    account_label: str
+
+
+def list_counterparty_mappings(company_id: int, direction: str | None = None) -> list[CounterpartyMappingRow]:
+    with new_session() as session:
+        query = select(CounterpartyAccountMapping).where(CounterpartyAccountMapping.company_id == company_id)
+        if direction is not None:
+            query = query.where(CounterpartyAccountMapping.direction == direction)
+        rows = session.scalars(query.order_by(CounterpartyAccountMapping.mapping_id)).all()
+
+    accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
+    person_groups_by_id = {g.person_group_id: g.name for g in dimensions_service.list_person_groups(company_id)}
+    dim_types_by_id = {
+        t.dimension_type_id: dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(t.code, t.code)
+        for t in dimensions_service.list_dimension_types(company_id)
+    }
+    result: list[CounterpartyMappingRow] = []
+    for r in rows:
+        group_label = (
+            person_groups_by_id.get(r.person_group_id, "")
+            if r.person_group_id is not None
+            else dim_types_by_id.get(r.dimension_type_id, "")
+        )
+        result.append(
+            CounterpartyMappingRow(
+                mapping_id=r.mapping_id,
+                direction=r.direction,
+                person_group_id=r.person_group_id,
+                dimension_type_id=r.dimension_type_id,
+                group_label=group_label,
+                account_id=r.account_id,
+                account_label=accounts_by_id.get(r.account_id, ""),
+            )
+        )
+    return result
+
+
+def create_counterparty_mapping(
+    company_id: int,
+    direction: str,
+    account_id: int,
+    person_group_id: int | None = None,
+    dimension_type_id: int | None = None,
+) -> None:
+    if direction not in ("RECEIPT", "PAYMENT"):
+        raise ValueError("جهت نامعتبر است.")
+    if (person_group_id is None) == (dimension_type_id is None):
+        raise ValueError("دقیقاً یکی از گروهِ تفصیلی/نوعِ تفصیلی باید مشخص شود.")
+    with new_session() as session:
+        session.add(
+            CounterpartyAccountMapping(
+                company_id=company_id,
+                direction=direction,
+                person_group_id=person_group_id,
+                dimension_type_id=dimension_type_id,
+                account_id=account_id,
+            )
+        )
+        session.commit()
+
+
+def delete_counterparty_mapping(mapping_id: int, company_id: int) -> None:
+    with new_session() as session:
+        row = session.get(CounterpartyAccountMapping, mapping_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("ردیف نامعتبر است.")
+        session.delete(row)
+        session.commit()
 
 
 # --- سندِ چندروشیِ دریافت/پرداخت ---------------------------------------------

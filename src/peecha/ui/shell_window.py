@@ -73,7 +73,7 @@ _NAV_ICONS = {
     "SETTINGS": "⚙️",
 }
 
-_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1}
 
 
 def _leaf_nav_children(item: dict) -> list[dict]:
