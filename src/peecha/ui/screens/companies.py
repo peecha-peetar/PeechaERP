@@ -20,9 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import session as app_session
 from peecha.services import companies as companies_service
 from peecha.services import company_cloning
 from peecha.services import languages as languages_service
+from peecha.services import users as users_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin
 
@@ -389,6 +391,8 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
                     registration_no=self.registration_no_field.text().strip() or None,
                     national_id=self.national_id_field.text().strip() or None,
                 )
+                if app_session.current_user is not None:
+                    users_service.grant_company_access(app_session.current_user.user_id, new_company.company_id)
                 clone_requested = self.clone_checkbox.isChecked()
                 clone_error = None
                 if clone_requested:

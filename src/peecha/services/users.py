@@ -55,6 +55,24 @@ def list_users() -> list[UserRow]:
         return rows
 
 
+def grant_company_access(user_id: int, company_id: int) -> None:
+    """طبقِ حسابرسیِ صریح: ساختنِ شرکتِ تازه از صفحه‌ی «شرکت‌ها» به‌خودی‌خود
+    هیچ دسترسی‌ای به هیچ کاربری نمی‌داد — یعنی شرکتِ تازه در سوییچرِ هدرِ
+    همان کاربرِ سازنده هم دیده نمی‌شد، مگر جداگانه از صفحه‌ی «کاربران»
+    دسترسی داده می‌شد. این تابع برایِ همان لحظه‌ی ساختِ شرکت صدا زده
+    می‌شود تا کاربرِ سازنده بلافاصله دسترسی داشته باشد؛ اگر این اولین
+    شرکتِ کاربر باشد، به‌طورِ خودکار پیش‌فرض هم می‌شود."""
+    with new_session() as session:
+        existing_links = session.scalars(
+            select(UserCompany).where(UserCompany.user_id == user_id)
+        ).all()
+        if any(link.company_id == company_id for link in existing_links):
+            return
+        make_default = not existing_links
+        session.add(UserCompany(user_id=user_id, company_id=company_id, is_default=make_default))
+        session.commit()
+
+
 def create_user(
     username: str,
     full_name: str,
