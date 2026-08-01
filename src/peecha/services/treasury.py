@@ -196,6 +196,41 @@ def _allocate_check_no(session, checkbook_id: int, company_id: int) -> tuple[str
     return str(allocated), checkbook.bank_account_detail_id
 
 
+_SETTLEMENT_DIMENSION_CODES = (
+    dimensions_service.CASH_BOX_CODE,
+    dimensions_service.BANK_ACCOUNT_CODE,
+    dimensions_service.PETTY_CASH_CODE,
+)
+# طبقِ درخواستِ صریح: مرکزِ هزینه/پروژه (اگر رویِ حسابِ طرف‌حساب الزامی
+# باشند) باید بینِ همه‌ی ردیف‌هایِ یک سند مشترک باشند — نه فقط ردیفِ
+# طرف‌حساب — چون این دو نوع‌بُعد ویژگیِ خودِ رویدادِ مالی‌اند (این تراکنش
+# مربوط به کدام مرکزِ هزینه/پروژه است)، نه ویژگیِ یک طرفِ حسابِ خاص.
+_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
+
+
+def list_counterparty_account_options(company_id: int) -> list[tuple[int, str]]:
+    """حساب‌هایِ قابلِ‌انتخاب به‌عنوانِ «طرفِ حساب» در فرمِ دریافت/پرداخت —
+    طبقِ گزارشِ صریح: معین‌هایی که تفصیلیِ الزامی‌شان صندوق/بانک/تنخواه
+    است اصلاً نباید این‌جا نمایش داده شوند، چون خودشان از طریقِ ردیف‌هایِ
+    روش (نقد/بانک) مدیریت می‌شوند، نه به‌عنوانِ طرفِ حساب."""
+    excluded_type_ids = {
+        dimensions_service.get_specialized_dimension_type_id(company_id, code) for code in _SETTLEMENT_DIMENSION_CODES
+    }
+    with new_session() as session:
+        excluded_account_ids = set(
+            session.scalars(
+                select(AccountDetailDimension.account_id).where(
+                    AccountDetailDimension.dimension_type_id.in_(excluded_type_ids)
+                )
+            ).all()
+        )
+    return [
+        (a.account_id, f"{a.full_code} — {a.name}")
+        for a in coa_service.list_postable_accounts(company_id)
+        if a.account_id not in excluded_account_ids
+    ]
+
+
 # --- سندِ چندروشیِ دریافت/پرداخت ---------------------------------------------
 
 
@@ -244,6 +279,14 @@ def create_treasury_voucher(
 
     total = sum((ml.amount for ml in method_lines), decimal.Decimal(0))
 
+    # طبقِ گزارشِ صریح: اگر رویِ حسابِ طرف‌حساب مرکزِ هزینه/پروژه الزامی
+    # باشد، همان مقدارِ انتخاب‌شده باید بینِ همه‌ی ردیف‌هایِ سند (نه فقط
+    # ردیفِ طرف‌حساب) مشترک باشد.
+    shared_type_ids = {
+        dimensions_service.get_specialized_dimension_type_id(company_id, code) for code in _SHARED_DIMENSION_CODES
+    }
+    shared_details = {k: v for k, v in counterparty_details.items() if k in shared_type_ids}
+
     with new_session() as session:
         detail_ids = {ml.detail_account_id for ml in method_lines if ml.detail_account_id is not None}
         dimension_type_by_detail_id: dict[int, int] = {}
@@ -291,7 +334,7 @@ def create_treasury_voucher(
         for ml in method_lines:
             mapping_key = f"{direction}_{ml.method}"
             account_id = _get_mapped_account_id(session, company_id, mapping_key)
-            details: dict[int, int] = {}
+            details: dict[int, int] = dict(shared_details)
             if ml.detail_account_id is not None:
                 dimension_type_id = dimension_type_by_detail_id.get(ml.detail_account_id)
                 if dimension_type_id is not None:

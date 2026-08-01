@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
-from peecha.services import chart_of_accounts as coa_service
 from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
@@ -306,8 +305,10 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.company_id = self._company_id()
         if self.company_id is None:
             return
-        accounts = coa_service.list_postable_accounts(self.company_id)
-        self.account_options = [(a.account_id, f"{a.full_code} — {a.name}") for a in accounts]
+        # طبقِ گزارشِ صریح: معین‌هایی که تفصیلیِ الزامی‌شان صندوق/بانک/تنخواه
+        # است، این‌جا اصلاً به‌عنوانِ «طرفِ حساب» انتخاب‌پذیر نیستند — خودشان
+        # از طریقِ ردیف‌هایِ روش (نقد/بانک) مدیریت می‌شوند.
+        self.account_options = treasury_service.list_counterparty_account_options(self.company_id)
         _fill_options(self.account_combo, self.account_options)
 
         base_currency_id = session.current_company.base_currency_id if session.current_company else None
