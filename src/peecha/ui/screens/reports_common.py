@@ -463,17 +463,46 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
             "filters": self._filters_summary(),
         }
 
+    def _prompt_print_options(self) -> "report_export.PrintOptions | None":
+        """طبقِ درخواستِ صریح: پیش از هر چاپ/PDF/اکسل، فرمِ تنظیماتِ چاپ
+        (اندازه‌یِ فونت، عرضِ ستون‌ها، متنِ اضافه‌یِ هدر/فوتر) باز می‌شود؛
+        انتخابِ قبلی به‌عنوانِ پیش‌فرضِ دفعه‌یِ بعد نگه داشته می‌شود."""
+        options = report_export.prompt_print_options(
+            self, self._title, self._headers, getattr(self, "_last_print_options", None)
+        )
+        if options is not None:
+            self._last_print_options = options
+        return options
+
     def _on_print(self) -> None:
+        if not self._rows:
+            report_export.print_report(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            return
+        options = self._prompt_print_options()
+        if options is None:
+            return
         report_export.print_report(
-            self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs()
+            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
         )
 
     def _on_export_pdf(self) -> None:
+        if not self._rows:
+            report_export.export_report_pdf(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            return
+        options = self._prompt_print_options()
+        if options is None:
+            return
         report_export.export_report_pdf(
-            self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs()
+            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
         )
 
     def _on_export_excel(self) -> None:
+        if not self._rows:
+            report_export.export_report_excel(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            return
+        options = self._prompt_print_options()
+        if options is None:
+            return
         report_export.export_report_excel(
-            self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs()
+            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
         )
