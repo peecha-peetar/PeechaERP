@@ -14,12 +14,21 @@ from sqlalchemy import select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
+    AccountPersonGroup,
     ChartOfAccount,
     DetailAccount,
+    DetailDimensionType,
     JournalEntryLine,
     JournalEntryLineDetail,
 )
-from peecha.db.models.treasury import Checkbook, CheckStatus, IssuedCheck, ReceivedCheck, TreasuryAccountMapping
+from peecha.db.models.treasury import (
+    Checkbook,
+    CheckStatus,
+    IssuedCheck,
+    ReceivedCheck,
+    TreasuryAccountMapping,
+    TreasuryCounterpartyMapping,
+)
 from peecha.services import audit as audit_service
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -229,6 +238,215 @@ def list_counterparty_account_options(company_id: int) -> list[tuple[int, str]]:
         for a in coa_service.list_postable_accounts(company_id)
         if a.account_id not in excluded_account_ids
     ]
+
+
+# --- انواعِ طرفِ‌حساب (دریافت/پرداخت) ----------------------------------------
+# طبقِ درخواستِ صریح: «دریافت از تامین‌کننده یک رفتار، دریافت از مشتری
+# رفتارِ دیگه، دریافتِ درآمد رفتارِ دیگه» — یعنی برایِ هر جهت (دریافت/
+# پرداخت) و هر گروهِ تفصیلی، یک معینِ مشخص در همین صفحه تنظیم می‌شود؛
+# اختیاری می‌توان یک تفصیلیِ ثابت هم هارد‌کد کرد. در فرمِ سند دیگر معین
+# نمایش داده نمی‌شود — فقط سطحِ آخر (تفصیلی) جست‌وجو می‌شود و معین از
+# رویِ همین قاعده خودکار حل می‌شود.
+
+
+@dataclass
+class CounterpartyGroupOption:
+    dimension_type_id: int
+    person_group_id: int
+    label: str
+
+
+def list_counterparty_group_options(company_id: int) -> list[CounterpartyGroupOption]:
+    """گروه‌هایِ تفصیلیِ قابل‌انتخاب برایِ یک قاعده‌یِ طرفِ‌حساب — همه‌یِ
+    زیرگروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل/...) به‌علاوه‌یِ هر نوع‌بُعدِ
+    دیگرِ فعال، به‌جز نوع‌بُعدهایِ تسویه (صندوق/بانک/تنخواه) که مالِ
+    ردیف‌هایِ روش‌اند نه طرفِ‌حساب."""
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    options = [
+        CounterpartyGroupOption(person_dimension_type_id, g.person_group_id, g.name)
+        for g in dimensions_service.list_person_groups(company_id)
+        if g.is_active
+    ]
+    excluded_type_ids = {
+        dimensions_service.get_specialized_dimension_type_id(company_id, code) for code in _SETTLEMENT_DIMENSION_CODES
+    }
+    with new_session() as session:
+        other_types = session.scalars(
+            select(DetailDimensionType).where(
+                DetailDimensionType.company_id == company_id,
+                DetailDimensionType.is_active.is_(True),
+                DetailDimensionType.dimension_type_id != person_dimension_type_id,
+                DetailDimensionType.dimension_type_id.not_in(excluded_type_ids),
+            )
+        ).all()
+        options += [
+            CounterpartyGroupOption(t.dimension_type_id, 0, dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(t.code, t.code))
+            for t in other_types
+        ]
+    return options
+
+
+@dataclass
+class CounterpartyMappingRow:
+    mapping_id: int
+    direction: str
+    dimension_type_id: int
+    person_group_id: int
+    group_label: str
+    account_id: int
+    account_label: str
+    detail_account_id: int | None
+    detail_label: str | None
+
+
+def list_counterparty_mappings(company_id: int) -> list[CounterpartyMappingRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(TreasuryCounterpartyMapping)
+            .where(TreasuryCounterpartyMapping.company_id == company_id)
+            .order_by(TreasuryCounterpartyMapping.direction, TreasuryCounterpartyMapping.mapping_id)
+        ).all()
+        data = [
+            (r.mapping_id, r.direction, r.dimension_type_id, r.person_group_id, r.account_id, r.detail_account_id)
+            for r in rows
+        ]
+        detail_ids = {d for *_r, d in data if d is not None}
+        detail_labels = (
+            {
+                d.detail_account_id: d.name or d.code
+                for d in session.scalars(select(DetailAccount).where(DetailAccount.detail_account_id.in_(detail_ids))).all()
+            }
+            if detail_ids
+            else {}
+        )
+
+    group_labels = {(g.dimension_type_id, g.person_group_id): g.label for g in list_counterparty_group_options(company_id)}
+    accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
+    return [
+        CounterpartyMappingRow(
+            mapping_id=mapping_id,
+            direction=direction,
+            dimension_type_id=dimension_type_id,
+            person_group_id=person_group_id,
+            group_label=group_labels.get((dimension_type_id, person_group_id), "؟"),
+            account_id=account_id,
+            account_label=accounts_by_id.get(account_id, ""),
+            detail_account_id=detail_account_id,
+            detail_label=detail_labels.get(detail_account_id) if detail_account_id else None,
+        )
+        for mapping_id, direction, dimension_type_id, person_group_id, account_id, detail_account_id in data
+    ]
+
+
+def set_counterparty_mapping(
+    company_id: int,
+    direction: str,
+    dimension_type_id: int,
+    person_group_id: int,
+    account_id: int,
+    detail_account_id: int | None = None,
+) -> None:
+    if direction not in ("RECEIPT", "PAYMENT"):
+        raise ValueError("جهت نامعتبر است.")
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    with new_session() as session:
+        existing = session.scalar(
+            select(TreasuryCounterpartyMapping).where(
+                TreasuryCounterpartyMapping.company_id == company_id,
+                TreasuryCounterpartyMapping.direction == direction,
+                TreasuryCounterpartyMapping.dimension_type_id == dimension_type_id,
+                TreasuryCounterpartyMapping.person_group_id == person_group_id,
+            )
+        )
+        if existing is None:
+            session.add(
+                TreasuryCounterpartyMapping(
+                    company_id=company_id,
+                    direction=direction,
+                    dimension_type_id=dimension_type_id,
+                    person_group_id=person_group_id,
+                    account_id=account_id,
+                    detail_account_id=detail_account_id,
+                )
+            )
+        else:
+            existing.account_id = account_id
+            existing.detail_account_id = detail_account_id
+
+        # طبقِ درخواستِ صریح، همین تنظیم باید خودکافی باشد — بدونِ نیاز به
+        # این‌که کاربر جداگانه از صفحه‌یِ کدینگِ حساب‌ها هم همین ارتباط را
+        # دستی تعریف کند؛ افزایشی (بدونِ حذفِ ارتباط‌هایِ دیگرِ حساب).
+        if dimension_type_id == person_dimension_type_id and person_group_id:
+            already = session.scalar(
+                select(AccountPersonGroup).where(
+                    AccountPersonGroup.account_id == account_id,
+                    AccountPersonGroup.person_group_id == person_group_id,
+                )
+            )
+            if already is None:
+                session.add(AccountPersonGroup(account_id=account_id, person_group_id=person_group_id))
+        else:
+            already = session.scalar(
+                select(AccountDetailDimension).where(
+                    AccountDetailDimension.account_id == account_id,
+                    AccountDetailDimension.dimension_type_id == dimension_type_id,
+                )
+            )
+            if already is None:
+                session.add(
+                    AccountDetailDimension(account_id=account_id, dimension_type_id=dimension_type_id, is_required=True)
+                )
+        session.commit()
+
+
+def delete_counterparty_mapping(mapping_id: int, company_id: int) -> None:
+    with new_session() as session:
+        row = session.get(TreasuryCounterpartyMapping, mapping_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("قاعده نامعتبر است.")
+        session.delete(row)
+        session.commit()
+
+
+@dataclass
+class CounterpartyDetailOption:
+    label: str
+    account_id: int
+    dimension_type_id: int
+    detail_account_id: int
+
+
+def list_counterparty_detail_options(company_id: int, direction: str) -> list[CounterpartyDetailOption]:
+    """گزینه‌هایِ «طرفِ حساب» در فرمِ دریافت/پرداخت — طبقِ گزارشِ صریح، این‌جا
+    فقط سطحِ آخرِ حساب (تفصیلی) جست‌وجو می‌شود، نه معین/کل؛ معینِ مربوطه
+    خودش از رویِ قاعده‌یِ تنظیم‌شده در تنظیماتِ خزانه‌داری حل می‌شود."""
+    with new_session() as session:
+        rows = session.scalars(
+            select(TreasuryCounterpartyMapping).where(
+                TreasuryCounterpartyMapping.company_id == company_id,
+                TreasuryCounterpartyMapping.direction == direction,
+            )
+        ).all()
+        data = [(r.dimension_type_id, r.person_group_id, r.account_id, r.detail_account_id) for r in rows]
+        detail_ids = {d for *_r, d in data if d is not None}
+        hardcoded_details = (
+            {d.detail_account_id: d for d in session.scalars(select(DetailAccount).where(DetailAccount.detail_account_id.in_(detail_ids))).all()}
+            if detail_ids
+            else {}
+        )
+
+    options: list[CounterpartyDetailOption] = []
+    for dimension_type_id, person_group_id, account_id, hardcoded_detail_id in data:
+        if hardcoded_detail_id is not None:
+            detail = hardcoded_details.get(hardcoded_detail_id)
+            if detail is not None:
+                options.append(CounterpartyDetailOption(detail.name or detail.code, account_id, dimension_type_id, hardcoded_detail_id))
+            continue
+        for d in dimensions_service.list_leaf_detail_accounts(company_id, dimension_type_id, person_group_id):
+            if d.code == dimensions_service.NO_DETAIL_CODE:
+                continue
+            options.append(CounterpartyDetailOption(d.name or d.code, account_id, dimension_type_id, d.detail_account_id))
+    return options
 
 
 # --- سندِ چندروشیِ دریافت/پرداخت ---------------------------------------------

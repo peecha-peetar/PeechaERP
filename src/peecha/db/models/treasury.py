@@ -23,6 +23,23 @@ class TreasuryAccountMapping(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
 
 
+class TreasuryCounterpartyMapping(Base):
+    """نگاشتِ «نوعِ طرفِ‌حساب» (جهت + گروهِ تفصیلی) به معین — طبقِ درخواستِ
+    صریح: دریافت از تامین‌کننده به یک معین، دریافت از مشتری به معینِ
+    دیگر؛ اختیاری می‌توان یک تفصیلیِ ثابت هم هارد‌کد کرد."""
+
+    __tablename__ = "counterparty_mappings"
+    __table_args__ = {"schema": "treasury"}
+
+    mapping_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    direction: Mapped[str] = mapped_column(String(10))  # RECEIPT | PAYMENT
+    dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
+    person_group_id: Mapped[int] = mapped_column(default=0)
+    account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
 class Checkbook(Base):
     __tablename__ = "checkbooks"
     __table_args__ = {"schema": "treasury"}
