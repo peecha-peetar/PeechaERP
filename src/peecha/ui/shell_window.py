@@ -73,7 +73,7 @@ _NAV_ICONS = {
     "SETTINGS": "⚙️",
 }
 
-_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0}
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1}
 
 
 def _leaf_nav_children(item: dict) -> list[dict]:
@@ -1017,7 +1017,6 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.system_settings import SystemSettingsScreen
         from peecha.ui.screens.treasury_checks import IssuedChecksScreen, ReceivedChecksScreen
         from peecha.ui.screens.treasury_reports import TreasuryChecksDueScreen
-        from peecha.ui.screens.treasury_settings import TreasurySettingsScreen
         from peecha.ui.screens.treasury_voucher import TreasuryVoucherScreen
 
         # طبقِ درخواستِ صریح («سیستمِ کارتابلِ قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
@@ -1058,7 +1057,6 @@ class MainWindow(QMainWindow):
         self.register_screen("treasury_checks_received", ReceivedChecksScreen())
         self.register_screen("treasury_checks_issued", IssuedChecksScreen())
         self.register_screen("treasury_checks_due", TreasuryChecksDueScreen())
-        self.register_screen("treasury_settings", TreasurySettingsScreen())
         self.register_screen("report_trial_balance", TrialBalanceScreen())
         self.register_screen("report_journal_book", JournalBookScreen())
         self.register_screen("report_account_ledger", AccountLedgerScreen())

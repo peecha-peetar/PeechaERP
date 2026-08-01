@@ -23,6 +23,22 @@ class TreasuryAccountMapping(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
 
 
+class TreasuryDocumentType(Base):
+    """«نوعِ سند» برایِ دریافت/پرداخت — طبقِ درخواستِ صریح، در فرمِ سند
+    به‌جایِ انتخابِ آزادِ معین از بینِ این‌ها انتخاب می‌شود (مثلاً «دریافت
+    از مشتری»)؛ هرکدام یک معین + یک تفصیلیِ اختیاریِ ثابت."""
+
+    __tablename__ = "document_types"
+    __table_args__ = {"schema": "treasury"}
+
+    document_type_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    direction: Mapped[str] = mapped_column(String(10))  # RECEIPT | PAYMENT
+    name: Mapped[str] = mapped_column(String(150))
+    account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
 class Checkbook(Base):
     __tablename__ = "checkbooks"
     __table_args__ = {"schema": "treasury"}

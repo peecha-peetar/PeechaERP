@@ -13,13 +13,19 @@ from sqlalchemy import select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
-    AccountDetailDimension,
     ChartOfAccount,
     DetailAccount,
     JournalEntryLine,
     JournalEntryLineDetail,
 )
-from peecha.db.models.treasury import Checkbook, CheckStatus, IssuedCheck, ReceivedCheck, TreasuryAccountMapping
+from peecha.db.models.treasury import (
+    Checkbook,
+    CheckStatus,
+    IssuedCheck,
+    ReceivedCheck,
+    TreasuryAccountMapping,
+    TreasuryDocumentType,
+)
 from peecha.services import audit as audit_service
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -196,11 +202,6 @@ def _allocate_check_no(session, checkbook_id: int, company_id: int) -> tuple[str
     return str(allocated), checkbook.bank_account_detail_id
 
 
-_SETTLEMENT_DIMENSION_CODES = (
-    dimensions_service.CASH_BOX_CODE,
-    dimensions_service.BANK_ACCOUNT_CODE,
-    dimensions_service.PETTY_CASH_CODE,
-)
 # طبقِ درخواستِ صریح: مرکزِ هزینه/پروژه (اگر رویِ حسابِ طرف‌حساب الزامی
 # باشند) باید بینِ همه‌ی ردیف‌هایِ یک سند مشترک باشند — نه فقط ردیفِ
 # طرف‌حساب — چون این دو نوع‌بُعد ویژگیِ خودِ رویدادِ مالی‌اند (این تراکنش
@@ -208,27 +209,89 @@ _SETTLEMENT_DIMENSION_CODES = (
 _SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
 
 
-def list_counterparty_account_options(company_id: int) -> list[tuple[int, str]]:
-    """حساب‌هایِ قابلِ‌انتخاب به‌عنوانِ «طرفِ حساب» در فرمِ دریافت/پرداخت —
-    طبقِ گزارشِ صریح: معین‌هایی که تفصیلیِ الزامی‌شان صندوق/بانک/تنخواه
-    است اصلاً نباید این‌جا نمایش داده شوند، چون خودشان از طریقِ ردیف‌هایِ
-    روش (نقد/بانک) مدیریت می‌شوند، نه به‌عنوانِ طرفِ حساب."""
-    excluded_type_ids = {
-        dimensions_service.get_specialized_dimension_type_id(company_id, code) for code in _SETTLEMENT_DIMENSION_CODES
-    }
+# --- انواعِ سند (دریافت/پرداخت) ----------------------------------------------
+# طبقِ درخواستِ صریح: در فرمِ سندِ دریافت/پرداخت به‌جایِ انتخابِ آزادِ معین،
+# از بینِ «نوع‌سند»هایِ ازپیش‌تعریف‌شده در همین‌جا انتخاب می‌شود (مثلاً
+# «دریافت از مشتری» -> معینِ حساب‌هایِ دریافتنی). اگر یک تفصیلیِ ثابت هم
+# پیوست شود، همیشه همان تفصیلی استفاده می‌شود؛ در غیرِ این صورت، فرمِ سند
+# طبقِ نیازِ خودِ معین، تفصیلیِ لازم را می‌پرسد.
+
+
+@dataclass
+class DocumentTypeRow:
+    document_type_id: int
+    direction: str
+    name: str
+    account_id: int
+    account_label: str
+    detail_account_id: int | None
+    detail_label: str | None
+    detail_dimension_type_id: int | None
+
+
+def list_document_types(company_id: int, direction: str | None = None) -> list[DocumentTypeRow]:
     with new_session() as session:
-        excluded_account_ids = set(
-            session.scalars(
-                select(AccountDetailDimension.account_id).where(
-                    AccountDetailDimension.dimension_type_id.in_(excluded_type_ids)
-                )
-            ).all()
+        query = select(TreasuryDocumentType).where(TreasuryDocumentType.company_id == company_id)
+        if direction is not None:
+            query = query.where(TreasuryDocumentType.direction == direction)
+        rows = session.scalars(query.order_by(TreasuryDocumentType.direction, TreasuryDocumentType.document_type_id)).all()
+        data = [(r.document_type_id, r.direction, r.name, r.account_id, r.detail_account_id) for r in rows]
+        detail_ids = {d for *_r, d in data if d is not None}
+        details_by_id = (
+            {
+                d.detail_account_id: d
+                for d in session.scalars(select(DetailAccount).where(DetailAccount.detail_account_id.in_(detail_ids))).all()
+            }
+            if detail_ids
+            else {}
         )
-    return [
-        (a.account_id, f"{a.full_code} — {a.name}")
-        for a in coa_service.list_postable_accounts(company_id)
-        if a.account_id not in excluded_account_ids
-    ]
+
+    accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
+    result: list[DocumentTypeRow] = []
+    for document_type_id, direction_, name, account_id, detail_account_id in data:
+        detail = details_by_id.get(detail_account_id) if detail_account_id is not None else None
+        result.append(
+            DocumentTypeRow(
+                document_type_id=document_type_id,
+                direction=direction_,
+                name=name,
+                account_id=account_id,
+                account_label=accounts_by_id.get(account_id, ""),
+                detail_account_id=detail_account_id,
+                detail_label=(detail.name or detail.code) if detail is not None else None,
+                detail_dimension_type_id=detail.dimension_type_id if detail is not None else None,
+            )
+        )
+    return result
+
+
+def create_document_type(
+    company_id: int, direction: str, name: str, account_id: int, detail_account_id: int | None = None
+) -> None:
+    if direction not in ("RECEIPT", "PAYMENT"):
+        raise ValueError("جهت نامعتبر است.")
+    if not name.strip():
+        raise ValueError("نامِ نوعِ سند الزامی است.")
+    with new_session() as session:
+        session.add(
+            TreasuryDocumentType(
+                company_id=company_id,
+                direction=direction,
+                name=name.strip(),
+                account_id=account_id,
+                detail_account_id=detail_account_id,
+            )
+        )
+        session.commit()
+
+
+def delete_document_type(document_type_id: int, company_id: int) -> None:
+    with new_session() as session:
+        row = session.get(TreasuryDocumentType, document_type_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("نوعِ سند نامعتبر است.")
+        session.delete(row)
+        session.commit()
 
 
 # --- سندِ چندروشیِ دریافت/پرداخت ---------------------------------------------

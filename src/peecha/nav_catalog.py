@@ -45,7 +45,6 @@ NAV_ITEMS = [
             {"code": "TREASURY_CHECKS_RECEIVED", "label": "چک‌هایِ دریافتی", "screen": "treasury_checks_received"},
             {"code": "TREASURY_CHECKS_ISSUED", "label": "چک‌هایِ پرداختی", "screen": "treasury_checks_issued"},
             {"code": "TREASURY_CHECKS_DUE", "label": "گزارشِ چک‌هایِ درجریانِ وصول", "screen": "treasury_checks_due"},
-            {"code": "TREASURY_SETTINGS", "label": "تنظیماتِ خزانه‌داری", "screen": "treasury_settings", "in_ribbon": False},
         ],
     },
     {"code": "INV", "label": "انبار و موجودی", "screen": None},
