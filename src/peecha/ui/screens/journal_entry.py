@@ -1762,6 +1762,10 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         )
         self._editing_journal_entry_id = journal_entry_id
         self._editing_registration_at = summary.registration_at if summary else None
+        if summary is not None:
+            # ویرایشِ یک سندِ خزانه‌داری (دریافت/پرداخت) از طریقِ همین فرمِ
+            # عمومی هم باید عنوانِ درستش را نشان دهد، نه همیشه «سند».
+            self._document_noun = _ENTRY_TYPE_NOUNS.get(summary.entry_type_code, "سند")
         self.form_title.setText(f"ویرایشِ {self._document_noun}")
         if summary is not None:
             self.date_field.setDate(summary.document_date)

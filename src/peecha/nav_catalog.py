@@ -36,9 +36,16 @@ NAV_ITEMS = [
         "code": "TREASURY",
         "label": "خزانه‌داری",
         "children": [
-            {"code": "TREASURY_RECEIPT", "label": "سندِ دریافت", "screen": "treasury_receipt"},
-            {"code": "TREASURY_PAYMENT", "label": "سندِ پرداخت", "screen": "treasury_payment"},
+            # طبقِ طرحِ تاییدشده (فازِ ۲): فرمِ دریافت/پرداخت حالا چندروشی
+            # است (نقد/بانک/چک/تخفیف در یک سند) — هر ردیف طبقِ نگاشتِ
+            # حساب‌هایِ تنظیماتِ خزانه‌داری خودکار به حسابِ کلِ خودش می‌رود.
+            {"code": "TREASURY_RECEIPT", "label": "سندِ دریافت", "screen": "treasury_voucher_receipt"},
+            {"code": "TREASURY_PAYMENT", "label": "سندِ پرداخت", "screen": "treasury_voucher_payment"},
             {"code": "TREASURY_LIST", "label": "اسنادِ خزانه‌داری", "screen": "treasury_vouchers_list"},
+            {"code": "TREASURY_CHECKS_RECEIVED", "label": "چک‌هایِ دریافتی", "screen": "treasury_checks_received"},
+            {"code": "TREASURY_CHECKS_ISSUED", "label": "چک‌هایِ پرداختی", "screen": "treasury_checks_issued"},
+            {"code": "TREASURY_CHECKS_DUE", "label": "گزارشِ چک‌هایِ درجریانِ وصول", "screen": "treasury_checks_due"},
+            {"code": "TREASURY_SETTINGS", "label": "تنظیماتِ خزانه‌داری", "screen": "treasury_settings", "in_ribbon": False},
         ],
     },
     {"code": "INV", "label": "انبار و موجودی", "screen": None},
@@ -135,6 +142,9 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("TREASURY_RECEIPT", "💵"),
         ("TREASURY_PAYMENT", "💸"),
         ("TREASURY_LIST", "📚"),
+        ("TREASURY_CHECKS_RECEIVED", "📥"),
+        ("TREASURY_CHECKS_ISSUED", "📤"),
+        ("TREASURY_CHECKS_DUE", "⏰"),
     ],
     "INV": [],
     "SALES": [],

@@ -1169,6 +1169,29 @@ def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
             session.add(dimension_type)
             session.flush()
             existing[code] = dimension_type.dimension_type_id
+            if code == BANK_ACCOUNT_CODE:
+                # طبقِ درخواستِ صریح: هر حسابِ بانکی از همان روزِ اول این
+                # فیلدهایِ اختصاصی را داشته باشد — از همان مکانیزمِ عمومیِ
+                # extra_fields JSONB، بدونِ ستونِ SQLِ تازه.
+                for sort_order, (field_key, label) in enumerate(
+                    [
+                        ("account_type", "نوعِ حساب (جاری/پس‌انداز)"),
+                        ("account_number", "شماره‌حساب"),
+                        ("iban", "شماره‌شبا"),
+                        ("branch", "شعبه"),
+                    ]
+                ):
+                    session.add(
+                        DetailGroupField(
+                            dimension_type_id=dimension_type.dimension_type_id,
+                            person_group_id=0,
+                            field_key=field_key,
+                            label=label,
+                            kind="text",
+                            is_required=False,
+                            sort_order=sort_order,
+                        )
+                    )
     return existing
 
 

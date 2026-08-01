@@ -1001,6 +1001,10 @@ class MainWindow(QMainWindow):
         )
         from peecha.ui.screens.my_tasks import register_open_handler
         from peecha.ui.screens.system_settings import SystemSettingsScreen
+        from peecha.ui.screens.treasury_checks import IssuedChecksScreen, ReceivedChecksScreen
+        from peecha.ui.screens.treasury_reports import TreasuryChecksDueScreen
+        from peecha.ui.screens.treasury_settings import TreasurySettingsScreen
+        from peecha.ui.screens.treasury_voucher import TreasuryVoucherScreen
 
         # طبقِ درخواستِ صریح («سیستمِ کارتابلِ قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
         # هر ماژولی که واردِ کارتابل می‌شود، فقط همین یک خط این‌جا اضافه
@@ -1022,8 +1026,8 @@ class MainWindow(QMainWindow):
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
         self.register_screen("journal_entry", JournalEntryScreen())
         self.register_screen("journal_entries_list", JournalEntriesListScreen(self))
-        self.register_screen("treasury_receipt", JournalEntryScreen(entry_type_code="RECEIPT"))
-        self.register_screen("treasury_payment", JournalEntryScreen(entry_type_code="PAYMENT"))
+        self.register_screen("treasury_voucher_receipt", TreasuryVoucherScreen("RECEIPT"))
+        self.register_screen("treasury_voucher_payment", TreasuryVoucherScreen("PAYMENT"))
         self.register_screen(
             "treasury_vouchers_list",
             JournalEntriesListScreen(
@@ -1031,9 +1035,16 @@ class MainWindow(QMainWindow):
                 entry_type_codes=["RECEIPT", "PAYMENT"],
                 title="اسنادِ خزانه‌داری",
                 new_entry_options=[("+ سندِ دریافت", "TREASURY_RECEIPT"), ("+ سندِ پرداخت", "TREASURY_PAYMENT")],
-                edit_screen_by_type={"RECEIPT": "TREASURY_RECEIPT", "PAYMENT": "TREASURY_PAYMENT"},
+                # ویرایشِ سندِ ازقبل‌ثبت‌شده همیشه از فرمِ عمومیِ GL_JE انجام
+                # می‌شود (پیش‌فرضِ edit_screen_by_type={}) — فرمِ چندروشی فقط
+                # برایِ صدورِ سندِ تازه است، نه بازسازیِ ردیف‌ها از رویِ یک
+                # سندِ موجود.
             ),
         )
+        self.register_screen("treasury_checks_received", ReceivedChecksScreen())
+        self.register_screen("treasury_checks_issued", IssuedChecksScreen())
+        self.register_screen("treasury_checks_due", TreasuryChecksDueScreen())
+        self.register_screen("treasury_settings", TreasurySettingsScreen())
         self.register_screen("report_trial_balance", TrialBalanceScreen())
         self.register_screen("report_journal_book", JournalBookScreen())
         self.register_screen("report_account_ledger", AccountLedgerScreen())
