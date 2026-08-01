@@ -706,9 +706,22 @@ class _LineRow:
         self.credit_field.setValue(float(line.credit))
 
 
+_ENTRY_TYPE_NOUNS = {
+    "NORMAL": "سند",
+    "RECEIPT": "سندِ دریافت",
+    "PAYMENT": "سندِ پرداخت",
+}
+
+
 class JournalEntryScreen(FieldHelpMixin, QWidget):
-    def __init__(self) -> None:
+    def __init__(self, entry_type_code: str = "NORMAL") -> None:
         super().__init__()
+        # طبقِ درخواستِ صریح («خزانه‌داری با ساختارِ بنیادیِ برنامه»): اسنادِ
+        # دریافت/پرداخت همان موتورِ این فرم را کامل (چندارزی/ابعادِ تفصیلی/
+        # پیش‌نویس/تاییدِ کارتابل) استفاده می‌کنند، فقط با entry_type متفاوت
+        # تا در گزارش/فهرست قابلِ‌تفکیک از سندهایِ عادی باشند.
+        self._entry_type_code = entry_type_code
+        self._document_noun = _ENTRY_TYPE_NOUNS.get(entry_type_code, "سند")
         self.company_id: int | None = None
         self.account_options: list[tuple[int, str]] = []
         self.recent_line_descriptions: list[str] = []
@@ -760,7 +773,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         header_layout.setContentsMargins(12, 10, 12, 10)
         header_layout.setSpacing(6)
 
-        self.form_title = QLabel("صدورِ سندِ جدید")
+        self.form_title = QLabel(f"صدورِ {self._document_noun}ِ جدید")
         self.form_title.setObjectName("pageTitle")
         header_layout.addWidget(self.form_title, 0, 0, 1, 4)
 
@@ -1088,7 +1101,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
     def _reset_form(self) -> None:
         self._editing_journal_entry_id = None
         self._editing_registration_at = None
-        self.form_title.setText("صدورِ سندِ جدید")
+        self.form_title.setText(f"صدورِ {self._document_noun}ِ جدید")
         self.date_field.setDate(datetime.date.today())
         self.alt_number_field.clear()
         self.description_field.clear()
@@ -1696,7 +1709,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             else:
                 result = je_service.create_journal_entry(
                     self.company_id, session.current_user.user_id, document_date, description, lines,
-                    alternative_number=alt_number, as_draft=as_draft,
+                    alternative_number=alt_number, as_draft=as_draft, entry_type_code=self._entry_type_code,
                 )
                 temp_no = result.temporary_no
         except ValueError as exc:
@@ -1749,7 +1762,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         )
         self._editing_journal_entry_id = journal_entry_id
         self._editing_registration_at = summary.registration_at if summary else None
-        self.form_title.setText("ویرایشِ سند")
+        self.form_title.setText(f"ویرایشِ {self._document_noun}")
         if summary is not None:
             self.date_field.setDate(summary.document_date)
             self.description_field.setText(summary.description or "")
@@ -1820,7 +1833,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         )
         self._editing_journal_entry_id = None
         self._editing_registration_at = None
-        self.form_title.setText("کپیِ معکوسِ سند" if reverse else "کپیِ سند")
+        self.form_title.setText(f"کپیِ معکوسِ {self._document_noun}" if reverse else f"کپیِ {self._document_noun}")
         self.date_field.setDate(datetime.date.today())
         self.alt_number_field.clear()
         self.draft_checkbox.setChecked(False)

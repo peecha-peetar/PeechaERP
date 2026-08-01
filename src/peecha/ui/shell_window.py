@@ -63,6 +63,7 @@ _NAV_ICONS = {
     "dashboard": "🏠",
     "MY_TASKS": "📥",
     "GL": "💰",
+    "TREASURY": "🏦",
     "INV": "📦",
     "SALES": "🛒",
     "PURCH": "🧺",
@@ -1021,6 +1022,18 @@ class MainWindow(QMainWindow):
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
         self.register_screen("journal_entry", JournalEntryScreen())
         self.register_screen("journal_entries_list", JournalEntriesListScreen(self))
+        self.register_screen("treasury_receipt", JournalEntryScreen(entry_type_code="RECEIPT"))
+        self.register_screen("treasury_payment", JournalEntryScreen(entry_type_code="PAYMENT"))
+        self.register_screen(
+            "treasury_vouchers_list",
+            JournalEntriesListScreen(
+                self,
+                entry_type_codes=["RECEIPT", "PAYMENT"],
+                title="اسنادِ خزانه‌داری",
+                new_entry_options=[("+ سندِ دریافت", "TREASURY_RECEIPT"), ("+ سندِ پرداخت", "TREASURY_PAYMENT")],
+                edit_screen_by_type={"RECEIPT": "TREASURY_RECEIPT", "PAYMENT": "TREASURY_PAYMENT"},
+            ),
+        )
         self.register_screen("report_trial_balance", TrialBalanceScreen())
         self.register_screen("report_journal_book", JournalBookScreen())
         self.register_screen("report_account_ledger", AccountLedgerScreen())

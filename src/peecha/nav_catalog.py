@@ -32,6 +32,15 @@ NAV_ITEMS = [
             {"code": "GL_DIM", "label": "تعریفِ تفصیلی", "screen": "detail_dimensions", "in_ribbon": False},
         ],
     },
+    {
+        "code": "TREASURY",
+        "label": "خزانه‌داری",
+        "children": [
+            {"code": "TREASURY_RECEIPT", "label": "سندِ دریافت", "screen": "treasury_receipt"},
+            {"code": "TREASURY_PAYMENT", "label": "سندِ پرداخت", "screen": "treasury_payment"},
+            {"code": "TREASURY_LIST", "label": "اسنادِ خزانه‌داری", "screen": "treasury_vouchers_list"},
+        ],
+    },
     {"code": "INV", "label": "انبار و موجودی", "screen": None},
     {"code": "SALES", "label": "فروش و بازاریابی", "screen": None},
     {"code": "PURCH", "label": "خرید و تدارکات", "screen": None},
@@ -121,6 +130,11 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("GL_JE_LIST", "📚"),
         ("GL_TAFSILI", "🤝"),
         ("GL_DIM", "🧰"),
+    ],
+    "TREASURY": [
+        ("TREASURY_RECEIPT", "💵"),
+        ("TREASURY_PAYMENT", "💸"),
+        ("TREASURY_LIST", "📚"),
     ],
     "INV": [],
     "SALES": [],

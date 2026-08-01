@@ -39,13 +39,14 @@ _MODULES = [
     ("DASH", "داشبورد", "view-dashboard-outline", 0),
     ("MY_TASKS", "کارتابلِ من", "inbox-outline", 1),
     ("GL", "مالی و حسابداری", "cash-multiple", 2),
-    ("INV", "انبار و موجودی", "package-variant-closed", 3),
-    ("SALES", "فروش و بازاریابی", "cart-outline", 4),
-    ("PURCH", "خرید و تدارکات", "truck-outline", 5),
-    ("HR", "منابع انسانی", "account-group-outline", 6),
-    ("INVOICES", "فاکتورها", "receipt-text-outline", 7),
-    ("REPORTS", "گزارش‌ها", "chart-bar", 8),
-    ("SETTINGS", "مدیریت سیستم", "cog-outline", 9),
+    ("TREASURY", "خزانه‌داری", "bank-outline", 3),
+    ("INV", "انبار و موجودی", "package-variant-closed", 4),
+    ("SALES", "فروش و بازاریابی", "cart-outline", 5),
+    ("PURCH", "خرید و تدارکات", "truck-outline", 6),
+    ("HR", "منابع انسانی", "account-group-outline", 7),
+    ("INVOICES", "فاکتورها", "receipt-text-outline", 8),
+    ("REPORTS", "گزارش‌ها", "chart-bar", 9),
+    ("SETTINGS", "مدیریت سیستم", "cog-outline", 10),
 ]
 
 # (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()

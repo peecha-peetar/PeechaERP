@@ -50,9 +50,24 @@ _COL_FISCAL_YEAR = 8
 
 
 class JournalEntriesListScreen(FieldHelpMixin, QWidget):
-    def __init__(self, main_window) -> None:
+    def __init__(
+        self,
+        main_window,
+        *,
+        entry_type_codes: list[str] | None = None,
+        title: str = "اسنادِ حسابداری",
+        new_entry_options: list[tuple[str, str]] | None = None,
+        edit_screen_by_type: dict[str, str] | None = None,
+    ) -> None:
         super().__init__()
         self._main_window = main_window
+        self._entry_type_codes = entry_type_codes
+        # طبقِ درخواستِ صریح («خزانه‌داری با ساختارِ بنیادیِ برنامه»): همین
+        # صفحه‌یِ فهرستِ اسناد، با فیلترِ نوعِ سند و مسیریابیِ ویرایش/سندِ
+        # جدیدِ متفاوت، برایِ فهرستِ اسنادِ خزانه‌داری (دریافت/پرداخت) هم
+        # دوباره استفاده می‌شود — بدونِ کپی‌کردنِ کدِ فهرست.
+        self._new_entry_options = new_entry_options or [("+ سندِ جدید", "GL_JE")]
+        self._edit_screen_by_type = edit_screen_by_type or {}
         self._entries: list[je_service.JournalEntrySummary] = []
         self._currency_decimal_places = 0
         self._currency_symbol: str | None = None
@@ -62,14 +77,15 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         layout.setSpacing(16)
 
         header = QHBoxLayout()
-        title = QLabel("اسنادِ حسابداری")
-        title.setObjectName("pageTitle")
-        header.addWidget(title)
+        title_label = QLabel(title)
+        title_label.setObjectName("pageTitle")
+        header.addWidget(title_label)
         header.addStretch(1)
-        new_button = QPushButton("+ سندِ جدید")
-        new_button.setObjectName("primaryButton")
-        new_button.clicked.connect(self._open_new_entry)
-        header.addWidget(new_button)
+        for button_label, screen_code in self._new_entry_options:
+            new_button = QPushButton(button_label)
+            new_button.setObjectName("primaryButton")
+            new_button.clicked.connect(lambda _checked=False, code=screen_code: self._open_new_entry(code))
+            header.addWidget(new_button)
         layout.addLayout(header)
 
         self.search_field = QLineEdit()
@@ -128,7 +144,11 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
 
     def refresh(self) -> None:
         company_id = self._company_id()
-        self._entries = je_service.list_journal_entries(company_id) if company_id is not None else []
+        self._entries = (
+            je_service.list_journal_entries(company_id, entry_type_codes=self._entry_type_codes)
+            if company_id is not None
+            else []
+        )
 
         base_currency_id = session.current_company.base_currency_id if session.current_company else None
         currency = next((c for c in currencies_service.list_all_currencies() if c.currency_id == base_currency_id), None)
@@ -169,20 +189,26 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
                 item.setData(Qt.UserRole, e.journal_entry_id)
                 self.table.setItem(row_index, col_index, item)
 
-    def _open_new_entry(self) -> None:
-        self._main_window.open_screen("GL_JE", then=lambda screen: screen._reset_form())
+    def _open_new_entry(self, screen_code: str) -> None:
+        self._main_window.open_screen(screen_code, then=lambda screen: screen._reset_form())
 
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
         journal_entry_id = self.table.item(row, 0).data(Qt.UserRole)
-        self._main_window.open_screen("GL_JE", then=lambda screen: screen.edit_journal_entry(journal_entry_id))
+        entry = next((e for e in self._entries if e.journal_entry_id == journal_entry_id), None)
+        entry_type_code = entry.entry_type_code if entry is not None else "NORMAL"
+        screen_code = self._edit_screen_by_type.get(entry_type_code, "GL_JE")
+        self._main_window.open_screen(screen_code, then=lambda screen: screen.edit_journal_entry(journal_entry_id))
 
     def _copy_selected(self, *, reverse: bool) -> None:
         selected = self.table.selectedItems()
         if not selected:
             return
         journal_entry_id = selected[0].data(Qt.UserRole)
+        entry = next((e for e in self._entries if e.journal_entry_id == journal_entry_id), None)
+        entry_type_code = entry.entry_type_code if entry is not None else "NORMAL"
+        screen_code = self._edit_screen_by_type.get(entry_type_code, "GL_JE")
         self._main_window.open_screen(
-            "GL_JE", then=lambda screen: screen.copy_from_journal_entry(journal_entry_id, reverse=reverse)
+            screen_code, then=lambda screen: screen.copy_from_journal_entry(journal_entry_id, reverse=reverse)
         )
 
     def _delete_selected(self) -> None:

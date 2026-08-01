@@ -138,6 +138,7 @@ class JournalEntrySummary:
     company_name: str = ""
     fiscal_year_code: str = ""
     permanent_no: int | None = None
+    entry_type_code: str = "NORMAL"
 
 
 def _validate_lines(lines: list[LineInput], *, require_balance: bool = True) -> list[LineInput]:
@@ -405,6 +406,7 @@ def create_journal_entry(
     lines: list[LineInput],
     alternative_number: str = "",
     as_draft: bool = False,
+    entry_type_code: str = "NORMAL",
 ) -> JournalEntryResult:
     require_balance = not as_draft
     real_lines = _validate_lines(lines, require_balance=require_balance)
@@ -417,7 +419,7 @@ def create_journal_entry(
         resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance)
 
         status_code = "DRAFT" if as_draft else "TEMPORARY"
-        entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == "NORMAL"))
+        entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == entry_type_code))
         status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == status_code))
         if entry_type is None or status is None:
             raise ValueError("داده‌ی پایه‌ی نوع/وضعیت سند در دیتابیس یافت نشد.")
@@ -497,12 +499,16 @@ def create_journal_entry(
         return JournalEntryResult(journal_entry_id=entry.journal_entry_id, temporary_no=entry.temporary_no)
 
 
-def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
+def list_journal_entries(company_id: int, entry_type_codes: list[str] | None = None) -> list[JournalEntrySummary]:
     with new_session() as session:
+        query = select(JournalEntry).where(JournalEntry.company_id == company_id)
+        if entry_type_codes is not None:
+            type_ids = session.scalars(
+                select(JournalEntryType.entry_type_id).where(JournalEntryType.code.in_(entry_type_codes))
+            ).all()
+            query = query.where(JournalEntry.entry_type_id.in_(type_ids))
         entries = session.scalars(
-            select(JournalEntry)
-            .where(JournalEntry.company_id == company_id)
-            .order_by(JournalEntry.document_date.desc(), JournalEntry.temporary_no.desc())
+            query.order_by(JournalEntry.document_date.desc(), JournalEntry.temporary_no.desc())
         ).all()
         entry_ids = [e.journal_entry_id for e in entries]
         totals: dict[int, decimal.Decimal] = {}
@@ -515,6 +521,7 @@ def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
             totals = dict(rows)
 
         status_codes = dict(session.execute(select(JournalEntryStatus.status_id, JournalEntryStatus.code)).all())
+        entry_type_codes_by_id = dict(session.execute(select(JournalEntryType.entry_type_id, JournalEntryType.code)).all())
 
         # طبقِ درخواستِ صریح: کاربرِ صادرکننده، نامِ شرکت و سالِ مالی هم در
         # فهرستِ اسناد نمایش داده شود.
@@ -553,6 +560,7 @@ def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
                 company_name=company_name,
                 fiscal_year_code=fiscal_year_codes.get(e.fiscal_year_id, ""),
                 permanent_no=e.permanent_no,
+                entry_type_code=entry_type_codes_by_id.get(e.entry_type_id, "NORMAL"),
             )
             for e in entries
         ]
@@ -887,7 +895,11 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
             .order_by(JournalEntryLine.line_no)
         ).all()
 
-        entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == "NORMAL"))
+        # نوعِ سندِ برگشتی همانِ نوعِ سندِ اصلی است (نه همیشه NORMAL) — وگرنه
+        # برگشت‌زدنِ یک سندِ خزانه‌داری (دریافت/پرداخت)، سندِ برگشتی‌اش را از
+        # فهرستِ خزانه‌داری خارج می‌کرد، چون آن فهرست بر اساسِ entry_type
+        # فیلتر می‌شود.
+        entry_type = session.get(JournalEntryType, original.entry_type_id)
         permanent_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "PERMANENT"))
         reversed_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "REVERSED"))
         if entry_type is None or permanent_status is None or reversed_status is None:
