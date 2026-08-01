@@ -135,6 +135,7 @@ class JournalEntrySummary:
     created_by_name: str = ""
     company_name: str = ""
     fiscal_year_code: str = ""
+    permanent_no: int | None = None
 
 
 def _validate_lines(lines: list[LineInput], *, require_balance: bool = True) -> list[LineInput]:
@@ -549,6 +550,7 @@ def list_journal_entries(company_id: int) -> list[JournalEntrySummary]:
                 created_by_name=user_names.get(e.created_by_user_id, ""),
                 company_name=company_name,
                 fiscal_year_code=fiscal_year_codes.get(e.fiscal_year_id, ""),
+                permanent_no=e.permanent_no,
             )
             for e in entries
         ]
@@ -792,3 +794,179 @@ def delete_journal_entry(journal_entry_id: int, company_id: int, changed_by_user
         )
 
         session.commit()
+
+
+def _next_permanent_no(session, company_id: int, fiscal_year_id: int) -> int:
+    return (
+        session.scalar(
+            select(func.max(JournalEntry.permanent_no)).where(
+                JournalEntry.company_id == company_id,
+                JournalEntry.fiscal_year_id == fiscal_year_id,
+            )
+        )
+        or 0
+    ) + 1
+
+
+def approve_journal_entry(journal_entry_id: int, company_id: int, posted_by_user_id: int) -> int:
+    """طبقِ حسابرسیِ صریح: طراحیِ دیتابیس از اول یک گردشِ کارِ «تاییدِ
+    کارتابل» را پیش‌بینی کرده بود (ستون‌هایِ posted_by_user_id/posted_at
+    و تریگرِ tr_journal_entries_prevent_permanent_no_change) ولی هیچ
+    سرویسی این گردشِ کار را پیاده نمی‌کرد — یعنی هر سندی برایِ همیشه
+    TEMPORARY می‌ماند و permanent_no همیشه NULL بود. این تابع همان
+    تاییدِ کارتابل است: سندِ TEMPORARY را به PERMANENT ارتقا می‌دهد و
+    شماره‌یِ دائمِ واقعی می‌گیرد (بعد از این، طبقِ تریگرِ دیتابیس دیگر
+    قابلِ‌تغییر نیست؛ create/update/delete هم همین حالا فقط
+    TEMPORARY/DRAFT را می‌پذیرند، پس سندِ دائم به‌طورِ طبیعی غیرقابلِ‌
+    ویرایش/حذف می‌شود)."""
+    with new_session() as session:
+        entry = session.get(JournalEntry, journal_entry_id)
+        if entry is None or entry.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        status = session.get(JournalEntryStatus, entry.status_id)
+        if status is None or status.code != "TEMPORARY":
+            raise ValueError("فقط سندهایِ موقت قابلِ تایید (ارتقا به دائم) هستند.")
+        fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
+        if fiscal_year is not None:
+            _ensure_fiscal_year_open(fiscal_year)
+            _ensure_fiscal_period_open(session, fiscal_year.fiscal_year_id, entry.document_date)
+
+        permanent_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "PERMANENT"))
+        if permanent_status is None:
+            raise ValueError("داده‌ی پایه‌ی وضعیتِ «دائم» در دیتابیس یافت نشد.")
+
+        next_no = _next_permanent_no(session, company_id, entry.fiscal_year_id)
+        entry.permanent_no = next_no
+        entry.status_id = permanent_status.status_id
+        entry.posted_by_user_id = posted_by_user_id
+        entry.posted_at = datetime.datetime.now()
+
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=posted_by_user_id,
+            entity_type="JournalEntry",
+            entity_id=journal_entry_id,
+            action="APPROVE",
+            changes={"after": {"status": "PERMANENT", "permanent_no": next_no}},
+        )
+
+        session.commit()
+        return next_no
+
+
+def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_user_id: int) -> JournalEntryResult:
+    """سندِ برگشتی (اصلاحیه) برایِ یک سندِ دائم. طبقِ طراحیِ دیتابیس، سندِ
+    دائم دیگر قابلِ‌ویرایش/حذف نیست، پس تنها راهِ خنثی‌کردنِ اثرش، سندی
+    تازه با بدهکار/بستانکارِ معکوسِ همان ردیف‌هاست (ستونِ خودِ مدل هم
+    reversed_entry_id دارد، دقیقاً برایِ همین). سندِ برگشتی بلافاصله
+    خودش هم دائم می‌شود (نه موقتِ منتظرِ تاییدِ جداگانه) چون هدفش خنثی‌
+    کردنِ فوریِ اثرِ یک سندِ ازپیش‌دائم در دفاتر است."""
+    with new_session() as session:
+        original = session.get(JournalEntry, journal_entry_id)
+        if original is None or original.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        original_status = session.get(JournalEntryStatus, original.status_id)
+        if original_status is None or original_status.code != "PERMANENT":
+            raise ValueError("فقط سندهایِ دائم قابلِ برگشت‌زدن‌اند.")
+
+        company = session.get(Company, company_id)
+        if company is None:
+            raise ValueError("شرکت نامعتبر است.")
+
+        document_date = datetime.date.today()
+        fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
+        _ensure_fiscal_year_open(fiscal_year)
+        _ensure_fiscal_period_open(session, fiscal_year.fiscal_year_id, document_date)
+
+        original_lines = session.scalars(
+            select(JournalEntryLine)
+            .where(JournalEntryLine.journal_entry_id == journal_entry_id)
+            .order_by(JournalEntryLine.line_no)
+        ).all()
+
+        entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == "NORMAL"))
+        permanent_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "PERMANENT"))
+        reversed_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "REVERSED"))
+        if entry_type is None or permanent_status is None or reversed_status is None:
+            raise ValueError("داده‌ی پایه‌ی نوع/وضعیتِ سند در دیتابیس یافت نشد.")
+
+        next_temp_no = (
+            session.scalar(
+                select(func.max(JournalEntry.temporary_no)).where(
+                    JournalEntry.company_id == company_id,
+                    JournalEntry.fiscal_year_id == fiscal_year.fiscal_year_id,
+                )
+            )
+            or 0
+        ) + 1
+        next_permanent_no = _next_permanent_no(session, company_id, fiscal_year.fiscal_year_id)
+
+        original_no = original.permanent_no
+        reversal = JournalEntry(
+            company_id=company_id,
+            fiscal_year_id=fiscal_year.fiscal_year_id,
+            temporary_no=next_temp_no,
+            permanent_no=next_permanent_no,
+            document_date=document_date,
+            entry_type_id=entry_type.entry_type_id,
+            status_id=permanent_status.status_id,
+            description=f"سندِ برگشتیِ سندِ دائمِ شماره‌ی {original_no}",
+            is_system_generated=True,
+            reversed_entry_id=original.journal_entry_id,
+            created_by_user_id=created_by_user_id,
+            posted_by_user_id=created_by_user_id,
+            posted_at=datetime.datetime.now(),
+        )
+        session.add(reversal)
+        session.flush()
+
+        for line_no, ln in enumerate(original_lines, start=1):
+            details = session.scalars(
+                select(JournalEntryLineDetail).where(JournalEntryLineDetail.line_id == ln.line_id)
+            ).all()
+            new_line = JournalEntryLine(
+                journal_entry_id=reversal.journal_entry_id,
+                line_no=line_no,
+                account_id=ln.account_id,
+                description=ln.description,
+                tax_code=ln.tax_code,
+                currency_id=ln.currency_id,
+                exchange_rate=ln.exchange_rate,
+                debit_amount_fc=ln.credit_amount_fc,
+                credit_amount_fc=ln.debit_amount_fc,
+            )
+            session.add(new_line)
+            session.flush()
+            for d in details:
+                session.add(
+                    JournalEntryLineDetail(
+                        line_id=new_line.line_id,
+                        dimension_type_id=d.dimension_type_id,
+                        detail_account_id=d.detail_account_id,
+                    )
+                )
+
+        original.status_id = reversed_status.status_id
+
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=created_by_user_id,
+            entity_type="JournalEntry",
+            entity_id=journal_entry_id,
+            action="REVERSE",
+            changes={"after": {"status": "REVERSED", "reversed_by_entry_id": reversal.journal_entry_id}},
+        )
+        audit_service.log_activity(
+            session,
+            company_id=company_id,
+            user_id=created_by_user_id,
+            entity_type="JournalEntry",
+            entity_id=reversal.journal_entry_id,
+            action="CREATE",
+            changes={"after": {"status": "PERMANENT", "reverses_entry_id": journal_entry_id}},
+        )
+
+        session.commit()
+        return JournalEntryResult(journal_entry_id=reversal.journal_entry_id, temporary_no=next_temp_no)

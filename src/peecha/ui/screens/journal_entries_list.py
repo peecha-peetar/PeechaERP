@@ -96,6 +96,16 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         reverse_copy_button.clicked.connect(lambda: self._copy_selected(reverse=True))
         buttons.addWidget(reverse_copy_button)
 
+        approve_button = QPushButton("تاییدِ سند (ارتقا به دائم)")
+        approve_button.setObjectName("flatButton")
+        approve_button.clicked.connect(self._approve_selected)
+        buttons.addWidget(approve_button)
+
+        reverse_button = QPushButton("برگشت‌زدنِ سندِ دائم")
+        reverse_button.setObjectName("flatButton")
+        reverse_button.clicked.connect(self._reverse_selected)
+        buttons.addWidget(reverse_button)
+
         buttons.addStretch(1)
 
         delete_button = QPushButton("حذفِ سندِ انتخاب‌شده (موقت/پیش‌نویس)")
@@ -137,9 +147,14 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         ]
         self.table.setRowCount(len(filtered))
         for row_index, e in enumerate(filtered):
+            number_text = (
+                f"دائم: {numerals.to_persian_digits(str(e.permanent_no))}"
+                if e.permanent_no is not None
+                else f"موقت: {numerals.to_persian_digits(str(e.temporary_no))}"
+            )
             values = [
                 str(row_index + 1),
-                str(e.temporary_no),
+                number_text,
                 numerals.format_jalali_date(e.document_date),
                 e.description or "—",
                 numerals.format_money(e.total_amount, self._currency_decimal_places, self._currency_symbol),
@@ -184,6 +199,53 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
             return
         try:
             je_service.delete_journal_entry(journal_entry_id, company_id, session.current_user.user_id if session.current_user else None)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.refresh()
+
+    def _approve_selected(self) -> None:
+        selected = self.table.selectedItems()
+        if not selected:
+            return
+        journal_entry_id = selected[0].data(Qt.UserRole)
+        company_id = self._company_id()
+        if company_id is None or session.current_user is None:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "تاییدِ سند",
+            "این سند تایید و به دائم ارتقا یابد؟ بعدِ تایید، سند دیگر قابلِ ویرایش/حذف نیست و شماره‌ی دائمش تغییرناپذیر می‌شود.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            permanent_no = je_service.approve_journal_entry(journal_entry_id, company_id, session.current_user.user_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        QMessageBox.information(self, "تایید شد", f"سند با شماره‌ی دائمِ {numerals.to_persian_digits(str(permanent_no))} تایید شد.")
+        self.refresh()
+
+    def _reverse_selected(self) -> None:
+        selected = self.table.selectedItems()
+        if not selected:
+            return
+        journal_entry_id = selected[0].data(Qt.UserRole)
+        company_id = self._company_id()
+        if company_id is None or session.current_user is None:
+            return
+        confirm = QMessageBox.question(
+            self,
+            "برگشت‌زدنِ سند",
+            "یک سندِ تازه با بدهکار/بستانکارِ معکوسِ این سند ساخته می‌شود تا اثرش را خنثی کند. ادامه می‌دهید؟",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            je_service.reverse_journal_entry(journal_entry_id, company_id, session.current_user.user_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
