@@ -193,6 +193,12 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.account_options: list[tuple[int, str]] = []
         self._detail_combos: dict[int, QComboBox] = {}
         self._method_rows: list[_MethodRow] = []
+        # طبقِ درخواستِ صریح: در فرمِ دریافت، طرفِ حساب یک تفصیلی است (نه
+        # معین) — فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ دریافت»
+        # (تنظیماتِ سیستم/خزانه‌داری) نگاشته شده‌اند پیشنهاد می‌شوند؛ معین
+        # و بقیه‌یِ تفصیلی‌هایِ لازم از رویِ همان نگاشت خودکار حل می‌شوند.
+        # کلید: detail_account_id -> (account_id، dimension_type_idِ حل‌شده)
+        self._receipt_counterparty_index: dict[int, tuple[int, int]] = {}
 
         noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
 
@@ -213,7 +219,9 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.title_label.setObjectName("pageTitle")
         header_layout.addWidget(self.title_label, 0, 0, 1, 4)
 
-        header_layout.addWidget(QLabel("طرفِ حساب / حسابِ مربوطه"), 1, 0)
+        header_layout.addWidget(
+            QLabel("طرفِ حساب (تفصیلی)" if direction == "RECEIPT" else "طرفِ حساب / حسابِ مربوطه"), 1, 0
+        )
         self.account_combo = _make_searchable_combo([])
         self.account_combo.currentIndexChanged.connect(self._on_account_changed)
         header_layout.addWidget(self.account_combo, 1, 1, 1, 3)
@@ -289,7 +297,12 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (
                 self.account_combo,
-                "طرفِ حسابی که از او دریافت می‌کنید یا به او پرداخت می‌کنید (مثلاً حسابِ کلِ «حساب‌هایِ دریافتنی»).",
+                (
+                    "تفصیلیِ طرفِ حساب (مثلاً یک مشتریِ خاص) — فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ دریافت» "
+                    "(تنظیماتِ سیستم/تبِ خزانه‌داری) نگاشته شده‌اند نشان داده می‌شوند؛ معین خودکار از رویِ همان نگاشت تعیین می‌شود."
+                    if direction == "RECEIPT"
+                    else "طرفِ حسابی که به او پرداخت می‌کنید (مثلاً حسابِ کلِ «حساب‌هایِ پرداختنی»)."
+                ),
             ),
             (
                 self.table,
@@ -305,10 +318,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.company_id = self._company_id()
         if self.company_id is None:
             return
-        # طبقِ گزارشِ صریح: معین‌هایی که تفصیلیِ الزامی‌شان صندوق/بانک/تنخواه
-        # است، این‌جا اصلاً به‌عنوانِ «طرفِ حساب» انتخاب‌پذیر نیستند — خودشان
-        # از طریقِ ردیف‌هایِ روش (نقد/بانک) مدیریت می‌شوند.
-        self.account_options = treasury_service.list_counterparty_account_options(self.company_id)
+        if self.direction == "RECEIPT":
+            self.account_options = self._build_receipt_counterparty_options()
+        else:
+            # طبقِ گزارشِ صریح: معین‌هایی که تفصیلیِ الزامی‌شان صندوق/بانک/
+            # تنخواه است، این‌جا اصلاً به‌عنوانِ «طرفِ حساب» انتخاب‌پذیر
+            # نیستند — خودشان از طریقِ ردیف‌هایِ روش (نقد/بانک) مدیریت
+            # می‌شوند.
+            self.account_options = treasury_service.list_counterparty_account_options(self.company_id)
         _fill_options(self.account_combo, self.account_options)
 
         base_currency_id = session.current_company.base_currency_id if session.current_company else None
@@ -317,6 +334,29 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
 
         self._reset_form()
 
+    def _build_receipt_counterparty_options(self) -> list[tuple[int, str]]:
+        """طبقِ درخواستِ صریح: فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ
+        دریافت» (تنظیماتِ سیستم/تبِ خزانه‌داری) نگاشته شده‌اند این‌جا
+        پیشنهاد می‌شوند — نه معین، نه بقیه‌یِ تفصیلی‌ها."""
+        self._receipt_counterparty_index = {}
+        mappings = treasury_service.list_counterparty_mappings(self.company_id, "RECEIPT")
+        person_mapping_by_group = {m.person_group_id: m.account_id for m in mappings if m.person_group_id is not None}
+        dim_mapping_by_type = {m.dimension_type_id: m.account_id for m in mappings if m.dimension_type_id is not None}
+
+        options: list[tuple[int, str]] = []
+        if person_mapping_by_group:
+            person_type_id = dimensions_service.get_person_dimension_type_id(self.company_id)
+            for d in dimensions_service.list_detail_accounts(self.company_id, person_type_id):
+                if d.person_group_id in person_mapping_by_group:
+                    account_id = person_mapping_by_group[d.person_group_id]
+                    self._receipt_counterparty_index[d.detail_account_id] = (account_id, person_type_id)
+                    options.append((d.detail_account_id, d.name or d.full_code or d.code))
+        for dimension_type_id, account_id in dim_mapping_by_type.items():
+            for d in dimensions_service.list_detail_accounts(self.company_id, dimension_type_id):
+                self._receipt_counterparty_index[d.detail_account_id] = (account_id, dimension_type_id)
+                options.append((d.detail_account_id, d.name or d.full_code or d.code))
+        return options
+
     def _on_account_changed(self, _index: int) -> None:
         while self.detail_container.count():
             child = self.detail_container.takeAt(0)
@@ -324,10 +364,24 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
                 child.widget().deleteLater()
         self._detail_combos = {}
 
-        account_id = self.account_combo.currentData()
-        if account_id is None or self.company_id is None:
+        if self.company_id is None:
             return
+
+        if self.direction == "RECEIPT":
+            detail_account_id = self.account_combo.currentData()
+            if detail_account_id is None or detail_account_id not in self._receipt_counterparty_index:
+                return
+            account_id, resolved_dimension_type_id = self._receipt_counterparty_index[detail_account_id]
+            skip_dimension_type_id = resolved_dimension_type_id
+        else:
+            account_id = self.account_combo.currentData()
+            if account_id is None:
+                return
+            skip_dimension_type_id = None
+
         for required in dimensions_service.get_required_dimensions_for_account(account_id):
+            if required.dimension_type_id == skip_dimension_type_id:
+                continue  # این بُعد از طریقِ تفصیلیِ طرفِ‌حسابِ انتخاب‌شده حل شده
             label = "تفصیلیِ اشخاص" if required.code == dimensions_service.PERSON_DIMENSION_CODE else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(required.code, required.code)
             row = QHBoxLayout()
             row.addWidget(QLabel(label))
@@ -370,15 +424,26 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         if self.company_id is None or session.current_user is None:
             theme.set_status_label(self.status_label, "ابتدا یک شرکت را انتخاب کنید.", ok=False)
             return
-        account_id = self.account_combo.currentData()
-        if account_id is None:
-            theme.set_status_label(self.status_label, "طرفِ حساب / حسابِ مربوطه را انتخاب کنید.", ok=False)
-            return
-        counterparty_details = {
-            dimension_type_id: combo.currentData()
-            for dimension_type_id, combo in self._detail_combos.items()
-            if combo.currentData() is not None
-        }
+        if self.direction == "RECEIPT":
+            detail_account_id = self.account_combo.currentData()
+            if detail_account_id is None or detail_account_id not in self._receipt_counterparty_index:
+                theme.set_status_label(self.status_label, "طرفِ حساب (تفصیلی) را انتخاب کنید.", ok=False)
+                return
+            account_id, resolved_dimension_type_id = self._receipt_counterparty_index[detail_account_id]
+            counterparty_details = {resolved_dimension_type_id: detail_account_id}
+        else:
+            account_id = self.account_combo.currentData()
+            if account_id is None:
+                theme.set_status_label(self.status_label, "طرفِ حساب / حسابِ مربوطه را انتخاب کنید.", ok=False)
+                return
+            counterparty_details = {}
+        counterparty_details.update(
+            {
+                dimension_type_id: combo.currentData()
+                for dimension_type_id, combo in self._detail_combos.items()
+                if combo.currentData() is not None
+            }
+        )
         method_lines = [ln for row in self._method_rows if (ln := row.to_method_line()) is not None]
         if not method_lines:
             theme.set_status_label(self.status_label, "حداقل یک ردیفِ روش (با مبلغِ مثبت) لازم است.", ok=False)
