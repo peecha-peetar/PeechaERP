@@ -226,43 +226,33 @@ def _colgroup_html(column_widths: list[float] | None, num_cols: int) -> str:
     return f"<colgroup>{cols}</colgroup>"
 
 
-# طبقِ گزارشِ صریح («کادرِ دورِ جدول در پایینِ صفحه بسته نمی‌شود»):
-# وقتی جدول بینِ صفحات می‌شکند، تکیه‌کردن به فقط یک قابِ بیرونیِ کلِ
-# جدول (border="1" رویِ خودِ <table>) باعث می‌شود پایینِ صفحه‌ای که
-# جدول در وسطش قطع شده، خطِ بسته‌کننده نداشته باشد — چون از دیدِ
-# چیدمان، جدول آن‌جا واقعاً «تمام» نشده، فقط صفحه عوض شده. راه‌حل:
-# هر سلول خودش حاشیه‌یِ کامل دارد (نه فقط جدول)، پس هر ردیفی که تهِ هر
-# صفحه بیفتد، خودش با خطِ زیرینِ کاملاً بسته دیده می‌شود. طبقِ گزارشِ
-# بعدی («ردیف نداره» — یعنی خطوط اصلاً دیده نمی‌شدند): واحدِ px رویِ
-# چاپِ با DPIِ بالا می‌تواند به‌شکلِ نامحسوسی نازک شود؛ واحدِ pt چون با
-# همان واحدی است که خودِ سندِ متنی چیدمانش را حساب می‌کند، اندازه‌ی
-# فیزیکیِ ثابت و همیشه قابلِ‌دیدنی می‌دهد.
-_GRIDLINE_STYLE = "border:0.75pt solid #333;"
-_NO_GRIDLINE_STYLE = "border:none;"
+# طبقِ دو گزارشِ متناقض‌نما که هردو با آزمایشِ مستقیم بررسی شدند:
+# ابتدا گمان رفت مشکل این است که کادرِ کلِ <table> در لبه‌ی صفحه بسته
+# نمی‌شود، پس حاشیه به CSSِ هر سلول (border:...pt) منتقل شد. اما با
+# رندرِ واقعیِ QTextDocument به QImage و شمارشِ پیکسل ثابت شد که Qt
+# اصلاً به CSSِ `border` رویِ <td> بی‌توجه است — هیچ خطی رسم نمی‌شود،
+# صرفِ‌نظر از مقدار. در همان آزمایش، attributeِ قدیمیِ HTMLِ `border="1"`
+# رویِ خودِ <table> واقعاً و همیشه رسم می‌شود (این مسیرِ رندرِ بومیِ
+# QTextTable است، نه یک قاعده‌ی CSSِ عمومی). پس به همان attribute
+# برمی‌گردیم؛ برایِ تیکِ «نمایشِ خطوط»، مقدارِ attribute بینِ ۱ و ۰
+# عوض می‌شود.
+def _table_border_attr(show_gridlines: bool) -> str:
+    return "1" if show_gridlines else "0"
 
 
-def _cell_border_style(show_gridlines: bool) -> str:
-    return _GRIDLINE_STYLE if show_gridlines else _NO_GRIDLINE_STYLE
-
-
-def _rows_html(rows: list[list], cell_border: str) -> str:
+def _rows_html(rows: list[list]) -> str:
     return "".join(
-        "<tr>" + "".join(f'<td style="{cell_border}">{_escape(c)}</td>' for c in reversed(row)) + "</tr>"
-        for row in rows
+        "<tr>" + "".join(f"<td>{_escape(c)}</td>" for c in reversed(row)) + "</tr>" for row in rows
     )
 
 
-def _bold_row_html(cells: list, cell_border: str) -> str:
-    return (
-        "<tr>"
-        + "".join(f'<td style="{cell_border}"><b>{_escape(c)}</b></td>' for c in reversed(cells))
-        + "</tr>"
-    )
+def _bold_row_html(cells: list) -> str:
+    return "<tr>" + "".join(f"<td><b>{_escape(c)}</b></td>" for c in reversed(cells)) + "</tr>"
 
 
-def _content_table_html(colgroup_html: str, head_cells: str, body_rows_html: str, extra_row_html: str) -> str:
+def _content_table_html(colgroup_html: str, head_cells: str, body_rows_html: str, extra_row_html: str, show_gridlines: bool) -> str:
     return f"""
-    <table cellspacing="0" cellpadding="3" width="100%" style="border-collapse: collapse; table-layout: fixed;">
+    <table border="{_table_border_attr(show_gridlines)}" cellspacing="0" cellpadding="3" width="100%" style="border-collapse: collapse; table-layout: fixed;">
     {colgroup_html}
     <thead><tr>{head_cells}</tr></thead>
     <tbody>{body_rows_html}{extra_row_html}</tbody>
@@ -294,7 +284,7 @@ def _estimate_rows_per_page(
     page_size: QSizeF,
     colgroup_html: str,
     head_cells: str,
-    cell_border: str,
+    show_gridlines: bool,
     font_family: str,
     font_size_pt: float,
 ) -> int:
@@ -310,8 +300,8 @@ def _estimate_rows_per_page(
     while lo <= hi:
         mid = (lo + hi) // 2
         trial_rows = rows[:mid]
-        trial_extra_html = _bold_row_html(_subtotal_row(headers, amount_col_indices, trial_rows), cell_border)
-        table_html = _content_table_html(colgroup_html, head_cells, _rows_html(trial_rows, cell_border), trial_extra_html)
+        trial_extra_html = _bold_row_html(_subtotal_row(headers, amount_col_indices, trial_rows))
+        table_html = _content_table_html(colgroup_html, head_cells, _rows_html(trial_rows), trial_extra_html, show_gridlines)
         if _fits_one_page(page_size, table_html, font_family, font_size_pt):
             best = mid
             lo = mid + 1
@@ -329,29 +319,29 @@ def _rows_with_subtotals_html(
     page_size: QSizeF,
     colgroup_html: str,
     head_cells: str,
-    cell_border: str,
+    show_gridlines: bool,
     font_family: str,
     font_size_pt: float,
 ) -> str:
     if not amount_col_indices or len(rows) < 2:
-        return _rows_html(rows, cell_border)
+        return _rows_html(rows)
 
     if rows_per_page_override and rows_per_page_override > 0:
         chunk_size = rows_per_page_override
     else:
         chunk_size = _estimate_rows_per_page(
             rows, headers, amount_col_indices, page_size=page_size, colgroup_html=colgroup_html,
-            head_cells=head_cells, cell_border=cell_border, font_family=font_family, font_size_pt=font_size_pt,
+            head_cells=head_cells, show_gridlines=show_gridlines, font_family=font_family, font_size_pt=font_size_pt,
         )
 
     parts = []
     remaining = rows
     while remaining:
         chunk = remaining[:chunk_size]
-        parts.append(_rows_html(chunk, cell_border))
+        parts.append(_rows_html(chunk))
         remaining = remaining[chunk_size:]
         if remaining:
-            parts.append(_bold_row_html(_subtotal_row(headers, amount_col_indices, chunk), cell_border))
+            parts.append(_bold_row_html(_subtotal_row(headers, amount_col_indices, chunk)))
     return "".join(parts)
 
 
@@ -395,11 +385,10 @@ def _paint_report(
     font_size_pt = options.font_size_pt
     header_html = _resolve_header_html(options, title, company_name, report_date, filters)
     reversed_headers = list(reversed(headers))
-    cell_border = _cell_border_style(options.show_gridlines)
-    head_cells = "".join(f'<th style="{cell_border}">{_escape(h)}</th>' for h in reversed_headers)
+    head_cells = "".join(f"<th>{_escape(h)}</th>" for h in reversed_headers)
     colgroup_html = _colgroup_html(options.column_widths, len(headers))
     amount_col_indices = _amount_column_indices(headers, rows)
-    footer_row_html = _bold_row_html(footer, cell_border) if footer else ""
+    footer_row_html = _bold_row_html(footer) if footer else ""
 
     # نکته‌یِ فنیِ مهم: QTextDocument همیشه محتوا را بر حسبِ Point
     # اندازه‌گیری می‌کند (نه device pixel چاپگر) — اگر page rect را
@@ -430,12 +419,15 @@ def _paint_report(
 
     body_rows_html = _rows_with_subtotals_html(
         rows, headers, amount_col_indices, options.rows_per_page,
-        page_size=content_page_size, colgroup_html=colgroup_html, head_cells=head_cells, cell_border=cell_border,
-        font_family=font_family, font_size_pt=font_size_pt,
+        page_size=content_page_size, colgroup_html=colgroup_html, head_cells=head_cells,
+        show_gridlines=options.show_gridlines, font_family=font_family, font_size_pt=font_size_pt,
     )
     content_doc = QTextDocument()
     content_doc.setHtml(
-        _wrap_document(_content_table_html(colgroup_html, head_cells, body_rows_html, footer_row_html), font_family, font_size_pt)
+        _wrap_document(
+            _content_table_html(colgroup_html, head_cells, body_rows_html, footer_row_html, options.show_gridlines),
+            font_family, font_size_pt,
+        )
     )
     content_doc.setPageSize(content_page_size)
     page_count = max(1, content_doc.pageCount())
