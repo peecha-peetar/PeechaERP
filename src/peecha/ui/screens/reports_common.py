@@ -468,7 +468,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         (اندازه‌یِ فونت، عرضِ ستون‌ها، متنِ اضافه‌یِ هدر/فوتر) باز می‌شود؛
         انتخابِ قبلی به‌عنوانِ پیش‌فرضِ دفعه‌یِ بعد نگه داشته می‌شود."""
         options = report_export.prompt_print_options(
-            self, self._title, self._headers, getattr(self, "_last_print_options", None)
+            self, self._title, self._headers, getattr(self, "_last_print_options", None), **self._export_kwargs()
         )
         if options is not None:
             self._last_print_options = options

@@ -4,45 +4,41 @@
 
 طبقِ گزارش‌هایِ صریحِ کاربر، چند مشکلِ واقعی در خروجیِ چاپ/PDF پیدا و رفع شد:
 
-۱. ترتیبِ ستون‌ها برعکس بود. آزمایشِ مستقیم نشان داد QTextDocument با
-   `dir="rtl"` رویِ `<html>`، ستونِ *اول*ِ نوشته‌شده در HTML را چپ‌ترین و
-   ستونِ *آخر* را راست‌ترین رسم می‌کند — یعنی دقیقاً برعکسِ قراردادِ
-   استانداردِ صفحه‌گسترده‌هایِ راست‌به‌چپ. راه‌حل: ترتیبِ سلول‌ها را در
-   خودِ HTML معکوس می‌نویسیم.
+۱. ترتیبِ ستون‌ها برعکس بود — ترتیبِ سلول‌ها در خودِ HTML معکوس نوشته
+   می‌شود (نکته‌ی فنی: QTextDocument با dir="rtl" ستونِ *اول*ِ HTML را
+   چپ‌ترین رسم می‌کند، برعکسِ قراردادِ راست‌به‌چپ).
 
-۲. هدرِ چاپ فقط عنوانِ گزارش را داشت. حالا سه سطرِ هدر دارد: نامِ شرکت،
-   عنوانِ گزارش، و تاریخِ گزارش + فیلترهایِ اعمال‌شده.
+۲. حاشیه‌یِ چاپ به‌صراحت به ۶ میلی‌متر تنظیم می‌شود.
 
-۳. حاشیه‌یِ چاپ زیاد بود. حاشیه‌هایِ صفحه به‌صراحت به مقدارِ کمی
-   (۶ میلی‌متر) تنظیم می‌شوند. محدودیتِ صادقانه: اگر چاپگرِ فیزیکی خودش
-   حداقلِ‌حاشیه‌یِ سخت‌افزاریِ بزرگ‌تری تحمیل کند، Qt/درایور آن مقدار را
-   جایگزین می‌کند — این محدودیت فقط رویِ خروجیِ PDF (بدونِ محدودیتِ
-   سخت‌افزاری) همیشه دقیقاً اعمال می‌شود.
+۳. فونتِ چاپ از فونتِ واقعیِ برنامه (get_font_family) استفاده می‌کند،
+   با اندازه‌یِ پیش‌فرضِ ۹pt (کوچک‌تر از حالتِ قبلی).
 
-۴. فونتِ متنِ چاپ/PDF قبلاً `sans-serif` خامِ عمومی بود — حالا از همان
-   فونتِ برنامه (get_font_family در ui/main.py) استفاده می‌کند، و
-   اندازه‌ی پیش‌فرض هم از ۱۰ به ۹pt کاهش یافت (طبقِ گزارشِ «فونت درشتی
-   داره»).
+۴. **ریشه‌یِ واقعیِ باگِ «صفحه‌های نصفه/خالی» پیدا شد**: نسخه‌هایِ قبلی
+   گزارش را به چند جدولِ جدا با CSS`page-break-after: always` بینِ آن‌ها
+   می‌شکستند. این روش با عکسِ واقعیِ کاربر (صفحه‌ی ۲ کاملاً خالی، صفحه‌ی
+   ۳ دوباره شروعِ محتوا) رد شد — پشتیبانیِ QTextDocument از
+   page-break-* رویِ جدول‌هایِ چندبخشی قابلِ‌اتکا نیست و صفحه‌یِ خالیِ
+   اضافه می‌سازد. **راه‌حلِ درست**: دیگر هیچ شکستِ صفحه‌ای دستی اعمال
+   نمی‌شود — کلِ گزارش یک جدولِ پیوسته‌یِ واحد است و Qt خودش (که برایِ
+   جدول‌هایِ بلند این کار را بومی و درست انجام می‌دهد) صفحه‌بندی می‌کند؛
+   ردیف‌هایِ «جمعِ این صفحه» به‌عنوانِ ردیف‌هایِ عادیِ همان جدول، در
+   فاصله‌هایِ تخمین‌زده‌شده (یا دستی‌تنظیم‌شده) درج می‌شوند — بدونِ هیچ
+   شکستِ اجباری، پس دیگر هرگز صفحه‌یِ خالی نمی‌سازد؛ محدودیتِ صادقانه:
+   ردیفِ جمع ممکن است دقیقاً رویِ خطِ لبه‌ی صفحه نیفتد (یکی-دو ردیف
+   جابه‌جا)، ولی این بی‌ضرر است چون هیچ شکستی به آن وابسته نیست. `<thead>`
+   خودِ Qt هم به‌صورتِ بومی رویِ هر صفحه تکرار می‌شود.
 
-۵. گزارش‌هایِ چندصفحه‌ای «جمعِ هر صفحه» نداشتند و مرزِ صفحات با
-   **تخمینِ میانگین** (pageCount / تعدادِ ردیف) تعیین می‌شد — این تخمین
-   وقتی ارتفاعِ ردیف‌ها یکنواخت نبود (مثلاً نام‌هایِ بلند که به دو خط
-   می‌شکنند) کاملاً نادرست از آب درمی‌آمد: عکسِ واقعیِ کاربر نشان داد
-   صفحه‌ای با فقط یک ردیف و باقیِ صفحه کاملاً خالی (اسرافِ کاغذ). حالا
-   مرزِ هر صفحه با **جستجویِ دودویی رویِ اندازه‌گیریِ واقعیِ خودِ
-   QTextDocument.pageCount()** پیدا می‌شود — یعنی دقیقاً همان تعداد
-   ردیفی که واقعاً در یک صفحه جا می‌شود، نه یک میانگینِ تقریبی.
-
-۶. فرمِ «تنظیماتِ چاپ» پیش از هر چاپ/PDF/اکسل باز می‌شود — اندازه‌یِ
-   فونت، عرضِ هر ستون (٪)، و یک خطِ اضافه برایِ هدر/فوتر (مثلاً محلِ
-   امضا) از همان‌جا قابلِ‌تنظیم است."""
+۵. **فرمِ «تنظیماتِ چاپ»** پیش از هر چاپ/PDF/اکسل باز می‌شود: اندازه‌یِ
+   فونت، عرضِ هر ستون (٪)، تعدادِ ردیف در هر صفحه (یا خودکار)، و متنِ
+   *کاملِ* هدر/فوتر (چندخطی، با متنِ پیش‌فرضِ همان نام‌شرکت/عنوان/تاریخ
+   به‌عنوانِ نقطه‌یِ شروعِ قابلِ‌ویرایش، نه فقط یک خطِ اضافه)."""
 
 from __future__ import annotations
 
 import decimal
 from dataclasses import dataclass
 
-from PySide6.QtCore import QSizeF, QMarginsF
+from PySide6.QtCore import QMarginsF, QSizeF
 from PySide6.QtGui import QPageLayout, QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PySide6.QtWidgets import (
@@ -52,10 +48,10 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QScrollArea,
     QSpinBox,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -75,10 +71,16 @@ _AMOUNT_HEADER_KEYWORDS = ("بدهکار", "بستانکار", "بد)", "بس)",
 class PrintOptions:
     font_size_pt: float = _DEFAULT_FONT_SIZE_PT
     # درصدِ عرضِ هر ستون، هم‌ترتیب با headers (نه معکوس‌شده) — None یعنی
-    # عرضِ خودکار/مساوی (پیش‌فرضِ قبلی).
+    # عرضِ خودکار/مساوی.
     column_widths: list[float] | None = None
-    extra_header_text: str = ""
-    extra_footer_text: str = ""
+    # اگر خالی باشد، هدرِ خودکار (نامِ شرکت+عنوان+تاریخ+فیلترها) ساخته
+    # می‌شود؛ اگر پر باشد، *کاملاً جایگزینِ* آن می‌شود (چندخطی، آزاد).
+    header_text: str = ""
+    # زیرِ جدول (پس از ردیفِ جمعِ کل) اضافه می‌شود — مثلاً محلِ امضا.
+    footer_text: str = ""
+    # ۰ یعنی خودکار (تخمینِ تعدادِ ردیفی که در یک صفحه جا می‌شود)؛ عددِ
+    # مثبت یعنی کاربر خودش فاصله‌یِ ردیف‌هایِ «جمعِ این صفحه» را تعیین کرده.
+    rows_per_page: int = 0
 
 
 def _escape(value: object) -> str:
@@ -129,13 +131,22 @@ def _subtotal_row(headers: list[str], amount_col_indices: list[int], chunk_rows:
     return totals
 
 
-def _header_block_html(
-    title: str,
-    company_name: str,
-    report_date: str,
-    filters: list[tuple[str, str]] | None,
-    extra_header_text: str = "",
-) -> str:
+def _default_header_plain_text(title: str, company_name: str, report_date: str, filters: list[tuple[str, str]] | None) -> str:
+    lines = []
+    if company_name:
+        lines.append(company_name)
+    lines.append(title)
+    meta_parts = []
+    if report_date:
+        meta_parts.append(f"تاریخِ گزارش: {report_date}")
+    for label, value in filters or []:
+        meta_parts.append(f"{label}: {value}")
+    if meta_parts:
+        lines.append(" | ".join(meta_parts))
+    return "\n".join(lines)
+
+
+def _auto_header_html(title: str, company_name: str, report_date: str, filters: list[tuple[str, str]] | None) -> str:
     header_lines = ""
     if company_name:
         header_lines += f'<div style="font-size:12pt; font-weight:bold;">{_escape(company_name)}</div>'
@@ -149,9 +160,24 @@ def _header_block_html(
         header_lines += (
             '<div style="font-size:9pt; color:#444;">' + " &nbsp;|&nbsp; ".join(meta_parts) + "</div>"
         )
-    if extra_header_text:
-        header_lines += f'<div style="font-size:9pt; margin-top:4px;">{_escape(extra_header_text)}</div>'
     return header_lines
+
+
+def _multiline_html(text: str) -> str:
+    lines = text.splitlines() or [""]
+    return "".join(f"<div>{_escape(line) if line.strip() else '&nbsp;'}</div>" for line in lines)
+
+
+def _resolve_header_html(options: PrintOptions, title: str, company_name: str, report_date: str, filters: list[tuple[str, str]] | None) -> str:
+    if options.header_text.strip():
+        return _multiline_html(options.header_text)
+    return _auto_header_html(title, company_name, report_date, filters)
+
+
+def _footer_extra_html(text: str) -> str:
+    if not text.strip():
+        return ""
+    return f'<div style="margin-top:16px; font-size:9pt;">{_multiline_html(text)}</div>'
 
 
 def _colgroup_html(column_widths: list[float] | None, num_cols: int) -> str:
@@ -196,12 +222,6 @@ def _wrap_document(body_html: str, font_family: str, font_size_pt: float) -> str
     """
 
 
-def _extra_footer_html(text: str) -> str:
-    if not text:
-        return ""
-    return f'<div style="margin-top:16px; font-size:9pt;">{_escape(text)}</div>'
-
-
 def _fits_one_page(page_size: QSizeF, page_html_kwargs: dict, font_family: str, font_size_pt: float) -> bool:
     doc = QTextDocument()
     doc.setHtml(_wrap_document(_page_body_html(**page_html_kwargs), font_family, font_size_pt))
@@ -209,55 +229,79 @@ def _fits_one_page(page_size: QSizeF, page_html_kwargs: dict, font_family: str, 
     return doc.pageCount() <= 1
 
 
-def _compute_page_chunks(
+def _estimate_rows_per_page(
     rows: list[list],
     headers: list[str],
+    amount_col_indices: list[int],
     *,
     page_size: QSizeF,
     colgroup_html: str,
     head_cells: str,
-    header_lines: str,
-    title: str,
-    amount_col_indices: list[int],
     font_family: str,
     font_size_pt: float,
-) -> list[list]:
-    """مرزِ هر صفحه را با جستجویِ دودویی رویِ اندازه‌گیریِ واقعیِ
-    QTextDocument.pageCount() پیدا می‌کند — نه با تخمینِ میانگین."""
-    chunks: list[list] = []
-    remaining = rows
-    is_first = True
-    while remaining:
-        page_header_html = header_lines if is_first else f'<h4 style="margin:4px 0;">ادامه — {_escape(title)}</h4>'
-        lo, hi, best = 1, len(remaining), 1
-        while lo <= hi:
-            mid = (lo + hi) // 2
-            trial_rows = remaining[:mid]
-            trial_extra_html = (
-                _bold_row_html(_subtotal_row(headers, amount_col_indices, trial_rows)) if amount_col_indices else ""
-            )
-            fits = _fits_one_page(
-                page_size,
-                {
-                    "page_header_html": page_header_html,
-                    "colgroup_html": colgroup_html,
-                    "head_cells": head_cells,
-                    "body_rows_html": _rows_html(trial_rows),
-                    "extra_row_html": trial_extra_html,
-                    "extra_footer_html": "",
-                },
-                font_family,
-                font_size_pt,
-            )
-            if fits:
-                best = mid
-                lo = mid + 1
-            else:
-                hi = mid - 1
-        chunks.append(remaining[:best])
-        remaining = remaining[best:]
-        is_first = False
-    return chunks
+) -> int:
+    """چند ردیفِ *اول* در یک صفحه جا می‌شوند — با جستجویِ دودویی رویِ
+    اندازه‌گیریِ واقعیِ QTextDocument.pageCount(). این فقط برایِ تعیینِ
+    فاصله‌یِ درجِ ردیف‌هایِ «جمعِ این صفحه» استفاده می‌شود (نه برایِ شکستِ
+    اجباریِ صفحه) — پس یک تخمینِ کمی نادرست هم صفحه‌یِ خالی نمی‌سازد،
+    فقط ردیفِ جمع را یکی-دو ردیف زودتر/دیرتر می‌نشاند."""
+    lo, hi, best = 1, len(rows), 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        trial_rows = rows[:mid]
+        trial_extra_html = _bold_row_html(_subtotal_row(headers, amount_col_indices, trial_rows))
+        fits = _fits_one_page(
+            page_size,
+            {
+                "page_header_html": "",
+                "colgroup_html": colgroup_html,
+                "head_cells": head_cells,
+                "body_rows_html": _rows_html(trial_rows),
+                "extra_row_html": trial_extra_html,
+                "extra_footer_html": "",
+            },
+            font_family,
+            font_size_pt,
+        )
+        if fits:
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return max(1, best)
+
+
+def _rows_with_subtotals_html(
+    rows: list[list],
+    headers: list[str],
+    amount_col_indices: list[int],
+    rows_per_page_override: int,
+    *,
+    page_size: QSizeF,
+    colgroup_html: str,
+    head_cells: str,
+    font_family: str,
+    font_size_pt: float,
+) -> str:
+    if not amount_col_indices or len(rows) < 2:
+        return _rows_html(rows)
+
+    if rows_per_page_override and rows_per_page_override > 0:
+        chunk_size = rows_per_page_override
+    else:
+        chunk_size = _estimate_rows_per_page(
+            rows, headers, amount_col_indices, page_size=page_size, colgroup_html=colgroup_html,
+            head_cells=head_cells, font_family=font_family, font_size_pt=font_size_pt,
+        )
+
+    parts = []
+    for i in range(0, len(rows), chunk_size):
+        chunk = rows[i : i + chunk_size]
+        parts.append(_rows_html(chunk))
+        is_last_chunk = i + chunk_size >= len(rows)
+        if not is_last_chunk:
+            parts.append(_bold_row_html(_subtotal_row(headers, amount_col_indices, chunk)))
+    return "".join(parts)
 
 
 def _apply_page_setup(printer: QPrinter) -> None:
@@ -277,88 +321,73 @@ def _build_final_document(
     filters: list[tuple[str, str]] | None,
     options: PrintOptions | None = None,
 ) -> QTextDocument:
-    """سندِ نهایی برایِ چاپ/PDF — اگر همه‌چیز در یک صفحه جا شود، همان
-    جدولِ ساده؛ وگرنه نسخه‌یِ صفحه‌بندی‌شده (با مرزِ دقیقِ اندازه‌گیری‌شده)
-    و جمعِ هر صفحه."""
+    """سندِ نهایی برایِ چاپ/PDF — یک جدولِ پیوسته‌یِ واحد (بدونِ هیچ
+    شکستِ صفحه‌ی دستی)؛ اگر چندصفحه‌ای شود، خودِ Qt صفحه‌بندی می‌کند و
+    ردیفِ هدرِ جدول (thead) را خودکار در هر صفحه تکرار می‌کند."""
     options = options or PrintOptions()
     font_family = _print_font_family()
     font_size_pt = options.font_size_pt
-    header_lines = _header_block_html(title, company_name, report_date, filters, options.extra_header_text)
+    header_html = _resolve_header_html(options, title, company_name, report_date, filters)
     reversed_headers = list(reversed(headers))
     head_cells = "".join(f"<th>{_escape(h)}</th>" for h in reversed_headers)
     colgroup_html = _colgroup_html(options.column_widths, len(headers))
     amount_col_indices = _amount_column_indices(headers, rows)
-    extra_footer_html = _extra_footer_html(options.extra_footer_text)
+    footer_extra_html = _footer_extra_html(options.footer_text)
 
     page_rect = printer.pageRect(QPrinter.Unit.Point)
     page_size = QSizeF(page_rect.width(), page_rect.height())
 
-    single_extra_row = _bold_row_html(footer) if footer else ""
+    body_rows_html = _rows_with_subtotals_html(
+        rows, headers, amount_col_indices, options.rows_per_page,
+        page_size=page_size, colgroup_html=colgroup_html, head_cells=head_cells,
+        font_family=font_family, font_size_pt=font_size_pt,
+    )
+    footer_row_html = _bold_row_html(footer) if footer else ""
+
     doc = QTextDocument()
     doc.setHtml(
         _wrap_document(
             _page_body_html(
-                page_header_html=header_lines, colgroup_html=colgroup_html, head_cells=head_cells,
-                body_rows_html=_rows_html(rows), extra_row_html=single_extra_row, extra_footer_html=extra_footer_html,
+                page_header_html=header_html, colgroup_html=colgroup_html, head_cells=head_cells,
+                body_rows_html=body_rows_html, extra_row_html=footer_row_html, extra_footer_html=footer_extra_html,
             ),
             font_family, font_size_pt,
         )
     )
     doc.setPageSize(page_size)
-    if doc.pageCount() <= 1 or len(rows) < 2:
-        return doc
-
-    chunks = _compute_page_chunks(
-        rows, headers, page_size=page_size, colgroup_html=colgroup_html, head_cells=head_cells,
-        header_lines=header_lines, title=title, amount_col_indices=amount_col_indices,
-        font_family=font_family, font_size_pt=font_size_pt,
-    )
-    body_blocks = []
-    for i, chunk_rows in enumerate(chunks):
-        is_last = i == len(chunks) - 1
-        page_header_html = header_lines if i == 0 else f'<h4 style="margin:4px 0;">ادامه — {_escape(title)}</h4>'
-        if is_last and footer:
-            extra_row_html = _bold_row_html(footer)
-        elif amount_col_indices:
-            extra_row_html = _bold_row_html(_subtotal_row(headers, amount_col_indices, chunk_rows))
-        else:
-            extra_row_html = ""
-        page_break = "" if is_last else '<div style="page-break-after: always;"></div>'
-        body_blocks.append(
-            _page_body_html(
-                page_header_html=page_header_html, colgroup_html=colgroup_html, head_cells=head_cells,
-                body_rows_html=_rows_html(chunk_rows), extra_row_html=extra_row_html,
-                extra_footer_html=extra_footer_html if is_last else "",
-            )
-            + page_break
-        )
-    paginated_doc = QTextDocument()
-    paginated_doc.setHtml(_wrap_document("".join(body_blocks), font_family, font_size_pt))
-    paginated_doc.setPageSize(page_size)
-    return paginated_doc
+    return doc
 
 
 class _PrintOptionsDialog(QDialog):
-    def __init__(self, parent: QWidget | None, title: str, headers: list[str], defaults: PrintOptions | None = None) -> None:
+    def __init__(
+        self, parent: QWidget | None, title: str, headers: list[str], defaults: PrintOptions | None,
+        *, company_name: str, report_date: str, filters: list[tuple[str, str]] | None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"تنظیماتِ چاپ — {title}")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(460)
         defaults = defaults or PrintOptions()
         layout = QVBoxLayout(self)
 
-        font_row = QHBoxLayout()
-        font_row.addWidget(QLabel("اندازه‌یِ فونت (pt):"))
+        top_row = QHBoxLayout()
+        top_row.addWidget(QLabel("اندازه‌یِ فونت (pt):"))
         self.font_size_field = QSpinBox()
         self.font_size_field.setRange(6, 16)
         self.font_size_field.setValue(int(round(defaults.font_size_pt)))
-        font_row.addWidget(self.font_size_field)
-        font_row.addStretch(1)
-        layout.addLayout(font_row)
+        top_row.addWidget(self.font_size_field)
+        top_row.addSpacing(16)
+        top_row.addWidget(QLabel("ردیف در هر صفحه (۰=خودکار):"))
+        self.rows_per_page_field = QSpinBox()
+        self.rows_per_page_field.setRange(0, 500)
+        self.rows_per_page_field.setValue(defaults.rows_per_page)
+        top_row.addWidget(self.rows_per_page_field)
+        top_row.addStretch(1)
+        layout.addLayout(top_row)
 
         layout.addWidget(QLabel("عرضِ ستون‌ها (٪ از عرضِ کلِ جدول):"))
         columns_scroll = QScrollArea()
         columns_scroll.setWidgetResizable(True)
-        columns_scroll.setMaximumHeight(220)
+        columns_scroll.setMaximumHeight(200)
         columns_widget = QWidget()
         columns_form = QFormLayout(columns_widget)
         self._width_fields: list[QSpinBox] = []
@@ -375,12 +404,18 @@ class _PrintOptionsDialog(QDialog):
         columns_scroll.setWidget(columns_widget)
         layout.addWidget(columns_scroll)
 
-        layout.addWidget(QLabel("متنِ اضافه‌یِ هدر (اختیاری):"))
-        self.header_text_field = QLineEdit(defaults.extra_header_text)
+        layout.addWidget(QLabel("متنِ هدر (کاملاً قابلِ‌ویرایش — همین متن به‌جایِ هدرِ خودکار چاپ می‌شود):"))
+        self.header_text_field = QTextEdit()
+        self.header_text_field.setPlainText(
+            defaults.header_text or _default_header_plain_text(title, company_name, report_date, filters)
+        )
+        self.header_text_field.setMaximumHeight(90)
         layout.addWidget(self.header_text_field)
 
-        layout.addWidget(QLabel("متنِ اضافه‌یِ فوتر (اختیاری — مثلاً محلِ امضا):"))
-        self.footer_text_field = QLineEdit(defaults.extra_footer_text)
+        layout.addWidget(QLabel("متنِ فوتر (اختیاری — چندخطی، مثلاً محلِ امضا):"))
+        self.footer_text_field = QTextEdit()
+        self.footer_text_field.setPlainText(defaults.footer_text)
+        self.footer_text_field.setMaximumHeight(70)
         layout.addWidget(self.footer_text_field)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -397,15 +432,26 @@ class _PrintOptionsDialog(QDialog):
         return PrintOptions(
             font_size_pt=float(self.font_size_field.value()),
             column_widths=normalized,
-            extra_header_text=self.header_text_field.text().strip(),
-            extra_footer_text=self.footer_text_field.text().strip(),
+            header_text=self.header_text_field.toPlainText().strip(),
+            footer_text=self.footer_text_field.toPlainText().strip(),
+            rows_per_page=self.rows_per_page_field.value(),
         )
 
 
 def prompt_print_options(
-    parent_widget: QWidget, title: str, headers: list[str], defaults: PrintOptions | None = None
+    parent_widget: QWidget,
+    title: str,
+    headers: list[str],
+    defaults: PrintOptions | None = None,
+    *,
+    company_name: str = "",
+    report_date: str = "",
+    filters: list[tuple[str, str]] | None = None,
 ) -> PrintOptions | None:
-    dialog = _PrintOptionsDialog(parent_widget, title, headers, defaults)
+    dialog = _PrintOptionsDialog(
+        parent_widget, title, headers, defaults,
+        company_name=company_name, report_date=report_date, filters=filters,
+    )
     if dialog.exec() != QDialog.Accepted:
         return None
     return dialog.result_options()
@@ -505,23 +551,12 @@ def export_report_excel(
     sheet.title = (title[:31] or "گزارش").replace("/", "-")
     sheet.sheet_view.rightToLeft = True
 
-    # طبقِ همان درخواستِ سربرگِ چاپ: نامِ شرکت + عنوان + تاریخ/فیلترها به‌عنوانِ
-    # چند سطرِ اول، پیش از جدولِ خودِ گزارش. توجه: بازچینیِ ستون این‌جا لازم
-    # نیست چون sheet_view.rightToLeft خودش راست‌ترین=ستونِ اول را درست می‌چیند.
-    if company_name:
-        sheet.append([company_name])
-        sheet.cell(row=sheet.max_row, column=1).font = Font(bold=True, size=13)
-    sheet.append([title])
-    sheet.cell(row=sheet.max_row, column=1).font = Font(bold=True, size=12)
-    meta_parts = []
-    if report_date:
-        meta_parts.append(f"تاریخِ گزارش: {report_date}")
-    for label, value in filters or []:
-        meta_parts.append(f"{label}: {value}")
-    if meta_parts:
-        sheet.append([" | ".join(meta_parts)])
-    if options.extra_header_text:
-        sheet.append([options.extra_header_text])
+    # طبقِ همان درخواستِ سربرگِ چاپ: نامِ شرکت + عنوان + تاریخ/فیلترها (یا
+    # متنِ سفارشیِ کاربر) به‌عنوانِ چند سطرِ اول، پیش از جدولِ خودِ گزارش.
+    header_text = options.header_text.strip() or _default_header_plain_text(title, company_name, report_date, filters)
+    for line in header_text.splitlines():
+        sheet.append([line])
+    sheet.cell(row=1, column=1).font = Font(bold=True, size=13)
     sheet.append([])
 
     header_row = sheet.max_row + 1
@@ -534,9 +569,10 @@ def export_report_excel(
         sheet.append(list(footer))
         for cell in sheet[sheet.max_row]:
             cell.font = Font(bold=True)
-    if options.extra_footer_text:
+    if options.footer_text.strip():
         sheet.append([])
-        sheet.append([options.extra_footer_text])
+        for line in options.footer_text.strip().splitlines():
+            sheet.append([line])
     sheet.freeze_panes = f"A{header_row + 1}"
 
     if options.column_widths and len(options.column_widths) == len(headers):
