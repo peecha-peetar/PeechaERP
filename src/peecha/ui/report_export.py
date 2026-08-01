@@ -14,32 +14,34 @@
    با اندازه‌یِ پیش‌فرضِ ۹pt (کوچک‌تر از حالتِ قبلی).
 
 ۴. **ریشه‌یِ واقعیِ باگِ «صفحه‌های نصفه/خالی» پیدا شد**: نسخه‌هایِ قبلی
-   گزارش را به چند جدولِ جدا با CSS`page-break-after: always` بینِ آن‌ها
-   می‌شکستند. این روش با عکسِ واقعیِ کاربر (صفحه‌ی ۲ کاملاً خالی، صفحه‌ی
-   ۳ دوباره شروعِ محتوا) رد شد — پشتیبانیِ QTextDocument از
-   page-break-* رویِ جدول‌هایِ چندبخشی قابلِ‌اتکا نیست و صفحه‌یِ خالیِ
-   اضافه می‌سازد. **راه‌حلِ درست**: دیگر هیچ شکستِ صفحه‌ای دستی اعمال
-   نمی‌شود — کلِ گزارش یک جدولِ پیوسته‌یِ واحد است و Qt خودش (که برایِ
-   جدول‌هایِ بلند این کار را بومی و درست انجام می‌دهد) صفحه‌بندی می‌کند؛
-   ردیف‌هایِ «جمعِ این صفحه» به‌عنوانِ ردیف‌هایِ عادیِ همان جدول، در
-   فاصله‌هایِ تخمین‌زده‌شده (یا دستی‌تنظیم‌شده) درج می‌شوند — بدونِ هیچ
-   شکستِ اجباری، پس دیگر هرگز صفحه‌یِ خالی نمی‌سازد؛ محدودیتِ صادقانه:
-   ردیفِ جمع ممکن است دقیقاً رویِ خطِ لبه‌ی صفحه نیفتد (یکی-دو ردیف
-   جابه‌جا)، ولی این بی‌ضرر است چون هیچ شکستی به آن وابسته نیست. `<thead>`
-   خودِ Qt هم به‌صورتِ بومی رویِ هر صفحه تکرار می‌شود.
+   گزارش را به چند جدولِ جدا با CSS `page-break-after: always` بینِ آن‌ها
+   می‌شکستند — پشتیبانیِ QTextDocument از page-break-* رویِ جدول‌هایِ
+   چندبخشی قابلِ‌اتکا نیست و صفحه‌یِ خالیِ اضافه می‌ساخت.
 
-۵. **فرمِ «تنظیماتِ چاپ»** پیش از هر چاپ/PDF/اکسل باز می‌شود: اندازه‌یِ
+۵. **هدر/فوترِ تکرارشونده + شماره‌یِ صفحه رویِ همه‌ی صفحات** (طبقِ
+   درخواستِ صریح): چون `QTextDocument.print_` به‌تنهایی چنین چیزی نمی‌دهد
+   (و شکستِ دستی هم باگ‌زا بود)، چاپ حالا به‌صورتِ دستی و صفحه‌به‌صفحه با
+   `QPainter` انجام می‌شود (`_paint_report`): یک نوارِ هدرِ ثابت (که عیناً
+   رویِ هر صفحه تکرار می‌شود) بالا، یک تکه از جدولِ محتوا (که خودِ Qt
+   بومی و درست بینِ صفحات می‌شکند، بدونِ CSSِ دستی) در وسط، و یک نوارِ
+   فوتر (متنِ کاربر + «صفحه‌یِ X از Y») پایینِ هر صفحه. ردیف‌هایِ «جمعِ
+   این صفحه» هم به‌عنوانِ ردیفِ عادیِ همان جدولِ محتوا، در فاصله‌هایِ
+   تخمین‌زده‌شده (یا دستی‌تنظیم‌شده) درج می‌شوند.
+
+۶. **فرمِ «تنظیماتِ چاپ»** پیش از هر چاپ/PDF/اکسل باز می‌شود: اندازه‌یِ
    فونت، عرضِ هر ستون (٪)، تعدادِ ردیف در هر صفحه (یا خودکار)، و متنِ
    *کاملِ* هدر/فوتر (چندخطی، با متنِ پیش‌فرضِ همان نام‌شرکت/عنوان/تاریخ
-   به‌عنوانِ نقطه‌یِ شروعِ قابلِ‌ویرایش، نه فقط یک خطِ اضافه)."""
+   به‌عنوانِ نقطه‌یِ شروعِ قابلِ‌ویرایش) — این تنظیمات با QSettings رویِ
+   دیسک (بر اساسِ عنوانِ هر گزارش) ذخیره می‌شوند و در اجراهایِ بعدی هم
+   می‌مانند."""
 
 from __future__ import annotations
 
 import decimal
 from dataclasses import dataclass
 
-from PySide6.QtCore import QMarginsF, QSettings, QSizeF
-from PySide6.QtGui import QPageLayout, QTextDocument
+from PySide6.QtCore import QMarginsF, QRectF, QSettings, QSizeF
+from PySide6.QtGui import QAbstractTextDocumentLayout, QPageLayout, QPainter, QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PySide6.QtWidgets import (
     QDialog,
@@ -210,12 +212,6 @@ def _resolve_header_html(options: PrintOptions, title: str, company_name: str, r
     return _auto_header_html(title, company_name, report_date, filters)
 
 
-def _footer_extra_html(text: str) -> str:
-    if not text.strip():
-        return ""
-    return f'<div style="margin-top:16px; font-size:9pt;">{_multiline_html(text)}</div>'
-
-
 def _colgroup_html(column_widths: list[float] | None, num_cols: int) -> str:
     if not column_widths or len(column_widths) != num_cols:
         return ""
@@ -224,28 +220,38 @@ def _colgroup_html(column_widths: list[float] | None, num_cols: int) -> str:
     return f"<colgroup>{cols}</colgroup>"
 
 
+# طبقِ گزارشِ صریح («کادرِ دورِ جدول در پایینِ صفحه بسته نمی‌شود»):
+# وقتی جدول بینِ صفحات می‌شکند، تکیه‌کردن به فقط یک قابِ بیرونیِ کلِ
+# جدول (border="1" رویِ خودِ <table>) باعث می‌شود پایینِ صفحه‌ای که
+# جدول در وسطش قطع شده، خطِ بسته‌کننده نداشته باشد — چون از دیدِ
+# چیدمان، جدول آن‌جا واقعاً «تمام» نشده، فقط صفحه عوض شده. راه‌حل:
+# هر سلول خودش حاشیه‌یِ کامل دارد (نه فقط جدول)، پس هر ردیفی که تهِ هر
+# صفحه بیفتد، خودش با خطِ زیرینِ کاملاً بسته دیده می‌شود.
+_CELL_BORDER = "border:1px solid #555;"
+
+
 def _rows_html(rows: list[list]) -> str:
     return "".join(
-        "<tr>" + "".join(f"<td>{_escape(c)}</td>" for c in reversed(row)) + "</tr>" for row in rows
+        "<tr>" + "".join(f'<td style="{_CELL_BORDER}">{_escape(c)}</td>' for c in reversed(row)) + "</tr>"
+        for row in rows
     )
 
 
 def _bold_row_html(cells: list) -> str:
-    return "<tr>" + "".join(f"<td><b>{_escape(c)}</b></td>" for c in reversed(cells)) + "</tr>"
+    return (
+        "<tr>"
+        + "".join(f'<td style="{_CELL_BORDER}"><b>{_escape(c)}</b></td>' for c in reversed(cells))
+        + "</tr>"
+    )
 
 
-def _page_body_html(
-    *, page_header_html: str, colgroup_html: str, head_cells: str, body_rows_html: str,
-    extra_row_html: str, extra_footer_html: str,
-) -> str:
+def _content_table_html(colgroup_html: str, head_cells: str, body_rows_html: str, extra_row_html: str) -> str:
     return f"""
-    <div style="text-align:center; margin-bottom:8px;">{page_header_html}</div>
-    <table border="1" cellspacing="0" cellpadding="3" width="100%" style="border-collapse: collapse; table-layout: fixed;">
+    <table cellspacing="0" cellpadding="3" width="100%" style="border-collapse: collapse; table-layout: fixed;">
     {colgroup_html}
     <thead><tr>{head_cells}</tr></thead>
     <tbody>{body_rows_html}{extra_row_html}</tbody>
     </table>
-    {extra_footer_html}
     """
 
 
@@ -258,9 +264,9 @@ def _wrap_document(body_html: str, font_family: str, font_size_pt: float) -> str
     """
 
 
-def _fits_one_page(page_size: QSizeF, page_html_kwargs: dict, font_family: str, font_size_pt: float) -> bool:
+def _fits_one_page(page_size: QSizeF, table_html: str, font_family: str, font_size_pt: float) -> bool:
     doc = QTextDocument()
-    doc.setHtml(_wrap_document(_page_body_html(**page_html_kwargs), font_family, font_size_pt))
+    doc.setHtml(_wrap_document(table_html, font_family, font_size_pt))
     doc.setPageSize(page_size)
     return doc.pageCount() <= 1
 
@@ -270,7 +276,6 @@ def _estimate_rows_per_page(
     headers: list[str],
     amount_col_indices: list[int],
     *,
-    page_header_html: str,
     page_size: QSizeF,
     colgroup_html: str,
     head_cells: str,
@@ -281,34 +286,17 @@ def _estimate_rows_per_page(
     اندازه‌گیریِ واقعیِ QTextDocument.pageCount(). این فقط برایِ تعیینِ
     فاصله‌یِ درجِ ردیف‌هایِ «جمعِ این صفحه» استفاده می‌شود (نه برایِ شکستِ
     اجباریِ صفحه) — پس یک تخمینِ کمی نادرست هم صفحه‌یِ خالی نمی‌سازد،
-    فقط ردیفِ جمع را یکی-دو ردیف زودتر/دیرتر می‌نشاند.
-
-    نکته‌ی مهم (باگِ واقعیِ کشف‌شده با گزارشِ کاربر: «وسطِ صفحه‌ی دوم
-    جمعِ صفحه‌ی اول زده»): این تابع باید هدرِ *واقعیِ* همان صفحه را هم
-    در اندازه‌گیری حساب کند — فقط صفحه‌ی اول هدرِ گزارش (نامِ‌شرکت/
-    عنوان/تاریخ) دارد و این فضا واقعاً از ظرفیتِ ردیف‌هایِ همان صفحه کم
-    می‌کند؛ اگر نادیده گرفته شود، ظرفیتِ صفحه‌ی اول سرریز تخمین زده
-    می‌شود و اولین ردیفِ جمع به‌جایِ لبه‌ی صفحه‌ی اول، وسطِ صفحه‌ی دوم
-    می‌افتد (دقیقاً همان چیزی که گزارش شد)."""
+    فقط ردیفِ جمع را یکی-دو ردیف زودتر/دیرتر می‌نشاند. طبقِ بازطراحیِ
+    هدر/فوترِ تکرارشونده (که حالا بیرونِ محتوایِ جدول، به‌صورتِ نوارهایِ
+    ثابت کشیده می‌شوند)، ظرفیتِ محتوایِ هر صفحه دیگر یکنواخت است — نیازی
+    به تخمینِ جداگانه برایِ صفحه‌یِ اول نیست."""
     lo, hi, best = 1, len(rows), 1
     while lo <= hi:
         mid = (lo + hi) // 2
         trial_rows = rows[:mid]
         trial_extra_html = _bold_row_html(_subtotal_row(headers, amount_col_indices, trial_rows))
-        fits = _fits_one_page(
-            page_size,
-            {
-                "page_header_html": page_header_html,
-                "colgroup_html": colgroup_html,
-                "head_cells": head_cells,
-                "body_rows_html": _rows_html(trial_rows),
-                "extra_row_html": trial_extra_html,
-                "extra_footer_html": "",
-            },
-            font_family,
-            font_size_pt,
-        )
-        if fits:
+        table_html = _content_table_html(colgroup_html, head_cells, _rows_html(trial_rows), trial_extra_html)
+        if _fits_one_page(page_size, table_html, font_family, font_size_pt):
             best = mid
             lo = mid + 1
         else:
@@ -325,7 +313,6 @@ def _rows_with_subtotals_html(
     page_size: QSizeF,
     colgroup_html: str,
     head_cells: str,
-    header_html: str,
     font_family: str,
     font_size_pt: float,
 ) -> str:
@@ -333,32 +320,33 @@ def _rows_with_subtotals_html(
         return _rows_html(rows)
 
     if rows_per_page_override and rows_per_page_override > 0:
-        first_page_rows = rows_per_page_override
-        rest_page_rows = rows_per_page_override
+        chunk_size = rows_per_page_override
     else:
-        # ظرفیتِ صفحه‌ی اول (با احتسابِ هدرِ واقعیِ گزارش) و ظرفیتِ
-        # صفحه‌هایِ بعدی (که فقط thead تکرارشونده دارند، نه هدرِ گزارش)
-        # می‌توانند واقعاً فرق کنند — جداگانه محاسبه می‌شوند.
-        first_page_rows = _estimate_rows_per_page(
-            rows, headers, amount_col_indices, page_header_html=header_html, page_size=page_size,
-            colgroup_html=colgroup_html, head_cells=head_cells, font_family=font_family, font_size_pt=font_size_pt,
-        )
-        rest_page_rows = _estimate_rows_per_page(
-            rows, headers, amount_col_indices, page_header_html="", page_size=page_size,
-            colgroup_html=colgroup_html, head_cells=head_cells, font_family=font_family, font_size_pt=font_size_pt,
+        chunk_size = _estimate_rows_per_page(
+            rows, headers, amount_col_indices, page_size=page_size, colgroup_html=colgroup_html,
+            head_cells=head_cells, font_family=font_family, font_size_pt=font_size_pt,
         )
 
     parts = []
     remaining = rows
-    is_first = True
     while remaining:
-        chunk_size = first_page_rows if is_first else rest_page_rows
         chunk = remaining[:chunk_size]
         parts.append(_rows_html(chunk))
         remaining = remaining[chunk_size:]
         if remaining:
             parts.append(_bold_row_html(_subtotal_row(headers, amount_col_indices, chunk)))
-        is_first = False
+    return "".join(parts)
+
+
+def _page_footer_html(footer_text: str, page_no: int, page_count: int) -> str:
+    parts = []
+    if footer_text.strip():
+        parts.append(_multiline_html(footer_text))
+    page_no_fa = numerals.to_persian_digits(str(page_no))
+    page_count_fa = numerals.to_persian_digits(str(page_count))
+    parts.append(
+        f'<div style="text-align:center; font-size:8pt; color:#666;">صفحه‌یِ {page_no_fa} از {page_count_fa}</div>'
+    )
     return "".join(parts)
 
 
@@ -367,7 +355,7 @@ def _apply_page_setup(printer: QPrinter) -> None:
     printer.setPageMargins(QMarginsF(_PAGE_MARGIN_MM, _PAGE_MARGIN_MM, _PAGE_MARGIN_MM, _PAGE_MARGIN_MM), QPageLayout.Unit.Millimeter)
 
 
-def _build_final_document(
+def _paint_report(
     printer: QPrinter,
     title: str,
     headers: list[str],
@@ -378,42 +366,100 @@ def _build_final_document(
     report_date: str,
     filters: list[tuple[str, str]] | None,
     options: PrintOptions | None = None,
-) -> QTextDocument:
-    """سندِ نهایی برایِ چاپ/PDF — یک جدولِ پیوسته‌یِ واحد (بدونِ هیچ
-    شکستِ صفحه‌ی دستی)؛ اگر چندصفحه‌ای شود، خودِ Qt صفحه‌بندی می‌کند و
-    ردیفِ هدرِ جدول (thead) را خودکار در هر صفحه تکرار می‌کند."""
+) -> None:
+    """طبقِ درخواستِ صریح («روی هر صفحه باید نشون بده صفحه چند از
+    چنده و هدر و فوتر روی همه صفحات نمایش بده»): QTextDocument.print_
+    به‌تنهایی هدر/فوترِ تکرارشونده یا شماره‌یِ صفحه نمی‌دهد — چاپ به‌صورتِ
+    دستی، صفحه‌به‌صفحه، با QPainter انجام می‌شود: یک نوارِ هدر (ثابت،
+    عیناً تکرارشونده) بالایِ هر صفحه، یک تکه از جدولِ محتوا در وسط، و یک
+    نوارِ فوتر (متنِ کاربر + «صفحه‌یِ X از Y») پایینِ هر صفحه."""
     options = options or PrintOptions()
     font_family = _print_font_family()
     font_size_pt = options.font_size_pt
     header_html = _resolve_header_html(options, title, company_name, report_date, filters)
     reversed_headers = list(reversed(headers))
-    head_cells = "".join(f"<th>{_escape(h)}</th>" for h in reversed_headers)
+    head_cells = "".join(f'<th style="{_CELL_BORDER}">{_escape(h)}</th>' for h in reversed_headers)
     colgroup_html = _colgroup_html(options.column_widths, len(headers))
     amount_col_indices = _amount_column_indices(headers, rows)
-    footer_extra_html = _footer_extra_html(options.footer_text)
+    footer_row_html = _bold_row_html(footer) if footer else ""
 
+    # نکته‌یِ فنیِ مهم: QTextDocument همیشه محتوا را بر حسبِ Point
+    # اندازه‌گیری می‌کند (نه device pixel چاپگر) — اگر page rect را
+    # بر حسبِ DevicePixel (که رویِ چاپگرهای HighResolution عددی چند
+    # برابرِ بزرگ‌تر است) به‌عنوانِ اندازه‌یِ صفحه بدهیم، کلِ گزارش
+    # اشتباهاً «در یک صفحه‌یِ غول‌آسا» جا می‌شود (باگِ واقعیِ کشف‌شده حینِ
+    # تست: گزارشِ ۱۶۰ردیفی هم فقط یک صفحه می‌شد). راه‌حل: همه‌ی
+    # اندازه‌گیری‌ها/چیدمان بر حسبِ Point انجام می‌شود؛ painter هم با
+    # همان نسبتِ device-pixel-به-point مقیاس می‌شود تا خروجیِ چاپیِ
+    # واقعی درست بماند.
     page_rect = printer.pageRect(QPrinter.Unit.Point)
-    page_size = QSizeF(page_rect.width(), page_rect.height())
+    page_rect_px = printer.pageRect(QPrinter.Unit.DevicePixel)
+    page_width = page_rect.width()
+    page_height = page_rect.height()
+
+    header_doc = QTextDocument()
+    header_doc.setHtml(_wrap_document(f'<div style="text-align:center;">{header_html}</div>', font_family, font_size_pt))
+    header_doc.setTextWidth(page_width)
+    header_height = header_doc.size().height()
+
+    footer_probe_doc = QTextDocument()
+    footer_probe_doc.setHtml(_wrap_document(_page_footer_html(options.footer_text, 1, 1), font_family, font_size_pt))
+    footer_probe_doc.setTextWidth(page_width)
+    footer_height = footer_probe_doc.size().height()
+
+    content_height = max(50.0, page_height - header_height - footer_height)
+    content_page_size = QSizeF(page_width, content_height)
 
     body_rows_html = _rows_with_subtotals_html(
         rows, headers, amount_col_indices, options.rows_per_page,
-        page_size=page_size, colgroup_html=colgroup_html, head_cells=head_cells, header_html=header_html,
+        page_size=content_page_size, colgroup_html=colgroup_html, head_cells=head_cells,
         font_family=font_family, font_size_pt=font_size_pt,
     )
-    footer_row_html = _bold_row_html(footer) if footer else ""
-
-    doc = QTextDocument()
-    doc.setHtml(
-        _wrap_document(
-            _page_body_html(
-                page_header_html=header_html, colgroup_html=colgroup_html, head_cells=head_cells,
-                body_rows_html=body_rows_html, extra_row_html=footer_row_html, extra_footer_html=footer_extra_html,
-            ),
-            font_family, font_size_pt,
-        )
+    content_doc = QTextDocument()
+    content_doc.setHtml(
+        _wrap_document(_content_table_html(colgroup_html, head_cells, body_rows_html, footer_row_html), font_family, font_size_pt)
     )
-    doc.setPageSize(page_size)
-    return doc
+    content_doc.setPageSize(content_page_size)
+    page_count = max(1, content_doc.pageCount())
+
+    painter = QPainter()
+    if not painter.begin(printer):
+        return
+    try:
+        if page_width and page_height:
+            painter.scale(page_rect_px.width() / page_width, page_rect_px.height() / page_height)
+        for page_index in range(page_count):
+            painter.save()
+            header_ctx = QAbstractTextDocumentLayout.PaintContext()
+            header_ctx.clip = QRectF(0, 0, page_width, header_height)
+            header_doc.documentLayout().draw(painter, header_ctx)
+            painter.restore()
+
+            painter.save()
+            painter.translate(0, header_height)
+            painter.setClipRect(QRectF(0, 0, page_width, content_height))
+            painter.translate(0, -page_index * content_height)
+            content_ctx = QAbstractTextDocumentLayout.PaintContext()
+            content_ctx.clip = QRectF(0, page_index * content_height, page_width, content_height)
+            content_doc.documentLayout().draw(painter, content_ctx)
+            painter.restore()
+
+            page_footer_doc = QTextDocument()
+            page_footer_doc.setHtml(
+                _wrap_document(_page_footer_html(options.footer_text, page_index + 1, page_count), font_family, font_size_pt)
+            )
+            page_footer_doc.setTextWidth(page_width)
+            painter.save()
+            painter.translate(0, header_height + content_height)
+            footer_ctx = QAbstractTextDocumentLayout.PaintContext()
+            footer_ctx.clip = QRectF(0, 0, page_width, footer_height)
+            page_footer_doc.documentLayout().draw(painter, footer_ctx)
+            painter.restore()
+
+            if page_index < page_count - 1:
+                printer.newPage()
+    finally:
+        painter.end()
 
 
 class _PrintOptionsDialog(QDialog):
@@ -470,7 +516,7 @@ class _PrintOptionsDialog(QDialog):
         self.header_text_field.setMaximumHeight(90)
         layout.addWidget(self.header_text_field)
 
-        layout.addWidget(QLabel("متنِ فوتر (اختیاری — چندخطی، مثلاً محلِ امضا):"))
+        layout.addWidget(QLabel("متنِ فوتر (اختیاری — رویِ همه‌ی صفحات همراه با «صفحه‌ی X از Y» تکرار می‌شود):"))
         self.footer_text_field = QTextEdit()
         self.footer_text_field.setPlainText(defaults.footer_text)
         self.footer_text_field.setMaximumHeight(70)
@@ -532,12 +578,13 @@ def print_report(
         return
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     _apply_page_setup(printer)
-    doc = _build_final_document(
-        printer, title, headers, rows, footer,
-        company_name=company_name, report_date=report_date, filters=filters, options=options,
-    )
     preview = QPrintPreviewDialog(printer, parent_widget)
-    preview.paintRequested.connect(doc.print_)
+    preview.paintRequested.connect(
+        lambda p: _paint_report(
+            p, title, headers, rows, footer,
+            company_name=company_name, report_date=report_date, filters=filters, options=options,
+        )
+    )
     # طبقِ درخواستِ صریح: فرمِ پیش‌نمایشِ چاپ به‌طورِ پیش‌فرض تمامِ صفحه باز شود.
     preview.showMaximized()
     preview.exec()
@@ -567,11 +614,10 @@ def export_report_pdf(
     printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
     _apply_page_setup(printer)
     printer.setOutputFileName(path)
-    doc = _build_final_document(
+    _paint_report(
         printer, title, headers, rows, footer,
         company_name=company_name, report_date=report_date, filters=filters, options=options,
     )
-    doc.print_(printer)
     QMessageBox.information(parent_widget, "خروجیِ PDF", "فایلِ PDF با موفقیت ساخته شد.")
 
 
