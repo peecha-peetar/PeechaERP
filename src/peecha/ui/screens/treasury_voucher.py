@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -196,33 +197,58 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
 
         noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
 
+        # هم‌الگو با هدرِ فرمِ سندِ حسابداری (journal_entry.py): کارتِ هدر با
+        # QGridLayout و عرض/کِشِ ستونِ مشخص — نه QFormLayout با عرضِ کاملِ
+        # پیش‌فرض، که برایِ فیلدهایِ کوتاه (تاریخ) نامتناسب/کِش‌آمده می‌شد.
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+
+        header_card = QWidget()
+        header_card.setObjectName("card")
+        header_layout = QGridLayout(header_card)
+        header_layout.setContentsMargins(12, 10, 12, 10)
+        header_layout.setSpacing(6)
 
         self.title_label = QLabel(f"سندِ {noun}")
         self.title_label.setObjectName("pageTitle")
-        layout.addWidget(self.title_label)
+        header_layout.addWidget(self.title_label, 0, 0, 1, 4)
 
-        header = QFormLayout()
+        header_layout.addWidget(QLabel("طرفِ حساب / حسابِ مربوطه"), 1, 0)
         self.account_combo = _make_searchable_combo([])
         self.account_combo.currentIndexChanged.connect(self._on_account_changed)
-        header.addRow("طرفِ حساب / حسابِ مربوطه", self.account_combo)
+        header_layout.addWidget(self.account_combo, 1, 1, 1, 3)
 
+        header_layout.addWidget(QLabel("تاریخ"), 2, 0)
         self.date_field = JalaliDateEdit("تاریخِ سند")
-        header.addRow("تاریخ", self.date_field)
+        self.date_field.setMaximumWidth(140)
+        header_layout.addWidget(self.date_field, 2, 1)
 
+        header_layout.addWidget(QLabel("شرح"), 2, 2)
         self.description_field = QLineEdit()
-        header.addRow("شرح", self.description_field)
-        layout.addLayout(header)
+        self.description_field.setMinimumWidth(220)
+        header_layout.addWidget(self.description_field, 2, 3)
+
+        header_layout.setColumnStretch(0, 0)
+        header_layout.setColumnStretch(1, 0)
+        header_layout.setColumnStretch(2, 0)
+        header_layout.setColumnStretch(3, 1)
 
         self.detail_container = QVBoxLayout()
-        detail_widget = QWidget()
-        detail_widget.setLayout(self.detail_container)
-        layout.addWidget(detail_widget)
+        self.detail_container.setContentsMargins(0, 4, 0, 0)
+        self.detail_container.setSpacing(4)
+        header_layout.addLayout(self.detail_container, 3, 0, 1, 4)
+
+        layout.addWidget(header_card)
+
+        table_card = QWidget()
+        table_card.setObjectName("card")
+        table_card_layout = QVBoxLayout(table_card)
+        table_card_layout.setContentsMargins(10, 8, 10, 10)
+        table_card_layout.setSpacing(6)
 
         rows_header = QHBoxLayout()
-        rows_title = QLabel("ردیف‌هایِ روش")
+        rows_title = QLabel("ردیف‌هایِ روش (نقد/بانک/چک/تخفیف)")
         rows_title.setObjectName("sectionHint")
         rows_header.addWidget(rows_title)
         rows_header.addStretch(1)
@@ -230,13 +256,25 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         add_row_button.setObjectName("flatButton")
         add_row_button.clicked.connect(self._add_row)
         rows_header.addWidget(add_row_button)
-        layout.addLayout(rows_header)
+        table_card_layout.addLayout(rows_header)
 
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["روش", "مبلغ", "شرح", "جزئیات", ""])
         self.table.verticalHeader().setVisible(False)
+        # طبقِ گزارشِ صریح («ارتفاعِ فیلدها کوچک/فشرده است»): Qt ارتفاعِ
+        # ردیفِ جدول را با موردهایِ متنیِ ساده به‌درستی حساب می‌کند، ولی با
+        # ویجت‌هایِ setCellWidget (کمبو/فیلدِ مبلغ با padding خودشان) نه —
+        # دقیقاً هم‌الگو با جدولِ ردیف‌هایِ journal_entry.py.
+        self.table.verticalHeader().setDefaultSectionSize(52)
+        self.table.setMinimumHeight(160)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        layout.addWidget(self.table, stretch=1)
+        self.table.setColumnWidth(0, 110)
+        self.table.setColumnWidth(1, 150)
+        self.table.setColumnWidth(3, 100)
+        self.table.setColumnWidth(4, 36)
+        table_card_layout.addWidget(self.table, stretch=1)
+
+        layout.addWidget(table_card, stretch=1)
 
         footer = QHBoxLayout()
         save_button = QPushButton(f"ثبتِ سندِ {noun}")

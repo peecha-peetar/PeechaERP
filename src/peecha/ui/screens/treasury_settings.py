@@ -67,9 +67,11 @@ class TreasurySettingsScreen(FieldHelpMixin, QWidget):
         super().__init__()
         self._mapping_rows: list[_MappingRow] = []
 
+        # هم‌الگو با کارت‌بندیِ فرمِ سندِ حسابداری (journal_entry.py): هر
+        # بخشِ منطقی در کارتِ جداگانه، نه یک ستونِ یکدستِ بدونِ مرز.
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
 
         title = QLabel("تنظیماتِ خزانه‌داری")
         title.setObjectName("pageTitle")
@@ -79,18 +81,30 @@ class TreasurySettingsScreen(FieldHelpMixin, QWidget):
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
+        mapping_card = QWidget()
+        mapping_card.setObjectName("card")
+        mapping_card_layout = QVBoxLayout(mapping_card)
+        mapping_card_layout.setContentsMargins(12, 10, 12, 10)
+        mapping_card_layout.setSpacing(4)
+
         mapping_title = QLabel("نگاشتِ حساب‌هایِ دریافت/پرداخت")
         mapping_title.setObjectName("sectionHint")
-        layout.addWidget(mapping_title)
+        mapping_card_layout.addWidget(mapping_title)
 
         self.mapping_container = QVBoxLayout()
-        mapping_widget = QWidget()
-        mapping_widget.setLayout(self.mapping_container)
-        layout.addWidget(mapping_widget)
+        self.mapping_container.setSpacing(2)
+        mapping_card_layout.addLayout(self.mapping_container)
+        layout.addWidget(mapping_card)
+
+        checkbook_card = QWidget()
+        checkbook_card.setObjectName("card")
+        checkbook_card_layout = QVBoxLayout(checkbook_card)
+        checkbook_card_layout.setContentsMargins(12, 10, 12, 10)
+        checkbook_card_layout.setSpacing(6)
 
         checkbook_title = QLabel("دسته‌چک‌ها")
         checkbook_title.setObjectName("sectionHint")
-        layout.addWidget(checkbook_title)
+        checkbook_card_layout.addWidget(checkbook_title)
 
         form_row = QHBoxLayout()
         form_row.addWidget(QLabel("حسابِ بانکی"))
@@ -108,7 +122,7 @@ class TreasurySettingsScreen(FieldHelpMixin, QWidget):
         add_checkbook_button.setObjectName("flatButton")
         add_checkbook_button.clicked.connect(self._create_checkbook)
         form_row.addWidget(add_checkbook_button)
-        layout.addLayout(form_row)
+        checkbook_card_layout.addLayout(form_row)
 
         self.checkbook_table = QTableWidget(0, 5)
         self.checkbook_table.setHorizontalHeaderLabels(["حسابِ بانکی", "از", "تا", "شماره‌یِ بعدی", "وضعیت"])
@@ -116,8 +130,10 @@ class TreasurySettingsScreen(FieldHelpMixin, QWidget):
         self.checkbook_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.checkbook_table.verticalHeader().setVisible(False)
         self.checkbook_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.checkbook_table.setMinimumHeight(140)
         self.checkbook_table.cellDoubleClicked.connect(self._toggle_checkbook_row)
-        layout.addWidget(self.checkbook_table, stretch=1)
+        checkbook_card_layout.addWidget(self.checkbook_table, stretch=1)
+        layout.addWidget(checkbook_card, stretch=1)
 
         self.set_field_help([
             (
