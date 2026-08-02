@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -108,6 +109,28 @@ class _MethodMappingRow(QWidget):
         layout.addWidget(save_button)
 
 
+class _TemplateRow(QWidget):
+    """ردیفِ ویرایشِ قالبِ متنِ خودکارِ شرحِ یک روش — طبقِ درخواستِ صریح
+    («دستِ کاربر باشه که چه متنی اعمال بشه»)."""
+
+    def __init__(self, template_key: str, label: str, current_text: str, on_save) -> None:
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 4)
+
+        name_label = QLabel(label)
+        name_label.setMinimumWidth(120)
+        layout.addWidget(name_label)
+
+        self.text_field = QLineEdit(current_text)
+        layout.addWidget(self.text_field, stretch=1)
+
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("flatButton")
+        save_button.clicked.connect(lambda: on_save(template_key, self.text_field.text()))
+        layout.addWidget(save_button)
+
+
 _RECEIPT_METHOD_KEYS = [
     "RECEIPT_CASH",
     "RECEIPT_BANK",
@@ -136,6 +159,7 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         self._tables: dict[str, QTableWidget] = {}
         self._method_mapping_containers: dict[str, QVBoxLayout] = {}
         self._method_mapping_rows: dict[str, list[_MethodMappingRow]] = {"RECEIPT": [], "PAYMENT": []}
+        self._template_rows: list[_TemplateRow] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -226,6 +250,31 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             self._method_mapping_containers[direction] = container
             help_fields.append((method_card, method_hint))
 
+        # --- متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت ------------------------
+        # طبقِ درخواستِ صریح: کاربر خودش می‌تواند متنِ هر روش را بسازد.
+        template_card = QWidget()
+        template_card.setObjectName("card")
+        template_card_layout = QVBoxLayout(template_card)
+        template_card_layout.setContentsMargins(12, 10, 12, 10)
+        template_card_layout.setSpacing(4)
+
+        template_title = QLabel("متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت")
+        template_title.setObjectName("sectionHint")
+        template_card_layout.addWidget(template_title)
+
+        template_hint = QLabel(
+            "جای‌گذارهایِ مجاز: {تفصیلی} (تفصیلیِ خودِ ردیف)، {مبلغ}، {طرف_حساب} (تفصیلیِ بالایِ فرم)، "
+            "{تعداد} (فقط چک)، {یادداشت} (فقط بن)."
+        )
+        template_hint.setWordWrap(True)
+        template_card_layout.addWidget(template_hint)
+
+        self._template_container = QVBoxLayout()
+        self._template_container.setSpacing(2)
+        template_card_layout.addLayout(self._template_container)
+        layout.addWidget(template_card)
+        help_fields.append((template_card, "این متن‌ها خودکار در ستونِ «شرح»ِ همان ردیف در فرمِ دریافت پیشنهاد می‌شوند — قابلِ‌ویرایشِ دستی هم هستند."))
+
         self.set_field_help(help_fields)
 
     def set_status(self, text: str) -> None:
@@ -267,11 +316,27 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
                 container.addWidget(row)
                 self._method_mapping_rows[direction].append(row)
 
+        while self._template_container.count():
+            child = self._template_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._template_rows = []
+        for t in treasury_service.list_description_templates(company_id, "RECEIPT"):
+            row = _TemplateRow(t.template_key, t.label, t.template_text, self._save_template)
+            self._template_container.addWidget(row)
+            self._template_rows.append(row)
+
     def _save_method_mapping(self, mapping_key: str, account_id) -> None:
         if self.company_id is None or account_id is None:
             self.set_status("ابتدا یک حساب انتخاب کنید.")
             return
         treasury_service.set_account_mapping(self.company_id, mapping_key, account_id)
+        self.set_status("")
+
+    def _save_template(self, template_key: str, text: str) -> None:
+        if self.company_id is None:
+            return
+        treasury_service.set_description_template(self.company_id, template_key, text)
         self.set_status("")
 
     def refresh_mappings(self, direction: str) -> None:

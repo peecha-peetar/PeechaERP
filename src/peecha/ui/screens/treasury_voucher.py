@@ -211,6 +211,7 @@ class _MethodDetailsDialog(QDialog):
         data: dict = {}
         if self.detail_combo is not None:
             data["detail_account_id"] = self.detail_combo.currentData()
+            data["detail_account_label"] = self.detail_combo.currentText()
         if self.checkbook_combo is not None:
             data["checkbook_id"] = self.checkbook_combo.currentData()
         if self.check_no_field is not None:
@@ -406,10 +407,13 @@ class _MethodRow:
         for code in method_codes:
             self.method_combo.addItem(_METHOD_LABELS[code], code)
         self.method_combo.enterPressed.connect(self._on_method_return)
+        self.method_combo.currentIndexChanged.connect(lambda _i: self._regenerate_description())
 
         self.amount_field = _AmountField()
         self.amount_field.setDecimals(screen.currency_decimal_places)
         self.amount_field.returnPressed.connect(lambda: self.description_field.setFocus())
+        self.amount_field.valueChanged.connect(lambda _v: self._regenerate_description())
+        self.amount_field.valueChanged.connect(lambda _v: screen._update_rows_summary())
 
         self.description_field = QLineEdit()
         self.description_field.returnPressed.connect(lambda: screen._focus_next_row_after(self))
@@ -425,6 +429,7 @@ class _MethodRow:
     def _on_method_return(self) -> None:
         method = self.method_combo.currentData()
         if method in _METHODS_WITHOUT_DETAILS or self._screen.company_id is None:
+            self._regenerate_description()
             self.amount_field.setFocus()
             return
         self._open_details()
@@ -432,6 +437,7 @@ class _MethodRow:
     def _open_details(self) -> None:
         method = self.method_combo.currentData()
         if method in _METHODS_WITHOUT_DETAILS or self._screen.company_id is None:
+            self._regenerate_description()
             self.amount_field.setFocus()
             return
         if method == "CHECK" and self._screen.direction == "RECEIPT":
@@ -441,6 +447,7 @@ class _MethodRow:
                 self.details = {"checks": checks}
                 total = sum((c["amount"] for c in checks), decimal.Decimal(0))
                 self.amount_field.setValue(float(total))
+                self._regenerate_description()
                 self.description_field.setFocus()
             return
         dialog = _MethodDetailsDialog(self._screen.direction, method, self._screen.company_id, self.details, self._screen)
@@ -448,9 +455,50 @@ class _MethodRow:
             self.details = dialog.result_data()
             if method == "CHECK_DISBURSEMENT" and "check_amount" in self.details:
                 self.amount_field.setValue(float(self.details["check_amount"]))
+                self._regenerate_description()
                 self.description_field.setFocus()
             else:
+                self._regenerate_description()
                 self.amount_field.setFocus()
+
+    def _regenerate_description(self) -> None:
+        """طبقِ درخواستِ صریح: شرحِ هر ردیف خودکار از رویِ قالبِ همان روش
+        (قابلِ‌ویرایش در تنظیمات) ساخته و نمایش داده می‌شود — کاربر بعداً
+        هم می‌تواند دستی ویرایشش کند."""
+        if self._screen.company_id is None:
+            return
+        method = self.method_combo.currentData()
+        if method is None:
+            return
+        template_text = self._screen._description_templates.get(f"{self._screen.direction}_{method}", "")
+        if not template_text:
+            return
+        try:
+            amount = decimal.Decimal(str(self.amount_field.value()))
+        except (ValueError, decimal.InvalidOperation):
+            amount = decimal.Decimal(0)
+        if amount <= 0:
+            return  # هنوز چیزِ معناداری برایِ توصیف نیست — شرحِ ردیفِ خالی را با متنِ نصفه‌نیمه پر نکن
+        context = {
+            "تفصیلی": self.details.get("detail_account_label") or "",
+            "مبلغ": numerals.to_persian_digits(f"{amount:,.0f}") if amount else "",
+            "طرف_حساب": self._screen._counterparty_label(),
+            "تعداد": "",
+            "یادداشت": "",
+        }
+        if method == "CHECK":
+            checks = self.details.get("checks")
+            if checks:
+                context["تعداد"] = numerals.to_persian_digits(str(len(checks)))
+            elif self.details.get("check_no"):
+                context["تعداد"] = numerals.to_persian_digits("1")
+        if method == "VOUCHER":
+            context["یادداشت"] = " — ".join(
+                bit for bit in (self.details.get("voucher_serial"), self.details.get("voucher_detail")) if bit
+            )
+        rendered = treasury_service.render_description_template(template_text, context)
+        if rendered:
+            self.description_field.setText(rendered)
 
     def to_method_line(self) -> treasury_service.MethodLine | None:
         method = self.method_combo.currentData()
@@ -460,17 +508,10 @@ class _MethodRow:
             amount = decimal.Decimal(0)
         if amount <= 0:
             return None
-        description = self.description_field.text().strip()
-        if method == "VOUCHER":
-            voucher_bits = " — ".join(
-                bit for bit in (self.details.get("voucher_serial"), self.details.get("voucher_detail")) if bit
-            )
-            if voucher_bits:
-                description = f"بنِ {voucher_bits}" + (f" — {description}" if description else "")
         kwargs = {
             "method": method,
             "amount": amount,
-            "description": description,
+            "description": self.description_field.text().strip(),
         }
         if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER"):
             kwargs["detail_account_id"] = self.details.get("detail_account_id")
@@ -507,6 +548,9 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         # حل می‌شوند.
         # کلید: detail_account_id -> (account_id، dimension_type_idِ حل‌شده)
         self._counterparty_index: dict[int, tuple[int, int]] = {}
+        # قالبِ متنِ خودکارِ شرحِ هر روش — در refresh() از تنظیمات بارگذاری
+        # می‌شود (به‌جایِ کوئریِ جداگانه به‌ازایِ هر کلیدزنیِ مبلغ).
+        self._description_templates: dict[str, str] = {}
 
         noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
         row_methods_hint = (
@@ -520,14 +564,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         # و طرفِ‌حساب+تاریخ در یک ردیف، شرح+جمعِ مبلغ در ردیفِ بعدی جا
         # گرفتند (به‌جایِ یک فیلد در هر ردیف).
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(6)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(5)
 
         header_card = QWidget()
         header_card.setObjectName("card")
         header_layout = QGridLayout(header_card)
-        header_layout.setContentsMargins(12, 8, 12, 6)
-        header_layout.setSpacing(4)
+        header_layout.setContentsMargins(10, 6, 10, 4)
+        header_layout.setSpacing(3)
 
         self.title_label = QLabel(f"سندِ {noun}")
         self.title_label.setObjectName("pageTitle")
@@ -556,11 +600,19 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         header_layout.addWidget(self.description_field, 2, 1, 1, 2 if direction == "RECEIPT" else 4)
 
         self.total_amount_field: _AmountField | None = None
+        self.rows_summary_label: QLabel | None = None
         if direction == "RECEIPT":
             header_layout.addWidget(QLabel("جمعِ مبلغِ دریافتی"), 2, 3)
             self.total_amount_field = _AmountField()
             self.total_amount_field.setMaximumWidth(160)
+            self.total_amount_field.valueChanged.connect(lambda _v: self._update_rows_summary())
             header_layout.addWidget(self.total_amount_field, 2, 4)
+
+            # طبقِ درخواستِ صریح: جمعِ زنده‌یِ ردیف‌ها + اختلافش با جمعِ
+            # دریافتیِ هدر، همین‌جا نمایش داده شود.
+            self.rows_summary_label = QLabel("")
+            self.rows_summary_label.setObjectName("sectionHint")
+            header_layout.addWidget(self.rows_summary_label, 3, 0, 1, 5)
 
         header_layout.setColumnStretch(0, 0)
         header_layout.setColumnStretch(1, 1)
@@ -641,7 +693,8 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
             (
                 self.table,
                 f"هر ردیف یک روشِ تسویه است ({row_methods_hint}) — می‌توانید یک {noun} را بینِ چند روش تقسیم کنید. "
-                "با انتخابِ روش و Enter، فرمِ جزئیاتِ همان روش باز می‌شود؛ بعدِ تاییدِ جزئیات، به مبلغ/شرح و بعد ردیفِ بعدی می‌روید.",
+                "با انتخابِ روش و Enter، فرمِ جزئیاتِ همان روش باز می‌شود؛ بعدِ تاییدِ جزئیات، به مبلغ/شرح و بعد ردیفِ بعدی می‌روید. "
+                "شرحِ هر ردیف خودکار (از رویِ قالبِ قابلِ‌ویرایشِ همان روش در تنظیمات) پیشنهاد می‌شود — قابلِ‌ویرایشِ دستی هم هست.",
             ),
         ]
         if self.total_amount_field is not None:
@@ -670,7 +723,15 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         if self.total_amount_field is not None:
             self.total_amount_field.setDecimals(self.currency_decimal_places)
 
+        self._description_templates = {
+            t.template_key: t.template_text for t in treasury_service.list_description_templates(self.company_id, self.direction)
+        }
+
         self._reset_form()
+
+    def _counterparty_label(self) -> str:
+        detail_account_id = self.account_combo.currentData()
+        return next((label for oid, label in self.account_options if oid == detail_account_id), "")
 
     def _build_counterparty_options(self) -> list[tuple[int, str]]:
         """طبقِ درخواستِ صریح: فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ
@@ -734,6 +795,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         if combos:
             combos[-1].lineEdit().returnPressed.connect(self.date_field.setFocus)
 
+        # طبقِ درخواستِ صریح: طرفِ‌حساب در متنِ خودکارِ شرحِ همه‌یِ ردیف‌ها
+        # به‌کار می‌رود — با تغییرش، شرحِ همه‌یِ ردیف‌ها هم به‌روز شود.
+        for row in self._method_rows:
+            row._regenerate_description()
+
     def _on_account_return(self) -> None:
         if self._detail_combos:
             first_combo = next(iter(self._detail_combos.values()))
@@ -752,6 +818,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         self.table.setCellWidget(row_index, 3, row.details_button)
         self.table.setCellWidget(row_index, 4, row.remove_button)
         self._method_rows.append(row)
+        self._update_rows_summary()
         return row
 
     def _remove_row(self, row: _MethodRow) -> None:
@@ -760,6 +827,24 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         row_index = self._method_rows.index(row)
         self.table.removeRow(row_index)
         self._method_rows.pop(row_index)
+        self._update_rows_summary()
+
+    def _update_rows_summary(self) -> None:
+        """طبقِ درخواستِ صریح: جمعِ زنده‌یِ ردیف‌ها و اختلافش با جمعِ مبلغِ
+        دریافتیِ هدر، همان‌جایِ هدر نمایش داده شود."""
+        if self.rows_summary_label is None or self.total_amount_field is None:
+            return
+        rows_total = sum(
+            (decimal.Decimal(str(row.amount_field.value())) for row in self._method_rows), decimal.Decimal(0)
+        )
+        header_total = decimal.Decimal(str(self.total_amount_field.value()))
+        diff = header_total - rows_total
+        theme.set_status_label(
+            self.rows_summary_label,
+            f"جمعِ ردیف‌ها: {numerals.to_persian_digits(str(rows_total))}    —    "
+            f"اختلاف با جمعِ دریافتی: {numerals.to_persian_digits(str(diff))}",
+            ok=(diff == 0),
+        )
 
     def _focus_first_row_method(self) -> None:
         if not self._method_rows:
@@ -792,6 +877,32 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
             self.total_amount_field.setValue(0)
         self.account_combo.setCurrentIndex(0)
         self.status_label.setText("")
+        self._update_rows_summary()
+
+    def _compose_description(self) -> str:
+        """طبقِ درخواستِ صریح: شرحِ سمتِ بستانکارِ سندِ دریافت خودکار
+        بشود: «دریافت از {طرفِ‌حساب} - {روش‌هایِ استفاده‌شده} - {شرحِ
+        دستیِ کاربر}» — فقط برایِ دریافت (طبقِ چارچوبِ همین درخواست)."""
+        manual = self.description_field.text().strip()
+        if self.direction != "RECEIPT":
+            return manual
+        counterparty_label = self._counterparty_label()
+        method_labels: list[str] = []
+        for row in self._method_rows:
+            line = row.to_method_line()
+            if line is None:
+                continue
+            label = _METHOD_LABELS.get(line.method, line.method)
+            if label not in method_labels:
+                method_labels.append(label)
+        parts: list[str] = []
+        if counterparty_label:
+            parts.append(f"دریافت از {counterparty_label}")
+        if method_labels:
+            parts.append(" و ".join(method_labels))
+        if manual:
+            parts.append(manual)
+        return " - ".join(parts) if parts else manual
 
     def _save(self) -> None:
         if self.company_id is None or session.current_user is None:
@@ -838,7 +949,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
                 account_id,
                 counterparty_details,
                 self.date_field.date(),
-                self.description_field.text().strip(),
+                self._compose_description(),
                 method_lines,
             )
         except ValueError as exc:

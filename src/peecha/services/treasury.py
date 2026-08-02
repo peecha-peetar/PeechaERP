@@ -23,6 +23,7 @@ from peecha.db.models.treasury import (
     Checkbook,
     CheckStatus,
     CounterpartyAccountMapping,
+    DescriptionTemplate,
     IssuedCheck,
     ReceivedCheck,
     TreasuryAccountMapping,
@@ -65,6 +66,84 @@ MAPPING_LABELS: dict[str, str] = {
 }
 
 METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER")
+
+# --- متنِ خودکارِ شرحِ ردیف‌ها ---------------------------------------------
+# طبقِ درخواستِ صریح: کاربر خودش می‌تواند این قالب‌ها را ویرایش کند —
+# جای‌گذارهایِ مجاز: {تفصیلی} (تفصیلیِ خودِ ردیف، مثلاً صندوق/بانک)،
+# {مبلغ}، {طرف_حساب} (تفصیلیِ بالایِ فرم)، {تعداد} (فقط چک)، {یادداشت}
+# (فقط بن — سریال/مشخصات).
+DEFAULT_DESCRIPTION_TEMPLATES: dict[str, str] = {
+    "RECEIPT_CASH": "دریافتِ نقدی «{تفصیلی}» به مبلغِ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_BANK": "دریافتِ بانکی «{تفصیلی}» به مبلغِ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_CHECK": "دریافتِ {تعداد} فقره چک به مبلغِ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_DISCOUNT": "تخفیفِ نقدیِ داده‌شده به مبلغِ {مبلغ} ریال به {طرف_حساب}",
+    "RECEIPT_GOODS_COUPON": "دریافتِ کالابرگِ «{تفصیلی}» به مبلغِ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_VOUCHER": "دریافتِ بنِ {یادداشت} به مبلغِ {مبلغ} ریال از {طرف_حساب}",
+    "RECEIPT_NETTING": "تهاترِ حساب به مبلغِ {مبلغ} ریال با {طرف_حساب}",
+}
+
+
+@dataclass
+class DescriptionTemplateRow:
+    template_key: str
+    label: str
+    template_text: str
+    is_default: bool
+
+
+def get_description_template(company_id: int, template_key: str) -> str:
+    with new_session() as session:
+        row = session.get(DescriptionTemplate, (company_id, template_key))
+        if row is not None:
+            return row.template_text
+    return DEFAULT_DESCRIPTION_TEMPLATES.get(template_key, "")
+
+
+def set_description_template(company_id: int, template_key: str, template_text: str) -> None:
+    with new_session() as session:
+        existing = session.get(DescriptionTemplate, (company_id, template_key))
+        if existing is None:
+            session.add(DescriptionTemplate(company_id=company_id, template_key=template_key, template_text=template_text))
+        else:
+            existing.template_text = template_text
+        session.commit()
+
+
+def list_description_templates(company_id: int, direction: str) -> list[DescriptionTemplateRow]:
+    keys = [k for k in DEFAULT_DESCRIPTION_TEMPLATES if k.startswith(f"{direction}_")]
+    with new_session() as session:
+        saved = {
+            r.template_key: r.template_text
+            for r in session.scalars(
+                select(DescriptionTemplate).where(
+                    DescriptionTemplate.company_id == company_id, DescriptionTemplate.template_key.in_(keys)
+                )
+            ).all()
+        }
+    return [
+        DescriptionTemplateRow(
+            template_key=key,
+            label=MAPPING_LABELS.get(key, key),
+            template_text=saved.get(key, DEFAULT_DESCRIPTION_TEMPLATES[key]),
+            is_default=key not in saved,
+        )
+        for key in keys
+    ]
+
+
+class _SafeFormatDict(dict):
+    def __missing__(self, key):
+        return ""
+
+
+def render_description_template(template_text: str, context: dict[str, str]) -> str:
+    """جایگذاریِ امنِ جای‌گذارهایِ قالب — کلیدِ ناشناخته/نبود به‌جایِ خطا،
+    رشته‌یِ خالی می‌شود؛ فرمتِ نامعتبر هم به‌جایِ کرش، همان متنِ خام را
+    برمی‌گرداند (تایپوی کاربر در قالب نباید فرم را از کار بیندازد)."""
+    try:
+        return template_text.format_map(_SafeFormatDict(context)).strip()
+    except (ValueError, IndexError, KeyError):
+        return template_text
 
 
 # --- بانک‌هایِ مرجع -----------------------------------------------------------

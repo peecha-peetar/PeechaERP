@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy import ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from peecha.db.base import Base
@@ -37,6 +37,18 @@ class CounterpartyAccountMapping(Base):
     person_group_id: Mapped[int | None] = mapped_column(ForeignKey("acc.person_groups.person_group_id"))
     dimension_type_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+
+
+class DescriptionTemplate(Base):
+    """متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت/پرداخت — قابلِ‌ویرایش توسطِ
+    کاربر، با جای‌گذارهایی مثلِ {تفصیلی}/{مبلغ}/{طرف_حساب}."""
+
+    __tablename__ = "description_templates"
+    __table_args__ = {"schema": "treasury"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    template_key: Mapped[str] = mapped_column(String(30), primary_key=True)
+    template_text: Mapped[str] = mapped_column(Text)
 
 
 class Bank(Base):
