@@ -89,7 +89,10 @@ _HEADER_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimension
 
 
 def _resolve_row_detail_source(
-    company_id: int, mapping_key: str, covered_dimension_type_ids: set[int] | None = None
+    company_id: int,
+    mapping_key: str,
+    covered_dimension_type_ids: set[int] | None = None,
+    header_person_group_id: int | None = None,
 ) -> tuple[int | None, tuple[int, str] | None, str, list]:
     """منبعِ تفصیلیِ یک ردیف (نقد/بانک/تخفیف/کالابرگ/بن/تهاتر) را مشخص
     می‌کند — به‌ترتیبِ اولویت:
@@ -107,6 +110,10 @@ def _resolve_row_detail_source(
        گروهِ شخص را — نتیجه این بود که وقتی مثلاً معینِ تخفیف به گروهِ
        «مشتری» محدود شده بود، این محدودیت نادیده گرفته می‌شد و به‌جایِ آن
        فهرستِ آزادِ همه‌یِ تفصیلی‌های شرکت (بندِ ۳) پیشنهاد می‌شد.
+       طبقِ گزارشِ صریحِ بعدی: اگر خودِ طرفِ‌حسابِ هدر هم عضوِ همان گروهِ
+       الزامی باشد (مثلاً طرفِ‌حساب و معینِ چکِ پرداخت هردو «تامین‌کننده»
+       می‌خواهند)، دیگر دوباره از کاربر پرسیده نمی‌شود — همان انتخابِ هدر
+       فیلدِ اضافه‌ای نیست، خودکار در سند اعمال می‌شود (در create_treasury_voucher).
     ۳) اگر معین نه گروهِ شخصیِ الزامی داشته باشد نه هیچ نوع‌بُعدِ دیگری
        (مثلاً تخفیف که هنوز چیزی رویش تنظیم نشده) — به‌جایِ این‌که هیچ‌جا
        نتوان تفصیلی وارد کرد، جستجویِ آزاد رویِ همه‌یِ تفصیلی‌هایِ برگِ
@@ -141,12 +148,15 @@ def _resolve_row_detail_source(
     # پیشنهاد می‌شد. حالا همان منطقِ صفحه‌ی صدورِ سند
     # (journal_entry._MethodRow._refresh_dimension_ui) این‌جا هم تکرار
     # می‌شود: گروهِ شخصیِ الزامی + بقیه‌ی نوع‌بُعدهایِ الزامی، هردو با هم.
-    person_group_ids = [
+    person_group_ids_all = [
         g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)
     ]
+    header_satisfies_person = header_person_group_id is not None and header_person_group_id in person_group_ids_all
+    person_group_ids = [] if header_satisfies_person else person_group_ids_all
     if not person_group_ids and not other_dims:
-        if required:
-            # همه‌ی بُعدهای الزامی مرکزِ هزینه/پروژه‌اند و هدر پوششان داده -> چیزی نمی‌پرسد
+        if required or person_group_ids_all:
+            # همه‌ی بُعدهای الزامی یا مرکزِ هزینه/پروژه‌اند (هدر پوششان داده)
+            # یا گروهِ شخصیِ الزامی‌اند و همان طرفِ‌حسابِ هدر ارضایشان می‌کند -> چیزی نمی‌پرسد
             return account_id, None, "", []
         # نه گروهِ شخصیِ الزامی نه هیچ نوع‌بُعدی -> جستجویِ آزادِ همه‌ی تفصیلی‌ها
         return account_id, None, "تفصیلی", dimensions_service.list_all_leaf_detail_accounts(company_id)
@@ -164,7 +174,7 @@ def _resolve_row_detail_source(
 
 
 def _resolve_supplementary_person_detail(
-    company_id: int, mapping_key: str
+    company_id: int, mapping_key: str, header_person_group_id: int | None = None
 ) -> tuple[tuple[int, str] | None, str, list]:
     """طبقِ گزارشِ صریح: روشِ چک (دریافت/پرداخت) و خرجِ چک، برخلافِ نقد/بانک/
     تخفیف/کالابرگ/بن/تهاتر، فیلدِ تخصصیِ خودشان را دارند (چندچکیِ دریافتی،
@@ -177,7 +187,10 @@ def _resolve_supplementary_person_detail(
     گروهِ شخص را (اگر باشد) به‌عنوانِ یک فیلدِ *تکمیلی* برمی‌گرداند — برخلافِ
     _resolve_row_detail_source، اگر هیچ گروهِ شخصی الزامی نباشد چیزی
     پیشنهاد نمی‌دهد (فهرستِ آزاد این‌جا معنا ندارد، چون این فیلدِ اصلیِ
-    ردیف نیست)."""
+    ردیف نیست). طبقِ گزارشِ صریحِ بعدی: «طرفِ‌حساب در فرمِ چک معنی نداره،
+    فیلدِ اضافه است» — اگر طرفِ‌حسابِ هدر خودش عضوِ همین گروهِ الزامی باشد،
+    این فیلدِ تکمیلی اصلاً نمایش داده نمی‌شود (create_treasury_voucher خودِ
+    همان انتخابِ هدر را برایِ این ردیف هم به‌کار می‌برد)."""
     account_id, preset_detail_id = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
     if account_id is None:
         return None, "", []
@@ -185,6 +198,8 @@ def _resolve_supplementary_person_detail(
         g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)
     ]
     if not person_group_ids:
+        return None, "", []
+    if header_person_group_id is not None and header_person_group_id in person_group_ids:
         return None, "", []
     if preset_detail_id is not None:
         preset_row = next(
@@ -210,6 +225,7 @@ class _MethodDetailsDialog(QDialog):
         current: dict,
         parent=None,
         covered_dimension_type_ids: set[int] | None = None,
+        header_person_group_id: int | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"جزئیاتِ ردیفِ {_METHOD_LABELS.get(method, method)}")
@@ -233,7 +249,7 @@ class _MethodDetailsDialog(QDialog):
         if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING"):
             mapping_key = f"{direction}_{method}"
             _account_id, preset, label, options = _resolve_row_detail_source(
-                company_id, mapping_key, covered_dimension_type_ids
+                company_id, mapping_key, covered_dimension_type_ids, header_person_group_id
             )
             if preset is not None:
                 self.preset_detail_id, self.preset_detail_label = preset
@@ -321,7 +337,7 @@ class _MethodDetailsDialog(QDialog):
             # journal_entries رد می‌شود، بدونِ این‌که کاربر جایی برایِ
             # واردکردنش داشته باشد.
             preset, person_label, persons = _resolve_supplementary_person_detail(
-                company_id, f"{direction}_{method}"
+                company_id, f"{direction}_{method}", header_person_group_id
             )
             if preset is not None:
                 self.preset_person_detail_id, self.preset_person_detail_label = preset
@@ -411,6 +427,7 @@ class _CheckEntryDialog(QDialog):
         parent=None,
         mapping_key: str = "RECEIPT_CHECK",
         current_person_detail_id: int | None = None,
+        header_person_group_id: int | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("چک‌هایِ دریافتی")
@@ -423,11 +440,15 @@ class _CheckEntryDialog(QDialog):
         # «اسناد دریافتنی نزدِ صندوق») به یک گروهِ شخص محدود شده باشد
         # (فقط مشتری/تامین‌کننده)، این محدودیت باید همین‌جا هم پرسیده شود
         # — وگرنه ثبتِ سند در اعتبارسنجیِ نهایی رد می‌شود بدونِ این‌که
-        # کاربر جایی برایِ واردکردنش داشته باشد.
+        # کاربر جایی برایِ واردکردنش داشته باشد. اما اگر طرفِ‌حسابِ هدر
+        # خودش عضوِ همین گروه باشد، دیگر دوباره پرسیده نمی‌شود (طبقِ گزارشِ
+        # بعدی: «طرفِ‌حساب در فرمِ چک معنی نداره، فیلدِ اضافه است»).
         self.person_detail_combo: QComboBox | None = None
         self.preset_person_detail_id: int | None = None
         self.preset_person_detail_label: str = ""
-        preset, person_label, persons = _resolve_supplementary_person_detail(company_id, mapping_key)
+        preset, person_label, persons = _resolve_supplementary_person_detail(
+            company_id, mapping_key, header_person_group_id
+        )
         if preset is not None:
             self.preset_person_detail_id, self.preset_person_detail_label = preset
         elif persons:
@@ -673,6 +694,7 @@ class _MethodRow:
                 self._screen,
                 mapping_key=f"{self._screen.direction}_{method}",
                 current_person_detail_id=self.details.get("detail_account_id"),
+                header_person_group_id=self._screen._counterparty_person_group_id(),
             )
             if dialog.exec() == QDialog.Accepted:
                 checks = dialog.result_checks()
@@ -692,7 +714,10 @@ class _MethodRow:
             # اگر نه پیش‌تخصیص هست نه هیچ گزینه‌ای، دیالوگِ خالی هم باز نمی‌شود.
             mapping_key = f"{self._screen.direction}_{method}"
             _account_id, preset, _label, options = _resolve_row_detail_source(
-                self._screen.company_id, mapping_key, set(self._screen._detail_combos.keys())
+                self._screen.company_id,
+                mapping_key,
+                set(self._screen._detail_combos.keys()),
+                self._screen._counterparty_person_group_id(),
             )
             if preset is not None:
                 self.details = {"detail_account_id": preset[0], "detail_account_label": preset[1]}
@@ -710,6 +735,7 @@ class _MethodRow:
             self.details,
             self._screen,
             covered_dimension_type_ids=set(self._screen._detail_combos.keys()),
+            header_person_group_id=self._screen._counterparty_person_group_id(),
         )
         if dialog.exec() == QDialog.Accepted:
             self.details = dialog.result_data()
@@ -1001,6 +1027,23 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
     def _counterparty_label(self) -> str:
         detail_account_id = self.account_combo.currentData()
         return next((label for oid, label in self.account_options if oid == detail_account_id), "")
+
+    def _counterparty_person_group_id(self) -> int | None:
+        """طبقِ گزارشِ صریح: طرفِ‌حسابِ هدر (که همیشه یک تفصیلیِ اشخاص است)
+        اگر خودش عضوِ همان گروهی باشد که معینِ یک ردیف الزامی‌اش کرده،
+        دیگر نباید دوباره از کاربر پرسیده شود — این تابع همان گروهِ
+        طرفِ‌حسابِ فعلی را برمی‌گرداند تا در _resolve_row_detail_source /
+        _resolve_supplementary_person_detail بررسی شود."""
+        if self.company_id is None:
+            return None
+        detail_account_id = self.account_combo.currentData()
+        if detail_account_id is None:
+            return None
+        person = next(
+            (p for p in dimensions_service.list_active_persons(self.company_id) if p.detail_account_id == detail_account_id),
+            None,
+        )
+        return person.person_group_id if person is not None else None
 
     def _build_counterparty_options(self) -> list[tuple[int, str]]:
         """طبقِ درخواستِ صریح: فقط تفصیلی‌هایِ گروه‌هایی که در «انواعِ سندِ

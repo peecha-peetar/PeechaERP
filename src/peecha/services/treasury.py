@@ -530,7 +530,24 @@ def create_treasury_voucher(
     }
     shared_details = {k: v for k, v in counterparty_details.items() if k in shared_type_ids}
 
+    # طبقِ گزارشِ صریح: اگر معینِ نگاشته‌شده‌یِ یک روش هم به همان گروهِ
+    # شخصی محدود باشد که طرفِ‌حسابِ هدر از آن انتخاب شده (مثلاً هم طرفِ‌حساب
+    # هم چکِ پرداخت هردو «تامین‌کننده» می‌خواهند)، تکرارِ همان انتخاب در
+    # ردیف معنی ندارد — همان تفصیلیِ هدر خودکار اعمال می‌شود. اگر روش به
+    # گروهِ دیگری محدود باشد (مثلاً تهاتر با تامین‌کننده در حالی که
+    # طرفِ‌حساب مشتری است)، همچنان جداگانه پرسیده می‌شود.
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    counterparty_person_detail_id = counterparty_details.get(person_dimension_type_id)
+
     with new_session() as session:
+        counterparty_person_group_id = None
+        if counterparty_person_detail_id is not None:
+            counterparty_person_group_id = session.scalar(
+                select(DetailAccount.person_group_id).where(
+                    DetailAccount.detail_account_id == counterparty_person_detail_id
+                )
+            )
+
         detail_ids = {ml.detail_account_id for ml in method_lines if ml.detail_account_id is not None}
         detail_ids |= {ml.person_detail_account_id for ml in method_lines if ml.person_detail_account_id is not None}
         dimension_type_by_detail_id: dict[int, int] = {}
@@ -593,6 +610,12 @@ def create_treasury_voucher(
             mapping_key = f"{direction}_{ml.method}"
             account_id = _get_mapped_account_id(session, company_id, mapping_key)
             details: dict[int, int] = dict(shared_details)
+            if counterparty_person_group_id is not None:
+                required_person_group_ids = {
+                    g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)
+                }
+                if counterparty_person_group_id in required_person_group_ids:
+                    details[person_dimension_type_id] = counterparty_person_detail_id
             if ml.detail_account_id is not None:
                 dimension_type_id = dimension_type_by_detail_id.get(ml.detail_account_id)
                 if dimension_type_id is not None:
