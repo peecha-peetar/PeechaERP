@@ -37,10 +37,13 @@ MAPPING_KEYS = [
     "RECEIPT_BANK",
     "RECEIPT_CHECK",
     "RECEIPT_DISCOUNT",
+    "RECEIPT_NETTING",
     "PAYMENT_CASH",
     "PAYMENT_BANK",
     "PAYMENT_CHECK",
     "PAYMENT_DISCOUNT",
+    "PAYMENT_CHECK_DISBURSEMENT",
+    "PAYMENT_NETTING",
 ]
 
 MAPPING_LABELS: dict[str, str] = {
@@ -48,13 +51,16 @@ MAPPING_LABELS: dict[str, str] = {
     "RECEIPT_BANK": "دریافتِ بانکی",
     "RECEIPT_CHECK": "چک‌هایِ دریافتنی (در جریانِ وصول)",
     "RECEIPT_DISCOUNT": "تخفیفاتِ نقدیِ داده‌شده",
+    "RECEIPT_NETTING": "تهاترِ دریافت",
     "PAYMENT_CASH": "پرداختِ نقدی",
     "PAYMENT_BANK": "پرداختِ بانکی",
     "PAYMENT_CHECK": "چک‌هایِ پرداختنی",
     "PAYMENT_DISCOUNT": "تخفیفاتِ نقدیِ دریافت‌شده",
+    "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
+    "PAYMENT_NETTING": "تهاترِ پرداخت",
 }
 
-METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT")
+METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT")
 
 
 # --- تنظیماتِ نگاشتِ حساب‌ها -------------------------------------------------
@@ -342,6 +348,7 @@ class MethodLine:
     check_due_date: datetime.date | None = None
     check_party_name: str | None = None
     checkbook_id: int | None = None  # فقط پرداختِ چک، اگر از یک دسته‌چک صادر می‌شود
+    received_check_id: int | None = None  # فقط CHECK_DISBURSEMENT — کدام چکِ دریافتیِ نزدِ صندوق خرج می‌شود
 
 
 def create_treasury_voucher(
@@ -404,6 +411,20 @@ def create_treasury_voucher(
                     dimension_type_by_detail_id[bank_detail_id] = session.scalar(
                         select(DetailAccount.dimension_type_id).where(DetailAccount.detail_account_id == bank_detail_id)
                     )
+        # اعتبارسنجیِ چکِ خرج‌شونده (CHECK_DISBURSEMENT) هم باید همین‌جا،
+        # پیش از ساختِ سند، انجام شود — نه بعد از آن.
+        for ml in method_lines:
+            if ml.method != "CHECK_DISBURSEMENT":
+                continue
+            if ml.received_check_id is None:
+                raise ValueError("چکِ دریافتی‌ای که خرج می‌شود را انتخاب کنید.")
+            check = session.get(ReceivedCheck, ml.received_check_id)
+            if check is None or check.company_id != company_id:
+                raise ValueError("چکِ دریافتیِ انتخاب‌شده نامعتبر است.")
+            current_code = session.scalar(select(CheckStatus.code).where(CheckStatus.status_id == check.status_id))
+            if current_code not in ("IN_HAND", "DEPOSITED"):
+                raise ValueError(f"چکِ شماره‌ی {check.check_no} دیگر قابلِ خرج‌کردن نیست.")
+
         # طبقِ همین دلیل، commit این تخصیص‌ها پیش از ساختِ خودِ سند انجام
         # می‌شود (create_journal_entry خودش new_session جداگانه باز می‌کند)
         # — در صورتِ خطایِ بعدی، شماره‌یِ چک مصرف‌شده باقی می‌ماند، دقیقاً
@@ -452,6 +473,17 @@ def create_treasury_voucher(
         alternative_number=alternative_number,
         entry_type_code=direction,
     )
+
+    with new_session() as session:
+        for ml in method_lines:
+            if ml.method != "CHECK_DISBURSEMENT" or ml.received_check_id is None:
+                continue
+            check = session.get(ReceivedCheck, ml.received_check_id)
+            status = session.scalar(
+                select(CheckStatus).where(CheckStatus.code == "ENDORSED", CheckStatus.applies_to == "RECEIVED")
+            )
+            check.status_id = status.status_id
+        session.commit()
 
     with new_session() as session:
         for index, ml in enumerate(method_lines):

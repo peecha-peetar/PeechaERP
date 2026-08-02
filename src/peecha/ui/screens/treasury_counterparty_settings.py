@@ -108,7 +108,16 @@ class _MethodMappingRow(QWidget):
         layout.addWidget(save_button)
 
 
-_RECEIPT_METHOD_KEYS = ["RECEIPT_CASH", "RECEIPT_CHECK", "RECEIPT_DISCOUNT"]
+_RECEIPT_METHOD_KEYS = ["RECEIPT_CASH", "RECEIPT_BANK", "RECEIPT_CHECK", "RECEIPT_DISCOUNT", "RECEIPT_NETTING"]
+_PAYMENT_METHOD_KEYS = [
+    "PAYMENT_CASH",
+    "PAYMENT_BANK",
+    "PAYMENT_CHECK",
+    "PAYMENT_DISCOUNT",
+    "PAYMENT_CHECK_DISBURSEMENT",
+    "PAYMENT_NETTING",
+]
+_METHOD_KEYS_BY_DIRECTION = {"RECEIPT": _RECEIPT_METHOD_KEYS, "PAYMENT": _PAYMENT_METHOD_KEYS}
 
 
 class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
@@ -117,7 +126,8 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         self.company_id: int | None = None
         self._forms: dict[str, _MappingForm] = {}
         self._tables: dict[str, QTableWidget] = {}
-        self._method_mapping_rows: list[_MethodMappingRow] = []
+        self._method_mapping_containers: dict[str, QVBoxLayout] = {}
+        self._method_mapping_rows: dict[str, list[_MethodMappingRow]] = {"RECEIPT": [], "PAYMENT": []}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -175,28 +185,38 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             help_fields.append((form, hint))
             help_fields.append((table, "برایِ حذفِ یک ردیف، رویِ آن دابل‌کلیک کنید."))
 
-        # --- روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/چک/تخفیف) ------------------
-        # طبقِ درخواستِ صریح: طرفِ بدهکارِ همین ردیف‌ها هم این‌جا تعریف شود.
-        method_card = QWidget()
-        method_card.setObjectName("card")
-        method_card_layout = QVBoxLayout(method_card)
-        method_card_layout.setContentsMargins(12, 10, 12, 10)
-        method_card_layout.setSpacing(4)
-
-        method_title = QLabel("روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/چک/تخفیف)")
-        method_title.setObjectName("sectionHint")
-        method_card_layout.addWidget(method_title)
-
-        self.method_mapping_container = QVBoxLayout()
-        self.method_mapping_container.setSpacing(2)
-        method_card_layout.addLayout(self.method_mapping_container)
-        layout.addWidget(method_card)
-        help_fields.append(
+        # --- روش‌هایِ ردیفِ پایینِ سندِ دریافت/پرداخت ---------------------------
+        # طبقِ درخواستِ صریح: طرفِ بستانکارِ ردیف‌هایِ دریافت (نقد/بانک/چک/
+        # تخفیف/تهاتر) و طرفِ بدهکارِ ردیف‌هایِ پرداخت (همان‌ها + پرداخت با
+        # چکِ دریافتی) هم این‌جا تعریف شوند.
+        for direction, method_card_title, method_hint in (
             (
-                method_card,
-                "معینِ سمتِ بدهکارِ ردیف‌هایِ روشِ سندِ دریافت — نقدی، چکِ دریافتنی (در جریانِ وصول)، و تخفیفاتِ نقدیِ داده‌شده.",
-            )
-        )
+                "RECEIPT",
+                "روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/بانک/چک/تخفیف/تهاتر)",
+                "معینِ سمتِ بستانکارِ ردیف‌هایِ روشِ سندِ دریافت.",
+            ),
+            (
+                "PAYMENT",
+                "روش‌هایِ ردیفِ پایینِ سندِ پرداخت (نقد/بانک/چک/تخفیف/خرجِ چک/تهاتر)",
+                "معینِ سمتِ بدهکارِ ردیف‌هایِ روشِ سندِ پرداخت.",
+            ),
+        ):
+            method_card = QWidget()
+            method_card.setObjectName("card")
+            method_card_layout = QVBoxLayout(method_card)
+            method_card_layout.setContentsMargins(12, 10, 12, 10)
+            method_card_layout.setSpacing(4)
+
+            method_title = QLabel(method_card_title)
+            method_title.setObjectName("sectionHint")
+            method_card_layout.addWidget(method_title)
+
+            container = QVBoxLayout()
+            container.setSpacing(2)
+            method_card_layout.addLayout(container)
+            layout.addWidget(method_card)
+            self._method_mapping_containers[direction] = container
+            help_fields.append((method_card, method_hint))
 
         self.set_field_help(help_fields)
 
@@ -225,22 +245,19 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             form.set_options(group_options, account_options)
             self.refresh_mappings(direction)
 
-        while self.method_mapping_container.count():
-            child = self.method_mapping_container.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        self._method_mapping_rows = []
-        method_mappings_by_key = {
-            m.mapping_key: m.account_id
-            for m in treasury_service.list_account_mappings(company_id)
-            if m.mapping_key in _RECEIPT_METHOD_KEYS
-        }
-        for key in _RECEIPT_METHOD_KEYS:
-            row = _MethodMappingRow(
-                key, treasury_service.MAPPING_LABELS[key], method_mappings_by_key.get(key), account_options, self._save_method_mapping
-            )
-            self.method_mapping_container.addWidget(row)
-            self._method_mapping_rows.append(row)
+        method_mappings_by_key = {m.mapping_key: m.account_id for m in treasury_service.list_account_mappings(company_id)}
+        for direction, container in self._method_mapping_containers.items():
+            while container.count():
+                child = container.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            self._method_mapping_rows[direction] = []
+            for key in _METHOD_KEYS_BY_DIRECTION[direction]:
+                row = _MethodMappingRow(
+                    key, treasury_service.MAPPING_LABELS[key], method_mappings_by_key.get(key), account_options, self._save_method_mapping
+                )
+                container.addWidget(row)
+                self._method_mapping_rows[direction].append(row)
 
     def _save_method_mapping(self, mapping_key: str, account_id) -> None:
         if self.company_id is None or account_id is None:

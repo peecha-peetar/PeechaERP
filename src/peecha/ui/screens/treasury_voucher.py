@@ -35,8 +35,19 @@ from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
-_METHOD_LABELS = {"CASH": "نقدی", "BANK": "بانکی", "CHECK": "چک", "DISCOUNT": "تخفیف"}
-_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT"]
+_METHOD_LABELS = {
+    "CASH": "نقدی",
+    "BANK": "بانکی",
+    "CHECK": "چک",
+    "DISCOUNT": "تخفیف",
+    "NETTING": "تهاتر",
+    "CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
+}
+_RECEIPT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "NETTING"]
+_PAYMENT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "CHECK_DISBURSEMENT", "NETTING"]
+# طبقِ درخواستِ صریح: این دو روش (تخفیف/تهاتر) نیازِ به دیالوگِ جزئیات
+# ندارند — فقط مبلغ + شرح، مثلِ همان رفتارِ قبلیِ تخفیف.
+_METHODS_WITHOUT_DETAILS = ("DISCOUNT", "NETTING")
 
 
 class _MethodDetailsDialog(QDialog):
@@ -54,6 +65,7 @@ class _MethodDetailsDialog(QDialog):
         self.check_bank_field: QLineEdit | None = None
         self.check_due_field: JalaliDateEdit | None = None
         self.check_party_field: QLineEdit | None = None
+        self.received_check_combo: QComboBox | None = None
 
         if method in ("CASH", "BANK"):
             dimension_code = dimensions_service.CASH_BOX_CODE if method == "CASH" else dimensions_service.BANK_ACCOUNT_CODE
@@ -104,6 +116,20 @@ class _MethodDetailsDialog(QDialog):
             layout.addRow("سررسید", self.check_due_field)
             self.check_party_field = QLineEdit(current.get("check_party_name") or "")
             layout.addRow("نامِ طرف", self.check_party_field)
+        elif method == "CHECK_DISBURSEMENT":
+            self.received_check_combo = QComboBox()
+            eligible_checks = treasury_service.list_received_checks(company_id, status_codes=["IN_HAND", "DEPOSITED"])
+            for c in eligible_checks:
+                label = f"چک {c.check_no} — {numerals.to_persian_digits(str(c.amount))} — سررسید {numerals.format_jalali_date(c.due_date)}"
+                self.received_check_combo.addItem(label, (c.received_check_id, c.amount))
+            if current.get("received_check_id") is not None:
+                index = next(
+                    (i for i in range(self.received_check_combo.count()) if self.received_check_combo.itemData(i)[0] == current["received_check_id"]),
+                    -1,
+                )
+                if index >= 0:
+                    self.received_check_combo.setCurrentIndex(index)
+            layout.addRow("چکِ دریافتیِ خرج‌شونده", self.received_check_combo)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -124,6 +150,10 @@ class _MethodDetailsDialog(QDialog):
             data["check_due_date"] = self.check_due_field.date()
         if self.check_party_field is not None:
             data["check_party_name"] = self.check_party_field.text().strip()
+        if self.received_check_combo is not None and self.received_check_combo.currentData() is not None:
+            received_check_id, amount = self.received_check_combo.currentData()
+            data["received_check_id"] = received_check_id
+            data["check_amount"] = amount
         return data
 
 
@@ -133,7 +163,8 @@ class _MethodRow:
         self.details: dict = {}
 
         self.method_combo = QComboBox()
-        for code in _METHOD_CODES:
+        method_codes = _RECEIPT_METHOD_CODES if screen.direction == "RECEIPT" else _PAYMENT_METHOD_CODES
+        for code in method_codes:
             self.method_combo.addItem(_METHOD_LABELS[code], code)
 
         self.amount_field = _AmountField()
@@ -151,11 +182,13 @@ class _MethodRow:
 
     def _open_details(self) -> None:
         method = self.method_combo.currentData()
-        if method == "DISCOUNT" or self._screen.company_id is None:
+        if method in _METHODS_WITHOUT_DETAILS or self._screen.company_id is None:
             return
         dialog = _MethodDetailsDialog(self._screen.direction, method, self._screen.company_id, self.details, self._screen)
         if dialog.exec() == QDialog.Accepted:
             self.details = dialog.result_data()
+            if method == "CHECK_DISBURSEMENT" and "check_amount" in self.details:
+                self.amount_field.setValue(float(self.details["check_amount"]))
 
     def to_method_line(self) -> treasury_service.MethodLine | None:
         method = self.method_combo.currentData()
@@ -181,6 +214,8 @@ class _MethodRow:
                 check_party_name=self.details.get("check_party_name"),
                 checkbook_id=self.details.get("checkbook_id"),
             )
+        elif method == "CHECK_DISBURSEMENT":
+            kwargs["received_check_id"] = self.details.get("received_check_id")
         return treasury_service.MethodLine(**kwargs)
 
 
