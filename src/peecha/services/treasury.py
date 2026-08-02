@@ -487,6 +487,12 @@ class MethodLine:
     # due_date، party_name، national_id، phone، amount. اگر پر باشد،
     # جایگزینِ فیلدهایِ تکیِ check_no/check_bank_name/... بالا می‌شود.
     checks: list[dict] | None = None
+    # فقط CHECK/CHECK_DISBURSEMENT — طبقِ باگ‌فیکسِ گزارش‌شده: این دو روش
+    # فیلدِ تخصصیِ خودشان را برایِ detail_account_id دارند (حسابِ بانکیِ
+    # صادرکننده / چکِ دریافتیِ خرج‌شونده)، پس اگر معینِ نگاشته‌شده‌یِ همان
+    # روش، جدا از آن، به یک گروهِ شخص هم محدود شده باشد (مثلاً «فقط
+    # مشتری/تامین‌کننده»)، این فیلدِ دومِ تفصیلی همان محدودیت را حمل می‌کند.
+    person_detail_account_id: int | None = None
 
 
 def create_treasury_voucher(
@@ -526,6 +532,7 @@ def create_treasury_voucher(
 
     with new_session() as session:
         detail_ids = {ml.detail_account_id for ml in method_lines if ml.detail_account_id is not None}
+        detail_ids |= {ml.person_detail_account_id for ml in method_lines if ml.person_detail_account_id is not None}
         dimension_type_by_detail_id: dict[int, int] = {}
         if detail_ids:
             dimension_type_by_detail_id = dict(
@@ -590,6 +597,10 @@ def create_treasury_voucher(
                 dimension_type_id = dimension_type_by_detail_id.get(ml.detail_account_id)
                 if dimension_type_id is not None:
                     details[dimension_type_id] = ml.detail_account_id
+            if ml.person_detail_account_id is not None:
+                person_dimension_type_id = dimension_type_by_detail_id.get(ml.person_detail_account_id)
+                if person_dimension_type_id is not None:
+                    details[person_dimension_type_id] = ml.person_detail_account_id
             line_debit = ml.amount if direction == "RECEIPT" else decimal.Decimal(0)
             line_credit = ml.amount if direction == "PAYMENT" else decimal.Decimal(0)
             lines.append(

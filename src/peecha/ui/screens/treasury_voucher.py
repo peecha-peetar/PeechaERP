@@ -163,6 +163,40 @@ def _resolve_row_detail_source(
     return account_id, None, " / ".join(labels), options
 
 
+def _resolve_supplementary_person_detail(
+    company_id: int, mapping_key: str
+) -> tuple[tuple[int, str] | None, str, list]:
+    """طبقِ گزارشِ صریح: روشِ چک (دریافت/پرداخت) و خرجِ چک، برخلافِ نقد/بانک/
+    تخفیف/کالابرگ/بن/تهاتر، فیلدِ تخصصیِ خودشان را دارند (چندچکیِ دریافتی،
+    حسابِ بانکیِ صادرکننده، چکِ دریافتیِ خرج‌شونده) و از _resolve_row_detail_source
+    استفاده نمی‌کنند — نتیجه این بود که اگر معینِ نگاشته‌شده‌یِ همان روش به
+    یک گروهِ شخص محدود شده بود (مثلاً «اسناد دریافتنی نزدِ صندوق» که فقط
+    مشتری/تامین‌کننده مجازند)، این محدودیت هیچ‌جا خوانده نمی‌شد و ثبتِ سند
+    با خطایِ «انتخابِ یک تفصیلیِ اشخاص از گروهِ مجاز الزامی است» رد می‌شد.
+    این تابع، مستقل از فیلدهایِ تخصصیِ همان دیالوگ‌ها، فقط همین محدودیتِ
+    گروهِ شخص را (اگر باشد) به‌عنوانِ یک فیلدِ *تکمیلی* برمی‌گرداند — برخلافِ
+    _resolve_row_detail_source، اگر هیچ گروهِ شخصی الزامی نباشد چیزی
+    پیشنهاد نمی‌دهد (فهرستِ آزاد این‌جا معنا ندارد، چون این فیلدِ اصلیِ
+    ردیف نیست)."""
+    account_id, preset_detail_id = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
+    if account_id is None:
+        return None, "", []
+    person_group_ids = [
+        g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)
+    ]
+    if not person_group_ids:
+        return None, "", []
+    if preset_detail_id is not None:
+        preset_row = next(
+            (p for p in dimensions_service.list_active_persons(company_id) if p.detail_account_id == preset_detail_id),
+            None,
+        )
+        preset_label = (preset_row.name or preset_row.full_code) if preset_row is not None else ""
+        return (preset_detail_id, preset_label), "", []
+    persons = [p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in person_group_ids]
+    return None, "تفصیلیِ اشخاص", persons
+
+
 class _MethodDetailsDialog(QDialog):
     """جزئیاتِ مخصوصِ روشِ انتخاب‌شده‌یِ یک ردیف — نقد/بانک/تخفیف/کالابرگ:
     تفصیلیِ سطحِ آخرِ حسابِ معینِ نگاشته‌شده؛ چک (پرداخت): شماره/بانک/
@@ -192,6 +226,9 @@ class _MethodDetailsDialog(QDialog):
         self.received_check_combo: QComboBox | None = None
         self.voucher_serial_field: QLineEdit | None = None
         self.voucher_detail_field: QLineEdit | None = None
+        self.person_detail_combo: QComboBox | None = None
+        self.preset_person_detail_id: int | None = None
+        self.preset_person_detail_label: str = ""
 
         if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING"):
             mapping_key = f"{direction}_{method}"
@@ -274,6 +311,30 @@ class _MethodDetailsDialog(QDialog):
                     self.received_check_combo.setCurrentIndex(index)
             layout.addRow("چکِ دریافتیِ خرج‌شونده", self.received_check_combo)
 
+        if method in ("CHECK", "CHECK_DISBURSEMENT"):
+            # طبقِ گزارشِ صریح: این دو روش فیلدِ تخصصیِ خودشان را دارند
+            # (حسابِ بانکیِ صادرکننده / چکِ خرج‌شونده) که تفصیلیِ اصلیِ
+            # ردیف است — اما اگر معینِ نگاشته‌شده‌یِ همین روش، جدا از آن،
+            # به یک گروهِ شخص هم محدود شده باشد (مثلاً «فقط تامین‌کننده»)،
+            # این محدودیت باید همین‌جا هم به‌عنوانِ یک فیلدِ تکمیلی
+            # پرسیده شود؛ وگرنه ثبتِ سند در همان اعتبارسنجیِ نهاییِ
+            # journal_entries رد می‌شود، بدونِ این‌که کاربر جایی برایِ
+            # واردکردنش داشته باشد.
+            preset, person_label, persons = _resolve_supplementary_person_detail(
+                company_id, f"{direction}_{method}"
+            )
+            if preset is not None:
+                self.preset_person_detail_id, self.preset_person_detail_label = preset
+            elif persons:
+                self.person_detail_combo = _make_searchable_combo(
+                    [(p.detail_account_id, p.name or p.full_code or p.code) for p in persons]
+                )
+                if current.get("person_detail_account_id") is not None:
+                    index = self.person_detail_combo.findData(current["person_detail_account_id"])
+                    if index >= 0:
+                        self.person_detail_combo.setCurrentIndex(index)
+                layout.addRow(person_label or "تفصیلیِ اشخاص", self.person_detail_combo)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("تایید")
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
@@ -326,6 +387,12 @@ class _MethodDetailsDialog(QDialog):
             data["voucher_serial"] = self.voucher_serial_field.text().strip()
         if self.voucher_detail_field is not None:
             data["voucher_detail"] = self.voucher_detail_field.text().strip()
+        if self.preset_person_detail_id is not None:
+            data["person_detail_account_id"] = self.preset_person_detail_id
+            data["person_detail_account_label"] = self.preset_person_detail_label
+        elif self.person_detail_combo is not None:
+            data["person_detail_account_id"] = self.person_detail_combo.currentData()
+            data["person_detail_account_label"] = self.person_detail_combo.currentText()
         return data
 
 
@@ -337,13 +404,43 @@ class _CheckEntryDialog(QDialog):
     شماره/شبا/بانک/شماره‌حساب/مبلغ/نامِ صاحبِ‌حساب/کدِملی/تلفن؛ با «تایید»
     جمعِ مبلغِ همه‌یِ چک‌ها به ردیف منتقل می‌شود."""
 
-    def __init__(self, company_id: int, current_checks: list[dict], parent=None) -> None:
+    def __init__(
+        self,
+        company_id: int,
+        current_checks: list[dict],
+        parent=None,
+        mapping_key: str = "RECEIPT_CHECK",
+        current_person_detail_id: int | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("چک‌هایِ دریافتی")
         self.setMinimumWidth(620)
         self._checks: list[dict] = list(current_checks or [])
 
         outer = QVBoxLayout(self)
+
+        # طبقِ باگ‌فیکسِ گزارش‌شده: اگر معینِ نگاشته‌شده‌یِ همین روش (مثلاً
+        # «اسناد دریافتنی نزدِ صندوق») به یک گروهِ شخص محدود شده باشد
+        # (فقط مشتری/تامین‌کننده)، این محدودیت باید همین‌جا هم پرسیده شود
+        # — وگرنه ثبتِ سند در اعتبارسنجیِ نهایی رد می‌شود بدونِ این‌که
+        # کاربر جایی برایِ واردکردنش داشته باشد.
+        self.person_detail_combo: QComboBox | None = None
+        self.preset_person_detail_id: int | None = None
+        self.preset_person_detail_label: str = ""
+        preset, person_label, persons = _resolve_supplementary_person_detail(company_id, mapping_key)
+        if preset is not None:
+            self.preset_person_detail_id, self.preset_person_detail_label = preset
+        elif persons:
+            person_form = QFormLayout()
+            self.person_detail_combo = _make_searchable_combo(
+                [(p.detail_account_id, p.name or p.full_code or p.code) for p in persons]
+            )
+            if current_person_detail_id is not None:
+                index = self.person_detail_combo.findData(current_person_detail_id)
+                if index >= 0:
+                    self.person_detail_combo.setCurrentIndex(index)
+            person_form.addRow(person_label or "تفصیلیِ اشخاص", self.person_detail_combo)
+            outer.addLayout(person_form)
 
         form = QGridLayout()
         form.setSpacing(6)
@@ -511,6 +608,20 @@ class _CheckEntryDialog(QDialog):
     def result_checks(self) -> list[dict]:
         return list(self._checks)
 
+    def result_person_detail_account_id(self) -> int | None:
+        if self.preset_person_detail_id is not None:
+            return self.preset_person_detail_id
+        if self.person_detail_combo is not None:
+            return self.person_detail_combo.currentData()
+        return None
+
+    def result_person_detail_label(self) -> str:
+        if self.preset_person_detail_id is not None:
+            return self.preset_person_detail_label
+        if self.person_detail_combo is not None:
+            return self.person_detail_combo.currentText()
+        return ""
+
 
 class _MethodRow:
     def __init__(self, screen: "TreasuryVoucherScreen") -> None:
@@ -556,10 +667,20 @@ class _MethodRow:
             self.amount_field.setFocus()
             return
         if method == "CHECK" and self._screen.direction == "RECEIPT":
-            dialog = _CheckEntryDialog(self._screen.company_id, self.details.get("checks") or [], self._screen)
+            dialog = _CheckEntryDialog(
+                self._screen.company_id,
+                self.details.get("checks") or [],
+                self._screen,
+                mapping_key=f"{self._screen.direction}_{method}",
+                current_person_detail_id=self.details.get("detail_account_id"),
+            )
             if dialog.exec() == QDialog.Accepted:
                 checks = dialog.result_checks()
-                self.details = {"checks": checks}
+                self.details = {
+                    "checks": checks,
+                    "detail_account_id": dialog.result_person_detail_account_id(),
+                    "detail_account_label": dialog.result_person_detail_label(),
+                }
                 total = sum((c["amount"] for c in checks), decimal.Decimal(0))
                 self.amount_field.setValue(float(total))
                 self._regenerate_description()
@@ -655,8 +776,16 @@ class _MethodRow:
         if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING"):
             kwargs["detail_account_id"] = self.details.get("detail_account_id")
         elif method == "CHECK":
+            kwargs["person_detail_account_id"] = self.details.get("person_detail_account_id")
             if "checks" in self.details:
                 kwargs["checks"] = self.details["checks"]
+                # طبقِ باگ‌فیکسِ گزارش‌شده: دیالوگِ چندچکیِ دریافتی
+                # (_CheckEntryDialog) تفصیلیِ گروهِ شخصیِ الزامیِ معینِ
+                # نگاشته‌شده را جداگانه در همان کلیدِ detail_account_id
+                # برمی‌گرداند (نه person_detail_account_id) چون این ردیف
+                # فیلدِ اصلیِ دیگری برایِ آن ندارد.
+                if kwargs["person_detail_account_id"] is None:
+                    kwargs["person_detail_account_id"] = self.details.get("detail_account_id")
             else:
                 kwargs.update(
                     detail_account_id=self.details.get("detail_account_id"),
@@ -668,6 +797,7 @@ class _MethodRow:
                 )
         elif method == "CHECK_DISBURSEMENT":
             kwargs["received_check_id"] = self.details.get("received_check_id")
+            kwargs["person_detail_account_id"] = self.details.get("person_detail_account_id")
         return treasury_service.MethodLine(**kwargs)
 
 
