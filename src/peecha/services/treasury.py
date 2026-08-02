@@ -13,7 +13,6 @@ from sqlalchemy import select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
-    AccountDetailDimension,
     ChartOfAccount,
     DetailAccount,
     JournalEntryLine,
@@ -209,39 +208,11 @@ def _allocate_check_no(session, checkbook_id: int, company_id: int) -> tuple[str
     return str(allocated), checkbook.bank_account_detail_id
 
 
-_SETTLEMENT_DIMENSION_CODES = (
-    dimensions_service.CASH_BOX_CODE,
-    dimensions_service.BANK_ACCOUNT_CODE,
-    dimensions_service.PETTY_CASH_CODE,
-)
 # طبقِ درخواستِ صریح: مرکزِ هزینه/پروژه (اگر رویِ حسابِ طرف‌حساب الزامی
 # باشند) باید بینِ همه‌ی ردیف‌هایِ یک سند مشترک باشند — نه فقط ردیفِ
 # طرف‌حساب — چون این دو نوع‌بُعد ویژگیِ خودِ رویدادِ مالی‌اند (این تراکنش
 # مربوط به کدام مرکزِ هزینه/پروژه است)، نه ویژگیِ یک طرفِ حسابِ خاص.
 _SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
-
-
-def list_counterparty_account_options(company_id: int) -> list[tuple[int, str]]:
-    """حساب‌هایِ قابلِ‌انتخاب به‌عنوانِ «طرفِ حساب» در فرمِ دریافت/پرداخت —
-    طبقِ گزارشِ صریح: معین‌هایی که تفصیلیِ الزامی‌شان صندوق/بانک/تنخواه
-    است اصلاً نباید این‌جا نمایش داده شوند، چون خودشان از طریقِ ردیف‌هایِ
-    روش (نقد/بانک) مدیریت می‌شوند، نه به‌عنوانِ طرفِ حساب."""
-    excluded_type_ids = {
-        dimensions_service.get_specialized_dimension_type_id(company_id, code) for code in _SETTLEMENT_DIMENSION_CODES
-    }
-    with new_session() as session:
-        excluded_account_ids = set(
-            session.scalars(
-                select(AccountDetailDimension.account_id).where(
-                    AccountDetailDimension.dimension_type_id.in_(excluded_type_ids)
-                )
-            ).all()
-        )
-    return [
-        (a.account_id, f"{a.full_code} — {a.name}")
-        for a in coa_service.list_postable_accounts(company_id)
-        if a.account_id not in excluded_account_ids
-    ]
 
 
 # --- نگاشتِ نوعِ تفصیلی <-> معین (دریافت/پرداخت) ------------------------------
