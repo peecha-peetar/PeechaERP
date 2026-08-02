@@ -480,7 +480,11 @@ class MethodLine:
     check_due_date: datetime.date | None = None
     check_party_name: str | None = None
     checkbook_id: int | None = None  # فقط پرداختِ چک، اگر از یک دسته‌چک صادر می‌شود
-    received_check_id: int | None = None  # فقط CHECK_DISBURSEMENT — کدام چکِ دریافتیِ نزدِ صندوق خرج می‌شود
+    received_check_id: int | None = None  # فقط CHECK_DISBURSEMENT — کدام چکِ دریافتیِ نزدِ صندوق خرج می‌شود (تک‌چکی، برایِ سازگاری با فرمِ قدیمی)
+    # فقط CHECK_DISBURSEMENT — طبقِ درخواستِ صریح: یک ردیفِ خرجِ چک هم
+    # می‌تواند چند چکِ دریافتی را هم‌زمان خرج کند. اگر پر باشد، جایگزینِ
+    # received_check_id تکی بالا می‌شود.
+    received_check_ids: list[int] | None = None
     # فقط CHECK در دریافت — طبقِ درخواستِ صریح، یک ردیف می‌تواند چند چکِ
     # دریافتی را هم‌زمان دربرگیرد؛ هرکدام یک دیکشنری با کلیدهایِ check_no،
     # check_serial، bank_id، check_bank_name، iban، bank_account_no،
@@ -565,7 +569,13 @@ def create_treasury_voucher(
         # دسته‌چک، حسابِ تفصیلیِ ردیفِ چک هم می‌شود (details لازمش دارد).
         allocated_check_nos: dict[int, str] = {}
         for index, ml in enumerate(method_lines):
-            if ml.method == "CHECK" and direction == "PAYMENT" and ml.checkbook_id is not None:
+            # طبقِ درخواستِ صریح: یک ردیفِ چکِ پرداختی هم می‌تواند چند چک را
+            # هم‌زمان دربرگیرد (ml.checks) — در این حالت حسابِ بانکیِ
+            # صادرکننده همیشه صریحاً در خودِ دیالوگ انتخاب می‌شود (نه فقط
+            # از رویِ دسته‌چک)، پس این تخصیصِ زودهنگام فقط برایِ حالتِ
+            # قدیمیِ تک‌چکی لازم است — شماره‌هایِ چندچکی جداگانه، در حلقه‌ی
+            # ساختِ IssuedCheckها پایین‌تر، تخصیص می‌یابند.
+            if ml.method == "CHECK" and direction == "PAYMENT" and ml.checkbook_id is not None and not ml.checks:
                 check_no, bank_detail_id = _allocate_check_no(session, ml.checkbook_id, company_id)
                 allocated_check_nos[index] = check_no
                 if ml.detail_account_id is None:
@@ -578,14 +588,16 @@ def create_treasury_voucher(
         for ml in method_lines:
             if ml.method != "CHECK_DISBURSEMENT":
                 continue
-            if ml.received_check_id is None:
+            check_ids = ml.received_check_ids or ([ml.received_check_id] if ml.received_check_id is not None else [])
+            if not check_ids:
                 raise ValueError("چکِ دریافتی‌ای که خرج می‌شود را انتخاب کنید.")
-            check = session.get(ReceivedCheck, ml.received_check_id)
-            if check is None or check.company_id != company_id:
-                raise ValueError("چکِ دریافتیِ انتخاب‌شده نامعتبر است.")
-            current_code = session.scalar(select(CheckStatus.code).where(CheckStatus.status_id == check.status_id))
-            if current_code not in ("IN_HAND", "DEPOSITED"):
-                raise ValueError(f"چکِ شماره‌ی {check.check_no} دیگر قابلِ خرج‌کردن نیست.")
+            for received_check_id in check_ids:
+                check = session.get(ReceivedCheck, received_check_id)
+                if check is None or check.company_id != company_id:
+                    raise ValueError("چکِ دریافتیِ انتخاب‌شده نامعتبر است.")
+                current_code = session.scalar(select(CheckStatus.code).where(CheckStatus.status_id == check.status_id))
+                if current_code not in ("IN_HAND", "DEPOSITED"):
+                    raise ValueError(f"چکِ شماره‌ی {check.check_no} دیگر قابلِ خرج‌کردن نیست.")
 
         # طبقِ همین دلیل، commit این تخصیص‌ها پیش از ساختِ خودِ سند انجام
         # می‌شود (create_journal_entry خودش new_session جداگانه باز می‌کند)
@@ -647,14 +659,16 @@ def create_treasury_voucher(
     )
 
     with new_session() as session:
+        status = session.scalar(
+            select(CheckStatus).where(CheckStatus.code == "ENDORSED", CheckStatus.applies_to == "RECEIVED")
+        )
         for ml in method_lines:
-            if ml.method != "CHECK_DISBURSEMENT" or ml.received_check_id is None:
+            if ml.method != "CHECK_DISBURSEMENT":
                 continue
-            check = session.get(ReceivedCheck, ml.received_check_id)
-            status = session.scalar(
-                select(CheckStatus).where(CheckStatus.code == "ENDORSED", CheckStatus.applies_to == "RECEIVED")
-            )
-            check.status_id = status.status_id
+            check_ids = ml.received_check_ids or ([ml.received_check_id] if ml.received_check_id is not None else [])
+            for received_check_id in check_ids:
+                check = session.get(ReceivedCheck, received_check_id)
+                check.status_id = status.status_id
         session.commit()
 
     with new_session() as session:
@@ -700,26 +714,46 @@ def create_treasury_voucher(
                         )
                     )
             else:
-                check_no = allocated_check_nos.get(index, ml.check_no or "")
+                # طبقِ درخواستِ صریح: یک ردیفِ چکِ پرداختی هم می‌تواند چند
+                # چکِ جداگانه را دربرگیرد (ml.checks) — اگر پر نباشد، برایِ
+                # سازگاری با فرمِ قدیمی، همان یک چکِ تکیِ ml خودش ثبت می‌شود.
                 status = session.scalar(
                     select(CheckStatus).where(CheckStatus.code == "ISSUED", CheckStatus.applies_to == "ISSUED")
                 )
-                session.add(
-                    IssuedCheck(
-                        company_id=company_id,
-                        checkbook_id=ml.checkbook_id,
-                        check_no=check_no,
-                        bank_account_detail_id=ml.detail_account_id,
-                        payee_name=ml.check_party_name,
-                        amount=ml.amount,
-                        due_date=ml.check_due_date or document_date,
-                        issue_date=document_date,
-                        counterparty_detail_account_id=next(iter(counterparty_details.values()), None),
-                        status_id=status.status_id,
-                        source_journal_entry_id=result.journal_entry_id,
-                        created_by_user_id=created_by_user_id,
+                check_entries = ml.checks or [
+                    {
+                        "check_no": allocated_check_nos.get(index, ml.check_no or ""),
+                        "payee_name": ml.check_party_name,
+                        "amount": ml.amount,
+                        "due_date": ml.check_due_date,
+                    }
+                ]
+                for entry in check_entries:
+                    check_no = entry.get("check_no") or ""
+                    if not check_no and ml.checkbook_id is not None:
+                        check_no, _bank_detail_id = _allocate_check_no(session, ml.checkbook_id, company_id)
+                    session.add(
+                        IssuedCheck(
+                            company_id=company_id,
+                            checkbook_id=ml.checkbook_id,
+                            check_no=check_no,
+                            bank_account_detail_id=ml.detail_account_id,
+                            payee_name=entry.get("payee_name") or ml.check_party_name,
+                            amount=entry.get("amount") or ml.amount,
+                            due_date=entry.get("due_date") or ml.check_due_date or document_date,
+                            issue_date=document_date,
+                            counterparty_detail_account_id=next(iter(counterparty_details.values()), None),
+                            status_id=status.status_id,
+                            source_journal_entry_id=result.journal_entry_id,
+                            created_by_user_id=created_by_user_id,
+                            check_serial=entry.get("check_serial"),
+                            iban=entry.get("iban"),
+                            payee_account_no=entry.get("payee_account_no"),
+                            payee_national_id=entry.get("payee_national_id"),
+                            payee_phone=entry.get("payee_phone"),
+                            payee_bank_id=entry.get("payee_bank_id"),
+                        )
                     )
-                )
         session.commit()
 
     return result

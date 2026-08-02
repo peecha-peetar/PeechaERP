@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -214,8 +216,9 @@ def _resolve_supplementary_person_detail(
 
 class _MethodDetailsDialog(QDialog):
     """جزئیاتِ مخصوصِ روشِ انتخاب‌شده‌یِ یک ردیف — نقد/بانک/تخفیف/کالابرگ:
-    تفصیلیِ سطحِ آخرِ حسابِ معینِ نگاشته‌شده؛ چک (پرداخت): شماره/بانک/
-    سررسید/طرف (+دسته‌چک)؛ خرجِ چک: کدام چکِ دریافتی؛ بن: سریال+مشخصات."""
+    تفصیلیِ سطحِ آخرِ حسابِ معینِ نگاشته‌شده؛ خرجِ چک: کدام چکِ دریافتی؛
+    بن: سریال+مشخصات. چک (هم دریافت هم پرداخت) دیگر این‌جا نیست — دیالوگِ
+    چندچکیِ _CheckEntryDialog هردو جهت را پوشش می‌دهد."""
 
     def __init__(
         self,
@@ -234,12 +237,7 @@ class _MethodDetailsDialog(QDialog):
         self.detail_combo: QComboBox | None = None
         self.preset_detail_id: int | None = None
         self.preset_detail_label: str = ""
-        self.checkbook_combo: QComboBox | None = None
-        self.check_no_field: QLineEdit | None = None
-        self.check_bank_field: QLineEdit | None = None
-        self.check_due_field: JalaliDateEdit | None = None
-        self.check_party_field: QLineEdit | None = None
-        self.received_check_combo: QComboBox | None = None
+        self.received_check_list: QListWidget | None = None
         self.voucher_serial_field: QLineEdit | None = None
         self.voucher_detail_field: QLineEdit | None = None
         self.person_detail_combo: QComboBox | None = None
@@ -273,69 +271,34 @@ class _MethodDetailsDialog(QDialog):
             self.voucher_detail_field.returnPressed.connect(self.accept)
         elif self.detail_combo is not None:
             self.detail_combo.lineEdit().returnPressed.connect(self.accept)
-        if method == "CHECK":
-            # طبقِ درخواستِ صریح: این دیالوگ فقط برایِ سمتِ پرداخت (صدورِ
-            # چکِ تازه از دسته‌چک) است — چکِ دریافتی از دیالوگِ چندچکیِ
-            # _CheckEntryDialog وارد می‌شود.
-            self.checkbook_combo = QComboBox()
-            self.checkbook_combo.addItem("(بدونِ دسته‌چک — شماره‌یِ دستی)", None)
-            for checkbook in treasury_service.list_checkbooks(company_id):
-                if checkbook.is_active and checkbook.next_no <= checkbook.end_no:
-                    self.checkbook_combo.addItem(
-                        f"{checkbook.bank_account_label} "
-                        f"({numerals.to_persian_digits(str(checkbook.next_no))}–{numerals.to_persian_digits(str(checkbook.end_no))})",
-                        checkbook.checkbook_id,
-                    )
-            if current.get("checkbook_id") is not None:
-                index = self.checkbook_combo.findData(current["checkbook_id"])
-                if index >= 0:
-                    self.checkbook_combo.setCurrentIndex(index)
-            layout.addRow("دسته‌چک", self.checkbook_combo)
-
-            bank_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.BANK_ACCOUNT_CODE)
-            options = dimensions_service.list_leaf_detail_accounts(company_id, bank_type_id)
-            self.detail_combo = QComboBox()
-            for option in options:
-                self.detail_combo.addItem(option.name or option.code, option.detail_account_id)
-            if current.get("detail_account_id") is not None:
-                index = self.detail_combo.findData(current["detail_account_id"])
-                if index >= 0:
-                    self.detail_combo.setCurrentIndex(index)
-            layout.addRow("حسابِ بانکیِ صادرکننده", self.detail_combo)
-
-            self.check_no_field = QLineEdit(current.get("check_no") or "")
-            layout.addRow("شماره‌یِ چک", self.check_no_field)
-            self.check_bank_field = QLineEdit(current.get("check_bank_name") or "")
-            layout.addRow("بانکِ چک", self.check_bank_field)
-            self.check_due_field = JalaliDateEdit("سررسید")
-            self.check_due_field.setDate(current.get("check_due_date") or datetime.date.today())
-            layout.addRow("سررسید", self.check_due_field)
-            self.check_party_field = QLineEdit(current.get("check_party_name") or "")
-            layout.addRow("نامِ طرف", self.check_party_field)
-        elif method == "CHECK_DISBURSEMENT":
-            self.received_check_combo = QComboBox()
+        if method == "CHECK_DISBURSEMENT":
+            # طبقِ درخواستِ صریح: «در موردِ خرج چک بتونیم چند چک انتخاب کنیم
+            # و خرج کنیم» — به‌جایِ کمبویِ تک‌انتخابیِ قبلی، فهرستِ چک‌مارک‌دارِ
+            # چندانتخابی؛ مبلغِ ردیف خودکار از جمعِ چک‌هایِ تیک‌خورده پر می‌شود.
+            self.received_check_list = QListWidget()
+            self.received_check_list.setSelectionMode(QListWidget.NoSelection)
             eligible_checks = treasury_service.list_received_checks(company_id, status_codes=["IN_HAND", "DEPOSITED"])
+            current_ids = set(
+                current.get("received_check_ids")
+                or ([current["received_check_id"]] if current.get("received_check_id") is not None else [])
+            )
             for c in eligible_checks:
                 label = f"چک {c.check_no} — {numerals.to_persian_digits(str(c.amount))} — سررسید {numerals.format_jalali_date(c.due_date)}"
-                self.received_check_combo.addItem(label, (c.received_check_id, c.amount))
-            if current.get("received_check_id") is not None:
-                index = next(
-                    (i for i in range(self.received_check_combo.count()) if self.received_check_combo.itemData(i)[0] == current["received_check_id"]),
-                    -1,
-                )
-                if index >= 0:
-                    self.received_check_combo.setCurrentIndex(index)
-            layout.addRow("چکِ دریافتیِ خرج‌شونده", self.received_check_combo)
+                item = QListWidgetItem(label)
+                item.setData(Qt.UserRole, (c.received_check_id, c.amount))
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked if c.received_check_id in current_ids else Qt.Unchecked)
+                self.received_check_list.addItem(item)
+            layout.addRow("چک‌هایِ دریافتیِ خرج‌شونده", self.received_check_list)
 
-        if method in ("CHECK", "CHECK_DISBURSEMENT"):
-            # طبقِ گزارشِ صریح: این دو روش فیلدِ تخصصیِ خودشان را دارند
-            # (حسابِ بانکیِ صادرکننده / چکِ خرج‌شونده) که تفصیلیِ اصلیِ
-            # ردیف است — اما اگر معینِ نگاشته‌شده‌یِ همین روش، جدا از آن،
-            # به یک گروهِ شخص هم محدود شده باشد (مثلاً «فقط تامین‌کننده»)،
-            # این محدودیت باید همین‌جا هم به‌عنوانِ یک فیلدِ تکمیلی
-            # پرسیده شود؛ وگرنه ثبتِ سند در همان اعتبارسنجیِ نهاییِ
-            # journal_entries رد می‌شود، بدونِ این‌که کاربر جایی برایِ
-            # واردکردنش داشته باشد.
+        if method == "CHECK_DISBURSEMENT":
+            # طبقِ گزارشِ صریح: خرجِ چک فیلدِ تخصصیِ خودش را دارد (چکِ
+            # دریافتیِ خرج‌شونده) که تفصیلیِ اصلیِ ردیف است — اما اگر معینِ
+            # نگاشته‌شده‌یِ همین روش، جدا از آن، به یک گروهِ شخص هم محدود
+            # شده باشد (مثلاً «فقط تامین‌کننده»)، این محدودیت باید همین‌جا
+            # هم به‌عنوانِ یک فیلدِ تکمیلی پرسیده شود؛ وگرنه ثبتِ سند در
+            # همان اعتبارسنجیِ نهاییِ journal_entries رد می‌شود، بدونِ
+            # این‌که کاربر جایی برایِ واردکردنش داشته باشد.
             preset, person_label, persons = _resolve_supplementary_person_detail(
                 company_id, f"{direction}_{method}", header_person_group_id
             )
@@ -385,20 +348,18 @@ class _MethodDetailsDialog(QDialog):
         elif self.detail_combo is not None:
             data["detail_account_id"] = self.detail_combo.currentData()
             data["detail_account_label"] = self.detail_combo.currentText()
-        if self.checkbook_combo is not None:
-            data["checkbook_id"] = self.checkbook_combo.currentData()
-        if self.check_no_field is not None:
-            data["check_no"] = self.check_no_field.text().strip()
-        if self.check_bank_field is not None:
-            data["check_bank_name"] = self.check_bank_field.text().strip()
-        if self.check_due_field is not None:
-            data["check_due_date"] = self.check_due_field.date()
-        if self.check_party_field is not None:
-            data["check_party_name"] = self.check_party_field.text().strip()
-        if self.received_check_combo is not None and self.received_check_combo.currentData() is not None:
-            received_check_id, amount = self.received_check_combo.currentData()
-            data["received_check_id"] = received_check_id
-            data["check_amount"] = amount
+        if self.received_check_list is not None:
+            selected_ids: list[int] = []
+            total = decimal.Decimal(0)
+            for i in range(self.received_check_list.count()):
+                item = self.received_check_list.item(i)
+                if item.checkState() == Qt.Checked:
+                    received_check_id, amount = item.data(Qt.UserRole)
+                    selected_ids.append(received_check_id)
+                    total += amount
+            if selected_ids:
+                data["received_check_ids"] = selected_ids
+                data["check_amount"] = total
         if self.voucher_serial_field is not None:
             data["voucher_serial"] = self.voucher_serial_field.text().strip()
         if self.voucher_detail_field is not None:
@@ -428,13 +389,53 @@ class _CheckEntryDialog(QDialog):
         mapping_key: str = "RECEIPT_CHECK",
         current_person_detail_id: int | None = None,
         header_person_group_id: int | None = None,
+        direction: str = "RECEIPT",
+        current_checkbook_id: int | None = None,
+        current_bank_account_detail_id: int | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("چک‌هایِ دریافتی")
+        self._direction = direction
+        self.setWindowTitle("چک‌هایِ دریافتی" if direction == "RECEIPT" else "چک‌هایِ پرداختی")
         self.setMinimumWidth(620)
         self._checks: list[dict] = list(current_checks or [])
 
         outer = QVBoxLayout(self)
+
+        # طبقِ درخواستِ صریح: «پرداخت چند چکه هم باشه» — برایِ پرداخت، پیش از
+        # فیلدهایِ تک‌تکِ چک‌ها، دسته‌چک (اختیاری، برایِ شماره‌گذاریِ خودکار)
+        # و حسابِ بانکیِ صادرکننده (الزامی) یک‌بار برایِ کلِ ردیف انتخاب
+        # می‌شوند — همان دو فیلدی که قبلاً فقط در حالتِ تک‌چکی وجود داشتند.
+        self.checkbook_combo: QComboBox | None = None
+        self.issuing_bank_combo: QComboBox | None = None
+        if direction == "PAYMENT":
+            issuing_form = QFormLayout()
+            self.checkbook_combo = QComboBox()
+            self.checkbook_combo.addItem("(بدونِ دسته‌چک — شماره‌یِ دستی)", None)
+            for checkbook in treasury_service.list_checkbooks(company_id):
+                if checkbook.is_active and checkbook.next_no <= checkbook.end_no:
+                    self.checkbook_combo.addItem(
+                        f"{checkbook.bank_account_label} "
+                        f"({numerals.to_persian_digits(str(checkbook.next_no))}–{numerals.to_persian_digits(str(checkbook.end_no))})",
+                        checkbook.checkbook_id,
+                    )
+            if current_checkbook_id is not None:
+                index = self.checkbook_combo.findData(current_checkbook_id)
+                if index >= 0:
+                    self.checkbook_combo.setCurrentIndex(index)
+            issuing_form.addRow("دسته‌چک", self.checkbook_combo)
+
+            bank_account_type_id = dimensions_service.get_specialized_dimension_type_id(
+                company_id, dimensions_service.BANK_ACCOUNT_CODE
+            )
+            self.issuing_bank_combo = QComboBox()
+            for option in dimensions_service.list_leaf_detail_accounts(company_id, bank_account_type_id):
+                self.issuing_bank_combo.addItem(option.name or option.code, option.detail_account_id)
+            if current_bank_account_detail_id is not None:
+                index = self.issuing_bank_combo.findData(current_bank_account_detail_id)
+                if index >= 0:
+                    self.issuing_bank_combo.setCurrentIndex(index)
+            issuing_form.addRow("حسابِ بانکیِ صادرکننده", self.issuing_bank_combo)
+            outer.addLayout(issuing_form)
 
         # طبقِ باگ‌فیکسِ گزارش‌شده: اگر معینِ نگاشته‌شده‌یِ همین روش (مثلاً
         # «اسناد دریافتنی نزدِ صندوق») به یک گروهِ شخص محدود شده باشد
@@ -493,17 +494,19 @@ class _CheckEntryDialog(QDialog):
         self.national_id_field.returnPressed.connect(self.phone_field.setFocus)
         self.phone_field.returnPressed.connect(self._add_current)
 
+        person_word = "صاحبِ حساب" if direction == "RECEIPT" else "گیرنده"
+        no_field_label = "شماره‌یِ چک" if direction == "RECEIPT" else "شماره‌یِ چک (خالی = خودکار از دسته‌چک)"
         rows = [
             ("سریالِ چک", self.serial_field),
-            ("شماره‌یِ چک", self.no_field),
+            (no_field_label, self.no_field),
             ("شماره‌یِ شبا", self.iban_field),
             ("بانک", self.bank_combo),
             ("شماره‌یِ حساب", self.account_no_field),
             ("مبلغ", self.amount_field),
             ("سررسید", self.due_field),
-            ("نامِ صاحبِ حساب", self.owner_field),
-            ("کدِ ملیِ صاحبِ حساب", self.national_id_field),
-            ("تلفنِ صاحبِ حساب", self.phone_field),
+            (f"نامِ {person_word}", self.owner_field),
+            (f"کدِ ملیِ {person_word}", self.national_id_field),
+            (f"تلفنِ {person_word}", self.phone_field),
         ]
         for row_index, (label, widget) in enumerate(rows):
             form.addWidget(QLabel(label), row_index // 2, (row_index % 2) * 2)
@@ -559,19 +562,32 @@ class _CheckEntryDialog(QDialog):
         amount = decimal.Decimal(str(self.amount_field.value()))
         if amount <= 0:
             return None
-        return {
+        bank_label = self.bank_combo.currentText() if self.bank_combo.currentData() is not None else None
+        entry = {
             "check_serial": self.serial_field.text().strip() or None,
             "check_no": self.no_field.text().strip(),
             "iban": self.iban_field.text().strip() or None,
-            "bank_id": self.bank_combo.currentData(),
-            "check_bank_name": self.bank_combo.currentText() if self.bank_combo.currentData() is not None else None,
-            "bank_account_no": self.account_no_field.text().strip() or None,
+            "check_bank_name": bank_label,
             "amount": amount,
             "due_date": self.due_field.date(),
-            "party_name": self.owner_field.text().strip() or None,
-            "national_id": self.national_id_field.text().strip() or None,
-            "phone": self.phone_field.text().strip() or None,
         }
+        if self._direction == "RECEIPT":
+            entry.update(
+                bank_id=self.bank_combo.currentData(),
+                bank_account_no=self.account_no_field.text().strip() or None,
+                party_name=self.owner_field.text().strip() or None,
+                national_id=self.national_id_field.text().strip() or None,
+                phone=self.phone_field.text().strip() or None,
+            )
+        else:
+            entry.update(
+                payee_bank_id=self.bank_combo.currentData(),
+                payee_account_no=self.account_no_field.text().strip() or None,
+                payee_name=self.owner_field.text().strip() or None,
+                payee_national_id=self.national_id_field.text().strip() or None,
+                payee_phone=self.phone_field.text().strip() or None,
+            )
+        return entry
 
     def _append_table_row(self, entry: dict) -> None:
         row_index = self.table.rowCount()
@@ -579,7 +595,9 @@ class _CheckEntryDialog(QDialog):
         self.table.setItem(row_index, 0, QTableWidgetItem(entry.get("check_no") or ""))
         self.table.setItem(row_index, 1, QTableWidgetItem(entry.get("check_bank_name") or ""))
         self.table.setItem(row_index, 2, QTableWidgetItem(numerals.to_persian_digits(str(entry["amount"]))))
-        self.table.setItem(row_index, 3, QTableWidgetItem(entry.get("party_name") or ""))
+        self.table.setItem(
+            row_index, 3, QTableWidgetItem(entry.get("party_name") or entry.get("payee_name") or "")
+        )
 
     def _clear_fields(self) -> None:
         self.serial_field.clear()
@@ -628,6 +646,12 @@ class _CheckEntryDialog(QDialog):
 
     def result_checks(self) -> list[dict]:
         return list(self._checks)
+
+    def result_checkbook_id(self) -> int | None:
+        return self.checkbook_combo.currentData() if self.checkbook_combo is not None else None
+
+    def result_bank_account_detail_id(self) -> int | None:
+        return self.issuing_bank_combo.currentData() if self.issuing_bank_combo is not None else None
 
     def result_person_detail_account_id(self) -> int | None:
         if self.preset_person_detail_id is not None:
@@ -687,22 +711,33 @@ class _MethodRow:
             self._regenerate_description()
             self.amount_field.setFocus()
             return
-        if method == "CHECK" and self._screen.direction == "RECEIPT":
+        if method == "CHECK":
+            # طبقِ درخواستِ صریح: «پرداخت چند چکه هم باشه» — دیالوگِ
+            # چندچکیِ _CheckEntryDialog دیگر مخصوصِ دریافت نیست، هردو جهت
+            # را با فیلدهایِ متناظرِ خودشان (دسته‌چک/حسابِ بانکیِ
+            # صادرکننده برایِ پرداخت) پوشش می‌دهد.
+            direction = self._screen.direction
             dialog = _CheckEntryDialog(
                 self._screen.company_id,
                 self.details.get("checks") or [],
                 self._screen,
-                mapping_key=f"{self._screen.direction}_{method}",
-                current_person_detail_id=self.details.get("detail_account_id"),
+                mapping_key=f"{direction}_{method}",
+                current_person_detail_id=self.details.get("person_detail_account_id"),
                 header_person_group_id=self._screen._counterparty_person_group_id(),
+                direction=direction,
+                current_checkbook_id=self.details.get("checkbook_id"),
+                current_bank_account_detail_id=self.details.get("detail_account_id"),
             )
             if dialog.exec() == QDialog.Accepted:
                 checks = dialog.result_checks()
                 self.details = {
                     "checks": checks,
-                    "detail_account_id": dialog.result_person_detail_account_id(),
-                    "detail_account_label": dialog.result_person_detail_label(),
+                    "person_detail_account_id": dialog.result_person_detail_account_id(),
+                    "person_detail_account_label": dialog.result_person_detail_label(),
                 }
+                if direction == "PAYMENT":
+                    self.details["checkbook_id"] = dialog.result_checkbook_id()
+                    self.details["detail_account_id"] = dialog.result_bank_account_detail_id()
                 total = sum((c["amount"] for c in checks), decimal.Decimal(0))
                 self.amount_field.setValue(float(total))
                 self._regenerate_description()
@@ -804,15 +839,17 @@ class _MethodRow:
         elif method == "CHECK":
             kwargs["person_detail_account_id"] = self.details.get("person_detail_account_id")
             if "checks" in self.details:
+                # طبقِ درخواستِ صریح: چک (هم دریافت هم پرداخت) همیشه از
+                # دیالوگِ چندچکیِ _CheckEntryDialog می‌آید — checkbook_id/
+                # detail_account_id فقط برایِ پرداخت پر می‌شوند (دسته‌چک و
+                # حسابِ بانکیِ صادرکننده‌یِ مشترکِ کلِ ردیف).
                 kwargs["checks"] = self.details["checks"]
-                # طبقِ باگ‌فیکسِ گزارش‌شده: دیالوگِ چندچکیِ دریافتی
-                # (_CheckEntryDialog) تفصیلیِ گروهِ شخصیِ الزامیِ معینِ
-                # نگاشته‌شده را جداگانه در همان کلیدِ detail_account_id
-                # برمی‌گرداند (نه person_detail_account_id) چون این ردیف
-                # فیلدِ اصلیِ دیگری برایِ آن ندارد.
-                if kwargs["person_detail_account_id"] is None:
-                    kwargs["person_detail_account_id"] = self.details.get("detail_account_id")
+                kwargs["checkbook_id"] = self.details.get("checkbook_id")
+                kwargs["detail_account_id"] = self.details.get("detail_account_id")
             else:
+                # فقط برایِ حالتِ نادر که کاربر بدونِ بازکردنِ دیالوگ
+                # («جزئیات…») مستقیماً مبلغ را پر و ثبت کند — این‌جا
+                # self.details هنوز خالی است.
                 kwargs.update(
                     detail_account_id=self.details.get("detail_account_id"),
                     check_no=self.details.get("check_no") or "",
@@ -822,6 +859,7 @@ class _MethodRow:
                     checkbook_id=self.details.get("checkbook_id"),
                 )
         elif method == "CHECK_DISBURSEMENT":
+            kwargs["received_check_ids"] = self.details.get("received_check_ids")
             kwargs["received_check_id"] = self.details.get("received_check_id")
             kwargs["person_detail_account_id"] = self.details.get("person_detail_account_id")
         return treasury_service.MethodLine(**kwargs)

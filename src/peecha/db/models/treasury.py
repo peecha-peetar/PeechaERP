@@ -143,3 +143,11 @@ class IssuedCheck(Base):
     source_journal_entry_id: Mapped[int] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    # طبقِ درخواستِ صریح: هم‌ارزِ فیلدهایِ تکمیلیِ چکِ دریافتی — این‌جا
+    # برایِ طرفِ دریافت‌کننده‌یِ چک (نه خودمان که صادرکننده‌ایم).
+    check_serial: Mapped[str | None] = mapped_column(String(30))
+    iban: Mapped[str | None] = mapped_column(String(34))
+    payee_account_no: Mapped[str | None] = mapped_column(String(40))
+    payee_national_id: Mapped[str | None] = mapped_column(String(15))
+    payee_phone: Mapped[str | None] = mapped_column(String(20))
+    payee_bank_id: Mapped[int | None] = mapped_column(ForeignKey("treasury.banks.bank_id"))
