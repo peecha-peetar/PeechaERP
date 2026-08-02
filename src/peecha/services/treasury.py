@@ -196,37 +196,52 @@ class AccountMappingRow:
     label: str
     account_id: int | None
     account_label: str | None
+    detail_account_id: int | None = None
+    detail_account_label: str | None = None
 
 
 def list_account_mappings(company_id: int) -> list[AccountMappingRow]:
     with new_session() as session:
         rows = {
-            m.mapping_key: m.account_id
+            m.mapping_key: (m.account_id, m.detail_account_id)
             for m in session.scalars(
                 select(TreasuryAccountMapping).where(TreasuryAccountMapping.company_id == company_id)
             ).all()
         }
     accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
-    return [
-        AccountMappingRow(
-            mapping_key=key,
-            label=MAPPING_LABELS[key],
-            account_id=rows.get(key),
-            account_label=accounts_by_id.get(rows.get(key)) if rows.get(key) is not None else None,
+    details_by_id = {
+        d.detail_account_id: d.name or d.full_code or d.code for d in dimensions_service.list_all_leaf_detail_accounts(company_id)
+    }
+    result = []
+    for key in MAPPING_KEYS:
+        account_id, detail_account_id = rows.get(key, (None, None))
+        result.append(
+            AccountMappingRow(
+                mapping_key=key,
+                label=MAPPING_LABELS[key],
+                account_id=account_id,
+                account_label=accounts_by_id.get(account_id) if account_id is not None else None,
+                detail_account_id=detail_account_id,
+                detail_account_label=details_by_id.get(detail_account_id) if detail_account_id is not None else None,
+            )
         )
-        for key in MAPPING_KEYS
-    ]
+    return result
 
 
-def set_account_mapping(company_id: int, mapping_key: str, account_id: int) -> None:
+def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
     if mapping_key not in MAPPING_LABELS:
         raise ValueError("کلیدِ نگاشتِ نامعتبر است.")
     with new_session() as session:
         existing = session.get(TreasuryAccountMapping, (company_id, mapping_key))
         if existing is None:
-            session.add(TreasuryAccountMapping(company_id=company_id, mapping_key=mapping_key, account_id=account_id))
+            session.add(
+                TreasuryAccountMapping(
+                    company_id=company_id, mapping_key=mapping_key, account_id=account_id, detail_account_id=detail_account_id
+                )
+            )
         else:
             existing.account_id = account_id
+            existing.detail_account_id = detail_account_id
         session.commit()
 
 
@@ -247,6 +262,17 @@ def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
     with new_session() as session:
         mapping = session.get(TreasuryAccountMapping, (company_id, mapping_key))
         return mapping.account_id if mapping is not None else None
+
+
+def get_account_mapping_with_detail(company_id: int, mapping_key: str) -> tuple[int | None, int | None]:
+    """مثلِ get_account_mapping، به‌همراهِ تفصیلیِ اختصاصیِ از‌پیش‌تخصیص‌یافته
+    (اگر در تنظیمات مشخص شده باشد) — برایِ فرمِ سند تا اگر تفصیلی از پیش
+    معلوم است، دیگر از کاربر دوباره نپرسد."""
+    with new_session() as session:
+        mapping = session.get(TreasuryAccountMapping, (company_id, mapping_key))
+        if mapping is None:
+            return None, None
+        return mapping.account_id, mapping.detail_account_id
 
 
 # --- دسته‌چک -----------------------------------------------------------------

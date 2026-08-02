@@ -84,15 +84,26 @@ class _MappingForm(QWidget):
 
 class _MethodMappingRow(QWidget):
     """ردیفِ نگاشتِ معینِ یک روشِ ردیفِ پایینِ سندِ دریافت (نقد/چک/تخفیف) —
-    طبقِ درخواستِ صریح: طرفِ بدهکارِ همین ردیف‌ها، در تنظیماتِ سند."""
+    طبقِ درخواستِ صریح: طرفِ بدهکارِ همین ردیف‌ها، در تنظیماتِ سند. جدا از
+    معین، می‌شود یک تفصیلیِ مشخص هم از پیش تخصیص داد — اگر خالی بماند،
+    کاربر خودش در فرمِ سند تفصیلی را انتخاب می‌کند."""
 
-    def __init__(self, mapping_key: str, label: str, current_account_id: int | None, account_options, on_save) -> None:
+    def __init__(
+        self,
+        mapping_key: str,
+        label: str,
+        current_account_id: int | None,
+        current_detail_account_id: int | None,
+        account_options,
+        detail_options,
+        on_save,
+    ) -> None:
         super().__init__()
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 4, 0, 4)
 
         name_label = QLabel(label)
-        name_label.setMinimumWidth(220)
+        name_label.setMinimumWidth(200)
         layout.addWidget(name_label)
 
         self.account_combo = _make_searchable_combo(account_options)
@@ -103,9 +114,20 @@ class _MethodMappingRow(QWidget):
                 self.account_combo.lineEdit().setCursorPosition(0)
         layout.addWidget(self.account_combo, stretch=1)
 
+        self.detail_combo = _make_searchable_combo(detail_options)
+        self.detail_combo.setPlaceholderText("تفصیلیِ اختصاصی (اختیاری)")
+        if current_detail_account_id is not None:
+            index = self.detail_combo.findData(current_detail_account_id)
+            if index >= 0:
+                self.detail_combo.setCurrentIndex(index)
+                self.detail_combo.lineEdit().setCursorPosition(0)
+        layout.addWidget(self.detail_combo, stretch=1)
+
         save_button = QPushButton("ذخیره")
         save_button.setObjectName("flatButton")
-        save_button.clicked.connect(lambda: on_save(mapping_key, self.account_combo.currentData()))
+        save_button.clicked.connect(
+            lambda: on_save(mapping_key, self.account_combo.currentData(), self.detail_combo.currentData())
+        )
         layout.addWidget(save_button)
 
 
@@ -225,12 +247,12 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             (
                 "RECEIPT",
                 "روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/بانک/چک/تخفیف/کالابرگ/بن/تهاتر)",
-                "معینِ سمتِ بستانکارِ ردیف‌هایِ روشِ سندِ دریافت.",
+                "معینِ سمتِ بستانکارِ ردیف‌هایِ روشِ سندِ دریافت. تفصیلیِ اختصاصی اختیاری است — اگر تعیین شود، دیگر در فرمِ سند پرسیده نمی‌شود؛ اگر خالی بماند، خودِ کاربر در فرمِ سند انتخاب می‌کند.",
             ),
             (
                 "PAYMENT",
                 "روش‌هایِ ردیفِ پایینِ سندِ پرداخت (نقد/بانک/چک/تخفیف/خرجِ چک/تهاتر)",
-                "معینِ سمتِ بدهکارِ ردیف‌هایِ روشِ سندِ پرداخت.",
+                "معینِ سمتِ بدهکارِ ردیف‌هایِ روشِ سندِ پرداخت. تفصیلیِ اختصاصی اختیاری است — اگر تعیین شود، دیگر در فرمِ سند پرسیده نمی‌شود؛ اگر خالی بماند، خودِ کاربر در فرمِ سند انتخاب می‌کند.",
             ),
         ):
             method_card = QWidget()
@@ -302,7 +324,11 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             form.set_options(group_options, account_options)
             self.refresh_mappings(direction)
 
-        method_mappings_by_key = {m.mapping_key: m.account_id for m in treasury_service.list_account_mappings(company_id)}
+        method_mappings_by_key = {m.mapping_key: m for m in treasury_service.list_account_mappings(company_id)}
+        detail_options = [
+            (d.detail_account_id, f"{d.full_code} — {d.name}" if d.name else d.full_code)
+            for d in dimensions_service.list_all_leaf_detail_accounts(company_id)
+        ]
         for direction, container in self._method_mapping_containers.items():
             while container.count():
                 child = container.takeAt(0)
@@ -310,8 +336,15 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
                     child.widget().deleteLater()
             self._method_mapping_rows[direction] = []
             for key in _METHOD_KEYS_BY_DIRECTION[direction]:
+                mapping = method_mappings_by_key.get(key)
                 row = _MethodMappingRow(
-                    key, treasury_service.MAPPING_LABELS[key], method_mappings_by_key.get(key), account_options, self._save_method_mapping
+                    key,
+                    treasury_service.MAPPING_LABELS[key],
+                    mapping.account_id if mapping else None,
+                    mapping.detail_account_id if mapping else None,
+                    account_options,
+                    detail_options,
+                    self._save_method_mapping,
                 )
                 container.addWidget(row)
                 self._method_mapping_rows[direction].append(row)
@@ -326,11 +359,11 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             self._template_container.addWidget(row)
             self._template_rows.append(row)
 
-    def _save_method_mapping(self, mapping_key: str, account_id) -> None:
+    def _save_method_mapping(self, mapping_key: str, account_id, detail_account_id) -> None:
         if self.company_id is None or account_id is None:
             self.set_status("ابتدا یک حساب انتخاب کنید.")
             return
-        treasury_service.set_account_mapping(self.company_id, mapping_key, account_id)
+        treasury_service.set_account_mapping(self.company_id, mapping_key, account_id, detail_account_id)
         self.set_status("")
 
     def _save_template(self, template_key: str, text: str) -> None:

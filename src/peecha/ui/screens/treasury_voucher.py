@@ -49,8 +49,15 @@ _METHOD_LABELS = {
 }
 _RECEIPT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING"]
 _PAYMENT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "CHECK_DISBURSEMENT", "NETTING"]
-# طبقِ درخواستِ صریح: تهاتر نیازِ به دیالوگِ جزئیات ندارد — فقط مبلغ + شرح.
-_METHODS_WITHOUT_DETAILS = ("NETTING",)
+# طبقِ درخواستِ صریح: تهاتر هم مثلِ نقد/بانک/تخفیف/کالابرگ/بن، تفصیلیِ
+# احتمالیِ خودش را (از رویِ نگاشتِ تنظیمات) نشان می‌دهد — پس دیگر همیشه از
+# دیالوگِ جزئیات معاف نیست؛ اگر برایِ آن معینی تفصیلی/بُعدِ الزامی نداشت،
+# _open_details خودش تشخیص می‌دهد و دیالوگِ خالی باز نمی‌کند.
+_METHODS_WITHOUT_DETAILS = ()
+# روش‌هایی که تفصیلیِ ردیفشان صرفاً از رویِ نگاشتِ معینِ تنظیمات تعیین
+# می‌شود (نه فیلدِ دیگری مثلِ سریالِ بن) — اگر پیش‌تخصیص یا گزینه‌ای نباشد،
+# اصلاً دیالوگ باز نمی‌شود.
+_MAPPING_ONLY_DETAIL_METHODS = ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "NETTING")
 # نوع‌بُعدهایی که تفصیلیِ نقد/بانک معمولاً از رویِ آن‌ها ساخته می‌شوند —
 # فقط برایِ برچسبِ فیلد؛ خودِ فهرستِ گزینه‌ها همیشه از رویِ بُعدِ الزامیِ
 # واقعیِ همان معینِ نگاشته‌شده گرفته می‌شود (نه این کدها به‌طورِ مستقیم).
@@ -78,37 +85,48 @@ class _EnterComboBox(QComboBox):
 _HEADER_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
 
 
-def _leaf_detail_options_for_mapped_account(
+def _resolve_row_detail_source(
     company_id: int, mapping_key: str, covered_dimension_type_ids: set[int] | None = None
-) -> tuple[str, list]:
-    """طبقِ درخواستِ صریح («تفضیلی سطح آخر حساب انتخاب‌شده را نمایش»): به‌جایِ
-    فرض‌کردنِ نوع‌بُعدِ ثابت (مثلاً همیشه صندوق برایِ نقدی)، بُعدِ الزامیِ
-    واقعیِ همان معینِ نگاشته‌شده در تنظیماتِ خزانه‌داری خوانده می‌شود —
-    get_required_dimensions_for_account خودش فقط برگ‌ها (سطحِ آخر) را
-    برمی‌گرداند. برچسب + فهرستِ حساب‌هایِ تفصیلی را برمی‌گرداند (برچسبِ
-    خالی/فهرستِ خالی یعنی این معین بُعدِ الزامی ندارد).
+) -> tuple[int | None, tuple[int, str] | None, str, list]:
+    """منبعِ تفصیلیِ یک ردیف (نقد/بانک/تخفیف/کالابرگ/بن/تهاتر) را مشخص
+    می‌کند — به‌ترتیبِ اولویت:
 
-    بُعدِ مرکزِ هزینه/پروژه فقط زمانی از دیالوگِ ردیف حذف می‌شود که هدرِ فرم
-    واقعاً همان نوع‌بُعد را پوشش داده باشد (یعنی در covered_dimension_type_ids
-    باشد) — وگرنه (مثلِ کالابرگ/بن که ممکن است مرکزِ هزینه بخواهند بدونِ
-    این‌که حسابِ طرفِ‌حساب/تفصیلی‌محورِ هدر همان بُعد را داشته باشد) باید در
-    خودِ دیالوگِ ردیف نمایش داده شود، وگرنه هیچ‌جا قابلِ‌انتخاب نخواهد بود."""
-    account_id = treasury_service.get_account_mapping(company_id, mapping_key)
+    ۱) تفصیلیِ اختصاصیِ از‌پیش‌تخصیص‌یافته در تنظیماتِ خزانه‌داری (طبقِ
+       درخواستِ صریح: «در هر ردیف از نوع سند غیر از کد معین بتوان کد
+       تفصیلی خاص هم تخصیص داد») — اگر باشد، دیگر از کاربر پرسیده نمی‌شود.
+    ۲) بُعدِ الزامیِ واقعیِ همان معینِ نگاشته‌شده (get_required_dimensions_for_account)
+       — بُعدِ مرکزِ هزینه/پروژه فقط زمانی حذف می‌شود که هدرِ فرم واقعاً همان
+       نوع‌بُعد را پوشش داده باشد (covered_dimension_type_ids)، وگرنه باید
+       در خودِ دیالوگِ ردیف نمایش داده شود.
+    ۳) اگر معین هیچ بُعدِ الزامی‌ای هم نداشته باشد (مثلاً تخفیف که هنوز
+       نوع‌بُعدی رویش تنظیم نشده) — به‌جایِ این‌که هیچ‌جا نتوان تفصیلی وارد
+       کرد، جستجویِ آزاد رویِ همه‌یِ تفصیلی‌هایِ برگِ شرکت پیشنهاد می‌شود
+       («اگر تفصیلی تخصیص ندهیم از سند انتخاب کنیم»).
+
+    خروجی: (account_id, پیش‌تخصیص (id, برچسب) یا None، برچسبِ فیلد، فهرستِ گزینه‌ها)."""
+    account_id, preset_detail_id = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
     if account_id is None:
-        return "", []
+        return None, None, "", []
+    if preset_detail_id is not None:
+        preset_row = next(
+            (d for d in dimensions_service.list_all_leaf_detail_accounts(company_id) if d.detail_account_id == preset_detail_id),
+            None,
+        )
+        preset_label = (preset_row.name or preset_row.full_code) if preset_row is not None else ""
+        return account_id, (preset_detail_id, preset_label), "", []
     required = dimensions_service.get_required_dimensions_for_account(account_id)
-    if not required:
-        return "", []
-    first = required[0]
     covered = covered_dimension_type_ids or set()
-    if first.code in _HEADER_SHARED_DIMENSION_CODES and first.dimension_type_id in covered:
-        return "", []
-    label = (
-        "تفصیلیِ اشخاص"
-        if first.code == dimensions_service.PERSON_DIMENSION_CODE
-        else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(first.code, first.code)
-    )
-    return label, first.detail_accounts
+    if required:
+        first = required[0]
+        if first.code in _HEADER_SHARED_DIMENSION_CODES and first.dimension_type_id in covered:
+            return account_id, None, "", []
+        label = (
+            "تفصیلیِ اشخاص"
+            if first.code == dimensions_service.PERSON_DIMENSION_CODE
+            else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(first.code, first.code)
+        )
+        return account_id, None, label, first.detail_accounts
+    return account_id, None, "تفصیلی", dimensions_service.list_all_leaf_detail_accounts(company_id)
 
 
 class _MethodDetailsDialog(QDialog):
@@ -130,6 +148,8 @@ class _MethodDetailsDialog(QDialog):
         layout = QFormLayout(self)
 
         self.detail_combo: QComboBox | None = None
+        self.preset_detail_id: int | None = None
+        self.preset_detail_label: str = ""
         self.checkbook_combo: QComboBox | None = None
         self.check_no_field: QLineEdit | None = None
         self.check_bank_field: QLineEdit | None = None
@@ -139,12 +159,14 @@ class _MethodDetailsDialog(QDialog):
         self.voucher_serial_field: QLineEdit | None = None
         self.voucher_detail_field: QLineEdit | None = None
 
-        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER"):
+        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING"):
             mapping_key = f"{direction}_{method}"
-            label, options = _leaf_detail_options_for_mapped_account(
+            _account_id, preset, label, options = _resolve_row_detail_source(
                 company_id, mapping_key, covered_dimension_type_ids
             )
-            if options:
+            if preset is not None:
+                self.preset_detail_id, self.preset_detail_label = preset
+            elif options:
                 self.detail_combo = _make_searchable_combo(
                     [(o.detail_account_id, o.name or o.full_code or o.code) for o in options]
                 )
@@ -246,7 +268,10 @@ class _MethodDetailsDialog(QDialog):
 
     def result_data(self) -> dict:
         data: dict = {}
-        if self.detail_combo is not None:
+        if self.preset_detail_id is not None:
+            data["detail_account_id"] = self.preset_detail_id
+            data["detail_account_label"] = self.preset_detail_label
+        elif self.detail_combo is not None:
             data["detail_account_id"] = self.detail_combo.currentData()
             data["detail_account_label"] = self.detail_combo.currentText()
         if self.checkbook_combo is not None:
@@ -506,6 +531,23 @@ class _MethodRow:
                 self._regenerate_description()
                 self.description_field.setFocus()
             return
+        if method in _MAPPING_ONLY_DETAIL_METHODS:
+            # طبقِ درخواستِ صریح: اگر تفصیلیِ این روش از پیش در تنظیمات
+            # تخصیص یافته، دیگر دیالوگ باز نمی‌شود (خودکار اعمال می‌شود)؛
+            # اگر نه پیش‌تخصیص هست نه هیچ گزینه‌ای، دیالوگِ خالی هم باز نمی‌شود.
+            mapping_key = f"{self._screen.direction}_{method}"
+            _account_id, preset, _label, options = _resolve_row_detail_source(
+                self._screen.company_id, mapping_key, set(self._screen._detail_combos.keys())
+            )
+            if preset is not None:
+                self.details = {"detail_account_id": preset[0], "detail_account_label": preset[1]}
+                self._regenerate_description()
+                self.amount_field.setFocus()
+                return
+            if not options:
+                self._regenerate_description()
+                self.amount_field.setFocus()
+                return
         dialog = _MethodDetailsDialog(
             self._screen.direction,
             method,
@@ -576,7 +618,7 @@ class _MethodRow:
             "amount": amount,
             "description": self.description_field.text().strip(),
         }
-        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER"):
+        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING"):
             kwargs["detail_account_id"] = self.details.get("detail_account_id")
         elif method == "CHECK":
             if "checks" in self.details:

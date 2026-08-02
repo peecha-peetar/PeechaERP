@@ -997,6 +997,16 @@ def list_all_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
         return result
 
 
+def list_all_leaf_detail_accounts(company_id: int) -> list[UnifiedDetailAccountRow]:
+    """هم‌الگو با list_leaf_detail_accounts، اما بدونِ محدودشدن به یک
+    نوع‌بُعدِ خاص — برایِ جایی که کاربر باید بتواند هر تفصیلیِ برگِ شرکت
+    (از هر نوع‌بُعد/گروهی) را آزادانه انتخاب کند (مثلاً تخصیصِ تفصیلیِ
+    اختصاصی در تنظیماتِ خزانه‌داری)."""
+    rows = list_all_detail_accounts(company_id)
+    parent_ids = {r.parent_detail_account_id for r in rows if r.parent_detail_account_id is not None}
+    return [r for r in rows if r.is_active and r.detail_account_id not in parent_ids]
+
+
 @dataclass
 class RequiredDimension:
     dimension_type_id: int
