@@ -28,6 +28,7 @@ import json
 from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -605,6 +606,27 @@ class MainWindow(QMainWindow):
 
         self._register_screens()
         self.open_screen("dashboard")
+
+        # طبقِ درخواستِ صریح: F2 در همه‌جایِ برنامه کلیدِ ذخیره/تایید باشد —
+        # به‌جایِ افزودنِ یک QShortcutِ جدا به تک‌تکِ فرم‌ها، یک فیلترِ
+        # رویدادِ سراسری رویِ QApplication نصب می‌شود که دکمه‌یِ اصلیِ
+        # (objectName == "primaryButton") فرمِ زیرپنجره‌یِ فعال (یا دیالوگِ
+        # مودالِ بازِ فعلی) را پیدا و کلیک می‌کند.
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 — نامِ متدِ Qt
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_F2:
+            target = QApplication.activeModalWidget() or (
+                self.mdi_area.activeSubWindow().widget() if self.mdi_area.activeSubWindow() else self
+            )
+            for button in target.findChildren(QPushButton):
+                if button.objectName() == "primaryButton" and button.isVisible() and button.isEnabled():
+                    button.click()
+                    return True
+            return False
+        return super().eventFilter(obj, event)
 
     # --- هدر --------------------------------------------------------------
     def _build_header(self) -> QWidget:

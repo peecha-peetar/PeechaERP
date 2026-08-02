@@ -19,6 +19,7 @@ from peecha.db.models.accounting import (
     JournalEntryLineDetail,
 )
 from peecha.db.models.treasury import (
+    Bank,
     Checkbook,
     CheckStatus,
     CounterpartyAccountMapping,
@@ -37,6 +38,8 @@ MAPPING_KEYS = [
     "RECEIPT_CHECK",
     "RECEIPT_DISCOUNT",
     "RECEIPT_NETTING",
+    "RECEIPT_GOODS_COUPON",
+    "RECEIPT_VOUCHER",
     "PAYMENT_CASH",
     "PAYMENT_BANK",
     "PAYMENT_CHECK",
@@ -51,6 +54,8 @@ MAPPING_LABELS: dict[str, str] = {
     "RECEIPT_CHECK": "چک‌هایِ دریافتنی (در جریانِ وصول)",
     "RECEIPT_DISCOUNT": "تخفیفاتِ نقدیِ داده‌شده",
     "RECEIPT_NETTING": "تهاترِ دریافت",
+    "RECEIPT_GOODS_COUPON": "کالابرگِ دریافتی",
+    "RECEIPT_VOUCHER": "بنِ دریافتی",
     "PAYMENT_CASH": "پرداختِ نقدی",
     "PAYMENT_BANK": "پرداختِ بانکی",
     "PAYMENT_CHECK": "چک‌هایِ پرداختنی",
@@ -59,7 +64,48 @@ MAPPING_LABELS: dict[str, str] = {
     "PAYMENT_NETTING": "تهاترِ پرداخت",
 }
 
-METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT")
+METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER")
+
+
+# --- بانک‌هایِ مرجع -----------------------------------------------------------
+
+
+@dataclass
+class BankRow:
+    bank_id: int
+    code: str | None
+    name: str
+    is_active: bool
+
+
+def list_banks(company_id: int, active_only: bool = False) -> list[BankRow]:
+    with new_session() as session:
+        query = select(Bank).where(Bank.company_id == company_id)
+        if active_only:
+            query = query.where(Bank.is_active.is_(True))
+        rows = session.scalars(query.order_by(Bank.name)).all()
+        return [BankRow(bank_id=r.bank_id, code=r.code, name=r.name, is_active=r.is_active) for r in rows]
+
+
+def create_bank(company_id: int, name: str, code: str = "") -> BankRow:
+    name = name.strip()
+    if not name:
+        raise ValueError("نامِ بانک نمی‌تواند خالی باشد.")
+    with new_session() as session:
+        bank = Bank(company_id=company_id, name=name, code=code.strip() or None, is_active=True)
+        session.add(bank)
+        session.commit()
+        session.refresh(bank)
+        return BankRow(bank_id=bank.bank_id, code=bank.code, name=bank.name, is_active=bank.is_active)
+
+
+def delete_bank(bank_id: int, company_id: int) -> None:
+    with new_session() as session:
+        bank = session.get(Bank, bank_id)
+        if bank is None or bank.company_id != company_id:
+            raise ValueError("بانک نامعتبر است.")
+        session.delete(bank)
+        session.commit()
 
 
 # --- تنظیماتِ نگاشتِ حساب‌ها -------------------------------------------------
@@ -112,6 +158,16 @@ def _get_mapped_account_id(session, company_id: int, mapping_key: str) -> int:
             f"حسابِ «{MAPPING_LABELS[mapping_key]}» هنوز در تنظیماتِ خزانه‌داری مشخص نشده است."
         )
     return mapping.account_id
+
+
+def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
+    """نگاشتِ یک روش را برمی‌گرداند (یا None اگر هنوز تنظیم نشده) — برایِ
+    UI که می‌خواهد بُعدِ الزامیِ همان معین را از رویِ آن استنتاج کند
+    (مثلاً کدام تفصیلی برایِ ردیفِ نقدی/تخفیف/کالابرگ نشان داده شود)،
+    بدونِ ریسکِ raise شدنِ خطا در میانه‌یِ رفرشِ فرم."""
+    with new_session() as session:
+        mapping = session.get(TreasuryAccountMapping, (company_id, mapping_key))
+        return mapping.account_id if mapping is not None else None
 
 
 # --- دسته‌چک -----------------------------------------------------------------
@@ -320,6 +376,12 @@ class MethodLine:
     check_party_name: str | None = None
     checkbook_id: int | None = None  # فقط پرداختِ چک، اگر از یک دسته‌چک صادر می‌شود
     received_check_id: int | None = None  # فقط CHECK_DISBURSEMENT — کدام چکِ دریافتیِ نزدِ صندوق خرج می‌شود
+    # فقط CHECK در دریافت — طبقِ درخواستِ صریح، یک ردیف می‌تواند چند چکِ
+    # دریافتی را هم‌زمان دربرگیرد؛ هرکدام یک دیکشنری با کلیدهایِ check_no،
+    # check_serial، bank_id، check_bank_name، iban، bank_account_no،
+    # due_date، party_name، national_id، phone، amount. اگر پر باشد،
+    # جایگزینِ فیلدهایِ تکیِ check_no/check_bank_name/... بالا می‌شود.
+    checks: list[dict] | None = None
 
 
 def create_treasury_voucher(
@@ -460,27 +522,46 @@ def create_treasury_voucher(
         for index, ml in enumerate(method_lines):
             if ml.method != "CHECK":
                 continue
-            check_no = allocated_check_nos.get(index, ml.check_no or "")
             if direction == "RECEIPT":
+                # طبقِ درخواستِ صریح: یک ردیفِ چکِ دریافتی می‌تواند چند چکِ
+                # جداگانه را دربرگیرد (checks) — اگر پر نباشد، برایِ
+                # سازگاری با فرمِ قدیمی، همان یک چکِ تکیِ ml خودش ثبت می‌شود.
                 status = session.scalar(
                     select(CheckStatus).where(CheckStatus.code == "IN_HAND", CheckStatus.applies_to == "RECEIVED")
                 )
-                session.add(
-                    ReceivedCheck(
-                        company_id=company_id,
-                        check_no=check_no,
-                        drawee_bank_name=ml.check_bank_name,
-                        drawer_name=ml.check_party_name,
-                        amount=ml.amount,
-                        due_date=ml.check_due_date or document_date,
-                        received_date=document_date,
-                        counterparty_detail_account_id=next(iter(counterparty_details.values()), None),
-                        status_id=status.status_id,
-                        source_journal_entry_id=result.journal_entry_id,
-                        created_by_user_id=created_by_user_id,
+                check_entries = ml.checks or [
+                    {
+                        "check_no": ml.check_no or "",
+                        "check_bank_name": ml.check_bank_name,
+                        "party_name": ml.check_party_name,
+                        "amount": ml.amount,
+                        "due_date": ml.check_due_date,
+                    }
+                ]
+                for entry in check_entries:
+                    session.add(
+                        ReceivedCheck(
+                            company_id=company_id,
+                            check_no=entry.get("check_no") or "",
+                            drawee_bank_name=entry.get("check_bank_name"),
+                            drawer_name=entry.get("party_name"),
+                            amount=entry.get("amount") or ml.amount,
+                            due_date=entry.get("due_date") or document_date,
+                            received_date=document_date,
+                            counterparty_detail_account_id=next(iter(counterparty_details.values()), None),
+                            status_id=status.status_id,
+                            source_journal_entry_id=result.journal_entry_id,
+                            created_by_user_id=created_by_user_id,
+                            check_serial=entry.get("check_serial"),
+                            iban=entry.get("iban"),
+                            bank_account_no=entry.get("bank_account_no"),
+                            drawer_national_id=entry.get("national_id"),
+                            drawer_phone=entry.get("phone"),
+                            bank_id=entry.get("bank_id"),
+                        )
                     )
-                )
             else:
+                check_no = allocated_check_nos.get(index, ml.check_no or "")
                 status = session.scalar(
                     select(CheckStatus).where(CheckStatus.code == "ISSUED", CheckStatus.applies_to == "ISSUED")
                 )

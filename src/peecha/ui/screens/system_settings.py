@@ -16,6 +16,7 @@ from peecha.ui.screens.fiscal_years import FiscalYearsScreen
 from peecha.ui.screens.languages import LanguagesScreen
 from peecha.ui.screens.roles import RolesScreen
 from peecha.ui.screens.translations import TranslationsScreen
+from peecha.ui.screens.treasury_banks import TreasuryBanksScreen
 from peecha.ui.screens.treasury_counterparty_settings import TreasuryCounterpartySettingsScreen
 from peecha.ui.screens.users import UsersScreen
 from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
@@ -61,6 +62,7 @@ class SystemSettingsScreen(QWidget):
         return self._sub_tabs(
             [
                 ("انواعِ سندِ دریافت/پرداخت", TreasuryCounterpartySettingsScreen()),
+                ("بانک‌ها", TreasuryBanksScreen()),
             ]
         )
 

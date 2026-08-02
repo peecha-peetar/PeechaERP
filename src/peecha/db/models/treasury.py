@@ -39,6 +39,20 @@ class CounterpartyAccountMapping(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
 
 
+class Bank(Base):
+    """فهرستِ مرجعِ نام‌هایِ بانک — برایِ انتخاب در فیلدِ «بانکِ صادرکننده»یِ
+    فرمِ چکِ دریافتی، به‌جایِ تایپِ آزادِ نام."""
+
+    __tablename__ = "banks"
+    __table_args__ = {"schema": "treasury"}
+
+    bank_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str | None] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(150))
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
 class Checkbook(Base):
     __tablename__ = "checkbooks"
     __table_args__ = {"schema": "treasury"}
@@ -84,6 +98,14 @@ class ReceivedCheck(Base):
     )
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    # طبقِ درخواستِ صریح: فیلدهایِ تکمیلیِ چکِ دریافتی برایِ ثبتِ کاملِ
+    # مشخصاتِ چکِ فیزیکی/صیادی.
+    check_serial: Mapped[str | None] = mapped_column(String(30))
+    iban: Mapped[str | None] = mapped_column(String(34))
+    bank_account_no: Mapped[str | None] = mapped_column(String(40))
+    drawer_national_id: Mapped[str | None] = mapped_column(String(15))
+    drawer_phone: Mapped[str | None] = mapped_column(String(20))
+    bank_id: Mapped[int | None] = mapped_column(ForeignKey("treasury.banks.bank_id"))
 
 
 class IssuedCheck(Base):

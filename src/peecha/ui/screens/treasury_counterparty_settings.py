@@ -108,7 +108,15 @@ class _MethodMappingRow(QWidget):
         layout.addWidget(save_button)
 
 
-_RECEIPT_METHOD_KEYS = ["RECEIPT_CASH", "RECEIPT_BANK", "RECEIPT_CHECK", "RECEIPT_DISCOUNT", "RECEIPT_NETTING"]
+_RECEIPT_METHOD_KEYS = [
+    "RECEIPT_CASH",
+    "RECEIPT_BANK",
+    "RECEIPT_CHECK",
+    "RECEIPT_DISCOUNT",
+    "RECEIPT_GOODS_COUPON",
+    "RECEIPT_VOUCHER",
+    "RECEIPT_NETTING",
+]
 _PAYMENT_METHOD_KEYS = [
     "PAYMENT_CASH",
     "PAYMENT_BANK",
@@ -192,7 +200,7 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         for direction, method_card_title, method_hint in (
             (
                 "RECEIPT",
-                "روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/بانک/چک/تخفیف/تهاتر)",
+                "روش‌هایِ ردیفِ پایینِ سندِ دریافت (نقد/بانک/چک/تخفیف/کالابرگ/بن/تهاتر)",
                 "معینِ سمتِ بستانکارِ ردیف‌هایِ روشِ سندِ دریافت.",
             ),
             (
