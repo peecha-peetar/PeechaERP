@@ -97,17 +97,20 @@ def _resolve_row_detail_source(
     ۱) تفصیلیِ اختصاصیِ از‌پیش‌تخصیص‌یافته در تنظیماتِ خزانه‌داری (طبقِ
        درخواستِ صریح: «در هر ردیف از نوع سند غیر از کد معین بتوان کد
        تفصیلی خاص هم تخصیص داد») — اگر باشد، دیگر از کاربر پرسیده نمی‌شود.
-    ۲) بُعدِ الزامیِ واقعیِ همان معینِ نگاشته‌شده (get_required_dimensions_for_account)
-       — اگر معین چند بُعدِ الزامی داشته باشد (مثلاً هم مرکزِ هزینه هم یک
-       نوع‌بُعدِ اختصاصیِ دیگر)، اولین بُعدی که «مرکزِ هزینه/پروژه‌یِ
-       پوشش‌یافته‌توسطِ‌هدر» نباشد انتخاب می‌شود — نه صرفاً اولین موردِ
-       فهرست؛ وگرنه بُعدِ اختصاصیِ کالابرگ/بن هیچ‌وقت دیده نمی‌شد چون
-       مرکزِ هزینه (اگر اول باشد و پوشش‌یافته باشد) کلِ معین را
-       «بدونِ‌تفصیلی» جلوه می‌داد.
-    ۳) اگر معین هیچ بُعدِ الزامی‌ای هم نداشته باشد (مثلاً تخفیف که هنوز
-       نوع‌بُعدی رویش تنظیم نشده) — به‌جایِ این‌که هیچ‌جا نتوان تفصیلی وارد
-       کرد، جستجویِ آزاد رویِ همه‌یِ تفصیلی‌هایِ برگِ شرکت پیشنهاد می‌شود
-       («اگر تفصیلی تخصیص ندهیم از سند انتخاب کنیم»).
+    ۲) بُعدِ(هایِ) الزامیِ واقعیِ همان معینِ نگاشته‌شده — هم گروهِ شخصیِ
+       الزامی (get_required_person_groups_for_account، مثلاً «فقط
+       مشتری») هم نوع‌بُعدهایِ الزامیِ دیگر (get_required_dimensions_for_account)،
+       دقیقاً همان منطقِ صفحه‌ی صدورِ سند: اگر گروهِ شخصی الزامی باشد،
+       فقط اشخاصِ همان گروه؛ به‌علاوه‌یِ هر نوع‌بُعدِ دیگری که الزامی
+       باشد (مرکزِ هزینه/پروژه فقط وقتی حذف می‌شوند که هدرِ فرم واقعاً
+       پوشششان داده باشد). قبلاً این تابع فقط نوع‌بُعدها را می‌خواند، نه
+       گروهِ شخص را — نتیجه این بود که وقتی مثلاً معینِ تخفیف به گروهِ
+       «مشتری» محدود شده بود، این محدودیت نادیده گرفته می‌شد و به‌جایِ آن
+       فهرستِ آزادِ همه‌یِ تفصیلی‌های شرکت (بندِ ۳) پیشنهاد می‌شد.
+    ۳) اگر معین نه گروهِ شخصیِ الزامی داشته باشد نه هیچ نوع‌بُعدِ دیگری
+       (مثلاً تخفیف که هنوز چیزی رویش تنظیم نشده) — به‌جایِ این‌که هیچ‌جا
+       نتوان تفصیلی وارد کرد، جستجویِ آزاد رویِ همه‌یِ تفصیلی‌هایِ برگِ
+       شرکت پیشنهاد می‌شود («اگر تفصیلی تخصیص ندهیم از سند انتخاب کنیم»).
 
     خروجی: (account_id, پیش‌تخصیص (id, برچسب) یا None، برچسبِ فیلد، فهرستِ گزینه‌ها)."""
     account_id, preset_detail_id = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
@@ -123,26 +126,41 @@ def _resolve_row_detail_source(
     required = dimensions_service.get_required_dimensions_for_account(account_id)
     covered = covered_dimension_type_ids or set()
     # طبقِ اصلاحِ ریشه‌ای: اگر معین بیش از یک بُعدِ الزامی داشته باشد (مثلاً
-    # هم مرکزِ هزینه هم یک نوع‌بُعدِ اختصاصیِ دیگر)، قبلاً فقط اولین موردِ
-    # فهرست (required[0]) بررسی می‌شد — اگر آن اولین مورد مرکزِ هزینه/پروژه
-    # و پوشش‌یافته بود، کلِ معین «بدونِ تفصیلی» تلقی می‌شد و بُعدِ الزامیِ
-    # دیگرش هیچ‌وقت دیده نمی‌شد. حالا کلِ فهرست پیموده می‌شود و اولین بُعدی
-    # که مرکزِ هزینه/پروژه‌یِ پوشش‌یافته نباشد انتخاب می‌شود.
-    chosen = next(
-        (r for r in required if not (r.code in _HEADER_SHARED_DIMENSION_CODES and r.dimension_type_id in covered)),
-        None,
-    )
-    if required and chosen is None:
-        # همه‌ی بُعدهای الزامی مرکزِ هزینه/پروژه‌اند و هدر پوششان داده -> چیزی نمی‌پرسد
-        return account_id, None, "", []
-    if chosen is not None:
-        label = (
-            "تفصیلیِ اشخاص"
-            if chosen.code == dimensions_service.PERSON_DIMENSION_CODE
-            else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(chosen.code, chosen.code)
+    # هم مرکزِ هزینه هم یک نوع‌بُعدِ اختصاصیِ دیگر)، دیگر فقط اولین موردِ
+    # فهرست بررسی نمی‌شود — همه‌ی بُعدهایِ الزامیِ پوشش‌نیافته (به‌جز
+    # مرکزِ هزینه/پروژه‌یِ پوشش‌یافته‌توسطِ‌هدر) با هم ترکیب می‌شوند؛ وگرنه
+    # وقتی مرکزِ هزینه اولِ فهرست و پوشش‌یافته بود، بُعدِ الزامیِ دیگرش
+    # هیچ‌وقت دیده نمی‌شد.
+    other_dims = [
+        r for r in required if not (r.code in _HEADER_SHARED_DIMENSION_CODES and r.dimension_type_id in covered)
+    ]
+    # طبقِ گزارشِ صریح: تا پیش از این، محدودیتِ گروهِ اشخاص (مثلاً «فقط
+    # مشتری») که رویِ معینِ همین روش تنظیم شده بود اصلاً خوانده نمی‌شد —
+    # نتیجه این بود که وقتی پیش‌تخصیصی در تنظیمات نبود، به‌جایِ فهرستِ
+    # تفصیلی‌هایِ همان معین، فهرستِ کاملِ همه‌ی تفصیلی‌هایِ شرکت (آزاد)
+    # پیشنهاد می‌شد. حالا همان منطقِ صفحه‌ی صدورِ سند
+    # (journal_entry._MethodRow._refresh_dimension_ui) این‌جا هم تکرار
+    # می‌شود: گروهِ شخصیِ الزامی + بقیه‌ی نوع‌بُعدهایِ الزامی، هردو با هم.
+    person_group_ids = [
+        g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)
+    ]
+    if not person_group_ids and not other_dims:
+        if required:
+            # همه‌ی بُعدهای الزامی مرکزِ هزینه/پروژه‌اند و هدر پوششان داده -> چیزی نمی‌پرسد
+            return account_id, None, "", []
+        # نه گروهِ شخصیِ الزامی نه هیچ نوع‌بُعدی -> جستجویِ آزادِ همه‌ی تفصیلی‌ها
+        return account_id, None, "تفصیلی", dimensions_service.list_all_leaf_detail_accounts(company_id)
+    options = []
+    labels = []
+    if person_group_ids:
+        labels.append("تفصیلیِ اشخاص")
+        options.extend(
+            p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in person_group_ids
         )
-        return account_id, None, label, chosen.detail_accounts
-    return account_id, None, "تفصیلی", dimensions_service.list_all_leaf_detail_accounts(company_id)
+    for dim in other_dims:
+        labels.append(dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code))
+        options.extend(dim.detail_accounts)
+    return account_id, None, " / ".join(labels), options
 
 
 class _MethodDetailsDialog(QDialog):
