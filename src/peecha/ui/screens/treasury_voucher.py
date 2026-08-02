@@ -70,13 +70,22 @@ class _EnterComboBox(QComboBox):
         super().keyPressEvent(event)
 
 
+# طبقِ درخواستِ صریح: مرکزِ هزینه/پروژه ویژگیِ خودِ رویدادِ مالی‌اند، نه
+# طرفِ‌حساب یا روش — همان مقداری که در هدرِ فرم انتخاب شده باید برایِ همه‌ی
+# ردیف‌ها به‌کار رود (create_treasury_voucher خودش این را با shared_details
+# تضمین می‌کند)؛ پس اگر بُعدِ الزامیِ معینِ یک روش مرکزِ هزینه/پروژه باشد،
+# دیالوگِ آن روش دوباره از کاربر نمی‌پرسد.
+_HEADER_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
+
+
 def _leaf_detail_options_for_mapped_account(company_id: int, mapping_key: str) -> tuple[str, list]:
     """طبقِ درخواستِ صریح («تفضیلی سطح آخر حساب انتخاب‌شده را نمایش»): به‌جایِ
     فرض‌کردنِ نوع‌بُعدِ ثابت (مثلاً همیشه صندوق برایِ نقدی)، بُعدِ الزامیِ
     واقعیِ همان معینِ نگاشته‌شده در تنظیماتِ خزانه‌داری خوانده می‌شود —
     get_required_dimensions_for_account خودش فقط برگ‌ها (سطحِ آخر) را
     برمی‌گرداند. برچسب + فهرستِ حساب‌هایِ تفصیلی را برمی‌گرداند (برچسبِ
-    خالی/فهرستِ خالی یعنی این معین بُعدِ الزامی ندارد)."""
+    خالی/فهرستِ خالی یعنی این معین بُعدِ الزامی ندارد، یا بُعدش مرکزِ
+    هزینه/پروژه است که از هدرِ فرم خودکار به همه‌یِ ردیف‌ها می‌رسد)."""
     account_id = treasury_service.get_account_mapping(company_id, mapping_key)
     if account_id is None:
         return "", []
@@ -84,6 +93,8 @@ def _leaf_detail_options_for_mapped_account(company_id: int, mapping_key: str) -
     if not required:
         return "", []
     first = required[0]
+    if first.code in _HEADER_SHARED_DIMENSION_CODES:
+        return "", []
     label = (
         "تفصیلیِ اشخاص"
         if first.code == dimensions_service.PERSON_DIMENSION_CODE
@@ -112,7 +123,7 @@ class _MethodDetailsDialog(QDialog):
         self.voucher_serial_field: QLineEdit | None = None
         self.voucher_detail_field: QLineEdit | None = None
 
-        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON"):
+        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER"):
             mapping_key = f"{direction}_{method}"
             label, options = _leaf_detail_options_for_mapped_account(company_id, mapping_key)
             if options:
@@ -123,9 +134,19 @@ class _MethodDetailsDialog(QDialog):
                     index = self.detail_combo.findData(current["detail_account_id"])
                     if index >= 0:
                         self.detail_combo.setCurrentIndex(index)
-                self.detail_combo.lineEdit().returnPressed.connect(self.accept)
                 layout.addRow(label or "تفصیلی", self.detail_combo)
-        elif method == "CHECK":
+        if method == "VOUCHER":
+            self.voucher_serial_field = QLineEdit(current.get("voucher_serial") or "")
+            layout.addRow("سریالِ بن", self.voucher_serial_field)
+            self.voucher_detail_field = QLineEdit(current.get("voucher_detail") or "")
+            layout.addRow("مشخصاتِ بن", self.voucher_detail_field)
+            if self.detail_combo is not None:
+                self.detail_combo.lineEdit().returnPressed.connect(self.voucher_serial_field.setFocus)
+            self.voucher_serial_field.returnPressed.connect(self.voucher_detail_field.setFocus)
+            self.voucher_detail_field.returnPressed.connect(self.accept)
+        elif self.detail_combo is not None:
+            self.detail_combo.lineEdit().returnPressed.connect(self.accept)
+        if method == "CHECK":
             # طبقِ درخواستِ صریح: این دیالوگ فقط برایِ سمتِ پرداخت (صدورِ
             # چکِ تازه از دسته‌چک) است — چکِ دریافتی از دیالوگِ چندچکیِ
             # _CheckEntryDialog وارد می‌شود.
@@ -178,15 +199,10 @@ class _MethodDetailsDialog(QDialog):
                 if index >= 0:
                     self.received_check_combo.setCurrentIndex(index)
             layout.addRow("چکِ دریافتیِ خرج‌شونده", self.received_check_combo)
-        elif method == "VOUCHER":
-            self.voucher_serial_field = QLineEdit(current.get("voucher_serial") or "")
-            layout.addRow("سریالِ بن", self.voucher_serial_field)
-            self.voucher_detail_field = QLineEdit(current.get("voucher_detail") or "")
-            self.voucher_serial_field.returnPressed.connect(self.voucher_detail_field.setFocus)
-            self.voucher_detail_field.returnPressed.connect(self.accept)
-            layout.addRow("مشخصاتِ بن", self.voucher_detail_field)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("تایید")
+        buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
@@ -237,7 +253,7 @@ class _CheckEntryDialog(QDialog):
         self.serial_field = QLineEdit()
         self.no_field = QLineEdit()
         self.iban_field = QLineEdit()
-        self.bank_combo = QComboBox()
+        self.bank_combo = _EnterComboBox()
         self.bank_combo.addItem("—", None)
         for bank in treasury_service.list_banks(company_id, active_only=True):
             self.bank_combo.addItem(bank.name, bank.bank_id)
@@ -248,6 +264,19 @@ class _CheckEntryDialog(QDialog):
         self.owner_field = QLineEdit()
         self.national_id_field = QLineEdit()
         self.phone_field = QLineEdit()
+
+        # طبقِ درخواستِ صریح: با زدنِ Enter در هر فیلد، به فیلدِ بعدی برود؛
+        # Enterِ فیلدِ آخر همان کاری را می‌کند که «+ افزودن» می‌کند.
+        self.serial_field.returnPressed.connect(self.no_field.setFocus)
+        self.no_field.returnPressed.connect(self.iban_field.setFocus)
+        self.iban_field.returnPressed.connect(self.bank_combo.setFocus)
+        self.bank_combo.enterPressed.connect(self.account_no_field.setFocus)
+        self.account_no_field.returnPressed.connect(self.amount_field.setFocus)
+        self.amount_field.returnPressed.connect(self.due_field.setFocus)
+        self.due_field.returnPressed.connect(self.owner_field.setFocus)
+        self.owner_field.returnPressed.connect(self.national_id_field.setFocus)
+        self.national_id_field.returnPressed.connect(self.phone_field.setFocus)
+        self.phone_field.returnPressed.connect(self._add_current)
 
         rows = [
             ("سریالِ چک", self.serial_field),
@@ -282,6 +311,8 @@ class _CheckEntryDialog(QDialog):
         outer.addWidget(self.total_label)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("تایید")
+        buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -441,7 +472,7 @@ class _MethodRow:
             "amount": amount,
             "description": description,
         }
-        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON"):
+        if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER"):
             kwargs["detail_account_id"] = self.details.get("detail_account_id")
         elif method == "CHECK":
             if "checks" in self.details:
@@ -500,43 +531,51 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
 
         self.title_label = QLabel(f"سندِ {noun}")
         self.title_label.setObjectName("pageTitle")
-        header_layout.addWidget(self.title_label, 0, 0, 1, 4)
+        header_layout.addWidget(self.title_label, 0, 0, 1, 5)
 
         header_layout.addWidget(QLabel("طرفِ حساب (تفصیلی)"), 1, 0)
         self.account_combo = _make_searchable_combo([])
         self.account_combo.currentIndexChanged.connect(self._on_account_changed)
         header_layout.addWidget(self.account_combo, 1, 1)
 
-        header_layout.addWidget(QLabel("تاریخ"), 1, 2)
+        # طبقِ درخواستِ صریح: مرکزِ هزینه/پروژه (اگر رویِ حسابِ طرف‌حساب
+        # الزامی باشند) به‌جایِ یک ردیفِ جداگانه‌یِ زیرِ هدر، همین‌جا جلویِ
+        # خودِ تفصیلیِ طرفِ‌حساب می‌آیند — افقی و جمع‌وجور.
+        self.detail_container = QHBoxLayout()
+        self.detail_container.setContentsMargins(0, 0, 0, 0)
+        self.detail_container.setSpacing(4)
+        header_layout.addLayout(self.detail_container, 1, 2)
+
+        header_layout.addWidget(QLabel("تاریخ"), 1, 3)
         self.date_field = JalaliDateEdit("تاریخِ سند")
         self.date_field.setMaximumWidth(120)
-        header_layout.addWidget(self.date_field, 1, 3)
+        header_layout.addWidget(self.date_field, 1, 4)
 
         header_layout.addWidget(QLabel("شرح"), 2, 0)
         self.description_field = QLineEdit()
-        header_layout.addWidget(self.description_field, 2, 1, 1, 1 if direction == "RECEIPT" else 3)
+        header_layout.addWidget(self.description_field, 2, 1, 1, 2 if direction == "RECEIPT" else 4)
 
         self.total_amount_field: _AmountField | None = None
         if direction == "RECEIPT":
-            header_layout.addWidget(QLabel("جمعِ مبلغِ دریافتی"), 2, 2)
+            header_layout.addWidget(QLabel("جمعِ مبلغِ دریافتی"), 2, 3)
             self.total_amount_field = _AmountField()
             self.total_amount_field.setMaximumWidth(160)
-            header_layout.addWidget(self.total_amount_field, 2, 3)
+            header_layout.addWidget(self.total_amount_field, 2, 4)
 
         header_layout.setColumnStretch(0, 0)
         header_layout.setColumnStretch(1, 1)
         header_layout.setColumnStretch(2, 0)
         header_layout.setColumnStretch(3, 0)
-
-        self.detail_container = QVBoxLayout()
-        self.detail_container.setContentsMargins(0, 2, 0, 0)
-        self.detail_container.setSpacing(2)
-        header_layout.addLayout(self.detail_container, 3, 0, 1, 4)
+        header_layout.setColumnStretch(4, 0)
 
         layout.addWidget(header_card)
 
-        # --- زنجیره‌یِ Enterِ هدر: طرفِ‌حساب -> تاریخ -> شرح -> [جمعِ مبلغ] -> ردیفِ اول
-        self.account_combo.lineEdit().returnPressed.connect(lambda: self.date_field.setFocus())
+        # --- زنجیره‌یِ Enterِ هدر: طرفِ‌حساب -> [مرکزِ هزینه/پروژه‌یِ پویا] ->
+        # تاریخ -> شرح -> [جمعِ مبلغ] -> ردیفِ اول. چون کمبوهایِ پویا هر بار
+        # در _on_account_changed از نو ساخته می‌شوند، نقطه‌یِ شروعِ زنجیره
+        # (بعدِ طرفِ‌حساب) به‌جایِ اتصالِ ثابت، به‌صورتِ پویا در همان‌جا
+        # تصمیم‌گیری می‌شود (_on_account_return).
+        self.account_combo.lineEdit().returnPressed.connect(self._on_account_return)
         self.date_field.returnPressed.connect(lambda: self.description_field.setFocus())
         if self.total_amount_field is not None:
             self.description_field.returnPressed.connect(lambda: self.total_amount_field.setFocus())
@@ -673,18 +712,35 @@ class TreasuryVoucherScreen(FieldHelpMixin, QWidget):
         account_id, resolved_dimension_type_id = self._counterparty_index[detail_account_id]
         skip_dimension_type_id = resolved_dimension_type_id
 
+        # طبقِ درخواستِ صریح: این کمبوها (مرکزِ هزینه/پروژه) افقی و جلویِ
+        # خودِ طرفِ‌حساب می‌آیند — نه یک ردیفِ جداگانه؛ برایِ همین به‌جایِ
+        # ویجت‌بندیِ عمودیِ قبلی، مستقیم به‌ترتیب در detail_containerِ افقی
+        # اضافه می‌شوند و زنجیره‌یِ Enter از رویِ همین ترتیب ساخته می‌شود.
+        combos: list[QComboBox] = []
         for required in dimensions_service.get_required_dimensions_for_account(account_id):
             if required.dimension_type_id == skip_dimension_type_id:
                 continue  # این بُعد از طریقِ تفصیلیِ طرفِ‌حسابِ انتخاب‌شده حل شده
             label = "تفصیلیِ اشخاص" if required.code == dimensions_service.PERSON_DIMENSION_CODE else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(required.code, required.code)
-            row = QHBoxLayout()
-            row.addWidget(QLabel(label))
+            self.detail_container.addWidget(QLabel(label))
             combo = _make_searchable_combo([(d.detail_account_id, d.name or d.full_code or d.code) for d in required.detail_accounts])
-            row.addWidget(combo, stretch=1)
-            wrapper = QWidget()
-            wrapper.setLayout(row)
-            self.detail_container.addWidget(wrapper)
+            combo.setMaximumWidth(160)
+            self.detail_container.addWidget(combo)
             self._detail_combos[required.dimension_type_id] = combo
+            combos.append(combo)
+
+        # زنجیره‌یِ Enter از میانِ همین کمبوهایِ پویا تا تاریخ.
+        for combo, next_combo in zip(combos, combos[1:]):
+            combo.lineEdit().returnPressed.connect(next_combo.setFocus)
+        if combos:
+            combos[-1].lineEdit().returnPressed.connect(self.date_field.setFocus)
+
+    def _on_account_return(self) -> None:
+        if self._detail_combos:
+            first_combo = next(iter(self._detail_combos.values()))
+            first_combo.setFocus()
+            first_combo.lineEdit().selectAll()
+        else:
+            self.date_field.setFocus()
 
     def _add_row(self) -> _MethodRow:
         row = _MethodRow(self)
