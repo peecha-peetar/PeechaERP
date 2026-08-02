@@ -78,14 +78,21 @@ class _EnterComboBox(QComboBox):
 _HEADER_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
 
 
-def _leaf_detail_options_for_mapped_account(company_id: int, mapping_key: str) -> tuple[str, list]:
+def _leaf_detail_options_for_mapped_account(
+    company_id: int, mapping_key: str, covered_dimension_type_ids: set[int] | None = None
+) -> tuple[str, list]:
     """طبقِ درخواستِ صریح («تفضیلی سطح آخر حساب انتخاب‌شده را نمایش»): به‌جایِ
     فرض‌کردنِ نوع‌بُعدِ ثابت (مثلاً همیشه صندوق برایِ نقدی)، بُعدِ الزامیِ
     واقعیِ همان معینِ نگاشته‌شده در تنظیماتِ خزانه‌داری خوانده می‌شود —
     get_required_dimensions_for_account خودش فقط برگ‌ها (سطحِ آخر) را
     برمی‌گرداند. برچسب + فهرستِ حساب‌هایِ تفصیلی را برمی‌گرداند (برچسبِ
-    خالی/فهرستِ خالی یعنی این معین بُعدِ الزامی ندارد، یا بُعدش مرکزِ
-    هزینه/پروژه است که از هدرِ فرم خودکار به همه‌یِ ردیف‌ها می‌رسد)."""
+    خالی/فهرستِ خالی یعنی این معین بُعدِ الزامی ندارد).
+
+    بُعدِ مرکزِ هزینه/پروژه فقط زمانی از دیالوگِ ردیف حذف می‌شود که هدرِ فرم
+    واقعاً همان نوع‌بُعد را پوشش داده باشد (یعنی در covered_dimension_type_ids
+    باشد) — وگرنه (مثلِ کالابرگ/بن که ممکن است مرکزِ هزینه بخواهند بدونِ
+    این‌که حسابِ طرفِ‌حساب/تفصیلی‌محورِ هدر همان بُعد را داشته باشد) باید در
+    خودِ دیالوگِ ردیف نمایش داده شود، وگرنه هیچ‌جا قابلِ‌انتخاب نخواهد بود."""
     account_id = treasury_service.get_account_mapping(company_id, mapping_key)
     if account_id is None:
         return "", []
@@ -93,7 +100,8 @@ def _leaf_detail_options_for_mapped_account(company_id: int, mapping_key: str) -
     if not required:
         return "", []
     first = required[0]
-    if first.code in _HEADER_SHARED_DIMENSION_CODES:
+    covered = covered_dimension_type_ids or set()
+    if first.code in _HEADER_SHARED_DIMENSION_CODES and first.dimension_type_id in covered:
         return "", []
     label = (
         "تفصیلیِ اشخاص"
@@ -108,7 +116,15 @@ class _MethodDetailsDialog(QDialog):
     تفصیلیِ سطحِ آخرِ حسابِ معینِ نگاشته‌شده؛ چک (پرداخت): شماره/بانک/
     سررسید/طرف (+دسته‌چک)؛ خرجِ چک: کدام چکِ دریافتی؛ بن: سریال+مشخصات."""
 
-    def __init__(self, direction: str, method: str, company_id: int, current: dict, parent=None) -> None:
+    def __init__(
+        self,
+        direction: str,
+        method: str,
+        company_id: int,
+        current: dict,
+        parent=None,
+        covered_dimension_type_ids: set[int] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"جزئیاتِ ردیفِ {_METHOD_LABELS.get(method, method)}")
         layout = QFormLayout(self)
@@ -125,7 +141,9 @@ class _MethodDetailsDialog(QDialog):
 
         if method in ("CASH", "BANK", "DISCOUNT", "GOODS_COUPON", "VOUCHER"):
             mapping_key = f"{direction}_{method}"
-            label, options = _leaf_detail_options_for_mapped_account(company_id, mapping_key)
+            label, options = _leaf_detail_options_for_mapped_account(
+                company_id, mapping_key, covered_dimension_type_ids
+            )
             if options:
                 self.detail_combo = _make_searchable_combo(
                     [(o.detail_account_id, o.name or o.full_code or o.code) for o in options]
@@ -203,9 +221,28 @@ class _MethodDetailsDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("تایید")
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
+        # طبقِ بررسیِ عملی: setAutoDefault(False) به‌تنهایی کافی نیست —
+        # QDialogButtonBox با هر show() دوباره دکمه‌یِ نقشِ AcceptRole را
+        # default (isDefault=True) می‌کند، جدا از پرچمِ autoDefault. برایِ
+        # همین Enterِ زده‌شده در هر فیلدی (حتی اگر خودِ فیلد returnPressed
+        # را برایِ جابه‌جاییِ فوکوس مصرف کرده باشد) از keyPressEvent خودِ
+        # QDialog هم عبور می‌کند و دکمه را دوباره کلیک می‌کند. جلوگیریِ
+        # واقعی در keyPressEvent زیر انجام شده؛ این دو خط هم به‌عنوانِ
+        # لایه‌یِ دومِ دفاعی نگه داشته می‌شوند.
+        buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
+
+    def keyPressEvent(self, event) -> None:
+        # جلوگیریِ واقعی از باگِ autoDefault: چون همه‌یِ فیلدهایِ این دیالوگ
+        # زنجیره‌یِ Enterِ خودشان را دارند، دیگر نیازی نیست QDialog با
+        # دیدنِ Enter دوباره دکمه‌یِ پیش‌فرض را کلیک کند.
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def result_data(self) -> dict:
         data: dict = {}
@@ -314,6 +351,13 @@ class _CheckEntryDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("تایید")
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
+        # همان باگِ autoDefault (نگاه کن به _MethodDetailsDialog): بدونِ این دو
+        # خط + بدونِ override زیرِ keyPressEvent، با هر Enterِ زده‌شده در
+        # زنجیره‌یِ فیلدها، دکمه‌یِ «تایید» هم به‌طورِ خودکار کلیک می‌شود و
+        # _on_accept را زودتر از موعد صدا می‌زند — همان لحظه‌ای که هنوز چکی
+        # به فهرست اضافه نشده، پس هشدارِ «حداقل یک چک» نمایش داده می‌شود.
+        buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -321,6 +365,18 @@ class _CheckEntryDialog(QDialog):
         for entry in self._checks:
             self._append_table_row(entry)
         self._update_total()
+
+    def keyPressEvent(self, event) -> None:
+        # طبقِ بررسیِ عملی: setAutoDefault(False) به‌تنهایی کافی نیست —
+        # QDialogButtonBox با هر show() دوباره دکمه‌یِ «تایید» را default
+        # می‌کند و QDialog.keyPressEvent با دیدنِ Enter (حتی اگر خودِ فیلد
+        # returnPressed را برایِ جابه‌جاییِ فوکوس/افزودنِ چک مصرف کرده باشد)
+        # آن را دوباره کلیک می‌کند. چون همه‌یِ فیلدها زنجیره‌یِ Enterِ خودشان
+        # را دارند، دیگر نیازی به این رفتارِ پیش‌فرضِ QDialog نیست.
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _current_entry(self) -> dict | None:
         amount = decimal.Decimal(str(self.amount_field.value()))
@@ -450,7 +506,14 @@ class _MethodRow:
                 self._regenerate_description()
                 self.description_field.setFocus()
             return
-        dialog = _MethodDetailsDialog(self._screen.direction, method, self._screen.company_id, self.details, self._screen)
+        dialog = _MethodDetailsDialog(
+            self._screen.direction,
+            method,
+            self._screen.company_id,
+            self.details,
+            self._screen,
+            covered_dimension_type_ids=set(self._screen._detail_combos.keys()),
+        )
         if dialog.exec() == QDialog.Accepted:
             self.details = dialog.result_data()
             if method == "CHECK_DISBURSEMENT" and "check_amount" in self.details:
