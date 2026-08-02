@@ -95,9 +95,12 @@ def _resolve_row_detail_source(
        درخواستِ صریح: «در هر ردیف از نوع سند غیر از کد معین بتوان کد
        تفصیلی خاص هم تخصیص داد») — اگر باشد، دیگر از کاربر پرسیده نمی‌شود.
     ۲) بُعدِ الزامیِ واقعیِ همان معینِ نگاشته‌شده (get_required_dimensions_for_account)
-       — بُعدِ مرکزِ هزینه/پروژه فقط زمانی حذف می‌شود که هدرِ فرم واقعاً همان
-       نوع‌بُعد را پوشش داده باشد (covered_dimension_type_ids)، وگرنه باید
-       در خودِ دیالوگِ ردیف نمایش داده شود.
+       — اگر معین چند بُعدِ الزامی داشته باشد (مثلاً هم مرکزِ هزینه هم یک
+       نوع‌بُعدِ اختصاصیِ دیگر)، اولین بُعدی که «مرکزِ هزینه/پروژه‌یِ
+       پوشش‌یافته‌توسطِ‌هدر» نباشد انتخاب می‌شود — نه صرفاً اولین موردِ
+       فهرست؛ وگرنه بُعدِ اختصاصیِ کالابرگ/بن هیچ‌وقت دیده نمی‌شد چون
+       مرکزِ هزینه (اگر اول باشد و پوشش‌یافته باشد) کلِ معین را
+       «بدونِ‌تفصیلی» جلوه می‌داد.
     ۳) اگر معین هیچ بُعدِ الزامی‌ای هم نداشته باشد (مثلاً تخفیف که هنوز
        نوع‌بُعدی رویش تنظیم نشده) — به‌جایِ این‌که هیچ‌جا نتوان تفصیلی وارد
        کرد، جستجویِ آزاد رویِ همه‌یِ تفصیلی‌هایِ برگِ شرکت پیشنهاد می‌شود
@@ -116,16 +119,26 @@ def _resolve_row_detail_source(
         return account_id, (preset_detail_id, preset_label), "", []
     required = dimensions_service.get_required_dimensions_for_account(account_id)
     covered = covered_dimension_type_ids or set()
-    if required:
-        first = required[0]
-        if first.code in _HEADER_SHARED_DIMENSION_CODES and first.dimension_type_id in covered:
-            return account_id, None, "", []
+    # طبقِ اصلاحِ ریشه‌ای: اگر معین بیش از یک بُعدِ الزامی داشته باشد (مثلاً
+    # هم مرکزِ هزینه هم یک نوع‌بُعدِ اختصاصیِ دیگر)، قبلاً فقط اولین موردِ
+    # فهرست (required[0]) بررسی می‌شد — اگر آن اولین مورد مرکزِ هزینه/پروژه
+    # و پوشش‌یافته بود، کلِ معین «بدونِ تفصیلی» تلقی می‌شد و بُعدِ الزامیِ
+    # دیگرش هیچ‌وقت دیده نمی‌شد. حالا کلِ فهرست پیموده می‌شود و اولین بُعدی
+    # که مرکزِ هزینه/پروژه‌یِ پوشش‌یافته نباشد انتخاب می‌شود.
+    chosen = next(
+        (r for r in required if not (r.code in _HEADER_SHARED_DIMENSION_CODES and r.dimension_type_id in covered)),
+        None,
+    )
+    if required and chosen is None:
+        # همه‌ی بُعدهای الزامی مرکزِ هزینه/پروژه‌اند و هدر پوششان داده -> چیزی نمی‌پرسد
+        return account_id, None, "", []
+    if chosen is not None:
         label = (
             "تفصیلیِ اشخاص"
-            if first.code == dimensions_service.PERSON_DIMENSION_CODE
-            else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(first.code, first.code)
+            if chosen.code == dimensions_service.PERSON_DIMENSION_CODE
+            else dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(chosen.code, chosen.code)
         )
-        return account_id, None, label, first.detail_accounts
+        return account_id, None, label, chosen.detail_accounts
     return account_id, None, "تفصیلی", dimensions_service.list_all_leaf_detail_accounts(company_id)
 
 
