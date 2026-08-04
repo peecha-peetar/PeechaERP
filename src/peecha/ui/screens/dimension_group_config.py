@@ -519,7 +519,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         conflict = dimensions_service.check_range_conflict(
             company_id, self._selected_type_id, level_no, from_value, to_value, self._selected_person_group_id
         )
-        color = "#e53e3e" if conflict else "#38a169"
+        color = theme.DANGER if conflict else theme.SUCCESS
         style = f"border: 2px solid {color};"
         range_from.setStyleSheet(style)
         range_to.setStyleSheet(style)
@@ -624,7 +624,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
     # --- رنگِ گروه ---------------------------------------------------------
     def _apply_color_swatch(self, color: str | None) -> None:
         self.color_button.setStyleSheet(
-            f"background-color: {color or '#FFFFFF'}; border: 1px solid {theme.BORDER}; border-radius: 4px;"
+            f"background-color: {color or theme.SURFACE}; border: 1px solid {theme.BORDER}; border-radius: 4px;"
         )
 
     def _pick_color(self) -> None:

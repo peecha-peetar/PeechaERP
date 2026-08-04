@@ -128,7 +128,7 @@ class _QuickAccessTile(QFrame):
         self._shadow.setBlurRadius(0)
         self._shadow.setXOffset(0)
         self._shadow.setYOffset(0)
-        self._shadow.setColor(QColor(79, 70, 229, 0))
+        self._shadow.setColor(QColor(0, 0, 0, 0))
         self.setGraphicsEffect(self._shadow)
         self._anim = QPropertyAnimation(self._shadow, b"blurRadius", self)
         self._anim.setDuration(150)
@@ -144,7 +144,9 @@ class _QuickAccessTile(QFrame):
         self._anim.setStartValue(self._shadow.blurRadius())
         self._anim.setEndValue(22)
         self._anim.start()
-        self._shadow.setColor(QColor(79, 70, 229, 60))
+        hover_glow = QColor(theme.ACCENT)
+        hover_glow.setAlpha(70)
+        self._shadow.setColor(hover_glow)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802
@@ -334,7 +336,7 @@ class _MdiTitleBar(QWidget):
         # آیکون/عنوان که آخر اضافه می‌شوند، سمتِ چپ می‌مانند. دکمه‌ی بستن
         # اول از همه اضافه می‌شود تا لبه‌یِ بیرونی (گوشه‌ی راست) باشد —
         # هم‌راستا با قراردادِ متعارفِ «بستن، دورترین دکمه از مرکز».
-        self.close_btn = self._make_control_button("✕", "#FDECEC")
+        self.close_btn = self._make_control_button("✕", theme.rgba(theme.DANGER, 0.16))
         self.close_btn.clicked.connect(sub_window.close)
         layout.addWidget(self.close_btn)
 
@@ -603,6 +605,8 @@ class MainWindow(QMainWindow):
         body.addWidget(self._build_sidebar())
         body.addWidget(self._build_mdi_area(), stretch=1)
         outer.addLayout(body, stretch=1)
+        self._outer_layout = outer
+        self._body_layout = body
 
         self._register_screens()
         self.open_screen("dashboard")
@@ -628,6 +632,60 @@ class MainWindow(QMainWindow):
             return False
         return super().eventFilter(obj, event)
 
+    # --- سوییچِ زنده‌یِ تمِ روشن/تیره ---------------------------------------
+    def _on_theme_toggled(self, light_checked: bool) -> None:
+        """طبقِ خواسته‌یِ صریح: سوییچِ واقعیِ رفت‌وبرگشتی بینِ تمِ روشن/تیره،
+        بدونِ نیاز به ری‌استارتِ برنامه. `theme.set_theme_mode` خودش
+        QPalette/QSS/QSettings را هندل می‌کند و یک پاسِ repolish رویِ
+        همه‌یِ ویجت‌هایِ زنده می‌زند (کافی برایِ اکثرِ سطحِ برنامه — جدول‌ها،
+        فیلدها، دکمه‌ها، کارت‌ها، تب‌ها). آنچه repolish پوشش نمی‌دهد
+        (HoverButtonِ سرتیترها/آیتم‌هایِ ساید‌بار که رنگِ هاورشان را در
+        __init__ منجمد می‌کنند) با بازسازیِ درجایِ کرومِ هدر/ریبون/ساید‌بار
+        در `_rebuild_chrome()` رفع می‌شود."""
+        app = QApplication.instance()
+        theme.set_theme_mode(app, dark=not light_checked)
+        self._rebuild_chrome()
+        for screen in self._screens.values():
+            refresh = getattr(screen, "refresh", None)
+            if callable(refresh):
+                refresh()
+        self.mdi_area.setBackground(QBrush(QColor(theme.BACKGROUND)))
+
+    def _rebuild_chrome(self) -> None:
+        """هدر/ریبون/ساید‌بار را با مقادیرِ تازه‌یِ theme.* دوباره می‌سازد
+        و به‌جایِ نسخه‌هایِ قدیمی در همان جایگاهِ layout می‌نشاند — چون
+        HoverButton (سرتیترها/آیتم‌هایِ ساید‌بار، دکمه‌یِ گیر) رنگِ
+        پس‌زمینه‌یِ هاور/فعالش را در __init__ منجمد می‌کند."""
+        old_header, old_quick_access, old_sidebar = (
+            self._header_scroll, self._quick_access_scroll, self._sidebar_scroll,
+        )
+        active_leaf = self._current_screen_code
+        active_module = self._quick_access_module_code
+
+        new_header = self._build_header()
+        self._outer_layout.replaceWidget(old_header, new_header)
+        old_header.deleteLater()
+
+        new_quick_access = self._build_quick_access_bar()
+        self._outer_layout.replaceWidget(old_quick_access, new_quick_access)
+        old_quick_access.deleteLater()
+
+        new_sidebar = self._build_sidebar()
+        self._body_layout.replaceWidget(old_sidebar, new_sidebar)
+        old_sidebar.deleteLater()
+
+        # طبقِ الگویِ خودِ open_screen: بازگردانیِ متن/گزینه‌هایِ کمبوهایِ
+        # هدر (شرکت/سالِ مالی/زبان)، ریبونِ ماژولِ فعلی، و آیتمِ فعالِ
+        # ساید‌بار — چون کمبو/ریبون/ساید‌بارِ تازه‌ساخته‌شده خالی یا رویِ
+        # پیش‌فرضِ داشبورد شروع می‌شوند.
+        self.load_context_switcher()
+        if active_module and active_module != "dashboard":
+            self._quick_access_module_code = None
+            self._refresh_quick_access_bar(active_module)
+        if active_leaf:
+            for group in self._sidebar_groups.values():
+                group.set_active_leaf(active_leaf)
+
     # --- هدر --------------------------------------------------------------
     def _build_header(self) -> QWidget:
         scroll = QScrollArea()
@@ -636,7 +694,7 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(68)
+        scroll.setFixedHeight(72)
 
         header = QWidget()
         header.setObjectName("headerBar")
@@ -644,13 +702,30 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(24, 8, 24, 8)
         layout.setSpacing(16)
 
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(10)
+        brand_mark = QLabel("پ")
+        brand_mark.setFixedSize(34, 34)
+        brand_mark.setAlignment(Qt.AlignCenter)
+        brand_mark_font = QFont()
+        brand_mark_font.setPointSize(14)
+        brand_mark_font.setBold(True)
+        brand_mark.setFont(brand_mark_font)
+        brand_mark.setStyleSheet(
+            f"background-color: {theme.rgba(theme.ACCENT, 0.18)}; "
+            f"border: 1px solid {theme.rgba(theme.ACCENT, 0.35)}; "
+            f"border-radius: 11px; color: {theme.PRIMARY};"
+        )
+        brand_row.addWidget(brand_mark)
+
         brand = QLabel("پیچا")
         brand_font = QFont()
         brand_font.setPointSize(15)
         brand_font.setBold(True)
         brand.setFont(brand_font)
-        brand.setStyleSheet(f"color: {theme.ACCENT};")
-        layout.addWidget(brand)
+        brand.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
+        brand_row.addWidget(brand)
+        layout.addLayout(brand_row)
 
         divider0 = QFrame()
         divider0.setFrameShape(QFrame.VLine)
@@ -668,13 +743,33 @@ class MainWindow(QMainWindow):
         self.field_help_toggle.setStyleSheet(
             "#fieldHelpToggle {"
             "   border: none; border-radius: 14px; padding: 4px 10px;"
-            "   font-size: 15px; color: #8a93a6; background: transparent;"
+            f"   font-size: 15px; color: {theme.TEXT_SECONDARY}; background: transparent;"
             "}"
-            "#fieldHelpToggle:checked { color: #f5a524; background: rgba(245, 165, 36, 40); }"
-            "#fieldHelpToggle:hover { background: rgba(245, 165, 36, 25); }"
+            f"#fieldHelpToggle:checked {{ color: {theme.WARNING}; background: {theme.rgba(theme.WARNING, 0.16)}; }}"
+            f"#fieldHelpToggle:hover {{ background: {theme.rgba(theme.WARNING, 0.10)}; }}"
         )
         self.field_help_toggle.toggled.connect(set_field_help_enabled)
         layout.addWidget(self.field_help_toggle)
+
+        # طبقِ خواسته‌یِ صریح: سوییچِ زنده‌یِ روشن/تیره — گلیف نشان‌دهنده‌یِ
+        # حالتِ *مقصد* است (اگر الان تیره‌ایم، آفتاب یعنی «برو روشن»),
+        # هم‌الگو با field_help_toggle (همان objectName-styling).
+        self.theme_toggle = QToolButton()
+        self.theme_toggle.setObjectName("fieldHelpToggle")
+        self.theme_toggle.setCheckable(True)
+        self.theme_toggle.setChecked(not theme.is_dark_mode())
+        self.theme_toggle.setCursor(Qt.PointingHandCursor)
+        self.theme_toggle.setText("☀" if theme.is_dark_mode() else "🌙")
+        self.theme_toggle.setToolTip("رفتن به حالتِ روشن" if theme.is_dark_mode() else "رفتن به حالتِ تیره")
+        self.theme_toggle.setStyleSheet(
+            "#fieldHelpToggle {"
+            "   border: none; border-radius: 14px; padding: 4px 10px;"
+            f"   font-size: 15px; color: {theme.TEXT_SECONDARY}; background: transparent;"
+            "}"
+            f"#fieldHelpToggle:hover {{ background: {theme.rgba(theme.PRIMARY, 0.10)}; }}"
+        )
+        self.theme_toggle.toggled.connect(self._on_theme_toggled)
+        layout.addWidget(self.theme_toggle)
 
         self.search_field = QLineEdit()
         self.search_field.setPlaceholderText("⌕  جستجو در سیستم...")
@@ -734,12 +829,13 @@ class MainWindow(QMainWindow):
         scroll.setWidget(header)
 
         header_shadow = QGraphicsDropShadowEffect(scroll)
-        header_shadow.setBlurRadius(18)
+        header_shadow.setBlurRadius(24)
         header_shadow.setXOffset(0)
-        header_shadow.setYOffset(3)
-        header_shadow.setColor(QColor(21, 22, 43, 20))
+        header_shadow.setYOffset(4)
+        header_shadow.setColor(QColor(0, 0, 0, 110))
         scroll.setGraphicsEffect(header_shadow)
 
+        self._header_scroll = scroll
         return scroll
 
     # --- ریبونِ میان‌برهایِ پرکاربرد -------------------------------------------
@@ -750,7 +846,7 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(92)
+        scroll.setFixedHeight(96)
 
         bar = QWidget()
         bar.setObjectName("quickAccessBar")
