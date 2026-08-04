@@ -407,6 +407,22 @@ class _CheckEntryDialog(QDialog):
         # می‌شوند — همان دو فیلدی که قبلاً فقط در حالتِ تک‌چکی وجود داشتند.
         self.checkbook_combo: QComboBox | None = None
         self.issuing_bank_combo: QComboBox | None = None
+        self.fund_combo: QComboBox | None = None
+        if direction == "RECEIPT":
+            # طبقِ درخواستِ صریح: پیش‌نیازِ زنجیره‌یِ مراحلِ چرخه‌یِ چک —
+            # هرچکِ دریافتی از همین لحظه باید بداند نزدِ کدام صندوقِ مشخص
+            # است (هم‌الگو با حسابِ بانکیِ صادرکننده در پرداخت).
+            fund_form = QFormLayout()
+            cash_box_type_id = dimensions_service.get_specialized_dimension_type_id(
+                company_id, dimensions_service.CASH_BOX_CODE
+            )
+            fund_options = dimensions_service.list_leaf_detail_accounts(company_id, cash_box_type_id)
+            if fund_options:
+                self.fund_combo = QComboBox()
+                for option in fund_options:
+                    self.fund_combo.addItem(option.name or option.code, option.detail_account_id)
+                fund_form.addRow("صندوقِ محلِ دریافت", self.fund_combo)
+                outer.addLayout(fund_form)
         if direction == "PAYMENT":
             issuing_form = QFormLayout()
             self.checkbook_combo = QComboBox()
@@ -653,6 +669,9 @@ class _CheckEntryDialog(QDialog):
     def result_bank_account_detail_id(self) -> int | None:
         return self.issuing_bank_combo.currentData() if self.issuing_bank_combo is not None else None
 
+    def result_fund_detail_account_id(self) -> int | None:
+        return self.fund_combo.currentData() if self.fund_combo is not None else None
+
     def result_person_detail_account_id(self) -> int | None:
         if self.preset_person_detail_id is not None:
             return self.preset_person_detail_id
@@ -738,6 +757,8 @@ class _MethodRow:
                 if direction == "PAYMENT":
                     self.details["checkbook_id"] = dialog.result_checkbook_id()
                     self.details["detail_account_id"] = dialog.result_bank_account_detail_id()
+                else:
+                    self.details["detail_account_id"] = dialog.result_fund_detail_account_id()
                 total = sum((c["amount"] for c in checks), decimal.Decimal(0))
                 self.amount_field.setValue(float(total))
                 self._regenerate_description()

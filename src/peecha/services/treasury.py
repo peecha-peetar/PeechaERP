@@ -47,6 +47,16 @@ MAPPING_KEYS = [
     "PAYMENT_DISCOUNT",
     "PAYMENT_CHECK_DISBURSEMENT",
     "PAYMENT_NETTING",
+    # طبقِ درخواستِ صریح: «برایِ هرِ مرحله یک ردیفِ جداگانه در تنظیمات باشه»
+    # — این‌ها مستقل از کلیدهایِ فرمِ دریافت/پرداختِ بالا، مخصوصِ مراحلِ
+    # چرخه‌یِ عمرِ چک‌اند (حتی اگر عملاً به همان حساب اشاره کنند).
+    "CHECK_RECEIVED_FUND_TRANSFER",
+    "CHECK_RECEIVED_CASH_COLLECT",
+    "CHECK_RECEIVED_BANK_DEPOSIT",
+    "CHECK_RECEIVED_BANK_CLEAR",
+    "CHECK_RECEIVED_BANK_RETURN",
+    "CHECK_ISSUED_BANK_CLEAR",
+    "CHECK_ISSUED_RETURN_TO_FUND",
 ]
 
 MAPPING_LABELS: dict[str, str] = {
@@ -63,6 +73,19 @@ MAPPING_LABELS: dict[str, str] = {
     "PAYMENT_DISCOUNT": "تخفیفاتِ نقدیِ دریافت‌شده",
     "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
     "PAYMENT_NETTING": "تهاترِ پرداخت",
+    "CHECK_RECEIVED_FUND_TRANSFER": "انتقالِ چکِ دریافتی بینِ صندوق‌ها",
+    "CHECK_RECEIVED_CASH_COLLECT": "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق",
+    "CHECK_RECEIVED_BANK_DEPOSIT": "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک",
+    "CHECK_RECEIVED_BANK_CLEAR": "اعلامِ وصولِ چکِ دریافتیِ نزدِ بانک",
+    "CHECK_RECEIVED_BANK_RETURN": "برگشتِ چکِ دریافتیِ نزدِ بانک به صندوق",
+    "CHECK_ISSUED_BANK_CLEAR": "وصولِ چکِ پرداختی از بانک",
+    "CHECK_ISSUED_RETURN_TO_FUND": "چکِ پرداختیِ وصول‌نشده جهتِ برگشت",
+    # این دو مرحله (برگشتِ چک به طرفِ‌حساب / برگشتِ چکِ خرجی به صندوق) حسابِ
+    # کلِ تازه لازم ندارند — هر دو طرفِ سندشان پویا از رویِ خودِ چک تعیین
+    # می‌شود؛ فقط این‌جا برایِ برچسبِ ردیفِ متنِ‌شرحِ قابل‌ویرایش (پایین)
+    # استفاده می‌شوند، نه به‌عنوانِ کلیدِ نگاشتِ حساب.
+    "CHECK_RECEIVED_CUSTOMER_RETURN": "برگشتِ چکِ دریافتیِ نزدِ صندوق به طرفِ‌حساب",
+    "CHECK_RECEIVED_ENDORSED_RETURN": "برگشتِ چکِ خرجی به صندوق",
 }
 
 METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER")
@@ -80,6 +103,8 @@ DEFAULT_DESCRIPTION_TEMPLATES: dict[str, str] = {
     "RECEIPT_GOODS_COUPON": "دریافتِ کالابرگِ «{تفصیلی}» به مبلغِ {مبلغ} ریال از {طرف_حساب}",
     "RECEIPT_VOUCHER": "دریافتِ بنِ {یادداشت} به مبلغِ {مبلغ} ریال از {طرف_حساب}",
     "RECEIPT_NETTING": "تهاترِ حساب به مبلغِ {مبلغ} ریال با {طرف_حساب}",
+    "CHECK_RECEIVED_CUSTOMER_RETURN": "برگشتِ چکِ دریافتیِ نزدِ صندوق به طرفِ‌حساب به مبلغِ {مبلغ} ریال",
+    "CHECK_RECEIVED_ENDORSED_RETURN": "برگشتِ چکِ خرجی‌شده به صندوق به مبلغِ {مبلغ} ریال",
 }
 
 
@@ -691,6 +716,11 @@ def create_treasury_voucher(
                         "due_date": ml.check_due_date,
                     }
                 ]
+                # طبقِ درخواستِ صریح: هر چکِ دریافتی از همین لحظه محلِ فعلیِ
+                # نگه‌داری‌اش (نزدِ کدام صندوق) را ثبت می‌کند — پیش‌نیازِ
+                # زنجیره‌یِ ۷مرحله‌ایِ چرخه‌یِ چک؛ ml.detail_account_id همان
+                # صندوقی است که در دیالوگِ چندچکی انتخاب شد.
+                receipt_check_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_CHECK")
                 for entry in check_entries:
                     session.add(
                         ReceivedCheck(
@@ -711,6 +741,8 @@ def create_treasury_voucher(
                             drawer_national_id=entry.get("national_id"),
                             drawer_phone=entry.get("phone"),
                             bank_id=entry.get("bank_id"),
+                            current_location_account_id=receipt_check_account_id,
+                            current_location_detail_account_id=ml.detail_account_id,
                         )
                     )
             else:
@@ -773,6 +805,7 @@ class ReceivedCheckRow:
     received_date: datetime.date
     status_code: str
     source_journal_entry_id: int
+    current_location_label: str | None = None
 
 
 @dataclass
@@ -811,6 +844,15 @@ def list_received_checks(company_id: int, status_codes: list[str] | None = None)
             status_ids = [sid for sid, code in codes.items() if code in status_codes]
             query = query.where(ReceivedCheck.status_id.in_(status_ids))
         rows = session.scalars(query.order_by(ReceivedCheck.due_date)).all()
+        location_detail_ids = {r.current_location_detail_account_id for r in rows if r.current_location_detail_account_id}
+        location_labels: dict[int, str] = {}
+        if location_detail_ids:
+            location_labels = {
+                d.detail_account_id: d.name or d.code
+                for d in session.scalars(
+                    select(DetailAccount).where(DetailAccount.detail_account_id.in_(location_detail_ids))
+                ).all()
+            }
         return [
             ReceivedCheckRow(
                 received_check_id=r.received_check_id,
@@ -822,6 +864,7 @@ def list_received_checks(company_id: int, status_codes: list[str] | None = None)
                 received_date=r.received_date,
                 status_code=codes.get(r.status_id, ""),
                 source_journal_entry_id=r.source_journal_entry_id,
+                current_location_label=location_labels.get(r.current_location_detail_account_id),
             )
             for r in rows
         ]
@@ -882,203 +925,390 @@ def _first_line_account_and_details(session, journal_entry_id: int) -> tuple[int
     return line.account_id, details
 
 
-def deposit_received_check(received_check_id: int, company_id: int) -> None:
-    """نزدِ صندوق -> واگذار به بانک برایِ وصول — فقط تغییرِ وضعیت، بدونِ
-    سندِ حسابداریِ تازه (تا وصول‌نشدنِ واقعی، اثری در دفاتر ثبت نمی‌شود)."""
-    with new_session() as session:
-        check = session.get(ReceivedCheck, received_check_id)
-        if check is None or check.company_id != company_id:
+def _load_checks_for_stage(
+    session, check_ids: list[int], company_id: int, eligible_status_codes: tuple[str, ...]
+) -> list[ReceivedCheck]:
+    if not check_ids:
+        raise ValueError("هیچ چکی انتخاب نشده است.")
+    checks = session.scalars(select(ReceivedCheck).where(ReceivedCheck.received_check_id.in_(check_ids))).all()
+    if len(checks) != len(set(check_ids)):
+        raise ValueError("چکِ انتخاب‌شده نامعتبر است.")
+    for check in checks:
+        if check.company_id != company_id:
             raise ValueError("چک نامعتبر است.")
-        check.status_id = _status_id(session, "DEPOSITED", "RECEIVED")
-        session.commit()
+        if session.get(CheckStatus, check.status_id).code not in eligible_status_codes:
+            raise ValueError(f"چکِ شماره‌ی {check.check_no} در این مرحله قابلِ‌پردازش نیست.")
+    return checks
 
 
-def clear_received_check(
-    received_check_id: int, company_id: int, created_by_user_id: int, bank_detail_account_id: int
+def _detail_dict(session, detail_id: int | None) -> dict[int, int]:
+    if detail_id is None:
+        return {}
+    detail = session.get(DetailAccount, detail_id)
+    if detail is None:
+        return {}
+    return {detail.dimension_type_id: detail_id}
+
+
+def _group_received_checks_by_source(
+    session, checks: list[ReceivedCheck], company_id: int
+) -> dict[tuple[int, int | None], list[ReceivedCheck]]:
+    """چک‌هایِ انتخاب‌شده را بر اساسِ محلِ فعلیِ نگه‌داری‌شان (حساب+تفصیلی)
+    گروه‌بندی می‌کند — هر گروه یک خطِ جداگانه در سندِ bulk می‌شود. چکِ
+    بدونِ محلِ ثبت‌شده (داده‌یِ قدیمی، پیش‌ازِ این ویژگی) با حسابِ نگاشتِ
+    RECEIPT_CHECK و بدونِ تفصیلی جایگزین می‌شود."""
+    fallback_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_CHECK")
+    groups: dict[tuple[int, int | None], list[ReceivedCheck]] = {}
+    for check in checks:
+        key = (check.current_location_account_id or fallback_account_id, check.current_location_detail_account_id)
+        groups.setdefault(key, []).append(check)
+    return groups
+
+
+def _validate_detail_account(session, detail_account_id: int, company_id: int) -> DetailAccount:
+    detail = session.get(DetailAccount, detail_account_id)
+    if detail is None or detail.company_id != company_id:
+        raise ValueError("تفصیلیِ انتخاب‌شده نامعتبر است.")
+    return detail
+
+
+def transfer_received_checks_between_funds(
+    check_ids: list[int], company_id: int, created_by_user_id: int, target_fund_detail_id: int
 ) -> je_service.JournalEntryResult:
-    """وصول شد: بدهکارِ حسابِ بانکیِ انتخاب‌شده / بستانکارِ چک‌هایِ دریافتنی."""
+    """مرحله‌ی ۱ — انتقالِ چکِ نزدِ صندوق بینِ صندوق‌ها: بدهکارِ حسابِ نگاشتِ
+    CHECK_RECEIVED_FUND_TRANSFER با تفصیلیِ صندوقِ مقصد / بستانکارِ همان
+    حساب با تفصیلیِ صندوق(هایِ) مبدأِ هرکدام."""
     with new_session() as session:
-        check = session.get(ReceivedCheck, received_check_id)
-        if check is None or check.company_id != company_id:
-            raise ValueError("چک نامعتبر است.")
-        current_code = session.get(CheckStatus, check.status_id).code
-        if current_code not in ("IN_HAND", "DEPOSITED"):
-            raise ValueError("فقط چکِ نزدِ صندوق یا واگذارشده‌ به بانک قابلِ وصول‌شدن است.")
-        bank_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_BANK")
-        check_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_CHECK")
-        bank_detail = session.get(DetailAccount, bank_detail_account_id)
-        if bank_detail is None or bank_detail.company_id != company_id:
-            raise ValueError("حسابِ بانکیِ انتخاب‌شده نامعتبر است.")
-        bank_dimension_type_id = bank_detail.dimension_type_id
+        checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
+        account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_FUND_TRANSFER")
+        _validate_detail_account(session, target_fund_detail_id, company_id)
+        groups = _group_received_checks_by_source(session, checks, company_id)
+        total = sum((c.amount for c in checks), decimal.Decimal(0))
+        description = "انتقالِ چکِ دریافتی بینِ صندوق‌ها"
         lines = [
             je_service.LineInput(
-                account_id=bank_account_id,
-                description=f"وصولِ چکِ شماره‌ی {check.check_no}",
-                debit=check.amount,
-                credit=decimal.Decimal(0),
-                details={bank_dimension_type_id: bank_detail_account_id},
-            ),
-            je_service.LineInput(
-                account_id=check_account_id,
-                description=f"وصولِ چکِ شماره‌ی {check.check_no}",
-                debit=decimal.Decimal(0),
-                credit=check.amount,
-            ),
+                account_id=account_id, description=description, debit=total, credit=decimal.Decimal(0),
+                details=_detail_dict(session, target_fund_detail_id),
+            )
         ]
-        check_no = check.check_no
-        check.status_id = _status_id(session, "CLEARED", "RECEIVED")
+        for (src_account_id, src_detail_id), group_checks in groups.items():
+            group_total = sum((c.amount for c in group_checks), decimal.Decimal(0))
+            lines.append(
+                je_service.LineInput(
+                    account_id=src_account_id, description=description, debit=decimal.Decimal(0), credit=group_total,
+                    details=_detail_dict(session, src_detail_id),
+                )
+            )
+        for check in checks:
+            check.current_location_account_id = account_id
+            check.current_location_detail_account_id = target_fund_detail_id
         session.commit()
 
     return je_service.create_journal_entry(
-        company_id, created_by_user_id, datetime.date.today(),
-        f"وصولِ چکِ دریافتیِ شماره‌ی {check_no}", lines, entry_type_code="RECEIPT",
+        company_id, created_by_user_id, datetime.date.today(), "انتقالِ چکِ دریافتی بینِ صندوق‌ها", lines,
+        entry_type_code="RECEIPT",
     )
 
 
-def bounce_received_check(received_check_id: int, company_id: int, created_by_user_id: int) -> je_service.JournalEntryResult:
-    """برگشت‌خورد: بدهکارِ همان حساب/تفصیلیِ طرف‌حسابِ سندِ اصلی (دوباره
-    بدهکار می‌شود) / بستانکارِ چک‌هایِ دریافتنی."""
+def collect_received_checks_cash(
+    check_ids: list[int], company_id: int, created_by_user_id: int, cash_box_detail_id: int
+) -> je_service.JournalEntryResult:
+    """مرحله‌ی ۲ — وصولِ نقدیِ چکِ نزدِ صندوق: بدهکارِ حسابِ نگاشتِ
+    CHECK_RECEIVED_CASH_COLLECT با تفصیلیِ صندوقِ نقدیِ مقصد / بستانکارِ
+    محلِ فعلیِ هرچک."""
     with new_session() as session:
-        check = session.get(ReceivedCheck, received_check_id)
-        if check is None or check.company_id != company_id:
-            raise ValueError("چک نامعتبر است.")
-        current_code = session.get(CheckStatus, check.status_id).code
-        if current_code not in ("IN_HAND", "DEPOSITED"):
-            raise ValueError("این چک دیگر قابلِ برگشت‌زدن نیست.")
-        counterparty_account_id, counterparty_details = _first_line_account_and_details(
-            session, check.source_journal_entry_id
-        )
-        check_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_CHECK")
+        checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
+        target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_CASH_COLLECT")
+        _validate_detail_account(session, cash_box_detail_id, company_id)
+        groups = _group_received_checks_by_source(session, checks, company_id)
+        total = sum((c.amount for c in checks), decimal.Decimal(0))
+        description = "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق"
         lines = [
             je_service.LineInput(
-                account_id=counterparty_account_id,
-                description=f"برگشتِ چکِ شماره‌ی {check.check_no}",
-                debit=check.amount,
-                credit=decimal.Decimal(0),
-                details=dict(counterparty_details),
-            ),
-            je_service.LineInput(
-                account_id=check_account_id,
-                description=f"برگشتِ چکِ شماره‌ی {check.check_no}",
-                debit=decimal.Decimal(0),
-                credit=check.amount,
-            ),
+                account_id=target_account_id, description=description, debit=total, credit=decimal.Decimal(0),
+                details=_detail_dict(session, cash_box_detail_id),
+            )
         ]
-        check_no = check.check_no
-        check.status_id = _status_id(session, "BOUNCED", "RECEIVED")
+        for (src_account_id, src_detail_id), group_checks in groups.items():
+            group_total = sum((c.amount for c in group_checks), decimal.Decimal(0))
+            lines.append(
+                je_service.LineInput(
+                    account_id=src_account_id, description=description, debit=decimal.Decimal(0), credit=group_total,
+                    details=_detail_dict(session, src_detail_id),
+                )
+            )
+        for check in checks:
+            check.status_id = _status_id(session, "CLEARED", "RECEIVED")
         session.commit()
 
     return je_service.create_journal_entry(
-        company_id, created_by_user_id, datetime.date.today(),
-        f"برگشتِ چکِ دریافتیِ شماره‌ی {check_no}", lines, entry_type_code="RECEIPT",
+        company_id, created_by_user_id, datetime.date.today(), "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق", lines,
+        entry_type_code="RECEIPT",
     )
 
 
-def endorse_received_check(received_check_id: int, company_id: int) -> None:
-    """خرج‌شده نزدِ شخصِ ثالث — فقط تغییرِ وضعیت (بدونِ سندِ تازه)؛ اگر این
-    چک بعداً به‌عنوانِ روشِ CHECK در یک سندِ پرداختِ دیگر استفاده شود، آن
-    سند اثرِ حسابداریِ واقعی را ثبت می‌کند."""
+def deposit_received_checks_to_bank(
+    check_ids: list[int], company_id: int, created_by_user_id: int, bank_detail_id: int
+) -> je_service.JournalEntryResult:
+    """مرحله‌ی ۳ — واگذاریِ چکِ نزدِ صندوق به بانک: بدهکارِ حسابِ نگاشتِ
+    CHECK_RECEIVED_BANK_DEPOSIT با تفصیلیِ بانکِ مقصد / بستانکارِ محلِ
+    فعلیِ هرچک."""
     with new_session() as session:
-        check = session.get(ReceivedCheck, received_check_id)
-        if check is None or check.company_id != company_id:
-            raise ValueError("چک نامعتبر است.")
-        current_code = session.get(CheckStatus, check.status_id).code
-        if current_code not in ("IN_HAND", "DEPOSITED"):
-            raise ValueError("این چک دیگر قابلِ خرج‌کردن نیست.")
-        check.status_id = _status_id(session, "ENDORSED", "RECEIVED")
+        checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
+        target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_BANK_DEPOSIT")
+        _validate_detail_account(session, bank_detail_id, company_id)
+        groups = _group_received_checks_by_source(session, checks, company_id)
+        total = sum((c.amount for c in checks), decimal.Decimal(0))
+        description = "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک"
+        lines = [
+            je_service.LineInput(
+                account_id=target_account_id, description=description, debit=total, credit=decimal.Decimal(0),
+                details=_detail_dict(session, bank_detail_id),
+            )
+        ]
+        for (src_account_id, src_detail_id), group_checks in groups.items():
+            group_total = sum((c.amount for c in group_checks), decimal.Decimal(0))
+            lines.append(
+                je_service.LineInput(
+                    account_id=src_account_id, description=description, debit=decimal.Decimal(0), credit=group_total,
+                    details=_detail_dict(session, src_detail_id),
+                )
+            )
+        for check in checks:
+            check.status_id = _status_id(session, "DEPOSITED", "RECEIVED")
+            check.current_location_account_id = target_account_id
+            check.current_location_detail_account_id = bank_detail_id
+        session.commit()
+
+    return je_service.create_journal_entry(
+        company_id, created_by_user_id, datetime.date.today(), "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک", lines,
+        entry_type_code="RECEIPT",
+    )
+
+
+def clear_deposited_received_checks(
+    check_ids: list[int], company_id: int, created_by_user_id: int
+) -> je_service.JournalEntryResult:
+    """مرحله‌ی ۴ — اعلامِ وصولِ چکِ نزدِ بانک: بدهکارِ حسابِ نگاشتِ
+    CHECK_RECEIVED_BANK_CLEAR / بستانکارِ محلِ فعلیِ هرچک (همان بانکی که
+    در مرحله‌ی ۳ انتخاب شده بود) — بدونِ نیازِ انتخابِ مقصد، چون بانک از
+    رویِ خودِ چک معلوم است."""
+    with new_session() as session:
+        checks = _load_checks_for_stage(session, check_ids, company_id, ("DEPOSITED",))
+        target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_BANK_CLEAR")
+        groups = _group_received_checks_by_source(session, checks, company_id)
+        description = "اعلامِ وصولِ چکِ دریافتیِ نزدِ بانک"
+        lines: list[je_service.LineInput] = []
+        for (src_account_id, src_detail_id), group_checks in groups.items():
+            group_total = sum((c.amount for c in group_checks), decimal.Decimal(0))
+            details = _detail_dict(session, src_detail_id)
+            lines.append(
+                je_service.LineInput(
+                    account_id=target_account_id, description=description, debit=group_total, credit=decimal.Decimal(0),
+                    details=details,
+                )
+            )
+            lines.append(
+                je_service.LineInput(
+                    account_id=src_account_id, description=description, debit=decimal.Decimal(0), credit=group_total,
+                    details=details,
+                )
+            )
+        for check in checks:
+            check.status_id = _status_id(session, "CLEARED", "RECEIVED")
+        session.commit()
+
+    return je_service.create_journal_entry(
+        company_id, created_by_user_id, datetime.date.today(), "اعلامِ وصولِ چکِ دریافتیِ نزدِ بانک", lines,
+        entry_type_code="RECEIPT",
+    )
+
+
+def return_deposited_received_checks_to_fund(
+    check_ids: list[int], company_id: int, created_by_user_id: int, target_fund_detail_id: int
+) -> je_service.JournalEntryResult:
+    """مرحله‌ی ۵ — برگشتِ چکِ نزدِ بانک به صندوق: بدهکارِ حسابِ نگاشتِ
+    CHECK_RECEIVED_BANK_RETURN با تفصیلیِ صندوقِ مقصد / بستانکارِ محلِ
+    فعلیِ هرچک (بانکِ مبدأ)."""
+    with new_session() as session:
+        checks = _load_checks_for_stage(session, check_ids, company_id, ("DEPOSITED",))
+        target_account_id = _get_mapped_account_id(session, company_id, "CHECK_RECEIVED_BANK_RETURN")
+        _validate_detail_account(session, target_fund_detail_id, company_id)
+        groups = _group_received_checks_by_source(session, checks, company_id)
+        total = sum((c.amount for c in checks), decimal.Decimal(0))
+        description = "برگشتِ چکِ دریافتیِ نزدِ بانک به صندوق"
+        lines = [
+            je_service.LineInput(
+                account_id=target_account_id, description=description, debit=total, credit=decimal.Decimal(0),
+                details=_detail_dict(session, target_fund_detail_id),
+            )
+        ]
+        for (src_account_id, src_detail_id), group_checks in groups.items():
+            group_total = sum((c.amount for c in group_checks), decimal.Decimal(0))
+            lines.append(
+                je_service.LineInput(
+                    account_id=src_account_id, description=description, debit=decimal.Decimal(0), credit=group_total,
+                    details=_detail_dict(session, src_detail_id),
+                )
+            )
+        for check in checks:
+            check.status_id = _status_id(session, "IN_HAND", "RECEIVED")
+            check.current_location_account_id = target_account_id
+            check.current_location_detail_account_id = target_fund_detail_id
+        session.commit()
+
+    return je_service.create_journal_entry(
+        company_id, created_by_user_id, datetime.date.today(), "برگشتِ چکِ دریافتیِ نزدِ بانک به صندوق", lines,
+        entry_type_code="RECEIPT",
+    )
+
+
+def bounce_received_checks(
+    check_ids: list[int], company_id: int, created_by_user_id: int
+) -> je_service.JournalEntryResult:
+    """مرحله‌ی ۶ — برگشتِ چکِ نزدِ صندوق به طرفِ‌حساب: بدهکارِ همان
+    حساب/تفصیلیِ طرف‌حسابِ سندِ اصلیِ هرچک (دوباره بدهکار می‌شود) /
+    بستانکارِ محلِ فعلیِ همان چک."""
+    with new_session() as session:
+        checks = _load_checks_for_stage(session, check_ids, company_id, ("IN_HAND",))
+        description = "برگشتِ چکِ دریافتی به طرفِ‌حساب"
+        lines: list[je_service.LineInput] = []
+        for check in checks:
+            counterparty_account_id, counterparty_details = _first_line_account_and_details(
+                session, check.source_journal_entry_id
+            )
+            lines.append(
+                je_service.LineInput(
+                    account_id=counterparty_account_id,
+                    description=f"{description} — چکِ شماره‌ی {check.check_no}",
+                    debit=check.amount, credit=decimal.Decimal(0), details=dict(counterparty_details),
+                )
+            )
+        groups = _group_received_checks_by_source(session, checks, company_id)
+        for (src_account_id, src_detail_id), group_checks in groups.items():
+            group_total = sum((c.amount for c in group_checks), decimal.Decimal(0))
+            lines.append(
+                je_service.LineInput(
+                    account_id=src_account_id, description=description, debit=decimal.Decimal(0), credit=group_total,
+                    details=_detail_dict(session, src_detail_id),
+                )
+            )
+        for check in checks:
+            check.status_id = _status_id(session, "BOUNCED", "RECEIVED")
+        session.commit()
+
+    return je_service.create_journal_entry(
+        company_id, created_by_user_id, datetime.date.today(), description, lines, entry_type_code="RECEIPT",
+    )
+
+
+def unendorse_received_checks_to_fund(
+    check_ids: list[int], company_id: int, target_fund_detail_id: int
+) -> None:
+    """مرحله‌ی ۷ — برگشتِ چکِ خرجی به صندوق: فقط تغییرِ وضعیت/محل، بدونِ
+    سندِ حسابداری — چون این نسخه ردی از «کدام سندِ CHECK_DISBURSEMENT این
+    چک را واقعاً خرج کرد» ندارد؛ اگر این چک واقعاً در یک سندِ پرداخت خرج
+    شده، آن سند باید جداگانه در دفترِ روزنامه اصلاح شود (این تابع فقط
+    برایِ چکی است که «خرج‌شده» علامت خورده ولی عملاً برنگشته)."""
+    with new_session() as session:
+        checks = _load_checks_for_stage(session, check_ids, company_id, ("ENDORSED",))
+        _validate_detail_account(session, target_fund_detail_id, company_id)
+        fund_account_id = _get_mapped_account_id(session, company_id, "RECEIPT_CHECK")
+        for check in checks:
+            check.status_id = _status_id(session, "IN_HAND", "RECEIVED")
+            check.current_location_account_id = fund_account_id
+            check.current_location_detail_account_id = target_fund_detail_id
         session.commit()
 
 
-def clear_issued_check(issued_check_id: int, company_id: int, created_by_user_id: int) -> je_service.JournalEntryResult:
-    """وصول شد توسطِ بانک: بدهکارِ چک‌هایِ پرداختنی / بستانکارِ همان حسابِ
-    بانکی‌ای که موقعِ صدور مشخص شده بود."""
+def clear_issued_checks(
+    check_ids: list[int], company_id: int, created_by_user_id: int
+) -> je_service.JournalEntryResult:
+    """وصولِ چکِ پرداختی از بانک: بدهکارِ حسابِ نگاشتِ CHECK_ISSUED_BANK_CLEAR
+    / بستانکارِ همان حسابِ بانکی‌ای که موقعِ صدورِ هرچک مشخص شده بود."""
     with new_session() as session:
-        check = session.get(IssuedCheck, issued_check_id)
-        if check is None or check.company_id != company_id:
-            raise ValueError("چک نامعتبر است.")
-        current_code = session.get(CheckStatus, check.status_id).code
-        if current_code != "ISSUED":
-            raise ValueError("فقط چکِ صادرشده/نزدِ گیرنده قابلِ وصول‌شدن است.")
-        check_account_id = _get_mapped_account_id(session, company_id, "PAYMENT_CHECK")
+        if not check_ids:
+            raise ValueError("هیچ چکی انتخاب نشده است.")
+        checks = session.scalars(select(IssuedCheck).where(IssuedCheck.issued_check_id.in_(check_ids))).all()
+        if len(checks) != len(set(check_ids)):
+            raise ValueError("چکِ انتخاب‌شده نامعتبر است.")
+        for check in checks:
+            if check.company_id != company_id:
+                raise ValueError("چک نامعتبر است.")
+            if session.get(CheckStatus, check.status_id).code != "ISSUED":
+                raise ValueError(f"چکِ شماره‌ی {check.check_no} در این مرحله قابلِ‌پردازش نیست.")
+        debit_account_id = _get_mapped_account_id(session, company_id, "CHECK_ISSUED_BANK_CLEAR")
         bank_account_id = _get_mapped_account_id(session, company_id, "PAYMENT_BANK")
-        bank_detail = session.get(DetailAccount, check.bank_account_detail_id)
-        bank_dimension_type_id = bank_detail.dimension_type_id if bank_detail else None
-        details = {bank_dimension_type_id: check.bank_account_detail_id} if bank_dimension_type_id else {}
+        description = "وصولِ چکِ پرداختی از بانک"
+        total = sum((c.amount for c in checks), decimal.Decimal(0))
         lines = [
             je_service.LineInput(
-                account_id=check_account_id,
-                description=f"وصولِ چکِ پرداختیِ شماره‌ی {check.check_no}",
-                debit=check.amount,
-                credit=decimal.Decimal(0),
-            ),
-            je_service.LineInput(
-                account_id=bank_account_id,
-                description=f"وصولِ چکِ پرداختیِ شماره‌ی {check.check_no}",
-                debit=decimal.Decimal(0),
-                credit=check.amount,
-                details=details,
-            ),
+                account_id=debit_account_id, description=description, debit=total, credit=decimal.Decimal(0),
+            )
         ]
-        check_no = check.check_no
-        check.status_id = _status_id(session, "CLEARED", "ISSUED")
+        by_bank_detail: dict[int, decimal.Decimal] = {}
+        for check in checks:
+            by_bank_detail[check.bank_account_detail_id] = (
+                by_bank_detail.get(check.bank_account_detail_id, decimal.Decimal(0)) + check.amount
+            )
+        for bank_detail_id, group_total in by_bank_detail.items():
+            lines.append(
+                je_service.LineInput(
+                    account_id=bank_account_id, description=description, debit=decimal.Decimal(0), credit=group_total,
+                    details=_detail_dict(session, bank_detail_id),
+                )
+            )
+        for check in checks:
+            check.status_id = _status_id(session, "CLEARED", "ISSUED")
         session.commit()
 
     return je_service.create_journal_entry(
-        company_id, created_by_user_id, datetime.date.today(),
-        f"وصولِ چکِ پرداختیِ شماره‌ی {check_no}", lines, entry_type_code="PAYMENT",
+        company_id, created_by_user_id, datetime.date.today(), "وصولِ چکِ پرداختی از بانک", lines,
+        entry_type_code="PAYMENT",
     )
 
 
-def bounce_issued_check(issued_check_id: int, company_id: int) -> None:
-    """برگشت‌خورد (بانکِ گیرنده نتوانست وصول کند) — فقط تغییرِ وضعیت؛
-    بدهیِ ما همچنان به‌عنوانِ چک‌هایِ پرداختنی برقرار می‌ماند تا با چکِ
-    تازه یا نقد تسویه شود."""
+def return_issued_checks_to_fund(
+    check_ids: list[int], company_id: int, created_by_user_id: int
+) -> je_service.JournalEntryResult:
+    """چکِ پرداختیِ وصول‌نشده جهتِ برگشت (ابطال): بدهکارِ حسابِ نگاشتِ
+    CHECK_ISSUED_RETURN_TO_FUND / بستانکارِ همان حساب/تفصیلیِ طرف‌حسابِ
+    سندِ اصلیِ هرچک (بدهیِ ما به او دوباره برمی‌گردد)."""
     with new_session() as session:
-        check = session.get(IssuedCheck, issued_check_id)
-        if check is None or check.company_id != company_id:
-            raise ValueError("چک نامعتبر است.")
-        current_code = session.get(CheckStatus, check.status_id).code
-        if current_code != "ISSUED":
-            raise ValueError("این چک دیگر قابلِ برگشت‌خوردن نیست.")
-        check.status_id = _status_id(session, "BOUNCED", "ISSUED")
-        session.commit()
-
-
-def void_issued_check(issued_check_id: int, company_id: int, created_by_user_id: int) -> je_service.JournalEntryResult:
-    """ابطال شد (هرگز وصول نشد، پس گرفته شد): بدهکارِ چک‌هایِ پرداختنی /
-    بستانکارِ همان حساب/تفصیلیِ طرف‌حسابِ سندِ اصلی (بدهیِ ما به او دوباره
-    برمی‌گردد)."""
-    with new_session() as session:
-        check = session.get(IssuedCheck, issued_check_id)
-        if check is None or check.company_id != company_id:
-            raise ValueError("چک نامعتبر است.")
-        current_code = session.get(CheckStatus, check.status_id).code
-        if current_code not in ("ISSUED", "BOUNCED"):
-            raise ValueError("این چک دیگر قابلِ ابطال‌شدن نیست.")
-        counterparty_account_id, counterparty_details = _first_line_account_and_details(
-            session, check.source_journal_entry_id
-        )
-        check_account_id = _get_mapped_account_id(session, company_id, "PAYMENT_CHECK")
+        if not check_ids:
+            raise ValueError("هیچ چکی انتخاب نشده است.")
+        checks = session.scalars(select(IssuedCheck).where(IssuedCheck.issued_check_id.in_(check_ids))).all()
+        if len(checks) != len(set(check_ids)):
+            raise ValueError("چکِ انتخاب‌شده نامعتبر است.")
+        for check in checks:
+            if check.company_id != company_id:
+                raise ValueError("چک نامعتبر است.")
+            if session.get(CheckStatus, check.status_id).code not in ("ISSUED", "BOUNCED"):
+                raise ValueError(f"چکِ شماره‌ی {check.check_no} در این مرحله قابلِ‌پردازش نیست.")
+        debit_account_id = _get_mapped_account_id(session, company_id, "CHECK_ISSUED_RETURN_TO_FUND")
+        description = "برگشتِ چکِ پرداختیِ وصول‌نشده"
+        total = sum((c.amount for c in checks), decimal.Decimal(0))
         lines = [
             je_service.LineInput(
-                account_id=check_account_id,
-                description=f"ابطالِ چکِ شماره‌ی {check.check_no}",
-                debit=check.amount,
-                credit=decimal.Decimal(0),
-            ),
-            je_service.LineInput(
-                account_id=counterparty_account_id,
-                description=f"ابطالِ چکِ شماره‌ی {check.check_no}",
-                debit=decimal.Decimal(0),
-                credit=check.amount,
-                details=dict(counterparty_details),
-            ),
+                account_id=debit_account_id, description=description, debit=total, credit=decimal.Decimal(0),
+            )
         ]
-        check_no = check.check_no
-        check.status_id = _status_id(session, "VOIDED", "ISSUED")
+        for check in checks:
+            counterparty_account_id, counterparty_details = _first_line_account_and_details(
+                session, check.source_journal_entry_id
+            )
+            lines.append(
+                je_service.LineInput(
+                    account_id=counterparty_account_id,
+                    description=f"{description} — چکِ شماره‌ی {check.check_no}",
+                    debit=decimal.Decimal(0), credit=check.amount, details=dict(counterparty_details),
+                )
+            )
+        for check in checks:
+            check.status_id = _status_id(session, "VOIDED", "ISSUED")
         session.commit()
 
     return je_service.create_journal_entry(
-        company_id, created_by_user_id, datetime.date.today(),
-        f"ابطالِ چکِ پرداختیِ شماره‌ی {check_no}", lines, entry_type_code="PAYMENT",
+        company_id, created_by_user_id, datetime.date.today(), "برگشتِ چکِ پرداختیِ وصول‌نشده", lines,
+        entry_type_code="PAYMENT",
     )

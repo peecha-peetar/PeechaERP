@@ -121,6 +121,13 @@ class ReceivedCheck(Base):
     drawer_national_id: Mapped[str | None] = mapped_column(String(15))
     drawer_phone: Mapped[str | None] = mapped_column(String(20))
     bank_id: Mapped[int | None] = mapped_column(ForeignKey("treasury.banks.bank_id"))
+    # محلِ فعلیِ نگه‌داریِ چک (نزدِ کدام صندوق/بانکِ مشخص) — پیش‌نیازِ
+    # زنجیره‌یِ چندمرحله‌ایِ چرخه‌یِ چک؛ هر مرحله بستانکارِ سندش را از رویِ
+    # همین دو ستون می‌خواند، نه از رویِ یک کلیدِ نگاشتِ ثابت.
+    current_location_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    current_location_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
 
 
 class IssuedCheck(Base):

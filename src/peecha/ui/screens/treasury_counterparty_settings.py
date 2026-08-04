@@ -172,6 +172,23 @@ _PAYMENT_METHOD_KEYS = [
 ]
 _METHOD_KEYS_BY_DIRECTION = {"RECEIPT": _RECEIPT_METHOD_KEYS, "PAYMENT": _PAYMENT_METHOD_KEYS}
 
+# طبقِ درخواستِ صریح: «برایِ هرِ مرحله یک ردیفِ جداگانه در تنظیمات باشه» —
+# این کلیدها مستقل از کلیدهایِ روش‌هایِ بالا (حتی اگر عملاً به همان حساب
+# اشاره کنند)، مخصوصِ مراحلِ چرخه‌یِ چکِ دریافتی/پرداختی‌اند. مرحله‌یِ
+# «برگشت به طرفِ‌حساب» و «برگشتِ چکِ خرجی به صندوق» این‌جا نیستند — چون
+# دو طرفِ سندشان کاملاً پویاست (طرفِ‌حسابِ اصلی/محلِ فعلیِ خودِ چک)،
+# حسابِ کلِ تازه لازم ندارند؛ فقط متنِ شرحشان پایین‌تر قابلِ‌ویرایش است.
+_CHECK_STAGE_MAPPING_KEYS = [
+    "CHECK_RECEIVED_FUND_TRANSFER",
+    "CHECK_RECEIVED_CASH_COLLECT",
+    "CHECK_RECEIVED_BANK_DEPOSIT",
+    "CHECK_RECEIVED_BANK_CLEAR",
+    "CHECK_RECEIVED_BANK_RETURN",
+    "CHECK_ISSUED_BANK_CLEAR",
+    "CHECK_ISSUED_RETURN_TO_FUND",
+]
+_CHECK_STAGE_TEMPLATE_KEYS = ["CHECK_RECEIVED_CUSTOMER_RETURN", "CHECK_RECEIVED_ENDORSED_RETURN"]
+
 
 class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
@@ -182,6 +199,8 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         self._method_mapping_containers: dict[str, QVBoxLayout] = {}
         self._method_mapping_rows: dict[str, list[_MethodMappingRow]] = {"RECEIPT": [], "PAYMENT": []}
         self._template_rows: list[_TemplateRow] = []
+        self._stage_mapping_rows: list[_MethodMappingRow] = []
+        self._stage_template_rows: list[_TemplateRow] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -272,6 +291,46 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             self._method_mapping_containers[direction] = container
             help_fields.append((method_card, method_hint))
 
+        # --- مراحلِ چرخه‌یِ چکِ دریافتی/پرداختی ----------------------------
+        # طبقِ درخواستِ صریح: برایِ هرِ مرحله‌یِ چرخه‌یِ چک (انتقال بینِ
+        # صندوق‌ها، وصولِ نقدی، واگذاری به بانک، اعلامِ وصول، برگشت از بانک
+        # به صندوق، وصول از بانک، برگشتِ چکِ پرداختی) یک ردیفِ مستقل با
+        # حسابِ کلِ/تفصیلیِ اختصاصیِ خودش.
+        stage_card = QWidget()
+        stage_card.setObjectName("card")
+        stage_card_layout = QVBoxLayout(stage_card)
+        stage_card_layout.setContentsMargins(12, 10, 12, 10)
+        stage_card_layout.setSpacing(4)
+
+        stage_title = QLabel("مراحلِ چرخه‌یِ چکِ دریافتی/پرداختی")
+        stage_title.setObjectName("sectionHint")
+        stage_card_layout.addWidget(stage_title)
+
+        stage_hint = QLabel(
+            "برایِ هر مرحله از چرخه‌یِ چک، معینِ حسابی که آن مرحله بدهکار می‌کند مشخص کنید. "
+            "تفصیلیِ اختصاصی اختیاری است — چون معمولاً هربار صندوق/بانکِ متفاوتی انتخاب می‌شود."
+        )
+        stage_hint.setWordWrap(True)
+        stage_card_layout.addWidget(stage_hint)
+
+        self._stage_mapping_container = QVBoxLayout()
+        self._stage_mapping_container.setSpacing(2)
+        stage_card_layout.addLayout(self._stage_mapping_container)
+
+        stage_template_hint = QLabel(
+            "این دو مرحله («برگشت به طرفِ‌حساب» و «برگشتِ چکِ خرجی به صندوق») حسابِ کلِ تازه لازم ندارند "
+            "— فقط متنِ شرحِ سندشان قابلِ‌ویرایش است."
+        )
+        stage_template_hint.setWordWrap(True)
+        stage_card_layout.addWidget(stage_template_hint)
+
+        self._stage_template_container = QVBoxLayout()
+        self._stage_template_container.setSpacing(2)
+        stage_card_layout.addLayout(self._stage_template_container)
+
+        layout.addWidget(stage_card)
+        help_fields.append((stage_card, "این تنظیمات، حساب/تفصیلیِ سندهایِ صفحه‌یِ «چک‌هایِ دریافتی/پرداختی» را مشخص می‌کنند."))
+
         # --- متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت ------------------------
         # طبقِ درخواستِ صریح: کاربر خودش می‌تواند متنِ هر روش را بسازد.
         template_card = QWidget()
@@ -358,6 +417,38 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             row = _TemplateRow(t.template_key, t.label, t.template_text, self._save_template)
             self._template_container.addWidget(row)
             self._template_rows.append(row)
+
+        while self._stage_mapping_container.count():
+            child = self._stage_mapping_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._stage_mapping_rows = []
+        for key in _CHECK_STAGE_MAPPING_KEYS:
+            mapping = method_mappings_by_key.get(key)
+            row = _MethodMappingRow(
+                key,
+                treasury_service.MAPPING_LABELS[key],
+                mapping.account_id if mapping else None,
+                mapping.detail_account_id if mapping else None,
+                account_options,
+                detail_options,
+                self._save_method_mapping,
+            )
+            self._stage_mapping_container.addWidget(row)
+            self._stage_mapping_rows.append(row)
+
+        while self._stage_template_container.count():
+            child = self._stage_template_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._stage_template_rows = []
+        for key in _CHECK_STAGE_TEMPLATE_KEYS:
+            row = _TemplateRow(
+                key, treasury_service.MAPPING_LABELS[key], treasury_service.get_description_template(company_id, key),
+                self._save_template,
+            )
+            self._stage_template_container.addWidget(row)
+            self._stage_template_rows.append(row)
 
     def _save_method_mapping(self, mapping_key: str, account_id, detail_account_id) -> None:
         if self.company_id is None or account_id is None:
