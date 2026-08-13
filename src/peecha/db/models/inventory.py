@@ -339,6 +339,66 @@ class Warehouse(Base):
     address: Mapped[str | None] = mapped_column(String(400))
     is_default: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # --- طبقِ بازطراحیِ فرمِ انبار (079_inventory_warehouse_v2.sql) --------
+    # پایه
+    english_name: Mapped[str | None] = mapped_column(String(150))
+    org_unit_id: Mapped[int | None] = mapped_column(ForeignKey("hr.organizational_units.org_unit_id"))
+    cost_center_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    # مکانی
+    country: Mapped[str | None] = mapped_column(String(100))
+    province: Mapped[str | None] = mapped_column(String(100))
+    city: Mapped[str | None] = mapped_column(String(100))
+    postal_code: Mapped[str | None] = mapped_column(String(20))
+    phone: Mapped[str | None] = mapped_column(String(30))
+    gps_coordinates: Mapped[str | None] = mapped_column(String(50))
+    manager_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    # عملیاتی
+    allow_purchase: Mapped[bool] = mapped_column(default=True)
+    allow_sale: Mapped[bool] = mapped_column(default=True)
+    allow_production: Mapped[bool] = mapped_column(default=False)
+    allow_transfer: Mapped[bool] = mapped_column(default=True)
+    allow_cycle_count: Mapped[bool] = mapped_column(default=True)
+    allow_reservation: Mapped[bool] = mapped_column(default=True)
+    allow_direct_sale: Mapped[bool] = mapped_column(default=False)
+    requires_receipt_approval: Mapped[bool] = mapped_column(default=False)
+    requires_issue_approval: Mapped[bool] = mapped_column(default=False)
+    # کنترلِ موجودی (اطلاعاتی — به موتورِ reorder/costing وصل نیست)
+    costing_method_id: Mapped[int | None] = mapped_column(
+        SmallInteger, ForeignKey("inv.costing_methods.costing_method_id")
+    )
+    default_min_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    default_max_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    default_reorder_point_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    withdrawal_policy_code: Mapped[str | None] = mapped_column(String(10))
+    # کیفیت
+    requires_qc: Mapped[bool] = mapped_column(default=False)
+    requires_quarantine: Mapped[bool] = mapped_column(default=False)
+    default_quarantine_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    # امنیت
+    access_level_code: Mapped[str] = mapped_column(String(15), default="PUBLIC")
+    # تجهیزات
+    has_barcode_equipment: Mapped[bool] = mapped_column(default=False)
+    has_qr_equipment: Mapped[bool] = mapped_column(default=False)
+    has_rfid_equipment: Mapped[bool] = mapped_column(default=False)
+    has_pda_equipment: Mapped[bool] = mapped_column(default=False)
+    has_scanner_equipment: Mapped[bool] = mapped_column(default=False)
+    has_scale_equipment: Mapped[bool] = mapped_column(default=False)
+    # فروشگاه/POS
+    pos_enabled: Mapped[bool] = mapped_column(default=False)
+    pos_pick_priority: Mapped[int | None] = mapped_column(SmallInteger)
+    # تولید (خودارجاع)
+    raw_material_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    production_line_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    finished_goods_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    scrap_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    # مالی
+    profit_center_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    # توضیحات
+    notes: Mapped[str | None] = mapped_column(Text)
 
 
 class BinLocation(Base):
@@ -354,6 +414,33 @@ class BinLocation(Base):
     barcode: Mapped[str | None] = mapped_column(String(100))
     is_pickable: Mapped[bool] = mapped_column(default=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class WarehouseUserAccess(Base):
+    """کاربرانِ مجازِ انبار — هم‌الگو با sec.user_companies (junction ساده) +
+    چهار پرچمِ توانایی. فقط CRUDِ تعریفی؛ هنوز به هیچ سندی وصل نیست."""
+
+    __tablename__ = "warehouse_user_access"
+    __table_args__ = {"schema": "inv"}
+
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
+    can_view_balance: Mapped[bool] = mapped_column(default=True)
+    can_post_receipt: Mapped[bool] = mapped_column(default=True)
+    can_post_issue: Mapped[bool] = mapped_column(default=True)
+    can_adjust: Mapped[bool] = mapped_column(default=True)
+
+
+class WarehouseAccountMapping(Base):
+    """نگاشتِ حسابِ سطحِ‌انبار — عیناً هم‌شکلِ CategoryAccountMapping؛ override
+    رویِ InventoryAccountMapping. طبقِ همان دامنه‌بندی: فقط CRUD این دور."""
+
+    __tablename__ = "warehouse_account_mappings"
+    __table_args__ = {"schema": "inv"}
+
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"), primary_key=True)
+    mapping_key: Mapped[str] = mapped_column(String(30), primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
 
 
 # =======================================================================

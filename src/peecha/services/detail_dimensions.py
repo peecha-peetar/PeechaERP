@@ -1255,6 +1255,11 @@ CASH_BOX_CODE = "CASH_BOX"
 PETTY_CASH_CODE = "PETTY_CASH"
 COST_CENTER_CODE = "COST_CENTER"
 PROJECT_CODE = "PROJECT"
+# طبقِ بازطراحیِ فرمِ انبار: «مرکزِ سود» به‌عنوانِ نوع‌بُعدِ تخصصیِ تازه —
+# چون ensure_specialized_dimensions فقط از رویِ همین دیکشنری کار می‌کند،
+# افزودنش هم‌زمان هم seedِ خودکار و هم ظاهرشدن در group_combo/detail_dimensions.py
+# را رایگان می‌دهد (بدونِ کدِ UI اضافه، دقیقاً مثلِ COST_CENTER/PROJECT).
+PROFIT_CENTER_CODE = "PROFIT_CENTER"
 
 SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
     INVENTORY_ITEM_CODE: "کالا",
@@ -1264,6 +1269,7 @@ SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
     PETTY_CASH_CODE: "تنخواه",
     COST_CENTER_CODE: "مرکز هزینه",
     PROJECT_CODE: "پروژه",
+    PROFIT_CENTER_CODE: "مرکز سود",
 }
 
 

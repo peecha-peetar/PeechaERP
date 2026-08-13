@@ -34,6 +34,7 @@ from peecha.db.models.inventory import (
     StockDocumentLine,
     StockLedger,
     Warehouse,
+    WarehouseAccountMapping,
 )
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
@@ -651,6 +652,46 @@ def set_category_account_mapping(category_id: int, mapping_key: str, account_id:
 def delete_category_account_mapping(category_id: int, mapping_key: str) -> None:
     with new_session() as session:
         row = session.get(CategoryAccountMapping, (category_id, mapping_key))
+        if row is not None:
+            session.delete(row)
+            session.commit()
+
+
+# ---------------------------------------------------------------------
+# نگاشتِ حسابِ حسابداری در سطحِ‌انبار — عیناً هم‌شکلِ نگاشتِ سطحِ‌دسته‌بندیِ
+# بالا. این دور فقط CRUD است؛ اتصال به _resolve_role_account/
+# post_stock_document دورِ بعدی است.
+# ---------------------------------------------------------------------
+@dataclass
+class WarehouseAccountMappingRow:
+    warehouse_id: int
+    mapping_key: str
+    account_id: int
+
+
+def list_warehouse_account_mappings(warehouse_id: int) -> list[WarehouseAccountMappingRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(WarehouseAccountMapping).where(WarehouseAccountMapping.warehouse_id == warehouse_id)
+        ).all()
+        return [WarehouseAccountMappingRow(r.warehouse_id, r.mapping_key, r.account_id) for r in rows]
+
+
+def set_warehouse_account_mapping(warehouse_id: int, mapping_key: str, account_id: int) -> None:
+    if mapping_key not in MAPPING_LABELS:
+        raise ValueError("کلیدِ نگاشت نامعتبر است.")
+    with new_session() as session:
+        row = session.get(WarehouseAccountMapping, (warehouse_id, mapping_key))
+        if row is None:
+            session.add(WarehouseAccountMapping(warehouse_id=warehouse_id, mapping_key=mapping_key, account_id=account_id))
+        else:
+            row.account_id = account_id
+        session.commit()
+
+
+def delete_warehouse_account_mapping(warehouse_id: int, mapping_key: str) -> None:
+    with new_session() as session:
+        row = session.get(WarehouseAccountMapping, (warehouse_id, mapping_key))
         if row is not None:
             session.delete(row)
             session.commit()
