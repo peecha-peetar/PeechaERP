@@ -348,6 +348,15 @@ def get_item_by_detail_account_id(item_detail_account_id: int) -> Item | None:
         return item
 
 
+def get_item_row_by_detail_account_id(company_id: int, item_detail_account_id: int) -> ItemRow | None:
+    """برایِ پلِ ادغام با detail_dimensions.py: از رویِ تفصیلیِ سطحِ‌آخرِ
+    گروهِ INVENTORY_ITEM، ردیفِ کاملِ کالا (اگر موجود باشد) را برمی‌گرداند —
+    گره‌هایِ میانیِ گروه‌بندی (که ردیفِ inv.items ندارند) None می‌گیرند."""
+    return next(
+        (r for r in list_items(company_id) if r.item_detail_account_id == item_detail_account_id), None
+    )
+
+
 @dataclass
 class ItemFields:
     item_kind_code: str
@@ -411,12 +420,22 @@ def _validate_item_fields(fields: ItemFields) -> None:
         raise ValueError("ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است.")
 
 
-def create_item(company_id: int, code: str, name: str, fields: ItemFields) -> int:
+def create_item(
+    company_id: int, code: str, name: str, fields: ItemFields, parent_detail_account_id: int | None = None
+) -> int:
     """ساختِ کالا: اول تفصیلیِ سطحِ‌آخرِ گروهِ INVENTORY_ITEM ساخته می‌شود،
-    سپس ردیفِ اقماریِ inv.items با همان item_detail_account_id."""
+    سپس ردیفِ اقماریِ inv.items با همان item_detail_account_id — دقیقاً
+    هم‌الگو با hr.create_personnel_detail_account نسبت به hr.employees.
+
+    این تابع فقط برایِ رکوردهایِ واقعاً سطحِ‌آخر صدا زده می‌شود؛ گره‌هایِ
+    میانیِ گروه‌بندیِ کالا (سطوحِ ۱ تا max_level-1) مستقیماً با
+    dimensions_service.create_detail_account در detail_dimensions.py
+    ساخته می‌شوند و به این تابع نیازی ندارند."""
     _validate_item_fields(fields)
     dimension_type_id = _item_dimension_type_id(company_id)
-    detail_account = dimensions_service.create_detail_account(company_id, dimension_type_id, code, name)
+    detail_account = dimensions_service.create_detail_account(
+        company_id, dimension_type_id, code, name, parent_detail_account_id=parent_detail_account_id
+    )
     with new_session() as session:
         item = Item(
             company_id=company_id,

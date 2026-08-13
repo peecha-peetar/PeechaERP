@@ -63,7 +63,10 @@ NAV_ITEMS = [
         "code": "INV",
         "label": "انبار و موجودی",
         "children": [
-            {"code": "INV_ITEMS", "label": "کالا و خدمت", "screen": "inventory_items"},
+            # طبقِ ادغامِ فرمِ «کالا و خدمت» در گروهِ تفصیلیِ INVENTORY_ITEM:
+            # صفحه‌یِ مستقلِ inventory_items.py حذف شد — تعریفِ/ویرایشِ کالا
+            # حالا از طریقِ «تعریفِ تفصیلی» (GL_DIM) با انتخابِ گروهِ «کالا»
+            # انجام می‌شود، دقیقاً هم‌الگو با ادغامِ پیشینِ HR_EMPLOYEES.
             {"code": "INV_WAREHOUSES", "label": "انبارها", "screen": "inventory_warehouses"},
             {"code": "INV_DOCUMENTS_LIST", "label": "اسنادِ انبار", "screen": "inventory_documents_list"},
             {"code": "INV_RECEIPT", "label": "رسید", "screen": "inventory_document_receipt"},

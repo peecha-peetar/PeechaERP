@@ -1,10 +1,8 @@
-"""کاتالوگِ کالا/خدمت — کالا موجودیتِ تازه‌ای نیست، تفصیلیِ سطحِ‌آخرِ گروهِ
-INVENTORY_ITEM است؛ این فرم فقط رویِ inv.items (جدولِ اقماری) + تفصیلیِ
-همان کالا کار می‌کند.
-
-طبقِ طراحیِ ماژولار: فرم در تب‌ها سازمان‌دهی شده و هر تب بر اساسِ نوعِ کالا
-(item_kind_code) و قابلیت‌هایِ فعالِ شرکت (Feature Toggle) نمایان/مخفی
-می‌شود. کمبوهایی که از جدولِ دیگری می‌خوانند یک دکمهٔ «+» کنارشان دارند."""
+"""پنلِ اختصاصیِ «کالا» — طبقِ ادغامِ فرمِ مستقلِ کالا/خدمت در گروهِ تفصیلیِ
+INVENTORY_ITEM (هم‌الگو با یکپارچه‌سازیِ HR/PERSONNEL): این ویجت فقط
+تب‌هایِ اختصاصیِ کالا را می‌سازد (کد/نام/فعال/والد و دکمه‌هایِ ذخیره/حذف
+در فرمِ میزبان — detail_dimensions.py — هستند) و توسطِ آن فرم، فقط در
+سطحِ‌آخرِ گروهِ کالا embed و نمایان می‌شود."""
 
 from __future__ import annotations
 
@@ -19,14 +17,12 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
     QDialogButtonBox,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -35,7 +31,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
@@ -43,7 +38,6 @@ from peecha.services import inventory_extended as extended_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.widgets import FieldHelpMixin
 
-_COLUMNS = ["فعال", "وضعیت", "واحد", "نام", "کد"]
 _KIND_LABELS = {
     "GOOD": "کالا", "SERVICE": "خدمت", "RAW_MATERIAL": "مادهٔ اولیه", "SEMI_FINISHED": "نیمه‌ساخته",
     "FINISHED_GOOD": "ساخته‌شده", "ASSET": "دارایی", "BUNDLE": "بسته", "KIT": "کیت",
@@ -76,80 +70,19 @@ def _int_or_none(text: str) -> int | None:
         return None
 
 
-def _wrap_scrollable(content: QWidget) -> QWidget:
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setFrameShape(QFrame.NoFrame)
-    scroll.setWidget(content)
-    wrapper = QWidget()
-    wrapper.setObjectName("card")
-    wrapper_layout = QVBoxLayout(wrapper)
-    wrapper_layout.setContentsMargins(0, 0, 0, 0)
-    wrapper_layout.setSpacing(0)
-    wrapper_layout.addWidget(scroll)
-    return wrapper
-
-
-class InventoryItemsScreen(FieldHelpMixin, QWidget):
+class ItemDetailPanel(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
+        self._company_id: int | None = None
+        self._item_id: int | None = None
         self._rows: list[catalog_service.ItemRow] = []
         self._categories: list[catalog_service.ItemCategoryRow] = []
-        self._editing_id: int | None = None
         self._enabled_features: set[str] = set()
         self._current_bom_id: int | None = None
 
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
-        outer.setSpacing(16)
-        outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
-
-        self.set_field_help([
-            (self.code_field, "کدِ یکتایِ این کالا/خدمت در سطحِ شرکت."),
-            (self.name_field, "نامِ نمایشیِ کالا/خدمت."),
-            (self.kind_combo, "نوعِ کالا؛ تب‌هایِ مرتبط بر اساسِ همین انتخاب نمایان می‌شوند."),
-            (self.uom_combo, "واحدِ پایه — پس از اولین حرکتِ انبار دیگر قابلِ‌تغییر نیست."),
-            (self.costing_combo, "روشِ قیمت‌گذاریِ اختصاصیِ این کالا؛ خالی یعنی از تنظیماتِ شرکت پیروی می‌کند."),
-            (self.is_stock_tracked_checkbox, "خدمت نمی‌تواند موجودی‌محور باشد."),
-            (self.track_expiry_checkbox, "ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است."),
-        ])
-
-    def _build_list_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-
-        title = QLabel("کاتالوگِ کالا و خدمت")
-        title.setObjectName("pageTitle")
-        layout.addWidget(title)
-
-        new_button = QPushButton("+ کالایِ جدید")
-        new_button.setObjectName("primaryButton")
-        new_button.clicked.connect(self._reset_form)
-        layout.addWidget(new_button, alignment=Qt.AlignLeft)
-
-        self.table = QTableWidget(0, len(_COLUMNS))
-        self.table.setHorizontalHeaderLabels(_COLUMNS)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.table.cellClicked.connect(self._on_row_clicked)
-        layout.addWidget(self.table)
-        return _wrap_scrollable(panel)
-
-    # --- ساختارِ کلیِ فرم: تب‌بندی‌شده ---------------------------------------
-    def _build_form_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-
-        self.form_title = QLabel("کالایِ جدید")
-        self.form_title.setObjectName("pageTitle")
-        layout.addWidget(self.form_title)
 
         self.tabs = QTabWidget()
         self.tab_indexes: dict[str, int] = {}
@@ -168,47 +101,23 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         ]
         for key, widget, label in tab_defs:
             self.tab_indexes[key] = self.tabs.addTab(widget, label)
-        layout.addWidget(self.tabs, stretch=1)
+        layout.addWidget(self.tabs)
 
-        self.status_label = QLabel("")
-        self.status_label.setObjectName("statusError")
-        self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label)
+        self.set_field_help([
+            (self.kind_combo, "نوعِ کالا؛ تب‌هایِ مرتبط بر اساسِ همین انتخاب نمایان می‌شوند."),
+            (self.uom_combo, "واحدِ پایه — پس از اولین حرکتِ انبار دیگر قابلِ‌تغییر نیست."),
+            (self.costing_combo, "روشِ قیمت‌گذاریِ اختصاصیِ این کالا؛ خالی یعنی از تنظیماتِ شرکت پیروی می‌کند."),
+            (self.is_stock_tracked_checkbox, "خدمت نمی‌تواند موجودی‌محور باشد."),
+            (self.track_expiry_checkbox, "ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است."),
+        ])
+        self.reset()
 
-        buttons = QHBoxLayout()
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
-        save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
-
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
-        cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
-
-        self.delete_button = QPushButton("حذف")
-        self.delete_button.setObjectName("dangerButton")
-        self.delete_button.clicked.connect(self._delete)
-        self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
-
-        layout.addLayout(buttons)
-        return _wrap_scrollable(panel)
-
-    # --- تبِ اطلاعاتِ پایه ---------------------------------------------------
+    # --- تبِ اطلاعاتِ پایه (بدونِ کد/نام/فعال — این‌ها در فرمِ میزبان‌اند) ------
     def _build_basic_info_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
-
-        layout.addWidget(QLabel("کد"))
-        self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
-
-        layout.addWidget(QLabel("نام"))
-        self.name_field = QLineEdit()
-        layout.addWidget(self.name_field)
 
         layout.addWidget(QLabel("نامِ لاتین"))
         self.latin_name_field = QLineEdit()
@@ -244,24 +153,17 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
             self.costing_combo.addItem(label, code or None)
         layout.addWidget(self.costing_combo)
 
-        self.lifecycle_row = QWidget()
-        lifecycle_layout = QVBoxLayout(self.lifecycle_row)
-        lifecycle_layout.setContentsMargins(0, 0, 0, 0)
-        lifecycle_layout.addWidget(QLabel("وضعیتِ چرخهٔ‌عمر"))
+        layout.addWidget(QLabel("وضعیتِ چرخهٔ‌عمر"))
         self.lifecycle_combo = QComboBox()
         for code, label in _LIFECYCLE_LABELS.items():
             self.lifecycle_combo.addItem(label, code)
-        lifecycle_layout.addWidget(self.lifecycle_combo)
-        layout.addWidget(self.lifecycle_row)
+        layout.addWidget(self.lifecycle_combo)
 
         layout.addWidget(QLabel("یادداشت"))
         self.notes_field = QTextEdit()
         self.notes_field.setMaximumHeight(60)
         layout.addWidget(self.notes_field)
 
-        self.is_active_checkbox = QCheckBox("فعال")
-        self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
         layout.addStretch(1)
         return tab
 
@@ -620,6 +522,9 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         save_asset_button.clicked.connect(self._save_asset_detail)
         layout.addWidget(save_asset_button, alignment=Qt.AlignLeft)
 
+        self.asset_status_label = QLabel("")
+        layout.addWidget(self.asset_status_label)
+
         layout.addStretch(1)
         return tab
 
@@ -641,8 +546,7 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         return row
 
     def _quick_add_uom(self) -> None:
-        company_id = self._company_id()
-        if company_id is None:
+        if self._company_id is None:
             return
         dialog = QDialog(self)
         dialog.setWindowTitle("واحدِ تازه")
@@ -665,45 +569,46 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         if dialog.exec() != QDialog.Accepted or not code_field.text().strip() or not name_field.text().strip():
             return
         try:
-            new_id = catalog_service.create_uom(company_id, code_field.text().strip(), name_field.text().strip(), type_combo.currentData())
+            new_id = catalog_service.create_uom(
+                self._company_id, code_field.text().strip(), name_field.text().strip(), type_combo.currentData()
+            )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
-        self._reload_uoms(company_id)
+        self._reload_uoms()
         self.uom_combo.setCurrentIndex(max(0, self.uom_combo.findData(new_id)))
 
     def _quick_add_brand(self) -> None:
-        company_id = self._company_id()
-        if company_id is None:
+        if self._company_id is None:
             return
-        new_id = self._quick_add_code_name_dialog("برندِ تازه", lambda code, name: catalog_service.create_brand(company_id, code, name))
+        new_id = self._quick_add_code_name_dialog(
+            "برندِ تازه", lambda code, name: catalog_service.create_brand(self._company_id, code, name)
+        )
         if new_id is None:
             return
-        self._reload_brands(company_id)
+        self._reload_brands()
         self.brand_combo.setCurrentIndex(max(0, self.brand_combo.findData(new_id)))
 
     def _quick_add_manufacturer(self) -> None:
-        company_id = self._company_id()
-        if company_id is None:
+        if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "تولیدکنندهٔ تازه", lambda code, name: catalog_service.create_manufacturer(company_id, code, name)
+            "تولیدکنندهٔ تازه", lambda code, name: catalog_service.create_manufacturer(self._company_id, code, name)
         )
         if new_id is None:
             return
-        self._reload_manufacturers(company_id)
+        self._reload_manufacturers()
         self.manufacturer_combo.setCurrentIndex(max(0, self.manufacturer_combo.findData(new_id)))
 
     def _quick_add_category(self) -> None:
-        company_id = self._company_id()
-        if company_id is None:
+        if self._company_id is None:
             return
         new_id = self._quick_add_code_name_dialog(
-            "دسته‌بندیِ تازه", lambda code, name: catalog_service.create_category(company_id, code, name)
+            "دسته‌بندیِ تازه", lambda code, name: catalog_service.create_category(self._company_id, code, name)
         )
         if new_id is None:
             return
-        self._reload_categories(company_id)
+        self._reload_categories()
         self.category_combo.setCurrentIndex(max(0, self.category_combo.findData(new_id)))
 
     def _quick_add_code_name_dialog(self, title: str, create_fn) -> int | None:
@@ -732,31 +637,31 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
             QMessageBox.warning(self, "خطا", str(exc))
             return None
 
-    def _reload_uoms(self, company_id: int) -> None:
+    def _reload_uoms(self) -> None:
         self.uom_combo.blockSignals(True)
         self.uom_combo.clear()
-        for u in catalog_service.list_uoms(company_id, active_only=True):
+        for u in catalog_service.list_uoms(self._company_id, active_only=True):
             self.uom_combo.addItem(f"{u.code} — {u.name}", u.uom_id)
         self.uom_combo.blockSignals(False)
 
-    def _reload_brands(self, company_id: int) -> None:
+    def _reload_brands(self) -> None:
         self.brand_combo.blockSignals(True)
         self.brand_combo.clear()
         self.brand_combo.addItem("(بدونِ برند)", None)
-        for b in catalog_service.list_brands(company_id, active_only=True):
+        for b in catalog_service.list_brands(self._company_id, active_only=True):
             self.brand_combo.addItem(f"{b.code} — {b.name}", b.brand_id)
         self.brand_combo.blockSignals(False)
 
-    def _reload_manufacturers(self, company_id: int) -> None:
+    def _reload_manufacturers(self) -> None:
         self.manufacturer_combo.blockSignals(True)
         self.manufacturer_combo.clear()
         self.manufacturer_combo.addItem("(بدونِ تولیدکننده)", None)
-        for m in catalog_service.list_manufacturers(company_id, active_only=True):
+        for m in catalog_service.list_manufacturers(self._company_id, active_only=True):
             self.manufacturer_combo.addItem(f"{m.code} — {m.name}", m.manufacturer_id)
         self.manufacturer_combo.blockSignals(False)
 
-    def _reload_categories(self, company_id: int) -> None:
-        self._categories = catalog_service.list_categories(company_id, active_only=True)
+    def _reload_categories(self) -> None:
+        self._categories = catalog_service.list_categories(self._company_id, active_only=True)
         self.category_combo.blockSignals(True)
         self.category_combo.clear()
         self.category_combo.addItem("(بدونِ دسته)", None)
@@ -792,21 +697,18 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         )
         self.tabs.setTabVisible(self.tab_indexes["asset"], kind == "ASSET")
 
-    def _company_id(self) -> int | None:
-        return app_session.current_company.company_id if app_session.current_company else None
-
-    def refresh(self) -> None:
-        self._reset_form()
-        company_id = self._company_id()
-        if company_id is None:
-            return
+    # --- API عمومی برایِ فرمِ میزبان (detail_dimensions.py) -------------------
+    def refresh(self, company_id: int) -> None:
+        """بارگذاریِ همه‌یِ کمبوهایِ وابسته به داده — باید هر بار که فرمِ
+        میزبان تفصیلی‌ها را رفرش می‌کند (تغییرِ گروه/شرکت) صدا زده شود."""
+        self._company_id = company_id
         self._rows = catalog_service.list_items(company_id)
         self._enabled_features = {f.feature_code for f in engine_service.list_features(company_id) if f.is_enabled}
 
-        self._reload_uoms(company_id)
-        self._reload_brands(company_id)
-        self._reload_manufacturers(company_id)
-        self._reload_categories(company_id)
+        self._reload_uoms()
+        self._reload_brands()
+        self._reload_manufacturers()
+        self._reload_categories()
 
         self.default_warehouse_combo.blockSignals(True)
         self.default_warehouse_combo.clear()
@@ -828,33 +730,14 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
 
         self._apply_visibility()
 
-        self.table.setRowCount(len(self._rows))
-        for row_index, it in enumerate(self._rows):
-            values = [
-                "بله" if it.is_active else "خیر",
-                _LIFECYCLE_LABELS.get(it.lifecycle_status_code, it.lifecycle_status_code),
-                it.base_uom_code,
-                it.name or "",
-                it.code,
-            ]
-            for col_index, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, it.item_id)
-                self.table.setItem(row_index, col_index, item)
-
-    def _on_row_clicked(self, row: int, _column: int) -> None:
-        item_id = self.table.item(row, 0).data(Qt.UserRole)
-        it = next((r for r in self._rows if r.item_id == item_id), None)
-        if it is not None:
-            self._load_into_form(it)
-
-    def _load_into_form(self, it: catalog_service.ItemRow) -> None:
-        self._editing_id = it.item_id
-        self.form_title.setText(f"ویرایشِ کالا — {it.name or it.code}")
-        self.status_label.setText("")
-        self.code_field.setText(it.code)
-        self.code_field.setEnabled(True)
-        self.name_field.setText(it.name or "")
+    def load(self, item_row: catalog_service.ItemRow | None) -> None:
+        """پرکردنِ فرم از رویِ یک کالایِ سطحِ‌آخرِ ازپیش‌ذخیره‌شده؛ با
+        None یعنی رکوردِ تازه (reset کاملِ فیلدها)."""
+        if item_row is None:
+            self.reset()
+            return
+        it = item_row
+        self._item_id = it.item_id
         self.latin_name_field.setText(it.latin_name or "")
         self.short_name_field.setText(it.short_name or "")
         self.kind_combo.setCurrentIndex(self.kind_combo.findData(it.item_kind_code))
@@ -863,7 +746,6 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         self.manufacturer_combo.setCurrentIndex(max(0, self.manufacturer_combo.findData(it.manufacturer_id)))
         self.country_of_origin_field.setText(it.country_of_origin or "")
         self.costing_combo.setCurrentIndex(max(0, self.costing_combo.findData(it.costing_method_code)))
-        self.lifecycle_row.setVisible(True)
         self.lifecycle_combo.setCurrentIndex(max(0, self.lifecycle_combo.findData(it.lifecycle_status_code)))
         self.is_sellable_checkbox.setChecked(it.is_sellable)
         self.is_purchasable_checkbox.setChecked(it.is_purchasable)
@@ -872,7 +754,6 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         self.track_expiry_checkbox.setChecked(it.track_expiry)
         self.track_serial_checkbox.setChecked(it.track_serial)
         self.notes_field.setPlainText(it.notes or "")
-        self.is_active_checkbox.setChecked(it.is_active)
 
         self.category_combo.setCurrentIndex(max(0, self.category_combo.findData(it.category_id)))
         self.default_warehouse_combo.setCurrentIndex(max(0, self.default_warehouse_combo.findData(it.default_warehouse_id)))
@@ -930,20 +811,15 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
             self.acquisition_cost_field.clear()
             self.salvage_value_field.clear()
 
-        self.delete_button.setVisible(True)
+        self.asset_status_label.setText("")
         self._apply_visibility()
         self._refresh_suppliers_table()
         self._refresh_related_table()
         self._refresh_bom_lines()
 
-    def _reset_form(self) -> None:
-        self._editing_id = None
+    def reset(self) -> None:
+        self._item_id = None
         self._current_bom_id = None
-        self.form_title.setText("کالایِ جدید")
-        self.status_label.setText("")
-        self.code_field.clear()
-        self.code_field.setEnabled(True)
-        self.name_field.clear()
         self.latin_name_field.clear()
         self.short_name_field.clear()
         self.kind_combo.setCurrentIndex(0)
@@ -953,7 +829,7 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         self.manufacturer_combo.setCurrentIndex(0)
         self.country_of_origin_field.clear()
         self.costing_combo.setCurrentIndex(0)
-        self.lifecycle_row.setVisible(False)
+        self.lifecycle_combo.setCurrentIndex(max(0, self.lifecycle_combo.findData("ACTIVE")))
         self.is_sellable_checkbox.setChecked(True)
         self.is_purchasable_checkbox.setChecked(True)
         self.is_stock_tracked_checkbox.setChecked(True)
@@ -961,7 +837,6 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         self.track_expiry_checkbox.setChecked(False)
         self.track_serial_checkbox.setChecked(False)
         self.notes_field.clear()
-        self.is_active_checkbox.setChecked(True)
 
         self.category_combo.setCurrentIndex(0)
         self.default_warehouse_combo.setCurrentIndex(0)
@@ -1006,19 +881,20 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
         self.acquisition_date_field.setDate(datetime.date.today())
         self.acquisition_cost_field.clear()
         self.salvage_value_field.clear()
+        self.asset_status_label.setText("")
 
-        self.delete_button.setVisible(False)
-        self.table.clearSelection()
         self.supplier_table.setRowCount(0)
         self.related_table.setRowCount(0)
         self.bom_lines_table.setRowCount(0)
         self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
         self._apply_visibility()
 
-    def _collect_fields(self) -> catalog_service.ItemFields | None:
+    def lifecycle_status_code(self) -> str:
+        return self.lifecycle_combo.currentData() or "ACTIVE"
+
+    def collect_fields(self) -> catalog_service.ItemFields:
         if self.uom_combo.currentData() is None:
-            self.status_label.setText("ابتدا یک واحدِ اندازه‌گیری تعریف کنید.")
-            return None
+            raise ValueError("ابتدا یک واحدِ اندازه‌گیری تعریف کنید.")
         return catalog_service.ItemFields(
             item_kind_code=self.kind_combo.currentData(),
             base_uom_id=self.uom_combo.currentData(),
@@ -1067,60 +943,12 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
             qc_inspection_interval_days=_int_or_none(self.qc_interval_field.text()),
         )
 
-    def _save(self) -> None:
-        company_id = self._company_id()
-        if company_id is None:
-            return
-        name = self.name_field.text().strip()
-        code = self.code_field.text().strip()
-        if not code:
-            self.status_label.setText("کد را وارد کنید.")
-            return
-        if not name:
-            self.status_label.setText("نام را وارد کنید.")
-            return
-        fields = self._collect_fields()
-        if fields is None:
-            return
-
-        try:
-            if self._editing_id is not None:
-                lifecycle_code = self.lifecycle_combo.currentData()
-                catalog_service.update_item(
-                    self._editing_id, company_id, code, name, self.is_active_checkbox.isChecked(), lifecycle_code, fields
-                )
-                saved_id = self._editing_id
-            else:
-                saved_id = catalog_service.create_item(company_id, code, name, fields)
-        except ValueError as exc:
-            self.status_label.setText(str(exc))
-            return
-
-        self.refresh()
-        saved = next((r for r in self._rows if r.item_id == saved_id), None)
-        if saved is not None:
-            self._load_into_form(saved)
-
-    def _delete(self) -> None:
-        if self._editing_id is None:
-            return
-        confirm = QMessageBox.question(self, "حذفِ کالا", "این کالا حذف شود؟", QMessageBox.Yes | QMessageBox.No)
-        if confirm != QMessageBox.Yes:
-            return
-        company_id = self._company_id()
-        try:
-            catalog_service.delete_item(self._editing_id, company_id)
-        except ValueError as exc:
-            self.status_label.setText(str(exc))
-            return
-        self.refresh()
-
     # --- تامین‌کنندگان -----------------------------------------------------
     def _refresh_suppliers_table(self) -> None:
         self.supplier_table.setRowCount(0)
-        if self._editing_id is None:
+        if self._item_id is None:
             return
-        rows = extended_service.list_item_suppliers(self._editing_id)
+        rows = extended_service.list_item_suppliers(self._item_id)
         self.supplier_table.setRowCount(len(rows))
         for row_index, r in enumerate(rows):
             label = self.supplier_combo.itemText(self.supplier_combo.findData(r.supplier_detail_account_id))
@@ -1131,27 +959,26 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
                 self.supplier_table.setItem(row_index, col_index, item)
 
     def _add_supplier(self) -> None:
-        if self._editing_id is None:
-            self.status_label.setText("ابتدا کالا را ذخیره کنید.")
+        if self._item_id is None:
             return
         supplier_id = self.supplier_combo.currentData()
         if supplier_id is None:
             return
         try:
-            extended_service.add_item_supplier(self._editing_id, supplier_id)
+            extended_service.add_item_supplier(self._item_id, supplier_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self._refresh_suppliers_table()
 
     def _remove_supplier(self) -> None:
-        if self._editing_id is None:
+        if self._item_id is None:
             return
         selected = self.supplier_table.selectedItems()
         if not selected:
             return
         try:
-            extended_service.remove_item_supplier(selected[0].data(Qt.UserRole), self._editing_id)
+            extended_service.remove_item_supplier(selected[0].data(Qt.UserRole), self._item_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
@@ -1160,9 +987,9 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
     # --- کالاهایِ مرتبط ------------------------------------------------------
     def _refresh_related_table(self) -> None:
         self.related_table.setRowCount(0)
-        if self._editing_id is None:
+        if self._item_id is None:
             return
-        rows = catalog_service.list_related_items(self._editing_id)
+        rows = catalog_service.list_related_items(self._item_id)
         self.related_table.setRowCount(len(rows))
         for row_index, (related_item_id, relation_type_code) in enumerate(rows):
             other = next((r for r in self._rows if r.item_id == related_item_id), None)
@@ -1174,15 +1001,14 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
                 self.related_table.setItem(row_index, col_index, item)
 
     def _add_related_item(self) -> None:
-        if self._editing_id is None:
-            self.status_label.setText("ابتدا کالا را ذخیره کنید.")
+        if self._item_id is None:
             return
         related_item_id = self.related_item_combo.currentData()
         relation_type_code = self.relation_type_combo.currentData()
         if related_item_id is None:
             return
         try:
-            catalog_service.add_related_item(self._editing_id, related_item_id, relation_type_code)
+            catalog_service.add_related_item(self._item_id, related_item_id, relation_type_code)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
@@ -1199,10 +1025,10 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
     def _refresh_bom_lines(self) -> None:
         self.bom_lines_table.setRowCount(0)
         self._current_bom_id = None
-        if self._editing_id is None:
+        if self._item_id is None:
             self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
             return
-        boms = extended_service.list_boms(self._editing_id)
+        boms = extended_service.list_boms(self._item_id)
         if not boms:
             self.bom_status_label.setText("هنوز فهرستِ موادِ اولیه‌ای ثبت نشده است.")
             return
@@ -1221,11 +1047,10 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
                 self.bom_lines_table.setItem(row_index, col_index, item)
 
     def _create_bom(self) -> None:
-        if self._editing_id is None:
-            self.status_label.setText("ابتدا کالا را ذخیره کنید.")
+        if self._item_id is None:
             return
         try:
-            extended_service.create_bom(self._editing_id)
+            extended_service.create_bom(self._item_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
@@ -1233,7 +1058,6 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
 
     def _add_bom_line(self) -> None:
         if self._current_bom_id is None:
-            self.status_label.setText("ابتدا یک نسخهٔ فهرستِ موادِ اولیه بسازید.")
             return
         component_id = self.bom_component_combo.currentData()
         qty = _decimal_or_none(self.bom_qty_field.text())
@@ -1262,17 +1086,17 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
 
     # --- دارایی ----------------------------------------------------------------
     def _save_asset_detail(self) -> None:
-        if self._editing_id is None:
-            self.status_label.setText("ابتدا کالا را ذخیره کنید.")
+        if self._item_id is None:
+            self.asset_status_label.setText("ابتدا کالا را ذخیره کنید.")
             return
         useful_life = _int_or_none(self.useful_life_field.text())
         cost = _decimal_or_none(self.acquisition_cost_field.text())
         if useful_life is None or cost is None:
-            self.status_label.setText("عمرِ مفید و بهایِ تحصیل را وارد کنید.")
+            self.asset_status_label.setText("عمرِ مفید و بهایِ تحصیل را وارد کنید.")
             return
         try:
             extended_service.set_asset_detail(
-                self._editing_id,
+                self._item_id,
                 useful_life_months=useful_life,
                 acquisition_date=self.acquisition_date_field.date().toPython(),
                 acquisition_cost=cost,
@@ -1282,7 +1106,6 @@ class InventoryItemsScreen(FieldHelpMixin, QWidget):
                 salvage_value=_decimal_or_none(self.salvage_value_field.text()) or decimal.Decimal(0),
             )
         except ValueError as exc:
-            self.status_label.setText(str(exc))
+            self.asset_status_label.setText(str(exc))
             return
-        self.status_label.setObjectName("statusSuccess")
-        self.status_label.setText("اطلاعاتِ دارایی ذخیره شد.")
+        self.asset_status_label.setText("اطلاعاتِ دارایی ذخیره شد.")

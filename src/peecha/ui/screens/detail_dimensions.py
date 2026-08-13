@@ -54,8 +54,10 @@ from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import hr as hr_service
+from peecha.services import inventory_catalog as catalog_service
 from peecha.services import payroll as payroll_service
 from peecha.services import treasury as treasury_service
+from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, PersianDigitLineEdit
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
@@ -66,6 +68,10 @@ _COLUMNS = ["کدِ کامل", "نام", "سطح", "وضعیت"]
 # باید همین‌جا هم دیده شود، پس فقط برایِ گروهِ PERSONNEL این ۴ ستونِ
 # اضافه به ستون‌هایِ عمومی افزوده می‌شود.
 _PERSONNEL_EXTRA_COLUMNS = ["واحدِ سازمانی", "پست", "حقوقِ پایه", "وضعیتِ استخدام"]
+# طبقِ ادغامِ فرمِ «کالا و خدمت» در گروهِ تفصیلیِ INVENTORY_ITEM: فقط برایِ
+# ردیف‌هایِ سطحِ‌آخرِ همین گروه، این ۳ ستونِ اضافه دیده می‌شود (گره‌هایِ
+# میانیِ گروه‌بندی مقدارِ «—» می‌گیرند، چون ردیفِ inv.items ندارند).
+_ITEM_EXTRA_COLUMNS = ["نوع", "واحدِ پایه", "وضعیتِ چرخهٔ‌عمر"]
 # طبقِ گزارشِ صریح («نوعِ حساب جاری/پس‌انداز») — گزینه‌هایِ ثابتِ کیندِ
 # «account_type»یِ فیلدهایِ اختصاصی (فقط برایِ BANK_ACCOUNT کاربرد دارد).
 _ACCOUNT_TYPE_OPTIONS = ["جاری", "پس‌انداز"]
@@ -236,6 +242,10 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
         self._selected: tuple[str, int | str] | None = None
         self._accounts_by_id: dict[int, dimensions_service.DetailAccountRow] = {}
         self._person_rows_by_id: dict[int, dict] = {}
+        # طبقِ ادغامِ فرمِ کالا: نگاشتِ detail_account_id -> ItemRow برایِ
+        # ردیف‌هایِ سطحِ‌آخرِ گروهِ INVENTORY_ITEM (فقط وقتی همین گروه
+        # انتخاب شده — هم‌الگو با self._person_rows_by_id).
+        self._item_rows_by_detail_id: dict[int, catalog_service.ItemRow] = {}
         self._editing_account_id: int | None = None
         self._extra_widgets: dict[str, tuple[QWidget, str]] = {}
         self._person_field_widgets: dict[str, QWidget] = {}
@@ -372,6 +382,13 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
         extra_widget = QWidget()
         extra_widget.setLayout(self.extra_fields_container)
         layout.addWidget(extra_widget)
+
+        # طبقِ ادغامِ فرمِ «کالا و خدمت»: پنلِ اختصاصیِ ۱۱‌تبیِ کالا فقط در
+        # سطحِ‌آخرِ گروهِ INVENTORY_ITEM نمایان می‌شود — هم‌الگو با پنلِ
+        # حکمِ حقوقِ زیر که فقط برایِ PERSONNEL کاربرد دارد.
+        self.item_detail_panel = ItemDetailPanel()
+        self.item_detail_panel.setVisible(False)
+        layout.addWidget(self.item_detail_panel)
 
         layout.addWidget(self._build_pay_components_section())
 
@@ -640,6 +657,34 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
     def _person_meta(self) -> dict:
         return _PERSON_GROUP_META[self._selected[1]]
 
+    def _is_inventory_item_group(self) -> bool:
+        """طبقِ ادغامِ فرمِ «کالا و خدمت»: برخلافِ CUSTOMER/SUPPLIER/PERSONNEL
+        (که زیرِ نوع‌بُعدِ سیستمیِ PERSON‌اند و در _PERSON_GROUP_META جا
+        می‌شوند)، INVENTORY_ITEM یک DetailDimensionType کاملاً جداست — پس
+        یک مسیرِ شرطیِ موازی و مستقل لازم است."""
+        if self._selected is None or self._selected[0] != "dim":
+            return False
+        return any(
+            t.dimension_type_id == self._selected[1] and t.code == dimensions_service.INVENTORY_ITEM_CODE
+            for t in self._types
+        )
+
+    def _render_item_panel(self, item_row: catalog_service.ItemRow | None = None) -> None:
+        """نمایش/مخفی‌کردنِ پنلِ اختصاصیِ کالا — فقط وقتی گروهِ انتخاب‌شده
+        INVENTORY_ITEM باشد و سطحِ درحالِ‌ساخت/ویرایش، سطحِ‌آخر باشد
+        (دقیقاً هم‌شرطِ is_leaf_level در _render_person_fields/_render_extra_fields)."""
+        if not self._is_inventory_item_group():
+            self.item_detail_panel.setVisible(False)
+            return
+        is_leaf_level = self._current_level_no() >= self._current_max_level_no
+        self.item_detail_panel.setVisible(is_leaf_level)
+        if not is_leaf_level:
+            return
+        company_id = self._company_id()
+        if company_id is not None:
+            self.item_detail_panel.refresh(company_id)
+        self.item_detail_panel.load(item_row)
+
     def _dimension_type_id(self) -> int | None:
         """dimension_type_idِ فعلی — برایِ گروه‌هایِ اشخاص، همیشه نوع‌بُعدِ
         سیستمیِ PERSON (سراسری برایِ هرسه‌شان)، برایِ بقیه همان انتخابِ کمبو."""
@@ -673,6 +718,11 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
             self._accounts_by_id = {r.detail_account_id: r for r in rows}
             self._person_rows_by_id = {}
 
+        self._item_rows_by_detail_id = (
+            {r.item_detail_account_id: r for r in catalog_service.list_items(company_id)}
+            if self._is_inventory_item_group() else {}
+        )
+
         max_level_no = dimensions_service.get_group_max_level_no(dimension_type_id, person_group_id)
         self._current_max_level_no = max_level_no
 
@@ -692,6 +742,7 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
         self._rebuild_accounts_tree()
         self._render_person_fields()
         self._render_extra_fields()
+        self._render_item_panel()
         if self._editing_account_id is None:
             self._suggest_code_for_current_parent()
 
@@ -704,7 +755,13 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
             return
         color = dimensions_service.get_group_color(self._dimension_type_id(), self._person_group_id())
         is_personnel_view = self._is_person() and self._selected[1] == dimensions_service.PERSONNEL_GROUP_CODE
-        columns = _COLUMNS + _PERSONNEL_EXTRA_COLUMNS if is_personnel_view else _COLUMNS
+        is_item_view = self._is_inventory_item_group()
+        if is_personnel_view:
+            columns = _COLUMNS + _PERSONNEL_EXTRA_COLUMNS
+        elif is_item_view:
+            columns = _COLUMNS + _ITEM_EXTRA_COLUMNS
+        else:
+            columns = _COLUMNS
         self.accounts_table.setColumnCount(len(columns))
         self.accounts_table.setHeaderLabels(columns)
 
@@ -719,6 +776,19 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
                 )
                 for r in self._person_rows_by_id.values()
             ]
+        elif is_item_view:
+            rows = []
+            for r in self._accounts_by_id.values():
+                item_row = self._item_rows_by_detail_id.get(r.detail_account_id)
+                if item_row is None:
+                    extra = ("—", "—", "—")
+                else:
+                    extra = (
+                        _KIND_LABELS.get(item_row.item_kind_code, item_row.item_kind_code),
+                        item_row.base_uom_code or "—",
+                        _LIFECYCLE_LABELS.get(item_row.lifecycle_status_code, item_row.lifecycle_status_code),
+                    )
+                rows.append((r.detail_account_id, r.parent_detail_account_id, r.full_code, r.name, r.level_no, r.is_active, *extra))
         else:
             rows = [
                 (r.detail_account_id, r.parent_detail_account_id, r.full_code, r.name, r.level_no, r.is_active)
@@ -728,7 +798,7 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
         def make_item(row: tuple) -> QTreeWidgetItem:
             detail_account_id, _parent_id, full_code, name, level_no, is_active = row[:6]
             values = [full_code, name or "—", str(level_no), "فعال" if is_active else "غیرفعال"]
-            if is_personnel_view:
+            if is_personnel_view or is_item_view:
                 values.extend(row[6:])
             item = QTreeWidgetItem(values)
             item.setData(0, Qt.UserRole, detail_account_id)
@@ -771,6 +841,7 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
         if self._is_person():
             self._render_person_fields()
         self._render_extra_fields()
+        self._render_item_panel()
 
     def _current_level_no(self) -> int:
         """سطحِ حسابی که در حالِ ساخت/ویرایشِ آن هستیم — از رویِ والدِ
@@ -1001,6 +1072,10 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
             self.parent_combo.setCurrentIndex(0)
         self.parent_combo.setEnabled(False)
         self._render_extra_fields(account.extra_fields)
+        item_row = None
+        if self._is_inventory_item_group():
+            item_row = catalog_service.get_item_row_by_detail_account_id(self._company_id(), detail_account_id)
+        self._render_item_panel(item_row)
         self.delete_button.setVisible(True)
         self.terminate_employee_button.setVisible(False)
         self._refresh_pay_components_section(None)
@@ -1053,6 +1128,7 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
             self.parent_combo.setCurrentIndex(0)
         self._render_person_fields()
         self._render_extra_fields()
+        self._render_item_panel()
         self._refresh_pay_components_section(None)
         self._suggest_code_for_current_parent()
         self.accounts_table.clearSelection()
@@ -1109,6 +1185,24 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
                         company_id=company_id, code=code, name=name or "", custom_fields=extra_fields,
                         parent_detail_account_id=self.parent_combo.currentData(), **person_fields,
                     )
+            elif self._is_inventory_item_group() and self._current_level_no() >= self._current_max_level_no:
+                # طبقِ طراحیِ ادغام: create_item/update_item فقط برایِ
+                # سطحِ‌آخر صدا زده می‌شوند؛ گره‌هایِ میانیِ گروه‌بندیِ کالا
+                # از همان مسیرِ عمومیِ زیر (elif/else بعدی) رد می‌شوند.
+                item_fields = self.item_detail_panel.collect_fields()
+                if self._editing_account_id is not None:
+                    item = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
+                    if item is None:
+                        raise ValueError("کالا یافت نشد.")
+                    catalog_service.update_item(
+                        item.item_id, company_id, code, name or "", self.account_active_checkbox.isChecked(),
+                        self.item_detail_panel.lifecycle_status_code(), item_fields,
+                    )
+                else:
+                    catalog_service.create_item(
+                        company_id, code, name or "", item_fields,
+                        parent_detail_account_id=self.parent_combo.currentData(),
+                    )
             elif self._editing_account_id is not None:
                 dimensions_service.update_detail_account(
                     self._editing_account_id, company_id, code, self.account_active_checkbox.isChecked(),
@@ -1142,6 +1236,12 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
         try:
             if self._is_person():
                 self._person_meta()["delete_fn"](self._editing_account_id, company_id)
+            elif self._is_inventory_item_group():
+                item = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
+                if item is not None:
+                    catalog_service.delete_item(item.item_id, company_id)
+                else:
+                    dimensions_service.delete_detail_account(self._editing_account_id, company_id)
             else:
                 dimensions_service.delete_detail_account(self._editing_account_id, company_id)
         except ValueError as exc:

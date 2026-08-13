@@ -1196,7 +1196,6 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.payroll_overtime_entries import PayrollOvertimeEntriesScreen
         from peecha.ui.screens.hr_attendance_entries import HrAttendanceEntriesScreen
         from peecha.ui.screens.hr_attendance_summary import HrAttendanceSummaryScreen
-        from peecha.ui.screens.inventory_items import InventoryItemsScreen
         from peecha.ui.screens.inventory_warehouses import InventoryWarehousesScreen
         from peecha.ui.screens.inventory_document import InventoryDocumentScreen
         from peecha.ui.screens.inventory_documents_list import InventoryDocumentsListScreen
@@ -1266,7 +1265,6 @@ class MainWindow(QMainWindow):
         self.register_screen("payroll_overtime_entries", PayrollOvertimeEntriesScreen())
         self.register_screen("hr_attendance_entries", HrAttendanceEntriesScreen())
         self.register_screen("hr_attendance_summary", HrAttendanceSummaryScreen())
-        self.register_screen("inventory_items", InventoryItemsScreen())
         self.register_screen("inventory_warehouses", InventoryWarehousesScreen())
         self.register_screen("inventory_documents_list", InventoryDocumentsListScreen(self))
         self.register_screen("inventory_document_receipt", InventoryDocumentScreen("RECEIPT", self))
