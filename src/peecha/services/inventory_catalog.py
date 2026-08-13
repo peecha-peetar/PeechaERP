@@ -13,18 +13,33 @@ import decimal
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.inventory import (
+    AssetDepreciationEntry,
+    AssetDetail,
+    Batch,
+    BomHeader,
+    BomLine,
     Brand,
     CostingMethod,
+    CostLayer,
+    CycleCountLine,
     Item,
     ItemCategory,
+    ItemMedia,
+    ItemSupplier,
     ItemUomConversion,
+    ItemVariantValue,
     Manufacturer,
+    ReorderPolicy,
+    ReorderSuggestionAcknowledgement,
     RelatedItem,
+    SerialNumber,
+    StandardCost,
     StockDocumentLine,
+    StockReservation,
     Uom,
 )
 from peecha.services import detail_dimensions as dimensions_service
@@ -523,6 +538,16 @@ def _item_has_stock_movements(session, item_id: int) -> bool:
 
 
 def delete_item(item_id: int, company_id: int) -> None:
+    """طبقِ رفعِ باگِ کشف‌شده: پیش‌تر این تابع فقط سابقهٔ حرکتِ انبار را چک
+    می‌کرد و مستقیماً ردیفِ inv.items را حذف می‌کرد — اگر کالا زیرجدول‌هایِ
+    تعریفیِ خودش را داشت (asset_details/bom_headers/item_suppliers/...)،
+    حذف با نقضِ کلیدِ خارجی شکست می‌خورد. حالا:
+    ۱) اگر کالا در جایی که واقعاً «استفاده» محسوب می‌شود (جزءِ فهرستِ
+       موادِ اولیهٔ کالایِ دیگر، والدِ تنوعِ کالاهایِ دیگر، رزرو/بچ/سریال/
+       لایهٔ‌بها/انبارگردانیِ فعال) نقش داشته باشد، حذف رد می‌شود.
+    ۲) در غیرِ این صورت، زیرجدول‌هایِ تعریفیِ خودِ همین کالا (که فقط با
+       همین کالا معنا دارند، نه سابقهٔ عملیاتیِ مستقل) پیش از حذفِ خودِ
+       کالا پاک می‌شوند."""
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
@@ -533,6 +558,38 @@ def delete_item(item_id: int, company_id: int) -> None:
             select(func.count()).select_from(StockDocumentLine).where(StockDocumentLine.item_id == item_id)
         ):
             raise ValueError("این کالا در سندی استفاده شده و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(BomLine).where(BomLine.component_item_id == item_id)):
+            raise ValueError("این کالا به‌عنوانِ جزءِ فهرستِ موادِ اولیهٔ کالایِ دیگری استفاده شده و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(Item).where(Item.variant_parent_item_id == item_id)):
+            raise ValueError("این کالا والدِ یک یا چند تنوعِ کالاست و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(StockReservation).where(StockReservation.item_id == item_id)):
+            raise ValueError("این کالا رزروِ موجودی دارد و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(Batch).where(Batch.item_id == item_id)):
+            raise ValueError("این کالا سابقهٔ بچ دارد و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(SerialNumber).where(SerialNumber.item_id == item_id)):
+            raise ValueError("این کالا سابقهٔ سریال دارد و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(CostLayer).where(CostLayer.item_id == item_id)):
+            raise ValueError("این کالا سابقهٔ لایهٔ بهایِ تمام‌شده دارد و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(CycleCountLine).where(CycleCountLine.item_id == item_id)):
+            raise ValueError("این کالا در انبارگردانی استفاده شده و قابلِ‌حذف نیست.")
+
+        bom_ids = session.scalars(select(BomHeader.bom_id).where(BomHeader.finished_item_id == item_id)).all()
+        if bom_ids:
+            session.execute(delete(BomLine).where(BomLine.bom_id.in_(bom_ids)))
+            session.execute(delete(BomHeader).where(BomHeader.bom_id.in_(bom_ids)))
+        session.execute(delete(AssetDepreciationEntry).where(AssetDepreciationEntry.item_id == item_id))
+        session.execute(delete(AssetDetail).where(AssetDetail.item_id == item_id))
+        session.execute(delete(ItemUomConversion).where(ItemUomConversion.item_id == item_id))
+        session.execute(delete(ItemVariantValue).where(ItemVariantValue.item_id == item_id))
+        session.execute(delete(ItemSupplier).where(ItemSupplier.item_id == item_id))
+        session.execute(delete(ItemMedia).where(ItemMedia.item_id == item_id))
+        session.execute(
+            delete(RelatedItem).where((RelatedItem.item_id == item_id) | (RelatedItem.related_item_id == item_id))
+        )
+        session.execute(delete(StandardCost).where(StandardCost.item_id == item_id))
+        session.execute(delete(ReorderPolicy).where(ReorderPolicy.item_id == item_id))
+        session.execute(delete(ReorderSuggestionAcknowledgement).where(ReorderSuggestionAcknowledgement.item_id == item_id))
+
         detail_account_id = item.item_detail_account_id
         session.delete(item)
         session.commit()
