@@ -43,7 +43,15 @@ from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.main import get_font_family
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, PersianDigitLineEdit
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    FormScreenBase,
+    JalaliDateEdit,
+    LayoutEditMixin,
+    PersianDigitLineEdit,
+)
 
 _METHOD_LABELS = {
     "CASH": "نقدی",
@@ -651,7 +659,7 @@ class _MethodDetailsDialog(QDialog):
 _CHECK_ENTRY_COLUMNS = ["شماره‌یِ چک", "بانک", "مبلغ", "صاحبِ حساب"]
 
 
-class _CheckEntryDialog(QDialog):
+class _CheckEntryDialog(LayoutEditMixin, QDialog):
     """واردکردنِ چند چک در یک ردیف — با «تایید» جمعِ مبلغِ همه‌یِ چک‌ها به
     ردیف منتقل می‌شود. برایِ دریافت: سریال/شماره/شبا/بانک/شماره‌حساب/مبلغ/
     نامِ صاحبِ‌حساب/کدِملی/تلفن. طبقِ درخواستِ صریح، برایِ پرداخت فقط
@@ -795,8 +803,6 @@ class _CheckEntryDialog(QDialog):
             outer.addLayout(person_form)
             pre_grid_focus_chain.append(self.person_detail_combo)
 
-        form = QGridLayout()
-        form.setSpacing(6)
         self.serial_field = PersianDigitLineEdit()
         self.no_field = PersianDigitLineEdit()
         self.iban_field = PersianDigitLineEdit()
@@ -868,10 +874,18 @@ class _CheckEntryDialog(QDialog):
         last_signal = last_widget.lineEdit().returnPressed if isinstance(last_widget, QComboBox) else last_widget.returnPressed
         last_signal.connect(self._add_current)
 
-        for row_index, (label, widget) in enumerate(rows):
-            form.addWidget(QLabel(label), row_index // 2, (row_index % 2) * 2)
-            form.addWidget(widget, row_index // 2, (row_index % 2) * 2 + 1)
-        outer.addLayout(form)
+        # طبقِ چرخشِ عمومیِ فرم‌ها به FieldGrid: جایگزینِ ریاضیِ دستیِ
+        # row_index // 2 با کمکِ مشترک — همان rows بالا، بدونِ تغییرِ
+        # ترتیب یا زنجیره‌یِ Enterِ بالاتر (که مستقل از این گریدِ بصری،
+        # مستقیماً از rows/field_widgets ساخته شده). کلیدِ هر FieldSpec
+        # ایندکسِ رویِ rows است چون این دیالوگ در هر بار بازشدن دوباره
+        # ساخته می‌شود و برچسب‌ها بینِ RECEIPT/PAYMENT فرق دارند.
+        self.fields_grid = FieldGrid(
+            [FieldSpec(f"field_{index}", label, widget, span=1) for index, (label, widget) in enumerate(rows)],
+            columns=2,
+        )
+        outer.addWidget(self.fields_grid)
+        self.register_field_grids(f"treasury_check_entry_{direction.lower()}", [self.fields_grid])
 
         self.add_button = QPushButton("+ افزودنِ این چک به فهرست")
         self.add_button.setObjectName("flatButton")

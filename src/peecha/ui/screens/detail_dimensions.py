@@ -58,7 +58,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import payroll as payroll_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, PersianDigitLineEdit
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, PersianDigitLineEdit
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها.
@@ -231,7 +231,7 @@ def _make_field_widget(kind: str) -> QWidget:
     return PersianDigitLineEdit()
 
 
-class DetailDimensionsScreen(FieldHelpMixin, QWidget):
+class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         # combo_data ذخیره‌شده رویِ هر آیتمِ group_combo یکی از این دو شکل است:
@@ -340,24 +340,24 @@ class DetailDimensionsScreen(FieldHelpMixin, QWidget):
         self.account_form_title.setObjectName("pageTitle")
         layout.addWidget(self.account_form_title)
 
-        grid = QGridLayout()
-        grid.addWidget(QLabel("والد"), 0, 0)
         self.parent_combo = QComboBox()
         self.parent_combo.currentIndexChanged.connect(self._on_parent_combo_changed)
-        grid.addWidget(self.parent_combo, 0, 1)
 
-        grid.addWidget(QLabel("کد"), 1, 0)
         self.account_code_field = QLineEdit()
-        grid.addWidget(self.account_code_field, 1, 1)
 
-        grid.addWidget(QLabel("نام"), 2, 0)
         self.account_name_field = QLineEdit()
-        grid.addWidget(self.account_name_field, 2, 1)
 
         self.account_active_checkbox = QCheckBox("فعال")
         self.account_active_checkbox.setChecked(True)
-        grid.addWidget(self.account_active_checkbox, 3, 1)
-        layout.addLayout(grid)
+
+        self.account_basic_grid = FieldGrid([
+            FieldSpec("parent", "والد", self.parent_combo, span=2),
+            FieldSpec("code", "کد", self.account_code_field, span=1),
+            FieldSpec("name", "نام", self.account_name_field, span=2),
+            FieldSpec("active", "", self.account_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.account_basic_grid)
+        self.register_field_grids("detail_dimensions", [self.account_basic_grid])
 
         # طبقِ درخواستِ صریح: گروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل)
         # فیلدهایِ هاردکدِ اختصاصیِ خودشان را هم دارند (چون در جدولِ

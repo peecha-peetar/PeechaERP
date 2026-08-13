@@ -26,13 +26,14 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
 _PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "OTHER": "سایر"}
 _SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
 _STRATEGY_LABELS = {"MOST_STOCK": "بیشترین موجودی", "REGION_MATCH": "تطبیقِ منطقه", "LOWEST_COST": "کمترین هزینه", "FIXED_WAREHOUSE": "انبارِ ثابت"}
 
 
-class CommercialEcommerceScreen(QWidget):
+class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._connections: list = []
@@ -70,18 +71,22 @@ class CommercialEcommerceScreen(QWidget):
         self.connections_table.cellClicked.connect(self._on_connection_selected)
         left.addWidget(self.connections_table, stretch=1)
 
-        conn_form = QVBoxLayout()
         self.platform_combo = QComboBox()
         for code, label in _PLATFORM_LABELS.items():
             self.platform_combo.addItem(label, code)
-        conn_form.addWidget(self.platform_combo)
         self.store_url_field = QLineEdit()
         self.store_url_field.setPlaceholderText("آدرسِ فروشگاه (URL)")
-        conn_form.addWidget(self.store_url_field)
         self.channel_combo = QComboBox()
-        conn_form.addWidget(self.channel_combo)
         self.warehouse_combo = QComboBox()
-        conn_form.addWidget(self.warehouse_combo)
+        self.conn_form_grid = FieldGrid([
+            FieldSpec("platform", "پلتفرم", self.platform_combo, span=1),
+            FieldSpec("store_url", "آدرسِ فروشگاه (URL)", self.store_url_field, span=3),
+            FieldSpec("channel", "کانالِ فروش", self.channel_combo, span=1),
+            FieldSpec("warehouse", "انبار", self.warehouse_combo, span=2),
+        ])
+        self.register_field_grids("commercial_ecommerce_connections", [self.conn_form_grid])
+        conn_form = QVBoxLayout()
+        conn_form.addWidget(self.conn_form_grid)
         add_conn_button = QPushButton("+ اتصالِ تازه")
         add_conn_button.setObjectName("primaryButton")
         add_conn_button.clicked.connect(self._add_connection)

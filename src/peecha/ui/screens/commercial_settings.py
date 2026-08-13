@@ -19,13 +19,14 @@ from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settings as settings_service
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
 
 def _company_id() -> int | None:
     return app_session.current_company.company_id if app_session.current_company else None
 
 
-class _AccountMappingsTab(QWidget):
+class _AccountMappingsTab(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._combos: dict[str, QComboBox] = {}
@@ -37,16 +38,15 @@ class _AccountMappingsTab(QWidget):
         layout.addWidget(title)
         layout.addWidget(QLabel("حساب‌هایِ دریافتنیِ مشتریان/پرداختنیِ تامین‌کنندگان از تنظیماتِ انبار می‌آیند و این‌جا تکرار نمی‌شوند."))
 
-        self.rows_layout = QVBoxLayout()
-        layout.addLayout(self.rows_layout)
-        for key, label in settings_service.MAPPING_LABELS.items():
-            row = QHBoxLayout()
-            row.addWidget(QLabel(label), stretch=1)
+        for key in settings_service.MAPPING_LABELS:
             combo = QComboBox()
             combo.setMinimumWidth(280)
             self._combos[key] = combo
-            row.addWidget(combo, stretch=2)
-            self.rows_layout.addLayout(row)
+        self.mappings_grid = FieldGrid(
+            [FieldSpec(key, label, self._combos[key], span=2) for key, label in settings_service.MAPPING_LABELS.items()]
+        )
+        layout.addWidget(self.mappings_grid)
+        self.register_field_grids("commercial_settings_account_mappings", [self.mappings_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -179,7 +179,7 @@ class _IndustryProfileTab(QWidget):
         self.status_label.setText("نمایه اعمال شد.")
 
 
-class _NumberingSequencesTab(QWidget):
+class _NumberingSequencesTab(LayoutEditMixin, QWidget):
     _RESET_LABELS = {"YEARLY": "سالانه", "NEVER": "هرگز"}
 
     def __init__(self) -> None:
@@ -195,21 +195,20 @@ class _NumberingSequencesTab(QWidget):
 
         from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES
 
-        self.rows_layout = QVBoxLayout()
-        layout.addLayout(self.rows_layout)
+        specs: list[FieldSpec] = []
         for code, label in DOC_TYPE_TITLES.items():
-            row = QHBoxLayout()
-            row.addWidget(QLabel(label), stretch=1)
             prefix_field = QLineEdit()
             prefix_field.setPlaceholderText("پیشوند (مثلاً SO-)")
             self._prefix_fields[code] = prefix_field
-            row.addWidget(prefix_field, stretch=1)
             reset_combo = QComboBox()
             for reset_code, reset_label in self._RESET_LABELS.items():
                 reset_combo.addItem(reset_label, reset_code)
             self._reset_combos[code] = reset_combo
-            row.addWidget(reset_combo)
-            self.rows_layout.addLayout(row)
+            specs.append(FieldSpec(f"{code}_prefix", f"پیشوندِ {label}", prefix_field, span=1))
+            specs.append(FieldSpec(f"{code}_reset", f"سیاستِ بازنشانیِ {label}", reset_combo, span=1))
+        self.numbering_grid = FieldGrid(specs, columns=2)
+        layout.addWidget(self.numbering_grid)
+        self.register_field_grids("commercial_settings_numbering", [self.numbering_grid])
 
         save_button = QPushButton("ذخیره")
         save_button.setObjectName("primaryButton")

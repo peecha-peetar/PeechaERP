@@ -23,12 +23,12 @@ from PySide6.QtWidgets import (
 
 from peecha import session as app_session
 from peecha.services import hr as hr_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
 
 _COLUMNS = ["فعال", "والد", "نام", "کد"]
 
 
-class OrgUnitsScreen(FieldHelpMixin, QWidget):
+class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[hr_service.OrgUnitRow] = []
@@ -46,6 +46,7 @@ class OrgUnitsScreen(FieldHelpMixin, QWidget):
             (self.parent_combo, "واحدِ سازمانیِ بالادست — اگر این واحد زیرمجموعهٔ واحدِ دیگری است."),
             (self.is_active_checkbox, "واحدِ غیرِفعال دیگر در انتخابِ واحدِ سازمانی برایِ پست/قرارداد نشان داده نمی‌شود."),
         ])
+        self.register_field_grids("hr_org_units", [self.form_grid])
 
     def _wrap_scrollable(self, content: QWidget) -> QWidget:
         # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت): این صفحه دو ستونِ مستقل
@@ -94,21 +95,19 @@ class OrgUnitsScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("کد"))
         self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
-
-        layout.addWidget(QLabel("نام"))
         self.name_field = QLineEdit()
-        layout.addWidget(self.name_field)
-
-        layout.addWidget(QLabel("والد"))
         self.parent_combo = QComboBox()
-        layout.addWidget(self.parent_combo)
-
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+
+        self.form_grid = FieldGrid([
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("name", "نام", self.name_field, span=2),
+            FieldSpec("parent", "والد", self.parent_combo, span=3),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=3),
+        ])
+        layout.addWidget(self.form_grid)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")

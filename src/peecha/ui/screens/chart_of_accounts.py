@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -37,7 +36,7 @@ from peecha.ui import report_export, theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
 
 # طبقِ درخواستِ صریح («در فرمِ تعریفِ حساب‌ها هم بتوان از اکسل ایمپورت
 # کرد») — «کدِ کامل» (full_code، مثلِ 1-01-001) به‌جایِ کدِ بخش گرفته
@@ -120,7 +119,7 @@ def _select_combo_value(combo: QComboBox, value: str | None) -> None:
     combo.setCurrentIndex(index if index >= 0 else 0)
 
 
-class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
+class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[coa_service.AccountRow] = []
@@ -211,64 +210,65 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        row = 0
-
-        grid.addWidget(QLabel("والد"), row, 0)
         self.parent_combo = QComboBox()
         self.parent_combo.currentIndexChanged.connect(self._update_level_preview)
-        grid.addWidget(self.parent_combo, row, 1)
-        row += 1
 
+        # segment_code_field و name_field برچسبِ متنیِ ثابت ندارند — با
+        # سطحِ حساب (گروه/کل/معین) عوض می‌شوند (_update_level_preview /
+        # _load_into_form پایین‌تر رویِ self.segment_code_label/name_label
+        # صراحتاً .setText می‌کنند). به همینِ خاطر این دو برچسب همچنان
+        # QLabelِ واقعیِ خودشان را دارند (نه متنِ ثابتِ FieldSpec.label) و
+        # با یک wrapperِ کوچک به‌جایِ برچسبِ خودکارِ FieldGrid قرار
+        # می‌گیرند — بقیه‌یِ منطقِ setText/setEnabled دست‌نخورده می‌ماند.
         self.segment_code_label = QLabel("کدِ گروه")
-        grid.addWidget(self.segment_code_label, row, 0)
         self.segment_code_field = QLineEdit()
-        grid.addWidget(self.segment_code_field, row, 1)
-        row += 1
+        segment_code_container = QWidget()
+        segment_code_layout = QVBoxLayout(segment_code_container)
+        segment_code_layout.setContentsMargins(0, 0, 0, 0)
+        segment_code_layout.setSpacing(4)
+        segment_code_layout.addWidget(self.segment_code_label)
+        segment_code_layout.addWidget(self.segment_code_field)
 
         self.name_label = QLabel("نامِ گروه")
-        grid.addWidget(self.name_label, row, 0)
         self.name_field = QLineEdit()
-        grid.addWidget(self.name_field, row, 1)
-        row += 1
+        name_container = QWidget()
+        name_layout = QVBoxLayout(name_container)
+        name_layout.setContentsMargins(0, 0, 0, 0)
+        name_layout.setSpacing(4)
+        name_layout.addWidget(self.name_label)
+        name_layout.addWidget(self.name_field)
 
-        grid.addWidget(QLabel("ماهیت"), row, 0)
         self.nature_combo = QComboBox()
         _fill_combo(self.nature_combo, _NATURE_OPTIONS)
-        grid.addWidget(self.nature_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("دسته"), row, 0)
         self.category_combo = QComboBox()
         _fill_combo(self.category_combo, _CATEGORY_OPTIONS)
-        grid.addWidget(self.category_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("نوعِ حساب"), row, 0)
         self.account_type_combo = QComboBox()
         _fill_combo(self.account_type_combo, _ACCOUNT_TYPE_OPTIONS)
-        grid.addWidget(self.account_type_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("بخشِ گردشِ وجوهِ نقد"), row, 0)
         self.cash_flow_section_combo = QComboBox()
         _fill_combo(self.cash_flow_section_combo, _CASH_FLOW_SECTION_OPTIONS)
-        grid.addWidget(self.cash_flow_section_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("طبقه‌یِ نقدینگی"), row, 0)
         self.liquidity_class_combo = QComboBox()
         _fill_combo(self.liquidity_class_combo, _LIQUIDITY_CLASS_OPTIONS)
-        grid.addWidget(self.liquidity_class_combo, row, 1)
-        row += 1
 
         self.is_postable_checkbox = QCheckBox("قابلِ ثبتِ سند")
         self.is_postable_checkbox.toggled.connect(self._update_dimension_checklists_visibility)
-        grid.addWidget(self.is_postable_checkbox, row, 1)
-        row += 1
 
-        layout.addLayout(grid)
+        self.form_grid = FieldGrid([
+            FieldSpec("parent", "والد", self.parent_combo, span=2),
+            FieldSpec("segment_code", "", segment_code_container, span=1),
+            FieldSpec("name", "", name_container, span=3),
+            FieldSpec("nature", "ماهیت", self.nature_combo, span=1),
+            FieldSpec("category", "دسته", self.category_combo, span=1),
+            FieldSpec("account_type", "نوعِ حساب", self.account_type_combo, span=2),
+            FieldSpec("cash_flow_section", "بخشِ گردشِ وجوهِ نقد", self.cash_flow_section_combo, span=2),
+            FieldSpec("liquidity_class", "طبقه‌یِ نقدینگی", self.liquidity_class_combo, span=2),
+            FieldSpec("is_postable", "", self.is_postable_checkbox, span=3),
+        ])
+        layout.addWidget(self.form_grid)
+        self.register_field_grids("chart_of_accounts", [self.form_grid])
 
         self.level_preview_label = QLabel("")
         self.level_preview_label.setObjectName("sectionHint")

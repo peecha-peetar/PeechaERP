@@ -42,7 +42,16 @@ from peecha.ui import theme
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
 from peecha.ui.screens.journal_entry import _AmountField, _make_searchable_combo
 from peecha.ui.screens.hr_attendance_entries import _IMPORT_GUESS_KEYWORDS, _IMPORT_TARGET_FIELDS
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, PersianDigitLineEdit, ZeroPaddedSpinBox
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    FormScreenBase,
+    JalaliDateEdit,
+    LayoutEditMixin,
+    PersianDigitLineEdit,
+    ZeroPaddedSpinBox,
+)
 
 _CALCULATION_BASIS_LABELS = [("DAILY", "روزانه"), ("HOURLY", "ساعتی")]
 _ROUNDING_RULE_LABELS = [
@@ -101,7 +110,7 @@ def _wrap_scrollable(content: QWidget) -> QWidget:
 # ---------------------------------------------------------------------
 # تبِ تنظیماتِ کلی
 # ---------------------------------------------------------------------
-class _GeneralSettingsTab(FieldHelpMixin, FormScreenBase):
+class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
     def __init__(self) -> None:
         super().__init__()
         layout = self.body_layout
@@ -112,44 +121,41 @@ class _GeneralSettingsTab(FieldHelpMixin, FormScreenBase):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        layout.addWidget(QLabel("تعدادِ روزهایِ استانداردِ ماه"))
         self.standard_month_days_field = ZeroPaddedSpinBox()
         self.standard_month_days_field.setRange(1, 31)
-        layout.addWidget(self.standard_month_days_field)
 
-        layout.addWidget(QLabel("مبنایِ محاسبه"))
         self.calculation_basis_combo = QComboBox()
         for code, label in _CALCULATION_BASIS_LABELS:
             self.calculation_basis_combo.addItem(label, code)
-        layout.addWidget(self.calculation_basis_combo)
 
-        layout.addWidget(QLabel("قاعدهٔ گردکردن"))
         self.rounding_rule_combo = QComboBox()
         for code, label in _ROUNDING_RULE_LABELS:
             self.rounding_rule_combo.addItem(label, code)
-        layout.addWidget(self.rounding_rule_combo)
 
-        layout.addWidget(QLabel("روزِ پرداخت (۰ یعنی تنظیم‌نشده)"))
         self.default_pay_day_field = ZeroPaddedSpinBox()
         self.default_pay_day_field.setRange(0, 31)
-        layout.addWidget(self.default_pay_day_field)
 
-        layout.addWidget(QLabel("ارزِ فیشِ حقوقی"))
         self.payslip_currency_combo = QComboBox()
-        layout.addWidget(self.payslip_currency_combo)
 
-        layout.addWidget(QLabel("حسابِ حقوقِ پرداختنی/بانک (برایِ صدورِ سندِ حقوق)"))
         self.salary_payable_account_combo = _make_searchable_combo([])
-        layout.addWidget(self.salary_payable_account_combo)
 
-        layout.addWidget(QLabel("تفصیلیِ حسابِ حقوقِ پرداختنی (اختیاری)"))
         self.salary_payable_detail_combo = _make_searchable_combo([])
-        layout.addWidget(self.salary_payable_detail_combo)
 
-        layout.addWidget(QLabel("قالبِ شرحِ ردیفِ حقوقِ پرداختنی (اختیاری)"))
         self.payable_description_template_field = QLineEdit()
         self.payable_description_template_field.setPlaceholderText("مثلاً: پرداختنیِ حقوقِ خالص — دورهٔ {دوره} — اجرایِ {اجرا}")
-        layout.addWidget(self.payable_description_template_field)
+
+        self.general_grid = FieldGrid([
+            FieldSpec("standard_month_days", "تعدادِ روزهایِ استانداردِ ماه", self.standard_month_days_field, span=1),
+            FieldSpec("calculation_basis", "مبنایِ محاسبه", self.calculation_basis_combo, span=1),
+            FieldSpec("rounding_rule", "قاعدهٔ گردکردن", self.rounding_rule_combo, span=1),
+            FieldSpec("default_pay_day", "روزِ پرداخت (۰ یعنی تنظیم‌نشده)", self.default_pay_day_field, span=1),
+            FieldSpec("payslip_currency", "ارزِ فیشِ حقوقی", self.payslip_currency_combo, span=2),
+            FieldSpec("salary_payable_account", "حسابِ حقوقِ پرداختنی/بانک (برایِ صدورِ سندِ حقوق)", self.salary_payable_account_combo, span=3),
+            FieldSpec("salary_payable_detail", "تفصیلیِ حسابِ حقوقِ پرداختنی (اختیاری)", self.salary_payable_detail_combo, span=3),
+            FieldSpec("payable_description_template", "قالبِ شرحِ ردیفِ حقوقِ پرداختنی (اختیاری)", self.payable_description_template_field, span=3),
+        ])
+        layout.addWidget(self.general_grid)
+        self.register_field_grids("payroll_settings_general", [self.general_grid])
 
         save_button = QPushButton("ذخیره")
         save_button.setObjectName("primaryButton")
@@ -247,7 +253,7 @@ class _GeneralSettingsTab(FieldHelpMixin, FormScreenBase):
 _WAGE_COLUMNS = ["نرخِ ساعتی", "نرخِ روزانه", "مبلغِ ماهانه", "تا تاریخ", "از تاریخ"]
 
 
-class _MinimumWageTab(FieldHelpMixin, QWidget):
+class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     # طبقِ رفعِ باگِ «دکمه‌یِ ذخیره زیرِ تسک‌بار»: هر دو ستون (لیست/فرم)
     # خودشان اسکرول+فوترِ ثابت دارند (_wrap_scrollable) — نباید
     # system_settings.py::_sub_tabs دوباره کلِ این ویجت را بپیچد.
@@ -300,31 +306,31 @@ class _MinimumWageTab(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("از تاریخ"))
         self.from_date_field = JalaliDateEdit()
-        layout.addWidget(self.from_date_field)
 
-        layout.addWidget(QLabel("تا تاریخ"))
         self.to_date_field = JalaliDateEdit()
-        layout.addWidget(self.to_date_field)
 
         self.to_date_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی (بدونِ تاریخِ پایان)")
         self.to_date_unbounded_checkbox.setChecked(True)
         self.to_date_unbounded_checkbox.toggled.connect(lambda checked: self.to_date_field.setEnabled(not checked))
         self.to_date_field.setEnabled(False)
-        layout.addWidget(self.to_date_unbounded_checkbox)
 
-        layout.addWidget(QLabel("مبلغِ ماهانه (ریال)"))
         self.monthly_field = _AmountField()
-        layout.addWidget(self.monthly_field)
 
-        layout.addWidget(QLabel("مبلغِ روزانه (اختیاری)"))
         self.daily_field = _AmountField()
-        layout.addWidget(self.daily_field)
 
-        layout.addWidget(QLabel("مبلغِ ساعتی (اختیاری)"))
         self.hourly_field = _AmountField()
-        layout.addWidget(self.hourly_field)
+
+        self.wage_grid = FieldGrid([
+            FieldSpec("from_date", "از تاریخ", self.from_date_field, span=1),
+            FieldSpec("to_date", "تا تاریخ", self.to_date_field, span=1),
+            FieldSpec("to_date_unbounded", "", self.to_date_unbounded_checkbox, span=1),
+            FieldSpec("monthly", "مبلغِ ماهانه (ریال)", self.monthly_field, span=1),
+            FieldSpec("daily", "مبلغِ روزانه (اختیاری)", self.daily_field, span=1),
+            FieldSpec("hourly", "مبلغِ ساعتی (اختیاری)", self.hourly_field, span=1),
+        ])
+        layout.addWidget(self.wage_grid)
+        self.register_field_grids("payroll_settings_minimum_wage", [self.wage_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -569,7 +575,7 @@ class _PoliciesTab(FormScreenBase):
 _PAY_ITEM_COLUMNS = ["فعال", "فاز", "روشِ محاسبه", "نوع", "نام", "کد"]
 
 
-class _PayItemsTab(FieldHelpMixin, QWidget):
+class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     # طبقِ رفعِ باگِ «دکمه‌یِ ذخیره زیرِ تسک‌بار»: هر دو ستون (لیست/فرم)
     # خودشان اسکرول+فوترِ ثابت دارند (_wrap_scrollable) — نباید
     # system_settings.py::_sub_tabs دوباره کلِ این ویجت را بپیچد.
@@ -594,6 +600,7 @@ class _PayItemsTab(FieldHelpMixin, QWidget):
             (self.detail_account_combo, "تفصیلیِ اختیاری برایِ همین ردیفِ سند (مثلاً مرکزِ هزینه)."),
             (self.description_template_field, "شرحِ ردیفِ این آیتم در سند — جای‌گذارهایِ مجاز: {نام_آیتم} {دوره} {اجرا}."),
         ])
+        self.register_field_grids("payroll_settings_pay_items", [self.form_grid])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -625,96 +632,75 @@ class _PayItemsTab(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("کد"))
         self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
 
-        layout.addWidget(QLabel("نام"))
         self.name_field = QLineEdit()
-        layout.addWidget(self.name_field)
 
-        layout.addWidget(QLabel("نوع"))
         self.item_type_combo = QComboBox()
         for code, label in _ITEM_TYPE_LABELS:
             self.item_type_combo.addItem(label, code)
-        layout.addWidget(self.item_type_combo)
 
-        layout.addWidget(QLabel("روشِ محاسبه"))
         self.calculation_method_combo = QComboBox()
         for code, label in _CALCULATION_METHOD_LABELS:
             self.calculation_method_combo.addItem(label, code)
         self.calculation_method_combo.currentIndexChanged.connect(self._update_method_fields_visibility)
-        layout.addWidget(self.calculation_method_combo)
 
-        layout.addWidget(QLabel("فازِ محاسبه"))
         self.calculation_phase_combo = QComboBox()
         for code, label in _CALCULATION_PHASE_LABELS:
             self.calculation_phase_combo.addItem(label, code)
-        layout.addWidget(self.calculation_phase_combo)
 
-        self.formula_label = QLabel("فرمول")
-        layout.addWidget(self.formula_label)
         self.formula_field = QLineEdit()
-        layout.addWidget(self.formula_field)
 
-        self.fixed_amount_label = QLabel("مبلغِ ثابت (ریال)")
-        layout.addWidget(self.fixed_amount_label)
         self.fixed_amount_field = _AmountField()
-        layout.addWidget(self.fixed_amount_field)
 
-        self.percentage_label = QLabel("درصد (از حقوقِ پایه)")
-        layout.addWidget(self.percentage_label)
         self.percentage_field = PersianDigitLineEdit()
-        layout.addWidget(self.percentage_field)
 
-        layout.addWidget(QLabel("حسابِ کلِ مرتبط (اختیاری)"))
         self.gl_account_combo = _make_searchable_combo([])
-        layout.addWidget(self.gl_account_combo)
 
-        layout.addWidget(QLabel("تفصیلیِ مرتبط (اختیاری)"))
         self.detail_account_combo = _make_searchable_combo([])
-        layout.addWidget(self.detail_account_combo)
 
-        layout.addWidget(QLabel("قالبِ شرحِ سند (اختیاری — خالی یعنی شرحِ پیش‌فرض)"))
         self.description_template_field = QLineEdit()
         self.description_template_field.setPlaceholderText("مثلاً: بابتِ {نام_آیتم} — دورهٔ {دوره} — اجرایِ {اجرا}")
-        layout.addWidget(self.description_template_field)
 
-        layout.addWidget(QLabel("شرطِ تخصیص (اختیاری)"))
         self.eligibility_field = QLineEdit()
-        layout.addWidget(self.eligibility_field)
 
-        checks_row1 = QHBoxLayout()
         self.is_prorated_checkbox = QCheckBox("نسبی‌سازی بر اساسِ روزِ کارکرد")
         self.is_taxable_checkbox = QCheckBox("مشمولِ مالیات")
-        checks_row1.addWidget(self.is_prorated_checkbox)
-        checks_row1.addWidget(self.is_taxable_checkbox)
-        layout.addLayout(checks_row1)
-
-        checks_row2 = QHBoxLayout()
         self.is_insurable_checkbox = QCheckBox("مشمولِ بیمه")
         self.is_continuous_checkbox = QCheckBox("مستمر (مبنایِ سنوات/اضافه‌کاری)")
-        checks_row2.addWidget(self.is_insurable_checkbox)
-        checks_row2.addWidget(self.is_continuous_checkbox)
-        layout.addLayout(checks_row2)
-
-        checks_row3 = QHBoxLayout()
         self.is_cash_checkbox = QCheckBox("نقدی (در جمعِ قابلِ‌پرداخت لحاظ شود)")
         self.is_cash_checkbox.setChecked(True)
         self.is_court_order_checkbox = QCheckBox("کسرِ حکمِ دادگاه")
-        checks_row3.addWidget(self.is_cash_checkbox)
-        checks_row3.addWidget(self.is_court_order_checkbox)
-        layout.addLayout(checks_row3)
 
-        self.deduction_priority_label = QLabel("اولویتِ کسر (عددِ کوچک‌تر = اولویتِ بالاتر)")
-        layout.addWidget(self.deduction_priority_label)
         self.deduction_priority_field = ZeroPaddedSpinBox()
         self.deduction_priority_field.setRange(0, 99)
-        layout.addWidget(self.deduction_priority_field)
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+
+        self.form_grid = FieldGrid([
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("name", "نام", self.name_field, span=2),
+            FieldSpec("item_type", "نوع", self.item_type_combo, span=1),
+            FieldSpec("calculation_method", "روشِ محاسبه", self.calculation_method_combo, span=1),
+            FieldSpec("calculation_phase", "فازِ محاسبه", self.calculation_phase_combo, span=1),
+            FieldSpec("formula", "فرمول", self.formula_field, span=3),
+            FieldSpec("fixed_amount", "مبلغِ ثابت (ریال)", self.fixed_amount_field, span=2),
+            FieldSpec("percentage", "درصد (از حقوقِ پایه)", self.percentage_field, span=1),
+            FieldSpec("gl_account", "حسابِ کلِ مرتبط (اختیاری)", self.gl_account_combo, span=3),
+            FieldSpec("detail_account", "تفصیلیِ مرتبط (اختیاری)", self.detail_account_combo, span=3),
+            FieldSpec("description_template", "قالبِ شرحِ سند (اختیاری — خالی یعنی شرحِ پیش‌فرض)", self.description_template_field, span=3),
+            FieldSpec("eligibility", "شرطِ تخصیص (اختیاری)", self.eligibility_field, span=3),
+            FieldSpec("is_prorated", "", self.is_prorated_checkbox, span=1),
+            FieldSpec("is_taxable", "", self.is_taxable_checkbox, span=1),
+            FieldSpec("is_insurable", "", self.is_insurable_checkbox, span=1),
+            FieldSpec("is_continuous", "", self.is_continuous_checkbox, span=1),
+            FieldSpec("is_cash", "", self.is_cash_checkbox, span=1),
+            FieldSpec("is_court_order", "", self.is_court_order_checkbox, span=1),
+            FieldSpec("deduction_priority", "اولویتِ کسر (عددِ کوچک‌تر = اولویتِ بالاتر)", self.deduction_priority_field, span=2),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.form_grid)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -744,16 +730,12 @@ class _PayItemsTab(FieldHelpMixin, QWidget):
 
     def _update_method_fields_visibility(self) -> None:
         method = self.calculation_method_combo.currentData()
-        self.formula_label.setVisible(method == "FORMULA")
-        self.formula_field.setVisible(method == "FORMULA")
-        self.fixed_amount_label.setVisible(method == "FIXED")
-        self.fixed_amount_field.setVisible(method == "FIXED")
-        self.percentage_label.setVisible(method == "PERCENTAGE_OF_BASE")
-        self.percentage_field.setVisible(method == "PERCENTAGE_OF_BASE")
+        self.form_grid.set_field_visible("formula", method == "FORMULA")
+        self.form_grid.set_field_visible("fixed_amount", method == "FIXED")
+        self.form_grid.set_field_visible("percentage", method == "PERCENTAGE_OF_BASE")
         is_deduction_method = self.item_type_combo.currentData() == "DEDUCTION"
-        self.deduction_priority_label.setVisible(is_deduction_method)
-        self.deduction_priority_field.setVisible(is_deduction_method)
-        self.is_court_order_checkbox.setVisible(is_deduction_method)
+        self.form_grid.set_field_visible("deduction_priority", is_deduction_method)
+        self.form_grid.set_field_visible("is_court_order", is_deduction_method)
 
     def refresh(self) -> None:
         self._reset_form()
@@ -937,7 +919,7 @@ class _PayItemsTab(FieldHelpMixin, QWidget):
 _INSURANCE_COLUMNS = ["نرخِ بیکاری", "نرخِ کارفرما", "نرخِ کارمند", "تا تاریخ", "از تاریخ"]
 
 
-class _InsuranceTab(FieldHelpMixin, QWidget):
+class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     # طبقِ رفعِ باگِ «دکمه‌یِ ذخیره زیرِ تسک‌بار»: هر دو ستون (لیست/فرم)
     # خودشان اسکرول+فوترِ ثابت دارند (_wrap_scrollable) — نباید
     # system_settings.py::_sub_tabs دوباره کلِ این ویجت را بپیچد.
@@ -961,6 +943,7 @@ class _InsuranceTab(FieldHelpMixin, QWidget):
             (self.employer_expense_detail_combo, "تفصیلیِ اختیاری برایِ همان ردیف."),
             (self.insurance_description_template_field, "شرحِ ردیفِ سهمِ کارفرما — جای‌گذارهایِ مجاز: {دوره} {اجرا}."),
         ])
+        self.register_field_grids("payroll_settings_insurance", [self.form_grid])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -996,47 +979,42 @@ class _InsuranceTab(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("از تاریخ"))
         self.from_date_field = JalaliDateEdit()
-        layout.addWidget(self.from_date_field)
 
-        layout.addWidget(QLabel("تا تاریخ"))
         self.to_date_field = JalaliDateEdit()
-        layout.addWidget(self.to_date_field)
         self.to_date_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی (بدونِ تاریخِ پایان)")
         self.to_date_unbounded_checkbox.setChecked(True)
         self.to_date_unbounded_checkbox.toggled.connect(lambda checked: self.to_date_field.setEnabled(not checked))
         self.to_date_field.setEnabled(False)
-        layout.addWidget(self.to_date_unbounded_checkbox)
 
-        layout.addWidget(QLabel("نرخِ سهمِ کارمند (درصد)"))
         self.employee_rate_field = PersianDigitLineEdit()
-        layout.addWidget(self.employee_rate_field)
 
-        layout.addWidget(QLabel("نرخِ سهمِ کارفرما (درصد)"))
         self.employer_rate_field = PersianDigitLineEdit()
-        layout.addWidget(self.employer_rate_field)
 
-        layout.addWidget(QLabel("نرخِ بیمهٔ بیکاری — سهمِ کارفرما (درصد)"))
         self.unemployment_rate_field = PersianDigitLineEdit()
-        layout.addWidget(self.unemployment_rate_field)
 
-        layout.addWidget(QLabel("کفِ مزدِ مشمول (ریال، اختیاری)"))
         self.floor_field = _AmountField()
-        layout.addWidget(self.floor_field)
 
-        layout.addWidget(QLabel("حسابِ هزینهٔ سهمِ کارفرما (برایِ صدورِ سندِ حقوق)"))
         self.employer_expense_account_combo = _make_searchable_combo([])
-        layout.addWidget(self.employer_expense_account_combo)
 
-        layout.addWidget(QLabel("تفصیلیِ حسابِ هزینهٔ سهمِ کارفرما (اختیاری)"))
         self.employer_expense_detail_combo = _make_searchable_combo([])
-        layout.addWidget(self.employer_expense_detail_combo)
 
-        layout.addWidget(QLabel("قالبِ شرحِ ردیفِ سهمِ کارفرما (اختیاری)"))
         self.insurance_description_template_field = QLineEdit()
         self.insurance_description_template_field.setPlaceholderText("مثلاً: سهمِ کارفرمایِ بیمه — دورهٔ {دوره} — اجرایِ {اجرا}")
-        layout.addWidget(self.insurance_description_template_field)
+
+        self.form_grid = FieldGrid([
+            FieldSpec("from_date", "از تاریخ", self.from_date_field, span=1),
+            FieldSpec("to_date", "تا تاریخ", self.to_date_field, span=1),
+            FieldSpec("to_date_unbounded", "", self.to_date_unbounded_checkbox, span=1),
+            FieldSpec("employee_rate", "نرخِ سهمِ کارمند (درصد)", self.employee_rate_field, span=1),
+            FieldSpec("employer_rate", "نرخِ سهمِ کارفرما (درصد)", self.employer_rate_field, span=1),
+            FieldSpec("unemployment_rate", "نرخِ بیمهٔ بیکاری — سهمِ کارفرما (درصد)", self.unemployment_rate_field, span=1),
+            FieldSpec("floor", "کفِ مزدِ مشمول (ریال، اختیاری)", self.floor_field, span=1),
+            FieldSpec("employer_expense_account", "حسابِ هزینهٔ سهمِ کارفرما (برایِ صدورِ سندِ حقوق)", self.employer_expense_account_combo, span=2),
+            FieldSpec("employer_expense_detail", "تفصیلیِ حسابِ هزینهٔ سهمِ کارفرما (اختیاری)", self.employer_expense_detail_combo, span=3),
+            FieldSpec("insurance_description_template", "قالبِ شرحِ ردیفِ سهمِ کارفرما (اختیاری)", self.insurance_description_template_field, span=3),
+        ])
+        layout.addWidget(self.form_grid)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -1371,7 +1349,7 @@ _STACKING_MODE_LABELS = [
 _OVERTIME_RULE_COLUMNS = ["تا تاریخ", "از تاریخ", "حالتِ ترکیب", "ضریب", "نوع"]
 
 
-class _OvertimeRulesTab(FieldHelpMixin, QWidget):
+class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     # طبقِ رفعِ باگِ «دکمه‌یِ ذخیره زیرِ تسک‌بار»: هر دو ستون (لیست/فرم)
     # خودشان اسکرول+فوترِ ثابت دارند (_wrap_scrollable) — نباید
     # system_settings.py::_sub_tabs دوباره کلِ این ویجت را بپیچد.
@@ -1392,6 +1370,7 @@ class _OvertimeRulesTab(FieldHelpMixin, QWidget):
             (self.multiplier_field, "ضریبِ این نوعِ اضافه‌کاری — مثلاً ۱٫۴ برایِ ۴۰٪ اضافه."),
             (self.stacking_mode_combo, "وقتی چند نوعِ اضافه‌کاری هم‌زمان رخ می‌دهد، ضرایب چگونه ترکیب شوند."),
         ])
+        self.register_field_grids("payroll_settings_overtime_rules", [self.form_grid])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -1423,38 +1402,36 @@ class _OvertimeRulesTab(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("نوع"))
         self.code_combo = QComboBox()
         for code, label in _OVERTIME_RULE_CODE_LABELS:
             self.code_combo.addItem(label, code)
-        layout.addWidget(self.code_combo)
 
-        layout.addWidget(QLabel("ضریب"))
         self.multiplier_field = PersianDigitLineEdit()
-        layout.addWidget(self.multiplier_field)
 
-        layout.addWidget(QLabel("حالتِ ترکیبِ ضرایب"))
         self.stacking_mode_combo = QComboBox()
         for code, label in _STACKING_MODE_LABELS:
             self.stacking_mode_combo.addItem(label, code)
-        layout.addWidget(self.stacking_mode_combo)
 
-        layout.addWidget(QLabel("کدِ سیاستِ سقفِ ساعتِ ماهانه (اختیاری)"))
         self.max_hours_policy_field = QLineEdit()
-        layout.addWidget(self.max_hours_policy_field)
 
-        layout.addWidget(QLabel("از تاریخِ اجرا"))
         self.from_date_field = JalaliDateEdit()
-        layout.addWidget(self.from_date_field)
 
-        layout.addWidget(QLabel("تا تاریخ"))
         self.to_date_field = JalaliDateEdit()
-        layout.addWidget(self.to_date_field)
         self.to_date_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی (بدونِ تاریخِ پایان)")
         self.to_date_unbounded_checkbox.setChecked(True)
         self.to_date_unbounded_checkbox.toggled.connect(lambda checked: self.to_date_field.setEnabled(not checked))
         self.to_date_field.setEnabled(False)
-        layout.addWidget(self.to_date_unbounded_checkbox)
+
+        self.form_grid = FieldGrid([
+            FieldSpec("code", "نوع", self.code_combo, span=1),
+            FieldSpec("multiplier", "ضریب", self.multiplier_field, span=1),
+            FieldSpec("stacking_mode", "حالتِ ترکیبِ ضرایب", self.stacking_mode_combo, span=1),
+            FieldSpec("max_hours_policy", "کدِ سیاستِ سقفِ ساعتِ ماهانه (اختیاری)", self.max_hours_policy_field, span=2),
+            FieldSpec("from_date", "از تاریخِ اجرا", self.from_date_field, span=1),
+            FieldSpec("to_date", "تا تاریخ", self.to_date_field, span=1),
+            FieldSpec("to_date_unbounded", "", self.to_date_unbounded_checkbox, span=2),
+        ])
+        layout.addWidget(self.form_grid)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -1595,7 +1572,7 @@ _TIME_FORMAT_OPTIONS = [
 ]
 
 
-class _AttendanceTemplatesTab(FieldHelpMixin, QWidget):
+class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     """الگوهایِ ذخیره‌شدهٔ ایمپورتِ CSV/اکسلِ دستگاه‌هایِ حضوروغیاب — طبقِ
     خواستهٔ صریح («الگویِ فایلِ csv شرکت‌هایِ دستگاه‌دارِ حضوروغیاب تعریف
     کنم») تا فرمِ ورود/خروجِ کارکنان (hr_attendance_entries.py) بتواند با
@@ -1622,6 +1599,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, QWidget):
                 "این تناظر با همین الگو ذخیره می‌شود تا دفعاتِ بعد تکرار نشود.",
             ),
         ])
+        self.register_field_grids("payroll_settings_attendance_templates", [self.form_grid])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -1661,25 +1639,26 @@ class _AttendanceTemplatesTab(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("نامِ الگو (مثلاً نامِ شرکتِ سازندهٔ دستگاه)"))
         self.name_field = QLineEdit()
-        layout.addWidget(self.name_field)
 
         self.header_row_checkbox = QCheckBox("ردیفِ اولِ فایل، عنوانِ ستون‌هاست")
         self.header_row_checkbox.setChecked(True)
-        layout.addWidget(self.header_row_checkbox)
 
-        layout.addWidget(QLabel("فرمتِ تاریخ در فایل"))
         self.date_format_combo = QComboBox()
         for value, label in _DATE_FORMAT_OPTIONS:
             self.date_format_combo.addItem(label, value)
-        layout.addWidget(self.date_format_combo)
 
-        layout.addWidget(QLabel("فرمتِ ساعت در فایل"))
         self.time_format_combo = QComboBox()
         for value, label in _TIME_FORMAT_OPTIONS:
             self.time_format_combo.addItem(label, value)
-        layout.addWidget(self.time_format_combo)
+
+        self.form_grid = FieldGrid([
+            FieldSpec("name", "نامِ الگو (مثلاً نامِ شرکتِ سازندهٔ دستگاه)", self.name_field, span=2),
+            FieldSpec("header_row", "", self.header_row_checkbox, span=1),
+            FieldSpec("date_format", "فرمتِ تاریخ در فایل", self.date_format_combo, span=2),
+            FieldSpec("time_format", "فرمتِ ساعت در فایل", self.time_format_combo, span=1),
+        ])
+        layout.addWidget(self.form_grid)
 
         self.define_columns_button = QPushButton("تعریفِ ستون‌ها از رویِ فایلِ نمونه…")
         self.define_columns_button.clicked.connect(self._on_define_columns)

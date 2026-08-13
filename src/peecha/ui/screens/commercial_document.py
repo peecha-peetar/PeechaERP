@@ -37,7 +37,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormScreenBase, JalaliDateEdit, LayoutEditMixin
 
 DOC_TYPE_TITLES = {
     "SALES_ORDER": "سفارشِ فروش",
@@ -52,7 +52,7 @@ _SALES_TYPES = ("SALES_ORDER", "SALES_INVOICE", "SALES_RETURN")
 _LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح"]
 
 
-class _LineDialog(QDialog):
+class _LineDialog(LayoutEditMixin, QDialog):
     def __init__(self, parent: QWidget, items: list[catalog_service.ItemRow], initial: dict | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("ردیفِ سند")
@@ -60,39 +60,38 @@ class _LineDialog(QDialog):
         layout = QVBoxLayout(self)
         self._items_by_id = {it.item_id: it for it in items}
 
-        layout.addWidget(QLabel("کالا"))
         item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items]
         self.item_combo = _make_searchable_combo(item_options)
-        layout.addWidget(self.item_combo)
 
-        layout.addWidget(QLabel("مقدار (واحدِ پایهٔ کالا)"))
         self.quantity_field = QDoubleSpinBox()
         self.quantity_field.setDecimals(6)
         self.quantity_field.setRange(0.000001, 999999999)
-        layout.addWidget(self.quantity_field)
 
-        layout.addWidget(QLabel("بهایِ واحد (خالی = محاسبهٔ خودکار)"))
         self.unit_price_field = QDoubleSpinBox()
         self.unit_price_field.setDecimals(2)
         self.unit_price_field.setRange(0, 999999999999)
         self.unit_price_field.setSpecialValueText(" ")
-        layout.addWidget(self.unit_price_field)
 
-        layout.addWidget(QLabel("تخفیفِ مبلغی"))
         self.discount_field = QDoubleSpinBox()
         self.discount_field.setDecimals(2)
         self.discount_field.setRange(0, 999999999999)
-        layout.addWidget(self.discount_field)
 
-        layout.addWidget(QLabel("درصدِ مالیات"))
         self.tax_percent_field = QDoubleSpinBox()
         self.tax_percent_field.setDecimals(2)
         self.tax_percent_field.setRange(0, 100)
-        layout.addWidget(self.tax_percent_field)
 
-        layout.addWidget(QLabel("توضیح"))
         self.description_field = QLineEdit()
-        layout.addWidget(self.description_field)
+
+        self.fields_grid = FieldGrid([
+            FieldSpec("item", "کالا", self.item_combo, span=2),
+            FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
+            FieldSpec("unit_price", "بهایِ واحد (خالی = محاسبهٔ خودکار)", self.unit_price_field, span=1),
+            FieldSpec("discount", "تخفیفِ مبلغی", self.discount_field, span=1),
+            FieldSpec("tax_percent", "درصدِ مالیات", self.tax_percent_field, span=1),
+            FieldSpec("description", "توضیح", self.description_field, span=3),
+        ])
+        layout.addWidget(self.fields_grid)
+        self.register_field_grids("commercial_document_line", [self.fields_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")

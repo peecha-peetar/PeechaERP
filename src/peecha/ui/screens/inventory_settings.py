@@ -27,6 +27,7 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
 _COSTING_METHOD_LABELS = {"FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
@@ -272,7 +273,7 @@ class _BrandManufacturerTab(QWidget):
         self.refresh()
 
 
-class _CostingSettingsTab(QWidget):
+class _CostingSettingsTab(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
@@ -282,15 +283,19 @@ class _CostingSettingsTab(QWidget):
         _title_label.setObjectName("pageTitle")
         layout.addWidget(_title_label)
 
-        layout.addWidget(QLabel("روشِ پیش‌فرضِ قیمت‌گذاری"))
         self.method_combo = QComboBox()
         for code, label in _COSTING_METHOD_LABELS.items():
             self.method_combo.addItem(label, code)
-        layout.addWidget(self.method_combo)
 
         self.allow_override_checkbox = QCheckBox("اجازهٔ override در سطحِ کالا")
         self.allow_override_checkbox.setChecked(True)
-        layout.addWidget(self.allow_override_checkbox)
+
+        self.costing_grid = FieldGrid([
+            FieldSpec("method", "روشِ پیش‌فرضِ قیمت‌گذاری", self.method_combo, span=1),
+            FieldSpec("allow_override", "", self.allow_override_checkbox, span=1),
+        ])
+        layout.addWidget(self.costing_grid)
+        self.register_field_grids("inventory_settings_costing", [self.costing_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -325,7 +330,7 @@ class _CostingSettingsTab(QWidget):
         self.status_label.setText("ذخیره شد.")
 
 
-class _AccountMappingsTab(QWidget):
+class _AccountMappingsTab(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._combos: dict[str, QComboBox] = {}
@@ -337,16 +342,15 @@ class _AccountMappingsTab(QWidget):
         layout.addWidget(_title_label)
         layout.addWidget(QLabel("هر عملیاتِ انبار به یک حساب (معین) نگاشت می‌شود؛ بدونِ نگاشت، ثبتِ سندِ خودکار متوقف می‌شود."))
 
-        self.rows_layout = QVBoxLayout()
-        layout.addLayout(self.rows_layout)
+        mapping_fields = []
         for key, label in engine_service.MAPPING_LABELS.items():
-            row = QHBoxLayout()
-            row.addWidget(QLabel(label), stretch=1)
             combo = QComboBox()
             combo.setMinimumWidth(280)
             self._combos[key] = combo
-            row.addWidget(combo, stretch=2)
-            self.rows_layout.addLayout(row)
+            mapping_fields.append(FieldSpec(key, label, combo, span=3))
+        self.mapping_grid = FieldGrid(mapping_fields, columns=3)
+        layout.addWidget(self.mapping_grid)
+        self.register_field_grids("inventory_settings_account_mappings", [self.mapping_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -531,7 +535,7 @@ class _ReasonCodesTab(QWidget):
         self.refresh()
 
 
-class _CategoriesTab(QWidget):
+class _CategoriesTab(LayoutEditMixin, QWidget):
     """دسته‌بندیِ کالا (بخشِ ۱) + نگاشتِ حسابِ حسابداری در سطحِ دسته (بخشِ ۱۴،
     override رویِ نگاشتِ سراسری — فعلاً فقط تنظیم؛ اتصال به موتورِ ثبت در
     دورِ بعدی)."""
@@ -588,16 +592,15 @@ class _CategoriesTab(QWidget):
         panel_layout.addWidget(title)
         panel_layout.addWidget(QLabel("اگر دسته‌ای انتخاب نشده باشد یا برایِ کلیدی مقداری تعیین نشود، نگاشتِ سراسریِ شرکت استفاده می‌شود."))
 
-        self.mapping_rows_layout = QVBoxLayout()
-        panel_layout.addLayout(self.mapping_rows_layout)
+        mapping_fields = []
         for key, label in engine_service.MAPPING_LABELS.items():
-            row = QHBoxLayout()
-            row.addWidget(QLabel(label), stretch=1)
             combo = QComboBox()
             combo.setMinimumWidth(240)
             self._mapping_combos[key] = combo
-            row.addWidget(combo, stretch=2)
-            self.mapping_rows_layout.addLayout(row)
+            mapping_fields.append(FieldSpec(key, label, combo, span=3))
+        self.mapping_grid = FieldGrid(mapping_fields, columns=3)
+        panel_layout.addWidget(self.mapping_grid)
+        self.register_field_grids("inventory_settings_category_mappings", [self.mapping_grid])
 
         self.mapping_status_label = QLabel("")
         self.mapping_status_label.setObjectName("statusError")

@@ -20,12 +20,12 @@ from PySide6.QtWidgets import (
 )
 
 from peecha.services import languages as languages_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
 
 _COLUMNS = ["فعال", "پیش‌فرض", "راست‌به‌چپ", "ترتیب", "نامِ بومی", "کد"]
 
 
-class LanguagesScreen(FieldHelpMixin, QWidget):
+class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[languages_service.LanguageRow] = []
@@ -96,28 +96,30 @@ class LanguagesScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("کد (مثلاً fa)"))
         self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
 
-        layout.addWidget(QLabel("نامِ بومی"))
         self.native_name_field = QLineEdit()
-        layout.addWidget(self.native_name_field)
 
-        layout.addWidget(QLabel("ترتیبِ نمایش"))
         self.sort_order_field = QSpinBox()
         self.sort_order_field.setRange(0, 999)
-        layout.addWidget(self.sort_order_field)
 
         self.is_rtl_checkbox = QCheckBox("راست‌به‌چپ")
-        layout.addWidget(self.is_rtl_checkbox)
 
         self.is_default_checkbox = QCheckBox("زبانِ پیش‌فرض")
-        layout.addWidget(self.is_default_checkbox)
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+
+        self.basic_grid = FieldGrid([
+            FieldSpec("code", "کد (مثلاً fa)", self.code_field, span=1),
+            FieldSpec("native_name", "نامِ بومی", self.native_name_field, span=3),
+            FieldSpec("sort_order", "ترتیبِ نمایش", self.sort_order_field, span=1),
+            FieldSpec("is_rtl", "", self.is_rtl_checkbox, span=1),
+            FieldSpec("is_default", "", self.is_default_checkbox, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.basic_grid)
+        self.register_field_grids("languages", [self.basic_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")

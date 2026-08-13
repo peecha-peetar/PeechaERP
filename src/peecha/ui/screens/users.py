@@ -22,12 +22,12 @@ from PySide6.QtWidgets import (
 )
 
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
 
 _COLUMNS = ["فعال", "مدیرِ کل", "شرکت‌ها", "نامِ کامل", "نامِ کاربری"]
 
 
-class UsersScreen(FieldHelpMixin, QWidget):
+class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[users_service.UserRow] = []
@@ -107,47 +107,34 @@ class UsersScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        row = 0
-
-        grid.addWidget(QLabel("نامِ کاربری"), row, 0)
         self.username_field = QLineEdit()
-        grid.addWidget(self.username_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("نامِ کامل"), row, 0)
         self.full_name_field = QLineEdit()
-        grid.addWidget(self.full_name_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("ایمیل"), row, 0)
         self.email_field = QLineEdit()
-        grid.addWidget(self.email_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("زبانِ پیش‌فرض"), row, 0)
         self.language_combo = QComboBox()
-        grid.addWidget(self.language_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("رمزِ عبور"), row, 0)
         self.password_field = QLineEdit()
         self.password_field.setEchoMode(QLineEdit.Password)
         self.password_field.setPlaceholderText("(برایِ عدمِ تغییر، خالی بگذارید)")
-        grid.addWidget(self.password_field, row, 1)
-        row += 1
 
         self.is_super_admin_checkbox = QCheckBox("مدیرِ کلِ سیستم")
-        grid.addWidget(self.is_super_admin_checkbox, row, 1)
-        row += 1
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        grid.addWidget(self.is_active_checkbox, row, 1)
-        row += 1
 
-        layout.addLayout(grid)
+        self.basic_grid = FieldGrid([
+            FieldSpec("username", "نامِ کاربری", self.username_field, span=1),
+            FieldSpec("full_name", "نامِ کامل", self.full_name_field, span=2),
+            FieldSpec("email", "ایمیل", self.email_field, span=3),
+            FieldSpec("language", "زبانِ پیش‌فرض", self.language_combo, span=1),
+            FieldSpec("password", "رمزِ عبور", self.password_field, span=2),
+            FieldSpec("is_super_admin", "", self.is_super_admin_checkbox, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.basic_grid)
+        self.register_field_grids("users", [self.basic_grid])
 
         layout.addWidget(QLabel("دسترسی به شرکت‌ها"))
         self.company_list = QListWidget()

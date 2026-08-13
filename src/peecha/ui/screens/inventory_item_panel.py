@@ -36,7 +36,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_extended as extended_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
 
 _KIND_LABELS = {
     "GOOD": "کالا", "SERVICE": "خدمت", "RAW_MATERIAL": "مادهٔ اولیه", "SEMI_FINISHED": "نیمه‌ساخته",
@@ -70,7 +70,7 @@ def _int_or_none(text: str) -> int | None:
         return None
 
 
-class ItemDetailPanel(FieldHelpMixin, QWidget):
+class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._company_id: int | None = None
@@ -110,6 +110,11 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
             (self.is_stock_tracked_checkbox, "خدمت نمی‌تواند موجودی‌محور باشد."),
             (self.track_expiry_checkbox, "ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است."),
         ])
+        self.register_field_grids("inventory_item_panel", [
+            self.basic_info_grid, self.sales_tracking_grid, self.grouping_grid, self.purchasing_grid,
+            self.sales_extra_grid, self.ecommerce_grid, self.pos_grid, self.shipping_grid,
+            self.qc_grid, self.asset_grid,
+        ])
         self.reset()
 
     # --- تبِ اطلاعاتِ پایه (بدونِ کد/نام/فعال — این‌ها در فرمِ میزبان‌اند) ------
@@ -119,50 +124,49 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("نامِ لاتین"))
         self.latin_name_field = QLineEdit()
-        layout.addWidget(self.latin_name_field)
-
-        layout.addWidget(QLabel("نامِ کوتاه"))
         self.short_name_field = QLineEdit()
-        layout.addWidget(self.short_name_field)
 
-        layout.addWidget(QLabel("نوع"))
         self.kind_combo = QComboBox()
         for code, label in _KIND_LABELS.items():
             self.kind_combo.addItem(label, code)
         self.kind_combo.currentIndexChanged.connect(self._on_kind_changed)
-        layout.addWidget(self.kind_combo)
 
         self.uom_combo = QComboBox()
-        layout.addWidget(self._make_combo_with_add_row("واحدِ پایه", self.uom_combo, self._quick_add_uom))
+        uom_row = self._make_combo_with_add_row("واحدِ پایه", self.uom_combo, self._quick_add_uom)
 
         self.brand_combo = QComboBox()
-        layout.addWidget(self._make_combo_with_add_row("برند", self.brand_combo, self._quick_add_brand))
+        brand_row = self._make_combo_with_add_row("برند", self.brand_combo, self._quick_add_brand)
 
         self.manufacturer_combo = QComboBox()
-        layout.addWidget(self._make_combo_with_add_row("تولیدکننده", self.manufacturer_combo, self._quick_add_manufacturer))
+        manufacturer_row = self._make_combo_with_add_row("تولیدکننده", self.manufacturer_combo, self._quick_add_manufacturer)
 
-        layout.addWidget(QLabel("کشورِ سازنده"))
         self.country_of_origin_field = QLineEdit()
-        layout.addWidget(self.country_of_origin_field)
 
-        layout.addWidget(QLabel("روشِ قیمت‌گذاری"))
         self.costing_combo = QComboBox()
         for code, label in _COSTING_LABELS.items():
             self.costing_combo.addItem(label, code or None)
-        layout.addWidget(self.costing_combo)
 
-        layout.addWidget(QLabel("وضعیتِ چرخهٔ‌عمر"))
         self.lifecycle_combo = QComboBox()
         for code, label in _LIFECYCLE_LABELS.items():
             self.lifecycle_combo.addItem(label, code)
-        layout.addWidget(self.lifecycle_combo)
 
-        layout.addWidget(QLabel("یادداشت"))
         self.notes_field = QTextEdit()
         self.notes_field.setMaximumHeight(60)
-        layout.addWidget(self.notes_field)
+
+        self.basic_info_grid = FieldGrid([
+            FieldSpec("latin_name", "نامِ لاتین", self.latin_name_field, span=1),
+            FieldSpec("short_name", "نامِ کوتاه", self.short_name_field, span=1),
+            FieldSpec("kind", "نوع", self.kind_combo, span=1),
+            FieldSpec("uom", "", uom_row, span=1),
+            FieldSpec("brand", "", brand_row, span=1),
+            FieldSpec("manufacturer", "", manufacturer_row, span=1),
+            FieldSpec("country_of_origin", "کشورِ سازنده", self.country_of_origin_field, span=1),
+            FieldSpec("costing", "روشِ قیمت‌گذاری", self.costing_combo, span=1),
+            FieldSpec("lifecycle", "وضعیتِ چرخهٔ‌عمر", self.lifecycle_combo, span=1),
+            FieldSpec("notes", "یادداشت", self.notes_field, span=3),
+        ])
+        layout.addWidget(self.basic_info_grid)
 
         layout.addStretch(1)
         return tab
@@ -176,27 +180,26 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
 
         self.is_sellable_checkbox = QCheckBox("قابلِ‌فروش")
         self.is_sellable_checkbox.setChecked(True)
-        layout.addWidget(self.is_sellable_checkbox)
 
         self.is_purchasable_checkbox = QCheckBox("قابلِ‌خرید")
         self.is_purchasable_checkbox.setChecked(True)
-        layout.addWidget(self.is_purchasable_checkbox)
 
         self.is_stock_tracked_checkbox = QCheckBox("موجودی‌محور")
         self.is_stock_tracked_checkbox.setChecked(True)
-        layout.addWidget(self.is_stock_tracked_checkbox)
 
         self.track_batch_checkbox = QCheckBox("ردیابیِ بچ")
-        self.track_batch_row = self.track_batch_checkbox
-        layout.addWidget(self.track_batch_checkbox)
-
         self.track_expiry_checkbox = QCheckBox("ردیابیِ انقضا")
-        self.track_expiry_row = self.track_expiry_checkbox
-        layout.addWidget(self.track_expiry_checkbox)
-
         self.track_serial_checkbox = QCheckBox("ردیابیِ سریال")
-        self.track_serial_row = self.track_serial_checkbox
-        layout.addWidget(self.track_serial_checkbox)
+
+        self.sales_tracking_grid = FieldGrid([
+            FieldSpec("is_sellable", "", self.is_sellable_checkbox, span=1),
+            FieldSpec("is_purchasable", "", self.is_purchasable_checkbox, span=1),
+            FieldSpec("is_stock_tracked", "", self.is_stock_tracked_checkbox, span=1),
+            FieldSpec("track_batch", "", self.track_batch_checkbox, span=1),
+            FieldSpec("track_expiry", "", self.track_expiry_checkbox, span=1),
+            FieldSpec("track_serial", "", self.track_serial_checkbox, span=1),
+        ])
+        layout.addWidget(self.sales_tracking_grid)
 
         layout.addStretch(1)
         return tab
@@ -209,23 +212,21 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setSpacing(8)
 
         self.category_combo = QComboBox()
-        layout.addWidget(self._make_combo_with_add_row("دسته‌بندی", self.category_combo, self._quick_add_category))
+        category_row = self._make_combo_with_add_row("دسته‌بندی", self.category_combo, self._quick_add_category)
 
         self.default_warehouse_combo = QComboBox()
-        layout.addWidget(QLabel("انبارِ پیش‌فرض"))
-        layout.addWidget(self.default_warehouse_combo)
-
-        layout.addWidget(QLabel("بارکد"))
         self.barcode_field = QLineEdit()
-        layout.addWidget(self.barcode_field)
-
-        layout.addWidget(QLabel("محتوایِ QR"))
         self.qr_code_field = QLineEdit()
-        layout.addWidget(self.qr_code_field)
-
-        layout.addWidget(QLabel("SKU"))
         self.sku_field = QLineEdit()
-        layout.addWidget(self.sku_field)
+
+        self.grouping_grid = FieldGrid([
+            FieldSpec("category", "", category_row, span=1),
+            FieldSpec("default_warehouse", "انبارِ پیش‌فرض", self.default_warehouse_combo, span=1),
+            FieldSpec("barcode", "بارکد", self.barcode_field, span=1),
+            FieldSpec("qr_code", "محتوایِ QR", self.qr_code_field, span=1),
+            FieldSpec("sku", "SKU", self.sku_field, span=1),
+        ])
+        layout.addWidget(self.grouping_grid)
 
         layout.addWidget(QLabel("کالاهایِ مرتبط (جایگزین/مکمل)"))
         self.related_item_combo = QComboBox()
@@ -263,17 +264,16 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("زمانِ تامین (روز)"))
         self.purchase_lead_time_field = QLineEdit()
-        layout.addWidget(self.purchase_lead_time_field)
-
-        layout.addWidget(QLabel("حداقلِ سفارش"))
         self.purchase_min_order_field = QLineEdit()
-        layout.addWidget(self.purchase_min_order_field)
-
-        layout.addWidget(QLabel("تعدادِ بسته‌بندیِ خرید"))
         self.purchase_package_qty_field = QLineEdit()
-        layout.addWidget(self.purchase_package_qty_field)
+
+        self.purchasing_grid = FieldGrid([
+            FieldSpec("lead_time", "زمانِ تامین (روز)", self.purchase_lead_time_field, span=1),
+            FieldSpec("min_order", "حداقلِ سفارش", self.purchase_min_order_field, span=1),
+            FieldSpec("package_qty", "تعدادِ بسته‌بندیِ خرید", self.purchase_package_qty_field, span=1),
+        ])
+        layout.addWidget(self.purchasing_grid)
 
         layout.addWidget(QLabel("تامین‌کنندگان"))
         self.supplier_combo = QComboBox()
@@ -307,17 +307,16 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("حداکثرِ درصدِ تخفیف"))
         self.max_discount_field = QLineEdit()
-        layout.addWidget(self.max_discount_field)
-
-        layout.addWidget(QLabel("درصدِ کمیسیونِ فروش"))
         self.sales_commission_field = QLineEdit()
-        layout.addWidget(self.sales_commission_field)
-
-        layout.addWidget(QLabel("مدتِ گارانتی (ماه)"))
         self.warranty_months_field = QLineEdit()
-        layout.addWidget(self.warranty_months_field)
+
+        self.sales_extra_grid = FieldGrid([
+            FieldSpec("max_discount", "حداکثرِ درصدِ تخفیف", self.max_discount_field, span=1),
+            FieldSpec("sales_commission", "درصدِ کمیسیونِ فروش", self.sales_commission_field, span=1),
+            FieldSpec("warranty_months", "مدتِ گارانتی (ماه)", self.warranty_months_field, span=1),
+        ])
+        layout.addWidget(self.sales_extra_grid)
 
         layout.addStretch(1)
         return tab
@@ -370,29 +369,22 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("عنوانِ سئو"))
         self.seo_title_field = QLineEdit()
-        layout.addWidget(self.seo_title_field)
-
-        layout.addWidget(QLabel("نامکِ آدرس (Slug)"))
         self.seo_slug_field = QLineEdit()
-        layout.addWidget(self.seo_slug_field)
-
-        layout.addWidget(QLabel("توضیحاتِ متا"))
         self.seo_description_field = QLineEdit()
-        layout.addWidget(self.seo_description_field)
-
-        layout.addWidget(QLabel("کلیدواژه‌هایِ متا"))
         self.seo_keywords_field = QLineEdit()
-        layout.addWidget(self.seo_keywords_field)
-
-        layout.addWidget(QLabel("دستهٔ فروشگاهی"))
         self.website_category_field = QLineEdit()
-        layout.addWidget(self.website_category_field)
-
-        layout.addWidget(QLabel("برچسب‌ها"))
         self.website_tags_field = QLineEdit()
-        layout.addWidget(self.website_tags_field)
+
+        self.ecommerce_grid = FieldGrid([
+            FieldSpec("seo_title", "عنوانِ سئو", self.seo_title_field, span=1),
+            FieldSpec("seo_slug", "نامکِ آدرس (Slug)", self.seo_slug_field, span=1),
+            FieldSpec("seo_description", "توضیحاتِ متا", self.seo_description_field, span=1),
+            FieldSpec("seo_keywords", "کلیدواژه‌هایِ متا", self.seo_keywords_field, span=1),
+            FieldSpec("website_category", "دستهٔ فروشگاهی", self.website_category_field, span=1),
+            FieldSpec("website_tags", "برچسب‌ها", self.website_tags_field, span=1),
+        ])
+        layout.addWidget(self.ecommerce_grid)
 
         layout.addStretch(1)
         return tab
@@ -404,20 +396,19 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("کلیدِ میان‌بر"))
         self.pos_shortcut_field = QLineEdit()
-        layout.addWidget(self.pos_shortcut_field)
-
-        layout.addWidget(QLabel("رنگِ دکمه"))
         self.pos_color_field = QLineEdit()
         self.pos_color_field.setPlaceholderText("#RRGGBB")
-        layout.addWidget(self.pos_color_field)
-
         self.pos_requires_weight_checkbox = QCheckBox("نیازمندِ توزین")
-        layout.addWidget(self.pos_requires_weight_checkbox)
-
         self.pos_requires_serial_checkbox = QCheckBox("نیازمندِ سریال")
-        layout.addWidget(self.pos_requires_serial_checkbox)
+
+        self.pos_grid = FieldGrid([
+            FieldSpec("shortcut", "کلیدِ میان‌بر", self.pos_shortcut_field, span=1),
+            FieldSpec("color", "رنگِ دکمه", self.pos_color_field, span=1),
+            FieldSpec("requires_weight", "", self.pos_requires_weight_checkbox, span=1),
+            FieldSpec("requires_serial", "", self.pos_requires_serial_checkbox, span=1),
+        ])
+        layout.addWidget(self.pos_grid)
 
         layout.addStretch(1)
         return tab
@@ -429,25 +420,20 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("طول (سانتی‌متر)"))
         self.length_field = QLineEdit()
-        layout.addWidget(self.length_field)
-
-        layout.addWidget(QLabel("عرض (سانتی‌متر)"))
         self.width_field = QLineEdit()
-        layout.addWidget(self.width_field)
-
-        layout.addWidget(QLabel("ارتفاع (سانتی‌متر)"))
         self.height_field = QLineEdit()
-        layout.addWidget(self.height_field)
-
-        layout.addWidget(QLabel("نوعِ بسته‌بندی"))
         self.package_type_field = QLineEdit()
-        layout.addWidget(self.package_type_field)
-
-        layout.addWidget(QLabel("کلاسِ حمل"))
         self.freight_class_field = QLineEdit()
-        layout.addWidget(self.freight_class_field)
+
+        self.shipping_grid = FieldGrid([
+            FieldSpec("length", "طول (سانتی‌متر)", self.length_field, span=1),
+            FieldSpec("width", "عرض (سانتی‌متر)", self.width_field, span=1),
+            FieldSpec("height", "ارتفاع (سانتی‌متر)", self.height_field, span=1),
+            FieldSpec("package_type", "نوعِ بسته‌بندی", self.package_type_field, span=1),
+            FieldSpec("freight_class", "کلاسِ حمل", self.freight_class_field, span=1),
+        ])
+        layout.addWidget(self.shipping_grid)
 
         layout.addStretch(1)
         return tab
@@ -460,20 +446,18 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setSpacing(8)
 
         self.requires_qc_checkbox = QCheckBox("نیازمندِ کنترلِ کیفیت")
-        layout.addWidget(self.requires_qc_checkbox)
-
-        layout.addWidget(QLabel("استانداردِ کیفیت"))
         self.qc_standard_field = QLineEdit()
-        layout.addWidget(self.qc_standard_field)
-
-        layout.addWidget(QLabel("مشخصاتِ آزمون"))
         self.qc_test_spec_field = QTextEdit()
         self.qc_test_spec_field.setMaximumHeight(60)
-        layout.addWidget(self.qc_test_spec_field)
-
-        layout.addWidget(QLabel("فاصلهٔ بازرسی (روز)"))
         self.qc_interval_field = QLineEdit()
-        layout.addWidget(self.qc_interval_field)
+
+        self.qc_grid = FieldGrid([
+            FieldSpec("requires_qc", "", self.requires_qc_checkbox, span=1),
+            FieldSpec("qc_standard", "استانداردِ کیفیت", self.qc_standard_field, span=1),
+            FieldSpec("qc_interval", "فاصلهٔ بازرسی (روز)", self.qc_interval_field, span=1),
+            FieldSpec("qc_test_spec", "مشخصاتِ آزمون", self.qc_test_spec_field, span=3),
+        ])
+        layout.addWidget(self.qc_grid)
 
         layout.addStretch(1)
         return tab
@@ -485,37 +469,31 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("شمارهٔ اموال"))
         self.asset_tag_field = QLineEdit()
-        layout.addWidget(self.asset_tag_field)
-
-        layout.addWidget(QLabel("گروهِ استهلاک"))
         self.depreciation_group_field = QLineEdit()
-        layout.addWidget(self.depreciation_group_field)
-
-        layout.addWidget(QLabel("عمرِ مفید (ماه)"))
         self.useful_life_field = QLineEdit()
-        layout.addWidget(self.useful_life_field)
 
-        layout.addWidget(QLabel("روشِ استهلاک"))
         self.depreciation_method_combo = QComboBox()
         for code, label in _DEPRECIATION_LABELS.items():
             self.depreciation_method_combo.addItem(label, code)
-        layout.addWidget(self.depreciation_method_combo)
 
-        layout.addWidget(QLabel("تاریخِ تحصیل"))
         self.acquisition_date_field = QDateEdit()
         self.acquisition_date_field.setCalendarPopup(True)
         self.acquisition_date_field.setDate(datetime.date.today())
-        layout.addWidget(self.acquisition_date_field)
 
-        layout.addWidget(QLabel("بهایِ تحصیل"))
         self.acquisition_cost_field = QLineEdit()
-        layout.addWidget(self.acquisition_cost_field)
-
-        layout.addWidget(QLabel("ارزشِ اسقاط"))
         self.salvage_value_field = QLineEdit()
-        layout.addWidget(self.salvage_value_field)
+
+        self.asset_grid = FieldGrid([
+            FieldSpec("asset_tag", "شمارهٔ اموال", self.asset_tag_field, span=1),
+            FieldSpec("depreciation_group", "گروهِ استهلاک", self.depreciation_group_field, span=1),
+            FieldSpec("useful_life", "عمرِ مفید (ماه)", self.useful_life_field, span=1),
+            FieldSpec("depreciation_method", "روشِ استهلاک", self.depreciation_method_combo, span=1),
+            FieldSpec("acquisition_date", "تاریخِ تحصیل", self.acquisition_date_field, span=1),
+            FieldSpec("acquisition_cost", "بهایِ تحصیل", self.acquisition_cost_field, span=1),
+            FieldSpec("salvage_value", "ارزشِ اسقاط", self.salvage_value_field, span=1),
+        ])
+        layout.addWidget(self.asset_grid)
 
         save_asset_button = QPushButton("ذخیرهٔ اطلاعاتِ دارایی")
         save_asset_button.setObjectName("primaryButton")
@@ -680,9 +658,15 @@ class ItemDetailPanel(FieldHelpMixin, QWidget):
     def _apply_visibility(self) -> None:
         is_service = self.kind_combo.currentData() == "SERVICE"
         kind = self.kind_combo.currentData()
-        self.track_batch_row.setVisible(not is_service and "BATCH_TRACKING" in self._enabled_features)
-        self.track_expiry_row.setVisible(not is_service and "EXPIRY_TRACKING" in self._enabled_features)
-        self.track_serial_row.setVisible(not is_service and "SERIAL_TRACKING" in self._enabled_features)
+        self.sales_tracking_grid.set_field_visible(
+            "track_batch", not is_service and "BATCH_TRACKING" in self._enabled_features
+        )
+        self.sales_tracking_grid.set_field_visible(
+            "track_expiry", not is_service and "EXPIRY_TRACKING" in self._enabled_features
+        )
+        self.sales_tracking_grid.set_field_visible(
+            "track_serial", not is_service and "SERIAL_TRACKING" in self._enabled_features
+        )
 
         self.tabs.setTabVisible(self.tab_indexes["purchasing"], kind != "SERVICE")
         self.tabs.setTabVisible(self.tab_indexes["sales_extra"], kind in _CONSUMER_FACING_KINDS)

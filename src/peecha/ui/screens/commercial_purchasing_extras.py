@@ -30,6 +30,7 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
 _COST_TYPE_LABELS = {"FREIGHT": "حمل‌ونقل", "CUSTOMS": "حقوقِ گمرکی", "INSURANCE": "بیمه", "HANDLING": "بارگیری/تخلیه", "OTHER": "سایر"}
 _ALLOCATION_METHOD_LABELS = {"BY_VALUE": "به‌نسبتِ ارزش", "BY_QUANTITY": "به‌نسبتِ تعداد", "BY_WEIGHT": "به‌نسبتِ وزن"}
@@ -37,7 +38,7 @@ _REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصدِ ثابت", "VOLUME_TIER": "�
 _ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحالِ تجمیع", "SETTLED": "تسویه‌شده"}
 
 
-class CommercialPurchasingExtrasScreen(QWidget):
+class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._suppliers: list[dict] = []
@@ -181,20 +182,24 @@ class CommercialPurchasingExtrasScreen(QWidget):
         self.agreement_table.cellClicked.connect(self._on_agreement_selected)
         left.addWidget(self.agreement_table, stretch=1)
 
-        agreement_form = QVBoxLayout()
         self.rebate_supplier_combo = QComboBox()
-        agreement_form.addWidget(self.rebate_supplier_combo)
         self.rebate_item_combo = QComboBox()
         self.rebate_item_combo.addItem("(همهٔ کالاها)", None)
-        agreement_form.addWidget(self.rebate_item_combo)
         self.rebate_basis_combo = QComboBox()
         for code, label in _REBATE_BASIS_LABELS.items():
             self.rebate_basis_combo.addItem(label, code)
-        agreement_form.addWidget(self.rebate_basis_combo)
         self.rebate_valid_from_field = QDateEdit()
         self.rebate_valid_from_field.setCalendarPopup(True)
         self.rebate_valid_from_field.setDate(datetime.date.today())
-        agreement_form.addWidget(self.rebate_valid_from_field)
+        self.agreement_form_grid = FieldGrid([
+            FieldSpec("supplier", "تامین‌کننده", self.rebate_supplier_combo, span=2),
+            FieldSpec("item", "کالا", self.rebate_item_combo, span=2),
+            FieldSpec("basis", "مبنا", self.rebate_basis_combo, span=1),
+            FieldSpec("valid_from", "ازتاریخ", self.rebate_valid_from_field, span=1),
+        ])
+        self.register_field_grids("commercial_purchasing_rebate_agreement", [self.agreement_form_grid])
+        agreement_form = QVBoxLayout()
+        agreement_form.addWidget(self.agreement_form_grid)
         add_agreement_button = QPushButton("+ قراردادِ تازه")
         add_agreement_button.setObjectName("primaryButton")
         add_agreement_button.clicked.connect(self._add_agreement)

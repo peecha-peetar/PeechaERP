@@ -26,12 +26,12 @@ from peecha import numerals
 from peecha import session as app_session
 from peecha.services import hr as hr_service
 from peecha.ui.screens.journal_entry import _AmountField
-from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, ZeroPaddedSpinBox
 
 _COLUMNS = ["فعال", "حداکثرِ حقوقِ پایه", "حداقلِ حقوقِ پایه", "سطح", "عنوان", "کد"]
 
 
-class JobGradesScreen(FieldHelpMixin, QWidget):
+class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[hr_service.JobGradeRow] = []
@@ -50,6 +50,7 @@ class JobGradesScreen(FieldHelpMixin, QWidget):
             (self.min_salary_field, "کفِ پیشنهادیِ حقوقِ پایه برایِ این رده — فقط هشدارِ کنترلی، نه محدودیتِ سخت."),
             (self.max_salary_field, "سقفِ پیشنهادیِ حقوقِ پایه برایِ این رده."),
         ])
+        self.register_field_grids("hr_job_grades", [self.form_grid])
 
     def _wrap_scrollable(self, content: QWidget) -> QWidget:
         # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت): دو ستونِ مستقل (فهرست/فرم)،
@@ -97,30 +98,24 @@ class JobGradesScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("کد"))
         self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
-
-        layout.addWidget(QLabel("عنوان"))
         self.title_field = QLineEdit()
-        layout.addWidget(self.title_field)
-
-        layout.addWidget(QLabel("سطح"))
         self.level_field = ZeroPaddedSpinBox()
         self.level_field.setRange(0, 99)
-        layout.addWidget(self.level_field)
-
-        layout.addWidget(QLabel("حداقلِ حقوقِ پایه"))
         self.min_salary_field = _AmountField()
-        layout.addWidget(self.min_salary_field)
-
-        layout.addWidget(QLabel("حداکثرِ حقوقِ پایه"))
         self.max_salary_field = _AmountField()
-        layout.addWidget(self.max_salary_field)
-
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+
+        self.form_grid = FieldGrid([
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("title", "عنوان", self.title_field, span=2),
+            FieldSpec("level", "سطح", self.level_field, span=1),
+            FieldSpec("min_salary", "حداقلِ حقوقِ پایه", self.min_salary_field, span=1),
+            FieldSpec("max_salary", "حداکثرِ حقوقِ پایه", self.max_salary_field, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=3),
+        ])
+        layout.addWidget(self.form_grid)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")

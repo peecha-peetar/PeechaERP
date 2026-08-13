@@ -29,12 +29,21 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
 _WARRANTY_STATUS_LABELS = {"ACTIVE": "معتبر", "EXPIRED": "منقضی", "VOIDED": "باطل‌شده"}
 _TICKET_STATUS_LABELS = {"OPEN": "باز", "IN_PROGRESS": "درحالِ انجام", "RESOLVED": "حل‌شده", "CLOSED": "بسته"}
 _TICKET_STATUS_ORDER = ("OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED")
 _RMA_STATUS_LABELS = {"REQUESTED": "درخواست‌شده", "APPROVED": "تاییدشده", "REJECTED": "ردشده", "COMPLETED": "تکمیل‌شده"}
 _RMA_REASON_LABELS = {"DEFECTIVE": "معیوب", "WRONG_ITEM": "کالایِ اشتباه", "NOT_SATISFIED": "عدمِ رضایت", "DAMAGED_IN_TRANSIT": "آسیب‌دیده در حمل"}
+
+
+class _TabLayoutController(LayoutEditMixin):
+    """کنترلرِ سبکِ ویرایشِ‌چیدمانِ مستقل برایِ هر تب — چون LayoutEditMixin
+    وضعیتِ screen_code/grids را رویِ self نگه می‌دارد (نه هر گرید
+    به‌تنهایی)، و این صفحه دو تبِ مستقل (تیکت/RMA) با دو کدِ صفحهٔ جدا
+    دارد، هر تب کنترلرِ خودش را می‌گیرد تا ذخیره/بازنشانیِ چیدمانِ یک تب
+    رویِ دیگری اثر نگذارد."""
 
 
 class CommercialAftersalesScreen(QWidget):
@@ -172,21 +181,26 @@ class CommercialAftersalesScreen(QWidget):
         self.ticket_table.cellClicked.connect(self._on_ticket_selected)
         left.addWidget(self.ticket_table, stretch=1)
 
-        ticket_form = QVBoxLayout()
         self.ticket_customer_combo = QComboBox()
-        ticket_form.addWidget(self.ticket_customer_combo)
         self.ticket_subject_field = QLineEdit()
         self.ticket_subject_field.setPlaceholderText("موضوعِ تیکت")
-        ticket_form.addWidget(self.ticket_subject_field)
         self.ticket_item_combo = QComboBox()
         self.ticket_item_combo.addItem("(بدونِ کالایِ مشخص)", None)
-        ticket_form.addWidget(self.ticket_item_combo)
         self.ticket_warranty_combo = QComboBox()
         self.ticket_warranty_combo.addItem("(بدونِ گارانتی)", None)
-        ticket_form.addWidget(self.ticket_warranty_combo)
         self.ticket_description_field = QLineEdit()
         self.ticket_description_field.setPlaceholderText("توضیحات (اختیاری)")
-        ticket_form.addWidget(self.ticket_description_field)
+        self.ticket_form_grid = FieldGrid([
+            FieldSpec("customer", "مشتری", self.ticket_customer_combo, span=2),
+            FieldSpec("subject", "موضوعِ تیکت", self.ticket_subject_field, span=3),
+            FieldSpec("item", "کالا", self.ticket_item_combo, span=2),
+            FieldSpec("warranty", "گارانتی", self.ticket_warranty_combo, span=2),
+            FieldSpec("description", "توضیحات", self.ticket_description_field, span=3),
+        ])
+        self._ticket_layout_controller = _TabLayoutController()
+        self._ticket_layout_controller.register_field_grids("commercial_aftersales_ticket", [self.ticket_form_grid])
+        ticket_form = QVBoxLayout()
+        ticket_form.addWidget(self.ticket_form_grid)
         add_ticket_button = QPushButton("+ تیکتِ تازه")
         add_ticket_button.setObjectName("primaryButton")
         add_ticket_button.clicked.connect(self._add_ticket)
@@ -350,19 +364,24 @@ class CommercialAftersalesScreen(QWidget):
         self.rma_table.cellClicked.connect(self._on_rma_selected)
         left.addWidget(self.rma_table, stretch=1)
 
-        rma_form = QVBoxLayout()
         self.rma_customer_combo = QComboBox()
         self.rma_customer_combo.currentIndexChanged.connect(self._on_rma_customer_selected)
-        rma_form.addWidget(self.rma_customer_combo)
         self.rma_document_combo = QComboBox()
-        rma_form.addWidget(self.rma_document_combo)
         self.rma_reason_combo = QComboBox()
         for code, label in _RMA_REASON_LABELS.items():
             self.rma_reason_combo.addItem(label, code)
-        rma_form.addWidget(self.rma_reason_combo)
         self.rma_quantity_field = QLineEdit()
         self.rma_quantity_field.setPlaceholderText("مقدارِ درخواستی")
-        rma_form.addWidget(self.rma_quantity_field)
+        self.rma_form_grid = FieldGrid([
+            FieldSpec("customer", "مشتری", self.rma_customer_combo, span=2),
+            FieldSpec("document", "فاکتورِ اصلی", self.rma_document_combo, span=2),
+            FieldSpec("reason", "دلیل", self.rma_reason_combo, span=1),
+            FieldSpec("quantity", "مقدارِ درخواستی", self.rma_quantity_field, span=1),
+        ])
+        self._rma_layout_controller = _TabLayoutController()
+        self._rma_layout_controller.register_field_grids("commercial_aftersales_rma", [self.rma_form_grid])
+        rma_form = QVBoxLayout()
+        rma_form.addWidget(self.rma_form_grid)
         add_rma_button = QPushButton("+ درخواستِ RMA")
         add_rma_button.setObjectName("primaryButton")
         add_rma_button.clicked.connect(self._add_rma)

@@ -24,12 +24,12 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha import session as app_session
 from peecha.services import hr as hr_service
-from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, ZeroPaddedSpinBox
 
 _COLUMNS = ["فعال", "ظرفیت", "ردهٔ شغلی", "واحدِ سازمانی", "عنوان", "کد"]
 
 
-class PositionsScreen(FieldHelpMixin, QWidget):
+class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[hr_service.PositionRow] = []
@@ -50,6 +50,7 @@ class PositionsScreen(FieldHelpMixin, QWidget):
             (self.job_grade_combo, "ردهٔ شغلیِ این پست — اختیاری."),
             (self.capacity_field, "تعدادِ نفراتی که هم‌زمان می‌توانند این پست را داشته باشند."),
         ])
+        self.register_field_grids("hr_positions", [self.form_grid])
 
     def _wrap_scrollable(self, content: QWidget) -> QWidget:
         # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت): دو ستونِ مستقل (فهرست/فرم)،
@@ -97,31 +98,25 @@ class PositionsScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("کد"))
         self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
-
-        layout.addWidget(QLabel("عنوان"))
         self.title_field = QLineEdit()
-        layout.addWidget(self.title_field)
-
-        layout.addWidget(QLabel("واحدِ سازمانی"))
         self.org_unit_combo = QComboBox()
-        layout.addWidget(self.org_unit_combo)
-
-        layout.addWidget(QLabel("ردهٔ شغلی"))
         self.job_grade_combo = QComboBox()
-        layout.addWidget(self.job_grade_combo)
-
-        layout.addWidget(QLabel("ظرفیت"))
         self.capacity_field = ZeroPaddedSpinBox()
         self.capacity_field.setRange(1, 999)
         self.capacity_field.setValue(1)
-        layout.addWidget(self.capacity_field)
-
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+
+        self.form_grid = FieldGrid([
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("title", "عنوان", self.title_field, span=2),
+            FieldSpec("org_unit", "واحدِ سازمانی", self.org_unit_combo, span=2),
+            FieldSpec("capacity", "ظرفیت", self.capacity_field, span=1),
+            FieldSpec("job_grade", "ردهٔ شغلی", self.job_grade_combo, span=3),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=3),
+        ])
+        layout.addWidget(self.form_grid)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
