@@ -8,6 +8,7 @@ PERSONNEL. منطقِ پل‌زدن این‌جاست (نه در detail_dimensio
 
 from __future__ import annotations
 
+import datetime
 import decimal
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,6 +20,7 @@ from peecha.db.models.inventory import (
     Brand,
     CostingMethod,
     Item,
+    ItemCategory,
     ItemUomConversion,
     Manufacturer,
     RelatedItem,
@@ -28,6 +30,24 @@ from peecha.db.models.inventory import (
 from peecha.services import detail_dimensions as dimensions_service
 
 ITEM_DIMENSION_CODE = "INVENTORY_ITEM"
+
+_ITEM_KIND_CODES = (
+    "GOOD", "SERVICE", "RAW_MATERIAL", "SEMI_FINISHED", "FINISHED_GOOD", "ASSET", "BUNDLE", "KIT",
+)
+
+_EXTENDED_ITEM_FIELD_KEYS = (
+    "category_id", "default_warehouse_id", "barcode", "qr_code_data", "sku", "latin_name", "short_name",
+    "country_of_origin", "length_cm", "width_cm", "height_cm", "package_type_code", "freight_class_code",
+    "requires_qc", "qc_standard", "qc_test_spec", "qc_inspection_interval_days", "purchase_lead_time_days",
+    "purchase_min_order_qty", "purchase_package_qty", "max_discount_percent", "sales_commission_percent",
+    "warranty_months", "seo_title", "seo_url_slug", "seo_meta_description", "seo_meta_keywords",
+    "website_category", "website_tags", "pos_shortcut_key", "pos_button_color", "pos_requires_weight",
+    "pos_requires_serial",
+)
+
+
+def _extended_item_kwargs(fields: "ItemFields") -> dict[str, Any]:
+    return {key: getattr(fields, key) for key in _EXTENDED_ITEM_FIELD_KEYS}
 
 
 # ---------------------------------------------------------------------
@@ -229,6 +249,39 @@ class ItemRow:
     track_batch: bool = False
     track_expiry: bool = False
     notes: str | None = None
+    category_id: int | None = None
+    default_warehouse_id: int | None = None
+    barcode: str | None = None
+    qr_code_data: str | None = None
+    sku: str | None = None
+    latin_name: str | None = None
+    short_name: str | None = None
+    country_of_origin: str | None = None
+    length_cm: decimal.Decimal | None = None
+    width_cm: decimal.Decimal | None = None
+    height_cm: decimal.Decimal | None = None
+    package_type_code: str | None = None
+    freight_class_code: str | None = None
+    requires_qc: bool = False
+    qc_standard: str | None = None
+    qc_test_spec: str | None = None
+    qc_inspection_interval_days: int | None = None
+    purchase_lead_time_days: int | None = None
+    purchase_min_order_qty: decimal.Decimal | None = None
+    purchase_package_qty: decimal.Decimal | None = None
+    max_discount_percent: decimal.Decimal | None = None
+    sales_commission_percent: decimal.Decimal | None = None
+    warranty_months: int | None = None
+    seo_title: str | None = None
+    seo_url_slug: str | None = None
+    seo_meta_description: str | None = None
+    seo_meta_keywords: str | None = None
+    website_category: str | None = None
+    website_tags: str | None = None
+    pos_shortcut_key: str | None = None
+    pos_button_color: str | None = None
+    pos_requires_weight: bool = False
+    pos_requires_serial: bool = False
 
 
 def _item_dimension_type_id(company_id: int) -> int:
@@ -272,6 +325,7 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
                     track_batch=it.track_batch,
                     track_expiry=it.track_expiry,
                     notes=it.notes,
+                    **{key: getattr(it, key) for key in _EXTENDED_ITEM_FIELD_KEYS},
                 )
             )
         result.sort(key=lambda r: r.code)
@@ -313,10 +367,43 @@ class ItemFields:
     volume_m3: decimal.Decimal | None = None
     notes: str | None = None
     extra_fields: dict[str, Any] = field(default_factory=dict)
+    category_id: int | None = None
+    default_warehouse_id: int | None = None
+    barcode: str | None = None
+    qr_code_data: str | None = None
+    sku: str | None = None
+    latin_name: str | None = None
+    short_name: str | None = None
+    country_of_origin: str | None = None
+    length_cm: decimal.Decimal | None = None
+    width_cm: decimal.Decimal | None = None
+    height_cm: decimal.Decimal | None = None
+    package_type_code: str | None = None
+    freight_class_code: str | None = None
+    requires_qc: bool = False
+    qc_standard: str | None = None
+    qc_test_spec: str | None = None
+    qc_inspection_interval_days: int | None = None
+    purchase_lead_time_days: int | None = None
+    purchase_min_order_qty: decimal.Decimal | None = None
+    purchase_package_qty: decimal.Decimal | None = None
+    max_discount_percent: decimal.Decimal | None = None
+    sales_commission_percent: decimal.Decimal | None = None
+    warranty_months: int | None = None
+    seo_title: str | None = None
+    seo_url_slug: str | None = None
+    seo_meta_description: str | None = None
+    seo_meta_keywords: str | None = None
+    website_category: str | None = None
+    website_tags: str | None = None
+    pos_shortcut_key: str | None = None
+    pos_button_color: str | None = None
+    pos_requires_weight: bool = False
+    pos_requires_serial: bool = False
 
 
 def _validate_item_fields(fields: ItemFields) -> None:
-    if fields.item_kind_code not in ("GOOD", "SERVICE"):
+    if fields.item_kind_code not in _ITEM_KIND_CODES:
         raise ValueError("نوعِ کالا نامعتبر است.")
     if fields.item_kind_code == "SERVICE" and fields.is_stock_tracked:
         raise ValueError("خدمت نمی‌تواند موجودی‌محور باشد.")
@@ -351,6 +438,7 @@ def create_item(company_id: int, code: str, name: str, fields: ItemFields) -> in
             volume_m3=fields.volume_m3,
             notes=fields.notes,
             extra_fields=dict(fields.extra_fields),
+            **_extended_item_kwargs(fields),
         )
         session.add(item)
         session.commit()
@@ -400,6 +488,9 @@ def update_item(
         item.volume_m3 = fields.volume_m3
         item.notes = fields.notes
         item.extra_fields = dict(fields.extra_fields)
+        for key, value in _extended_item_kwargs(fields).items():
+            setattr(item, key, value)
+        item.updated_at = datetime.datetime.now(datetime.timezone.utc)
         detail_account_id = item.item_detail_account_id
         session.commit()
 
@@ -517,3 +608,67 @@ def remove_related_item(related_item_link_id: int) -> None:
         if row is not None:
             session.delete(row)
             session.commit()
+
+
+# ---------------------------------------------------------------------
+# دسته‌بندیِ کالا — بخشِ ۱ (گروه/زیرگروه)
+# ---------------------------------------------------------------------
+@dataclass
+class ItemCategoryRow:
+    category_id: int
+    parent_category_id: int | None
+    code: str
+    name: str
+    is_active: bool
+
+
+def list_categories(company_id: int, active_only: bool = False) -> list[ItemCategoryRow]:
+    with new_session() as session:
+        query = select(ItemCategory).where(ItemCategory.company_id == company_id)
+        if active_only:
+            query = query.where(ItemCategory.is_active)
+        rows = session.scalars(query.order_by(ItemCategory.code)).all()
+        return [
+            ItemCategoryRow(r.category_id, r.parent_category_id, r.code, r.name, r.is_active) for r in rows
+        ]
+
+
+def create_category(company_id: int, code: str, name: str, parent_category_id: int | None = None) -> int:
+    with new_session() as session:
+        if session.scalar(
+            select(func.count()).select_from(ItemCategory).where(
+                ItemCategory.company_id == company_id, ItemCategory.code == code.strip()
+            )
+        ):
+            raise ValueError("این کد قبلاً برایِ دسته‌بندیِ دیگری استفاده شده است.")
+        category = ItemCategory(
+            company_id=company_id, parent_category_id=parent_category_id, code=code.strip(), name=name.strip()
+        )
+        session.add(category)
+        session.commit()
+        return category.category_id
+
+
+def update_category(category_id: int, company_id: int, name: str, is_active: bool) -> None:
+    with new_session() as session:
+        category = session.get(ItemCategory, category_id)
+        if category is None or category.company_id != company_id:
+            raise ValueError("دسته‌بندی نامعتبر است.")
+        category.name = name.strip()
+        category.is_active = is_active
+        session.commit()
+
+
+def delete_category(category_id: int, company_id: int) -> None:
+    with new_session() as session:
+        category = session.get(ItemCategory, category_id)
+        if category is None or category.company_id != company_id:
+            raise ValueError("دسته‌بندی نامعتبر است.")
+        if session.scalar(
+            select(func.count()).select_from(ItemCategory).where(ItemCategory.parent_category_id == category_id)
+        ):
+            raise ValueError("این دسته زیرگروه دارد و قابلِ‌حذف نیست.")
+        if session.scalar(select(func.count()).select_from(Item).where(Item.category_id == category_id)):
+            raise ValueError("این دسته به کالایی وصل است و قابلِ‌حذف نیست.")
+        session.delete(category)
+        session.commit()

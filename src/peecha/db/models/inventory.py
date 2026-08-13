@@ -79,6 +79,21 @@ class CostingMethod(Base):
     code: Mapped[str] = mapped_column(String(20))
 
 
+class ItemCategory(Base):
+    """دسته‌بندیِ سلسله‌مراتبیِ کالا — مستقل از تفصیلی؛ صرفاً برایِ گروه‌بندیِ
+    نمایشی/گزارشی و override حساب در سطحِ دسته."""
+
+    __tablename__ = "item_categories"
+    __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "inv"})
+
+    category_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    parent_category_id: Mapped[int | None] = mapped_column(ForeignKey("inv.item_categories.category_id"))
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(150))
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
 class Item(Base):
     """جدولِ اقماریِ «کالا/خدمت» — یک‌به‌یک با تفصیلیِ سطحِ‌آخرِ گروهِ
     INVENTORY_ITEM؛ خودِ کد/نام/سلسله‌مراتب رویِ acc.detail_accounts است،
@@ -98,7 +113,7 @@ class Item(Base):
     item_detail_account_id: Mapped[int] = mapped_column(
         ForeignKey("acc.detail_accounts.detail_account_id"), unique=True
     )
-    item_kind_code: Mapped[str] = mapped_column(String(10))  # GOOD | SERVICE
+    item_kind_code: Mapped[str] = mapped_column(String(20))  # GOOD|SERVICE|RAW_MATERIAL|...
     base_uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
     brand_id: Mapped[int | None] = mapped_column(ForeignKey("inv.brands.brand_id"))
     manufacturer_id: Mapped[int | None] = mapped_column(ForeignKey("inv.manufacturers.manufacturer_id"))
@@ -120,6 +135,42 @@ class Item(Base):
     extra_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     notes: Mapped[str | None] = mapped_column(String(1000))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+    # --- فیلدهایِ فازِ ۱ تا ۱۵ (078_inventory_catalog_v2.sql) --------------
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("inv.item_categories.category_id"))
+    default_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    barcode: Mapped[str | None] = mapped_column(String(50))
+    qr_code_data: Mapped[str | None] = mapped_column(String(200))
+    sku: Mapped[str | None] = mapped_column(String(50))
+    latin_name: Mapped[str | None] = mapped_column(String(200))
+    short_name: Mapped[str | None] = mapped_column(String(50))
+    country_of_origin: Mapped[str | None] = mapped_column(String(60))
+    length_cm: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    width_cm: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    height_cm: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    package_type_code: Mapped[str | None] = mapped_column(String(30))
+    freight_class_code: Mapped[str | None] = mapped_column(String(30))
+    requires_qc: Mapped[bool] = mapped_column(default=False)
+    qc_standard: Mapped[str | None] = mapped_column(String(100))
+    qc_test_spec: Mapped[str | None] = mapped_column(Text)
+    qc_inspection_interval_days: Mapped[int | None]
+    purchase_lead_time_days: Mapped[int | None]
+    purchase_min_order_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    purchase_package_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    max_discount_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    sales_commission_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    warranty_months: Mapped[int | None]
+    seo_title: Mapped[str | None] = mapped_column(String(200))
+    seo_url_slug: Mapped[str | None] = mapped_column(String(200))
+    seo_meta_description: Mapped[str | None] = mapped_column(String(500))
+    seo_meta_keywords: Mapped[str | None] = mapped_column(String(300))
+    website_category: Mapped[str | None] = mapped_column(String(150))
+    website_tags: Mapped[str | None] = mapped_column(String(300))
+    pos_shortcut_key: Mapped[str | None] = mapped_column(String(10))
+    pos_button_color: Mapped[str | None] = mapped_column(String(20))
+    pos_requires_weight: Mapped[bool] = mapped_column(default=False)
+    pos_requires_serial: Mapped[bool] = mapped_column(default=False)
+    updated_at: Mapped[datetime.datetime | None]
 
 
 class ItemUomConversion(Base):
@@ -176,6 +227,94 @@ class RelatedItem(Base):
     item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
     related_item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
     relation_type_code: Mapped[str] = mapped_column(String(15))  # SUBSTITUTE | COMPLEMENTARY
+
+
+class ItemSupplier(Base):
+    __tablename__ = "item_suppliers"
+    __table_args__ = (
+        UniqueConstraint("item_id", "supplier_detail_account_id"),
+        {"schema": "inv"},
+    )
+
+    item_supplier_id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    supplier_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    supplier_sku: Mapped[str | None] = mapped_column(String(50))
+    lead_time_days: Mapped[int | None]
+    min_order_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    is_preferred: Mapped[bool] = mapped_column(default=False)
+
+
+class ItemMedia(Base):
+    __tablename__ = "item_media"
+    __table_args__ = {"schema": "inv"}
+
+    item_media_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    attachment_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("doc.attachments.attachment_id"))
+    media_type_code: Mapped[str] = mapped_column(String(15))  # IMAGE|VIDEO|CATALOG|MANUAL|DOCUMENT
+    alt_text: Mapped[str | None] = mapped_column(String(200))
+    is_primary: Mapped[bool] = mapped_column(default=False)
+    sort_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+
+
+class BomHeader(Base):
+    __tablename__ = "bom_headers"
+    __table_args__ = (UniqueConstraint("finished_item_id", "version_no"), {"schema": "inv"})
+
+    bom_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    finished_item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    version_no: Mapped[int] = mapped_column(SmallInteger, default=1)
+    batch_size_qty: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(1))
+    production_time_minutes: Mapped[int | None]
+    scrap_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=decimal.Decimal(0))
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class BomLine(Base):
+    __tablename__ = "bom_lines"
+    __table_args__ = (UniqueConstraint("bom_id", "line_no"), {"schema": "inv"})
+
+    bom_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    bom_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.bom_headers.bom_id"))
+    component_item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    quantity_per: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    scrap_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=decimal.Decimal(0))
+    line_no: Mapped[int] = mapped_column(SmallInteger)
+
+
+class AssetDetail(Base):
+    __tablename__ = "asset_details"
+    __table_args__ = {"schema": "inv"}
+
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"), primary_key=True)
+    asset_tag_no: Mapped[str | None] = mapped_column(String(50))
+    depreciation_group_code: Mapped[str | None] = mapped_column(String(30))
+    useful_life_months: Mapped[int] = mapped_column()
+    depreciation_method_code: Mapped[str] = mapped_column(String(20), default="STRAIGHT_LINE")
+    acquisition_date: Mapped[datetime.date] = mapped_column(Date)
+    acquisition_cost: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    salvage_value: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal(0))
+
+
+class AssetDepreciationEntry(Base):
+    __tablename__ = "asset_depreciation_entries"
+    __table_args__ = (UniqueConstraint("item_id", "period_date"), {"schema": "inv"})
+
+    depreciation_entry_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.asset_details.item_id"))
+    period_date: Mapped[datetime.date] = mapped_column(Date)
+    depreciation_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+
+
+class CategoryAccountMapping(Base):
+    __tablename__ = "category_account_mappings"
+    __table_args__ = {"schema": "inv"}
+
+    category_id: Mapped[int] = mapped_column(ForeignKey("inv.item_categories.category_id"), primary_key=True)
+    mapping_key: Mapped[str] = mapped_column(String(30), primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
 
 
 # =======================================================================

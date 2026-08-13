@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import FiscalYear
-from peecha.db.models.inventory import DocumentReasonCode, StockDocument, StockDocumentLine
+from peecha.db.models.inventory import DocumentReasonCode, Item, StockDocument, StockDocumentLine
 from peecha.services import inventory_engine as engine_service
 
 DOCUMENT_TYPE_CODES = ("RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT")
@@ -306,6 +306,10 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
             unit_cost=fields.unit_cost, reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
             description=(fields.description or None),
         )
+        if doc.document_type_code == "RECEIPT":
+            item = session.get(Item, fields.item_id)
+            if item is not None and item.requires_qc and engine_service.is_feature_enabled(company_id, "QUALITY_CONTROL"):
+                line.quality_status_code = "PENDING"
         session.add(line)
         session.commit()
         return line.line_id

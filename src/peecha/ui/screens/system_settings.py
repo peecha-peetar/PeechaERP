@@ -23,6 +23,7 @@ from peecha.ui.screens.fiscal_years import FiscalYearsScreen
 from peecha.ui.screens.inventory_settings import (
     _AccountMappingsTab,
     _BrandManufacturerTab,
+    _CategoriesTab,
     _CostingSettingsTab,
     _FeatureToggleTab as _InventoryFeatureToggleTab,
     _ReasonCodesTab,
@@ -168,6 +169,7 @@ class SystemSettingsScreen(QWidget):
             [
                 ("واحدهایِ اندازه‌گیری", _UomTab()),
                 ("برند و تولیدکننده", _BrandManufacturerTab()),
+                ("دسته‌بندیِ کالا", _CategoriesTab()),
                 ("قیمت‌گذاری", _CostingSettingsTab()),
                 ("نگاشتِ حساب‌ها", _AccountMappingsTab()),
                 ("دلیل‌هایِ اصلاح/برگشت", _ReasonCodesTab()),

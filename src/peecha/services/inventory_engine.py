@@ -20,6 +20,7 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount
 from peecha.db.models.inventory import (
     BinLocation,
+    CategoryAccountMapping,
     CompanyCostingSettings,
     CompanyFeature,
     CostingMethod,
@@ -612,3 +613,44 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
             session.commit()
 
     return PostResult(stock_document_id=result_stock_document_id, journal_entry_id=journal_entry_id)
+
+
+# ---------------------------------------------------------------------
+# نگاشتِ حسابِ حسابداری در سطحِ دسته‌بندی — بخشِ ۱۴ (override رویِ نگاشتِ
+# سراسری). این دور فقط CRUD است؛ post_stock_document/_resolve_role_account
+# هنوز از نگاشتِ سراسریِ company-wide می‌خوانند — اتصالِ این override به
+# موتورِ ثبت، دورِ بعدی.
+# ---------------------------------------------------------------------
+@dataclass
+class CategoryAccountMappingRow:
+    category_id: int
+    mapping_key: str
+    account_id: int
+
+
+def list_category_account_mappings(category_id: int) -> list[CategoryAccountMappingRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(CategoryAccountMapping).where(CategoryAccountMapping.category_id == category_id)
+        ).all()
+        return [CategoryAccountMappingRow(r.category_id, r.mapping_key, r.account_id) for r in rows]
+
+
+def set_category_account_mapping(category_id: int, mapping_key: str, account_id: int) -> None:
+    if mapping_key not in MAPPING_LABELS:
+        raise ValueError("کلیدِ نگاشت نامعتبر است.")
+    with new_session() as session:
+        row = session.get(CategoryAccountMapping, (category_id, mapping_key))
+        if row is None:
+            session.add(CategoryAccountMapping(category_id=category_id, mapping_key=mapping_key, account_id=account_id))
+        else:
+            row.account_id = account_id
+        session.commit()
+
+
+def delete_category_account_mapping(category_id: int, mapping_key: str) -> None:
+    with new_session() as session:
+        row = session.get(CategoryAccountMapping, (category_id, mapping_key))
+        if row is not None:
+            session.delete(row)
+            session.commit()

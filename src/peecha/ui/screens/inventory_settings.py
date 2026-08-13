@@ -529,3 +529,220 @@ class _ReasonCodesTab(QWidget):
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self.refresh()
+
+
+class _CategoriesTab(QWidget):
+    """دسته‌بندیِ کالا (بخشِ ۱) + نگاشتِ حسابِ حسابداری در سطحِ دسته (بخشِ ۱۴،
+    override رویِ نگاشتِ سراسری — فعلاً فقط تنظیم؛ اتصال به موتورِ ثبت در
+    دورِ بعدی)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._rows: list[catalog_service.ItemCategoryRow] = []
+        self._selected_category_id: int | None = None
+        self._mapping_combos: dict[str, QComboBox] = {}
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(16)
+        layout.addWidget(self._build_list_panel(), stretch=1)
+        layout.addWidget(self._build_mapping_panel(), stretch=1)
+
+    def _build_list_panel(self) -> QWidget:
+        panel = QWidget()
+        panel_layout = QVBoxLayout(panel)
+        title = QLabel("دسته‌بندیِ کالا")
+        title.setObjectName("pageTitle")
+        panel_layout.addWidget(title)
+
+        add_button = QPushButton("+ دستهٔ جدید")
+        add_button.setObjectName("primaryButton")
+        add_button.clicked.connect(self._add)
+        panel_layout.addWidget(add_button, alignment=Qt.AlignLeft)
+
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["فعال", "نام", "کد"])
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.cellClicked.connect(self._on_row_clicked)
+        panel_layout.addWidget(self.table)
+
+        buttons = QHBoxLayout()
+        edit_button = QPushButton("ویرایش")
+        edit_button.clicked.connect(self._edit_selected)
+        buttons.addWidget(edit_button)
+        delete_button = QPushButton("حذف")
+        delete_button.setObjectName("dangerButton")
+        delete_button.clicked.connect(self._delete_selected)
+        buttons.addWidget(delete_button)
+        panel_layout.addLayout(buttons)
+        return panel
+
+    def _build_mapping_panel(self) -> QWidget:
+        panel = QWidget()
+        panel_layout = QVBoxLayout(panel)
+        title = QLabel("نگاشتِ حسابِ این دسته (override)")
+        title.setObjectName("pageTitle")
+        panel_layout.addWidget(title)
+        panel_layout.addWidget(QLabel("اگر دسته‌ای انتخاب نشده باشد یا برایِ کلیدی مقداری تعیین نشود، نگاشتِ سراسریِ شرکت استفاده می‌شود."))
+
+        self.mapping_rows_layout = QVBoxLayout()
+        panel_layout.addLayout(self.mapping_rows_layout)
+        for key, label in engine_service.MAPPING_LABELS.items():
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label), stretch=1)
+            combo = QComboBox()
+            combo.setMinimumWidth(240)
+            self._mapping_combos[key] = combo
+            row.addWidget(combo, stretch=2)
+            self.mapping_rows_layout.addLayout(row)
+
+        self.mapping_status_label = QLabel("")
+        self.mapping_status_label.setObjectName("statusError")
+        panel_layout.addWidget(self.mapping_status_label)
+
+        save_button = QPushButton("ذخیرهٔ نگاشت")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save_mapping)
+        panel_layout.addWidget(save_button, alignment=Qt.AlignLeft)
+        panel_layout.addStretch(1)
+        return panel
+
+    def _company_id(self) -> int | None:
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        self._rows = catalog_service.list_categories(company_id)
+        self.table.setRowCount(len(self._rows))
+        for row_index, c in enumerate(self._rows):
+            values = ["بله" if c.is_active else "خیر", c.name, c.code]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, c.category_id)
+                self.table.setItem(row_index, col_index, item)
+        self._refresh_mapping_accounts()
+
+    def _refresh_mapping_accounts(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        accounts = [(a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable]
+        current_by_key: dict[str, int] = {}
+        if self._selected_category_id is not None:
+            current_by_key = {
+                m.mapping_key: m.account_id
+                for m in engine_service.list_category_account_mappings(self._selected_category_id)
+            }
+        for key, combo in self._mapping_combos.items():
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("(از نگاشتِ سراسری پیروی کند)", None)
+            for account_id, label in accounts:
+                combo.addItem(label, account_id)
+            combo.setCurrentIndex(max(0, combo.findData(current_by_key.get(key))))
+            combo.blockSignals(False)
+        self.mapping_status_label.setText("")
+
+    def _selected_row(self) -> catalog_service.ItemCategoryRow | None:
+        selected = self.table.selectedItems()
+        if not selected:
+            return None
+        category_id = selected[0].data(Qt.UserRole)
+        return next((r for r in self._rows if r.category_id == category_id), None)
+
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        item = self.table.item(row, 0)
+        self._selected_category_id = item.data(Qt.UserRole) if item is not None else None
+        self._refresh_mapping_accounts()
+
+    def _add(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("دستهٔ جدید")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("کد"))
+        code_field = QLineEdit()
+        layout.addWidget(code_field)
+        layout.addWidget(QLabel("نام"))
+        name_field = QLineEdit()
+        layout.addWidget(name_field)
+        layout.addWidget(QLabel("دستهٔ والد (اختیاری)"))
+        parent_combo = QComboBox()
+        parent_combo.addItem("(بدونِ والد)", None)
+        for c in self._rows:
+            parent_combo.addItem(f"{c.code} — {c.name}", c.category_id)
+        layout.addWidget(parent_combo)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        company_id = self._company_id()
+        if company_id is None or not code_field.text().strip() or not name_field.text().strip():
+            return
+        try:
+            catalog_service.create_category(company_id, code_field.text().strip(), name_field.text().strip(), parent_combo.currentData())
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.refresh()
+
+    def _edit_selected(self, *_args) -> None:
+        row = self._selected_row()
+        if row is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ویرایشِ دسته")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("نام"))
+        name_field = QLineEdit(row.name)
+        layout.addWidget(name_field)
+        active_checkbox = QCheckBox("فعال")
+        active_checkbox.setChecked(row.is_active)
+        layout.addWidget(active_checkbox)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            catalog_service.update_category(row.category_id, self._company_id(), name_field.text().strip(), active_checkbox.isChecked())
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.refresh()
+
+    def _delete_selected(self) -> None:
+        row = self._selected_row()
+        if row is None:
+            return
+        confirm = QMessageBox.question(self, "حذف", "این دسته حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            catalog_service.delete_category(row.category_id, self._company_id())
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        if self._selected_category_id == row.category_id:
+            self._selected_category_id = None
+        self.refresh()
+
+    def _save_mapping(self) -> None:
+        if self._selected_category_id is None:
+            self.mapping_status_label.setText("ابتدا یک دسته را از فهرست انتخاب کنید.")
+            return
+        for key, combo in self._mapping_combos.items():
+            account_id = combo.currentData()
+            if account_id is not None:
+                engine_service.set_category_account_mapping(self._selected_category_id, key, account_id)
+            else:
+                engine_service.delete_category_account_mapping(self._selected_category_id, key)
+        self.mapping_status_label.setObjectName("statusSuccess")
+        self.mapping_status_label.setText("ذخیره شد.")
