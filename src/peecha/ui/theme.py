@@ -1,57 +1,105 @@
-"""پالتِ رنگی + QSSِ سراسریِ برنامه — بازطراحیِ «مدرنِ ۲۰۲۶»: پالتِ نیلی/
-بنفشِ نرم (به‌جایِ سرمه‌ایِ تخت/تیره‌یِ قبلی)، پس‌زمینه‌یِ روشن و هوادار،
-گوشه‌هایِ گردترِ کارت/دکمه/فیلد، سایه‌هایِ لطیف، و هدر/منویِ افقیِ روشن
-(به‌جایِ نوارِ تیره‌یِ قدیمی که حسِ برنامه‌هایِ enterprise کهنه می‌داد).
+"""پالتِ رنگی + QSSِ سراسریِ برنامه — «Peecha ERP 2026»: معماریِ دوتاییِ
+تمِ روشن/تیره (سوییچِ واقعیِ رفت‌وبرگشتی، نه فقط یک تمِ ثابت)، سطوحِ
+لایه‌ای برایِ عمق (BACKGROUND تیره‌ترین/روشن‌ترین، SURFACE یک پله
+متفاوت‌تر، HOVER/SELECTED یک پله بیشتر)، گوشه‌هایِ گردِ ۱۲–۱۶px، لبه‌هایِ
+نیمه‌شفافِ نازک به‌جایِ بردرِ توپر، و سایه‌هایِ نرم برایِ حسِ شناوربودنِ
+کارت‌ها.
 
 نکته‌یِ سازگاری: تمامِ نام‌هایی که بیرون از این فایل استفاده می‌شوند
 (ACCENT، BORDER، DIVIDER، PRIMARY، SUCCESS، TEXT_PRIMARY، TEXT_SECONDARY،
 DONUT_COLORS، LEVEL_*، apply_card_shadows، avatar_color_for،
-set_status_label، GLOBAL_QSS) دست‌نخورده مانده‌اند — فقط مقدار/محتوایشان
-تازه شده."""
+set_status_label، GLOBAL_QSS) دست‌نخورده مانده‌اند — این‌ها همه به
+ماژول‌سطح متصل‌اند و با `set_theme_mode()` مقدارشان زنده عوض می‌شود (نه
+فقط یک‌بار در import). کدِ مصرف‌کننده همیشه باید با
+`from peecha.ui import theme` + `theme.NAME` باشد (نه
+`from peecha.ui.theme import NAME`) — وگرنه مقدارِ منجمدشده‌یِ لحظه‌یِ
+import می‌ماند و با سوییچِ تم به‌روز نمی‌شود.
+
+معماری: دو دیکشنریِ ثابتِ توکن (`_DARK_TOKENS`/`_LIGHT_TOKENS`) + تابعِ
+`_apply_tokens()` که مقادیرِ ماژول‌سطح را از رویِ یکی از این دو
+بازمی‌نویسد و `GLOBAL_QSS` را دوباره می‌سازد. `set_theme_mode(app, dark)`
+این را صدا می‌زند، `QPalette` را هم دوباره اعمال می‌کند، ترجیح را در
+`QSettings` ذخیره می‌کند، و یک پاسِ repolish رویِ همه‌یِ ویجت‌هایِ زنده
+می‌زند تا سوییچ بدونِ ری‌استارت اثر کند."""
 
 from __future__ import annotations
 
 import hashlib
+import os
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
-from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QWidget
 
-# --- پالتِ نیلی/بنفشِ مدرن -------------------------------------------------
-PRIMARY = "#1E1B4B"          # نیلیِ خیلی تیره — فقط برایِ تولتیپ/متن‌هایِ تأکیدی
-PRIMARY_HOVER = "#312E81"
-PRIMARY_LIGHT = "#EEF2FF"
-ACCENT = "#4F46E5"           # نیلیِ اصلی (indigo-600) — جایگزینِ سرمه‌ایِ #020025
-ACCENT_HOVER = "#4338CA"
-ACCENT_PRESSED = "#3730A3"
-ACCENT_LIGHT = "#EEF2FF"     # ته‌رنگِ خیلی کم‌رنگِ اکسنت — برایِ هاورِ نرم/پیل‌هایِ غیرفعال
-ACCENT_LIGHT_HOVER = "#E0E0FC"
-SUCCESS = "#16A672"
-WARNING = "#F5A524"
-DANGER = "#EF4444"
-INFO = "#0EA5E9"
+_SETTINGS_ORG = "Peecha"
+_SETTINGS_APP = "PeechaERP"
+_THEME_MODE_KEY = "appearance/dark_mode"
 
-CHART_PURPLE = "#9333EA"
-CHART_ORANGE = "#F97316"
-CHART_TEAL = "#14B8A6"
+# --- جدولِ توکن‌هایِ تمِ تیره (پیش‌فرض) --------------------------------------
+_DARK_TOKENS: dict[str, str] = {
+    "BACKGROUND": "#0B0D18",        # پس‌زمینه‌یِ صفحه — navy تقریباً سیاه
+    "SURFACE": "#151830",           # کارت/پنلِ شیشه‌ای — یک پله روشن‌تر از BACKGROUND
+    "HOVER": "#1C2040",             # حالتِ هاور
+    "SELECTED": "#262A52",          # حالتِ انتخاب‌شده (نرم، نه اکسنتِ کامل)
+    "BORDER": "#262A4C",            # لبه‌یِ نازکِ کارت/فیلد
+    "BORDER_HOVER": "#3A3E68",      # لبه‌یِ فیلد در حالتِ هاور
+    "DIVIDER": "#1D2140",           # خط‌جداکننده — کم‌رنگ‌تر از BORDER
+    "TEXT_PRIMARY": "#EEF0FA",      # سفیدِ نرم — خوانایی بدونِ خیرگی
+    "TEXT_SECONDARY": "#9599BD",    # خاکستری‌-یاسیِ کم‌رنگ
+    "TEXT_DISABLED": "#565A7C",
+    "PRIMARY": "#9EA0FF",           # نیلیِ روشن — متنِ تاکیدی رویِ زمینه‌یِ تیره
+    "PRIMARY_HOVER": "#B4B6FF",
+    "PRIMARY_LIGHT": "#20223F",
+    "ACCENT": "#5B5CF0",            # اکسنتِ اصلیِ برند — یکسان در هر دو تم
+    "ACCENT_HOVER": "#7274FF",
+    "ACCENT_PRESSED": "#4547CC",
+    "ACCENT_LIGHT": "#23244F",
+    "ACCENT_LIGHT_HOVER": "#2B2D63",
+    "SUCCESS": "#34D399",
+    "WARNING": "#E8A23D",
+    "DANGER": "#F0616B",
+    "INFO": "#5AA9F2",
+    "CHART_PURPLE": "#B79CFA",
+    "CHART_ORANGE": "#FB9B5D",
+    "CHART_TEAL": "#3FD9C7",
+    "GRID_HEADER_BG": "#171A33",
+    "GRID_BORDER": "#242847",
+    "GRID_ROW_ALT": "#10121F",
+    "TOOLTIP_BG": "#1E2142",
+}
 
-BACKGROUND = "#F7F7FC"
-SURFACE = "#FFFFFF"
-HOVER = "#F1F1F8"
-SELECTED = "#E6E4FB"
-BORDER = "#E4E4EE"
-DIVIDER = "#EDEDF4"
-
-TEXT_PRIMARY = "#15162B"
-TEXT_SECONDARY = "#6B6F85"
-TEXT_DISABLED = "#A0A3B4"
-
-GRID_HEADER_BG = "#F5F5FA"
-GRID_BORDER = "#ECECF3"
-GRID_ROW_ALT = "#FAFAFD"
-LEVEL_GROUP = "#7C3AED"
-LEVEL_KOL = "#0D9488"
-LEVEL_MOEIN = TEXT_PRIMARY
+# --- جدولِ توکن‌هایِ تمِ روشن — طراحیِ تازه، نه اینورسِ ساده‌یِ تمِ تیره ---------
+_LIGHT_TOKENS: dict[str, str] = {
+    "BACKGROUND": "#F7F7FB",        # سفیدِ خیلی کم‌رنگِ یاسی — نه سفیدِ خام
+    "SURFACE": "#FFFFFF",           # کارتِ سفیدِ خالص — یک پله روشن‌تر از BACKGROUND
+    "HOVER": "#F0F1F8",
+    "SELECTED": "#E7E8FA",
+    "BORDER": "#E3E4F0",
+    "BORDER_HOVER": "#C7C9DC",
+    "DIVIDER": "#ECEDF5",
+    "TEXT_PRIMARY": "#1A1B2E",      # تقریباً مشکی — نه مشکیِ خالص
+    "TEXT_SECONDARY": "#6B6E8C",
+    "TEXT_DISABLED": "#A6A8C0",
+    "PRIMARY": "#4C4DE0",           # نیلیِ عمیق‌تر — رویِ زمینه‌یِ روشن باید تیره‌تر از ACCENT باشد
+    "PRIMARY_HOVER": "#3F40C4",
+    "PRIMARY_LIGHT": "#EEEEFF",
+    "ACCENT": "#5B5CF0",            # همان اکسنتِ برند — هویتِ یکسان در هر دو تم
+    "ACCENT_HOVER": "#4A4BDB",
+    "ACCENT_PRESSED": "#3A3BB8",
+    "ACCENT_LIGHT": "#EEEEFF",
+    "ACCENT_LIGHT_HOVER": "#E2E3FC",
+    "SUCCESS": "#16A34A",
+    "WARNING": "#D97706",
+    "DANGER": "#DC2626",
+    "INFO": "#2563EB",
+    "CHART_PURPLE": "#8B5CF6",
+    "CHART_ORANGE": "#F97316",
+    "CHART_TEAL": "#0D9488",
+    "GRID_HEADER_BG": "#F5F5FA",
+    "GRID_BORDER": "#E7E8F2",
+    "GRID_ROW_ALT": "#FAFAFD",
+    "TOOLTIP_BG": "#2A2B45",         # تولتیپ عمداً در هر دو تم تیره می‌ماند (مثلِ VSCode)
+}
 
 STATUS_COLOR_ROLE: dict[str, str] = {
     "TEMPORARY": "warning",
@@ -63,17 +111,10 @@ STATUS_COLOR_ROLE: dict[str, str] = {
     "REJECTED": "danger",
 }
 
-_ROLE_COLORS = {
-    "success": SUCCESS,
-    "warning": WARNING,
-    "danger": DANGER,
-    "info": INFO,
-}
-
 
 def status_color(status_code: str) -> str:
     role = STATUS_COLOR_ROLE.get(status_code, "info")
-    return _ROLE_COLORS[role]
+    return {"success": SUCCESS, "warning": WARNING, "danger": DANGER, "info": INFO}[role]
 
 
 def set_status_label(label, text: str, *, ok: bool) -> None:
@@ -85,29 +126,60 @@ def set_status_label(label, text: str, *, ok: bool) -> None:
     label.setText(text)
 
 
-DONUT_COLORS = [ACCENT, SUCCESS, CHART_PURPLE, CHART_ORANGE, WARNING]
-
-# رنگ‌های چرخشیِ آواتار/نشان — برایِ حروفِ اول (کاربر/گروه/...)
-AVATAR_COLORS = [ACCENT, SUCCESS, CHART_ORANGE, INFO, CHART_PURPLE, CHART_TEAL]
+def rgba(color: str, alpha: float) -> str:
+    """کدِ هگز را به رشته‌یِ rgba() برایِ QSS تبدیل می‌کند — برایِ ته‌رنگ/
+    شیشه‌ای‌کردنِ واقعی (آلفایِ ترکیبی رویِ SURFACE زیرین)، به‌جایِ شبیه‌سازیِ
+    دستیِ ترکیبِ رنگ با یک رنگِ پایه‌یِ ثابت."""
+    c = QColor(color)
+    return f"rgba({c.red()}, {c.green()}, {c.blue()}, {max(0.0, min(1.0, alpha))})"
 
 
 def apply_card_shadows(root: QWidget) -> None:
-    """سایه‌ی ملایمِ زیرِ هر ویجتِ «کارت» (objectName == "card") را — رویِ
+    """سایه‌ی نرمِ زیرِ هر ویجتِ «کارت» (objectName == "card") را — رویِ
     خودِ آن ویجت و همه‌ی فرزندانش — اعمال می‌کند؛ کارت‌هایی که خودشان از
-    قبل یک QGraphicsEffect دارند (مثلِ widgets.KpiCard، که سایه‌اش را با
-    هاور متحرک می‌کند) نادیده گرفته می‌شوند — وگرنه این افکتِ ثابت
-    جایگزینِ افکتِ متحرکشان می‌شد و انیمیشنِ هاور را (بی‌صدا، چون افکتِ
-    قدیمی از ویجت جدا می‌شد نه حذف) از کار می‌انداخت."""
+    قبل یک QGraphicsEffect دارند (مثلِ widgets.KpiCard) نادیده گرفته
+    می‌شوند. سایه‌یِ سیاهِ خنثی (نه رنگیِ اکسنت) رویِ هر دو تم به‌درستی
+    حسِ «شناوربودن» می‌دهد — نیازی به دو مقدارِ جدا برایِ روشن/تیره نیست."""
     candidates = [root, *root.findChildren(QWidget)]
     for widget in candidates:
         if widget.objectName() != "card" or widget.graphicsEffect() is not None:
             continue
         effect = QGraphicsDropShadowEffect(widget)
-        effect.setBlurRadius(32)
+        effect.setBlurRadius(36)
         effect.setXOffset(0)
-        effect.setYOffset(8)
-        effect.setColor(QColor(79, 70, 229, 22))
+        effect.setYOffset(10)
+        effect.setColor(QColor(0, 0, 0, 130))
         widget.setGraphicsEffect(effect)
+
+
+def apply_palette(app: QApplication) -> None:
+    """کنارِ GLOBAL_QSS، خودِ QPalette را هم با توکن‌هایِ *جاری* هماهنگ
+    می‌کند — چون Fusion برایِ بخشی از اجزایِ بومی‌رسم‌شده (فریم/فلشِ
+    QComboBoxِ غیرقابل‌ویرایش، پس‌زمینه‌یِ پاپ‌آپ‌ها، اسکرول‌بار، حالتِ
+    غیرفعال) رویِ QPalette تکیه می‌کند، نه QSS. با فراخوانیِ دوباره‌یِ این
+    تابع بعدِ `set_theme_mode`، این اجزا هم بدونِ ری‌استارت عوض می‌شوند."""
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(BACKGROUND))
+    palette.setColor(QPalette.WindowText, QColor(TEXT_PRIMARY))
+    palette.setColor(QPalette.Base, QColor(SURFACE))
+    palette.setColor(QPalette.AlternateBase, QColor(GRID_ROW_ALT))
+    # طبقِ طراحی، TOOLTIP_BG در هر دو تم تیره می‌ماند (مثلِ VSCode) — پس
+    # متنِ تولتیپ هم ثابت روشن است، نه TEXT_PRIMARY (که در تمِ روشن
+    # تقریباً مشکی می‌شود و رویِ زمینه‌یِ تیره‌یِ تولتیپ ناخوانا می‌شود).
+    palette.setColor(QPalette.ToolTipBase, QColor(TOOLTIP_BG))
+    palette.setColor(QPalette.ToolTipText, QColor("#EEF0FA"))
+    palette.setColor(QPalette.Text, QColor(TEXT_PRIMARY))
+    palette.setColor(QPalette.Button, QColor(SURFACE))
+    palette.setColor(QPalette.ButtonText, QColor(TEXT_PRIMARY))
+    palette.setColor(QPalette.BrightText, QColor(DANGER))
+    palette.setColor(QPalette.Link, QColor(PRIMARY))
+    palette.setColor(QPalette.Highlight, QColor(ACCENT))
+    palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
+    palette.setColor(QPalette.PlaceholderText, QColor(TEXT_DISABLED))
+    palette.setColor(QPalette.Disabled, QPalette.Text, QColor(TEXT_DISABLED))
+    palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(TEXT_DISABLED))
+    palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(TEXT_DISABLED))
+    app.setPalette(palette)
 
 
 def avatar_color_for(text: str) -> str:
@@ -130,7 +202,124 @@ def emoji_icon(glyph: str, size: int = 22) -> QIcon:
     return QIcon(pixmap)
 
 
-GLOBAL_QSS = f"""
+_ASSETS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+    "assets",
+)
+_LOGO_PATH = os.path.join(_ASSETS_DIR, "Peecha_logo2.png")
+
+
+def logo_pixmap(size: int, color: str | None = None) -> QPixmap:
+    """پیکسمپِ لوگویِ برند (assets/Peecha_logo2.png) با رنگِ دلخواه.
+    فایلِ اصلی یک خطوطِ تک‌رنگِ سرمه‌ایِ تقریباً مشکی است (۰,۵,۲۸) —
+    رویِ پس‌زمینه‌یِ تیره تقریباً ناپدید می‌شود. برایِ این‌که در هر دو تم
+    خوانا بماند، فقط شکلِ لوگو (کانالِ آلفا) از فایل خوانده می‌شود و با
+    رنگِ داده‌شده (پیش‌فرض: توکنِ جاریِ TEXT_PRIMARY که خودش بینِ روشن/
+    تیره جابه‌جا می‌شود) دوباره رنگ‌آمیزی می‌شود — به‌جایِ نگه‌داشتنِ دو
+    فایلِ جدا برایِ دو تم."""
+    color = color or TEXT_PRIMARY
+    source = QPixmap(_LOGO_PATH)
+    if source.isNull():
+        return QPixmap()
+    source = source.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    result = QPixmap(source.size())
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.drawPixmap(0, 0, source)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(result.rect(), QColor(color))
+    painter.end()
+    return result
+
+
+def app_icon() -> QIcon:
+    """آیکونِ سطحِ اپ/تسک‌بار — پس‌زمینه‌یِ دایره‌ایِ ثابتِ اکسنتِ برند +
+    لوگویِ سفید رویِ آن. بر خلافِ `logo_pixmap` (که برایِ استفاده‌یِ
+    داخلِ خودِ اپ، رنگش بینِ تمِ روشن/تیره عوض می‌شود)، آیکونِ سیستم‌عامل/
+    تسک‌بار باید مستقل از تمِ برنامه، رویِ هر پس‌زمینه‌یِ سیستم‌عاملی
+    (تیره یا روشن) خوانا بماند — پس یک زمینه‌یِ ثابت دارد، نه شفاف."""
+    size = 256
+    canvas = QPixmap(size, size)
+    canvas.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(canvas)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(ACCENT))
+    painter.drawEllipse(0, 0, size, size)
+    painter.end()
+
+    logo = logo_pixmap(int(size * 0.6), "#FFFFFF")
+    painter2 = QPainter(canvas)
+    painter2.drawPixmap((size - logo.width()) // 2, (size - logo.height()) // 2, logo)
+    painter2.end()
+    return QIcon(canvas)
+
+
+# --- مدیریتِ حالتِ تم (روشن/تیره) --------------------------------------------
+_dark_mode = True
+_font_family: str | None = None
+
+
+def set_font_family(name: str) -> None:
+    """`main.py` این را یک‌بار بعدِ ثبتِ فونت صدا می‌زند تا `set_theme_mode`
+    همیشه بداند QSS را با کدام font-family دوباره اعمال کند."""
+    global _font_family
+    _font_family = name
+
+
+def is_dark_mode() -> bool:
+    return _dark_mode
+
+
+def load_saved_theme_mode() -> bool:
+    """ترجیحِ ذخیره‌شده در QSettings را می‌خواند — پیش‌فرض تیره (True)
+    اگر کاربر هنوز هیچ‌وقت سوییچ نکرده باشد."""
+    settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    return bool(settings.value(_THEME_MODE_KEY, True, type=bool))
+
+
+def set_theme_mode(app: QApplication, dark: bool) -> None:
+    """سوییچِ زنده‌یِ تم — بدونِ نیاز به ری‌استارتِ برنامه. توکن‌هایِ
+    ماژول‌سطح را عوض می‌کند، QPalette و QSSِ سراسری را دوباره اعمال
+    می‌کند، ترجیح را ذخیره می‌کند، و یک پاسِ repolish رویِ همه‌یِ ویجت‌هایِ
+    زنده می‌زند تا کنترل‌هایِ استانداردِ QSS (کارت/جدول/دکمه/فیلد/تب/…)
+    فوراً رنگِ تازه بگیرند. ویجت‌هایِ سفارشیِ رسم‌شونده (HoverButton و
+    مشابه‌ها، فقط در کرومِ ساید‌بار/هدر/تیتربارِ MDI) رنگِ پس‌زمینه‌یِ
+    هاورشان را در __init__ منجمد می‌کنند — مسئولِ بازسازیِ آن‌ها
+    `MainWindow._rebuild_chrome()` است، نه این تابع."""
+    global _dark_mode
+    _dark_mode = dark
+    _apply_tokens(_DARK_TOKENS if dark else _LIGHT_TOKENS)
+    apply_palette(app)
+    font_prefix = f'* {{ font-family: "{_font_family}"; }}\n' if _font_family else ""
+    app.setStyleSheet(font_prefix + GLOBAL_QSS)
+    settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    settings.setValue(_THEME_MODE_KEY, dark)
+    for widget in app.allWidgets():
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+        widget.update()
+
+
+def _apply_tokens(tokens: dict[str, str]) -> None:
+    g = globals()
+    g.update(tokens)
+    g["LEVEL_GROUP"] = tokens["CHART_PURPLE"]
+    g["LEVEL_KOL"] = tokens["CHART_TEAL"]
+    g["LEVEL_MOEIN"] = tokens["TEXT_PRIMARY"]
+    g["DONUT_COLORS"] = [
+        tokens["ACCENT"], tokens["SUCCESS"], tokens["CHART_PURPLE"],
+        tokens["CHART_ORANGE"], tokens["WARNING"],
+    ]
+    g["AVATAR_COLORS"] = [
+        tokens["ACCENT"], tokens["SUCCESS"], tokens["CHART_ORANGE"],
+        tokens["INFO"], tokens["CHART_PURPLE"], tokens["CHART_TEAL"],
+    ]
+    g["GLOBAL_QSS"] = _build_global_qss()
+
+
+def _build_global_qss() -> str:
+    return f"""
 * {{
     outline: none;
 }}
@@ -139,10 +328,24 @@ QWidget {{
     color: {TEXT_PRIMARY};
     font-size: 14px;
 }}
+/* طبقِ یک باگِ واقعاً کشف‌شده: همین قاعده‌ی بالا (background-colorِ
+   سراسری رویِ QWidget) باعث می‌شود Qt هر QLabelِ ساده هم WA_StyledBackground
+   بگیرد و یک مستطیلِ توپرِ هم‌رنگِ BACKGROUND پشتِ خودش رسم کند — حتی
+   وقتی آن لیبل درونِ یک کارت/هدرِ SURFACE-رنگ نشسته باشد. راه‌حل:
+   پیش‌فرضِ لیبل‌ها شفاف باشد — لیبل‌هایی که واقعاً پس‌زمینه می‌خواهند
+   (avatarBadge و…) با selectorِ اختصاصیِ خودشان (اولویتِ بالاتر)
+   همچنان کار می‌کنند. */
+QLabel {{
+    background: transparent;
+}}
 QWidget#card, QFrame#card {{
     background-color: {SURFACE};
     border-radius: 16px;
-    border: 1px solid {DIVIDER};
+    border: 1px solid {BORDER};
+}}
+QWidget#formFooter {{
+    background: transparent;
+    border-top: 1px solid {BORDER};
 }}
 QLabel#pageTitle {{
     font-size: 26px;
@@ -153,6 +356,23 @@ QLabel#pageTitle {{
 QLabel#sectionHint {{
     color: {TEXT_SECONDARY};
     font-size: 13px;
+}}
+QLabel#rowsSummaryLabel {{
+    font-size: 16px;
+    font-weight: 700;
+}}
+/* طبقِ گزارشِ صریح («راس در فرم دریافت/پرداخت پیدا نیست»): برخلافِ
+sectionHintِ کم‌رنگِ معمولی، این برچسب پررنگ و با رنگِ اکسنت است تا وقتی
+مقداری دارد، بی‌شک به چشم بیاید. */
+QLabel#raasLabel {{
+    font-size: 14px;
+    font-weight: 700;
+    color: {ACCENT};
+}}
+QLabel#cardTitle {{
+    color: {TEXT_PRIMARY};
+    font-size: 15px;
+    font-weight: 700;
 }}
 QLabel#statusError {{
     color: {DANGER};
@@ -171,7 +391,7 @@ QLabel#avatarBadge {{
 
 /* --- فیلدهایِ ورودی -------------------------------------------------- */
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
-    background-color: {SURFACE};
+    background-color: {rgba(SURFACE, 0.7)};
     border: 1.5px solid {BORDER};
     border-radius: 10px;
     padding: 8px 12px;
@@ -180,7 +400,7 @@ QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     selection-background-color: {ACCENT};
 }}
 QLineEdit:hover, QComboBox:hover, QDateEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
-    border: 1.5px solid #C7C9E0;
+    border: 1.5px solid {BORDER_HOVER};
 }}
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border: 1.5px solid {ACCENT};
@@ -199,12 +419,12 @@ QComboBox::drop-down {{
     width: 28px;
 }}
 QComboBox QAbstractItemView {{
-    background-color: {SURFACE};
+    background-color: {GRID_HEADER_BG};
     border: 1px solid {BORDER};
     border-radius: 12px;
     padding: 4px;
     selection-background-color: {SELECTED};
-    selection-color: {ACCENT_PRESSED};
+    selection-color: {PRIMARY};
     outline: none;
 }}
 QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
@@ -227,7 +447,7 @@ QCalendarWidget QAbstractItemView:enabled {{
     selection-color: white;
 }}
 
-/* --- دکمه‌ها (گردتر و نرم‌تر از نسخه‌ی قبل) -------------------------------- */
+/* --- دکمه‌ها -------------------------------------------------------- */
 QPushButton {{
     border-radius: 10px;
     padding: 9px 18px;
@@ -255,11 +475,39 @@ QPushButton#primaryButton:pressed {{
 }}
 QPushButton#flatButton {{
     background-color: transparent;
-    color: {ACCENT};
+    color: {PRIMARY};
     font-weight: 600;
 }}
 QPushButton#flatButton:hover {{
     background-color: {SELECTED};
+}}
+QPushButton#flatButton:disabled {{
+    background-color: transparent;
+    color: {TEXT_DISABLED};
+}}
+/* طبقِ گزارشِ صریح («دکمه‌هایِ آیکونی مثلِ + / 📒 / ✕ تا هاور نکنی معلوم
+نیستند دکمه‌اند»): این دکمه‌ها برخلافِ flatButton/dangerButton، همیشه
+(نه فقط رویِ هاور) یک زمینه/لبه‌یِ ملایم دارند تا در حالتِ عادی هم به‌
+وضوح «دکمه» به‌نظر برسند. */
+QPushButton#iconButton {{
+    background-color: {ACCENT_LIGHT};
+    color: {PRIMARY};
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+    font-weight: 700;
+}}
+QPushButton#iconButton:hover {{
+    background-color: {ACCENT_LIGHT_HOVER};
+}}
+QPushButton#dangerIconButton {{
+    background-color: {rgba(DANGER, 0.14)};
+    color: {DANGER};
+    border: 1px solid {rgba(DANGER, 0.4)};
+    border-radius: 6px;
+    font-weight: 700;
+}}
+QPushButton#dangerIconButton:hover {{
+    background-color: {rgba(DANGER, 0.26)};
 }}
 QPushButton#dangerButton {{
     background-color: transparent;
@@ -267,7 +515,7 @@ QPushButton#dangerButton {{
     font-weight: 600;
 }}
 QPushButton#dangerButton:hover {{
-    background-color: #FDECEC;
+    background-color: {rgba(DANGER, 0.14)};
 }}
 
 /* --- جدول‌ها ------------------------------------------------------------ */
@@ -390,7 +638,7 @@ QPushButton#sidebarGroupHeader {{
     font-size: 14px;
 }}
 QPushButton#sidebarGroupHeader:hover {{
-    color: {ACCENT_PRESSED};
+    color: {PRIMARY};
 }}
 QPushButton#sidebarGroupHeader[active="true"] {{
     color: {ACCENT};
@@ -400,7 +648,7 @@ QPushButton#sidebarGearButton {{
     font-size: 14px;
 }}
 QPushButton#sidebarGearButton:hover {{
-    color: {ACCENT};
+    color: {PRIMARY};
 }}
 QLabel#sidebarSubGroupTitle {{
     color: {TEXT_SECONDARY};
@@ -413,7 +661,7 @@ QPushButton#sidebarLeafItem {{
     font-weight: 500;
 }}
 QPushButton#sidebarLeafItem:hover {{
-    color: {ACCENT_PRESSED};
+    color: {PRIMARY};
 }}
 QPushButton#sidebarLeafItem[active="true"] {{
     color: {ACCENT};
@@ -466,9 +714,9 @@ QCheckBox::indicator:checked {{
 }}
 
 QToolTip {{
-    background-color: {PRIMARY};
-    color: white;
-    border: none;
+    background-color: {TOOLTIP_BG};
+    color: #EEF0FA;
+    border: 1px solid {BORDER};
     padding: 6px 10px;
     border-radius: 8px;
 }}
@@ -511,3 +759,6 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0px;
 }}
 """
+
+
+_apply_tokens(_DARK_TOKENS)

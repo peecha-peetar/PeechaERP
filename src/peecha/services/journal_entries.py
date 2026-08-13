@@ -36,7 +36,7 @@ from peecha.db.models.accounting import (
     JournalEntryStatus,
     JournalEntryType,
 )
-from peecha.db.models.core import Company, CompanyCurrency
+from peecha.db.models.core import Company, CompanyCurrency, Currency
 from peecha.db.models.security import User
 from peecha.services import audit as audit_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -255,7 +255,7 @@ def _resolve_lines(
         required = required_by_account.get(ln.account_id, set())
         missing = required - set(ln.details.keys())
         if missing:
-            raise ValueError(f"برای حساب «{account.full_code}» انتخابِ ابعادِ تفصیلیِ الزامی فراموش شده است.")
+            raise ValueError(f"برای حساب «{account.full_code}» انتخابِ گروه‌هایِ تفصیلیِ الزامی فراموش شده است.")
 
         required_person_groups = required_person_groups_by_account.get(ln.account_id)
         person_detail_account_id = ln.details.get(person_dimension_type_id)
@@ -301,9 +301,17 @@ def _resolve_lines(
         total_debit = sum((_base_amount(r.line.debit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
         total_credit = sum((_base_amount(r.line.credit, r.exchange_rate) for r in resolved), decimal.Decimal(0))
         if total_debit != total_credit:
+            # طبقِ گزارشِ صریح: تعدادِ رقمِ اعشار باید از رویِ خودِ ارزِ پایه
+            # خوانده شود، نه رقمِ اعشارِ خامِ Decimal (که باعثِ نمایشِ
+            # اعشارِ اضافه/نامنظم می‌شد).
+            base_decimal_places = (
+                session.scalar(select(Currency.decimal_places).where(Currency.currency_id == company.base_currency_id))
+                or 0
+            )
             raise ValueError(
-                f"سند تراز نیست: جمع بدهکار (معادلِ ارزِ پایه) {numerals.format_amount(total_debit)} "
-                f"با جمع بستانکار {numerals.format_amount(total_credit)} برابر نیست."
+                f"سند تراز نیست: جمع بدهکار (معادلِ ارزِ پایه) "
+                f"{numerals.format_money(total_debit, base_decimal_places)} "
+                f"با جمع بستانکار {numerals.format_money(total_credit, base_decimal_places)} برابر نیست."
             )
 
     return resolved
@@ -984,6 +992,104 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
 
         session.commit()
         return JournalEntryResult(journal_entry_id=reversal.journal_entry_id, temporary_no=next_temp_no)
+
+
+def merge_journal_entries(
+    company_id: int,
+    journal_entry_ids: list[int],
+    created_by_user_id: int,
+    *,
+    description: str | None = None,
+) -> JournalEntryResult:
+    """طبقِ درخواستِ صریح («امکانِ ادغامِ اسناد در یک سندِ واحدِ جدید»):
+    چند سندِ *موقت* را در یک سندِ تازه ادغام می‌کند — ردیف‌هایِ هم‌حساب/
+    هم‌ارز/هم‌تفصیلی با هم جمع می‌شوند (سندِ نهایی کوتاه‌تر می‌شود)،
+    اسنادِ اصلی به‌جایِ حذف، طبقِ همان قراردادِ مستندشده در schema
+    (acc.journal_entry_statuses.CANCELLED: «ابطال‌شده/ادغام‌شده در سندِ
+    موقتِ دیگر») به وضعیتِ ابطال‌شده تغییر می‌کنند — برایِ حفظِ ردِ
+    حسابرسی. فقط اسنادِ TEMPORARY قابلِ ادغام‌اند (طبقِ همان قراردادِ
+    schema: «موقت: قابلِ ویرایش/ادغام»)."""
+    if len(journal_entry_ids) < 2:
+        raise ValueError("برایِ ادغام، حداقل باید دو سند انتخاب شوند.")
+
+    with new_session() as session:
+        originals = [session.get(JournalEntry, jid) for jid in journal_entry_ids]
+        if any(o is None or o.company_id != company_id for o in originals):
+            raise ValueError("یکی از اسنادِ انتخاب‌شده نامعتبر است.")
+        temporary_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "TEMPORARY"))
+        cancelled_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "CANCELLED"))
+        if temporary_status is None or cancelled_status is None:
+            raise ValueError("داده‌ی پایه‌ی وضعیتِ سند در دیتابیس یافت نشد.")
+        if any(o.status_id != temporary_status.status_id for o in originals):
+            raise ValueError("فقط اسنادِ موقت قابلِ ادغام‌اند.")
+        entry_type_ids = {o.entry_type_id for o in originals}
+        if len(entry_type_ids) > 1:
+            raise ValueError("اسنادِ انتخاب‌شده باید همه از یک نوعِ سند باشند.")
+        entry_type = session.get(JournalEntryType, originals[0].entry_type_id)
+
+        temporary_numbers = sorted(o.temporary_no for o in originals)
+        document_date = max(o.document_date for o in originals)
+
+    # جمع‌بندیِ ردیف‌ها — کلیدِ گروه‌بندی: حساب + ارز/نرخ + مجموعه‌یِ
+    # دقیقِ تفصیلی‌های ردیف (چون دو ردیف با تفصیلیِ متفاوت را نمی‌توان
+    # بدونِ ازدست‌دادنِ اطلاعات در یک ردیف ادغام کرد).
+    merged: dict[tuple, LineInput] = {}
+    for jid in journal_entry_ids:
+        for line in get_journal_entry_lines(jid):
+            details_key = tuple(sorted(line.details.items()))
+            key = (line.account_id, line.currency_id, line.exchange_rate, details_key, line.tax_code)
+            existing = merged.get(key)
+            if existing is None:
+                merged[key] = LineInput(
+                    account_id=line.account_id,
+                    description=line.description,
+                    debit=line.debit,
+                    credit=line.credit,
+                    details=dict(line.details),
+                    currency_id=line.currency_id,
+                    exchange_rate=line.exchange_rate,
+                    tax_code=line.tax_code,
+                )
+            else:
+                existing.debit += line.debit
+                existing.credit += line.credit
+
+    # طبقِ قاعده‌یِ سندِ حسابداری، هر ردیف فقط یا بدهکار یا بستانکار
+    # می‌تواند باشد — اگر جمعِ خامِ بالا هردو را غیرِصفر کرده باشد (مثلاً
+    # همان حساب در یک سند بدهکار و در سندِ دیگر بستانکار بوده)، این‌جا
+    # به مانده‌یِ خالص تبدیل می‌شود.
+    for ln in merged.values():
+        net = ln.debit - ln.credit
+        ln.debit = net if net > 0 else decimal.Decimal(0)
+        ln.credit = -net if net < 0 else decimal.Decimal(0)
+
+    merged_description = description or f"سندِ ادغامیِ اسنادِ موقتِ شماره‌یِ {'، '.join(str(n) for n in temporary_numbers)}"
+    result = create_journal_entry(
+        company_id,
+        created_by_user_id,
+        document_date,
+        merged_description,
+        list(merged.values()),
+        entry_type_code=entry_type.code,
+    )
+
+    with new_session() as session:
+        cancelled_status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == "CANCELLED"))
+        for jid in journal_entry_ids:
+            original = session.get(JournalEntry, jid)
+            original.status_id = cancelled_status.status_id
+            audit_service.log_activity(
+                session,
+                company_id=company_id,
+                user_id=created_by_user_id,
+                entity_type="JournalEntry",
+                entity_id=jid,
+                action="MERGE",
+                changes={"after": {"status": "CANCELLED", "merged_into_entry_id": result.journal_entry_id}},
+            )
+        session.commit()
+
+    return result
 
 
 # --- ثبت‌نامِ handlerِ کارتابل (services/cartable.py) ------------------------

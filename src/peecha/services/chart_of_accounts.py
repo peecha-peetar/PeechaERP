@@ -17,6 +17,7 @@ from peecha.db.models.accounting import (
     AccountCategory,
     AccountNature,
     AccountType,
+    BalanceSheetSide,
     CashFlowSection,
     ChartOfAccount,
     ChartOfAccountLevelConfig,
@@ -41,6 +42,7 @@ class AccountRow:
     account_type_code: str
     cash_flow_section_code: str | None = None
     liquidity_class_code: str | None = None
+    balance_sheet_side_code: str | None = None
 
 
 def list_accounts(company_id: int) -> list[AccountRow]:
@@ -71,6 +73,9 @@ def list_accounts(company_id: int) -> list[AccountRow]:
         liquidity_class_codes = dict(
             session.execute(select(LiquidityClass.liquidity_class_id, LiquidityClass.code)).all()
         )
+        balance_sheet_side_codes = dict(
+            session.execute(select(BalanceSheetSide.balance_sheet_side_id, BalanceSheetSide.code)).all()
+        )
 
         return [
             AccountRow(
@@ -84,6 +89,7 @@ def list_accounts(company_id: int) -> list[AccountRow]:
                 account_type_code=account_type_codes[a.account_type_id],
                 cash_flow_section_code=cash_flow_section_codes.get(a.cash_flow_section_id),
                 liquidity_class_code=liquidity_class_codes.get(a.liquidity_class_id),
+                balance_sheet_side_code=balance_sheet_side_codes.get(a.balance_sheet_side_id),
             )
             for a in accounts
         ]
@@ -127,6 +133,7 @@ def create_account(
     changed_by_user_id: int | None = None,
     cash_flow_section_code: str | None = None,
     liquidity_class_code: str | None = None,
+    balance_sheet_side_code: str | None = None,
 ) -> ChartOfAccount:
     with new_session() as session:
         # طبقِ درخواستِ صریح: ماهیت/دسته/نوعِ حساب فقط در سطحِ گروه (بدونِ
@@ -160,6 +167,14 @@ def create_account(
                 if liquidity_class is None:
                     raise ValueError("مقدارِ طبقه‌یِ نقدینگی نامعتبر است.")
                 liquidity_class_id = liquidity_class.liquidity_class_id
+            balance_sheet_side_id = None
+            if balance_sheet_side_code:
+                balance_sheet_side = session.scalar(
+                    select(BalanceSheetSide).where(BalanceSheetSide.code == balance_sheet_side_code)
+                )
+                if balance_sheet_side is None:
+                    raise ValueError("مقدارِ سمتِ ترازنامه نامعتبر است.")
+                balance_sheet_side_id = balance_sheet_side.balance_sheet_side_id
         else:
             parent = session.get(ChartOfAccount, parent_account_id)
             if parent is None or parent.company_id != company_id:
@@ -171,6 +186,7 @@ def create_account(
             nature_id, category_id, account_type_id = parent.nature_id, parent.category_id, parent.account_type_id
             cash_flow_section_id = parent.cash_flow_section_id
             liquidity_class_id = parent.liquidity_class_id
+            balance_sheet_side_id = parent.balance_sheet_side_id
 
         # طبقِ درخواستِ صریح: فقط حساب‌هایِ سطحِ آخر (معین) قابلِ ثبتِ سندند —
         # چون افزودنِ زیرشاخه به سطحِ آخر از قبل مسدود است، این تضمین می‌کند
@@ -191,6 +207,7 @@ def create_account(
             account_type_id=account_type_id,
             cash_flow_section_id=cash_flow_section_id,
             liquidity_class_id=liquidity_class_id,
+            balance_sheet_side_id=balance_sheet_side_id,
             is_postable=is_postable,
         )
         session.add(account)
@@ -264,6 +281,7 @@ def update_account(
     changed_by_user_id: int | None = None,
     cash_flow_section_code: str | None = None,
     liquidity_class_code: str | None = None,
+    balance_sheet_side_code: str | None = None,
 ) -> ChartOfAccount:
     """ویرایشِ حساب — عمداً فقط نام/ماهیت/دسته/نوع/قابل‌ثبت‌بودن قابل‌تغییرند؛
     کد و والد (که full_code و سطحِ کل زیردرخت را تعیین می‌کنند) در این
@@ -305,6 +323,7 @@ def update_account(
             nature_id, category_id, account_type_id = parent.nature_id, parent.category_id, parent.account_type_id
             cash_flow_section_id = parent.cash_flow_section_id
             liquidity_class_id = parent.liquidity_class_id
+            balance_sheet_side_id = parent.balance_sheet_side_id
         else:
             nature = session.scalar(select(AccountNature).where(AccountNature.code == nature_code))
             category = session.scalar(select(AccountCategory).where(AccountCategory.code == category_code))
@@ -328,6 +347,14 @@ def update_account(
                 if liquidity_class is None:
                     raise ValueError("مقدارِ طبقه‌یِ نقدینگی نامعتبر است.")
                 liquidity_class_id = liquidity_class.liquidity_class_id
+            balance_sheet_side_id = None
+            if balance_sheet_side_code:
+                balance_sheet_side = session.scalar(
+                    select(BalanceSheetSide).where(BalanceSheetSide.code == balance_sheet_side_code)
+                )
+                if balance_sheet_side is None:
+                    raise ValueError("مقدارِ سمتِ ترازنامه نامعتبر است.")
+                balance_sheet_side_id = balance_sheet_side.balance_sheet_side_id
 
             # طبقِ درخواستِ صریح: ویرایشِ ماهیت/دسته/نوع/بخشِ‌وجوهِ‌نقد/طبقه‌یِ‌نقدینگیِ
             # گروه، در هر حالتی مجاز است و رویِ کلِ زیردرخت (کل/معین‌هایِ
@@ -343,6 +370,7 @@ def update_account(
         account.account_type_id = account_type_id
         account.cash_flow_section_id = cash_flow_section_id
         account.liquidity_class_id = liquidity_class_id
+        account.balance_sheet_side_id = balance_sheet_side_id
         account.is_postable = is_postable
         for descendant in descendants:
             descendant.nature_id = nature_id
@@ -350,6 +378,7 @@ def update_account(
             descendant.account_type_id = account_type_id
             descendant.cash_flow_section_id = cash_flow_section_id
             descendant.liquidity_class_id = liquidity_class_id
+            descendant.balance_sheet_side_id = balance_sheet_side_id
 
         translation = session.scalar(
             select(Translation).where(

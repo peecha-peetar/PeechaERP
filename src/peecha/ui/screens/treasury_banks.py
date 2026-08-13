@@ -28,6 +28,7 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.company_id: int | None = None
+        self._editing_bank_id: int | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -48,12 +49,22 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         add_row.addWidget(self.code_field)
         self.name_field = QLineEdit()
         self.name_field.setPlaceholderText("نامِ بانک (مثلاً بانکِ ملی)")
-        self.name_field.returnPressed.connect(self._add)
+        self.name_field.returnPressed.connect(self._save)
         add_row.addWidget(self.name_field, stretch=1)
-        add_button = QPushButton("+ افزودن")
-        add_button.setObjectName("primaryButton")
-        add_button.clicked.connect(self._add)
-        add_row.addWidget(add_button)
+        self.save_button = QPushButton("+ افزودن")
+        self.save_button.setObjectName("primaryButton")
+        self.save_button.clicked.connect(self._save)
+        add_row.addWidget(self.save_button)
+        self.cancel_button = QPushButton("انصراف")
+        self.cancel_button.setObjectName("flatButton")
+        self.cancel_button.clicked.connect(self._reset_form)
+        self.cancel_button.setVisible(False)
+        add_row.addWidget(self.cancel_button)
+        self.delete_button = QPushButton("حذف")
+        self.delete_button.setObjectName("dangerButton")
+        self.delete_button.clicked.connect(self._delete)
+        self.delete_button.setVisible(False)
+        add_row.addWidget(self.delete_button)
         layout.addLayout(add_row)
 
         self.table = QTableWidget(0, 2)
@@ -62,12 +73,12 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.cellDoubleClicked.connect(self._delete)
+        self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table, stretch=1)
 
         self.set_field_help([
             (self.name_field, "نامِ بانک — بعداً در فرمِ ثبتِ چکِ دریافتی از این فهرست انتخاب می‌شود."),
-            (self.table, "برایِ حذفِ یک بانک، رویِ ردیفش دابل‌کلیک کنید."),
+            (self.table, "برایِ ویرایشِ یک بانک، رویِ ردیفش کلیک کنید."),
         ])
 
     def _company_id(self) -> int | None:
@@ -75,9 +86,7 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
 
     def refresh(self) -> None:
         self.company_id = self._company_id()
-        self.status_label.setText("")
-        self.code_field.clear()
-        self.name_field.clear()
+        self._reset_form()
         if self.company_id is None:
             self.table.setRowCount(0)
             return
@@ -89,26 +98,50 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
             self.table.setItem(row_index, 0, code_item)
             self.table.setItem(row_index, 1, QTableWidgetItem(r.name))
 
-    def _add(self) -> None:
+    def _reset_form(self) -> None:
+        self._editing_bank_id = None
+        self.status_label.setText("")
+        self.code_field.clear()
+        self.name_field.clear()
+        self.save_button.setText("+ افزودن")
+        self.cancel_button.setVisible(False)
+        self.delete_button.setVisible(False)
+        self.table.clearSelection()
+
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        code_item = self.table.item(row, 0)
+        if code_item is None:
+            return
+        self._editing_bank_id = code_item.data(Qt.UserRole)
+        self.status_label.setText("")
+        self.code_field.setText(code_item.text())
+        self.name_field.setText(self.table.item(row, 1).text())
+        self.save_button.setText("ذخیره‌یِ ویرایش")
+        self.cancel_button.setVisible(True)
+        self.delete_button.setVisible(True)
+
+    def _save(self) -> None:
         if self.company_id is None:
             self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
             return
         try:
-            treasury_service.create_bank(self.company_id, self.name_field.text(), self.code_field.text())
+            if self._editing_bank_id is not None:
+                treasury_service.update_bank(self._editing_bank_id, self.company_id, self.name_field.text(), self.code_field.text())
+            else:
+                treasury_service.create_bank(self.company_id, self.name_field.text(), self.code_field.text())
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
         self.refresh()
 
-    def _delete(self, row: int, _column: int) -> None:
-        if self.company_id is None:
+    def _delete(self) -> None:
+        if self.company_id is None or self._editing_bank_id is None:
             return
-        bank_id = self.table.item(row, 0).data(Qt.UserRole)
         confirm = QMessageBox.question(self, "حذفِ بانک", "این بانک حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
-            treasury_service.delete_bank(bank_id, self.company_id)
+            treasury_service.delete_bank(self._editing_bank_id, self.company_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return

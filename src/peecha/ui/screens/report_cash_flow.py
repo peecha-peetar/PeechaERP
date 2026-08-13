@@ -76,13 +76,15 @@ class CashFlowScreen(ReportScreenBase):
         return self._load_direct(company_id, date_from, date_to)
 
     def _load_direct(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
+        document_no_from, document_no_to = self.document_no_range()
         opening_balance, lines = reports_service.compute_cash_flow_direct(
             company_id,
             date_from,
             date_to,
             status_filter=self.status_filter(),
             cost_center_id=self.cost_center_id(),
-            document_no_filter=self.document_no(),
+            document_no_from=document_no_from,
+            document_no_to=document_no_to,
         )
 
         headers = ["تاریخ", "شماره‌یِ سند", "شرح", "طرفِ حساب", "دریافت", "پرداخت"]
@@ -112,23 +114,34 @@ class CashFlowScreen(ReportScreenBase):
             company_id, date_from, date_to, status_filter=self.status_filter()
         )
 
+        # طبقِ آیتمِ ۵: پنج طبقه‌یِ استانداردِ حسابداریِ ایران، به همین ترتیب.
         headers = ["کد", "شرح", "مبلغ"]
         rows: list[list] = [["", "سودِ (زیانِ) خالص", self._fmt(result.net_income)]]
 
-        rows.append(["", "فعالیت‌هایِ عملیاتی", ""])
+        rows.append(["", "۱. فعالیت‌هایِ عملیاتی", ""])
         for r in result.operating_rows:
             rows.append([r.full_code, r.name, self._fmt(r.amount)])
-        rows.append(["", "خالصِ ورودی/خروجیِ نقدِ عملیاتی", self._fmt(result.net_operating)])
+        rows.append(["", "جریانِ خالصِ نقدِ ناشی از فعالیت‌هایِ عملیاتی", self._fmt(result.net_operating)])
 
-        rows.append(["", "فعالیت‌هایِ سرمایه‌گذاری", ""])
+        rows.append(["", "۲. بازده‌یِ سرمایه‌گذاری‌ها و سودِ پرداختیِ بابتِ تامینِ مالی", ""])
+        for r in result.investment_returns_rows:
+            rows.append([r.full_code, r.name, self._fmt(r.amount)])
+        rows.append(["", "جریانِ خالصِ نقدِ ناشی از بازده‌یِ سرمایه‌گذاری‌ها و سودِ پرداختیِ تامینِ مالی", self._fmt(result.net_investment_returns)])
+
+        rows.append(["", "۳. مالیات بر درآمد", ""])
+        for r in result.income_tax_rows:
+            rows.append([r.full_code, r.name, self._fmt(r.amount)])
+        rows.append(["", "جریانِ خالصِ نقدِ ناشی از مالیات بر درآمد", self._fmt(result.net_income_tax)])
+
+        rows.append(["", "۴. فعالیت‌هایِ سرمایه‌گذاری", ""])
         for r in result.investing_rows:
             rows.append([r.full_code, r.name, self._fmt(r.amount)])
-        rows.append(["", "خالصِ ورودی/خروجیِ نقدِ سرمایه‌گذاری", self._fmt(result.net_investing)])
+        rows.append(["", "جریانِ خالصِ نقدِ ناشی از فعالیت‌هایِ سرمایه‌گذاری", self._fmt(result.net_investing)])
 
-        rows.append(["", "فعالیت‌هایِ تامینِ مالی", ""])
+        rows.append(["", "۵. فعالیت‌هایِ تامینِ مالی", ""])
         for r in result.financing_rows:
             rows.append([r.full_code, r.name, self._fmt(r.amount)])
-        rows.append(["", "خالصِ ورودی/خروجیِ نقدِ تامینِ مالی", self._fmt(result.net_financing)])
+        rows.append(["", "جریانِ خالصِ نقدِ ناشی از فعالیت‌هایِ تامینِ مالی", self._fmt(result.net_financing)])
 
-        footer = ["", "خالصِ تغییرِ وجهِ نقد", self._fmt(result.net_change_in_cash)]
+        footer = ["", "خالصِ افزایش (کاهش) در وجهِ نقد", self._fmt(result.net_change_in_cash)]
         return headers, rows, footer

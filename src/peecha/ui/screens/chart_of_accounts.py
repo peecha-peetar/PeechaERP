@@ -6,11 +6,15 @@
 
 from __future__ import annotations
 
+import datetime
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -28,11 +32,34 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
-from peecha.ui import theme
+from peecha import numerals, session
+from peecha.ui import report_export, theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
 from peecha.ui.widgets import FieldHelpMixin
+
+# طبقِ درخواستِ صریح («در فرمِ تعریفِ حساب‌ها هم بتوان از اکسل ایمپورت
+# کرد») — «کدِ کامل» (full_code، مثلِ 1-01-001) به‌جایِ کدِ بخش گرفته
+# می‌شود چون سلسله‌مراتب را یک‌جا مشخص می‌کند؛ ماهیت/دسته/نوع فقط برایِ
+# ردیف‌هایِ سطحِ گروه (بدونِ خط‌تیره در کد) لازم‌اند — بقیه از والدشان
+# به‌ارث می‌برند (دقیقاً هم‌رفتار با فرمِ دستی).
+_COA_IMPORT_TARGET_FIELDS: list[tuple[str, str, bool]] = [
+    ("full_code", "کدِ کاملِ حساب (مثلِ 1-01-001)", True),
+    ("name", "نام", True),
+    ("nature_code", "ماهیت (فقط سطحِ گروه: بدهکار/بستانکار/دوطرفه)", False),
+    ("category_code", "دسته (فقط سطحِ گروه)", False),
+    ("account_type_code", "نوعِ حساب (فقط سطحِ گروه)", False),
+    ("is_postable", "قابلِ ثبتِ سند؟ (بله/خیر)", False),
+]
+_COA_IMPORT_GUESS_KEYWORDS: dict[str, list[str]] = {
+    "full_code": ["کد کامل", "کدحساب", "کد حساب", "کد"],
+    "name": ["نام"],
+    "nature_code": ["ماهیت"],
+    "category_code": ["دسته"],
+    "account_type_code": ["نوع حساب", "نوعِ حساب"],
+    "is_postable": ["قابل ثبت", "قابلِ ثبت"],
+}
 
 _NATURE_OPTIONS = [("DEBIT", "بدهکار"), ("CREDIT", "بستانکار"), ("BOTH", "دوطرفه")]
 _CATEGORY_OPTIONS = [
@@ -115,9 +142,32 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
 
+        header_row = QHBoxLayout()
         title = QLabel("کدینگِ حساب‌ها")
         title.setObjectName("pageTitle")
-        layout.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch(1)
+        # طبقِ درخواستِ صریح («خروجیِ اکسل و چاپی از کدینگ، برایِ برگرداندن
+        # روی دیتابیسِ جدید»): ستون‌هایِ خروجیِ اکسل دقیقاً هم‌شکلِ همان
+        # فیلدهایِ ایمپورت (_COA_IMPORT_TARGET_FIELDS) هستند تا فایلِ
+        # خروجی بدونِ ویرایشِ دستی، دوباره از همین صفحه قابلِ‌ایمپورت باشد.
+        print_button = QPushButton("🖨 چاپ")
+        print_button.setObjectName("flatButton")
+        print_button.clicked.connect(self._on_print)
+        header_row.addWidget(print_button)
+        pdf_button = QPushButton("📄 PDF")
+        pdf_button.setObjectName("flatButton")
+        pdf_button.clicked.connect(self._on_export_pdf)
+        header_row.addWidget(pdf_button)
+        excel_export_button = QPushButton("📊 خروجیِ اکسل")
+        excel_export_button.setObjectName("flatButton")
+        excel_export_button.clicked.connect(self._on_export_excel)
+        header_row.addWidget(excel_export_button)
+        import_excel_button = QPushButton("📥 ایمپورت از اکسل")
+        import_excel_button.setObjectName("flatButton")
+        import_excel_button.clicked.connect(self._on_import_excel)
+        header_row.addWidget(import_excel_button)
+        layout.addLayout(header_row)
 
         self.search_field = QLineEdit()
         self.search_field.setPlaceholderText("جستجو در کد یا نامِ حساب")
@@ -140,8 +190,15 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         # طبقِ گزارشِ صریح: این فرم (چک‌لیستِ نوع‌هایِ تفصیلی + گروه‌هایِ
         # اشخاصِ مجاز + فیلدهایِ اصلیِ حساب) می‌تواند طولانی شود و هیچ
         # اسکرولی نداشت.
+        #
+        # باگِ واقعیِ گزارش‌شده: دکمه‌هایِ ذخیره/انصراف/حذف قبلاً *داخلِ*
+        # همین محتوایِ اسکرول‌شونده بودند — با چک‌لیستِ بلند (مثلاً حسابی
+        # که همه‌یِ گروه‌هایِ شخص + مرکزِهزینه/پروژه را دارد)، این دکمه‌ها
+        # چندین صفحه پایین‌تر می‌رفتند و در حالتِ تمام‌صفحه، عملاً از دیدِ
+        # کاربر خارج می‌شدند (زیرِ نوارِ وظیفه به‌نظر می‌رسید). حالا این
+        # دکمه‌ها به یک نوارِ ثابتِ زیرِ اسکرول منتقل شده‌اند — همیشه دیده
+        # می‌شوند، صرفِ‌نظر از طولِ چک‌لیست یا اندازه‌یِ پنجره.
         scroll = QScrollArea()
-        scroll.setObjectName("card")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
 
@@ -245,24 +302,6 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
-        buttons_layout = QHBoxLayout()
-        self.save_button = QPushButton("ذخیره")
-        self.save_button.setObjectName("primaryButton")
-        self.save_button.clicked.connect(self._save)
-        buttons_layout.addWidget(self.save_button)
-
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
-        cancel_button.clicked.connect(self._reset_form)
-        buttons_layout.addWidget(cancel_button)
-
-        self.delete_button = QPushButton("حذف")
-        self.delete_button.setObjectName("dangerButton")
-        self.delete_button.clicked.connect(self._delete)
-        self.delete_button.setVisible(False)
-        buttons_layout.addWidget(self.delete_button)
-
-        layout.addLayout(buttons_layout)
         layout.addStretch(1)
 
         self.set_field_help([
@@ -314,7 +353,39 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         ])
 
         scroll.setWidget(panel)
-        return scroll
+
+        wrapper = QWidget()
+        wrapper.setObjectName("card")
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(0)
+        wrapper_layout.addWidget(scroll, stretch=1)
+
+        footer = QWidget()
+        footer.setObjectName("formFooter")
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(18, 12, 18, 14)
+
+        self.save_button = QPushButton("ذخیره")
+        self.save_button.setObjectName("primaryButton")
+        self.save_button.clicked.connect(self._save)
+        footer_layout.addWidget(self.save_button)
+
+        cancel_button = QPushButton("انصراف")
+        cancel_button.setObjectName("flatButton")
+        cancel_button.clicked.connect(self._reset_form)
+        footer_layout.addWidget(cancel_button)
+
+        self.delete_button = QPushButton("حذف")
+        self.delete_button.setObjectName("dangerButton")
+        self.delete_button.clicked.connect(self._delete)
+        self.delete_button.setVisible(False)
+        footer_layout.addWidget(self.delete_button)
+
+        footer_layout.addStretch(1)
+        wrapper_layout.addWidget(footer)
+
+        return wrapper
 
     # --- بارگذاری/فیلتر --------------------------------------------------
     def refresh(self) -> None:
@@ -326,6 +397,187 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
+
+    # --- خروجیِ اکسل/چاپ (طبقِ درخواستِ صریح: بکاپ/انتقالِ کدینگ به
+    # دیتابیسِ جدید) ------------------------------------------------------
+    _EXPORT_HEADERS = [
+        "کدِ کاملِ حساب (مثلِ 1-01-001)", "نام", "ماهیت (فقط سطحِ گروه: بدهکار/بستانکار/دوطرفه)",
+        "دسته (فقط سطحِ گروه)", "نوعِ حساب (فقط سطحِ گروه)", "قابلِ ثبتِ سند؟ (بله/خیر)", "سطح",
+    ]
+
+    def _export_rows(self) -> tuple[list[str], list[list], list]:
+        nature_label = dict(_NATURE_OPTIONS)
+        category_label = dict(_CATEGORY_OPTIONS)
+        account_type_label = dict(_ACCOUNT_TYPE_OPTIONS)
+        table_rows = [
+            [
+                r.full_code, r.name,
+                nature_label.get(r.nature_code, r.nature_code),
+                category_label.get(r.category_code, r.category_code),
+                account_type_label.get(r.account_type_code, r.account_type_code),
+                "بله" if r.is_postable else "خیر",
+                r.account_level,
+            ]
+            for r in self._rows
+        ]
+        return list(self._EXPORT_HEADERS), table_rows, []
+
+    def _export_kwargs(self) -> dict:
+        return {
+            "company_name": session.current_company.display_name if session.current_company else "",
+            "report_date": numerals.format_jalali_date(datetime.date.today()),
+        }
+
+    def _on_print(self) -> None:
+        headers, rows, footer = self._export_rows()
+        report_export.print_report(self, "کدینگِ حساب‌ها", headers, rows, footer, **self._export_kwargs())
+
+    def _on_export_pdf(self) -> None:
+        headers, rows, footer = self._export_rows()
+        report_export.export_report_pdf(self, "کدینگِ حساب‌ها", headers, rows, footer, **self._export_kwargs())
+
+    def _on_export_excel(self) -> None:
+        _headers, rows, _footer = self._export_rows()
+        report_export.export_plain_excel(self, "کدینگِ حساب‌ها", self._EXPORT_HEADERS, rows)
+
+    def _on_import_excel(self) -> None:
+        """طبقِ درخواستِ صریح: ایمپورتِ کدینگِ حساب‌ها از اکسل — هم‌الگو با
+        ایمپورتِ ردیف‌هایِ سند در journal_entry.py (همان دیالوگِ تناظرِ
+        ستون‌ها، از excel_import.py). ردیف‌ها بر اساسِ تعدادِ بخش‌هایِ
+        full_code (گروه قبل از کل، کل قبل از معین) مرتب می‌شوند تا والد
+        همیشه پیش از فرزند ساخته شده باشد."""
+        company_id = self._company_id()
+        if company_id is None:
+            self.status_label.setText("ابتدا یک شرکت را انتخاب کنید.")
+            return
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ فایلِ اکسل", "", "Excel Files (*.xlsx)")
+        if not path:
+            return
+        rows = read_excel_rows(self, path)
+        if rows is None:
+            return
+
+        dialog = ExcelColumnMappingDialog(
+            _COA_IMPORT_TARGET_FIELDS,
+            _COA_IMPORT_GUESS_KEYWORDS,
+            rows[0],
+            self,
+            title="ایمپورتِ کدینگِ حساب‌ها از اکسل — تناظرِ ستون‌ها",
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
+        mapping = dialog.mapping()
+        data_rows = rows[1:] if dialog.skip_header_row() else rows
+
+        def cell(row: tuple, field: str) -> str:
+            idx = mapping.get(field)
+            if idx is None or idx >= len(row):
+                return ""
+            value = row[idx]
+            return str(value).strip() if value is not None else ""
+
+        nature_by_label = {label: code for code, label in _NATURE_OPTIONS}
+        nature_by_label.update({code: code for code, _label in _NATURE_OPTIONS})
+        category_by_label = {label: code for code, label in _CATEGORY_OPTIONS}
+        category_by_label.update({code: code for code, _label in _CATEGORY_OPTIONS})
+        account_type_by_label = {label: code for code, label in _ACCOUNT_TYPE_OPTIONS}
+        account_type_by_label.update({code: code for code, _label in _ACCOUNT_TYPE_OPTIONS})
+
+        existing_by_full_code = {a.full_code: a for a in coa_service.list_accounts(company_id)}
+        language_id = self._current_language_id()
+        user_id = session.current_user.user_id if session.current_user else None
+
+        parsed_rows = []
+        errors: list[str] = []
+        for offset, row in enumerate(data_rows):
+            excel_row_no = offset + (2 if dialog.skip_header_row() else 1)
+            full_code = cell(row, "full_code")
+            name = cell(row, "name")
+            if not full_code or not name:
+                errors.append(f"ردیفِ {excel_row_no}: کدِ کامل یا نام خالی است.")
+                continue
+            parsed_rows.append((excel_row_no, full_code, name, row))
+
+        # مرتب‌سازیِ بر اساسِ عمق (تعدادِ خط‌تیره) تا والد همیشه پیش از
+        # فرزند پردازش شود — بدونِ این، وارداتِ یک فایلِ تخت (بدونِ ترتیبِ
+        # خاص) می‌تواند به خطایِ کاذبِ «والد پیدا نشد» بینجامد.
+        parsed_rows.sort(key=lambda item: item[1].count("-"))
+
+        created_count = 0
+        skipped_existing = 0
+        for excel_row_no, full_code, name, row in parsed_rows:
+            if full_code in existing_by_full_code:
+                skipped_existing += 1
+                continue
+            segments = full_code.split("-")
+            segment_code = segments[-1].strip()
+            parent_full_code = "-".join(segments[:-1]) if len(segments) > 1 else None
+            parent_account = existing_by_full_code.get(parent_full_code) if parent_full_code else None
+            if parent_full_code is not None and parent_account is None:
+                errors.append(f"ردیفِ {excel_row_no}: والدِ «{parent_full_code}» پیدا نشد (باید پیش از فرزندانش بیاید).")
+                continue
+
+            is_group_level = parent_full_code is None
+            nature_code = "DEBIT"
+            category_code = "ASSET"
+            account_type_code = "PERMANENT"
+            if is_group_level:
+                nature_text = cell(row, "nature_code")
+                category_text = cell(row, "category_code")
+                account_type_text = cell(row, "account_type_code")
+                if not nature_text or nature_text not in nature_by_label:
+                    errors.append(f"ردیفِ {excel_row_no}: ماهیت (بدهکار/بستانکار/دوطرفه) برایِ حسابِ سطحِ گروه لازم است.")
+                    continue
+                if not category_text or category_text not in category_by_label:
+                    errors.append(f"ردیفِ {excel_row_no}: دسته‌یِ حساب برایِ حسابِ سطحِ گروه لازم است.")
+                    continue
+                if not account_type_text or account_type_text not in account_type_by_label:
+                    errors.append(f"ردیفِ {excel_row_no}: نوعِ حساب برایِ حسابِ سطحِ گروه لازم است.")
+                    continue
+                nature_code = nature_by_label[nature_text]
+                category_code = category_by_label[category_text]
+                account_type_code = account_type_by_label[account_type_text]
+
+            is_postable_text = cell(row, "is_postable")
+            if is_postable_text:
+                is_postable = is_postable_text in ("بله", "true", "True", "1", "yes")
+            else:
+                is_postable = len(segments) == coa_service.MAX_ACCOUNT_LEVEL
+
+            try:
+                created = coa_service.create_account(
+                    company_id,
+                    segment_code,
+                    name,
+                    nature_code,
+                    category_code,
+                    account_type_code,
+                    is_postable,
+                    language_id,
+                    parent_account_id=parent_account.account_id if parent_account else None,
+                    changed_by_user_id=user_id,
+                )
+            except ValueError as exc:
+                errors.append(f"ردیفِ {excel_row_no} ({full_code}): {exc}")
+                continue
+            existing_by_full_code[full_code] = created
+            created_count += 1
+
+        if errors:
+            preview = "\n".join(errors[:30])
+            if len(errors) > 30:
+                preview += f"\n… و {len(errors) - 30} موردِ دیگر."
+            QMessageBox.warning(
+                self,
+                "خطاهایِ ایمپورت",
+                f"{len(errors)} ردیف با خطا مواجه شد و وارد نشدند:\n\n{preview}\n\n"
+                f"{created_count} حسابِ دیگر با موفقیت ساخته شد.",
+            )
+        message = f"{created_count} حسابِ تازه ساخته شد."
+        if skipped_existing:
+            message += f" ({skipped_existing} ردیف چون از قبل وجود داشت، رد شد.)"
+        QMessageBox.information(self, "ایمپورت انجام شد", message)
+        self.refresh()
 
     def _reload_parent_options(self) -> None:
         self._parent_options = [r for r in self._rows if r.account_level < coa_service.MAX_ACCOUNT_LEVEL]
@@ -409,11 +661,17 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
         if locked:
             self.is_postable_checkbox.setEnabled(False)
         self.delete_button.setEnabled(not locked)
-        self.save_button.setEnabled(not locked)
+        # طبقِ درخواستِ صریحِ کاربر: حتی برایِ حسابِ قفل‌شده، دکمه‌یِ ذخیره
+        # فعال می‌ماند — چون ذخیره‌کردنِ چک‌لیستِ تفصیلی‌هایِ الزامی (تنها
+        # چیزِ باقی‌مانده‌یِ قابلِ‌تغییر) همچنان با همین دکمه انجام می‌شود.
+        self.save_button.setEnabled(True)
         if locked:
             self.status_label.setObjectName("sectionHint")
             self.status_label.setStyleSheet("")
-            self.status_label.setText("این حساب در سندهای حسابداری استفاده شده؛ قابلِ‌ویرایش نیست.")
+            self.status_label.setText(
+                "این حساب در سندهای حسابداری استفاده شده؛ نام/ماهیت/دسته/نوع قابلِ‌ویرایش نیستند — "
+                "فقط چک‌لیستِ تفصیلی‌هایِ الزامیِ زیر همچنان قابلِ‌تغییر و ذخیره است."
+            )
 
         self._populate_dimension_checklists(account.account_id if is_leaf_level else None)
         self._update_dimension_checklists_visibility()
@@ -613,21 +871,30 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
             self.status_label.setText("نام را وارد کنید.")
             return
 
+        created_account_id: int | None = None
         try:
             if self._editing_account_id is not None:
-                coa_service.update_account(
-                    self._editing_account_id,
-                    company_id,
-                    name,
-                    nature_code,
-                    category_code,
-                    account_type_code,
-                    is_postable,
-                    self._current_language_id(),
-                    changed_by_user_id=session.current_user.user_id if session.current_user else None,
-                    cash_flow_section_code=cash_flow_section_code,
-                    liquidity_class_code=liquidity_class_code,
-                )
+                # طبقِ درخواستِ صریحِ کاربر: حتی حسابی که در سندهایِ
+                # حسابداری استفاده شده (و بقیه‌یِ فیلدهایش قفل است)، باید
+                # بتوان تفصیلی‌هایِ الزامی‌اش را کم/زیاد کرد — این تنها
+                # چیزی‌ست که ذخیره می‌شود؛ update_account (که نام/ماهیت/...
+                # را عوض می‌کند) اصلاً صدا زده نمی‌شود، چون خودش برایِ
+                # چنین حسابی همیشه خطا می‌دهد.
+                locked = coa_service.account_has_posted_lines(self._editing_account_id)
+                if not locked:
+                    coa_service.update_account(
+                        self._editing_account_id,
+                        company_id,
+                        name,
+                        nature_code,
+                        category_code,
+                        account_type_code,
+                        is_postable,
+                        self._current_language_id(),
+                        changed_by_user_id=session.current_user.user_id if session.current_user else None,
+                        cash_flow_section_code=cash_flow_section_code,
+                        liquidity_class_code=liquidity_class_code,
+                    )
                 # طبقِ درخواستِ صریح: دیگر دکمه‌ی ذخیره‌یِ جداگانه‌ای برایِ
                 # نوع‌هایِ تفصیلی نیست — همین‌جا با همان «ذخیره»یِ اصلی
                 # ذخیره می‌شود (اگر چک‌لیست اصلاً نمایان باشد).
@@ -637,7 +904,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
                 if not segment_code:
                     self.status_label.setText("کدِ بخش را وارد کنید.")
                     return
-                coa_service.create_account(
+                created = coa_service.create_account(
                     company_id,
                     segment_code,
                     name,
@@ -651,11 +918,46 @@ class ChartOfAccountsScreen(FieldHelpMixin, QWidget):
                     cash_flow_section_code=cash_flow_section_code,
                     liquidity_class_code=liquidity_class_code,
                 )
+                created_account_id = created.account_id
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
 
+        edited_account_id = self._editing_account_id if created_account_id is None else None
         self.refresh()
+        if edited_account_id is not None:
+            # طبقِ همان اصلاح: بعدِ ذخیره‌یِ موفقِ ویرایشِ یک حسابِ
+            # از-قبل-موجود (شاملِ حالتِ «فقط تفصیلی‌هایِ حسابِ قفل‌شده»)،
+            # فرم باید همچنان رویِ همان حساب بماند — نه به «حسابِ جدید»
+            # خالی برگردد — تا کاربر نتیجه‌یِ ذخیره را همان‌جا ببیند.
+            edited_row = next((r for r in self._rows if r.account_id == edited_account_id), None)
+            if edited_row is not None:
+                self._load_into_form(edited_row)
+                for row_index in range(self.table.rowCount()):
+                    if self.table.item(row_index, 0).data(Qt.UserRole) == edited_account_id:
+                        self.table.blockSignals(True)
+                        self.table.selectRow(row_index)
+                        self.table.blockSignals(False)
+                        break
+                theme.set_status_label(self.status_label, "ذخیره شد.", ok=True)
+        if created_account_id is not None:
+            # طبقِ اصلاحِ ریشه‌ای: چک‌لیستِ گروه‌هایِ شخصی/بُعدهایِ الزامی فقط
+            # برایِ حسابِ در-حالِ-ویرایش نمایان می‌شود (_update_dimension_checklists_visibility)
+            # — بدونِ این، بلافاصله بعدِ ساختنِ یک معینِ تازه، امکانِ
+            # محدودکردنش به یک گروهِ شخص (مثلاً «فقط مشتری») در همان‌جا
+            # اصلاً وجود نداشت؛ کاربر باید بعداً دوباره پیدایش می‌کرد و
+            # ویرایش می‌زد که به‌سادگی فراموش می‌شد و محدودیت هرگز ذخیره
+            # نمی‌شد. حالا حسابِ تازه‌ساخته‌شده خودکار در همان فرم برایِ
+            # ویرایش انتخاب می‌شود.
+            new_row = next((r for r in self._rows if r.account_id == created_account_id), None)
+            if new_row is not None:
+                self._load_into_form(new_row)
+                for row_index in range(self.table.rowCount()):
+                    if self.table.item(row_index, 0).data(Qt.UserRole) == created_account_id:
+                        self.table.blockSignals(True)
+                        self.table.selectRow(row_index)
+                        self.table.blockSignals(False)
+                        break
 
     def _delete(self) -> None:
         if self._editing_account_id is None:

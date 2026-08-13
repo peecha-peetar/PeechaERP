@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -46,18 +47,6 @@ from peecha import numerals
 from peecha.ui import theme
 
 _FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
-
-
-def _tint(color: str, amount: float) -> str:
-    """رنگِ داده‌شده را با سفید مخلوط می‌کند (amount=۰..۱ سهمِ خودِ رنگ) —
-    ته‌رنگِ روشنِ قابلِ‌اتکا برایِ پس‌زمینه‌یِ نشان‌ها؛ به‌جایِ تکنیکِ ناموفقِ
-    پسوندِ آلفا رویِ کدِ هگز (Qt در QSS این را #AARRGGBB می‌خواند، نه
-    #RRGGBBAA مثلِ CSS، پس نتیجه‌اش رنگِ کاملاً غلط بود)."""
-    base = QColor(color)
-    r = round(base.red() * amount + 255 * (1 - amount))
-    g = round(base.green() * amount + 255 * (1 - amount))
-    b = round(base.blue() * amount + 255 * (1 - amount))
-    return QColor(r, g, b).name()
 
 
 def field_help_is_enabled() -> bool:
@@ -74,6 +63,56 @@ def set_field_help_enabled(value: bool) -> None:
     settings.setValue(_FIELD_HELP_SETTINGS_KEY, value)
     if FieldHelpPanel._instance is not None:
         FieldHelpPanel._instance.set_enabled(value)
+
+
+class FormScreenBase(QWidget):
+    """اسکلتِ استانداردِ فرم‌هایِ ورودِ اطلاعات — بدنه‌یِ اسکرول‌شونده +
+    نوارِ دکمه‌یِ ثابتِ زیرِ آن (formFooter)، هردو داخلِ یک کارت. طبقِ
+    گزارشِ تکراریِ کاربر («فرم‌هایِ جدید اسکرول ندارن»، «دکمه‌هایِ ذخیره
+    زیرِ تسک‌بار می‌مونن»): پیش از این کلاس هر فرم این الگو را جداگانه و
+    ناقص پیاده می‌کرد (`journal_entry.py` فقط جدول را اسکرول می‌کرد نه
+    فوتر را؛ `treasury_voucher.py` اصلاً اسکرول نداشت)، و تنها نمونه‌یِ
+    درستِ الگو (`treasury_checks.py`) دستی و بدونِ کلاسِ پایه تکرار شده
+    بود. حالا هر فرمِ جدید فقط باید این کلاس را زیرکلاسی کند: بدنه در
+    self.body_layout، دکمه‌ها در self.footer_layout.
+
+    اگر این صفحه خودش داخلِ یک QScrollAreaِ دیگر (مثلِ
+    system_settings.py::_sub_tabs) قرار می‌گیرد، manages_own_scroll=True
+    به آن می‌گوید این ویجت را دوباره نپیچد — وگرنه همین فوترِ «ثابت» هم
+    دوباره قابلِ‌اسکرول‌شدن و گم‌شدن می‌شود."""
+
+    manages_own_scroll = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        wrapper = QWidget()
+        wrapper.setObjectName("card")
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(0)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._body = QWidget()
+        self.body_layout = QVBoxLayout(self._body)
+        self._scroll.setWidget(self._body)
+        wrapper_layout.addWidget(self._scroll, stretch=1)
+
+        self.footer = QWidget()
+        self.footer.setObjectName("formFooter")
+        self.footer_layout = QHBoxLayout(self.footer)
+        self.footer_layout.setContentsMargins(18, 12, 18, 14)
+        wrapper_layout.addWidget(self.footer)
+
+        outer.addWidget(wrapper, stretch=1)
+
+    def set_footer_visible(self, visible: bool) -> None:
+        self.footer.setVisible(visible)
 
 
 class JalaliDateEdit(QLineEdit):
@@ -115,6 +154,33 @@ class JalaliDateEdit(QLineEdit):
     def setDate(self, value: datetime.date) -> None:
         self._date = value
         self._refresh_text()
+
+
+class PersianDigitLineEdit(QLineEdit):
+    """فیلدِ متنیِ ساده با نمایشِ زندهٔ ارقامِ فارسی حینِ تایپ — برایِ
+    فیلدهایِ شناسه‌ای/عددی مثلِ سریال/شماره‌چک/شبا/شماره‌حساب/کدِملی/تلفن
+    که نیازی به پردازشِ عددیِ JalaliDateEdit/ZeroPaddedSpinBox ندارند، فقط
+    نمایشِ رقمِ فارسی (هم‌الگو با _on_text_edited آن دو)."""
+
+    def __init__(self, initial_text: str = "", *, placeholder: str = "") -> None:
+        super().__init__()
+        if placeholder:
+            self.setPlaceholderText(placeholder)
+        self.textEdited.connect(self._on_text_edited)
+        if initial_text:
+            self.setText(initial_text)
+
+    def _on_text_edited(self, text: str) -> None:
+        converted = numerals.to_persian_digits(numerals.to_ascii_digits(text))
+        if converted != text:
+            cursor = self.cursorPosition()
+            self.setText(converted)
+            self.setCursorPosition(cursor)
+
+    def setText(self, text: str) -> None:  # noqa: N802 — نامِ متدِ Qt
+        """طبقِ درخواستِ صریح: ارقامِ فارسی «همه‌جا» — حتی وقتی مقدارِ اولیه
+        برنامه‌ای (مثلاً بارگذاریِ چکِ ذخیره‌شده) با ارقامِ ASCII ست شود."""
+        super().setText(numerals.to_persian_digits(numerals.to_ascii_digits(text)))
 
 
 class ZeroPaddedSpinBox(QSpinBox):
@@ -538,65 +604,88 @@ class HoverButton(QPushButton):
 
 
 class KpiCard(QFrame):
-    """کارتِ آماریِ داشبورد با آیکونِ رنگی و سایه‌ای که با هاور «بلندتر»
-    می‌شود (blur/yOffset بیشتر) — جایگزینِ کارتِ ساده‌ی متنیِ قبلی که هیچ
-    واکنشی به هاور نداشت و حسِ «فرمِ اداریِ قدیمی» می‌داد."""
+    """کارتِ آماریِ داشبورد با آیکونِ رنگی (ته‌رنگِ شیشه‌ایِ واقعی، با آلفا
+    رویِ سطحِ تیره — نه دیگر مخلوطِ دستی با سفید) و سایه‌ای که با هاور
+    «بلندتر» می‌شود (blur/yOffset بیشتر، رنگِ اکسنتِ خودِ کارت را هم کمی
+    به سایه اضافه می‌کند تا هاور حسِ برجسته‌شدنِ رنگی/شیشه‌ای بدهد، نه فقط
+    یک سایه‌یِ خنثیِ تیره‌تر)."""
 
     def __init__(self, title: str, icon: str, color: str = theme.ACCENT) -> None:
         super().__init__()
         self.setObjectName("card")
         self.setAttribute(Qt.WA_Hover, True)
-        self._color = color
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(18, 18, 18, 18)
-        outer.setSpacing(10)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
 
         header = QHBoxLayout()
-        header.setSpacing(10)
+        header.setSpacing(12)
 
-        icon_badge = QLabel(icon)
-        icon_badge.setFixedSize(38, 38)
-        icon_badge.setAlignment(Qt.AlignCenter)
-        icon_badge.setStyleSheet(
-            f"background-color: {_tint(color, 0.16)}; border-radius: 12px; font-size: 17px;"
-        )
-        header.addWidget(icon_badge)
+        self._icon_badge = QLabel(icon)
+        self._icon_badge.setFixedSize(42, 42)
+        self._icon_badge.setAlignment(Qt.AlignCenter)
+        header.addWidget(self._icon_badge)
 
-        title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px; font-weight: 600;")
-        header.addWidget(title_label)
+        self._title_label = QLabel(title)
+        header.addWidget(self._title_label)
         header.addStretch(1)
         outer.addLayout(header)
 
         self.value_label = QLabel("۰")
-        self.value_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-size: 28px; font-weight: 800;")
         outer.addWidget(self.value_label)
 
+        self._shadow_color = QColor(0, 0, 0, 130)
         self._shadow = QGraphicsDropShadowEffect(self)
-        self._shadow.setBlurRadius(24)
+        self._shadow.setBlurRadius(30)
         self._shadow.setXOffset(0)
-        self._shadow.setYOffset(6)
-        self._shadow.setColor(QColor(79, 70, 229, 24))
+        self._shadow.setYOffset(8)
+        self._shadow.setColor(self._shadow_color)
         self.setGraphicsEffect(self._shadow)
 
         self._blur_animation = QPropertyAnimation(self._shadow, b"blurRadius", self)
-        self._blur_animation.setDuration(160)
+        self._blur_animation.setDuration(180)
         self._y_animation = QPropertyAnimation(self._shadow, b"yOffset", self)
-        self._y_animation.setDuration(160)
+        self._y_animation.setDuration(180)
+        self._color_animation = QPropertyAnimation(self._shadow, b"color", self)
+        self._color_animation.setDuration(180)
+
+        self.refresh_theme(color)
+
+    def refresh_theme(self, color: str | None = None) -> None:
+        """طبقِ باگِ واقعیِ کشف‌شده (سوییچِ روشن/تیره): این کارت رنگ‌هایش
+        را در __init__ به‌صورتِ inline stylesheet منجمد می‌کند — یک
+        setStyleSheet سراسریِ دوباره خودکار روشنشان نمی‌کند. صفحه‌یِ
+        داشبورد (singleton، بازسازی‌نشدنی) باید بعدِ هر سوییچِ تم این را
+        صریحاً صدا بزند (در `refresh()` خودش) تا متن/آیکون با تمِ تازه
+        هماهنگ بمانند. اگر `color` داده نشود، فقط رنگ‌هایِ خنثی (عنوان/
+        مقدار) به‌روز می‌شوند و ته‌رنگِ اکسنتِ خودِ کارت دست‌نخورده می‌ماند؛
+        اگر داده شود (مثلاً theme.CHART_TEAL که مقدارش بینِ تمِ روشن/تیره
+        فرق دارد)، ته‌رنگِ آیکون/سایه‌یِ هاور هم با آن هماهنگ می‌شود."""
+        if color is not None:
+            self._color = color
+            self._shadow_color_hover = QColor(color)
+            self._shadow_color_hover.setAlpha(70)
+        self._icon_badge.setStyleSheet(
+            f"background-color: {theme.rgba(self._color, 0.16)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.30)}; "
+            "border-radius: 13px; font-size: 18px;"
+        )
+        self._title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12.5px; font-weight: 600;")
+        self.value_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-size: 30px; font-weight: 800;")
 
     def set_value(self, value: str) -> None:
         self.value_label.setText(value)
 
     def enterEvent(self, event) -> None:  # noqa: N802
-        self._animate_shadow(38, 14)
+        self._animate_shadow(44, 16, self._shadow_color_hover)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802
-        self._animate_shadow(24, 6)
+        self._animate_shadow(30, 8, self._shadow_color)
         super().leaveEvent(event)
 
-    def _animate_shadow(self, blur: float, y_offset: float) -> None:
+    def _animate_shadow(self, blur: float, y_offset: float, color: QColor) -> None:
         self._blur_animation.stop()
         self._blur_animation.setStartValue(self._shadow.blurRadius())
         self._blur_animation.setEndValue(blur)
@@ -606,3 +695,8 @@ class KpiCard(QFrame):
         self._y_animation.setStartValue(self._shadow.yOffset())
         self._y_animation.setEndValue(y_offset)
         self._y_animation.start()
+
+        self._color_animation.stop()
+        self._color_animation.setStartValue(self._shadow.color())
+        self._color_animation.setEndValue(color)
+        self._color_animation.start()

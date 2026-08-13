@@ -4,14 +4,18 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -20,66 +24,206 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import numerals, session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
+from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import FieldHelpMixin
 
 
+class _MultiSelectComboBox(QComboBox):
+    """کمبوباکسی که popupِ آن یک چک‌لیستِ چندانتخابیِ شناور است — طبقِ
+    گزارشِ صریح («کومبوباکس و چک‌لیست که در لیستِ شناور انتخاب بشه»):
+    ظاهرش یک کمبویِ معمولی‌ست (متنِ خلاصه‌یِ گزینه‌هایِ تیک‌خورده را نشان
+    می‌دهد)، اما کلیک رویِ هر گزینه، popup را نمی‌بندد تا بشود چند مورد
+    را پشتِ‌هم تیک زد — با تکنیکِ استانداردِ override کردنِ hidePopup
+    (وگرنه QComboBox با هر کلیکِ رویِ یک آیتم، popup را می‌بندد).
+
+    نکته‌یِ ریشه‌ایِ باگِ گزارش‌شده («کمبو اصلاً باز نمی‌شود»): وقتی
+    QComboBox.setEditable(True) باشد، Qt فقط با کلیکِ رویِ فلشِ کوچکِ
+    لبه (نه هرجایِ کمبو) popup را باز می‌کند — کلیک رویِ خودِ متن دیگر
+    این کار را نمی‌کند (چون آن ناحیه مالِ ویرایشِ متن است، حتی اگر
+    read-only باشد). این‌جا با یک eventFilter رویِ خودِ lineEdit، هر
+    کلیکِ چپ رویِ هرجایِ کمبو را به‌صراحت باز‌کردنِ popup تبدیل می‌کنیم."""
+
+    selectionChanged = Signal()
+
+    def __init__(self, options: list[tuple[int, str]], parent=None) -> None:
+        super().__init__(parent)
+        self.setEditable(True)
+        self.lineEdit().setReadOnly(True)
+        self.lineEdit().setPlaceholderText("— انتخابِ معین(ها) —")
+        self.lineEdit().installEventFilter(self)
+        model = QStandardItemModel(self)
+        for value, label in options:
+            item = QStandardItem(label)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setData(Qt.Unchecked, Qt.CheckStateRole)
+            item.setData(value, Qt.UserRole)
+            model.appendRow(item)
+        self.setModel(model)
+        self.view().pressed.connect(self._toggle_item)
+        # طبقِ گزارشِ صریح («چند تا نمیشه با هم انتخاب کرد»): override
+        # کردنِ hidePopup به‌تنهایی گاهی کافی نیست — کانتینرِ داخلیِ Qt
+        # (QComboBoxPrivateContainer) خودش هم رویِ رهاکردنِ کلیک (mouse
+        # release) رویِ viewport گوش می‌دهد و می‌تواند مستقل popup را ببندد.
+        # این‌جا با eventFilterِ اضافه رویِ خودِ viewport، آن رویداد پیش از
+        # رسیدن به منطقِ داخلیِ Qt بلعیده می‌شود — کلیک هنوز رویِ «press»
+        # (سیگنالِ pressed، در _toggle_item) اثر می‌کند، فقط «release» دیگر
+        # نمی‌تواند popup را ببندد.
+        self.view().viewport().installEventFilter(self)
+        self._skip_hide = False
+        self._refresh_text()
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 — نامِ متدِ Qt
+        if watched is self.lineEdit() and event.type() == QEvent.MouseButtonPress:
+            if self.view().isVisible():
+                self.hidePopup()
+            else:
+                self.showPopup()
+            return True
+        if watched is self.view().viewport() and event.type() == QEvent.MouseButtonRelease:
+            return True
+        return super().eventFilter(watched, event)
+
+    def _toggle_item(self, index) -> None:
+        item = self.model().itemFromIndex(index)
+        item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
+        # طبقِ اصلاحِ بالا: چون رویدادِ mouse-release رویِ viewport
+        # سرکوب می‌شود، دیگر تلاشی برایِ hidePopup از رویِ همین کلیک پیش
+        # نمی‌آید — پس دیگر لازم نیست _skip_hide این‌جا ست شود (وگرنه اگر
+        # ست بماند، بستنِ واقعیِ بعدیِ popup — مثلاً با کلیکِ رویِ خودِ
+        # lineEdit — به‌اشتباه نادیده گرفته می‌شود).
+        self._refresh_text()
+        self.selectionChanged.emit()
+
+    def hidePopup(self) -> None:  # noqa: N802 — نامِ متدِ Qt
+        if self._skip_hide:
+            self._skip_hide = False
+            return
+        super().hidePopup()
+
+    def _refresh_text(self) -> None:
+        labels = self.checked_labels()
+        if not labels:
+            self.lineEdit().setText("")
+        elif len(labels) == 1:
+            self.lineEdit().setText(labels[0])
+        else:
+            self.lineEdit().setText(f"{numerals.to_persian_digits(str(len(labels)))} موردِ انتخاب‌شده")
+
+    def checked_labels(self) -> list[str]:
+        return [
+            self.model().item(i).text()
+            for i in range(self.model().rowCount())
+            if self.model().item(i).checkState() == Qt.Checked
+        ]
+
+    def checked_data(self) -> list:
+        return [
+            self.model().item(i).data(Qt.UserRole)
+            for i in range(self.model().rowCount())
+            if self.model().item(i).checkState() == Qt.Checked
+        ]
+
+    def set_checked_data(self, values) -> None:
+        value_set = set(values)
+        for i in range(self.model().rowCount()):
+            item = self.model().item(i)
+            item.setCheckState(Qt.Checked if item.data(Qt.UserRole) in value_set else Qt.Unchecked)
+        self._refresh_text()
+
+
 class _MappingForm(QWidget):
-    """ردیفِ افزودنِ یک نگاشتِ تازه: نوعِ تفصیلی + معین."""
+    """ردیفِ افزودنِ نگاشتِ تازه: یک گروهِ تفصیلی + چند معین با هم — طبقِ
+    گزارشِ صریح («بتوان چند معین را به آن تخصیص داد و برای هر گروهِ
+    تفصیلی یک بار تعریف بشه»): قبلاً برایِ هر معین باید دوباره همان گروه
+    از کمبو انتخاب و «افزودن» زده می‌شد؛ حالا گروه یک‌بار انتخاب می‌شود و
+    معین‌ها با همان _MultiSelectComboBoxِ چندانتخابیِ موجود (هم‌الگو با
+    _MultiAccountMappingRow) در یک عملیات ثبت می‌شوند."""
 
     def __init__(self, direction: str, screen: "TreasuryCounterpartySettingsScreen") -> None:
         super().__init__()
         self._direction = direction
         self._screen = screen
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 4, 0, 4)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(0, 4, 0, 4)
 
         self.group_combo = QComboBox()
-        layout.addWidget(self.group_combo, stretch=1)
+        self._layout.addWidget(self.group_combo, stretch=1)
 
-        self.account_combo = _make_searchable_combo([])
-        layout.addWidget(self.account_combo, stretch=1)
+        self.account_combo = _MultiSelectComboBox([])
+        self._layout.addWidget(self.account_combo, stretch=1)
 
         add_button = QPushButton("+ افزودن")
         add_button.setObjectName("flatButton")
         add_button.clicked.connect(self._add)
-        layout.addWidget(add_button)
+        self._layout.addWidget(add_button)
 
     def set_options(self, group_options: list[tuple[tuple[str, int], str]], account_options: list[tuple[int, str]]) -> None:
         self.group_combo.clear()
-        self.group_combo.addItem("— انتخابِ نوعِ تفصیلی —", None)
+        self.group_combo.addItem("— انتخابِ گروهِ تفصیلی —", None)
         for data, label in group_options:
             self.group_combo.addItem(label, data)
-        _fill_options(self.account_combo, account_options)
+        # _MultiSelectComboBox گزینه‌هایش را فقط در سازنده می‌گیرد — برایِ
+        # به‌روزرسانیِ گزینه‌ها (هم‌الگو با refreshِ _MultiAccountMappingRow)
+        # کمبویِ قبلی با یکِ تازه جایگزین می‌شود.
+        old_combo = self.account_combo
+        self.account_combo = _MultiSelectComboBox(account_options)
+        self._layout.replaceWidget(old_combo, self.account_combo)
+        old_combo.deleteLater()
 
     def _add(self) -> None:
         company_id = self._screen.company_id
         group_data = self.group_combo.currentData()
-        account_id = self.account_combo.currentData()
-        if company_id is None or group_data is None or account_id is None:
-            self._screen.set_status("نوعِ تفصیلی و معین را انتخاب کنید.")
+        account_ids = self.account_combo.checked_data()
+        if company_id is None or group_data is None or not account_ids:
+            self._screen.set_status("گروهِ تفصیلی و دستِ‌کم یک معین را انتخاب کنید.")
             return
         kind, key = group_data
         try:
-            treasury_service.create_counterparty_mapping(
-                company_id,
-                self._direction,
-                account_id,
-                person_group_id=key if kind == "person" else None,
-                dimension_type_id=key if kind == "dim" else None,
-            )
+            for account_id in account_ids:
+                treasury_service.create_counterparty_mapping(
+                    company_id,
+                    self._direction,
+                    account_id,
+                    person_group_id=key if kind == "person" else None,
+                    dimension_type_id=key if kind == "dim" else None,
+                )
         except ValueError as exc:
             self._screen.set_status(str(exc))
             return
-        self._screen.set_status("")
+        self._screen.set_status("ذخیره شد.", ok=True)
         self.group_combo.setCurrentIndex(0)
-        self.account_combo.setCurrentIndex(0)
+        self.account_combo.set_checked_data([])
         self._screen.refresh_mappings(self._direction)
+
+
+def _describe_account_requirements(account_ids: list[int]) -> str:
+    """طبقِ گزارشِ صریح («این چه ربطی به معین داره»): توضیح می‌دهد فهرستِ
+    تفصیلیِ این ردیف در فرمِ سند از کجا می‌آید — مستقیماً از رویِ گروه‌هایِ
+    شخصیِ الزامی/بُعدهایِ الزامیِ همان معین(ها)، طبقِ تنظیماتِ فعلیِ آن‌ها
+    در «کدینگِ حسابداری». اگر فهرستِ تفصیلی اشتباه/بیش‌ازحد‌گسترده است،
+    محلِ اصلاح همان‌جاست، نه این صفحه."""
+    if not account_ids:
+        return "هنوز هیچ معینی انتخاب نشده."
+    lines = []
+    for account_id in account_ids:
+        groups = dimensions_service.get_required_person_groups_for_account(account_id)
+        dims = dimensions_service.get_required_dimensions_for_account(account_id)
+        labels = [g.name for g in groups] + [
+            dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(d.code, d.code) for d in dims
+        ]
+        lines.append("— " + (" / ".join(labels) if labels else "بدونِ محدودیت (همه‌یِ تفصیلی‌هایِ شرکت)"))
+    return (
+        "تفصیلی‌هایی که در فرمِ سند برایِ این ردیف پیشنهاد می‌شوند، طبقِ همین محدودیت‌هایِ "
+        "معین(ها) (تنظیم‌شده در کدینگِ حسابداری ← ویرایشِ معین) تعیین می‌شوند:\n\n"
+        + "\n".join(lines)
+        + "\n\nبرایِ محدودکردن/اصلاحِ این فهرست، همان معین را در کدینگِ حسابداری ویرایش کنید."
+    )
 
 
 class _MethodMappingRow(QWidget):
@@ -123,12 +267,191 @@ class _MethodMappingRow(QWidget):
                 self.detail_combo.lineEdit().setCursorPosition(0)
         layout.addWidget(self.detail_combo, stretch=1)
 
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("flatButton")
-        save_button.clicked.connect(
-            lambda: on_save(mapping_key, self.account_combo.currentData(), self.detail_combo.currentData())
+        info_button = QPushButton("؟")
+        info_button.setObjectName("flatButton")
+        info_button.setToolTip("این ردیف چرا این تفصیلی‌ها را نشان می‌دهد؟")
+        info_button.setMaximumWidth(28)
+        info_button.clicked.connect(
+            lambda: QMessageBox.information(
+                self, "منشأِ فهرستِ تفصیلی",
+                _describe_account_requirements(
+                    [self.account_combo.currentData()] if self.account_combo.currentData() is not None else []
+                ),
+            )
         )
-        layout.addWidget(save_button)
+        layout.addWidget(info_button)
+
+        # طبقِ گزارشِ صریح («وقتی معین را عوض می‌کنیم ذخیره نمی‌شود»): دکمه‌یِ
+        # ذخیره تا وقتی چیزی در همین ردیف عوض نشده غیرفعال است — تا هم
+        # روشن باشد چه زمانی چیزی برایِ ذخیره‌کردن هست، هم بعدِ ذخیره‌یِ
+        # موفق (با پیامِ تاییدیه) دوباره غیرفعال شود تا کلیکِ تکراری معنی
+        # نداشته باشد.
+        self.save_button = QPushButton("ذخیره")
+        self.save_button.setObjectName("flatButton")
+        self.save_button.setEnabled(False)
+        self.save_button.clicked.connect(lambda: self._on_save_clicked(mapping_key, on_save))
+        layout.addWidget(self.save_button)
+
+        self.account_combo.currentIndexChanged.connect(self._mark_dirty)
+        self.detail_combo.currentIndexChanged.connect(self._mark_dirty)
+
+    def _mark_dirty(self, _index: int) -> None:
+        self.save_button.setEnabled(True)
+
+    def _on_save_clicked(self, mapping_key: str, on_save) -> None:
+        saved = on_save(mapping_key, self.account_combo.currentData(), self.detail_combo.currentData())
+        if saved:
+            QMessageBox.information(self, "ذخیره شد", "تغییراتِ این ردیف ذخیره شد.")
+            self.save_button.setEnabled(False)
+
+
+class _MultiAccountMappingRow(QWidget):
+    """طبقِ آیتمِ ۹: ردیفِ نگاشتِ چندمعینیِ یک روشِ دریافت — چک‌لیستِ
+    چندانتخابیِ معین‌ها (هم‌الگو با فهرستِ چندانتخابیِ CHECK_DISBURSEMENT).
+    تفصیلیِ اختصاصیِ اختیاری فقط وقتی معنی دارد که دقیقاً یک معین تیک
+    خورده باشد — وگرنه موقعِ ثبتِ سند، تفصیلی‌هایِ همه‌ی معین‌هایِ
+    انتخاب‌شده با هم union می‌شود.
+
+    طبقِ گزارشِ صریح («فضایِ کمتر، مرتب مثلِ قبل» و بعد «کومبوباکس و
+    چک‌لیست که در لیستِ شناور انتخاب بشه»): به‌جایِ لیست‌باکسِ همیشه-بازِ
+    ۶۴پیکسلی (که مبهم/سخت بود)، همان‌الگویِ ردیفِ تک‌معینیِ قدیمی
+    (QHBoxLayoutِ فشرده) با یک _MultiSelectComboBox — ظاهرش دقیقاً یک
+    کمبویِ معمولی‌ست، فقط popupِ آن چندانتخابی و شناور است."""
+
+    def __init__(
+        self,
+        mapping_key: str,
+        label: str,
+        current_account_ids: list[int],
+        current_detail_by_account: dict[int, int],
+        account_options,
+        detail_options,
+        on_save,
+    ) -> None:
+        super().__init__()
+        self._mapping_key = mapping_key
+        self._on_save = on_save
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 4)
+
+        name_label = QLabel(label)
+        name_label.setMinimumWidth(200)
+        layout.addWidget(name_label)
+
+        self.account_combo = _MultiSelectComboBox(account_options)
+        self.account_combo.set_checked_data(current_account_ids)
+        layout.addWidget(self.account_combo, stretch=1)
+
+        self.detail_combo = _make_searchable_combo(detail_options)
+        self.detail_combo.setPlaceholderText("تفصیلیِ اختصاصی (اختیاری)")
+        if len(current_account_ids) == 1:
+            preset_detail = current_detail_by_account.get(current_account_ids[0])
+            if preset_detail is not None:
+                index = self.detail_combo.findData(preset_detail)
+                if index >= 0:
+                    self.detail_combo.setCurrentIndex(index)
+                    self.detail_combo.lineEdit().setCursorPosition(0)
+        layout.addWidget(self.detail_combo, stretch=1)
+
+        info_button = QPushButton("؟")
+        info_button.setObjectName("flatButton")
+        info_button.setToolTip("این ردیف چرا این تفصیلی‌ها را نشان می‌دهد؟")
+        info_button.setMaximumWidth(28)
+        info_button.clicked.connect(
+            lambda: QMessageBox.information(
+                self, "منشأِ فهرستِ تفصیلی", _describe_account_requirements(self.account_combo.checked_data())
+            )
+        )
+        layout.addWidget(info_button)
+
+        # طبقِ گزارشِ صریح: دکمه‌یِ ذخیره فقط وقتی این ردیف تغییر کرده فعال
+        # می‌شود، و بعدِ ذخیره‌یِ موفق (با پیامِ تاییدیه) دوباره غیرفعال می‌شود.
+        self.save_button = QPushButton("ذخیره")
+        self.save_button.setObjectName("flatButton")
+        self.save_button.setEnabled(False)
+        self.save_button.clicked.connect(self._on_save_clicked)
+        layout.addWidget(self.save_button)
+
+        self.account_combo.selectionChanged.connect(self._mark_dirty)
+        self.detail_combo.currentIndexChanged.connect(self._mark_dirty)
+
+    def _mark_dirty(self, *_args) -> None:
+        self.save_button.setEnabled(True)
+
+    def _on_save_clicked(self) -> None:
+        checked_ids = self.account_combo.checked_data()
+        detail_account_id = self.detail_combo.currentData() if len(checked_ids) == 1 else None
+        saved = self._on_save(self._mapping_key, checked_ids, detail_account_id)
+        if saved:
+            QMessageBox.information(self, "ذخیره شد", "تغییراتِ این ردیف ذخیره شد.")
+            self.save_button.setEnabled(False)
+
+
+class _CustomMethodForm(QWidget):
+    """طبقِ آیتمِ ۷ (درخواستِ صریح: «بتونیم روش پرداخت و دریافت خودمون
+    درست کنیم غیر از موارد پیش‌فرض»): افزودنِ یک روشِ سفارشیِ تازه —
+    فقط یک برچسب لازم است؛ کدِ داخلیِ یکتایش خودکار از رویِ همان برچسب
+    ساخته می‌شود (کاربر نیازی به واردکردنِ کد ندارد)."""
+
+    def __init__(self, direction: str, screen: "TreasuryCounterpartySettingsScreen") -> None:
+        super().__init__()
+        self._direction = direction
+        self._screen = screen
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 4)
+
+        self.label_field = QLineEdit()
+        self.label_field.setPlaceholderText("مثلاً «تهاترِ ارزی» یا «کارت‌به‌کارت»")
+        layout.addWidget(self.label_field, stretch=1)
+
+        add_button = QPushButton("+ افزودنِ روشِ سفارشی")
+        add_button.setObjectName("flatButton")
+        add_button.clicked.connect(self._add)
+        layout.addWidget(add_button)
+
+    def _add(self) -> None:
+        label = self.label_field.text().strip()
+        if not label:
+            self._screen.set_status("برچسبِ روشِ سفارشی را وارد کنید.")
+            return
+        company_id = self._screen.company_id
+        if company_id is None:
+            return
+        try:
+            treasury_service.create_custom_method(company_id, self._direction, label, label)
+        except ValueError as exc:
+            self._screen.set_status(str(exc))
+            return
+        self._screen.set_status("ذخیره شد.", ok=True)
+        self.label_field.clear()
+        self._screen.refresh()
+
+
+class _CustomMethodRow(QWidget):
+    """ردیفِ مدیریتِ یک روشِ سفارشیِ موجود — فعال/غیرفعال و حذف. نگاشتِ
+    حسابِ کلِ آن جدا، بلافاصله زیرِ همین ردیف، با یک _MultiAccountMappingRow
+    معمولی (عیناً هم‌الگو با روش‌هایِ ثابت) می‌آید."""
+
+    def __init__(self, method: "treasury_service.CustomMethodRow", on_toggle, on_delete) -> None:
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 0)
+
+        name_label = QLabel(f"«{method.label}» (سفارشی)")
+        name_label.setMinimumWidth(200)
+        layout.addWidget(name_label, stretch=1)
+
+        active_checkbox = QCheckBox("فعال")
+        active_checkbox.setChecked(method.is_active)
+        active_checkbox.toggled.connect(lambda checked: on_toggle(method.custom_method_id, checked))
+        layout.addWidget(active_checkbox)
+
+        delete_button = QPushButton("حذفِ روش")
+        delete_button.setObjectName("dangerButton")
+        delete_button.clicked.connect(lambda: on_delete(method.custom_method_id))
+        layout.addWidget(delete_button)
 
 
 class _TemplateRow(QWidget):
@@ -147,10 +470,22 @@ class _TemplateRow(QWidget):
         self.text_field = QLineEdit(current_text)
         layout.addWidget(self.text_field, stretch=1)
 
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("flatButton")
-        save_button.clicked.connect(lambda: on_save(template_key, self.text_field.text()))
-        layout.addWidget(save_button)
+        self.save_button = QPushButton("ذخیره")
+        self.save_button.setObjectName("flatButton")
+        self.save_button.setEnabled(False)
+        self.save_button.clicked.connect(lambda: self._on_save_clicked(template_key, on_save))
+        layout.addWidget(self.save_button)
+
+        self.text_field.textChanged.connect(self._mark_dirty)
+
+    def _mark_dirty(self, _text: str) -> None:
+        self.save_button.setEnabled(True)
+
+    def _on_save_clicked(self, template_key: str, on_save) -> None:
+        saved = on_save(template_key, self.text_field.text())
+        if saved:
+            QMessageBox.information(self, "ذخیره شد", "تغییراتِ این ردیف ذخیره شد.")
+            self.save_button.setEnabled(False)
 
 
 _RECEIPT_METHOD_KEYS = [
@@ -172,6 +507,27 @@ _PAYMENT_METHOD_KEYS = [
 ]
 _METHOD_KEYS_BY_DIRECTION = {"RECEIPT": _RECEIPT_METHOD_KEYS, "PAYMENT": _PAYMENT_METHOD_KEYS}
 
+# طبقِ درخواستِ صریح: «برایِ هرِ مرحله یک ردیفِ جداگانه در تنظیمات باشه» —
+# این کلیدها مستقل از کلیدهایِ روش‌هایِ بالا (حتی اگر عملاً به همان حساب
+# اشاره کنند)، مخصوصِ مراحلِ چرخه‌یِ چکِ دریافتی/پرداختی‌اند. مرحله‌یِ
+# «برگشت به طرفِ‌حساب» و «برگشتِ چکِ خرجی به صندوق» این‌جا نیستند — چون
+# دو طرفِ سندشان کاملاً پویاست (طرفِ‌حسابِ اصلی/محلِ فعلیِ خودِ چک)،
+# حسابِ کلِ تازه لازم ندارند؛ فقط متنِ شرحشان پایین‌تر قابلِ‌ویرایش است.
+_CHECK_STAGE_MAPPING_KEYS = [
+    "CHECK_RECEIVED_FUND_TRANSFER",
+    "CHECK_RECEIVED_CASH_COLLECT",
+    "CHECK_RECEIVED_BANK_DEPOSIT",
+    "CHECK_RECEIVED_BANK_CLEAR",
+    "CHECK_RECEIVED_BANK_RETURN",
+    "CHECK_ISSUED_BANK_CLEAR",
+    "CHECK_ISSUED_RETURN_TO_FUND",
+]
+_CHECK_STAGE_TEMPLATE_KEYS = ["CHECK_RECEIVED_CUSTOMER_RETURN", "CHECK_RECEIVED_ENDORSED_RETURN"]
+
+# طبقِ گزارشِ صریح: حسابِ پیش‌پرداختِ تنخواه‌گردان باید این‌جا (تنظیماتِ
+# خزانه‌داری) تعیین شود، نه در خودِ فرمِ عملیاتیِ تنخواه.
+_PETTY_CASH_MAPPING_KEY = "PETTY_CASH_ADVANCE"
+
 
 class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
@@ -180,8 +536,11 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         self._forms: dict[str, _MappingForm] = {}
         self._tables: dict[str, QTableWidget] = {}
         self._method_mapping_containers: dict[str, QVBoxLayout] = {}
-        self._method_mapping_rows: dict[str, list[_MethodMappingRow]] = {"RECEIPT": [], "PAYMENT": []}
-        self._template_rows: list[_TemplateRow] = []
+        self._method_mapping_rows: dict[str, list[_MultiAccountMappingRow]] = {"RECEIPT": [], "PAYMENT": []}
+        self._template_containers: dict[str, QVBoxLayout] = {}
+        self._template_rows: dict[str, list[_TemplateRow]] = {"RECEIPT": [], "PAYMENT": []}
+        self._stage_mapping_rows: list[_MethodMappingRow] = []
+        self._stage_template_rows: list[_TemplateRow] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -268,39 +627,128 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             container = QVBoxLayout()
             container.setSpacing(2)
             method_card_layout.addLayout(container)
+
+            # طبقِ آیتمِ ۷: زیرِ فهرستِ روش‌هایِ ثابت، فرمِ افزودنِ روشِ
+            # سفارشی — خودِ روش‌هایِ سفارشیِ موجود هم در همین container
+            # (بعدِ روش‌هایِ ثابت) در refresh() اضافه می‌شوند.
+            custom_form = _CustomMethodForm(direction, self)
+            method_card_layout.addWidget(custom_form)
+
             layout.addWidget(method_card)
             self._method_mapping_containers[direction] = container
             help_fields.append((method_card, method_hint))
+            help_fields.append(
+                (custom_form, "روشِ سفارشیِ تازه (مثلِ نقد/تخفیف/بن: فقط مبلغ + تفصیلیِ اختیاری) اضافه می‌کند.")
+            )
 
-        # --- متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت ------------------------
-        # طبقِ درخواستِ صریح: کاربر خودش می‌تواند متنِ هر روش را بسازد.
-        template_card = QWidget()
-        template_card.setObjectName("card")
-        template_card_layout = QVBoxLayout(template_card)
-        template_card_layout.setContentsMargins(12, 10, 12, 10)
-        template_card_layout.setSpacing(4)
+        # --- مراحلِ چرخه‌یِ چکِ دریافتی/پرداختی ----------------------------
+        # طبقِ درخواستِ صریح: برایِ هرِ مرحله‌یِ چرخه‌یِ چک (انتقال بینِ
+        # صندوق‌ها، وصولِ نقدی، واگذاری به بانک، اعلامِ وصول، برگشت از بانک
+        # به صندوق، وصول از بانک، برگشتِ چکِ پرداختی) یک ردیفِ مستقل با
+        # حسابِ کلِ/تفصیلیِ اختصاصیِ خودش.
+        stage_card = QWidget()
+        stage_card.setObjectName("card")
+        stage_card_layout = QVBoxLayout(stage_card)
+        stage_card_layout.setContentsMargins(12, 10, 12, 10)
+        stage_card_layout.setSpacing(4)
 
-        template_title = QLabel("متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت")
-        template_title.setObjectName("sectionHint")
-        template_card_layout.addWidget(template_title)
+        stage_title = QLabel("مراحلِ چرخه‌یِ چکِ دریافتی/پرداختی")
+        stage_title.setObjectName("sectionHint")
+        stage_card_layout.addWidget(stage_title)
 
-        template_hint = QLabel(
-            "جای‌گذارهایِ مجاز: {تفصیلی} (تفصیلیِ خودِ ردیف)، {مبلغ}، {طرف_حساب} (تفصیلیِ بالایِ فرم)، "
-            "{تعداد} (فقط چک)، {یادداشت} (فقط بن)."
+        stage_hint = QLabel(
+            "برایِ هر مرحله از چرخه‌یِ چک، معینِ حسابی که آن مرحله بدهکار می‌کند مشخص کنید. "
+            "تفصیلیِ اختصاصی اختیاری است — چون معمولاً هربار صندوق/بانکِ متفاوتی انتخاب می‌شود."
         )
-        template_hint.setWordWrap(True)
-        template_card_layout.addWidget(template_hint)
+        stage_hint.setWordWrap(True)
+        stage_card_layout.addWidget(stage_hint)
 
-        self._template_container = QVBoxLayout()
-        self._template_container.setSpacing(2)
-        template_card_layout.addLayout(self._template_container)
-        layout.addWidget(template_card)
-        help_fields.append((template_card, "این متن‌ها خودکار در ستونِ «شرح»ِ همان ردیف در فرمِ دریافت پیشنهاد می‌شوند — قابلِ‌ویرایشِ دستی هم هستند."))
+        self._stage_mapping_container = QVBoxLayout()
+        self._stage_mapping_container.setSpacing(2)
+        stage_card_layout.addLayout(self._stage_mapping_container)
+
+        stage_template_hint = QLabel(
+            "این دو مرحله («برگشت به طرفِ‌حساب» و «برگشتِ چکِ خرجی به صندوق») حسابِ کلِ تازه لازم ندارند "
+            "— فقط متنِ شرحِ سندشان قابلِ‌ویرایش است."
+        )
+        stage_template_hint.setWordWrap(True)
+        stage_card_layout.addWidget(stage_template_hint)
+
+        self._stage_template_container = QVBoxLayout()
+        self._stage_template_container.setSpacing(2)
+        stage_card_layout.addLayout(self._stage_template_container)
+
+        layout.addWidget(stage_card)
+        help_fields.append((stage_card, "این تنظیمات، حساب/تفصیلیِ سندهایِ صفحه‌یِ «چک‌هایِ دریافتی/پرداختی» را مشخص می‌کنند."))
+
+        # --- حسابِ پیش‌پرداختِ تنخواه‌گردان ------------------------------------
+        petty_cash_card = QWidget()
+        petty_cash_card.setObjectName("card")
+        petty_cash_card_layout = QVBoxLayout(petty_cash_card)
+        petty_cash_card_layout.setContentsMargins(12, 10, 12, 10)
+        petty_cash_card_layout.setSpacing(4)
+
+        petty_cash_title = QLabel("تنخواه‌گردان")
+        petty_cash_title.setObjectName("sectionHint")
+        petty_cash_card_layout.addWidget(petty_cash_title)
+
+        petty_cash_hint = QLabel(
+            "معینِ حسابی که در افتتاحِ هر تنخواه بدهکار، و در بستنِ آن بستانکار می‌شود؛ "
+            "این حساب برایِ همه‌یِ تنخواه‌دارها مشترک است."
+        )
+        petty_cash_hint.setWordWrap(True)
+        petty_cash_card_layout.addWidget(petty_cash_hint)
+
+        self._petty_cash_mapping_container = QVBoxLayout()
+        self._petty_cash_mapping_container.setSpacing(2)
+        petty_cash_card_layout.addLayout(self._petty_cash_mapping_container)
+
+        layout.addWidget(petty_cash_card)
+        help_fields.append((petty_cash_card, "این تنظیم، حسابِ معینِ فرمِ «تنخواه‌گردان» را مشخص می‌کند."))
+
+        # --- متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت/پرداخت -------------------
+        # طبقِ درخواستِ صریح («مدلِ تنظیماتِ روش‌هایِ پرداخت مثلِ روش‌هایِ
+        # دریافت»): کاربر خودش می‌تواند متنِ هر روش را بسازد — برایِ هر دو
+        # جهت، نه فقط دریافت.
+        for direction, template_card_title, template_hint_text in (
+            (
+                "RECEIPT",
+                "متنِ خودکارِ شرحِ ردیف‌هایِ سندِ دریافت",
+                "جای‌گذارهایِ مجاز: {تفصیلی} (تفصیلیِ خودِ ردیف)، {مبلغ}، {طرف_حساب} (تفصیلیِ بالایِ فرم)، "
+                "{تعداد} (فقط چک)، {یادداشت} (فقط بن).",
+            ),
+            (
+                "PAYMENT",
+                "متنِ خودکارِ شرحِ ردیف‌هایِ سندِ پرداخت",
+                "جای‌گذارهایِ مجاز: {تفصیلی} (تفصیلیِ خودِ ردیف)، {مبلغ}، {طرف_حساب} (تفصیلیِ بالایِ فرم)، "
+                "{تعداد} (فقط چک/خرجِ چک).",
+            ),
+        ):
+            template_card = QWidget()
+            template_card.setObjectName("card")
+            template_card_layout = QVBoxLayout(template_card)
+            template_card_layout.setContentsMargins(12, 10, 12, 10)
+            template_card_layout.setSpacing(4)
+
+            template_title = QLabel(template_card_title)
+            template_title.setObjectName("sectionHint")
+            template_card_layout.addWidget(template_title)
+
+            template_hint = QLabel(template_hint_text)
+            template_hint.setWordWrap(True)
+            template_card_layout.addWidget(template_hint)
+
+            container = QVBoxLayout()
+            container.setSpacing(2)
+            template_card_layout.addLayout(container)
+            layout.addWidget(template_card)
+            self._template_containers[direction] = container
+            help_fields.append((template_card, "این متن‌ها خودکار در ستونِ «شرح»ِ همان ردیف در فرمِ سند پیشنهاد می‌شوند — قابلِ‌ویرایشِ دستی هم هستند."))
 
         self.set_field_help(help_fields)
 
-    def set_status(self, text: str) -> None:
-        self.status_label.setText(text)
+    def set_status(self, text: str, *, ok: bool = False) -> None:
+        theme.set_status_label(self.status_label, text, ok=ok)
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
@@ -336,41 +784,141 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
                     child.widget().deleteLater()
             self._method_mapping_rows[direction] = []
             for key in _METHOD_KEYS_BY_DIRECTION[direction]:
-                mapping = method_mappings_by_key.get(key)
-                row = _MethodMappingRow(
+                # طبقِ درخواستِ صریح («مدلِ تنظیماتِ روش‌هایِ پرداخت مثلِ
+                # روش‌هایِ دریافت»): هر دو جهت می‌توانند چند معین داشته باشند.
+                mapped = treasury_service.list_mapped_accounts_for_key(company_id, key)
+                row = _MultiAccountMappingRow(
                     key,
                     treasury_service.MAPPING_LABELS[key],
-                    mapping.account_id if mapping else None,
-                    mapping.detail_account_id if mapping else None,
+                    [m.account_id for m in mapped],
+                    {m.account_id: m.detail_account_id for m in mapped if m.detail_account_id is not None},
                     account_options,
                     detail_options,
-                    self._save_method_mapping,
+                    self._save_multi_method_mapping,
                 )
                 container.addWidget(row)
                 self._method_mapping_rows[direction].append(row)
 
-        while self._template_container.count():
-            child = self._template_container.takeAt(0)
+            # طبقِ آیتمِ ۷: بعدِ روش‌هایِ ثابت، روش‌هایِ سفارشیِ همین شرکت/
+            # جهت — هر روش، یک ردیفِ مدیریت (نام/فعال/حذف) + بلافاصله
+            # زیرش، یک ردیفِ نگاشتِ حساب (عیناً هم‌الگو با روش‌هایِ ثابت).
+            for custom_method in treasury_service.list_custom_methods(company_id, direction):
+                management_row = _CustomMethodRow(custom_method, self._toggle_custom_method, self._delete_custom_method)
+                container.addWidget(management_row)
+                mapping_key = treasury_service.custom_method_mapping_key(direction, custom_method.custom_method_id)
+                mapped = treasury_service.list_mapped_accounts_for_key(company_id, mapping_key)
+                mapping_row = _MultiAccountMappingRow(
+                    mapping_key,
+                    f"معینِ «{custom_method.label}»",
+                    [m.account_id for m in mapped],
+                    {m.account_id: m.detail_account_id for m in mapped if m.detail_account_id is not None},
+                    account_options,
+                    detail_options,
+                    self._save_multi_method_mapping,
+                )
+                container.addWidget(mapping_row)
+                self._method_mapping_rows[direction].append(mapping_row)
+
+        for direction, container in self._template_containers.items():
+            while container.count():
+                child = container.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            self._template_rows[direction] = []
+            for t in treasury_service.list_description_templates(company_id, direction):
+                row = _TemplateRow(t.template_key, t.label, t.template_text, self._save_template)
+                container.addWidget(row)
+                self._template_rows[direction].append(row)
+
+        while self._stage_mapping_container.count():
+            child = self._stage_mapping_container.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
-        self._template_rows = []
-        for t in treasury_service.list_description_templates(company_id, "RECEIPT"):
-            row = _TemplateRow(t.template_key, t.label, t.template_text, self._save_template)
-            self._template_container.addWidget(row)
-            self._template_rows.append(row)
+        self._stage_mapping_rows = []
+        for key in _CHECK_STAGE_MAPPING_KEYS:
+            mapping = method_mappings_by_key.get(key)
+            row = _MethodMappingRow(
+                key,
+                treasury_service.MAPPING_LABELS[key],
+                mapping.account_id if mapping else None,
+                mapping.detail_account_id if mapping else None,
+                account_options,
+                detail_options,
+                self._save_method_mapping,
+            )
+            self._stage_mapping_container.addWidget(row)
+            self._stage_mapping_rows.append(row)
 
-    def _save_method_mapping(self, mapping_key: str, account_id, detail_account_id) -> None:
+        while self._stage_template_container.count():
+            child = self._stage_template_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._stage_template_rows = []
+        for key in _CHECK_STAGE_TEMPLATE_KEYS:
+            row = _TemplateRow(
+                key, treasury_service.MAPPING_LABELS[key], treasury_service.get_description_template(company_id, key),
+                self._save_template,
+            )
+            self._stage_template_container.addWidget(row)
+            self._stage_template_rows.append(row)
+
+        while self._petty_cash_mapping_container.count():
+            child = self._petty_cash_mapping_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        petty_cash_account_id = treasury_service.get_account_mapping(company_id, _PETTY_CASH_MAPPING_KEY)
+        petty_cash_row = _MethodMappingRow(
+            _PETTY_CASH_MAPPING_KEY, treasury_service.MAPPING_LABELS[_PETTY_CASH_MAPPING_KEY],
+            petty_cash_account_id, None, account_options, [], self._save_method_mapping,
+        )
+        petty_cash_row.detail_combo.setVisible(False)
+        self._petty_cash_mapping_container.addWidget(petty_cash_row)
+
+    def _save_method_mapping(self, mapping_key: str, account_id, detail_account_id) -> bool:
         if self.company_id is None or account_id is None:
             self.set_status("ابتدا یک حساب انتخاب کنید.")
-            return
+            return False
         treasury_service.set_account_mapping(self.company_id, mapping_key, account_id, detail_account_id)
-        self.set_status("")
+        self.set_status("ذخیره شد.", ok=True)
+        return True
 
-    def _save_template(self, template_key: str, text: str) -> None:
+    def _save_multi_method_mapping(self, mapping_key: str, account_ids: list[int], detail_account_id: int | None) -> bool:
+        """طبقِ آیتمِ ۹: ذخیره‌یِ چندمعینیِ روش‌هایِ دریافت — تفصیلیِ
+        اختصاصی فقط وقتی معنی دارد که دقیقاً یک معین انتخاب شده باشد."""
+        if self.company_id is None:
+            return False
+        if not account_ids:
+            self.set_status("حداقلِ یک معین انتخاب کنید.")
+            return False
+        entries = [(account_id, detail_account_id if account_id == account_ids[0] else None) for account_id in account_ids]
+        treasury_service.set_account_mappings(self.company_id, mapping_key, entries)
+        self.set_status("ذخیره شد.", ok=True)
+        return True
+
+    def _toggle_custom_method(self, custom_method_id: int, is_active: bool) -> None:
         if self.company_id is None:
             return
+        treasury_service.set_custom_method_active(self.company_id, custom_method_id, is_active)
+        self.set_status("ذخیره شد.", ok=True)
+
+    def _delete_custom_method(self, custom_method_id: int) -> None:
+        if self.company_id is None:
+            return
+        confirm = QMessageBox.question(
+            self, "حذفِ روشِ سفارشی", "این روشِ سفارشی حذف شود؟", QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        treasury_service.delete_custom_method(self.company_id, custom_method_id)
+        self.set_status("حذف شد.", ok=True)
+        self.refresh()
+
+    def _save_template(self, template_key: str, text: str) -> bool:
+        if self.company_id is None:
+            return False
         treasury_service.set_description_template(self.company_id, template_key, text)
-        self.set_status("")
+        self.set_status("ذخیره شد.", ok=True)
+        return True
 
     def refresh_mappings(self, direction: str) -> None:
         if self.company_id is None:

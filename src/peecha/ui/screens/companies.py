@@ -26,7 +26,7 @@ from peecha.services import company_cloning
 from peecha.services import languages as languages_service
 from peecha.services import users as users_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, PersianDigitLineEdit
 
 _COLUMNS = ["فعال", "زبانِ پیش‌فرض", "ارزِ پایه", "نامِ نمایشی", "کد"]
 
@@ -190,17 +190,17 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         row += 1
 
         grid.addWidget(QLabel("کدِ اقتصادی"), row, 0)
-        self.economic_code_field = QLineEdit()
+        self.economic_code_field = PersianDigitLineEdit()
         grid.addWidget(self.economic_code_field, row, 1)
         row += 1
 
         grid.addWidget(QLabel("شماره‌ی ثبت"), row, 0)
-        self.registration_no_field = QLineEdit()
+        self.registration_no_field = PersianDigitLineEdit()
         grid.addWidget(self.registration_no_field, row, 1)
         row += 1
 
         grid.addWidget(QLabel("شناسه‌ی ملی"), row, 0)
-        self.national_id_field = QLineEdit()
+        self.national_id_field = PersianDigitLineEdit()
         grid.addWidget(self.national_id_field, row, 1)
         row += 1
 

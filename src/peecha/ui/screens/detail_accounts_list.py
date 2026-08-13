@@ -28,8 +28,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+import datetime
+
+from peecha import numerals, session
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
@@ -69,6 +72,22 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         self.new_entry_button.setObjectName("primaryButton")
         self.new_entry_button.clicked.connect(self._show_new_entry_menu)
         header_row.addWidget(self.new_entry_button)
+
+        # طبقِ درخواستِ صریح («خروجیِ اکسل و چاپی از تفصیلی‌ها، برایِ
+        # برگرداندن روی دیتابیسِ جدید»): خروجیِ اکسل خام است (فقط عنوان+
+        # دیتا) تا قابلِ‌ایمپورتِ مجدد باشد؛ چاپ/PDF با هدرِ کاملِ گزارش.
+        print_button = QPushButton("🖨 چاپ")
+        print_button.setObjectName("flatButton")
+        print_button.clicked.connect(self._on_print)
+        header_row.addWidget(print_button)
+        pdf_button = QPushButton("📄 PDF")
+        pdf_button.setObjectName("flatButton")
+        pdf_button.clicked.connect(self._on_export_pdf)
+        header_row.addWidget(pdf_button)
+        excel_button = QPushButton("📊 خروجیِ اکسل")
+        excel_button.setObjectName("flatButton")
+        excel_button.clicked.connect(self._on_export_excel)
+        header_row.addWidget(excel_button)
         layout.addLayout(header_row)
 
         hint = QLabel(
@@ -113,6 +132,44 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         company_id = session.current_company.company_id if session.current_company else None
         self._entries = dimensions_service.list_all_detail_accounts(company_id) if company_id is not None else []
         self._apply_filter()
+
+    # --- خروجیِ اکسل/چاپ (طبقِ درخواستِ صریح: بکاپ/انتقالِ تفصیلی‌ها به
+    # دیتابیسِ جدید) ------------------------------------------------------
+    _EXPORT_HEADERS = ["کدِ کاملِ حساب", "کد", "نام", "سطح", "وضعیت", "گروهِ تفصیلی", "کدِ کاملِ والد"]
+
+    def _export_rows(self) -> tuple[list[str], list[list], list]:
+        full_code_by_id = {e.detail_account_id: e.full_code for e in self._entries}
+        table_rows = [
+            [
+                e.full_code,
+                e.code,
+                e.name or "—",
+                e.level_no,
+                "فعال" if e.is_active else "غیرفعال",
+                _group_label(e.group_name),
+                full_code_by_id.get(e.parent_detail_account_id, "") if e.parent_detail_account_id else "",
+            ]
+            for e in sorted(self._entries, key=lambda r: (_group_label(r.group_name), r.full_code))
+        ]
+        return list(self._EXPORT_HEADERS), table_rows, []
+
+    def _export_kwargs(self) -> dict:
+        return {
+            "company_name": session.current_company.display_name if session.current_company else "",
+            "report_date": numerals.format_jalali_date(datetime.date.today()),
+        }
+
+    def _on_print(self) -> None:
+        headers, rows, footer = self._export_rows()
+        report_export.print_report(self, "تفصیلی‌ها", headers, rows, footer, **self._export_kwargs())
+
+    def _on_export_pdf(self) -> None:
+        headers, rows, footer = self._export_rows()
+        report_export.export_report_pdf(self, "تفصیلی‌ها", headers, rows, footer, **self._export_kwargs())
+
+    def _on_export_excel(self) -> None:
+        _headers, rows, _footer = self._export_rows()
+        report_export.export_plain_excel(self, "تفصیلی‌ها", self._EXPORT_HEADERS, rows)
 
     def _matches_query(self, e: dimensions_service.UnifiedDetailAccountRow, query: str) -> bool:
         if not query:

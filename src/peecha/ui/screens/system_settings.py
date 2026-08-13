@@ -8,12 +8,37 @@ from PySide6.QtWidgets import QFrame, QLabel, QScrollArea, QTabWidget, QVBoxLayo
 
 from peecha.ui.screens.accounting_coding import AccountingCodingSettingsScreen, DetailLevelDigitSettingsScreen
 from peecha.ui.screens.audit_log import AuditLogScreen
+from peecha.ui.screens.commercial_settings import (
+    _AccountMappingsTab as _CommercialAccountMappingsTab,
+    _ChannelsTab as _CommercialChannelsTab,
+    _FeatureToggleTab,
+    _IndustryProfileTab,
+    _NumberingSequencesTab,
+)
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
 from peecha.ui.screens.field_labels import FieldLabelsScreen
 from peecha.ui.screens.financial_statement_mapping import FinancialStatementMappingScreen
 from peecha.ui.screens.fiscal_years import FiscalYearsScreen
+from peecha.ui.screens.inventory_settings import (
+    _AccountMappingsTab,
+    _BrandManufacturerTab,
+    _CostingSettingsTab,
+    _FeatureToggleTab as _InventoryFeatureToggleTab,
+    _ReasonCodesTab,
+    _UomTab,
+)
 from peecha.ui.screens.languages import LanguagesScreen
+from peecha.ui.screens.payroll_settings import (
+    _AttendanceTemplatesTab,
+    _GeneralSettingsTab,
+    _InsuranceTab,
+    _MinimumWageTab,
+    _OvertimeRulesTab,
+    _PayItemsTab,
+    _PoliciesTab,
+    _TaxTab,
+)
 from peecha.ui.screens.roles import RolesScreen
 from peecha.ui.screens.translations import TranslationsScreen
 from peecha.ui.screens.treasury_banks import TreasuryBanksScreen
@@ -44,6 +69,16 @@ class SystemSettingsScreen(QWidget):
         self.tabs.addTab(self._build_users_tab(), "کاربران و دسترسی‌ها")
         self.tabs.addTab(self._build_accounting_data_tab(), "داده‌های حسابداری")
         self.tabs.addTab(self._build_security_tab(), "امنیت")
+        # طبقِ درخواستِ صریح: تنظیماتِ حقوق‌ودستمزد از یک صفحه‌یِ مستقل به
+        # این‌جا منتقل شد — دسترسی هم از این تب و هم از آیکونِ چرخ‌دنده‌یِ
+        # کنارِ گروهِ «منابعِ انسانی» (shell_window.py).
+        self.tabs.addTab(self._build_payroll_tab(), "حقوق و دستمزد")
+        # طبقِ همان الگوی حقوق‌ودستمزد: تنظیماتِ ماژولِ انبار هم این‌جا و
+        # هم از آیکونِ چرخ‌دنده‌یِ کنارِ گروهِ «انبار و موجودی» در دسترس است.
+        self.tabs.addTab(self._build_inventory_tab(), "انبار و موجودی")
+        # طبقِ همان الگو: تنظیماتِ مدیریتِ بازرگانی هم این‌جا و هم از
+        # آیکونِ چرخ‌دنده‌یِ کنارِ گروه‌هایِ «فروش»/«خرید» در دسترس است.
+        self.tabs.addTab(self._build_commercial_tab(), "مدیریتِ بازرگانی")
         outer.addWidget(self.tabs, stretch=1)
 
     def _build_coding_tab(self) -> QWidget:
@@ -77,6 +112,14 @@ class SystemSettingsScreen(QWidget):
         inner.setDocumentMode(True)
         for label, widget in pages:
             self._sub_screens.append(widget)
+            # باگِ واقعیِ گزارش‌شده («پایینِ همه‌یِ فرم‌ها زیرِ تسک‌بار
+            # می‌ماند»): صفحه‌هایی که خودشان اسکرول+نوارِ ثابتِ دکمه دارند
+            # (manages_own_scroll) نباید دوباره در این QScrollAreaِ بیرونی
+            # بپیچند — وگرنه دقیقاً همان نوارِ دکمه‌یِ «ثابت»شان هم دوباره
+            # قابلِ‌اسکرول‌شدن و گم‌شدن می‌شود.
+            if getattr(widget, "manages_own_scroll", False):
+                inner.addTab(widget, label)
+                continue
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.NoFrame)
@@ -119,6 +162,43 @@ class SystemSettingsScreen(QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(screen)
         return scroll
+
+    def _build_inventory_tab(self) -> QWidget:
+        return self._sub_tabs(
+            [
+                ("واحدهایِ اندازه‌گیری", _UomTab()),
+                ("برند و تولیدکننده", _BrandManufacturerTab()),
+                ("قیمت‌گذاری", _CostingSettingsTab()),
+                ("نگاشتِ حساب‌ها", _AccountMappingsTab()),
+                ("دلیل‌هایِ اصلاح/برگشت", _ReasonCodesTab()),
+                ("قابلیت‌هایِ فعال", _InventoryFeatureToggleTab()),
+            ]
+        )
+
+    def _build_payroll_tab(self) -> QWidget:
+        return self._sub_tabs(
+            [
+                ("تنظیماتِ کلی", _GeneralSettingsTab()),
+                ("حداقلِ دستمزد", _MinimumWageTab()),
+                ("قوانینِ حقوق و دستمزد", _PoliciesTab()),
+                ("آیتم‌هایِ حقوقی", _PayItemsTab()),
+                ("بیمه", _InsuranceTab()),
+                ("مالیات", _TaxTab()),
+                ("قوانینِ اضافه‌کاری", _OvertimeRulesTab()),
+                ("الگوهایِ ایمپورتِ حضوروغیاب", _AttendanceTemplatesTab()),
+            ]
+        )
+
+    def _build_commercial_tab(self) -> QWidget:
+        return self._sub_tabs(
+            [
+                ("نگاشتِ حساب‌ها", _CommercialAccountMappingsTab()),
+                ("قابلیت‌هایِ فعال", _FeatureToggleTab()),
+                ("نمایهٔ صنعتی", _IndustryProfileTab()),
+                ("شماره‌گذاریِ اسناد", _NumberingSequencesTab()),
+                ("کانال‌ها", _CommercialChannelsTab()),
+            ]
+        )
 
     def refresh(self) -> None:
         for widget in self._sub_screens:

@@ -30,6 +30,7 @@ from peecha.db.models.accounting import (
     PersonnelDetail,
     SupplierDetail,
 )
+from peecha.db.models.treasury import CounterpartyAccountMapping
 
 # نوع‌بُعدِ سیستمی/رزروشده‌ی «تفصیلیِ اشخاص» — بر خلافِ نوع‌بُعدهایی مثلِ
 # مرکزِ هزینه/پروژه که کاربر خودش می‌سازد، این یکی برای هر شرکت خودکار
@@ -49,7 +50,12 @@ NO_DETAIL_LABEL = "بدون تفصیلی"
 # است (acc.detail_group_levels)؛ گروهی که پیکربندی نداشته باشد همچنان
 # تخت/بدونِ محدودیتِ طول می‌ماند (سازگار با گروه‌های موجود).
 MAX_DETAIL_LEVEL = 4
-_VALID_FIELD_KINDS = ("text", "decimal", "date", "boolean")
+# «bank» طبقِ گزارشِ صریح («نام بانک از جدولِ بانک‌ها») اضافه شد — یک
+# کمبویِ ساده‌یِ منبع‌گرفته از treasury.banks، هم‌الگو با سایرِ کیندها؛
+# مقدارش (bank_id) در همان extra_fieldsِ JSONB ذخیره می‌شود، بدونِ نیازِ
+# FK (چون این سرویس نباید به services.treasury وابسته شود). «account_type»
+# هم یک کمبویِ ثابتِ جاری/پس‌انداز است (نه متنِ آزاد).
+_VALID_FIELD_KINDS = ("text", "decimal", "date", "boolean", "bank", "account_type")
 
 
 @dataclass
@@ -118,7 +124,7 @@ def update_dimension_type(dimension_type_id: int, company_id: int, code: str, is
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
-            raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
         if dimension_type.code in SPECIALIZED_DIMENSION_LABELS or dimension_type.code == PERSON_DIMENSION_CODE:
             raise ValueError("عنوانِ گروه‌هایِ سیستمی (کالا/بانک/... و اشخاص) قابلِ‌تغییر نیست.")
         dimension_type.code = code.strip().upper()
@@ -133,7 +139,7 @@ def set_dimension_type_color(dimension_type_id: int, company_id: int, color: str
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
-            raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
         dimension_type.color = color or None
         session.commit()
 
@@ -160,7 +166,7 @@ def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
-            raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
 
         detail_count = session.scalar(
             select(func.count())
@@ -168,7 +174,7 @@ def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:
             .where(DetailAccount.dimension_type_id == dimension_type_id)
         )
         if detail_count:
-            raise ValueError("این نوعِ بُعد حسابِ تفصیلی دارد؛ اول آن‌ها را حذف کنید.")
+            raise ValueError("این گروهِ تفصیلی حسابِ تفصیلی دارد؛ اول آن‌ها را حذف کنید.")
 
         usage_count = session.scalar(
             select(func.count())
@@ -176,7 +182,7 @@ def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:
             .where(AccountDetailDimension.dimension_type_id == dimension_type_id)
         )
         if usage_count:
-            raise ValueError("این نوعِ بُعد روی حساب‌های کدینگ استفاده شده؛ ابتدا آن ارتباط را حذف کنید.")
+            raise ValueError("این گروهِ تفصیلی روی حساب‌های کدینگ استفاده شده؛ ابتدا آن ارتباط را حذف کنید.")
 
         session.delete(dimension_type)
         session.commit()
@@ -232,7 +238,7 @@ def delete_custom_group_completely(dimension_type_id: int, company_id: int) -> N
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
-            raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
         if dimension_type.code in SPECIALIZED_DIMENSION_LABELS or dimension_type.code == PERSON_DIMENSION_CODE:
             raise ValueError("این گروه سیستمی است و قابلِ‌حذفِ کامل نیست.")
 
@@ -248,13 +254,34 @@ def delete_custom_group_completely(dimension_type_id: int, company_id: int) -> N
             if usage_count:
                 raise ValueError("این گروه دارای حساب‌هایِ تفصیلیِ سنددار است؛ ابتدا سندهایِ مربوطه را حذف کنید.")
 
-        usage_on_coding = session.scalar(
-            select(func.count())
-            .select_from(AccountDetailDimension)
-            .where(AccountDetailDimension.dimension_type_id == dimension_type_id)
+        # طبقِ گزارشِ صریح («معین‌هایِ متصل نشان داده می‌شوند ولی باز هم اجازه‌یِ
+        # حذف نمی‌دهد»): این ارتباط فقط یک چک‌لیستِ «الزامیِ کدینگ» است، نه
+        # دیتایِ سندی — با حذفِ کاملِ خودِ گروه، این الزام دیگر معنا ندارد،
+        # پس به‌جایِ مسدودکردنِ حذف، خودِ این ارتباط هم به‌عنوانِ بخشی از
+        # «حذفِ کامل» پاک می‌شود (بر خلافِ سنددار بودن یا نگاشتِ دریافت/پرداخت
+        # که همچنان به‌درستی مسدودکننده می‌مانند، چون دیتا/تنظیماتِ فعال‌اند).
+        session.execute(
+            AccountDetailDimension.__table__.delete().where(
+                AccountDetailDimension.dimension_type_id == dimension_type_id
+            )
         )
-        if usage_on_coding:
-            raise ValueError("این نوعِ بُعد روی حساب‌های کدینگ استفاده شده؛ ابتدا آن ارتباط را حذف کنید.")
+
+        # کشف‌شده حینِ رفعِ باگ: این گروه ممکن است در تنظیماتِ سندِ
+        # دریافت/پرداخت (treasury.counterparty_account_mappings.dimension_type_id)
+        # هم استفاده شده باشد — یک FKِ کاملاً جدا از چک‌لیستِ کدینگِ بالا.
+        # پیش از این فیکس، این حالت اصلاً چک نمی‌شد و روی خودِ DELETE با
+        # یک IntegrityErrorِ خام (غیرِقابلِ‌مدیریت در UI) شکست می‌خورد —
+        # دقیقاً همان چیزی که کاربر گزارش داد: «اتصالِ معین‌ها را جدا کردم
+        # ولی همچنان اجازه‌یِ حذف نمی‌دهد» (چون آن اتصال، اتصالِ دیگری بود).
+        usage_on_counterparty_mapping = session.scalar(
+            select(func.count())
+            .select_from(CounterpartyAccountMapping)
+            .where(CounterpartyAccountMapping.dimension_type_id == dimension_type_id)
+        )
+        if usage_on_counterparty_mapping:
+            raise ValueError(
+                "این گروهِ تفصیلی در تنظیماتِ سندِ دریافت/پرداخت استفاده شده؛ ابتدا آن نگاشت را از آن‌جا حذف کنید."
+            )
 
         # حذفِ حساب‌هایِ تفصیلی از عمیق‌ترین سطح به سمتِ ریشه — چون
         # parent_detail_account_id یک FKِ خودارجاع (RESTRICT پیش‌فرض) است.
@@ -366,6 +393,12 @@ def get_group_max_level_no(dimension_type_id: int, person_group_id: int = 0) -> 
         return _get_group_max_level_no(session, dimension_type_id, person_group_id)
 
 
+def get_detail_account_level_no(detail_account_id: int) -> int | None:
+    with new_session() as session:
+        account = session.get(DetailAccount, detail_account_id)
+        return account.level_no if account is not None else None
+
+
 def set_group_max_level_no(dimension_type_id: int, company_id: int, max_level_no: int, person_group_id: int = 0) -> None:
     if not (1 <= max_level_no <= MAX_DETAIL_LEVEL):
         raise ValueError(f"تعدادِ سطح باید بینِ ۱ تا {MAX_DETAIL_LEVEL} باشد.")
@@ -428,7 +461,7 @@ def create_detail_account(
     with new_session() as session:
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         if dimension_type is None or dimension_type.company_id != company_id:
-            raise ValueError("نوعِ بُعدِ تفصیلی نامعتبر است.")
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
 
         max_level_no = _get_group_max_level_no(session, dimension_type_id)
         segment_code = code.strip()
@@ -556,6 +589,38 @@ def set_account_dimension_types(account_id: int, company_id: int, dimension_type
                 AccountDetailDimension(account_id=account_id, dimension_type_id=dimension_type_id, is_required=True)
             )
         session.commit()
+
+
+def list_accounts_requiring_group(
+    company_id: int, dimension_type_id: int | None = None, person_group_id: int | None = None
+) -> list[str]:
+    """طبقِ گزارشِ صریح («در پیکربندیِ گروهِ تفصیلی نشان دهد چه معین‌هایی به
+    آن وصله»): جهتِ معکوسِ set_account_dimension_types/set_account_person_groups
+    — فهرستِ کدِکاملِ+نامِ معین‌هایی که این گروه را الزامی کرده‌اند. نامِ
+    حساب از همان سرویسِ کدینگ (که نام را از جدولِ Translation می‌خواند)
+    گرفته می‌شود، نه مستقیم از ChartOfAccount (که ستونِ name ندارد)."""
+    with new_session() as session:
+        if person_group_id:
+            account_ids = set(
+                session.scalars(
+                    select(AccountPersonGroup.account_id).where(AccountPersonGroup.person_group_id == person_group_id)
+                ).all()
+            )
+        else:
+            account_ids = set(
+                session.scalars(
+                    select(AccountDetailDimension.account_id).where(
+                        AccountDetailDimension.dimension_type_id == dimension_type_id
+                    )
+                ).all()
+            )
+    if not account_ids:
+        return []
+    from peecha.services import chart_of_accounts as coa_service
+
+    return sorted(
+        f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id) if a.account_id in account_ids
+    )
 
 
 # --- تعدادِ رقمِ سراسریِ هر سطحِ تفصیلی (یکسان برایِ همه‌ی گروه‌ها) ---------
@@ -1144,7 +1209,33 @@ def list_persons(company_id: int) -> list[DetailAccountRow]:
 
 
 def list_active_persons(company_id: int) -> list[DetailAccountRow]:
-    return [row for row in list_persons(company_id) if row.is_active]
+    """طبقِ گزارشِ صریح: در سلسله‌مراتبِ گروه‌بندیِ اشخاص (مثلاً «مشتریانِ
+    تهران» به‌عنوانِ گروه، با چند مشتریِ واقعی زیرش)، فقط برگ‌ها قابلِ‌انتخاب‌اند
+    — گره‌هایِ والد/گروه خودشان یک شخصِ واقعی نیستند و نباید در فهرست‌هایِ
+    انتخابیِ تفصیلی ظاهر شوند."""
+    rows = list_persons(company_id)
+    parent_ids = {row.parent_detail_account_id for row in rows if row.parent_detail_account_id is not None}
+    return [row for row in rows if row.is_active and row.detail_account_id not in parent_ids]
+
+
+def get_person_contact_info(company_id: int, detail_account_id: int) -> tuple[str, str, str]:
+    """(نام، کدِملی، تلفن) یک تفصیلیِ اشخاص — طبقِ درخواستِ صریح، برایِ
+    پرکردنِ خودکارِ اطلاعاتِ گیرنده در فرمِ چکِ پرداختی. کدِملی/تلفن برایِ
+    سه گروهِ استاندارد (مشتری/تامین‌کننده/پرسنل) در جدولِ اختصاصیِ خودشان
+    ذخیره می‌شود، نه در extra_fieldsِ عمومیِ DetailAccount — پس اول همان
+    سه جدول امتحان می‌شود؛ اگر گروه چیزِ دیگری بود (تفصیلیِ سفارشی با
+    فیلدهایِ پویا)، از extra_fields برمی‌گردد."""
+    with new_session() as session:
+        detail_account = session.get(DetailAccount, detail_account_id)
+        if detail_account is None or detail_account.company_id != company_id:
+            return "", "", ""
+        name = detail_account.name or ""
+        for model in (CustomerDetail, SupplierDetail, PersonnelDetail):
+            extra = session.get(model, detail_account_id)
+            if extra is not None:
+                return name, extra.national_id or "", extra.phone or extra.mobile or ""
+        extra_fields = detail_account.extra_fields or {}
+        return name, extra_fields.get("national_id") or "", extra_fields.get("phone") or extra_fields.get("mobile") or ""
 
 
 # --- ۷ نوع‌بُعدِ «فرمِ خاص»یِ تازه (کالا/دارایی‌ثابت/بانک/صندوق/تنخواه/ -----
@@ -1197,13 +1288,20 @@ def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
             if code == BANK_ACCOUNT_CODE:
                 # طبقِ درخواستِ صریح: هر حسابِ بانکی از همان روزِ اول این
                 # فیلدهایِ اختصاصی را داشته باشد — از همان مکانیزمِ عمومیِ
-                # extra_fields JSONB، بدونِ ستونِ SQLِ تازه.
-                for sort_order, (field_key, label) in enumerate(
+                # extra_fields JSONB، بدونِ ستونِ SQLِ تازه. طبقِ گزارشِ تکمیلیِ
+                # صریح («کدِ حسابِ شعبه، نامِ بانک از جدولِ بانک‌ها، نوعِ
+                # حساب، شماره‌کارت، اتصال به کارت‌خوان»)، bank_id/branch_code/
+                # card_number/is_pos_connected هم اضافه شدند.
+                for sort_order, (field_key, label, kind) in enumerate(
                     [
-                        ("account_type", "نوعِ حساب (جاری/پس‌انداز)"),
-                        ("account_number", "شماره‌حساب"),
-                        ("iban", "شماره‌شبا"),
-                        ("branch", "شعبه"),
+                        ("bank_id", "نامِ بانک", "bank"),
+                        ("account_type", "نوعِ حساب", "account_type"),
+                        ("account_number", "شماره‌حساب", "text"),
+                        ("branch", "شعبه", "text"),
+                        ("branch_code", "کدِ شعبه", "text"),
+                        ("iban", "شماره‌شبا", "text"),
+                        ("card_number", "شماره‌کارت", "text"),
+                        ("is_pos_connected", "متصل به کارت‌خوان است؟", "boolean"),
                     ]
                 ):
                     session.add(
@@ -1212,7 +1310,7 @@ def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
                             person_group_id=0,
                             field_key=field_key,
                             label=label,
-                            kind="text",
+                            kind=kind,
                             is_required=False,
                             sort_order=sort_order,
                         )
@@ -1247,6 +1345,7 @@ class PersonGroupRow:
     name: str
     is_active: bool
     color: str | None = None
+    is_personnel: bool = False
 
 
 def ensure_person_groups(session, company_id: int) -> dict[str, int]:
@@ -1259,7 +1358,14 @@ def ensure_person_groups(session, company_id: int) -> dict[str, int]:
     }
     for code, name in _PERSON_GROUP_SEED:
         if code not in existing:
-            group = PersonGroup(company_id=company_id, code=code, name=name, is_active=True)
+            # طبقِ درخواستِ صریح: گروهِ PERSONNEL همیشه با پرچمِ is_personnel
+            # روشن ساخته می‌شود — هم برایِ شرکت‌هایِ تازه، هم (طبقِ مایگریشنِ
+            # ۰۵۰) برایِ شرکت‌هایِ از‌قبل‌موجود؛ رفتار برایِ نصب‌هایِ فعلی
+            # عوض نمی‌شود.
+            group = PersonGroup(
+                company_id=company_id, code=code, name=name, is_active=True,
+                is_personnel=(code == PERSONNEL_GROUP_CODE),
+            )
             session.add(group)
             session.flush()
             existing[code] = group.person_group_id
@@ -1273,7 +1379,7 @@ def list_person_groups(company_id: int) -> list[PersonGroupRow]:
         rows = session.scalars(
             select(PersonGroup).where(PersonGroup.company_id == company_id).order_by(PersonGroup.person_group_id)
         ).all()
-        return [PersonGroupRow(g.person_group_id, g.code, g.name, g.is_active, g.color) for g in rows]
+        return [PersonGroupRow(g.person_group_id, g.code, g.name, g.is_active, g.color, g.is_personnel) for g in rows]
 
 
 def get_person_group_id(company_id: int, code: str) -> int:
@@ -1281,6 +1387,24 @@ def get_person_group_id(company_id: int, code: str) -> int:
         groups = ensure_person_groups(session, company_id)
         session.commit()
         return groups[code]
+
+
+def is_personnel_group(person_group_id: int) -> bool:
+    """طبقِ درخواستِ صریح: «کدام گروه(هایِ) تفصیلی = پرسنل» دیگر هاردکد
+    نیست — این پرچم در تنظیماتِ گروه‌هایِ تفصیلی قابلِ‌تغییر است
+    (dimension_group_config.py)."""
+    with new_session() as session:
+        group = session.get(PersonGroup, person_group_id)
+        return bool(group is not None and group.is_personnel)
+
+
+def set_group_is_personnel(person_group_id: int, value: bool) -> None:
+    with new_session() as session:
+        group = session.get(PersonGroup, person_group_id)
+        if group is None:
+            raise ValueError("گروه یافت نشد.")
+        group.is_personnel = value
+        session.commit()
 
 
 def _group_row_to_person_row(

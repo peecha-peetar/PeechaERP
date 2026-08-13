@@ -38,7 +38,7 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
 
-        title = QLabel("ردِ حسابرسی")
+        title = QLabel("وقایعِ کاربران")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 

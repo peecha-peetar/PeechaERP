@@ -1,0 +1,519 @@
+"""سرویسِ کاتالوگِ انبار — واحد/برند/تولیدکننده و «کالا».
+
+طبقِ سندِ معماری: کالا موجودیتِ تازه‌ای نیست، تفصیلیِ سطحِ‌آخرِ گروهِ سیستمیِ
+INVENTORY_ITEM است (acc.detail_accounts)؛ inv.items یک جدولِ اقماریِ
+یک‌به‌یک است — دقیقاً هم‌الگو با hr.employees نسبت به تفصیلیِ گروهِ
+PERSONNEL. منطقِ پل‌زدن این‌جاست (نه در detail_dimensions.py که عمداً
+بی‌اطلاع از inv.* می‌ماند)."""
+
+from __future__ import annotations
+
+import decimal
+from dataclasses import dataclass, field
+from typing import Any
+
+from sqlalchemy import func, select
+
+from peecha.db.base import new_session
+from peecha.db.models.inventory import (
+    Brand,
+    CostingMethod,
+    Item,
+    ItemUomConversion,
+    Manufacturer,
+    RelatedItem,
+    StockDocumentLine,
+    Uom,
+)
+from peecha.services import detail_dimensions as dimensions_service
+
+ITEM_DIMENSION_CODE = "INVENTORY_ITEM"
+
+
+# ---------------------------------------------------------------------
+# واحدِ اندازه‌گیری
+# ---------------------------------------------------------------------
+@dataclass
+class UomRow:
+    uom_id: int
+    code: str
+    name: str
+    uom_type_code: str
+    is_active: bool
+    is_global: bool
+
+
+def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
+    with new_session() as session:
+        query = select(Uom).where((Uom.company_id == company_id) | (Uom.company_id.is_(None)))
+        if active_only:
+            query = query.where(Uom.is_active)
+        rows = session.scalars(query.order_by(Uom.code)).all()
+        return [
+            UomRow(r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None) for r in rows
+        ]
+
+
+def create_uom(company_id: int, code: str, name: str, uom_type_code: str) -> int:
+    with new_session() as session:
+        uom = Uom(company_id=company_id, code=code.strip(), name=name.strip(), uom_type_code=uom_type_code)
+        session.add(uom)
+        session.commit()
+        return uom.uom_id
+
+
+def update_uom(uom_id: int, company_id: int, code: str, name: str, uom_type_code: str, is_active: bool) -> None:
+    with new_session() as session:
+        uom = session.get(Uom, uom_id)
+        if uom is None or uom.company_id != company_id:
+            raise ValueError("واحدِ اندازه‌گیری نامعتبر است (فقط واحدهایِ اختصاصیِ همین شرکت قابلِ‌ویرایش‌اند).")
+        uom.code = code.strip()
+        uom.name = name.strip()
+        uom.uom_type_code = uom_type_code
+        uom.is_active = is_active
+        session.commit()
+
+
+def delete_uom(uom_id: int, company_id: int) -> None:
+    with new_session() as session:
+        uom = session.get(Uom, uom_id)
+        if uom is None or uom.company_id != company_id:
+            raise ValueError("واحدِ اندازه‌گیری نامعتبر است.")
+        in_use = session.scalar(
+            select(func.count()).select_from(Item).where(Item.base_uom_id == uom_id)
+        ) or session.scalar(
+            select(func.count()).select_from(ItemUomConversion).where(ItemUomConversion.uom_id == uom_id)
+        )
+        if in_use:
+            raise ValueError("این واحد در تعریفِ کالاها استفاده شده و قابلِ‌حذف نیست.")
+        session.delete(uom)
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# برند / تولیدکننده
+# ---------------------------------------------------------------------
+@dataclass
+class BrandRow:
+    brand_id: int
+    code: str
+    name: str
+    is_active: bool
+
+
+def list_brands(company_id: int, active_only: bool = False) -> list[BrandRow]:
+    with new_session() as session:
+        query = select(Brand).where(Brand.company_id == company_id)
+        if active_only:
+            query = query.where(Brand.is_active)
+        rows = session.scalars(query.order_by(Brand.code)).all()
+        return [BrandRow(r.brand_id, r.code, r.name, r.is_active) for r in rows]
+
+
+def create_brand(company_id: int, code: str, name: str) -> int:
+    with new_session() as session:
+        brand = Brand(company_id=company_id, code=code.strip(), name=name.strip())
+        session.add(brand)
+        session.commit()
+        return brand.brand_id
+
+
+def update_brand(brand_id: int, company_id: int, code: str, name: str, is_active: bool) -> None:
+    with new_session() as session:
+        brand = session.get(Brand, brand_id)
+        if brand is None or brand.company_id != company_id:
+            raise ValueError("برند نامعتبر است.")
+        brand.code, brand.name, brand.is_active = code.strip(), name.strip(), is_active
+        session.commit()
+
+
+def delete_brand(brand_id: int, company_id: int) -> None:
+    with new_session() as session:
+        brand = session.get(Brand, brand_id)
+        if brand is None or brand.company_id != company_id:
+            raise ValueError("برند نامعتبر است.")
+        if session.scalar(select(func.count()).select_from(Item).where(Item.brand_id == brand_id)):
+            raise ValueError("این برند به کالایی وصل است و قابلِ‌حذف نیست.")
+        session.delete(brand)
+        session.commit()
+
+
+@dataclass
+class ManufacturerRow:
+    manufacturer_id: int
+    code: str
+    name: str
+    country_name: str | None
+    is_active: bool
+
+
+def list_manufacturers(company_id: int, active_only: bool = False) -> list[ManufacturerRow]:
+    with new_session() as session:
+        query = select(Manufacturer).where(Manufacturer.company_id == company_id)
+        if active_only:
+            query = query.where(Manufacturer.is_active)
+        rows = session.scalars(query.order_by(Manufacturer.code)).all()
+        return [ManufacturerRow(r.manufacturer_id, r.code, r.name, r.country_name, r.is_active) for r in rows]
+
+
+def create_manufacturer(company_id: int, code: str, name: str, country_name: str | None = None) -> int:
+    with new_session() as session:
+        manufacturer = Manufacturer(
+            company_id=company_id, code=code.strip(), name=name.strip(), country_name=(country_name or None)
+        )
+        session.add(manufacturer)
+        session.commit()
+        return manufacturer.manufacturer_id
+
+
+def update_manufacturer(
+    manufacturer_id: int, company_id: int, code: str, name: str, is_active: bool, country_name: str | None = None
+) -> None:
+    with new_session() as session:
+        manufacturer = session.get(Manufacturer, manufacturer_id)
+        if manufacturer is None or manufacturer.company_id != company_id:
+            raise ValueError("تولیدکننده نامعتبر است.")
+        manufacturer.code, manufacturer.name = code.strip(), name.strip()
+        manufacturer.country_name, manufacturer.is_active = (country_name or None), is_active
+        session.commit()
+
+
+def delete_manufacturer(manufacturer_id: int, company_id: int) -> None:
+    with new_session() as session:
+        manufacturer = session.get(Manufacturer, manufacturer_id)
+        if manufacturer is None or manufacturer.company_id != company_id:
+            raise ValueError("تولیدکننده نامعتبر است.")
+        if session.scalar(select(func.count()).select_from(Item).where(Item.manufacturer_id == manufacturer_id)):
+            raise ValueError("این تولیدکننده به کالایی وصل است و قابلِ‌حذف نیست.")
+        session.delete(manufacturer)
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# روش‌هایِ قیمت‌گذاری (Lookup ثابتِ سیستمی)
+# ---------------------------------------------------------------------
+@dataclass
+class CostingMethodRow:
+    costing_method_id: int
+    code: str
+
+
+def list_costing_methods() -> list[CostingMethodRow]:
+    with new_session() as session:
+        rows = session.scalars(select(CostingMethod).order_by(CostingMethod.costing_method_id)).all()
+        return [CostingMethodRow(r.costing_method_id, r.code) for r in rows]
+
+
+# ---------------------------------------------------------------------
+# کالا/خدمت — پل به تفصیلیِ گروهِ INVENTORY_ITEM
+# ---------------------------------------------------------------------
+@dataclass
+class ItemRow:
+    item_id: int
+    item_detail_account_id: int
+    code: str
+    name: str | None
+    is_active: bool
+    item_kind_code: str
+    base_uom_id: int
+    base_uom_code: str = ""
+    brand_id: int | None = None
+    manufacturer_id: int | None = None
+    variant_parent_item_id: int | None = None
+    costing_method_code: str | None = None
+    lifecycle_status_code: str = "ACTIVE"
+    is_sellable: bool = True
+    is_purchasable: bool = True
+    is_stock_tracked: bool = True
+    track_serial: bool = False
+    track_batch: bool = False
+    track_expiry: bool = False
+    notes: str | None = None
+
+
+def _item_dimension_type_id(company_id: int) -> int:
+    return dimensions_service.get_specialized_dimension_type_id(company_id, ITEM_DIMENSION_CODE)
+
+
+def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
+    dimension_type_id = _item_dimension_type_id(company_id)
+    detail_rows = {
+        r.detail_account_id: r for r in dimensions_service.list_detail_accounts(company_id, dimension_type_id)
+    }
+    with new_session() as session:
+        items = session.scalars(select(Item).where(Item.company_id == company_id)).all()
+        uom_codes = {u.uom_id: u.code for u in session.scalars(select(Uom))}
+        result: list[ItemRow] = []
+        for it in items:
+            detail = detail_rows.get(it.item_detail_account_id)
+            if detail is None:
+                continue
+            if active_only and not detail.is_active:
+                continue
+            result.append(
+                ItemRow(
+                    item_id=it.item_id,
+                    item_detail_account_id=it.item_detail_account_id,
+                    code=detail.code,
+                    name=detail.name,
+                    is_active=detail.is_active,
+                    item_kind_code=it.item_kind_code,
+                    base_uom_id=it.base_uom_id,
+                    base_uom_code=uom_codes.get(it.base_uom_id, ""),
+                    brand_id=it.brand_id,
+                    manufacturer_id=it.manufacturer_id,
+                    variant_parent_item_id=it.variant_parent_item_id,
+                    costing_method_code=it.costing_method_code,
+                    lifecycle_status_code=it.lifecycle_status_code,
+                    is_sellable=it.is_sellable,
+                    is_purchasable=it.is_purchasable,
+                    is_stock_tracked=it.is_stock_tracked,
+                    track_serial=it.track_serial,
+                    track_batch=it.track_batch,
+                    track_expiry=it.track_expiry,
+                    notes=it.notes,
+                )
+            )
+        result.sort(key=lambda r: r.code)
+        return result
+
+
+def get_item(item_id: int) -> Item | None:
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is not None:
+            session.expunge(item)
+        return item
+
+
+def get_item_by_detail_account_id(item_detail_account_id: int) -> Item | None:
+    with new_session() as session:
+        item = session.scalar(select(Item).where(Item.item_detail_account_id == item_detail_account_id))
+        if item is not None:
+            session.expunge(item)
+        return item
+
+
+@dataclass
+class ItemFields:
+    item_kind_code: str
+    base_uom_id: int
+    brand_id: int | None = None
+    manufacturer_id: int | None = None
+    variant_parent_item_id: int | None = None
+    costing_method_code: str | None = None
+    is_sellable: bool = True
+    is_purchasable: bool = True
+    is_stock_tracked: bool = True
+    track_serial: bool = False
+    track_batch: bool = False
+    track_expiry: bool = False
+    shelf_life_days: int | None = None
+    weight_kg: decimal.Decimal | None = None
+    volume_m3: decimal.Decimal | None = None
+    notes: str | None = None
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+
+
+def _validate_item_fields(fields: ItemFields) -> None:
+    if fields.item_kind_code not in ("GOOD", "SERVICE"):
+        raise ValueError("نوعِ کالا نامعتبر است.")
+    if fields.item_kind_code == "SERVICE" and fields.is_stock_tracked:
+        raise ValueError("خدمت نمی‌تواند موجودی‌محور باشد.")
+    if fields.track_expiry and not fields.track_batch:
+        raise ValueError("ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است.")
+
+
+def create_item(company_id: int, code: str, name: str, fields: ItemFields) -> int:
+    """ساختِ کالا: اول تفصیلیِ سطحِ‌آخرِ گروهِ INVENTORY_ITEM ساخته می‌شود،
+    سپس ردیفِ اقماریِ inv.items با همان item_detail_account_id."""
+    _validate_item_fields(fields)
+    dimension_type_id = _item_dimension_type_id(company_id)
+    detail_account = dimensions_service.create_detail_account(company_id, dimension_type_id, code, name)
+    with new_session() as session:
+        item = Item(
+            company_id=company_id,
+            item_detail_account_id=detail_account.detail_account_id,
+            item_kind_code=fields.item_kind_code,
+            base_uom_id=fields.base_uom_id,
+            brand_id=fields.brand_id,
+            manufacturer_id=fields.manufacturer_id,
+            variant_parent_item_id=fields.variant_parent_item_id,
+            costing_method_code=fields.costing_method_code,
+            is_sellable=fields.is_sellable,
+            is_purchasable=fields.is_purchasable,
+            is_stock_tracked=fields.is_stock_tracked,
+            track_serial=fields.track_serial,
+            track_batch=fields.track_batch,
+            track_expiry=fields.track_expiry,
+            shelf_life_days=fields.shelf_life_days,
+            weight_kg=fields.weight_kg,
+            volume_m3=fields.volume_m3,
+            notes=fields.notes,
+            extra_fields=dict(fields.extra_fields),
+        )
+        session.add(item)
+        session.commit()
+        return item.item_id
+
+
+def update_item(
+    item_id: int, company_id: int, code: str, name: str, is_active: bool, lifecycle_status_code: str, fields: ItemFields
+) -> None:
+    _validate_item_fields(fields)
+    if lifecycle_status_code not in ("DRAFT", "ACTIVE", "DISCONTINUED"):
+        raise ValueError("وضعیتِ چرخهٔ‌عمر نامعتبر است.")
+
+    from peecha.services import inventory_engine as engine_service
+
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None or item.company_id != company_id:
+            raise ValueError("کالا نامعتبر است.")
+
+        # طبقِ مرحلهٔ ۸ (۱۰۸): واحدِ پایه/روشِ قیمت‌گذاری فقط با موجودیِ صفر
+        # در همهٔ انبارها قابلِ‌تغییر است — نه صرفِ نبودِ سابقهٔ حرکت.
+        has_open_balance = (
+            (item.base_uom_id != fields.base_uom_id or item.costing_method_code != fields.costing_method_code)
+            and engine_service.get_item_total_on_hand(item_id) != 0
+        )
+        if has_open_balance and item.base_uom_id != fields.base_uom_id:
+            raise ValueError("این کالا در انباری موجودی دارد؛ واحدِ پایه فقط با موجودیِ صفر قابلِ‌تغییر است.")
+        if has_open_balance and item.costing_method_code != fields.costing_method_code:
+            raise ValueError("این کالا در انباری موجودی دارد؛ روشِ قیمت‌گذاری فقط با موجودیِ صفر قابلِ‌تغییر است.")
+
+        item.item_kind_code = fields.item_kind_code
+        item.base_uom_id = fields.base_uom_id
+        item.brand_id = fields.brand_id
+        item.manufacturer_id = fields.manufacturer_id
+        item.variant_parent_item_id = fields.variant_parent_item_id
+        item.costing_method_code = fields.costing_method_code
+        item.lifecycle_status_code = lifecycle_status_code
+        item.is_sellable = fields.is_sellable
+        item.is_purchasable = fields.is_purchasable
+        item.is_stock_tracked = fields.is_stock_tracked
+        item.track_serial = fields.track_serial
+        item.track_batch = fields.track_batch
+        item.track_expiry = fields.track_expiry
+        item.shelf_life_days = fields.shelf_life_days
+        item.weight_kg = fields.weight_kg
+        item.volume_m3 = fields.volume_m3
+        item.notes = fields.notes
+        item.extra_fields = dict(fields.extra_fields)
+        detail_account_id = item.item_detail_account_id
+        session.commit()
+
+    dimensions_service.update_detail_account(detail_account_id, company_id, code, is_active, name)
+
+
+def _item_has_stock_movements(session, item_id: int) -> bool:
+    from peecha.db.models.inventory import StockLedger
+
+    return bool(session.scalar(select(func.count()).select_from(StockLedger).where(StockLedger.item_id == item_id)))
+
+
+def delete_item(item_id: int, company_id: int) -> None:
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None or item.company_id != company_id:
+            raise ValueError("کالا نامعتبر است.")
+        if _item_has_stock_movements(session, item_id):
+            raise ValueError("این کالا سابقهٔ حرکتِ انبار دارد و قابلِ‌حذف نیست — به‌جایِ حذف، وضعیتِ آن را «متوقف‌شده» کنید.")
+        if session.scalar(
+            select(func.count()).select_from(StockDocumentLine).where(StockDocumentLine.item_id == item_id)
+        ):
+            raise ValueError("این کالا در سندی استفاده شده و قابلِ‌حذف نیست.")
+        detail_account_id = item.item_detail_account_id
+        session.delete(item)
+        session.commit()
+    dimensions_service.delete_detail_account(detail_account_id, company_id)
+
+
+# ---------------------------------------------------------------------
+# تبدیلِ واحد
+# ---------------------------------------------------------------------
+@dataclass
+class UomConversionRow:
+    conversion_id: int
+    uom_id: int
+    uom_code: str
+    conversion_factor: decimal.Decimal
+    is_purchase_default: bool
+    is_sales_default: bool
+
+
+def list_item_uom_conversions(item_id: int) -> list[UomConversionRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(ItemUomConversion).where(ItemUomConversion.item_id == item_id)
+        ).all()
+        uom_codes = {u.uom_id: u.code for u in session.scalars(select(Uom))}
+        return [
+            UomConversionRow(
+                r.conversion_id, r.uom_id, uom_codes.get(r.uom_id, ""), r.conversion_factor,
+                r.is_purchase_default, r.is_sales_default,
+            )
+            for r in rows
+        ]
+
+
+def set_item_uom_conversion(
+    item_id: int, uom_id: int, conversion_factor: decimal.Decimal,
+    is_purchase_default: bool = False, is_sales_default: bool = False,
+) -> None:
+    if conversion_factor <= 0:
+        raise ValueError("ضریبِ تبدیل باید بزرگ‌تر از صفر باشد.")
+    with new_session() as session:
+        existing = session.scalar(
+            select(ItemUomConversion).where(
+                ItemUomConversion.item_id == item_id, ItemUomConversion.uom_id == uom_id
+            )
+        )
+        if existing is not None:
+            existing.conversion_factor = conversion_factor
+            existing.is_purchase_default = is_purchase_default
+            existing.is_sales_default = is_sales_default
+        else:
+            session.add(
+                ItemUomConversion(
+                    item_id=item_id, uom_id=uom_id, conversion_factor=conversion_factor,
+                    is_purchase_default=is_purchase_default, is_sales_default=is_sales_default,
+                )
+            )
+        session.commit()
+
+
+def delete_item_uom_conversion(conversion_id: int, item_id: int) -> None:
+    with new_session() as session:
+        row = session.get(ItemUomConversion, conversion_id)
+        if row is None or row.item_id != item_id:
+            raise ValueError("ردیفِ تبدیلِ واحد نامعتبر است.")
+        session.delete(row)
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# کالاهایِ جایگزین/مکمل
+# ---------------------------------------------------------------------
+def list_related_items(item_id: int) -> list[tuple[int, str]]:
+    with new_session() as session:
+        rows = session.scalars(select(RelatedItem).where(RelatedItem.item_id == item_id)).all()
+        return [(r.related_item_id, r.relation_type_code) for r in rows]
+
+
+def add_related_item(item_id: int, related_item_id: int, relation_type_code: str) -> None:
+    if relation_type_code not in ("SUBSTITUTE", "COMPLEMENTARY"):
+        raise ValueError("نوعِ ارتباط نامعتبر است.")
+    if item_id == related_item_id:
+        raise ValueError("یک کالا نمی‌تواند جایگزین/مکملِ خودش باشد.")
+    with new_session() as session:
+        session.add(RelatedItem(item_id=item_id, related_item_id=related_item_id, relation_type_code=relation_type_code))
+        session.commit()
+
+
+def remove_related_item(related_item_link_id: int) -> None:
+    with new_session() as session:
+        row = session.get(RelatedItem, related_item_link_id)
+        if row is not None:
+            session.delete(row)
+            session.commit()

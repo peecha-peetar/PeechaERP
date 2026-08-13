@@ -40,7 +40,7 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services.reports import code_in_range
 from peecha.ui import report_export
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, PersianDigitLineEdit
 
 _ZERO = decimal.Decimal("0")
 
@@ -48,6 +48,7 @@ _STATUS_OPTIONS = [
     ("EXCLUDE_DRAFT", "بدونِ پیش‌نویس (پیش‌فرض)"),
     ("ALL", "همه (شاملِ پیش‌نویس)"),
     ("DRAFT_ONLY", "فقط پیش‌نویس"),
+    ("PERMANENT_ONLY", "فقط دائم"),
 ]
 
 
@@ -107,7 +108,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
     override کنند و (headers, rows, footer) برگردانند؛ فیلترهایِ اختصاصیِ
     خودشان را می‌توانند به `self.extra_filter_row` اضافه کنند و در
     `load_report` از `self.status_filter()`/`self.code_range()`/
-    `self.cost_center_id()`/`self.document_no()` استفاده کنند."""
+    `self.cost_center_id()`/`self.document_no_range()` استفاده کنند."""
 
     def __init__(self, title: str) -> None:
         super().__init__()
@@ -178,9 +179,12 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         self.code_to_field.setMaximumWidth(420)
         self.cost_center_label = QLabel("مرکزِ هزینه/پروژه:")
         self.cost_center_combo = QComboBox()
-        self.document_no_label = QLabel("شماره‌یِ سند:")
-        self.document_no_field = QLineEdit()
+        self.document_no_label = QLabel("از شماره‌یِ سند:")
+        self.document_no_field = PersianDigitLineEdit()
         self.document_no_field.setMaximumWidth(110)
+        self.document_no_to_label = QLabel("تا شماره‌یِ سند:")
+        self.document_no_to_field = PersianDigitLineEdit()
+        self.document_no_to_field.setMaximumWidth(110)
         for widget in (
             self.code_from_label,
             self.code_from_field,
@@ -190,6 +194,8 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
             self.cost_center_combo,
             self.document_no_label,
             self.document_no_field,
+            self.document_no_to_label,
+            self.document_no_to_field,
         ):
             widget.setVisible(False)
             advanced_row.addWidget(widget)
@@ -264,7 +270,8 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
                 "کدِ حسابِ پایانِ بازه — مثلِ فیلدِ «از کدِ حساب»، با جستجویِ زنده. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد.",
             ),
             (self.cost_center_combo, "فقط اسنادِ همین مرکزِ هزینه یا پروژه نشان داده شوند. «همه» یعنی بدونِ این فیلتر."),
-            (self.document_no_field, "فقط سندی با همین شماره نشان داده شود. اختیاری است."),
+            (self.document_no_field, "شماره‌یِ سندِ شروعِ بازه. اختیاری است؛ اگر خالی بماند، از ابتدا محدودیتی ندارد."),
+            (self.document_no_to_field, "شماره‌یِ سندِ پایانِ بازه. اختیاری است؛ اگر خالی بماند، تا انتها محدودیتی ندارد."),
         ])
 
     def add_field_help(self, fields: list[tuple[QWidget, str]]) -> None:
@@ -285,6 +292,8 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
     def enable_document_no_filter(self) -> None:
         self.document_no_label.setVisible(True)
         self.document_no_field.setVisible(True)
+        self.document_no_to_label.setVisible(True)
+        self.document_no_to_field.setVisible(True)
 
     def _reload_cost_center_options(self) -> None:
         company_id = self._company_id()
@@ -301,7 +310,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         for row in dimensions_service.list_all_detail_accounts(company_id):
             if row.dimension_type_id in (cost_center_type_id, project_type_id):
                 self.cost_center_combo.addItem(
-                    f"{row.group_name}: {row.full_code} — {row.name or ''}", row.detail_account_id
+                    f"{dimension_label(row.group_name)}: {row.full_code} — {row.name or ''}", row.detail_account_id
                 )
 
     def code_range_account_level(self) -> int | None:
@@ -311,17 +320,26 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         پیش‌فرض None یعنی بدونِ محدودیت (گزارش‌هایی که سطح ندارند)."""
         return None
 
+    def code_range_detail_options(self) -> list[tuple[str, str]] | None:
+        """زیرکلاس‌هایی که سطحِ تفصیلی (۴) را هم در کمبویِ «سطح» دارند، این
+        را override می‌کنند تا وقتی code_range_account_level() برابرِ ۴
+        است، فهرستِ زنده‌ی بازه‌یِ کد از رویِ حساب‌هایِ تفصیلیِ همان نوع‌بُعدِ
+        انتخاب‌شده ساخته شود (نه از رویِ حساب‌هایِ کدینگیِ گروه/کل/معین).
+        None یعنی این گزارش سطحِ تفصیلی ندارد."""
+        return None
+
     def _reload_code_range_options(self) -> None:
         company_id = self._company_id()
         if company_id is None:
             return
         level = self.code_range_account_level()
-        accounts = coa_service.list_accounts(company_id)
-        # تفصیلی (سطحِ ۴) از جدولِ دیگری می‌آید و در این فهرستِ زنده
-        # نیست؛ برایِ آن سطح، تایپِ دستیِ کد همچنان کار می‌کند.
-        if level in (1, 2, 3):
-            accounts = [a for a in accounts if a.account_level == level]
-        options = [(a.full_code, a.name) for a in accounts]
+        if level == 4:
+            options = self.code_range_detail_options() or []
+        else:
+            accounts = coa_service.list_accounts(company_id)
+            if level in (1, 2, 3):
+                accounts = [a for a in accounts if a.account_level == level]
+            options = [(a.full_code, a.name) for a in accounts]
         self.code_from_field.set_options(options)
         self.code_to_field.set_options(options)
 
@@ -335,14 +353,17 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
     def cost_center_id(self) -> int | None:
         return self.cost_center_combo.currentData()
 
-    def document_no(self) -> int | None:
-        text = self.document_no_field.text().strip()
+    def _parse_document_no(self, field: PersianDigitLineEdit) -> int | None:
+        text = field.text().strip()
         if not text:
             return None
         try:
             return int(text)
         except ValueError:
             return None
+
+    def document_no_range(self) -> tuple[int | None, int | None]:
+        return self._parse_document_no(self.document_no_field), self._parse_document_no(self.document_no_to_field)
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
@@ -449,8 +470,12 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
             parts.append(("بازه‌یِ کد", f"{self.code_from_field.text().strip()} تا {self.code_to_field.text().strip()}"))
         if self.cost_center_combo.isVisibleTo(self) and self.cost_center_combo.currentData() is not None:
             parts.append(("مرکزِ هزینه/پروژه", self.cost_center_combo.currentText()))
-        if self.document_no_field.isVisibleTo(self) and self.document_no_field.text().strip():
-            parts.append(("شماره‌یِ سند", self.document_no_field.text().strip()))
+        if self.document_no_field.isVisibleTo(self) and (
+            self.document_no_field.text().strip() or self.document_no_to_field.text().strip()
+        ):
+            parts.append(
+                ("شماره‌یِ سند", f"{self.document_no_field.text().strip()} تا {self.document_no_to_field.text().strip()}")
+            )
         parts.extend(self.extra_filters_summary())
         if self.search_field.text().strip():
             parts.append(("جستجو در نتایج", self.search_field.text().strip()))
