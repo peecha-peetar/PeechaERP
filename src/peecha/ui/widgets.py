@@ -16,6 +16,8 @@ set_field_help_enabled) به دکمه‌ای در هدرِ برنامه منتق
 from __future__ import annotations
 
 import datetime
+import json
+from dataclasses import dataclass
 
 from PySide6.QtCore import (
     Property,
@@ -26,6 +28,7 @@ from PySide6.QtCore import (
     QPropertyAnimation,
     QSettings,
     Qt,
+    Signal,
 )
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import (
@@ -33,9 +36,11 @@ from PySide6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -498,6 +503,256 @@ class FieldHelpMixin:
         parent = self.parentWidget()
         if parent is not None:
             FieldHelpPanel.instance(parent).deactivate()
+
+
+@dataclass
+class FieldSpec:
+    """یک فیلدِ فرم برایِ FieldGrid — key شناسه‌یِ پایدار برایِ ذخیره‌یِ
+    چیدمان است (نه متنِ نمایشی، که ممکن است بعداً عوض شود)؛ span تعدادِ
+    ستون (از columnsِ FieldGrid) که این فیلد پیش‌فرض اشغال می‌کند."""
+
+    key: str
+    label: str
+    widget: QWidget
+    span: int = 3
+
+
+class FieldGrid(QWidget):
+    """گریدِ چندستونهٔ واکنش‌گرا برایِ چیدمانِ فیلدهایِ فرم — جایگزینِ
+    الگویِ تکراریِ «یک QLabel + یک فیلد در هر ردیفِ QVBoxLayout» که تقریباً
+    در همه‌یِ صفحه‌ها فیلدهایِ کوتاه (تلفن/کدپستی/کد) را بی‌دلیل
+    تمامِ‌عرض می‌کرد. هر FieldSpec یک spanِ پیش‌فرض دارد که نویسنده‌یِ
+    صفحه تعیین می‌کند؛ ریاضیِ ردیف/ستون همان الگویی است که قبلاً فقط در
+    treasury_voucher.py (به‌صورتِ دوتاییِ ثابت) دستی نوشته شده بود، اینجا
+    برایِ spanِ متغیر (۱ تا columns) تعمیم یافته.
+
+    برایِ پشتیبانیِ ویرایشِ چیدمان (LayoutEditMixin) بدونِ بازساختِ
+    ویجت‌ها در هر تغییر: هر فیلد یک container ثابت دارد (ساخته‌شده فقط
+    یک‌بار در __init__) که در rebuild فقط موقعیتش در QGridLayout تغییر
+    می‌کند — QLayout.addWidget رویِ ویجتی که از قبل عضوِ همان layout است،
+    فقط موقعیتش را جابه‌جا می‌کند، نه دوباره می‌سازد."""
+
+    layoutChanged = Signal()
+
+    def __init__(self, fields: list[FieldSpec], columns: int = 3, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._columns = columns
+        self._default_order: list[str] = [f.key for f in fields]
+        self._specs: dict[str, FieldSpec] = {f.key: f for f in fields}
+        self._current_span: dict[str, int] = {f.key: f.span for f in fields}
+        self._order: list[str] = list(self._default_order)
+
+        self._grid_layout = QGridLayout(self)
+        self._grid_layout.setSpacing(10)
+
+        self._containers: dict[str, QWidget] = {}
+        self._toolbars: dict[str, QWidget] = {}
+        self._span_buttons: dict[str, dict[int, QPushButton]] = {}
+        for spec in fields:
+            self._containers[spec.key] = self._build_container(spec)
+        self._rebuild()
+
+    def _build_container(self, spec: FieldSpec) -> QWidget:
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+
+        header = QHBoxLayout()
+        header.setSpacing(4)
+        if spec.label:
+            header.addWidget(QLabel(spec.label), stretch=1)
+        else:
+            # مثلاً چک‌باکس‌ها که متنِ خودشان برچسب است — بدونِ QLabelِ
+            # تکراری، فقط جایگاهِ تولبارِ ویرایش (راست‌چین) نگه داشته می‌شود.
+            header.addStretch(1)
+
+        toolbar = QWidget()
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.setSpacing(2)
+        span_buttons: dict[int, QPushButton] = {}
+        for span_value, span_label in ((1, "۱"), (2, "۲"), (3, "۳")):
+            button = QPushButton(span_label)
+            button.setCheckable(True)
+            button.setFixedSize(20, 20)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setToolTip(f"عرضِ فیلد: {span_value} از {self._columns} ستون")
+            button.clicked.connect(lambda _checked, key=spec.key, value=span_value: self._set_span(key, value))
+            toolbar_layout.addWidget(button)
+            span_buttons[span_value] = button
+        up_button = QPushButton("▲")
+        up_button.setFixedSize(20, 20)
+        up_button.setCursor(Qt.PointingHandCursor)
+        up_button.setToolTip("جابه‌جایی به بالا")
+        up_button.clicked.connect(lambda _checked=False, key=spec.key: self._move(key, -1))
+        toolbar_layout.addWidget(up_button)
+        down_button = QPushButton("▼")
+        down_button.setFixedSize(20, 20)
+        down_button.setCursor(Qt.PointingHandCursor)
+        down_button.setToolTip("جابه‌جایی به پایین")
+        down_button.clicked.connect(lambda _checked=False, key=spec.key: self._move(key, 1))
+        toolbar_layout.addWidget(down_button)
+        toolbar.setVisible(False)
+        header.addWidget(toolbar)
+        outer.addLayout(header)
+        outer.addWidget(spec.widget)
+
+        self._toolbars[spec.key] = toolbar
+        self._span_buttons[spec.key] = span_buttons
+        return container
+
+    def _rebuild(self) -> None:
+        row = 0
+        col = 0
+        for key in self._order:
+            span = max(1, min(self._columns, self._current_span[key]))
+            if col + span > self._columns:
+                row += 1
+                col = 0
+            self._grid_layout.addWidget(self._containers[key], row, col, 1, span)
+            col += span
+            if col >= self._columns:
+                row += 1
+                col = 0
+        for key, buttons in self._span_buttons.items():
+            current = self._current_span[key]
+            for span_value, button in buttons.items():
+                button.setChecked(span_value == current)
+
+    def _set_span(self, key: str, span: int) -> None:
+        self._current_span[key] = span
+        self._rebuild()
+        self.layoutChanged.emit()
+
+    def _move(self, key: str, delta: int) -> None:
+        index = self._order.index(key)
+        new_index = index + delta
+        if 0 <= new_index < len(self._order):
+            self._order[index], self._order[new_index] = self._order[new_index], self._order[index]
+            self._rebuild()
+            self.layoutChanged.emit()
+
+    def set_field_visible(self, key: str, visible: bool) -> None:
+        """پنهان/آشکارکردنِ یک فیلد بدونِ حذفش از چیدمان — برایِ فیلدهایِ
+        شرطی (مثلاً «پروژه» فقط وقتی نوعِ انبار پروژه‌ای است). اگر آن
+        فیلد تنها عضوِ ردیفِ خودش باشد (span کاملِ ردیف)، با پنهان‌شدن
+        همان ردیف هم جمع می‌شود — هم‌رفتار با project_row.setVisible
+        قبلی."""
+        self._containers[key].setVisible(visible)
+
+    def set_edit_mode(self, enabled: bool) -> None:
+        for toolbar in self._toolbars.values():
+            toolbar.setVisible(enabled)
+
+    def is_edit_mode(self) -> bool:
+        # isVisible() به دیده‌بودنِ کلِ زنجیره‌یِ اجدادِ ویجت هم وابسته است
+        # (مثلاً در تست‌هایِ آفلاین که پنجره show() نشده، همیشه False
+        # برمی‌گرداند)؛ isHidden() فقط پرچمِ صریحِ خودِ ویجت را می‌سنجد —
+        # هر تولبار (همه‌شان با هم روشن/خاموش می‌شوند) کافی‌ست برایِ تشخیص.
+        return any(not toolbar.isHidden() for toolbar in self._toolbars.values())
+
+    def current_overrides(self) -> dict[str, tuple[int, int]]:
+        """span/orderِ فعلیِ هر فیلد — برایِ ذخیره در QSettings."""
+        return {key: (self._current_span[key], index) for index, key in enumerate(self._order)}
+
+    def set_layout_overrides(self, overrides: dict[str, tuple[int, int]]) -> None:
+        """overrides: key -> (span, order). فیلدهایی که override ندارند طبقِ
+        span/ترتیبِ پیش‌فرضِ کدنویسی‌شده باقی می‌مانند؛ کلیدهایِ ناشناخته
+        (مثلاً از یک نسخهٔ قدیمی‌ترِ صفحه) بی‌سروصدا نادیده گرفته می‌شوند."""
+        for key in self._default_order:
+            span, _order = overrides.get(key, (self._specs[key].span, 0))
+            self._current_span[key] = max(1, min(self._columns, span))
+
+        def sort_key(key: str) -> tuple[int, int]:
+            default_index = self._default_order.index(key)
+            _span, order = overrides.get(key, (0, default_index))
+            return (order, default_index)
+
+        self._order = sorted(self._default_order, key=sort_key)
+        self._rebuild()
+
+    def reset_layout(self) -> None:
+        self.set_layout_overrides({})
+
+
+class LayoutEditMixin:
+    """میکسینِ اختیاریِ کلیکِ‌راست‌برایِ‌ویرایشِ‌چیدمان — هم‌الگو با
+    FieldHelpMixin (میکسینِ اختیاری که صفحه با فراخوانیِ یک متدِ ثبت،
+    آن را فعال می‌کند)، ولی چون نیازی به موقعیت‌دهیِ نسبت‌به‌پنجره‌یِ‌اصلی
+    ندارد (برخلافِ FieldHelpPanel)، ثبت بلافاصله در register_field_grids
+    انجام می‌شود، نه به‌تعویق‌افتاده تا showEvent.
+
+    استفاده: کلاسِ صفحه این را قبل از QWidget ارث ببرد و بعدِ ساختنِ
+    FieldGridهایِ خودش صدا بزند:
+        class MyScreen(LayoutEditMixin, QWidget):
+            def __init__(self):
+                super().__init__()
+                self.basic_grid = FieldGrid([...])
+                ...
+                self.register_field_grids("my_screen", [self.basic_grid, ...])
+
+    کلیکِ‌راست رویِ هر FieldGrid یک منو می‌دهد: «ویرایشِ چیدمان» (توگل)،
+    «ذخیرهٔ چیدمان»، «بازنشانیِ چیدمان». ذخیره در QSettings با کلیدِ
+    form_layout/{screen_code} به‌صورتِ یک JSONِ تخت `{field_key: [span, order]}`
+    برایِ همه‌یِ FieldGridهایِ ثبت‌شده با هم (هم‌الگو با کلیدگذاریِ
+    print_options/{title} در report_export.py) — چون هر فیلد فقط در یک
+    FieldGrid وجود دارد، ترکیب‌کردنِ همه در یک دیکشنریِ تخت مشکلی ایجاد
+    نمی‌کند (orderِ هر فیلد فقط درونِ همان FieldGridِ خودش معنا دارد).
+    این یک ترجیحِ محلیِ کاربر است (هم‌رده با تمِ رنگی/تنظیماتِ چاپ)، نه
+    داده‌یِ چندکاربره — به همین دلیل QSettings صحیح‌تر از جدولِ دیتابیس
+    است."""
+
+    _layout_edit_screen_code: str = ""
+    _layout_edit_grids: list[FieldGrid] = ()
+
+    def register_field_grids(self, screen_code: str, grids: list[FieldGrid]) -> None:
+        self._layout_edit_screen_code = screen_code
+        self._layout_edit_grids = list(grids)
+        self._apply_saved_layout()
+        for grid in grids:
+            grid.setContextMenuPolicy(Qt.CustomContextMenu)
+            grid.customContextMenuRequested.connect(lambda pos, g=grid: self._show_layout_menu(g, pos))
+
+    def _settings_key(self) -> str:
+        return f"form_layout/{self._layout_edit_screen_code}"
+
+    def _apply_saved_layout(self) -> None:
+        settings = QSettings("Peecha", "PeechaERP")
+        raw = settings.value(self._settings_key(), "")
+        if not raw:
+            return
+        try:
+            data: dict[str, list[int]] = json.loads(raw)
+        except (TypeError, ValueError):
+            return
+        overrides = {key: (int(span), int(order)) for key, (span, order) in data.items()}
+        for grid in self._layout_edit_grids:
+            grid.set_layout_overrides(overrides)
+
+    def _show_layout_menu(self, grid: FieldGrid, pos: QPoint) -> None:
+        menu = QMenu(grid)
+        toggle_action = menu.addAction("ویرایشِ چیدمان")
+        toggle_action.setCheckable(True)
+        toggle_action.setChecked(grid.is_edit_mode())
+        toggle_action.triggered.connect(lambda checked, g=grid: g.set_edit_mode(checked))
+        menu.addSeparator()
+        menu.addAction("ذخیرهٔ چیدمان", self._save_layout)
+        menu.addAction("بازنشانیِ چیدمان", self._reset_layout)
+        menu.exec(grid.mapToGlobal(pos))
+
+    def _save_layout(self) -> None:
+        merged: dict[str, tuple[int, int]] = {}
+        for grid in self._layout_edit_grids:
+            merged.update(grid.current_overrides())
+        settings = QSettings("Peecha", "PeechaERP")
+        settings.setValue(self._settings_key(), json.dumps({key: list(value) for key, value in merged.items()}))
+
+    def _reset_layout(self) -> None:
+        settings = QSettings("Peecha", "PeechaERP")
+        settings.remove(self._settings_key())
+        for grid in self._layout_edit_grids:
+            grid.reset_layout()
 
 
 class HoverButton(QPushButton):

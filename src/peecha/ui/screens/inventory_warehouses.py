@@ -42,7 +42,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
 
 _COLUMNS = ["فعال", "پیش‌فرض", "نوع", "نام", "کد"]
 _BIN_COLUMNS = ["فعال", "قابلِ‌برداشت", "نوع", "بارکد", "نام", "کد"]
@@ -129,7 +129,7 @@ class _BinLocationDialog(QDialog):
         )
 
 
-class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
+class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[locations_service.WarehouseRow] = []
@@ -151,6 +151,11 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
             (self.type_combo, "انبارِ پروژه‌ای باید به یک پروژهٔ تفصیلیِ حسابداری وصل شود."),
             (self.allow_negative_checkbox, "اگر روشن باشد، حواله/خروجی حتی با موجودیِ ناکافی نیز Post می‌شود."),
             (self.access_level_combo, "سطحِ محدود یعنی فقط کاربرانِ فهرست‌شده در تبِ امنیت به این انبار دسترسی دارند."),
+        ])
+        self.register_field_grids("inventory_warehouses", [
+            self.basic_grid, self.location_grid, self.operational_grid, self.stock_control_grid,
+            self.quality_grid, self.security_grid, self.equipment_grid, self.pos_grid,
+            self.production_grid, self.financial_grid,
         ])
 
     # ------------------------------------------------------------------
@@ -243,46 +248,37 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout = QVBoxLayout(panel)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("کد"))
         self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
-
-        layout.addWidget(QLabel("نام"))
         self.name_field = QLineEdit()
-        layout.addWidget(self.name_field)
-
-        layout.addWidget(QLabel("نامِ انگلیسی"))
         self.english_name_field = QLineEdit()
-        layout.addWidget(self.english_name_field)
-
-        layout.addWidget(QLabel("نوعِ انبار"))
         self.type_combo = QComboBox()
         self.type_combo.currentIndexChanged.connect(self._on_type_changed)
-        layout.addWidget(self.type_combo)
-
-        self.project_row = QWidget()
-        project_layout = QVBoxLayout(self.project_row)
-        project_layout.setContentsMargins(0, 0, 0, 0)
-        project_layout.addWidget(QLabel("پروژه"))
         self.project_combo = QComboBox()
-        project_layout.addWidget(self.project_combo)
-        layout.addWidget(self.project_row)
-
-        layout.addWidget(QLabel("واحدِ سازمانی"))
         self.org_unit_combo = QComboBox()
-        layout.addWidget(self.org_unit_combo)
-
-        layout.addWidget(QLabel("مرکزِ هزینه"))
         self.cost_center_combo = QComboBox()
-        layout.addWidget(self.cost_center_combo)
-
         self.is_default_checkbox = QCheckBox("انبارِ پیش‌فرض")
-        layout.addWidget(self.is_default_checkbox)
-
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
 
+        self.basic_grid = FieldGrid([
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("name", "نام", self.name_field, span=2),
+            FieldSpec("english_name", "نامِ انگلیسی", self.english_name_field, span=2),
+            FieldSpec("type", "نوعِ انبار", self.type_combo, span=1),
+            FieldSpec("project", "پروژه", self.project_combo, span=3),
+            FieldSpec("org_unit", "واحدِ سازمانی", self.org_unit_combo, span=1),
+            FieldSpec("cost_center", "مرکزِ هزینه", self.cost_center_combo, span=1),
+            FieldSpec("is_default", "", self.is_default_checkbox, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=3),
+        ])
+        # طبقِ درخواستِ صریح: پروژه فقط برایِ نوعِ PROJECT دیده شود. تکیه‌کردن
+        # به سیگنالِ currentIndexChanged کافی نیست — اگر ایندکسِ اولیه‌یِ
+        # کمبو از قبل ۰ (GENERAL) باشد، ست‌کردنِ دوباره‌یِ همان ایندکس هیچ
+        # سیگنالی صادر نمی‌کند و این ردیف با حالتِ پیش‌فرضِ QWidget (نمایان)
+        # می‌ماند؛ برایِ همین این‌جا صریحاً پنهانش می‌کنیم، هم‌الگو با
+        # temp_range در تبِ عملیاتی.
+        self.basic_grid.set_field_visible("project", False)
+        layout.addWidget(self.basic_grid)
         layout.addStretch(1)
         return panel
 
@@ -291,38 +287,26 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout = QVBoxLayout(panel)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("کشور"))
         self.country_field = QLineEdit()
-        layout.addWidget(self.country_field)
-
-        layout.addWidget(QLabel("استان"))
         self.province_field = QLineEdit()
-        layout.addWidget(self.province_field)
-
-        layout.addWidget(QLabel("شهر"))
         self.city_field = QLineEdit()
-        layout.addWidget(self.city_field)
-
-        layout.addWidget(QLabel("آدرس"))
         self.address_field = QLineEdit()
-        layout.addWidget(self.address_field)
-
-        layout.addWidget(QLabel("کدپستی"))
         self.postal_code_field = QLineEdit()
-        layout.addWidget(self.postal_code_field)
-
-        layout.addWidget(QLabel("تلفن"))
         self.phone_field = QLineEdit()
-        layout.addWidget(self.phone_field)
-
-        layout.addWidget(QLabel("مختصاتِ GPS"))
         self.gps_field = QLineEdit()
-        layout.addWidget(self.gps_field)
-
-        layout.addWidget(QLabel("مسئول/مدیرِ انبار"))
         self.manager_combo = QComboBox()
-        layout.addWidget(self.manager_combo)
 
+        self.location_grid = FieldGrid([
+            FieldSpec("country", "کشور", self.country_field, span=1),
+            FieldSpec("province", "استان", self.province_field, span=1),
+            FieldSpec("city", "شهر", self.city_field, span=1),
+            FieldSpec("postal_code", "کدپستی", self.postal_code_field, span=1),
+            FieldSpec("phone", "تلفن", self.phone_field, span=1),
+            FieldSpec("gps", "مختصاتِ GPS", self.gps_field, span=1),
+            FieldSpec("address", "آدرس", self.address_field, span=2),
+            FieldSpec("manager", "مسئول/مدیرِ انبار", self.manager_combo, span=1),
+        ])
+        layout.addWidget(self.location_grid)
         layout.addStretch(1)
         return panel
 
@@ -333,42 +317,21 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
 
         self.allow_purchase_checkbox = QCheckBox("مجازِ خرید")
         self.allow_purchase_checkbox.setChecked(True)
-        layout.addWidget(self.allow_purchase_checkbox)
-
         self.allow_sale_checkbox = QCheckBox("مجازِ فروش")
         self.allow_sale_checkbox.setChecked(True)
-        layout.addWidget(self.allow_sale_checkbox)
-
         self.allow_production_checkbox = QCheckBox("مجازِ تولید")
-        layout.addWidget(self.allow_production_checkbox)
-
         self.allow_transfer_checkbox = QCheckBox("مجازِ انتقال")
         self.allow_transfer_checkbox.setChecked(True)
-        layout.addWidget(self.allow_transfer_checkbox)
-
         self.allow_cycle_count_checkbox = QCheckBox("مجازِ انبارگردانی")
         self.allow_cycle_count_checkbox.setChecked(True)
-        layout.addWidget(self.allow_cycle_count_checkbox)
-
         self.allow_reservation_checkbox = QCheckBox("مجازِ رزرو")
         self.allow_reservation_checkbox.setChecked(True)
-        layout.addWidget(self.allow_reservation_checkbox)
-
         self.allow_direct_sale_checkbox = QCheckBox("مجازِ فروشِ مستقیم")
-        layout.addWidget(self.allow_direct_sale_checkbox)
-
         self.allow_negative_checkbox = QCheckBox("اجازهٔ موجودیِ منفی")
-        layout.addWidget(self.allow_negative_checkbox)
-
         self.requires_receipt_approval_checkbox = QCheckBox("نیازمندِ تاییدِ رسید")
-        layout.addWidget(self.requires_receipt_approval_checkbox)
-
         self.requires_issue_approval_checkbox = QCheckBox("نیازمندِ تاییدِ حواله")
-        layout.addWidget(self.requires_issue_approval_checkbox)
-
         self.temp_controlled_checkbox = QCheckBox("کنترلِ دما")
         self.temp_controlled_checkbox.toggled.connect(self._on_temp_toggled)
-        layout.addWidget(self.temp_controlled_checkbox)
 
         self.temp_row = QWidget()
         temp_layout = QHBoxLayout(self.temp_row)
@@ -381,9 +344,23 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         self.max_temp_field = QDoubleSpinBox()
         self.max_temp_field.setRange(-100, 100)
         temp_layout.addWidget(self.max_temp_field)
-        layout.addWidget(self.temp_row)
-        self.temp_row.setVisible(False)
 
+        self.operational_grid = FieldGrid([
+            FieldSpec("allow_purchase", "", self.allow_purchase_checkbox, span=1),
+            FieldSpec("allow_sale", "", self.allow_sale_checkbox, span=1),
+            FieldSpec("allow_production", "", self.allow_production_checkbox, span=1),
+            FieldSpec("allow_transfer", "", self.allow_transfer_checkbox, span=1),
+            FieldSpec("allow_cycle_count", "", self.allow_cycle_count_checkbox, span=1),
+            FieldSpec("allow_reservation", "", self.allow_reservation_checkbox, span=1),
+            FieldSpec("allow_direct_sale", "", self.allow_direct_sale_checkbox, span=1),
+            FieldSpec("allow_negative", "", self.allow_negative_checkbox, span=1),
+            FieldSpec("requires_receipt_approval", "", self.requires_receipt_approval_checkbox, span=1),
+            FieldSpec("requires_issue_approval", "", self.requires_issue_approval_checkbox, span=1),
+            FieldSpec("temp_controlled", "", self.temp_controlled_checkbox, span=1),
+            FieldSpec("temp_range", "بازهٔ دما", self.temp_row, span=2),
+        ])
+        self.operational_grid.set_field_visible("temp_range", False)
+        layout.addWidget(self.operational_grid)
         layout.addStretch(1)
         return panel
 
@@ -392,38 +369,36 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout = QVBoxLayout(panel)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("روشِ قیمت‌گذاری"))
         self.costing_method_combo = QComboBox()
         self.costing_method_combo.addItem("(پیش‌فرضِ شرکت)", None)
         for m in catalog_service.list_costing_methods():
             self.costing_method_combo.addItem(_COSTING_METHOD_LABELS.get(m.code, m.code), m.costing_method_id)
-        layout.addWidget(self.costing_method_combo)
 
-        layout.addWidget(QLabel("حداقلِ موجودی (پیش‌فرض)"))
         self.min_qty_field = QDoubleSpinBox()
         self.min_qty_field.setRange(0, 999_999_999)
         self.min_qty_field.setDecimals(2)
-        layout.addWidget(self.min_qty_field)
 
-        layout.addWidget(QLabel("حداکثرِ موجودی (پیش‌فرض)"))
         self.max_qty_field = QDoubleSpinBox()
         self.max_qty_field.setRange(0, 999_999_999)
         self.max_qty_field.setDecimals(2)
-        layout.addWidget(self.max_qty_field)
 
-        layout.addWidget(QLabel("نقطهٔ‌سفارش (پیش‌فرض)"))
         self.reorder_point_field = QDoubleSpinBox()
         self.reorder_point_field.setRange(0, 999_999_999)
         self.reorder_point_field.setDecimals(2)
-        layout.addWidget(self.reorder_point_field)
 
-        layout.addWidget(QLabel("سیاستِ برداشت"))
         self.withdrawal_policy_combo = QComboBox()
         self.withdrawal_policy_combo.addItem("(تعیین‌نشده)", None)
         for code, label in _WITHDRAWAL_POLICY_LABELS.items():
             self.withdrawal_policy_combo.addItem(label, code)
-        layout.addWidget(self.withdrawal_policy_combo)
 
+        self.stock_control_grid = FieldGrid([
+            FieldSpec("costing_method", "روشِ قیمت‌گذاری", self.costing_method_combo, span=1),
+            FieldSpec("min_qty", "حداقلِ موجودی (پیش‌فرض)", self.min_qty_field, span=1),
+            FieldSpec("max_qty", "حداکثرِ موجودی (پیش‌فرض)", self.max_qty_field, span=1),
+            FieldSpec("reorder_point", "نقطهٔ‌سفارش (پیش‌فرض)", self.reorder_point_field, span=1),
+            FieldSpec("withdrawal_policy", "سیاستِ برداشت", self.withdrawal_policy_combo, span=2),
+        ])
+        layout.addWidget(self.stock_control_grid)
         layout.addStretch(1)
         return panel
 
@@ -433,15 +408,15 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout.setSpacing(8)
 
         self.requires_qc_checkbox = QCheckBox("نیازمندِ کنترلِ کیفیت (QC)")
-        layout.addWidget(self.requires_qc_checkbox)
-
         self.requires_quarantine_checkbox = QCheckBox("نیازمندِ قرنطینه")
-        layout.addWidget(self.requires_quarantine_checkbox)
-
-        layout.addWidget(QLabel("انبارِ قرنطینهٔ پیش‌فرض"))
         self.quarantine_warehouse_combo = QComboBox()
-        layout.addWidget(self.quarantine_warehouse_combo)
 
+        self.quality_grid = FieldGrid([
+            FieldSpec("requires_qc", "", self.requires_qc_checkbox, span=1),
+            FieldSpec("requires_quarantine", "", self.requires_quarantine_checkbox, span=1),
+            FieldSpec("quarantine_warehouse", "انبارِ قرنطینهٔ پیش‌فرض", self.quarantine_warehouse_combo, span=1),
+        ])
+        layout.addWidget(self.quality_grid)
         layout.addStretch(1)
         return panel
 
@@ -450,11 +425,13 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout = QVBoxLayout(panel)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("سطحِ دسترسی"))
         self.access_level_combo = QComboBox()
         for code, label in _ACCESS_LEVEL_LABELS.items():
             self.access_level_combo.addItem(label, code)
-        layout.addWidget(self.access_level_combo)
+        self.security_grid = FieldGrid([
+            FieldSpec("access_level", "سطحِ دسترسی", self.access_level_combo, span=1),
+        ])
+        layout.addWidget(self.security_grid)
 
         layout.addWidget(QLabel("کاربرانِ مجاز"))
         add_row = QHBoxLayout()
@@ -498,18 +475,21 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout.setSpacing(8)
 
         self.has_barcode_checkbox = QCheckBox("بارکدخوان")
-        layout.addWidget(self.has_barcode_checkbox)
         self.has_qr_checkbox = QCheckBox("QR")
-        layout.addWidget(self.has_qr_checkbox)
         self.has_rfid_checkbox = QCheckBox("RFID")
-        layout.addWidget(self.has_rfid_checkbox)
         self.has_pda_checkbox = QCheckBox("PDA")
-        layout.addWidget(self.has_pda_checkbox)
         self.has_scanner_checkbox = QCheckBox("اسکنر")
-        layout.addWidget(self.has_scanner_checkbox)
         self.has_scale_checkbox = QCheckBox("باسکول/ترازو")
-        layout.addWidget(self.has_scale_checkbox)
 
+        self.equipment_grid = FieldGrid([
+            FieldSpec("has_barcode", "", self.has_barcode_checkbox, span=1),
+            FieldSpec("has_qr", "", self.has_qr_checkbox, span=1),
+            FieldSpec("has_rfid", "", self.has_rfid_checkbox, span=1),
+            FieldSpec("has_pda", "", self.has_pda_checkbox, span=1),
+            FieldSpec("has_scanner", "", self.has_scanner_checkbox, span=1),
+            FieldSpec("has_scale", "", self.has_scale_checkbox, span=1),
+        ])
+        layout.addWidget(self.equipment_grid)
         layout.addStretch(1)
         return panel
 
@@ -519,12 +499,13 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout.setSpacing(8)
 
         self.pos_enabled_checkbox = QCheckBox("فعال برایِ فروشگاه/POS")
-        layout.addWidget(self.pos_enabled_checkbox)
-
-        layout.addWidget(QLabel("اولویتِ برداشت"))
         self.pos_priority_field = QSpinBox()
         self.pos_priority_field.setRange(0, 999)
-        layout.addWidget(self.pos_priority_field)
+        self.pos_grid = FieldGrid([
+            FieldSpec("pos_enabled", "", self.pos_enabled_checkbox, span=1),
+            FieldSpec("pos_priority", "اولویتِ برداشت", self.pos_priority_field, span=1),
+        ])
+        layout.addWidget(self.pos_grid)
 
         layout.addWidget(QLabel("صندوق‌هایِ متصل"))
         self.pos_terminals_table = QTableWidget(0, 2)
@@ -541,22 +522,18 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout = QVBoxLayout(panel)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("زیرانبارِ موادِ اولیه"))
         self.raw_material_wh_combo = QComboBox()
-        layout.addWidget(self.raw_material_wh_combo)
-
-        layout.addWidget(QLabel("زیرانبارِ خطِ تولید"))
         self.production_line_wh_combo = QComboBox()
-        layout.addWidget(self.production_line_wh_combo)
-
-        layout.addWidget(QLabel("زیرانبارِ کالایِ ساخته‌شده"))
         self.finished_goods_wh_combo = QComboBox()
-        layout.addWidget(self.finished_goods_wh_combo)
-
-        layout.addWidget(QLabel("زیرانبارِ ضایعات"))
         self.scrap_wh_combo = QComboBox()
-        layout.addWidget(self.scrap_wh_combo)
 
+        self.production_grid = FieldGrid([
+            FieldSpec("raw_material_wh", "زیرانبارِ موادِ اولیه", self.raw_material_wh_combo, span=1),
+            FieldSpec("production_line_wh", "زیرانبارِ خطِ تولید", self.production_line_wh_combo, span=1),
+            FieldSpec("finished_goods_wh", "زیرانبارِ کالایِ ساخته‌شده", self.finished_goods_wh_combo, span=1),
+            FieldSpec("scrap_wh", "زیرانبارِ ضایعات", self.scrap_wh_combo, span=3),
+        ])
+        layout.addWidget(self.production_grid)
         layout.addStretch(1)
         return panel
 
@@ -565,20 +542,15 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         layout = QVBoxLayout(panel)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("مرکزِ سود"))
         self.profit_center_combo = QComboBox()
-        layout.addWidget(self.profit_center_combo)
-
-        layout.addWidget(QLabel("نگاشتِ حسابِ این انبار (override بر نگاشتِ سراسری)"))
+        fields = [FieldSpec("profit_center", "مرکزِ سود", self.profit_center_combo, span=1)]
         for key in _FINANCIAL_MAPPING_KEYS:
-            row = QHBoxLayout()
-            row.addWidget(QLabel(engine_service.MAPPING_LABELS[key]), stretch=1)
             combo = QComboBox()
             combo.setMinimumWidth(220)
             self._mapping_combos[key] = combo
-            row.addWidget(combo, stretch=2)
-            layout.addLayout(row)
-
+            fields.append(FieldSpec(f"mapping_{key}", engine_service.MAPPING_LABELS[key], combo, span=3))
+        self.financial_grid = FieldGrid(fields)
+        layout.addWidget(self.financial_grid)
         layout.addStretch(1)
         return panel
 
@@ -732,10 +704,10 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
     # رفتار
     # ------------------------------------------------------------------
     def _on_type_changed(self) -> None:
-        self.project_row.setVisible(self.type_combo.currentData() == "PROJECT")
+        self.basic_grid.set_field_visible("project", self.type_combo.currentData() == "PROJECT")
 
     def _on_temp_toggled(self, checked: bool) -> None:
-        self.temp_row.setVisible(checked)
+        self.operational_grid.set_field_visible("temp_range", checked)
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -848,6 +820,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         self.name_field.setText(w.name)
         self.english_name_field.setText(f.english_name or "")
         _set_combo(self.type_combo, f.warehouse_type_code)
+        self._on_type_changed()  # setCurrentIndex بی‌تغییر سیگنال نمی‌دهد؛ صریح فراخوانی می‌شود
         _set_combo(self.project_combo, f.project_detail_account_id)
         _set_combo(self.org_unit_combo, f.org_unit_id)
         _set_combo(self.cost_center_combo, f.cost_center_detail_account_id)
@@ -942,6 +915,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, QWidget):
         self.name_field.clear()
         self.english_name_field.clear()
         self.type_combo.setCurrentIndex(0)
+        self._on_type_changed()  # setCurrentIndex بی‌تغییر سیگنال نمی‌دهد؛ صریح فراخوانی می‌شود
         self.project_combo.setCurrentIndex(0)
         self.org_unit_combo.setCurrentIndex(0)
         self.cost_center_combo.setCurrentIndex(0)
