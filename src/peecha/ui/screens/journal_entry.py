@@ -981,7 +981,7 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         footer.addWidget(self.delete_button)
 
         self.save_button = QPushButton("✔️")
-        self.save_button.setObjectName("primaryButton")
+        self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(56)
         self.save_button.setToolTip("ثبتِ سند")
         self.save_button.clicked.connect(self._save)

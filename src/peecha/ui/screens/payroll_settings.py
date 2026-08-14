@@ -158,7 +158,7 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
         self.register_field_grids("payroll_settings_general", [self.general_grid])
 
         save_button = QPushButton("💾")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(40)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
@@ -341,7 +341,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         buttons = QHBoxLayout()
         save_button = QPushButton("💾")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(40)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
@@ -717,7 +717,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         buttons = QHBoxLayout()
         save_button = QPushButton("💾")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(40)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
@@ -1037,7 +1037,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         buttons = QHBoxLayout()
         save_button = QPushButton("💾")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(40)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
@@ -1462,7 +1462,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         buttons = QHBoxLayout()
         save_button = QPushButton("💾")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(40)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
@@ -1704,7 +1704,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         buttons = QHBoxLayout()
         save_button = QPushButton("💾")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(40)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)

@@ -1717,7 +1717,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # اکسنتِ primaryButton و عرضِ بزرگ‌تر همچنان آن را از بقیه‌ی
         # دکمه‌ها متمایز نگه می‌دارد.
         save_button = QPushButton("✔️")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(56)
         save_button.setToolTip(f"ثبتِ سندِ {noun}")
         save_button.clicked.connect(self._save)

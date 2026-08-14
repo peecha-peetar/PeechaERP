@@ -238,7 +238,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.body_layout.addWidget(lines_title)
 
         add_line_button = QPushButton("➕")
-        add_line_button.setObjectName("primaryButton")
+        add_line_button.setObjectName("primaryIconButton")
         add_line_button.setFixedWidth(40)
         add_line_button.setToolTip("افزودنِ ردیف")
         add_line_button.clicked.connect(self._add_line)
@@ -293,7 +293,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.footer_layout.addWidget(self.new_button)
 
         self.save_button = QPushButton("💾")
-        self.save_button.setObjectName("primaryButton")
+        self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(40)
         self.save_button.setToolTip("ذخیرهٔ پیش‌نویس")
         self.save_button.clicked.connect(self._save_header)
@@ -314,7 +314,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.footer_layout.addWidget(self.approve_button)
 
         self.post_button = QPushButton("🔒")
-        self.post_button.setObjectName("primaryButton")
+        self.post_button.setObjectName("primaryIconButton")
         self.post_button.setFixedWidth(40)
         self.post_button.setToolTip("ثبتِ نهایی")
         self.post_button.clicked.connect(self._post)

@@ -191,7 +191,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
 
         buttons = QHBoxLayout()
         approve_button = QPushButton("✅")
-        approve_button.setObjectName("primaryButton")
+        approve_button.setObjectName("primaryIconButton")
         approve_button.setFixedWidth(34)
         approve_button.setToolTip("تایید")
         approve_button.clicked.connect(lambda: self._set_selected_status("APPROVED"))

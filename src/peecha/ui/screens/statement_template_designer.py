@@ -365,7 +365,7 @@ class _RowEditorDialog(QDialog):
         cancel_button.clicked.connect(self.reject)
         buttons_row.addWidget(cancel_button)
         save_button = QPushButton("💾")
-        save_button.setObjectName("primaryButton")
+        save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(40)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._on_save_clicked)

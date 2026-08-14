@@ -126,7 +126,7 @@ class _QuickAccessTile(QFrame):
         icon_label.setStyleSheet(
             f"background-color: {theme.rgba(self._color, 0.16)}; "
             f"border: 1px solid {theme.rgba(self._color, 0.30)}; "
-            "border-radius: 9px; font-size: 15px;"
+            "border-radius: 9px; font-size: 20px;"
         )
         layout.addWidget(icon_label, alignment=Qt.AlignCenter)
 

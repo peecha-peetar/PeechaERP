@@ -52,7 +52,7 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.name_field.returnPressed.connect(self._save)
         add_row.addWidget(self.name_field, stretch=1)
         self.save_button = QPushButton("➕")
-        self.save_button.setObjectName("primaryButton")
+        self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(40)
         self.save_button.setToolTip("افزودن")
         self.save_button.clicked.connect(self._save)

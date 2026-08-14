@@ -291,7 +291,20 @@ def set_theme_mode(app: QApplication, dark: bool) -> None:
     _dark_mode = dark
     _apply_tokens(_DARK_TOKENS if dark else _LIGHT_TOKENS)
     apply_palette(app)
-    font_prefix = f'* {{ font-family: "{_font_family}"; }}\n' if _font_family else ""
+    # طبقِ گزارشِ صریح: بعدِ تبدیلِ دکمه‌ها به آیکنِ ایموجی، هیچ آیکنی
+    # اصلاً دیده نمی‌شد — چون فونتِ فارسیِ Vazir هیچ گلیفِ ایموجی ندارد
+    # و این قانونِ سراسریِ `* { font-family: "Vazir" }` تک‌فونت بود (بدونِ
+    # فallback)، پس کاراکترهایِ ایموجی به‌جایِ افتادن رویِ فونتِ سیستمیِ
+    # ایموجی، کاملاً خالی رسم می‌شدند. اضافه‌کردنِ فونت‌هایِ ایموجیِ
+    # شناخته‌شده به‌عنوانِ fallback در همین لیستِ CSS (که Qt به
+    # QFont::setFamilies تبدیلش می‌کند و واقعاً fallback گلیف‌به‌گلیف
+    # انجام می‌دهد) متنِ فارسی را رویِ Vazir نگه می‌دارد ولی ایموجی را
+    # رویِ اولین فونتِ سیستمیِ موجود می‌کشد.
+    font_prefix = (
+        f'* {{ font-family: "{_font_family}", "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", "Noto Emoji"; }}\n'
+        if _font_family
+        else ""
+    )
     app.setStyleSheet(font_prefix + GLOBAL_QSS)
     settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     settings.setValue(_THEME_MODE_KEY, dark)
@@ -488,13 +501,18 @@ QPushButton#flatButton:disabled {{
 /* طبقِ گزارشِ صریح («دکمه‌هایِ آیکونی مثلِ + / 📒 / ✕ تا هاور نکنی معلوم
 نیستند دکمه‌اند»): این دکمه‌ها برخلافِ flatButton/dangerButton، همیشه
 (نه فقط رویِ هاور) یک زمینه/لبه‌یِ ملایم دارند تا در حالتِ عادی هم به‌
-وضوح «دکمه» به‌نظر برسند. */
+وضوح «دکمه» به‌نظر برسند. طبقِ گزارشِ بعدی («اصلاً آیکنی دیده نمی‌شود»):
+پدینگِ پایه‌یِ QPushButton (۹px۱۸px) رویِ عرضِ ثابتِ ۳۴px این دکمه‌ها
+عملاً چیزی برایِ گلیف نمی‌گذاشت — این‌جا صریحاً override می‌شود؛ فونتِ
+بزرگ‌تر هم برایِ خواناییِ ایموجی در این اندازه لازم بود. */
 QPushButton#iconButton {{
     background-color: {ACCENT_LIGHT};
     color: {PRIMARY};
     border: 1px solid {BORDER};
     border-radius: 6px;
     font-weight: 700;
+    padding: 4px 2px;
+    font-size: 16px;
 }}
 QPushButton#iconButton:hover {{
     background-color: {ACCENT_LIGHT_HOVER};
@@ -505,9 +523,29 @@ QPushButton#dangerIconButton {{
     border: 1px solid {rgba(DANGER, 0.4)};
     border-radius: 6px;
     font-weight: 700;
+    padding: 4px 2px;
+    font-size: 16px;
 }}
 QPushButton#dangerIconButton:hover {{
     background-color: {rgba(DANGER, 0.26)};
+}}
+/* نسخه‌یِ آیکونیِ primaryButton — همان رنگِ اکسنتِ پرشده، ولی برایِ
+دکمه‌هایِ کوچکِ ثبت/ذخیره‌یِ اصلیِ فرم (✔️/💾) که عرضِ ثابتِ کوچک دارند؛
+از primaryButtonِ اصلی جدا شد چونِ آن هنوز در بسیاری از فرم‌ها برایِ
+دکمه‌هایِ متن‌دارِ تمام‌عرض استفاده می‌شود و پدینگِ ۹px۱۸pxش را نیاز دارد. */
+QPushButton#primaryIconButton {{
+    background-color: {ACCENT};
+    color: white;
+    border-radius: 6px;
+    font-weight: 700;
+    padding: 4px 2px;
+    font-size: 16px;
+}}
+QPushButton#primaryIconButton:hover {{
+    background-color: {ACCENT_HOVER};
+}}
+QPushButton#primaryIconButton:pressed {{
+    background-color: {ACCENT_PRESSED};
 }}
 QPushButton#dangerButton {{
     background-color: transparent;

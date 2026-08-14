@@ -370,7 +370,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # نوشته، با تول‌تیپ برایِ توضیح») — هم‌الگو با فوترِ فرم‌هایِ
         # تراکنشی.
         self.save_button = QPushButton("💾")
-        self.save_button.setObjectName("primaryButton")
+        self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(40)
         self.save_button.setToolTip("ذخیره")
         self.save_button.clicked.connect(self._save)
