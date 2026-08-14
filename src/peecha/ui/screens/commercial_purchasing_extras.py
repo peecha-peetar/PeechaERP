@@ -30,7 +30,7 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _COST_TYPE_LABELS = {"FREIGHT": "حمل‌ونقل", "CUSTOMS": "حقوقِ گمرکی", "INSURANCE": "بیمه", "HANDLING": "بارگیری/تخلیه", "OTHER": "سایر"}
 _ALLOCATION_METHOD_LABELS = {"BY_VALUE": "به‌نسبتِ ارزش", "BY_QUANTITY": "به‌نسبتِ تعداد", "BY_WEIGHT": "به‌نسبتِ وزن"}
@@ -114,7 +114,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         self.landed_status_label = QLabel("")
         self.landed_status_label.setObjectName("statusError")
         outer.addWidget(self.landed_status_label)
-        return page
+        return wrap_scrollable(page)
 
     def _refresh_landed_costs(self) -> None:
         self.landed_cost_table.setRowCount(0)
@@ -283,7 +283,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         right.addWidget(self.rebate_status_label)
         right.addStretch(1)
         outer.addLayout(right, stretch=2)
-        return page
+        return wrap_scrollable(page)
 
     def _on_agreement_selected(self, row: int, _column: int) -> None:
         self._selected_agreement_id = self.agreement_table.item(row, 0).data(Qt.UserRole)

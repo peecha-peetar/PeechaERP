@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.db.base import get_engine
 from peecha.services import backup as backup_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 _SCHEMA_LABELS = {
     "core": "پایه/تنظیماتِ عمومی",
@@ -51,7 +51,10 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         self._tables: list[backup_service.BackupTableInfo] = []
         self._table_items: dict[str, QTreeWidgetItem] = {}
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(14)
 
@@ -101,16 +104,13 @@ class SystemBackupScreen(FieldHelpMixin, QWidget):
         self.status_text.setPlaceholderText("نتیجه‌یِ آخرین بک‌آپ/بازیابی این‌جا نشان داده می‌شود.")
         layout.addWidget(self.status_text)
 
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
         self.export_button = QPushButton("📦 گرفتنِ بک‌آپ از موارد انتخاب‌شده")
         self.export_button.setObjectName("primaryButton")
         self.export_button.clicked.connect(self._on_export)
-        button_row.addWidget(self.export_button)
         self.import_button = QPushButton("📥 بازیابیِ بک‌آپ")
         self.import_button.clicked.connect(self._on_import)
-        button_row.addWidget(self.import_button)
-        layout.addLayout(button_row)
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, [self.export_button, self.import_button]))
 
         self.set_field_help([
             (

@@ -26,7 +26,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "OTHER": "سایر"}
 _SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
@@ -159,7 +159,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self.status_label.setObjectName("statusError")
         right.addWidget(self.status_label)
         outer.addLayout(right, stretch=3)
-        return page
+        return wrap_scrollable(page)
 
     def refresh(self) -> None:
         company_id = self._company_id()
@@ -323,7 +323,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self.routing_status_label = QLabel("")
         self.routing_status_label.setObjectName("statusError")
         outer.addWidget(self.routing_status_label)
-        return page
+        return wrap_scrollable(page)
 
     def _refresh_routing_rules(self) -> None:
         company_id = self._company_id()

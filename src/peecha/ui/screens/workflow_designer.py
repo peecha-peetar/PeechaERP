@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import cartable as cartable_service
 from peecha.services import roles as roles_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 
 class _StepRow(QWidget):
@@ -59,7 +59,10 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         self._step_rows: list[_StepRow] = []
         self._roles: list[roles_service.RoleRow] = []
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
 
@@ -101,14 +104,13 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
         add_step_button.clicked.connect(self._add_step)
         layout.addWidget(add_step_button)
 
-        layout.addStretch(1)
-
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        layout.addWidget(save_button)
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, [save_button]))
 
         self.set_field_help([
             (

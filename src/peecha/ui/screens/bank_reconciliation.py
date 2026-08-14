@@ -26,7 +26,7 @@ from peecha.services import currencies as currencies_service
 from peecha.services import reconciliation as reconciliation_service
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable
 
 _TARGET_FIELDS: list[tuple[str, str, bool]] = [
     ("date", "تاریخ", False),
@@ -50,7 +50,10 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
         super().__init__()
         self._currency_decimal_places = 0
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
@@ -84,6 +87,8 @@ class BankReconciliationScreen(FieldHelpMixin, QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         layout.addWidget(self.table, stretch=1)
+
+        outer.addWidget(wrap_scrollable(panel))
 
         self.set_field_help([
             (

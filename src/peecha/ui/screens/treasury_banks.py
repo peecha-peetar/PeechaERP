@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import treasury as treasury_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 
 class TreasuryBanksScreen(FieldHelpMixin, QWidget):
@@ -30,7 +30,10 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.company_id: int | None = None
         self._editing_bank_id: int | None = None
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(10)
 
@@ -81,6 +84,8 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table, stretch=1)
+
+        outer.addWidget(wrap_scrollable(panel))
 
         self.set_field_help([
             (self.name_field, "نامِ بانک — بعداً در فرمِ ثبتِ چکِ دریافتی از این فهرست انتخاب می‌شود."),

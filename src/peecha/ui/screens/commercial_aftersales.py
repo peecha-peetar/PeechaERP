@@ -29,7 +29,7 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _WARRANTY_STATUS_LABELS = {"ACTIVE": "معتبر", "EXPIRED": "منقضی", "VOIDED": "باطل‌شده"}
 _TICKET_STATUS_LABELS = {"OPEN": "باز", "IN_PROGRESS": "درحالِ انجام", "RESOLVED": "حل‌شده", "CLOSED": "بسته"}
@@ -109,7 +109,7 @@ class CommercialAftersalesScreen(QWidget):
         self.warranty_status_label = QLabel("")
         self.warranty_status_label.setObjectName("statusError")
         outer.addWidget(self.warranty_status_label)
-        return page
+        return wrap_scrollable(page)
 
     def _on_warranty_invoice_selected(self) -> None:
         self.warranty_line_combo.clear()
@@ -270,7 +270,7 @@ class CommercialAftersalesScreen(QWidget):
         right.addWidget(self.ticket_status_label)
         right.addStretch(1)
         outer.addLayout(right, stretch=2)
-        return page
+        return wrap_scrollable(page)
 
     def _add_ticket(self) -> None:
         company_id = self._company_id()
@@ -431,7 +431,7 @@ class CommercialAftersalesScreen(QWidget):
         right.addWidget(self.rma_status_label)
         right.addStretch(1)
         outer.addLayout(right, stretch=1)
-        return page
+        return wrap_scrollable(page)
 
     def _on_rma_customer_selected(self) -> None:
         self.rma_document_combo.clear()

@@ -33,7 +33,7 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import statement_templates as statement_templates_service
 from peecha.services.statement_templates import AccountRefInfo
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 _STATEMENT_TYPE_OPTIONS = [
     ("CUSTOM", "سفارشی"),
@@ -497,7 +497,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
-        return panel
+        return wrap_scrollable(panel)
 
     def _build_rows_panel(self) -> QWidget:
         panel = QWidget()
@@ -527,7 +527,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         add_row_button.clicked.connect(self._on_add_row)
         layout.addWidget(add_row_button)
 
-        return panel
+        return wrap_scrollable(panel)
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None

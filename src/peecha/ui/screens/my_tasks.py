@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import cartable as cartable_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 _REQUEST_TYPE_LABELS = {"CREATE": "ثبت/تایید", "EDIT": "ویرایش", "DELETE": "حذف"}
 
@@ -77,7 +77,10 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         self._main_window = main_window
         self._tasks: list[cartable_service.CartableTaskRow] = []
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
@@ -101,20 +104,19 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
 
-        buttons = QHBoxLayout()
         approve_button = QPushButton("✅")
         approve_button.setObjectName("primaryIconButton")
         approve_button.setFixedWidth(48)
         approve_button.setToolTip("تایید")
         approve_button.clicked.connect(self._approve_selected)
-        buttons.addWidget(approve_button)
 
-        reject_button = QPushButton("رد")
-        reject_button.setObjectName("dangerButton")
+        reject_button = QPushButton("❌")
+        reject_button.setObjectName("dangerIconButton")
+        reject_button.setFixedWidth(44)
+        reject_button.setToolTip("رد")
         reject_button.clicked.connect(self._reject_selected)
-        buttons.addWidget(reject_button)
-        buttons.addStretch(1)
-        layout.addLayout(buttons)
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, [approve_button, reject_button]))
 
         self.set_field_help([
             (self.table, "برایِ بازکردنِ خودِ سند، رویِ ردیفش دابل‌کلیک کنید."),

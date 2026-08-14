@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.services import treasury as treasury_service
 from peecha.ui import report_export
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable_with_footer
 
 _STATUS_LABELS = {
     "IN_HAND": "نزدِ صندوق (دریافتی)",
@@ -54,7 +54,10 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
         self._rows: list[tuple] = []
         self._total = decimal.Decimal(0)
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
@@ -133,21 +136,17 @@ class ChecksReportScreen(FieldHelpMixin, QWidget):
         self.summary_label.setObjectName("sectionHint")
         layout.addWidget(self.summary_label)
 
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
         print_button = QPushButton("🖨 چاپ")
         print_button.setObjectName("flatButton")
         print_button.clicked.connect(self._on_print)
-        button_row.addWidget(print_button)
         pdf_button = QPushButton("📄 خروجیِ PDF")
         pdf_button.setObjectName("flatButton")
         pdf_button.clicked.connect(self._on_export_pdf)
-        button_row.addWidget(pdf_button)
         excel_button = QPushButton("📊 خروجیِ Excel")
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
-        button_row.addWidget(excel_button)
-        layout.addLayout(button_row)
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, [print_button, pdf_button, excel_button]))
 
         self.set_field_help([
             (self.received_checkbox, "چک‌هایِ دریافتی در گزارش بیایند یا نه."),

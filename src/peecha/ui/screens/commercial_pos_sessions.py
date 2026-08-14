@@ -26,6 +26,7 @@ from peecha import numerals, session as app_session
 from peecha.services import commercial_pos as pos_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui.widgets import wrap_scrollable
 
 _SESSION_STATUS_LABELS = {"OPEN": "باز", "CLOSED": "بسته"}
 
@@ -36,7 +37,8 @@ class CommercialPosSessionsScreen(QWidget):
         self._terminals: list = []
         self._selected_terminal_id: int | None = None
 
-        outer = QHBoxLayout(self)
+        page = QWidget()
+        outer = QHBoxLayout(page)
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(16)
 
@@ -154,6 +156,10 @@ class CommercialPosSessionsScreen(QWidget):
         self.status_label.setWordWrap(True)
         right.addWidget(self.status_label)
         outer.addLayout(right, stretch=3)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(wrap_scrollable(page))
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

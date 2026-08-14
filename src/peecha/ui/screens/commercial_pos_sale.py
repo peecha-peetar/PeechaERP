@@ -30,6 +30,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
+from peecha.ui.widgets import wrap_scrollable
 
 _PAYMENT_METHOD_LABELS = {"CASH": "نقد", "CARD": "کارت‌خوان", "WALLET": "کیفِ‌پول", "GIFT_CARD": "کارتِ‌هدیه", "STORE_CREDIT": "اعتبارِ فروشگاهی"}
 
@@ -42,7 +43,8 @@ class CommercialPosSaleScreen(QWidget):
         self._lines: list = []
         self._is_posted = False
 
-        outer = QVBoxLayout(self)
+        page = QWidget()
+        outer = QVBoxLayout(page)
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(12)
 
@@ -145,6 +147,10 @@ class CommercialPosSaleScreen(QWidget):
         self.status_label.setWordWrap(True)
         outer.addWidget(self.status_label)
         outer.addStretch(1)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(wrap_scrollable(page))
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

@@ -26,7 +26,7 @@ from peecha.services import hr as hr_service
 from peecha.services import hr_attendance as attendance_service
 from peecha.services import payroll as payroll_service
 from peecha.ui import report_export
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 _COLUMNS = ["مجموعِ ساعتِ کارکرد", "روزهایِ حاضر", "کارمند", "کد"]
 _REPORT_TITLE = "خلاصهٔ کارکردِ پرسنل"
@@ -38,7 +38,10 @@ class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
         self._rows: list[attendance_service.AttendanceSummaryRow] = []
         self._periods: list[payroll_service.PeriodRow] = []
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
@@ -74,21 +77,17 @@ class HrAttendanceSummaryScreen(FieldHelpMixin, QWidget):
         self.summary_label.setObjectName("sectionHint")
         layout.addWidget(self.summary_label)
 
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
         print_button = QPushButton("🖨 چاپ")
         print_button.setObjectName("flatButton")
         print_button.clicked.connect(self._on_print)
-        button_row.addWidget(print_button)
         pdf_button = QPushButton("📄 خروجیِ PDF")
         pdf_button.setObjectName("flatButton")
         pdf_button.clicked.connect(self._on_export_pdf)
-        button_row.addWidget(pdf_button)
         excel_button = QPushButton("📊 خروجیِ Excel")
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
-        button_row.addWidget(excel_button)
-        layout.addLayout(button_row)
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, [print_button, pdf_button, excel_button]))
 
         self.set_field_help([
             (self.period_combo, "دوره‌ای که خلاصهٔ کارکرد برایش محاسبه شود."),

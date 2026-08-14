@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import commercial_pricing as pricing_service
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import JalaliDateEdit, wrap_scrollable
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "AMOUNT": "مبلغِ ثابت", "TIERED": "پلکانی"}
 
@@ -132,7 +132,7 @@ class CommercialPricingScreen(QWidget):
         self.pl_status_label.setObjectName("statusError")
         right.addWidget(self.pl_status_label)
         outer.addLayout(right, stretch=3)
-        return page
+        return wrap_scrollable(page)
 
     def refresh(self) -> None:
         company_id = self._company_id()
@@ -281,7 +281,7 @@ class CommercialPricingScreen(QWidget):
         self.rule_status_label = QLabel("")
         self.rule_status_label.setObjectName("statusError")
         outer.addWidget(self.rule_status_label)
-        return page
+        return wrap_scrollable(page)
 
     def _on_rule_type_changed(self) -> None:
         is_tiered = self.rule_type_combo.currentData() == "TIERED"

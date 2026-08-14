@@ -30,7 +30,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 
 class _MultiSelectComboBox(QComboBox):
@@ -554,7 +554,10 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
         self._stage_mapping_rows: list[_MethodMappingRow] = []
         self._stage_template_rows: list[_TemplateRow] = []
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(10)
 
@@ -757,6 +760,7 @@ class TreasuryCounterpartySettingsScreen(FieldHelpMixin, QWidget):
             self._template_containers[direction] = container
             help_fields.append((template_card, "این متن‌ها خودکار در ستونِ «شرح»ِ همان ردیف در فرمِ سند پیشنهاد می‌شوند — قابلِ‌ویرایشِ دستی هم هستند."))
 
+        outer.addWidget(wrap_scrollable(panel))
         self.set_field_help(help_fields)
 
     def set_status(self, text: str, *, ok: bool = False) -> None:
