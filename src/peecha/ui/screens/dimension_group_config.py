@@ -90,8 +90,10 @@ class _GroupFieldRowWidget(QWidget):
         self.required_checkbox = QCheckBox("اجباری")
         layout.addWidget(self.required_checkbox)
 
-        remove_button = QPushButton("حذف")
-        remove_button.setObjectName("dangerButton")
+        remove_button = QPushButton("🗑️")
+        remove_button.setObjectName("dangerIconButton")
+        remove_button.setFixedWidth(34)
+        remove_button.setToolTip("حذف")
         remove_button.clicked.connect(lambda: self._on_remove(self))
         layout.addWidget(remove_button)
 

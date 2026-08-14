@@ -366,18 +366,27 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(18, 12, 18, 14)
 
-        self.save_button = QPushButton("ذخیره")
+        # طبقِ گزارشِ صریح («دکمه‌یِ حذف و بقیه‌یِ دکمه‌ها آیکن به‌جایِ
+        # نوشته، با تول‌تیپ برایِ توضیح») — هم‌الگو با فوترِ فرم‌هایِ
+        # تراکنشی.
+        self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryButton")
+        self.save_button.setFixedWidth(40)
+        self.save_button.setToolTip("ذخیره")
         self.save_button.clicked.connect(self._save)
         footer_layout.addWidget(self.save_button)
 
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
+        cancel_button = QPushButton("↩️")
+        cancel_button.setObjectName("iconButton")
+        cancel_button.setFixedWidth(34)
+        cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
         footer_layout.addWidget(cancel_button)
 
-        self.delete_button = QPushButton("حذف")
-        self.delete_button.setObjectName("dangerButton")
+        self.delete_button = QPushButton("🗑️")
+        self.delete_button.setObjectName("dangerIconButton")
+        self.delete_button.setFixedWidth(34)
+        self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
         footer_layout.addWidget(self.delete_button)

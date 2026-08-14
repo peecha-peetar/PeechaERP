@@ -405,9 +405,10 @@ class _LineRow:
         self.credit_field.returnPressed.connect(lambda: screen.focus_next_row_after(self))
 
         self.remove_button = QPushButton("✕")
-        self.remove_button.setObjectName("dangerButton")
+        self.remove_button.setObjectName("dangerIconButton")
         self.remove_button.setFixedWidth(34)
         self.remove_button.setStyleSheet("padding: 2px 0px;")
+        self.remove_button.setToolTip("حذفِ این ردیف")
         self.remove_button.clicked.connect(lambda: screen.remove_line(self))
 
     def _attach_description_completer(self) -> None:
@@ -798,8 +799,10 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self.header_rate_field.setMaximumWidth(120)
         self.header_rate_field.editingFinished.connect(self._on_header_rate_changed)
         rate_row.addWidget(self.header_rate_field)
-        self.header_rate_fetch_button = QPushButton("🌐 خودکار")
-        self.header_rate_fetch_button.setObjectName("flatButton")
+        self.header_rate_fetch_button = QPushButton("🌐")
+        self.header_rate_fetch_button.setObjectName("iconButton")
+        self.header_rate_fetch_button.setFixedWidth(34)
+        self.header_rate_fetch_button.setToolTip("دریافتِ خودکارِ نرخِ ارز")
         self.header_rate_fetch_button.clicked.connect(self._on_fetch_header_rate)
         rate_row.addWidget(self.header_rate_fetch_button)
         header_layout.addLayout(rate_row, 3, 3)
@@ -868,14 +871,18 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         table_card_layout.setSpacing(4)
 
         table_toolbar = QHBoxLayout()
-        import_excel_button = QPushButton("📥 ایمپورتِ ردیف‌ها از اکسل")
-        import_excel_button.setObjectName("flatButton")
+        import_excel_button = QPushButton("📥")
+        import_excel_button.setObjectName("iconButton")
+        import_excel_button.setFixedWidth(34)
         import_excel_button.setMaximumHeight(28)
+        import_excel_button.setToolTip("ایمپورتِ ردیف‌ها از اکسل")
         import_excel_button.clicked.connect(self._on_import_excel)
         table_toolbar.addWidget(import_excel_button)
-        add_line_button = QPushButton("+ افزودنِ ردیف")
-        add_line_button.setObjectName("flatButton")
+        add_line_button = QPushButton("➕")
+        add_line_button.setObjectName("iconButton")
+        add_line_button.setFixedWidth(34)
         add_line_button.setMaximumHeight(28)
+        add_line_button.setToolTip("افزودنِ ردیف")
         add_line_button.clicked.connect(lambda: self.add_line())
         table_toolbar.addStretch(1)
         table_toolbar.addWidget(add_line_button)
@@ -944,31 +951,46 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setWordWrap(True)
         footer.addWidget(self.status_label)
 
-        self.cancel_edit_button = QPushButton("لغوِ ویرایش (Esc)")
-        self.cancel_edit_button.setObjectName("flatButton")
+        # طبقِ گزارشِ صریح («بعضی فرم‌ها روی دکمه‌هاش نوشته داره و نصف
+        # نوشته‌هاست»): این فوتر ۵ دکمه‌یِ متنی کنارِ هم داشت که با
+        # برچسبِ وضعیتِ متغیرِ balance_label/status_label رقابتِ فضا
+        # می‌کرد — دقیقاً جایی که فشرده‌شدن/بریده‌شدنِ متن پیش می‌آمد.
+        # همه‌شان آیکنی شدند؛ توضیح از طریقِ تول‌تیپ.
+        self.cancel_edit_button = QPushButton("↩️")
+        self.cancel_edit_button.setObjectName("iconButton")
+        self.cancel_edit_button.setFixedWidth(34)
+        self.cancel_edit_button.setToolTip("لغوِ ویرایش (Esc)")
         self.cancel_edit_button.clicked.connect(lambda: self._reset_form())
         footer.addWidget(self.cancel_edit_button)
 
         # طبقِ درخواستِ صریح («پرینتِ سندِ حسابداری ساخته نشده»): چاپِ
         # سندِ در‌حالِ‌ویرایش (سندِ ذخیره‌شده‌ای که با «ویرایش» بازشده) —
         # روی سندِ تازه (هنوز ذخیره‌نشده) هم کار می‌کند، برایِ پیش‌نمایش.
-        self.print_voucher_button = QPushButton("🖨️ چاپِ سند")
-        self.print_voucher_button.setObjectName("flatButton")
+        self.print_voucher_button = QPushButton("🖨️")
+        self.print_voucher_button.setObjectName("iconButton")
+        self.print_voucher_button.setFixedWidth(34)
+        self.print_voucher_button.setToolTip("چاپِ سند")
         self.print_voucher_button.clicked.connect(self._on_print_voucher_clicked)
         footer.addWidget(self.print_voucher_button)
 
-        self.delete_button = QPushButton("حذفِ سند")
-        self.delete_button.setObjectName("dangerButton")
+        self.delete_button = QPushButton("🗑️")
+        self.delete_button.setObjectName("dangerIconButton")
+        self.delete_button.setFixedWidth(34)
+        self.delete_button.setToolTip("حذفِ سند")
         self.delete_button.clicked.connect(self._delete_current_entry)
         footer.addWidget(self.delete_button)
 
-        self.save_button = QPushButton("ثبتِ سند")
+        self.save_button = QPushButton("✔️")
         self.save_button.setObjectName("primaryButton")
+        self.save_button.setFixedWidth(56)
+        self.save_button.setToolTip("ثبتِ سند")
         self.save_button.clicked.connect(self._save)
         footer.addWidget(self.save_button)
 
-        new_button = QPushButton("سندِ جدید")
-        new_button.setObjectName("flatButton")
+        new_button = QPushButton("🆕")
+        new_button.setObjectName("iconButton")
+        new_button.setFixedWidth(34)
+        new_button.setToolTip("سندِ جدید")
         new_button.clicked.connect(lambda: self._reset_form())
         footer.addWidget(new_button)
 
@@ -1093,7 +1115,10 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
 
     def _update_footer_for_mode(self) -> None:
         editing = self._editing_journal_entry_id is not None
-        self.save_button.setText("ذخیره‌ی تغییرات" if editing else "ثبتِ سند")
+        # طبقِ گزارشِ صریح («آیکن به‌جایِ نوشته، تول‌تیپ برایِ توضیح»):
+        # خودِ آیکن ثابت می‌ماند (✔️ = ثبت/ذخیره)، فقط تول‌تیپ بینِ حالتِ
+        # ویرایش/سندِ تازه فرق می‌کند.
+        self.save_button.setToolTip("ذخیره‌ی تغییرات" if editing else "ثبتِ سند")
         self.cancel_edit_button.setVisible(editing)
         self.delete_button.setVisible(editing)
         if editing and self._editing_registration_at is not None:

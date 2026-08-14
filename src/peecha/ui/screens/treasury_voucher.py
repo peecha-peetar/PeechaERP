@@ -890,8 +890,10 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         outer.addWidget(self.fields_grid)
         self.register_field_grids(f"treasury_check_entry_{direction.lower()}", [self.fields_grid])
 
-        self.add_button = QPushButton("+ افزودنِ این چک به فهرست")
-        self.add_button.setObjectName("flatButton")
+        self.add_button = QPushButton("➕")
+        self.add_button.setObjectName("iconButton")
+        self.add_button.setFixedWidth(40)
+        self.add_button.setToolTip("افزودنِ این چک به فهرست")
         self.add_button.clicked.connect(self._add_current)
         outer.addWidget(self.add_button)
 
@@ -916,8 +918,10 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
 
         table_buttons = QHBoxLayout()
         table_buttons.addStretch(1)
-        delete_button = QPushButton("✕ حذفِ چکِ انتخاب‌شده")
-        delete_button.setObjectName("dangerButton")
+        delete_button = QPushButton("🗑️")
+        delete_button.setObjectName("dangerIconButton")
+        delete_button.setFixedWidth(40)
+        delete_button.setToolTip("حذفِ چکِ انتخاب‌شده")
         delete_button.clicked.connect(self._delete_selected_row)
         table_buttons.addWidget(delete_button)
         outer.addLayout(table_buttons)
@@ -1057,7 +1061,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         self.phone_field.setText(phone or "")
         self.sayad_field.setText(entry.get("sayad_no") or "")
         self._editing_index = row
-        self.add_button.setText("به‌روزرسانیِ این چک")
+        self.add_button.setToolTip("به‌روزرسانیِ این چک")
         self.serial_field.setFocus()
 
     def _delete_selected_row(self) -> None:
@@ -1068,7 +1072,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         self._checks.pop(row)
         if self._editing_index == row:
             self._editing_index = None
-            self.add_button.setText("+ افزودنِ این چک به فهرست")
+            self.add_button.setToolTip("افزودنِ این چک به فهرست")
             self._clear_fields(after_edit=True)
         elif self._editing_index is not None and self._editing_index > row:
             self._editing_index -= 1
@@ -1083,7 +1087,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
             self._checks[self._editing_index] = entry
             self._refresh_table()
             self._editing_index = None
-            self.add_button.setText("+ افزودنِ این چک به فهرست")
+            self.add_button.setToolTip("افزودنِ این چک به فهرست")
         else:
             self._checks.append(entry)
             self._append_table_row(entry)
@@ -1235,8 +1239,14 @@ class _MethodRow:
         self.description_field = QLineEdit()
         self.description_field.returnPressed.connect(lambda: screen._focus_next_row_after(self))
 
-        self.details_button = QPushButton("جزئیات…")
-        self.details_button.setObjectName("flatButton")
+        # طبقِ گزارشِ صریح («بعضی فرم‌ها روی دکمه‌هاش نوشته داره و نصف
+        # نوشته‌هاست»): این دکمه در ستونی به عرضِ ۱۰۰px می‌نشست — متنِ
+        # «جزئیات…» حتی با سه‌نقطه‌یِ دستی هم گاهی نصفه دیده می‌شد. آیکنِ
+        # تنها هرگز بریده نمی‌شود.
+        self.details_button = QPushButton("📋")
+        self.details_button.setObjectName("iconButton")
+        self.details_button.setFixedWidth(34)
+        self.details_button.setToolTip("جزئیاتِ این ردیف")
         self.details_button.clicked.connect(self._open_details)
 
         self.remove_button = QPushButton("✕")
@@ -1244,6 +1254,7 @@ class _MethodRow:
         # تا هاور نکردن اصلاً معلوم نبود — dangerIconButton همیشه یک
         # زمینه/لبه‌یِ قرمزِ کم‌رنگ دارد.
         self.remove_button.setObjectName("dangerIconButton")
+        self.remove_button.setFixedWidth(34)
         self.remove_button.setToolTip("حذفِ این ردیف")
         self.remove_button.clicked.connect(lambda: screen._remove_row(self))
 
@@ -1633,8 +1644,10 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.rate_field = QLineEdit()
         self.rate_field.editingFinished.connect(self._on_rate_changed)
         rate_row.addWidget(self.rate_field)
-        self.rate_fetch_button = QPushButton("🌐 خودکار")
-        self.rate_fetch_button.setObjectName("flatButton")
+        self.rate_fetch_button = QPushButton("🌐")
+        self.rate_fetch_button.setObjectName("iconButton")
+        self.rate_fetch_button.setFixedWidth(34)
+        self.rate_fetch_button.setToolTip("دریافتِ خودکارِ نرخِ ارز")
         self.rate_fetch_button.clicked.connect(self._on_fetch_rate)
         rate_row.addWidget(self.rate_fetch_button)
         header_layout.addLayout(rate_row, 6, 3, 1, 2)
@@ -1671,8 +1684,10 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         rows_title.setObjectName("sectionHint")
         rows_header.addWidget(rows_title)
         rows_header.addStretch(1)
-        add_row_button = QPushButton("+ ردیفِ روش")
-        add_row_button.setObjectName("flatButton")
+        add_row_button = QPushButton("➕")
+        add_row_button.setObjectName("iconButton")
+        add_row_button.setFixedWidth(36)
+        add_row_button.setToolTip("افزودنِ ردیفِ روشِ تازه")
         add_row_button.clicked.connect(self._add_row)
         rows_header.addWidget(add_row_button)
         table_card_layout.addLayout(rows_header)
@@ -1697,8 +1712,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
 
         self.step_stepper.register_sections(self._scroll, [header_card, table_card])
 
-        save_button = QPushButton(f"ثبتِ سندِ {noun}")
+        # طبقِ گزارشِ صریح («برای همه‌ی دکمه‌ها آیکن به‌جایِ نوشته، با
+        # تول‌تیپ برایِ توضیح»): حتی دکمه‌ی اصلیِ ثبت هم آیکنی شد — رنگِ
+        # اکسنتِ primaryButton و عرضِ بزرگ‌تر همچنان آن را از بقیه‌ی
+        # دکمه‌ها متمایز نگه می‌دارد.
+        save_button = QPushButton("✔️")
         save_button.setObjectName("primaryButton")
+        save_button.setFixedWidth(56)
+        save_button.setToolTip(f"ثبتِ سندِ {noun}")
         save_button.clicked.connect(self._save)
         self.footer_layout.addWidget(save_button)
         self.footer_layout.addStretch(1)
