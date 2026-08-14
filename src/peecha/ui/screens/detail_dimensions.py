@@ -386,6 +386,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # طبقِ ادغامِ فرمِ «کالا و خدمت»: پنلِ اختصاصیِ ۱۱‌تبیِ کالا فقط در
         # سطحِ‌آخرِ گروهِ INVENTORY_ITEM نمایان می‌شود — هم‌الگو با پنلِ
         # حکمِ حقوقِ زیر که فقط برایِ PERSONNEL کاربرد دارد.
+        self.item_level_hint_label = QLabel("")
+        self.item_level_hint_label.setWordWrap(True)
+        self.item_level_hint_label.setObjectName("itemLevelHint")
+        self.item_level_hint_label.setVisible(False)
+        layout.addWidget(self.item_level_hint_label)
+
         self.item_detail_panel = ItemDetailPanel()
         self.item_detail_panel.setVisible(False)
         layout.addWidget(self.item_detail_panel)
@@ -688,10 +694,18 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         (دقیقاً هم‌شرطِ is_leaf_level در _render_person_fields/_render_extra_fields)."""
         if not self._is_inventory_item_group():
             self.item_detail_panel.setVisible(False)
+            self.item_level_hint_label.setVisible(False)
             return
         is_leaf_level = self._current_level_no() >= self._current_max_level_no
         self.item_detail_panel.setVisible(is_leaf_level)
+        self.item_level_hint_label.setVisible(not is_leaf_level)
         if not is_leaf_level:
+            self.item_level_hint_label.setText(
+                f"این یک سطحِ دسته‌بندی است، نه خودِ کالا (سطحِ فعلی: {self._current_level_no()} از "
+                f"{self._current_max_level_no}). برایِ تعریفِ کالا، یک زیرمجموعه در همین سطح بسازید تا به "
+                "سطحِ آخر برسید؛ یا اگر نمی‌خواهید دسته‌بندی داشته باشید، تعدادِ سطوحِ گروهِ «کالا» را در "
+                "«تنظیماتِ گروه‌هایِ تفصیلی» به ۱ کاهش دهید."
+            )
             return
         company_id = self._company_id()
         if company_id is not None:

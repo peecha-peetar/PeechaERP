@@ -1288,6 +1288,11 @@ def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
     for code in SPECIALIZED_DIMENSION_LABELS:
         if code not in existing:
             dimension_type = DetailDimensionType(company_id=company_id, code=code, is_active=True)
+            if code == INVENTORY_ITEM_CODE:
+                # طبقِ رفعِ باگ: کالا باید از همان روزِ اول (بدونِ نیازِ
+                # پیش‌نیازِ ساختِ چندسطح دسته‌بندی در تنظیمات) قابلِ‌تعریف
+                # باشد — نگاه کنید به 080_inventory_item_default_level.sql.
+                dimension_type.max_level_no = 1
             session.add(dimension_type)
             session.flush()
             existing[code] = dimension_type.dimension_type_id

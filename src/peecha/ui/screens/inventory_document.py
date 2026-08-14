@@ -220,44 +220,57 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._warehouses: list[locations_service.WarehouseRow] = []
 
         title = DOC_TYPE_TITLES[document_type_code]
+        title_row = QHBoxLayout()
         self.page_title = QLabel(f"سندِ {title}")
         self.page_title.setObjectName("pageTitle")
-        self.body_layout.addWidget(self.page_title)
+        title_row.addWidget(self.page_title)
+        self.status_badge = QLabel("")
+        self.status_badge.setObjectName("statusBadge")
+        title_row.addWidget(self.status_badge)
+        title_row.addStretch(1)
+        self.body_layout.addLayout(title_row)
 
         self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
         self.body_layout.addWidget(self.step_stepper)
 
-        # طبقِ درخواستِ صریح: هدر تا حدِ ممکن فشرده باشد (تا ردیفِ بیشتری
-        # از سند بدونِ اسکرول دیده شود) — تاریخ فقط به‌اندازه‌یِ متنِ
-        # «۱۴۰۵/۰۵/۲۳» جا لازم دارد، پس عرضش محدود می‌شود تا فضایِ آزادشده
-        # صرفِ انبار/طرفِ‌حساب (که کد+نامِ طولانی نمایش می‌دهند) شود.
-        header_row1 = QHBoxLayout()
+        # طبقِ درخواستِ صریح: همه‌یِ فیلدهایِ هدر در یک ردیفِ واحد و فشرده —
+        # تاریخ/انبار(ها)/جهت هرکدام فقط به‌اندازه‌یِ متنِ خودشان (نه بیشتر)
+        # جا می‌گیرند، طرفِ‌حساب نصفِ حالتِ قبل، و بقیه‌یِ عرض خالی می‌ماند
+        # (نه صرفِ کشیده‌شدنِ فیلدها) — این تابعِ کمکی همان الگویِ
+        # «حداکثرعرضِ ثابت + stretchِ انتهایی» را برایِ هر فیلد اعمال می‌کند.
+        def _compact_box(widget: QWidget, max_width: int) -> None:
+            widget.setMaximumWidth(max_width)
+
+        header_row = QHBoxLayout()
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
         self.date_field = JalaliDateEdit()
         self.date_field.setMaximumWidth(150)
         date_box.addWidget(self.date_field)
-        header_row1.addLayout(date_box, 0)
+        header_row.addLayout(date_box, 0)
 
         self.source_wh_box = QWidget()
+        _compact_box(self.source_wh_box, 150)
         source_wh_layout = QVBoxLayout(self.source_wh_box)
         source_wh_layout.setContentsMargins(0, 0, 0, 0)
         source_wh_layout.addWidget(QLabel("انبارِ مبدا"))
         self.source_wh_combo = _EnterComboBox()
         self.source_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         source_wh_layout.addWidget(self.source_wh_combo)
-        header_row1.addWidget(self.source_wh_box, 2)
+        header_row.addWidget(self.source_wh_box, 0)
 
         self.destination_wh_box = QWidget()
+        _compact_box(self.destination_wh_box, 150)
         dest_wh_layout = QVBoxLayout(self.destination_wh_box)
         dest_wh_layout.setContentsMargins(0, 0, 0, 0)
         dest_wh_layout.addWidget(QLabel("انبارِ مقصد"))
         self.destination_wh_combo = _EnterComboBox()
         self.destination_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         dest_wh_layout.addWidget(self.destination_wh_combo)
-        header_row1.addWidget(self.destination_wh_box, 2)
+        header_row.addWidget(self.destination_wh_box, 0)
 
         self.adjustment_direction_box = QWidget()
+        _compact_box(self.adjustment_direction_box, 180)
         adj_dir_layout = QVBoxLayout(self.adjustment_direction_box)
         adj_dir_layout.setContentsMargins(0, 0, 0, 0)
         adj_dir_layout.addWidget(QLabel("جهت"))
@@ -266,41 +279,27 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.adjustment_direction_combo.addItem("کسری (کاهش)", "OUT")
         self.adjustment_direction_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         adj_dir_layout.addWidget(self.adjustment_direction_combo)
-        header_row1.addWidget(self.adjustment_direction_box, 1)
+        header_row.addWidget(self.adjustment_direction_box, 0)
 
-        self.body_layout.addLayout(header_row1)
-
-        # طبقِ درخواستِ صریح: طرفِ‌حساب فضایِ بیشتر (کد+نامِ تامین‌کننده
-        # معمولاً طولانی است)، شمارهٔ مرجع فضایِ کمتر (چندرقمی/کوتاه است)،
-        # توضیح فضایِ بیشتر می‌گیرد.
-        header_row2 = QHBoxLayout()
         self.counterparty_box = QWidget()
+        _compact_box(self.counterparty_box, 220)
         counterparty_layout = QVBoxLayout(self.counterparty_box)
         counterparty_layout.setContentsMargins(0, 0, 0, 0)
         self.counterparty_label = QLabel("طرفِ‌حساب")
         counterparty_layout.addWidget(self.counterparty_label)
         self.counterparty_combo = _make_searchable_combo([])
         counterparty_layout.addWidget(self.counterparty_combo)
-        header_row2.addWidget(self.counterparty_box, 2)
+        header_row.addWidget(self.counterparty_box, 0)
 
         reference_box = QVBoxLayout()
         reference_box.addWidget(QLabel("شمارهٔ مرجع"))
         self.reference_field = QLineEdit()
         self.reference_field.setMaximumWidth(160)
         reference_box.addWidget(self.reference_field)
-        header_row2.addLayout(reference_box, 0)
+        header_row.addLayout(reference_box, 0)
 
-        description_box = QVBoxLayout()
-        description_box.addWidget(QLabel("توضیح"))
-        self.description_field = QLineEdit()
-        description_box.addWidget(self.description_field)
-        header_row2.addLayout(description_box, 2)
-
-        self.body_layout.addLayout(header_row2)
-
-        self.status_badge = QLabel("")
-        self.status_badge.setObjectName("statusBadge")
-        self.body_layout.addWidget(self.status_badge)
+        header_row.addStretch(1)
+        self.body_layout.addLayout(header_row)
 
         lines_title = QLabel("ردیف‌ها")
         lines_title.setObjectName("sectionTitle")
@@ -394,7 +393,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.setToolTip("لغوِ سند")
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
-        self.footer_layout.addStretch(1)
+
+        # طبقِ درخواستِ صریح: توضیحِ سند به‌جایِ اشغالِ یک ردیفِ کاملِ هدر،
+        # کنارِ دکمه‌ها در همین فوترِ ثابت جا می‌گیرد — دکمه‌ها هنوز کنارِ
+        # هم و سمتِ چپ می‌مانند، توضیح باقیِ فضایِ فوتر را پر می‌کند.
+        description_label = QLabel("شرح:")
+        self.footer_layout.addWidget(description_label)
+        self.description_field = QLineEdit()
+        self.footer_layout.addWidget(self.description_field, 1)
 
         self._apply_type_visibility()
         self.set_field_help([
@@ -448,7 +454,6 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self.counterparty_box.isVisibleTo(self):
             chain.append(self.counterparty_combo)
         chain.append(self.reference_field)
-        chain.append(self.description_field)
 
         for widget, next_widget in zip(chain, chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
