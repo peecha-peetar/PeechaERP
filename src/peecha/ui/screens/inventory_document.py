@@ -362,6 +362,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.setToolTip("لغوِ سند")
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
+        self.footer_layout.addStretch(1)
 
         self._apply_type_visibility()
         self.set_field_help([

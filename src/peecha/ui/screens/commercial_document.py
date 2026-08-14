@@ -329,6 +329,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.setToolTip("لغوِ سند")
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
+        self.footer_layout.addStretch(1)
 
         self.set_field_help([
             (self.date_field, "تاریخِ سند — پایهٔ تعیینِ سالِ مالی."),
