@@ -98,15 +98,22 @@ def _leaf_nav_children_for_module(module_code: str) -> list[dict]:
 
 
 class _QuickAccessTile(QFrame):
-    """کاشیِ ریبونِ میان‌بر — آیکون + برچسب، با سایه‌ای که رویِ هاور
-    بلندتر می‌شود (همان الگویِ widgets.KpiCard، مقیاسِ کوچک‌تر)."""
+    """کاشیِ ریبونِ میان‌بر — طبقِ نمونه‌طراحیِ کارت‌رنگیِ ارسالیِ کاربر،
+    هم‌زبان با widgets.SummaryCard شد: بجِ آیکونِ ته‌رنگ‌دار (شیشه‌ایِ رنگیِ
+    اکسنت، نه فقط متنِ خام)، لبه/زمینه‌یِ کم‌رنگِ کارت در حالتِ استراحت
+    (نه دیگر کاملاً شفاف) و همان سایه‌ای که رویِ هاور بلندتر می‌شود. چون
+    این کاشی‌ها هر بار در `_set_quick_access_module` از نو ساخته می‌شوند
+    (نه singleton مثلِ KpiCardِ داشبورد)، رنگ‌هایِ inline اینجا مشکلِ
+    «منجمدشدن رویِ سوییچِ تم» ندارند — با هر بازسازی از رویِ توکن‌هایِ
+    تازه ساخته می‌شوند."""
 
-    def __init__(self, icon: str, label: str, on_click) -> None:
+    def __init__(self, icon: str, label: str, on_click, color: str | None = None) -> None:
         super().__init__()
         self.setObjectName("quickTile")
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedSize(84, 74)
+        self.setFixedSize(84, 78)
         self._on_click = on_click
+        self._color = color or theme.ACCENT
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 10, 6, 8)
@@ -114,15 +121,30 @@ class _QuickAccessTile(QFrame):
         layout.setAlignment(Qt.AlignCenter)
 
         icon_label = QLabel(icon)
+        icon_label.setFixedSize(30, 30)
         icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setStyleSheet("font-size: 20px; background: transparent;")
-        layout.addWidget(icon_label)
+        icon_label.setStyleSheet(
+            f"background-color: {theme.rgba(self._color, 0.16)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.30)}; "
+            "border-radius: 9px; font-size: 15px;"
+        )
+        layout.addWidget(icon_label, alignment=Qt.AlignCenter)
 
         text_label = QLabel(label)
         text_label.setAlignment(Qt.AlignCenter)
         text_label.setWordWrap(True)
         text_label.setStyleSheet(f"font-size: 10px; font-weight: 600; color: {theme.TEXT_SECONDARY}; background: transparent;")
         layout.addWidget(text_label)
+
+        self._rest_style = (
+            f"QFrame#quickTile {{ background-color: {theme.rgba(self._color, 0.05)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.14)}; border-radius: 14px; }}"
+        )
+        self._hover_style = (
+            f"QFrame#quickTile {{ background-color: {theme.rgba(self._color, 0.14)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.35)}; border-radius: 14px; }}"
+        )
+        self.setStyleSheet(self._rest_style)
 
         self._shadow = QGraphicsDropShadowEffect(self)
         self._shadow.setBlurRadius(0)
@@ -139,18 +161,18 @@ class _QuickAccessTile(QFrame):
         super().mousePressEvent(event)
 
     def enterEvent(self, event) -> None:  # noqa: N802
-        self.setStyleSheet(f"QFrame#quickTile {{ background-color: {theme.ACCENT_LIGHT}; border-radius: 14px; }}")
+        self.setStyleSheet(self._hover_style)
         self._anim.stop()
         self._anim.setStartValue(self._shadow.blurRadius())
         self._anim.setEndValue(22)
         self._anim.start()
-        hover_glow = QColor(theme.ACCENT)
+        hover_glow = QColor(self._color)
         hover_glow.setAlpha(70)
         self._shadow.setColor(hover_glow)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802
-        self.setStyleSheet("QFrame#quickTile { background-color: transparent; border-radius: 14px; }")
+        self.setStyleSheet(self._rest_style)
         self._anim.stop()
         self._anim.setStartValue(self._shadow.blurRadius())
         self._anim.setEndValue(0)

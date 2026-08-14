@@ -220,6 +220,9 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("GL_JE_LIST", "📚"),
         ("GL_TAFSILI", "🤝"),
         ("GL_DIM", "🧰"),
+        # طبقِ گزارشِ صریح («هر فرم آیکنِ اختصاصیِ خودش را داشته باشد»):
+        # این آیتم در ریبونِ حسابداری جا افتاده بود.
+        ("GL_DIM_CONFIG", "🧩"),
     ],
     "TREASURY": [
         ("TREASURY_RECEIPT", "💵"),
@@ -233,9 +236,39 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("TREASURY_CHECKS_REPORT", "📋"),
         ("TREASURY_RECONCILIATION", "🧾"),
     ],
-    "INV": [],
-    "SALES": [],
-    "PURCH": [],
+    # طبقِ گزارشِ صریح («هر ماژول ریبونِ مختصِ خودش و هر فرم آیکنِ
+    # اختصاصیِ خودش را داشته باشد»): این سه ماژول قبلاً فهرستِ خالی
+    # داشتند — یعنی تا وقتی کاربر خودش با دکمه‌یِ ⚙ میان‌بر اضافه نمی‌کرد،
+    # هیچ ریبونی نمی‌دید. حالا مثلِ GL/TREASURY/HR، همه‌یِ فرم‌هایِ برگِ
+    # هر ماژول با یک آیکنِ اختصاصی پیش‌فرض نشان داده می‌شوند.
+    "INV": [
+        ("INV_WAREHOUSES", "🏬"),
+        ("INV_DOCUMENTS_LIST", "📚"),
+        ("INV_RECEIPT", "📥"),
+        ("INV_ISSUE", "📤"),
+        ("INV_TRANSFER", "🔄"),
+        ("INV_RETURN_IN", "↩️"),
+        ("INV_RETURN_OUT", "↪️"),
+        ("INV_ADJUSTMENT", "🛠️"),
+    ],
+    "SALES": [
+        ("SALES_ORDER", "📝"),
+        ("SALES_INVOICE", "🧾"),
+        ("SALES_RETURN", "↩️"),
+        ("SALES_DOCUMENTS_LIST", "📚"),
+        ("SALES_PRICING", "🏷️"),
+        ("SALES_POS_SESSIONS", "🖥️"),
+        ("SALES_POS_SALE", "🛒"),
+        ("SALES_ECOMMERCE", "🌐"),
+        ("SALES_AFTERSALES", "🎧"),
+    ],
+    "PURCH": [
+        ("PURCH_ORDER", "📝"),
+        ("PURCH_INVOICE", "🧾"),
+        ("PURCH_RETURN", "↪️"),
+        ("PURCH_DOCUMENTS_LIST", "📚"),
+        ("PURCH_EXTRAS", "🚢"),
+    ],
     "HR": [
         ("HR_ORG_UNITS", "🏢"),
         ("HR_POSITIONS", "🗂️"),
@@ -253,6 +286,17 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("REPORTS_ACCOUNT_LEDGER", "📒"),
         ("REPORTS_INCOME_STATEMENT", "📈"),
         ("REPORTS_BALANCE_SHEET", "📊"),
+        # طبقِ گزارشِ صریح («هر فرم آیکنِ اختصاصیِ خودش را داشته باشد»):
+        # این ۷ گزارش قبلاً در ریبون نبودند — فقط از طریقِ دکمه‌یِ ⚙
+        # با آیکنِ عمومیِ 📄 قابل‌اضافه‌شدن بودند.
+        ("REPORTS_CASH_FLOW", "🌊"),
+        ("REPORTS_EQUITY_CHANGES", "🏛️"),
+        ("REPORTS_CUSTOM_STATEMENT", "🧩"),
+        ("REPORTS_STATEMENT_DESIGNER", "🎨"),
+        ("REPORTS_FINANCIAL_RATIOS", "➗"),
+        ("REPORTS_PERIOD_COMPARISON", "🔀"),
+        ("REPORTS_ANOMALIES", "⚠️"),
+        ("REPORTS_COST_CENTER", "🏗️"),
     ],
     "SETTINGS": [],
 }
