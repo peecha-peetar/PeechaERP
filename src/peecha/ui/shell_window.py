@@ -641,6 +641,21 @@ class _ClampingMdiArea(QMdiArea):
             if clamped != geo:
                 sub_window.setGeometry(clamped)
 
+    def minimumSizeHint(self):  # noqa: N802 — نامِ متدِ Qt
+        # ریشه‌یِ واقعیِ باگِ تکرارشوندهٔ «حتی بعدِ ثابت‌کردنِ تسک‌بار،
+        # بازهم فرمِ اصلی زیرش می‌رود»: به‌طورِ پیش‌فرض، QMdiArea مینیمم
+        # سایزِ خودش را از رویِ بزرگ‌ترین زیرپنجره‌یِ بازِ داخلش (مثلاً
+        # فرمی با فیلدهایِ زیاد که minimumSizeHintِ طبیعیِ بزرگی دارد)
+        # محاسبه می‌کند و این عدد از طریقِ لایه‌هایِ تودرتو تا خودِ
+        # MainWindow بالا می‌رود — یعنی هرچقدر هم کلمپِ availableGeometry
+        # را صدا بزنیم، Qt خودش اجازه‌یِ کوچک‌ترشدنِ پنجره از این حدِ
+        # مینیمم را نمی‌دهد و مازادش زیرِ تسک‌بار می‌ماند. چون این کلاس
+        # از قبل دقیقاً برایِ همین حالت (زیرپنجره بزرگ‌تر از ناحیه‌یِ MDI)
+        # اسکرول‌بار نشان می‌دهد، مینیمم‌سایزِ خودش را مستقل از
+        # محتوایِ زیرپنجره‌ها نگه می‌داریم تا هیچ‌وقت این محدودیت به
+        # MainWindow تحمیل نشود.
+        return QSize(200, 150)
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -658,6 +673,20 @@ class MainWindow(QMainWindow):
         self._clamping_geometry = False
         self._watched_screen: QScreen | None = None
         self._screen_changed_connected = False
+        self._last_known_available_geometry: QRect | None = None
+        # طبقِ گزارشِ تکرارشوندهٔ کاربر («تسک‌بار را ثابت کردم، بازهم فرم
+        # زیرش رفت»): QScreen.availableGeometryChanged رویِ ویندوز برایِ
+        # toggleِ auto-hideِ نوارِ وظیفه به‌طورِ شناخته‌شده‌ای نامطمئن است —
+        # گاهی اصلاً شلیک نمی‌شود، چون خودِ ویندوز پیامِ WM_SETTINGCHANGE
+        # را همیشه به‌موقع/به‌طورِ کامل به Qt نمی‌رساند. برایِ همین، به‌جایِ
+        # تکیه‌یِ صرف به آن سیگنال، یک تایمرِ pollingِ سبک هم اضافه شده که
+        # مستقل از سیگنال، هر ۱ ثانیه availableGeometryِ واقعی را می‌خواند
+        # و اگر با آخرین مقدارِ شناخته‌شده فرق داشت، بلافاصله کلمپ می‌کند —
+        # این تنها راهِ قابل‌اطمینان برایِ گرفتنِ این حالتِ خاص است.
+        self._geometry_poll_timer = QTimer(self)
+        self._geometry_poll_timer.setInterval(1000)
+        self._geometry_poll_timer.timeout.connect(self._poll_available_geometry)
+        self._geometry_poll_timer.start()
         self.resize(1440, 900)
         self._clamp_geometry_to_available_screen()
 
@@ -749,6 +778,17 @@ class MainWindow(QMainWindow):
     def _on_available_geometry_changed(self, _available: QRect) -> None:
         QTimer.singleShot(0, self._clamp_geometry_to_available_screen)
 
+    def _poll_available_geometry(self) -> None:
+        """پشتیبانِ سیگنالِ availableGeometryChanged (ر.ک. توضیحِ کاملِ
+        دلیلِ نیاز به این تایمر در __init__)."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        if self._last_known_available_geometry is not None and available != self._last_known_available_geometry:
+            self._clamp_geometry_to_available_screen()
+        self._last_known_available_geometry = available
+
     def changeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
         # باگِ واقعیِ گزارش‌شده: رویِ بعضی پیکربندی‌هایِ ویندوز، maximize
         # بومیِ Qt کاملاً availableGeometry را رعایت نمی‌کند و پایینِ
@@ -774,6 +814,9 @@ class MainWindow(QMainWindow):
         if not self.isMaximized():
             self._clamp_geometry_to_available_screen()
         self._ensure_screen_geometry_watcher()
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            self._last_known_available_geometry = screen.availableGeometry()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
         # طبقِ گزارشِ تکرارشونده‌یِ کاربر («بازهم فرم‌ها زیرِ نوارِ وظیفه
