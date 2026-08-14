@@ -501,51 +501,54 @@ QPushButton#flatButton:disabled {{
 /* طبقِ گزارشِ صریح («دکمه‌هایِ آیکونی مثلِ + / 📒 / ✕ تا هاور نکنی معلوم
 نیستند دکمه‌اند»): این دکمه‌ها برخلافِ flatButton/dangerButton، همیشه
 (نه فقط رویِ هاور) یک زمینه/لبه‌یِ ملایم دارند تا در حالتِ عادی هم به‌
-وضوح «دکمه» به‌نظر برسند. طبقِ گزارشِ بعدی («اصلاً آیکنی دیده نمی‌شود»):
-پدینگِ پایه‌یِ QPushButton (۹px۱۸px) رویِ عرضِ ثابتِ ۳۴px این دکمه‌ها
-عملاً چیزی برایِ گلیف نمی‌گذاشت — این‌جا صریحاً override می‌شود؛ فونتِ
-بزرگ‌تر هم برایِ خواناییِ ایموجی در این اندازه لازم بود. */
+وضوح «دکمه» به‌نظر برسند. طبقِ گزارش‌هایِ بعدی: (۱) پدینگِ پایه‌یِ
+QPushButton (۹px۱۸px) رویِ عرضِ ثابتِ ۳۴px چیزی برایِ گلیف نمی‌گذاشت —
+override شد؛ (۲) رنگِ آیکن (PRIMARY رویِ ACCENT_LIGHT) کنتراستِ کافی
+نداشت — به TEXT_PRIMARY (پرکنتراست‌ترین توکنِ خنثیِ هر دو تم) تغییر
+کرد و فونت به ۲۰px بزرگ‌تر شد؛ (۳) نیازی به پرشدنِ توپُرِ رنگی نیست،
+فقط باید همیشه («نه‌فقط‌رویِ‌هاور») قابلِ‌تشخیص باشد — همین زمینه/لبه‌یِ
+کم‌رنگ کافی‌ست، بدونِ نیاز به fillِ اشباع‌شده. */
 QPushButton#iconButton {{
-    background-color: {ACCENT_LIGHT};
-    color: {PRIMARY};
+    background-color: {rgba(TEXT_PRIMARY, 0.06)};
+    color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
     border-radius: 6px;
     font-weight: 700;
     padding: 4px 2px;
-    font-size: 16px;
+    font-size: 20px;
 }}
 QPushButton#iconButton:hover {{
-    background-color: {ACCENT_LIGHT_HOVER};
+    background-color: {rgba(TEXT_PRIMARY, 0.12)};
 }}
 QPushButton#dangerIconButton {{
-    background-color: {rgba(DANGER, 0.14)};
+    background-color: {rgba(DANGER, 0.12)};
     color: {DANGER};
     border: 1px solid {rgba(DANGER, 0.4)};
     border-radius: 6px;
     font-weight: 700;
     padding: 4px 2px;
-    font-size: 16px;
+    font-size: 20px;
 }}
 QPushButton#dangerIconButton:hover {{
-    background-color: {rgba(DANGER, 0.26)};
+    background-color: {rgba(DANGER, 0.24)};
 }}
-/* نسخه‌یِ آیکونیِ primaryButton — همان رنگِ اکسنتِ پرشده، ولی برایِ
-دکمه‌هایِ کوچکِ ثبت/ذخیره‌یِ اصلیِ فرم (✔️/💾) که عرضِ ثابتِ کوچک دارند؛
-از primaryButtonِ اصلی جدا شد چونِ آن هنوز در بسیاری از فرم‌ها برایِ
-دکمه‌هایِ متن‌دارِ تمام‌عرض استفاده می‌شود و پدینگِ ۹px۱۸pxش را نیاز دارد. */
+/* نسخه‌یِ آیکونیِ primaryButton — برایِ دکمه‌هایِ کوچکِ ثبت/ذخیره‌یِ اصلیِ
+فرم (✔️/💾). طبقِ گزارشِ صریح («نیازی به رنگِ آبیِ توپُر نیست، فقط هاورِ
+ملایم کافی‌ست») دیگر fillِ اشباع‌شده ندارد — هم‌الگو با iconButton، فقط
+با لبه/آیکونِ اکسنت‌رنگ تا هنوز به‌عنوانِ اقدامِ اصلی متمایز باشد؛
+از primaryButtonِ متن‌دار (تمام‌عرض، هنوز پدینگِ ۹px۱۸pxِ خودش را دارد)
+جداست. */
 QPushButton#primaryIconButton {{
-    background-color: {ACCENT};
-    color: white;
+    background-color: {rgba(ACCENT, 0.10)};
+    color: {ACCENT};
+    border: 1px solid {rgba(ACCENT, 0.4)};
     border-radius: 6px;
     font-weight: 700;
     padding: 4px 2px;
-    font-size: 16px;
+    font-size: 20px;
 }}
 QPushButton#primaryIconButton:hover {{
-    background-color: {ACCENT_HOVER};
-}}
-QPushButton#primaryIconButton:pressed {{
-    background-color: {ACCENT_PRESSED};
+    background-color: {rgba(ACCENT, 0.20)};
 }}
 QPushButton#dangerButton {{
     background-color: transparent;

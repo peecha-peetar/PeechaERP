@@ -152,8 +152,10 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.worked_hours_field)
         self.hours_field_hint = self.worked_hours_field
 
-        create_button = QPushButton("+ ثبت")
-        create_button.setObjectName("primaryButton")
+        create_button = QPushButton("➕")
+        create_button.setObjectName("primaryIconButton")
+        create_button.setFixedWidth(40)
+        create_button.setToolTip("ثبت")
         create_button.clicked.connect(self._create_record)
         layout.addWidget(create_button)
 
@@ -166,11 +168,17 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
         layout.addWidget(QLabel("ایمپورتِ دسته‌ای با الگویِ ذخیره‌شده"))
         self.template_combo = QComboBox()
         layout.addWidget(self.template_combo)
-        self.template_import_button = QPushButton("انتخابِ فایل و ایمپورت (لود و تاییدِ خودکار)")
+        self.template_import_button = QPushButton("✅")
+        self.template_import_button.setObjectName("iconButton")
+        self.template_import_button.setFixedWidth(34)
+        self.template_import_button.setToolTip("انتخابِ فایل و ایمپورت (لود و تاییدِ خودکار)")
         self.template_import_button.clicked.connect(self._on_import_with_template)
         layout.addWidget(self.template_import_button)
 
-        self.manual_import_button = QPushButton("ایمپورتِ دستی (بدونِ الگو — تناظرِ ستون‌ها)")
+        self.manual_import_button = QPushButton("📥")
+        self.manual_import_button.setObjectName("iconButton")
+        self.manual_import_button.setFixedWidth(34)
+        self.manual_import_button.setToolTip("ایمپورتِ دستی (بدونِ الگو — تناظرِ ستون‌ها)")
         self.manual_import_button.clicked.connect(self._on_import_manual)
         layout.addWidget(self.manual_import_button)
 

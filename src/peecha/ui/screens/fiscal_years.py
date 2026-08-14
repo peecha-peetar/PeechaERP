@@ -80,7 +80,10 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.table, stretch=1)
 
         toggle_year_row = QHBoxLayout()
-        self.toggle_year_button = QPushButton("بازکردن/بستنِ سالِ مالیِ انتخاب‌شده")
+        self.toggle_year_button = QPushButton("📂")
+        self.toggle_year_button.setObjectName("iconButton")
+        self.toggle_year_button.setFixedWidth(34)
+        self.toggle_year_button.setToolTip("بازکردن/بستنِ سالِ مالیِ انتخاب‌شده")
         self.toggle_year_button.setEnabled(False)
         self.toggle_year_button.clicked.connect(self._toggle_selected_year)
         toggle_year_row.addWidget(self.toggle_year_button)
@@ -126,8 +129,10 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        create_button = QPushButton("ایجادِ سالِ مالی")
-        create_button.setObjectName("primaryButton")
+        create_button = QPushButton("➕")
+        create_button.setObjectName("primaryIconButton")
+        create_button.setFixedWidth(40)
+        create_button.setToolTip("ایجادِ سالِ مالی")
         create_button.clicked.connect(self._create)
         layout.addWidget(create_button)
 

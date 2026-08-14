@@ -50,13 +50,17 @@ class _FieldEditRow(QWidget):
         self.value_field.setText(current_label or default_label)
         layout.addWidget(self.value_field)
 
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("flatButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("iconButton")
+        save_button.setFixedWidth(34)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(lambda: on_save(field_id, self.value_field.text().strip()))
         layout.addWidget(save_button)
 
-        reset_button = QPushButton("بازگشت به پیش‌فرض")
-        reset_button.setObjectName("flatButton")
+        reset_button = QPushButton("↩️")
+        reset_button.setObjectName("iconButton")
+        reset_button.setFixedWidth(34)
+        reset_button.setToolTip("بازگشت به پیش‌فرض")
         reset_button.clicked.connect(lambda: on_reset(field_id))
         layout.addWidget(reset_button)
 

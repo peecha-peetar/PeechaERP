@@ -158,8 +158,10 @@ class _MappingForm(QWidget):
         self.account_combo = _MultiSelectComboBox([])
         self._layout.addWidget(self.account_combo, stretch=1)
 
-        add_button = QPushButton("+ افزودن")
-        add_button.setObjectName("flatButton")
+        add_button = QPushButton("➕")
+        add_button.setObjectName("iconButton")
+        add_button.setFixedWidth(34)
+        add_button.setToolTip("افزودن")
         add_button.clicked.connect(self._add)
         self._layout.addWidget(add_button)
 
@@ -286,8 +288,10 @@ class _MethodMappingRow(QWidget):
         # روشن باشد چه زمانی چیزی برایِ ذخیره‌کردن هست، هم بعدِ ذخیره‌یِ
         # موفق (با پیامِ تاییدیه) دوباره غیرفعال شود تا کلیکِ تکراری معنی
         # نداشته باشد.
-        self.save_button = QPushButton("ذخیره")
-        self.save_button.setObjectName("flatButton")
+        self.save_button = QPushButton("💾")
+        self.save_button.setObjectName("iconButton")
+        self.save_button.setFixedWidth(34)
+        self.save_button.setToolTip("ذخیره")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._on_save_clicked(mapping_key, on_save))
         layout.addWidget(self.save_button)
@@ -367,8 +371,10 @@ class _MultiAccountMappingRow(QWidget):
 
         # طبقِ گزارشِ صریح: دکمه‌یِ ذخیره فقط وقتی این ردیف تغییر کرده فعال
         # می‌شود، و بعدِ ذخیره‌یِ موفق (با پیامِ تاییدیه) دوباره غیرفعال می‌شود.
-        self.save_button = QPushButton("ذخیره")
-        self.save_button.setObjectName("flatButton")
+        self.save_button = QPushButton("💾")
+        self.save_button.setObjectName("iconButton")
+        self.save_button.setFixedWidth(34)
+        self.save_button.setToolTip("ذخیره")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._on_save_clicked)
         layout.addWidget(self.save_button)
@@ -406,8 +412,10 @@ class _CustomMethodForm(QWidget):
         self.label_field.setPlaceholderText("مثلاً «تهاترِ ارزی» یا «کارت‌به‌کارت»")
         layout.addWidget(self.label_field, stretch=1)
 
-        add_button = QPushButton("+ افزودنِ روشِ سفارشی")
-        add_button.setObjectName("flatButton")
+        add_button = QPushButton("➕")
+        add_button.setObjectName("iconButton")
+        add_button.setFixedWidth(34)
+        add_button.setToolTip("افزودنِ روشِ سفارشی")
         add_button.clicked.connect(self._add)
         layout.addWidget(add_button)
 
@@ -448,8 +456,10 @@ class _CustomMethodRow(QWidget):
         active_checkbox.toggled.connect(lambda checked: on_toggle(method.custom_method_id, checked))
         layout.addWidget(active_checkbox)
 
-        delete_button = QPushButton("حذفِ روش")
-        delete_button.setObjectName("dangerButton")
+        delete_button = QPushButton("🗑️")
+        delete_button.setObjectName("dangerIconButton")
+        delete_button.setFixedWidth(34)
+        delete_button.setToolTip("حذفِ روش")
         delete_button.clicked.connect(lambda: on_delete(method.custom_method_id))
         layout.addWidget(delete_button)
 
@@ -470,8 +480,10 @@ class _TemplateRow(QWidget):
         self.text_field = QLineEdit(current_text)
         layout.addWidget(self.text_field, stretch=1)
 
-        self.save_button = QPushButton("ذخیره")
-        self.save_button.setObjectName("flatButton")
+        self.save_button = QPushButton("💾")
+        self.save_button.setObjectName("iconButton")
+        self.save_button.setFixedWidth(34)
+        self.save_button.setToolTip("ذخیره")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._on_save_clicked(template_key, on_save))
         layout.addWidget(self.save_button)

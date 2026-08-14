@@ -287,8 +287,10 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.rate_status_label.setWordWrap(True)
         content_layout.addWidget(self.rate_status_label)
 
-        save_rate_button = QPushButton("ثبتِ نرخ")
-        save_rate_button.setObjectName("primaryButton")
+        save_rate_button = QPushButton("➕")
+        save_rate_button.setObjectName("primaryIconButton")
+        save_rate_button.setFixedWidth(40)
+        save_rate_button.setToolTip("ثبتِ نرخ")
         save_rate_button.clicked.connect(self._on_save_rate)
         content_layout.addWidget(save_rate_button)
 

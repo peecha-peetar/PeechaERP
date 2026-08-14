@@ -60,8 +60,10 @@ class AccountLedgerScreen(ReportScreenBase):
         # ناوبری)؛ این دکمه، مستقل از سطح، گردشِ حسابِ همان ردیفِ
         # انتخاب‌شده را نشان می‌دهد — برایِ گروه/کل به‌صورتِ رول‌آپِ همه‌یِ
         # معین‌هایِ زیرمجموعه (چون سندی مستقیم رویِ آن‌ها ثبت نمی‌شود).
-        self.ledger_button = QPushButton("گردشِ حسابِ ردیفِ انتخاب‌شده")
-        self.ledger_button.setObjectName("flatButton")
+        self.ledger_button = QPushButton("📖")
+        self.ledger_button.setObjectName("iconButton")
+        self.ledger_button.setFixedWidth(34)
+        self.ledger_button.setToolTip("گردشِ حسابِ ردیفِ انتخاب‌شده")
         self.ledger_button.clicked.connect(self._show_ledger_for_selected)
         self.extra_filter_row.addWidget(self.ledger_button)
 

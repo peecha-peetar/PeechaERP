@@ -70,7 +70,9 @@ class InventoryDocumentsListScreen(QWidget):
 
         new_buttons = QHBoxLayout()
         for code, label in DOC_TYPE_TITLES.items():
-            button = QPushButton(f"+ {label}")
+            button = QPushButton(f"➕ {label}")
+            button.setObjectName("primaryButton")
+            button.setToolTip(f"سندِ {label}یِ تازه")
             button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
             new_buttons.addWidget(button)
         layout.addLayout(new_buttons)

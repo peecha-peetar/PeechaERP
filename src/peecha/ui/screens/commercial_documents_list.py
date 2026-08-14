@@ -73,7 +73,9 @@ class CommercialDocumentsListScreen(QWidget):
 
         new_buttons = QHBoxLayout()
         for code in visible_types:
-            button = QPushButton(f"+ {DOC_TYPE_TITLES[code]}")
+            button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
+            button.setObjectName("primaryButton")
+            button.setToolTip(f"سندِ {DOC_TYPE_TITLES[code]}یِ تازه")
             button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
             new_buttons.addWidget(button)
         layout.addLayout(new_buttons)

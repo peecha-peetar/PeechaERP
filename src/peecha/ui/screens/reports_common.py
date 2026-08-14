@@ -159,8 +159,10 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         self.extra_filter_row = QHBoxLayout()
         filter_row.addLayout(self.extra_filter_row)
 
-        apply_button = QPushButton("اعمالِ فیلتر")
-        apply_button.setObjectName("primaryButton")
+        apply_button = QPushButton("🔍")
+        apply_button.setObjectName("primaryIconButton")
+        apply_button.setFixedWidth(40)
+        apply_button.setToolTip("اعمالِ فیلتر")
         apply_button.clicked.connect(self._reload)
         filter_row.addWidget(apply_button)
         filter_row.addStretch(1)

@@ -153,13 +153,17 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.status_label)
 
         buttons = QHBoxLayout()
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(40)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
         buttons.addWidget(save_button)
 
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
+        cancel_button = QPushButton("↩️")
+        cancel_button.setObjectName("iconButton")
+        cancel_button.setFixedWidth(34)
+        cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
         buttons.addWidget(cancel_button)
 

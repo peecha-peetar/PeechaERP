@@ -143,12 +143,17 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         self.form_status_label.setWordWrap(True)
         layout.addWidget(self.form_status_label)
 
-        create_button = QPushButton("+ ثبت")
-        create_button.setObjectName("primaryButton")
+        create_button = QPushButton("➕")
+        create_button.setObjectName("primaryIconButton")
+        create_button.setFixedWidth(40)
+        create_button.setToolTip("ثبت")
         create_button.clicked.connect(self._create_entry)
         layout.addWidget(create_button)
 
-        self.import_button = QPushButton("ایمپورت از اکسل")
+        self.import_button = QPushButton("📥")
+        self.import_button.setObjectName("iconButton")
+        self.import_button.setFixedWidth(34)
+        self.import_button.setToolTip("ایمپورت از اکسل")
         self.import_button.clicked.connect(self._on_import_excel)
         layout.addWidget(self.import_button)
 

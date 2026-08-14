@@ -94,8 +94,10 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        create_button = QPushButton("افزودنِ نقش")
-        create_button.setObjectName("primaryButton")
+        create_button = QPushButton("➕")
+        create_button.setObjectName("primaryIconButton")
+        create_button.setFixedWidth(40)
+        create_button.setToolTip("افزودنِ نقش")
         create_button.clicked.connect(self._create_role)
         layout.addWidget(create_button)
 

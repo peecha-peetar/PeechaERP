@@ -75,8 +75,10 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.table, stretch=1)
 
         save_row = QHBoxLayout()
-        save_button = QPushButton("ذخیره‌یِ تغییرات")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(40)
+        save_button.setToolTip("ذخیره‌یِ تغییرات")
         save_button.clicked.connect(self._save_all)
         save_row.addWidget(save_button)
         save_row.addStretch(1)

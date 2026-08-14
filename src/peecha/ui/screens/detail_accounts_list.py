@@ -68,8 +68,10 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         # طبقِ درخواستِ صریح: دکمه‌ی «تفصیلیِ جدید» با منویی از همه‌ی
         # گروه‌هایِ تفصیلی — با انتخابِ هرکدام، همان فرمِ اختصاصی‌اش در
         # حالتِ «رکوردِ تازه» باز می‌شود (نه لیستِ خودِ گروه‌ها).
-        self.new_entry_button = QPushButton("+ تفصیلیِ جدید")
-        self.new_entry_button.setObjectName("primaryButton")
+        self.new_entry_button = QPushButton("➕")
+        self.new_entry_button.setObjectName("primaryIconButton")
+        self.new_entry_button.setFixedWidth(40)
+        self.new_entry_button.setToolTip("تفصیلیِ جدید")
         self.new_entry_button.clicked.connect(self._show_new_entry_menu)
         header_row.addWidget(self.new_entry_button)
 

@@ -155,8 +155,10 @@ class FinancialStatementMappingScreen(QWidget):
             # کلیک می‌کند) جلوگیری می‌کند — چون refresh() همه‌ی کمبوها را
             # از رویِ دیتابیس بازمی‌سازد و تغییرِ ذخیره‌نشده‌ی ردیف‌هایِ
             # دیگر گم می‌شود.
-            save_button = QPushButton("ذخیره")
-            save_button.setObjectName("primaryButton")
+            save_button = QPushButton("💾")
+            save_button.setObjectName("primaryIconButton")
+            save_button.setFixedWidth(40)
+            save_button.setToolTip("ذخیره")
             save_button.setEnabled(False)
             # نکته‌یِ مهم: کمبوها باید با آرگومانِ پیش‌فرض به لامبدا مقیّد
             # شوند (نه فقط با closure) — وگرنه چون همه‌یِ ردیف‌هایِ حلقه در
