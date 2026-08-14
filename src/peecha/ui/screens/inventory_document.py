@@ -36,8 +36,8 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha import numerals
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper, SummaryCard, SummaryCardBar
+from peecha.ui.screens.treasury_voucher import _EnterComboBox
+from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper
 
 DOC_TYPE_TITLES = {
     "RECEIPT": "رسید",
@@ -49,6 +49,16 @@ DOC_TYPE_TITLES = {
 }
 STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "POSTED": "ثبتِ‌نهایی‌شده", "CANCELLED": "لغوشده"}
 _LINE_COLUMNS = ["کالا", "مقدار", "مکان", "مکانِ مقصد", "بهایِ واحد", "بهایِ کل", "دلیل", "توضیح"]
+
+
+def _enter_signal(widget: QWidget):
+    """سیگنالِ Enterِ درستِ هر نوع فیلد — برایِ ساختِ زنجیره‌هایِ ناوبریِ
+    کیبوردی، هم در هدرِ فرم و هم در دیالوگِ ردیف."""
+    if isinstance(widget, _EnterComboBox):
+        return widget.enterPressed
+    if isinstance(widget, (QComboBox, QDoubleSpinBox)):
+        return widget.lineEdit().returnPressed
+    return widget.returnPressed
 
 
 class _LineDialog(QDialog):
@@ -79,7 +89,7 @@ class _LineDialog(QDialog):
         bin_layout = QVBoxLayout(self.bin_row)
         bin_layout.setContentsMargins(0, 0, 0, 0)
         bin_layout.addWidget(QLabel("مکان"))
-        self.bin_combo = QComboBox()
+        self.bin_combo = _EnterComboBox()
         self.bin_combo.addItem("(پیش‌فرضِ انبار)", None)
         for b in source_bins:
             self.bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
@@ -90,7 +100,7 @@ class _LineDialog(QDialog):
         dest_bin_layout = QVBoxLayout(self.destination_bin_row)
         dest_bin_layout.setContentsMargins(0, 0, 0, 0)
         dest_bin_layout.addWidget(QLabel("مکانِ مقصد"))
-        self.destination_bin_combo = QComboBox()
+        self.destination_bin_combo = _EnterComboBox()
         self.destination_bin_combo.addItem("(پیش‌فرضِ انبار)", None)
         for b in destination_bins:
             self.destination_bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
@@ -101,7 +111,7 @@ class _LineDialog(QDialog):
         self.unit_cost_row = QWidget()
         cost_layout = QVBoxLayout(self.unit_cost_row)
         cost_layout.setContentsMargins(0, 0, 0, 0)
-        cost_layout.addWidget(QLabel("بهایِ واحد"))
+        cost_layout.addWidget(QLabel("بهایِ واحد (اختیاری)"))
         self.unit_cost_field = QDoubleSpinBox()
         self.unit_cost_field.setDecimals(2)
         self.unit_cost_field.setRange(0, 999999999999)
@@ -113,7 +123,7 @@ class _LineDialog(QDialog):
         reason_layout = QVBoxLayout(self.reason_row)
         reason_layout.setContentsMargins(0, 0, 0, 0)
         reason_layout.addWidget(QLabel("دلیل"))
-        self.reason_combo = QComboBox()
+        self.reason_combo = _EnterComboBox()
         self.reason_combo.addItem("(انتخاب کنید)", None)
         for r in reasons:
             self.reason_combo.addItem(r.name, r.reason_code_id)
@@ -133,7 +143,31 @@ class _LineDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
+        # طبقِ الگویِ ثابت‌شده در treasury_voucher.py (رفعِ RcptBug3-1):
+        # وقتی autoDefault فعال باشد، همان اولین Enterِ زده‌شده در *هر*
+        # فیلدی زودتر از زنجیره‌یِ صریحِ زیر به این دکمه می‌رسد و دیالوگ را
+        # زودهنگام می‌بندد.
+        buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         layout.addWidget(buttons)
+
+        # طبقِ درخواستِ صریح («ادامهٔ ثبتِ رسید»): زنجیره‌یِ Enter از کالا
+        # تا توضیح، و در پایان معادلِ کلیکِ روی «تایید» — تا کاربر بتواند
+        # ردیف‌ها را پشتِ‌سرِهم فقط با کیبورد وارد کند.
+        enter_chain: list[QWidget] = [self.item_combo, self.quantity_field, self.bin_combo]
+        if self.destination_bin_row.isVisibleTo(self):
+            enter_chain.append(self.destination_bin_combo)
+        if self.unit_cost_row.isVisibleTo(self):
+            enter_chain.append(self.unit_cost_field)
+        if self.reason_row.isVisibleTo(self):
+            enter_chain.append(self.reason_combo)
+        enter_chain.append(self.description_field)
+
+        for widget, next_widget in zip(enter_chain, enter_chain[1:]):
+            _enter_signal(widget).connect(next_widget.setFocus)
+        _enter_signal(enter_chain[-1]).connect(self._on_accept)
+
+        self.item_combo.setFocus()
 
         if initial is not None:
             index = self.item_combo.findData(initial.item_id)
@@ -190,58 +224,55 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.page_title.setObjectName("pageTitle")
         self.body_layout.addWidget(self.page_title)
 
-        # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر — هم‌الگو با
-        # treasury_voucher.py/journal_entry.py/commercial_document.py: صرفاً
-        # لایه‌یِ بصری/ناوبری. این سند مبلغ ندارد (فقط مقدار)، پس کارت‌ها
-        # تعدادِ ردیف‌ها/جمعِ مقدار/جمعِ بهایِ ردیف‌ها را نشان می‌دهند.
         self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
         self.body_layout.addWidget(self.step_stepper)
 
-        self.summary_cards = SummaryCardBar({
-            "line_count": SummaryCard("تعدادِ ردیف‌ها", role="neutral"),
-            "total_quantity": SummaryCard("جمعِ مقدار", role="info"),
-            "total_cost": SummaryCard("جمعِ بهایِ ردیف‌ها", role="success"),
-        })
-        self.body_layout.addWidget(self.summary_cards)
-
+        # طبقِ درخواستِ صریح: هدر تا حدِ ممکن فشرده باشد (تا ردیفِ بیشتری
+        # از سند بدونِ اسکرول دیده شود) — تاریخ فقط به‌اندازه‌یِ متنِ
+        # «۱۴۰۵/۰۵/۲۳» جا لازم دارد، پس عرضش محدود می‌شود تا فضایِ آزادشده
+        # صرفِ انبار/طرفِ‌حساب (که کد+نامِ طولانی نمایش می‌دهند) شود.
         header_row1 = QHBoxLayout()
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
         self.date_field = JalaliDateEdit()
+        self.date_field.setMaximumWidth(150)
         date_box.addWidget(self.date_field)
-        header_row1.addLayout(date_box)
+        header_row1.addLayout(date_box, 0)
 
         self.source_wh_box = QWidget()
         source_wh_layout = QVBoxLayout(self.source_wh_box)
         source_wh_layout.setContentsMargins(0, 0, 0, 0)
         source_wh_layout.addWidget(QLabel("انبارِ مبدا"))
-        self.source_wh_combo = QComboBox()
+        self.source_wh_combo = _EnterComboBox()
         self.source_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         source_wh_layout.addWidget(self.source_wh_combo)
-        header_row1.addWidget(self.source_wh_box)
+        header_row1.addWidget(self.source_wh_box, 2)
 
         self.destination_wh_box = QWidget()
         dest_wh_layout = QVBoxLayout(self.destination_wh_box)
         dest_wh_layout.setContentsMargins(0, 0, 0, 0)
         dest_wh_layout.addWidget(QLabel("انبارِ مقصد"))
-        self.destination_wh_combo = QComboBox()
+        self.destination_wh_combo = _EnterComboBox()
         self.destination_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         dest_wh_layout.addWidget(self.destination_wh_combo)
-        header_row1.addWidget(self.destination_wh_box)
+        header_row1.addWidget(self.destination_wh_box, 2)
 
         self.adjustment_direction_box = QWidget()
         adj_dir_layout = QVBoxLayout(self.adjustment_direction_box)
         adj_dir_layout.setContentsMargins(0, 0, 0, 0)
         adj_dir_layout.addWidget(QLabel("جهت"))
-        self.adjustment_direction_combo = QComboBox()
+        self.adjustment_direction_combo = _EnterComboBox()
         self.adjustment_direction_combo.addItem("مازاد (افزایش)", "IN")
         self.adjustment_direction_combo.addItem("کسری (کاهش)", "OUT")
         self.adjustment_direction_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         adj_dir_layout.addWidget(self.adjustment_direction_combo)
-        header_row1.addWidget(self.adjustment_direction_box)
+        header_row1.addWidget(self.adjustment_direction_box, 1)
 
         self.body_layout.addLayout(header_row1)
 
+        # طبقِ درخواستِ صریح: طرفِ‌حساب فضایِ بیشتر (کد+نامِ تامین‌کننده
+        # معمولاً طولانی است)، شمارهٔ مرجع فضایِ کمتر (چندرقمی/کوتاه است)،
+        # توضیح فضایِ بیشتر می‌گیرد.
         header_row2 = QHBoxLayout()
         self.counterparty_box = QWidget()
         counterparty_layout = QVBoxLayout(self.counterparty_box)
@@ -250,19 +281,20 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         counterparty_layout.addWidget(self.counterparty_label)
         self.counterparty_combo = _make_searchable_combo([])
         counterparty_layout.addWidget(self.counterparty_combo)
-        header_row2.addWidget(self.counterparty_box)
+        header_row2.addWidget(self.counterparty_box, 2)
 
         reference_box = QVBoxLayout()
         reference_box.addWidget(QLabel("شمارهٔ مرجع"))
         self.reference_field = QLineEdit()
+        self.reference_field.setMaximumWidth(160)
         reference_box.addWidget(self.reference_field)
-        header_row2.addLayout(reference_box)
+        header_row2.addLayout(reference_box, 0)
 
         description_box = QVBoxLayout()
         description_box.addWidget(QLabel("توضیح"))
         self.description_field = QLineEdit()
         description_box.addWidget(self.description_field)
-        header_row2.addLayout(description_box)
+        header_row2.addLayout(description_box, 2)
 
         self.body_layout.addLayout(header_row2)
 
@@ -392,6 +424,35 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.counterparty_label.setText("طرفِ‌حساب (مشتری) — الزامی")
         elif t == "ISSUE":
             self.counterparty_label.setText("طرفِ‌حساب (مشتری)")
+        self._wire_header_enter_chain()
+
+    def _wire_header_enter_chain(self) -> None:
+        """طبقِ درخواستِ صریح («مثلِ فرمِ دریافت»): زنجیره‌یِ Enter از
+        تاریخ تا آخرین فیلدِ هدر، و در پایان به بازکردنِ دیالوگِ افزودنِ
+        ردیف می‌رسد — دقیقاً هم‌الگو با treasury_voucher.py. چون
+        visibilityِ فیلدهایِ هدر فقط یک‌بار (برایِ نوعِ سندِ ثابتِ همین
+        نمونه) در _apply_type_visibility تعیین می‌شود، این‌جا هم فقط
+        همان یک‌بار زنجیره ساخته می‌شود — نه در هر refresh."""
+        # طبقِ باگِ واقعیِ کشف‌شده: این تابع در __init__ (پیش از نمایشِ
+        # واقعیِ صفحه) صدا زده می‌شود، جایی که isVisible() همیشه False
+        # برمی‌گرداند (چون کلِ زنجیره‌یِ اجداد هنوز show نشده) — حتی برایِ
+        # فیلدهایی که setVisible(True) رویشان صدا زده شده. isVisibleTo(self)
+        # وضعیتِ واقعیِ تنظیم‌شده را مستقل از نمایانیِ خودِ صفحه برمی‌گرداند.
+        chain: list[QWidget] = [self.date_field]
+        if self.source_wh_box.isVisibleTo(self):
+            chain.append(self.source_wh_combo)
+        if self.destination_wh_box.isVisibleTo(self):
+            chain.append(self.destination_wh_combo)
+        if self.adjustment_direction_box.isVisibleTo(self):
+            chain.append(self.adjustment_direction_combo)
+        if self.counterparty_box.isVisibleTo(self):
+            chain.append(self.counterparty_combo)
+        chain.append(self.reference_field)
+        chain.append(self.description_field)
+
+        for widget, next_widget in zip(chain, chain[1:]):
+            _enter_signal(widget).connect(next_widget.setFocus)
+        _enter_signal(chain[-1]).connect(self._add_line)
 
     def _on_warehouse_changed(self) -> None:
         # طبقِ گزارشِ صریح: عوضِ‌شدنِ انبار ردیف‌هایِ ثبت‌شده را بی‌معنا
@@ -444,6 +505,12 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._load_document()
         else:
             self._reset_form(clear_only=True)
+
+        # طبقِ درخواستِ صریح: هر بار این صفحه باز می‌شود، فوکوس مستقیم
+        # رویِ تاریخ می‌رود — هم‌الگو با فرمِ دریافت/سندِ حسابداری — تا
+        # زنجیره‌یِ Enterِ هدر بتواند بدونِ کلیکِ اضافه شروع شود.
+        self.date_field.setFocus()
+        self.date_field.selectAll()
 
     def _load_document(self) -> None:
         company_id = self._company_id()
@@ -507,12 +574,6 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.UserRole, ln.line_id)
                 self.lines_table.setItem(row_index, col_index, cell)
-
-        total_quantity = sum((ln.quantity for ln in self._lines), decimal.Decimal(0))
-        total_cost = sum((ln.line_total_cost or decimal.Decimal(0) for ln in self._lines), decimal.Decimal(0))
-        self.summary_cards.set_value("line_count", numerals.to_persian_digits(str(len(self._lines))))
-        self.summary_cards.set_value("total_quantity", numerals.format_amount(total_quantity))
-        self.summary_cards.set_value("total_cost", numerals.format_amount(total_cost))
 
     def _apply_status_state(self) -> None:
         self.status_badge.setText(STATUS_LABELS.get(self._status_code, self._status_code))
@@ -611,15 +672,21 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         reasons: list[documents_service.ReasonCodeRow] = []
         if self.document_type_code in ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT"):
             reasons = documents_service.list_reason_codes(company_id, self.document_type_code)
-        dialog = _LineDialog(self, self.document_type_code, self._items, source_bins, destination_bins, reasons)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        try:
-            documents_service.add_line(self._document_id, company_id, dialog.result_fields())
-        except ValueError as exc:
-            QMessageBox.warning(self, "خطا", str(exc))
-            return
-        self._load_document()
+        # طبقِ درخواستِ صریح («ادامهٔ ثبتِ رسید»): بعدِ ثبتِ موفقِ هر ردیف،
+        # بلافاصله دیالوگِ تازه‌ای برایِ ردیفِ بعدی باز می‌شود — تا کاربر
+        # با زنجیره‌یِ Enterِ داخلِ دیالوگ بتواند پشتِ‌سرِهم ردیف واردکند،
+        # بدونِ نیازِ به کلیکِ دوباره‌یِ «افزودنِ ردیف». فقط با لغوِ دیالوگ
+        # (Escape/Cancel) این چرخه متوقف می‌شود.
+        while True:
+            dialog = _LineDialog(self, self.document_type_code, self._items, source_bins, destination_bins, reasons)
+            if dialog.exec() != QDialog.Accepted:
+                break
+            try:
+                documents_service.add_line(self._document_id, company_id, dialog.result_fields())
+            except ValueError as exc:
+                QMessageBox.warning(self, "خطا", str(exc))
+                break
+            self._load_document()
 
     def _selected_line(self) -> documents_service.StockDocumentLineRow | None:
         selected = self.lines_table.selectedItems()

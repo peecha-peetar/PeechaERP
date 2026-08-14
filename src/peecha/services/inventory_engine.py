@@ -251,6 +251,20 @@ def _standard_cost(session, item_id: int, as_of_date: datetime.date) -> decimal.
     return row.standard_unit_cost
 
 
+def _last_known_unit_cost(session, item_id: int) -> decimal.Decimal | None:
+    """آخرین بهایِ واحدِ واقعاً ثبت‌شده برایِ این کالا در دفترِ انبار —
+    طبقِ تصمیمِ صریح: وقتی سندِ مستقیمِ انبار (رسید/برگشت) بدونِ بهایِ
+    واحد ثبتِ نهایی می‌شود و روشِ قیمت‌گذاری STANDARD نیست، به‌جایِ
+    خطایِ سخت، همین مقدار به‌طورِ نامرئی جایگزین می‌شود."""
+    row = session.scalar(
+        select(StockLedger.unit_cost)
+        .where(StockLedger.item_id == item_id, StockLedger.unit_cost.is_not(None))
+        .order_by(StockLedger.movement_date.desc(), StockLedger.ledger_id.desc())
+        .limit(1)
+    )
+    return row
+
+
 def _source_line_unit_cost(session, source_line_id: int) -> decimal.Decimal:
     rows = session.scalars(select(StockLedger).where(StockLedger.stock_document_line_id == source_line_id)).all()
     if not rows:
@@ -449,7 +463,12 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                         if method == "STANDARD":
                             actual_cost = _standard_cost(session, item.item_id, movement_date)
                         else:
-                            raise ValueError("بهایِ واحد برایِ رسید الزامی است.")
+                            # طبقِ تصمیمِ صریح: بهایِ واحد در رسیدِ مستقیمِ
+                            # انبار الزامی نیست — اگر خالی بماند، آخرین بهایِ
+                            # واقعاً ثبت‌شده برایِ همین کالا (از دفترِ انبار)
+                            # به‌طورِ نامرئی جایگزین می‌شود؛ اگر هیچ سابقه‌ای
+                            # نبود، صفر (نه خطا) تا Postِ سند هرگز مسدود نشود.
+                            actual_cost = _last_known_unit_cost(session, item.item_id) or _ZERO
 
                 ledger_unit_cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else actual_cost
 
