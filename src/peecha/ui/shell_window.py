@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -719,11 +719,17 @@ class MainWindow(QMainWindow):
         # باگِ واقعیِ گزارش‌شده: رویِ بعضی پیکربندی‌هایِ ویندوز، maximize
         # بومیِ Qt کاملاً availableGeometry را رعایت نمی‌کند و پایینِ
         # پنجره زیرِ نوارِ وظیفه می‌رود؛ این‌جا به‌طورِ صریح آن را با
-        # availableGeometry جایگزین می‌کنیم.
+        # availableGeometry جایگزین می‌کنیم. طبقِ گزارشِ تکرارشوندهٔ
+        # کاربر («هنوز هم زیرِ تسک‌بار می‌رود») حتی این تعویضِ صریح هم
+        # وقتی showMaximized() رویِ پنجره‌ای که هنوز هیچ‌وقت show() نشده
+        # صدا زده می‌شود (دقیقاً همان‌طور که login_window.py می‌کند) کافی
+        # نبود — چونِ تکمیلِ maximizeِ بومیِ ویندوز برایِ چنین پنجره‌ای
+        # می‌تواند بعد از این callback هم ادامه پیدا کند و geometryِ ما را
+        # دوباره بازنویسی کند. برایِ همین، کلمپ را یک تیکِ رویداد به تعویق
+        # می‌اندازیم (QTimer.singleShot(0, ...)) تا *بعدِ* تکمیلِ کاملِ
+        # maximizeِ بومی اجرا شود، نه هم‌زمان با آن.
         if event.type() == QEvent.WindowStateChange and self.isMaximized():
-            screen = self.screen() or QApplication.primaryScreen()
-            if screen is not None:
-                self.setGeometry(screen.availableGeometry())
+            QTimer.singleShot(0, self._clamp_geometry_to_available_screen)
         super().changeEvent(event)
 
     def showEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt

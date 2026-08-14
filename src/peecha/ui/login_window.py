@@ -12,7 +12,7 @@ bidi/شکل‌دهیِ عربی/فارسی دارد (بر خلافِ Kivی)."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QGridLayout,
     QLabel,
@@ -225,6 +225,14 @@ class LoginWindow(QStackedWidget):
 
         self._main_window = MainWindow()
         self._main_window.load_context_switcher()
+        # طبقِ گزارشِ تکرارشوندهٔ کاربر («هنوز هم زیرِ تسک‌بار می‌رود»):
+        # فراخوانیِ showMaximized() رویِ پنجره‌ای که هنوز هیچ‌وقت show()
+        # نشده، در بعضی پیکربندی‌هایِ ویندوز باعث می‌شود maximizeِ بومی
+        # کاملِ صفحه (زیرِ تسک‌بار را هم بگیرد) اجرا شود، نه فقط
+        # availableGeometry — چون Qt هنوز handle/screenِ واقعیِ پنجره را
+        # نساخته. اول show() عادی (که geometryِ واقعی و screen() را
+        # برقرار می‌کند)، بعد maximize.
+        self._main_window.show()
         self._main_window.showMaximized()
         self.close()
 
