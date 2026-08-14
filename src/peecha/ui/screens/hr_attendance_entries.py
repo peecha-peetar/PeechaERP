@@ -18,13 +18,11 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTimeEdit,
@@ -38,7 +36,7 @@ from peecha.services import hr as hr_service
 from peecha.services import hr_attendance as attendance_service
 from peecha.ui import theme
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable, wrap_scrollable_with_footer
 
 _RECORD_COLUMNS = ["وضعیت", "ساعتِ کارکرد", "خروج", "ورود", "تاریخ", "کارمند"]
 _STATUS_LABELS = {"PENDING_APPROVAL": "درانتظارِ تایید", "APPROVED": "تاییدشده", "REJECTED": "ردشده"}
@@ -97,19 +95,6 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
                 "ردیف‌هایِ ایمپورت‌شده در این حالت درانتظارِ تایید می‌مانند.",
             ),
         ])
-
-    def _wrap_scrollable(self, content: QWidget) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(content)
-        wrapper = QWidget()
-        wrapper.setObjectName("card")
-        wrapper_layout = QVBoxLayout(wrapper)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.setSpacing(0)
-        wrapper_layout.addWidget(scroll)
-        return wrapper
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
@@ -183,7 +168,7 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.manual_import_button)
 
         layout.addStretch(1)
-        return self._wrap_scrollable(panel)
+        return wrap_scrollable(panel)
 
     def _build_records_panel(self) -> QWidget:
         panel = QWidget()
@@ -224,33 +209,33 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
         self.records_status_label.setWordWrap(True)
         layout.addWidget(self.records_status_label)
 
-        buttons = QHBoxLayout()
         approve_button = QPushButton("✅")
         approve_button.setObjectName("primaryIconButton")
-        approve_button.setFixedWidth(44)
+        approve_button.setFixedWidth(48)
         approve_button.setToolTip("تایید")
         approve_button.clicked.connect(lambda: self._set_selected_status("APPROVED"))
-        buttons.addWidget(approve_button)
+
         reject_button = QPushButton("❌")
         reject_button.setObjectName("iconButton")
         reject_button.setFixedWidth(44)
         reject_button.setToolTip("رد")
         reject_button.clicked.connect(lambda: self._set_selected_status("REJECTED"))
-        buttons.addWidget(reject_button)
+
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
         delete_button.setToolTip("حذف")
         delete_button.clicked.connect(self._delete_selected)
-        buttons.addWidget(delete_button)
+
         approve_all_button = QPushButton("✅✅")
         approve_all_button.setObjectName("iconButton")
         approve_all_button.setFixedWidth(44)
         approve_all_button.setToolTip("تاییدِ همه‌یِ درانتظار")
         approve_all_button.clicked.connect(self._approve_all_pending)
-        buttons.addWidget(approve_all_button)
-        layout.addLayout(buttons)
-        return self._wrap_scrollable(panel)
+
+        return wrap_scrollable_with_footer(
+            panel, [approve_button, reject_button, delete_button, approve_all_button]
+        )
 
     def refresh(self) -> None:
         company_id = _company_id()

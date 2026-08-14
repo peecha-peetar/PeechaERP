@@ -64,7 +64,10 @@ class _UomTab(QWidget):
         self.table.cellDoubleClicked.connect(self._edit_selected)
         layout.addWidget(self.table)
 
-        buttons = QHBoxLayout()
+        button_cluster = QWidget()
+        button_cluster.setLayoutDirection(Qt.LeftToRight)
+        buttons = QHBoxLayout(button_cluster)
+        buttons.setContentsMargins(0, 0, 0, 0)
         edit_button = QPushButton("✏️")
         edit_button.setObjectName("iconButton")
         edit_button.setFixedWidth(44)
@@ -77,7 +80,7 @@ class _UomTab(QWidget):
         delete_button.setToolTip("حذف")
         delete_button.clicked.connect(self._delete_selected)
         buttons.addWidget(delete_button)
-        layout.addLayout(buttons)
+        layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
 
     def refresh(self) -> None:
         company_id = _company_id()
@@ -594,7 +597,10 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         self.table.cellClicked.connect(self._on_row_clicked)
         panel_layout.addWidget(self.table)
 
-        buttons = QHBoxLayout()
+        button_cluster = QWidget()
+        button_cluster.setLayoutDirection(Qt.LeftToRight)
+        buttons = QHBoxLayout(button_cluster)
+        buttons.setContentsMargins(0, 0, 0, 0)
         edit_button = QPushButton("✏️")
         edit_button.setObjectName("iconButton")
         edit_button.setFixedWidth(44)
@@ -607,7 +613,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         delete_button.setToolTip("حذف")
         delete_button.clicked.connect(self._delete_selected)
         buttons.addWidget(delete_button)
-        panel_layout.addLayout(buttons)
+        panel_layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
         return panel
 
     def _build_mapping_panel(self) -> QWidget:

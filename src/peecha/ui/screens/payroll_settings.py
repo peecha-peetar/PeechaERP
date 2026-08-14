@@ -51,6 +51,7 @@ from peecha.ui.widgets import (
     LayoutEditMixin,
     PersianDigitLineEdit,
     ZeroPaddedSpinBox,
+    wrap_scrollable_with_footer,
 )
 
 _CALCULATION_BASIS_LABELS = [("DAILY", "روزانه"), ("HOURLY", "ساعتی")]
@@ -339,20 +340,17 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
@@ -360,10 +358,8 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
-        return _wrap_scrollable(panel)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def refresh(self) -> None:
         self._reset_form()
@@ -717,20 +713,17 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
@@ -738,11 +731,9 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
         self._update_method_fields_visibility()
-        return _wrap_scrollable(panel)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def _update_method_fields_visibility(self) -> None:
         method = self.calculation_method_combo.currentData()
@@ -1037,20 +1028,17 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
@@ -1058,10 +1046,8 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
-        return _wrap_scrollable(panel)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def refresh(self) -> None:
         self._reset_form()
@@ -1468,20 +1454,17 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
@@ -1489,10 +1472,8 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
-        return _wrap_scrollable(panel)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def refresh(self) -> None:
         self._reset_form()
@@ -1713,20 +1694,17 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
@@ -1734,11 +1712,8 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
-        layout.addStretch(1)
-        return _wrap_scrollable(panel)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def refresh(self) -> None:
         self._reset_form()

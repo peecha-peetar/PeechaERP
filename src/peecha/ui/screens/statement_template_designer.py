@@ -356,8 +356,10 @@ class _RowEditorDialog(QDialog):
         self.error_label.setObjectName("statusError")
         layout.addWidget(self.error_label)
 
-        buttons_row = QHBoxLayout()
-        buttons_row.addStretch(1)
+        button_cluster = QWidget()
+        button_cluster.setLayoutDirection(Qt.LeftToRight)
+        buttons_row = QHBoxLayout(button_cluster)
+        buttons_row.setContentsMargins(0, 0, 0, 0)
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
@@ -370,7 +372,7 @@ class _RowEditorDialog(QDialog):
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._on_save_clicked)
         buttons_row.addWidget(save_button)
-        layout.addLayout(buttons_row)
+        layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
 
         if existing is not None:
             index = self.row_type_combo.findData(existing.row_type)

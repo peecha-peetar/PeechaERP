@@ -497,7 +497,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.pay_component_status_label.setWordWrap(True)
         layout.addWidget(self.pay_component_status_label)
 
-        pc_buttons = QHBoxLayout()
+        pc_button_cluster = QWidget()
+        pc_button_cluster.setLayoutDirection(Qt.LeftToRight)
+        pc_buttons = QHBoxLayout(pc_button_cluster)
+        pc_buttons.setContentsMargins(0, 0, 0, 0)
         add_button = QPushButton("➕")
         add_button.setObjectName("iconButton")
         add_button.setFixedWidth(44)
@@ -517,8 +520,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_pay_component_button.clicked.connect(self._delete_pay_component)
         self.delete_pay_component_button.setVisible(False)
         pc_buttons.addWidget(self.delete_pay_component_button)
-        pc_buttons.addStretch(1)
-        layout.addLayout(pc_buttons)
+        layout.addWidget(pc_button_cluster, alignment=Qt.AlignLeft)
 
         self.pay_components_section = section
         section.setVisible(False)

@@ -256,7 +256,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
 
-        line_buttons = QHBoxLayout()
+        line_button_cluster = QWidget()
+        line_button_cluster.setLayoutDirection(Qt.LeftToRight)
+        line_buttons = QHBoxLayout(line_button_cluster)
+        line_buttons.setContentsMargins(0, 0, 0, 0)
         edit_line_button = QPushButton("✏️")
         edit_line_button.setObjectName("iconButton")
         edit_line_button.setFixedWidth(44)
@@ -269,7 +272,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         delete_line_button.setToolTip("حذفِ ردیف")
         delete_line_button.clicked.connect(self._delete_line)
         line_buttons.addWidget(delete_line_button)
-        self.body_layout.addLayout(line_buttons)
+        self.body_layout.addWidget(line_button_cluster, alignment=Qt.AlignLeft)
 
         self.totals_label = QLabel("")
         self.totals_label.setObjectName("sectionTitle")

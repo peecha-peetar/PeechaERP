@@ -21,13 +21,11 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -41,7 +39,12 @@ from peecha.services import payroll as payroll_service
 from peecha.services import payroll_overtime as overtime_service
 from peecha.ui import theme
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
-from peecha.ui.widgets import FieldHelpMixin, PersianDigitLineEdit
+from peecha.ui.widgets import (
+    FieldHelpMixin,
+    PersianDigitLineEdit,
+    wrap_scrollable,
+    wrap_scrollable_with_footer,
+)
 
 _ENTRY_COLUMNS = ["وضعیت", "ساعت", "نوعِ اضافه‌کاری", "کارمند"]
 _ENTRY_STATUS_LABELS = {"PENDING_APPROVAL": "درانتظارِ تایید", "APPROVED": "تاییدشده", "REJECTED": "ردشده"}
@@ -95,24 +98,6 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
             ),
         ])
 
-    def _wrap_scrollable(self, content: QWidget) -> QWidget:
-        # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت): دو ستونِ این صفحه (فرمِ ثبت/
-        # فهرستِ ردیف‌ها) فرم‌هایِ کوچکِ مستقل‌اند، نه یک فرمِ یکپارچه با
-        # یک فوترِ واحد — هرکدام جداگانه، هم‌الگو با payroll_loans.py، در
-        # کارتِ خودش اسکرول می‌شود تا دکمه‌هایِ پایینِ همان ستون هیچ‌وقت
-        # با کوچک‌شدنِ زیرپنجره گم نشوند.
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(content)
-        wrapper = QWidget()
-        wrapper.setObjectName("card")
-        wrapper_layout = QVBoxLayout(wrapper)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.setSpacing(0)
-        wrapper_layout.addWidget(scroll)
-        return wrapper
-
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
@@ -148,17 +133,14 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         create_button.setFixedWidth(48)
         create_button.setToolTip("ثبت")
         create_button.clicked.connect(self._create_entry)
-        layout.addWidget(create_button)
 
         self.import_button = QPushButton("📥")
         self.import_button.setObjectName("iconButton")
         self.import_button.setFixedWidth(44)
         self.import_button.setToolTip("ایمپورت از اکسل")
         self.import_button.clicked.connect(self._on_import_excel)
-        layout.addWidget(self.import_button)
 
-        layout.addStretch(1)
-        return self._wrap_scrollable(panel)
+        return wrap_scrollable_with_footer(panel, [create_button, self.import_button])
 
     def _build_entries_panel(self) -> QWidget:
         panel = QWidget()
@@ -194,27 +176,25 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         self.entries_status_label.setWordWrap(True)
         layout.addWidget(self.entries_status_label)
 
-        buttons = QHBoxLayout()
         approve_button = QPushButton("✅")
         approve_button.setObjectName("primaryIconButton")
-        approve_button.setFixedWidth(44)
+        approve_button.setFixedWidth(48)
         approve_button.setToolTip("تایید")
         approve_button.clicked.connect(lambda: self._set_selected_status("APPROVED"))
-        buttons.addWidget(approve_button)
+
         reject_button = QPushButton("❌")
         reject_button.setObjectName("iconButton")
         reject_button.setFixedWidth(44)
         reject_button.setToolTip("رد")
         reject_button.clicked.connect(lambda: self._set_selected_status("REJECTED"))
-        buttons.addWidget(reject_button)
+
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
         delete_button.setToolTip("حذف")
         delete_button.clicked.connect(self._delete_selected)
-        buttons.addWidget(delete_button)
-        layout.addLayout(buttons)
-        return self._wrap_scrollable(panel)
+
+        return wrap_scrollable_with_footer(panel, [approve_button, reject_button, delete_button])
 
     def refresh(self) -> None:
         company_id = _company_id()

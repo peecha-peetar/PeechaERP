@@ -42,7 +42,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "پیش‌فرض", "نوع", "نام", "کد"]
 _BIN_COLUMNS = ["فعال", "قابلِ‌برداشت", "نوع", "بارکد", "نام", "کد"]
@@ -211,20 +211,17 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
@@ -232,9 +229,8 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
+        layout.addWidget(build_action_footer([save_button, cancel_button, self.delete_button]))
         return panel
 
     def _build_basic_tab(self) -> QWidget:

@@ -10,7 +10,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -31,7 +29,11 @@ from peecha.services import hr as hr_service
 from peecha.services import payroll as payroll_service
 from peecha.services import payroll_loans as loan_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
+from peecha.ui.widgets import (
+    FieldHelpMixin,
+    ZeroPaddedSpinBox,
+    wrap_scrollable_with_footer,
+)
 
 _LOAN_COLUMNS = ["وضعیت", "منبعِ تامین", "تعدادِ اقساط", "نرخِ کارمزد", "مبلغِ اصل", "نوع"]
 _INSTALLMENT_COLUMNS = ["وضعیت", "مبلغ", "دورهٔ سررسید", "شمارهٔ قسط"]
@@ -66,25 +68,6 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
             (self.principal_field, "مبلغِ اصلِ وام/مساعده."),
             (self.fee_rate_field, "نرخِ کارمزد به‌صورتِ اعشاری (مثلاً ۰٫۰۵ برایِ ۵٪) — می‌تواند صفر باشد."),
         ])
-
-    def _wrap_scrollable(self, content: QWidget) -> QWidget:
-        # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت): سه ستونِ این صفحه (فرمِ
-        # درخواست/وام‌ها/اقساط) فرم‌هایِ کوچکِ مستقل‌اند، نه یک فرمِ
-        # یکپارچه با یک فوترِ واحد — هرکدام جداگانه، هم‌الگو با
-        # treasury_checks.py و payroll_run.py، در کارتِ خودش اسکرول
-        # می‌شود تا دکمه‌هایِ پایینِ همان ستون هیچ‌وقت با کوچک‌شدنِ
-        # زیرپنجره گم نشوند.
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(content)
-        wrapper = QWidget()
-        wrapper.setObjectName("card")
-        wrapper_layout = QVBoxLayout(wrapper)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.setSpacing(0)
-        wrapper_layout.addWidget(scroll)
-        return wrapper
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
@@ -139,9 +122,8 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         create_button.setFixedWidth(48)
         create_button.setToolTip("ثبتِ درخواست")
         create_button.clicked.connect(self._create_loan)
-        layout.addWidget(create_button)
-        layout.addStretch(1)
-        return self._wrap_scrollable(panel)
+
+        return wrap_scrollable_with_footer(panel, [create_button])
 
     def _build_loans_panel(self) -> QWidget:
         panel = QWidget()
@@ -166,33 +148,33 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         self.loan_status_label.setWordWrap(True)
         layout.addWidget(self.loan_status_label)
 
-        button_row = QHBoxLayout()
         approve_button = QPushButton("✅")
         approve_button.setObjectName("iconButton")
         approve_button.setFixedWidth(44)
         approve_button.setToolTip("تایید")
         approve_button.clicked.connect(self._approve_selected_loan)
-        button_row.addWidget(approve_button)
+
         reject_button = QPushButton("❌")
         reject_button.setObjectName("dangerIconButton")
         reject_button.setFixedWidth(44)
         reject_button.setToolTip("رد")
         reject_button.clicked.connect(self._reject_selected_loan)
-        button_row.addWidget(reject_button)
+
         disburse_button = QPushButton("💰")
         disburse_button.setObjectName("primaryIconButton")
         disburse_button.setFixedWidth(48)
         disburse_button.setToolTip("پرداخت (تولیدِ اقساط)")
         disburse_button.clicked.connect(self._disburse_selected_loan)
-        button_row.addWidget(disburse_button)
+
         cancel_button = QPushButton("🚫")
         cancel_button.setObjectName("dangerIconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("لغو")
         cancel_button.clicked.connect(self._cancel_selected_loan)
-        button_row.addWidget(cancel_button)
-        layout.addLayout(button_row)
-        return self._wrap_scrollable(panel)
+
+        return wrap_scrollable_with_footer(
+            panel, [approve_button, reject_button, disburse_button, cancel_button]
+        )
 
     def _build_installments_panel(self) -> QWidget:
         panel = QWidget()
@@ -216,21 +198,19 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         self.outstanding_label = QLabel("")
         layout.addWidget(self.outstanding_label)
 
-        button_row = QHBoxLayout()
         defer_button = QPushButton("⏭️")
         defer_button.setObjectName("iconButton")
         defer_button.setFixedWidth(44)
         defer_button.setToolTip("موکول‌کردن به دورهٔ بعد")
         defer_button.clicked.connect(self._defer_selected_installment)
-        button_row.addWidget(defer_button)
+
         waive_button = QPushButton("🎁")
         waive_button.setObjectName("iconButton")
         waive_button.setFixedWidth(44)
         waive_button.setToolTip("بخشش")
         waive_button.clicked.connect(self._waive_selected_installment)
-        button_row.addWidget(waive_button)
-        layout.addLayout(button_row)
-        return self._wrap_scrollable(panel)
+
+        return wrap_scrollable_with_footer(panel, [defer_button, waive_button])
 
     def refresh(self) -> None:
         company_id = _company_id()

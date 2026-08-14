@@ -11,13 +11,11 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFileDialog,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -34,7 +32,13 @@ from peecha.services import payroll_payslip as payslip_service
 from peecha.services import treasury as treasury_service
 from peecha.ui import report_export
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, ZeroPaddedSpinBox
+from peecha.ui.widgets import (
+    FieldHelpMixin,
+    JalaliDateEdit,
+    ZeroPaddedSpinBox,
+    wrap_scrollable,
+    wrap_scrollable_with_footer,
+)
 
 _PERIOD_COLUMNS = ["وضعیت", "تا تاریخ", "از تاریخ", "ماه", "سال"]
 _RUN_COLUMNS = ["پایانِ اجرا", "وضعیت", "نوع", "شمارهٔ اجرا"]
@@ -65,26 +69,6 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
             (self.year_field, "سالِ شمسیِ دوره."),
             (self.month_field, "ماهِ شمسیِ دوره (۱ تا ۱۲)."),
         ])
-
-    def _wrap_scrollable(self, content: QWidget) -> QWidget:
-        # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت): هرکدام از سه ستونِ این صفحه
-        # (دوره/اجرا/نتیجه) یک فرمِ مستقلِ کوچک با چند دکمه‌یِ پشتِ‌سرِهم
-        # زیرِ جدولِ خودشان‌اند — نه یک فرمِ یکپارچه با یک فوترِ واحد،
-        # پس FormScreenBase (یک اسکرول+یک فوتر برایِ کلِ صفحه) این‌جا
-        # مناسب نیست؛ هرکدام جداگانه، دقیقاً هم‌الگو با
-        # treasury_checks.py، در کارتِ خودش اسکرول می‌شود تا وقتی
-        # زیرپنجره کوتاه است، دکمه‌هایِ پایینِ همان ستون هیچ‌وقت گم نشوند.
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(content)
-        wrapper = QWidget()
-        wrapper.setObjectName("card")
-        wrapper_layout = QVBoxLayout(wrapper)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.setSpacing(0)
-        wrapper_layout.addWidget(scroll)
-        return wrapper
 
     def _build_periods_panel(self) -> QWidget:
         panel = QWidget()
@@ -134,8 +118,8 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         create_period_button.setFixedWidth(48)
         create_period_button.setToolTip("دورهٔ تازه")
         create_period_button.clicked.connect(self._create_period)
-        layout.addWidget(create_period_button)
-        return self._wrap_scrollable(panel)
+
+        return wrap_scrollable_with_footer(panel, [create_period_button])
 
     def _build_runs_panel(self) -> QWidget:
         panel = QWidget()
@@ -166,36 +150,34 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         run_button.setFixedWidth(48)
         run_button.setToolTip("اجرایِ محاسبه برایِ این دوره")
         run_button.clicked.connect(self._create_and_run)
-        layout.addWidget(run_button)
 
         recalc_button = QPushButton("🔄")
         recalc_button.setObjectName("iconButton")
         recalc_button.setFixedWidth(44)
         recalc_button.setToolTip("بازمحاسبهٔ اجرایِ انتخاب‌شده")
         recalc_button.clicked.connect(self._recalculate_selected)
-        layout.addWidget(recalc_button)
 
         approve_button = QPushButton("✅")
         approve_button.setObjectName("iconButton")
         approve_button.setFixedWidth(44)
         approve_button.setToolTip("تاییدِ نهاییِ اجرا")
         approve_button.clicked.connect(self._approve_selected)
-        layout.addWidget(approve_button)
 
         finalize_button = QPushButton("🔒")
         finalize_button.setObjectName("iconButton")
         finalize_button.setFixedWidth(44)
         finalize_button.setToolTip("قطعی‌سازیِ فیش‌ها (فصلِ ۱۴)")
         finalize_button.clicked.connect(self._finalize_selected)
-        layout.addWidget(finalize_button)
 
         post_journal_button = QPushButton("📄")
         post_journal_button.setObjectName("primaryIconButton")
         post_journal_button.setFixedWidth(48)
         post_journal_button.setToolTip("صدورِ سندِ حسابداری (فصلِ ۱۶)")
         post_journal_button.clicked.connect(self._post_journal_selected)
-        layout.addWidget(post_journal_button)
-        return self._wrap_scrollable(panel)
+
+        return wrap_scrollable_with_footer(
+            panel, [run_button, recalc_button, approve_button, finalize_button, post_journal_button]
+        )
 
     def _build_results_panel(self) -> QWidget:
         panel = QWidget()
@@ -241,7 +223,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         self.bank_status_label = QLabel("")
         self.bank_status_label.setWordWrap(True)
         layout.addWidget(self.bank_status_label)
-        return self._wrap_scrollable(panel)
+        return wrap_scrollable(panel)
 
     def refresh(self) -> None:
         self.period_status_label.setText("")

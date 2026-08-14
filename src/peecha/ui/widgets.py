@@ -33,7 +33,6 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import (
     QApplication,
-    QBoxLayout,
     QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
@@ -111,14 +110,17 @@ class FormScreenBase(QWidget):
 
         self.footer = QWidget()
         self.footer.setObjectName("formFooter")
+        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها («همه‌یِ آیکن‌ها کنارِ هم، سمتِ
+        # چپِ پایینِ فرم» — نه فقط رویِ این فرم، در همه‌جا): چون کلِ اپ
+        # RTL است (setLayoutDirection در main.py)، QBoxLayout.setDirection
+        # به‌تنهایی اثری ندارد — Qt جهتِ نمایشِ QBoxLayout را از
+        # layoutDirection() خودِ ویجتِ صاحبِ آن می‌گیرد، نه از Direction
+        # enum. پس باید layoutDirection خودِ ویجتِ فوتر را صریحاً LTR کرد؛
+        # وگرنه دکمه‌ها همچنان از راست به چپ می‌چینند و ترتیبشان معکوس
+        # (و محل‌شان وابسته به کدنویسیِ هر فایل) می‌ماند.
+        self.footer.setLayoutDirection(Qt.LeftToRight)
         self.footer_layout = QHBoxLayout(self.footer)
         self.footer_layout.setContentsMargins(18, 12, 18, 14)
-        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها («همه‌یِ آیکن‌ها کنارِ هم، سمتِ
-        # چپِ پایینِ فرم» — نه فقط رویِ این فرم، در همه‌جا): بدونِ این خط،
-        # چون کلِ اپ RTL است (setLayoutDirection در main.py)، یک QHBoxLayout
-        # معمولی دکمه‌هایِ اضافه‌شده را از راست به چپ می‌چیند و محلِ نهایی
-        # به ترتیبِ کدنویسیِ هر فایل بستگی پیدا می‌کند، نه یک قاعده‌یِ ثابت.
-        self.footer_layout.setDirection(QBoxLayout.LeftToRight)
         self.footer_layout.setSpacing(8)
         wrapper_layout.addWidget(self.footer)
 
@@ -189,9 +191,12 @@ def build_action_footer(buttons: list[QWidget]) -> QWidget:
     QScrollAreaای، نه داخلش."""
     footer = QWidget()
     footer.setObjectName("formFooter")
+    # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها: باید layoutDirection خودِ ویجتِ
+    # فوتر صریحاً LTR شود (نه فقط Direction خودِ QBoxLayout) — دلیل را
+    # در FormScreenBase.__init__ ببینید.
+    footer.setLayoutDirection(Qt.LeftToRight)
     footer_layout = QHBoxLayout(footer)
     footer_layout.setContentsMargins(18, 12, 18, 14)
-    footer_layout.setDirection(QBoxLayout.LeftToRight)
     footer_layout.setSpacing(8)
     for button in buttons:
         footer_layout.addWidget(button)

@@ -10,7 +10,6 @@ import dataclasses
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -317,15 +316,17 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
 
         footer = QWidget()
         footer.setObjectName("formFooter")
-        self._action_row = QHBoxLayout(footer)
-        self._action_row.setContentsMargins(18, 12, 18, 14)
-        self._action_row.setSpacing(8)
         # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
-        # پایینِ فرم»): جهت صریحاً چپ‌به‌راست شد و دکمه‌ها قبل از
+        # پایینِ فرم»): QBoxLayout.setDirection به‌تنهایی اثری ندارد — Qt
+        # جهتِ نمایشِ آن را از layoutDirection() خودِ ویجتِ فوتر می‌گیرد،
+        # نه از Direction enum؛ پس باید صریحاً LTR شود. دکمه‌ها قبل از
         # target_label/target_combo اضافه می‌شوند تا همیشه چپ بنشینند —
         # ایندکسِ پویایِ target_combo (پایین‌تر، برایِ جایگزینی‌اش) با
         # ترتیبِ افزودن کاری ندارد، پس این تغییر امن است.
-        self._action_row.setDirection(QBoxLayout.LeftToRight)
+        footer.setLayoutDirection(Qt.LeftToRight)
+        self._action_row = QHBoxLayout(footer)
+        self._action_row.setContentsMargins(18, 12, 18, 14)
+        self._action_row.setSpacing(8)
         self.history_button = QPushButton("🕒")
         self.history_button.setObjectName("iconButton")
         self.history_button.setFixedWidth(44)

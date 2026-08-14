@@ -105,8 +105,10 @@ class _TransferDialog(QDialog):
         self.warning_label.setWordWrap(True)
         layout.addWidget(self.warning_label)
 
-        button_row = QHBoxLayout()
-        button_row.addStretch(1)
+        button_cluster = QWidget()
+        button_cluster.setLayoutDirection(Qt.LeftToRight)
+        button_row = QHBoxLayout(button_cluster)
+        button_row.setContentsMargins(0, 0, 0, 0)
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("primaryIconButton")
         self.confirm_button.setFixedWidth(48)
@@ -119,7 +121,7 @@ class _TransferDialog(QDialog):
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self.reject)
         button_row.addWidget(cancel_button)
-        layout.addLayout(button_row)
+        layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
 
         if not self._companies:
             self.warning_label.setText("هیچ شرکتِ مقصدِ دیگری که به آن دسترسی داشته باشید یافت نشد.")

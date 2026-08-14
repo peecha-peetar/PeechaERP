@@ -54,26 +54,38 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         self.name_field.setPlaceholderText("نامِ بانک (مثلاً بانکِ ملی)")
         self.name_field.returnPressed.connect(self._save)
         add_row.addWidget(self.name_field, stretch=1)
+
+        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها: دکمه‌ها باید کنارِ هم و به‌ترتیبِ
+        # چپ‌به‌راست بمانند، بدونِ اینکه جهتِ فیلدهایِ کد/نامِ همین ردیف تغییر کند —
+        # پس فقط خوشه‌یِ دکمه‌ها در یک زیرویجتِ LTR جداگانه قرار می‌گیرد.
+        button_cluster = QWidget()
+        button_cluster.setLayoutDirection(Qt.LeftToRight)
+        button_cluster_layout = QHBoxLayout(button_cluster)
+        button_cluster_layout.setContentsMargins(0, 0, 0, 0)
+        button_cluster_layout.setSpacing(8)
+
         self.save_button = QPushButton("➕")
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
         self.save_button.setToolTip("افزودن")
         self.save_button.clicked.connect(self._save)
-        add_row.addWidget(self.save_button)
+        button_cluster_layout.addWidget(self.save_button)
         self.cancel_button = QPushButton("↩️")
         self.cancel_button.setObjectName("iconButton")
         self.cancel_button.setFixedWidth(44)
         self.cancel_button.setToolTip("انصراف")
         self.cancel_button.clicked.connect(self._reset_form)
         self.cancel_button.setVisible(False)
-        add_row.addWidget(self.cancel_button)
+        button_cluster_layout.addWidget(self.cancel_button)
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
         self.delete_button.setFixedWidth(44)
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        add_row.addWidget(self.delete_button)
+        button_cluster_layout.addWidget(self.delete_button)
+
+        add_row.addWidget(button_cluster)
         layout.addLayout(add_row)
 
         self.table = QTableWidget(0, 2)

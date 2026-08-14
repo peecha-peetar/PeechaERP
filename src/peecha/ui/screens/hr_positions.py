@@ -7,14 +7,12 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -24,7 +22,15 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha import session as app_session
 from peecha.services import hr as hr_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, ZeroPaddedSpinBox
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    LayoutEditMixin,
+    ZeroPaddedSpinBox,
+    wrap_scrollable,
+    wrap_scrollable_with_footer,
+)
 
 _COLUMNS = ["فعال", "ظرفیت", "ردهٔ شغلی", "واحدِ سازمانی", "عنوان", "کد"]
 
@@ -52,22 +58,6 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         ])
         self.register_field_grids("hr_positions", [self.form_grid])
 
-    def _wrap_scrollable(self, content: QWidget) -> QWidget:
-        # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت): دو ستونِ مستقل (فهرست/فرم)،
-        # نه یک فرمِ یکپارچه با یک فوترِ واحد — هرکدام جداگانه، هم‌الگو
-        # با treasury_checks.py، در کارتِ خودش اسکرول می‌شود.
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(content)
-        wrapper = QWidget()
-        wrapper.setObjectName("card")
-        wrapper_layout = QVBoxLayout(wrapper)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.setSpacing(0)
-        wrapper_layout.addWidget(scroll)
-        return wrapper
-
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
@@ -86,7 +76,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table)
-        return self._wrap_scrollable(panel)
+        return wrap_scrollable(panel)
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
@@ -123,20 +113,17 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
         cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
@@ -144,11 +131,8 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
-        layout.addStretch(1)
-        return self._wrap_scrollable(panel)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
