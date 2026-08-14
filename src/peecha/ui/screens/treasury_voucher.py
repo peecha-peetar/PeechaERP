@@ -51,6 +51,9 @@ from peecha.ui.widgets import (
     JalaliDateEdit,
     LayoutEditMixin,
     PersianDigitLineEdit,
+    SectionStepper,
+    SummaryCard,
+    SummaryCardBar,
 )
 
 _METHOD_LABELS = {
@@ -1516,6 +1519,21 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         layout.setContentsMargins(16, 10, 16, 10)
         layout.setSpacing(5)
 
+        # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر: نوارِ گام‌نمایِ
+        # بصری (اطلاعاتِ سند -> ردیف‌ها؛ صرفاً اسکرول می‌کند، صفحه‌بندیِ
+        # واقعی نیست، پس زنجیره‌یِ کیبورد/اعتبارسنجیِ پایین دست‌نخورده
+        # می‌ماند) + نوارِ کارت‌هایِ رنگیِ خلاصه (جمعِ هدر/جمعِ ردیف‌ها/اختلاف)
+        # بالایِ فرم.
+        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        layout.addWidget(self.step_stepper)
+
+        self.summary_cards = SummaryCardBar({
+            "total": SummaryCard(f"جمعِ مبلغِ {noun}", role="info"),
+            "rows_total": SummaryCard("جمعِ ردیف‌ها", role="neutral"),
+            "diff": SummaryCard("اختلاف", role="success"),
+        })
+        layout.addWidget(self.summary_cards)
+
         header_card = QWidget()
         header_card.setObjectName("card")
         header_layout = QGridLayout(header_card)
@@ -1676,6 +1694,8 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         table_card_layout.addWidget(self.table, stretch=1)
 
         layout.addWidget(table_card, stretch=1)
+
+        self.step_stepper.register_sections(self._scroll, [header_card, table_card])
 
         save_button = QPushButton(f"ثبتِ سندِ {noun}")
         save_button.setObjectName("primaryButton")
@@ -2045,6 +2065,11 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             f"اختلاف با جمعِ {total_word}: {numerals.format_money(diff, self.currency_decimal_places)}",
             ok=(diff == 0),
         )
+        header_total = decimal.Decimal(str(self.total_amount_field.value()))
+        self.summary_cards.set_value("total", numerals.format_money(header_total, self.currency_decimal_places))
+        self.summary_cards.set_value("rows_total", numerals.format_money(rows_total, self.currency_decimal_places))
+        self.summary_cards.set_value("diff", numerals.format_money(diff, self.currency_decimal_places))
+        self.summary_cards.set_role("diff", "success" if diff == 0 else "danger")
         self._update_ras_label()
 
     def _update_ras_label(self) -> None:

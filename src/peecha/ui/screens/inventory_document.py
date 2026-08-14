@@ -36,7 +36,8 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit
+from peecha import numerals
+from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper, SummaryCard, SummaryCardBar
 
 DOC_TYPE_TITLES = {
     "RECEIPT": "رسید",
@@ -189,6 +190,20 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.page_title.setObjectName("pageTitle")
         self.body_layout.addWidget(self.page_title)
 
+        # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر — هم‌الگو با
+        # treasury_voucher.py/journal_entry.py/commercial_document.py: صرفاً
+        # لایه‌یِ بصری/ناوبری. این سند مبلغ ندارد (فقط مقدار)، پس کارت‌ها
+        # تعدادِ ردیف‌ها/جمعِ مقدار/جمعِ بهایِ ردیف‌ها را نشان می‌دهند.
+        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        self.body_layout.addWidget(self.step_stepper)
+
+        self.summary_cards = SummaryCardBar({
+            "line_count": SummaryCard("تعدادِ ردیف‌ها", role="neutral"),
+            "total_quantity": SummaryCard("جمعِ مقدار", role="info"),
+            "total_cost": SummaryCard("جمعِ بهایِ ردیف‌ها", role="success"),
+        })
+        self.body_layout.addWidget(self.summary_cards)
+
         header_row1 = QHBoxLayout()
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
@@ -273,6 +288,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
+
+        self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
 
         line_buttons = QHBoxLayout()
         edit_line_button = QPushButton("ویرایشِ ردیف")
@@ -461,6 +478,12 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.UserRole, ln.line_id)
                 self.lines_table.setItem(row_index, col_index, cell)
+
+        total_quantity = sum((ln.quantity for ln in self._lines), decimal.Decimal(0))
+        total_cost = sum((ln.line_total_cost or decimal.Decimal(0) for ln in self._lines), decimal.Decimal(0))
+        self.summary_cards.set_value("line_count", numerals.to_persian_digits(str(len(self._lines))))
+        self.summary_cards.set_value("total_quantity", numerals.format_amount(total_quantity))
+        self.summary_cards.set_value("total_cost", numerals.format_amount(total_cost))
 
     def _apply_status_state(self) -> None:
         self.status_badge.setText(STATUS_LABELS.get(self._status_code, self._status_code))

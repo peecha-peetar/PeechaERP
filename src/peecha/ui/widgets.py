@@ -955,3 +955,196 @@ class KpiCard(QFrame):
         self._color_animation.setStartValue(self._shadow.color())
         self._color_animation.setEndValue(color)
         self._color_animation.start()
+
+
+# --- SummaryCard / SummaryCardBar --------------------------------------
+# کارتِ رنگیِ خلاصه — الهام‌گرفته از نمونه‌طراحیِ فرمِ دریافت/پرداختِ
+# خزانه‌داری که کاربر فرستاد (کارت‌هایِ رنگیِ جمع‌بندی بالایِ فرم، پیش از
+# جدولِ ردیف‌ها). کوچک‌تر و فشرده‌تر از KpiCardِ داشبورد است چون داخلِ یک
+# فرم می‌نشیند نه یک صفحه‌یِ مستقل، ولی از همان زبانِ بصری (کارت + ته‌رنگِ
+# شیشه‌ای + برچسب کوچک بالایِ عددِ درشت) استفاده می‌کند.
+_SUMMARY_CARD_ROLE_COLORS = {
+    "neutral": None,  # در refresh_theme با theme.ACCENT جایگزین می‌شود
+    "success": "SUCCESS",
+    "warning": "WARNING",
+    "danger": "DANGER",
+    "info": "INFO",
+}
+
+
+class SummaryCard(QFrame):
+    """کارتِ کوچکِ رنگیِ یک‌مقداره برایِ نوارِ خلاصه‌یِ بالایِ فرم‌هایِ
+    تراکنشی (مثلاً «جمعِ دریافت»، «جمعِ ردیف‌ها»، «مانده»). با
+    `set_role()` رنگش بینِ نقش‌هایِ success/warning/danger/info/neutral
+    عوض می‌شود — برایِ نمایشِ زنده‌یِ وضعیت (مثلاً مانده=۰ سبز، غیرِصفر
+    قرمز) بدونِ بازسازیِ کارت."""
+
+    def __init__(self, title: str, role: str = "neutral", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("card")
+        self._role = role
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(4)
+
+        self._title_label = QLabel(title)
+        outer.addWidget(self._title_label)
+
+        self.value_label = QLabel("۰")
+        outer.addWidget(self.value_label)
+
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(22)
+        self._shadow.setXOffset(0)
+        self._shadow.setYOffset(6)
+        self._shadow.setColor(QColor(0, 0, 0, 110))
+        self.setGraphicsEffect(self._shadow)
+
+        self.refresh_theme()
+
+    def _color(self) -> str:
+        role_attr = _SUMMARY_CARD_ROLE_COLORS.get(self._role)
+        return getattr(theme, role_attr) if role_attr else theme.ACCENT
+
+    def set_role(self, role: str) -> None:
+        self._role = role
+        self.refresh_theme()
+
+    def refresh_theme(self) -> None:
+        color = self._color()
+        self._title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11.5px; font-weight: 600;")
+        self.value_label.setStyleSheet(f"color: {color}; font-size: 21px; font-weight: 800;")
+        self.setStyleSheet(
+            f"QFrame#card {{ border: 1px solid {theme.rgba(color, 0.28)}; "
+            f"background-color: {theme.rgba(color, 0.08)}; border-radius: 12px; }}"
+        )
+
+    def set_value(self, value: str) -> None:
+        self.value_label.setText(value)
+
+
+class SummaryCardBar(QWidget):
+    """ردیفِ افقیِ چند SummaryCard، هم‌عرض و با فاصله‌یِ یکسان — برایِ
+    نمایشِ همزمانِ چند مقدارِ کلیدی (جمع، تعداد، مانده و ...) بالایِ فرم."""
+
+    def __init__(self, cards: dict[str, SummaryCard], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.cards = cards
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        for card in cards.values():
+            layout.addWidget(card, stretch=1)
+
+    def set_value(self, key: str, value: str) -> None:
+        self.cards[key].set_value(value)
+
+    def set_role(self, key: str, role: str) -> None:
+        self.cards[key].set_role(role)
+
+
+# --- SectionStepper ------------------------------------------------------
+# نوارِ گام‌نمایِ افقی — صرفاً یک راهنمایِ بصری/پیمایشی است: با کلیک رویِ
+# هر گام به بخشِ مربوطه در همان صفحه‌یِ تک‌صفحه‌ای اسکرول می‌کند، نه
+# صفحه‌بندیِ واقعی (فیلدها هرگز hide/show نمی‌شوند). این تصمیمِ عمدی است
+# تا زنجیره‌هایِ کیبورد/اعتبارسنجیِ فرم‌هایِ پیچیده (مثلِ صدورِ سندِ
+# خزانه‌داری) دست‌نخورده بمانند و فقط لایه‌یِ بصری/ناوبری اضافه شود.
+class _StepButton(QPushButton):
+    def __init__(self, number: int, label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFlat(True)
+        self._number = number
+        self._label = label
+        self.setText(f"{numerals.to_persian_digits(str(number))}   {label}")
+        self.setCheckable(False)
+        self.set_state("upcoming")
+
+    def set_state(self, state: str) -> None:
+        # state: "upcoming" | "current" | "done"
+        if state == "current":
+            bg, fg, border = theme.rgba(theme.ACCENT, 0.16), theme.ACCENT, theme.ACCENT
+            weight = 800
+        elif state == "done":
+            bg, fg, border = theme.rgba(theme.SUCCESS, 0.12), theme.SUCCESS, theme.rgba(theme.SUCCESS, 0.4)
+            weight = 700
+        else:
+            bg, fg, border = "transparent", theme.TEXT_SECONDARY, theme.BORDER
+            weight = 600
+        self.setStyleSheet(
+            f"QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border}; "
+            f"border-radius: 16px; padding: 6px 14px; font-size: 12.5px; font-weight: {weight}; }}"
+            f"QPushButton:hover {{ background-color: {theme.rgba(theme.ACCENT, 0.10)}; }}"
+        )
+
+
+class SectionStepper(QWidget):
+    """نوارِ گام‌ها: `labels` نامِ هر بخش است، به همان ترتیبی که بخش‌ها
+    در فرم ظاهر می‌شوند. `register_sections(scroll_area, section_widgets)`
+    کلیکِ هر گام را به اسکرول‌کردنِ همان بخش وصل می‌کند و هم‌زمان با
+    اسکرولِ دستیِ کاربر، گامِ جاری را زنده به‌روزرسانی می‌کند."""
+
+    stepClicked = Signal(int)
+
+    def __init__(self, labels: list[str], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._buttons: list[_StepButton] = []
+        self._current = 0
+        self._sections: list[QWidget] = []
+        self._scroll_area: QScrollArea | None = None
+        self._suppress_scroll_sync = False
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        for index, label in enumerate(labels):
+            if index > 0:
+                line = QFrame()
+                line.setFrameShape(QFrame.HLine)
+                line.setStyleSheet(f"background-color: {theme.BORDER}; max-height: 1px; border: none;")
+                layout.addWidget(line, stretch=1)
+            button = _StepButton(index + 1, label)
+            button.clicked.connect(lambda _checked=False, idx=index: self._on_step_clicked(idx))
+            self._buttons.append(button)
+            layout.addWidget(button, stretch=0)
+        layout.addStretch(0)
+        self.set_current(0)
+
+    def set_current(self, index: int) -> None:
+        self._current = index
+        for i, button in enumerate(self._buttons):
+            if i < index:
+                button.set_state("done")
+            elif i == index:
+                button.set_state("current")
+            else:
+                button.set_state("upcoming")
+
+    def register_sections(self, scroll_area: QScrollArea, sections: list[QWidget]) -> None:
+        self._scroll_area = scroll_area
+        self._sections = sections
+        scroll_area.verticalScrollBar().valueChanged.connect(self._on_scrolled)
+
+    def _on_step_clicked(self, index: int) -> None:
+        self.set_current(index)
+        self.stepClicked.emit(index)
+        if self._scroll_area is not None and index < len(self._sections):
+            # جلوگیریِ از رقابتِ رویدادِ اسکرولِ برنامه‌ای (که هم‌زمان
+            # valueChanged را شلیک می‌کند) با وضعیتِ گامی که کاربر تازه
+            # صریحاً کلیک کرده — وگرنه _on_scrolled ممکن است بلافاصله
+            # آن را رویِ محاسبه‌ی هندسیِ ناپایدار بازنویسی کند.
+            self._suppress_scroll_sync = True
+            self._scroll_area.ensureWidgetVisible(self._sections[index], 0, 0)
+            self._suppress_scroll_sync = False
+
+    def _on_scrolled(self, _value: int) -> None:
+        if not self._sections or self._scroll_area is None or self._suppress_scroll_sync:
+            return
+        viewport_top = self._scroll_area.verticalScrollBar().value()
+        current = 0
+        for i, section in enumerate(self._sections):
+            if section.y() <= viewport_top + 24:
+                current = i
+        if current != self._current:
+            self.set_current(current)

@@ -73,7 +73,15 @@ from peecha.services import treasury as treasury_service
 from peecha import numerals
 from peecha.ui import report_export, theme
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, PersianDigitLineEdit
+from peecha.ui.widgets import (
+    FieldHelpMixin,
+    FormScreenBase,
+    JalaliDateEdit,
+    PersianDigitLineEdit,
+    SectionStepper,
+    SummaryCard,
+    SummaryCardBar,
+)
 
 _COL_ROW_NO = 0
 _COL_ACCOUNT = 1
@@ -722,6 +730,20 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         outer.setContentsMargins(16, 14, 16, 14)
         outer.setSpacing(8)
 
+        # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر: افزودنِ صرفاً
+        # لایه‌یِ بصری/ناوبری (اسکرول‌کردن، نه صفحه‌بندیِ واقعی) — عیناً
+        # هم‌الگو با treasury_voucher.py؛ هیچ ویجتِ موجودی جابه‌جا نمی‌شود،
+        # فقط این دو ویجتِ تازه به بالایِ فرم اضافه می‌شوند.
+        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        outer.addWidget(self.step_stepper)
+
+        self.summary_cards = SummaryCardBar({
+            "debit": SummaryCard("جمعِ بدهکار", role="info"),
+            "credit": SummaryCard("جمعِ بستانکار", role="neutral"),
+            "diff": SummaryCard("اختلاف", role="success"),
+        })
+        outer.addWidget(self.summary_cards)
+
         header_card = QWidget()
         header_card.setObjectName("card")
         header_layout = QGridLayout(header_card)
@@ -905,6 +927,8 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         # اسکرولِ تودرتو. self.table.setMinimumHeight(160) بالاتر همان
         # نقشِ حداقل‌ارتفاعِ قبلی را ایفا می‌کند.
         outer.addWidget(table_card, stretch=1)
+
+        self.step_stepper.register_sections(self._scroll, [header_card, table_card])
 
         self.amount_words_label = QLabel("")
         self.amount_words_label.setObjectName("sectionHint")
@@ -1634,6 +1658,13 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
             theme.set_status_label(
                 self.balance_label, f"غیرِ تراز — بدهکار: {debit_text} | بستانکار: {credit_text}", ok=False
             )
+        self.summary_cards.set_value("debit", debit_text)
+        self.summary_cards.set_value("credit", credit_text)
+        diff = total_debit - total_credit
+        self.summary_cards.set_value(
+            "diff", numerals.format_money(abs(diff), self.currency_decimal_places, self.currency_symbol)
+        )
+        self.summary_cards.set_role("diff", "success" if diff == 0 and total_debit > 0 else "danger")
 
         reference_amount = total_debit if total_debit > 0 else total_credit
         if reference_amount > 0:

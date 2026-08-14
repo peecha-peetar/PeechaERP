@@ -37,7 +37,17 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormScreenBase, JalaliDateEdit, LayoutEditMixin
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    FormScreenBase,
+    JalaliDateEdit,
+    LayoutEditMixin,
+    SectionStepper,
+    SummaryCard,
+    SummaryCardBar,
+)
 
 DOC_TYPE_TITLES = {
     "SALES_ORDER": "سفارشِ فروش",
@@ -152,6 +162,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.page_title.setObjectName("pageTitle")
         self.body_layout.addWidget(self.page_title)
 
+        # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر — هم‌الگو با
+        # treasury_voucher.py/journal_entry.py: صرفاً لایه‌یِ بصری/ناوبری،
+        # هیچ ویجتِ موجودی جابه‌جا نمی‌شود. چون این فرم (بر خلافِ آن دو)
+        # هدرش را در یک کارتِ جداگانه نمی‌پیچد، از خودِ page_title/
+        # lines_table به‌عنوانِ لنگرِ شروعِ هر بخش استفاده می‌شود.
+        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        self.body_layout.addWidget(self.step_stepper)
+
+        self.summary_cards = SummaryCardBar({
+            "subtotal": SummaryCard("جمعِ ناخالص", role="neutral"),
+            "discount_tax": SummaryCard("تخفیف/مالیات", role="warning"),
+            "grand_total": SummaryCard("جمعِ کل", role="success"),
+        })
+        self.body_layout.addWidget(self.summary_cards)
+
         header_row1 = QHBoxLayout()
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
@@ -226,6 +251,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
+
+        self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
 
         line_buttons = QHBoxLayout()
         edit_line_button = QPushButton("ویرایشِ ردیف")
@@ -370,6 +397,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             f"جمعِ ناخالص: {numerals.format_amount(doc.subtotal_amount)}    تخفیف: {numerals.format_amount(doc.discount_amount)}    "
             f"مالیات: {numerals.format_amount(doc.tax_amount)}    جمعِ کل: {numerals.format_amount(doc.total_amount)}"
         )
+        self.summary_cards.set_value("subtotal", numerals.format_amount(doc.subtotal_amount))
+        self.summary_cards.set_value(
+            "discount_tax", numerals.format_amount(doc.discount_amount + doc.tax_amount)
+        )
+        self.summary_cards.set_value("grand_total", numerals.format_amount(doc.total_amount))
         self._apply_status_state()
 
     def _refresh_lines_table(self) -> None:
@@ -420,6 +452,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.reference_field.clear()
         self.description_field.clear()
         self.totals_label.setText("")
+        for key in ("subtotal", "discount_tax", "grand_total"):
+            self.summary_cards.set_value(key, "۰")
         self._refresh_lines_table()
         self._apply_status_state()
         if not clear_only:
