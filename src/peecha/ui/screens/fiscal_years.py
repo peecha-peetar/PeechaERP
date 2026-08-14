@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha import session as app_session
 from peecha.services import fiscal_years as fiscal_years_service
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable, wrap_scrollable_with_footer
 
 _YEAR_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
 _PERIOD_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "دوره"]
@@ -57,7 +57,6 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
@@ -103,11 +102,10 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         self.periods_table.cellClicked.connect(self._on_period_row_clicked)
         layout.addWidget(self.periods_table, stretch=1)
 
-        return panel
+        return wrap_scrollable(panel)
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -134,10 +132,9 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         create_button.setFixedWidth(48)
         create_button.setToolTip("ایجادِ سالِ مالی")
         create_button.clicked.connect(self._create)
-        layout.addWidget(create_button)
 
         layout.addStretch(1)
-        return panel
+        return wrap_scrollable_with_footer(panel, [create_button])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 _FORM_CODES = [
     "chart_of_accounts",
@@ -101,8 +101,7 @@ class FieldLabelsScreen(FieldHelpMixin, QWidget):
         self.rows_container = QVBoxLayout()
         rows_widget = QWidget()
         rows_widget.setLayout(self.rows_container)
-        layout.addWidget(rows_widget)
-        layout.addStretch(1)
+        layout.addWidget(wrap_scrollable(rows_widget), stretch=1)
 
         self.set_field_help([
             (self.form_combo, "فرمی که می‌خواهید نامِ فیلدهایش را تغییر دهید."),

@@ -333,6 +333,24 @@ _RESIZE_MARGIN = 6
 _MIN_SUBWINDOW_SIZE = QSize(420, 320)
 
 
+def _clamp_rect_to_area(rect: QRect, area: QRect) -> QRect:
+    """یک مستطیل (geometryِ زیرپنجره) را طوری به داخلِ area (مرزهایِ
+    فعلیِ ناحیه‌یِ MDI) می‌کشد که هیچ بخشی از آن — به‌خصوص فوترِ دکمه‌ها
+    در پایینِ فرم — بیرون از دیدِ کاربر نماند؛ ریاضیِ فیزیکیِ ساده،
+    نه تکیه بر مکانیزمِ داخلیِ QMdiArea که تحتِ راست‌چین درست عمل
+    نمی‌کند. هم در بازیابی/کدربندیِ اولیه‌یِ زیرپنجره استفاده می‌شود
+    (MainWindow._clamp_to_mdi_area) و هم در هر resizeِ زنده‌یِ خودِ
+    ناحیه‌یِ MDI (_ClampingMdiArea.resizeEvent) — یک منبعِ حقیقتِ واحد،
+    به‌جایِ دو پیاده‌سازیِ جدا که ممکن بود از هم عقب بمانند."""
+    width = min(rect.width(), max(area.width(), _MIN_SUBWINDOW_SIZE.width()))
+    height = min(rect.height(), max(area.height(), _MIN_SUBWINDOW_SIZE.height()))
+    max_x = max(0, area.width() - width)
+    max_y = max(0, area.height() - height)
+    x = min(max(rect.x(), 0), max_x)
+    y = min(max(rect.y(), 0), max_y)
+    return QRect(x, y, width, height)
+
+
 class _MdiTitleBar(QWidget):
     """تیتربارِ کاملاً سفارشی برایِ فرم‌هایِ شناور — طبقِ درخواستِ صریح
     (تیتربارِ بومیِ Fusion با بقیه‌ی برنامه هم‌خوان نبود). قابلِ‌درگ (کلیک
@@ -592,6 +610,36 @@ class _MdiFormWrapper(QFrame):
         self.title_bar = _MdiTitleBar(title, icon, sub_window)
         outer.addWidget(self.title_bar)
         outer.addWidget(screen, stretch=1)
+
+
+class _ClampingMdiArea(QMdiArea):
+    """QMdiAreaِ معمولی، وقتی خودش کوچک‌تر می‌شود (کوچک‌کردنِ پنجره‌یِ
+    اصلی از حالتِ maximize، اسنپ‌کردنِ ویندوز به نیمِ صفحه، جمع‌شدنِ
+    نوارِ کناری، تغییرِ اندازه‌یِ چندمانیتوره)، زیرپنجره‌هایی را که از
+    قبل با اندازه‌یِ بزرگ‌تر باز شده‌اند خودش دوباره اندازه نمی‌دهد —
+    آن‌ها همان اندازه‌یِ قبلی را نگه می‌دارند و فقط یک اسکرول‌بار رویِ
+    خودِ ناحیه‌یِ MDI ظاهر می‌شود؛ از دیدِ کاربر این دقیقاً همان چیزی‌ست
+    که به‌عنوانِ «دکمه‌هایِ پایینِ فرم زیرِ تسک‌بار/از دید رفتن» گزارش
+    می‌شود — چون MainWindow خودش به‌درستی clamp می‌شود (ر.ک.
+    _clamp_geometry_to_available_screen)، اما این clamp تا امروز فقط
+    یک‌بار، در لحظه‌یِ بازشدن/بازیابیِ هر زیرپنجره اجرا می‌شد
+    (_restore_or_size_subwindow)، نه در هر resizeِ بعدیِ خودِ ناحیه‌یِ
+    MDI. این‌جا با override کردنِ resizeEvent، در *هر* تغییرِ اندازه‌ای
+    همه‌یِ زیرپنجره‌هایِ غیرِmaximize/غیرِminimize را دوباره به داخلِ
+    مرزهایِ تازه می‌کشیم — با همان تابعِ مشترکِ _clamp_rect_to_area که
+    MainWindow._clamp_to_mdi_area هم استفاده می‌کند، تا دو پیاده‌سازیِ
+    جدا از هم عقب نمانند."""
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        super().resizeEvent(event)
+        area = self.viewport().rect()
+        for sub_window in self.subWindowList():
+            if sub_window.isMaximized() or sub_window.isMinimized():
+                continue
+            geo = sub_window.geometry()
+            clamped = _clamp_rect_to_area(geo, area)
+            if clamped != geo:
+                sub_window.setGeometry(clamped)
 
 
 class MainWindow(QMainWindow):
@@ -1088,7 +1136,7 @@ class MainWindow(QMainWindow):
 
     # --- ناحیه‌ی کاریِ MDI (فرم‌هایِ شناور) --------------------------------------
     def _build_mdi_area(self) -> QWidget:
-        self.mdi_area = QMdiArea()
+        self.mdi_area = _ClampingMdiArea()
         self.mdi_area.setObjectName("mdiArea")
         self.mdi_area.setActivationOrder(QMdiArea.ActivationHistoryOrder)
         self.mdi_area.setViewMode(QMdiArea.SubWindowView)
@@ -1486,17 +1534,10 @@ class MainWindow(QMainWindow):
 
     def _clamp_to_mdi_area(self, rect: QRect) -> QRect:
         """اگر جایگاهِ ذخیره‌شده (مثلاً از یک اجرایِ قبلی با پنجره‌یِ بزرگ‌تر)
-        دیگر تویِ ناحیه‌یِ MDIِ فعلی جا نشود، خودمان با ریاضیِ ساده‌یِ
-        فیزیکی (نه با تکیه بر مکانیزمِ داخلیِ QMdiArea که تحتِ راست‌چین
-        درست عمل نمی‌کند) آن را به داخلِ مرزها می‌کشیم."""
-        area = self.mdi_area.rect()
-        width = min(rect.width(), max(area.width(), _MIN_SUBWINDOW_SIZE.width()))
-        height = min(rect.height(), max(area.height(), _MIN_SUBWINDOW_SIZE.height()))
-        max_x = max(0, area.width() - width)
-        max_y = max(0, area.height() - height)
-        x = min(max(rect.x(), 0), max_x)
-        y = min(max(rect.y(), 0), max_y)
-        return QRect(x, y, width, height)
+        دیگر تویِ ناحیه‌یِ MDIِ فعلی جا نشود، آن را به داخلِ مرزها می‌کشیم
+        — با همان تابعِ مشترکِ _clamp_rect_to_area که _ClampingMdiArea هم
+        رویِ هر resizeِ زنده استفاده می‌کند."""
+        return _clamp_rect_to_area(rect, self.mdi_area.rect())
 
     def _highlight_active_leaf(self, code: str) -> None:
         for group in self._sidebar_groups.values():
