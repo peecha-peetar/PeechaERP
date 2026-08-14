@@ -10,6 +10,7 @@ import dataclasses
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -36,7 +37,7 @@ from peecha import numerals, session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.journal_entry import _make_searchable_combo
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer
 
 _RECEIVED_STATUS_LABELS = {
     "IN_HAND": "نزدِ صندوق",
@@ -183,7 +184,7 @@ class _CheckHistoryDialog(QDialog):
             layout.addWidget(hint)
             undo_button = QPushButton("↩️")
             undo_button.setObjectName("dangerIconButton")
-            undo_button.setFixedWidth(34)
+            undo_button.setFixedWidth(44)
             undo_button.setToolTip("حذفِ آخرین سندِ مرحله")
             undo_button.clicked.connect(self._undo_last_stage)
             layout.addWidget(undo_button)
@@ -318,29 +319,36 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         footer.setObjectName("formFooter")
         self._action_row = QHBoxLayout(footer)
         self._action_row.setContentsMargins(18, 12, 18, 14)
-        self.target_label = QLabel("")
-        self.target_combo = QComboBox()
-        self._action_row.addWidget(self.target_label)
-        self._action_row.addWidget(self.target_combo)
-        self._action_row.addStretch(1)
+        self._action_row.setSpacing(8)
+        # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
+        # پایینِ فرم»): جهت صریحاً چپ‌به‌راست شد و دکمه‌ها قبل از
+        # target_label/target_combo اضافه می‌شوند تا همیشه چپ بنشینند —
+        # ایندکسِ پویایِ target_combo (پایین‌تر، برایِ جایگزینی‌اش) با
+        # ترتیبِ افزودن کاری ندارد، پس این تغییر امن است.
+        self._action_row.setDirection(QBoxLayout.LeftToRight)
         self.history_button = QPushButton("🕒")
         self.history_button.setObjectName("iconButton")
-        self.history_button.setFixedWidth(34)
+        self.history_button.setFixedWidth(44)
         self.history_button.setToolTip("تاریخچه")
         self.history_button.clicked.connect(self._show_history)
         self._action_row.addWidget(self.history_button)
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
-        self.delete_button.setFixedWidth(34)
+        self.delete_button.setFixedWidth(44)
         self.delete_button.setToolTip("حذفِ چک")
         self.delete_button.clicked.connect(self._delete_check)
         self._action_row.addWidget(self.delete_button)
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")
-        self.confirm_button.setFixedWidth(34)
+        self.confirm_button.setFixedWidth(44)
         self.confirm_button.setToolTip("تاییدِ عملیات")
         self.confirm_button.clicked.connect(self._apply_stage)
         self._action_row.addWidget(self.confirm_button)
+        self._action_row.addStretch(1)
+        self.target_label = QLabel("")
+        self.target_combo = QComboBox()
+        self._action_row.addWidget(self.target_label)
+        self._action_row.addWidget(self.target_combo)
         wrapper_layout.addWidget(footer)
 
         outer.addWidget(wrapper, stretch=1)
@@ -641,29 +649,22 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         wrapper_layout.setSpacing(0)
         wrapper_layout.addWidget(scroll, stretch=1)
 
-        footer = QWidget()
-        footer.setObjectName("formFooter")
-        action_row = QHBoxLayout(footer)
-        action_row.setContentsMargins(18, 12, 18, 14)
-        action_row.addStretch(1)
         self.history_button = QPushButton("🕒")
         self.history_button.setObjectName("iconButton")
-        self.history_button.setFixedWidth(34)
+        self.history_button.setFixedWidth(44)
         self.history_button.setToolTip("تاریخچه")
         self.history_button.clicked.connect(self._show_history)
-        action_row.addWidget(self.history_button)
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
-        self.delete_button.setFixedWidth(34)
+        self.delete_button.setFixedWidth(44)
         self.delete_button.setToolTip("حذفِ چک")
         self.delete_button.clicked.connect(self._delete_check)
-        action_row.addWidget(self.delete_button)
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")
-        self.confirm_button.setFixedWidth(34)
+        self.confirm_button.setFixedWidth(44)
         self.confirm_button.setToolTip("تاییدِ عملیات")
         self.confirm_button.clicked.connect(self._apply_stage)
-        action_row.addWidget(self.confirm_button)
+        footer = build_action_footer([self.history_button, self.delete_button, self.confirm_button])
         wrapper_layout.addWidget(footer)
 
         outer.addWidget(wrapper, stretch=1)

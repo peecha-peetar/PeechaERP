@@ -58,7 +58,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import payroll as payroll_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, PersianDigitLineEdit
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, PersianDigitLineEdit, build_action_footer
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها.
@@ -409,44 +409,38 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         wrapper_layout.setSpacing(0)
         wrapper_layout.addWidget(scroll, stretch=1)
 
-        footer = QWidget()
-        footer.setObjectName("formFooter")
-        buttons = QHBoxLayout(footer)
-        buttons.setContentsMargins(18, 12, 18, 14)
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
-        self.save_button.setFixedWidth(40)
+        self.save_button.setFixedWidth(48)
         self.save_button.setToolTip("ذخیره")
         self.save_button.clicked.connect(self._save_account)
-        buttons.addWidget(self.save_button)
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
-        cancel_button.setFixedWidth(34)
+        cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._cancel_account_edit)
-        buttons.addWidget(cancel_button)
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
-        self.delete_button.setFixedWidth(34)
+        self.delete_button.setFixedWidth(44)
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete_account)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
         self.terminate_employee_button = QPushButton("🚪")
         self.terminate_employee_button.setObjectName("dangerIconButton")
-        self.terminate_employee_button.setFixedWidth(34)
+        self.terminate_employee_button.setFixedWidth(44)
         self.terminate_employee_button.setToolTip("ثبتِ ترکِ کار")
         self.terminate_employee_button.clicked.connect(self._terminate_employee)
         self.terminate_employee_button.setVisible(False)
-        buttons.addWidget(self.terminate_employee_button)
         self.approve_partner_button = QPushButton("💳")
         self.approve_partner_button.setObjectName("primaryIconButton")
-        self.approve_partner_button.setFixedWidth(40)
+        self.approve_partner_button.setFixedWidth(48)
         self.approve_partner_button.setToolTip("تاییدِ اعتباری")
         self.approve_partner_button.clicked.connect(self._approve_partner)
         self.approve_partner_button.setVisible(False)
-        buttons.addWidget(self.approve_partner_button)
-        buttons.addStretch(1)
+        footer = build_action_footer([
+            self.save_button, cancel_button, self.delete_button,
+            self.terminate_employee_button, self.approve_partner_button,
+        ])
         wrapper_layout.addWidget(footer)
 
         self.account_panel = wrapper
@@ -506,19 +500,19 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         pc_buttons = QHBoxLayout()
         add_button = QPushButton("➕")
         add_button.setObjectName("iconButton")
-        add_button.setFixedWidth(34)
+        add_button.setFixedWidth(44)
         add_button.setToolTip("افزودن/به‌روزرسانی")
         add_button.clicked.connect(self._save_pay_component)
         pc_buttons.addWidget(add_button)
         clear_button = QPushButton("↩️")
         clear_button.setObjectName("iconButton")
-        clear_button.setFixedWidth(34)
+        clear_button.setFixedWidth(44)
         clear_button.setToolTip("انصراف")
         clear_button.clicked.connect(self._reset_pay_component_form)
         pc_buttons.addWidget(clear_button)
         self.delete_pay_component_button = QPushButton("🗑️")
         self.delete_pay_component_button.setObjectName("dangerIconButton")
-        self.delete_pay_component_button.setFixedWidth(34)
+        self.delete_pay_component_button.setFixedWidth(44)
         self.delete_pay_component_button.setToolTip("حذفِ ردیف")
         self.delete_pay_component_button.clicked.connect(self._delete_pay_component)
         self.delete_pay_component_button.setVisible(False)

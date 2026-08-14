@@ -42,7 +42,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _COLUMNS = ["فعال", "پیش‌فرض", "نوع", "نام", "کد"]
 _BIN_COLUMNS = ["فعال", "قابلِ‌برداشت", "نوع", "بارکد", "نام", "کد"]
@@ -61,20 +61,6 @@ _WITHDRAWAL_POLICY_LABELS: dict[str, str] = {
 _ACCESS_LEVEL_LABELS: dict[str, str] = {"PUBLIC": "عمومی", "RESTRICTED": "محدود (فقط کاربرانِ مجاز)"}
 _COSTING_METHOD_LABELS: dict[str, str] = {"FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
 _FINANCIAL_MAPPING_KEYS = ("INVENTORY_ASSET", "INVENTORY_ADJUSTMENT_GAIN", "INVENTORY_ADJUSTMENT_LOSS")
-
-
-def _wrap_scrollable(content: QWidget) -> QWidget:
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setFrameShape(QFrame.NoFrame)
-    scroll.setWidget(content)
-    wrapper = QWidget()
-    wrapper.setObjectName("card")
-    wrapper_layout = QVBoxLayout(wrapper)
-    wrapper_layout.setContentsMargins(0, 0, 0, 0)
-    wrapper_layout.setSpacing(0)
-    wrapper_layout.addWidget(scroll)
-    return wrapper
 
 
 def _set_combo(combo: QComboBox, value) -> None:
@@ -173,7 +159,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         new_button = QPushButton("➕")
         new_button.setObjectName("primaryIconButton")
-        new_button.setFixedWidth(40)
+        new_button.setFixedWidth(48)
         new_button.setToolTip("انبارِ جدید")
         new_button.clicked.connect(self._reset_form)
         layout.addWidget(new_button, alignment=Qt.AlignLeft)
@@ -186,7 +172,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table)
-        return _wrap_scrollable(panel)
+        return wrap_scrollable(panel)
 
     # ------------------------------------------------------------------
     # فرمِ تب‌دار
@@ -217,7 +203,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             ("notes", self._build_notes_tab(), "توضیحات"),
         ]
         for key, widget, label in tab_defs:
-            self.tab_indexes[key] = self.tabs.addTab(_wrap_scrollable(widget), label)
+            self.tab_indexes[key] = self.tabs.addTab(wrap_scrollable(widget), label)
         layout.addWidget(self.tabs)
 
         self.status_label = QLabel("")
@@ -228,21 +214,21 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
-        save_button.setFixedWidth(40)
+        save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
         buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
-        cancel_button.setFixedWidth(34)
+        cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
         buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
-        self.delete_button.setFixedWidth(34)
+        self.delete_button.setFixedWidth(44)
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
@@ -459,7 +445,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_row.addWidget(self.access_adjust_checkbox)
         add_access_button = QPushButton("➕")
         add_access_button.setObjectName("iconButton")
-        add_access_button.setFixedWidth(34)
+        add_access_button.setFixedWidth(44)
         add_access_button.setToolTip("افزودن")
         add_access_button.clicked.connect(self._add_access)
         add_row.addWidget(add_access_button)
@@ -475,7 +461,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         remove_access_button = QPushButton("🗑️")
         remove_access_button.setObjectName("dangerIconButton")
-        remove_access_button.setFixedWidth(34)
+        remove_access_button.setFixedWidth(44)
         remove_access_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
         remove_access_button.clicked.connect(self._remove_access)
         layout.addWidget(remove_access_button)
@@ -590,7 +576,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.add_bin_button = QPushButton("➕")
         self.add_bin_button.setObjectName("primaryIconButton")
-        self.add_bin_button.setFixedWidth(40)
+        self.add_bin_button.setFixedWidth(48)
         self.add_bin_button.setToolTip("مکانِ جدید")
         self.add_bin_button.clicked.connect(self._add_bin)
         self.add_bin_button.setEnabled(False)
@@ -605,11 +591,11 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.delete_bin_button = QPushButton("🗑️")
         self.delete_bin_button.setObjectName("dangerIconButton")
-        self.delete_bin_button.setFixedWidth(34)
+        self.delete_bin_button.setFixedWidth(44)
         self.delete_bin_button.setToolTip("حذفِ مکانِ انتخاب‌شده")
         self.delete_bin_button.clicked.connect(self._delete_bin)
         layout.addWidget(self.delete_bin_button)
-        return _wrap_scrollable(panel)
+        return wrap_scrollable(panel)
 
     def _refresh_bins(self) -> None:
         self.bin_tree.clear()

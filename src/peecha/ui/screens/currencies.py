@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, wrap_scrollable_with_footer
 
 _COLUMNS = ["فعال", "رقمِ اعشار", "نماد", "کدِ ارز"]
 _RATE_COLUMNS = ["تاریخ", "نرخ به ارزِ پایه"]
@@ -108,7 +108,6 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -141,32 +140,27 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
-        save_button.setFixedWidth(40)
+        save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
-        cancel_button.setFixedWidth(34)
+        cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
-        self.delete_button.setFixedWidth(34)
+        self.delete_button.setFixedWidth(44)
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
         layout.addStretch(1)
-        return panel
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def _build_rate_panel(self) -> QWidget:
         panel = QWidget()
@@ -289,7 +283,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         save_rate_button = QPushButton("➕")
         save_rate_button.setObjectName("primaryIconButton")
-        save_rate_button.setFixedWidth(40)
+        save_rate_button.setFixedWidth(48)
         save_rate_button.setToolTip("ثبتِ نرخ")
         save_rate_button.clicked.connect(self._on_save_rate)
         content_layout.addWidget(save_rate_button)

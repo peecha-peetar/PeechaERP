@@ -892,7 +892,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
 
         self.add_button = QPushButton("➕")
         self.add_button.setObjectName("iconButton")
-        self.add_button.setFixedWidth(40)
+        self.add_button.setFixedWidth(48)
         self.add_button.setToolTip("افزودنِ این چک به فهرست")
         self.add_button.clicked.connect(self._add_current)
         outer.addWidget(self.add_button)
@@ -920,7 +920,7 @@ class _CheckEntryDialog(LayoutEditMixin, QDialog):
         table_buttons.addStretch(1)
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
-        delete_button.setFixedWidth(40)
+        delete_button.setFixedWidth(48)
         delete_button.setToolTip("حذفِ چکِ انتخاب‌شده")
         delete_button.clicked.connect(self._delete_selected_row)
         table_buttons.addWidget(delete_button)
@@ -1245,7 +1245,7 @@ class _MethodRow:
         # تنها هرگز بریده نمی‌شود.
         self.details_button = QPushButton("📋")
         self.details_button.setObjectName("iconButton")
-        self.details_button.setFixedWidth(34)
+        self.details_button.setFixedWidth(44)
         self.details_button.setToolTip("جزئیاتِ این ردیف")
         self.details_button.clicked.connect(self._open_details)
 
@@ -1254,7 +1254,7 @@ class _MethodRow:
         # تا هاور نکردن اصلاً معلوم نبود — dangerIconButton همیشه یک
         # زمینه/لبه‌یِ قرمزِ کم‌رنگ دارد.
         self.remove_button.setObjectName("dangerIconButton")
-        self.remove_button.setFixedWidth(34)
+        self.remove_button.setFixedWidth(44)
         self.remove_button.setToolTip("حذفِ این ردیف")
         self.remove_button.clicked.connect(lambda: screen._remove_row(self))
 
@@ -1646,7 +1646,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         rate_row.addWidget(self.rate_field)
         self.rate_fetch_button = QPushButton("🌐")
         self.rate_fetch_button.setObjectName("iconButton")
-        self.rate_fetch_button.setFixedWidth(34)
+        self.rate_fetch_button.setFixedWidth(44)
         self.rate_fetch_button.setToolTip("دریافتِ خودکارِ نرخِ ارز")
         self.rate_fetch_button.clicked.connect(self._on_fetch_rate)
         rate_row.addWidget(self.rate_fetch_button)

@@ -36,7 +36,7 @@ from peecha.ui import report_export, theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_action_footer
 
 # طبقِ درخواستِ صریح («در فرمِ تعریفِ حساب‌ها هم بتوان از اکسل ایمپورت
 # کرد») — «کدِ کامل» (full_code، مثلِ 1-01-001) به‌جایِ کدِ بخش گرفته
@@ -361,37 +361,29 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         wrapper_layout.setSpacing(0)
         wrapper_layout.addWidget(scroll, stretch=1)
 
-        footer = QWidget()
-        footer.setObjectName("formFooter")
-        footer_layout = QHBoxLayout(footer)
-        footer_layout.setContentsMargins(18, 12, 18, 14)
-
         # طبقِ گزارشِ صریح («دکمه‌یِ حذف و بقیه‌یِ دکمه‌ها آیکن به‌جایِ
         # نوشته، با تول‌تیپ برایِ توضیح») — هم‌الگو با فوترِ فرم‌هایِ
         # تراکنشی.
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
-        self.save_button.setFixedWidth(40)
+        self.save_button.setFixedWidth(48)
         self.save_button.setToolTip("ذخیره")
         self.save_button.clicked.connect(self._save)
-        footer_layout.addWidget(self.save_button)
 
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
-        cancel_button.setFixedWidth(34)
+        cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        footer_layout.addWidget(cancel_button)
 
         self.delete_button = QPushButton("🗑️")
         self.delete_button.setObjectName("dangerIconButton")
-        self.delete_button.setFixedWidth(34)
+        self.delete_button.setFixedWidth(44)
         self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        footer_layout.addWidget(self.delete_button)
 
-        footer_layout.addStretch(1)
+        footer = build_action_footer([self.save_button, cancel_button, self.delete_button])
         wrapper_layout.addWidget(footer)
 
         return wrapper

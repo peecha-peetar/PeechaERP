@@ -62,7 +62,7 @@ class AccountLedgerScreen(ReportScreenBase):
         # معین‌هایِ زیرمجموعه (چون سندی مستقیم رویِ آن‌ها ثبت نمی‌شود).
         self.ledger_button = QPushButton("📖")
         self.ledger_button.setObjectName("iconButton")
-        self.ledger_button.setFixedWidth(34)
+        self.ledger_button.setFixedWidth(44)
         self.ledger_button.setToolTip("گردشِ حسابِ ردیفِ انتخاب‌شده")
         self.ledger_button.clicked.connect(self._show_ledger_for_selected)
         self.extra_filter_row.addWidget(self.ledger_button)

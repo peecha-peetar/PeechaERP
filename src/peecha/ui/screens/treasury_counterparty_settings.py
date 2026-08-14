@@ -160,7 +160,7 @@ class _MappingForm(QWidget):
 
         add_button = QPushButton("➕")
         add_button.setObjectName("iconButton")
-        add_button.setFixedWidth(34)
+        add_button.setFixedWidth(44)
         add_button.setToolTip("افزودن")
         add_button.clicked.connect(self._add)
         self._layout.addWidget(add_button)
@@ -290,7 +290,7 @@ class _MethodMappingRow(QWidget):
         # نداشته باشد.
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("iconButton")
-        self.save_button.setFixedWidth(34)
+        self.save_button.setFixedWidth(44)
         self.save_button.setToolTip("ذخیره")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._on_save_clicked(mapping_key, on_save))
@@ -373,7 +373,7 @@ class _MultiAccountMappingRow(QWidget):
         # می‌شود، و بعدِ ذخیره‌یِ موفق (با پیامِ تاییدیه) دوباره غیرفعال می‌شود.
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("iconButton")
-        self.save_button.setFixedWidth(34)
+        self.save_button.setFixedWidth(44)
         self.save_button.setToolTip("ذخیره")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._on_save_clicked)
@@ -414,7 +414,7 @@ class _CustomMethodForm(QWidget):
 
         add_button = QPushButton("➕")
         add_button.setObjectName("iconButton")
-        add_button.setFixedWidth(34)
+        add_button.setFixedWidth(44)
         add_button.setToolTip("افزودنِ روشِ سفارشی")
         add_button.clicked.connect(self._add)
         layout.addWidget(add_button)
@@ -458,7 +458,7 @@ class _CustomMethodRow(QWidget):
 
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
-        delete_button.setFixedWidth(34)
+        delete_button.setFixedWidth(44)
         delete_button.setToolTip("حذفِ روش")
         delete_button.clicked.connect(lambda: on_delete(method.custom_method_id))
         layout.addWidget(delete_button)
@@ -482,7 +482,7 @@ class _TemplateRow(QWidget):
 
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("iconButton")
-        self.save_button.setFixedWidth(34)
+        self.save_button.setFixedWidth(44)
         self.save_button.setToolTip("ذخیره")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(lambda: self._on_save_clicked(template_key, on_save))

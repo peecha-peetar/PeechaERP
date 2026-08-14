@@ -44,7 +44,7 @@ class _StepRow(QWidget):
 
         remove_button = QPushButton("🗑️")
         remove_button.setObjectName("iconButton")
-        remove_button.setFixedWidth(34)
+        remove_button.setFixedWidth(44)
         remove_button.setToolTip("حذفِ مرحله")
         remove_button.clicked.connect(lambda: on_remove(self))
         layout.addWidget(remove_button)
@@ -96,7 +96,7 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
 
         add_step_button = QPushButton("➕")
         add_step_button.setObjectName("iconButton")
-        add_step_button.setFixedWidth(34)
+        add_step_button.setFixedWidth(44)
         add_step_button.setToolTip("افزودنِ مرحله")
         add_step_button.clicked.connect(self._add_step)
         layout.addWidget(add_step_button)
@@ -105,7 +105,7 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
 
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
-        save_button.setFixedWidth(40)
+        save_button.setFixedWidth(48)
         save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
         layout.addWidget(save_button)

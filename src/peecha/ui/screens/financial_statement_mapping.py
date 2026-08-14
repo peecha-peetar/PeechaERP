@@ -157,7 +157,7 @@ class FinancialStatementMappingScreen(QWidget):
             # دیگر گم می‌شود.
             save_button = QPushButton("💾")
             save_button.setObjectName("primaryIconButton")
-            save_button.setFixedWidth(40)
+            save_button.setFixedWidth(48)
             save_button.setToolTip("ذخیره")
             save_button.setEnabled(False)
             # نکته‌یِ مهم: کمبوها باید با آرگومانِ پیش‌فرض به لامبدا مقیّد

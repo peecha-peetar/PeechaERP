@@ -33,7 +33,7 @@ from peecha.services import companies as companies_service
 from peecha.services import company_transfer
 from peecha.services import currencies as currencies_service
 from peecha.services import journal_entries as je_service
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer
 
 _STATUS_LABELS = {
     "DRAFT": "پیش‌نویس",
@@ -109,13 +109,13 @@ class _TransferDialog(QDialog):
         button_row.addStretch(1)
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("primaryIconButton")
-        self.confirm_button.setFixedWidth(40)
+        self.confirm_button.setFixedWidth(48)
         self.confirm_button.setToolTip("تایید و انجام")
         self.confirm_button.clicked.connect(self._on_confirm)
         button_row.addWidget(self.confirm_button)
         cancel_button = QPushButton("↩️")
         cancel_button.setObjectName("iconButton")
-        cancel_button.setFixedWidth(34)
+        cancel_button.setFixedWidth(44)
         cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self.reject)
         button_row.addWidget(cancel_button)
@@ -248,59 +248,54 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
 
-        buttons = QHBoxLayout()
         copy_button = QPushButton("📋")
         copy_button.setObjectName("iconButton")
-        copy_button.setFixedWidth(34)
+        copy_button.setFixedWidth(44)
         copy_button.setToolTip("کپیِ سندِ انتخاب‌شده (مشابه)")
         copy_button.clicked.connect(lambda: self._copy_selected(reverse=False))
-        buttons.addWidget(copy_button)
 
         reverse_copy_button = QPushButton("🔄")
         reverse_copy_button.setObjectName("iconButton")
-        reverse_copy_button.setFixedWidth(34)
+        reverse_copy_button.setFixedWidth(44)
         reverse_copy_button.setToolTip("کپیِ معکوسِ سندِ انتخاب‌شده")
         reverse_copy_button.clicked.connect(lambda: self._copy_selected(reverse=True))
-        buttons.addWidget(reverse_copy_button)
 
         approve_button = QPushButton("✅")
         approve_button.setObjectName("iconButton")
-        approve_button.setFixedWidth(34)
+        approve_button.setFixedWidth(44)
         approve_button.setToolTip("تاییدِ سند (ارتقا به دائم)")
         approve_button.clicked.connect(self._approve_selected)
-        buttons.addWidget(approve_button)
 
         reverse_button = QPushButton("↩️")
         reverse_button.setObjectName("iconButton")
-        reverse_button.setFixedWidth(34)
+        reverse_button.setFixedWidth(44)
         reverse_button.setToolTip("برگشت‌زدنِ سندِ دائم")
         reverse_button.clicked.connect(self._reverse_selected)
-        buttons.addWidget(reverse_button)
 
         merge_button = QPushButton("🔗")
         merge_button.setObjectName("iconButton")
-        merge_button.setFixedWidth(34)
+        merge_button.setFixedWidth(44)
         merge_button.setToolTip("ادغامِ اسنادِ انتخاب‌شده در یک سند")
         merge_button.clicked.connect(self._merge_selected)
-        buttons.addWidget(merge_button)
 
         transfer_button = QPushButton("📤")
         transfer_button.setObjectName("iconButton")
-        transfer_button.setFixedWidth(34)
+        transfer_button.setFixedWidth(44)
         transfer_button.setToolTip("ارسال/کپی به شرکتِ دیگر")
         transfer_button.clicked.connect(self._transfer_selected)
-        buttons.addWidget(transfer_button)
-
-        buttons.addStretch(1)
 
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
-        delete_button.setFixedWidth(34)
+        delete_button.setFixedWidth(44)
         delete_button.setToolTip("حذفِ سندِ انتخاب‌شده (موقت/پیش‌نویس)")
         delete_button.clicked.connect(self._delete_selected)
-        buttons.addWidget(delete_button)
 
-        layout.addLayout(buttons)
+        # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
+        # پایینِ فرم»): همه‌یِ ۷ دکمه یک گروهِ واحد در چپِ نوارِ اقدامات‌اند.
+        layout.addWidget(build_action_footer([
+            copy_button, reverse_copy_button, approve_button,
+            reverse_button, merge_button, transfer_button, delete_button,
+        ]))
 
         self.set_field_help([
             (

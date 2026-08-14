@@ -33,6 +33,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QBoxLayout,
     QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
@@ -112,12 +113,90 @@ class FormScreenBase(QWidget):
         self.footer.setObjectName("formFooter")
         self.footer_layout = QHBoxLayout(self.footer)
         self.footer_layout.setContentsMargins(18, 12, 18, 14)
+        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها («همه‌یِ آیکن‌ها کنارِ هم، سمتِ
+        # چپِ پایینِ فرم» — نه فقط رویِ این فرم، در همه‌جا): بدونِ این خط،
+        # چون کلِ اپ RTL است (setLayoutDirection در main.py)، یک QHBoxLayout
+        # معمولی دکمه‌هایِ اضافه‌شده را از راست به چپ می‌چیند و محلِ نهایی
+        # به ترتیبِ کدنویسیِ هر فایل بستگی پیدا می‌کند، نه یک قاعده‌یِ ثابت.
+        self.footer_layout.setDirection(QBoxLayout.LeftToRight)
+        self.footer_layout.setSpacing(8)
         wrapper_layout.addWidget(self.footer)
 
         outer.addWidget(wrapper, stretch=1)
 
     def set_footer_visible(self, visible: bool) -> None:
         self.footer.setVisible(visible)
+
+    def set_footer_buttons(self, buttons: list[QWidget]) -> None:
+        """دکمه‌هایِ فوتر را با ترتیبِ چپ‌به‌راستِ داده‌شده جایگزین می‌کند —
+        همیشه کنارِ هم، در سمتِ چپِ فرم می‌نشینند (طبقِ قانونِ ثابتِ چیدمان)."""
+        while self.footer_layout.count():
+            item = self.footer_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().setParent(None)
+        for button in buttons:
+            self.footer_layout.addWidget(button)
+        self.footer_layout.addStretch(1)
+
+
+def wrap_scrollable(content: QWidget) -> QWidget:
+    """بدنه‌یِ یک فرم را داخلِ یک QScrollAreaِ بی‌قاب می‌پیچد، درونِ یک
+    کارتِ تمام‌عرض. برایِ صفحاتی که (برخلافِ FormScreenBase) ساختارِ
+    خودشان را حفظ می‌کنند ولی همچنان باید نوارِ دکمه‌شان بیرونِ ناحیه‌یِ
+    اسکرول‌شونده بماند تا هرگز زیرِ تسک‌بار/لبه‌یِ زیرپنجره گم نشود."""
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.NoFrame)
+    scroll.setWidget(content)
+    wrapper = QWidget()
+    wrapper.setObjectName("card")
+    wrapper_layout = QVBoxLayout(wrapper)
+    wrapper_layout.setContentsMargins(0, 0, 0, 0)
+    wrapper_layout.setSpacing(0)
+    wrapper_layout.addWidget(scroll)
+    return wrapper
+
+
+def wrap_scrollable_with_footer(content: QWidget, footer_buttons: list[QWidget]) -> QWidget:
+    """معادلِ دستیِ همان اسکلتِ FormScreenBase (بدنه‌یِ اسکرول‌شونده +
+    فوترِ ثابت، هردو داخلِ یک کارت) برایِ صفحاتی که به دلیلِ چیدمانِ
+    خاصِ خودشان (مثلاً دو-پانلیِ فهرست+فرم در companies.py/roles.py/...)
+    نمی‌توانند مستقیماً زیرکلاسِ FormScreenBase شوند. دکمه‌ها همیشه بیرونِ
+    ناحیه‌یِ اسکرول می‌مانند، پس هرگز با محتوایِ زیاد از دیدِ کاربر گم/
+    زیرِ تسک‌بار نمی‌شوند."""
+    card = QWidget()
+    card.setObjectName("card")
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(0, 0, 0, 0)
+    card_layout.setSpacing(0)
+
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.NoFrame)
+    scroll.setWidget(content)
+    card_layout.addWidget(scroll, stretch=1)
+
+    card_layout.addWidget(build_action_footer(footer_buttons))
+    return card
+
+
+def build_action_footer(buttons: list[QWidget]) -> QWidget:
+    """نوارِ دکمه‌یِ استانداردِ پایینِ فرم برایِ صفحاتی که به‌جایِ
+    زیرکلاسیِ FormScreenBase، ساختارِ چیدمانِ خودشان را حفظ می‌کنند
+    (مثلِ فهرست‌هایِ جدول‌محور یا صفحاتِ چندتبیِ ساده). دکمه‌ها به همان
+    قاعده‌یِ ثابت می‌نشینند: کنارِ هم، سمتِ چپِ پایینِ فرم. این ویجت باید
+    به‌عنوانِ آخرین آیتمِ layoutِ اصلیِ صفحه اضافه شود — بیرونِ هر
+    QScrollAreaای، نه داخلش."""
+    footer = QWidget()
+    footer.setObjectName("formFooter")
+    footer_layout = QHBoxLayout(footer)
+    footer_layout.setContentsMargins(18, 12, 18, 14)
+    footer_layout.setDirection(QBoxLayout.LeftToRight)
+    footer_layout.setSpacing(8)
+    for button in buttons:
+        footer_layout.addWidget(button)
+    footer_layout.addStretch(1)
+    return footer
 
 
 class JalaliDateEdit(QLineEdit):

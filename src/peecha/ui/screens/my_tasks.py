@@ -104,7 +104,7 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         buttons = QHBoxLayout()
         approve_button = QPushButton("✅")
         approve_button.setObjectName("primaryIconButton")
-        approve_button.setFixedWidth(40)
+        approve_button.setFixedWidth(48)
         approve_button.setToolTip("تایید")
         approve_button.clicked.connect(self._approve_selected)
         buttons.addWidget(approve_button)

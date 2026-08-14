@@ -70,7 +70,7 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         # حالتِ «رکوردِ تازه» باز می‌شود (نه لیستِ خودِ گروه‌ها).
         self.new_entry_button = QPushButton("➕")
         self.new_entry_button.setObjectName("primaryIconButton")
-        self.new_entry_button.setFixedWidth(40)
+        self.new_entry_button.setFixedWidth(48)
         self.new_entry_button.setToolTip("تفصیلیِ جدید")
         self.new_entry_button.clicked.connect(self._show_new_entry_menu)
         header_row.addWidget(self.new_entry_button)

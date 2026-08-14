@@ -508,29 +508,55 @@ override شد؛ (۲) رنگِ آیکن (PRIMARY رویِ ACCENT_LIGHT) کنتر�
 کرد و فونت به ۲۰px بزرگ‌تر شد؛ (۳) نیازی به پرشدنِ توپُرِ رنگی نیست،
 فقط باید همیشه («نه‌فقط‌رویِ‌هاور») قابلِ‌تشخیص باشد — همین زمینه/لبه‌یِ
 کم‌رنگ کافی‌ست، بدونِ نیاز به fillِ اشباع‌شده. */
+/* طبقِ گزارشِ صریح («سه‌بعدی‌تر باشه، بزرگ‌تر باشه»): زمینه دیگر تختِ
+یک‌دست نیست — یک gradientِ عمودیِ ملایم (بالا کمی روشن‌تر/پررنگ‌تر از
+پایین) رویِ همان رنگِ توکن، به‌علاوه‌یِ کادرِ نامتقارن (لبه‌یِ پایین
+ضخیم‌تر/پررنگ‌تر از سه‌ضلعِ دیگر) حسِ «دکمه‌ای که رویِ سطح نشسته» می‌دهد؛
+در :pressed این تضاد معکوس می‌شود (گرادیانِ تیره‌تر، لبه‌یِ بالا
+پررنگ‌تر) تا حسِ فرورفتن بدهد. چون همه‌چیز rgba رویِ همان توکنِ رنگیِ
+هر کلاس است (نه سفید/سیاهِ مطلق)، در هر دو حالتِ تیره/روشن درست کار
+می‌کند. اندازه هم از ۲۰px/۳۴px به ۲۴px/۴۴px بزرگ‌تر شد. */
 QPushButton#iconButton {{
-    background-color: {rgba(TEXT_PRIMARY, 0.06)};
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(TEXT_PRIMARY, 0.11)}, stop:1 {rgba(TEXT_PRIMARY, 0.04)});
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
-    border-radius: 6px;
+    border-bottom: 2px solid {rgba(TEXT_PRIMARY, 0.30)};
+    border-radius: 8px;
     font-weight: 700;
     padding: 4px 2px;
-    font-size: 20px;
+    font-size: 24px;
 }}
 QPushButton#iconButton:hover {{
-    background-color: {rgba(TEXT_PRIMARY, 0.12)};
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(TEXT_PRIMARY, 0.18)}, stop:1 {rgba(TEXT_PRIMARY, 0.08)});
+}}
+QPushButton#iconButton:pressed {{
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(TEXT_PRIMARY, 0.05)}, stop:1 {rgba(TEXT_PRIMARY, 0.11)});
+    border: 1px solid {BORDER};
+    border-top: 2px solid {rgba(TEXT_PRIMARY, 0.30)};
 }}
 QPushButton#dangerIconButton {{
-    background-color: {rgba(DANGER, 0.12)};
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(DANGER, 0.18)}, stop:1 {rgba(DANGER, 0.08)});
     color: {DANGER};
     border: 1px solid {rgba(DANGER, 0.4)};
-    border-radius: 6px;
+    border-bottom: 2px solid {rgba(DANGER, 0.55)};
+    border-radius: 8px;
     font-weight: 700;
     padding: 4px 2px;
-    font-size: 20px;
+    font-size: 24px;
 }}
 QPushButton#dangerIconButton:hover {{
-    background-color: {rgba(DANGER, 0.24)};
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(DANGER, 0.30)}, stop:1 {rgba(DANGER, 0.16)});
+}}
+QPushButton#dangerIconButton:pressed {{
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(DANGER, 0.08)}, stop:1 {rgba(DANGER, 0.18)});
+    border: 1px solid {rgba(DANGER, 0.4)};
+    border-top: 2px solid {rgba(DANGER, 0.55)};
 }}
 /* نسخه‌یِ آیکونیِ primaryButton — برایِ دکمه‌هایِ کوچکِ ثبت/ذخیره‌یِ اصلیِ
 فرم (✔️/💾). طبقِ گزارشِ صریح («نیازی به رنگِ آبیِ توپُر نیست، فقط هاورِ
@@ -539,16 +565,25 @@ QPushButton#dangerIconButton:hover {{
 از primaryButtonِ متن‌دار (تمام‌عرض، هنوز پدینگِ ۹px۱۸pxِ خودش را دارد)
 جداست. */
 QPushButton#primaryIconButton {{
-    background-color: {rgba(ACCENT, 0.10)};
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(ACCENT, 0.16)}, stop:1 {rgba(ACCENT, 0.06)});
     color: {ACCENT};
     border: 1px solid {rgba(ACCENT, 0.4)};
-    border-radius: 6px;
+    border-bottom: 2px solid {rgba(ACCENT, 0.55)};
+    border-radius: 8px;
     font-weight: 700;
     padding: 4px 2px;
-    font-size: 20px;
+    font-size: 24px;
 }}
 QPushButton#primaryIconButton:hover {{
-    background-color: {rgba(ACCENT, 0.20)};
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(ACCENT, 0.28)}, stop:1 {rgba(ACCENT, 0.14)});
+}}
+QPushButton#primaryIconButton:pressed {{
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(ACCENT, 0.06)}, stop:1 {rgba(ACCENT, 0.16)});
+    border: 1px solid {rgba(ACCENT, 0.4)};
+    border-top: 2px solid {rgba(ACCENT, 0.55)};
 }}
 QPushButton#dangerButton {{
     background-color: transparent;
