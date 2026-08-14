@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 
 from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtGui import QBrush, QColor, QFont, QScreen
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -656,6 +656,8 @@ class MainWindow(QMainWindow):
         # صریح به availableGeometry (به‌جایِ geometry/screenGeometریِ خام)
         # رفع می‌شوند.
         self._clamping_geometry = False
+        self._watched_screen: QScreen | None = None
+        self._screen_changed_connected = False
         self.resize(1440, 900)
         self._clamp_geometry_to_available_screen()
 
@@ -715,6 +717,38 @@ class MainWindow(QMainWindow):
         y = available.y() + max(0, (available.height() - height) // 2)
         self.setGeometry(x, y, width, height)
 
+    def _ensure_screen_geometry_watcher(self) -> None:
+        """طبقِ گزارشِ صریح: اگر کاربر حالتِ auto-hideِ نوارِ وظیفه را در
+        حینِ بازبودنِ برنامه خاموش کند (یا هر تغییرِ دیگری در
+        availableGeometryِ صفحه رخ دهد)، هیچ‌کدام از رویدادهایِ خودِ
+        پنجره (resizeEvent/changeEvent) شلیک نمی‌شوند — چون اندازه/حالتِ
+        خودِ پنجره تغییر نکرده، فقط ناحیه‌یِ رزروشده‌یِ سیستم‌عامل عوض شده.
+        برایِ همین باید مستقیماً به QScreen.availableGeometryChanged
+        گوش داد. این‌جا وصل می‌شود (نه در __init__، چونِ self.screen()
+        پیش از نمایشِ واقعیِ پنجره قابلِ‌اتکا نیست) و اگر پنجره به
+        مانیتورِ دیگری منتقل شود هم خودش را دوباره به صفحه‌یِ تازه وصل
+        می‌کند."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        if screen is not self._watched_screen:
+            if self._watched_screen is not None:
+                try:
+                    self._watched_screen.availableGeometryChanged.disconnect(
+                        self._on_available_geometry_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+            screen.availableGeometryChanged.connect(self._on_available_geometry_changed)
+            self._watched_screen = screen
+        window_handle = self.windowHandle()
+        if window_handle is not None and not self._screen_changed_connected:
+            window_handle.screenChanged.connect(lambda _screen: self._ensure_screen_geometry_watcher())
+            self._screen_changed_connected = True
+
+    def _on_available_geometry_changed(self, _available: QRect) -> None:
+        QTimer.singleShot(0, self._clamp_geometry_to_available_screen)
+
     def changeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
         # باگِ واقعیِ گزارش‌شده: رویِ بعضی پیکربندی‌هایِ ویندوز، maximize
         # بومیِ Qt کاملاً availableGeometry را رعایت نمی‌کند و پایینِ
@@ -739,6 +773,7 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if not self.isMaximized():
             self._clamp_geometry_to_available_screen()
+        self._ensure_screen_geometry_watcher()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
         # طبقِ گزارشِ تکرارشونده‌یِ کاربر («بازهم فرم‌ها زیرِ نوارِ وظیفه
