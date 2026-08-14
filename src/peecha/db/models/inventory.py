@@ -45,6 +45,7 @@ class Uom(Base):
     code: Mapped[str] = mapped_column(String(20))
     name: Mapped[str] = mapped_column(String(50))
     uom_type_code: Mapped[str] = mapped_column(String(10))
+    decimal_places: Mapped[int] = mapped_column(SmallInteger, default=2)
     is_active: Mapped[bool] = mapped_column(default=True)
 
 

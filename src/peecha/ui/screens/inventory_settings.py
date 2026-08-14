@@ -16,13 +16,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from peecha import session as app_session
+from peecha import numerals, session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
@@ -55,12 +56,12 @@ class _UomTab(QWidget):
         add_button.clicked.connect(self._add)
         layout.addWidget(add_button, alignment=Qt.AlignLeft)
 
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["فعال", "نوع", "نام", "کد"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["فعال", "تعدادِ اعشار", "نوع", "نام", "کد"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.cellDoubleClicked.connect(self._edit_selected)
         layout.addWidget(self.table)
 
@@ -89,7 +90,10 @@ class _UomTab(QWidget):
         self._rows = catalog_service.list_uoms(company_id)
         self.table.setRowCount(len(self._rows))
         for row_index, u in enumerate(self._rows):
-            values = ["بله" if u.is_active else "خیر", _UOM_TYPE_LABELS.get(u.uom_type_code, u.uom_type_code), u.name, u.code]
+            values = [
+                "بله" if u.is_active else "خیر", numerals.to_persian_digits(str(u.decimal_places)),
+                _UOM_TYPE_LABELS.get(u.uom_type_code, u.uom_type_code), u.name, u.code,
+            ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, u.uom_id)
@@ -117,6 +121,17 @@ class _UomTab(QWidget):
         for code, label in _UOM_TYPE_LABELS.items():
             type_combo.addItem(label, code)
         layout.addWidget(type_combo)
+        layout.addWidget(QLabel("تعدادِ اعشارِ مقدار (۰ = عددِ صحیح)"))
+        decimal_places_spin = QSpinBox()
+        decimal_places_spin.setRange(0, 6)
+        decimal_places_spin.setValue(0)
+
+        def _sync_default_decimal_places() -> None:
+            decimal_places_spin.setValue(0 if type_combo.currentData() == "COUNT" else 2)
+
+        type_combo.currentIndexChanged.connect(_sync_default_decimal_places)
+        _sync_default_decimal_places()
+        layout.addWidget(decimal_places_spin)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
@@ -127,7 +142,10 @@ class _UomTab(QWidget):
         if company_id is None or not code_field.text().strip() or not name_field.text().strip():
             return
         try:
-            catalog_service.create_uom(company_id, code_field.text().strip(), name_field.text().strip(), type_combo.currentData())
+            catalog_service.create_uom(
+                company_id, code_field.text().strip(), name_field.text().strip(), type_combo.currentData(),
+                decimal_places_spin.value(),
+            )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
@@ -143,6 +161,11 @@ class _UomTab(QWidget):
         layout.addWidget(QLabel("نام"))
         name_field = QLineEdit(row.name)
         layout.addWidget(name_field)
+        layout.addWidget(QLabel("تعدادِ اعشارِ مقدار (۰ = عددِ صحیح)"))
+        decimal_places_spin = QSpinBox()
+        decimal_places_spin.setRange(0, 6)
+        decimal_places_spin.setValue(row.decimal_places)
+        layout.addWidget(decimal_places_spin)
         active_checkbox = QCheckBox("فعال")
         active_checkbox.setChecked(row.is_active)
         layout.addWidget(active_checkbox)
@@ -154,7 +177,10 @@ class _UomTab(QWidget):
             return
         company_id = _company_id()
         try:
-            catalog_service.update_uom(row.uom_id, company_id, row.code, name_field.text().strip(), row.uom_type_code, active_checkbox.isChecked())
+            catalog_service.update_uom(
+                row.uom_id, company_id, row.code, name_field.text().strip(), row.uom_type_code,
+                active_checkbox.isChecked(), decimal_places_spin.value(),
+            )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return

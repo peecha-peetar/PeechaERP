@@ -30,7 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session as app_session
+from peecha import numerals, session as app_session
+from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
@@ -66,9 +67,11 @@ class _LineDialog(QDialog):
         self, parent: QWidget, document_type_code: str, items: list[catalog_service.ItemRow],
         source_bins: list[locations_service.BinLocationRow], destination_bins: list[locations_service.BinLocationRow],
         reasons: list[documents_service.ReasonCodeRow], initial: documents_service.LineFields | None = None,
+        uom_decimal_places: dict[int, int] | None = None, unit_cost_decimal_places: int = 2,
     ) -> None:
         super().__init__(parent)
         self.document_type_code = document_type_code
+        self._uom_decimal_places = uom_decimal_places or {}
         self.setWindowTitle("ردیفِ سند")
         self.setMinimumWidth(380)
         layout = QVBoxLayout(self)
@@ -84,6 +87,7 @@ class _LineDialog(QDialog):
         self.quantity_field.setDecimals(6)
         self.quantity_field.setRange(0.000001, 999999999)
         layout.addWidget(self.quantity_field)
+        self.item_combo.currentIndexChanged.connect(self._on_item_changed)
 
         self.bin_row = QWidget()
         bin_layout = QVBoxLayout(self.bin_row)
@@ -113,7 +117,7 @@ class _LineDialog(QDialog):
         cost_layout.setContentsMargins(0, 0, 0, 0)
         cost_layout.addWidget(QLabel("بهایِ واحد (اختیاری)"))
         self.unit_cost_field = QDoubleSpinBox()
-        self.unit_cost_field.setDecimals(2)
+        self.unit_cost_field.setDecimals(unit_cost_decimal_places)
         self.unit_cost_field.setRange(0, 999999999999)
         cost_layout.addWidget(self.unit_cost_field)
         layout.addWidget(self.unit_cost_row)
@@ -168,6 +172,7 @@ class _LineDialog(QDialog):
         _enter_signal(enter_chain[-1]).connect(self._on_accept)
 
         self.item_combo.setFocus()
+        self._on_item_changed()
 
         if initial is not None:
             index = self.item_combo.findData(initial.item_id)
@@ -183,6 +188,16 @@ class _LineDialog(QDialog):
             if initial.reason_code_id is not None:
                 self.reason_combo.setCurrentIndex(max(0, self.reason_combo.findData(initial.reason_code_id)))
             self.description_field.setText(initial.description or "")
+
+    def _on_item_changed(self) -> None:
+        # طبقِ گزارشِ صریح: تعدادِ اعشارِ «مقدار» باید از تعریفِ واحدِ
+        # پایهٔ همان کالا ارث ببرد (مثلاً واحدِ شمارشی «عدد» = عددِ صحیح)،
+        # نه همیشه ۶ رقمِ ثابتِ اعشار.
+        item = self._items_by_id.get(self.item_combo.currentData())
+        decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 6
+        self.quantity_field.setDecimals(decimals)
+        self.quantity_field.setSingleStep(1)
+        self.quantity_field.setMinimum(1 if decimals == 0 else 10 ** -decimals)
 
     def _on_accept(self) -> None:
         if self.item_combo.currentData() is None:
@@ -218,6 +233,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._lines: list[documents_service.StockDocumentLineRow] = []
         self._items: list[catalog_service.ItemRow] = []
         self._warehouses: list[locations_service.WarehouseRow] = []
+        self._uom_decimal_places: dict[int, int] = {}
+        self._unit_cost_decimal_places: int = 2
 
         title = DOC_TYPE_TITLES[document_type_code]
         title_row = QHBoxLayout()
@@ -241,6 +258,12 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         def _compact_box(widget: QWidget, max_width: int) -> None:
             widget.setMaximumWidth(max_width)
 
+        def _growable_box(widget: QWidget, min_width: int) -> None:
+            # طبقِ درخواستِ صریح: این فیلدها به‌جایِ عرضِ ثابتِ کوچک،
+            # فضایِ خالیِ باقی‌ماندهٔ ردیفِ هدر را (به‌جایِ stretchِ انتهاییِ
+            # بلااستفاده) بینِ خودشان تقسیم کنند.
+            widget.setMinimumWidth(min_width)
+
         header_row = QHBoxLayout()
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
@@ -250,24 +273,24 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         header_row.addLayout(date_box, 0)
 
         self.source_wh_box = QWidget()
-        _compact_box(self.source_wh_box, 150)
+        _growable_box(self.source_wh_box, 150)
         source_wh_layout = QVBoxLayout(self.source_wh_box)
         source_wh_layout.setContentsMargins(0, 0, 0, 0)
         source_wh_layout.addWidget(QLabel("انبارِ مبدا"))
         self.source_wh_combo = _EnterComboBox()
         self.source_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         source_wh_layout.addWidget(self.source_wh_combo)
-        header_row.addWidget(self.source_wh_box, 0)
+        header_row.addWidget(self.source_wh_box, 1)
 
         self.destination_wh_box = QWidget()
-        _compact_box(self.destination_wh_box, 150)
+        _growable_box(self.destination_wh_box, 150)
         dest_wh_layout = QVBoxLayout(self.destination_wh_box)
         dest_wh_layout.setContentsMargins(0, 0, 0, 0)
         dest_wh_layout.addWidget(QLabel("انبارِ مقصد"))
         self.destination_wh_combo = _EnterComboBox()
         self.destination_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
         dest_wh_layout.addWidget(self.destination_wh_combo)
-        header_row.addWidget(self.destination_wh_box, 0)
+        header_row.addWidget(self.destination_wh_box, 1)
 
         self.adjustment_direction_box = QWidget()
         _compact_box(self.adjustment_direction_box, 180)
@@ -282,14 +305,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         header_row.addWidget(self.adjustment_direction_box, 0)
 
         self.counterparty_box = QWidget()
-        _compact_box(self.counterparty_box, 220)
+        _growable_box(self.counterparty_box, 220)
         counterparty_layout = QVBoxLayout(self.counterparty_box)
         counterparty_layout.setContentsMargins(0, 0, 0, 0)
         self.counterparty_label = QLabel("طرفِ‌حساب")
         counterparty_layout.addWidget(self.counterparty_label)
         self.counterparty_combo = _make_searchable_combo([])
         counterparty_layout.addWidget(self.counterparty_combo)
-        header_row.addWidget(self.counterparty_box, 0)
+        header_row.addWidget(self.counterparty_box, 1)
 
         reference_box = QVBoxLayout()
         reference_box.addWidget(QLabel("شمارهٔ مرجع"))
@@ -298,7 +321,6 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         reference_box.addWidget(self.reference_field)
         header_row.addLayout(reference_box, 0)
 
-        header_row.addStretch(1)
         self.body_layout.addLayout(header_row)
 
         lines_title = QLabel("ردیف‌ها")
@@ -482,6 +504,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._warehouses = locations_service.list_warehouses(company_id, active_only=True)
+        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        self._unit_cost_decimal_places = companies_service.get_base_currency_decimal_places(company_id)
 
         for combo in (self.source_wh_combo, self.destination_wh_combo):
             current = combo.currentData()
@@ -565,13 +589,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setRowCount(len(self._lines))
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
+            qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
-                str(ln.quantity),
+                numerals.format_money(ln.quantity, qty_decimals),
                 all_bins.get(ln.bin_location_id).code if ln.bin_location_id in all_bins else "پیش‌فرض",
                 all_bins.get(ln.destination_bin_location_id).code if ln.destination_bin_location_id in all_bins else "",
-                str(ln.unit_cost) if ln.unit_cost is not None else "",
-                str(ln.line_total_cost) if ln.line_total_cost is not None else "",
+                numerals.format_money(ln.unit_cost, self._unit_cost_decimal_places) if ln.unit_cost is not None else "",
+                numerals.format_money(ln.line_total_cost, self._unit_cost_decimal_places) if ln.line_total_cost is not None else "",
                 reasons_by_id.get(ln.reason_code_id, ""),
                 ln.description or "",
             ]
@@ -683,7 +708,10 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         # بدونِ نیازِ به کلیکِ دوباره‌یِ «افزودنِ ردیف». فقط با لغوِ دیالوگ
         # (Escape/Cancel) این چرخه متوقف می‌شود.
         while True:
-            dialog = _LineDialog(self, self.document_type_code, self._items, source_bins, destination_bins, reasons)
+            dialog = _LineDialog(
+                self, self.document_type_code, self._items, source_bins, destination_bins, reasons,
+                uom_decimal_places=self._uom_decimal_places, unit_cost_decimal_places=self._unit_cost_decimal_places,
+            )
             if dialog.exec() != QDialog.Accepted:
                 break
             try:
@@ -717,7 +745,10 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             bin_location_id=line.bin_location_id, destination_bin_location_id=line.destination_bin_location_id,
             unit_cost=line.unit_cost, reason_code_id=line.reason_code_id, description=line.description,
         )
-        dialog = _LineDialog(self, self.document_type_code, self._items, source_bins, destination_bins, reasons, initial)
+        dialog = _LineDialog(
+            self, self.document_type_code, self._items, source_bins, destination_bins, reasons, initial,
+            uom_decimal_places=self._uom_decimal_places, unit_cost_decimal_places=self._unit_cost_decimal_places,
+        )
         if dialog.exec() != QDialog.Accepted:
             return
         try:

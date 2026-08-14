@@ -76,6 +76,13 @@ class UomRow:
     uom_type_code: str
     is_active: bool
     is_global: bool
+    decimal_places: int = 2
+
+
+# طبقِ گزارشِ صریح: واحدِ شمارشی (COUNT) پیش‌فرض عددِ صحیح است، بقیه‌یِ
+# انواع دو رقمِ اعشار — هنگامِ ساختِ واحدِ تازه (بدونِ مقدارِ صریح) همین
+# پیش‌فرض به‌کار می‌رود.
+_DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE = {"COUNT": 0}
 
 
 def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
@@ -85,19 +92,31 @@ def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
             query = query.where(Uom.is_active)
         rows = session.scalars(query.order_by(Uom.code)).all()
         return [
-            UomRow(r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None) for r in rows
+            UomRow(r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None, r.decimal_places)
+            for r in rows
         ]
 
 
-def create_uom(company_id: int, code: str, name: str, uom_type_code: str) -> int:
+def create_uom(company_id: int, code: str, name: str, uom_type_code: str, decimal_places: int | None = None) -> int:
+    if decimal_places is None:
+        decimal_places = _DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE.get(uom_type_code, 2)
+    if not (0 <= decimal_places <= 6):
+        raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
     with new_session() as session:
-        uom = Uom(company_id=company_id, code=code.strip(), name=name.strip(), uom_type_code=uom_type_code)
+        uom = Uom(
+            company_id=company_id, code=code.strip(), name=name.strip(), uom_type_code=uom_type_code,
+            decimal_places=decimal_places,
+        )
         session.add(uom)
         session.commit()
         return uom.uom_id
 
 
-def update_uom(uom_id: int, company_id: int, code: str, name: str, uom_type_code: str, is_active: bool) -> None:
+def update_uom(
+    uom_id: int, company_id: int, code: str, name: str, uom_type_code: str, is_active: bool, decimal_places: int,
+) -> None:
+    if not (0 <= decimal_places <= 6):
+        raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
     with new_session() as session:
         uom = session.get(Uom, uom_id)
         if uom is None or uom.company_id != company_id:
@@ -106,6 +125,7 @@ def update_uom(uom_id: int, company_id: int, code: str, name: str, uom_type_code
         uom.name = name.strip()
         uom.uom_type_code = uom_type_code
         uom.is_active = is_active
+        uom.decimal_places = decimal_places
         session.commit()
 
 

@@ -56,6 +56,14 @@ def list_currencies() -> list[CurrencyOption]:
         ]
 
 
+def get_base_currency_decimal_places(company_id: int) -> int:
+    with new_session() as session:
+        company = session.get(Company, company_id)
+        if company is None:
+            return 0
+        return session.scalar(select(Currency.decimal_places).where(Currency.currency_id == company.base_currency_id)) or 0
+
+
 def update_currency_decimal_places(currency_id: int, decimal_places: int) -> None:
     if decimal_places < 0 or decimal_places > 6:
         raise ValueError("رقم اعشار باید بین ۰ تا ۶ باشد.")
