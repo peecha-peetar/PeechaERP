@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session
 from peecha.services import roles as roles_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 _ACTIONS = ["VIEW", "CREATE", "EDIT", "DELETE"]
 _ACTION_LABELS = {"VIEW": "دیدن", "CREATE": "ساختن", "EDIT": "ویرایش", "DELETE": "حذف"}
@@ -68,7 +68,6 @@ class RolesScreen(FieldHelpMixin, QWidget):
 
     def _build_roles_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -94,8 +93,10 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        create_button = QPushButton("افزودنِ نقش")
-        create_button.setObjectName("primaryButton")
+        create_button = QPushButton("➕")
+        create_button.setObjectName("primaryIconButton")
+        create_button.setFixedWidth(48)
+        create_button.setToolTip("افزودنِ نقش")
         create_button.clicked.connect(self._create_role)
         layout.addWidget(create_button)
 
@@ -105,7 +106,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.is_active_checkbox)
 
         layout.addStretch(1)
-        return panel
+        return wrap_scrollable(panel)
 
     def _build_detail_panel(self) -> QWidget:
         panel = QWidget()

@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, wrap_scrollable_with_footer
 
 _COLUMNS = ["فعال", "رقمِ اعشار", "نماد", "کدِ ارز"]
 _RATE_COLUMNS = ["تاریخ", "نرخ به ارزِ پایه"]
@@ -51,7 +51,7 @@ _RATE_SOURCE_GLOBAL = "GLOBAL"
 _RATE_SOURCE_NAVASAN = "NAVASAN"
 
 
-class CurrenciesScreen(FieldHelpMixin, QWidget):
+class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[currencies_service.CurrencyRow] = []
@@ -108,7 +108,6 @@ class CurrenciesScreen(FieldHelpMixin, QWidget):
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -117,48 +116,51 @@ class CurrenciesScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("کدِ ارز (مثلاً IRR)"))
         self.iso_code_field = QLineEdit()
-        layout.addWidget(self.iso_code_field)
 
-        layout.addWidget(QLabel("نماد"))
         self.symbol_field = QLineEdit()
-        layout.addWidget(self.symbol_field)
 
-        layout.addWidget(QLabel("رقمِ اعشار"))
         self.decimal_places_field = QSpinBox()
         self.decimal_places_field.setRange(0, 6)
-        layout.addWidget(self.decimal_places_field)
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+
+        self.basic_grid = FieldGrid([
+            FieldSpec("iso_code", "کدِ ارز (مثلاً IRR)", self.iso_code_field, span=1),
+            FieldSpec("symbol", "نماد", self.symbol_field, span=1),
+            FieldSpec("decimal_places", "رقمِ اعشار", self.decimal_places_field, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=3),
+        ])
+        layout.addWidget(self.basic_grid)
+        self.register_field_grids("currencies", [self.basic_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(48)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
+        cancel_button = QPushButton("↩️")
+        cancel_button.setObjectName("iconButton")
+        cancel_button.setFixedWidth(44)
+        cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
-        self.delete_button = QPushButton("حذف")
-        self.delete_button.setObjectName("dangerButton")
+        self.delete_button = QPushButton("🗑️")
+        self.delete_button.setObjectName("dangerIconButton")
+        self.delete_button.setFixedWidth(44)
+        self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
         layout.addStretch(1)
-        return panel
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def _build_rate_panel(self) -> QWidget:
         panel = QWidget()
@@ -279,8 +281,10 @@ class CurrenciesScreen(FieldHelpMixin, QWidget):
         self.rate_status_label.setWordWrap(True)
         content_layout.addWidget(self.rate_status_label)
 
-        save_rate_button = QPushButton("ثبتِ نرخ")
-        save_rate_button.setObjectName("primaryButton")
+        save_rate_button = QPushButton("➕")
+        save_rate_button.setObjectName("primaryIconButton")
+        save_rate_button.setFixedWidth(48)
+        save_rate_button.setToolTip("ثبتِ نرخ")
         save_rate_button.clicked.connect(self._on_save_rate)
         content_layout.addWidget(save_rate_button)
 

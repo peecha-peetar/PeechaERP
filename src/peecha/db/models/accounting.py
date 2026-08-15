@@ -94,7 +94,9 @@ class CashFlowSection(Base):
     __table_args__ = {"schema": "acc"}
 
     cash_flow_section_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
-    code: Mapped[str] = mapped_column(String(20), unique=True)  # OPERATING | INVESTING | FINANCING
+    # طبقِ آیتمِ ۵: پنج طبقه‌یِ استانداردِ ایران — OPERATING |
+    # INVESTMENT_RETURNS_FINANCE_COST | INCOME_TAX | INVESTING | FINANCING
+    code: Mapped[str] = mapped_column(String(40), unique=True)
 
 
 class LiquidityClass(Base):
@@ -107,6 +109,19 @@ class LiquidityClass(Base):
 
     liquidity_class_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     code: Mapped[str] = mapped_column(String(20), unique=True)  # CURRENT | CURRENT_INVENTORY | NON_CURRENT
+
+
+class BalanceSheetSide(Base):
+    """طبقِ درخواستِ صریح («ترازنامه دو ستونِ چپ/راست داشته باشد و در
+    تنظیمات مشخص کنیم کدام گروه در کدام سمت باشد») — سمتِ نمایشِ گروهِ
+    حساب در ترازنامه؛ اختیاری، NULL یعنی سمت از رویِ category_code
+    خودکار تعیین می‌شود (دارایی=راست، بدهی/حقوقِ‌صاحبانِ‌سهام=چپ)."""
+
+    __tablename__ = "balance_sheet_sides"
+    __table_args__ = {"schema": "acc"}
+
+    balance_sheet_side_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(String(10), unique=True)  # RIGHT | LEFT
 
 
 class ChartOfAccount(Base):
@@ -129,6 +144,9 @@ class ChartOfAccount(Base):
         ForeignKey("acc.cash_flow_sections.cash_flow_section_id")
     )
     liquidity_class_id: Mapped[int | None] = mapped_column(ForeignKey("acc.liquidity_classes.liquidity_class_id"))
+    balance_sheet_side_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.balance_sheet_sides.balance_sheet_side_id")
+    )
     is_postable: Mapped[bool] = mapped_column(Boolean, default=False)
     currency_id: Mapped[int | None] = mapped_column(ForeignKey("core.currencies.currency_id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -276,6 +294,9 @@ class PersonGroup(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # رنگِ اختصاصیِ این زیرگروه — هم‌الگو با DetailDimensionType.color.
     color: Mapped[str | None] = mapped_column(String(7))
+    # طبقِ درخواستِ صریح: «کدام گروه(هایِ) تفصیلی = پرسنل» باید از تنظیمات
+    # کنترل شود، نه هاردکدِ PERSONNEL_GROUP_CODE در کد.
+    is_personnel: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class AccountPersonGroup(Base):

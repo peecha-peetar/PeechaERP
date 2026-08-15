@@ -20,12 +20,12 @@ from PySide6.QtWidgets import (
 )
 
 from peecha.services import languages as languages_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable, wrap_scrollable_with_footer
 
 _COLUMNS = ["فعال", "پیش‌فرض", "راست‌به‌چپ", "ترتیب", "نامِ بومی", "کد"]
 
 
-class LanguagesScreen(FieldHelpMixin, QWidget):
+class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[languages_service.LanguageRow] = []
@@ -66,7 +66,6 @@ class LanguagesScreen(FieldHelpMixin, QWidget):
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
@@ -83,11 +82,10 @@ class LanguagesScreen(FieldHelpMixin, QWidget):
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table)
-        return panel
+        return wrap_scrollable(panel)
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
@@ -96,54 +94,57 @@ class LanguagesScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        layout.addWidget(QLabel("کد (مثلاً fa)"))
         self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
 
-        layout.addWidget(QLabel("نامِ بومی"))
         self.native_name_field = QLineEdit()
-        layout.addWidget(self.native_name_field)
 
-        layout.addWidget(QLabel("ترتیبِ نمایش"))
         self.sort_order_field = QSpinBox()
         self.sort_order_field.setRange(0, 999)
-        layout.addWidget(self.sort_order_field)
 
         self.is_rtl_checkbox = QCheckBox("راست‌به‌چپ")
-        layout.addWidget(self.is_rtl_checkbox)
 
         self.is_default_checkbox = QCheckBox("زبانِ پیش‌فرض")
-        layout.addWidget(self.is_default_checkbox)
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        layout.addWidget(self.is_active_checkbox)
+
+        self.basic_grid = FieldGrid([
+            FieldSpec("code", "کد (مثلاً fa)", self.code_field, span=1),
+            FieldSpec("native_name", "نامِ بومی", self.native_name_field, span=3),
+            FieldSpec("sort_order", "ترتیبِ نمایش", self.sort_order_field, span=1),
+            FieldSpec("is_rtl", "", self.is_rtl_checkbox, span=1),
+            FieldSpec("is_default", "", self.is_default_checkbox, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.basic_grid)
+        self.register_field_grids("languages", [self.basic_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(48)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
+        cancel_button = QPushButton("↩️")
+        cancel_button.setObjectName("iconButton")
+        cancel_button.setFixedWidth(44)
+        cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
-        self.delete_button = QPushButton("حذف")
-        self.delete_button.setObjectName("dangerButton")
+        self.delete_button = QPushButton("🗑️")
+        self.delete_button.setObjectName("dangerIconButton")
+        self.delete_button.setFixedWidth(44)
+        self.delete_button.setToolTip("حذف")
         self.delete_button.clicked.connect(self._delete)
         self.delete_button.setVisible(False)
-        buttons.addWidget(self.delete_button)
 
-        layout.addLayout(buttons)
         layout.addStretch(1)
-        return panel
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, self.delete_button])
 
     def refresh(self) -> None:
         self._reset_form()

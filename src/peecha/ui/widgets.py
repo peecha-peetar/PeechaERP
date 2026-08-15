@@ -16,6 +16,8 @@ set_field_help_enabled) به دکمه‌ای در هدرِ برنامه منتق
 from __future__ import annotations
 
 import datetime
+import json
+from dataclasses import dataclass
 
 from PySide6.QtCore import (
     Property,
@@ -26,6 +28,7 @@ from PySide6.QtCore import (
     QPropertyAnimation,
     QSettings,
     Qt,
+    Signal,
 )
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import (
@@ -33,10 +36,13 @@ from PySide6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -46,18 +52,6 @@ from peecha import numerals
 from peecha.ui import theme
 
 _FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
-
-
-def _tint(color: str, amount: float) -> str:
-    """رنگِ داده‌شده را با سفید مخلوط می‌کند (amount=۰..۱ سهمِ خودِ رنگ) —
-    ته‌رنگِ روشنِ قابلِ‌اتکا برایِ پس‌زمینه‌یِ نشان‌ها؛ به‌جایِ تکنیکِ ناموفقِ
-    پسوندِ آلفا رویِ کدِ هگز (Qt در QSS این را #AARRGGBB می‌خواند، نه
-    #RRGGBBAA مثلِ CSS، پس نتیجه‌اش رنگِ کاملاً غلط بود)."""
-    base = QColor(color)
-    r = round(base.red() * amount + 255 * (1 - amount))
-    g = round(base.green() * amount + 255 * (1 - amount))
-    b = round(base.blue() * amount + 255 * (1 - amount))
-    return QColor(r, g, b).name()
 
 
 def field_help_is_enabled() -> bool:
@@ -74,6 +68,140 @@ def set_field_help_enabled(value: bool) -> None:
     settings.setValue(_FIELD_HELP_SETTINGS_KEY, value)
     if FieldHelpPanel._instance is not None:
         FieldHelpPanel._instance.set_enabled(value)
+
+
+class FormScreenBase(QWidget):
+    """اسکلتِ استانداردِ فرم‌هایِ ورودِ اطلاعات — بدنه‌یِ اسکرول‌شونده +
+    نوارِ دکمه‌یِ ثابتِ زیرِ آن (formFooter)، هردو داخلِ یک کارت. طبقِ
+    گزارشِ تکراریِ کاربر («فرم‌هایِ جدید اسکرول ندارن»، «دکمه‌هایِ ذخیره
+    زیرِ تسک‌بار می‌مونن»): پیش از این کلاس هر فرم این الگو را جداگانه و
+    ناقص پیاده می‌کرد (`journal_entry.py` فقط جدول را اسکرول می‌کرد نه
+    فوتر را؛ `treasury_voucher.py` اصلاً اسکرول نداشت)، و تنها نمونه‌یِ
+    درستِ الگو (`treasury_checks.py`) دستی و بدونِ کلاسِ پایه تکرار شده
+    بود. حالا هر فرمِ جدید فقط باید این کلاس را زیرکلاسی کند: بدنه در
+    self.body_layout، دکمه‌ها در self.footer_layout.
+
+    اگر این صفحه خودش داخلِ یک QScrollAreaِ دیگر (مثلِ
+    system_settings.py::_sub_tabs) قرار می‌گیرد، manages_own_scroll=True
+    به آن می‌گوید این ویجت را دوباره نپیچد — وگرنه همین فوترِ «ثابت» هم
+    دوباره قابلِ‌اسکرول‌شدن و گم‌شدن می‌شود."""
+
+    manages_own_scroll = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        wrapper = QWidget()
+        wrapper.setObjectName("card")
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(0)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._body = QWidget()
+        self.body_layout = QVBoxLayout(self._body)
+        self._scroll.setWidget(self._body)
+        wrapper_layout.addWidget(self._scroll, stretch=1)
+
+        self.footer = QWidget()
+        self.footer.setObjectName("formFooter")
+        # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها («همه‌یِ آیکن‌ها کنارِ هم، سمتِ
+        # چپِ پایینِ فرم» — نه فقط رویِ این فرم، در همه‌جا): چون کلِ اپ
+        # RTL است (setLayoutDirection در main.py)، QBoxLayout.setDirection
+        # به‌تنهایی اثری ندارد — Qt جهتِ نمایشِ QBoxLayout را از
+        # layoutDirection() خودِ ویجتِ صاحبِ آن می‌گیرد، نه از Direction
+        # enum. پس باید layoutDirection خودِ ویجتِ فوتر را صریحاً LTR کرد؛
+        # وگرنه دکمه‌ها همچنان از راست به چپ می‌چینند و ترتیبشان معکوس
+        # (و محل‌شان وابسته به کدنویسیِ هر فایل) می‌ماند.
+        self.footer.setLayoutDirection(Qt.LeftToRight)
+        self.footer_layout = QHBoxLayout(self.footer)
+        self.footer_layout.setContentsMargins(18, 12, 18, 14)
+        self.footer_layout.setSpacing(8)
+        wrapper_layout.addWidget(self.footer)
+
+        outer.addWidget(wrapper, stretch=1)
+
+    def set_footer_visible(self, visible: bool) -> None:
+        self.footer.setVisible(visible)
+
+    def set_footer_buttons(self, buttons: list[QWidget]) -> None:
+        """دکمه‌هایِ فوتر را با ترتیبِ چپ‌به‌راستِ داده‌شده جایگزین می‌کند —
+        همیشه کنارِ هم، در سمتِ چپِ فرم می‌نشینند (طبقِ قانونِ ثابتِ چیدمان)."""
+        while self.footer_layout.count():
+            item = self.footer_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().setParent(None)
+        for button in buttons:
+            self.footer_layout.addWidget(button)
+        self.footer_layout.addStretch(1)
+
+
+def wrap_scrollable(content: QWidget) -> QWidget:
+    """بدنه‌یِ یک فرم را داخلِ یک QScrollAreaِ بی‌قاب می‌پیچد، درونِ یک
+    کارتِ تمام‌عرض. برایِ صفحاتی که (برخلافِ FormScreenBase) ساختارِ
+    خودشان را حفظ می‌کنند ولی همچنان باید نوارِ دکمه‌شان بیرونِ ناحیه‌یِ
+    اسکرول‌شونده بماند تا هرگز زیرِ تسک‌بار/لبه‌یِ زیرپنجره گم نشود."""
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.NoFrame)
+    scroll.setWidget(content)
+    wrapper = QWidget()
+    wrapper.setObjectName("card")
+    wrapper_layout = QVBoxLayout(wrapper)
+    wrapper_layout.setContentsMargins(0, 0, 0, 0)
+    wrapper_layout.setSpacing(0)
+    wrapper_layout.addWidget(scroll)
+    return wrapper
+
+
+def wrap_scrollable_with_footer(content: QWidget, footer_buttons: list[QWidget]) -> QWidget:
+    """معادلِ دستیِ همان اسکلتِ FormScreenBase (بدنه‌یِ اسکرول‌شونده +
+    فوترِ ثابت، هردو داخلِ یک کارت) برایِ صفحاتی که به دلیلِ چیدمانِ
+    خاصِ خودشان (مثلاً دو-پانلیِ فهرست+فرم در companies.py/roles.py/...)
+    نمی‌توانند مستقیماً زیرکلاسِ FormScreenBase شوند. دکمه‌ها همیشه بیرونِ
+    ناحیه‌یِ اسکرول می‌مانند، پس هرگز با محتوایِ زیاد از دیدِ کاربر گم/
+    زیرِ تسک‌بار نمی‌شوند."""
+    card = QWidget()
+    card.setObjectName("card")
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(0, 0, 0, 0)
+    card_layout.setSpacing(0)
+
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.NoFrame)
+    scroll.setWidget(content)
+    card_layout.addWidget(scroll, stretch=1)
+
+    card_layout.addWidget(build_action_footer(footer_buttons))
+    return card
+
+
+def build_action_footer(buttons: list[QWidget]) -> QWidget:
+    """نوارِ دکمه‌یِ استانداردِ پایینِ فرم برایِ صفحاتی که به‌جایِ
+    زیرکلاسیِ FormScreenBase، ساختارِ چیدمانِ خودشان را حفظ می‌کنند
+    (مثلِ فهرست‌هایِ جدول‌محور یا صفحاتِ چندتبیِ ساده). دکمه‌ها به همان
+    قاعده‌یِ ثابت می‌نشینند: کنارِ هم، سمتِ چپِ پایینِ فرم. این ویجت باید
+    به‌عنوانِ آخرین آیتمِ layoutِ اصلیِ صفحه اضافه شود — بیرونِ هر
+    QScrollAreaای، نه داخلش."""
+    footer = QWidget()
+    footer.setObjectName("formFooter")
+    # طبقِ قانونِ ثابتِ چیدمانِ دکمه‌ها: باید layoutDirection خودِ ویجتِ
+    # فوتر صریحاً LTR شود (نه فقط Direction خودِ QBoxLayout) — دلیل را
+    # در FormScreenBase.__init__ ببینید.
+    footer.setLayoutDirection(Qt.LeftToRight)
+    footer_layout = QHBoxLayout(footer)
+    footer_layout.setContentsMargins(18, 12, 18, 14)
+    footer_layout.setSpacing(8)
+    for button in buttons:
+        footer_layout.addWidget(button)
+    footer_layout.addStretch(1)
+    return footer
 
 
 class JalaliDateEdit(QLineEdit):
@@ -115,6 +243,33 @@ class JalaliDateEdit(QLineEdit):
     def setDate(self, value: datetime.date) -> None:
         self._date = value
         self._refresh_text()
+
+
+class PersianDigitLineEdit(QLineEdit):
+    """فیلدِ متنیِ ساده با نمایشِ زندهٔ ارقامِ فارسی حینِ تایپ — برایِ
+    فیلدهایِ شناسه‌ای/عددی مثلِ سریال/شماره‌چک/شبا/شماره‌حساب/کدِملی/تلفن
+    که نیازی به پردازشِ عددیِ JalaliDateEdit/ZeroPaddedSpinBox ندارند، فقط
+    نمایشِ رقمِ فارسی (هم‌الگو با _on_text_edited آن دو)."""
+
+    def __init__(self, initial_text: str = "", *, placeholder: str = "") -> None:
+        super().__init__()
+        if placeholder:
+            self.setPlaceholderText(placeholder)
+        self.textEdited.connect(self._on_text_edited)
+        if initial_text:
+            self.setText(initial_text)
+
+    def _on_text_edited(self, text: str) -> None:
+        converted = numerals.to_persian_digits(numerals.to_ascii_digits(text))
+        if converted != text:
+            cursor = self.cursorPosition()
+            self.setText(converted)
+            self.setCursorPosition(cursor)
+
+    def setText(self, text: str) -> None:  # noqa: N802 — نامِ متدِ Qt
+        """طبقِ درخواستِ صریح: ارقامِ فارسی «همه‌جا» — حتی وقتی مقدارِ اولیه
+        برنامه‌ای (مثلاً بارگذاریِ چکِ ذخیره‌شده) با ارقامِ ASCII ست شود."""
+        super().setText(numerals.to_persian_digits(numerals.to_ascii_digits(text)))
 
 
 class ZeroPaddedSpinBox(QSpinBox):
@@ -434,6 +589,256 @@ class FieldHelpMixin:
             FieldHelpPanel.instance(parent).deactivate()
 
 
+@dataclass
+class FieldSpec:
+    """یک فیلدِ فرم برایِ FieldGrid — key شناسه‌یِ پایدار برایِ ذخیره‌یِ
+    چیدمان است (نه متنِ نمایشی، که ممکن است بعداً عوض شود)؛ span تعدادِ
+    ستون (از columnsِ FieldGrid) که این فیلد پیش‌فرض اشغال می‌کند."""
+
+    key: str
+    label: str
+    widget: QWidget
+    span: int = 3
+
+
+class FieldGrid(QWidget):
+    """گریدِ چندستونهٔ واکنش‌گرا برایِ چیدمانِ فیلدهایِ فرم — جایگزینِ
+    الگویِ تکراریِ «یک QLabel + یک فیلد در هر ردیفِ QVBoxLayout» که تقریباً
+    در همه‌یِ صفحه‌ها فیلدهایِ کوتاه (تلفن/کدپستی/کد) را بی‌دلیل
+    تمامِ‌عرض می‌کرد. هر FieldSpec یک spanِ پیش‌فرض دارد که نویسنده‌یِ
+    صفحه تعیین می‌کند؛ ریاضیِ ردیف/ستون همان الگویی است که قبلاً فقط در
+    treasury_voucher.py (به‌صورتِ دوتاییِ ثابت) دستی نوشته شده بود، اینجا
+    برایِ spanِ متغیر (۱ تا columns) تعمیم یافته.
+
+    برایِ پشتیبانیِ ویرایشِ چیدمان (LayoutEditMixin) بدونِ بازساختِ
+    ویجت‌ها در هر تغییر: هر فیلد یک container ثابت دارد (ساخته‌شده فقط
+    یک‌بار در __init__) که در rebuild فقط موقعیتش در QGridLayout تغییر
+    می‌کند — QLayout.addWidget رویِ ویجتی که از قبل عضوِ همان layout است،
+    فقط موقعیتش را جابه‌جا می‌کند، نه دوباره می‌سازد."""
+
+    layoutChanged = Signal()
+
+    def __init__(self, fields: list[FieldSpec], columns: int = 3, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._columns = columns
+        self._default_order: list[str] = [f.key for f in fields]
+        self._specs: dict[str, FieldSpec] = {f.key: f for f in fields}
+        self._current_span: dict[str, int] = {f.key: f.span for f in fields}
+        self._order: list[str] = list(self._default_order)
+
+        self._grid_layout = QGridLayout(self)
+        self._grid_layout.setSpacing(10)
+
+        self._containers: dict[str, QWidget] = {}
+        self._toolbars: dict[str, QWidget] = {}
+        self._span_buttons: dict[str, dict[int, QPushButton]] = {}
+        for spec in fields:
+            self._containers[spec.key] = self._build_container(spec)
+        self._rebuild()
+
+    def _build_container(self, spec: FieldSpec) -> QWidget:
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+
+        header = QHBoxLayout()
+        header.setSpacing(4)
+        if spec.label:
+            header.addWidget(QLabel(spec.label), stretch=1)
+        else:
+            # مثلاً چک‌باکس‌ها که متنِ خودشان برچسب است — بدونِ QLabelِ
+            # تکراری، فقط جایگاهِ تولبارِ ویرایش (راست‌چین) نگه داشته می‌شود.
+            header.addStretch(1)
+
+        toolbar = QWidget()
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.setSpacing(2)
+        span_buttons: dict[int, QPushButton] = {}
+        for span_value, span_label in ((1, "۱"), (2, "۲"), (3, "۳")):
+            button = QPushButton(span_label)
+            button.setCheckable(True)
+            button.setFixedSize(20, 20)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setToolTip(f"عرضِ فیلد: {span_value} از {self._columns} ستون")
+            button.clicked.connect(lambda _checked, key=spec.key, value=span_value: self._set_span(key, value))
+            toolbar_layout.addWidget(button)
+            span_buttons[span_value] = button
+        up_button = QPushButton("▲")
+        up_button.setFixedSize(20, 20)
+        up_button.setCursor(Qt.PointingHandCursor)
+        up_button.setToolTip("جابه‌جایی به بالا")
+        up_button.clicked.connect(lambda _checked=False, key=spec.key: self._move(key, -1))
+        toolbar_layout.addWidget(up_button)
+        down_button = QPushButton("▼")
+        down_button.setFixedSize(20, 20)
+        down_button.setCursor(Qt.PointingHandCursor)
+        down_button.setToolTip("جابه‌جایی به پایین")
+        down_button.clicked.connect(lambda _checked=False, key=spec.key: self._move(key, 1))
+        toolbar_layout.addWidget(down_button)
+        toolbar.setVisible(False)
+        header.addWidget(toolbar)
+        outer.addLayout(header)
+        outer.addWidget(spec.widget)
+
+        self._toolbars[spec.key] = toolbar
+        self._span_buttons[spec.key] = span_buttons
+        return container
+
+    def _rebuild(self) -> None:
+        row = 0
+        col = 0
+        for key in self._order:
+            span = max(1, min(self._columns, self._current_span[key]))
+            if col + span > self._columns:
+                row += 1
+                col = 0
+            self._grid_layout.addWidget(self._containers[key], row, col, 1, span)
+            col += span
+            if col >= self._columns:
+                row += 1
+                col = 0
+        for key, buttons in self._span_buttons.items():
+            current = self._current_span[key]
+            for span_value, button in buttons.items():
+                button.setChecked(span_value == current)
+
+    def _set_span(self, key: str, span: int) -> None:
+        self._current_span[key] = span
+        self._rebuild()
+        self.layoutChanged.emit()
+
+    def _move(self, key: str, delta: int) -> None:
+        index = self._order.index(key)
+        new_index = index + delta
+        if 0 <= new_index < len(self._order):
+            self._order[index], self._order[new_index] = self._order[new_index], self._order[index]
+            self._rebuild()
+            self.layoutChanged.emit()
+
+    def set_field_visible(self, key: str, visible: bool) -> None:
+        """پنهان/آشکارکردنِ یک فیلد بدونِ حذفش از چیدمان — برایِ فیلدهایِ
+        شرطی (مثلاً «پروژه» فقط وقتی نوعِ انبار پروژه‌ای است). اگر آن
+        فیلد تنها عضوِ ردیفِ خودش باشد (span کاملِ ردیف)، با پنهان‌شدن
+        همان ردیف هم جمع می‌شود — هم‌رفتار با project_row.setVisible
+        قبلی."""
+        self._containers[key].setVisible(visible)
+
+    def set_edit_mode(self, enabled: bool) -> None:
+        for toolbar in self._toolbars.values():
+            toolbar.setVisible(enabled)
+
+    def is_edit_mode(self) -> bool:
+        # isVisible() به دیده‌بودنِ کلِ زنجیره‌یِ اجدادِ ویجت هم وابسته است
+        # (مثلاً در تست‌هایِ آفلاین که پنجره show() نشده، همیشه False
+        # برمی‌گرداند)؛ isHidden() فقط پرچمِ صریحِ خودِ ویجت را می‌سنجد —
+        # هر تولبار (همه‌شان با هم روشن/خاموش می‌شوند) کافی‌ست برایِ تشخیص.
+        return any(not toolbar.isHidden() for toolbar in self._toolbars.values())
+
+    def current_overrides(self) -> dict[str, tuple[int, int]]:
+        """span/orderِ فعلیِ هر فیلد — برایِ ذخیره در QSettings."""
+        return {key: (self._current_span[key], index) for index, key in enumerate(self._order)}
+
+    def set_layout_overrides(self, overrides: dict[str, tuple[int, int]]) -> None:
+        """overrides: key -> (span, order). فیلدهایی که override ندارند طبقِ
+        span/ترتیبِ پیش‌فرضِ کدنویسی‌شده باقی می‌مانند؛ کلیدهایِ ناشناخته
+        (مثلاً از یک نسخهٔ قدیمی‌ترِ صفحه) بی‌سروصدا نادیده گرفته می‌شوند."""
+        for key in self._default_order:
+            span, _order = overrides.get(key, (self._specs[key].span, 0))
+            self._current_span[key] = max(1, min(self._columns, span))
+
+        def sort_key(key: str) -> tuple[int, int]:
+            default_index = self._default_order.index(key)
+            _span, order = overrides.get(key, (0, default_index))
+            return (order, default_index)
+
+        self._order = sorted(self._default_order, key=sort_key)
+        self._rebuild()
+
+    def reset_layout(self) -> None:
+        self.set_layout_overrides({})
+
+
+class LayoutEditMixin:
+    """میکسینِ اختیاریِ کلیکِ‌راست‌برایِ‌ویرایشِ‌چیدمان — هم‌الگو با
+    FieldHelpMixin (میکسینِ اختیاری که صفحه با فراخوانیِ یک متدِ ثبت،
+    آن را فعال می‌کند)، ولی چون نیازی به موقعیت‌دهیِ نسبت‌به‌پنجره‌یِ‌اصلی
+    ندارد (برخلافِ FieldHelpPanel)، ثبت بلافاصله در register_field_grids
+    انجام می‌شود، نه به‌تعویق‌افتاده تا showEvent.
+
+    استفاده: کلاسِ صفحه این را قبل از QWidget ارث ببرد و بعدِ ساختنِ
+    FieldGridهایِ خودش صدا بزند:
+        class MyScreen(LayoutEditMixin, QWidget):
+            def __init__(self):
+                super().__init__()
+                self.basic_grid = FieldGrid([...])
+                ...
+                self.register_field_grids("my_screen", [self.basic_grid, ...])
+
+    کلیکِ‌راست رویِ هر FieldGrid یک منو می‌دهد: «ویرایشِ چیدمان» (توگل)،
+    «ذخیرهٔ چیدمان»، «بازنشانیِ چیدمان». ذخیره در QSettings با کلیدِ
+    form_layout/{screen_code} به‌صورتِ یک JSONِ تخت `{field_key: [span, order]}`
+    برایِ همه‌یِ FieldGridهایِ ثبت‌شده با هم (هم‌الگو با کلیدگذاریِ
+    print_options/{title} در report_export.py) — چون هر فیلد فقط در یک
+    FieldGrid وجود دارد، ترکیب‌کردنِ همه در یک دیکشنریِ تخت مشکلی ایجاد
+    نمی‌کند (orderِ هر فیلد فقط درونِ همان FieldGridِ خودش معنا دارد).
+    این یک ترجیحِ محلیِ کاربر است (هم‌رده با تمِ رنگی/تنظیماتِ چاپ)، نه
+    داده‌یِ چندکاربره — به همین دلیل QSettings صحیح‌تر از جدولِ دیتابیس
+    است."""
+
+    _layout_edit_screen_code: str = ""
+    _layout_edit_grids: list[FieldGrid] = ()
+
+    def register_field_grids(self, screen_code: str, grids: list[FieldGrid]) -> None:
+        self._layout_edit_screen_code = screen_code
+        self._layout_edit_grids = list(grids)
+        self._apply_saved_layout()
+        for grid in grids:
+            grid.setContextMenuPolicy(Qt.CustomContextMenu)
+            grid.customContextMenuRequested.connect(lambda pos, g=grid: self._show_layout_menu(g, pos))
+
+    def _settings_key(self) -> str:
+        return f"form_layout/{self._layout_edit_screen_code}"
+
+    def _apply_saved_layout(self) -> None:
+        settings = QSettings("Peecha", "PeechaERP")
+        raw = settings.value(self._settings_key(), "")
+        if not raw:
+            return
+        try:
+            data: dict[str, list[int]] = json.loads(raw)
+        except (TypeError, ValueError):
+            return
+        overrides = {key: (int(span), int(order)) for key, (span, order) in data.items()}
+        for grid in self._layout_edit_grids:
+            grid.set_layout_overrides(overrides)
+
+    def _show_layout_menu(self, grid: FieldGrid, pos: QPoint) -> None:
+        menu = QMenu(grid)
+        toggle_action = menu.addAction("ویرایشِ چیدمان")
+        toggle_action.setCheckable(True)
+        toggle_action.setChecked(grid.is_edit_mode())
+        toggle_action.triggered.connect(lambda checked, g=grid: g.set_edit_mode(checked))
+        menu.addSeparator()
+        menu.addAction("ذخیرهٔ چیدمان", self._save_layout)
+        menu.addAction("بازنشانیِ چیدمان", self._reset_layout)
+        menu.exec(grid.mapToGlobal(pos))
+
+    def _save_layout(self) -> None:
+        merged: dict[str, tuple[int, int]] = {}
+        for grid in self._layout_edit_grids:
+            merged.update(grid.current_overrides())
+        settings = QSettings("Peecha", "PeechaERP")
+        settings.setValue(self._settings_key(), json.dumps({key: list(value) for key, value in merged.items()}))
+
+    def _reset_layout(self) -> None:
+        settings = QSettings("Peecha", "PeechaERP")
+        settings.remove(self._settings_key())
+        for grid in self._layout_edit_grids:
+            grid.reset_layout()
+
+
 class HoverButton(QPushButton):
     """QPushButton با پس‌زمینه‌یِ متحرک (fade) بینِ رنگِ عادی/هاور —
     به‌جایِ سوییچِ آنیِ QSS. طبقِ درخواستِ صریح برایِ حسِ «مدرنِ ۲۰۲۶ با
@@ -538,65 +943,88 @@ class HoverButton(QPushButton):
 
 
 class KpiCard(QFrame):
-    """کارتِ آماریِ داشبورد با آیکونِ رنگی و سایه‌ای که با هاور «بلندتر»
-    می‌شود (blur/yOffset بیشتر) — جایگزینِ کارتِ ساده‌ی متنیِ قبلی که هیچ
-    واکنشی به هاور نداشت و حسِ «فرمِ اداریِ قدیمی» می‌داد."""
+    """کارتِ آماریِ داشبورد با آیکونِ رنگی (ته‌رنگِ شیشه‌ایِ واقعی، با آلفا
+    رویِ سطحِ تیره — نه دیگر مخلوطِ دستی با سفید) و سایه‌ای که با هاور
+    «بلندتر» می‌شود (blur/yOffset بیشتر، رنگِ اکسنتِ خودِ کارت را هم کمی
+    به سایه اضافه می‌کند تا هاور حسِ برجسته‌شدنِ رنگی/شیشه‌ای بدهد، نه فقط
+    یک سایه‌یِ خنثیِ تیره‌تر)."""
 
     def __init__(self, title: str, icon: str, color: str = theme.ACCENT) -> None:
         super().__init__()
         self.setObjectName("card")
         self.setAttribute(Qt.WA_Hover, True)
-        self._color = color
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(18, 18, 18, 18)
-        outer.setSpacing(10)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(16)
 
         header = QHBoxLayout()
-        header.setSpacing(10)
+        header.setSpacing(12)
 
-        icon_badge = QLabel(icon)
-        icon_badge.setFixedSize(38, 38)
-        icon_badge.setAlignment(Qt.AlignCenter)
-        icon_badge.setStyleSheet(
-            f"background-color: {_tint(color, 0.16)}; border-radius: 12px; font-size: 17px;"
-        )
-        header.addWidget(icon_badge)
+        self._icon_badge = QLabel(icon)
+        self._icon_badge.setFixedSize(42, 42)
+        self._icon_badge.setAlignment(Qt.AlignCenter)
+        header.addWidget(self._icon_badge)
 
-        title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px; font-weight: 600;")
-        header.addWidget(title_label)
+        self._title_label = QLabel(title)
+        header.addWidget(self._title_label)
         header.addStretch(1)
         outer.addLayout(header)
 
         self.value_label = QLabel("۰")
-        self.value_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-size: 28px; font-weight: 800;")
         outer.addWidget(self.value_label)
 
+        self._shadow_color = QColor(0, 0, 0, 130)
         self._shadow = QGraphicsDropShadowEffect(self)
-        self._shadow.setBlurRadius(24)
+        self._shadow.setBlurRadius(30)
         self._shadow.setXOffset(0)
-        self._shadow.setYOffset(6)
-        self._shadow.setColor(QColor(79, 70, 229, 24))
+        self._shadow.setYOffset(8)
+        self._shadow.setColor(self._shadow_color)
         self.setGraphicsEffect(self._shadow)
 
         self._blur_animation = QPropertyAnimation(self._shadow, b"blurRadius", self)
-        self._blur_animation.setDuration(160)
+        self._blur_animation.setDuration(180)
         self._y_animation = QPropertyAnimation(self._shadow, b"yOffset", self)
-        self._y_animation.setDuration(160)
+        self._y_animation.setDuration(180)
+        self._color_animation = QPropertyAnimation(self._shadow, b"color", self)
+        self._color_animation.setDuration(180)
+
+        self.refresh_theme(color)
+
+    def refresh_theme(self, color: str | None = None) -> None:
+        """طبقِ باگِ واقعیِ کشف‌شده (سوییچِ روشن/تیره): این کارت رنگ‌هایش
+        را در __init__ به‌صورتِ inline stylesheet منجمد می‌کند — یک
+        setStyleSheet سراسریِ دوباره خودکار روشنشان نمی‌کند. صفحه‌یِ
+        داشبورد (singleton، بازسازی‌نشدنی) باید بعدِ هر سوییچِ تم این را
+        صریحاً صدا بزند (در `refresh()` خودش) تا متن/آیکون با تمِ تازه
+        هماهنگ بمانند. اگر `color` داده نشود، فقط رنگ‌هایِ خنثی (عنوان/
+        مقدار) به‌روز می‌شوند و ته‌رنگِ اکسنتِ خودِ کارت دست‌نخورده می‌ماند؛
+        اگر داده شود (مثلاً theme.CHART_TEAL که مقدارش بینِ تمِ روشن/تیره
+        فرق دارد)، ته‌رنگِ آیکون/سایه‌یِ هاور هم با آن هماهنگ می‌شود."""
+        if color is not None:
+            self._color = color
+            self._shadow_color_hover = QColor(color)
+            self._shadow_color_hover.setAlpha(70)
+        self._icon_badge.setStyleSheet(
+            f"background-color: {theme.rgba(self._color, 0.16)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.30)}; "
+            "border-radius: 13px; font-size: 18px;"
+        )
+        self._title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12.5px; font-weight: 600;")
+        self.value_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-size: 30px; font-weight: 800;")
 
     def set_value(self, value: str) -> None:
         self.value_label.setText(value)
 
     def enterEvent(self, event) -> None:  # noqa: N802
-        self._animate_shadow(38, 14)
+        self._animate_shadow(44, 16, self._shadow_color_hover)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802
-        self._animate_shadow(24, 6)
+        self._animate_shadow(30, 8, self._shadow_color)
         super().leaveEvent(event)
 
-    def _animate_shadow(self, blur: float, y_offset: float) -> None:
+    def _animate_shadow(self, blur: float, y_offset: float, color: QColor) -> None:
         self._blur_animation.stop()
         self._blur_animation.setStartValue(self._shadow.blurRadius())
         self._blur_animation.setEndValue(blur)
@@ -606,3 +1034,201 @@ class KpiCard(QFrame):
         self._y_animation.setStartValue(self._shadow.yOffset())
         self._y_animation.setEndValue(y_offset)
         self._y_animation.start()
+
+        self._color_animation.stop()
+        self._color_animation.setStartValue(self._shadow.color())
+        self._color_animation.setEndValue(color)
+        self._color_animation.start()
+
+
+# --- SummaryCard / SummaryCardBar --------------------------------------
+# کارتِ رنگیِ خلاصه — الهام‌گرفته از نمونه‌طراحیِ فرمِ دریافت/پرداختِ
+# خزانه‌داری که کاربر فرستاد (کارت‌هایِ رنگیِ جمع‌بندی بالایِ فرم، پیش از
+# جدولِ ردیف‌ها). کوچک‌تر و فشرده‌تر از KpiCardِ داشبورد است چون داخلِ یک
+# فرم می‌نشیند نه یک صفحه‌یِ مستقل، ولی از همان زبانِ بصری (کارت + ته‌رنگِ
+# شیشه‌ای + برچسب کوچک بالایِ عددِ درشت) استفاده می‌کند.
+_SUMMARY_CARD_ROLE_COLORS = {
+    "neutral": None,  # در refresh_theme با theme.ACCENT جایگزین می‌شود
+    "success": "SUCCESS",
+    "warning": "WARNING",
+    "danger": "DANGER",
+    "info": "INFO",
+}
+
+
+class SummaryCard(QFrame):
+    """کارتِ کوچکِ رنگیِ یک‌مقداره برایِ نوارِ خلاصه‌یِ بالایِ فرم‌هایِ
+    تراکنشی (مثلاً «جمعِ دریافت»، «جمعِ ردیف‌ها»، «مانده»). با
+    `set_role()` رنگش بینِ نقش‌هایِ success/warning/danger/info/neutral
+    عوض می‌شود — برایِ نمایشِ زنده‌یِ وضعیت (مثلاً مانده=۰ سبز، غیرِصفر
+    قرمز) بدونِ بازسازیِ کارت."""
+
+    def __init__(self, title: str, role: str = "neutral", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("card")
+        self._role = role
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(4)
+
+        self._title_label = QLabel(title)
+        outer.addWidget(self._title_label)
+
+        self.value_label = QLabel("۰")
+        outer.addWidget(self.value_label)
+
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(22)
+        self._shadow.setXOffset(0)
+        self._shadow.setYOffset(6)
+        self._shadow.setColor(QColor(0, 0, 0, 110))
+        self.setGraphicsEffect(self._shadow)
+
+        self.refresh_theme()
+
+    def _color(self) -> str:
+        role_attr = _SUMMARY_CARD_ROLE_COLORS.get(self._role)
+        return getattr(theme, role_attr) if role_attr else theme.ACCENT
+
+    def set_role(self, role: str) -> None:
+        self._role = role
+        self.refresh_theme()
+
+    def refresh_theme(self) -> None:
+        color = self._color()
+        self._title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11.5px; font-weight: 600;")
+        self.value_label.setStyleSheet(f"color: {color}; font-size: 21px; font-weight: 800;")
+        self.setStyleSheet(
+            f"QFrame#card {{ border: 1px solid {theme.rgba(color, 0.28)}; "
+            f"background-color: {theme.rgba(color, 0.08)}; border-radius: 12px; }}"
+        )
+
+    def set_value(self, value: str) -> None:
+        self.value_label.setText(value)
+
+
+class SummaryCardBar(QWidget):
+    """ردیفِ افقیِ چند SummaryCard، هم‌عرض و با فاصله‌یِ یکسان — برایِ
+    نمایشِ همزمانِ چند مقدارِ کلیدی (جمع، تعداد، مانده و ...) بالایِ فرم."""
+
+    def __init__(self, cards: dict[str, SummaryCard], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.cards = cards
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        for card in cards.values():
+            layout.addWidget(card, stretch=1)
+
+    def set_value(self, key: str, value: str) -> None:
+        self.cards[key].set_value(value)
+
+    def set_role(self, key: str, role: str) -> None:
+        self.cards[key].set_role(role)
+
+
+# --- SectionStepper ------------------------------------------------------
+# نوارِ گام‌نمایِ افقی — صرفاً یک راهنمایِ بصری/پیمایشی است: با کلیک رویِ
+# هر گام به بخشِ مربوطه در همان صفحه‌یِ تک‌صفحه‌ای اسکرول می‌کند، نه
+# صفحه‌بندیِ واقعی (فیلدها هرگز hide/show نمی‌شوند). این تصمیمِ عمدی است
+# تا زنجیره‌هایِ کیبورد/اعتبارسنجیِ فرم‌هایِ پیچیده (مثلِ صدورِ سندِ
+# خزانه‌داری) دست‌نخورده بمانند و فقط لایه‌یِ بصری/ناوبری اضافه شود.
+class _StepButton(QPushButton):
+    def __init__(self, number: int, label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFlat(True)
+        self._number = number
+        self._label = label
+        self.setText(f"{numerals.to_persian_digits(str(number))}   {label}")
+        self.setCheckable(False)
+        self.set_state("upcoming")
+
+    def set_state(self, state: str) -> None:
+        # state: "upcoming" | "current" | "done"
+        if state == "current":
+            bg, fg, border = theme.rgba(theme.ACCENT, 0.16), theme.ACCENT, theme.ACCENT
+            weight = 800
+        elif state == "done":
+            bg, fg, border = theme.rgba(theme.SUCCESS, 0.12), theme.SUCCESS, theme.rgba(theme.SUCCESS, 0.4)
+            weight = 700
+        else:
+            bg, fg, border = "transparent", theme.TEXT_SECONDARY, theme.BORDER
+            weight = 600
+        self.setStyleSheet(
+            f"QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border}; "
+            f"border-radius: 16px; padding: 6px 14px; font-size: 12.5px; font-weight: {weight}; }}"
+            f"QPushButton:hover {{ background-color: {theme.rgba(theme.ACCENT, 0.10)}; }}"
+        )
+
+
+class SectionStepper(QWidget):
+    """نوارِ گام‌ها: `labels` نامِ هر بخش است، به همان ترتیبی که بخش‌ها
+    در فرم ظاهر می‌شوند. `register_sections(scroll_area, section_widgets)`
+    کلیکِ هر گام را به اسکرول‌کردنِ همان بخش وصل می‌کند و هم‌زمان با
+    اسکرولِ دستیِ کاربر، گامِ جاری را زنده به‌روزرسانی می‌کند."""
+
+    stepClicked = Signal(int)
+
+    def __init__(self, labels: list[str], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._buttons: list[_StepButton] = []
+        self._current = 0
+        self._sections: list[QWidget] = []
+        self._scroll_area: QScrollArea | None = None
+        self._suppress_scroll_sync = False
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        for index, label in enumerate(labels):
+            if index > 0:
+                line = QFrame()
+                line.setFrameShape(QFrame.HLine)
+                line.setStyleSheet(f"background-color: {theme.BORDER}; max-height: 1px; border: none;")
+                layout.addWidget(line, stretch=1)
+            button = _StepButton(index + 1, label)
+            button.clicked.connect(lambda _checked=False, idx=index: self._on_step_clicked(idx))
+            self._buttons.append(button)
+            layout.addWidget(button, stretch=0)
+        layout.addStretch(0)
+        self.set_current(0)
+
+    def set_current(self, index: int) -> None:
+        self._current = index
+        for i, button in enumerate(self._buttons):
+            if i < index:
+                button.set_state("done")
+            elif i == index:
+                button.set_state("current")
+            else:
+                button.set_state("upcoming")
+
+    def register_sections(self, scroll_area: QScrollArea, sections: list[QWidget]) -> None:
+        self._scroll_area = scroll_area
+        self._sections = sections
+        scroll_area.verticalScrollBar().valueChanged.connect(self._on_scrolled)
+
+    def _on_step_clicked(self, index: int) -> None:
+        self.set_current(index)
+        self.stepClicked.emit(index)
+        if self._scroll_area is not None and index < len(self._sections):
+            # جلوگیریِ از رقابتِ رویدادِ اسکرولِ برنامه‌ای (که هم‌زمان
+            # valueChanged را شلیک می‌کند) با وضعیتِ گامی که کاربر تازه
+            # صریحاً کلیک کرده — وگرنه _on_scrolled ممکن است بلافاصله
+            # آن را رویِ محاسبه‌ی هندسیِ ناپایدار بازنویسی کند.
+            self._suppress_scroll_sync = True
+            self._scroll_area.ensureWidgetVisible(self._sections[index], 0, 0)
+            self._suppress_scroll_sync = False
+
+    def _on_scrolled(self, _value: int) -> None:
+        if not self._sections or self._scroll_area is None or self._suppress_scroll_sync:
+            return
+        viewport_top = self._scroll_area.verticalScrollBar().value()
+        current = 0
+        for i, section in enumerate(self._sections):
+            if section.y() <= viewport_top + 24:
+                current = i
+        if current != self._current:
+            self.set_current(current)

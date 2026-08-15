@@ -36,9 +36,11 @@ _CATEGORY_OPTIONS = [
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت"), ("STATISTICAL", "انتظامی")]
 _CASH_FLOW_SECTION_OPTIONS = [
     (None, "— بدونِ طبقه‌بندی —"),
-    ("OPERATING", "عملیاتی"),
-    ("INVESTING", "سرمایه‌گذاری"),
-    ("FINANCING", "تامینِ مالی"),
+    ("OPERATING", "۱. فعالیت‌هایِ عملیاتی"),
+    ("INVESTMENT_RETURNS_FINANCE_COST", "۲. بازده‌یِ سرمایه‌گذاری‌ها و سودِ پرداختیِ تامینِ مالی"),
+    ("INCOME_TAX", "۳. مالیات بر درآمد"),
+    ("INVESTING", "۴. فعالیت‌هایِ سرمایه‌گذاری"),
+    ("FINANCING", "۵. فعالیت‌هایِ تامینِ مالی"),
 ]
 _LIQUIDITY_CLASS_OPTIONS = [
     (None, "— بدونِ طبقه‌بندی —"),
@@ -46,9 +48,14 @@ _LIQUIDITY_CLASS_OPTIONS = [
     ("CURRENT_INVENTORY", "جاری (موجودی)"),
     ("NON_CURRENT", "غیرِجاری"),
 ]
+_BALANCE_SHEET_SIDE_OPTIONS = [
+    (None, "— خودکار (از رویِ دسته) —"),
+    ("RIGHT", "راست"),
+    ("LEFT", "چپ"),
+]
 
 _COLUMNS = [
-    "کد", "نام", "دسته‌یِ حساب", "نوعِ حساب", "بخشِ گردشِ نقد", "طبقه‌یِ نقدینگی", "",
+    "کد", "نام", "دسته‌یِ حساب", "نوعِ حساب", "بخشِ گردشِ نقد", "طبقه‌یِ نقدینگی", "سمتِ ترازنامه", "",
 ]
 
 
@@ -95,12 +102,12 @@ class FinancialStatementMappingScreen(QWidget):
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         # ستون‌هایِ کمبوباکس باید به‌اندازه‌یِ کافی عریض باشند، وگرنه متنِ
         # گزینه‌هایِ بلندتر (مثلِ «حقوق صاحبانِ سهام») بریده نشان داده می‌شود.
-        combo_widths = {2: 190, 3: 130, 4: 150, 5: 150}
+        combo_widths = {2: 190, 3: 130, 4: 340, 5: 150, 6: 170}
         for combo_col, width in combo_widths.items():
             self.table.setColumnWidth(combo_col, width)
             header.setSectionResizeMode(combo_col, QHeaderView.Fixed)
-        self.table.setColumnWidth(6, 90)
-        header.setSectionResizeMode(6, QHeaderView.Fixed)
+        self.table.setColumnWidth(7, 90)
+        header.setSectionResizeMode(7, QHeaderView.Fixed)
         layout.addWidget(self.table, stretch=1)
 
         self.status_label = QLabel("")
@@ -137,18 +144,41 @@ class FinancialStatementMappingScreen(QWidget):
             _fill_combo(liquidity_class_combo, _LIQUIDITY_CLASS_OPTIONS, account.liquidity_class_code)
             self.table.setCellWidget(row_index, 5, liquidity_class_combo)
 
-            save_button = QPushButton("ذخیره")
-            save_button.setObjectName("flatButton")
+            balance_sheet_side_combo = QComboBox()
+            _fill_combo(balance_sheet_side_combo, _BALANCE_SHEET_SIDE_OPTIONS, account.balance_sheet_side_code)
+            self.table.setCellWidget(row_index, 6, balance_sheet_side_combo)
+
+            # طبقِ درخواستِ صریح («دکمه‌ی ذخیره مثلِ دکمه‌هایِ روشِ دریافت/
+            # پرداخت باشد»): تا این ردیف تغییری نکرده، دکمه غیرفعال/طوسی
+            # می‌ماند؛ همین علامتِ بصری از گم‌شدنِ ذخیره‌ی یک ردیف (وقتیِ
+            # کاربر چند ردیف را با هم ویرایش می‌کند ولی فقط رویِ یکی
+            # کلیک می‌کند) جلوگیری می‌کند — چون refresh() همه‌ی کمبوها را
+            # از رویِ دیتابیس بازمی‌سازد و تغییرِ ذخیره‌نشده‌ی ردیف‌هایِ
+            # دیگر گم می‌شود.
+            save_button = QPushButton("💾")
+            save_button.setObjectName("primaryIconButton")
+            save_button.setFixedWidth(48)
+            save_button.setToolTip("ذخیره")
+            save_button.setEnabled(False)
+            # نکته‌یِ مهم: کمبوها باید با آرگومانِ پیش‌فرض به لامبدا مقیّد
+            # شوند (نه فقط با closure) — وگرنه چون همه‌یِ ردیف‌هایِ حلقه در
+            # یک اسکوپِ مشترک‌اند، دکمه‌یِ همه‌یِ ردیف‌ها به کمبوهایِ
+            # *آخرین* ردیف اشاره می‌کرد و ذخیره‌یِ هر ردیفی جز آخرین،
+            # مقادیرِ ردیفِ اشتباه را می‌نوشت — دقیقاً همان باگِ گزارش‌شده.
             save_button.clicked.connect(
-                lambda _checked=False, r=row_index: self._save_row(
-                    r, category_combo, account_type_combo, cash_flow_combo, liquidity_class_combo
+                lambda _checked=False, r=row_index, b=save_button,
+                cc=category_combo, tc=account_type_combo, fc=cash_flow_combo,
+                lc=liquidity_class_combo, sc=balance_sheet_side_combo: self._save_row(
+                    r, cc, tc, fc, lc, sc, b
                 )
             )
+            for combo in (category_combo, account_type_combo, cash_flow_combo, liquidity_class_combo, balance_sheet_side_combo):
+                combo.currentIndexChanged.connect(lambda _index, b=save_button: b.setEnabled(True))
             cell = QWidget()
             cell_layout = QHBoxLayout(cell)
             cell_layout.setContentsMargins(4, 0, 4, 0)
             cell_layout.addWidget(save_button)
-            self.table.setCellWidget(row_index, 6, cell)
+            self.table.setCellWidget(row_index, 7, cell)
 
     def _save_row(
         self,
@@ -157,6 +187,8 @@ class FinancialStatementMappingScreen(QWidget):
         account_type_combo: QComboBox,
         cash_flow_combo: QComboBox,
         liquidity_class_combo: QComboBox,
+        balance_sheet_side_combo: QComboBox,
+        save_button: QPushButton,
     ) -> None:
         company_id = self._company_id()
         if company_id is None or row_index >= len(self._rows):
@@ -175,8 +207,10 @@ class FinancialStatementMappingScreen(QWidget):
                 changed_by_user_id=session.current_user.user_id if session.current_user else None,
                 cash_flow_section_code=cash_flow_combo.currentData(),
                 liquidity_class_code=liquidity_class_combo.currentData(),
+                balance_sheet_side_code=balance_sheet_side_combo.currentData(),
             )
         except ValueError as exc:
             theme.set_status_label(self.status_label, str(exc), ok=False)
             return
+        save_button.setEnabled(False)
         theme.set_status_label(self.status_label, f"نگاشتِ حسابِ «{account.full_code}» ذخیره شد.", ok=True)

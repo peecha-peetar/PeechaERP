@@ -22,6 +22,11 @@ from peecha.ui.screens.reports_common import ReportScreenBase, code_in_range, di
 
 _ZERO = decimal.Decimal("0")
 _LEVEL_OPTIONS = [(1, "گروه"), (2, "کل"), (3, "معین"), (4, "تفصیلی")]
+# طبقِ درخواستِ صریح («وقتی تفصیلی انتخاب می‌شه بالاجبار باید یک گروهِ
+# تفصیلی را انتخاب کرد — باید طوری باشه که همه‌یِ گروه‌ها هم باشه»):
+# مقدارِ ویژه‌یِ کمبویِ نوعِ تفصیلی که یعنی «همه‌یِ گروه‌ها با هم» — صفر
+# چون dimension_type_id همیشه یک IDENTITY مثبت است، تداخلی رخ نمی‌دهد.
+_ALL_DIMENSIONS = 0
 
 
 class AccountLedgerScreen(ReportScreenBase):
@@ -41,6 +46,7 @@ class AccountLedgerScreen(ReportScreenBase):
         self.extra_filter_row.addWidget(self.dimension_label)
         self.dimension_combo = QComboBox()
         self.dimension_combo.setVisible(False)
+        self.dimension_combo.currentIndexChanged.connect(self._on_dimension_changed)
         self.extra_filter_row.addWidget(self.dimension_combo)
 
         self.back_button = QPushButton("↩ بازگشت به فهرست")
@@ -48,6 +54,18 @@ class AccountLedgerScreen(ReportScreenBase):
         self.back_button.setVisible(False)
         self.back_button.clicked.connect(self._go_back)
         self.extra_filter_row.addWidget(self.back_button)
+
+        # طبقِ آیتمِ ۴ («در هر مرحله‌ای گروه، کل، معین بشه گردشِ حساب هم
+        # دید»): دابل‌کلیک همیشه drill-down می‌کند (رفتارِ قبلی، برایِ
+        # ناوبری)؛ این دکمه، مستقل از سطح، گردشِ حسابِ همان ردیفِ
+        # انتخاب‌شده را نشان می‌دهد — برایِ گروه/کل به‌صورتِ رول‌آپِ همه‌یِ
+        # معین‌هایِ زیرمجموعه (چون سندی مستقیم رویِ آن‌ها ثبت نمی‌شود).
+        self.ledger_button = QPushButton("📖")
+        self.ledger_button.setObjectName("iconButton")
+        self.ledger_button.setFixedWidth(44)
+        self.ledger_button.setToolTip("گردشِ حسابِ ردیفِ انتخاب‌شده")
+        self.ledger_button.clicked.connect(self._show_ledger_for_selected)
+        self.extra_filter_row.addWidget(self.ledger_button)
 
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
@@ -71,6 +89,7 @@ class AccountLedgerScreen(ReportScreenBase):
         self._ledger_target: tuple[str, int, str] | None = None
         self._currency_decimal_places = 0
         self._base_currency_iso_code = ""
+        self._decimal_places_by_iso: dict[str, int] = {}
 
     def extra_filters_summary(self) -> list[tuple[str, str]]:
         parts = [("سطح", self.level_combo.currentText())]
@@ -81,6 +100,18 @@ class AccountLedgerScreen(ReportScreenBase):
     def code_range_account_level(self) -> int | None:
         return self.level_combo.currentData()
 
+    def code_range_detail_options(self) -> list[tuple[str, str]] | None:
+        company_id = self._company_id()
+        if company_id is None:
+            return []
+        dimension_type_id = self.dimension_combo.currentData()
+        if dimension_type_id is None:
+            return []
+        rows = dimensions_service.list_all_detail_accounts(company_id)
+        if dimension_type_id != _ALL_DIMENSIONS:
+            rows = [r for r in rows if r.dimension_type_id == dimension_type_id]
+        return [(r.full_code, r.name or r.code) for r in rows]
+
     def _on_level_changed(self) -> None:
         is_detail = self.level_combo.currentData() == 4
         self.dimension_label.setVisible(is_detail)
@@ -90,6 +121,10 @@ class AccountLedgerScreen(ReportScreenBase):
         if self.code_from_field.isVisibleTo(self):
             self._reload_code_range_options()
         self._reset_drill()
+
+    def _on_dimension_changed(self) -> None:
+        if self.code_from_field.isVisibleTo(self) and self.level_combo.currentData() == 4:
+            self._reload_code_range_options()
 
     def _reset_drill(self) -> None:
         self._mode = "summary"
@@ -111,6 +146,7 @@ class AccountLedgerScreen(ReportScreenBase):
         self.dimension_combo.clear()
         if company_id is None:
             return
+        self.dimension_combo.addItem("— همه‌یِ گروه‌ها —", _ALL_DIMENSIONS)
         for t in dimensions_service.list_dimension_types(company_id, include_system=True):
             if t.is_active:
                 self.dimension_combo.addItem(dimension_label(t.code), t.dimension_type_id)
@@ -120,17 +156,28 @@ class AccountLedgerScreen(ReportScreenBase):
         self._reset_drill()
         company = session.current_company
         currency = None
+        all_currencies = currencies_service.list_all_currencies()
         if company is not None:
-            currency = next(
-                (c for c in currencies_service.list_all_currencies() if c.currency_id == company.base_currency_id),
-                None,
-            )
+            currency = next((c for c in all_currencies if c.currency_id == company.base_currency_id), None)
         self._currency_decimal_places = currency.decimal_places if currency else 0
         self._base_currency_iso_code = currency.iso_code if currency else ""
+        # طبقِ گزارشِ صریح: مبلغِ ارزیِ هر ردیف باید طبقِ رقمِ اعشارِ خودِ
+        # همان ارز نمایش داده شود (نه رقمِ اعشارِ ارزِ پایه).
+        self._decimal_places_by_iso = {c.iso_code: c.decimal_places for c in all_currencies}
         super().refresh()
 
     def _fmt(self, value: decimal.Decimal) -> str:
         return numerals.format_money(value, self._currency_decimal_places, None)
+
+    def show_ledger_for_detail(self, detail_account_id: int, name: str) -> None:
+        """طبقِ آیتمِ ۹: بازکردنِ مستقیمِ گردشِ حسابِ یک تفصیلیِ مشخص —
+        بدونِ نیازِ کاربر به drill-downِ دستی (مثلاً از دکمه‌یِ «گزارشِ
+        معینِ طرفِ‌حساب» در فرمِ دریافت/پرداخت)."""
+        self._reset_drill()
+        self._mode = "ledger"
+        self._ledger_target = ("detail", detail_account_id, name)
+        self.back_button.setVisible(True)
+        self._reload()
 
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
         if row >= len(self._row_ids):
@@ -154,6 +201,19 @@ class AccountLedgerScreen(ReportScreenBase):
             self.back_button.setVisible(True)
         self._reload()
 
+    def _show_ledger_for_selected(self) -> None:
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self._row_ids) or self._mode == "ledger":
+            return
+        level = self.level_combo.currentData()
+        row_id = self._row_ids[row]
+        name = self._rows[row][1] if row < len(self._rows) else ""
+        kind = "detail" if level == 4 else ("rollup" if level in (1, 2) else "account")
+        self._ledger_target = (kind, row_id, name)
+        self._mode = "ledger"
+        self.back_button.setVisible(True)
+        self._reload()
+
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         if self._mode == "ledger" and self._ledger_target is not None:
             return self._load_ledger(company_id, date_from, date_to)
@@ -169,9 +229,19 @@ class AccountLedgerScreen(ReportScreenBase):
             dimension_type_id = self.dimension_combo.currentData()
             if dimension_type_id is None:
                 return [], [], None
-            rows = reports_service.compute_detail_balances(
-                company_id, dimension_type_id, date_from, date_to, status_filter=status_filter
-            )
+            if dimension_type_id == _ALL_DIMENSIONS:
+                rows = []
+                for t in dimensions_service.list_dimension_types(company_id, include_system=True):
+                    if t.is_active:
+                        rows.extend(
+                            reports_service.compute_detail_balances(
+                                company_id, t.dimension_type_id, date_from, date_to, status_filter=status_filter
+                            )
+                        )
+            else:
+                rows = reports_service.compute_detail_balances(
+                    company_id, dimension_type_id, date_from, date_to, status_filter=status_filter
+                )
             if self._parent_id is not None:
                 rows = [r for r in rows if r.parent_account_id == self._parent_id]
         else:
@@ -202,16 +272,32 @@ class AccountLedgerScreen(ReportScreenBase):
 
     def _load_ledger(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         kind, target_id, name = self._ledger_target
-        kwargs = {"detail_account_id": target_id} if kind == "detail" else {"account_id": target_id}
-        opening_debit, opening_credit, lines = reports_service.list_ledger_entries(
-            company_id,
-            date_from,
-            date_to,
-            status_filter=self.status_filter(),
-            cost_center_id=self.cost_center_id(),
-            document_no_filter=self.document_no(),
-            **kwargs,
-        )
+        document_no_from, document_no_to = self.document_no_range()
+        if kind == "rollup":
+            # طبقِ آیتمِ ۴: گروه/کل سندی مستقیم ندارند، پس گردشِ همه‌یِ
+            # معین‌هایِ زیرمجموعه با هم (رول‌آپ) نشان داده می‌شود.
+            opening_debit, opening_credit, lines = reports_service.list_rollup_ledger_entries(
+                company_id,
+                date_from,
+                date_to,
+                target_id,
+                status_filter=self.status_filter(),
+                cost_center_id=self.cost_center_id(),
+                document_no_from=document_no_from,
+                document_no_to=document_no_to,
+            )
+        else:
+            kwargs = {"detail_account_id": target_id} if kind == "detail" else {"account_id": target_id}
+            opening_debit, opening_credit, lines = reports_service.list_ledger_entries(
+                company_id,
+                date_from,
+                date_to,
+                status_filter=self.status_filter(),
+                cost_center_id=self.cost_center_id(),
+                document_no_from=document_no_from,
+                document_no_to=document_no_to,
+                **kwargs,
+            )
         # طبقِ درخواستِ صریح («دفترِ معین ارزی و ریالی») — دو ستونِ آخر مبلغِ
         # اصلیِ ردیف (به ارزِ خودش) + کدِ همان ارز را نشان می‌دهند؛ برایِ
         # ردیف‌هایی که با ارزِ پایه ثبت شده‌اند، این دو ستون خالی می‌مانند
@@ -230,15 +316,22 @@ class AccountLedgerScreen(ReportScreenBase):
             running_net = ln.running_debit - ln.running_credit
             is_foreign = bool(ln.currency_iso_code) and ln.currency_iso_code != self._base_currency_iso_code
             fc_amount = ln.debit_fc or ln.credit_fc
+            description = (
+                f"{ln.account_full_code} {ln.account_name} — {ln.description or '—'}"
+                if kind == "rollup"
+                else (ln.description or "—")
+            )
             table_rows.append(
                 [
                     numerals.format_jalali_date(ln.document_date),
                     str(ln.temporary_no),
-                    ln.description or "—",
+                    description,
                     self._fmt(ln.debit) if ln.debit else "",
                     self._fmt(ln.credit) if ln.credit else "",
                     self._signed(running_net),
-                    numerals.format_amount(fc_amount) if is_foreign else "",
+                    numerals.format_money(fc_amount, self._decimal_places_by_iso.get(ln.currency_iso_code, 2))
+                    if is_foreign
+                    else "",
                     ln.currency_iso_code if is_foreign else "",
                 ]
             )

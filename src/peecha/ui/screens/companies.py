@@ -26,12 +26,19 @@ from peecha.services import company_cloning
 from peecha.services import languages as languages_service
 from peecha.services import users as users_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    LayoutEditMixin,
+    PersianDigitLineEdit,
+    wrap_scrollable_with_footer,
+)
 
 _COLUMNS = ["فعال", "زبانِ پیش‌فرض", "ارزِ پایه", "نامِ نمایشی", "کد"]
 
 
-class CompaniesScreen(FieldHelpMixin, QWidget):
+class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[companies_service.CompanyRow] = []
@@ -137,7 +144,6 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(8)
@@ -146,70 +152,48 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        row = 0
-
-        grid.addWidget(QLabel("کد"), row, 0)
         self.code_field = QLineEdit()
-        grid.addWidget(self.code_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("نامِ حقوقی"), row, 0)
         self.legal_name_field = QLineEdit()
-        grid.addWidget(self.legal_name_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("نامِ نمایشی"), row, 0)
         self.display_name_field = QLineEdit()
-        grid.addWidget(self.display_name_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("ارزِ پایه"), row, 0)
         self.currency_combo = QComboBox()
-        grid.addWidget(self.currency_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("زبانِ پیش‌فرض"), row, 0)
         self.language_combo = QComboBox()
-        grid.addWidget(self.language_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("ماهِ شروعِ سالِ مالی"), row, 0)
         self.fy_month_field = QSpinBox()
         self.fy_month_field.setRange(1, 12)
         self.fy_month_field.setValue(1)
-        grid.addWidget(self.fy_month_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("روزِ شروعِ سالِ مالی"), row, 0)
         self.fy_day_field = QSpinBox()
         self.fy_day_field.setRange(1, 31)
         self.fy_day_field.setValue(1)
-        grid.addWidget(self.fy_day_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("کدِ اقتصادی"), row, 0)
-        self.economic_code_field = QLineEdit()
-        grid.addWidget(self.economic_code_field, row, 1)
-        row += 1
+        self.economic_code_field = PersianDigitLineEdit()
 
-        grid.addWidget(QLabel("شماره‌ی ثبت"), row, 0)
-        self.registration_no_field = QLineEdit()
-        grid.addWidget(self.registration_no_field, row, 1)
-        row += 1
+        self.registration_no_field = PersianDigitLineEdit()
 
-        grid.addWidget(QLabel("شناسه‌ی ملی"), row, 0)
-        self.national_id_field = QLineEdit()
-        grid.addWidget(self.national_id_field, row, 1)
-        row += 1
+        self.national_id_field = PersianDigitLineEdit()
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        grid.addWidget(self.is_active_checkbox, row, 1)
-        row += 1
 
-        layout.addLayout(grid)
+        self.basic_grid = FieldGrid([
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("legal_name", "نامِ حقوقی", self.legal_name_field, span=2),
+            FieldSpec("display_name", "نامِ نمایشی", self.display_name_field, span=2),
+            FieldSpec("currency", "ارزِ پایه", self.currency_combo, span=1),
+            FieldSpec("language", "زبانِ پیش‌فرض", self.language_combo, span=1),
+            FieldSpec("fy_month", "ماهِ شروعِ سالِ مالی", self.fy_month_field, span=1),
+            FieldSpec("fy_day", "روزِ شروعِ سالِ مالی", self.fy_day_field, span=1),
+            FieldSpec("economic_code", "کدِ اقتصادی", self.economic_code_field, span=1),
+            FieldSpec("registration_no", "شماره‌ی ثبت", self.registration_no_field, span=1),
+            FieldSpec("national_id", "شناسه‌ی ملی", self.national_id_field, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=3),
+        ])
+        layout.addWidget(self.basic_grid)
+        self.register_field_grids("companies", [self.basic_grid])
 
         # طبقِ درخواستِ صریح: امکانِ ساختن شرکتِ تازه بر اساسِ کدینگ/گروه‌هایِ
         # تفصیلیِ یک شرکتِ موجود — فقط در حالتِ «شرکتِ جدید» معنا دارد (نه
@@ -244,20 +228,20 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(48)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
+        cancel_button = QPushButton("↩️")
+        cancel_button.setObjectName("iconButton")
+        cancel_button.setFixedWidth(44)
+        cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
-        layout.addLayout(buttons)
         layout.addStretch(1)
-        return panel
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button])
 
     def refresh(self) -> None:
         self._currency_options = companies_service.list_currencies()

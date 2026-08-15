@@ -63,6 +63,8 @@ def _apply_status_filter(query, status_filter: str):
     query = query.join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id)
     if status_filter == "DRAFT_ONLY":
         return query.where(JournalEntryStatus.code == "DRAFT")
+    if status_filter == "PERMANENT_ONLY":
+        return query.where(JournalEntryStatus.code == "PERMANENT")
     return query.where(JournalEntryStatus.code != "DRAFT")  # "EXCLUDE_DRAFT"
 
 
@@ -88,6 +90,7 @@ class AccountBalanceRow:
     closing_credit: decimal.Decimal
     cash_flow_section_code: str | None = None
     liquidity_class_code: str | None = None
+    balance_sheet_side_code: str | None = None
 
 
 def _day_before(value: datetime.date | None) -> datetime.date | None:
@@ -102,6 +105,8 @@ def _raw_account_sums(
     status_filter: str,
     *,
     cost_center_id: int | None = None,
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
 ) -> dict[int, tuple[decimal.Decimal, decimal.Decimal]]:
     query = (
         select(
@@ -116,6 +121,10 @@ def _raw_account_sums(
         query = query.join(
             JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id
         ).where(JournalEntryLineDetail.detail_account_id == cost_center_id)
+    if document_no_from is not None:
+        query = query.where(JournalEntry.temporary_no >= document_no_from)
+    if document_no_to is not None:
+        query = query.where(JournalEntry.temporary_no <= document_no_to)
     if date_from is not None:
         query = query.where(JournalEntry.document_date >= date_from)
     if date_to is not None:
@@ -135,6 +144,9 @@ def _raw_detail_sums(
     date_from: datetime.date | None,
     date_to: datetime.date | None,
     status_filter: str,
+    *,
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
 ) -> dict[int, tuple[decimal.Decimal, decimal.Decimal]]:
     query = (
         select(
@@ -146,6 +158,10 @@ def _raw_detail_sums(
         .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
         .where(JournalEntry.company_id == company_id, JournalEntryLineDetail.dimension_type_id == dimension_type_id)
     )
+    if document_no_from is not None:
+        query = query.where(JournalEntry.temporary_no >= document_no_from)
+    if document_no_to is not None:
+        query = query.where(JournalEntry.temporary_no <= document_no_to)
     if date_from is not None:
         query = query.where(JournalEntry.document_date >= date_from)
     if date_to is not None:
@@ -198,6 +214,8 @@ def compute_account_balances(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
     cost_center_id: int | None = None,
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
 ) -> list[AccountBalanceRow]:
     """مانده/گردشِ همه‌یِ حساب‌ها (هر سه سطحِ گروه/کل/معین)، رول‌آپ‌شده از
     رویِ حساب‌هایِ قابلِ‌ثبتِ سند (سطحِ معین) که تنها سطحی هستند که مستقیماً
@@ -214,13 +232,27 @@ def compute_account_balances(
         )
         opening_leaf = (
             _raw_account_sums(
-                session, company_id, None, _day_before(date_from), status_filter, cost_center_id=cost_center_id
+                session,
+                company_id,
+                None,
+                _day_before(date_from),
+                status_filter,
+                cost_center_id=cost_center_id,
+                document_no_from=document_no_from,
+                document_no_to=document_no_to,
             )
             if date_from is not None
             else {}
         )
         period_leaf = _raw_account_sums(
-            session, company_id, date_from, date_to, status_filter, cost_center_id=cost_center_id
+            session,
+            company_id,
+            date_from,
+            date_to,
+            status_filter,
+            cost_center_id=cost_center_id,
+            document_no_from=document_no_from,
+            document_no_to=document_no_to,
         )
 
     opening_rolled = _rollup_sums(ids, parent_map, opening_leaf)
@@ -242,6 +274,7 @@ def compute_account_balances(
                 account_type_code=a.account_type_code,
                 cash_flow_section_code=a.cash_flow_section_code,
                 liquidity_class_code=a.liquidity_class_code,
+                balance_sheet_side_code=a.balance_sheet_side_code,
                 opening_debit=opening_debit,
                 opening_credit=opening_credit,
                 period_debit=period_debit,
@@ -260,6 +293,8 @@ def compute_detail_balances(
     date_to: datetime.date | None,
     *,
     status_filter: str = "EXCLUDE_DRAFT",
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
 ) -> list[AccountBalanceRow]:
     """معادلِ compute_account_balances ولی در سطحِ حساب‌هایِ تفصیلیِ یک
     نوع‌بُعدِ مشخص (مثلاً مشتریان یا مراکزِ هزینه)، رول‌آپ‌شده رویِ سلسله‌مراتبِ
@@ -272,11 +307,29 @@ def compute_detail_balances(
 
     with new_session() as session:
         opening_leaf = (
-            _raw_detail_sums(session, company_id, dimension_type_id, None, _day_before(date_from), status_filter)
+            _raw_detail_sums(
+                session,
+                company_id,
+                dimension_type_id,
+                None,
+                _day_before(date_from),
+                status_filter,
+                document_no_from=document_no_from,
+                document_no_to=document_no_to,
+            )
             if date_from is not None
             else {}
         )
-        period_leaf = _raw_detail_sums(session, company_id, dimension_type_id, date_from, date_to, status_filter)
+        period_leaf = _raw_detail_sums(
+            session,
+            company_id,
+            dimension_type_id,
+            date_from,
+            date_to,
+            status_filter,
+            document_no_from=document_no_from,
+            document_no_to=document_no_to,
+        )
 
     opening_rolled = _rollup_sums(ids, parent_map, opening_leaf)
     period_rolled = _rollup_sums(ids, parent_map, period_leaf)
@@ -307,6 +360,100 @@ def compute_detail_balances(
 
 
 @dataclass
+class DetailAccountBreakdownRow:
+    """طبقِ درخواستِ صریح («تراز تفصیلی را در سطحِ معین/کل/گروه هم به‌تفکیک
+    بگیریم که تفصیلی در چه حساب‌هایی گردش داشته») — یک ردیف یعنی یک
+    حسابِ تفصیلی در یک حسابِ کدینگیِ مشخص (در سطحِ خواسته‌شده) چقدر گردش
+    داشته. برخلافِ AccountBalanceRow، این گزارش «گردش» است نه «مانده»
+    (بدونِ مانده‌یِ اول/آخر) چون هدف نشان‌دادنِ محلِ گردش است، نه ماندگی."""
+
+    detail_full_code: str
+    detail_name: str
+    account_full_code: str
+    account_name: str
+    debit: decimal.Decimal
+    credit: decimal.Decimal
+
+
+def compute_detail_account_breakdown(
+    company_id: int,
+    dimension_type_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    *,
+    gl_level: int = 3,
+    status_filter: str = "EXCLUDE_DRAFT",
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
+) -> list[DetailAccountBreakdownRow]:
+    accounts_by_id = {a.account_id: a for a in coa_service.list_accounts(company_id)}
+
+    def ancestor_at_level(account_id: int) -> int | None:
+        current = accounts_by_id.get(account_id)
+        while current is not None and current.account_level > gl_level:
+            current = accounts_by_id.get(current.parent_account_id)
+        return current.account_id if current is not None and current.account_level == gl_level else None
+
+    detail_rows = {
+        r.detail_account_id: r
+        for r in dimensions_service.list_all_detail_accounts(company_id)
+        if r.dimension_type_id == dimension_type_id
+    }
+
+    with new_session() as session:
+        query = (
+            select(
+                JournalEntryLineDetail.detail_account_id,
+                JournalEntryLine.account_id,
+                func.coalesce(func.sum(JournalEntryLine.debit_amount_base), 0),
+                func.coalesce(func.sum(JournalEntryLine.credit_amount_base), 0),
+            )
+            .join(JournalEntryLine, JournalEntryLine.line_id == JournalEntryLineDetail.line_id)
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .where(JournalEntry.company_id == company_id, JournalEntryLineDetail.dimension_type_id == dimension_type_id)
+        )
+        if document_no_from is not None:
+            query = query.where(JournalEntry.temporary_no >= document_no_from)
+        if document_no_to is not None:
+            query = query.where(JournalEntry.temporary_no <= document_no_to)
+        if date_from is not None:
+            query = query.where(JournalEntry.document_date >= date_from)
+        if date_to is not None:
+            query = query.where(JournalEntry.document_date <= date_to)
+        query = _apply_status_filter(query, status_filter)
+        query = query.group_by(JournalEntryLineDetail.detail_account_id, JournalEntryLine.account_id)
+        raw = session.execute(query).all()
+
+    combined: dict[tuple[int, int], tuple[decimal.Decimal, decimal.Decimal]] = {}
+    for detail_account_id, account_id, debit, credit in raw:
+        if detail_account_id not in detail_rows:
+            continue
+        gl_id = ancestor_at_level(account_id)
+        if gl_id is None:
+            continue
+        key = (detail_account_id, gl_id)
+        d, c = combined.get(key, (_ZERO, _ZERO))
+        combined[key] = (d + decimal.Decimal(debit), c + decimal.Decimal(credit))
+
+    rows: list[DetailAccountBreakdownRow] = []
+    for (detail_account_id, gl_id), (debit, credit) in combined.items():
+        detail_row = detail_rows[detail_account_id]
+        gl_account = accounts_by_id[gl_id]
+        rows.append(
+            DetailAccountBreakdownRow(
+                detail_full_code=detail_row.full_code,
+                detail_name=detail_row.name or "",
+                account_full_code=gl_account.full_code,
+                account_name=gl_account.name,
+                debit=debit,
+                credit=credit,
+            )
+        )
+    rows.sort(key=lambda r: (r.detail_full_code, r.account_full_code))
+    return rows
+
+
+@dataclass
 class JournalBookLineRow:
     document_date: datetime.date
     temporary_no: int
@@ -315,6 +462,14 @@ class JournalBookLineRow:
     account_name: str
     debit: decimal.Decimal
     credit: decimal.Decimal
+    # طبقِ درخواستِ صریح («دفترِ روزنامه نامِ حسابِ تفصیلی و مرکزِ هزینه و
+    # پروژه را هم نشان دهد»): مرکزِ هزینه/پروژه ستونِ اختصاصیِ خودشان
+    # دارند (هم‌الگو با ستون‌بندیِ journal_entry.py)؛ بقیه‌یِ بُعدهایِ
+    # ردیف (تفصیلیِ شخص، بانک، کالا، گروه‌هایِ سفارشی، ...) در یک ستونِ
+    # واحدِ «تفصیلی» با کاما جمع می‌شوند.
+    detail_name: str
+    cost_center_name: str
+    project_name: str
 
 
 def list_journal_book_lines(
@@ -324,7 +479,8 @@ def list_journal_book_lines(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
     cost_center_id: int | None = None,
-    document_no_filter: int | None = None,
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
 ) -> list[JournalBookLineRow]:
     """دفترِ روزنامه: ردیف‌هایِ سند+سطر به‌ترتیبِ تاریخ/شماره/شماره‌یِ ردیف —
     برایِ تحریرِ دفاترِ قانونی."""
@@ -339,8 +495,10 @@ def list_journal_book_lines(
             query = query.join(
                 JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id
             ).where(JournalEntryLineDetail.detail_account_id == cost_center_id)
-        if document_no_filter is not None:
-            query = query.where(JournalEntry.temporary_no == document_no_filter)
+        if document_no_from is not None:
+            query = query.where(JournalEntry.temporary_no >= document_no_from)
+        if document_no_to is not None:
+            query = query.where(JournalEntry.temporary_no <= document_no_to)
         if date_from is not None:
             query = query.where(JournalEntry.document_date >= date_from)
         if date_to is not None:
@@ -349,9 +507,38 @@ def list_journal_book_lines(
         query = query.order_by(JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no)
         rows = session.execute(query).all()
 
+        # طبقِ درخواستِ صریح: تفصیلی/مرکزِهزینه/پروژه‌یِ هر ردیف هم نمایش
+        # داده شود — مرکزِهزینه/پروژه ستونِ اختصاصیِ خودشان دارند، بقیه‌ی
+        # بُعدها (تفصیلیِ شخص، بانک، کالا، ...) در یک ستونِ «تفصیلی» جمع می‌شوند.
+        line_ids = [line.line_id for line, _d, _n, _desc in rows]
+        details_by_line: dict[int, list[tuple[int, int]]] = {}
+        if line_ids:
+            detail_rows = session.execute(
+                select(JournalEntryLineDetail).where(JournalEntryLineDetail.line_id.in_(line_ids))
+            ).scalars()
+            for d in detail_rows:
+                details_by_line.setdefault(d.line_id, []).append((d.dimension_type_id, d.detail_account_id))
+
+    detail_names_by_id = {d.detail_account_id: (d.name or d.code) for d in dimensions_service.list_all_detail_accounts(company_id)}
+    cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
+    project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+
     result: list[JournalBookLineRow] = []
     for line, document_date, temporary_no, entry_description in rows:
         account = accounts_by_id.get(line.account_id)
+        cost_center_name = ""
+        project_name = ""
+        other_names: list[str] = []
+        for dimension_type_id, detail_account_id in details_by_line.get(line.line_id, []):
+            name = detail_names_by_id.get(detail_account_id)
+            if not name:
+                continue
+            if dimension_type_id == cost_center_type_id:
+                cost_center_name = name
+            elif dimension_type_id == project_type_id:
+                project_name = name
+            else:
+                other_names.append(name)
         result.append(
             JournalBookLineRow(
                 document_date=document_date,
@@ -361,6 +548,9 @@ def list_journal_book_lines(
                 account_name=account.name if account else "",
                 debit=line.debit_amount_base,
                 credit=line.credit_amount_base,
+                detail_name="، ".join(other_names),
+                cost_center_name=cost_center_name,
+                project_name=project_name,
             )
         )
     return result
@@ -382,6 +572,12 @@ class LedgerLineRow:
     currency_iso_code: str
     debit_fc: decimal.Decimal
     credit_fc: decimal.Decimal
+    # طبقِ آیتمِ ۴ («در هر مرحله‌ای گروه/کل/معین بشه گردشِ حساب هم دید»):
+    # این دو فیلد فقط در list_rollup_ledger_entries پر می‌شوند (چونِ آن‌جا
+    # هر ردیف ممکن است متعلق به یک معینِ متفاوتِ زیرِ همان گروه/کل باشد)؛
+    # برایِ list_ledger_entریesِ تک‌حسابی همیشه خالی می‌مانند (بی‌اثر).
+    account_full_code: str = ""
+    account_name: str = ""
 
 
 def list_ledger_entries(
@@ -393,7 +589,8 @@ def list_ledger_entries(
     detail_account_id: int | None = None,
     status_filter: str = "EXCLUDE_DRAFT",
     cost_center_id: int | None = None,
-    document_no_filter: int | None = None,
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
 ) -> tuple[decimal.Decimal, decimal.Decimal, list[LedgerLineRow]]:
     """گردشِ زمانیِ یک حسابِ کدینگیِ مشخص (account_id) یا یک حسابِ تفصیلیِ
     مشخص (detail_account_id)، با مانده‌یِ رواگرد — برایِ دفترِ کل/معین/تفصیلی
@@ -444,8 +641,10 @@ def list_ledger_entries(
                 JournalEntryLineDetail.detail_account_id == cost_center_id
             )
             line_query = line_query.where(JournalEntryLine.line_id.in_(cc_alias))
-        if document_no_filter is not None:
-            line_query = line_query.where(JournalEntry.temporary_no == document_no_filter)
+        if document_no_from is not None:
+            line_query = line_query.where(JournalEntry.temporary_no >= document_no_from)
+        if document_no_to is not None:
+            line_query = line_query.where(JournalEntry.temporary_no <= document_no_to)
         if date_from is not None:
             line_query = line_query.where(JournalEntry.document_date >= date_from)
         if date_to is not None:
@@ -474,6 +673,109 @@ def list_ledger_entries(
                 currency_iso_code=currency_codes.get(line.currency_id, ""),
                 debit_fc=line.debit_amount_fc,
                 credit_fc=line.credit_amount_fc,
+            )
+        )
+    return opening_debit, opening_credit, result
+
+
+def list_rollup_ledger_entries(
+    company_id: int,
+    date_from: datetime.date | None,
+    date_to: datetime.date | None,
+    group_account_id: int,
+    *,
+    status_filter: str = "EXCLUDE_DRAFT",
+    cost_center_id: int | None = None,
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
+) -> tuple[decimal.Decimal, decimal.Decimal, list[LedgerLineRow]]:
+    """طبقِ آیتمِ ۴ («در هر مرحله‌ای گروه/کل بشه گردشِ حساب هم دید») —
+    چون هیچ سندی مستقیم رویِ حسابِ گروه/کل (غیرِقابلِ‌ثبت) نمی‌رود، این
+    گردشِ «رول‌آپ‌شده»یِ همه‌یِ معین‌هایِ زیرمجموعه‌یِ آن گروه/کل است (کاربر
+    این رفتار را طبقِ پرسشِ روشن‌سازی تایید کرد): ردیف‌هایِ همه‌یِ آن
+    معین‌ها با هم، به‌ترتیبِ تاریخ، در یک گردشِ واحد ترکیب می‌شوند؛ نامِ
+    حسابِ هر ردیف هم (چون از چند معینِ متفاوت می‌آید) نمایش داده می‌شود."""
+    accounts = coa_service.list_accounts(company_id)
+    accounts_by_id = {a.account_id: a for a in accounts}
+    group_account = accounts_by_id.get(group_account_id)
+    if group_account is None:
+        raise ValueError("حساب نامعتبر است.")
+    prefix = group_account.full_code + "-"
+    descendant_ids = [
+        a.account_id for a in accounts
+        if a.full_code == group_account.full_code or a.full_code.startswith(prefix)
+    ]
+
+    with new_session() as session:
+        opening_debit, opening_credit = _ZERO, _ZERO
+        if date_from is not None:
+            opening_query = (
+                select(
+                    func.coalesce(func.sum(JournalEntryLine.debit_amount_base), 0),
+                    func.coalesce(func.sum(JournalEntryLine.credit_amount_base), 0),
+                )
+                .select_from(JournalEntryLine)
+                .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+                .where(
+                    JournalEntry.company_id == company_id,
+                    JournalEntry.document_date < date_from,
+                    JournalEntryLine.account_id.in_(descendant_ids),
+                )
+            )
+            if cost_center_id is not None:
+                cc_alias = select(JournalEntryLineDetail.line_id).where(
+                    JournalEntryLineDetail.detail_account_id == cost_center_id
+                )
+                opening_query = opening_query.where(JournalEntryLine.line_id.in_(cc_alias))
+            opening_query = _apply_status_filter(opening_query, status_filter)
+            debit_sum, credit_sum = session.execute(opening_query).one()
+            opening_debit, opening_credit = decimal.Decimal(debit_sum), decimal.Decimal(credit_sum)
+
+        line_query = (
+            select(JournalEntryLine, JournalEntry.document_date, JournalEntry.temporary_no, JournalEntry.description)
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .where(JournalEntry.company_id == company_id, JournalEntryLine.account_id.in_(descendant_ids))
+        )
+        if cost_center_id is not None:
+            cc_alias = select(JournalEntryLineDetail.line_id).where(
+                JournalEntryLineDetail.detail_account_id == cost_center_id
+            )
+            line_query = line_query.where(JournalEntryLine.line_id.in_(cc_alias))
+        if document_no_from is not None:
+            line_query = line_query.where(JournalEntry.temporary_no >= document_no_from)
+        if document_no_to is not None:
+            line_query = line_query.where(JournalEntry.temporary_no <= document_no_to)
+        if date_from is not None:
+            line_query = line_query.where(JournalEntry.document_date >= date_from)
+        if date_to is not None:
+            line_query = line_query.where(JournalEntry.document_date <= date_to)
+        line_query = _apply_status_filter(line_query, status_filter)
+        line_query = line_query.order_by(
+            JournalEntry.document_date, JournalEntry.temporary_no, JournalEntryLine.line_no
+        )
+        rows = session.execute(line_query).all()
+        currency_codes = dict(session.execute(select(Currency.currency_id, Currency.iso_code)).all())
+
+    running_debit, running_credit = opening_debit, opening_credit
+    result: list[LedgerLineRow] = []
+    for line, document_date, temporary_no, entry_description in rows:
+        running_debit += line.debit_amount_base
+        running_credit += line.credit_amount_base
+        account = accounts_by_id.get(line.account_id)
+        result.append(
+            LedgerLineRow(
+                document_date=document_date,
+                temporary_no=temporary_no,
+                description=line.description or entry_description or "",
+                debit=line.debit_amount_base,
+                credit=line.credit_amount_base,
+                running_debit=running_debit,
+                running_credit=running_credit,
+                currency_iso_code=currency_codes.get(line.currency_id, ""),
+                debit_fc=line.debit_amount_fc,
+                credit_fc=line.credit_amount_fc,
+                account_full_code=account.full_code if account else "",
+                account_name=account.name if account else "",
             )
         )
     return opening_debit, opening_credit, result
@@ -611,7 +913,12 @@ class BalanceSheetRow:
     full_code: str
     name: str
     category_code: str  # ASSET | LIABILITY | EQUITY
+    side_code: str  # RIGHT | LEFT — طبقِ درخواستِ صریح، برایِ چیدمانِ دوستونیِ ترازنامه
     balance: decimal.Decimal
+    # طبقِ آیتمِ ۲ («ترازنامه به ترتیبِ گروهِ حساب‌ها، با کدهایِ کلِ زیرِ هر
+    # گروه و جمعِ کلِ هر گروه بیاید»): برایِ گروه‌بندیِ ردیف‌هایِ کل (سطحِ ۲)
+    # زیرِ گروهِ (سطحِ ۱) خودشان لازم است.
+    parent_account_id: int | None = None
 
 
 @dataclass
@@ -623,6 +930,15 @@ class BalanceSheetResult:
     total_liabilities: decimal.Decimal
     total_equity: decimal.Decimal
     accumulated_earnings: decimal.Decimal
+
+
+def _balance_sheet_side(r: "AccountBalanceRow") -> str:
+    """اگرکاربر در تنظیماتِ گروه صریحاً سمت را مشخص کرده باشد همان اعمال
+    می‌شود؛ وگرنه طبقِ قراردادِ کلاسیک از رویِ دسته‌یِ حساب تعیین می‌شود
+    (دارایی=راست، بدهی/حقوقِ‌صاحبانِ‌سهام=چپ)."""
+    if r.balance_sheet_side_code in ("RIGHT", "LEFT"):
+        return r.balance_sheet_side_code
+    return "RIGHT" if r.category_code == "ASSET" else "LEFT"
 
 
 def compute_balance_sheet(
@@ -648,19 +964,25 @@ def compute_balance_sheet(
     total_assets = total_liabilities = total_equity = _ZERO
 
     for r in balances:
-        if r.account_type_code != "PERMANENT" or r.account_level != 2:
+        if r.account_level != 2:
             continue
+        # طبقِ آیتمِ ۲ («ترازنامه چیزِ اضافه نداشته باشد»): حساب‌هایِ آماری
+        # (انتظامی) جزوِ ترازنامه‌ی استاندارد نیستند و اصلاً نمایش داده
+        # نمی‌شوند — فقط PERMANENT.
+        if r.account_type_code != "PERMANENT":
+            continue
+        side = _balance_sheet_side(r)
         if r.category_code == "ASSET":
             balance = r.closing_debit - r.closing_credit
-            asset_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, balance))
+            asset_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, side, balance, r.parent_account_id))
             total_assets += balance
         elif r.category_code == "LIABILITY":
             balance = r.closing_credit - r.closing_debit
-            liability_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, balance))
+            liability_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, side, balance, r.parent_account_id))
             total_liabilities += balance
         elif r.category_code == "EQUITY":
             balance = r.closing_credit - r.closing_debit
-            equity_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, balance))
+            equity_rows.append(BalanceSheetRow(r.full_code, r.name, r.category_code, side, balance, r.parent_account_id))
             total_equity += balance
 
     accumulated_earnings = _net_income(company_id, None, as_of_date, status_filter)
@@ -694,7 +1016,8 @@ def compute_cash_flow_direct(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
     cost_center_id: int | None = None,
-    document_no_filter: int | None = None,
+    document_no_from: int | None = None,
+    document_no_to: int | None = None,
 ) -> tuple[decimal.Decimal, list[CashFlowLineRow]]:
     """صورتِ گردشِ وجوهِ نقد به روشِ مستقیم — از رویِ حساب‌هایِ نیازمندِ بُعدِ
     صندوق/بانک: دریافت=بدهکار، پرداخت=بستانکار، شرح از طرفِ مقابلِ سند.
@@ -762,8 +1085,10 @@ def compute_cash_flow_direct(
                     JournalEntryLineDetail.detail_account_id == cost_center_id
                 )
                 line_query = line_query.where(JournalEntryLine.line_id.in_(cc_alias))
-            if document_no_filter is not None:
-                line_query = line_query.where(JournalEntry.temporary_no == document_no_filter)
+            if document_no_from is not None:
+                line_query = line_query.where(JournalEntry.temporary_no >= document_no_from)
+            if document_no_to is not None:
+                line_query = line_query.where(JournalEntry.temporary_no <= document_no_to)
             if date_from is not None:
                 line_query = line_query.where(JournalEntry.document_date >= date_from)
             if date_to is not None:
@@ -811,9 +1136,19 @@ class CashFlowIndirectSectionRow:
 
 @dataclass
 class CashFlowIndirectResult:
+    """طبقِ آیتمِ ۵ («صورتِ وجوهِ نقد استاندارد نیست») و پاسخِ تاییدشده‌یِ
+    کاربر: پنج طبقه‌یِ استانداردِ حسابداریِ ایران (استانداردِ شماره‌یِ ۲)،
+    به‌جایِ سه‌بخشیِ ساده‌شده‌یِ قبلی — به همین ترتیب: عملیاتی، بازده‌یِ
+    سرمایه‌گذاری‌ها و سودِ پرداختیِ تامینِ مالی، مالیات بر درآمد،
+    سرمایه‌گذاری، تامینِ مالی."""
+
     net_income: decimal.Decimal
     operating_rows: list[CashFlowIndirectSectionRow]
     net_operating: decimal.Decimal
+    investment_returns_rows: list[CashFlowIndirectSectionRow]
+    net_investment_returns: decimal.Decimal
+    income_tax_rows: list[CashFlowIndirectSectionRow]
+    net_income_tax: decimal.Decimal
     investing_rows: list[CashFlowIndirectSectionRow]
     net_investing: decimal.Decimal
     financing_rows: list[CashFlowIndirectSectionRow]
@@ -828,21 +1163,26 @@ def compute_cash_flow_indirect(
     *,
     status_filter: str = "EXCLUDE_DRAFT",
 ) -> CashFlowIndirectResult:
-    """صورتِ گردشِ وجوهِ نقد به روشِ غیرمستقیم — از سودِ خالص شروع می‌شود و
-    با تغییرِ حساب‌هایِ ترازنامه‌ایِ برچسب‌خورده با یک بخشِ وجوهِ نقد
-    (acc.cash_flow_sections، از `financial_statement_mapping.py` تنظیم
-    می‌شود) تعدیل می‌کند. حساب‌هایِ بدونِ برچسب (از‌جمله خودِ صندوق/بانک،
-    که مبنایِ نقد است نه یک تغییرِ نقدی) نادیده گرفته می‌شوند.
+    """صورتِ گردشِ وجوهِ نقد به روشِ غیرمستقیم، در پنج طبقه‌یِ استانداردِ
+    ایران — از سودِ خالص شروع می‌شود و با تغییرِ حساب‌هایِ ترازنامه‌ایِ
+    برچسب‌خورده با یک بخشِ وجوهِ نقد (acc.cash_flow_sections، از
+    `financial_statement_mapping.py` تنظیم می‌شود) تعدیل می‌کند.
+    حساب‌هایِ بدونِ برچسب (از‌جمله خودِ صندوق/بانک، که مبنایِ نقد است نه
+    یک تغییرِ نقدی) نادیده گرفته می‌شوند.
 
-    قراردادِ علامت (هرسه بخش با همین قاعده): افزایشِ بدهی/حقوقِ صاحبانِ
+    قراردادِ علامت (هر پنج بخش با همین قاعده): افزایشِ بدهی/حقوقِ صاحبانِ
     سهام = ورودِ نقد (+)، افزایشِ دارایی = خروجِ نقد (-)."""
     net_income = _net_income(company_id, date_from, date_to, status_filter)
     balances = compute_account_balances(company_id, date_from, date_to, status_filter=status_filter)
 
     operating_rows: list[CashFlowIndirectSectionRow] = []
+    investment_returns_rows: list[CashFlowIndirectSectionRow] = []
+    income_tax_rows: list[CashFlowIndirectSectionRow] = []
     investing_rows: list[CashFlowIndirectSectionRow] = []
     financing_rows: list[CashFlowIndirectSectionRow] = []
     net_operating = net_income
+    net_investment_returns = _ZERO
+    net_income_tax = _ZERO
     net_investing = _ZERO
     net_financing = _ZERO
 
@@ -861,6 +1201,12 @@ def compute_cash_flow_indirect(
         if r.cash_flow_section_code == "OPERATING":
             operating_rows.append(row)
             net_operating += amount
+        elif r.cash_flow_section_code == "INVESTMENT_RETURNS_FINANCE_COST":
+            investment_returns_rows.append(row)
+            net_investment_returns += amount
+        elif r.cash_flow_section_code == "INCOME_TAX":
+            income_tax_rows.append(row)
+            net_income_tax += amount
         elif r.cash_flow_section_code == "INVESTING":
             investing_rows.append(row)
             net_investing += amount
@@ -872,11 +1218,15 @@ def compute_cash_flow_indirect(
         net_income=net_income,
         operating_rows=operating_rows,
         net_operating=net_operating,
+        investment_returns_rows=investment_returns_rows,
+        net_investment_returns=net_investment_returns,
+        income_tax_rows=income_tax_rows,
+        net_income_tax=net_income_tax,
         investing_rows=investing_rows,
         net_investing=net_investing,
         financing_rows=financing_rows,
         net_financing=net_financing,
-        net_change_in_cash=net_operating + net_investing + net_financing,
+        net_change_in_cash=net_operating + net_investment_returns + net_income_tax + net_investing + net_financing,
     )
 
 

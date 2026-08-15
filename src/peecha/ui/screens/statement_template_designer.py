@@ -33,7 +33,7 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import statement_templates as statement_templates_service
 from peecha.services.statement_templates import AccountRefInfo
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 _STATEMENT_TYPE_OPTIONS = [
     ("CUSTOM", "سفارشی"),
@@ -101,8 +101,10 @@ class _RefListWidget(QWidget):
         self.sign_combo.addItem("کسر (−)", -1)
         add_row.addWidget(self.sign_combo)
 
-        add_button = QPushButton("افزودن")
-        add_button.setObjectName("flatButton")
+        add_button = QPushButton("➕")
+        add_button.setObjectName("iconButton")
+        add_button.setFixedWidth(44)
+        add_button.setToolTip("افزودن")
         add_button.clicked.connect(self._on_add)
         add_row.addWidget(add_button)
         layout.addLayout(add_row)
@@ -111,8 +113,10 @@ class _RefListWidget(QWidget):
         self.list_widget.setMaximumHeight(110)
         layout.addWidget(self.list_widget)
 
-        remove_button = QPushButton("حذفِ موردِ انتخاب‌شده")
-        remove_button.setObjectName("flatButton")
+        remove_button = QPushButton("🗑️")
+        remove_button.setObjectName("dangerIconButton")
+        remove_button.setFixedWidth(44)
+        remove_button.setToolTip("حذفِ موردِ انتخاب‌شده")
         remove_button.clicked.connect(self._on_remove_selected)
         layout.addWidget(remove_button)
 
@@ -203,8 +207,10 @@ class _AccountRefListWidget(QWidget):
         self.sign_combo.addItem("جمع (+)", 1)
         self.sign_combo.addItem("کسر (−)", -1)
         add_row.addWidget(self.sign_combo)
-        add_button = QPushButton("افزودن")
-        add_button.setObjectName("flatButton")
+        add_button = QPushButton("➕")
+        add_button.setObjectName("iconButton")
+        add_button.setFixedWidth(44)
+        add_button.setToolTip("افزودن")
         add_button.clicked.connect(self._on_add)
         add_row.addWidget(add_button)
         layout.addLayout(add_row)
@@ -213,8 +219,10 @@ class _AccountRefListWidget(QWidget):
         self.list_widget.setMaximumHeight(110)
         layout.addWidget(self.list_widget)
 
-        remove_button = QPushButton("حذفِ موردِ انتخاب‌شده")
-        remove_button.setObjectName("flatButton")
+        remove_button = QPushButton("🗑️")
+        remove_button.setObjectName("dangerIconButton")
+        remove_button.setFixedWidth(44)
+        remove_button.setToolTip("حذفِ موردِ انتخاب‌شده")
         remove_button.clicked.connect(self._on_remove_selected)
         layout.addWidget(remove_button)
 
@@ -348,16 +356,23 @@ class _RowEditorDialog(QDialog):
         self.error_label.setObjectName("statusError")
         layout.addWidget(self.error_label)
 
-        buttons_row = QHBoxLayout()
-        buttons_row.addStretch(1)
-        cancel_button = QPushButton("انصراف")
+        button_cluster = QWidget()
+        button_cluster.setLayoutDirection(Qt.LeftToRight)
+        buttons_row = QHBoxLayout(button_cluster)
+        buttons_row.setContentsMargins(0, 0, 0, 0)
+        cancel_button = QPushButton("↩️")
+        cancel_button.setObjectName("iconButton")
+        cancel_button.setFixedWidth(44)
+        cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self.reject)
         buttons_row.addWidget(cancel_button)
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(48)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._on_save_clicked)
         buttons_row.addWidget(save_button)
-        layout.addLayout(buttons_row)
+        layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
 
         if existing is not None:
             index = self.row_type_combo.findData(existing.row_type)
@@ -452,8 +467,9 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
             self.new_type_combo.addItem(label, code)
         layout.addWidget(self.new_type_combo)
 
-        add_template_button = QPushButton("افزودنِ الگو")
+        add_template_button = QPushButton("➕")
         add_template_button.setObjectName("primaryButton")
+        add_template_button.setToolTip("افزودنِ الگو")
         add_template_button.clicked.connect(self._on_add_template)
         layout.addWidget(add_template_button)
 
@@ -464,14 +480,18 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         rename_row = QHBoxLayout()
         self.rename_field = QLineEdit()
         rename_row.addWidget(self.rename_field, stretch=1)
-        rename_button = QPushButton("تغییرِ نام")
-        rename_button.setObjectName("flatButton")
+        rename_button = QPushButton("✏️")
+        rename_button.setObjectName("iconButton")
+        rename_button.setFixedWidth(44)
+        rename_button.setToolTip("تغییرِ نام")
         rename_button.clicked.connect(self._on_rename_template)
         rename_row.addWidget(rename_button)
         layout.addLayout(rename_row)
 
-        delete_template_button = QPushButton("حذفِ الگو")
-        delete_template_button.setObjectName("dangerButton")
+        delete_template_button = QPushButton("🗑️")
+        delete_template_button.setObjectName("dangerIconButton")
+        delete_template_button.setFixedWidth(44)
+        delete_template_button.setToolTip("حذفِ الگو")
         delete_template_button.clicked.connect(self._on_delete_template)
         layout.addWidget(delete_template_button)
 
@@ -479,7 +499,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
-        return panel
+        return wrap_scrollable(panel)
 
     def _build_rows_panel(self) -> QWidget:
         panel = QWidget()
@@ -503,12 +523,13 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         header.setSectionResizeMode(4, QHeaderView.Fixed)
         layout.addWidget(self.rows_table, stretch=1)
 
-        add_row_button = QPushButton("افزودنِ ردیف")
+        add_row_button = QPushButton("➕")
         add_row_button.setObjectName("primaryButton")
+        add_row_button.setToolTip("افزودنِ ردیف")
         add_row_button.clicked.connect(self._on_add_row)
         layout.addWidget(add_row_button)
 
-        return panel
+        return wrap_scrollable(panel)
 
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
@@ -569,22 +590,28 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         up_button = QPushButton("▲")
         up_button.setFixedWidth(28)
         up_button.setStyleSheet("padding: 2px;")
+        up_button.setToolTip("جابه‌جایی به بالا")
         up_button.clicked.connect(lambda _checked=False, i=row_index: self._on_move_row(i, -1))
         cell_layout.addWidget(up_button)
 
         down_button = QPushButton("▼")
         down_button.setFixedWidth(28)
         down_button.setStyleSheet("padding: 2px;")
+        down_button.setToolTip("جابه‌جایی به پایین")
         down_button.clicked.connect(lambda _checked=False, i=row_index: self._on_move_row(i, 1))
         cell_layout.addWidget(down_button)
 
-        edit_button = QPushButton("ویرایش")
-        edit_button.setObjectName("flatButton")
+        edit_button = QPushButton("✏️")
+        edit_button.setObjectName("iconButton")
+        edit_button.setFixedWidth(44)
+        edit_button.setToolTip("ویرایش")
         edit_button.clicked.connect(lambda _checked=False, r=row_info: self._on_edit_row(r))
         cell_layout.addWidget(edit_button)
 
-        delete_button = QPushButton("حذف")
-        delete_button.setObjectName("dangerButton")
+        delete_button = QPushButton("🗑️")
+        delete_button.setObjectName("dangerIconButton")
+        delete_button.setFixedWidth(44)
+        delete_button.setToolTip("حذف")
         delete_button.clicked.connect(lambda _checked=False, r=row_info: self._on_delete_row(r))
         cell_layout.addWidget(delete_button)
 

@@ -50,7 +50,14 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldHelpMixin, ZeroPaddedSpinBox
 
-_FIELD_KIND_OPTIONS = [("text", "متن"), ("decimal", "عدد اعشاری"), ("date", "تاریخ"), ("boolean", "بله/خیر")]
+_FIELD_KIND_OPTIONS = [
+    ("text", "متن"),
+    ("decimal", "عدد اعشاری"),
+    ("date", "تاریخ"),
+    ("boolean", "بله/خیر"),
+    ("bank", "بانک (از فهرستِ بانک‌ها)"),
+    ("account_type", "نوعِ حساب (جاری/پس‌انداز)"),
+]
 _LEVEL_COUNT = 4
 
 _PERSON_GROUP_LIST_FUNCS = {
@@ -83,8 +90,10 @@ class _GroupFieldRowWidget(QWidget):
         self.required_checkbox = QCheckBox("اجباری")
         layout.addWidget(self.required_checkbox)
 
-        remove_button = QPushButton("حذف")
-        remove_button.setObjectName("dangerButton")
+        remove_button = QPushButton("🗑️")
+        remove_button.setObjectName("dangerIconButton")
+        remove_button.setFixedWidth(44)
+        remove_button.setToolTip("حذف")
         remove_button.clicked.connect(lambda: self._on_remove(self))
         layout.addWidget(remove_button)
 
@@ -181,8 +190,10 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.new_type_code_field = QLineEdit()
         self.new_type_code_field.setFixedWidth(160)
         header_row.addWidget(self.new_type_code_field)
-        create_button = QPushButton("افزودنِ گروه")
-        create_button.setObjectName("primaryButton")
+        create_button = QPushButton("➕")
+        create_button.setObjectName("primaryIconButton")
+        create_button.setFixedWidth(48)
+        create_button.setToolTip("افزودنِ گروه")
         create_button.clicked.connect(self._create_type)
         header_row.addWidget(create_button)
         layout.addLayout(header_row)
@@ -252,18 +263,30 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         title_row.addWidget(QLabel("عنوانِ گروه"))
         self.title_field = QLineEdit()
         title_row.addWidget(self.title_field, stretch=1)
-        save_title_button = QPushButton("ذخیره‌یِ عنوان")
-        save_title_button.setObjectName("flatButton")
+        save_title_button = QPushButton("💾")
+        save_title_button.setObjectName("iconButton")
+        save_title_button.setFixedWidth(44)
+        save_title_button.setToolTip("ذخیره‌یِ عنوان")
         save_title_button.clicked.connect(self._save_title)
         title_row.addWidget(save_title_button)
         layout.addLayout(title_row)
+
+        # طبقِ گزارشِ صریح («نشان دهد چه معین‌هایی به گروهِ هزینه/تفصیلی
+        # وصل‌اند»): فهرستِ همان معین‌هایی که این گروه را در چک‌لیستِ
+        # کدینگِ حسابداری الزامی کرده‌اند.
+        self.linked_accounts_label = QLabel("")
+        self.linked_accounts_label.setObjectName("sectionHint")
+        self.linked_accounts_label.setWordWrap(True)
+        layout.addWidget(self.linked_accounts_label)
 
         # طبقِ درخواستِ صریح: گروهِ سادهِ کاربرساخته که هیچ‌کدام از
         # حساب‌هایِ تفصیلی‌اش سند ندارند، باید کاملاً قابلِ‌حذف باشد.
         delete_row = QHBoxLayout()
         delete_row.addStretch(1)
-        self.delete_group_button = QPushButton("حذفِ کاملِ این گروه")
-        self.delete_group_button.setObjectName("dangerButton")
+        self.delete_group_button = QPushButton("🗑️")
+        self.delete_group_button.setObjectName("dangerIconButton")
+        self.delete_group_button.setFixedWidth(44)
+        self.delete_group_button.setToolTip("حذفِ کاملِ این گروه")
         self.delete_group_button.clicked.connect(self._delete_group)
         delete_row.addWidget(self.delete_group_button)
         layout.addLayout(delete_row)
@@ -277,12 +300,24 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.color_button.setFixedSize(30, 26)
         self.color_button.clicked.connect(self._pick_color)
         color_row.addWidget(self.color_button)
-        clear_color_button = QPushButton("حذفِ رنگ")
-        clear_color_button.setObjectName("flatButton")
+        clear_color_button = QPushButton("🚫")
+        clear_color_button.setObjectName("iconButton")
+        clear_color_button.setFixedWidth(44)
+        clear_color_button.setToolTip("حذفِ رنگ")
         clear_color_button.clicked.connect(self._clear_color)
         color_row.addWidget(clear_color_button)
         color_row.addStretch(1)
         layout.addLayout(color_row)
+
+        # طبقِ درخواستِ صریح: «کدام گروه(هایِ) تفصیلی = پرسنل» باید از
+        # همین صفحه‌یِ تنظیماتِ گروه‌هایِ تفصیلی کنترل شود، نه هاردکد در
+        # کد — فقط برایِ گروه‌هایِ سیستمیِ اشخاص (مشتری/تامین‌کننده/پرسنل)
+        # معنی دارد، پس فقط برایِ آن‌ها نمایان می‌شود.
+        self.is_personnel_checkbox = QCheckBox(
+            "این گروه پرسنل است (تعریفِ کارکنان از همین گروه انجام می‌شود)"
+        )
+        self.is_personnel_checkbox.toggled.connect(self._on_is_personnel_toggled)
+        layout.addWidget(self.is_personnel_checkbox)
 
         # طبقِ بازخوردِ کاربر: قبلاً «تعدادِ سطح» و «بازه‌ی سطوح» دو دکمه‌ی
         # ذخیره‌یِ جدا داشتند — کاربر با کلیک‌کردنِ فقط دکمه‌یِ کنارِ «تعدادِ
@@ -330,8 +365,10 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             self._level_widgets[level_no] = (range_from, range_to)
         layout.addLayout(levels_grid)
 
-        self.save_levels_button = QPushButton("ذخیره‌یِ تعدادِ سطح و بازه‌یِ سطوح")
-        self.save_levels_button.setObjectName("primaryButton")
+        self.save_levels_button = QPushButton("💾")
+        self.save_levels_button.setObjectName("primaryIconButton")
+        self.save_levels_button.setFixedWidth(48)
+        self.save_levels_button.setToolTip("ذخیره‌یِ تعدادِ سطح و بازه‌یِ سطوح")
         self.save_levels_button.clicked.connect(self._save_levels)
         layout.addWidget(self.save_levels_button)
 
@@ -341,13 +378,17 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         fields_widget.setLayout(self.fields_container)
         layout.addWidget(fields_widget)
 
-        add_field_button = QPushButton("+ افزودنِ فیلد")
-        add_field_button.setObjectName("flatButton")
+        add_field_button = QPushButton("➕")
+        add_field_button.setObjectName("iconButton")
+        add_field_button.setFixedWidth(44)
+        add_field_button.setToolTip("افزودنِ فیلد")
         add_field_button.clicked.connect(lambda: self._add_field_row())
         layout.addWidget(add_field_button)
 
-        save_fields_button = QPushButton("ذخیره‌ی فیلدها")
-        save_fields_button.setObjectName("primaryButton")
+        save_fields_button = QPushButton("💾")
+        save_fields_button.setObjectName("primaryIconButton")
+        save_fields_button.setFixedWidth(48)
+        save_fields_button.setToolTip("ذخیره‌ی فیلدها")
         save_fields_button.clicked.connect(self._save_fields)
         layout.addWidget(save_fields_button)
 
@@ -433,6 +474,12 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             person_group_id == 0 and dim_type is not None and dim_type.code not in dimensions_service.SPECIALIZED_DIMENSION_LABELS
         )
 
+        self.is_personnel_checkbox.setVisible(person_group_id != 0)
+        if person_group_id != 0:
+            self.is_personnel_checkbox.blockSignals(True)
+            self.is_personnel_checkbox.setChecked(dimensions_service.is_personnel_group(person_group_id))
+            self.is_personnel_checkbox.blockSignals(False)
+
         company_id = self._company_id()
         digit_config_by_level = (
             {r.level_no: r.code_length for r in dimensions_service.list_level_digit_config(company_id)}
@@ -447,8 +494,21 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.max_level_spin.blockSignals(True)
         self.max_level_spin.setValue(dimensions_service.get_group_max_level_no(dimension_type_id, person_group_id))
         self.max_level_spin.blockSignals(False)
+        self._saved_max_level_no = self.max_level_spin.value()
+        self._update_level_save_hint()
         self._load_levels()
         self._load_fields()
+
+        if company_id is not None:
+            linked = dimensions_service.list_accounts_requiring_group(
+                company_id, dimension_type_id=dimension_type_id if not person_group_id else None,
+                person_group_id=person_group_id or None,
+            )
+            self.linked_accounts_label.setText(
+                "معین‌هایِ متصل به این گروه: " + ("، ".join(linked) if linked else "هیچ‌کدام")
+            )
+        else:
+            self.linked_accounts_label.setText("")
 
         has_usage = (
             company_id is not None
@@ -474,6 +534,23 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self._apply_level_enablement(value)
         for level_no in self._level_widgets:
             self._validate_range_live(level_no)
+        self._update_level_save_hint()
+
+    def _update_level_save_hint(self) -> None:
+        # طبقِ گزارشِ صریح: تغییرِ «تعدادِ سطح» با تایپ/کلیکِ اسپین‌باکس به‌
+        # تنهایی ذخیره نمی‌شود — کاربر باید حتماً دکمه‌یِ همین بخش را هم
+        # بزند؛ قبلاً هیچ نشانه‌ای نبود که این دو از هم جدا افتاده‌اند، پس
+        # کاربر فکر می‌کرد تغییر اعمال شده درحالی‌که در سطحِ آخرِ واقعیِ
+        # ذخیره‌شده (که ممکن است خیلی بزرگ‌تر باشد) هنوز فیلدهایِ اختصاصیِ
+        # آن سطح، غلط، در سطوحِ پایین‌تر پنهان می‌ماندند.
+        unsaved = self.max_level_spin.value() != getattr(self, "_saved_max_level_no", self.max_level_spin.value())
+        self.save_levels_button.setStyleSheet(
+            f"border: 2px solid {theme.WARNING}; font-weight: bold;" if unsaved else ""
+        )
+        self.save_levels_button.setToolTip(
+            "تعدادِ سطح تغییر کرده ولی هنوز ذخیره نشده — تا این دکمه را نزنید، فیلدهایِ اختصاصیِ سطحِ آخر درست نمایش داده نمی‌شوند."
+            if unsaved else ""
+        )
 
     def _apply_level_enablement(self, max_level_no: int) -> None:
         # طبقِ درخواستِ صریح: سطوحِ فراتر از سقفِ این گروه (مثلاً سطحِ ۳/۴
@@ -519,7 +596,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         conflict = dimensions_service.check_range_conflict(
             company_id, self._selected_type_id, level_no, from_value, to_value, self._selected_person_group_id
         )
-        color = "#e53e3e" if conflict else "#38a169"
+        color = theme.DANGER if conflict else theme.SUCCESS
         style = f"border: 2px solid {color};"
         range_from.setStyleSheet(style)
         range_to.setStyleSheet(style)
@@ -566,6 +643,8 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             self._show_type_status(f"خطایِ غیرمنتظره در ذخیره‌یِ بازه‌یِ سطوح: {exc}", ok=False)
             return
         self._show_type_status("تعدادِ سطح و بازه‌یِ سطوح ذخیره شد.", ok=True)
+        self._saved_max_level_no = max_level_no
+        self._update_level_save_hint()
         for level_no in self._level_widgets:
             self._validate_range_live(level_no)
 
@@ -599,6 +678,12 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.refresh()
         self._select_type(selected_type_id, selected_person_group_id)
 
+    def _on_is_personnel_toggled(self, checked: bool) -> None:
+        if not self._selected_person_group_id:
+            return
+        dimensions_service.set_group_is_personnel(self._selected_person_group_id, checked)
+        self._show_type_status("ذخیره شد.", ok=True)
+
     def _delete_group(self) -> None:
         company_id = self._company_id()
         if company_id is None or self._selected_type_id is None:
@@ -606,7 +691,8 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         confirm = QMessageBox.question(
             self,
             "حذفِ کاملِ گروه",
-            "این گروه به‌همراهِ همه‌یِ حساب‌هایِ تفصیلی/سطوح/فیلدهایِ اختصاصی‌اش حذف شود؟ این کار قابلِ‌بازگشت نیست.",
+            "این گروه به‌همراهِ همه‌یِ حساب‌هایِ تفصیلی/سطوح/فیلدهایِ اختصاصی‌اش حذف شود؟ "
+            "الزامِ این گروه رویِ معین‌هایِ کدینگ (اگر بود) هم برداشته می‌شود. این کار قابلِ‌بازگشت نیست.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -624,7 +710,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
     # --- رنگِ گروه ---------------------------------------------------------
     def _apply_color_swatch(self, color: str | None) -> None:
         self.color_button.setStyleSheet(
-            f"background-color: {color or '#FFFFFF'}; border: 1px solid {theme.BORDER}; border-radius: 4px;"
+            f"background-color: {color or theme.SURFACE}; border: 1px solid {theme.BORDER}; border-radius: 4px;"
         )
 
     def _pick_color(self) -> None:

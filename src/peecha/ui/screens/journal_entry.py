@@ -39,7 +39,7 @@ import datetime
 import decimal
 import re
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -51,7 +51,6 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -59,7 +58,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -71,9 +69,19 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
+from peecha.services import treasury as treasury_service
 from peecha import numerals
 from peecha.ui import report_export, theme
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
+from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
+from peecha.ui.widgets import (
+    FieldHelpMixin,
+    FormScreenBase,
+    JalaliDateEdit,
+    PersianDigitLineEdit,
+    SectionStepper,
+    SummaryCard,
+    SummaryCardBar,
+)
 
 _COL_ROW_NO = 0
 _COL_ACCOUNT = 1
@@ -97,6 +105,27 @@ _STATUS_LABELS = {
 }
 
 
+class _CompleterReturnRelay(QObject):
+    """طبقِ همان ریشه‌یِ باگِ _EnterComboBox (treasury_voucher.py): وقتی
+    popupِ QCompleter بازست و Enter زده می‌شود، خودِ Qt همان کلید را برایِ
+    اعمالِ کامل‌شدنِ متن و بستنِ popup مصرف می‌کند — پس
+    lineEdit().returnPressed() هرگز امیت نمی‌شود و زنجیره‌یِ Enterِ فرم
+    (فوکوس به فیلدِ بعدی) گیر می‌کند، هرچند خودِ انتخاب (currentIndex)
+    درست اعمال شده باشد. طبقِ گزارشِ صریح («تشخیص درسته ولی از روش
+    میپره») این‌جا با یک eventFilterِ رویِ popupِ همان completer، بدونِ
+    دست‌کاریِ رفتارِ پیش‌فرضش (رویداد بلعیده نمی‌شود)، یک returnPressedِ
+    تاخیری (بعد از پردازشِ کاملِ همان کلیک) امیت می‌شود."""
+
+    def __init__(self, combo: QComboBox) -> None:
+        super().__init__(combo)
+        self._combo = combo
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 — نامِ متدِ Qt
+        if event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            QTimer.singleShot(0, self._combo.lineEdit().returnPressed.emit)
+        return False
+
+
 def _fill_options(combo: QComboBox, options: list[tuple[int, str]]) -> None:
     """پرکردنِ گزینه‌هایِ یک کمبویِ جستجوپذیرِ *موجود* — بدونِ دست‌زدن به
     handlerهایِ متصل‌شده (که فقط یک‌بار در _make_searchable_combo وصل می‌شوند)."""
@@ -108,6 +137,10 @@ def _fill_options(combo: QComboBox, options: list[tuple[int, str]]) -> None:
     completer.setCaseSensitivity(Qt.CaseInsensitive)
     completer.setFilterMode(Qt.MatchContains)
     combo.setCompleter(completer)
+    # چون _fill_options ممکن است دوباره (با گزینه‌هایِ تازه) صدا زده شود و
+    # هربار QCompleterِ تازه‌ای ساخته می‌شود، eventFilter هم باید هر بار
+    # رویِ popupِ همان completerِ تازه نصب شود — نه فقط یک‌بار در ساختِ اولیه.
+    completer.popup().installEventFilter(_CompleterReturnRelay(combo))
 
 
 def _normalize_typed_digits(combo: QComboBox, text: str) -> None:
@@ -136,21 +169,21 @@ def _clear_if_unmatched(combo: QComboBox) -> None:
     انتخاب را به حالتِ خالی برمی‌گرداند — وگرنه ممکن است یک متنِ‌ ناقص/غلط
     با یک account_id قبلی/نامعتبر همراه بماند و سند به حسابِ اشتباه ثبت شود.
 
+    باگِ ریشه‌ایِ رفع‌شده: وقتی کاربر متن را دستی کامل پاک می‌کند، متنِ
+    خالیِ حاصل دقیقاً با آیتمِ اولِ خودِ کمبو (گزینه‌یِ «— انتخاب —» با
+    متنِ خالی) یکی است — یعنی findText یک ایندکسِ معتبر (۰) پیدا می‌کند و
+    شرطِ قبلی (فقط زمانِ «پیدا نشد») هرگز setCurrentIndex(0) را صدا
+    نمی‌زد؛ در نتیجه currentIndex/currentData رویِ همان انتخابِ قبلی
+    (مثلاً یک تفصیلی) گیر می‌کرد، با اینکه فیلد ظاهراً خالی به‌نظر
+    می‌رسید — و ذخیره‌کردن، مقدارِ قدیمی را دوباره می‌نوشت. حالا همیشه
+    ایندکسِ منطبق (چه ۰ چه هر آیتمِ دیگر) صراحتاً ست می‌شود.
+
     نکته: مکان‌نما همیشه به ابتدایِ متن برمی‌گردد — وگرنه فیلد رویِ آخرِ
     متنِ تایپ‌شده اسکرول‌شده می‌ماند و شروعِ برچسبِ حساب/تفصیلی (که معمولاً
     مهم‌تر است) دیده نمی‌شود."""
-    if combo.findText(combo.currentText(), Qt.MatchExactly) < 0:
-        combo.setCurrentIndex(0)
+    matched_index = combo.findText(combo.currentText(), Qt.MatchExactly)
+    combo.setCurrentIndex(matched_index if matched_index >= 0 else 0)
     combo.lineEdit().setCursorPosition(0)
-
-
-def _excel_column_letter(index: int) -> str:
-    letters = ""
-    n = index + 1
-    while n > 0:
-        n, remainder = divmod(n - 1, 26)
-        letters = chr(65 + remainder) + letters
-    return letters
 
 
 # نامِ فیلدِ مقصد -> کلیدواژه‌هایِ فارسی برایِ حدسِ خودکارِ ستونِ متناظر از
@@ -173,73 +206,6 @@ _IMPORT_GUESS_KEYWORDS: dict[str, list[str]] = {
     "cost_center_code": ["مرکز"],
     "project_code": ["پروژه"],
 }
-
-
-class _ExcelImportMappingDialog(QDialog):
-    """طبقِ درخواستِ صریح: «فرمی باز شود از یک طرف ستون‌هایِ فایلِ اکسل و
-    از طرفِ دیگر ستون‌هایِ سند، نظیربه‌نظیر ارتباط داده شوند» — هر فیلدِ
-    مقصد یک کمبو دارد که هر ستونِ اکسل (با متنِ هدر یا حرفِ ستون) را
-    می‌توان به آن نسبت داد."""
-
-    def __init__(self, header_row: tuple, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("ایمپورتِ ردیف‌ها از اکسل — تناظرِ ستون‌ها")
-        self.setMinimumWidth(480)
-
-        self._column_labels: list[str] = []
-        for i, value in enumerate(header_row):
-            letter = _excel_column_letter(i)
-            text = str(value).strip() if value is not None else ""
-            self._column_labels.append(f"{letter}: {text}" if text else f"ستونِ {letter}")
-
-        layout = QVBoxLayout(self)
-
-        self.header_checkbox = QCheckBox("ردیفِ اولِ فایل، عنوانِ ستون‌هاست (وارد نشود)")
-        self.header_checkbox.setChecked(True)
-        layout.addWidget(self.header_checkbox)
-
-        hint = QLabel("هر ستونِ سند را به یکی از ستون‌هایِ فایلِ اکسل نسبت دهید:")
-        hint.setObjectName("sectionHint")
-        layout.addWidget(hint)
-
-        form = QFormLayout()
-        self.field_combos: dict[str, QComboBox] = {}
-        for key, label, required in _IMPORT_TARGET_FIELDS:
-            combo = QComboBox()
-            combo.addItem("— هیچ‌کدام —", None)
-            for i, col_label in enumerate(self._column_labels):
-                combo.addItem(col_label, i)
-            guessed = self._guess_column(key, header_row)
-            if guessed is not None:
-                combo.setCurrentIndex(guessed + 1)
-            form.addRow(("* " if required else "") + label + ":", combo)
-            self.field_combos[key] = combo
-        layout.addLayout(form)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def _guess_column(self, field_key: str, header_row: tuple) -> int | None:
-        keywords = _IMPORT_GUESS_KEYWORDS.get(field_key, [])
-        for i, value in enumerate(header_row):
-            text = str(value).strip() if value is not None else ""
-            if any(kw in text for kw in keywords):
-                return i
-        return None
-
-    def _on_accept(self) -> None:
-        if self.field_combos["account_code"].currentData() is None:
-            QMessageBox.warning(self, "ناقص", "باید ستونِ «کدِ حساب» مشخص شود.")
-            return
-        self.accept()
-
-    def mapping(self) -> dict[str, int | None]:
-        return {key: combo.currentData() for key, combo in self.field_combos.items()}
-
-    def skip_header_row(self) -> bool:
-        return self.header_checkbox.isChecked()
 
 
 class _AmountField(QLineEdit):
@@ -384,6 +350,10 @@ class _LineRow:
         self._screen = screen
         self._table = table
         self.account_id: int | None = None
+        # طبقِ گزارشِ صریح: شماره‌یِ ردیفِ (line_no) اصلیِ سند، فقط وقتی این
+        # ردیف از بارگذاریِ یک سندِ موجود آمده باشد (نه ردیفِ تازه) — برایِ
+        # جلوگیری از حذفِ دستیِ ردیفی که به یک چکِ خزانه‌داری وصل است.
+        self.original_line_no: int | None = None
         # ارز/نرخِ ردیف — فقط برایِ ردیف‌هایِ بارگذاری‌شده از سندِ موجود پر
         # می‌شود؛ ردیفِ تازه با None (=ارزِ پایه‌ی شرکت) ثبت می‌شود.
         self.currency_id: int | None = None
@@ -435,9 +405,10 @@ class _LineRow:
         self.credit_field.returnPressed.connect(lambda: screen.focus_next_row_after(self))
 
         self.remove_button = QPushButton("✕")
-        self.remove_button.setObjectName("dangerButton")
-        self.remove_button.setFixedWidth(34)
+        self.remove_button.setObjectName("dangerIconButton")
+        self.remove_button.setFixedWidth(44)
         self.remove_button.setStyleSheet("padding: 2px 0px;")
+        self.remove_button.setToolTip("حذفِ این ردیف")
         self.remove_button.clicked.connect(lambda: screen.remove_line(self))
 
     def _attach_description_completer(self) -> None:
@@ -713,7 +684,7 @@ _ENTRY_TYPE_NOUNS = {
 }
 
 
-class JournalEntryScreen(FieldHelpMixin, QWidget):
+class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
     def __init__(self, entry_type_code: str = "NORMAL") -> None:
         super().__init__()
         # طبقِ درخواستِ صریح («خزانه‌داری با ساختارِ بنیادیِ برنامه»): اسنادِ
@@ -744,28 +715,35 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         # ردیفِ «جاری» برایِ نوارِ خلاصه — آخرین ردیفی که فوکوس داشته.
         self._active_row: _LineRow | None = None
 
-        # طبقِ گزارشِ صریح (با اعدادِ واقعیِ فرستاده‌شده تأیید شد): قبلاً
-        # کلِ صفحه (هدر+ردیف‌ها+فوتر) در یک QScrollAreaِ واحد بود که فوتر
-        # را از دیدرس خارج می‌کرد؛ حذفِ کاملِ آن QScrollArea هم رگرسیونِ
-        # تازه‌ای ساخت (چون فونتِ فارسیِ واقعیِ کاربر بلندتر از فونتِ
-        # آزمایشیِ ماست، حداقلِ ارتفاعِ کلِ صفحه از ارتفاعِ واقعیِ
-        # صفحه‌نمایش بیشتر می‌شد و دیگر هیچ اسکرولی برایِ رسیدن به فوتر
-        # نبود). راه‌حلِ درست (هم‌راستا با فیکسِ قدیمیِ Kivyِ همین فرم):
-        # فقط کارتِ ردیف‌ها درونِ یک QScrollAreaِ اختصاصی با حداقل‌ارتفاعِ
-        # کم قرار می‌گیرد — هدر و فوتر مستقیماً در چیدمانِ اصلی و همیشه
-        # ثابت/قابلِ‌مشاهده‌اند، مستقل از اینکه فونت/صفحه‌نمایش چقدر بلند/
-        # کوتاه باشد.
-        # طبقِ گزارشِ صریح («فرمِ سند جدید فضایِ کمی برایِ ردیف‌ها دارد، چون
-        # هدر خیلی فضا اشغال کرده»): حاشیه/فاصله‌هایِ هدر/پیش‌نمایش فشرده‌تر
-        # شدند و دکمه‌ی «افزودنِ ردیف» از یک ردیفِ کاملاً جداگانه در چیدمانِ
-        # اصلی (که هم خودش هم فاصله‌یِ قبل/بعدش را از بودجه‌یِ ثابت می‌گرفت)
-        # به داخلِ خودِ کارتِ جدول منتقل شد — این‌طوری کلِ بودجه‌یِ ثابت
-        # (غیرِ stretch) کم شد و جدول (تنها ناحیه‌یِ stretch=1) فضایِ
-        # بیشتری از ارتفاعِ واقعیِ صفحه می‌گیرد.
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(16, 14, 16, 14)
-        root_layout.setSpacing(8)
-        outer = root_layout
+        # طبقِ آیتمِ ۱ (اسکرول+فوترِ ثابت، بازبینیِ راه‌حلِ قبلی): تلاشِ اول
+        # (کلِ صفحه در یک QScrollAreaِ واحد) فوتر را «داخلِ» ناحیه‌یِ
+        # اسکرول می‌گذاشت — یعنی فوتر خودش هم قابلِ‌اسکرول‌شدن/گم‌شدن بود.
+        # تلاشِ دوم (حذفِ کاملِ اسکرول، فقط جدول را جداگانه اسکرول کردن)
+        # با فونتِ آزمایشیِ ما مشکلی نداشت، ولی چون هدر/فوتر دیگر در هیچ
+        # اسکرولی نبودند، با فونتِ واقعیِ کاربر (بلندتر) یا زیرپنجره‌یِ
+        # کوچک‌تر، مجموعِ ارتفاعِ ثابتِ آن‌ها به‌تنهایی می‌توانست از
+        # ارتفاعِ زیرپنجره بیشتر شود — دقیقاً همان الگویِ باگ‌دار. راه‌حلِ
+        # نهایی روی FormScreenBase (widgets.py): هدر+پیش‌نمایش+جدول همه
+        # با هم در یک اسکرولِ واحد (self.body_layout)، و فقط فوتر بیرونِ
+        # آن، در self.footer_layout — ثابت و همیشه قابلِ‌مشاهده، چه هدر
+        # کوتاه باشد چه بلند.
+        outer = self.body_layout
+        outer.setContentsMargins(16, 14, 16, 14)
+        outer.setSpacing(8)
+
+        # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر: افزودنِ صرفاً
+        # لایه‌یِ بصری/ناوبری (اسکرول‌کردن، نه صفحه‌بندیِ واقعی) — عیناً
+        # هم‌الگو با treasury_voucher.py؛ هیچ ویجتِ موجودی جابه‌جا نمی‌شود،
+        # فقط این دو ویجتِ تازه به بالایِ فرم اضافه می‌شوند.
+        self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
+        outer.addWidget(self.step_stepper)
+
+        self.summary_cards = SummaryCardBar({
+            "debit": SummaryCard("جمعِ بدهکار", role="info"),
+            "credit": SummaryCard("جمعِ بستانکار", role="neutral"),
+            "diff": SummaryCard("اختلاف", role="success"),
+        })
+        outer.addWidget(self.summary_cards)
 
         header_card = QWidget()
         header_card.setObjectName("card")
@@ -799,7 +777,7 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         header_layout.addWidget(self.description_field, 1, 3)
 
         header_layout.addWidget(QLabel("شماره‌ی عطف"), 2, 0)
-        self.alt_number_field = QLineEdit()
+        self.alt_number_field = PersianDigitLineEdit()
         self.alt_number_field.setMaximumWidth(140)
         header_layout.addWidget(self.alt_number_field, 2, 1)
 
@@ -821,8 +799,10 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self.header_rate_field.setMaximumWidth(120)
         self.header_rate_field.editingFinished.connect(self._on_header_rate_changed)
         rate_row.addWidget(self.header_rate_field)
-        self.header_rate_fetch_button = QPushButton("🌐 خودکار")
-        self.header_rate_fetch_button.setObjectName("flatButton")
+        self.header_rate_fetch_button = QPushButton("🌐")
+        self.header_rate_fetch_button.setObjectName("iconButton")
+        self.header_rate_fetch_button.setFixedWidth(44)
+        self.header_rate_fetch_button.setToolTip("دریافتِ خودکارِ نرخِ ارز")
         self.header_rate_fetch_button.clicked.connect(self._on_fetch_header_rate)
         rate_row.addWidget(self.header_rate_fetch_button)
         header_layout.addLayout(rate_row, 3, 3)
@@ -891,14 +871,18 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         table_card_layout.setSpacing(4)
 
         table_toolbar = QHBoxLayout()
-        import_excel_button = QPushButton("📥 ایمپورتِ ردیف‌ها از اکسل")
-        import_excel_button.setObjectName("flatButton")
+        import_excel_button = QPushButton("📥")
+        import_excel_button.setObjectName("iconButton")
+        import_excel_button.setFixedWidth(44)
         import_excel_button.setMaximumHeight(28)
+        import_excel_button.setToolTip("ایمپورتِ ردیف‌ها از اکسل")
         import_excel_button.clicked.connect(self._on_import_excel)
         table_toolbar.addWidget(import_excel_button)
-        add_line_button = QPushButton("+ افزودنِ ردیف")
-        add_line_button.setObjectName("flatButton")
+        add_line_button = QPushButton("➕")
+        add_line_button.setObjectName("iconButton")
+        add_line_button.setFixedWidth(44)
         add_line_button.setMaximumHeight(28)
+        add_line_button.setToolTip("افزودنِ ردیف")
         add_line_button.clicked.connect(lambda: self.add_line())
         table_toolbar.addStretch(1)
         table_toolbar.addWidget(add_line_button)
@@ -941,69 +925,77 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         self.table.setColumnWidth(_COL_REMOVE, 40)
         table_card_layout.addWidget(self.table)
 
-        # طبقِ گزارشِ صریح (با اعدادِ واقعی تأیید شد): حذفِ کاملِ
-        # QScrollAreaِ دورِ صفحه (تلاشِ قبلی) یک رگرسیونِ تازه ساخت —
-        # چون فونتِ فارسیِ واقعی (Vazirmatn، lineSpacing≈۲۳px) بلندتر از
-        # فونتِ آزمایشیِ ماست، حداقلِ ارتفاعِ لازمِ کلِ صفحه (هدر+پیش‌نمایش+
-        # جدول+فوتر) از ارتفاعِ واقعیِ صفحه‌نمایشِ کاربر (۸۵۲px) بیشتر
-        # می‌شد و چون دیگر هیچ اسکرولی نبود، فوتر کاملاً خارج از دیدرس
-        # می‌ماند. راه‌حلِ درست (هم‌راستا با فیکسِ قدیمیِ Kivy): فقط
-        # کارتِ ردیف‌ها درونِ یک QScrollAreaِ اختصاصی با حداقل‌ارتفاعِ کم
-        # قرار می‌گیرد — این‌طوری حداقلِ ارتفاعِ کلِ صفحه هرگز به حداقلِ
-        # ارتفاعِ خودِ جدول (که می‌تواند زیاد باشد) وابسته نیست، ولی وقتی
-        # فضا کافی است (اکثرِ اوقات)، جدول با stretch=1 همان فضایِ اضافه
-        # را می‌گیرد؛ هدر و فوتر همچنان مستقیماً در چیدمانِ اصلی و همیشه
-        # قابلِ‌مشاهده‌اند.
-        table_scroll = QScrollArea()
-        table_scroll.setWidgetResizable(True)
-        table_scroll.setFrameShape(QFrame.NoFrame)
-        table_scroll.setMinimumHeight(120)
-        table_scroll.setWidget(table_card)
-        outer.addWidget(table_scroll, stretch=1)
+        # طبقِ آیتمِ ۱: جدول دیگر در یک QScrollAreaِ تودرتویِ جداگانه
+        # نیست — همینکه با stretch=1 مستقیماً در self.body_layout
+        # (که خودش تویِ اسکرولِ FormScreenBase است) قرار بگیرد، وقتی
+        # فضایِ زیرپنجره کافی باشد جدول همان فضایِ اضافه را می‌گیرد
+        # (هم‌الگو با treasury_voucher.py)، و وقتی کافی نباشد کلِ بدنه
+        # (هدر+پیش‌نمایش+جدول) با هم اسکرول می‌شود — بدونِ دو نوارِ
+        # اسکرولِ تودرتو. self.table.setMinimumHeight(160) بالاتر همان
+        # نقشِ حداقل‌ارتفاعِ قبلی را ایفا می‌کند.
+        outer.addWidget(table_card, stretch=1)
+
+        self.step_stepper.register_sections(self._scroll, [header_card, table_card])
 
         self.amount_words_label = QLabel("")
         self.amount_words_label.setObjectName("sectionHint")
         outer.addWidget(self.amount_words_label)
 
-        footer = QHBoxLayout()
+        footer = self.footer_layout
+
+        # طبقِ قانونِ ثابتِ چیدمان («همه‌یِ آیکن‌ها کنارِ هم، سمتِ چپِ
+        # پایینِ فرم»): دکمه‌ها همیشه اول اضافه می‌شوند (پس فیزیکی چپ
+        # می‌نشینند)، بعد یک stretch، و برچسب‌هایِ وضعیت/موجودی در باقیِ
+        # فضا سمتِ راست. پیش‌تر برچسب‌ها قبل از دکمه‌ها اضافه می‌شدند که
+        # با جهتِ چپ‌به‌راستِ تازه‌یِ فوتر، دکمه‌ها را به‌جایِ چپ به راست
+        # می‌راند — همین‌جا اصلاح شد.
+        new_button = QPushButton("🆕")
+        new_button.setObjectName("iconButton")
+        new_button.setFixedWidth(44)
+        new_button.setToolTip("سندِ جدید")
+        new_button.clicked.connect(lambda: self._reset_form())
+        footer.addWidget(new_button)
+
+        self.save_button = QPushButton("✔️")
+        self.save_button.setObjectName("primaryIconButton")
+        self.save_button.setFixedWidth(56)
+        self.save_button.setToolTip("ثبتِ سند")
+        self.save_button.clicked.connect(self._save)
+        footer.addWidget(self.save_button)
+
+        self.delete_button = QPushButton("🗑️")
+        self.delete_button.setObjectName("dangerIconButton")
+        self.delete_button.setFixedWidth(44)
+        self.delete_button.setToolTip("حذفِ سند")
+        self.delete_button.clicked.connect(self._delete_current_entry)
+        footer.addWidget(self.delete_button)
+
+        # طبقِ درخواستِ صریح («پرینتِ سندِ حسابداری ساخته نشده»): چاپِ
+        # سندِ در‌حالِ‌ویرایش (سندِ ذخیره‌شده‌ای که با «ویرایش» بازشده) —
+        # روی سندِ تازه (هنوز ذخیره‌نشده) هم کار می‌کند، برایِ پیش‌نمایش.
+        self.print_voucher_button = QPushButton("🖨️")
+        self.print_voucher_button.setObjectName("iconButton")
+        self.print_voucher_button.setFixedWidth(44)
+        self.print_voucher_button.setToolTip("چاپِ سند")
+        self.print_voucher_button.clicked.connect(self._on_print_voucher_clicked)
+        footer.addWidget(self.print_voucher_button)
+
+        self.cancel_edit_button = QPushButton("↩️")
+        self.cancel_edit_button.setObjectName("iconButton")
+        self.cancel_edit_button.setFixedWidth(44)
+        self.cancel_edit_button.setToolTip("لغوِ ویرایش (Esc)")
+        self.cancel_edit_button.clicked.connect(lambda: self._reset_form())
+        footer.addWidget(self.cancel_edit_button)
+
+        footer.addStretch(1)
+
         self.balance_label = QLabel("")
         footer.addWidget(self.balance_label)
-        footer.addStretch(1)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         footer.addWidget(self.status_label)
-
-        self.cancel_edit_button = QPushButton("لغوِ ویرایش (Esc)")
-        self.cancel_edit_button.setObjectName("flatButton")
-        self.cancel_edit_button.clicked.connect(lambda: self._reset_form())
-        footer.addWidget(self.cancel_edit_button)
-
-        # طبقِ درخواستِ صریح («پرینتِ سندِ حسابداری ساخته نشده»): چاپِ
-        # سندِ در‌حالِ‌ویرایش (سندِ ذخیره‌شده‌ای که با «ویرایش» بازشده) —
-        # روی سندِ تازه (هنوز ذخیره‌نشده) هم کار می‌کند، برایِ پیش‌نمایش.
-        self.print_voucher_button = QPushButton("🖨️ چاپِ سند")
-        self.print_voucher_button.setObjectName("flatButton")
-        self.print_voucher_button.clicked.connect(self._on_print_voucher_clicked)
-        footer.addWidget(self.print_voucher_button)
-
-        self.delete_button = QPushButton("حذفِ سند")
-        self.delete_button.setObjectName("dangerButton")
-        self.delete_button.clicked.connect(self._delete_current_entry)
-        footer.addWidget(self.delete_button)
-
-        self.save_button = QPushButton("ثبتِ سند")
-        self.save_button.setObjectName("primaryButton")
-        self.save_button.clicked.connect(self._save)
-        footer.addWidget(self.save_button)
-
-        new_button = QPushButton("سندِ جدید")
-        new_button.setObjectName("flatButton")
-        new_button.clicked.connect(lambda: self._reset_form())
-        footer.addWidget(new_button)
-
-        outer.addLayout(footer)
 
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._save)
         QShortcut(QKeySequence("Escape"), self, activated=self._reset_form)
@@ -1126,7 +1118,10 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
 
     def _update_footer_for_mode(self) -> None:
         editing = self._editing_journal_entry_id is not None
-        self.save_button.setText("ذخیره‌ی تغییرات" if editing else "ثبتِ سند")
+        # طبقِ گزارشِ صریح («آیکن به‌جایِ نوشته، تول‌تیپ برایِ توضیح»):
+        # خودِ آیکن ثابت می‌ماند (✔️ = ثبت/ذخیره)، فقط تول‌تیپ بینِ حالتِ
+        # ویرایش/سندِ تازه فرق می‌کند.
+        self.save_button.setToolTip("ذخیره‌ی تغییرات" if editing else "ثبتِ سند")
         self.cancel_edit_button.setVisible(editing)
         self.delete_button.setVisible(editing)
         if editing and self._editing_registration_at is not None:
@@ -1229,20 +1224,13 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
         if not path:
             return
 
-        import openpyxl
-
-        try:
-            workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
-            worksheet = workbook.active
-            rows = [row for row in worksheet.iter_rows(values_only=True) if any(c is not None for c in row)]
-        except Exception as exc:
-            QMessageBox.critical(self, "خطا در خواندنِ فایل", f"فایلِ اکسل قابلِ‌خواندن نبود:\n{exc}")
-            return
-        if not rows:
-            QMessageBox.warning(self, "فایلِ خالی", "فایلِ انتخاب‌شده هیچ ردیفی ندارد.")
+        rows = read_excel_rows(self, path)
+        if rows is None:
             return
 
-        dialog = _ExcelImportMappingDialog(rows[0], self)
+        dialog = ExcelColumnMappingDialog(
+            _IMPORT_TARGET_FIELDS, _IMPORT_GUESS_KEYWORDS, rows[0], self, title="ایمپورتِ ردیف‌ها از اکسل — تناظرِ ستون‌ها"
+        )
         if dialog.exec() != QDialog.Accepted:
             return
         mapping = dialog.mapping()
@@ -1515,6 +1503,29 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
     def remove_line(self, row: _LineRow, *, force: bool = False) -> None:
         if not force and len(self._line_rows) <= 2:
             return
+        if (
+            not force
+            and self._editing_journal_entry_id is not None
+            and row.original_line_no is not None
+            and self.company_id is not None
+        ):
+            # طبقِ گزارشِ صریح: حذفِ دستیِ ردیفی که به یک چکِ خزانه‌داری
+            # (دریافتی/پرداختی) وصل است، باید از همین‌جا رد شود — وگرنه چک
+            # به ردیفی اشاره می‌کند که دیگر وجود ندارد، بدونِ این‌که خودِ
+            # چک هم اصلاح/حذف شده باشد. کاربر باید از صفحه‌یِ چک‌ها اقدام
+            # کند، جایی که مبلغ/شرحِ سند هم به‌درستی اصلاح می‌شود.
+            check_numbers = treasury_service.list_check_numbers_on_journal_entry_line(
+                self.company_id, self._editing_journal_entry_id, row.original_line_no
+            )
+            if check_numbers:
+                numbers_text = "، ".join(numerals.to_persian_digits(n) for n in check_numbers)
+                QMessageBox.warning(
+                    self,
+                    "حذف مجاز نیست",
+                    f"این ردیف به چکِ «{numbers_text}» وصل است — نمی‌توان آن را از این فرم حذف کرد.\n"
+                    "برایِ حذفِ این چک، از صفحه‌یِ «چک‌هایِ دریافتی/پرداختی» اقدام کنید.",
+                )
+                return
         index = self._line_rows.index(row)
         self.table.removeRow(index)
         self._line_rows.remove(row)
@@ -1675,6 +1686,13 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             theme.set_status_label(
                 self.balance_label, f"غیرِ تراز — بدهکار: {debit_text} | بستانکار: {credit_text}", ok=False
             )
+        self.summary_cards.set_value("debit", debit_text)
+        self.summary_cards.set_value("credit", credit_text)
+        diff = total_debit - total_credit
+        self.summary_cards.set_value(
+            "diff", numerals.format_money(abs(diff), self.currency_decimal_places, self.currency_symbol)
+        )
+        self.summary_cards.set_role("diff", "success" if diff == 0 and total_debit > 0 else "danger")
 
         reference_amount = total_debit if total_debit > 0 else total_credit
         if reference_amount > 0:
@@ -1779,9 +1797,10 @@ class JournalEntryScreen(FieldHelpMixin, QWidget):
             self.remove_line(row, force=True)
         lines = je_service.get_journal_entry_lines(journal_entry_id)
         accounts_by_id = {a[0]: a[1] for a in self.account_options}
-        for line in lines:
+        for index, line in enumerate(lines, start=1):
             row = self.add_line()
             row.load_from(line, accounts_by_id.get(line.account_id, "?"))
+            row.original_line_no = index
         if len(self._line_rows) < 2:
             self.add_line()
         self._sync_header_currency_from_lines(lines)
