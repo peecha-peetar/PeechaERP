@@ -133,17 +133,27 @@ class InventoryDocumentsListScreen(QWidget):
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(36)
-        if d.status_code == "DRAFT":
-            delete_button.setToolTip("حذفِ سندِ پیش‌نویس")
+        is_admin = bool(app_session.current_user and app_session.current_user.is_super_admin)
+        if d.posted_at is None:
+            # هرگز ثبتِ‌نهایی نشده (DRAFT/CONFIRMED/لغوشدهٔ پیش از ثبت) —
+            # هیچ ردیفی در دفترِ انبار ندارد، پس حذفِ مستقیم بی‌خطر است.
+            delete_button.setToolTip("حذفِ سند")
             delete_button.clicked.connect(lambda _checked=False, doc_id=d.stock_document_id: self._delete_document(doc_id))
-        else:
+        elif d.status_code == "POSTED" and is_admin:
+            delete_button.setToolTip(
+                "حذفِ سندِ ثبت‌شده (مدیر): یک سندِ برگشتیِ خودکار ساخته می‌شود تا اثرش را خنثی کند، "
+                "سپس خودِ این سند «لغوشده» علامت می‌خورد."
+            )
+            delete_button.clicked.connect(lambda _checked=False, doc_id=d.stock_document_id: self._reverse_and_delete_document(doc_id))
+        elif d.status_code == "POSTED":
             delete_button.setEnabled(False)
             delete_button.setToolTip(
-                "فقط اسنادِ پیش‌نویس قابلِ‌حذف‌اند — این سند را ابتدا با دکمهٔ «بازگرداندن به پیش‌نویس» "
-                "در فرمِ سند به پیش‌نویس بازگردانید."
-                if d.status_code == "CONFIRMED"
-                else "سندِ ثبت‌شده در دفترِ انبار را نمی‌توان حذف کرد."
+                "این سند ثبتِ‌نهایی شده و اثری در دفترِ انبار/حسابداری دارد — فقط مدیرِ سیستم می‌تواند "
+                "آن را (با ساختِ خودکارِ سندِ برگشتی) حذف کند."
             )
+        else:
+            delete_button.setEnabled(False)
+            delete_button.setToolTip("اثرِ این سند قبلاً با یک سندِ برگشتیِ خودکار خنثی و خودش لغو شده است.")
         actions_layout.addWidget(delete_button)
         actions_layout.addStretch(1)
         return actions
@@ -170,6 +180,28 @@ class InventoryDocumentsListScreen(QWidget):
             return
         try:
             documents_service.delete_stock_document(stock_document_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.refresh()
+
+    def _reverse_and_delete_document(self, stock_document_id: int) -> None:
+        confirm = QMessageBox.question(
+            self, "حذفِ سندِ ثبت‌شده",
+            "این سند قبلاً در دفترِ انبار و حسابداری اثر گذاشته — حذفِ مستقیمِ آن ممکن نیست.\n"
+            "به‌جایش یک سندِ برگشتیِ خودکار ساخته و ثبتِ‌نهایی می‌شود تا اثرش خنثی شود، سپس خودِ این سند "
+            "«لغوشده» علامت می‌خورد.\n\nادامه می‌دهید؟",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        company_id = self._company_id()
+        if company_id is None or app_session.current_user is None:
+            return
+        try:
+            documents_service.reverse_and_cancel_stock_document(
+                stock_document_id, company_id, app_session.current_user.user_id
+            )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return

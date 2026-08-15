@@ -260,11 +260,110 @@ def update_stock_document_header(stock_document_id: int, company_id: int, docume
 
 
 def delete_stock_document(stock_document_id: int, company_id: int) -> None:
+    """حذفِ مستقیم فقط برایِ سندی مجاز است که هنوز هرگز ثبتِ‌نهایی نشده —
+    یعنی DRAFT/CONFIRMED/CANCELLED با posted_at خالی — چون چنین سندی هیچ
+    ردیفی در inv.stock_ledger ندارد. سندِ ثبتِ‌نهایی‌شده باید از مسیرِ
+    reverse_and_cancel_stock_document برود (نه اینجا)، چون هم دفترِ انبار
+    را ناهم‌خوان می‌کند و هم فنی به‌خاطرِ ارجاعِ stock_ledger به همین
+    ردیف‌ها امکان‌پذیر نیست."""
     with new_session() as session:
-        doc = _get_draft_document(session, stock_document_id, company_id)
+        doc = session.get(StockDocument, stock_document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.posted_at is not None:
+            raise ValueError("سندِ ثبتِ‌نهایی‌شده را نمی‌توان مستقیماً حذف کرد — باید ابتدا اثرش خنثی شود.")
         session.query(StockDocumentLine).filter(StockDocumentLine.stock_document_id == stock_document_id).delete()
         session.delete(doc)
         session.commit()
+
+
+# ---------------------------------------------------------------------
+# برگشتِ خودکار + لغوِ سندِ ثبتِ‌نهایی‌شده (برایِ «حذفِ» سندهایِ POSTED)
+# ---------------------------------------------------------------------
+# طبقِ تصمیمِ صریحِ کاربر: سندِ POSTED هرگز فیزیکی حذف نمی‌شود (هم به‌خاطرِ
+# یکپارچگیِ دفترِ انبار/حسابداری، هم چون stock_ledger به ردیف‌هایِ همین سند
+# ارجاع دارد) — به‌جایش یک سندِ برگشتیِ هم‌نوع/معکوس ساخته+تاییدشده+
+# ثبتِ‌نهایی می‌شود تا اثرش را خنثی کند، سپس خودِ سند «لغوشده» علامت
+# می‌خورد (برایِ حفظِ ردِ حسابرسی).
+_REVERSAL_TYPE_MAP = {
+    "RECEIPT": "ISSUE",
+    "ISSUE": "RECEIPT",
+    "RETURN_IN": "RETURN_OUT",
+    "RETURN_OUT": "RETURN_IN",
+    "TRANSFER": "TRANSFER",
+    "ADJUSTMENT": "ADJUSTMENT",
+}
+_AUTO_REVERSAL_REASON_CODE = "AUTO_REVERSAL"
+
+
+def _ensure_auto_reversal_reason_code(company_id: int, applies_to: str) -> int:
+    for row in list_reason_codes(company_id, applies_to, active_only=False):
+        if row.code == _AUTO_REVERSAL_REASON_CODE:
+            return row.reason_code_id
+    return create_reason_code(company_id, applies_to, _AUTO_REVERSAL_REASON_CODE, "برگشتِ خودکار (حذفِ سندِ ثبت‌شده)")
+
+
+def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, user_id: int) -> int:
+    """معادلِ «حذفِ» یک سندِ POSTED: سندِ برگشتیِ خودکار می‌سازد (نوعِ
+    معکوس — مثلاً رسید با حواله خنثی می‌شود، انتقال با انتقالِ معکوس، اصلاح
+    با جهتِ معکوس) با همان ردیف‌ها، آن را تاییدوثبت می‌کند، و در پایان
+    وضعیتِ سندِ اصلی را CANCELLED می‌کند. شناسهٔ سندِ برگشتی را برمی‌گرداند."""
+    with new_session() as session:
+        original = session.get(StockDocument, stock_document_id)
+        if original is None or original.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if original.status_code != "POSTED":
+            raise ValueError("این عملیات فقط برایِ سندِ ثبتِ‌نهایی‌شده معنا دارد.")
+        original_no = original.document_no
+        original_type = original.document_type_code
+        header = DocumentHeaderFields(
+            source_warehouse_id=original.destination_warehouse_id,
+            destination_warehouse_id=original.source_warehouse_id,
+            counterparty_detail_account_id=original.counterparty_detail_account_id,
+            cost_center_detail_account_id=original.cost_center_detail_account_id,
+            project_detail_account_id=original.project_detail_account_id,
+            reference_no=f"برگشتِ سندِ #{original_no}",
+            description=f"سندِ برگشتیِ خودکار برایِ خنثی‌کردنِ اثرِ سندِ #{original_no} پیش از حذفِ آن.",
+        )
+        lines_snapshot = [
+            (
+                ln.line_no, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base,
+                ln.destination_bin_location_id if original_type == "TRANSFER" else ln.bin_location_id,
+                ln.bin_location_id if original_type == "TRANSFER" else None,
+            )
+            for ln in session.scalars(
+                select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id).order_by(StockDocumentLine.line_no)
+            )
+        ]
+
+    reversal_type = _REVERSAL_TYPE_MAP[original_type]
+    reason_code_id = (
+        _ensure_auto_reversal_reason_code(company_id, reversal_type) if reversal_type in _REASON_REQUIRED_TYPES else None
+    )
+
+    reversal_doc_id = create_stock_document(company_id, user_id, reversal_type, datetime.date.today(), header)
+    try:
+        for line_no, item_id, uom_id, quantity, quantity_base, bin_location_id, destination_bin_location_id in lines_snapshot:
+            add_line(reversal_doc_id, company_id, LineFields(
+                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                bin_location_id=bin_location_id, destination_bin_location_id=destination_bin_location_id,
+                reason_code_id=reason_code_id, description=f"برگشتِ ردیفِ #{line_no} از سندِ #{original_no}",
+            ))
+        confirm_stock_document(reversal_doc_id, company_id)
+        post_stock_document(reversal_doc_id, company_id, user_id)
+    except ValueError:
+        try:
+            delete_stock_document(reversal_doc_id, company_id)
+        except ValueError:
+            pass
+        raise
+
+    with new_session() as session:
+        original = session.get(StockDocument, stock_document_id)
+        original.status_code = "CANCELLED"
+        session.commit()
+
+    return reversal_doc_id
 
 
 # ---------------------------------------------------------------------
