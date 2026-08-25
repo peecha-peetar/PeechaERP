@@ -248,7 +248,7 @@ class PettyCashFundLine(Base):
 
     line_id: Mapped[int] = mapped_column(primary_key=True)
     fund_id: Mapped[int] = mapped_column(ForeignKey("treasury.petty_cash_funds.fund_id"))
-    method: Mapped[str] = mapped_column(String(20))
+    method: Mapped[str] = mapped_column(String(40))
     amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
     description: Mapped[str | None] = mapped_column(String(300))
     detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
@@ -256,3 +256,18 @@ class PettyCashFundLine(Base):
     check_due_date: Mapped[datetime.date | None]
     line_date: Mapped[datetime.date]
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class PettyCashFundExtraDetail(Base):
+    """بُعد/گروهِ اضافیِ الزامیِ حسابِ پیش‌پرداختِ تنخواه (غیر از خودِ بُعدِ
+    تنخواه‌دار) — انتخابِ هنگامِ افتتاح، برایِ استفاده‌یِ دوباره هنگامِ
+    بستنِ همین تنخواه (بدونِ پرسیدنِ دوباره)."""
+
+    __tablename__ = "petty_cash_fund_extra_details"
+    __table_args__ = {"schema": "treasury"}
+
+    fund_id: Mapped[int] = mapped_column(ForeignKey("treasury.petty_cash_funds.fund_id"), primary_key=True)
+    dimension_type_id: Mapped[int] = mapped_column(
+        ForeignKey("acc.detail_dimension_types.dimension_type_id"), primary_key=True
+    )
+    detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))

@@ -51,7 +51,8 @@ from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_s
 from peecha.ui.screens.treasury_voucher import _EnterComboBox, _detail_option_label, _resolve_row_detail_source
 from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit
 
-_METHOD_LABELS = {"CASH": "نقد", "BANK": "بانک", "CHECK": "چک"}
+_METHOD_LABELS = {"CASH": "نقد", "BANK": "بانک", "CHECK": "چک", "DISCOUNT": "تخفیف", "NETTING": "تهاتر"}
+_LINE_METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING")
 _NEW_FUND_SENTINEL = "__NEW__"
 
 
@@ -93,57 +94,66 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        # --- تنخواه‌دار + انتخابِ تنخواه: یک هدرِ فشرده و مرتب (هم‌الگو با
-        # هدرِ فرمِ دریافت/پرداخت) به‌جایِ دو ردیفِ کاملاً جدا. -------------
-        picker_card = QWidget()
-        picker_card.setObjectName("card")
-        picker_grid = QGridLayout(picker_card)
-        picker_grid.setContentsMargins(10, 6, 10, 6)
-        picker_grid.setSpacing(4)
+        # --- هدرِ یکپارچه: تنخواه‌دار/تنخواه + (فقط برایِ افتتاحِ تازه)
+        # تاریخ/شرح/تفصیلی‌هایِ اضافیِ حسابِ پیش‌پرداخت — طبقِ گزارشِ صریح
+        # («هدر دو تکه نباشد»)، همه در یک کارتِ واحد و جمع‌وجورند؛ ردیف‌هایِ
+        # مخصوصِ افتتاح فقط وقتی «تنخواهِ تازه» انتخاب شده باشد نمایش
+        # داده می‌شوند (بدونِ این‌که کارتِ دومی ساخته شود). ------------------
+        header_card = QWidget()
+        header_card.setObjectName("card")
+        self.header_grid = QGridLayout(header_card)
+        self.header_grid.setContentsMargins(10, 6, 10, 6)
+        self.header_grid.setSpacing(4)
 
-        picker_grid.addWidget(QLabel("تنخواه‌دار (تفصیلیِ سطحِ آخرِ گروهِ تنخواه)"), 0, 0)
+        self.header_grid.addWidget(QLabel("تنخواه‌دار (تفصیلیِ سطحِ آخرِ گروهِ تنخواه)"), 0, 0)
         self.custodian_combo = _make_searchable_combo([])
-        picker_grid.addWidget(self.custodian_combo, 1, 0)
+        self.header_grid.addWidget(self.custodian_combo, 1, 0)
 
-        picker_grid.addWidget(QLabel("تنخواه"), 0, 1)
+        self.header_grid.addWidget(QLabel("تنخواه"), 0, 1)
         self.fund_combo = _EnterComboBox()
-        picker_grid.addWidget(self.fund_combo, 1, 1)
+        self.header_grid.addWidget(self.fund_combo, 1, 1)
 
         self.fund_no_label = QLabel("")
         self.fund_no_label.setObjectName("sectionHint")
-        picker_grid.addWidget(self.fund_no_label, 2, 0, 1, 2)
+        self.header_grid.addWidget(self.fund_no_label, 2, 0, 1, 2)
 
-        picker_grid.setColumnStretch(0, 2)
-        picker_grid.setColumnStretch(1, 1)
-        layout.addWidget(picker_card)
+        self.opening_date_label = QLabel("تاریخِ افتتاح")
+        self.header_grid.addWidget(self.opening_date_label, 3, 0)
+        self.opening_description_label = QLabel("شرح")
+        self.header_grid.addWidget(self.opening_description_label, 3, 1)
+        self.opening_date_field = JalaliDateEdit()
+        self.header_grid.addWidget(self.opening_date_field, 4, 0)
+        self.opening_description_field = QLineEdit()
+        self.header_grid.addWidget(self.opening_description_field, 4, 1)
+
+        self.header_grid.setColumnStretch(0, 2)
+        self.header_grid.setColumnStretch(1, 1)
+        layout.addWidget(header_card)
+
+        # طبقِ رفعِ باگِ واقعی: اگر حسابِ پیش‌پرداختِ تنخواه خودش، جدا از
+        # بُعدِ تنخواه‌دار، بُعد/گروهِ شخصِ دیگری هم الزامی کرده باشد، این
+        # ردیف‌هایِ پویا (فقط وقتی واقعاً لازم باشد) در همین کارت اضافه
+        # می‌شوند — قبلاً چون هیچ‌جا پرسیده نمی‌شد، ثبتِ سند همیشه با خطایِ
+        # «تفصیلیِ الزامی فراموش شده» رد می‌شد.
+        self._opening_header_widgets: list[QWidget] = [
+            self.opening_date_label, self.opening_description_label,
+            self.opening_date_field, self.opening_description_field,
+        ]
+        self._advance_extra_widgets: list[tuple[int, QLabel, QComboBox]] = []
+        self._advance_extra_row = 5
 
         self.custodian_combo.currentIndexChanged.connect(self._on_custodian_changed)
         self.fund_combo.currentIndexChanged.connect(self._on_fund_changed)
         self.custodian_combo.lineEdit().returnPressed.connect(lambda: self.fund_combo.setFocus())
         self.fund_combo.enterPressed.connect(self._on_fund_combo_return)
+        self.opening_date_field.returnPressed.connect(lambda: self.opening_description_field.setFocus())
+        self.opening_description_field.returnPressed.connect(self._focus_after_header)
 
         # --- بخشِ افتتاحِ تنخواهِ تازه ---------------------------------------
         self.open_section = QWidget()
         open_layout = QVBoxLayout(self.open_section)
         open_layout.setContentsMargins(0, 0, 0, 0)
         open_layout.setSpacing(6)
-
-        open_header_card = QWidget()
-        open_header_card.setObjectName("card")
-        open_grid = QGridLayout(open_header_card)
-        open_grid.setContentsMargins(10, 6, 10, 6)
-        open_grid.setSpacing(4)
-        open_grid.addWidget(QLabel("تاریخِ افتتاح"), 0, 0)
-        self.opening_date_field = JalaliDateEdit()
-        open_grid.addWidget(self.opening_date_field, 1, 0)
-        open_grid.addWidget(QLabel("شرح"), 0, 1)
-        self.opening_description_field = QLineEdit()
-        open_grid.addWidget(self.opening_description_field, 1, 1)
-        open_grid.setColumnStretch(1, 1)
-        open_layout.addWidget(open_header_card)
-
-        self.opening_date_field.returnPressed.connect(lambda: self.opening_description_field.setFocus())
-        self.opening_description_field.returnPressed.connect(self._focus_first_opening_row)
 
         open_layout.addWidget(QLabel("واریزیِ اولیه (روشِ پرداخت)"))
         self.opening_rows_container = QVBoxLayout()
@@ -184,8 +194,8 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
 
         add_line_row = QHBoxLayout()
         self.line_method_combo = _EnterComboBox()
-        for code, label in _METHOD_LABELS.items():
-            self.line_method_combo.addItem(label, code)
+        for code in _LINE_METHOD_CODES:
+            self.line_method_combo.addItem(_METHOD_LABELS[code], code)
         self.line_method_combo.currentIndexChanged.connect(self._on_line_method_changed)
         self.line_method_combo.enterPressed.connect(self._on_line_method_return)
         add_line_row.addWidget(self.line_method_combo)
@@ -254,11 +264,73 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         ]
         _fill_options(self.custodian_combo, custodian_options)
 
+        self._rebuild_advance_extra_widgets()
+        self._rebuild_line_method_combo()
         self._reset_opening_rows()
         self._on_custodian_changed()
 
     def _reset_form(self) -> None:
         self.refresh()
+
+    def _rebuild_advance_extra_widgets(self) -> None:
+        """طبقِ رفعِ باگِ واقعی: اگر حسابِ پیش‌پرداختِ تنخواه بُعد/گروهِ
+        شخصِ دیگری هم (غیر از بُعدِ تنخواه‌دار) الزامی کرده باشد، همین‌جا
+        (فقط وقتی واقعاً لازم باشد) کمبویِ متناظرش ساخته می‌شود."""
+        for _dim_type_id, label, combo in self._advance_extra_widgets:
+            self.header_grid.removeWidget(label)
+            self.header_grid.removeWidget(combo)
+            label.deleteLater()
+            combo.deleteLater()
+        self._advance_extra_widgets = []
+        if self.company_id is None:
+            return
+        requirements = petty_cash_service.get_advance_extra_requirements(self.company_id)
+        row = self._advance_extra_row
+        for requirement in requirements:
+            label = QLabel(requirement.label)
+            combo = _make_searchable_combo(
+                [(o.detail_account_id, _detail_option_label(o)) for o in requirement.options]
+            )
+            self.header_grid.addWidget(label, row, 0, 1, 2)
+            self.header_grid.addWidget(combo, row + 1, 0, 1, 2)
+            row += 2
+            self._advance_extra_widgets.append((requirement.dimension_type_id, label, combo))
+        for (_dim, _label, combo), (_next_dim, _next_label, next_combo) in zip(
+            self._advance_extra_widgets, self._advance_extra_widgets[1:]
+        ):
+            combo.lineEdit().returnPressed.connect(next_combo.setFocus)
+        if self._advance_extra_widgets:
+            self._advance_extra_widgets[-1][2].lineEdit().returnPressed.connect(self._focus_first_opening_row)
+
+    def _focus_after_header(self) -> None:
+        """زنجیره‌ی Enter بعدِ شرحِ افتتاح: اگر تفصیلیِ اضافه‌ای برایِ
+        حسابِ پیش‌پرداخت لازم باشد، اول به آن‌ها می‌رود، وگرنه مستقیم به
+        اولین ردیفِ واریزی."""
+        if self._advance_extra_widgets:
+            self._advance_extra_widgets[0][2].setFocus()
+        else:
+            self._focus_first_opening_row()
+
+    def _rebuild_line_method_combo(self) -> None:
+        """طبقِ درخواستِ صریح («همه‌یِ روش‌هایِ فرمِ پرداخت در تنخواه هم
+        باشد»): علاوه بر نقد/بانک/چک/تخفیف/تهاتر، روش‌هایِ سفارشیِ فعالِ
+        همین شرکت (جهتِ پرداخت) هم اضافه می‌شوند — دقیقاً هم‌الگو با
+        treasury_voucher.py. خرجِ چک (CHECK_DISBURSEMENT) عمداً این‌جا
+        نیست: منطقِ حسابداریِ آن (بازنشستگیِ یک چکِ دریافتیِ مشخص) با
+        ردیف‌هایِ سادهِ «مبلغ + تفصیلیِ اختیاری» تفاوتِ بنیادی دارد."""
+        current = self.line_method_combo.currentData()
+        self.line_method_combo.blockSignals(True)
+        self.line_method_combo.clear()
+        for code in _LINE_METHOD_CODES:
+            self.line_method_combo.addItem(_METHOD_LABELS[code], code)
+        if self.company_id is not None:
+            for custom_method in treasury_service.list_custom_methods(self.company_id, "PAYMENT", active_only=True):
+                code = f"CUSTOM_{custom_method.custom_method_id}"
+                _METHOD_LABELS[code] = custom_method.label
+                self.line_method_combo.addItem(custom_method.label, code)
+        self.line_method_combo.blockSignals(False)
+        index = self.line_method_combo.findData(current) if current else -1
+        self.line_method_combo.setCurrentIndex(index if index >= 0 else 0)
 
     def _on_custodian_changed(self) -> None:
         custodian_id = self.custodian_combo.currentData()
@@ -273,7 +345,13 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
 
     def _on_fund_changed(self) -> None:
         data = self.fund_combo.currentData()
-        if data == _NEW_FUND_SENTINEL or data is None:
+        is_new = data == _NEW_FUND_SENTINEL or data is None
+        for widget in self._opening_header_widgets:
+            widget.setVisible(is_new)
+        for _dim_type_id, label, combo in self._advance_extra_widgets:
+            label.setVisible(is_new)
+            combo.setVisible(is_new)
+        if is_new:
             self._current_fund_id = None
             self.open_section.setVisible(True)
             self.manage_section.setVisible(False)
@@ -384,6 +462,15 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         if custodian_id is None:
             theme.set_status_label(self.status_label, "تنخواه‌دار را انتخاب کنید.", ok=False)
             return
+        extra_details: dict[int, int] = {}
+        for dim_type_id, label, combo in self._advance_extra_widgets:
+            if combo.currentData() is None:
+                theme.set_status_label(
+                    self.status_label, f"انتخابِ «{label.text()}» برایِ حسابِ پیش‌پرداختِ تنخواه الزامی است.", ok=False
+                )
+                combo.setFocus()
+                return
+            extra_details[dim_type_id] = combo.currentData()
         for _widget, method_combo, detail_combo, amount_field, _description_field in self._opening_rows:
             if amount_field.value() <= 0:
                 continue
@@ -409,6 +496,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             fund_id, _result = petty_cash_service.open_fund(
                 self.company_id, session.current_user.user_id, custodian_id,
                 self.opening_date_field.date(), self.opening_description_field.text().strip(), method_lines,
+                extra_details=extra_details,
             )
         except ValueError as exc:
             theme.set_status_label(self.status_label, str(exc), ok=False)
