@@ -59,7 +59,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         card = QWidget()
         card.setObjectName("card")
         grid = QGridLayout(card)
-        grid.setContentsMargins(18, 18, 18, 18)
+        grid.setContentsMargins(14, 10, 14, 10)
         grid.setSpacing(10)
 
         grid.addWidget(QLabel("سطح"), 0, 0)
@@ -224,7 +224,7 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         detail_card = QWidget()
         detail_card.setObjectName("card")
         detail_grid = QGridLayout(detail_card)
-        detail_grid.setContentsMargins(18, 18, 18, 18)
+        detail_grid.setContentsMargins(14, 10, 14, 10)
         detail_grid.setSpacing(10)
 
         detail_grid.addWidget(QLabel("سطح"), 0, 0)

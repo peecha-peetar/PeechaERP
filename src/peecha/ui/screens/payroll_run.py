@@ -73,7 +73,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
     def _build_periods_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("دوره‌هایِ حقوقی")
@@ -124,7 +124,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
     def _build_runs_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("اجراهایِ محاسبه")
@@ -182,7 +182,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
     def _build_results_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("نتیجهٔ محاسبه")

@@ -125,7 +125,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("شرکت‌ها")
@@ -145,7 +145,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("شرکتِ جدید")

@@ -150,7 +150,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("انبارها")
@@ -180,7 +180,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("انبارِ جدید")
@@ -563,7 +563,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_bins_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("مکان‌هایِ انبار")

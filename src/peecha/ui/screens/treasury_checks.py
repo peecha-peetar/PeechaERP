@@ -125,7 +125,7 @@ class _CheckHistoryDialog(QDialog):
         self.undo_performed = False
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel(f"تاریخچه‌یِ چکِ شماره‌یِ {numerals.to_persian_digits(check_no)}")

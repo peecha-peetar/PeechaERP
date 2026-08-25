@@ -242,7 +242,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
 
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         self.config_title = QLabel("پیکربندیِ گروه")

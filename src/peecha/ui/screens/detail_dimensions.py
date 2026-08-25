@@ -294,7 +294,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("تعریفِ حساب‌هایِ تفصیلی")
@@ -333,7 +333,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         self.account_form_title = QLabel("حسابِ تفصیلیِ جدید")

@@ -67,7 +67,7 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("زبان‌ها")
@@ -87,7 +87,7 @@ class LanguagesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         self.form_title = QLabel("زبانِ جدید")

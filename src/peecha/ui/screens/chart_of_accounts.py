@@ -138,7 +138,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         header_row = QHBoxLayout()
@@ -203,7 +203,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         self.form_title = QLabel("حسابِ جدید")

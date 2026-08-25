@@ -115,7 +115,7 @@ class _GeneralSettingsTab(FieldHelpMixin, LayoutEditMixin, FormScreenBase):
     def __init__(self) -> None:
         super().__init__()
         layout = self.body_layout
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("تنظیماتِ کلیِ حقوق و دستمزد")
@@ -268,7 +268,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._editing_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setContentsMargins(14, 10, 14, 10)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
@@ -282,7 +282,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("حداقلِ دستمزدِ مصوب")
@@ -302,7 +302,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("دورهٔ تازه")
@@ -493,7 +493,7 @@ class _PoliciesTab(FormScreenBase):
         self._rows: list[payroll_service.PolicyRow] = []
 
         layout = self.body_layout
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("قوانینِ حقوق و دستمزد")
@@ -611,7 +611,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("آیتم‌هایِ حقوقی")
@@ -631,7 +631,7 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("آیتمِ تازه")
@@ -955,7 +955,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("تنظیماتِ بیمهٔ اختصاصیِ این شرکت")
@@ -979,7 +979,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("دورهٔ تازه")
@@ -1176,7 +1176,7 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         self._bracket_rows: list[tuple[QLineEdit, QLineEdit, QLineEdit]] = []
 
         layout = self.body_layout
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("پلکان‌هایِ مالیاتِ سالانه")
@@ -1377,7 +1377,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._editing_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setContentsMargins(14, 10, 14, 10)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
@@ -1391,7 +1391,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("قوانینِ اضافه‌کاری")
@@ -1411,7 +1411,7 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("قانونِ تازه")
@@ -1604,7 +1604,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._pending_mapping: dict | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setContentsMargins(14, 10, 14, 10)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
@@ -1621,7 +1621,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("الگوهایِ ایمپورتِ حضوروغیاب")
@@ -1649,7 +1649,7 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("الگویِ تازه")

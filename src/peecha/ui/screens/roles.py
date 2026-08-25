@@ -69,7 +69,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
     def _build_roles_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("نقش‌ها")
@@ -112,7 +112,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         self.detail_title = QLabel("یک نقش را از فهرست انتخاب کنید")

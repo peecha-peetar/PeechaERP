@@ -72,7 +72,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("درخواستِ وام/مساعدهٔ تازه")
@@ -128,7 +128,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
     def _build_loans_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("وام‌هایِ کارمندِ انتخاب‌شده")
@@ -179,7 +179,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
     def _build_installments_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("اقساطِ وامِ انتخاب‌شده")

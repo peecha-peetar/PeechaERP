@@ -99,7 +99,7 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("ثبتِ حضوروغیاب")
@@ -173,7 +173,7 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
     def _build_records_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("رکوردهایِ حضوروغیاب")

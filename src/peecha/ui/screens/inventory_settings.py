@@ -43,7 +43,7 @@ class _UomTab(QWidget):
         super().__init__()
         self._rows: list[catalog_service.UomRow] = []
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         _title_label = QLabel("واحدهایِ اندازه‌گیری")
         _title_label.setObjectName("pageTitle")
@@ -208,7 +208,7 @@ class _BrandManufacturerTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(16)
         layout.addWidget(self._build_section("برندها", is_brand=True), stretch=1)
         layout.addWidget(self._build_section("تولیدکنندگان", is_brand=False), stretch=1)
@@ -317,7 +317,7 @@ class _CostingSettingsTab(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         _title_label = QLabel("تنظیماتِ قیمت‌گذاریِ شرکت")
         _title_label.setObjectName("pageTitle")
@@ -377,7 +377,7 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         super().__init__()
         self._combos: dict[str, QComboBox] = {}
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         _title_label = QLabel("نگاشتِ حساب‌هایِ حسابداری")
         _title_label.setObjectName("pageTitle")
@@ -440,7 +440,7 @@ class _FeatureToggleTab(QWidget):
         super().__init__()
         self._checkboxes: dict[str, QCheckBox] = {}
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         title = QLabel("قابلیت‌هایِ فعال (Feature Toggle)")
         title.setObjectName("pageTitle")
@@ -493,7 +493,7 @@ class _ReasonCodesTab(QWidget):
         super().__init__()
         self._tables: dict[str, QTableWidget] = {}
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(16)
         layout.addWidget(self._build_section("دلیل‌هایِ اصلاح", "ADJUSTMENT"), stretch=1)
         layout.addWidget(self._build_section("دلیل‌هایِ برگشت از فروش", "RETURN_IN"), stretch=1)
@@ -595,7 +595,7 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         self._mapping_combos: dict[str, QComboBox] = {}
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(16)
         layout.addWidget(self._build_list_panel(), stretch=1)
         layout.addWidget(self._build_mapping_panel(), stretch=1)

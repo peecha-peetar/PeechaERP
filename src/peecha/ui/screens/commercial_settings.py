@@ -31,7 +31,7 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         super().__init__()
         self._combos: dict[str, QComboBox] = {}
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         title = QLabel("نگاشتِ حساب‌هایِ بازرگانی")
         title.setObjectName("pageTitle")
@@ -93,7 +93,7 @@ class _FeatureToggleTab(QWidget):
         super().__init__()
         self._checkboxes: dict[str, QCheckBox] = {}
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         title = QLabel("قابلیت‌هایِ فعال (Feature Toggle)")
         title.setObjectName("pageTitle")
@@ -145,7 +145,7 @@ class _IndustryProfileTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         title = QLabel("نمایهٔ صنعتی")
         title.setObjectName("pageTitle")
@@ -191,7 +191,7 @@ class _NumberingSequencesTab(LayoutEditMixin, QWidget):
         self._prefix_fields: dict[str, QLineEdit] = {}
         self._reset_combos: dict[str, QComboBox] = {}
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         title = QLabel("شماره‌گذاریِ اسناد")
         title.setObjectName("pageTitle")
@@ -256,7 +256,7 @@ class _ChannelsTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
         title = QLabel("کانال‌هایِ فروش")
         title.setObjectName("pageTitle")

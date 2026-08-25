@@ -101,7 +101,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("ثبتِ اضافه‌کاری")
@@ -145,7 +145,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
     def _build_entries_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         title = QLabel("ردیف‌هایِ اضافه‌کاری")

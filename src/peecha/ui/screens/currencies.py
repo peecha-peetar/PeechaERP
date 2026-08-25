@@ -89,7 +89,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("ارزها")
@@ -109,7 +109,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         self.form_title = QLabel("ارزِ جدید")
@@ -166,7 +166,7 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
 
         self.rate_panel_title = QLabel("نرخِ ارز")
