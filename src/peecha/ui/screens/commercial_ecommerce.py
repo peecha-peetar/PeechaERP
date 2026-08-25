@@ -41,7 +41,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self._items: list[catalog_service.ItemRow] = []
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         title = QLabel("فروشِ اینترنتی و Omnichannel")

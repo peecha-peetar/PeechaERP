@@ -72,7 +72,7 @@ class SystemSettingsScreen(QWidget):
         self._search_targets: list[tuple[int, QTabWidget | None, int | None]] = []
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         title = QLabel("تنظیمات سیستم")

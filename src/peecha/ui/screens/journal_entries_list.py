@@ -199,7 +199,7 @@ class JournalEntriesListScreen(FieldHelpMixin, QWidget):
         self._currency_symbol: str | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(16)
 
         header = QHBoxLayout()

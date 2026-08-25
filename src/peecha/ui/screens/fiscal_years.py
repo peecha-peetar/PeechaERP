@@ -40,7 +40,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         self._selected_fiscal_year_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=1)

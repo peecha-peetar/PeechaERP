@@ -132,7 +132,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         self._row_bold: list[bool] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(16)
 
         header = QHBoxLayout()

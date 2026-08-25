@@ -35,7 +35,7 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._company_options: list[tuple[int, str]] = []
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)

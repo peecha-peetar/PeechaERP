@@ -41,7 +41,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         content = QWidget()
         outer = QVBoxLayout(content)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         title = QLabel("کدینگِ حسابداری")
@@ -205,7 +205,7 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         content = QWidget()
         outer = QVBoxLayout(content)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         detail_title = QLabel("تعدادِ رقمِ سطوحِ تفصیلی")

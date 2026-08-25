@@ -56,7 +56,7 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
         self._entries: list[dimensions_service.UnifiedDetailAccountRow] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(16)
 
         header_row = QHBoxLayout()

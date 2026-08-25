@@ -47,7 +47,7 @@ class CommercialPricingScreen(QWidget):
         self._selected_rule_id: int | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel("فهرستِ قیمت و تخفیف")

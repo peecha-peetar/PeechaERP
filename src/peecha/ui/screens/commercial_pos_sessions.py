@@ -39,7 +39,7 @@ class CommercialPosSessionsScreen(QWidget):
 
         page = QWidget()
         outer = QHBoxLayout(page)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
 
         left = QVBoxLayout()

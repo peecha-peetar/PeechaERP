@@ -47,7 +47,7 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         self._selected_accrual_id: int | None = None
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         title = QLabel("بهایِ تمام‌شدهٔ وارداتی و ریبیتِ تامین‌کننده")

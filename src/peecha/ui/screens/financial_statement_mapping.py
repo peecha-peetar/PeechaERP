@@ -85,7 +85,7 @@ class FinancialStatementMappingScreen(QWidget):
 
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel("تنظیماتِ صورت‌هایِ مالی")
@@ -125,8 +125,10 @@ class FinancialStatementMappingScreen(QWidget):
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
-        self.save_button = QPushButton("💾 ذخیره‌یِ تغییرات")
+        self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
+        self.save_button.setFixedWidth(48)
+        self.save_button.setToolTip("ذخیره‌یِ تغییرات")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._save_all)
         outer.addWidget(wrap_scrollable_with_footer(content, [self.save_button]), stretch=1)

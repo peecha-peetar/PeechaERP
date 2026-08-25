@@ -56,7 +56,7 @@ class CommercialAftersalesScreen(QWidget):
         self._selected_rma_id: int | None = None
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         title = QLabel("خدماتِ پس‌ازفروش و گارانتی")

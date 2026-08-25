@@ -58,7 +58,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         self._selected_installment_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_form_panel(), stretch=2)
         outer.addWidget(self._build_loans_panel(), stretch=3)

@@ -72,7 +72,7 @@ class FieldLabelsScreen(FieldHelpMixin, QWidget):
         self._rows: list[_FieldEditRow] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel("عنوانِ فیلدها")

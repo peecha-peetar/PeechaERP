@@ -38,7 +38,7 @@ class RolesScreen(FieldHelpMixin, QWidget):
         self._permission_checkboxes: dict[tuple[int, str], QCheckBox] = {}
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_roles_panel(), stretch=1)
         outer.addWidget(self._build_detail_panel(), stretch=3)

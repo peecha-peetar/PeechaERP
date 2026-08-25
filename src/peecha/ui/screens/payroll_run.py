@@ -59,7 +59,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         self._selected_payslip_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_periods_panel(), stretch=2)
         outer.addWidget(self._build_runs_panel(), stretch=2)

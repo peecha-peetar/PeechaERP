@@ -127,7 +127,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._parent_options: list[coa_service.AccountRow] = []
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
 
         outer.addWidget(self._build_list_panel(), stretch=3)

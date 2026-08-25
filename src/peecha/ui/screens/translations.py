@@ -42,7 +42,7 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel("ترجمه‌ها")

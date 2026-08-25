@@ -131,7 +131,7 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         # تمامِ عرضِ صفحه را در اختیار دارد (فقط اسکرولِ عمودی، طبقِ
         # استانداردِ ریسپانسیو).
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_types_panel())
         outer.addWidget(self._build_config_panel(), stretch=1)

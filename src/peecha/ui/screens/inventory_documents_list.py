@@ -43,7 +43,7 @@ class InventoryDocumentsListScreen(QWidget):
         self._warehouses_by_id: dict[int, str] = {}
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel("اسنادِ انبار")

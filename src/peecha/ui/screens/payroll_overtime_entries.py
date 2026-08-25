@@ -84,7 +84,7 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         self._selected_entry_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_form_panel(), stretch=2)
         outer.addWidget(self._build_entries_panel(), stretch=3)

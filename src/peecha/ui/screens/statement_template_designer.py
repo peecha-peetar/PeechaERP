@@ -417,7 +417,7 @@ class StatementTemplateDesignerScreen(FieldHelpMixin, QWidget):
         self._selected_template_id: int | None = None
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_templates_panel())
         outer.addWidget(self._build_rows_panel(), stretch=1)
