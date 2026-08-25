@@ -200,8 +200,13 @@ class DetailDimensionType(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
     code: Mapped[str] = mapped_column(String(30))  # CUSTOMER, VENDOR, COST_CENTER, PROJECT, ...
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # سقفِ تعدادِ سطحِ سلسله‌مراتبِ حساب‌هایِ تفصیلیِ این گروه (۱ تا ۴).
-    max_level_no: Mapped[int] = mapped_column(SmallInteger, default=4)
+    # سقفِ تعدادِ سطحِ سلسله‌مراتبِ حساب‌هایِ تفصیلیِ این گروه (۱ تا ۴). طبقِ
+    # گزارشِ صریح («فیلدهایِ تخصصی در سطحِ اول باز نمی‌شوند»): پیش‌فرضِ ۴
+    # باعث می‌شد فیلدهایِ اختصاصیِ گروه‌هایی مثلِ بانک/مرکزِ هزینه (که در
+    # عمل تقریباً همیشه تخت/یک‌سطحی‌اند) هرگز در سطحِ ۱ باز نشوند — دقیقاً
+    # همان باگی که پیش‌تر فقط برایِ INVENTORY_ITEM رفع شده بود؛ حالا پیش‌فرض
+    # برایِ همه یکسان و منطقی (تخت) است، مدیر می‌تواند از تنظیمات بالا ببرد.
+    max_level_no: Mapped[int] = mapped_column(SmallInteger, default=1)
     # رنگِ اختصاصیِ این گروه (مثلاً "#15A672") — طبقِ درخواستِ صریح، در فهرستِ
     # تفصیلی‌ها و کمبویِ تفصیلیِ سندِ حسابداری استفاده می‌شود.
     color: Mapped[str | None] = mapped_column(String(7))

@@ -361,10 +361,9 @@ QWidget#formFooter {{
     border-top: 1px solid {BORDER};
 }}
 QLabel#pageTitle {{
-    font-size: 26px;
-    font-weight: 800;
+    font-size: 17px;
+    font-weight: 700;
     color: {TEXT_PRIMARY};
-    letter-spacing: 0.2px;
 }}
 QLabel#sectionHint {{
     color: {TEXT_SECONDARY};

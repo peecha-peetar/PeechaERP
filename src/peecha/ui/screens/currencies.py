@@ -203,7 +203,6 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         new_rate_row = QHBoxLayout()
         new_rate_row.addWidget(QLabel("تاریخ:"))
         self.rate_date_field = JalaliDateEdit()
-        self.rate_date_field.setMaximumWidth(120)
         new_rate_row.addWidget(self.rate_date_field)
         new_rate_row.addWidget(QLabel("نرخ:"))
         self.rate_value_field = QLineEdit()

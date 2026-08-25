@@ -1591,7 +1591,6 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
 
         header_layout.addWidget(QLabel("تاریخ"), 1, 3)
         self.date_field = JalaliDateEdit("تاریخِ سند")
-        self.date_field.setMaximumWidth(120)
         header_layout.addWidget(self.date_field, 1, 4)
 
         # طبقِ آیتمِ ۸: ماندهٔ فعلی + ماهیتِ همین طرفِ‌حساب، بلافاصله زیرِ

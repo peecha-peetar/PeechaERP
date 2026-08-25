@@ -857,8 +857,14 @@ class MainWindow(QMainWindow):
             target = QApplication.activeModalWidget() or (
                 self.mdi_area.activeSubWindow().widget() if self.mdi_area.activeSubWindow() else self
             )
+            # طبقِ باگِ کشف‌شده («F2 دیگر کار نمی‌کند»): دورِ تبدیلِ دکمه‌ها به
+            # آیکون+تولتیپ (بازرگانی/انبار/حسابداری/...)، objectNameِ دکمه‌ی
+            # اصلی را از "primaryButton" به "primaryIconButton" تغییر داد،
+            # بدونِ به‌روزرسانیِ همین فیلتر — یعنی F2 در تقریباً همه‌ی
+            # فرم‌هایِ تراکنشی/تنظیماتِ اصلیِ برنامه (بیش از ۴۰ فایل) اثری
+            # نداشت. حالا هر دو نامِ objectName پذیرفته می‌شوند.
             for button in target.findChildren(QPushButton):
-                if button.objectName() == "primaryButton" and button.isVisible() and button.isEnabled():
+                if button.objectName() in ("primaryButton", "primaryIconButton") and button.isVisible() and button.isEnabled():
                     button.click()
                     return True
             return False

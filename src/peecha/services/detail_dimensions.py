@@ -112,7 +112,10 @@ def list_active_dimension_types(company_id: int) -> list[DimensionTypeRow]:
 
 def create_dimension_type(company_id: int, code: str) -> DetailDimensionType:
     with new_session() as session:
-        dimension_type = DetailDimensionType(company_id=company_id, code=code.strip().upper())
+        # پیش‌فرضِ تخت/یک‌سطحی (max_level_no=1) — اکثرِ گروه‌هایِ تفصیلیِ
+        # سفارشی در عمل فهرستِ ساده‌اند؛ مدیر در صورتِ نیاز از تنظیماتِ
+        # همین گروه، تعدادِ سطح را بالا می‌برد.
+        dimension_type = DetailDimensionType(company_id=company_id, code=code.strip().upper(), max_level_no=1)
         session.add(dimension_type)
         session.commit()
         session.refresh(dimension_type)
@@ -1287,12 +1290,13 @@ def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
     }
     for code in SPECIALIZED_DIMENSION_LABELS:
         if code not in existing:
-            dimension_type = DetailDimensionType(company_id=company_id, code=code, is_active=True)
-            if code == INVENTORY_ITEM_CODE:
-                # طبقِ رفعِ باگ: کالا باید از همان روزِ اول (بدونِ نیازِ
-                # پیش‌نیازِ ساختِ چندسطح دسته‌بندی در تنظیمات) قابلِ‌تعریف
-                # باشد — نگاه کنید به 080_inventory_item_default_level.sql.
-                dimension_type.max_level_no = 1
+            # طبقِ رفعِ باگ (تعمیم‌یافته به هر ۸ گروهِ سیستمی، نه فقط کالا):
+            # این گروه‌ها باید از همان روزِ اول (بدونِ نیازِ پیش‌نیازِ ساختِ
+            # چندسطح دسته‌بندی در تنظیمات) قابلِ‌تعریف باشند — نگاه کنید به
+            # 080_inventory_item_default_level.sql و 082_specialized_dimension_default_level.sql.
+            dimension_type = DetailDimensionType(
+                company_id=company_id, code=code, is_active=True, max_level_no=1
+            )
             session.add(dimension_type)
             session.flush()
             existing[code] = dimension_type.dimension_type_id

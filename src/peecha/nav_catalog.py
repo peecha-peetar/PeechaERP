@@ -307,7 +307,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
 SETTINGS_SUB_FORMS = [
     ("accounting_coding", "کدینگِ حساب‌ها"),
     ("detail_level_digits", "تعدادِ رقمِ سطوحِ تفصیلی"),
-    ("financial_statement_mapping", "نگاشتِ صورت‌هایِ مالی"),
+    ("financial_statement_mapping", "تنظیماتِ صورت‌هایِ مالی"),
     ("companies", "شرکت‌ها"),
     ("languages", "زبان‌ها"),
     ("currencies", "ارزها"),

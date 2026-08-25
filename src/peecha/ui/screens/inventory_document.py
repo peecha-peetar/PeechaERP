@@ -268,7 +268,6 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
         self.date_field = JalaliDateEdit()
-        self.date_field.setMaximumWidth(150)
         date_box.addWidget(self.date_field)
         header_row.addLayout(date_box, 0)
 

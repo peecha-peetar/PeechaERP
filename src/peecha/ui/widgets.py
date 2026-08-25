@@ -211,6 +211,10 @@ class JalaliDateEdit(QLineEdit):
     def __init__(self, placeholder: str = "۱۴۰۳/۰۴/۲۸") -> None:
         super().__init__()
         self.setPlaceholderText(placeholder)
+        # اندازه‌یِ ثابت و یکسان در همه‌یِ فرم‌ها — قبلاً هر صفحه یک
+        # setMaximumWidth دلبخواهی (۱۲۰ تا ۱۵۰) می‌گذاشت یا اصلاً نمی‌گذاشت
+        # و فیلد کشیده می‌شد؛ حالا این کلاسِ مشترک اندازه را تعیین می‌کند.
+        self.setFixedWidth(118)
         self._date = datetime.date.today()
         self._refresh_text()
         self.textEdited.connect(self._on_text_edited)
@@ -1069,8 +1073,11 @@ class SummaryCard(QFrame):
         self._role = role
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 12, 16, 12)
-        outer.setSpacing(4)
+        # طبقِ گزارشِ صریح («هدرِ فرم‌ها خیلی بزرگ است، فضا به آیتم‌ها
+        # بدهید»): پدینگِ قبلی (۱۶/۱۲) این کارت‌هایِ خلاصه را بی‌جهت
+        # بلند می‌کرد — همه‌ی صفحاتی که SummaryCard دارند یک‌جا جمع‌تر شدند.
+        outer.setContentsMargins(10, 6, 10, 6)
+        outer.setSpacing(2)
 
         self._title_label = QLabel(title)
         outer.addWidget(self._title_label)
@@ -1079,10 +1086,10 @@ class SummaryCard(QFrame):
         outer.addWidget(self.value_label)
 
         self._shadow = QGraphicsDropShadowEffect(self)
-        self._shadow.setBlurRadius(22)
+        self._shadow.setBlurRadius(14)
         self._shadow.setXOffset(0)
-        self._shadow.setYOffset(6)
-        self._shadow.setColor(QColor(0, 0, 0, 110))
+        self._shadow.setYOffset(3)
+        self._shadow.setColor(QColor(0, 0, 0, 90))
         self.setGraphicsEffect(self._shadow)
 
         self.refresh_theme()

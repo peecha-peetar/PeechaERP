@@ -212,10 +212,13 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
             quoted_table = f'"{table.schema}"."{table.name}"' if table.schema else f'"{table.name}"'
             inserted = skipped = errors = 0
             error_samples: list[str] = []
-            for raw_row in data[full_name]:
+
+            def _try_insert_row(raw_row: dict) -> tuple[bool, bool, str | None]:
+                """یک ردیف را درج می‌کند. خروجی: (موفق؟, خطا_قابلِ‌رفعِ‌بعدی؟ (یعنی
+                IntegrityErrorِ ممکن‌است-به‌خاطرِ-ترتیب باشد, پیامِ خطا)."""
                 row = {k: _deserialize_value(v) for k, v in raw_row.items() if k in target_columns}
                 if not row:
-                    continue
+                    return True, False, None
                 needs_override = bool(set(row) & always_identity_cols)
                 col_list = ", ".join(f'"{c}"' for c in row)
                 bind_params = dict(row)
@@ -237,17 +240,54 @@ def import_backup(engine: Engine, path: str) -> RestoreReport:
                 try:
                     conn.execute(stmt, bind_params)
                     savepoint.commit()
-                    inserted += 1
+                    return True, False, None
                 except IntegrityError as exc:
                     savepoint.rollback()
-                    skipped += 1
-                    if len(error_samples) < 5:
-                        error_samples.append(str(exc)[:200])
+                    return False, True, str(exc)[:200]
                 except Exception as exc:  # noqa: BLE001 - هر خطایِ ردیف باید فقط همان ردیف را متوقف کند
                     savepoint.rollback()
-                    errors += 1
-                    if len(error_samples) < 5:
-                        error_samples.append(str(exc)[:200])
+                    return False, False, str(exc)[:200]
+
+            # طبقِ رفعِ باگِ صریح («بعدِ بازیابیِ بک‌آپ، سطوح و تعدادِ سطوحِ
+            # حساب‌هایِ تفصیلی به‌هم ریخته»): جدول‌هایی مثلِ acc.chart_of_accounts
+            # و acc.detail_accounts خودشان به خودشان ارجاعِ سلسله‌مراتبی دارند
+            # (parent_account_id/parent_detail_account_id). ردیف‌های exportشده
+            # بدونِ ORDER BY خوانده می‌شوند، پس ترتیبِ آن‌ها تضمین‌شده نیست —
+            # اگر یک ردیفِ فرزند پیش از والدش درج شود، به‌خاطرِ نقضِ کلیدِ
+            # خارجی با IntegrityError شکست می‌خورد و قبلاً به‌عنوانِ «ردیفِ
+            # تکراری/نامعتبر» به‌سادگی نادیده گرفته می‌شد — یعنی آن حسابِ
+            # تفصیلی/حسابِ حسابداری کلاً از بازیابی جا می‌ماند. راه‌حل: هر
+            # ردیفی که با IntegrityError شکست بخورد (که می‌تواند به‌خاطرِ
+            # ترتیب باشد، نه لزوماً نامعتبربودنِ خودِ ردیف)، در پاس‌هایِ بعدی
+            # دوباره امتحان می‌شود؛ با هر پاسِ موفق، ردیف‌هایِ والدِ تازه‌درج‌شده
+            # فرزندانشان را در پاسِ بعدی قابلِ‌درج می‌کنند. وقتی یک پاسِ کامل
+            # هیچ پیشرفتی نداشته باشد (یعنی خطا واقعاً به‌خاطرِ ترتیب نبوده)،
+            # باقیمانده قطعی شکست‌خورده/ردشده ثبت می‌شود.
+            pending = list(data[full_name])
+            last_errors: dict[int, str | None] = {}
+            while pending:
+                next_pending: list[dict] = []
+                progressed = False
+                for raw_row in pending:
+                    ok, retryable, message = _try_insert_row(raw_row)
+                    if ok:
+                        inserted += 1
+                        progressed = True
+                    elif retryable:
+                        next_pending.append(raw_row)
+                        last_errors[id(raw_row)] = message
+                    else:
+                        errors += 1
+                        if len(error_samples) < 5 and message:
+                            error_samples.append(message)
+                if not progressed:
+                    skipped += len(next_pending)
+                    for raw_row in next_pending:
+                        message = last_errors.get(id(raw_row))
+                        if len(error_samples) < 5 and message:
+                            error_samples.append(message)
+                    break
+                pending = next_pending
             results.append(RestoreTableResult(full_name, inserted, skipped, errors, error_samples))
 
         # طبقِ نیازِ فنی: بعدِ درجِ دستیِ مقادیرِ شناسه، دنباله‌یِ (sequence)

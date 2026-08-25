@@ -180,9 +180,30 @@ def _clear_if_unmatched(combo: QComboBox) -> None:
 
     نکته: مکان‌نما همیشه به ابتدایِ متن برمی‌گردد — وگرنه فیلد رویِ آخرِ
     متنِ تایپ‌شده اسکرول‌شده می‌ماند و شروعِ برچسبِ حساب/تفصیلی (که معمولاً
-    مهم‌تر است) دیده نمی‌شود."""
-    matched_index = combo.findText(combo.currentText(), Qt.MatchExactly)
+    مهم‌تر است) دیده نمی‌شود.
+
+    طبقِ درخواستِ صریح، بعدِ انتخابِ واقعی فقط نامِ حساب/تفصیلی (بدونِ کد)
+    نمایش داده می‌شود (`_show_name_only_after_selection`) — پس اینجا باید
+    این حالت را هم «تغییرنکرده» بشناسد، وگرنه با هر بار خارج‌شدن از فیلد
+    (بدونِ تایپِ چیزی)، چون متنِ نمایشی («نام») با برچسبِ کاملِ آیتم
+    («کد — نام») یکی نیست، انتخابِ معتبر به‌غلط پاک می‌شد."""
+    text = combo.currentText()
+    current_item_text = combo.itemText(combo.currentIndex()) if combo.currentIndex() >= 0 else ""
+    if text == current_item_text or text == _display_name_only(current_item_text):
+        combo.lineEdit().setCursorPosition(0)
+        return
+    matched_index = combo.findText(text, Qt.MatchExactly)
     combo.setCurrentIndex(matched_index if matched_index >= 0 else 0)
+    combo.lineEdit().setCursorPosition(0)
+
+
+def _show_name_only_after_selection(combo: QComboBox) -> None:
+    """طبقِ درخواستِ صریح: بعدِ انتخابِ حساب/تفصیلی، دیگر نیازی به نمایشِ
+    کد در فیلد نیست — فقط نام کافی است (کد همچنان در فهرستِ جستجو/کشویی
+    برایِ تشخیص باقی می‌ماند). دادهٔ واقعی (itemData) دست‌نخورده می‌ماند."""
+    if combo.currentIndex() < 0:
+        return
+    combo.lineEdit().setText(_display_name_only(combo.itemText(combo.currentIndex())))
     combo.lineEdit().setCursorPosition(0)
 
 
@@ -377,17 +398,17 @@ class _LineRow:
 
         self.detail_combo = _make_searchable_combo([])
         self.detail_combo.lineEdit().returnPressed.connect(self._on_detail_return)
-        self.detail_combo.currentIndexChanged.connect(lambda _i: self._screen._refresh_preview_strip())
+        self.detail_combo.currentIndexChanged.connect(self._on_detail_changed)
 
         self.cost_center_combo = _make_searchable_combo([])
         self.cost_center_combo.setEnabled(False)
         self.cost_center_combo.lineEdit().returnPressed.connect(self._on_cost_center_return)
-        self.cost_center_combo.currentIndexChanged.connect(lambda _i: self._screen._refresh_preview_strip())
+        self.cost_center_combo.currentIndexChanged.connect(self._on_cost_center_changed)
 
         self.project_combo = _make_searchable_combo([])
         self.project_combo.setEnabled(False)
         self.project_combo.lineEdit().returnPressed.connect(self._on_project_return)
-        self.project_combo.currentIndexChanged.connect(lambda _i: self._screen._refresh_preview_strip())
+        self.project_combo.currentIndexChanged.connect(self._on_project_changed)
 
         self.description_field = QLineEdit()
         self._attach_description_completer()
@@ -458,7 +479,20 @@ class _LineRow:
 
     def _on_account_changed(self, _index: int) -> None:
         self.account_id = self.account_combo.currentData()
+        _show_name_only_after_selection(self.account_combo)
         self._refresh_dimension_ui()
+        self._screen._refresh_preview_strip()
+
+    def _on_detail_changed(self, _index: int) -> None:
+        _show_name_only_after_selection(self.detail_combo)
+        self._screen._refresh_preview_strip()
+
+    def _on_cost_center_changed(self, _index: int) -> None:
+        _show_name_only_after_selection(self.cost_center_combo)
+        self._screen._refresh_preview_strip()
+
+    def _on_project_changed(self, _index: int) -> None:
+        _show_name_only_after_selection(self.project_combo)
         self._screen._refresh_preview_strip()
 
     def _on_account_return(self) -> None:
@@ -728,8 +762,8 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         # آن، در self.footer_layout — ثابت و همیشه قابلِ‌مشاهده، چه هدر
         # کوتاه باشد چه بلند.
         outer = self.body_layout
-        outer.setContentsMargins(16, 14, 16, 14)
-        outer.setSpacing(8)
+        outer.setContentsMargins(16, 10, 16, 10)
+        outer.setSpacing(6)
 
         # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر: افزودنِ صرفاً
         # لایه‌یِ بصری/ناوبری (اسکرول‌کردن، نه صفحه‌بندیِ واقعی) — عیناً
@@ -748,8 +782,8 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         header_card = QWidget()
         header_card.setObjectName("card")
         header_layout = QGridLayout(header_card)
-        header_layout.setContentsMargins(12, 10, 12, 10)
-        header_layout.setSpacing(6)
+        header_layout.setContentsMargins(10, 6, 10, 6)
+        header_layout.setSpacing(4)
 
         self.form_title = QLabel(f"صدورِ {self._document_noun}ِ جدید")
         self.form_title.setObjectName("pageTitle")
@@ -761,7 +795,6 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
 
         header_layout.addWidget(QLabel("تاریخِ سند"), 1, 0)
         self.date_field = JalaliDateEdit("تاریخِ سند (۱۴۰۳/۰۴/۲۸)")
-        self.date_field.setMaximumWidth(140)
         header_layout.addWidget(self.date_field, 1, 1)
 
         header_layout.addWidget(QLabel("شرحِ سند"), 1, 2)
@@ -843,7 +876,7 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         preview_card = QWidget()
         preview_card.setObjectName("card")
         preview_layout = QHBoxLayout(preview_card)
-        preview_layout.setContentsMargins(14, 6, 14, 6)
+        preview_layout.setContentsMargins(12, 4, 12, 4)
         preview_layout.setSpacing(24)
         self._preview_value_labels: dict[str, QLabel] = {}
         for key, title in (
