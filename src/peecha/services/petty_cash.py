@@ -36,24 +36,48 @@ class ExtraDetailRequirement:
     options: list
 
 
+_HEADER_SHARED_DIMENSION_CODES = (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
+
+
+def get_advance_shared_dimension_options(company_id: int, code: str) -> tuple[bool, list]:
+    """طبقِ هم‌الگو با هدرِ فرمِ دریافت/پرداخت: مرکزِ هزینه/پروژه فیلدهایِ
+    همیشه‌حاضرِ هدرند (فقط enable/disable می‌شوند، نه پویا مثلِ بقیه‌یِ
+    ابعادِ اضافی) — تا کاربر بتواند شرح/مرکزِ هزینه/پروژه را در یک ردیفِ
+    واحد ببیند، دقیقاً مثلِ فرمِ دریافت/پرداخت. خروجی: (آیا الزامی است, گزینه‌ها)."""
+    dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, code)
+    if dim_type_id is None:
+        return False, []
+    options = dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)
+    advance_account_id = treasury_service.get_account_mapping(company_id, PETTY_CASH_ADVANCE_MAPPING_KEY)
+    is_required = False
+    if advance_account_id is not None:
+        required = dimensions_service.get_required_dimensions_for_account(advance_account_id)
+        is_required = any(r.dimension_type_id == dim_type_id for r in required)
+    return is_required, options
+
+
 def get_advance_extra_requirements(company_id: int) -> list[ExtraDetailRequirement]:
     """طبقِ رفعِ باگِ واقعی («برایِ حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
     فراموش شده است» حتی وقتی روش/تفصیلیِ ردیف‌ها درست بودند): حسابِ
     پیش‌پرداختِ تنخواه ممکن است، جدا از بُعدِ تنخواه‌دار، بُعد/گروهِ شخصِ
-    دیگری هم رویش الزامی شده باشد (مثلاً مرکزِ هزینه). قبلاً open_fund/
-    close_fund فقط بُعدِ تنخواه‌دار را می‌فرستادند و هر نیازِ دیگری را
-    نادیده می‌گرفتند — نتیجه این بود که create_journal_entry همیشه رد
-    می‌کرد، مستقل از این‌که کاربر چه روشی/تفصیلی‌ای در ردیف‌ها انتخاب
-    کرده بود."""
+    دیگری هم رویش الزامی شده باشد. قبلاً open_fund/close_fund فقط بُعدِ
+    تنخواه‌دار را می‌فرستادند و هر نیازِ دیگری را نادیده می‌گرفتند — نتیجه
+    این بود که create_journal_entry همیشه رد می‌کرد، مستقل از این‌که
+    کاربر چه روشی/تفصیلی‌ای در ردیف‌ها انتخاب کرده بود. مرکزِ هزینه/پروژه
+    این‌جا نیستند — آن‌ها فیلدهایِ همیشه‌حاضرِ هدرند (get_advance_shared_dimension_options)."""
     advance_account_id = treasury_service.get_account_mapping(company_id, PETTY_CASH_ADVANCE_MAPPING_KEY)
     if advance_account_id is None:
         return []
     petty_cash_dim_id = dimensions_service.get_specialized_dimension_type_id(
         company_id, dimensions_service.PETTY_CASH_CODE
     )
+    shared_type_ids = {
+        dimensions_service.get_specialized_dimension_type_id(company_id, code)
+        for code in _HEADER_SHARED_DIMENSION_CODES
+    }
     requirements: list[ExtraDetailRequirement] = []
     for dim in dimensions_service.get_required_dimensions_for_account(advance_account_id):
-        if dim.dimension_type_id == petty_cash_dim_id:
+        if dim.dimension_type_id == petty_cash_dim_id or dim.dimension_type_id in shared_type_ids:
             continue
         label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code)
         requirements.append(ExtraDetailRequirement(dim.dimension_type_id, label, dim.detail_accounts))

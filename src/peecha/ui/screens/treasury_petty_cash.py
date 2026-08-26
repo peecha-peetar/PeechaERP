@@ -84,60 +84,82 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.company_id: int | None = None
         self._current_fund_id: int | None = None
         self._lines: list[petty_cash_service.PettyCashFundLineRow] = []
-        self._opening_rows: list[tuple[QWidget, _EnterComboBox, QComboBox, _AmountField, QLineEdit]] = []
+        self._opening_rows: list[tuple] = []
 
         layout = self.body_layout
-        layout.setContentsMargins(16, 10, 16, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setSpacing(4)
 
         title = QLabel("تنخواه‌گردان")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         # --- هدرِ یکپارچه: تنخواه‌دار/تنخواه + (فقط برایِ افتتاحِ تازه)
-        # تاریخ/شرح/تفصیلی‌هایِ اضافیِ حسابِ پیش‌پرداخت — طبقِ گزارشِ صریح
-        # («هدر دو تکه نباشد»)، همه در یک کارتِ واحد و جمع‌وجورند؛ ردیف‌هایِ
+        # تاریخ/شرح/مرکزِ هزینه/پروژه — طبقِ گزارشِ صریح («هدر دو تکه
+        # نباشد»، «فیلدها به اندازه‌یِ لازم عرض داشته باشند»، «شرح و
+        # مرکزِ هزینه و پروژه در یک خط»): یک شبکه‌یِ ۴ستونیِ واحد، هرکدام
+        # از فیلدها عرضِ متناسبِ خودش را دارد (نه کِشیدگیِ یکسان)؛ ردیف‌هایِ
         # مخصوصِ افتتاح فقط وقتی «تنخواهِ تازه» انتخاب شده باشد نمایش
         # داده می‌شوند (بدونِ این‌که کارتِ دومی ساخته شود). ------------------
         header_card = QWidget()
         header_card.setObjectName("card")
         self.header_grid = QGridLayout(header_card)
-        self.header_grid.setContentsMargins(10, 6, 10, 6)
-        self.header_grid.setSpacing(4)
+        self.header_grid.setContentsMargins(8, 5, 8, 5)
+        self.header_grid.setSpacing(3)
 
-        self.header_grid.addWidget(QLabel("تنخواه‌دار (تفصیلیِ سطحِ آخرِ گروهِ تنخواه)"), 0, 0)
+        self.header_grid.addWidget(QLabel("تنخواه‌دار (تفصیلیِ سطحِ آخرِ گروهِ تنخواه)"), 0, 0, 1, 2)
         self.custodian_combo = _make_searchable_combo([])
-        self.header_grid.addWidget(self.custodian_combo, 1, 0)
+        self.header_grid.addWidget(self.custodian_combo, 1, 0, 1, 2)
 
-        self.header_grid.addWidget(QLabel("تنخواه"), 0, 1)
+        self.header_grid.addWidget(QLabel("تنخواه"), 0, 2, 1, 2)
         self.fund_combo = _EnterComboBox()
-        self.header_grid.addWidget(self.fund_combo, 1, 1)
+        self.fund_combo.setMaximumWidth(220)
+        self.header_grid.addWidget(self.fund_combo, 1, 2, 1, 2)
 
         self.fund_no_label = QLabel("")
         self.fund_no_label.setObjectName("sectionHint")
-        self.header_grid.addWidget(self.fund_no_label, 2, 0, 1, 2)
+        self.header_grid.addWidget(self.fund_no_label, 2, 0, 1, 4)
 
         self.opening_date_label = QLabel("تاریخِ افتتاح")
         self.header_grid.addWidget(self.opening_date_label, 3, 0)
         self.opening_description_label = QLabel("شرح")
         self.header_grid.addWidget(self.opening_description_label, 3, 1)
+        self.cost_center_label = QLabel(dimensions_service.SPECIALIZED_DIMENSION_LABELS[dimensions_service.COST_CENTER_CODE])
+        self.header_grid.addWidget(self.cost_center_label, 3, 2)
+        self.project_label = QLabel(dimensions_service.SPECIALIZED_DIMENSION_LABELS[dimensions_service.PROJECT_CODE])
+        self.header_grid.addWidget(self.project_label, 3, 3)
+
         self.opening_date_field = JalaliDateEdit()
         self.header_grid.addWidget(self.opening_date_field, 4, 0)
         self.opening_description_field = QLineEdit()
         self.header_grid.addWidget(self.opening_description_field, 4, 1)
+        self.cost_center_combo = _make_searchable_combo([])
+        self.cost_center_combo.setMaximumWidth(160)
+        self.header_grid.addWidget(self.cost_center_combo, 4, 2)
+        self.project_combo = _make_searchable_combo([])
+        self.project_combo.setMaximumWidth(160)
+        self.header_grid.addWidget(self.project_combo, 4, 3)
 
-        self.header_grid.setColumnStretch(0, 2)
-        self.header_grid.setColumnStretch(1, 1)
+        self.header_grid.setColumnStretch(0, 0)
+        self.header_grid.setColumnStretch(1, 2)
+        self.header_grid.setColumnStretch(2, 1)
+        self.header_grid.setColumnStretch(3, 1)
         layout.addWidget(header_card)
 
         # طبقِ رفعِ باگِ واقعی: اگر حسابِ پیش‌پرداختِ تنخواه خودش، جدا از
-        # بُعدِ تنخواه‌دار، بُعد/گروهِ شخصِ دیگری هم الزامی کرده باشد، این
-        # ردیف‌هایِ پویا (فقط وقتی واقعاً لازم باشد) در همین کارت اضافه
-        # می‌شوند — قبلاً چون هیچ‌جا پرسیده نمی‌شد، ثبتِ سند همیشه با خطایِ
-        # «تفصیلیِ الزامی فراموش شده» رد می‌شد.
+        # بُعدِ تنخواه‌دار/مرکزِ هزینه/پروژه، بُعد/گروهِ شخصِ دیگری هم
+        # الزامی کرده باشد، این ردیف‌هایِ پویا (فقط وقتی واقعاً لازم باشد)
+        # در همین کارت اضافه می‌شوند — قبلاً چون هیچ‌جا پرسیده نمی‌شد،
+        # ثبتِ سند همیشه با خطایِ «تفصیلیِ الزامی فراموش شده» رد می‌شد.
         self._opening_header_widgets: list[QWidget] = [
             self.opening_date_label, self.opening_description_label,
             self.opening_date_field, self.opening_description_field,
+            self.cost_center_label, self.cost_center_combo,
+            self.project_label, self.project_combo,
+        ]
+        self._shared_dimension_widgets: list[tuple[str, QLabel, QComboBox]] = [
+            (dimensions_service.COST_CENTER_CODE, self.cost_center_label, self.cost_center_combo),
+            (dimensions_service.PROJECT_CODE, self.project_label, self.project_combo),
         ]
         self._advance_extra_widgets: list[tuple[int, QLabel, QComboBox]] = []
         self._advance_extra_row = 5
@@ -147,17 +169,19 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.custodian_combo.lineEdit().returnPressed.connect(lambda: self.fund_combo.setFocus())
         self.fund_combo.enterPressed.connect(self._on_fund_combo_return)
         self.opening_date_field.returnPressed.connect(lambda: self.opening_description_field.setFocus())
-        self.opening_description_field.returnPressed.connect(self._focus_after_header)
+        self.opening_description_field.returnPressed.connect(self._focus_after_description)
+        self.cost_center_combo.lineEdit().returnPressed.connect(self._focus_after_cost_center)
+        self.project_combo.lineEdit().returnPressed.connect(self._focus_after_header)
 
         # --- بخشِ افتتاحِ تنخواهِ تازه ---------------------------------------
         self.open_section = QWidget()
         open_layout = QVBoxLayout(self.open_section)
         open_layout.setContentsMargins(0, 0, 0, 0)
-        open_layout.setSpacing(6)
+        open_layout.setSpacing(3)
 
         open_layout.addWidget(QLabel("واریزیِ اولیه (روشِ پرداخت)"))
         self.opening_rows_container = QVBoxLayout()
-        self.opening_rows_container.setSpacing(4)
+        self.opening_rows_container.setSpacing(2)
         open_layout.addLayout(self.opening_rows_container)
 
         add_opening_row_button = QPushButton("➕")
@@ -180,12 +204,16 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.manage_section = QWidget()
         manage_layout = QVBoxLayout(self.manage_section)
         manage_layout.setContentsMargins(0, 0, 0, 0)
-        manage_layout.setSpacing(6)
+        manage_layout.setSpacing(3)
 
         self.lines_table = QTableWidget(0, 4)
         self.lines_table.setHorizontalHeaderLabels(["روش", "مبلغ", "شرح", ""])
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        # طبقِ درخواستِ صریح («فرم را فشرده کن تا ردیفِ بیشتری جا بگیرد»):
+        # ارتفاعِ هر ردیفِ جدول را به‌اندازه‌یِ محتوایِ واقعی محدود می‌کند،
+        # نه ارتفاعِ پیش‌فرضِ فراخِ Qt.
+        self.lines_table.verticalHeader().setDefaultSectionSize(28)
         manage_layout.addWidget(self.lines_table)
 
         self.lines_total_label = QLabel("")
@@ -193,7 +221,9 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         manage_layout.addWidget(self.lines_total_label)
 
         add_line_row = QHBoxLayout()
+        add_line_row.setSpacing(3)
         self.line_method_combo = _EnterComboBox()
+        self.line_method_combo.setMaximumWidth(130)
         for code in _LINE_METHOD_CODES:
             self.line_method_combo.addItem(_METHOD_LABELS[code], code)
         self.line_method_combo.currentIndexChanged.connect(self._on_line_method_changed)
@@ -201,11 +231,13 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         add_line_row.addWidget(self.line_method_combo)
 
         self.line_detail_combo = _make_searchable_combo([])
+        self.line_detail_combo.setMaximumWidth(200)
         self.line_detail_combo.setVisible(False)
         add_line_row.addWidget(self.line_detail_combo)
 
         self.line_check_no_field = QLineEdit()
         self.line_check_no_field.setPlaceholderText("شماره‌یِ چک")
+        self.line_check_no_field.setMaximumWidth(110)
         self.line_check_no_field.setVisible(False)
         add_line_row.addWidget(self.line_check_no_field)
         self.line_check_due_field = JalaliDateEdit()
@@ -213,6 +245,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         add_line_row.addWidget(self.line_check_due_field)
 
         self.line_amount_field = _AmountField()
+        self.line_amount_field.setMaximumWidth(140)
         add_line_row.addWidget(self.line_amount_field)
 
         self.line_description_field = QLineEdit()
@@ -264,6 +297,7 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         ]
         _fill_options(self.custodian_combo, custodian_options)
 
+        self._refresh_shared_dimension_widgets()
         self._rebuild_advance_extra_widgets()
         self._rebuild_line_method_combo()
         self._reset_opening_rows()
@@ -271,6 +305,31 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
 
     def _reset_form(self) -> None:
         self.refresh()
+
+    def _refresh_shared_dimension_widgets(self) -> None:
+        """طبقِ درخواستِ صریح («مرکزِ هزینه و پروژه در یک خط با شرح»):
+        این دو، هم‌الگو با هدرِ فرمِ دریافت/پرداخت، همیشه ساخته می‌شوند و
+        فقط enable/disable می‌شوند (فعال اگر حسابِ پیش‌پرداختِ تنخواه
+        واقعاً همان بُعد را الزامی کرده باشد)."""
+        for code, _label, combo in self._shared_dimension_widgets:
+            if self.company_id is None:
+                combo.setEnabled(False)
+                continue
+            is_required, options = petty_cash_service.get_advance_shared_dimension_options(self.company_id, code)
+            _fill_options(combo, [(o.detail_account_id, _detail_option_label(o)) for o in options])
+            combo.setEnabled(is_required)
+
+    def _focus_after_description(self) -> None:
+        if self.cost_center_combo.isEnabled():
+            self.cost_center_combo.setFocus()
+        else:
+            self._focus_after_cost_center()
+
+    def _focus_after_cost_center(self) -> None:
+        if self.project_combo.isEnabled():
+            self.project_combo.setFocus()
+        else:
+            self._focus_after_header()
 
     def _rebuild_advance_extra_widgets(self) -> None:
         """طبقِ رفعِ باگِ واقعی: اگر حسابِ پیش‌پرداختِ تنخواه بُعد/گروهِ
@@ -311,23 +370,28 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         else:
             self._focus_first_opening_row()
 
-    def _rebuild_line_method_combo(self) -> None:
+    def _method_combo_items(self) -> list[tuple[str, str]]:
         """طبقِ درخواستِ صریح («همه‌یِ روش‌هایِ فرمِ پرداخت در تنخواه هم
-        باشد»): علاوه بر نقد/بانک/چک/تخفیف/تهاتر، روش‌هایِ سفارشیِ فعالِ
-        همین شرکت (جهتِ پرداخت) هم اضافه می‌شوند — دقیقاً هم‌الگو با
+        باشد — نه فقط نقد/بانک»): فهرستِ کاملِ روش‌ها، هم برایِ ردیفِ
+        واریزیِ اولیه هم ردیفِ مدیریت — نقد/بانک/چک/تخفیف/تهاتر + روش‌هایِ
+        سفارشیِ فعالِ همین شرکت (جهتِ پرداخت)، دقیقاً هم‌الگو با
         treasury_voucher.py. خرجِ چک (CHECK_DISBURSEMENT) عمداً این‌جا
         نیست: منطقِ حسابداریِ آن (بازنشستگیِ یک چکِ دریافتیِ مشخص) با
         ردیف‌هایِ سادهِ «مبلغ + تفصیلیِ اختیاری» تفاوتِ بنیادی دارد."""
-        current = self.line_method_combo.currentData()
-        self.line_method_combo.blockSignals(True)
-        self.line_method_combo.clear()
-        for code in _LINE_METHOD_CODES:
-            self.line_method_combo.addItem(_METHOD_LABELS[code], code)
+        items = [(code, _METHOD_LABELS[code]) for code in _LINE_METHOD_CODES]
         if self.company_id is not None:
             for custom_method in treasury_service.list_custom_methods(self.company_id, "PAYMENT", active_only=True):
                 code = f"CUSTOM_{custom_method.custom_method_id}"
                 _METHOD_LABELS[code] = custom_method.label
-                self.line_method_combo.addItem(custom_method.label, code)
+                items.append((code, custom_method.label))
+        return items
+
+    def _rebuild_line_method_combo(self) -> None:
+        current = self.line_method_combo.currentData()
+        self.line_method_combo.blockSignals(True)
+        self.line_method_combo.clear()
+        for code, label in self._method_combo_items():
+            self.line_method_combo.addItem(label, code)
         self.line_method_combo.blockSignals(False)
         index = self.line_method_combo.findData(current) if current else -1
         self.line_method_combo.setCurrentIndex(index if index >= 0 else 0)
@@ -400,19 +464,37 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             self._opening_rows[0][1].setFocus()
 
     def _refresh_opening_row_detail_options(self, row_index: int) -> None:
-        _row_widget, method_combo, detail_combo, _amount_field, _description_field = self._opening_rows[row_index]
+        (
+            _row_widget, method_combo, detail_combo, check_no_field, check_due_field, _amount_field, _description_field,
+        ) = self._opening_rows[row_index]
+        method = method_combo.currentData()
+        check_no_field.setVisible(method == "CHECK")
+        check_due_field.setVisible(method == "CHECK")
         if self.company_id is None:
             detail_combo.setVisible(False)
             return
-        options, _is_required = _resolve_petty_cash_detail_options(self.company_id, method_combo.currentData())
+        options, _is_required = _resolve_petty_cash_detail_options(self.company_id, method)
         _fill_options(detail_combo, [(o.detail_account_id, _detail_option_label(o)) for o in options])
         detail_combo.setVisible(bool(options))
 
     def _on_opening_row_method_return(self, row_index: int) -> None:
-        _row_widget, _method_combo, detail_combo, amount_field, _description_field = self._opening_rows[row_index]
+        (
+            _row_widget, _method_combo, detail_combo, check_no_field, _check_due_field, amount_field, _description_field,
+        ) = self._opening_rows[row_index]
         self._refresh_opening_row_detail_options(row_index)
         if detail_combo.isVisible():
             detail_combo.setFocus()
+        elif check_no_field.isVisible():
+            check_no_field.setFocus()
+        else:
+            amount_field.setFocus()
+
+    def _focus_after_opening_detail(self, row_index: int) -> None:
+        (
+            _row_widget, _method_combo, _detail_combo, check_no_field, _check_due_field, amount_field, _description_field,
+        ) = self._opening_rows[row_index]
+        if check_no_field.isVisible():
+            check_no_field.setFocus()
         else:
             amount_field.setFocus()
 
@@ -426,29 +508,49 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             self._add_opening_row(focus=True)
 
     def _add_opening_row(self, focus: bool = False) -> None:
+        """طبقِ درخواستِ صریح («همه‌یِ روش‌هایِ فرمِ پرداخت اینجا هم
+        باشه»): ردیفِ واریزیِ اولیه هم اکنون دقیقاً همان فهرستِ کاملِ
+        روش‌ها را دارد (نه فقط نقد/بانک)؛ چک هم فیلدهایِ تخصصیِ خودش
+        (شماره/تاریخِ سررسید) را دارد، هم‌الگو با ردیفِ مدیریت."""
         row_index = len(self._opening_rows)
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(3)
         method_combo = _EnterComboBox()
-        method_combo.addItem("نقد", "CASH")
-        method_combo.addItem("بانک", "BANK")
+        method_combo.setMaximumWidth(110)
+        for code, label in self._method_combo_items():
+            method_combo.addItem(label, code)
         row_layout.addWidget(method_combo)
         detail_combo = _make_searchable_combo([])
+        detail_combo.setMaximumWidth(180)
         detail_combo.setVisible(False)
         row_layout.addWidget(detail_combo)
+        check_no_field = QLineEdit()
+        check_no_field.setPlaceholderText("شماره‌یِ چک")
+        check_no_field.setMaximumWidth(110)
+        check_no_field.setVisible(False)
+        row_layout.addWidget(check_no_field)
+        check_due_field = JalaliDateEdit()
+        check_due_field.setVisible(False)
+        row_layout.addWidget(check_due_field)
         amount_field = _AmountField()
+        amount_field.setMaximumWidth(140)
         row_layout.addWidget(amount_field)
         description_field = QLineEdit()
         description_field.setPlaceholderText("شرح")
         row_layout.addWidget(description_field, 1)
         self.opening_rows_container.addWidget(row_widget)
-        self._opening_rows.append((row_widget, method_combo, detail_combo, amount_field, description_field))
+        self._opening_rows.append(
+            (row_widget, method_combo, detail_combo, check_no_field, check_due_field, amount_field, description_field)
+        )
 
         method_combo.currentIndexChanged.connect(lambda _i, r=row_index: self._refresh_opening_row_detail_options(r))
         method_combo.enterPressed.connect(lambda r=row_index: self._on_opening_row_method_return(r))
-        detail_combo.lineEdit().returnPressed.connect(lambda r=row_index: self._opening_rows[r][3].setFocus())
-        amount_field.returnPressed.connect(lambda r=row_index: self._opening_rows[r][4].setFocus())
+        detail_combo.lineEdit().returnPressed.connect(lambda r=row_index: self._focus_after_opening_detail(r))
+        check_no_field.returnPressed.connect(lambda r=row_index: self._opening_rows[r][4].setFocus())
+        check_due_field.returnPressed.connect(lambda r=row_index: self._opening_rows[r][5].setFocus())
+        amount_field.returnPressed.connect(lambda r=row_index: self._opening_rows[r][6].setFocus())
         description_field.returnPressed.connect(lambda r=row_index: self._focus_opening_row_after(r))
 
         self._refresh_opening_row_detail_options(row_index)
@@ -463,6 +565,17 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             theme.set_status_label(self.status_label, "تنخواه‌دار را انتخاب کنید.", ok=False)
             return
         extra_details: dict[int, int] = {}
+        for code, label, combo in self._shared_dimension_widgets:
+            if not combo.isEnabled():
+                continue
+            if combo.currentData() is None:
+                theme.set_status_label(
+                    self.status_label, f"انتخابِ «{label.text()}» برایِ حسابِ پیش‌پرداختِ تنخواه الزامی است.", ok=False
+                )
+                combo.setFocus()
+                return
+            dim_type_id = dimensions_service.get_specialized_dimension_type_id(self.company_id, code)
+            extra_details[dim_type_id] = combo.currentData()
         for dim_type_id, label, combo in self._advance_extra_widgets:
             if combo.currentData() is None:
                 theme.set_status_label(
@@ -471,10 +584,19 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
                 combo.setFocus()
                 return
             extra_details[dim_type_id] = combo.currentData()
-        for _widget, method_combo, detail_combo, amount_field, _description_field in self._opening_rows:
+        for _widget, method_combo, detail_combo, _check_no_field, _check_due_field, amount_field, _description_field in self._opening_rows:
             if amount_field.value() <= 0:
                 continue
-            _options, is_required = _resolve_petty_cash_detail_options(self.company_id, method_combo.currentData())
+            method = method_combo.currentData()
+            _options, is_required = _resolve_petty_cash_detail_options(self.company_id, method)
+            # طبقِ محدودیتِ واقعیِ create_treasury_voucher (که افتتاحِ
+            # تنخواه از آن استفاده می‌کند): برایِ روشِ چک، حسابِ بانکیِ
+            # صادرکننده هرگز اختیاری نیست — بدونش اصلاً نمی‌شود چکِ صادرشده
+            # را ثبت کرد (ستونِ bank_account_detail_id در پایگاه‌داده
+            # NOT NULL است)، حتی اگر رویِ معینِ نگاشته‌شده هیچ بُعدی الزامی
+            # نشده باشد.
+            if method == "CHECK":
+                is_required = True
             if is_required and detail_combo.currentData() is None:
                 theme.set_status_label(self.status_label, "تفصیلیِ الزامیِ یکی از ردیف‌هایِ واریزی انتخاب نشده است.", ok=False)
                 detail_combo.setFocus()
@@ -485,8 +607,11 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
                 amount=decimal.Decimal(str(amount_field.value())),
                 description=description_field.text().strip(),
                 detail_account_id=detail_combo.currentData() if detail_combo.isVisible() else None,
+                check_no=check_no_field.text().strip() or None if method_combo.currentData() == "CHECK" else None,
+                check_due_date=check_due_field.date() if method_combo.currentData() == "CHECK" else None,
             )
-            for _widget, method_combo, detail_combo, amount_field, description_field in self._opening_rows
+            for _widget, method_combo, detail_combo, check_no_field, check_due_field, amount_field, description_field
+            in self._opening_rows
             if amount_field.value() > 0
         ]
         if not method_lines:
