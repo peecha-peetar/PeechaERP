@@ -55,26 +55,36 @@ from peecha.ui.widgets import (
 
 DOC_TYPE_TITLES = {
     "SALES_ORDER": "سفارشِ فروش",
+    "SALES_PROFORMA": "پیش‌فاکتورِ فروش",
     "SALES_INVOICE": "فاکتورِ فروش",
     "SALES_RETURN": "برگشت از فروش",
     "PURCHASE_ORDER": "سفارشِ خرید",
+    "PURCHASE_PROFORMA": "پیش‌فاکتورِ خرید",
     "PURCHASE_INVOICE": "فاکتورِ خرید",
     "PURCHASE_RETURN": "برگشت به تامین‌کننده",
 }
 STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "APPROVED": "تصویب‌شده", "POSTED": "ثبتِ‌نهایی‌شده", "CANCELLED": "لغوشده"}
-_SALES_TYPES = ("SALES_ORDER", "SALES_INVOICE", "SALES_RETURN")
+_SALES_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN")
+# طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل شود»).
+_CONVERTIBLE_TO_INVOICE_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA")
 _LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح"]
 
 
 class _LineDialog(LayoutEditMixin, QDialog):
     def __init__(
         self, parent: QWidget, items: list[catalog_service.ItemRow], company_id: int, main_window,
-        decimal_places: int, initial: dict | None = None,
+        decimal_places: int, initial: dict | None = None, *, counterparty_id: int | None = None,
+        price_list_id: int | None = None, document_type_code: str | None = None,
+        document_date: datetime.date | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("ردیفِ سند")
         self.setMinimumWidth(380)
         self._company_id = company_id
+        self._counterparty_id = counterparty_id
+        self._price_list_id = price_list_id
+        self._document_type_code = document_type_code
+        self._document_date = document_date
         layout = QVBoxLayout(self)
         self._items_by_id = {it.item_id: it for it in items}
 
@@ -108,7 +118,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.fields_grid = FieldGrid([
             FieldSpec("item", "کالا", item_row_widget, span=2),
             FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
-            FieldSpec("unit_price", "بهایِ واحد (صفر = محاسبهٔ خودکار)", self.unit_price_field, span=1),
+            FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
             FieldSpec("discount", "تخفیفِ مبلغی", self.discount_field, span=1),
             FieldSpec("tax_percent", "درصدِ مالیات (بعدِ تخفیف)", self.tax_percent_field, span=1),
             FieldSpec("description", "توضیح", self.description_field, span=3),
@@ -142,7 +152,11 @@ class _LineDialog(LayoutEditMixin, QDialog):
             _enter_signal(widget).connect(next_widget.setFocus)
         _enter_signal(enter_chain[-1]).connect(self._on_accept)
 
+        self._is_new_row = initial is None
+        self._price_manually_edited = False
+        self.unit_price_field.textEdited.connect(self._on_price_edited_manually)
         self.item_combo.currentIndexChanged.connect(self._on_item_changed)
+        self.quantity_field.valueChanged.connect(self._suggest_price)
 
         if initial is not None:
             index = self.item_combo.findData(initial["item_id"])
@@ -176,6 +190,38 @@ class _LineDialog(LayoutEditMixin, QDialog):
             return
         default_tax = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
         self.tax_percent_field.setValue(float(default_tax))
+        self._price_manually_edited = False
+        self._suggest_price()
+
+    def _on_price_edited_manually(self) -> None:
+        self._price_manually_edited = True
+
+    def _suggest_price(self) -> None:
+        """طبقِ رفعِ باگِ واقعی («قیمتِ کالا از لیستِ قیمت پیشنهاد
+        نمی‌شود»): قبلاً این مقدار فقط داخلِ سرویس (add_line) و در
+        سکوت محاسبه می‌شد — کاربر پیش از ذخیره هرگز آن را نمی‌دید. حالا
+        همان منطق (commercial_pricing.resolve_price) این‌جا هم صدا زده
+        می‌شود تا بهایِ واحد، همین که کالا/مقدار مشخص شد، در فیلد نمایش
+        داده شود — هنوز کاملاً قابلِ‌ویرایشِ دستی."""
+        if not self._is_new_row or self._price_manually_edited:
+            return
+        item_id = self.item_combo.currentData()
+        if item_id is None or self._counterparty_id is None or self._document_type_code is None:
+            return
+        item = self._items_by_id.get(item_id)
+        if item is None:
+            return
+        quantity = decimal.Decimal(str(self.quantity_field.value())) if self.quantity_field.value() > 0 else decimal.Decimal(1)
+        try:
+            resolved = pricing_service.resolve_price(
+                self._company_id, self._counterparty_id, item_id, item.base_uom_id, quantity,
+                self._price_list_id, self._document_type_code, self._document_date,
+            )
+        except ValueError:
+            return
+        self.unit_price_field.setValue(float(resolved.unit_price))
+        if resolved.discount_amount and self.discount_field.value() == 0:
+            self.discount_field.setValue(float(resolved.discount_amount))
 
     def _on_accept(self) -> None:
         if self.item_combo.currentData() is None:
@@ -313,23 +359,36 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         for widget, next_widget in zip(header_chain, header_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
 
+        # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): وضعیت و
+        # پیوندهایِ سند هردو متنِ کوتاهِ اطلاعاتی‌اند — قبلاً هرکدام یک
+        # ردیفِ کاملِ جدا بودند؛ حالا کنارِ هم، یک ردیف.
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(0, 0, 0, 0)
+        status_row.setSpacing(8)
         self.status_badge = QLabel("")
         self.status_badge.setObjectName("statusBadge")
-        self.body_layout.addWidget(self.status_badge)
-
+        status_row.addWidget(self.status_badge)
         self.links_label = QLabel("")
-        self.body_layout.addWidget(self.links_label)
+        status_row.addWidget(self.links_label)
+        status_row.addStretch(1)
+        self.body_layout.addLayout(status_row)
 
+        # همان‌طور: عنوانِ بخشِ «ردیف‌ها» و دکمهٔ افزودن هرکدام یک ردیفِ
+        # کاملِ جدا بودند، بدونِ نیازِ واقعی — حالا کنارِ هم.
+        lines_header_row = QHBoxLayout()
+        lines_header_row.setContentsMargins(0, 0, 0, 0)
+        lines_header_row.setSpacing(8)
         lines_title = QLabel("ردیف‌ها")
         lines_title.setObjectName("sectionTitle")
-        self.body_layout.addWidget(lines_title)
-
+        lines_header_row.addWidget(lines_title)
         add_line_button = QPushButton("➕")
         add_line_button.setObjectName("primaryIconButton")
         add_line_button.setFixedWidth(48)
         add_line_button.setToolTip("افزودنِ ردیف")
         add_line_button.clicked.connect(self._add_line)
-        self.body_layout.addWidget(add_line_button, alignment=Qt.AlignLeft)
+        lines_header_row.addWidget(add_line_button)
+        lines_header_row.addStretch(1)
+        self.body_layout.addLayout(lines_header_row)
 
         self.lines_table = QTableWidget(0, len(_LINE_COLUMNS))
         self.lines_table.setHorizontalHeaderLabels(_LINE_COLUMNS)
@@ -360,10 +419,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         delete_line_button.clicked.connect(self._delete_line)
         line_buttons.addWidget(delete_line_button)
         self.body_layout.addWidget(line_button_cluster, alignment=Qt.AlignLeft)
-
-        self.totals_label = QLabel("")
-        self.totals_label.setObjectName("sectionTitle")
-        self.body_layout.addWidget(self.totals_label)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -416,6 +471,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.setToolTip("لغوِ سند")
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
+
+        # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل
+        # شود»): فقط برایِ انواعِ سفارش/پیش‌فاکتور نمایش داده می‌شود.
+        self.convert_button = QPushButton("🧾")
+        self.convert_button.setObjectName("primaryIconButton")
+        self.convert_button.setFixedWidth(48)
+        self.convert_button.setToolTip("تبدیل به فاکتور")
+        self.convert_button.clicked.connect(self._convert_to_invoice)
+        self.convert_button.setVisible(document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
+        self.footer_layout.addWidget(self.convert_button)
         self.footer_layout.addStretch(1)
 
         self.set_field_help([
@@ -511,10 +576,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._lines = lines
         self._refresh_lines_table()
         dp = self._decimal_places
-        self.totals_label.setText(
-            f"جمعِ ناخالص: {numerals.format_money(doc.subtotal_amount, dp)}    تخفیف: {numerals.format_money(doc.discount_amount, dp)}    "
-            f"مالیات: {numerals.format_money(doc.tax_amount, dp)}    جمعِ کل: {numerals.format_money(doc.total_amount, dp)}"
-        )
         self.summary_cards.set_value("subtotal", numerals.format_money(doc.subtotal_amount, dp))
         self.summary_cards.set_value(
             "discount_tax", numerals.format_money(doc.discount_amount + doc.tax_amount, dp)
@@ -559,6 +620,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.approve_button.setEnabled(is_confirmed)
         self.post_button.setEnabled(is_confirmed or is_approved)
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
+        is_posted = self._status_code == "POSTED"
+        self.convert_button.setEnabled(is_confirmed or is_approved or is_posted)
 
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
@@ -574,7 +637,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.channel_combo.setCurrentIndex(0)
         self.reference_field.clear()
         self.description_field.clear()
-        self.totals_label.setText("")
         for key in ("subtotal", "discount_tax", "grand_total"):
             self.summary_cards.set_value(key, "۰")
         self._refresh_lines_table()
@@ -629,7 +691,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _add_line(self) -> None:
         if not self._ensure_saved():
             return
-        dialog = _LineDialog(self, self._items, self._company_id(), self._main_window, self._decimal_places)
+        dialog = _LineDialog(
+            self, self._items, self._company_id(), self._main_window, self._decimal_places,
+            counterparty_id=self.counterparty_combo.currentData(), price_list_id=self.price_list_combo.currentData(),
+            document_type_code=self.document_type_code, document_date=self.date_field.date(),
+        )
         if dialog.exec() != QDialog.Accepted:
             return
         try:
@@ -693,8 +759,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در تاییدِ سند", str(exc))
             return
-        self.status_label.setText("")
         self._load_document()
+        theme.set_status_label(self.status_label, "سند تایید شد.", ok=True)
 
     def _approve(self) -> None:
         if self._document_id is None:
@@ -705,8 +771,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در تصویبِ سند", str(exc))
             return
-        self.status_label.setText("")
         self._load_document()
+        theme.set_status_label(self.status_label, "سند تصویب شد.", ok=True)
 
     def _post(self) -> None:
         if self._document_id is None:
@@ -746,4 +812,33 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در لغوِ سند", str(exc))
             return
-        self._load_document()
+        # لغو هم مثلِ ثبتِ نهایی یک وضعیتِ نهایی‌ست — سند دیگر رویِ همین
+        # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
+        self._reset_form()
+        theme.set_status_label(self.status_label, "سند لغو شد.", ok=True)
+
+    def _convert_to_invoice(self) -> None:
+        if self._document_id is None:
+            return
+        is_sales = self.document_type_code.startswith("SALES")
+        target_title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
+        confirm = QMessageBox.question(
+            self, "تبدیل به فاکتور", f"یک {target_title}ِ تازه با همینِ سرِسند و ردیف‌ها ساخته شود؟",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            new_document_id = documents_service.convert_to_invoice(
+                self._document_id, self._company_id(), app_session.current_user.user_id, datetime.date.today()
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
+            return
+        screen_code = "commercial_document_sales_invoice" if is_sales else "commercial_document_purchase_invoice"
+        if self._main_window is not None:
+            self._main_window.open_screen(screen_code, then=lambda screen: screen.edit_document(new_document_id))
+        else:
+            theme.set_status_label(
+                self.status_label, f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} ساخته شد.", ok=True
+            )

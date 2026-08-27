@@ -1434,18 +1434,20 @@ class MainWindow(QMainWindow):
         self.register_screen("inventory_document_return_out", InventoryDocumentScreen("RETURN_OUT", self))
         self.register_screen("inventory_document_adjustment", InventoryDocumentScreen("ADJUSTMENT", self))
         self.register_screen("commercial_document_sales_order", CommercialDocumentScreen("SALES_ORDER", self))
+        self.register_screen("commercial_document_sales_proforma", CommercialDocumentScreen("SALES_PROFORMA", self))
         self.register_screen("commercial_document_sales_invoice", CommercialDocumentScreen("SALES_INVOICE", self))
         self.register_screen("commercial_document_sales_return", CommercialDocumentScreen("SALES_RETURN", self))
         self.register_screen("commercial_document_purchase_order", CommercialDocumentScreen("PURCHASE_ORDER", self))
+        self.register_screen("commercial_document_purchase_proforma", CommercialDocumentScreen("PURCHASE_PROFORMA", self))
         self.register_screen("commercial_document_purchase_invoice", CommercialDocumentScreen("PURCHASE_INVOICE", self))
         self.register_screen("commercial_document_purchase_return", CommercialDocumentScreen("PURCHASE_RETURN", self))
         self.register_screen(
             "commercial_documents_list_sales",
-            CommercialDocumentsListScreen(self, type_filter_codes=("SALES_ORDER", "SALES_INVOICE", "SALES_RETURN")),
+            CommercialDocumentsListScreen(self, type_filter_codes=("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN")),
         )
         self.register_screen(
             "commercial_documents_list_purchase",
-            CommercialDocumentsListScreen(self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_INVOICE", "PURCHASE_RETURN")),
+            CommercialDocumentsListScreen(self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN")),
         )
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sessions", CommercialPosSessionsScreen())

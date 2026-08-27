@@ -40,15 +40,25 @@ from peecha.services import inventory_engine as inv_engine_service
 from peecha.services import journal_entries as je_service
 
 DOCUMENT_TYPE_CODES = (
-    "SALES_ORDER", "SALES_INVOICE", "SALES_RETURN",
-    "PURCHASE_ORDER", "PURCHASE_INVOICE", "PURCHASE_RETURN",
+    "SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN",
+    "PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN",
 )
-_ORDER_TYPES = ("SALES_ORDER", "PURCHASE_ORDER")
+# سفارش/پیش‌فاکتور فقط سندِ قصد/پیشنهاد هستند — هرگز اثری در انبار یا
+# حسابداری نمی‌گذارند؛ POSTED برایِ این دو یعنی صرفاً «قفل و ارسال‌شده».
+_ORDER_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA")
 _STOCK_DOC_TYPE_BY_TYPE = {
     "PURCHASE_INVOICE": "RECEIPT",
     "SALES_INVOICE": "ISSUE",
     "SALES_RETURN": "RETURN_IN",
     "PURCHASE_RETURN": "RETURN_OUT",
+}
+# طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور باید بتواند به فاکتور تبدیل
+# شود»): مقصدِ تبدیل برایِ هر نوعِ سندِ غیرِمالی.
+_CONVERT_TO_INVOICE_TARGET = {
+    "SALES_ORDER": "SALES_INVOICE",
+    "SALES_PROFORMA": "SALES_INVOICE",
+    "PURCHASE_ORDER": "PURCHASE_INVOICE",
+    "PURCHASE_PROFORMA": "PURCHASE_INVOICE",
 }
 
 _ZERO = decimal.Decimal("0")
@@ -128,6 +138,63 @@ def create_document(
         session.add(doc)
         session.commit()
         return doc.document_id
+
+
+def convert_to_invoice(document_id: int, company_id: int, created_by_user_id: int, document_date: datetime.date) -> int:
+    """طبقِ درخواستِ صریح: سفارش/پیش‌فاکتورِ خرید و فروش باید بتواند به
+    فاکتورِ خرید/فروش تبدیل شود — یک سندِ فاکتورِ تازه (DRAFT) با همان
+    سرِسند و ردیف‌ها ساخته می‌شود، با source_document_id به سندِ مبدا
+    (طبقِ ستونِ ازپیش‌موجودِ همین جدول برایِ همین منظور)."""
+    with new_session() as session:
+        source = session.get(CommercialDocument, document_id)
+        if source is None or source.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        target_type = _CONVERT_TO_INVOICE_TARGET.get(source.document_type_code)
+        if target_type is None:
+            raise ValueError("این نوعِ سند قابلِ‌تبدیل به فاکتور نیست.")
+        if source.status_code in ("DRAFT", "CANCELLED"):
+            raise ValueError("فقط سندِ تاییدشده/تصویب‌شده/ثبت‌شده قابلِ‌تبدیل به فاکتور است.")
+        already_converted = session.scalar(
+            select(CommercialDocument).where(
+                CommercialDocument.source_document_id == document_id,
+                CommercialDocument.document_type_code == target_type,
+                CommercialDocument.status_code != "CANCELLED",
+            )
+        )
+        if already_converted is not None:
+            raise ValueError(f"این سند قبلاً به فاکتورِ #{already_converted.document_no} تبدیل شده است.")
+        source_lines = session.scalars(
+            select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
+        ).all()
+        if not source_lines:
+            raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+        header_fields = DocumentHeaderFields(
+            counterparty_detail_account_id=source.counterparty_detail_account_id, currency_id=source.currency_id,
+            warehouse_id=source.warehouse_id, channel_code=source.channel_code, price_list_id=source.price_list_id,
+            source_document_id=source.document_id, exchange_rate=source.exchange_rate,
+            sales_rep_detail_account_id=source.sales_rep_detail_account_id,
+            cost_center_detail_account_id=source.cost_center_detail_account_id,
+            project_detail_account_id=source.project_detail_account_id,
+            reference_no=source.reference_no, description=source.description,
+        )
+        line_snapshots = [
+            {
+                "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": ln.quantity, "quantity_base": ln.quantity_base,
+                "unit_price": ln.unit_price, "discount_amount": ln.discount_amount, "tax_percent": ln.tax_percent,
+                "batch_id": ln.batch_id, "serial_id": ln.serial_id, "description": ln.description, "line_id": ln.line_id,
+            }
+            for ln in source_lines
+        ]
+
+    new_document_id = create_document(company_id, created_by_user_id, target_type, document_date, header_fields)
+    for snap in line_snapshots:
+        add_line(
+            new_document_id, company_id, item_id=snap["item_id"], uom_id=snap["uom_id"], quantity=snap["quantity"],
+            quantity_base=snap["quantity_base"], unit_price=snap["unit_price"], discount_amount=snap["discount_amount"],
+            tax_percent=snap["tax_percent"], batch_id=snap["batch_id"], serial_id=snap["serial_id"],
+            source_line_id=snap["line_id"], description=snap["description"],
+        )
+    return new_document_id
 
 
 def _get_draft_document(session, document_id: int, company_id: int) -> CommercialDocument:
@@ -224,7 +291,14 @@ def delete_line(line_id: int, document_id: int, company_id: int) -> None:
 
 def delete_document(document_id: int, company_id: int) -> None:
     with new_session() as session:
-        doc = _get_draft_document(session, document_id, company_id)
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        # DRAFT/CONFIRMED/APPROVED/CANCELLED هرگز stock_document_id/
+        # journal_entry_id پر نمی‌کنند (فقط POSTED این دو را پر می‌کند) —
+        # پس حذفِ مستقیمِ هرکدام از این چهار وضعیت همیشه بی‌خطر است.
+        if doc.status_code == "POSTED":
+            raise ValueError("سندِ ثبت‌شده هرگز حذف نمی‌شود — برایِ اصلاح، سندِ تازه‌ای ثبت کنید.")
         session.query(CommercialDocumentLine).filter(CommercialDocumentLine.document_id == document_id).delete()
         session.delete(doc)
         session.commit()

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -22,13 +23,15 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES, STATUS_LABELS
 
-_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع"]
+_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "عملیات"]
 
 _TYPE_TO_SCREEN = {
     "SALES_ORDER": "commercial_document_sales_order",
+    "SALES_PROFORMA": "commercial_document_sales_proforma",
     "SALES_INVOICE": "commercial_document_sales_invoice",
     "SALES_RETURN": "commercial_document_sales_return",
     "PURCHASE_ORDER": "commercial_document_purchase_order",
+    "PURCHASE_PROFORMA": "commercial_document_purchase_proforma",
     "PURCHASE_INVOICE": "commercial_document_purchase_invoice",
     "PURCHASE_RETURN": "commercial_document_purchase_return",
 }
@@ -86,6 +89,7 @@ class CommercialDocumentsListScreen(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(len(_COLUMNS) - 1, QHeaderView.ResizeToContents)
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
 
@@ -127,15 +131,64 @@ class CommercialDocumentsListScreen(QWidget):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, d.document_id)
                 self.table.setItem(row_index, col_index, item)
+            self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d))
+
+    def _build_row_actions(self, d) -> QWidget:
+        actions = QWidget()
+        actions_layout = QHBoxLayout(actions)
+        actions_layout.setContentsMargins(4, 2, 4, 2)
+        actions_layout.setSpacing(4)
+
+        edit_button = QPushButton("✏️")
+        edit_button.setObjectName("iconButton")
+        edit_button.setFixedWidth(36)
+        edit_button.setToolTip("اصلاح" if d.status_code == "DRAFT" else "مشاهده")
+        edit_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._open_existing(doc_id))
+        actions_layout.addWidget(edit_button)
+
+        delete_button = QPushButton("🗑️")
+        delete_button.setObjectName("dangerIconButton")
+        delete_button.setFixedWidth(36)
+        if d.status_code != "POSTED":
+            # طبقِ services/commercial_documents.py:delete_document —
+            # DRAFT/CONFIRMED/APPROVED/CANCELLED هرگز اثری در انبار یا
+            # حسابداری نگذاشته‌اند، پس حذفِ مستقیم همیشه بی‌خطر است.
+            delete_button.setToolTip("حذفِ سند")
+            delete_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._delete_document(doc_id))
+        else:
+            delete_button.setEnabled(False)
+            delete_button.setToolTip("این سند ثبتِ‌نهایی شده و در انبار/حسابداری اثر دارد — حذفِ مستقیم ممکن نیست.")
+        actions_layout.addWidget(delete_button)
+        actions_layout.addStretch(1)
+        return actions
 
     def _open_new(self, document_type_code: str) -> None:
         screen_code = _TYPE_TO_SCREEN[document_type_code]
         self._main_window.open_screen(screen_code, then=lambda screen: screen._reset_form())
 
-    def _on_row_double_clicked(self, row: int, _column: int) -> None:
-        document_id = self.table.item(row, 0).data(Qt.UserRole)
+    def _open_existing(self, document_id: int) -> None:
         doc = next((d for d in self._rows if d.document_id == document_id), None)
         if doc is None:
             return
         screen_code = _TYPE_TO_SCREEN[doc.document_type_code]
         self._main_window.open_screen(screen_code, then=lambda screen: screen.edit_document(document_id))
+
+    def _delete_document(self, document_id: int) -> None:
+        confirm = QMessageBox.question(
+            self, "حذف", "این سند حذف شود؟ این کار قابلِ‌بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            documents_service.delete_document(document_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.refresh()
+
+    def _on_row_double_clicked(self, row: int, _column: int) -> None:
+        document_id = self.table.item(row, 0).data(Qt.UserRole)
+        self._open_existing(document_id)

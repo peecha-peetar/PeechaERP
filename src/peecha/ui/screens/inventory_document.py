@@ -385,16 +385,23 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         self.body_layout.addWidget(header_card)
 
+        # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): عنوانِ
+        # بخشِ «ردیف‌ها» و دکمهٔ افزودن قبلاً دو ردیفِ کاملِ جدا بودند،
+        # بدونِ نیازِ واقعی — حالا کنارِ هم، یک ردیف.
+        lines_header_row = QHBoxLayout()
+        lines_header_row.setContentsMargins(0, 0, 0, 0)
+        lines_header_row.setSpacing(8)
         lines_title = QLabel("ردیف‌ها")
         lines_title.setObjectName("sectionTitle")
-        self.body_layout.addWidget(lines_title)
-
+        lines_header_row.addWidget(lines_title)
         add_line_button = QPushButton("➕")
         add_line_button.setObjectName("primaryIconButton")
         add_line_button.setFixedWidth(48)
         add_line_button.setToolTip("افزودنِ ردیف")
         add_line_button.clicked.connect(self._add_line)
-        self.body_layout.addWidget(add_line_button, alignment=Qt.AlignLeft)
+        lines_header_row.addWidget(add_line_button)
+        lines_header_row.addStretch(1)
+        self.body_layout.addLayout(lines_header_row)
 
         self.lines_table = QTableWidget(0, len(_LINE_COLUMNS))
         self.lines_table.setHorizontalHeaderLabels(_LINE_COLUMNS)
@@ -849,8 +856,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در تاییدِ سند", str(exc))
             return
-        self.status_label.setText("")
         self._load_document()
+        theme.set_status_label(self.status_label, "سند تایید شد.", ok=True)
 
     def _revert_to_draft(self) -> None:
         if self._document_id is None:
@@ -862,6 +869,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.warning(self, "خطا در بازگردانیِ سند به پیش‌نویس", str(exc))
             return
         self._load_document()
+        theme.set_status_label(self.status_label, "سند به پیش‌نویس بازگشت.", ok=True)
 
     def _post(self) -> None:
         if self._document_id is None:
@@ -901,4 +909,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در لغوِ سند", str(exc))
             return
-        self._load_document()
+        # لغو هم مثلِ ثبتِ نهایی یک وضعیتِ نهایی‌ست — سند دیگر رویِ همین
+        # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
+        self._reset_form()
+        theme.set_status_label(self.status_label, "سند لغو شد.", ok=True)
