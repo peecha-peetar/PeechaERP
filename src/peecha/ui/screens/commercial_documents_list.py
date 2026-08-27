@@ -21,9 +21,9 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES, STATUS_LABELS
+from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES, STATUS_LABELS, _CONVERTIBLE_TO_INVOICE_TYPES
 
-_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "عملیات"]
+_COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "وضعیتِ تبدیل", "عملیات"]
 
 _TYPE_TO_SCREEN = {
     "SALES_ORDER": "commercial_document_sales_order",
@@ -126,6 +126,7 @@ class CommercialDocumentsListScreen(QWidget):
                 numerals.format_amount(d.total_amount),
                 STATUS_LABELS.get(d.status_code, d.status_code),
                 d.reference_no or "—",
+                self._fulfillment_text(d, company_id),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -133,16 +134,34 @@ class CommercialDocumentsListScreen(QWidget):
                 self.table.setItem(row_index, col_index, item)
             self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d))
 
+    def _fulfillment_text(self, d, company_id: int) -> str:
+        # طبقِ درخواستِ صریح («مدیریتِ سفارشات داشته باشیم»): فقط برایِ
+        # سفارش/پیش‌فاکتورِ تاییدشده/تصویب‌شده/ثبت‌شده معنا دارد — بقیه
+        # (فاکتور/برگشت، یا پیش‌نویس/لغوشده) خط تیره نشان می‌دهند.
+        if d.document_type_code not in _CONVERTIBLE_TO_INVOICE_TYPES or d.status_code not in ("CONFIRMED", "APPROVED", "POSTED"):
+            return "—"
+        ordered, invoiced = documents_service.get_order_fulfillment_summary(d.document_id, company_id)
+        if invoiced <= 0:
+            return "تبدیل‌نشده"
+        if invoiced >= ordered:
+            return "کامل"
+        return f"جزئی ({numerals.format_money(invoiced, 3)} از {numerals.format_money(ordered, 3)})"
+
     def _build_row_actions(self, d) -> QWidget:
         actions = QWidget()
         actions_layout = QHBoxLayout(actions)
         actions_layout.setContentsMargins(4, 2, 4, 2)
         actions_layout.setSpacing(4)
 
+        # طبقِ رفعِ باگِ واقعی («سفارشات ویرایش نمیشه»): سفارش/پیش‌فاکتور
+        # برخلافِ فاکتور/برگشت، بعدِ تاییدشدن هم قابلِ‌ویرایش می‌مانند
+        # (services/commercial_documents.py:_get_editable_document).
+        is_order_type = d.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
+        is_editable = d.status_code == "DRAFT" or (is_order_type and d.status_code in ("CONFIRMED", "APPROVED"))
         edit_button = QPushButton("✏️")
         edit_button.setObjectName("iconButton")
         edit_button.setFixedWidth(36)
-        edit_button.setToolTip("اصلاح" if d.status_code == "DRAFT" else "مشاهده")
+        edit_button.setToolTip("اصلاح" if is_editable else "مشاهده")
         edit_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._open_existing(doc_id))
         actions_layout.addWidget(edit_button)
 

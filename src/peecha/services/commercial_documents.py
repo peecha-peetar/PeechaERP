@@ -140,11 +140,66 @@ def create_document(
         return doc.document_id
 
 
-def convert_to_invoice(document_id: int, company_id: int, created_by_user_id: int, document_date: datetime.date) -> int:
-    """طبقِ درخواستِ صریح: سفارش/پیش‌فاکتورِ خرید و فروش باید بتواند به
-    فاکتورِ خرید/فروش تبدیل شود — یک سندِ فاکتورِ تازه (DRAFT) با همان
-    سرِسند و ردیف‌ها ساخته می‌شود، با source_document_id به سندِ مبدا
-    (طبقِ ستونِ ازپیش‌موجودِ همین جدول برایِ همین منظور)."""
+@dataclass
+class LineFulfillment:
+    line_id: int
+    item_id: int
+    uom_id: int
+    quantity: decimal.Decimal
+    invoiced_quantity: decimal.Decimal
+    remaining_quantity: decimal.Decimal
+
+
+def _invoiced_quantity(session, source_line_id: int) -> decimal.Decimal:
+    """جمعِ مقدارِ ردیف‌هایِ فاکتورهایی که از این ردیفِ سفارش/پیش‌فاکتور
+    ساخته شده‌اند (طبقِ source_line_id) — فاکتورهایِ لغوشده حساب نمی‌شوند
+    (اثری ندارند، پس مانده را کم نمی‌کنند)."""
+    return session.scalar(
+        select(func.coalesce(func.sum(CommercialDocumentLine.quantity), 0))
+        .select_from(CommercialDocumentLine)
+        .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+        .where(CommercialDocumentLine.source_line_id == source_line_id, CommercialDocument.status_code != "CANCELLED")
+    ) or _ZERO
+
+
+def get_line_fulfillment(document_id: int, company_id: int) -> list[LineFulfillment]:
+    """طبقِ درخواستِ صریح («مانده‌یِ هر سفارش را بتوان دید»): برایِ هر
+    ردیفِ سفارش/پیش‌فاکتور، مقدارِ تاکنون‌فاکتورشده و مانده را برمی‌گرداند."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        lines = session.scalars(
+            select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
+        ).all()
+        result = []
+        for ln in lines:
+            invoiced = _invoiced_quantity(session, ln.line_id)
+            result.append(LineFulfillment(
+                line_id=ln.line_id, item_id=ln.item_id, uom_id=ln.uom_id, quantity=ln.quantity,
+                invoiced_quantity=invoiced, remaining_quantity=ln.quantity - invoiced,
+            ))
+        return result
+
+
+def get_order_fulfillment_summary(document_id: int, company_id: int) -> tuple[decimal.Decimal, decimal.Decimal]:
+    """(جمعِ مقدارِ سفارش‌شده، جمعِ مقدارِ تاکنون‌فاکتورشده) — نسخه‌یِ
+    سبک‌ترِ get_line_fulfillment، برایِ نمایشِ خلاصه در لیستِ اسناد."""
+    fulfillment = get_line_fulfillment(document_id, company_id)
+    ordered_total = sum((f.quantity for f in fulfillment), _ZERO)
+    invoiced_total = sum((f.invoiced_quantity for f in fulfillment), _ZERO)
+    return ordered_total, invoiced_total
+
+
+def convert_to_invoice(
+    document_id: int, company_id: int, created_by_user_id: int, document_date: datetime.date,
+    line_quantities: dict[int, decimal.Decimal] | None = None,
+) -> int:
+    """طبقِ درخواستِ صریح («تبدیلِ مرحله‌ای»): سفارش/پیش‌فاکتور می‌تواند
+    بارها، هر بار برایِ بخشی از مقدار، به فاکتور تبدیل شود — نه فقط یک
+    بارِ کاملِ همه‌یِ ردیف‌ها. اگر line_quantities داده نشود، هرچه از هر
+    ردیف مانده (هنوز فاکتور نشده) باشد یک‌جا تبدیل می‌شود؛ در غیرِاین‌صورت
+    فقط مقدارهایِ مشخص‌شده (نباید از مانده‌یِ همان ردیف بیشتر باشد)."""
     with new_session() as session:
         source = session.get(CommercialDocument, document_id)
         if source is None or source.company_id != company_id:
@@ -154,20 +209,34 @@ def convert_to_invoice(document_id: int, company_id: int, created_by_user_id: in
             raise ValueError("این نوعِ سند قابلِ‌تبدیل به فاکتور نیست.")
         if source.status_code in ("DRAFT", "CANCELLED"):
             raise ValueError("فقط سندِ تاییدشده/تصویب‌شده/ثبت‌شده قابلِ‌تبدیل به فاکتور است.")
-        already_converted = session.scalar(
-            select(CommercialDocument).where(
-                CommercialDocument.source_document_id == document_id,
-                CommercialDocument.document_type_code == target_type,
-                CommercialDocument.status_code != "CANCELLED",
-            )
-        )
-        if already_converted is not None:
-            raise ValueError(f"این سند قبلاً به فاکتورِ #{already_converted.document_no} تبدیل شده است.")
         source_lines = session.scalars(
             select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
         ).all()
         if not source_lines:
             raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+
+        line_snapshots = []
+        for ln in source_lines:
+            remaining = ln.quantity - _invoiced_quantity(session, ln.line_id)
+            if line_quantities is None:
+                qty_this_time = remaining
+            else:
+                qty_this_time = line_quantities.get(ln.line_id, _ZERO)
+                if qty_this_time < 0:
+                    raise ValueError("مقدار نمی‌تواند منفی باشد.")
+                if qty_this_time > remaining:
+                    raise ValueError(f"مقدارِ درخواستی برایِ ردیفِ #{ln.line_no} از مانده ({remaining}) بیشتر است.")
+            if qty_this_time <= 0:
+                continue
+            ratio = qty_this_time / ln.quantity
+            line_snapshots.append({
+                "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": qty_this_time, "quantity_base": qty_this_time,
+                "unit_price": ln.unit_price, "discount_amount": _money(ln.discount_amount * ratio), "tax_percent": ln.tax_percent,
+                "batch_id": ln.batch_id, "serial_id": ln.serial_id, "description": ln.description, "line_id": ln.line_id,
+            })
+        if not line_snapshots:
+            raise ValueError("چیزی برایِ تبدیل به فاکتور باقی نمانده است.")
+
         header_fields = DocumentHeaderFields(
             counterparty_detail_account_id=source.counterparty_detail_account_id, currency_id=source.currency_id,
             warehouse_id=source.warehouse_id, channel_code=source.channel_code, price_list_id=source.price_list_id,
@@ -177,14 +246,6 @@ def convert_to_invoice(document_id: int, company_id: int, created_by_user_id: in
             project_detail_account_id=source.project_detail_account_id,
             reference_no=source.reference_no, description=source.description,
         )
-        line_snapshots = [
-            {
-                "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": ln.quantity, "quantity_base": ln.quantity_base,
-                "unit_price": ln.unit_price, "discount_amount": ln.discount_amount, "tax_percent": ln.tax_percent,
-                "batch_id": ln.batch_id, "serial_id": ln.serial_id, "description": ln.description, "line_id": ln.line_id,
-            }
-            for ln in source_lines
-        ]
 
     new_document_id = create_document(company_id, created_by_user_id, target_type, document_date, header_fields)
     for snap in line_snapshots:
@@ -197,13 +258,40 @@ def convert_to_invoice(document_id: int, company_id: int, created_by_user_id: in
     return new_document_id
 
 
-def _get_draft_document(session, document_id: int, company_id: int) -> CommercialDocument:
+# طبقِ درخواستِ صریح («سفارشات در حال حاضر ویرایش نمیشه»): برخلافِ
+# فاکتور/برگشت (که برایِ حفظِ صحتِ حسابداری، بعدِ تاییدشدن قفل می‌مانند)،
+# سفارش/پیش‌فاکتور تا وقتی ثبتِ‌نهایی/لغو نشده صرفاً یک سندِ قصد است —
+# می‌تواند حتی بعدِ تاییدشدن ویرایش شود.
+_ORDER_EDITABLE_STATUSES = ("DRAFT", "CONFIRMED", "APPROVED")
+
+
+def _get_editable_document(session, document_id: int, company_id: int) -> CommercialDocument:
     doc = session.get(CommercialDocument, document_id)
     if doc is None or doc.company_id != company_id:
         raise ValueError("سند نامعتبر است.")
-    if doc.status_code != "DRAFT":
+    if doc.document_type_code in _ORDER_TYPES:
+        if doc.status_code not in _ORDER_EDITABLE_STATUSES:
+            raise ValueError("این سند دیگر ویرایش‌پذیر نیست.")
+    elif doc.status_code != "DRAFT":
         raise ValueError("فقط سندِ پیش‌نویس قابلِ‌ویرایش است.")
     return doc
+
+
+def update_document_header(document_id: int, company_id: int, document_date: datetime.date, fields: DocumentHeaderFields) -> None:
+    with new_session() as session:
+        doc = _get_editable_document(session, document_id, company_id)
+        doc.document_date = document_date
+        doc.fiscal_year_id = _resolve_fiscal_year_id(session, company_id, document_date)
+        doc.counterparty_detail_account_id = fields.counterparty_detail_account_id
+        doc.warehouse_id = fields.warehouse_id
+        doc.channel_code = fields.channel_code
+        doc.price_list_id = fields.price_list_id
+        doc.sales_rep_detail_account_id = fields.sales_rep_detail_account_id
+        doc.cost_center_detail_account_id = fields.cost_center_detail_account_id
+        doc.project_detail_account_id = fields.project_detail_account_id
+        doc.reference_no = fields.reference_no or None
+        doc.description = fields.description or None
+        session.commit()
 
 
 def get_document(document_id: int, company_id: int) -> tuple[CommercialDocument, list[CommercialDocumentLine]]:
@@ -251,7 +339,7 @@ def add_line(
     if quantity <= 0 or quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
-        doc = _get_draft_document(session, document_id, company_id)
+        doc = _get_editable_document(session, document_id, company_id)
         if unit_price is None:
             resolved = pricing_service.resolve_price(
                 company_id, doc.counterparty_detail_account_id, item_id, uom_id, quantity, doc.price_list_id,
@@ -283,7 +371,19 @@ def add_line(
 
 def delete_line(line_id: int, document_id: int, company_id: int) -> None:
     with new_session() as session:
-        _get_draft_document(session, document_id, company_id)
+        _get_editable_document(session, document_id, company_id)
+        # طبقِ صحتِ ردگیریِ تبدیل‌شدنِ سفارش به فاکتور: اگر این ردیف
+        # قبلاً (کامل یا جزئی) در فاکتوری کپی شده (source_line_id)، حذفش
+        # آن اثر را یتیم می‌کند — هم به خاطرِ FK (بدونِ ON DELETE) خطایِ
+        # خام می‌داد، هم منطقاً اشتباه است.
+        referencing_docs = select(CommercialDocumentLine.document_id).where(CommercialDocumentLine.source_line_id == line_id)
+        still_referenced = session.scalar(
+            select(CommercialDocument.document_id).where(
+                CommercialDocument.document_id.in_(referencing_docs), CommercialDocument.status_code != "CANCELLED",
+            )
+        )
+        if still_referenced is not None:
+            raise ValueError("این ردیف قبلاً (به‌طور کامل یا جزئی) به فاکتور تبدیل شده و دیگر حذف نمی‌شود.")
         session.query(CommercialDocumentLine).filter(CommercialDocumentLine.line_id == line_id).delete()
         _recompute_header_totals(session, document_id)
         session.commit()
@@ -299,6 +399,28 @@ def delete_document(document_id: int, company_id: int) -> None:
         # پس حذفِ مستقیمِ هرکدام از این چهار وضعیت همیشه بی‌خطر است.
         if doc.status_code == "POSTED":
             raise ValueError("سندِ ثبت‌شده هرگز حذف نمی‌شود — برایِ اصلاح، سندِ تازه‌ای ثبت کنید.")
+        # طبقِ صحتِ ردگیریِ تبدیل‌شدنِ سفارش به فاکتور: اگر این سند (یا
+        # یکی از ردیف‌هایش) مبدایِ فاکتوریِ دیگر است، حذفش آن پیوند را
+        # یتیم می‌کند — هم به خاطرِ FK (بدونِ ON DELETE) خطایِ خام می‌داد.
+        own_line_ids = select(CommercialDocumentLine.line_id).where(CommercialDocumentLine.document_id == document_id)
+        still_referenced = session.scalar(
+            select(CommercialDocument.document_id).where(
+                (CommercialDocument.source_document_id == document_id)
+                | (CommercialDocument.document_id.in_(
+                    select(CommercialDocumentLine.document_id).where(CommercialDocumentLine.source_line_id.in_(own_line_ids))
+                )),
+                CommercialDocument.status_code != "CANCELLED",
+            )
+        )
+        if still_referenced is not None:
+            raise ValueError("این سند قبلاً (به‌طور کامل یا جزئی) به فاکتور تبدیل شده و دیگر حذف نمی‌شود.")
+        # طبقِ رفعِ باگِ واقعی: سفارش/پیش‌فاکتورِ تاییدشده ممکن است حینِ
+        # تایید یک قفلِ اعتباری (comm.credit_holds) ساخته باشد — قبلاً
+        # حذف فقط برایِ DRAFT مجاز بود (پیش از هر تاییدی)، پس این حالت
+        # هرگز رخ نمی‌داد؛ حالا که CONFIRMED/APPROVED هم حذف‌پذیرند، خودِ
+        # قفل‌هایِ متعلق به همین سند هم باید حذف شوند، وگرنه FK خطایِ خام
+        # می‌دهد.
+        session.query(CreditHold).filter(CreditHold.related_document_id == document_id).delete()
         session.query(CommercialDocumentLine).filter(CommercialDocumentLine.document_id == document_id).delete()
         session.delete(doc)
         session.commit()

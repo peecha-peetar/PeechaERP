@@ -256,6 +256,81 @@ class _LineDialog(LayoutEditMixin, QDialog):
         }
 
 
+class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
+    """طبقِ درخواستِ صریح («صرفِ دکمه‌یِ تبدیلِ یک‌باره خیلی ساده است»):
+    به‌جایِ تبدیلِ کاملِ خودکارِ همه‌یِ ردیف‌ها با یک کلیک، این دیالوگ
+    مقدارِ سفارش‌شده/فاکتورشده/مانده‌یِ هر ردیف را نشان می‌دهد و اجازه
+    می‌دهد کاربر برایِ همین‌بار مقدارِ کمتری (تبدیلِ مرحله‌ای) وارد کند —
+    پیش‌فرضِ هر ردیف، کلِ مانده‌اش است."""
+
+    _COLUMNS = ["کالا", "سفارش‌شده", "فاکتورشده", "مانده", "مقدارِ این‌بار"]
+
+    def __init__(self, parent: QWidget, fulfillment: list, items_by_id: dict) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("تبدیل به فاکتور")
+        self.setMinimumWidth(520)
+        self._fulfillment = [f for f in fulfillment if f.remaining_quantity > 0]
+        self._qty_fields: dict[int, _AmountField] = {}
+
+        layout = QVBoxLayout(self)
+        info = QLabel("مقدارِ این‌بار برایِ هر ردیف را مشخص کنید (پیش‌فرض: کلِ مانده).")
+        layout.addWidget(info)
+
+        table = QTableWidget(len(self._fulfillment), len(self._COLUMNS))
+        table.setHorizontalHeaderLabels(self._COLUMNS)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for row_index, f in enumerate(self._fulfillment):
+            item = items_by_id.get(f.item_id)
+            table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(f.item_id)))
+            table.setItem(row_index, 1, QTableWidgetItem(numerals.format_money(f.quantity, 3)))
+            table.setItem(row_index, 2, QTableWidgetItem(numerals.format_money(f.invoiced_quantity, 3)))
+            table.setItem(row_index, 3, QTableWidgetItem(numerals.format_money(f.remaining_quantity, 3)))
+            qty_field = _AmountField()
+            qty_field.setDecimals(3)
+            qty_field.setValue(float(f.remaining_quantity))
+            self._qty_fields[f.line_id] = qty_field
+            table.setCellWidget(row_index, 4, qty_field)
+        table.resizeRowsToContents()
+        layout.addWidget(table)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("تبدیل")
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
+        layout.addWidget(buttons)
+
+    def keyPressEvent(self, event) -> None:
+        # هم‌الگو با _LineDialog — جلوگیریِ واقعی از باگِ autoDefaultِ
+        # QDialogButtonBox (طبقِ سندِ راهنما، بخشِ ۶.۳-ت).
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _on_accept(self) -> None:
+        quantities = {line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items()}
+        if all(q <= 0 for q in quantities.values()):
+            self.status_label.setText("حداقل برایِ یک ردیف مقداری وارد کنید.")
+            return
+        for f in self._fulfillment:
+            if quantities[f.line_id] > f.remaining_quantity:
+                self.status_label.setText("مقدارِ واردشده برایِ یک ردیف از مانده‌اش بیشتر است.")
+                return
+        self.accept()
+
+    def result_quantities(self) -> dict[int, decimal.Decimal]:
+        return {line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items() if field.value() > 0}
+
+
 class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def __init__(self, document_type_code: str, main_window) -> None:
         super().__init__()
@@ -613,9 +688,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         is_draft = self._status_code == "DRAFT"
         is_confirmed = self._status_code == "CONFIRMED"
         is_approved = self._status_code == "APPROVED"
+        # طبقِ رفعِ باگِ واقعی («سفارشات در حال حاضر ویرایش نمیشه»):
+        # برخلافِ فاکتور/برگشت که بعدِ تاییدشدن برایِ همیشه قفل می‌ماند،
+        # سفارش/پیش‌فاکتور تا وقتی ثبتِ‌نهایی/لغو نشده قابلِ‌ویرایش است
+        # (هم‌الگو با services/commercial_documents.py:_get_editable_document).
+        is_order_type = self.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
+        is_editable = is_draft or (is_order_type and (is_confirmed or is_approved))
         for widget in (self.date_field, self.counterparty_combo, self.warehouse_combo, self.price_list_combo, self.channel_combo, self.reference_field, self.description_field):
-            widget.setEnabled(is_draft)
-        self.save_button.setEnabled(is_draft)
+            widget.setEnabled(is_editable)
+        self.save_button.setEnabled(is_editable)
         self.confirm_button.setEnabled(is_draft and self._document_id is not None)
         self.approve_button.setEnabled(is_confirmed)
         self.post_button.setEnabled(is_confirmed or is_approved)
@@ -676,7 +757,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                     company_id, app_session.current_user.user_id, self.document_type_code, self.date_field.date(), fields
                 )
             else:
-                self.status_label.setText("")
+                # طبقِ رفعِ باگِ واقعی: قبلاً ذخیره‌یِ هدرِ سندِ ازپیش‌موجود
+                # اصلاً هیچ صدازدنی به سرویس نداشت — تغییراتِ فیلدهایِ هدر
+                # (برایِ سفارش/پیش‌فاکتورِ تاییدشده، که حالا قابلِ‌ویرایش
+                # است) در سکوت گم می‌شد.
+                documents_service.update_document_header(self._document_id, company_id, self.date_field.date(), fields)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
@@ -820,25 +905,36 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _convert_to_invoice(self) -> None:
         if self._document_id is None:
             return
+        company_id = self._company_id()
+        try:
+            fulfillment = documents_service.get_line_fulfillment(self._document_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
+            return
+        if not any(f.remaining_quantity > 0 for f in fulfillment):
+            QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برایِ تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
+            return
+        items_by_id = {it.item_id: it for it in self._items}
+        dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id)
+        if dialog.exec() != QDialog.Accepted:
+            return
         is_sales = self.document_type_code.startswith("SALES")
         target_title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
-        confirm = QMessageBox.question(
-            self, "تبدیل به فاکتور", f"یک {target_title}ِ تازه با همینِ سرِسند و ردیف‌ها ساخته شود؟",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-        if confirm != QMessageBox.Yes:
-            return
         try:
             new_document_id = documents_service.convert_to_invoice(
-                self._document_id, self._company_id(), app_session.current_user.user_id, datetime.date.today()
+                self._document_id, company_id, app_session.current_user.user_id, datetime.date.today(),
+                line_quantities=dialog.result_quantities(),
             )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
             return
-        screen_code = "commercial_document_sales_invoice" if is_sales else "commercial_document_purchase_invoice"
-        if self._main_window is not None:
-            self._main_window.open_screen(screen_code, then=lambda screen: screen.edit_document(new_document_id))
-        else:
-            theme.set_status_label(
-                self.status_label, f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} ساخته شد.", ok=True
-            )
+        # طبقِ درخواستِ صریح («مانده‌یِ هر سفارش را بتوان دید و دوباره به
+        # فاکتور تبدیل کرد»): برخلافِ نسخه‌یِ قبلی که به فاکتورِ تازه
+        # می‌پرید، این‌جا رویِ همان سفارش می‌مانیم و دوباره بارگذاری
+        # می‌کنیم تا مانده‌یِ به‌روزشده بلافاصله دیده شود.
+        self._load_document()
+        theme.set_status_label(
+            self.status_label,
+            f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} از رویِ این سند ساخته شد.",
+            ok=True,
+        )
