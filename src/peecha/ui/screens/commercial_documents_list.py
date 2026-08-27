@@ -102,6 +102,11 @@ class CommercialDocumentsListScreen(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
+        # طبقِ رفعِ باگِ واقعی («عرضِ ردیف‌ها کمه، اصلا نمادها معلوم
+        # نیست»): ارتفاعِ پیش‌فرضِ ردیف (بر مبنایِ فقط متنِ ستون‌هایِ
+        # دیگر) برایِ جا دادنِ دکمه‌هایِ آیکونی کافی نبود و آیکون‌ها
+        # نصفه/فشرده دیده می‌شدند.
+        self.table.verticalHeader().setMinimumSectionSize(40)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(len(_COLUMNS) - 1, QHeaderView.ResizeToContents)
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
@@ -148,6 +153,7 @@ class CommercialDocumentsListScreen(QWidget):
                 item.setData(Qt.UserRole, d.document_id)
                 self.table.setItem(row_index, col_index, item)
             self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d, fulfillment))
+        self.table.resizeRowsToContents()
 
     def _fulfillment_summary(self, d, company_id: int) -> tuple[decimal.Decimal, decimal.Decimal] | None:
         # طبقِ درخواستِ صریح («مدیریتِ سفارشات داشته باشیم»): فقط برایِ
@@ -169,8 +175,8 @@ class CommercialDocumentsListScreen(QWidget):
     def _build_row_actions(self, d, fulfillment=None) -> QWidget:
         actions = QWidget()
         actions_layout = QHBoxLayout(actions)
-        actions_layout.setContentsMargins(4, 2, 4, 2)
-        actions_layout.setSpacing(4)
+        actions_layout.setContentsMargins(4, 4, 4, 4)
+        actions_layout.setSpacing(6)
 
         # طبقِ رفعِ باگِ واقعی («سفارشات ویرایش نمیشه»): سفارش/پیش‌فاکتور
         # برخلافِ فاکتور/برگشت، بعدِ تاییدشدن هم قابلِ‌ویرایش می‌مانند
@@ -185,14 +191,14 @@ class CommercialDocumentsListScreen(QWidget):
         # می‌کند و مطمئناً درست دیده می‌شود) جایگزین شدند.
         edit_button = QPushButton("✎")
         edit_button.setObjectName("iconButton")
-        edit_button.setFixedWidth(36)
+        edit_button.setFixedSize(44, 32)
         edit_button.setToolTip("اصلاح" if is_editable else "مشاهده")
         edit_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._open_existing(doc_id))
         actions_layout.addWidget(edit_button)
 
         delete_button = QPushButton("✕")
         delete_button.setObjectName("dangerIconButton")
-        delete_button.setFixedWidth(36)
+        delete_button.setFixedSize(44, 32)
         if d.status_code != "POSTED":
             # طبقِ services/commercial_documents.py:delete_document —
             # DRAFT/CONFIRMED/APPROVED/CANCELLED هرگز اثری در انبار یا
@@ -210,7 +216,7 @@ class CommercialDocumentsListScreen(QWidget):
         if is_order_type:
             convert_button = QPushButton("→")
             convert_button.setObjectName("primaryIconButton")
-            convert_button.setFixedWidth(36)
+            convert_button.setFixedSize(44, 32)
             if fulfillment is None:
                 convert_button.setEnabled(False)
                 convert_button.setToolTip("فقط سندِ تاییدشده/تصویب‌شده/ثبت‌شده قابلِ‌تبدیل به فاکتور است.")
