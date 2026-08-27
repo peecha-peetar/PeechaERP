@@ -36,6 +36,7 @@ from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui import theme
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
 from peecha.ui.screens.treasury_voucher import _EnterComboBox
@@ -684,7 +685,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         try:
             documents_service.confirm_document(self._document_id, self._company_id(), app_session.current_user.user_id)
         except ValueError as exc:
+            # طبقِ رفعِ باگِ واقعی: قبلاً این خطا فقط در یک برچسبِ ساکت
+            # نمایش داده می‌شد — کاربر (به‌خصوص خطایِ «حساب هنوز در
+            # تنظیمات مشخص نشده») به‌راحتی آن را نمی‌دید و فکر می‌کرد
+            # هیچ اتفاقی نیفتاده. حالا هم‌الگو با خطاهایِ ردیف، یک
+            # دیالوگِ مسدودکننده هم نمایش می‌دهد.
             self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "خطا در تاییدِ سند", str(exc))
             return
         self.status_label.setText("")
         self._load_document()
@@ -696,6 +703,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             documents_service.approve_document(self._document_id, self._company_id())
         except ValueError as exc:
             self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "خطا در تصویبِ سند", str(exc))
             return
         self.status_label.setText("")
         self._load_document()
@@ -710,12 +718,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if confirm != QMessageBox.Yes:
             return
         try:
-            documents_service.post_document(self._document_id, self._company_id(), app_session.current_user.user_id)
+            result = documents_service.post_document(self._document_id, self._company_id(), app_session.current_user.user_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "خطا در ثبتِ نهایی", str(exc))
             return
-        self.status_label.setText("")
-        self._load_document()
+        # طبقِ رفعِ باگِ واقعی («بعدِ تایید، فرم ریست نمی‌شود»): بعدِ ثبتِ
+        # نهایی، سند برایِ همیشه قفل است — دیگر کاری رویِ همین رکورد از
+        # این فرم ممکن نیست، پس فرم برایِ سندِ بعدی ریست می‌شود، به‌جایِ
+        # نگه‌داشتنِ سندِ بسته‌شده روی صفحه.
+        je_note = (
+            f" (سندِ حسابداریِ #{numerals.to_persian_digits(str(result.journal_entry_id))} ساخته شد.)"
+            if result.journal_entry_id is not None else ""
+        )
+        self._reset_form()
+        theme.set_status_label(self.status_label, f"سند ثبتِ نهایی شد.{je_note}", ok=True)
 
     def _cancel(self) -> None:
         if self._document_id is None:
@@ -727,5 +744,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             documents_service.cancel_document(self._document_id, self._company_id())
         except ValueError as exc:
             self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "خطا در لغوِ سند", str(exc))
             return
         self._load_document()
