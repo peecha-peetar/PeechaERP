@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import datetime
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -21,7 +24,13 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
-from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES, STATUS_LABELS, _CONVERTIBLE_TO_INVOICE_TYPES
+from peecha.services import inventory_catalog as catalog_service
+from peecha.ui.screens.commercial_document import (
+    DOC_TYPE_TITLES,
+    STATUS_LABELS,
+    _CONVERTIBLE_TO_INVOICE_TYPES,
+    _ConvertToInvoiceDialog,
+)
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "وضعیتِ تبدیل", "عملیات"]
 
@@ -122,6 +131,7 @@ class CommercialDocumentsListScreen(QWidget):
 
         self.table.setRowCount(len(self._rows))
         for row_index, d in enumerate(self._rows):
+            fulfillment = self._fulfillment_summary(d, company_id)
             values = [
                 str(row_index + 1),
                 DOC_TYPE_TITLES.get(d.document_type_code, d.document_type_code),
@@ -131,28 +141,32 @@ class CommercialDocumentsListScreen(QWidget):
                 numerals.format_amount(d.total_amount),
                 STATUS_LABELS.get(d.status_code, d.status_code),
                 d.reference_no or "—",
-                self._fulfillment_text(d, company_id),
+                self._fulfillment_text(fulfillment),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, d.document_id)
                 self.table.setItem(row_index, col_index, item)
-            self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d))
+            self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d, fulfillment))
 
-    def _fulfillment_text(self, d, company_id: int) -> str:
+    def _fulfillment_summary(self, d, company_id: int) -> tuple[decimal.Decimal, decimal.Decimal] | None:
         # طبقِ درخواستِ صریح («مدیریتِ سفارشات داشته باشیم»): فقط برایِ
-        # سفارش/پیش‌فاکتورِ تاییدشده/تصویب‌شده/ثبت‌شده معنا دارد — بقیه
-        # (فاکتور/برگشت، یا پیش‌نویس/لغوشده) خط تیره نشان می‌دهند.
+        # سفارش/پیش‌فاکتورِ تاییدشده/تصویب‌شده/ثبت‌شده معنا دارد.
         if d.document_type_code not in _CONVERTIBLE_TO_INVOICE_TYPES or d.status_code not in ("CONFIRMED", "APPROVED", "POSTED"):
+            return None
+        return documents_service.get_order_fulfillment_summary(d.document_id, company_id)
+
+    def _fulfillment_text(self, fulfillment) -> str:
+        if fulfillment is None:
             return "—"
-        ordered, invoiced = documents_service.get_order_fulfillment_summary(d.document_id, company_id)
+        ordered, invoiced = fulfillment
         if invoiced <= 0:
             return "تبدیل‌نشده"
         if invoiced >= ordered:
             return "کامل"
         return f"جزئی ({numerals.format_money(invoiced, 3)} از {numerals.format_money(ordered, 3)})"
 
-    def _build_row_actions(self, d) -> QWidget:
+    def _build_row_actions(self, d, fulfillment=None) -> QWidget:
         actions = QWidget()
         actions_layout = QHBoxLayout(actions)
         actions_layout.setContentsMargins(4, 2, 4, 2)
@@ -183,6 +197,24 @@ class CommercialDocumentsListScreen(QWidget):
             delete_button.setEnabled(False)
             delete_button.setToolTip("این سند ثبتِ‌نهایی شده و در انبار/حسابداری اثر دارد — حذفِ مستقیم ممکن نیست.")
         actions_layout.addWidget(delete_button)
+
+        # طبقِ درخواستِ صریح («تبدیل باید همین‌جا در صفحه‌یِ اسناد انجام
+        # شود، نه با بازکردنِ سفارش و رفتن به فرمِ آن»): دکمه‌یِ تبدیل به
+        # فاکتور مستقیماً در همین ردیف — بدونِ نیاز به بازکردنِ فرمِ سند.
+        if is_order_type:
+            convert_button = QPushButton("🧾")
+            convert_button.setObjectName("primaryIconButton")
+            convert_button.setFixedWidth(36)
+            if fulfillment is None:
+                convert_button.setEnabled(False)
+                convert_button.setToolTip("فقط سندِ تاییدشده/تصویب‌شده/ثبت‌شده قابلِ‌تبدیل به فاکتور است.")
+            elif fulfillment[1] >= fulfillment[0]:
+                convert_button.setEnabled(False)
+                convert_button.setToolTip("کل این سند قبلاً به فاکتور تبدیل شده است.")
+            else:
+                convert_button.setToolTip("تبدیل به فاکتور")
+                convert_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._convert_document(doc_id))
+            actions_layout.addWidget(convert_button)
         actions_layout.addStretch(1)
         return actions
 
@@ -196,6 +228,40 @@ class CommercialDocumentsListScreen(QWidget):
             return
         nav_code = _TYPE_TO_NAV_CODE[doc.document_type_code]
         self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
+
+    def _convert_document(self, document_id: int) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        doc = next((d for d in self._rows if d.document_id == document_id), None)
+        if doc is None:
+            return
+        try:
+            fulfillment = documents_service.get_line_fulfillment(document_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
+            return
+        if not any(f.remaining_quantity > 0 for f in fulfillment):
+            QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برایِ تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
+            return
+        items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id, active_only=True)}
+        dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        is_sales = doc.document_type_code.startswith("SALES")
+        target_title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
+        try:
+            new_document_id = documents_service.convert_to_invoice(
+                document_id, company_id, app_session.current_user.user_id, datetime.date.today(),
+                line_quantities=dialog.result_quantities(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
+            return
+        QMessageBox.information(
+            self, "تبدیل به فاکتور", f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} از رویِ این سند ساخته شد."
+        )
+        self.refresh()
 
     def _delete_document(self, document_id: int) -> None:
         confirm = QMessageBox.question(
