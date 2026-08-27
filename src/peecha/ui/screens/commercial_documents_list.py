@@ -177,14 +177,20 @@ class CommercialDocumentsListScreen(QWidget):
         # (services/commercial_documents.py:_get_editable_document).
         is_order_type = d.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
         is_editable = d.status_code == "DRAFT" or (is_order_type and d.status_code in ("CONFIRMED", "APPROVED"))
-        edit_button = QPushButton("✏️")
+        # طبقِ رفعِ باگِ واقعی («علامتهایِ حذف و ویرایش و تبدیل در ردیف
+        # معلوم نیست»): ✏️/🗑️/🧾 ایموجی‌هایِ نسبتاً تازه‌اند (یونیکدِ ۹ به
+        # بعد) و روی فونت/سیستمِ کاربر بدونِ گلیفِ رنگی به‌صورتِ جعبه‌یِ
+        # خالی نمایش داده می‌شدند؛ این نمادها با نمادهایِ سادهٔ متنیِ
+        # عمومی (همان‌هایی که خودِ دکمهٔ بستنِ پنجرهٔ اصلی هم استفاده
+        # می‌کند و مطمئناً درست دیده می‌شود) جایگزین شدند.
+        edit_button = QPushButton("✎")
         edit_button.setObjectName("iconButton")
         edit_button.setFixedWidth(36)
         edit_button.setToolTip("اصلاح" if is_editable else "مشاهده")
         edit_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._open_existing(doc_id))
         actions_layout.addWidget(edit_button)
 
-        delete_button = QPushButton("🗑️")
+        delete_button = QPushButton("✕")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(36)
         if d.status_code != "POSTED":
@@ -202,7 +208,7 @@ class CommercialDocumentsListScreen(QWidget):
         # شود، نه با بازکردنِ سفارش و رفتن به فرمِ آن»): دکمه‌یِ تبدیل به
         # فاکتور مستقیماً در همین ردیف — بدونِ نیاز به بازکردنِ فرمِ سند.
         if is_order_type:
-            convert_button = QPushButton("🧾")
+            convert_button = QPushButton("→")
             convert_button.setObjectName("primaryIconButton")
             convert_button.setFixedWidth(36)
             if fulfillment is None:

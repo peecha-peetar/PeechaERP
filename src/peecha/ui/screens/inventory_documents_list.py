@@ -128,14 +128,18 @@ class InventoryDocumentsListScreen(QWidget):
         actions_layout.setContentsMargins(4, 2, 4, 2)
         actions_layout.setSpacing(4)
 
-        edit_button = QPushButton("✏️")
+        # طبقِ رفعِ باگِ واقعی («علامتهایِ حذف و ویرایش در ردیف معلوم
+        # نیست»): ✏️/🗑️ روی فونت/سیستمِ کاربر بدونِ گلیفِ رنگی به‌صورتِ
+        # جعبه‌یِ خالی نمایش داده می‌شدند؛ با نمادهایِ سادهٔ متنیِ عمومی
+        # جایگزین شدند (هم‌الگو با commercial_documents_list.py).
+        edit_button = QPushButton("✎")
         edit_button.setObjectName("iconButton")
         edit_button.setFixedWidth(36)
         edit_button.setToolTip("اصلاح" if d.status_code == "DRAFT" else "مشاهده")
         edit_button.clicked.connect(lambda _checked=False, doc_id=d.stock_document_id: self._open_existing(doc_id))
         actions_layout.addWidget(edit_button)
 
-        delete_button = QPushButton("🗑️")
+        delete_button = QPushButton("✕")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(36)
         is_admin = bool(app_session.current_user and app_session.current_user.is_super_admin)
