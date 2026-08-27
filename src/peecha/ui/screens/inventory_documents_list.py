@@ -25,13 +25,18 @@ from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES, STATUS_LABELS
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "انبارِ مبدا", "انبارِ مقصد", "وضعیت", "شمارهٔ مرجع", "عملیات"]
 
-_TYPE_TO_SCREEN = {
-    "RECEIPT": "inventory_document_receipt",
-    "ISSUE": "inventory_document_issue",
-    "TRANSFER": "inventory_document_transfer",
-    "RETURN_IN": "inventory_document_return_in",
-    "RETURN_OUT": "inventory_document_return_out",
-    "ADJUSTMENT": "inventory_document_adjustment",
+# طبقِ رفعِ باگِ واقعی: این‌جا باید کدهایِ ناوبریِ nav_catalog.py باشد
+# (همان‌ها که MainWindow.open_screen ازشان می‌خواند)، نه نامِ داخلیِ
+# ویجتِ ثبت‌شده با register_screen — قبلاً این دو با هم اشتباه شده بود،
+# پس open_screen هیچ‌وقت آیتمی پیدا نمی‌کرد و دکمه‌هایِ «+» و ویرایش/
+# دابل‌کلیک در این لیست همیشه در سکوت هیچ کاری نمی‌کردند.
+_TYPE_TO_NAV_CODE = {
+    "RECEIPT": "INV_RECEIPT",
+    "ISSUE": "INV_ISSUE",
+    "TRANSFER": "INV_TRANSFER",
+    "RETURN_IN": "INV_RETURN_IN",
+    "RETURN_OUT": "INV_RETURN_OUT",
+    "ADJUSTMENT": "INV_ADJUSTMENT",
 }
 
 
@@ -159,15 +164,15 @@ class InventoryDocumentsListScreen(QWidget):
         return actions
 
     def _open_new(self, document_type_code: str) -> None:
-        screen_code = _TYPE_TO_SCREEN[document_type_code]
-        self._main_window.open_screen(screen_code, then=lambda screen: screen._reset_form())
+        nav_code = _TYPE_TO_NAV_CODE[document_type_code]
+        self._main_window.open_screen(nav_code, then=lambda screen: screen._reset_form())
 
     def _open_existing(self, stock_document_id: int) -> None:
         doc = next((d for d in self._rows if d.stock_document_id == stock_document_id), None)
         if doc is None:
             return
-        screen_code = _TYPE_TO_SCREEN[doc.document_type_code]
-        self._main_window.open_screen(screen_code, then=lambda screen: screen.edit_document(stock_document_id))
+        nav_code = _TYPE_TO_NAV_CODE[doc.document_type_code]
+        self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(stock_document_id))
 
     def _delete_document(self, stock_document_id: int) -> None:
         confirm = QMessageBox.question(

@@ -82,6 +82,7 @@ NAV_ITEMS = [
         "label": "فروش و بازاریابی",
         "children": [
             {"code": "SALES_ORDER", "label": "سفارشِ فروش", "screen": "commercial_document_sales_order"},
+            {"code": "SALES_PROFORMA", "label": "پیش‌فاکتورِ فروش", "screen": "commercial_document_sales_proforma"},
             {"code": "SALES_INVOICE", "label": "فاکتورِ فروش", "screen": "commercial_document_sales_invoice"},
             {"code": "SALES_RETURN", "label": "برگشت از فروش", "screen": "commercial_document_sales_return"},
             {"code": "SALES_DOCUMENTS_LIST", "label": "اسنادِ فروش", "screen": "commercial_documents_list_sales"},
@@ -97,6 +98,7 @@ NAV_ITEMS = [
         "label": "خرید و تدارکات",
         "children": [
             {"code": "PURCH_ORDER", "label": "سفارشِ خرید", "screen": "commercial_document_purchase_order"},
+            {"code": "PURCH_PROFORMA", "label": "پیش‌فاکتورِ خرید", "screen": "commercial_document_purchase_proforma"},
             {"code": "PURCH_INVOICE", "label": "فاکتورِ خرید", "screen": "commercial_document_purchase_invoice"},
             {"code": "PURCH_RETURN", "label": "برگشت به تامین‌کننده", "screen": "commercial_document_purchase_return"},
             {"code": "PURCH_DOCUMENTS_LIST", "label": "اسنادِ خرید", "screen": "commercial_documents_list_purchase"},

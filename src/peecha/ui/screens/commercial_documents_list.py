@@ -25,15 +25,20 @@ from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES, STATUS_LABELS
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "وضعیتِ تبدیل", "عملیات"]
 
-_TYPE_TO_SCREEN = {
-    "SALES_ORDER": "commercial_document_sales_order",
-    "SALES_PROFORMA": "commercial_document_sales_proforma",
-    "SALES_INVOICE": "commercial_document_sales_invoice",
-    "SALES_RETURN": "commercial_document_sales_return",
-    "PURCHASE_ORDER": "commercial_document_purchase_order",
-    "PURCHASE_PROFORMA": "commercial_document_purchase_proforma",
-    "PURCHASE_INVOICE": "commercial_document_purchase_invoice",
-    "PURCHASE_RETURN": "commercial_document_purchase_return",
+# طبقِ رفعِ باگِ واقعی: این‌جا باید کدهایِ ناوبریِ nav_catalog.py (همان‌ها
+# که MainWindow.open_screen ازشان می‌خواند) باشد، نه نامِ داخلیِ ویجتِ
+# ثبت‌شده با register_screen — قبلاً این دو با هم اشتباه شده بود، پس
+# open_screen هیچ‌وقت آیتمی پیدا نمی‌کرد و دکمه‌هایِ «+» و ویرایش/دابل‌کلیک
+# در این لیست همیشه در سکوت هیچ کاری نمی‌کردند.
+_TYPE_TO_NAV_CODE = {
+    "SALES_ORDER": "SALES_ORDER",
+    "SALES_PROFORMA": "SALES_PROFORMA",
+    "SALES_INVOICE": "SALES_INVOICE",
+    "SALES_RETURN": "SALES_RETURN",
+    "PURCHASE_ORDER": "PURCH_ORDER",
+    "PURCHASE_PROFORMA": "PURCH_PROFORMA",
+    "PURCHASE_INVOICE": "PURCH_INVOICE",
+    "PURCHASE_RETURN": "PURCH_RETURN",
 }
 
 
@@ -182,15 +187,15 @@ class CommercialDocumentsListScreen(QWidget):
         return actions
 
     def _open_new(self, document_type_code: str) -> None:
-        screen_code = _TYPE_TO_SCREEN[document_type_code]
-        self._main_window.open_screen(screen_code, then=lambda screen: screen._reset_form())
+        nav_code = _TYPE_TO_NAV_CODE[document_type_code]
+        self._main_window.open_screen(nav_code, then=lambda screen: screen._reset_form())
 
     def _open_existing(self, document_id: int) -> None:
         doc = next((d for d in self._rows if d.document_id == document_id), None)
         if doc is None:
             return
-        screen_code = _TYPE_TO_SCREEN[doc.document_type_code]
-        self._main_window.open_screen(screen_code, then=lambda screen: screen.edit_document(document_id))
+        nav_code = _TYPE_TO_NAV_CODE[doc.document_type_code]
+        self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
 
     def _delete_document(self, document_id: int) -> None:
         confirm = QMessageBox.question(

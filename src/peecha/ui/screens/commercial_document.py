@@ -751,8 +751,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         fields = self._header_fields()
         if fields is None:
             return
+        is_new = self._document_id is None
         try:
-            if self._document_id is None:
+            if is_new:
                 self._document_id = documents_service.create_document(
                     company_id, app_session.current_user.user_id, self.document_type_code, self.date_field.date(), fields
                 )
@@ -764,9 +765,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 documents_service.update_document_header(self._document_id, company_id, self.date_field.date(), fields)
         except ValueError as exc:
             self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "خطا در ذخیره", str(exc))
             return
-        self.status_label.setText("")
         self._load_document()
+        # طبقِ رفعِ باگِ واقعی («بعدِ ذخیره هیچ پیامی نمی‌دهد»): قبلاً این
+        # مسیرِ موفقیت فقط status_label را خالی می‌کرد — بدونِ هیچ
+        # تاییدِ مثبتی، کاربر نمی‌فهمید سند واقعاً ذخیره شده یا نه.
+        theme.set_status_label(
+            self.status_label, "سند به‌عنوانِ پیش‌نویس ذخیره شد." if is_new else "تغییراتِ سند ذخیره شد.", ok=True,
+        )
 
     def _ensure_saved(self) -> bool:
         if self._document_id is None:
