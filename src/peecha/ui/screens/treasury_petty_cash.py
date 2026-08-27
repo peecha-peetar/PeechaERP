@@ -266,12 +266,28 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
         self.line_amount_field.returnPressed.connect(lambda: self.line_description_field.setFocus())
         self.line_description_field.returnPressed.connect(self._add_line)
 
+        fund_actions_row = QHBoxLayout()
+        fund_actions_row.setSpacing(3)
         self.close_fund_button = QPushButton("🔒")
         self.close_fund_button.setObjectName("dangerIconButton")
         self.close_fund_button.setFixedWidth(44)
         self.close_fund_button.setToolTip("بستنِ تنخواه")
         self.close_fund_button.clicked.connect(self._close_fund)
-        manage_layout.addWidget(self.close_fund_button)
+        fund_actions_row.addWidget(self.close_fund_button)
+
+        # طبقِ رفعِ باگِ واقعی («سندِ صادرشده‌یِ تنخواه را نمی‌توان حذف
+        # کرد»): چون حذفِ مستقیمِ آن سند از صفحه‌ی عمومیِ اسناد به‌خاطرِ
+        # کلیدِ خارجیِ petty_cash_funds همیشه رد می‌شد، همین‌جا — جایی که
+        # واقعاً می‌دانیم این سند مالِ کدام تنخواه است — امکانِ حذفِ کاملِ
+        # تنخواه (ردیف‌ها + خودِ سند(هایِ) حسابداری) اضافه شده است.
+        self.delete_fund_button = QPushButton("🗑️")
+        self.delete_fund_button.setObjectName("dangerIconButton")
+        self.delete_fund_button.setFixedWidth(44)
+        self.delete_fund_button.setToolTip("حذفِ کاملِ این تنخواه (سند(هایِ) حسابداری هم حذف می‌شود)")
+        self.delete_fund_button.clicked.connect(self._delete_fund)
+        fund_actions_row.addWidget(self.delete_fund_button)
+        fund_actions_row.addStretch(1)
+        manage_layout.addLayout(fund_actions_row)
 
         layout.addWidget(self.manage_section)
         layout.addStretch(1)
@@ -746,4 +762,23 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
             f"تنخواه بسته شد؛ سندِ موقتِ پیش‌نویس با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ساخته شد.",
             ok=True,
         )
+        self._on_custodian_changed()
+
+    def _delete_fund(self) -> None:
+        if self._current_fund_id is None or session.current_user is None:
+            return
+        confirm = QMessageBox.question(
+            self, "حذفِ تنخواه",
+            "این تنخواه، همه‌یِ ردیف‌هایش، و سند(هایِ) حسابداریِ افتتاح/بستنِ آن به‌طورِ کامل حذف می‌شود. "
+            "این عمل قابلِ بازگشت نیست. ادامه می‌دهید؟",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            petty_cash_service.delete_fund(self._current_fund_id, self.company_id, session.current_user.user_id)
+        except ValueError as exc:
+            theme.set_status_label(self.status_label, str(exc), ok=False)
+            return
+        theme.set_status_label(self.status_label, "تنخواه حذف شد.", ok=True)
         self._on_custodian_changed()

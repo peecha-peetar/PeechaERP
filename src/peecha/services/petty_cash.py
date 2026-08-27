@@ -367,3 +367,48 @@ def close_fund(
         session.commit()
 
     return je_result
+
+
+def delete_fund(fund_id: int, company_id: int, changed_by_user_id: int) -> None:
+    """طبقِ گزارشِ صریح («سندِ صادرشده‌یِ تنخواه را نمی‌توان حذف کرد»):
+    چون petty_cash_funds با کلیدِ خارجیِ الزامی به سندِ افتتاح (و اگر
+    بسته باشد، سندِ بستن) اشاره می‌کند، تلاش برایِ حذفِ مستقیمِ آن سند از
+    صفحه‌ی عمومیِ اسناد همیشه با خطایِ خامِ کلیدِ خارجی رد می‌شد (نه یک
+    پیامِ روشن). این تابع، هم‌الگو با delete_received_check/
+    delete_issued_check (که پیش از حذفِ سندِ حسابداری، ابتدا رکوردِ
+    وابسته را پاک می‌کنند)، کلِ تنخواه — ردیف‌ها، تفصیلی‌هایِ اضافی، و در
+    آخر خودِ سند(هایِ) حسابداری — را یک‌جا حذف می‌کند؛ فقط وقتی همه‌ی
+    سندهایِ مربوطه هنوز موقت/پیش‌نویس‌اند (وگرنه ابتدا اعتبارسنجی می‌شود،
+    پیش از دست‌زدن به هیچ رکوردی)."""
+    from peecha.db.models.accounting import FiscalYear, JournalEntry, JournalEntryStatus
+    from peecha.services.journal_entries import _ensure_fiscal_period_open, _ensure_fiscal_year_open
+
+    with new_session() as session:
+        fund = session.get(PettyCashFund, fund_id)
+        if fund is None or fund.company_id != company_id:
+            raise ValueError("تنخواه یافت نشد.")
+        entry_ids = [fund.opening_journal_entry_id]
+        if fund.closing_journal_entry_id is not None:
+            entry_ids.append(fund.closing_journal_entry_id)
+        for entry_id in entry_ids:
+            entry = session.get(JournalEntry, entry_id)
+            if entry is None:
+                continue
+            status = session.get(JournalEntryStatus, entry.status_id)
+            if status is None or status.code not in ("TEMPORARY", "DRAFT"):
+                raise ValueError("این تنخواه دیگر قابلِ حذف نیست، چون سندِ حسابداریِ آن به وضعیتِ دائم رسیده است.")
+            fiscal_year = session.get(FiscalYear, entry.fiscal_year_id)
+            if fiscal_year is not None:
+                _ensure_fiscal_year_open(fiscal_year)
+                _ensure_fiscal_period_open(session, fiscal_year.fiscal_year_id, entry.document_date)
+
+        opening_journal_entry_id = fund.opening_journal_entry_id
+        closing_journal_entry_id = fund.closing_journal_entry_id
+        session.execute(PettyCashFundExtraDetail.__table__.delete().where(PettyCashFundExtraDetail.fund_id == fund_id))
+        session.execute(PettyCashFundLine.__table__.delete().where(PettyCashFundLine.fund_id == fund_id))
+        session.delete(fund)
+        session.commit()
+
+    if closing_journal_entry_id is not None:
+        je_service.delete_journal_entry(closing_journal_entry_id, company_id, changed_by_user_id)
+    je_service.delete_journal_entry(opening_journal_entry_id, company_id, changed_by_user_id)

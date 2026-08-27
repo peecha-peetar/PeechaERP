@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 import jdatetime
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from peecha import numerals
 from peecha.db.base import new_session
@@ -811,7 +812,23 @@ def delete_journal_entry(journal_entry_id: int, company_id: int, changed_by_user
             changes={"before": before_snapshot},
         )
 
-        session.commit()
+        # طبقِ گزارشِ صریح («سندِ صادرشده را نمی‌توان حذف کرد»): چند
+        # ماژول (تنخواه‌گردان، دسته‌هایِ پرداختِ حقوق، ...) رکوردهایِ
+        # خودشان را با کلیدِ خارجیِ الزامی به همین سند وصل می‌کنند؛ بدونِ
+        # این try/except، حذفِ چنین سندی نه یک پیامِ روشن، بلکه یک
+        # IntegrityErrorِ خامِ دیتابیس بالا می‌آمد (که در UI به‌صورتِ
+        # کرشِ ناگهانی یا سکوتِ کاملِ فرم دیده می‌شد). فرمی که واقعاً
+        # می‌داند این سند مالِ کدام رکوردِ وابسته است (مثلاً
+        # petty_cash.delete_fund) باید همان رکورد را *پیش از* این تابع
+        # حذف کند؛ این‌جا فقط یک تورِ ایمنیِ عمومی است.
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise ValueError(
+                "این سند توسطِ رکوردِ دیگری (مثلاً تنخواه‌گردان یا دسته‌یِ پرداختِ حقوق) هنوز استفاده می‌شود "
+                "و نمی‌توان مستقیماً حذفش کرد. ابتدا آن رکورد را حذف/جدا کنید."
+            ) from exc
 
 
 def _next_permanent_no(session, company_id: int, fiscal_year_id: int) -> int:
