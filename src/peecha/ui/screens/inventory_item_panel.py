@@ -314,11 +314,15 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_discount_field = QLineEdit()
         self.sales_commission_field = QLineEdit()
         self.warranty_months_field = QLineEdit()
+        # طبقِ درخواستِ صریح: درصدِ مالیاتِ این کالا (بعدِ تخفیف) — اگر
+        # خالی بماند، هنگامِ صدورِ سند از تنظیماتِ کلیِ شرکت خوانده می‌شود.
+        self.default_tax_percent_field = QLineEdit()
 
         self.sales_extra_grid = FieldGrid([
             FieldSpec("max_discount", "حداکثرِ درصدِ تخفیف", self.max_discount_field, span=1),
             FieldSpec("sales_commission", "درصدِ کمیسیونِ فروش", self.sales_commission_field, span=1),
             FieldSpec("warranty_months", "مدتِ گارانتی (ماه)", self.warranty_months_field, span=1),
+            FieldSpec("default_tax_percent", "درصدِ مالیات (خالی = تنظیماتِ کلیِ شرکت)", self.default_tax_percent_field, span=1),
         ])
         layout.addWidget(self.sales_extra_grid)
 
@@ -715,14 +719,25 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         for s in dimensions_service.list_suppliers(company_id):
             self.supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
 
+        self._rebuild_related_item_combo()
+
+        self._apply_visibility()
+
+    def _rebuild_related_item_combo(self) -> None:
+        """طبقِ رفعِ باگِ واقعی: قبلاً این کمبو خودِ کالایِ در حالِ ویرایش
+        را هم به‌عنوانِ گزینه‌یِ «جایگزین/مکملِ خودش» نشان می‌داد (فقط در
+        لایه‌ی سرویس رد می‌شد، نه در UI) — این‌جا حذف می‌شود. چون هنگامِ
+        refresh (تعویضِ گروه/شرکت) هنوز self._item_id معلوم نیست، این
+        تابع دوباره در load() هم صدا زده می‌شود تا با شناخته‌شدنِ کالایِ
+        در حالِ ویرایش، خودش از فهرست حذف شود."""
         self.related_item_combo.clear()
         self.bom_component_combo.clear()
         for r in self._rows:
+            if r.item_id == self._item_id:
+                continue
             label = f"{r.code} — {r.name or ''}"
             self.related_item_combo.addItem(label, r.item_id)
             self.bom_component_combo.addItem(label, r.item_id)
-
-        self._apply_visibility()
 
     def load(self, item_row: catalog_service.ItemRow | None) -> None:
         """پرکردنِ فرم از رویِ یک کالایِ سطحِ‌آخرِ ازپیش‌ذخیره‌شده؛ با
@@ -732,6 +747,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         it = item_row
         self._item_id = it.item_id
+        self._rebuild_related_item_combo()
         self.latin_name_field.setText(it.latin_name or "")
         self.short_name_field.setText(it.short_name or "")
         self.kind_combo.setCurrentIndex(self.kind_combo.findData(it.item_kind_code))
@@ -762,6 +778,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_discount_field.setText(str(it.max_discount_percent) if it.max_discount_percent is not None else "")
         self.sales_commission_field.setText(str(it.sales_commission_percent) if it.sales_commission_percent is not None else "")
         self.warranty_months_field.setText(str(it.warranty_months) if it.warranty_months is not None else "")
+        self.default_tax_percent_field.setText(str(it.default_tax_percent) if it.default_tax_percent is not None else "")
 
         self.seo_title_field.setText(it.seo_title or "")
         self.seo_slug_field.setText(it.seo_url_slug or "")
@@ -845,6 +862,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_discount_field.clear()
         self.sales_commission_field.clear()
         self.warranty_months_field.clear()
+        self.default_tax_percent_field.clear()
 
         self.seo_title_field.clear()
         self.seo_slug_field.clear()
@@ -915,6 +933,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             purchase_package_qty=_decimal_or_none(self.purchase_package_qty_field.text()),
             max_discount_percent=_decimal_or_none(self.max_discount_field.text()),
             sales_commission_percent=_decimal_or_none(self.sales_commission_field.text()),
+            default_tax_percent=_decimal_or_none(self.default_tax_percent_field.text()),
             warranty_months=_int_or_none(self.warranty_months_field.text()),
             seo_title=self.seo_title_field.text().strip() or None,
             seo_url_slug=self.seo_slug_field.text().strip() or None,
@@ -954,6 +973,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _add_supplier(self) -> None:
         if self._item_id is None:
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس تامین‌کننده اضافه کنید.")
             return
         supplier_id = self.supplier_combo.currentData()
         if supplier_id is None:
@@ -996,6 +1016,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _add_related_item(self) -> None:
         if self._item_id is None:
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کالایِ جایگزین/مکمل اضافه کنید.")
             return
         related_item_id = self.related_item_combo.currentData()
         relation_type_code = self.relation_type_combo.currentData()

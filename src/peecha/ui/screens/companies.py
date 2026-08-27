@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import decimal
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -176,6 +178,10 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.national_id_field = PersianDigitLineEdit()
 
+        # طبقِ درخواستِ صریح: درصدِ مالیاتِ پیش‌فرضِ سراسری — وقتی کالایی
+        # درصدِ مالیاتِ خودش را نداشته باشد، از همین مقدار استفاده می‌شود.
+        self.default_tax_percent_field = PersianDigitLineEdit()
+
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
 
@@ -190,6 +196,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("economic_code", "کدِ اقتصادی", self.economic_code_field, span=1),
             FieldSpec("registration_no", "شماره‌ی ثبت", self.registration_no_field, span=1),
             FieldSpec("national_id", "شناسه‌ی ملی", self.national_id_field, span=1),
+            FieldSpec("default_tax_percent", "درصدِ مالیاتِ پیش‌فرض", self.default_tax_percent_field, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
         ])
         layout.addWidget(self.basic_grid)
@@ -293,6 +300,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.economic_code_field.setText(company.economic_code or "")
         self.registration_no_field.setText(company.registration_no or "")
         self.national_id_field.setText(company.national_id or "")
+        self.default_tax_percent_field.setText(str(company.default_tax_percent) if company.default_tax_percent is not None else "")
         self.is_active_checkbox.setChecked(company.is_active)
         self.clone_section.setVisible(False)
 
@@ -326,6 +334,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.economic_code_field.clear()
         self.registration_no_field.clear()
         self.national_id_field.clear()
+        self.default_tax_percent_field.clear()
         self.is_active_checkbox.setChecked(True)
         self.table.clearSelection()
         self.clone_section.setVisible(True)
@@ -342,6 +351,12 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         base_currency_id = self.currency_combo.currentData()
         default_language_id = self.language_combo.currentData()
+        tax_text = self.default_tax_percent_field.text().strip()
+        try:
+            default_tax_percent = decimal.Decimal(tax_text) if tax_text else None
+        except decimal.InvalidOperation:
+            self.status_label.setText("درصدِ مالیاتِ پیش‌فرض نامعتبر است.")
+            return
 
         try:
             if self._editing_id is not None:
@@ -357,6 +372,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     economic_code=self.economic_code_field.text().strip() or None,
                     registration_no=self.registration_no_field.text().strip() or None,
                     national_id=self.national_id_field.text().strip() or None,
+                    default_tax_percent=default_tax_percent,
                 )
             else:
                 code = self.code_field.text().strip()
@@ -374,6 +390,7 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     economic_code=self.economic_code_field.text().strip() or None,
                     registration_no=self.registration_no_field.text().strip() or None,
                     national_id=self.national_id_field.text().strip() or None,
+                    default_tax_percent=default_tax_percent,
                 )
                 if app_session.current_user is not None:
                     users_service.grant_company_access(app_session.current_user.user_id, new_company.company_id)

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import decimal
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -30,6 +31,7 @@ class CompanyRow:
     default_language_id: int
     default_language_name: str
     is_active: bool
+    default_tax_percent: decimal.Decimal | None = None
 
 
 @dataclass
@@ -96,6 +98,7 @@ def list_companies() -> list[CompanyRow]:
                 default_language_id=c.default_language_id,
                 default_language_name=langs.get(c.default_language_id, "?"),
                 is_active=c.is_active,
+                default_tax_percent=c.default_tax_percent,
             )
             for c in companies
         ]
@@ -134,6 +137,7 @@ def list_companies_for_user(user_id: int) -> list[CompanyRow]:
                 default_language_id=c.default_language_id,
                 default_language_name=langs.get(c.default_language_id, "?"),
                 is_active=c.is_active,
+                default_tax_percent=c.default_tax_percent,
             )
             for c in companies
         ]
@@ -150,6 +154,7 @@ def create_company(
     economic_code: str | None = None,
     registration_no: str | None = None,
     national_id: str | None = None,
+    default_tax_percent: decimal.Decimal | None = None,
 ) -> Company:
     with new_session() as session:
         if session.scalar(select(Company).where(Company.code == code)):
@@ -166,6 +171,7 @@ def create_company(
             base_currency_id=base_currency_id,
             default_language_id=default_language_id,
             is_active=True,
+            default_tax_percent=default_tax_percent,
         )
         session.add(company)
         session.flush()
@@ -190,6 +196,7 @@ def update_company(
     economic_code: str | None = None,
     registration_no: str | None = None,
     national_id: str | None = None,
+    default_tax_percent: decimal.Decimal | None = None,
 ) -> Company:
     with new_session() as session:
         company = session.get(Company, company_id)
@@ -205,6 +212,7 @@ def update_company(
         company.fiscal_year_start_month = fiscal_year_start_month
         company.fiscal_year_start_day = fiscal_year_start_day
         company.is_active = is_active
+        company.default_tax_percent = default_tax_percent
         session.commit()
         session.refresh(company)
         session.expunge(company)

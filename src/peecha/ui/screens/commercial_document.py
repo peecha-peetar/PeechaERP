@@ -14,10 +14,9 @@ import decimal
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -33,10 +32,13 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
+from peecha.ui.screens.inventory_document import _enter_signal
+from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
+from peecha.ui.screens.treasury_voucher import _EnterComboBox
 from peecha.ui.widgets import (
     FieldGrid,
     FieldHelpMixin,
@@ -47,6 +49,7 @@ from peecha.ui.widgets import (
     SectionStepper,
     SummaryCard,
     SummaryCardBar,
+    add_quick_add_button,
 )
 
 DOC_TYPE_TITLES = {
@@ -63,41 +66,50 @@ _LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", 
 
 
 class _LineDialog(LayoutEditMixin, QDialog):
-    def __init__(self, parent: QWidget, items: list[catalog_service.ItemRow], initial: dict | None = None) -> None:
+    def __init__(
+        self, parent: QWidget, items: list[catalog_service.ItemRow], company_id: int, main_window,
+        decimal_places: int, initial: dict | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("ردیفِ سند")
         self.setMinimumWidth(380)
+        self._company_id = company_id
         layout = QVBoxLayout(self)
         self._items_by_id = {it.item_id: it for it in items}
 
         item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items]
+        item_row_widget = QWidget()
+        item_row_layout = QHBoxLayout(item_row_widget)
+        item_row_layout.setContentsMargins(0, 0, 0, 0)
+        item_row_layout.setSpacing(3)
         self.item_combo = _make_searchable_combo(item_options)
+        item_row_layout.addWidget(self.item_combo, stretch=1)
+        add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
 
-        self.quantity_field = QDoubleSpinBox()
-        self.quantity_field.setDecimals(6)
-        self.quantity_field.setRange(0.000001, 999999999)
+        # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۲/۶.۳): فیلدهایِ مبلغ/عدد باید
+        # _AmountField باشند (گروه‌بندیِ سه‌رقمیِ زنده + ارقامِ فارسی)، نه
+        # QDoubleSpinBoxِ خام — دقیقاً هم‌الگو با journal_entry.py/
+        # treasury_voucher.py/treasury_petty_cash.py.
+        self.quantity_field = _AmountField()
+        self.quantity_field.setDecimals(3)
 
-        self.unit_price_field = QDoubleSpinBox()
-        self.unit_price_field.setDecimals(2)
-        self.unit_price_field.setRange(0, 999999999999)
-        self.unit_price_field.setSpecialValueText(" ")
+        self.unit_price_field = _AmountField()
+        self.unit_price_field.setDecimals(decimal_places)
 
-        self.discount_field = QDoubleSpinBox()
-        self.discount_field.setDecimals(2)
-        self.discount_field.setRange(0, 999999999999)
+        self.discount_field = _AmountField()
+        self.discount_field.setDecimals(decimal_places)
 
-        self.tax_percent_field = QDoubleSpinBox()
+        self.tax_percent_field = _AmountField()
         self.tax_percent_field.setDecimals(2)
-        self.tax_percent_field.setRange(0, 100)
 
         self.description_field = QLineEdit()
 
         self.fields_grid = FieldGrid([
-            FieldSpec("item", "کالا", self.item_combo, span=2),
+            FieldSpec("item", "کالا", item_row_widget, span=2),
             FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
-            FieldSpec("unit_price", "بهایِ واحد (خالی = محاسبهٔ خودکار)", self.unit_price_field, span=1),
+            FieldSpec("unit_price", "بهایِ واحد (صفر = محاسبهٔ خودکار)", self.unit_price_field, span=1),
             FieldSpec("discount", "تخفیفِ مبلغی", self.discount_field, span=1),
-            FieldSpec("tax_percent", "درصدِ مالیات", self.tax_percent_field, span=1),
+            FieldSpec("tax_percent", "درصدِ مالیات (بعدِ تخفیف)", self.tax_percent_field, span=1),
             FieldSpec("description", "توضیح", self.description_field, span=3),
         ])
         layout.addWidget(self.fields_grid)
@@ -111,7 +123,25 @@ class _LineDialog(LayoutEditMixin, QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
+        # طبقِ بررسیِ عملی (هم‌الگو با treasury_voucher.py — این‌جا با
+        # QTestِ واقعی دوباره تاییدشد): setAutoDefault(False) به‌تنهایی
+        # کافی نیست، چون QDialogButtonBox با هر show() دوباره دکمه‌یِ
+        # نقشِ AcceptRole را default (isDefault=True) می‌کند، جدا از
+        # پرچمِ autoDefault؛ جلوگیریِ واقعی در keyPressEvent پایین‌تر است.
+        buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         layout.addWidget(buttons)
+
+        # طبقِ سندِ راهنما (زنجیره‌یِ کاملِ Enter، بدونِ استثنا).
+        enter_chain = [
+            self.item_combo, self.quantity_field, self.unit_price_field,
+            self.discount_field, self.tax_percent_field, self.description_field,
+        ]
+        for widget, next_widget in zip(enter_chain, enter_chain[1:]):
+            _enter_signal(widget).connect(next_widget.setFocus)
+        _enter_signal(enter_chain[-1]).connect(self._on_accept)
+
+        self.item_combo.currentIndexChanged.connect(self._on_item_changed)
 
         if initial is not None:
             index = self.item_combo.findData(initial["item_id"])
@@ -122,6 +152,29 @@ class _LineDialog(LayoutEditMixin, QDialog):
             self.discount_field.setValue(float(initial["discount_amount"]))
             self.tax_percent_field.setValue(float(initial["tax_percent"]))
             self.description_field.setText(initial["description"] or "")
+        else:
+            self._on_item_changed()
+
+    def keyPressEvent(self, event) -> None:
+        # جلوگیریِ واقعی از باگِ autoDefault (هم‌الگو با
+        # treasury_voucher._MethodDetailsDialog): چون همه‌یِ فیلدهایِ این
+        # دیالوگ زنجیره‌یِ Enterِ خودشان را دارند، دیگر نیازی نیست QDialog
+        # با دیدنِ Enter دوباره دکمه‌یِ پیش‌فرض را کلیک کند.
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _on_item_changed(self) -> None:
+        """طبقِ درخواستِ صریح: درصدِ مالیات با اولویتِ کالا -> تنظیماتِ
+        کلیِ شرکت پیش‌پر می‌شود — فقط برایِ ردیفِ *تازه* (initial=None)،
+        نه هنگامِ ویرایشِ ردیفِ ازپیش‌ذخیره‌شده که مقدارِ ثبت‌شده‌اش را
+        نباید بازنویسی کند."""
+        item_id = self.item_combo.currentData()
+        if item_id is None:
+            return
+        default_tax = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
+        self.tax_percent_field.setValue(float(default_tax))
 
     def _on_accept(self) -> None:
         if self.item_combo.currentData() is None:
@@ -135,10 +188,20 @@ class _LineDialog(LayoutEditMixin, QDialog):
     def result_fields(self) -> dict:
         item_id = self.item_combo.currentData()
         item = self._items_by_id.get(item_id)
+        quantity = decimal.Decimal(str(self.quantity_field.value()))
         return {
             "item_id": item_id,
             "uom_id": item.base_uom_id if item else 0,
-            "quantity": decimal.Decimal(str(self.quantity_field.value())),
+            "quantity": quantity,
+            # طبقِ رفعِ باگِ واقعی («ردیف بعدِ ثبت نمایش داده نمی‌شود»):
+            # این فیلد قبلاً اصلاً در این دیکشنری نبود — چون
+            # documents_service.add_line آن را الزامی (بدونِ مقدارِ
+            # پیش‌فرض) می‌خواهد، هر افزودنِ ردیف با TypeErrorِ خاموش
+            # (فقط رویِ کنسول، نه در UI) رد می‌شد و کاربر فقط می‌دید که
+            # هیچ ردیفی اضافه نشد. چون این فرم هنوز تبدیلِ واحد ندارد
+            # (طبقِ داکیومنتِ بالایِ فایل)، quantity_base همیشه با
+            # quantity برابر است — هم‌الگو با inventory_document.py.
+            "quantity_base": quantity,
             "unit_price": decimal.Decimal(str(self.unit_price_field.value())) if self.unit_price_field.value() > 0 else None,
             "discount_amount": decimal.Decimal(str(self.discount_field.value())),
             "tax_percent": decimal.Decimal(str(self.tax_percent_field.value())),
@@ -156,6 +219,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._status_code = "DRAFT"
         self._lines: list = []
         self._items: list[catalog_service.ItemRow] = []
+        self._decimal_places = 0
 
         title = DOC_TYPE_TITLES[document_type_code]
         self.page_title = QLabel(title)
@@ -177,54 +241,76 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         })
         self.body_layout.addWidget(self.summary_cards)
 
-        header_row1 = QHBoxLayout()
-        date_box = QVBoxLayout()
-        date_box.addWidget(QLabel("تاریخ"))
+        # طبقِ گزارشِ تکراریِ کاربر («هدرِ فرم‌هایِ انبار/فروش/خرید هنوز
+        # نامرتب است — فقط یک فرم درست شد»): این هدر هم اکنون هم‌الگو با
+        # journal_entry.py/treasury_voucher.py یک کارتِ واحد با
+        # QGridLayoutِ فشرده است، نه چند QHBoxLayoutِ خامِ پشتِ سرهم.
+        header_card = QWidget()
+        header_card.setObjectName("card")
+        header_grid = QGridLayout(header_card)
+        header_grid.setContentsMargins(8, 5, 8, 5)
+        header_grid.setSpacing(3)
+
+        header_grid.addWidget(QLabel("تاریخ"), 0, 0)
         self.date_field = JalaliDateEdit()
-        date_box.addWidget(self.date_field)
-        header_row1.addLayout(date_box)
+        header_grid.addWidget(self.date_field, 1, 0)
 
-        counterparty_box = QVBoxLayout()
-        counterparty_box.addWidget(QLabel("مشتری" if self._is_sales else "تامین‌کننده"))
+        header_grid.addWidget(QLabel("مشتری" if self._is_sales else "تامین‌کننده"), 0, 1)
+        counterparty_row = QHBoxLayout()
+        counterparty_row.setContentsMargins(0, 0, 0, 0)
+        counterparty_row.setSpacing(3)
         self.counterparty_combo = _make_searchable_combo([])
-        counterparty_box.addWidget(self.counterparty_combo)
-        header_row1.addLayout(counterparty_box)
+        counterparty_row.addWidget(self.counterparty_combo, stretch=1)
+        add_quick_add_button(
+            counterparty_row, self.counterparty_combo, main_window, "GL_DIM",
+            "تعریفِ مشتریِ تازه" if self._is_sales else "تعریفِ تامین‌کننده‌یِ تازه",
+        )
+        header_grid.addLayout(counterparty_row, 1, 1)
 
-        warehouse_box = QVBoxLayout()
-        warehouse_box.addWidget(QLabel("انبار"))
-        self.warehouse_combo = QComboBox()
-        warehouse_box.addWidget(self.warehouse_combo)
-        header_row1.addLayout(warehouse_box)
-        self.body_layout.addLayout(header_row1)
+        header_grid.addWidget(QLabel("انبار"), 0, 2)
+        warehouse_row = QHBoxLayout()
+        warehouse_row.setContentsMargins(0, 0, 0, 0)
+        warehouse_row.setSpacing(3)
+        self.warehouse_combo = _EnterComboBox()
+        warehouse_row.addWidget(self.warehouse_combo, stretch=1)
+        add_quick_add_button(warehouse_row, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        header_grid.addLayout(warehouse_row, 1, 2)
 
-        header_row2 = QHBoxLayout()
-        price_list_box = QVBoxLayout()
-        price_list_box.addWidget(QLabel("فهرستِ قیمت"))
-        self.price_list_combo = QComboBox()
-        price_list_box.addWidget(self.price_list_combo)
-        header_row2.addLayout(price_list_box)
+        header_grid.addWidget(QLabel("شمارهٔ مرجع"), 0, 3)
+        self.reference_field = QLineEdit()
+        header_grid.addWidget(self.reference_field, 1, 3)
+
+        header_grid.addWidget(QLabel("فهرستِ قیمت"), 2, 0)
+        self.price_list_combo = _EnterComboBox()
+        header_grid.addWidget(self.price_list_combo, 3, 0)
 
         self.channel_box = QWidget()
         channel_layout = QVBoxLayout(self.channel_box)
         channel_layout.setContentsMargins(0, 0, 0, 0)
+        channel_layout.setSpacing(3)
         channel_layout.addWidget(QLabel("کانال"))
-        self.channel_combo = QComboBox()
+        self.channel_combo = _EnterComboBox()
         channel_layout.addWidget(self.channel_combo)
-        header_row2.addWidget(self.channel_box)
+        header_grid.addWidget(self.channel_box, 2, 1, 2, 1)
         self.channel_box.setVisible(self._is_sales)
 
-        reference_box = QVBoxLayout()
-        reference_box.addWidget(QLabel("شمارهٔ مرجع"))
-        self.reference_field = QLineEdit()
-        reference_box.addWidget(self.reference_field)
-        header_row2.addLayout(reference_box)
-
-        description_box = QVBoxLayout()
-        description_box.addWidget(QLabel("توضیح"))
+        header_grid.addWidget(QLabel("توضیح"), 2, 2, 1, 2)
         self.description_field = QLineEdit()
-        description_box.addWidget(self.description_field)
-        header_row2.addLayout(description_box)
-        self.body_layout.addLayout(header_row2)
+        header_grid.addWidget(self.description_field, 3, 2, 1, 2)
+
+        header_grid.setColumnStretch(0, 1)
+        header_grid.setColumnStretch(1, 2)
+        header_grid.setColumnStretch(2, 1)
+        header_grid.setColumnStretch(3, 1)
+        self.body_layout.addWidget(header_card)
+
+        # زنجیره‌ی کاملِ Enter رویِ هدر — بدونِ استثنا (طبقِ سندِ راهنما).
+        header_chain = [
+            self.date_field, self.counterparty_combo, self.warehouse_combo, self.reference_field,
+            self.price_list_combo, self.channel_combo, self.description_field,
+        ]
+        for widget, next_widget in zip(header_chain, header_chain[1:]):
+            _enter_signal(widget).connect(next_widget.setFocus)
 
         self.status_badge = QLabel("")
         self.status_badge.setObjectName("statusBadge")
@@ -344,6 +430,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if company_id is None:
             return
         self._items = catalog_service.list_items(company_id, active_only=True)
+        self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
         warehouses = locations_service.list_warehouses(company_id, active_only=True)
         current_wh = self.warehouse_combo.currentData()
         self.warehouse_combo.blockSignals(True)
@@ -422,30 +509,36 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.links_label.setText("  |  ".join(links))
         self._lines = lines
         self._refresh_lines_table()
+        dp = self._decimal_places
         self.totals_label.setText(
-            f"جمعِ ناخالص: {numerals.format_amount(doc.subtotal_amount)}    تخفیف: {numerals.format_amount(doc.discount_amount)}    "
-            f"مالیات: {numerals.format_amount(doc.tax_amount)}    جمعِ کل: {numerals.format_amount(doc.total_amount)}"
+            f"جمعِ ناخالص: {numerals.format_money(doc.subtotal_amount, dp)}    تخفیف: {numerals.format_money(doc.discount_amount, dp)}    "
+            f"مالیات: {numerals.format_money(doc.tax_amount, dp)}    جمعِ کل: {numerals.format_money(doc.total_amount, dp)}"
         )
-        self.summary_cards.set_value("subtotal", numerals.format_amount(doc.subtotal_amount))
+        self.summary_cards.set_value("subtotal", numerals.format_money(doc.subtotal_amount, dp))
         self.summary_cards.set_value(
-            "discount_tax", numerals.format_amount(doc.discount_amount + doc.tax_amount)
+            "discount_tax", numerals.format_money(doc.discount_amount + doc.tax_amount, dp)
         )
-        self.summary_cards.set_value("grand_total", numerals.format_amount(doc.total_amount))
+        self.summary_cards.set_value("grand_total", numerals.format_money(doc.total_amount, dp))
         self._apply_status_state()
 
     def _refresh_lines_table(self) -> None:
+        # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۳ — نمایشِ مبلغ‌ها طبقِ تنظیماتِ
+        # واحدِ پولی): قبلاً این جدول با str() خامِ Decimal پر می‌شد —
+        # نه گروه‌بندیِ سه‌رقمی، نه ارقامِ فارسی، نه تعدادِ اعشارِ درستِ
+        # واحدِ پول.
+        dp = self._decimal_places
         items_by_id = {it.item_id: it for it in self._items}
         self.lines_table.setRowCount(len(self._lines))
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
-                str(ln.quantity),
-                str(ln.unit_price),
-                str(ln.discount_amount),
-                str(ln.tax_percent),
-                str(ln.tax_amount),
-                str(ln.line_total),
+                numerals.format_money(ln.quantity, 3),
+                numerals.format_money(ln.unit_price, dp),
+                numerals.format_money(ln.discount_amount, dp),
+                numerals.format_money(ln.tax_percent, 2),
+                numerals.format_money(ln.tax_amount, dp),
+                numerals.format_money(ln.line_total, dp),
                 ln.description or "",
             ]
             for col_index, value in enumerate(values):
@@ -535,7 +628,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _add_line(self) -> None:
         if not self._ensure_saved():
             return
-        dialog = _LineDialog(self, self._items)
+        dialog = _LineDialog(self, self._items, self._company_id(), self._main_window, self._decimal_places)
         if dialog.exec() != QDialog.Accepted:
             return
         try:
@@ -560,7 +653,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             "item_id": line.item_id, "quantity": line.quantity, "unit_price": line.unit_price,
             "discount_amount": line.discount_amount, "tax_percent": line.tax_percent, "description": line.description,
         }
-        dialog = _LineDialog(self, self._items, initial)
+        dialog = _LineDialog(self, self._items, self._company_id(), self._main_window, self._decimal_places, initial)
         if dialog.exec() != QDialog.Accepted:
             return
         try:

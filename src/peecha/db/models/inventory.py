@@ -160,6 +160,10 @@ class Item(Base):
     purchase_package_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     max_discount_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     sales_commission_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    # طبقِ درخواستِ صریح: درصدِ مالیاتِ این کالا (بعدِ تخفیف) — اگر خالی
+    # باشد، از تنظیماتِ کلیِ شرکت (Company.default_tax_percent) استفاده
+    # می‌شود؛ اولویتِ خواندن با همین فیلدِ کالاست، نه تنظیماتِ کلی.
+    default_tax_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     warranty_months: Mapped[int | None]
     seo_title: Mapped[str | None] = mapped_column(String(200))
     seo_url_slug: Mapped[str | None] = mapped_column(String(200))

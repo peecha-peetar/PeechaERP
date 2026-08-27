@@ -204,6 +204,34 @@ def build_action_footer(buttons: list[QWidget]) -> QWidget:
     return footer
 
 
+def add_quick_add_button(
+    row_layout: QHBoxLayout, combo: QWidget, main_window, screen_code: str, tooltip: str = "افزودنِ مقدارِ تازه"
+) -> QPushButton:
+    """طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۳ — دکمه‌یِ +ِ استاندارد): هر
+    فیلدی که مقدارش از یک جدول/فرمِ دیگر می‌آید باید کنارش یک دکمه‌یِ +
+    داشته باشد که همان فرمِ تعریف را باز کند — بدونِ نیاز به بستنِ سندِ
+    در حالِ ویرایش. برگشتن از آن فرم، refresh()ِ فرمِ میزبان (که خودِ
+    ناوبریِ برنامه صدا می‌زند) کمبو را از نو می‌سازد، پس مقدارِ
+    تازه‌ساخته خودکار در آن ظاهر می‌شود — هم‌الگو با
+    treasury_voucher._quick_add_counterparty، فقط به‌صورتِ تابعِ
+    عمومیِ یک‌بار پیاده‌شده به‌جایِ کپی‌شدن در هر فرم.
+
+    combo از قبل باید به row_layout اضافه شده باشد (این تابع فقط دکمه
+    را می‌سازد و کنارش اضافه می‌کند، خودِ combo را جابه‌جا نمی‌کند)."""
+    button = QPushButton("+")
+    button.setObjectName("iconButton")
+    button.setFixedWidth(28)
+    button.setToolTip(tooltip)
+
+    def _open() -> None:
+        if main_window is not None:
+            main_window.open_screen(screen_code)
+
+    button.clicked.connect(_open)
+    row_layout.addWidget(button)
+    return button
+
+
 class JalaliDateEdit(QLineEdit):
     """فیلدِ متنیِ تاریخِ شمسی با ارقامِ فارسی — معادلِ رفتارِ تاریخ‌گیرِ
     Kivy (که هم آن یک فیلدِ متنی بود، نه پاپ‌آپِ تقویم)."""

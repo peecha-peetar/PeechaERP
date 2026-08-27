@@ -192,7 +192,12 @@ def add_line(
             )
             unit_price = resolved.unit_price
             discount_amount = discount_amount + resolved.discount_amount
-        tax_amount = _money(quantity * unit_price * (tax_percent / 100)) if tax_percent else _ZERO
+        # طبقِ رفعِ باگِ واقعی: مالیات باید رویِ مبلغِ *بعدِ تخفیف* محاسبه
+        # شود (همان‌طور که ستون‌بندیِ خودِ جدولِ ردیف‌ها هم نشان می‌دهد:
+        # «تخفیف» پیش از «درصدِ مالیات» می‌آید) — قبلاً رویِ جمعِ ناخالص
+        # (quantity*unit_price) محاسبه می‌شد، بدونِ کسرِ تخفیف.
+        net_amount = quantity * unit_price - discount_amount
+        tax_amount = _money(net_amount * (tax_percent / 100)) if tax_percent and net_amount > 0 else _ZERO
         next_no = (
             session.scalar(select(func.max(CommercialDocumentLine.line_no)).where(CommercialDocumentLine.document_id == document_id)) or 0
         ) + 1

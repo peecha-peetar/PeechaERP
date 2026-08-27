@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 
 from peecha.db.base import new_session
+from peecha.db.models.core import Company
 from peecha.db.models.inventory import (
     AssetDepreciationEntry,
     AssetDetail,
@@ -55,6 +56,7 @@ _EXTENDED_ITEM_FIELD_KEYS = (
     "country_of_origin", "length_cm", "width_cm", "height_cm", "package_type_code", "freight_class_code",
     "requires_qc", "qc_standard", "qc_test_spec", "qc_inspection_interval_days", "purchase_lead_time_days",
     "purchase_min_order_qty", "purchase_package_qty", "max_discount_percent", "sales_commission_percent",
+    "default_tax_percent",
     "warranty_months", "seo_title", "seo_url_slug", "seo_meta_description", "seo_meta_keywords",
     "website_category", "website_tags", "pos_shortcut_key", "pos_button_color", "pos_requires_weight",
     "pos_requires_serial",
@@ -306,6 +308,7 @@ class ItemRow:
     purchase_package_qty: decimal.Decimal | None = None
     max_discount_percent: decimal.Decimal | None = None
     sales_commission_percent: decimal.Decimal | None = None
+    default_tax_percent: decimal.Decimal | None = None
     warranty_months: int | None = None
     seo_title: str | None = None
     seo_url_slug: str | None = None
@@ -392,6 +395,20 @@ def get_item_row_by_detail_account_id(company_id: int, item_detail_account_id: i
     )
 
 
+def resolve_default_tax_percent(company_id: int, item_id: int) -> decimal.Decimal:
+    """طبقِ درخواستِ صریح: درصدِ مالیاتِ پیش‌فرضِ ردیفِ سند با اولویت خوانده
+    می‌شود — اول خودِ کالا (Item.default_tax_percent)، اگر خالی بود
+    تنظیماتِ کلیِ شرکت (Company.default_tax_percent)، در نهایت صفر."""
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is not None and item.default_tax_percent is not None:
+            return item.default_tax_percent
+        company = session.get(Company, company_id)
+        if company is not None and company.default_tax_percent is not None:
+            return company.default_tax_percent
+        return decimal.Decimal(0)
+
+
 @dataclass
 class ItemFields:
     item_kind_code: str
@@ -433,6 +450,7 @@ class ItemFields:
     purchase_package_qty: decimal.Decimal | None = None
     max_discount_percent: decimal.Decimal | None = None
     sales_commission_percent: decimal.Decimal | None = None
+    default_tax_percent: decimal.Decimal | None = None
     warranty_months: int | None = None
     seo_title: str | None = None
     seo_url_slug: str | None = None

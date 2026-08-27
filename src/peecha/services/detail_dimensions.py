@@ -1448,6 +1448,14 @@ def _group_row_to_person_row(
 
 
 def _list_group_persons(company_id: int, group_code: str, detail_model, extra_field_names: tuple[str, ...]) -> list[dict]:
+    """طبقِ رفعِ باگِ واقعی: این تابع پایه‌یِ list_customers/list_suppliers/
+    list_personnel است — همه‌جایِ برنامه (فرمِ سند خرید/فروش، تبِ
+    تامین‌کننده‌یِ فرمِ کالا، فروشِ حضوری، ...) برایِ فهرستِ *انتخابیِ*
+    مشتری/تامین‌کننده/پرسنل از همین استفاده می‌کنند. قبلاً گره‌هایِ
+    گروه‌بندیِ سلسله‌مراتب (غیرِبرگ) هم در همین فهرست می‌آمدند — یعنی
+    کاربر می‌توانست یک «گروه» را به‌جایِ یک مشتری/تامین‌کننده‌یِ واقعی
+    انتخاب کند. هم‌الگو با list_leaf_detail_accounts، فقط برگ‌هایِ فعال
+    برمی‌گردند."""
     with new_session() as session:
         dimension_type_id = ensure_person_dimension(session, company_id)
         person_group_id = ensure_person_groups(session, company_id)[group_code]
@@ -1461,8 +1469,10 @@ def _list_group_persons(company_id: int, group_code: str, detail_model, extra_fi
             )
             .order_by(DetailAccount.code)
         ).all()
+        parent_ids = {r.parent_detail_account_id for r in rows if r.parent_detail_account_id is not None}
+        leaf_rows = [r for r in rows if r.is_active and r.detail_account_id not in parent_ids]
         full_codes = _compute_full_codes(rows)
-        detail_account_ids = [r.detail_account_id for r in rows]
+        detail_account_ids = [r.detail_account_id for r in leaf_rows]
         extras_by_id = {
             e.detail_account_id: e
             for e in session.scalars(
@@ -1473,7 +1483,7 @@ def _list_group_persons(company_id: int, group_code: str, detail_model, extra_fi
             _group_row_to_person_row(
                 r, extras_by_id.get(r.detail_account_id), extra_field_names, full_codes.get(r.detail_account_id, r.code)
             )
-            for r in rows
+            for r in leaf_rows
         ]
 
 

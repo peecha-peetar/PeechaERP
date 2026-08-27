@@ -36,9 +36,9 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
+from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
 from peecha.ui.screens.treasury_voucher import _EnterComboBox
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper
+from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper, add_quick_add_button
 
 DOC_TYPE_TITLES = {
     "RECEIPT": "رسید",
@@ -68,6 +68,7 @@ class _LineDialog(QDialog):
         source_bins: list[locations_service.BinLocationRow], destination_bins: list[locations_service.BinLocationRow],
         reasons: list[documents_service.ReasonCodeRow], initial: documents_service.LineFields | None = None,
         uom_decimal_places: dict[int, int] | None = None, unit_cost_decimal_places: int = 2,
+        main_window=None,
     ) -> None:
         super().__init__(parent)
         self.document_type_code = document_type_code
@@ -77,15 +78,22 @@ class _LineDialog(QDialog):
         layout = QVBoxLayout(self)
 
         layout.addWidget(QLabel("کالا"))
+        item_row = QHBoxLayout()
+        item_row.setContentsMargins(0, 0, 0, 0)
+        item_row.setSpacing(3)
         item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items]
         self.item_combo = _make_searchable_combo(item_options)
-        layout.addWidget(self.item_combo)
+        item_row.addWidget(self.item_combo, stretch=1)
+        add_quick_add_button(item_row, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
+        layout.addLayout(item_row)
         self._items_by_id = {it.item_id: it for it in items}
 
         layout.addWidget(QLabel("مقدار (واحدِ پایهٔ کالا)"))
-        self.quantity_field = QDoubleSpinBox()
+        # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۲/۶.۳): _AmountField به‌جایِ
+        # QDoubleSpinBoxِ خام — گروه‌بندیِ سه‌رقمیِ زنده + ارقامِ فارسی حینِ
+        # تایپ، دقیقاً هم‌الگو با journal_entry.py/treasury_voucher.py.
+        self.quantity_field = _AmountField()
         self.quantity_field.setDecimals(6)
-        self.quantity_field.setRange(0.000001, 999999999)
         layout.addWidget(self.quantity_field)
         self.item_combo.currentIndexChanged.connect(self._on_item_changed)
 
@@ -116,9 +124,8 @@ class _LineDialog(QDialog):
         cost_layout = QVBoxLayout(self.unit_cost_row)
         cost_layout.setContentsMargins(0, 0, 0, 0)
         cost_layout.addWidget(QLabel("بهایِ واحد (اختیاری)"))
-        self.unit_cost_field = QDoubleSpinBox()
+        self.unit_cost_field = _AmountField()
         self.unit_cost_field.setDecimals(unit_cost_decimal_places)
-        self.unit_cost_field.setRange(0, 999999999999)
         cost_layout.addWidget(self.unit_cost_field)
         layout.addWidget(self.unit_cost_row)
         self.unit_cost_row.setVisible(document_type_code in ("RECEIPT", "RETURN_IN", "ADJUSTMENT"))
@@ -154,6 +161,15 @@ class _LineDialog(QDialog):
         buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
         buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         layout.addWidget(buttons)
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده با تستِ زنده (QTest): برخلافِ آنچه
+        # کامنتِ بالا فرض کرده بود، همان setAutoDefault(False) به‌تنهایی
+        # کافی نبود — QDialogButtonBox با هر show() دوباره دکمه‌یِ
+        # AcceptRole را default (isDefault=True) می‌کند؛ نتیجه این بود که
+        # هر Enterِ زده‌شده در هر فیلدی، حتی بعدِ جابه‌جاکردنِ فوکوسِ درست
+        # توسطِ enter_chain زیر، بلافاصله خودِ دیالوگ را می‌بست (زنجیره‌یِ
+        # Enter عملاً هیچ‌وقت به فیلدِ دوم نمی‌رسید). جلوگیریِ واقعی، هم‌الگو
+        # با treasury_voucher._MethodDetailsDialog، در keyPressEventِ
+        # پایین‌ترِ همین کلاس انجام شده.
 
         # طبقِ درخواستِ صریح («ادامهٔ ثبتِ رسید»): زنجیره‌یِ Enter از کالا
         # تا توضیح، و در پایان معادلِ کلیکِ روی «تایید» — تا کاربر بتواند
@@ -189,6 +205,16 @@ class _LineDialog(QDialog):
                 self.reason_combo.setCurrentIndex(max(0, self.reason_combo.findData(initial.reason_code_id)))
             self.description_field.setText(initial.description or "")
 
+    def keyPressEvent(self, event) -> None:
+        # جلوگیریِ واقعی از باگِ autoDefault (هم‌الگو با
+        # treasury_voucher._MethodDetailsDialog): چون همه‌یِ فیلدهایِ این
+        # دیالوگ زنجیره‌یِ Enterِ خودشان را دارند، دیگر نیازی نیست QDialog
+        # با دیدنِ Enter دوباره دکمه‌یِ پیش‌فرض را کلیک کند.
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def _on_item_changed(self) -> None:
         # طبقِ گزارشِ صریح: تعدادِ اعشارِ «مقدار» باید از تعریفِ واحدِ
         # پایهٔ همان کالا ارث ببرد (مثلاً واحدِ شمارشی «عدد» = عددِ صحیح)،
@@ -196,29 +222,42 @@ class _LineDialog(QDialog):
         item = self._items_by_id.get(self.item_combo.currentData())
         decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 6
         self.quantity_field.setDecimals(decimals)
-        self.quantity_field.setSingleStep(1)
-        self.quantity_field.setMinimum(1 if decimals == 0 else 10 ** -decimals)
 
     def _on_accept(self) -> None:
         if self.item_combo.currentData() is None:
             self.status_label.setText("کالا را انتخاب کنید.")
             return
-        if self.reason_row.isVisible() and self.reason_combo.currentData() is None:
+        if self.reason_row.isVisibleTo(self) and self.reason_combo.currentData() is None:
             self.status_label.setText("انتخابِ دلیل الزامی است.")
             return
         self.accept()
 
     def result_fields(self) -> documents_service.LineFields:
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده: این تابع همیشه *بعدِ* بستنِ دیالوگ
+        # (دیگر self.exec() برگشته) صدا زده می‌شود — یعنی خودِ دیالوگ دیگر
+        # isVisible() نیست، پس widget.isVisible() برایِ هر ردیف/فیلدِ
+        # داخلش هم همیشه False برمی‌گشت (چون isVisible وابسته به نمایانیِ
+        # واقعیِ رویِ صفحه است، نه صرفاً تنظیم‌شدنِ صریحِ setVisible). نتیجه
+        # این بود که دلیل/بهایِ واحد/مکانِ مقصد — حتی وقتی واقعاً پر شده
+        # بودند — همیشه None ثبت می‌شدند، و بعداً هنگامِ تاییدِ سند دوباره
+        # با «انتخابِ دلیل الزامی است» رد می‌شد. isVisibleTo(self) وضعیتِ
+        # واقعیِ تنظیم‌شده (مستقل از نمایانیِ خودِ دیالوگ) را می‌دهد.
         item_id = self.item_combo.currentData()
         item = self._items_by_id.get(item_id)
         quantity = decimal.Decimal(str(self.quantity_field.value()))
-        unit_cost = decimal.Decimal(str(self.unit_cost_field.value())) if self.unit_cost_row.isVisible() and self.unit_cost_field.value() > 0 else None
+        unit_cost = (
+            decimal.Decimal(str(self.unit_cost_field.value()))
+            if self.unit_cost_row.isVisibleTo(self) and self.unit_cost_field.value() > 0
+            else None
+        )
         return documents_service.LineFields(
             item_id=item_id, uom_id=item.base_uom_id if item else 0, quantity=quantity, quantity_base=quantity,
             bin_location_id=self.bin_combo.currentData(),
-            destination_bin_location_id=self.destination_bin_combo.currentData() if self.destination_bin_row.isVisible() else None,
+            destination_bin_location_id=(
+                self.destination_bin_combo.currentData() if self.destination_bin_row.isVisibleTo(self) else None
+            ),
             unit_cost=unit_cost,
-            reason_code_id=self.reason_combo.currentData() if self.reason_row.isVisible() else None,
+            reason_code_id=self.reason_combo.currentData() if self.reason_row.isVisibleTo(self) else None,
             description=self.description_field.text().strip() or None,
         )
 
@@ -264,7 +303,15 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             # بلااستفاده) بینِ خودشان تقسیم کنند.
             widget.setMinimumWidth(min_width)
 
-        header_row = QHBoxLayout()
+        # طبقِ گزارشِ تکراریِ کاربر («هدرِ فرم‌هایِ انبار/فروش/خرید هنوز
+        # نامرتب است»): این هدر هم اکنون درونِ یک کارتِ واحد قرار می‌گیرد —
+        # هم‌الگو با journal_entry.py/treasury_voucher.py — به‌جایِ نشستنِ
+        # مستقیمِ QHBoxLayout رویِ بدنه‌یِ صفحه.
+        header_card = QWidget()
+        header_card.setObjectName("card")
+        header_row = QHBoxLayout(header_card)
+        header_row.setContentsMargins(8, 5, 8, 5)
+        header_row.setSpacing(6)
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
         self.date_field = JalaliDateEdit()
@@ -276,9 +323,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         source_wh_layout = QVBoxLayout(self.source_wh_box)
         source_wh_layout.setContentsMargins(0, 0, 0, 0)
         source_wh_layout.addWidget(QLabel("انبارِ مبدا"))
+        source_wh_row = QHBoxLayout()
+        source_wh_row.setContentsMargins(0, 0, 0, 0)
+        source_wh_row.setSpacing(3)
         self.source_wh_combo = _EnterComboBox()
         self.source_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
-        source_wh_layout.addWidget(self.source_wh_combo)
+        source_wh_row.addWidget(self.source_wh_combo, stretch=1)
+        add_quick_add_button(source_wh_row, self.source_wh_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        source_wh_layout.addLayout(source_wh_row)
         header_row.addWidget(self.source_wh_box, 1)
 
         self.destination_wh_box = QWidget()
@@ -286,9 +338,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         dest_wh_layout = QVBoxLayout(self.destination_wh_box)
         dest_wh_layout.setContentsMargins(0, 0, 0, 0)
         dest_wh_layout.addWidget(QLabel("انبارِ مقصد"))
+        dest_wh_row = QHBoxLayout()
+        dest_wh_row.setContentsMargins(0, 0, 0, 0)
+        dest_wh_row.setSpacing(3)
         self.destination_wh_combo = _EnterComboBox()
         self.destination_wh_combo.currentIndexChanged.connect(self._on_warehouse_changed)
-        dest_wh_layout.addWidget(self.destination_wh_combo)
+        dest_wh_row.addWidget(self.destination_wh_combo, stretch=1)
+        add_quick_add_button(dest_wh_row, self.destination_wh_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        dest_wh_layout.addLayout(dest_wh_row)
         header_row.addWidget(self.destination_wh_box, 1)
 
         self.adjustment_direction_box = QWidget()
@@ -309,8 +366,13 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         counterparty_layout.setContentsMargins(0, 0, 0, 0)
         self.counterparty_label = QLabel("طرفِ‌حساب")
         counterparty_layout.addWidget(self.counterparty_label)
+        counterparty_row = QHBoxLayout()
+        counterparty_row.setContentsMargins(0, 0, 0, 0)
+        counterparty_row.setSpacing(3)
         self.counterparty_combo = _make_searchable_combo([])
-        counterparty_layout.addWidget(self.counterparty_combo)
+        counterparty_row.addWidget(self.counterparty_combo, stretch=1)
+        add_quick_add_button(counterparty_row, self.counterparty_combo, main_window, "GL_DIM", "تعریفِ طرفِ‌حسابِ تازه")
+        counterparty_layout.addLayout(counterparty_row)
         header_row.addWidget(self.counterparty_box, 1)
 
         reference_box = QVBoxLayout()
@@ -320,7 +382,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         reference_box.addWidget(self.reference_field)
         header_row.addLayout(reference_box, 0)
 
-        self.body_layout.addLayout(header_row)
+        self.body_layout.addWidget(header_card)
 
         lines_title = QLabel("ردیف‌ها")
         lines_title.setObjectName("sectionTitle")
@@ -710,6 +772,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             dialog = _LineDialog(
                 self, self.document_type_code, self._items, source_bins, destination_bins, reasons,
                 uom_decimal_places=self._uom_decimal_places, unit_cost_decimal_places=self._unit_cost_decimal_places,
+                main_window=self._main_window,
             )
             if dialog.exec() != QDialog.Accepted:
                 break
@@ -747,6 +810,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         dialog = _LineDialog(
             self, self.document_type_code, self._items, source_bins, destination_bins, reasons, initial,
             uom_decimal_places=self._uom_decimal_places, unit_cost_decimal_places=self._unit_cost_decimal_places,
+            main_window=self._main_window,
         )
         if dialog.exec() != QDialog.Accepted:
             return

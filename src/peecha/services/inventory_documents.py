@@ -460,8 +460,14 @@ def confirm_stock_document(stock_document_id: int, company_id: int) -> None:
             raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
 
         if doc.document_type_code in _REASON_REQUIRED_TYPES:
+            # باگِ واقعیِ رفع‌شده: مقایسه‌یِ «تعدادِ دلیل‌هایِ *یکتا*» با
+            # «تعدادِ ردیف‌ها» فقط وقتی هر ردیف دلیلِ متفاوتی داشت درست
+            # کار می‌کرد — به‌محضِ این‌که دو ردیف (مثلاً هردو با دلیلِ
+            # «اصلاحِ ممیزی») همان یک دلیلِ مشترک را داشتند، len(reason_ids)
+            # از len(lines) کمتر می‌شد و کاربر با پیامِ «انتخابِ دلیل الزامی
+            # است» رد می‌شد، حتی وقتی همه‌یِ ردیف‌ها واقعاً دلیل داشتند.
             reason_ids = {ln.reason_code_id for ln in lines if ln.reason_code_id is not None}
-            if len(reason_ids) < len(lines):
+            if any(ln.reason_code_id is None for ln in lines):
                 raise ValueError("انتخابِ دلیل برایِ این نوعِ سند الزامی است.")
             if reason_ids:
                 valid_count = session.scalar(
