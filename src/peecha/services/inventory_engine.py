@@ -598,17 +598,28 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                 raise ValueError("نوعِ سند نامعتبر است.")
 
         person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
+        # الزامی فراموش شده است» حتی وقتی تفصیلیِ طرفِ‌حساب درست انتخاب
+        # شده بود): قبلاً هیچ‌کدام از ردیف‌هایِ خودکارِ این سند (موجودیِ
+        # کالا، بهایِ تمام‌شده، و...) مرکزِ هزینه/پروژهٔ خودِ سند را
+        # نمی‌فرستادند — اگر حسابِ نقش‌محورشان به آن بُعدها هم نیاز
+        # داشت، ثبتِ نهایی همیشه رد می‌شد.
+        extra_dims: dict[int, int] = {}
+        if doc.cost_center_detail_account_id is not None:
+            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = doc.cost_center_detail_account_id
+        if doc.project_detail_account_id is not None:
+            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = doc.project_detail_account_id
         je_lines: list[je_service.LineInput] = []
         description = doc.description or f"سندِ انبار #{doc.document_no}"
         for role, amount in debits.items():
             account_id = _resolve_role_account(session, company_id, role)
-            details = {}
+            details = dict(extra_dims)
             if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
                 details[person_dimension_type_id] = doc.counterparty_detail_account_id
             je_lines.append(je_service.LineInput(account_id=account_id, description=description, debit=amount, credit=_ZERO, details=details))
         for role, amount in credits.items():
             account_id = _resolve_role_account(session, company_id, role)
-            details = {}
+            details = dict(extra_dims)
             if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
                 details[person_dimension_type_id] = doc.counterparty_detail_account_id
             je_lines.append(je_service.LineInput(account_id=account_id, description=description, debit=_ZERO, credit=amount, details=details))

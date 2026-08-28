@@ -61,6 +61,40 @@ _CONVERT_TO_INVOICE_TARGET = {
     "PURCHASE_PROFORMA": "PURCHASE_INVOICE",
 }
 
+# طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
+# فراموش شده است»): حساب‌هایِ نقش‌محورِ درگیر در ثبتِ نهاییِ هر نوعِ سند —
+# برایِ تشخیصِ این‌که مرکزِ هزینه/پروژه در سرِسند باید الزامی نمایش داده
+# شود یا نه (هرکدام از این حساب‌ها که تنظیم شده و آن بُعد رویش الزامی
+# باشد، کافی‌ست). (منبعِ نگاشت, کلید) — منبعِ "comm" یعنی
+# commercial_settings، "inv" یعنی inventory_engine.
+_HEADER_DIMENSION_ROLE_KEYS = {
+    "SALES_INVOICE": [("comm", "SALES_REVENUE"), ("inv", "CUSTOMER_RECEIVABLE"), ("inv", "INVENTORY_ASSET"), ("inv", "COGS")],
+    "SALES_RETURN": [("inv", "CUSTOMER_RECEIVABLE"), ("inv", "INVENTORY_ASSET")],
+    "PURCHASE_INVOICE": [("inv", "SUPPLIER_PAYABLE"), ("inv", "INVENTORY_ASSET")],
+    "PURCHASE_RETURN": [("inv", "SUPPLIER_PAYABLE"), ("inv", "INVENTORY_ASSET")],
+}
+
+
+def get_header_dimension_requirement(company_id: int, document_type_code: str, dimension_code: str) -> tuple[bool, list]:
+    """(آیا الزامی است, فهرستِ حساب‌هایِ تفصیلیِ سطحِ آخرِ آن گروه) — برایِ
+    فیلدهایِ همیشه‌حاضرِ «مرکزِ هزینه»/«پروژه» در سرِسند، هم‌الگو با
+    petty_cash.get_advance_shared_dimension_options."""
+    dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimension_code)
+    options = dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)
+    is_required = False
+    for source, key in _HEADER_DIMENSION_ROLE_KEYS.get(document_type_code, []):
+        account_id = (
+            settings_service.get_account_mapping(company_id, key) if source == "comm"
+            else inv_engine_service.get_account_mapping(company_id, key)
+        )
+        if account_id is None:
+            continue
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        if any(r.dimension_type_id == dim_type_id for r in required):
+            is_required = True
+            break
+    return is_required, options
+
 _ZERO = decimal.Decimal("0")
 _Q2 = decimal.Decimal("0.01")
 
@@ -525,6 +559,8 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         document_date = doc.document_date
         description = doc.description or f"سندِ بازرگانی #{doc.document_no}"
         sales_rep_id = doc.sales_rep_detail_account_id
+        cost_center_id = doc.cost_center_detail_account_id
+        project_id = doc.project_detail_account_id
         subtotal_amount = doc.subtotal_amount
         discount_amount = doc.discount_amount
         tax_amount = doc.tax_amount
@@ -533,12 +569,28 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             for ln in lines
         ]
 
+    # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
+    # فراموش شده است» حتی وقتی تفصیلیِ طرفِ‌حساب درست انتخاب شده بود):
+    # اگر حسابِ نقش‌محورِ (دریافتنی/پرداختنی/درآمد/موجودی/...) این سند
+    # یک بُعدِ الزامیِ اضافه (مثلاً مرکزِ هزینه/پروژه) هم داشته باشد،
+    # ساختِ خودکارِ سندِ حسابداری قبلاً فقط تفصیلیِ طرفِ‌حساب را می‌فرستاد
+    # و آن بُعدِ اضافه را هیچ‌وقت نمی‌فرستاد — دقیقاً هم‌الگو با باگِ حسابِ
+    # پیش‌پرداختِ تنخواه که پیش‌تر رفع شد. حالا مرکزِ هزینه/پروژهٔ خودِ سند
+    # (اگر در سرِسند انتخاب شده باشد) به همه‌یِ ردیف‌هایِ سندِ حسابداری
+    # (این سند و سندِ انبارِ خودکارِ همراهش) فرستاده می‌شود.
+    extra_dims: dict[int, int] = {}
+    if cost_center_id is not None:
+        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = cost_center_id
+    if project_id is not None:
+        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = project_id
+
     stock_document_type = _STOCK_DOC_TYPE_BY_TYPE[document_type_code]
     is_receipt_like = stock_document_type in ("RECEIPT", "RETURN_IN")
     header_fields = inv_documents_service.DocumentHeaderFields(
         destination_warehouse_id=warehouse_id if is_receipt_like else None,
         source_warehouse_id=warehouse_id if not is_receipt_like else None,
         counterparty_detail_account_id=counterparty_id,
+        cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
         reference_no=f"COMM-{document_id}", description=description,
     )
     stock_document_id = inv_documents_service.create_stock_document(
@@ -575,23 +627,32 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         je_lines.append(
             je_service.LineInput(
                 account_id=ar_account_id, description=description, debit=total, credit=_ZERO,
-                details={person_dim_type_id: counterparty_id},
+                details={person_dim_type_id: counterparty_id, **extra_dims},
             )
         )
         with new_session() as session:
             revenue_account_id = settings_service.resolve_role_account(session, company_id, "SALES_REVENUE")
             je_lines.append(
-                je_service.LineInput(account_id=revenue_account_id, description=description, debit=_ZERO, credit=subtotal_amount)
+                je_service.LineInput(
+                    account_id=revenue_account_id, description=description, debit=_ZERO, credit=subtotal_amount,
+                    details=dict(extra_dims),
+                )
             )
             if discount_amount > 0:
                 discount_account_id = settings_service.resolve_role_account(session, company_id, "SALES_DISCOUNT")
                 je_lines.append(
-                    je_service.LineInput(account_id=discount_account_id, description=description, debit=discount_amount, credit=_ZERO)
+                    je_service.LineInput(
+                        account_id=discount_account_id, description=description, debit=discount_amount, credit=_ZERO,
+                        details=dict(extra_dims),
+                    )
                 )
             if tax_amount > 0:
                 tax_account_id = settings_service.resolve_role_account(session, company_id, "SALES_TAX_PAYABLE")
                 je_lines.append(
-                    je_service.LineInput(account_id=tax_account_id, description=description, debit=_ZERO, credit=tax_amount)
+                    je_service.LineInput(
+                        account_id=tax_account_id, description=description, debit=_ZERO, credit=tax_amount,
+                        details=dict(extra_dims),
+                    )
                 )
 
         je_result = je_service.create_journal_entry(

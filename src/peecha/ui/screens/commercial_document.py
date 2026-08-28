@@ -342,6 +342,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._lines: list = []
         self._items: list[catalog_service.ItemRow] = []
         self._decimal_places = 0
+        self._cost_center_required = False
+        self._project_required = False
 
         title = DOC_TYPE_TITLES[document_type_code]
         self.page_title = QLabel(title)
@@ -436,6 +438,38 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.description_field = QLineEdit()
         header_grid.addWidget(self.description_field, 3, 3, 1, 2)
 
+        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
+        # الزامی فراموش شده است» با این‌که تفصیلیِ طرفِ‌حساب درست انتخاب
+        # شده بود): بعضی حساب‌هایِ نقش‌محورِ این سند (دریافتنی/پرداختنی/
+        # درآمد/موجودی/...) ممکن است علاوه‌بر تفصیلیِ طرفِ‌حساب، به مرکزِ
+        # هزینه/پروژه هم نیاز داشته باشند — هم‌الگو با فیلدهایِ همیشه‌حاضرِ
+        # مشابه در فرمِ تنخواه‌گردان. برچسب با «*» یعنی برایِ این نوعِ سند
+        # (طبقِ تنظیماتِ نگاشتِ حساب‌ها) الزامی است.
+        self.cost_center_label = QLabel("مرکزِ هزینه")
+        header_grid.addWidget(self.cost_center_label, 4, 0, 1, 2)
+        cost_center_row = QHBoxLayout()
+        cost_center_row.setContentsMargins(0, 0, 0, 0)
+        cost_center_row.setSpacing(3)
+        self.cost_center_combo = _EnterComboBox()
+        cost_center_row.addWidget(self.cost_center_combo, stretch=1)
+        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریفِ مرکزِ هزینه‌یِ تازه")
+        header_grid.addLayout(cost_center_row, 5, 0, 1, 2)
+
+        self.project_box = QWidget()
+        project_layout = QVBoxLayout(self.project_box)
+        project_layout.setContentsMargins(0, 0, 0, 0)
+        project_layout.setSpacing(3)
+        self.project_label = QLabel("پروژه")
+        project_layout.addWidget(self.project_label)
+        project_row = QHBoxLayout()
+        project_row.setContentsMargins(0, 0, 0, 0)
+        project_row.setSpacing(3)
+        self.project_combo = _EnterComboBox()
+        project_row.addWidget(self.project_combo, stretch=1)
+        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریفِ پروژه‌یِ تازه")
+        project_layout.addLayout(project_row)
+        header_grid.addWidget(self.project_box, 4, 2, 2, 1)
+
         header_grid.setColumnStretch(0, 1)
         header_grid.setColumnStretch(1, 2)
         header_grid.setColumnStretch(2, 1)
@@ -446,7 +480,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # زنجیره‌ی کاملِ Enter رویِ هدر — بدونِ استثنا (طبقِ سندِ راهنما).
         header_chain = [
             self.date_field, self.counterparty_combo, self.warehouse_combo, self.reference_field,
-            self.price_list_combo, self.channel_combo, self.description_field,
+            self.price_list_combo, self.channel_combo, self.cost_center_combo, self.project_combo,
+            self.description_field,
         ]
         for widget, next_widget in zip(header_chain, header_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
@@ -637,6 +672,38 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             if index >= 0:
                 self.price_list_combo.setCurrentIndex(index)
 
+        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
+        # الزامی فراموش شده است»): مرکزِ هزینه/پروژه فیلدهایِ همیشه‌حاضرِ
+        # هدرند؛ فقط بر اساسِ نگاشتِ حساب‌هایِ این نوعِ سند enable/الزامی
+        # می‌شوند (هم‌الگو با فرمِ تنخواه‌گردان).
+        self._cost_center_required, cost_center_options = documents_service.get_header_dimension_requirement(
+            company_id, self.document_type_code, dimensions_service.COST_CENTER_CODE
+        )
+        current_cc = self.cost_center_combo.currentData()
+        self.cost_center_combo.clear()
+        self.cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        for opt in cost_center_options:
+            self.cost_center_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
+        if current_cc is not None:
+            index = self.cost_center_combo.findData(current_cc)
+            if index >= 0:
+                self.cost_center_combo.setCurrentIndex(index)
+        self.cost_center_label.setText("مرکزِ هزینه *" if self._cost_center_required else "مرکزِ هزینه")
+
+        self._project_required, project_options = documents_service.get_header_dimension_requirement(
+            company_id, self.document_type_code, dimensions_service.PROJECT_CODE
+        )
+        current_project = self.project_combo.currentData()
+        self.project_combo.clear()
+        self.project_combo.addItem("(بدونِ پروژه)", None)
+        for opt in project_options:
+            self.project_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
+        if current_project is not None:
+            index = self.project_combo.findData(current_project)
+            if index >= 0:
+                self.project_combo.setCurrentIndex(index)
+        self.project_label.setText("پروژه *" if self._project_required else "پروژه")
+
         if self._document_id is not None:
             self._load_document()
         else:
@@ -667,6 +734,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.price_list_combo.setCurrentIndex(max(0, self.price_list_combo.findData(doc.price_list_id)))
         if self._is_sales and doc.channel_code is not None:
             self.channel_combo.setCurrentIndex(max(0, self.channel_combo.findData(doc.channel_code)))
+        if doc.cost_center_detail_account_id is not None:
+            self.cost_center_combo.setCurrentIndex(max(0, self.cost_center_combo.findData(doc.cost_center_detail_account_id)))
+        if doc.project_detail_account_id is not None:
+            self.project_combo.setCurrentIndex(max(0, self.project_combo.findData(doc.project_detail_account_id)))
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
         links = []
@@ -723,7 +794,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # (هم‌الگو با services/commercial_documents.py:_get_editable_document).
         is_order_type = self.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
         is_editable = is_draft or (is_order_type and (is_confirmed or is_approved))
-        for widget in (self.date_field, self.counterparty_combo, self.warehouse_combo, self.price_list_combo, self.channel_combo, self.reference_field, self.description_field):
+        for widget in (
+            self.date_field, self.counterparty_combo, self.warehouse_combo, self.price_list_combo, self.channel_combo,
+            self.cost_center_combo, self.project_combo, self.reference_field, self.description_field,
+        ):
             widget.setEnabled(is_editable)
         self.save_button.setEnabled(is_editable)
         self.confirm_button.setEnabled(is_draft and self._document_id is not None)
@@ -746,6 +820,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.warehouse_combo.setCurrentIndex(0)
         self.price_list_combo.setCurrentIndex(0)
         self.channel_combo.setCurrentIndex(0)
+        self.cost_center_combo.setCurrentIndex(0)
+        self.project_combo.setCurrentIndex(0)
         self.reference_field.clear()
         self.description_field.clear()
         for key in ("subtotal", "discount_tax", "grand_total"):
@@ -764,12 +840,27 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if counterparty_id is None:
             self.status_label.setText("انتخابِ طرفِ‌حساب الزامی است.")
             return None
+        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
+        # الزامی فراموش شده است»): اگر حسابِ نقش‌محورِ این نوعِ سند به
+        # مرکزِ هزینه/پروژه نیاز داشته باشد، همین‌جا (پیش از تلاشِ ذخیره)
+        # با یک پیامِ روشن جلوگیری می‌شود — نه با خطایِ گنگِ عمقیِ
+        # اعتبارسنجیِ سندِ حسابداری در لحظه‌یِ ثبتِ نهایی.
+        company_id = self._company_id()
+        if company_id is not None:
+            if self.cost_center_combo.currentData() is None and self._cost_center_required:
+                self.status_label.setText("انتخابِ «مرکزِ هزینه» برایِ این نوعِ سند الزامی است.")
+                return None
+            if self.project_combo.currentData() is None and self._project_required:
+                self.status_label.setText("انتخابِ «پروژه» برایِ این نوعِ سند الزامی است.")
+                return None
         company = app_session.current_company
         return documents_service.DocumentHeaderFields(
             counterparty_detail_account_id=counterparty_id, currency_id=company.base_currency_id,
             warehouse_id=self.warehouse_combo.currentData(),
             channel_code=self.channel_combo.currentData() if self._is_sales else None,
             price_list_id=self.price_list_combo.currentData(),
+            cost_center_detail_account_id=self.cost_center_combo.currentData(),
+            project_detail_account_id=self.project_combo.currentData(),
             reference_no=self.reference_field.text().strip() or None,
             description=self.description_field.text().strip() or None,
         )
