@@ -35,6 +35,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
 from peecha.ui.screens.inventory_document import _enter_signal
@@ -794,11 +795,29 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.project_combo.setCurrentIndex(max(0, self.project_combo.findData(doc.project_detail_account_id)))
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
+        # طبقِ رفعِ باگِ واقعی («سندِ بهایِ تمام‌شده/موجودی انجام نمی‌شود»
+        # — درواقع انجام می‌شد، فقط دیده نمی‌شد): برایِ SALES_INVOICE دو
+        # سندِ حسابداریِ کاملاً جدا ساخته می‌شود (طبقِ اصلِ همین فایل، بالایِ
+        # سند) — یکی دریافتنی/درآمد (doc.journal_entry_id) و دیگری بهایِ
+        # تمام‌شده/موجودی (سندِ انبار خودش journal_entry_id دارد). قبلاً
+        # این‌جا فقط اولی نمایش داده می‌شد، پس کاربر گمان می‌کرد دومی هرگز
+        # ثبت نشده.
         links = []
+        stock_journal_entry_id = None
         if doc.stock_document_id is not None:
             links.append(f"سندِ انبار: #{numerals.to_persian_digits(str(doc.stock_document_id))}")
-        if doc.journal_entry_id is not None:
+            try:
+                stock_doc_row, _ = inv_documents_service.get_stock_document(doc.stock_document_id, company_id)
+                stock_journal_entry_id = stock_doc_row.journal_entry_id
+            except ValueError:
+                stock_journal_entry_id = None
+        if doc.journal_entry_id is not None and stock_journal_entry_id is not None:
+            links.append(f"سندِ حسابداریِ فروش/دریافتنی: #{numerals.to_persian_digits(str(doc.journal_entry_id))}")
+            links.append(f"سندِ حسابداریِ بهایِ تمام‌شده/موجودی: #{numerals.to_persian_digits(str(stock_journal_entry_id))}")
+        elif doc.journal_entry_id is not None:
             links.append(f"سندِ حسابداری: #{numerals.to_persian_digits(str(doc.journal_entry_id))}")
+        elif stock_journal_entry_id is not None:
+            links.append(f"سندِ حسابداریِ بهایِ تمام‌شده/موجودی: #{numerals.to_persian_digits(str(stock_journal_entry_id))}")
         if doc.source_document_id is not None:
             links.append(f"سندِ مبدا: #{numerals.to_persian_digits(str(doc.source_document_id))}")
         self.links_label.setText("  |  ".join(links))
