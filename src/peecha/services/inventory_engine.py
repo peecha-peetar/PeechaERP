@@ -430,18 +430,26 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
             bal.last_movement_at = datetime.datetime.now()
             return segments
 
-        debits: dict[str, decimal.Decimal] = {}
-        credits: dict[str, decimal.Decimal] = {}
+        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ کالا الزامی است» رویِ
+        # حساب‌هایِ نقش‌محورِ اسنادِ انبار — رسید/حواله/اصلاح/برگشت — نه
+        # فقط حسابِ درآمدِ فروش): این‌جا هم مثلِ فروش، مبلغِ هر نقش قبلاً
+        # به‌صورتِ یک جمعِ کلی (بدونِ ردِ کالا) جمع می‌شد، پس اگر معینِ آن
+        # نقش «کالا» را الزامی می‌کرد، هرگز قابلِ‌تامین نبود. حالا مبلغِ
+        # هر نقش به‌تفکیکِ تفصیلیِ کالایِ همان ردیف هم نگه داشته می‌شود.
+        debits: dict[str, dict[int | None, decimal.Decimal]] = {}
+        credits: dict[str, dict[int | None, decimal.Decimal]] = {}
 
-        def add_debit(role: str, amount: decimal.Decimal) -> None:
+        def add_debit(role: str, amount: decimal.Decimal, item_detail_account_id: int | None = None) -> None:
             if amount == 0:
                 return
-            debits[role] = debits.get(role, _ZERO) + amount
+            by_item = debits.setdefault(role, {})
+            by_item[item_detail_account_id] = by_item.get(item_detail_account_id, _ZERO) + amount
 
-        def add_credit(role: str, amount: decimal.Decimal) -> None:
+        def add_credit(role: str, amount: decimal.Decimal, item_detail_account_id: int | None = None) -> None:
             if amount == 0:
                 return
-            credits[role] = credits.get(role, _ZERO) + amount
+            by_item = credits.setdefault(role, {})
+            by_item[item_detail_account_id] = by_item.get(item_detail_account_id, _ZERO) + amount
 
         doc_type = doc.document_type_code
         movement_date = doc.document_date
@@ -504,18 +512,18 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
 
                 inventory_amount = _money(ledger_unit_cost * line.quantity_base)
                 payable_amount = _money(actual_cost * line.quantity_base)
-                add_debit("INVENTORY_ASSET", inventory_amount)
+                add_debit("INVENTORY_ASSET", inventory_amount, item.item_detail_account_id)
                 variance = payable_amount - inventory_amount
                 if doc_type == "RECEIPT" and variance != 0:
                     if variance > 0:
-                        add_debit("INVENTORY_COST_VARIANCE", variance)
+                        add_debit("INVENTORY_COST_VARIANCE", variance, item.item_detail_account_id)
                     else:
-                        add_credit("INVENTORY_COST_VARIANCE", -variance)
+                        add_credit("INVENTORY_COST_VARIANCE", -variance, item.item_detail_account_id)
                 credit_role = "SUPPLIER_PAYABLE" if doc_type == "RECEIPT" else "CUSTOMER_RECEIVABLE"
                 if doc.counterparty_detail_account_id is not None:
-                    add_credit(credit_role, payable_amount)
+                    add_credit(credit_role, payable_amount, item.item_detail_account_id)
                 else:
-                    add_credit("INVENTORY_ADJUSTMENT_GAIN", payable_amount)
+                    add_credit("INVENTORY_ADJUSTMENT_GAIN", payable_amount, item.item_detail_account_id)
 
             elif doc_type in ("ISSUE", "RETURN_OUT"):
                 warehouse_id = doc.source_warehouse_id
@@ -529,13 +537,13 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                         movement_date=movement_date,
                     )
                     total_amount += _money(seg_cost * seg_qty)
-                add_credit("INVENTORY_ASSET", total_amount)
+                add_credit("INVENTORY_ASSET", total_amount, item.item_detail_account_id)
                 if doc_type == "ISSUE":
-                    add_debit("COGS", total_amount)
+                    add_debit("COGS", total_amount, item.item_detail_account_id)
                 elif doc.counterparty_detail_account_id is not None:
-                    add_debit("SUPPLIER_PAYABLE", total_amount)
+                    add_debit("SUPPLIER_PAYABLE", total_amount, item.item_detail_account_id)
                 else:
-                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount)
+                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount, item.item_detail_account_id)
 
             elif doc_type == "TRANSFER":
                 source_wh, dest_wh = doc.source_warehouse_id, doc.destination_warehouse_id
@@ -579,8 +587,8 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                             movement_date=movement_date,
                         )
                         total_amount += _money(seg_cost * seg_qty)
-                    add_credit("INVENTORY_ASSET", total_amount)
-                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount)
+                    add_credit("INVENTORY_ASSET", total_amount, item.item_detail_account_id)
+                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount, item.item_detail_account_id)
                 if doc.destination_warehouse_id is not None:
                     warehouse_id = doc.destination_warehouse_id
                     bin_id = resolve_bin(warehouse_id, line.bin_location_id)
@@ -626,8 +634,8 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                             )
                         )
                     amount = _money(unit_cost * line.quantity_base)
-                    add_debit("INVENTORY_ASSET", amount)
-                    add_credit("INVENTORY_ADJUSTMENT_GAIN", amount)
+                    add_debit("INVENTORY_ASSET", amount, item.item_detail_account_id)
+                    add_credit("INVENTORY_ADJUSTMENT_GAIN", amount, item.item_detail_account_id)
             else:
                 raise ValueError("نوعِ سند نامعتبر است.")
 
@@ -654,20 +662,45 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                 extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
                     warehouse.profit_center_detail_account_id
                 )
+        item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+
+        def _account_requires_item_dim(account_id: int) -> bool:
+            required = dimensions_service.get_required_dimensions_for_account(account_id)
+            return any(r.dimension_type_id == item_dim_type_id for r in required)
+
         je_lines: list[je_service.LineInput] = []
         description = doc.description or f"سندِ انبار #{doc.document_no}"
-        for role, amount in debits.items():
-            account_id = _resolve_role_account(session, company_id, role)
-            details = dict(extra_dims)
-            if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
-                details[person_dimension_type_id] = doc.counterparty_detail_account_id
-            je_lines.append(je_service.LineInput(account_id=account_id, description=description, debit=amount, credit=_ZERO, details=details))
-        for role, amount in credits.items():
-            account_id = _resolve_role_account(session, company_id, role)
-            details = dict(extra_dims)
-            if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
-                details[person_dimension_type_id] = doc.counterparty_detail_account_id
-            je_lines.append(je_service.LineInput(account_id=account_id, description=description, debit=_ZERO, credit=amount, details=details))
+
+        def _build_lines(role_amounts: dict[str, dict[int | None, decimal.Decimal]], is_debit: bool) -> None:
+            for role, by_item in role_amounts.items():
+                account_id = _resolve_role_account(session, company_id, role)
+                base_details = dict(extra_dims)
+                if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
+                    base_details[person_dimension_type_id] = doc.counterparty_detail_account_id
+                if _account_requires_item_dim(account_id):
+                    for item_detail_account_id, item_amount in by_item.items():
+                        details = dict(base_details)
+                        if item_detail_account_id is not None:
+                            details[item_dim_type_id] = item_detail_account_id
+                        je_lines.append(
+                            je_service.LineInput(
+                                account_id=account_id, description=description,
+                                debit=item_amount if is_debit else _ZERO, credit=_ZERO if is_debit else item_amount,
+                                details=details,
+                            )
+                        )
+                else:
+                    total = sum(by_item.values(), _ZERO)
+                    je_lines.append(
+                        je_service.LineInput(
+                            account_id=account_id, description=description,
+                            debit=total if is_debit else _ZERO, credit=_ZERO if is_debit else total,
+                            details=dict(base_details),
+                        )
+                    )
+
+        _build_lines(debits, is_debit=True)
+        _build_lines(credits, is_debit=False)
 
         doc.status_code = "POSTED"
         doc.posted_by_user_id = posted_by_user_id
