@@ -2153,6 +2153,20 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setText("")
         self._update_rows_summary()
 
+    def prefill_for_invoice(self, counterparty_id: int | None, amount: decimal.Decimal, description: str) -> None:
+        """طبقِ درخواستِ صریح: بعدِ ثبتِ نهاییِ فاکتورِ فروش/خرید، همین فرم
+        (دریافت/پرداخت) با طرفِ‌حساب و مبلغِ همان فاکتور باز شود — کاربر
+        فقط روشِ پرداخت (نقد/بانک/چک) را انتخاب و مبلغ را تایید می‌کند
+        (یا با اسپیس در فیلدِ ردیف، مبلغِ بالای فرم را کپی می‌کند)."""
+        self._reset_form()
+        if counterparty_id is not None:
+            index = self.account_combo.findData(counterparty_id)
+            if index >= 0:
+                self.account_combo.setCurrentIndex(index)
+        self.total_amount_field.setValue(float(amount))
+        self.description_field.setText(description)
+        self._update_rows_summary()
+
     def _compose_description(self) -> str:
         """طبقِ درخواستِ صریح: شرحِ سمتِ بستانکارِ سندِ دریافت خودکار
         بشود: «دریافت از {طرفِ‌حساب} - {روش‌هایِ استفاده‌شده} - {شرحِ

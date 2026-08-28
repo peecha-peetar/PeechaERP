@@ -398,13 +398,29 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         add_quick_add_button(warehouse_row, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
         header_grid.addLayout(warehouse_row, 1, 2)
 
-        header_grid.addWidget(QLabel("شمارهٔ مرجع"), 0, 3)
-        self.reference_field = QLineEdit()
-        header_grid.addWidget(self.reference_field, 1, 3)
+        # طبقِ درخواستِ صریح («فیلدِ شماره‌یِ سفارش روی هدر باز بشه»):
+        # قبلاً شماره‌یِ سند فقط داخلِ عنوانِ صفحه («سفارشِ فروش #۵»، فقط
+        # بعدِ ذخیره) دیده می‌شد؛ حالا یک فیلدِ صریح و همیشه‌حاضر در هدر
+        # هم دارد (پیش از ذخیره: «—»).
+        header_grid.addWidget(QLabel("شمارهٔ سند"), 0, 3)
+        self.document_no_field = QLineEdit()
+        self.document_no_field.setReadOnly(True)
+        self.document_no_field.setFocusPolicy(Qt.NoFocus)
+        self.document_no_field.setAlignment(Qt.AlignCenter)
+        self.document_no_field.setText("—")
+        header_grid.addWidget(self.document_no_field, 1, 3)
 
-        header_grid.addWidget(QLabel("فهرستِ قیمت"), 2, 0)
+        header_grid.addWidget(QLabel("شمارهٔ مرجع"), 0, 4)
+        self.reference_field = QLineEdit()
+        header_grid.addWidget(self.reference_field, 1, 4)
+
+        # طبقِ رفعِ باگِ واقعی («عرضِ فیلدِ فهرستِ قیمت کمه، عرضِ کانال
+        # کم بشه اضافه شود به فهرستِ قیمت»): فهرستِ قیمت حالا هم‌عرضِ
+        # دو ستون (به‌اندازه‌یِ ستونِ مشتری/تامین‌کننده که پهن‌تر است) و
+        # کانال فقط یک ستون است.
+        header_grid.addWidget(QLabel("فهرستِ قیمت"), 2, 0, 1, 2)
         self.price_list_combo = _EnterComboBox()
-        header_grid.addWidget(self.price_list_combo, 3, 0)
+        header_grid.addWidget(self.price_list_combo, 3, 0, 1, 2)
 
         self.channel_box = QWidget()
         channel_layout = QVBoxLayout(self.channel_box)
@@ -413,17 +429,18 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         channel_layout.addWidget(QLabel("کانال"))
         self.channel_combo = _EnterComboBox()
         channel_layout.addWidget(self.channel_combo)
-        header_grid.addWidget(self.channel_box, 2, 1, 2, 1)
+        header_grid.addWidget(self.channel_box, 2, 2, 2, 1)
         self.channel_box.setVisible(self._is_sales)
 
-        header_grid.addWidget(QLabel("توضیح"), 2, 2, 1, 2)
+        header_grid.addWidget(QLabel("توضیح"), 2, 3, 1, 2)
         self.description_field = QLineEdit()
-        header_grid.addWidget(self.description_field, 3, 2, 1, 2)
+        header_grid.addWidget(self.description_field, 3, 3, 1, 2)
 
         header_grid.setColumnStretch(0, 1)
         header_grid.setColumnStretch(1, 2)
         header_grid.setColumnStretch(2, 1)
         header_grid.setColumnStretch(3, 1)
+        header_grid.setColumnStretch(4, 1)
         self.body_layout.addWidget(header_card)
 
         # زنجیره‌ی کاملِ Enter رویِ هدر — بدونِ استثنا (طبقِ سندِ راهنما).
@@ -433,6 +450,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         ]
         for widget, next_widget in zip(header_chain, header_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
+        # طبقِ درخواستِ صریح («بعدِ اینترِ فیلدِ آخرِ هدر خودکار برود به
+        # اولین ردیف»): زنجیره‌یِ Enterِ هدر حالا مستقیم به افزودنِ اولین
+        # ردیف می‌رسد، به‌جایِ متوقف‌شدن روی توضیح.
+        _enter_signal(header_chain[-1]).connect(self._add_line)
 
         # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): وضعیت و
         # پیوندهایِ سند هردو متنِ کوتاهِ اطلاعاتی‌اند — قبلاً هرکدام یک
@@ -508,51 +529,51 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.new_button = QPushButton("🆕")
         self.new_button.setObjectName("iconButton")
         self.new_button.setFixedWidth(44)
-        self.new_button.setToolTip("سندِ جدید")
+        self.new_button.setToolTip("سندِ جدید — فرم را برایِ ثبتِ سندِ بعدی خالی می‌کند")
         self.new_button.clicked.connect(self._reset_form)
         self.footer_layout.addWidget(self.new_button)
 
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
-        self.save_button.setToolTip("ذخیرهٔ پیش‌نویس")
+        self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرِسند و ردیف‌ها بعداً قابلِ‌ویرایش/حذف‌اند")
         self.save_button.clicked.connect(self._save_header)
         self.footer_layout.addWidget(self.save_button)
 
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")
         self.confirm_button.setFixedWidth(44)
-        self.confirm_button.setToolTip("تاییدِ سند")
+        self.confirm_button.setToolTip("۲) تاییدِ سند — گامِ اولِ گردشِ کار پس از پیش‌نویس؛ سند برایِ تصویب/ثبتِ نهایی آماده می‌شود")
         self.confirm_button.clicked.connect(self._confirm)
         self.footer_layout.addWidget(self.confirm_button)
 
         self.approve_button = QPushButton("👍")
         self.approve_button.setObjectName("iconButton")
         self.approve_button.setFixedWidth(44)
-        self.approve_button.setToolTip("تصویبِ سند")
+        self.approve_button.setToolTip("۳) تصویبِ سند — تاییدِ مدیریتیِ اضافه پیش از ثبتِ نهایی (اختیاری، پیش از ثبتِ نهایی انجام می‌شود)")
         self.approve_button.clicked.connect(self._approve)
         self.footer_layout.addWidget(self.approve_button)
 
         self.post_button = QPushButton("🔒")
         self.post_button.setObjectName("primaryIconButton")
         self.post_button.setFixedWidth(48)
-        self.post_button.setToolTip("ثبتِ نهایی")
+        self.post_button.setToolTip("۴) ثبتِ نهایی — قطعی و برگشت‌ناپذیر؛ سندِ انبار/حسابداریِ واقعی همین‌جا ساخته می‌شود")
         self.post_button.clicked.connect(self._post)
         self.footer_layout.addWidget(self.post_button)
 
         self.cancel_button = QPushButton("🚫")
         self.cancel_button.setObjectName("dangerIconButton")
         self.cancel_button.setFixedWidth(44)
-        self.cancel_button.setToolTip("لغوِ سند")
+        self.cancel_button.setToolTip("لغوِ سند — سند باطل می‌شود (فقط پیش از ثبتِ نهایی ممکن است)")
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
 
         # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل
         # شود»): فقط برایِ انواعِ سفارش/پیش‌فاکتور نمایش داده می‌شود.
-        self.convert_button = QPushButton("🧾")
+        self.convert_button = QPushButton("→")
         self.convert_button.setObjectName("primaryIconButton")
         self.convert_button.setFixedWidth(48)
-        self.convert_button.setToolTip("تبدیل به فاکتور")
+        self.convert_button.setToolTip("تبدیل به فاکتور — از مقدارِ باقی‌ماندهٔ این سند، فاکتورِ تازه می‌سازد")
         self.convert_button.clicked.connect(self._convert_to_invoice)
         self.convert_button.setVisible(document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
         self.footer_layout.addWidget(self.convert_button)
@@ -608,7 +629,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.price_list_combo.clear()
         self.price_list_combo.addItem("(بدونِ فهرستِ قیمت)", None)
         for pl in price_lists:
-            self.price_list_combo.addItem(f"{pl.code} — {pl.name}", pl.price_list_id)
+            # طبقِ درخواستِ صریح: فقط نامِ فهرستِ قیمت نمایش داده شود،
+            # نه «کد — نام» (که با عرضِ محدودِ فیلد بریده می‌شد).
+            self.price_list_combo.addItem(pl.name, pl.price_list_id)
         if current_price_list is not None:
             index = self.price_list_combo.findData(current_price_list)
             if index >= 0:
@@ -619,6 +642,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         else:
             self._reset_form(clear_only=True)
 
+        # طبقِ درخواستِ صریح: هر بار این فرم باز می‌شود، فوکوس مستقیم
+        # رویِ تاریخ می‌رود — هم‌الگو با inventory_document.py.
+        self.date_field.setFocus()
+        self.date_field.selectAll()
+
     def _load_document(self) -> None:
         company_id = self._company_id()
         try:
@@ -628,6 +656,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._status_code = doc.status_code
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]} #{numerals.to_persian_digits(str(doc.document_no))}")
+        self.document_no_field.setText(numerals.to_persian_digits(str(doc.document_no)))
         self.date_field.setDate(doc.document_date)
         index = self.counterparty_combo.findData(doc.counterparty_detail_account_id)
         if index >= 0:
@@ -709,6 +738,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._status_code = "DRAFT"
         self._lines = []
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]}ِ جدید")
+        self.document_no_field.setText("—")
         self.status_label.setText("")
         self.links_label.setText("")
         self.date_field.setDate(datetime.date.today())
@@ -875,8 +905,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         if confirm != QMessageBox.Yes:
             return
+        company_id = self._company_id()
         try:
-            result = documents_service.post_document(self._document_id, self._company_id(), app_session.current_user.user_id)
+            result = documents_service.post_document(self._document_id, company_id, app_session.current_user.user_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در ثبتِ نهایی", str(exc))
@@ -889,8 +920,32 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             f" (سندِ حسابداریِ #{numerals.to_persian_digits(str(result.journal_entry_id))} ساخته شد.)"
             if result.journal_entry_id is not None else ""
         )
+        # طبقِ درخواستِ صریح («بعدِ تاییدِ فاکتورِ فروش فرمِ دریافت باز
+        # بشه ... همین‌طور برایِ فاکتورِ خرید فرمِ پرداخت»): پیش از ریست،
+        # اطلاعاتِ لازم برایِ فرمِ دریافت/پرداخت را نگه می‌داریم.
+        posted_doc, _ = documents_service.get_document(self._document_id, company_id)
+        posted_type = self.document_type_code
+        posted_counterparty_id = posted_doc.counterparty_detail_account_id
+        posted_total = posted_doc.total_amount
+        posted_no = posted_doc.document_no
         self._reset_form()
         theme.set_status_label(self.status_label, f"سند ثبتِ نهایی شد.{je_note}", ok=True)
+
+        if posted_type in ("SALES_INVOICE", "PURCHASE_INVOICE") and self._main_window is not None:
+            is_sales = posted_type == "SALES_INVOICE"
+            noun = "دریافتِ وجه" if is_sales else "پرداختِ وجه"
+            confirm_payment = QMessageBox.question(
+                self, noun,
+                f"آیا برایِ این فاکتور {noun} ثبت می‌شود؟\n(اگر نسیه است و هنوز پرداختی صورت نگرفته، «خیر» را انتخاب کنید.)",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if confirm_payment == QMessageBox.Yes:
+                nav_code = "TREASURY_RECEIPT" if is_sales else "TREASURY_PAYMENT"
+                description = f"بابتِ {DOC_TYPE_TITLES[posted_type]}ِ #{numerals.to_persian_digits(str(posted_no))}"
+                self._main_window.open_screen(
+                    nav_code,
+                    then=lambda screen: screen.prefill_for_invoice(posted_counterparty_id, posted_total, description),
+                )
 
     def _cancel(self) -> None:
         if self._document_id is None:
