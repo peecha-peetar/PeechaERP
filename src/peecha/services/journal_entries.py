@@ -222,19 +222,16 @@ def _resolve_lines(
         ).all()
     )
 
-    # تفصیلیِ اشخاص برخلافِ نوع‌بُعدهای اختیاری (مرکزِ هزینه/پروژه) برایِ
-    # هر ردیف الزامی است — اگر کاربر شخصی انتخاب نکرده باشد، همین‌جا
-    # مقدارِ پیش‌فرضِ «بدون تفصیلی» جایگزین می‌شود تا ترازِ سطحِ تفصیلی
-    # همیشه کامل بماند.
+    # طبقِ گزارشِ صریحِ کاربر («سندِ حسابداریِ غیراستاندارد»، تکرارشده):
+    # قبلاً برایِ *هر* ردیفی که حسابش به گروهِ تفصیلیِ خاصی محدود نبود،
+    # این‌جا خودکار یک تفصیلیِ «بدون تفصیلی» رویِ بُعدِ اشخاص اضافه
+    # می‌شد — یعنی مثلاً ردیفِ موجودیِ کالا (که فقط باید تفصیلیِ کالا
+    # داشته باشد) همزمان یک تفصیلیِ دومِ بی‌معنی هم می‌گرفت و در دفترِ
+    # روزنامه/سندِ حسابداری/ترازِ آزمایشی گردشِ اضافه نشان می‌داد. حالا
+    # وقتی حساب به گروهِ خاصی محدود نیست، اصلاً چیزی رویِ بُعدِ اشخاص
+    # اضافه نمی‌شود — ردیف فقط همان تفصیلی/تفصیلی‌هایی را دارد که خودِ
+    # سند واقعاً به آن نیاز داشته.
     person_dimension_type_id = dimensions_service.ensure_person_dimension(session, company.company_id)
-    no_detail_account = session.scalar(
-        select(DetailAccount).where(
-            DetailAccount.company_id == company.company_id,
-            DetailAccount.dimension_type_id == person_dimension_type_id,
-            DetailAccount.code == dimensions_service.NO_DETAIL_CODE,
-        )
-    )
-    no_detail_account_id = no_detail_account.detail_account_id
 
     all_provided_detail_ids = {v for ln in real_lines for v in ln.details.values()}
     detail_accounts_by_id: dict[int, DetailAccount] = {}
@@ -290,8 +287,6 @@ def _resolve_lines(
                 raise ValueError(
                     f"برایِ حساب «{account.full_code}» انتخابِ یک تفصیلیِ اشخاص از گروهِ مجازِ همین حساب الزامی است."
                 )
-        elif person_dimension_type_id not in ln.details:
-            ln.details[person_dimension_type_id] = no_detail_account_id
 
         currency_id = ln.currency_id or company.base_currency_id
         if account.currency_id is not None and account.currency_id != currency_id:
