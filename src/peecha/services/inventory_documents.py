@@ -15,10 +15,43 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import FiscalYear
 from peecha.db.models.inventory import DocumentReasonCode, Item, StockDocument, StockDocumentLine
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_engine as engine_service
 
 DOCUMENT_TYPE_CODES = ("RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT")
 _REASON_REQUIRED_TYPES = ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT")
+
+# طبقِ گزارشِ صریح («در فرمِ رسیدِ اصلاح جایی برایِ ورودِ مرکزِ هزینه
+# نیست، مثلِ فرم‌هایِ فروش/خرید نیست»): نگاشتِ نوعِ سند -> کلیدهایِ
+# نقش‌محورِ حسابی که ممکن است در inventory_engine.post_stock_document
+# برایِ آن نوعِ سند به‌کار روند — برایِ تشخیصِ اینکه آیا مرکزِ هزینه/پروژه
+# رویِ سرِسند *الزامی* است یا نه (هم‌الگو با
+# commercial_documents._HEADER_DIMENSION_ROLE_KEYS).
+_HEADER_DIMENSION_ROLE_KEYS: dict[str, tuple[str, ...]] = {
+    "RECEIPT": ("INVENTORY_ASSET", "INVENTORY_COST_VARIANCE", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_GAIN"),
+    "ISSUE": ("INVENTORY_ASSET", "COGS", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_LOSS"),
+    "RETURN_IN": ("INVENTORY_ASSET", "CUSTOMER_RECEIVABLE", "INVENTORY_ADJUSTMENT_GAIN"),
+    "RETURN_OUT": ("INVENTORY_ASSET", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_LOSS"),
+    "ADJUSTMENT": ("INVENTORY_ASSET", "INVENTORY_ADJUSTMENT_GAIN", "INVENTORY_ADJUSTMENT_LOSS"),
+    "TRANSFER": (),
+}
+
+
+def get_header_dimension_requirement(company_id: int, document_type_code: str, dimension_code: str) -> tuple[bool, list]:
+    """(آیا الزامی است, فهرستِ حساب‌هایِ تفصیلیِ سطحِ آخرِ آن گروه) —
+    هم‌الگو با commercial_documents.get_header_dimension_requirement."""
+    dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimension_code)
+    options = dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)
+    is_required = False
+    for key in _HEADER_DIMENSION_ROLE_KEYS.get(document_type_code, ()):
+        account_id = engine_service.get_account_mapping(company_id, key)
+        if account_id is None:
+            continue
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        if any(r.dimension_type_id == dim_type_id for r in required):
+            is_required = True
+            break
+    return is_required, options
 
 
 # ---------------------------------------------------------------------

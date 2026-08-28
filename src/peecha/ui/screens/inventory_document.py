@@ -275,6 +275,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._warehouses: list[locations_service.WarehouseRow] = []
         self._uom_decimal_places: dict[int, int] = {}
         self._unit_cost_decimal_places: int = 2
+        self._cost_center_required = False
+        self._project_required = False
 
         title = DOC_TYPE_TITLES[document_type_code]
         title_row = QHBoxLayout()
@@ -310,9 +312,13 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         # مستقیمِ QHBoxLayout رویِ بدنه‌یِ صفحه.
         header_card = QWidget()
         header_card.setObjectName("card")
-        header_row = QHBoxLayout(header_card)
-        header_row.setContentsMargins(8, 5, 8, 5)
+        header_card_layout = QVBoxLayout(header_card)
+        header_card_layout.setContentsMargins(8, 5, 8, 5)
+        header_card_layout.setSpacing(2)
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
         header_row.setSpacing(6)
+        header_card_layout.addLayout(header_row)
         date_box = QVBoxLayout()
         date_box.addWidget(QLabel("تاریخ"))
         self.date_field = JalaliDateEdit()
@@ -383,6 +389,51 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         reference_box.addWidget(self.reference_field)
         header_row.addLayout(reference_box, 0)
 
+        # طبقِ گزارشِ صریح («در فرمِ رسیدِ اصلاح جایی برایِ ورودِ مرکزِ
+        # هزینه نیست، اگر معینِ نقش‌محورِ سند آن را الزامی کرده باشد، مثلِ
+        # فرم‌هایِ فروش/خرید نیست»): همان الگویِ commercial_document.py —
+        # مرکزِ هزینه/پروژه فیلدهایِ همیشه‌حاضرِ هدرِ همه‌یِ اسنادِ انبارند
+        # (backendِ inventory_engine.post_stock_document از قبل، طبقِ
+        # R8-2، همین دو مقدار را از سرِسند می‌خواند)؛ فقط بر اساسِ نگاشتِ
+        # حساب‌هایِ نقش‌محورِ همین نوعِ سند enable/الزامی می‌شوند. هم‌الگو
+        # با هدرِ ۲‌ردیفه‌یِ commercial_document.py (R11)، در ردیفِ دومِ
+        # همین کارت جا می‌گیرند — نه در ردیفِ اولِ همین‌الان شلوغ.
+        header_row2 = QHBoxLayout()
+        header_row2.setContentsMargins(0, 0, 0, 0)
+        header_row2.setSpacing(6)
+
+        self.cost_center_box = QWidget()
+        _growable_box(self.cost_center_box, 200)
+        cost_center_layout = QVBoxLayout(self.cost_center_box)
+        cost_center_layout.setContentsMargins(0, 0, 0, 0)
+        self.cost_center_label = QLabel("مرکزِ هزینه")
+        cost_center_layout.addWidget(self.cost_center_label)
+        cost_center_row = QHBoxLayout()
+        cost_center_row.setContentsMargins(0, 0, 0, 0)
+        cost_center_row.setSpacing(3)
+        self.cost_center_combo = _EnterComboBox()
+        cost_center_row.addWidget(self.cost_center_combo, stretch=1)
+        add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریفِ مرکزِ هزینه‌یِ تازه")
+        cost_center_layout.addLayout(cost_center_row)
+        header_row2.addWidget(self.cost_center_box, 1)
+
+        self.project_box = QWidget()
+        _growable_box(self.project_box, 200)
+        project_layout = QVBoxLayout(self.project_box)
+        project_layout.setContentsMargins(0, 0, 0, 0)
+        self.project_label = QLabel("پروژه")
+        project_layout.addWidget(self.project_label)
+        project_row = QHBoxLayout()
+        project_row.setContentsMargins(0, 0, 0, 0)
+        project_row.setSpacing(3)
+        self.project_combo = _EnterComboBox()
+        project_row.addWidget(self.project_combo, stretch=1)
+        add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریفِ پروژه‌یِ تازه")
+        project_layout.addLayout(project_row)
+        header_row2.addWidget(self.project_box, 1)
+        header_row2.addStretch(1)
+
+        header_card_layout.addLayout(header_row2)
         self.body_layout.addWidget(header_card)
 
         # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): عنوانِ
@@ -545,6 +596,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self.counterparty_box.isVisibleTo(self):
             chain.append(self.counterparty_combo)
         chain.append(self.reference_field)
+        chain.append(self.cost_center_combo)
+        chain.append(self.project_combo)
 
         for widget, next_widget in zip(chain, chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
@@ -599,6 +652,34 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             if index >= 0:
                 self.counterparty_combo.setCurrentIndex(index)
 
+        self._cost_center_required, cost_center_options = documents_service.get_header_dimension_requirement(
+            company_id, self.document_type_code, dimensions_service.COST_CENTER_CODE
+        )
+        current_cc = self.cost_center_combo.currentData()
+        self.cost_center_combo.clear()
+        self.cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        for opt in cost_center_options:
+            self.cost_center_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
+        if current_cc is not None:
+            index = self.cost_center_combo.findData(current_cc)
+            if index >= 0:
+                self.cost_center_combo.setCurrentIndex(index)
+        self.cost_center_label.setText("مرکزِ هزینه *" if self._cost_center_required else "مرکزِ هزینه")
+
+        self._project_required, project_options = documents_service.get_header_dimension_requirement(
+            company_id, self.document_type_code, dimensions_service.PROJECT_CODE
+        )
+        current_project = self.project_combo.currentData()
+        self.project_combo.clear()
+        self.project_combo.addItem("(بدونِ پروژه)", None)
+        for opt in project_options:
+            self.project_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
+        if current_project is not None:
+            index = self.project_combo.findData(current_project)
+            if index >= 0:
+                self.project_combo.setCurrentIndex(index)
+        self.project_label.setText("پروژه *" if self._project_required else "پروژه")
+
         if self._document_id is not None:
             self._load_document()
         else:
@@ -636,6 +717,10 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             index = self.counterparty_combo.findData(doc.counterparty_detail_account_id)
             if index >= 0:
                 self.counterparty_combo.setCurrentIndex(index)
+        if doc.cost_center_detail_account_id is not None:
+            self.cost_center_combo.setCurrentIndex(max(0, self.cost_center_combo.findData(doc.cost_center_detail_account_id)))
+        if doc.project_detail_account_id is not None:
+            self.project_combo.setCurrentIndex(max(0, self.project_combo.findData(doc.project_detail_account_id)))
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
         self._lines = lines
@@ -679,7 +764,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         is_draft = self._status_code == "DRAFT"
         is_confirmed = self._status_code == "CONFIRMED"
         editable = is_draft and self._document_id is not None
-        for widget in (self.date_field, self.source_wh_combo, self.destination_wh_combo, self.adjustment_direction_combo, self.counterparty_combo, self.reference_field, self.description_field):
+        for widget in (self.date_field, self.source_wh_combo, self.destination_wh_combo, self.adjustment_direction_combo, self.counterparty_combo, self.cost_center_combo, self.project_combo, self.reference_field, self.description_field):
             widget.setEnabled(is_draft)
         self.save_button.setEnabled(is_draft)
         self.confirm_button.setEnabled(editable)
@@ -699,6 +784,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.destination_wh_combo.setCurrentIndex(0)
         self.adjustment_direction_combo.setCurrentIndex(0)
         self.counterparty_combo.setCurrentIndex(0)
+        self.cost_center_combo.setCurrentIndex(0)
+        self.project_combo.setCurrentIndex(0)
         self.reference_field.clear()
         self.description_field.clear()
         self._refresh_lines_table()
@@ -716,9 +803,23 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self.document_type_code in ("RETURN_IN", "RETURN_OUT") and counterparty_id is None:
             self.status_label.setText("انتخابِ طرفِ‌حساب برایِ این نوعِ سند الزامی است.")
             return None
+        # طبقِ رفعِ باگِ واقعی («در فرمِ رسیدِ اصلاح جایی برایِ ورودِ مرکزِ
+        # هزینه نیست»): هم‌الگو با commercial_document.py — اگر حسابِ
+        # نقش‌محورِ این نوعِ سند به مرکزِ هزینه/پروژه نیاز داشته باشد،
+        # همین‌جا (پیش از تلاشِ ذخیره) با یک پیامِ روشن جلوگیری می‌شود.
+        cost_center_id = self.cost_center_combo.currentData()
+        if cost_center_id is None and self._cost_center_required:
+            self.status_label.setText("انتخابِ «مرکزِ هزینه» برایِ این نوعِ سند الزامی است.")
+            return None
+        project_id = self.project_combo.currentData()
+        if project_id is None and self._project_required:
+            self.status_label.setText("انتخابِ «پروژه» برایِ این نوعِ سند الزامی است.")
+            return None
         return documents_service.DocumentHeaderFields(
             source_warehouse_id=source_wh, destination_warehouse_id=destination_wh,
-            counterparty_detail_account_id=counterparty_id, reference_no=self.reference_field.text().strip() or None,
+            counterparty_detail_account_id=counterparty_id,
+            cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
+            reference_no=self.reference_field.text().strip() or None,
             description=self.description_field.text().strip() or None,
         )
 
