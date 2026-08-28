@@ -253,12 +253,17 @@ def _standard_cost(session, item_id: int, as_of_date: datetime.date) -> decimal.
 
 def _last_known_unit_cost(session, item_id: int) -> decimal.Decimal | None:
     """آخرین بهایِ واحدِ واقعاً ثبت‌شده برایِ این کالا در دفترِ انبار —
-    طبقِ تصمیمِ صریح: وقتی سندِ مستقیمِ انبار (رسید/برگشت) بدونِ بهایِ
-    واحد ثبتِ نهایی می‌شود و روشِ قیمت‌گذاری STANDARD نیست، به‌جایِ
-    خطایِ سخت، همین مقدار به‌طورِ نامرئی جایگزین می‌شود."""
+    وقتی سندِ مستقیمِ انبار (رسید/برگشت) بدونِ بهایِ واحد ثبتِ نهایی
+    می‌شود و روشِ قیمت‌گذاری STANDARD نیست، به‌جایِ خطایِ سخت، همین
+    مقدار جایگزین می‌شود. طبقِ رفعِ باگِ واقعی («سندِ حسابداریِ بهایِ
+    تمام‌شده/موجودی هیچ‌وقت ساخته نمی‌شود»): فقط بهایِ *مثبت* یک سابقهٔ
+    واقعی حساب می‌شود — قبلاً صفر هم قبول می‌شد، یعنی اگر یک اصلاحِ
+    موجودیِ بدونِ‌بها زودتر همین کالا را با بهایِ ۰ ثبت کرده بود، آن صفر
+    برایِ همیشه به‌عنوانِ «آخرین بهایِ شناخته‌شده» تکرار می‌شد و موجودی/
+    بهایِ‌تمام‌شده تا ابد صفر (و بی‌اثر در حسابداری) می‌ماند."""
     row = session.scalar(
         select(StockLedger.unit_cost)
-        .where(StockLedger.item_id == item_id, StockLedger.unit_cost.is_not(None))
+        .where(StockLedger.item_id == item_id, StockLedger.unit_cost > 0)
         .order_by(StockLedger.movement_date.desc(), StockLedger.ledger_id.desc())
         .limit(1)
     )
@@ -466,9 +471,19 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                             # طبقِ تصمیمِ صریح: بهایِ واحد در رسیدِ مستقیمِ
                             # انبار الزامی نیست — اگر خالی بماند، آخرین بهایِ
                             # واقعاً ثبت‌شده برایِ همین کالا (از دفترِ انبار)
-                            # به‌طورِ نامرئی جایگزین می‌شود؛ اگر هیچ سابقه‌ای
-                            # نبود، صفر (نه خطا) تا Postِ سند هرگز مسدود نشود.
-                            actual_cost = _last_known_unit_cost(session, item.item_id) or _ZERO
+                            # به‌طورِ نامرئی جایگزین می‌شود. طبقِ رفعِ باگِ
+                            # واقعی («سندِ حسابداریِ بهایِ تمام‌شده/موجودی
+                            # هیچ‌وقت ساخته نمی‌شود»): اگر هیچ سابقه‌یِ
+                            # بهایِ *مثبتی* هم نبود، دیگر صفرِ نامرئی جایگزین
+                            # نمی‌شود (چون آن صفر عملاً یعنی این حواله هیچ‌وقت
+                            # اثرِ حسابداری پیدا نمی‌کند و هیچ‌جا هم دیده
+                            # نمی‌شود) — به‌جایش صریحاً بهایِ واحد خواسته می‌شود.
+                            actual_cost = _last_known_unit_cost(session, item.item_id)
+                            if actual_cost is None:
+                                raise ValueError(
+                                    f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» هنوز هیچ بهایِ "
+                                    "ثبت‌شده‌ای در سابقه نیست — واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
+                                )
 
                 ledger_unit_cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else actual_cost
 
@@ -575,8 +590,27 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                     elif line.unit_cost is not None:
                         unit_cost = line.unit_cost
                     else:
+                        # طبقِ رفعِ باگِ واقعی («سندِ حسابداریِ بهایِ
+                        # تمام‌شده/موجودی هیچ‌وقت ساخته نمی‌شود»): قبلاً
+                        # اگر این کالا هنوز میانگینِ بهایِ واقعی‌ای نداشت
+                        # (اولین حرکتش)، این‌جا صفر جایگزین می‌شد و همان
+                        # صفر برایِ همیشه به کالا می‌چسبید — هر فروشِ بعدی
+                        # هم بهایِ تمام‌شده‌اش صفر می‌شد و اصلاً سندِ
+                        # حسابداری نمی‌ساخت (چون ردیفِ صفر مجاز نیست).
+                        # حالا اگر میانگینِ محلی صفر بود، آخرین بهایِ
+                        # مثبتِ واقعیِ همین کالا (از هر انباری) امتحان
+                        # می‌شود؛ اگر آن هم نبود، صریحاً بهایِ واحد خواسته
+                        # می‌شود.
                         bal = get_or_create_balance(item.item_id, warehouse_id, bin_id)
-                        unit_cost = bal.average_unit_cost or _ZERO
+                        if bal.quantity_on_hand > 0 and bal.average_unit_cost > 0:
+                            unit_cost = bal.average_unit_cost
+                        else:
+                            unit_cost = _last_known_unit_cost(session, item.item_id)
+                            if unit_cost is None:
+                                raise ValueError(
+                                    f"برایِ افزایشِ موجودیِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» که "
+                                    "هنوز هیچ بهایِ ثبت‌شده‌ای ندارد، واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
+                                )
                     in_ledger = insert_ledger(
                         stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
                         bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
