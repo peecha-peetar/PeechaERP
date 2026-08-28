@@ -872,6 +872,11 @@ class CommercialAccountMapping(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     mapping_key: Mapped[str] = mapped_column(String(30), primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    # طبقِ درخواستِ صریح («برایِ فاکتورِ فروش هم تفصیلیِ ثابت برایِ
+    # مالیات، مثلِ فاکتورِ خرید»): تفصیلیِ ثابتِ ازپیش‌تخصیص‌یافته برایِ
+    # این حسابِ نقش‌محور -- دقیقاً هم‌الگو با
+    # inv.account_mappings.detail_account_id.
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
 class CommercialFeatureDefinition(Base):

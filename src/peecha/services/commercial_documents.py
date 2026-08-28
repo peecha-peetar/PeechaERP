@@ -133,21 +133,30 @@ def _role_line_amounts_by_item(
 def _build_role_je_lines(
     account_id: int, description: str, extra_dims: dict[int, int], total_amount: decimal.Decimal, is_debit: bool,
     item_dim_type_id: int, amounts_by_item_detail_account: dict[int, decimal.Decimal],
+    fixed_detail: tuple[int, int] | None = None,
 ) -> list["je_service.LineInput"]:
     """ردیفِ حسابداریِ یک نقش را می‌سازد — اگر معینِ آن نقش «کالا» را هم
     الزامی کرده باشد، به‌جایِ یک ردیفِ جمعی، به‌ازایِ هر کالا یک ردیفِ
-    جداگانه با تفصیلیِ همان کالا می‌سازد (وگرنه رفتارِ قبلی: یک ردیفِ جمعی)."""
+    جداگانه با تفصیلیِ همان کالا می‌سازد (وگرنه رفتارِ قبلی: یک ردیفِ جمعی).
+    طبقِ درخواستِ صریح («برایِ فاکتورِ فروش هم تفصیلیِ ثابت برایِ مالیات،
+    مثلِ فاکتورِ خرید»): اگر این نقش یک تفصیلیِ ثابت داشته باشد (مثلاً
+    یک تفصیلیِ اشخاصِ ثابت برایِ حسابِ مالياتِ فروش)، این‌جا با پایین‌ترین
+    اولویت (extra_dims رویش override می‌شود) اضافه می‌شود."""
+    base_details: dict[int, int] = {}
+    if fixed_detail is not None:
+        base_details[fixed_detail[0]] = fixed_detail[1]
+    base_details.update(extra_dims)
     if not _account_requires_dimension(account_id, item_dim_type_id):
         return [
             je_service.LineInput(
                 account_id=account_id, description=description,
                 debit=total_amount if is_debit else _ZERO, credit=_ZERO if is_debit else total_amount,
-                details=dict(extra_dims),
+                details=dict(base_details),
             )
         ]
     lines = []
     for item_detail_account_id, amount in amounts_by_item_detail_account.items():
-        details = {**extra_dims, item_dim_type_id: item_detail_account_id}
+        details = {**base_details, item_dim_type_id: item_detail_account_id}
         lines.append(
             je_service.LineInput(
                 account_id=account_id, description=description,
@@ -783,6 +792,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 _build_role_je_lines(
                     revenue_account_id, description, extra_dims, subtotal_amount, is_debit=False,
                     item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=revenue_by_item,
+                    fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_REVENUE"),
                 )
             )
             if discount_amount > 0:
@@ -794,6 +804,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     _build_role_je_lines(
                         discount_account_id, description, extra_dims, discount_amount, is_debit=True,
                         item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=discount_by_item,
+                        fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_DISCOUNT"),
                     )
                 )
             if tax_amount > 0:
@@ -805,6 +816,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     _build_role_je_lines(
                         tax_account_id, description, extra_dims, tax_amount, is_debit=False,
                         item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=tax_by_item,
+                        fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_TAX_PAYABLE"),
                     )
                 )
 
