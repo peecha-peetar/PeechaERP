@@ -109,8 +109,24 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.unit_price_field = _AmountField()
         self.unit_price_field.setDecimals(decimal_places)
 
+        # طبقِ درخواستِ صریح («تخفیف روی ردیف کالا فقط مبلغی است، باید
+        # درصدی هم باشد»): یک کمبویِ نوعِ تخفیف کنارِ همان فیلدِ عددیِ
+        # قبلی — عددِ واردشده بسته به نوعِ انتخاب‌شده، یا مبلغِ مستقیمِ
+        # تخفیف است یا درصدِ آن (که خودِ commercial_documents.add_line
+        # رویِ جمعِ ناخالصِ همین ردیف حساب می‌کند، دقیقاً هم‌الگو با
+        # tax_percent).
         self.discount_field = _AmountField()
         self.discount_field.setDecimals(decimal_places)
+        self.discount_type_combo = _EnterComboBox()
+        self.discount_type_combo.addItem("مبلغی", "AMOUNT")
+        self.discount_type_combo.addItem("درصدی", "PERCENT")
+        self.discount_type_combo.setMaximumWidth(80)
+        discount_row_widget = QWidget()
+        discount_row_layout = QHBoxLayout(discount_row_widget)
+        discount_row_layout.setContentsMargins(0, 0, 0, 0)
+        discount_row_layout.setSpacing(3)
+        discount_row_layout.addWidget(self.discount_field, stretch=1)
+        discount_row_layout.addWidget(self.discount_type_combo)
 
         self.tax_percent_field = _AmountField()
         self.tax_percent_field.setDecimals(2)
@@ -126,7 +142,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             FieldSpec("item", "کالا", item_row_widget, span=2),
             FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
             FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
-            FieldSpec("discount", "تخفیفِ مبلغی", self.discount_field, span=1),
+            FieldSpec("discount", "تخفیف", discount_row_widget, span=1),
             FieldSpec("tax_percent", "درصدِ مالیات (بعدِ تخفیف)", self.tax_percent_field, span=1),
         ]
         if per_line_warehouse_enabled:
@@ -171,7 +187,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # طبقِ سندِ راهنما (زنجیره‌یِ کاملِ Enter، بدونِ استثنا).
         enter_chain = [
             self.item_combo, self.quantity_field, self.unit_price_field,
-            self.discount_field, self.tax_percent_field,
+            self.discount_field, self.discount_type_combo, self.tax_percent_field,
         ]
         if self.warehouse_combo is not None:
             enter_chain.append(self.warehouse_combo)
@@ -192,7 +208,16 @@ class _LineDialog(LayoutEditMixin, QDialog):
                 self.item_combo.setCurrentIndex(index)
             self.quantity_field.setValue(float(initial["quantity"]))
             self.unit_price_field.setValue(float(initial["unit_price"]))
-            self.discount_field.setValue(float(initial["discount_amount"]))
+            # طبقِ رفعِ باگِ واقعی: اگر ردیف قبلاً با تخفیفِ درصدی ذخیره شده
+            # (discount_percent > 0)، همان درصد دوباره نمایش داده شود -- نه
+            # مبلغِ نهاییِ محاسبه‌شده (که در حالتِ درصدی گمراه‌کننده است).
+            initial_discount_percent = decimal.Decimal(str(initial.get("discount_percent") or 0))
+            if initial_discount_percent > 0:
+                self.discount_type_combo.setCurrentIndex(self.discount_type_combo.findData("PERCENT"))
+                self.discount_field.setValue(float(initial_discount_percent))
+            else:
+                self.discount_type_combo.setCurrentIndex(self.discount_type_combo.findData("AMOUNT"))
+                self.discount_field.setValue(float(initial["discount_amount"]))
             self.tax_percent_field.setValue(float(initial["tax_percent"]))
             self.description_field.setText(initial["description"] or "")
             if self.warehouse_combo is not None:
@@ -267,6 +292,14 @@ class _LineDialog(LayoutEditMixin, QDialog):
         item_id = self.item_combo.currentData()
         item = self._items_by_id.get(item_id)
         quantity = decimal.Decimal(str(self.quantity_field.value()))
+        # طبقِ درخواستِ صریح («تخفیف روی ردیف کالا فقط مبلغی است، باید
+        # درصدی هم باشد»): اگر نوعِ انتخاب‌شده درصدی است، عددِ واردشده
+        # درصد است و مبلغِ نهایی رویِ جمعِ ناخالصِ همین ردیف در خودِ
+        # commercial_documents.add_line محاسبه می‌شود (هم‌الگو با
+        # tax_percent) -- نه این‌جا، چون unit_price ممکن است هنوز None
+        # باشد (رزروِ خودکار از فهرستِ قیمت).
+        is_percent_discount = self.discount_type_combo.currentData() == "PERCENT"
+        discount_value = decimal.Decimal(str(self.discount_field.value()))
         return {
             "item_id": item_id,
             "uom_id": item.base_uom_id if item else 0,
@@ -281,7 +314,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
             # quantity برابر است — هم‌الگو با inventory_document.py.
             "quantity_base": quantity,
             "unit_price": decimal.Decimal(str(self.unit_price_field.value())) if self.unit_price_field.value() > 0 else None,
-            "discount_amount": decimal.Decimal(str(self.discount_field.value())),
+            "discount_amount": decimal.Decimal(0) if is_percent_discount else discount_value,
+            "discount_percent": discount_value if is_percent_discount else decimal.Decimal(0),
             "tax_percent": decimal.Decimal(str(self.tax_percent_field.value())),
             "description": self.description_field.text().strip() or None,
             "warehouse_id": self.warehouse_combo.currentData() if self.warehouse_combo is not None else None,
@@ -845,7 +879,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
                 numerals.format_money(ln.quantity, 3),
                 numerals.format_money(ln.unit_price, dp),
-                numerals.format_money(ln.discount_amount, dp),
+                (
+                    f"{numerals.format_money(ln.discount_amount, dp)} ({numerals.format_money(ln.discount_percent, 2)}٪)"
+                    if ln.discount_percent else numerals.format_money(ln.discount_amount, dp)
+                ),
                 numerals.format_money(ln.tax_percent, 2),
                 numerals.format_money(ln.tax_amount, dp),
                 numerals.format_money(ln.line_total, dp),
@@ -1006,7 +1043,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         initial = {
             "item_id": line.item_id, "quantity": line.quantity, "unit_price": line.unit_price,
-            "discount_amount": line.discount_amount, "tax_percent": line.tax_percent, "description": line.description,
+            "discount_amount": line.discount_amount, "discount_percent": line.discount_percent,
+            "tax_percent": line.tax_percent, "description": line.description,
             "warehouse_id": line.warehouse_id,
         }
         dialog = _LineDialog(

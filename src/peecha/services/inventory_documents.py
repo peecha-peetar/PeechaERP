@@ -134,6 +134,7 @@ class StockDocumentLineRow:
     batch_id: int | None
     unit_cost: decimal.Decimal | None
     line_total_cost: decimal.Decimal | None
+    tax_amount: decimal.Decimal
     quality_status_code: str
     reason_code_id: int | None
     source_line_id: int | None
@@ -173,8 +174,8 @@ def get_stock_document(stock_document_id: int, company_id: int) -> tuple[StockDo
         line_rows = [
             StockDocumentLineRow(
                 ln.line_id, ln.line_no, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.bin_location_id,
-                ln.destination_bin_location_id, ln.batch_id, ln.unit_cost, ln.line_total_cost, ln.quality_status_code,
-                ln.reason_code_id, ln.source_line_id, ln.description,
+                ln.destination_bin_location_id, ln.batch_id, ln.unit_cost, ln.line_total_cost, ln.tax_amount,
+                ln.quality_status_code, ln.reason_code_id, ln.source_line_id, ln.description,
             )
             for ln in lines
         ]
@@ -412,6 +413,11 @@ class LineFields:
     destination_bin_location_id: int | None = None
     batch_id: int | None = None
     unit_cost: decimal.Decimal | None = None
+    # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید هیچ‌وقت به سندِ
+    # حسابداری نمی‌رسد»): وقتی این ردیف از یک سندِ بازرگانی (فاکتورِ
+    # خرید) می‌آید، مالياتِ همان ردیف جداگانه این‌جا هم منتقل می‌شود —
+    # نه بخشی از unit_cost (که ارزشِ خودِ موجودی است).
+    tax_amount: decimal.Decimal | None = None
     reason_code_id: int | None = None
     source_line_id: int | None = None
     description: str | None = None
@@ -435,7 +441,8 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
             stock_document_id=stock_document_id, line_no=next_no, item_id=fields.item_id, uom_id=fields.uom_id,
             quantity=fields.quantity, quantity_base=fields.quantity_base, bin_location_id=fields.bin_location_id,
             destination_bin_location_id=fields.destination_bin_location_id, batch_id=fields.batch_id,
-            unit_cost=fields.unit_cost, reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
+            unit_cost=fields.unit_cost, tax_amount=(fields.tax_amount or decimal.Decimal(0)),
+            reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
             description=(fields.description or None),
         )
         if doc.document_type_code == "RECEIPT":
@@ -461,6 +468,7 @@ def update_line(line_id: int, stock_document_id: int, company_id: int, fields: L
         line.destination_bin_location_id = fields.destination_bin_location_id
         line.batch_id = fields.batch_id
         line.unit_cost = fields.unit_cost
+        line.tax_amount = fields.tax_amount or decimal.Decimal(0)
         line.reason_code_id = fields.reason_code_id
         line.source_line_id = fields.source_line_id
         line.description = fields.description or None

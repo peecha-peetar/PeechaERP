@@ -516,6 +516,12 @@ class StockDocumentLine(Base):
     line_total_cost: Mapped[decimal.Decimal | None] = mapped_column(
         Numeric(18, 2), Computed("round(quantity_base * unit_cost, 2)")
     )
+    # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید هیچ‌وقت به سندِ
+    # حسابداری نمی‌رسد»): مبلغِ مالياتی که همراهِ همین ردیف (اگر از یک
+    # سندِ بازرگانی آمده باشد) باید جداگانه بستانکارِ حساب‌هایِ پرداختنی
+    # را زیاد کند و بدهکارِ «مالياتِ خرید-قابلِ مطالبه» شود -- بدونِ اینکه
+    # وارد ارزشِ خودِ موجودی (unit_cost) شود.
+    tax_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     quality_status_code: Mapped[str] = mapped_column(String(15), default="APPROVED")
     reason_code_id: Mapped[int | None] = mapped_column(ForeignKey("inv.document_reason_codes.reason_code_id"))
     source_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))

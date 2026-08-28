@@ -327,7 +327,8 @@ def convert_to_invoice(
             ratio = qty_this_time / ln.quantity
             line_snapshots.append({
                 "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": qty_this_time, "quantity_base": qty_this_time,
-                "unit_price": ln.unit_price, "discount_amount": _money(ln.discount_amount * ratio), "tax_percent": ln.tax_percent,
+                "unit_price": ln.unit_price, "discount_amount": _money(ln.discount_amount * ratio),
+                "discount_percent": ln.discount_percent, "tax_percent": ln.tax_percent,
                 "batch_id": ln.batch_id, "serial_id": ln.serial_id, "description": ln.description, "line_id": ln.line_id,
                 "warehouse_id": ln.warehouse_id,
             })
@@ -349,8 +350,9 @@ def convert_to_invoice(
         add_line(
             new_document_id, company_id, item_id=snap["item_id"], uom_id=snap["uom_id"], quantity=snap["quantity"],
             quantity_base=snap["quantity_base"], unit_price=snap["unit_price"], discount_amount=snap["discount_amount"],
-            tax_percent=snap["tax_percent"], batch_id=snap["batch_id"], serial_id=snap["serial_id"],
-            source_line_id=snap["line_id"], description=snap["description"], warehouse_id=snap["warehouse_id"],
+            discount_percent=snap["discount_percent"], tax_percent=snap["tax_percent"], batch_id=snap["batch_id"],
+            serial_id=snap["serial_id"], source_line_id=snap["line_id"], description=snap["description"],
+            warehouse_id=snap["warehouse_id"],
         )
     return new_document_id
 
@@ -429,7 +431,8 @@ def _recompute_header_totals(session, document_id: int) -> None:
 def add_line(
     document_id: int, company_id: int, item_id: int, uom_id: int, quantity: decimal.Decimal,
     quantity_base: decimal.Decimal, unit_price: decimal.Decimal | None = None,
-    discount_amount: decimal.Decimal = _ZERO, tax_percent: decimal.Decimal = _ZERO,
+    discount_amount: decimal.Decimal = _ZERO, discount_percent: decimal.Decimal = _ZERO,
+    tax_percent: decimal.Decimal = _ZERO,
     batch_id: int | None = None, serial_id: int | None = None, source_line_id: int | None = None,
     description: str | None = None, warehouse_id: int | None = None,
 ) -> int:
@@ -444,11 +447,19 @@ def add_line(
             )
             unit_price = resolved.unit_price
             discount_amount = discount_amount + resolved.discount_amount
+        # طبقِ درخواستِ صریح («تخفیف هم روی ردیف کالا فقط مبلغی است، باید
+        # درصدی هم باشد»): وقتی discount_percent وارد شده، مبنایِ صحتِ
+        # مبلغِ تخفیف همین درصد است — دقیقاً هم‌الگو با tax_percent پایین‌تر
+        # (رویِ جمعِ ناخالصِ همین ردیف، بعدِ حل‌شدنِ unit_price)، نه هرچه
+        # پیش‌تر در discount_amount بوده.
+        gross_amount = quantity * unit_price
+        if discount_percent:
+            discount_amount = _money(gross_amount * (discount_percent / 100))
         # طبقِ رفعِ باگِ واقعی: مالیات باید رویِ مبلغِ *بعدِ تخفیف* محاسبه
         # شود (همان‌طور که ستون‌بندیِ خودِ جدولِ ردیف‌ها هم نشان می‌دهد:
         # «تخفیف» پیش از «درصدِ مالیات» می‌آید) — قبلاً رویِ جمعِ ناخالص
         # (quantity*unit_price) محاسبه می‌شد، بدونِ کسرِ تخفیف.
-        net_amount = quantity * unit_price - discount_amount
+        net_amount = gross_amount - discount_amount
         tax_amount = _money(net_amount * (tax_percent / 100)) if tax_percent and net_amount > 0 else _ZERO
         next_no = (
             session.scalar(select(func.max(CommercialDocumentLine.line_no)).where(CommercialDocumentLine.document_id == document_id)) or 0
@@ -456,7 +467,8 @@ def add_line(
         line = CommercialDocumentLine(
             document_id=document_id, line_no=next_no, item_id=item_id, uom_id=uom_id, quantity=quantity,
             quantity_base=quantity_base, unit_price=unit_price, discount_amount=discount_amount,
-            tax_percent=tax_percent, tax_amount=tax_amount, batch_id=batch_id, serial_id=serial_id,
+            discount_percent=discount_percent, tax_percent=tax_percent, tax_amount=tax_amount,
+            batch_id=batch_id, serial_id=serial_id,
             source_line_id=source_line_id, description=(description or None), warehouse_id=warehouse_id,
         )
         session.add(line)
@@ -691,12 +703,30 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in group_lines:
             # برایِ ISSUE، unit_cost=None می‌ماند تا موتورِ انبار از میانگینِ
             # موزونِ فعلی استفاده کند (قیمتِ فروش هرگز بهایِ تمام‌شده نیست).
-            stock_unit_cost = None if stock_document_type == "ISSUE" else unit_price
+            # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید محاسبه
+            # می‌شود ولی سندش ثبت نمی‌شود»): قبلاً این‌جا تخفیف/مالياتِ
+            # ردیف (_discount_amt/_tax_amt) کاملاً نادیده گرفته می‌شد —
+            # بهایِ واحدِ خامِ ردیف (بدونِ کسرِ تخفیف) مستقیماً به‌عنوانِ
+            # ارزشِ موجودی/مبنایِ بستانکاریِ پرداختنی می‌رفت. حالا برایِ
+            # فاکتورِ خرید (RECEIPT)، ارزشِ موجودی خالص از تخفیف است، و
+            # مالياتِ ردیف جداگانه (نه در unit_cost) به موتورِ انبار
+            # منتقل می‌شود تا بدهکارِ «مالياتِ خرید-قابلِ مطالبه» شود و
+            # به بستانکاریِ حساب‌هایِ پرداختنی هم اضافه شود — دقیقاً هم‌
+            # مبلغِ doc.total_amount که کاربر رویِ فاکتور می‌بیند.
+            line_tax_amount = None
+            if stock_document_type == "ISSUE":
+                stock_unit_cost = None
+            elif stock_document_type == "RECEIPT":
+                net_of_discount = (quantity * unit_price - _discount_amt) / quantity if quantity else unit_price
+                stock_unit_cost = _money(net_of_discount)
+                line_tax_amount = _tax_amt
+            else:
+                stock_unit_cost = unit_price
             inv_line_id = inv_documents_service.add_line(
                 group_stock_document_id, company_id,
                 inv_documents_service.LineFields(
                     item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
-                    batch_id=batch_id, unit_cost=stock_unit_cost,
+                    batch_id=batch_id, unit_cost=stock_unit_cost, tax_amount=line_tax_amount,
                 ),
             )
             with new_session() as session:

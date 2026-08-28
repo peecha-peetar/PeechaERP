@@ -50,6 +50,7 @@ MAPPING_LABELS: dict[str, str] = {
     "INVENTORY_COST_VARIANCE": "مغایرتِ بهایِ استاندارد",
     "SUPPLIER_PAYABLE": "حساب‌هایِ پرداختنیِ تامین‌کنندگان",
     "CUSTOMER_RECEIVABLE": "حساب‌هایِ دریافتنیِ مشتریان",
+    "PURCHASE_TAX_RECEIVABLE": "مالياتِ خرید — قابلِ مطالبه",
 }
 
 
@@ -519,11 +520,20 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                         add_debit("INVENTORY_COST_VARIANCE", variance, item.item_detail_account_id)
                     else:
                         add_credit("INVENTORY_COST_VARIANCE", -variance, item.item_detail_account_id)
+                # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید محاسبه
+                # می‌شود ولی سندش ثبت نمی‌شود»): مالياتِ همین ردیف (اگر از
+                # یک فاکتورِ خرید آمده باشد) بدهکارِ «مالياتِ خرید-قابلِ
+                # مطالبه» می‌شود و رویِ بستانکاریِ حساب‌هایِ پرداختنی هم
+                # افزوده می‌شود — بدونِ اینکه وارد ارزشِ خودِ موجودی شود.
+                tax_amount = line.tax_amount or _ZERO
+                if tax_amount:
+                    add_debit("PURCHASE_TAX_RECEIVABLE", tax_amount, item.item_detail_account_id)
+                credit_amount = payable_amount + tax_amount
                 credit_role = "SUPPLIER_PAYABLE" if doc_type == "RECEIPT" else "CUSTOMER_RECEIVABLE"
                 if doc.counterparty_detail_account_id is not None:
-                    add_credit(credit_role, payable_amount, item.item_detail_account_id)
+                    add_credit(credit_role, credit_amount, item.item_detail_account_id)
                 else:
-                    add_credit("INVENTORY_ADJUSTMENT_GAIN", payable_amount, item.item_detail_account_id)
+                    add_credit("INVENTORY_ADJUSTMENT_GAIN", credit_amount, item.item_detail_account_id)
 
             elif doc_type in ("ISSUE", "RETURN_OUT"):
                 warehouse_id = doc.source_warehouse_id
