@@ -37,6 +37,7 @@ from peecha.services import commercial_settings as settings_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as inv_engine_service
+from peecha.services import inventory_locations as locations_service
 from peecha.services import journal_entries as je_service
 
 DOCUMENT_TYPE_CODES = (
@@ -583,6 +584,14 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = cost_center_id
     if project_id is not None:
         extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = project_id
+    # «مرکزِ سود» فیلدی در سرِسندِ اسنادِ بازرگانی ندارد — تنها منبعِ آن
+    # انبارِ خودِ سند است (طبقِ رفعِ همین باگ در inventory_engine.py).
+    if warehouse_id is not None:
+        warehouse_row = locations_service.get_warehouse(warehouse_id, company_id)
+        if warehouse_row is not None and warehouse_row.fields.profit_center_detail_account_id is not None:
+            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
+                warehouse_row.fields.profit_center_detail_account_id
+            )
 
     stock_document_type = _STOCK_DOC_TYPE_BY_TYPE[document_type_code]
     is_receipt_like = stock_document_type in ("RECEIPT", "RETURN_IN")

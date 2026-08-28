@@ -609,6 +609,17 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
             extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = doc.cost_center_detail_account_id
         if doc.project_detail_account_id is not None:
             extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = doc.project_detail_account_id
+        # «مرکزِ سود» هیچ فیلدی در سرِسند ندارد — تنها منبعِ آن انبارِ خودِ
+        # سند است (که از قبل در فرمِ انبارها قابلِ تعریف است). بدونِ این،
+        # هر حسابِ نقش‌محوری که این بُعد را الزامی کند، ثبت را همیشه با
+        # پیامِ «تفصیلیِ الزامی» رد می‌کرد — چون هیچ‌جا راهی برایِ فرستادنش نبود.
+        warehouse_id_for_profit_center = doc.destination_warehouse_id or doc.source_warehouse_id
+        if warehouse_id_for_profit_center is not None:
+            warehouse = session.get(Warehouse, warehouse_id_for_profit_center)
+            if warehouse is not None and warehouse.profit_center_detail_account_id is not None:
+                extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
+                    warehouse.profit_center_detail_account_id
+                )
         je_lines: list[je_service.LineInput] = []
         description = doc.description or f"سندِ انبار #{doc.document_no}"
         for role, amount in debits.items():

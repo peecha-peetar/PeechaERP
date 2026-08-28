@@ -29,6 +29,7 @@ from peecha.db.models.accounting import (
     AccountPersonGroup,
     ChartOfAccount,
     DetailAccount,
+    DetailDimensionType,
     FiscalPeriod,
     FiscalYear,
     JournalEntry,
@@ -186,6 +187,20 @@ def _resolve_lines(
         for account_id, dimension_type_id in rows:
             required_by_account.setdefault(account_id, set()).add(dimension_type_id)
 
+    # طبقِ درخواستِ صریح: پیامِ خطا باید نامِ خودِ بُعدِ گم‌شده را هم بگوید
+    # (نه فقط کدِ حساب) — قبلاً پیام برایِ همه‌یِ بُعدهایِ الزامیِ ازقلم‌افتاده
+    # یکسان بود و کاربر نمی‌فهمید دقیقاً کدام گروهِ تفصیلی را فراموش کرده.
+    dimension_labels_by_id: dict[int, str] = {}
+    all_required_dimension_type_ids = {d for dims in required_by_account.values() for d in dims}
+    if all_required_dimension_type_ids:
+        dim_rows = session.execute(
+            select(DetailDimensionType.dimension_type_id, DetailDimensionType.code).where(
+                DetailDimensionType.dimension_type_id.in_(all_required_dimension_type_ids)
+            )
+        ).all()
+        for dimension_type_id, code in dim_rows:
+            dimension_labels_by_id[dimension_type_id] = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(code, code)
+
     # طبقِ درخواستِ صریح: یک معین می‌تواند به گروهِ تفصیلیِ خاصی (مشتری/
     # تامین‌کننده/پرسنل) محدود شود — اگر محدود بود، «بدون تفصیلی» دیگر کافی
     # نیست و انتخابِ الزامی از همان گروه لازم است.
@@ -256,7 +271,12 @@ def _resolve_lines(
         required = required_by_account.get(ln.account_id, set())
         missing = required - set(ln.details.keys())
         if missing:
-            raise ValueError(f"برای حساب «{account.full_code}» انتخابِ گروه‌هایِ تفصیلیِ الزامی فراموش شده است.")
+            missing_labels = ", ".join(
+                sorted(dimension_labels_by_id.get(d, str(d)) for d in missing)
+            )
+            raise ValueError(
+                f"برای حساب «{account.full_code}» انتخابِ «{missing_labels}» الزامی است و فراموش شده است."
+            )
 
         required_person_groups = required_person_groups_by_account.get(ln.account_id)
         person_detail_account_id = ln.details.get(person_dimension_type_id)
