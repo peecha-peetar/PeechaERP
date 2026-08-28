@@ -98,6 +98,13 @@ def get_header_dimension_requirement(company_id: int, document_type_code: str, d
     return is_required, options
 
 
+def is_per_line_warehouse_enabled(company_id: int) -> bool:
+    """طبقِ درخواستِ صریح («انبار در سطرِ کالا، اختیاری در تنظیمات»):
+    وقتی روشن باشد، فرم اجازه می‌دهد هر ردیف انبارِ خودش را جدا از هدر
+    انتخاب کند."""
+    return settings_service.is_feature_enabled(company_id, "PER_LINE_WAREHOUSE")
+
+
 def _account_requires_dimension(account_id: int, dimension_type_id: int) -> bool:
     required = dimensions_service.get_required_dimensions_for_account(account_id)
     return any(r.dimension_type_id == dimension_type_id for r in required)
@@ -322,6 +329,7 @@ def convert_to_invoice(
                 "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": qty_this_time, "quantity_base": qty_this_time,
                 "unit_price": ln.unit_price, "discount_amount": _money(ln.discount_amount * ratio), "tax_percent": ln.tax_percent,
                 "batch_id": ln.batch_id, "serial_id": ln.serial_id, "description": ln.description, "line_id": ln.line_id,
+                "warehouse_id": ln.warehouse_id,
             })
         if not line_snapshots:
             raise ValueError("چیزی برایِ تبدیل به فاکتور باقی نمانده است.")
@@ -342,7 +350,7 @@ def convert_to_invoice(
             new_document_id, company_id, item_id=snap["item_id"], uom_id=snap["uom_id"], quantity=snap["quantity"],
             quantity_base=snap["quantity_base"], unit_price=snap["unit_price"], discount_amount=snap["discount_amount"],
             tax_percent=snap["tax_percent"], batch_id=snap["batch_id"], serial_id=snap["serial_id"],
-            source_line_id=snap["line_id"], description=snap["description"],
+            source_line_id=snap["line_id"], description=snap["description"], warehouse_id=snap["warehouse_id"],
         )
     return new_document_id
 
@@ -423,7 +431,7 @@ def add_line(
     quantity_base: decimal.Decimal, unit_price: decimal.Decimal | None = None,
     discount_amount: decimal.Decimal = _ZERO, tax_percent: decimal.Decimal = _ZERO,
     batch_id: int | None = None, serial_id: int | None = None, source_line_id: int | None = None,
-    description: str | None = None,
+    description: str | None = None, warehouse_id: int | None = None,
 ) -> int:
     if quantity <= 0 or quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
@@ -449,7 +457,7 @@ def add_line(
             document_id=document_id, line_no=next_no, item_id=item_id, uom_id=uom_id, quantity=quantity,
             quantity_base=quantity_base, unit_price=unit_price, discount_amount=discount_amount,
             tax_percent=tax_percent, tax_amount=tax_amount, batch_id=batch_id, serial_id=serial_id,
-            source_line_id=source_line_id, description=(description or None),
+            source_line_id=source_line_id, description=(description or None), warehouse_id=warehouse_id,
         )
         session.add(line)
         session.flush()
@@ -622,7 +630,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         line_snapshots = [
             (
                 ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id,
-                ln.serial_id, ln.discount_amount, ln.tax_amount,
+                ln.serial_id, ln.discount_amount, ln.tax_amount, ln.warehouse_id,
             )
             for ln in lines
         ]
@@ -652,36 +660,61 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
 
     stock_document_type = _STOCK_DOC_TYPE_BY_TYPE[document_type_code]
     is_receipt_like = stock_document_type in ("RECEIPT", "RETURN_IN")
-    header_fields = inv_documents_service.DocumentHeaderFields(
-        destination_warehouse_id=warehouse_id if is_receipt_like else None,
-        source_warehouse_id=warehouse_id if not is_receipt_like else None,
-        counterparty_detail_account_id=counterparty_id,
-        cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
-        reference_no=f"COMM-{document_id}", description=description,
-    )
-    stock_document_id = inv_documents_service.create_stock_document(
-        company_id, posted_by_user_id, stock_document_type, document_date, header_fields
-    )
-    for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt in line_snapshots:
-        # برایِ ISSUE، unit_cost=None می‌ماند تا موتورِ انبار از میانگینِ
-        # موزونِ فعلی استفاده کند (قیمتِ فروش هرگز بهایِ تمام‌شده نیست).
-        stock_unit_cost = None if stock_document_type == "ISSUE" else unit_price
-        inv_line_id = inv_documents_service.add_line(
-            stock_document_id, company_id,
-            inv_documents_service.LineFields(
-                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
-                batch_id=batch_id, unit_cost=stock_unit_cost,
-            ),
+
+    # طبقِ درخواستِ صریح («کالایِ ردیف بتواند انبارِ مستقل از هدر داشته
+    # باشد، حتی یک کالا در چند انبار، و به‌ازایِ هر انبار یک حوالهٔ
+    # جداگانه صادر شود» — Toggleِ PER_LINE_WAREHOUSE): ردیف‌ها بر اساسِ
+    # انبارِ مؤثرِشان (انبارِ خودِ ردیف، وگرنه انبارِ هدر) گروه‌بندی
+    # می‌شوند و به‌ازایِ هر انبار یک سندِ انبارِ جداگانه ساخته می‌شود —
+    # هرکدام خودکار مرکزِ سودِ همان انبار را می‌گیرد (طبقِ رفعِ باگِ قبلی
+    # در inventory_engine.py، چون هرکدام سندِ انبارِ خودش را دارد). وقتی
+    # همه‌یِ ردیف‌ها به یک انبار برمی‌گردند (پیش‌فرض، بدونِ این Toggle)،
+    # دقیقاً یک سندِ انبار مثلِ قبل ساخته می‌شود — رفتار بدونِ تغییر.
+    lines_by_warehouse: dict[int | None, list[tuple]] = {}
+    for snapshot in line_snapshots:
+        effective_warehouse_id = snapshot[10] or warehouse_id
+        lines_by_warehouse.setdefault(effective_warehouse_id, []).append(snapshot)
+
+    stock_document_id = None
+    journal_entry_id = None
+    for group_warehouse_id, group_lines in lines_by_warehouse.items():
+        group_header_fields = inv_documents_service.DocumentHeaderFields(
+            destination_warehouse_id=group_warehouse_id if is_receipt_like else None,
+            source_warehouse_id=group_warehouse_id if not is_receipt_like else None,
+            counterparty_detail_account_id=counterparty_id,
+            cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
+            reference_no=f"COMM-{document_id}", description=description,
         )
-        with new_session() as session:
-            comm_line = session.get(CommercialDocumentLine, line_id)
-            comm_line.stock_document_line_id = inv_line_id
-            session.commit()
+        group_stock_document_id = inv_documents_service.create_stock_document(
+            company_id, posted_by_user_id, stock_document_type, document_date, group_header_fields
+        )
+        for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in group_lines:
+            # برایِ ISSUE، unit_cost=None می‌ماند تا موتورِ انبار از میانگینِ
+            # موزونِ فعلی استفاده کند (قیمتِ فروش هرگز بهایِ تمام‌شده نیست).
+            stock_unit_cost = None if stock_document_type == "ISSUE" else unit_price
+            inv_line_id = inv_documents_service.add_line(
+                group_stock_document_id, company_id,
+                inv_documents_service.LineFields(
+                    item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                    batch_id=batch_id, unit_cost=stock_unit_cost,
+                ),
+            )
+            with new_session() as session:
+                comm_line = session.get(CommercialDocumentLine, line_id)
+                comm_line.stock_document_line_id = inv_line_id
+                session.commit()
 
-    inv_documents_service.confirm_stock_document(stock_document_id, company_id)
-    inv_post_result = inv_documents_service.post_stock_document(stock_document_id, company_id, posted_by_user_id)
+        inv_documents_service.confirm_stock_document(group_stock_document_id, company_id)
+        group_post_result = inv_documents_service.post_stock_document(group_stock_document_id, company_id, posted_by_user_id)
 
-    journal_entry_id = inv_post_result.journal_entry_id
+        # طبقِ محدودیتِ آگاهانه: comm.commercial_documents فقط یک
+        # stock_document_id/journal_entry_id دارد — با چند انبار، این
+        # فیلدها به اولین حواله/سندِ ساخته‌شده اشاره می‌کنند؛ بقیه هم به
+        # همان reference_no («COMM-{document_id}») قابلِ‌پیداکردن در
+        # فهرستِ اسنادِ انبار هستند، فقط از طریقِ این یک FK لینک نمی‌شوند.
+        if stock_document_id is None:
+            stock_document_id = group_stock_document_id
+            journal_entry_id = group_post_result.journal_entry_id
 
     if document_type_code == "SALES_INVOICE":
         person_dim_type_id = dimensions_service.get_person_dimension_type_id(company_id)
@@ -757,7 +790,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 rep = session.get(SalesRepresentative, sales_rep_id)
                 rule_id = rep.default_commission_rule_id if rep is not None else None
             if rule_id is not None:
-                for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt in line_snapshots:
+                for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in line_snapshots:
                     base_amount = _money(quantity * unit_price)
                     contracts_service.create_commission_entry_for_line(line_id, sales_rep_id, rule_id, base_amount)
 

@@ -329,6 +329,10 @@ class CommercialDocumentLine(Base):
     )
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("inv.batches.batch_id"))
     serial_id: Mapped[int | None] = mapped_column(ForeignKey("inv.serial_numbers.serial_id"))
+    # طبقِ درخواستِ صریح («کالایِ ردیف بتواند انبارِ مستقل از هدر داشته
+    # باشد») — Toggleِ اختیاریِ PER_LINE_WAREHOUSE. خالی یعنی از انبارِ
+    # هدر استفاده شود (رفتارِ قدیم، بدونِ تغییر).
+    warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     source_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
     stock_document_line_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("inv.stock_document_lines.line_id")

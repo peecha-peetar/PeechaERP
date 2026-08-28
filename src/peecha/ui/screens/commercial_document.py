@@ -75,7 +75,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self, parent: QWidget, items: list[catalog_service.ItemRow], company_id: int, main_window,
         decimal_places: int, initial: dict | None = None, *, counterparty_id: int | None = None,
         price_list_id: int | None = None, document_type_code: str | None = None,
-        document_date: datetime.date | None = None,
+        document_date: datetime.date | None = None, warehouses: list | None = None,
+        default_warehouse_id: int | None = None, per_line_warehouse_enabled: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("ردیفِ سند")
@@ -115,14 +116,37 @@ class _LineDialog(LayoutEditMixin, QDialog):
 
         self.description_field = QLineEdit()
 
-        self.fields_grid = FieldGrid([
+        # طبقِ درخواستِ صریح («کالایِ ردیف بتواند انبارِ مستقل از هدر داشته
+        # باشد») — Toggleِ اختیاریِ PER_LINE_WAREHOUSE؛ وقتی خاموش است این
+        # فیلد اصلاً ساخته/نمایش داده نمی‌شود (رفتارِ قدیم بدونِ تغییر).
+        self._per_line_warehouse_enabled = per_line_warehouse_enabled
+        self.warehouse_combo: _EnterComboBox | None = None
+        field_specs = [
             FieldSpec("item", "کالا", item_row_widget, span=2),
             FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
             FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
             FieldSpec("discount", "تخفیفِ مبلغی", self.discount_field, span=1),
             FieldSpec("tax_percent", "درصدِ مالیات (بعدِ تخفیف)", self.tax_percent_field, span=1),
-            FieldSpec("description", "توضیح", self.description_field, span=3),
-        ])
+        ]
+        if per_line_warehouse_enabled:
+            warehouse_row_widget = QWidget()
+            warehouse_row_layout = QHBoxLayout(warehouse_row_widget)
+            warehouse_row_layout.setContentsMargins(0, 0, 0, 0)
+            warehouse_row_layout.setSpacing(3)
+            self.warehouse_combo = _EnterComboBox()
+            self.warehouse_combo.addItem("(انبارِ پیش‌فرضِ سند)", None)
+            for w in warehouses or []:
+                self.warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
+            if default_warehouse_id is not None:
+                index = self.warehouse_combo.findData(default_warehouse_id)
+                if index >= 0:
+                    self.warehouse_combo.setCurrentIndex(index)
+            warehouse_row_layout.addWidget(self.warehouse_combo, stretch=1)
+            add_quick_add_button(warehouse_row_layout, self.warehouse_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+            field_specs.append(FieldSpec("warehouse", "انبار", warehouse_row_widget, span=1))
+        field_specs.append(FieldSpec("description", "توضیح", self.description_field, span=3))
+
+        self.fields_grid = FieldGrid(field_specs)
         layout.addWidget(self.fields_grid)
         self.register_field_grids("commercial_document_line", [self.fields_grid])
 
@@ -146,8 +170,11 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # طبقِ سندِ راهنما (زنجیره‌یِ کاملِ Enter، بدونِ استثنا).
         enter_chain = [
             self.item_combo, self.quantity_field, self.unit_price_field,
-            self.discount_field, self.tax_percent_field, self.description_field,
+            self.discount_field, self.tax_percent_field,
         ]
+        if self.warehouse_combo is not None:
+            enter_chain.append(self.warehouse_combo)
+        enter_chain.append(self.description_field)
         for widget, next_widget in zip(enter_chain, enter_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
         _enter_signal(enter_chain[-1]).connect(self._on_accept)
@@ -167,6 +194,9 @@ class _LineDialog(LayoutEditMixin, QDialog):
             self.discount_field.setValue(float(initial["discount_amount"]))
             self.tax_percent_field.setValue(float(initial["tax_percent"]))
             self.description_field.setText(initial["description"] or "")
+            if self.warehouse_combo is not None:
+                index = self.warehouse_combo.findData(initial.get("warehouse_id"))
+                self.warehouse_combo.setCurrentIndex(max(0, index))
         else:
             self._on_item_changed()
 
@@ -253,6 +283,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             "discount_amount": decimal.Decimal(str(self.discount_field.value())),
             "tax_percent": decimal.Decimal(str(self.tax_percent_field.value())),
             "description": self.description_field.text().strip() or None,
+            "warehouse_id": self.warehouse_combo.currentData() if self.warehouse_combo is not None else None,
         }
 
 
@@ -344,6 +375,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._decimal_places = 0
         self._cost_center_required = False
         self._project_required = False
+        self._per_line_warehouse_enabled = False
+        self._warehouses: list = []
 
         title = DOC_TYPE_TITLES[document_type_code]
         self.page_title = QLabel(title)
@@ -372,8 +405,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         header_card = QWidget()
         header_card.setObjectName("card")
         header_grid = QGridLayout(header_card)
-        header_grid.setContentsMargins(8, 5, 8, 5)
-        header_grid.setSpacing(3)
+        header_grid.setContentsMargins(8, 4, 8, 4)
+        header_grid.setHorizontalSpacing(6)
+        header_grid.setVerticalSpacing(2)
 
         header_grid.addWidget(QLabel("تاریخ"), 0, 0)
         self.date_field = JalaliDateEdit()
@@ -391,7 +425,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         header_grid.addLayout(counterparty_row, 1, 1)
 
-        header_grid.addWidget(QLabel("انبار"), 0, 2)
+        self.warehouse_label = QLabel("انبار")
+        header_grid.addWidget(self.warehouse_label, 0, 2)
         warehouse_row = QHBoxLayout()
         warehouse_row.setContentsMargins(0, 0, 0, 0)
         warehouse_row.setSpacing(3)
@@ -416,13 +451,22 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.reference_field = QLineEdit()
         header_grid.addWidget(self.reference_field, 1, 4)
 
-        # طبقِ رفعِ باگِ واقعی («عرضِ فیلدِ فهرستِ قیمت کمه، عرضِ کانال
-        # کم بشه اضافه شود به فهرستِ قیمت»): فهرستِ قیمت حالا هم‌عرضِ
-        # دو ستون (به‌اندازه‌یِ ستونِ مشتری/تامین‌کننده که پهن‌تر است) و
-        # کانال فقط یک ستون است.
-        header_grid.addWidget(QLabel("فهرستِ قیمت"), 2, 0, 1, 2)
+        # طبقِ درخواستِ صریح («هدر ۳ ردیفه — عرضِ فیلدهایِ ردیفِ دوم را کم
+        # کن و مرکزِ هزینه/پروژه هم در همان ردیفِ دوم بگنجد، فاصله‌یِ بینِ
+        # ردیف‌ها را به حداقل برسان»): فهرستِ قیمت/کانال/توضیح/مرکزِ هزینه/
+        # پروژه پنج تا هستند و برایِ این‌که عرضشان مستقلِ ستون‌بندیِ ردیفِ
+        # اول (تاریخ/طرفِ‌حساب/انبار/شماره‌ها) بماند، در یک QGridLayoutِ
+        # تودرتوی جدا چیده می‌شوند — نه مستقیم در header_grid — وگرنه
+        # تغییرِ عرضِ ستون‌هایشان عرضِ فیلدهایِ ردیفِ اول را هم به‌هم می‌زد.
+        # همین یک ردیفِ بیرونی هم باعث می‌شود دیگر ردیفِ سومِ جدا لازم نباشد.
+        row2_widget = QWidget()
+        row2_grid = QGridLayout(row2_widget)
+        row2_grid.setContentsMargins(0, 0, 0, 0)
+        row2_grid.setSpacing(3)
+
+        row2_grid.addWidget(QLabel("فهرستِ قیمت"), 0, 0)
         self.price_list_combo = _EnterComboBox()
-        header_grid.addWidget(self.price_list_combo, 3, 0, 1, 2)
+        row2_grid.addWidget(self.price_list_combo, 1, 0)
 
         self.channel_box = QWidget()
         channel_layout = QVBoxLayout(self.channel_box)
@@ -431,12 +475,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         channel_layout.addWidget(QLabel("کانال"))
         self.channel_combo = _EnterComboBox()
         channel_layout.addWidget(self.channel_combo)
-        header_grid.addWidget(self.channel_box, 2, 2, 2, 1)
+        row2_grid.addWidget(self.channel_box, 0, 1, 2, 1)
         self.channel_box.setVisible(self._is_sales)
 
-        header_grid.addWidget(QLabel("توضیح"), 2, 3, 1, 2)
+        row2_grid.addWidget(QLabel("توضیح"), 0, 2)
         self.description_field = QLineEdit()
-        header_grid.addWidget(self.description_field, 3, 3, 1, 2)
+        row2_grid.addWidget(self.description_field, 1, 2)
 
         # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
         # الزامی فراموش شده است» با این‌که تفصیلیِ طرفِ‌حساب درست انتخاب
@@ -446,14 +490,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # مشابه در فرمِ تنخواه‌گردان. برچسب با «*» یعنی برایِ این نوعِ سند
         # (طبقِ تنظیماتِ نگاشتِ حساب‌ها) الزامی است.
         self.cost_center_label = QLabel("مرکزِ هزینه")
-        header_grid.addWidget(self.cost_center_label, 4, 0, 1, 2)
+        row2_grid.addWidget(self.cost_center_label, 0, 3)
         cost_center_row = QHBoxLayout()
         cost_center_row.setContentsMargins(0, 0, 0, 0)
         cost_center_row.setSpacing(3)
         self.cost_center_combo = _EnterComboBox()
         cost_center_row.addWidget(self.cost_center_combo, stretch=1)
         add_quick_add_button(cost_center_row, self.cost_center_combo, main_window, "GL_DIM", "تعریفِ مرکزِ هزینه‌یِ تازه")
-        header_grid.addLayout(cost_center_row, 5, 0, 1, 2)
+        row2_grid.addLayout(cost_center_row, 1, 3)
 
         self.project_box = QWidget()
         project_layout = QVBoxLayout(self.project_box)
@@ -468,7 +512,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         project_row.addWidget(self.project_combo, stretch=1)
         add_quick_add_button(project_row, self.project_combo, main_window, "GL_DIM", "تعریفِ پروژه‌یِ تازه")
         project_layout.addLayout(project_row)
-        header_grid.addWidget(self.project_box, 4, 2, 2, 1)
+        row2_grid.addWidget(self.project_box, 0, 4, 2, 1)
+
+        row2_grid.setColumnStretch(0, 1)
+        row2_grid.setColumnStretch(1, 1)
+        row2_grid.setColumnStretch(2, 2)
+        row2_grid.setColumnStretch(3, 1)
+        row2_grid.setColumnStretch(4, 1)
+        header_grid.addWidget(row2_widget, 2, 0, 1, 5)
 
         header_grid.setColumnStretch(0, 1)
         header_grid.setColumnStretch(1, 2)
@@ -629,6 +680,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
         warehouses = locations_service.list_warehouses(company_id, active_only=True)
+        self._warehouses = warehouses
+        self._per_line_warehouse_enabled = documents_service.is_per_line_warehouse_enabled(company_id)
+        self.warehouse_label.setText("انبار (پیش‌فرضِ ردیف‌ها)" if self._per_line_warehouse_enabled else "انبار")
         current_wh = self.warehouse_combo.currentData()
         self.warehouse_combo.blockSignals(True)
         self.warehouse_combo.clear()
@@ -908,6 +962,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self, self._items, self._company_id(), self._main_window, self._decimal_places,
             counterparty_id=self.counterparty_combo.currentData(), price_list_id=self.price_list_combo.currentData(),
             document_type_code=self.document_type_code, document_date=self.date_field.date(),
+            warehouses=self._warehouses, default_warehouse_id=self.warehouse_combo.currentData(),
+            per_line_warehouse_enabled=self._per_line_warehouse_enabled,
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -932,8 +988,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         initial = {
             "item_id": line.item_id, "quantity": line.quantity, "unit_price": line.unit_price,
             "discount_amount": line.discount_amount, "tax_percent": line.tax_percent, "description": line.description,
+            "warehouse_id": line.warehouse_id,
         }
-        dialog = _LineDialog(self, self._items, self._company_id(), self._main_window, self._decimal_places, initial)
+        dialog = _LineDialog(
+            self, self._items, self._company_id(), self._main_window, self._decimal_places, initial,
+            warehouses=self._warehouses, default_warehouse_id=self.warehouse_combo.currentData(),
+            per_line_warehouse_enabled=self._per_line_warehouse_enabled,
+        )
         if dialog.exec() != QDialog.Accepted:
             return
         try:
