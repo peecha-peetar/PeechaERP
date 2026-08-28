@@ -203,6 +203,10 @@ NAV_ITEMS = [
     # بک‌آپ/بازیابی — چون کاری/عملیاتی است (فایل‌دیالوگ، نه فرمِ ذخیره‌ای)،
     # به‌جایِ تبی درونِ system_settings، آیتمِ مستقلِ خودش را دارد.
     {"code": "SYSTEM_BACKUP", "label": "پشتیبان‌گیری و بازیابی", "screen": "system_backup"},
+    # ابزارِ فنی/محدود (نه ویژگیِ عمومی) — طبقِ درخواستِ صریح: خام‌کردنِ
+    # اطلاعاتِ شرکتِ جاری برایِ تست/راه‌اندازیِ اولیه، بدونِ تاثیر بر
+    # ساختارِ برنامه یا سایرِ شرکت‌ها.
+    {"code": "SYSTEM_DATA_RESET", "label": "خام‌کردنِ اطلاعات (فنی)", "screen": "system_data_reset"},
 ]
 
 # طبقِ درخواستِ صریح («ریبونِ بالا مرتبط با ماژولی باشد که در ساید‌بار
@@ -325,7 +329,11 @@ SETTINGS_SUB_FORMS = [
 
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط
 # «داشبورد» با این قاعده مچ نمی‌شود (کدِ خودش با کدِ ماژولش یکی نیست).
-_TOP_LEVEL_MODULE_CODE_OVERRIDE = {"dashboard": "DASH", "SYSTEM_BACKUP": "SETTINGS"}
+_TOP_LEVEL_MODULE_CODE_OVERRIDE = {
+    "dashboard": "DASH",
+    "SYSTEM_BACKUP": "SETTINGS",
+    "SYSTEM_DATA_RESET": "SETTINGS",
+}
 
 
 def flatten_nav_items() -> list[dict]:

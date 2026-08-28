@@ -1391,6 +1391,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_checks import ChecksReportScreen
         from peecha.ui.screens.system_settings import SystemSettingsScreen
         from peecha.ui.screens.system_backup import SystemBackupScreen
+        from peecha.ui.screens.system_data_reset import SystemDataResetScreen
         from peecha.ui.screens.treasury_checks import IssuedChecksScreen, ReceivedChecksScreen
         from peecha.ui.screens.treasury_reports import TreasuryChecksDueScreen
         from peecha.ui.screens.treasury_voucher import TreasuryVoucherScreen
@@ -1412,6 +1413,7 @@ class MainWindow(QMainWindow):
         self.register_screen("chart_of_accounts", ChartOfAccountsScreen())
         self.register_screen("system_settings", SystemSettingsScreen())
         self.register_screen("system_backup", SystemBackupScreen())
+        self.register_screen("system_data_reset", SystemDataResetScreen())
         self.register_screen("dimension_group_config", DimensionGroupConfigScreen())
         self.register_screen("detail_dimensions", DetailDimensionsScreen())
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
