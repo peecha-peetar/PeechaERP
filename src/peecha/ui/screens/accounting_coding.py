@@ -24,6 +24,12 @@ _DETAIL_LEVEL_LABELS = {1: "سطحِ ۱", 2: "سطحِ ۲", 3: "سطحِ ۳", 4:
 
 
 class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
+    # طبقِ رفعِ باگِ «دکمه‌یِ ذخیره زیرِ تسک‌بار»: این صفحه خودش اسکرول +
+    # نوارِ ثابتِ دکمه دارد؛ system_settings.py دیگر نباید دوباره در یک
+    # QScrollAreaِ بیرونی بپیچدش — وگرنه همان نوارِ ثابت هم دوباره قابلِ
+    # اسکرول‌شدن (و گم‌شدن) می‌شود.
+    manages_own_scroll = True
+
     def __init__(self) -> None:
         super().__init__()
         self._level_widgets: dict[int, tuple[QSpinBox, QSpinBox, QSpinBox]] = {}
@@ -35,7 +41,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         content = QWidget()
         outer = QVBoxLayout(content)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         title = QLabel("کدینگِ حسابداری")
@@ -53,7 +59,7 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         card = QWidget()
         card.setObjectName("card")
         grid = QGridLayout(card)
-        grid.setContentsMargins(18, 18, 18, 18)
+        grid.setContentsMargins(14, 10, 14, 10)
         grid.setSpacing(10)
 
         grid.addWidget(QLabel("سطح"), 0, 0)
@@ -96,14 +102,24 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
         self.status_label.setWordWrap(True)
         outer.addWidget(self.status_label)
 
-        self.save_button = QPushButton("ذخیره‌ی تنظیماتِ کدینگ")
-        self.save_button.setObjectName("primaryButton")
-        self.save_button.clicked.connect(self._save)
-        outer.addWidget(self.save_button)
-
         outer.addStretch(1)
         scroll.setWidget(content)
-        root_layout.addWidget(scroll)
+        root_layout.addWidget(scroll, stretch=1)
+
+        # باگِ واقعیِ گزارش‌شده (هم‌الگو با chart_of_accounts.py): دکمه‌یِ
+        # ذخیره دیگر داخلِ محتوایِ اسکرول‌شونده نیست — یک نوارِ ثابتِ
+        # پایینی همیشه دیده می‌شود.
+        footer = QWidget()
+        footer.setObjectName("formFooter")
+        footer_layout = QVBoxLayout(footer)
+        footer_layout.setContentsMargins(24, 10, 24, 14)
+        self.save_button = QPushButton("💾")
+        self.save_button.setObjectName("primaryIconButton")
+        self.save_button.setFixedWidth(48)
+        self.save_button.setToolTip("ذخیره‌ی تنظیماتِ کدینگ")
+        self.save_button.clicked.connect(self._save)
+        footer_layout.addWidget(self.save_button)
+        root_layout.addWidget(footer)
 
         level_help = []
         for level, (code_length, range_from, range_to) in self._level_widgets.items():
@@ -176,6 +192,8 @@ class AccountingCodingSettingsScreen(FieldHelpMixin, QWidget):
 
 
 class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
+    manages_own_scroll = True
+
     def __init__(self) -> None:
         super().__init__()
         self._detail_level_widgets: dict[int, QSpinBox] = {}
@@ -187,7 +205,7 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         content = QWidget()
         outer = QVBoxLayout(content)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
         detail_title = QLabel("تعدادِ رقمِ سطوحِ تفصیلی")
@@ -206,7 +224,7 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         detail_card = QWidget()
         detail_card.setObjectName("card")
         detail_grid = QGridLayout(detail_card)
-        detail_grid.setContentsMargins(18, 18, 18, 18)
+        detail_grid.setContentsMargins(14, 10, 14, 10)
         detail_grid.setSpacing(10)
 
         detail_grid.addWidget(QLabel("سطح"), 0, 0)
@@ -226,14 +244,21 @@ class DetailLevelDigitSettingsScreen(FieldHelpMixin, QWidget):
         self.detail_status_label.setWordWrap(True)
         outer.addWidget(self.detail_status_label)
 
-        self.save_detail_button = QPushButton("ذخیره‌ی تعدادِ رقمِ سطوحِ تفصیلی")
-        self.save_detail_button.setObjectName("primaryButton")
-        self.save_detail_button.clicked.connect(self._save_detail_digits)
-        outer.addWidget(self.save_detail_button)
-
         outer.addStretch(1)
         scroll.setWidget(content)
-        root_layout.addWidget(scroll)
+        root_layout.addWidget(scroll, stretch=1)
+
+        footer = QWidget()
+        footer.setObjectName("formFooter")
+        footer_layout = QVBoxLayout(footer)
+        footer_layout.setContentsMargins(24, 10, 24, 14)
+        self.save_detail_button = QPushButton("💾")
+        self.save_detail_button.setObjectName("primaryIconButton")
+        self.save_detail_button.setFixedWidth(48)
+        self.save_detail_button.setToolTip("ذخیره‌ی تعدادِ رقمِ سطوحِ تفصیلی")
+        self.save_detail_button.clicked.connect(self._save_detail_digits)
+        footer_layout.addWidget(self.save_detail_button)
+        root_layout.addWidget(footer)
 
         self.set_field_help([
             (

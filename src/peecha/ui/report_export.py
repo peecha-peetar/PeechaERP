@@ -707,3 +707,52 @@ def export_report_excel(
 
     workbook.save(path)
     QMessageBox.information(parent_widget, "خروجیِ Excel", "فایلِ Excel با موفقیت ساخته شد.")
+
+
+def export_plain_excel(
+    parent_widget: QWidget,
+    default_filename: str,
+    headers: list[str],
+    rows: list[list],
+) -> str | None:
+    """خروجیِ اکسلِ «خام» — فقط ردیفِ عنوان‌ها + دیتا، بدونِ سربرگِ نامِ
+    شرکت/تاریخ که export_report_excel اضافه می‌کند. طبقِ درخواستِ صریح
+    («خروجیِ کدینگ/تفصیلی‌ها برایِ برگرداندن روی دیتابیسِ جدید»): چنین
+    فایلی باید بتواند مستقیماً با همان مکانیزمِ ایمپورتِ اکسلِ موجود
+    (excel_import.py) دوباره خوانده شود — سطرهایِ اضافیِ سربرگ این کار
+    را با جابه‌جاکردنِ ردیفِ عنوان‌هایِ واقعی خراب می‌کردند."""
+    if not rows:
+        QMessageBox.information(parent_widget, "Excel", "چیزی برایِ خروجیِ Excel وجود ندارد.")
+        return None
+    try:
+        import openpyxl
+        from openpyxl.styles import Font
+    except ImportError:
+        QMessageBox.warning(parent_widget, "خطا", "امکانِ ساختِ فایلِ Excel روی این سیستم فراهم نیست.")
+        return None
+
+    path, _filter = QFileDialog.getSaveFileName(parent_widget, "ذخیره‌یِ Excel", f"{default_filename}.xlsx", "Excel (*.xlsx)")
+    if not path:
+        return None
+    if not path.lower().endswith(".xlsx"):
+        path += ".xlsx"
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = (default_filename[:31] or "خروجی").replace("/", "-")
+    sheet.sheet_view.rightToLeft = True
+
+    sheet.append(headers)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        sheet.append(list(row))
+    sheet.freeze_panes = "A2"
+
+    for col_cells in sheet.columns:
+        length = max((len(str(c.value)) for c in col_cells if c.value is not None), default=10)
+        sheet.column_dimensions[col_cells[0].column_letter].width = min(max(length + 2, 10), 40)
+
+    workbook.save(path)
+    QMessageBox.information(parent_widget, "خروجیِ Excel", "فایلِ Excel با موفقیت ساخته شد.")
+    return path

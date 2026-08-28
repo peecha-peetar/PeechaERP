@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from peecha.services import field_labels as field_labels_service
 from peecha.services import languages as languages_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 _FORM_CODES = [
     "chart_of_accounts",
@@ -50,13 +50,17 @@ class _FieldEditRow(QWidget):
         self.value_field.setText(current_label or default_label)
         layout.addWidget(self.value_field)
 
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("flatButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("iconButton")
+        save_button.setFixedWidth(44)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(lambda: on_save(field_id, self.value_field.text().strip()))
         layout.addWidget(save_button)
 
-        reset_button = QPushButton("بازگشت به پیش‌فرض")
-        reset_button.setObjectName("flatButton")
+        reset_button = QPushButton("↩️")
+        reset_button.setObjectName("iconButton")
+        reset_button.setFixedWidth(44)
+        reset_button.setToolTip("بازگشت به پیش‌فرض")
         reset_button.clicked.connect(lambda: on_reset(field_id))
         layout.addWidget(reset_button)
 
@@ -68,7 +72,7 @@ class FieldLabelsScreen(FieldHelpMixin, QWidget):
         self._rows: list[_FieldEditRow] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel("عنوانِ فیلدها")
@@ -97,8 +101,7 @@ class FieldLabelsScreen(FieldHelpMixin, QWidget):
         self.rows_container = QVBoxLayout()
         rows_widget = QWidget()
         rows_widget.setLayout(self.rows_container)
-        layout.addWidget(rows_widget)
-        layout.addStretch(1)
+        layout.addWidget(wrap_scrollable(rows_widget), stretch=1)
 
         self.set_field_help([
             (self.form_combo, "فرمی که می‌خواهید نامِ فیلدهایش را تغییر دهید."),

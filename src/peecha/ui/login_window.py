@@ -12,7 +12,7 @@ bidi/شکل‌دهیِ عربی/فارسی دارد (بر خلافِ Kivی)."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QGridLayout,
     QLabel,
@@ -46,9 +46,16 @@ from peecha.ui import theme
 # استایلِ محلی فقط برایِ عناصرِ اختصاصیِ این صفحه (برند/عنوان)؛ کارت،
 # فیلدها و دکمه با objectNameهایِ شناخته‌شده از QSS سراسری (theme.GLOBAL_QSS)
 # استفاده می‌کنند تا هم‌شکلِ بقیه‌ی برنامه باشند.
-_STYLE = f"""
+def _build_style() -> str:
+    """طبقِ باگِ واقعیِ کشف‌شده (سوییچِ روشن/تیره): این قبلاً یک ثابتِ
+    سطحِ ماژول بود که فقط یک‌بار، در لحظه‌یِ importِ فایل، رنگ‌هایِ
+    theme.* را می‌خواند — یعنی بعدِ سوییچِ تم و logout (که یک
+    LoginWindowِ تازه می‌سازد)، همچنان رنگِ همانِ تمی را نشان می‌داد که
+    برنامه اولین‌بار با آن اجرا شده بود. حالا در هر بارِ ساختِ پنجره
+    (`__init__`) دوباره صدا زده می‌شود تا رنگِ تازه‌یِ تم را بخواند."""
+    return f"""
 QLabel#brandTitle {{
-    font-size: 30px;
+    font-size: 26px;
     font-weight: 800;
     color: {theme.ACCENT};
 }}
@@ -74,7 +81,7 @@ class LoginWindow(QStackedWidget):
         super().__init__()
         self.setWindowTitle("پیچا")
         self.resize(460, 680)
-        self.setStyleSheet(_STYLE)
+        self.setStyleSheet(_build_style())
         self._font_family = font_family
         self._main_window = None
 
@@ -94,6 +101,11 @@ class LoginWindow(QStackedWidget):
         outer.setContentsMargins(40, 40, 40, 40)
         outer.setSpacing(24)
         outer.setAlignment(Qt.AlignTop)
+
+        logo = QLabel()
+        logo.setPixmap(theme.logo_pixmap(64, theme.ACCENT))
+        logo.setAlignment(Qt.AlignCenter)
+        outer.addWidget(logo)
 
         title = QLabel("پیچا")
         title.setObjectName("brandTitle")
@@ -159,8 +171,9 @@ class LoginWindow(QStackedWidget):
         try:
             apply_pending_schema_files(get_engine())
             no_users = not has_any_user()
-        except SQLAlchemyError:
-            self.status_label.setText("اتصال به دیتابیس برقرار نشد — از «تنظیماتِ اتصال به دیتابیس» بررسی کنید.")
+        except SQLAlchemyError as exc:
+            detail = str(exc.__cause__ or exc)
+            self.status_label.setText(f"اتصال به دیتابیس برقرار نشد: {detail}")
             self.username_field.setFocus()
             return
 
@@ -182,10 +195,11 @@ class LoginWindow(QStackedWidget):
 
         try:
             user = authenticate(username, password)
-        except SQLAlchemyError:
+        except SQLAlchemyError as exc:
+            detail = str(exc.__cause__ or exc)
             self.status_label.setObjectName("statusError")
             self.status_label.setStyleSheet("")
-            self.status_label.setText("اتصال به دیتابیس برقرار نشد.")
+            self.status_label.setText(f"اتصال به دیتابیس برقرار نشد: {detail}")
             return
         if user is None:
             self.status_label.setObjectName("statusError")
@@ -211,6 +225,14 @@ class LoginWindow(QStackedWidget):
 
         self._main_window = MainWindow()
         self._main_window.load_context_switcher()
+        # طبقِ گزارشِ تکرارشوندهٔ کاربر («هنوز هم زیرِ تسک‌بار می‌رود»):
+        # فراخوانیِ showMaximized() رویِ پنجره‌ای که هنوز هیچ‌وقت show()
+        # نشده، در بعضی پیکربندی‌هایِ ویندوز باعث می‌شود maximizeِ بومی
+        # کاملِ صفحه (زیرِ تسک‌بار را هم بگیرد) اجرا شود، نه فقط
+        # availableGeometry — چون Qt هنوز handle/screenِ واقعیِ پنجره را
+        # نساخته. اول show() عادی (که geometryِ واقعی و screen() را
+        # برقرار می‌کند)، بعد maximize.
+        self._main_window.show()
         self._main_window.showMaximized()
         self.close()
 

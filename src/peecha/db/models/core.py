@@ -65,6 +65,11 @@ class Company(Base):
     fiscal_year_start_day: Mapped[int] = mapped_column(SmallInteger, default=1)
     base_currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     default_language_id: Mapped[int] = mapped_column(ForeignKey("core.languages.language_id"))
+    # طبقِ درخواستِ صریح: درصدِ مالیاتِ پیش‌فرضِ سراسریِ شرکت (بعدِ تخفیف) —
+    # اگر کالایی درصدِ مالیاتِ خودش را نداشته باشد (Item.default_tax_percent
+    # خالی)، همین مقدار به‌عنوانِ اولویتِ دوم برایِ پیش‌پرکردنِ فیلدِ درصدِ
+    # مالیاتِ ردیفِ سند استفاده می‌شود.
+    default_tax_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 

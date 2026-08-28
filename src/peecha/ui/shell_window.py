@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import json
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QBrush, QColor, QFont, QScreen
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -74,7 +74,7 @@ _NAV_ICONS = {
     "SETTINGS": "⚙️",
 }
 
-_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1}
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8}
 
 
 def _leaf_nav_children(item: dict) -> list[dict]:
@@ -98,15 +98,22 @@ def _leaf_nav_children_for_module(module_code: str) -> list[dict]:
 
 
 class _QuickAccessTile(QFrame):
-    """کاشیِ ریبونِ میان‌بر — آیکون + برچسب، با سایه‌ای که رویِ هاور
-    بلندتر می‌شود (همان الگویِ widgets.KpiCard، مقیاسِ کوچک‌تر)."""
+    """کاشیِ ریبونِ میان‌بر — طبقِ نمونه‌طراحیِ کارت‌رنگیِ ارسالیِ کاربر،
+    هم‌زبان با widgets.SummaryCard شد: بجِ آیکونِ ته‌رنگ‌دار (شیشه‌ایِ رنگیِ
+    اکسنت، نه فقط متنِ خام)، لبه/زمینه‌یِ کم‌رنگِ کارت در حالتِ استراحت
+    (نه دیگر کاملاً شفاف) و همان سایه‌ای که رویِ هاور بلندتر می‌شود. چون
+    این کاشی‌ها هر بار در `_set_quick_access_module` از نو ساخته می‌شوند
+    (نه singleton مثلِ KpiCardِ داشبورد)، رنگ‌هایِ inline اینجا مشکلِ
+    «منجمدشدن رویِ سوییچِ تم» ندارند — با هر بازسازی از رویِ توکن‌هایِ
+    تازه ساخته می‌شوند."""
 
-    def __init__(self, icon: str, label: str, on_click) -> None:
+    def __init__(self, icon: str, label: str, on_click, color: str | None = None) -> None:
         super().__init__()
         self.setObjectName("quickTile")
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedSize(84, 74)
+        self.setFixedSize(84, 78)
         self._on_click = on_click
+        self._color = color or theme.ACCENT
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 10, 6, 8)
@@ -114,9 +121,14 @@ class _QuickAccessTile(QFrame):
         layout.setAlignment(Qt.AlignCenter)
 
         icon_label = QLabel(icon)
+        icon_label.setFixedSize(30, 30)
         icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setStyleSheet("font-size: 20px; background: transparent;")
-        layout.addWidget(icon_label)
+        icon_label.setStyleSheet(
+            f"background-color: {theme.rgba(self._color, 0.16)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.30)}; "
+            "border-radius: 9px; font-size: 20px;"
+        )
+        layout.addWidget(icon_label, alignment=Qt.AlignCenter)
 
         text_label = QLabel(label)
         text_label.setAlignment(Qt.AlignCenter)
@@ -124,11 +136,21 @@ class _QuickAccessTile(QFrame):
         text_label.setStyleSheet(f"font-size: 10px; font-weight: 600; color: {theme.TEXT_SECONDARY}; background: transparent;")
         layout.addWidget(text_label)
 
+        self._rest_style = (
+            f"QFrame#quickTile {{ background-color: {theme.rgba(self._color, 0.05)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.14)}; border-radius: 14px; }}"
+        )
+        self._hover_style = (
+            f"QFrame#quickTile {{ background-color: {theme.rgba(self._color, 0.14)}; "
+            f"border: 1px solid {theme.rgba(self._color, 0.35)}; border-radius: 14px; }}"
+        )
+        self.setStyleSheet(self._rest_style)
+
         self._shadow = QGraphicsDropShadowEffect(self)
         self._shadow.setBlurRadius(0)
         self._shadow.setXOffset(0)
         self._shadow.setYOffset(0)
-        self._shadow.setColor(QColor(79, 70, 229, 0))
+        self._shadow.setColor(QColor(0, 0, 0, 0))
         self.setGraphicsEffect(self._shadow)
         self._anim = QPropertyAnimation(self._shadow, b"blurRadius", self)
         self._anim.setDuration(150)
@@ -139,16 +161,18 @@ class _QuickAccessTile(QFrame):
         super().mousePressEvent(event)
 
     def enterEvent(self, event) -> None:  # noqa: N802
-        self.setStyleSheet(f"QFrame#quickTile {{ background-color: {theme.ACCENT_LIGHT}; border-radius: 14px; }}")
+        self.setStyleSheet(self._hover_style)
         self._anim.stop()
         self._anim.setStartValue(self._shadow.blurRadius())
         self._anim.setEndValue(22)
         self._anim.start()
-        self._shadow.setColor(QColor(79, 70, 229, 60))
+        hover_glow = QColor(self._color)
+        hover_glow.setAlpha(70)
+        self._shadow.setColor(hover_glow)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802
-        self.setStyleSheet("QFrame#quickTile { background-color: transparent; border-radius: 14px; }")
+        self.setStyleSheet(self._rest_style)
         self._anim.stop()
         self._anim.setStartValue(self._shadow.blurRadius())
         self._anim.setEndValue(0)
@@ -309,6 +333,24 @@ _RESIZE_MARGIN = 6
 _MIN_SUBWINDOW_SIZE = QSize(420, 320)
 
 
+def _clamp_rect_to_area(rect: QRect, area: QRect) -> QRect:
+    """یک مستطیل (geometryِ زیرپنجره) را طوری به داخلِ area (مرزهایِ
+    فعلیِ ناحیه‌یِ MDI) می‌کشد که هیچ بخشی از آن — به‌خصوص فوترِ دکمه‌ها
+    در پایینِ فرم — بیرون از دیدِ کاربر نماند؛ ریاضیِ فیزیکیِ ساده،
+    نه تکیه بر مکانیزمِ داخلیِ QMdiArea که تحتِ راست‌چین درست عمل
+    نمی‌کند. هم در بازیابی/کدربندیِ اولیه‌یِ زیرپنجره استفاده می‌شود
+    (MainWindow._clamp_to_mdi_area) و هم در هر resizeِ زنده‌یِ خودِ
+    ناحیه‌یِ MDI (_ClampingMdiArea.resizeEvent) — یک منبعِ حقیقتِ واحد،
+    به‌جایِ دو پیاده‌سازیِ جدا که ممکن بود از هم عقب بمانند."""
+    width = min(rect.width(), max(area.width(), _MIN_SUBWINDOW_SIZE.width()))
+    height = min(rect.height(), max(area.height(), _MIN_SUBWINDOW_SIZE.height()))
+    max_x = max(0, area.width() - width)
+    max_y = max(0, area.height() - height)
+    x = min(max(rect.x(), 0), max_x)
+    y = min(max(rect.y(), 0), max_y)
+    return QRect(x, y, width, height)
+
+
 class _MdiTitleBar(QWidget):
     """تیتربارِ کاملاً سفارشی برایِ فرم‌هایِ شناور — طبقِ درخواستِ صریح
     (تیتربارِ بومیِ Fusion با بقیه‌ی برنامه هم‌خوان نبود). قابلِ‌درگ (کلیک
@@ -334,7 +376,7 @@ class _MdiTitleBar(QWidget):
         # آیکون/عنوان که آخر اضافه می‌شوند، سمتِ چپ می‌مانند. دکمه‌ی بستن
         # اول از همه اضافه می‌شود تا لبه‌یِ بیرونی (گوشه‌ی راست) باشد —
         # هم‌راستا با قراردادِ متعارفِ «بستن، دورترین دکمه از مرکز».
-        self.close_btn = self._make_control_button("✕", "#FDECEC")
+        self.close_btn = self._make_control_button("✕", theme.rgba(theme.DANGER, 0.16))
         self.close_btn.clicked.connect(sub_window.close)
         layout.addWidget(self.close_btn)
 
@@ -570,11 +612,83 @@ class _MdiFormWrapper(QFrame):
         outer.addWidget(screen, stretch=1)
 
 
+class _ClampingMdiArea(QMdiArea):
+    """QMdiAreaِ معمولی، وقتی خودش کوچک‌تر می‌شود (کوچک‌کردنِ پنجره‌یِ
+    اصلی از حالتِ maximize، اسنپ‌کردنِ ویندوز به نیمِ صفحه، جمع‌شدنِ
+    نوارِ کناری، تغییرِ اندازه‌یِ چندمانیتوره)، زیرپنجره‌هایی را که از
+    قبل با اندازه‌یِ بزرگ‌تر باز شده‌اند خودش دوباره اندازه نمی‌دهد —
+    آن‌ها همان اندازه‌یِ قبلی را نگه می‌دارند و فقط یک اسکرول‌بار رویِ
+    خودِ ناحیه‌یِ MDI ظاهر می‌شود؛ از دیدِ کاربر این دقیقاً همان چیزی‌ست
+    که به‌عنوانِ «دکمه‌هایِ پایینِ فرم زیرِ تسک‌بار/از دید رفتن» گزارش
+    می‌شود — چون MainWindow خودش به‌درستی clamp می‌شود (ر.ک.
+    _clamp_geometry_to_available_screen)، اما این clamp تا امروز فقط
+    یک‌بار، در لحظه‌یِ بازشدن/بازیابیِ هر زیرپنجره اجرا می‌شد
+    (_restore_or_size_subwindow)، نه در هر resizeِ بعدیِ خودِ ناحیه‌یِ
+    MDI. این‌جا با override کردنِ resizeEvent، در *هر* تغییرِ اندازه‌ای
+    همه‌یِ زیرپنجره‌هایِ غیرِmaximize/غیرِminimize را دوباره به داخلِ
+    مرزهایِ تازه می‌کشیم — با همان تابعِ مشترکِ _clamp_rect_to_area که
+    MainWindow._clamp_to_mdi_area هم استفاده می‌کند، تا دو پیاده‌سازیِ
+    جدا از هم عقب نمانند."""
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        super().resizeEvent(event)
+        area = self.viewport().rect()
+        for sub_window in self.subWindowList():
+            if sub_window.isMaximized() or sub_window.isMinimized():
+                continue
+            geo = sub_window.geometry()
+            clamped = _clamp_rect_to_area(geo, area)
+            if clamped != geo:
+                sub_window.setGeometry(clamped)
+
+    def minimumSizeHint(self):  # noqa: N802 — نامِ متدِ Qt
+        # ریشه‌یِ واقعیِ باگِ تکرارشوندهٔ «حتی بعدِ ثابت‌کردنِ تسک‌بار،
+        # بازهم فرمِ اصلی زیرش می‌رود»: به‌طورِ پیش‌فرض، QMdiArea مینیمم
+        # سایزِ خودش را از رویِ بزرگ‌ترین زیرپنجره‌یِ بازِ داخلش (مثلاً
+        # فرمی با فیلدهایِ زیاد که minimumSizeHintِ طبیعیِ بزرگی دارد)
+        # محاسبه می‌کند و این عدد از طریقِ لایه‌هایِ تودرتو تا خودِ
+        # MainWindow بالا می‌رود — یعنی هرچقدر هم کلمپِ availableGeometry
+        # را صدا بزنیم، Qt خودش اجازه‌یِ کوچک‌ترشدنِ پنجره از این حدِ
+        # مینیمم را نمی‌دهد و مازادش زیرِ تسک‌بار می‌ماند. چون این کلاس
+        # از قبل دقیقاً برایِ همین حالت (زیرپنجره بزرگ‌تر از ناحیه‌یِ MDI)
+        # اسکرول‌بار نشان می‌دهد، مینیمم‌سایزِ خودش را مستقل از
+        # محتوایِ زیرپنجره‌ها نگه می‌داریم تا هیچ‌وقت این محدودیت به
+        # MainWindow تحمیل نشود.
+        return QSize(200, 150)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("پیچا")
+        # باگِ واقعیِ گزارش‌شده: در حالتِ تمام‌صفحه، پایینِ فرم‌ها زیرِ
+        # نوارِ وظیفه‌یِ ویندوز می‌رفت. اندازه‌یِ پیش‌فرضِ ۱۴۴۰×۹۰۰ روی
+        # مانیتورهایی با ارتفاعِ نمایشیِ کمتر (مثلاً ۹۰۰pxِ کامل، که بعدِ
+        # کسرِ نوارِ وظیفه چیزی حدودِ ۸۵۰px می‌ماند) از ابتدا از محدوده‌یِ
+        # قابل‌مشاهده بزرگ‌تر بود؛ maximize کردنِ بعدی هم روی بعضی
+        # پیکربندی‌هایِ ویندوز (DPI/چندمانیتوره) کاملاً به availableGeometry
+        # (که نوارِ وظیفه را کم می‌کند) احترام نمی‌گذارد. هردو با کلمپ‌کردنِ
+        # صریح به availableGeometry (به‌جایِ geometry/screenGeometریِ خام)
+        # رفع می‌شوند.
+        self._clamping_geometry = False
+        self._watched_screen: QScreen | None = None
+        self._screen_changed_connected = False
+        self._last_known_available_geometry: QRect | None = None
+        # طبقِ گزارشِ تکرارشوندهٔ کاربر («تسک‌بار را ثابت کردم، بازهم فرم
+        # زیرش رفت»): QScreen.availableGeometryChanged رویِ ویندوز برایِ
+        # toggleِ auto-hideِ نوارِ وظیفه به‌طورِ شناخته‌شده‌ای نامطمئن است —
+        # گاهی اصلاً شلیک نمی‌شود، چون خودِ ویندوز پیامِ WM_SETTINGCHANGE
+        # را همیشه به‌موقع/به‌طورِ کامل به Qt نمی‌رساند. برایِ همین، به‌جایِ
+        # تکیه‌یِ صرف به آن سیگنال، یک تایمرِ pollingِ سبک هم اضافه شده که
+        # مستقل از سیگنال، هر ۱ ثانیه availableGeometryِ واقعی را می‌خواند
+        # و اگر با آخرین مقدارِ شناخته‌شده فرق داشت، بلافاصله کلمپ می‌کند —
+        # این تنها راهِ قابل‌اطمینان برایِ گرفتنِ این حالتِ خاص است.
+        self._geometry_poll_timer = QTimer(self)
+        self._geometry_poll_timer.setInterval(1000)
+        self._geometry_poll_timer.timeout.connect(self._poll_available_geometry)
+        self._geometry_poll_timer.start()
         self.resize(1440, 900)
+        self._clamp_geometry_to_available_screen()
 
         self._screens: dict[str, QWidget] = {}
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
@@ -603,6 +717,8 @@ class MainWindow(QMainWindow):
         body.addWidget(self._build_sidebar())
         body.addWidget(self._build_mdi_area(), stretch=1)
         outer.addLayout(body, stretch=1)
+        self._outer_layout = outer
+        self._body_layout = body
 
         self._register_screens()
         self.open_screen("dashboard")
@@ -616,17 +732,197 @@ class MainWindow(QMainWindow):
         if app is not None:
             app.installEventFilter(self)
 
+    def _clamp_geometry_to_available_screen(self) -> None:
+        """پنجره را داخلِ availableGeometryِ صفحه‌یِ فعلی نگه می‌دارد —
+        یعنی هیچ‌وقت زیرِ نوارِ وظیفه (یا هر ناحیه‌یِ رزروشده‌یِ دیگرِ
+        سیستم‌عامل) نمی‌رود، برخلافِ geometry/screenGeometریِ خام."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        width = min(self.width(), available.width())
+        height = min(self.height(), available.height())
+        x = available.x() + max(0, (available.width() - width) // 2)
+        y = available.y() + max(0, (available.height() - height) // 2)
+        self.setGeometry(x, y, width, height)
+
+    def _ensure_screen_geometry_watcher(self) -> None:
+        """طبقِ گزارشِ صریح: اگر کاربر حالتِ auto-hideِ نوارِ وظیفه را در
+        حینِ بازبودنِ برنامه خاموش کند (یا هر تغییرِ دیگری در
+        availableGeometryِ صفحه رخ دهد)، هیچ‌کدام از رویدادهایِ خودِ
+        پنجره (resizeEvent/changeEvent) شلیک نمی‌شوند — چون اندازه/حالتِ
+        خودِ پنجره تغییر نکرده، فقط ناحیه‌یِ رزروشده‌یِ سیستم‌عامل عوض شده.
+        برایِ همین باید مستقیماً به QScreen.availableGeometryChanged
+        گوش داد. این‌جا وصل می‌شود (نه در __init__، چونِ self.screen()
+        پیش از نمایشِ واقعیِ پنجره قابلِ‌اتکا نیست) و اگر پنجره به
+        مانیتورِ دیگری منتقل شود هم خودش را دوباره به صفحه‌یِ تازه وصل
+        می‌کند."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        if screen is not self._watched_screen:
+            if self._watched_screen is not None:
+                try:
+                    self._watched_screen.availableGeometryChanged.disconnect(
+                        self._on_available_geometry_changed
+                    )
+                except (RuntimeError, TypeError):
+                    pass
+            screen.availableGeometryChanged.connect(self._on_available_geometry_changed)
+            self._watched_screen = screen
+        window_handle = self.windowHandle()
+        if window_handle is not None and not self._screen_changed_connected:
+            window_handle.screenChanged.connect(lambda _screen: self._ensure_screen_geometry_watcher())
+            self._screen_changed_connected = True
+
+    def _on_available_geometry_changed(self, _available: QRect) -> None:
+        QTimer.singleShot(0, self._clamp_geometry_to_available_screen)
+
+    def _poll_available_geometry(self) -> None:
+        """پشتیبانِ سیگنالِ availableGeometryChanged (ر.ک. توضیحِ کاملِ
+        دلیلِ نیاز به این تایمر در __init__)."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        if self._last_known_available_geometry is not None and available != self._last_known_available_geometry:
+            self._clamp_geometry_to_available_screen()
+        self._last_known_available_geometry = available
+
+    def changeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        # باگِ واقعیِ گزارش‌شده: رویِ بعضی پیکربندی‌هایِ ویندوز، maximize
+        # بومیِ Qt کاملاً availableGeometry را رعایت نمی‌کند و پایینِ
+        # پنجره زیرِ نوارِ وظیفه می‌رود؛ این‌جا به‌طورِ صریح آن را با
+        # availableGeometry جایگزین می‌کنیم. طبقِ گزارشِ تکرارشوندهٔ
+        # کاربر («هنوز هم زیرِ تسک‌بار می‌رود») حتی این تعویضِ صریح هم
+        # وقتی showMaximized() رویِ پنجره‌ای که هنوز هیچ‌وقت show() نشده
+        # صدا زده می‌شود (دقیقاً همان‌طور که login_window.py می‌کند) کافی
+        # نبود — چونِ تکمیلِ maximizeِ بومیِ ویندوز برایِ چنین پنجره‌ای
+        # می‌تواند بعد از این callback هم ادامه پیدا کند و geometryِ ما را
+        # دوباره بازنویسی کند. برایِ همین، کلمپ را یک تیکِ رویداد به تعویق
+        # می‌اندازیم (QTimer.singleShot(0, ...)) تا *بعدِ* تکمیلِ کاملِ
+        # maximizeِ بومی اجرا شود، نه هم‌زمان با آن.
+        if event.type() == QEvent.WindowStateChange and self.isMaximized():
+            QTimer.singleShot(0, self._clamp_geometry_to_available_screen)
+        super().changeEvent(event)
+
+    def showEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        # self.screen() پیش از نمایشِ واقعیِ پنجره (در __init__) قابلِ‌اتکا
+        # نیست — پس کلمپِ availableGeometry باید دوباره، این‌بار بعدِ
+        # واقعاً نمایان‌شدن، انجام شود.
+        super().showEvent(event)
+        if not self.isMaximized():
+            self._clamp_geometry_to_available_screen()
+        self._ensure_screen_geometry_watcher()
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            self._last_known_available_geometry = screen.availableGeometry()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        # طبقِ گزارشِ تکرارشونده‌یِ کاربر («بازهم فرم‌ها زیرِ نوارِ وظیفه
+        # می‌روند»): تکیه‌یِ صرف بر changeEvent/WindowStateChange کافی نبود
+        # — چون بعضی مدیرهایِ پنجره (به‌خصوص در چندمانیتوره/تغییرِ DPI یا
+        # snap-to-fill) اندازه‌یِ پنجره را مستقیماً به اندازه‌یِ کاملِ صفحه
+        # (نه availableGeometry) تغییر می‌دهند بدونِ اینکه پرچمِ رسمیِ
+        # Qt.WindowMaximized فعال شود؛ در آن حالت isMaximized() هنوز False
+        # است و آن مسیرِ قبلی اصلاً اجرا نمی‌شد. این‌جا، مستقل از
+        # isMaximized()، در *هر* تغییرِ اندازه‌ای بررسی می‌شود که آیا
+        # geometryِ فعلی از availableGeometry فراتر رفته — اگر رفته باشد،
+        # فوراً کلمپ می‌شود.
+        super().resizeEvent(event)
+        self._clamp_if_overflowing_available_screen()
+
+    def _clamp_if_overflowing_available_screen(self) -> None:
+        if self._clamping_geometry:
+            return
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        geo = self.geometry()
+        if available.contains(geo):
+            return
+        width = min(geo.width(), available.width())
+        height = min(geo.height(), available.height())
+        x = min(max(geo.x(), available.x()), available.x() + available.width() - width)
+        y = min(max(geo.y(), available.y()), available.y() + available.height() - height)
+        self._clamping_geometry = True
+        try:
+            self.setGeometry(x, y, width, height)
+        finally:
+            self._clamping_geometry = False
+
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 — نامِ متدِ Qt
         if event.type() == QEvent.KeyPress and event.key() == Qt.Key_F2:
             target = QApplication.activeModalWidget() or (
                 self.mdi_area.activeSubWindow().widget() if self.mdi_area.activeSubWindow() else self
             )
+            # طبقِ باگِ کشف‌شده («F2 دیگر کار نمی‌کند»): دورِ تبدیلِ دکمه‌ها به
+            # آیکون+تولتیپ (بازرگانی/انبار/حسابداری/...)، objectNameِ دکمه‌ی
+            # اصلی را از "primaryButton" به "primaryIconButton" تغییر داد،
+            # بدونِ به‌روزرسانیِ همین فیلتر — یعنی F2 در تقریباً همه‌ی
+            # فرم‌هایِ تراکنشی/تنظیماتِ اصلیِ برنامه (بیش از ۴۰ فایل) اثری
+            # نداشت. حالا هر دو نامِ objectName پذیرفته می‌شوند.
             for button in target.findChildren(QPushButton):
-                if button.objectName() == "primaryButton" and button.isVisible() and button.isEnabled():
+                if button.objectName() in ("primaryButton", "primaryIconButton") and button.isVisible() and button.isEnabled():
                     button.click()
                     return True
             return False
         return super().eventFilter(obj, event)
+
+    # --- سوییچِ زنده‌یِ تمِ روشن/تیره ---------------------------------------
+    def _on_theme_toggled(self, light_checked: bool) -> None:
+        """طبقِ خواسته‌یِ صریح: سوییچِ واقعیِ رفت‌وبرگشتی بینِ تمِ روشن/تیره،
+        بدونِ نیاز به ری‌استارتِ برنامه. `theme.set_theme_mode` خودش
+        QPalette/QSS/QSettings را هندل می‌کند و یک پاسِ repolish رویِ
+        همه‌یِ ویجت‌هایِ زنده می‌زند (کافی برایِ اکثرِ سطحِ برنامه — جدول‌ها،
+        فیلدها، دکمه‌ها، کارت‌ها، تب‌ها). آنچه repolish پوشش نمی‌دهد
+        (HoverButtonِ سرتیترها/آیتم‌هایِ ساید‌بار که رنگِ هاورشان را در
+        __init__ منجمد می‌کنند) با بازسازیِ درجایِ کرومِ هدر/ریبون/ساید‌بار
+        در `_rebuild_chrome()` رفع می‌شود."""
+        app = QApplication.instance()
+        theme.set_theme_mode(app, dark=not light_checked)
+        self._rebuild_chrome()
+        for screen in self._screens.values():
+            refresh = getattr(screen, "refresh", None)
+            if callable(refresh):
+                refresh()
+        self.mdi_area.setBackground(QBrush(QColor(theme.BACKGROUND)))
+
+    def _rebuild_chrome(self) -> None:
+        """هدر/ریبون/ساید‌بار را با مقادیرِ تازه‌یِ theme.* دوباره می‌سازد
+        و به‌جایِ نسخه‌هایِ قدیمی در همان جایگاهِ layout می‌نشاند — چون
+        HoverButton (سرتیترها/آیتم‌هایِ ساید‌بار، دکمه‌یِ گیر) رنگِ
+        پس‌زمینه‌یِ هاور/فعالش را در __init__ منجمد می‌کند."""
+        old_header, old_quick_access, old_sidebar = (
+            self._header_scroll, self._quick_access_scroll, self._sidebar_scroll,
+        )
+        active_leaf = self._current_screen_code
+        active_module = self._quick_access_module_code
+
+        new_header = self._build_header()
+        self._outer_layout.replaceWidget(old_header, new_header)
+        old_header.deleteLater()
+
+        new_quick_access = self._build_quick_access_bar()
+        self._outer_layout.replaceWidget(old_quick_access, new_quick_access)
+        old_quick_access.deleteLater()
+
+        new_sidebar = self._build_sidebar()
+        self._body_layout.replaceWidget(old_sidebar, new_sidebar)
+        old_sidebar.deleteLater()
+
+        # طبقِ الگویِ خودِ open_screen: بازگردانیِ متن/گزینه‌هایِ کمبوهایِ
+        # هدر (شرکت/سالِ مالی/زبان)، ریبونِ ماژولِ فعلی، و آیتمِ فعالِ
+        # ساید‌بار — چون کمبو/ریبون/ساید‌بارِ تازه‌ساخته‌شده خالی یا رویِ
+        # پیش‌فرضِ داشبورد شروع می‌شوند.
+        self.load_context_switcher()
+        if active_module and active_module != "dashboard":
+            self._quick_access_module_code = None
+            self._refresh_quick_access_bar(active_module)
+        if active_leaf:
+            for group in self._sidebar_groups.values():
+                group.set_active_leaf(active_leaf)
 
     # --- هدر --------------------------------------------------------------
     def _build_header(self) -> QWidget:
@@ -636,7 +932,7 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(68)
+        scroll.setFixedHeight(72)
 
         header = QWidget()
         header.setObjectName("headerBar")
@@ -644,13 +940,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(24, 8, 24, 8)
         layout.setSpacing(16)
 
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(10)
+        brand_mark = QLabel()
+        brand_mark.setFixedSize(34, 34)
+        brand_mark.setAlignment(Qt.AlignCenter)
+        brand_mark.setPixmap(theme.logo_pixmap(20, theme.PRIMARY))
+        brand_mark.setStyleSheet(
+            f"background-color: {theme.rgba(theme.ACCENT, 0.18)}; "
+            f"border: 1px solid {theme.rgba(theme.ACCENT, 0.35)}; "
+            f"border-radius: 11px;"
+        )
+        brand_row.addWidget(brand_mark)
+
         brand = QLabel("پیچا")
         brand_font = QFont()
         brand_font.setPointSize(15)
         brand_font.setBold(True)
         brand.setFont(brand_font)
-        brand.setStyleSheet(f"color: {theme.ACCENT};")
-        layout.addWidget(brand)
+        brand.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
+        brand_row.addWidget(brand)
+        layout.addLayout(brand_row)
 
         divider0 = QFrame()
         divider0.setFrameShape(QFrame.VLine)
@@ -668,13 +978,33 @@ class MainWindow(QMainWindow):
         self.field_help_toggle.setStyleSheet(
             "#fieldHelpToggle {"
             "   border: none; border-radius: 14px; padding: 4px 10px;"
-            "   font-size: 15px; color: #8a93a6; background: transparent;"
+            f"   font-size: 15px; color: {theme.TEXT_SECONDARY}; background: transparent;"
             "}"
-            "#fieldHelpToggle:checked { color: #f5a524; background: rgba(245, 165, 36, 40); }"
-            "#fieldHelpToggle:hover { background: rgba(245, 165, 36, 25); }"
+            f"#fieldHelpToggle:checked {{ color: {theme.WARNING}; background: {theme.rgba(theme.WARNING, 0.16)}; }}"
+            f"#fieldHelpToggle:hover {{ background: {theme.rgba(theme.WARNING, 0.10)}; }}"
         )
         self.field_help_toggle.toggled.connect(set_field_help_enabled)
         layout.addWidget(self.field_help_toggle)
+
+        # طبقِ خواسته‌یِ صریح: سوییچِ زنده‌یِ روشن/تیره — گلیف نشان‌دهنده‌یِ
+        # حالتِ *مقصد* است (اگر الان تیره‌ایم، آفتاب یعنی «برو روشن»),
+        # هم‌الگو با field_help_toggle (همان objectName-styling).
+        self.theme_toggle = QToolButton()
+        self.theme_toggle.setObjectName("fieldHelpToggle")
+        self.theme_toggle.setCheckable(True)
+        self.theme_toggle.setChecked(not theme.is_dark_mode())
+        self.theme_toggle.setCursor(Qt.PointingHandCursor)
+        self.theme_toggle.setText("☀" if theme.is_dark_mode() else "🌙")
+        self.theme_toggle.setToolTip("رفتن به حالتِ روشن" if theme.is_dark_mode() else "رفتن به حالتِ تیره")
+        self.theme_toggle.setStyleSheet(
+            "#fieldHelpToggle {"
+            "   border: none; border-radius: 14px; padding: 4px 10px;"
+            f"   font-size: 15px; color: {theme.TEXT_SECONDARY}; background: transparent;"
+            "}"
+            f"#fieldHelpToggle:hover {{ background: {theme.rgba(theme.PRIMARY, 0.10)}; }}"
+        )
+        self.theme_toggle.toggled.connect(self._on_theme_toggled)
+        layout.addWidget(self.theme_toggle)
 
         self.search_field = QLineEdit()
         self.search_field.setPlaceholderText("⌕  جستجو در سیستم...")
@@ -734,12 +1064,13 @@ class MainWindow(QMainWindow):
         scroll.setWidget(header)
 
         header_shadow = QGraphicsDropShadowEffect(scroll)
-        header_shadow.setBlurRadius(18)
+        header_shadow.setBlurRadius(24)
         header_shadow.setXOffset(0)
-        header_shadow.setYOffset(3)
-        header_shadow.setColor(QColor(21, 22, 43, 20))
+        header_shadow.setYOffset(4)
+        header_shadow.setColor(QColor(0, 0, 0, 110))
         scroll.setGraphicsEffect(header_shadow)
 
+        self._header_scroll = scroll
         return scroll
 
     # --- ریبونِ میان‌برهایِ پرکاربرد -------------------------------------------
@@ -750,7 +1081,7 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(92)
+        scroll.setFixedHeight(96)
 
         bar = QWidget()
         bar.setObjectName("quickAccessBar")
@@ -895,7 +1226,7 @@ class MainWindow(QMainWindow):
 
     # --- ناحیه‌ی کاریِ MDI (فرم‌هایِ شناور) --------------------------------------
     def _build_mdi_area(self) -> QWidget:
-        self.mdi_area = QMdiArea()
+        self.mdi_area = _ClampingMdiArea()
         self.mdi_area.setObjectName("mdiArea")
         self.mdi_area.setActivationOrder(QMdiArea.ActivationHistoryOrder)
         self.mdi_area.setViewMode(QMdiArea.SubWindowView)
@@ -1017,6 +1348,25 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.detail_accounts_list import DetailAccountsListScreen
         from peecha.ui.screens.detail_dimensions import DetailDimensionsScreen
         from peecha.ui.screens.dimension_group_config import DimensionGroupConfigScreen
+        from peecha.ui.screens.hr_job_grades import JobGradesScreen
+        from peecha.ui.screens.hr_org_units import OrgUnitsScreen
+        from peecha.ui.screens.hr_positions import PositionsScreen
+        from peecha.ui.screens.payroll_run import PayrollRunScreen
+        from peecha.ui.screens.payroll_loans import PayrollLoansScreen
+        from peecha.ui.screens.payroll_overtime_entries import PayrollOvertimeEntriesScreen
+        from peecha.ui.screens.hr_attendance_entries import HrAttendanceEntriesScreen
+        from peecha.ui.screens.hr_attendance_summary import HrAttendanceSummaryScreen
+        from peecha.ui.screens.inventory_warehouses import InventoryWarehousesScreen
+        from peecha.ui.screens.inventory_document import InventoryDocumentScreen
+        from peecha.ui.screens.inventory_documents_list import InventoryDocumentsListScreen
+        from peecha.ui.screens.commercial_document import CommercialDocumentScreen
+        from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
+        from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
+        from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
+        from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
+        from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
+        from peecha.ui.screens.commercial_aftersales import CommercialAftersalesScreen
+        from peecha.ui.screens.commercial_purchasing_extras import CommercialPurchasingExtrasScreen
         from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen
         from peecha.ui.screens.journal_entry import JournalEntryScreen
         from peecha.ui.screens.my_tasks import MyTasksScreen
@@ -1025,6 +1375,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_anomalies import AnomaliesScreen
         from peecha.ui.screens.report_balance_sheet import BalanceSheetScreen
         from peecha.ui.screens.report_cash_flow import CashFlowScreen
+        from peecha.ui.screens.report_cost_center_breakdown import CostCenterBreakdownScreen
         from peecha.ui.screens.report_custom_statement import CustomStatementScreen
         from peecha.ui.screens.report_equity_changes import EquityChangesScreen
         from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen
@@ -1036,10 +1387,14 @@ class MainWindow(QMainWindow):
             StatementTemplateDesignerScreen,
         )
         from peecha.ui.screens.my_tasks import register_open_handler
+        from peecha.ui.screens.bank_reconciliation import BankReconciliationScreen
+        from peecha.ui.screens.report_checks import ChecksReportScreen
         from peecha.ui.screens.system_settings import SystemSettingsScreen
+        from peecha.ui.screens.system_backup import SystemBackupScreen
         from peecha.ui.screens.treasury_checks import IssuedChecksScreen, ReceivedChecksScreen
         from peecha.ui.screens.treasury_reports import TreasuryChecksDueScreen
         from peecha.ui.screens.treasury_voucher import TreasuryVoucherScreen
+        from peecha.ui.screens.treasury_petty_cash import PettyCashScreen
 
         # طبقِ درخواستِ صریح («سیستمِ کارتابلِ قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
         # هر ماژولی که واردِ کارتابل می‌شود، فقط همین یک خط این‌جا اضافه
@@ -1056,13 +1411,52 @@ class MainWindow(QMainWindow):
         self.register_screen("placeholder", PlaceholderScreen())
         self.register_screen("chart_of_accounts", ChartOfAccountsScreen())
         self.register_screen("system_settings", SystemSettingsScreen())
+        self.register_screen("system_backup", SystemBackupScreen())
         self.register_screen("dimension_group_config", DimensionGroupConfigScreen())
         self.register_screen("detail_dimensions", DetailDimensionsScreen())
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
         self.register_screen("journal_entry", JournalEntryScreen())
         self.register_screen("journal_entries_list", JournalEntriesListScreen(self))
-        self.register_screen("treasury_voucher_receipt", TreasuryVoucherScreen("RECEIPT"))
-        self.register_screen("treasury_voucher_payment", TreasuryVoucherScreen("PAYMENT"))
+        self.register_screen("hr_org_units", OrgUnitsScreen())
+        self.register_screen("hr_job_grades", JobGradesScreen())
+        self.register_screen("hr_positions", PositionsScreen())
+        self.register_screen("payroll_run", PayrollRunScreen())
+        self.register_screen("payroll_loans", PayrollLoansScreen())
+        self.register_screen("payroll_overtime_entries", PayrollOvertimeEntriesScreen())
+        self.register_screen("hr_attendance_entries", HrAttendanceEntriesScreen())
+        self.register_screen("hr_attendance_summary", HrAttendanceSummaryScreen())
+        self.register_screen("inventory_warehouses", InventoryWarehousesScreen())
+        self.register_screen("inventory_documents_list", InventoryDocumentsListScreen(self))
+        self.register_screen("inventory_document_receipt", InventoryDocumentScreen("RECEIPT", self))
+        self.register_screen("inventory_document_issue", InventoryDocumentScreen("ISSUE", self))
+        self.register_screen("inventory_document_transfer", InventoryDocumentScreen("TRANSFER", self))
+        self.register_screen("inventory_document_return_in", InventoryDocumentScreen("RETURN_IN", self))
+        self.register_screen("inventory_document_return_out", InventoryDocumentScreen("RETURN_OUT", self))
+        self.register_screen("inventory_document_adjustment", InventoryDocumentScreen("ADJUSTMENT", self))
+        self.register_screen("commercial_document_sales_order", CommercialDocumentScreen("SALES_ORDER", self))
+        self.register_screen("commercial_document_sales_proforma", CommercialDocumentScreen("SALES_PROFORMA", self))
+        self.register_screen("commercial_document_sales_invoice", CommercialDocumentScreen("SALES_INVOICE", self))
+        self.register_screen("commercial_document_sales_return", CommercialDocumentScreen("SALES_RETURN", self))
+        self.register_screen("commercial_document_purchase_order", CommercialDocumentScreen("PURCHASE_ORDER", self))
+        self.register_screen("commercial_document_purchase_proforma", CommercialDocumentScreen("PURCHASE_PROFORMA", self))
+        self.register_screen("commercial_document_purchase_invoice", CommercialDocumentScreen("PURCHASE_INVOICE", self))
+        self.register_screen("commercial_document_purchase_return", CommercialDocumentScreen("PURCHASE_RETURN", self))
+        self.register_screen(
+            "commercial_documents_list_sales",
+            CommercialDocumentsListScreen(self, type_filter_codes=("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN")),
+        )
+        self.register_screen(
+            "commercial_documents_list_purchase",
+            CommercialDocumentsListScreen(self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN")),
+        )
+        self.register_screen("commercial_pricing", CommercialPricingScreen())
+        self.register_screen("commercial_pos_sessions", CommercialPosSessionsScreen())
+        self.register_screen("commercial_pos_sale", CommercialPosSaleScreen())
+        self.register_screen("commercial_ecommerce", CommercialEcommerceScreen())
+        self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
+        self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())
+        self.register_screen("treasury_voucher_receipt", TreasuryVoucherScreen("RECEIPT", self))
+        self.register_screen("treasury_voucher_payment", TreasuryVoucherScreen("PAYMENT", self))
         self.register_screen(
             "treasury_vouchers_list",
             JournalEntriesListScreen(
@@ -1076,15 +1470,34 @@ class MainWindow(QMainWindow):
                 # سندِ موجود.
             ),
         )
+        # طبقِ ساختارِ واقعیِ تنخواه‌گردان (نه یک فرمِ پرداختِ سرپوش‌دار):
+        # هر تنخواه‌دار (تفصیلیِ سطحِ آخرِ گروهِ «تنخواه») می‌تواند چند
+        # تنخواهِ بازِ هم‌زمان داشته باشد، هرکدام با شماره‌یِ خودکارِ
+        # مستقل؛ افتتاح = یک سندِ پرداختِ واقعی، ردیف‌هایِ ثبت‌شده در دورانِ
+        # بازبودن هیچ سندی نمی‌سازند، بستن = یک سندِ موقتِ پیش‌نویس که
+        # تنخواه‌دار را بستانکار می‌کند.
+        self.register_screen("treasury_petty_cash", PettyCashScreen(self))
+        self.register_screen(
+            "treasury_petty_cash_list",
+            JournalEntriesListScreen(
+                self,
+                entry_type_codes=["TANKHAH"],
+                title="اسنادِ تنخواه‌گردان",
+                new_entry_options=[("+ تنخواه‌گردان", "TREASURY_PETTY_CASH")],
+            ),
+        )
         self.register_screen("treasury_checks_received", ReceivedChecksScreen())
         self.register_screen("treasury_checks_issued", IssuedChecksScreen())
         self.register_screen("treasury_checks_due", TreasuryChecksDueScreen())
+        self.register_screen("report_checks", ChecksReportScreen())
+        self.register_screen("bank_reconciliation", BankReconciliationScreen())
         self.register_screen("report_trial_balance", TrialBalanceScreen())
         self.register_screen("report_journal_book", JournalBookScreen())
         self.register_screen("report_account_ledger", AccountLedgerScreen())
         self.register_screen("report_income_statement", IncomeStatementScreen())
         self.register_screen("report_balance_sheet", BalanceSheetScreen())
         self.register_screen("report_cash_flow", CashFlowScreen())
+        self.register_screen("report_cost_center_breakdown", CostCenterBreakdownScreen())
         self.register_screen("report_equity_changes", EquityChangesScreen())
         self.register_screen("report_custom_statement", CustomStatementScreen())
         self.register_screen("statement_template_designer", StatementTemplateDesignerScreen())
@@ -1213,17 +1626,10 @@ class MainWindow(QMainWindow):
 
     def _clamp_to_mdi_area(self, rect: QRect) -> QRect:
         """اگر جایگاهِ ذخیره‌شده (مثلاً از یک اجرایِ قبلی با پنجره‌یِ بزرگ‌تر)
-        دیگر تویِ ناحیه‌یِ MDIِ فعلی جا نشود، خودمان با ریاضیِ ساده‌یِ
-        فیزیکی (نه با تکیه بر مکانیزمِ داخلیِ QMdiArea که تحتِ راست‌چین
-        درست عمل نمی‌کند) آن را به داخلِ مرزها می‌کشیم."""
-        area = self.mdi_area.rect()
-        width = min(rect.width(), max(area.width(), _MIN_SUBWINDOW_SIZE.width()))
-        height = min(rect.height(), max(area.height(), _MIN_SUBWINDOW_SIZE.height()))
-        max_x = max(0, area.width() - width)
-        max_y = max(0, area.height() - height)
-        x = min(max(rect.x(), 0), max_x)
-        y = min(max(rect.y(), 0), max_y)
-        return QRect(x, y, width, height)
+        دیگر تویِ ناحیه‌یِ MDIِ فعلی جا نشود، آن را به داخلِ مرزها می‌کشیم
+        — با همان تابعِ مشترکِ _clamp_rect_to_area که _ClampingMdiArea هم
+        رویِ هر resizeِ زنده استفاده می‌کند."""
+        return _clamp_rect_to_area(rect, self.mdi_area.rect())
 
     def _highlight_active_leaf(self, code: str) -> None:
         for group in self._sidebar_groups.values():

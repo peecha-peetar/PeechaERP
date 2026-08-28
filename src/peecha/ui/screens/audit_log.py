@@ -35,10 +35,10 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self._rows: list[audit_service.ActivityLogRow] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("ردِ حسابرسی")
+        title = QLabel("وقایعِ کاربران")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 

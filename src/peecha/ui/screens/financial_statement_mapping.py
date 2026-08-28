@@ -14,7 +14,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,
@@ -27,6 +26,7 @@ from PySide6.QtWidgets import (
 from peecha import session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.ui import theme
+from peecha.ui.widgets import wrap_scrollable_with_footer
 
 _CATEGORY_OPTIONS = [
     ("ASSET", "دارایی"), ("LIABILITY", "بدهی"), ("EQUITY", "حقوق صاحبان سهام"),
@@ -36,9 +36,11 @@ _CATEGORY_OPTIONS = [
 _ACCOUNT_TYPE_OPTIONS = [("PERMANENT", "ترازنامه‌ای"), ("TEMPORARY", "موقت"), ("STATISTICAL", "انتظامی")]
 _CASH_FLOW_SECTION_OPTIONS = [
     (None, "— بدونِ طبقه‌بندی —"),
-    ("OPERATING", "عملیاتی"),
-    ("INVESTING", "سرمایه‌گذاری"),
-    ("FINANCING", "تامینِ مالی"),
+    ("OPERATING", "۱. فعالیت‌هایِ عملیاتی"),
+    ("INVESTMENT_RETURNS_FINANCE_COST", "۲. بازده‌یِ سرمایه‌گذاری‌ها و سودِ پرداختیِ تامینِ مالی"),
+    ("INCOME_TAX", "۳. مالیات بر درآمد"),
+    ("INVESTING", "۴. فعالیت‌هایِ سرمایه‌گذاری"),
+    ("FINANCING", "۵. فعالیت‌هایِ تامینِ مالی"),
 ]
 _LIQUIDITY_CLASS_OPTIONS = [
     (None, "— بدونِ طبقه‌بندی —"),
@@ -46,9 +48,14 @@ _LIQUIDITY_CLASS_OPTIONS = [
     ("CURRENT_INVENTORY", "جاری (موجودی)"),
     ("NON_CURRENT", "غیرِجاری"),
 ]
+_BALANCE_SHEET_SIDE_OPTIONS = [
+    (None, "— خودکار (از رویِ دسته) —"),
+    ("RIGHT", "راست"),
+    ("LEFT", "چپ"),
+]
 
 _COLUMNS = [
-    "کد", "نام", "دسته‌یِ حساب", "نوعِ حساب", "بخشِ گردشِ نقد", "طبقه‌یِ نقدینگی", "",
+    "کد", "نام", "دسته‌یِ حساب", "نوعِ حساب", "بخشِ گردشِ نقد", "طبقه‌یِ نقدینگی", "سمتِ ترازنامه",
 ]
 
 
@@ -64,19 +71,32 @@ class FinancialStatementMappingScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[coa_service.AccountRow] = []
+        # ردیف‌هایی که کاربر تغییر داده ولی هنوز ذخیره نشده‌اند — طبقِ
+        # رفعِ باگِ صریح («چندین دکمه‌ی ذخیره روی هر ردیف، خیلی شلوغ و
+        # سخت‌مدیریت است»)، دیگر هر ردیف دکمه‌ی ذخیره‌ی جداگانه ندارد؛ یک
+        # دکمه‌ی واحد در فوترِ صفحه همه‌ی ردیف‌هایِ تغییریافته را یک‌جا
+        # ذخیره می‌کند (هم‌الگو با یکپارچه‌سازیِ نوارِ دکمه‌هایِ بقیه‌یِ
+        # فرم‌ها طبقِ همان قاعده‌یِ ثابتِ چیدمان).
+        self._dirty_rows: set[int] = set()
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("نگاشتِ صورت‌هایِ مالی")
+        title = QLabel("تنظیماتِ صورت‌هایِ مالی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         hint = QLabel(
             "مشخص کنید هر گروهِ حساب در کدام گزارشِ مالی بیاید: دارایی/بدهی/سرمایه در ترازنامه، "
             "درآمد/هزینه در سود و زیان. «بخشِ گردشِ نقد» و «طبقه‌یِ نقدینگی» اختیاری‌اند و فقط در "
-            "گزارش‌هایِ مربوطه اثر دارند. با ذخیره، همه‌یِ زیرمجموعه‌هایِ همان گروه هم به‌روز می‌شوند."
+            "گزارش‌هایِ مربوطه اثر دارند. تغییراتِ همه‌یِ ردیف‌ها را با یک دکمه‌یِ ذخیره در پایینِ "
+            "صفحه یک‌جا ثبت کنید."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -86,8 +106,8 @@ class FinancialStatementMappingScreen(QWidget):
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        # طبقِ بازخورد: ارتفاعِ پیش‌فرضِ ردیف برایِ سه‌تا کمبوباکس+دکمه در
-        # یک ردیف کافی نبود (فیلدها فشرده/نصفه دیده می‌شدند) — هم‌الگو با
+        # طبقِ بازخورد: ارتفاعِ پیش‌فرضِ ردیف برایِ پنج‌تا کمبوباکس در یک
+        # ردیف کافی نبود (فیلدها فشرده/نصفه دیده می‌شدند) — هم‌الگو با
         # همین رفعِ باگ در journal_entry.py.
         self.table.verticalHeader().setDefaultSectionSize(48)
         header = self.table.horizontalHeader()
@@ -95,23 +115,31 @@ class FinancialStatementMappingScreen(QWidget):
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         # ستون‌هایِ کمبوباکس باید به‌اندازه‌یِ کافی عریض باشند، وگرنه متنِ
         # گزینه‌هایِ بلندتر (مثلِ «حقوق صاحبانِ سهام») بریده نشان داده می‌شود.
-        combo_widths = {2: 190, 3: 130, 4: 150, 5: 150}
+        combo_widths = {2: 190, 3: 130, 4: 340, 5: 150, 6: 170}
         for combo_col, width in combo_widths.items():
             self.table.setColumnWidth(combo_col, width)
             header.setSectionResizeMode(combo_col, QHeaderView.Fixed)
-        self.table.setColumnWidth(6, 90)
-        header.setSectionResizeMode(6, QHeaderView.Fixed)
         layout.addWidget(self.table, stretch=1)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
+        self.save_button = QPushButton("💾")
+        self.save_button.setObjectName("primaryIconButton")
+        self.save_button.setFixedWidth(48)
+        self.save_button.setToolTip("ذخیره‌یِ تغییرات")
+        self.save_button.setEnabled(False)
+        self.save_button.clicked.connect(self._save_all)
+        outer.addWidget(wrap_scrollable_with_footer(content, [self.save_button]), stretch=1)
+
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
 
     def refresh(self) -> None:
         self.status_label.setText("")
+        self._dirty_rows = set()
+        self.save_button.setEnabled(False)
         company_id = self._company_id()
         self._rows = (
             [r for r in coa_service.list_accounts(company_id) if r.account_level == 1] if company_id is not None else []
@@ -137,46 +165,53 @@ class FinancialStatementMappingScreen(QWidget):
             _fill_combo(liquidity_class_combo, _LIQUIDITY_CLASS_OPTIONS, account.liquidity_class_code)
             self.table.setCellWidget(row_index, 5, liquidity_class_combo)
 
-            save_button = QPushButton("ذخیره")
-            save_button.setObjectName("flatButton")
-            save_button.clicked.connect(
-                lambda _checked=False, r=row_index: self._save_row(
-                    r, category_combo, account_type_combo, cash_flow_combo, liquidity_class_combo
-                )
-            )
-            cell = QWidget()
-            cell_layout = QHBoxLayout(cell)
-            cell_layout.setContentsMargins(4, 0, 4, 0)
-            cell_layout.addWidget(save_button)
-            self.table.setCellWidget(row_index, 6, cell)
+            balance_sheet_side_combo = QComboBox()
+            _fill_combo(balance_sheet_side_combo, _BALANCE_SHEET_SIDE_OPTIONS, account.balance_sheet_side_code)
+            self.table.setCellWidget(row_index, 6, balance_sheet_side_combo)
 
-    def _save_row(
-        self,
-        row_index: int,
-        category_combo: QComboBox,
-        account_type_combo: QComboBox,
-        cash_flow_combo: QComboBox,
-        liquidity_class_combo: QComboBox,
-    ) -> None:
+            for combo in (
+                category_combo, account_type_combo, cash_flow_combo, liquidity_class_combo, balance_sheet_side_combo,
+            ):
+                combo.currentIndexChanged.connect(lambda _index, r=row_index: self._mark_dirty(r))
+
+    def _mark_dirty(self, row_index: int) -> None:
+        self._dirty_rows.add(row_index)
+        self.save_button.setEnabled(True)
+
+    def _save_all(self) -> None:
         company_id = self._company_id()
-        if company_id is None or row_index >= len(self._rows):
+        if company_id is None or not self._dirty_rows:
             return
-        account = self._rows[row_index]
-        try:
-            coa_service.update_account(
-                account.account_id,
-                company_id,
-                account.name,
-                account.nature_code,
-                category_combo.currentData(),
-                account_type_combo.currentData(),
-                account.is_postable,
-                session.current_company.default_language_id if session.current_company else None,
-                changed_by_user_id=session.current_user.user_id if session.current_user else None,
-                cash_flow_section_code=cash_flow_combo.currentData(),
-                liquidity_class_code=liquidity_class_combo.currentData(),
-            )
-        except ValueError as exc:
-            theme.set_status_label(self.status_label, str(exc), ok=False)
-            return
-        theme.set_status_label(self.status_label, f"نگاشتِ حسابِ «{account.full_code}» ذخیره شد.", ok=True)
+        saved_codes: list[str] = []
+        for row_index in sorted(self._dirty_rows):
+            if row_index >= len(self._rows):
+                continue
+            account = self._rows[row_index]
+            category_combo = self.table.cellWidget(row_index, 2)
+            account_type_combo = self.table.cellWidget(row_index, 3)
+            cash_flow_combo = self.table.cellWidget(row_index, 4)
+            liquidity_class_combo = self.table.cellWidget(row_index, 5)
+            balance_sheet_side_combo = self.table.cellWidget(row_index, 6)
+            try:
+                coa_service.update_account(
+                    account.account_id,
+                    company_id,
+                    account.name,
+                    account.nature_code,
+                    category_combo.currentData(),
+                    account_type_combo.currentData(),
+                    account.is_postable,
+                    session.current_company.default_language_id if session.current_company else None,
+                    changed_by_user_id=session.current_user.user_id if session.current_user else None,
+                    cash_flow_section_code=cash_flow_combo.currentData(),
+                    liquidity_class_code=liquidity_class_combo.currentData(),
+                    balance_sheet_side_code=balance_sheet_side_combo.currentData(),
+                )
+                saved_codes.append(account.full_code)
+            except ValueError as exc:
+                theme.set_status_label(self.status_label, f"«{account.full_code}»: {exc}", ok=False)
+                return
+        self.refresh()
+        theme.set_status_label(
+            self.status_label, f"تنظیماتِ {len(saved_codes)} گروهِ حساب ذخیره شد.", ok=True
+        )

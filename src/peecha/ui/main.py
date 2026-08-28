@@ -80,13 +80,20 @@ def main() -> None:
     # سبکِ بومیِ ویندوز/مک که ظاهرِ کارت/دکمه‌های مدرنِ QSSِ ما را با
     # جلوه‌های پیش‌فرضِ خودش (سایه/حاشیه‌ی متفاوت) قاطی می‌کند.
     app.setStyle("Fusion")
+    # طبقِ خواسته‌یِ صریح: لوگویِ برند به‌عنوانِ آیکونِ اپ/تسک‌بار — همه‌یِ
+    # پنجره‌هایِ بی‌آیکونِ اختصاصی (ورود، شِلِ اصلی) این را به ارث می‌برند.
+    app.setWindowIcon(theme.app_icon())
 
     font_family = get_font_family()
     app.setFont(QFont(font_family, 11.5))
     # علاوه بر QApplication.setFont، فونت را صریحاً در QSS هم می‌گذاریم —
     # بعضی کنترل‌های استایل‌شده (مثلِ سرستونِ جدول) به‌طورِ قابلِ‌اتکا فقط
     # به font-family در stylesheet واکنش نشان می‌دهند، نه setFont برنامه.
-    app.setStyleSheet(f'* {{ font-family: "{font_family}"; }}\n' + theme.GLOBAL_QSS)
+    theme.set_font_family(font_family)
+    # طبقِ خواسته‌یِ صریح: حالتِ روشن/تیره‌یِ ذخیره‌شده‌یِ کاربر (یا
+    # پیش‌فرضِ تیره اگر هنوز سوییچ نکرده) — هم QPalette هم QSS را با هم
+    # اعمال می‌کند، پس دیگر نیازی به فراخوانیِ جداگانه‌یِ apply_palette نیست.
+    theme.set_theme_mode(app, theme.load_saved_theme_mode())
 
     from peecha.ui.login_window import LoginWindow  # noqa: PLC0415
 

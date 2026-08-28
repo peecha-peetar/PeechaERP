@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import decimal
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -26,12 +28,19 @@ from peecha.services import company_cloning
 from peecha.services import languages as languages_service
 from peecha.services import users as users_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    LayoutEditMixin,
+    PersianDigitLineEdit,
+    wrap_scrollable_with_footer,
+)
 
 _COLUMNS = ["فعال", "زبانِ پیش‌فرض", "ارزِ پایه", "نامِ نمایشی", "کد"]
 
 
-class CompaniesScreen(FieldHelpMixin, QWidget):
+class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[companies_service.CompanyRow] = []
@@ -40,7 +49,7 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         self._language_options: list[languages_service.LanguageRow] = []
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=2)
@@ -118,7 +127,7 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         panel = QWidget()
         panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(12)
 
         title = QLabel("شرکت‌ها")
@@ -137,79 +146,61 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
 
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setObjectName("card")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
         self.form_title = QLabel("شرکتِ جدید")
         self.form_title.setObjectName("pageTitle")
         layout.addWidget(self.form_title)
 
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        row = 0
-
-        grid.addWidget(QLabel("کد"), row, 0)
         self.code_field = QLineEdit()
-        grid.addWidget(self.code_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("نامِ حقوقی"), row, 0)
         self.legal_name_field = QLineEdit()
-        grid.addWidget(self.legal_name_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("نامِ نمایشی"), row, 0)
         self.display_name_field = QLineEdit()
-        grid.addWidget(self.display_name_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("ارزِ پایه"), row, 0)
         self.currency_combo = QComboBox()
-        grid.addWidget(self.currency_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("زبانِ پیش‌فرض"), row, 0)
         self.language_combo = QComboBox()
-        grid.addWidget(self.language_combo, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("ماهِ شروعِ سالِ مالی"), row, 0)
         self.fy_month_field = QSpinBox()
         self.fy_month_field.setRange(1, 12)
         self.fy_month_field.setValue(1)
-        grid.addWidget(self.fy_month_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("روزِ شروعِ سالِ مالی"), row, 0)
         self.fy_day_field = QSpinBox()
         self.fy_day_field.setRange(1, 31)
         self.fy_day_field.setValue(1)
-        grid.addWidget(self.fy_day_field, row, 1)
-        row += 1
 
-        grid.addWidget(QLabel("کدِ اقتصادی"), row, 0)
-        self.economic_code_field = QLineEdit()
-        grid.addWidget(self.economic_code_field, row, 1)
-        row += 1
+        self.economic_code_field = PersianDigitLineEdit()
 
-        grid.addWidget(QLabel("شماره‌ی ثبت"), row, 0)
-        self.registration_no_field = QLineEdit()
-        grid.addWidget(self.registration_no_field, row, 1)
-        row += 1
+        self.registration_no_field = PersianDigitLineEdit()
 
-        grid.addWidget(QLabel("شناسه‌ی ملی"), row, 0)
-        self.national_id_field = QLineEdit()
-        grid.addWidget(self.national_id_field, row, 1)
-        row += 1
+        self.national_id_field = PersianDigitLineEdit()
+
+        # طبقِ درخواستِ صریح: درصدِ مالیاتِ پیش‌فرضِ سراسری — وقتی کالایی
+        # درصدِ مالیاتِ خودش را نداشته باشد، از همین مقدار استفاده می‌شود.
+        self.default_tax_percent_field = PersianDigitLineEdit()
 
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
-        grid.addWidget(self.is_active_checkbox, row, 1)
-        row += 1
 
-        layout.addLayout(grid)
+        self.basic_grid = FieldGrid([
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("legal_name", "نامِ حقوقی", self.legal_name_field, span=2),
+            FieldSpec("display_name", "نامِ نمایشی", self.display_name_field, span=2),
+            FieldSpec("currency", "ارزِ پایه", self.currency_combo, span=1),
+            FieldSpec("language", "زبانِ پیش‌فرض", self.language_combo, span=1),
+            FieldSpec("fy_month", "ماهِ شروعِ سالِ مالی", self.fy_month_field, span=1),
+            FieldSpec("fy_day", "روزِ شروعِ سالِ مالی", self.fy_day_field, span=1),
+            FieldSpec("economic_code", "کدِ اقتصادی", self.economic_code_field, span=1),
+            FieldSpec("registration_no", "شماره‌ی ثبت", self.registration_no_field, span=1),
+            FieldSpec("national_id", "شناسه‌ی ملی", self.national_id_field, span=1),
+            FieldSpec("default_tax_percent", "درصدِ مالیاتِ پیش‌فرض", self.default_tax_percent_field, span=1),
+            FieldSpec("is_active", "", self.is_active_checkbox, span=3),
+        ])
+        layout.addWidget(self.basic_grid)
+        self.register_field_grids("companies", [self.basic_grid])
 
         # طبقِ درخواستِ صریح: امکانِ ساختن شرکتِ تازه بر اساسِ کدینگ/گروه‌هایِ
         # تفصیلیِ یک شرکتِ موجود — فقط در حالتِ «شرکتِ جدید» معنا دارد (نه
@@ -244,20 +235,20 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        buttons = QHBoxLayout()
-        save_button = QPushButton("ذخیره")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(48)
+        save_button.setToolTip("ذخیره")
         save_button.clicked.connect(self._save)
-        buttons.addWidget(save_button)
 
-        cancel_button = QPushButton("انصراف")
-        cancel_button.setObjectName("flatButton")
+        cancel_button = QPushButton("↩️")
+        cancel_button.setObjectName("iconButton")
+        cancel_button.setFixedWidth(44)
+        cancel_button.setToolTip("انصراف")
         cancel_button.clicked.connect(self._reset_form)
-        buttons.addWidget(cancel_button)
 
-        layout.addLayout(buttons)
         layout.addStretch(1)
-        return panel
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button])
 
     def refresh(self) -> None:
         self._currency_options = companies_service.list_currencies()
@@ -309,6 +300,7 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         self.economic_code_field.setText(company.economic_code or "")
         self.registration_no_field.setText(company.registration_no or "")
         self.national_id_field.setText(company.national_id or "")
+        self.default_tax_percent_field.setText(str(company.default_tax_percent) if company.default_tax_percent is not None else "")
         self.is_active_checkbox.setChecked(company.is_active)
         self.clone_section.setVisible(False)
 
@@ -342,6 +334,7 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
         self.economic_code_field.clear()
         self.registration_no_field.clear()
         self.national_id_field.clear()
+        self.default_tax_percent_field.clear()
         self.is_active_checkbox.setChecked(True)
         self.table.clearSelection()
         self.clone_section.setVisible(True)
@@ -358,6 +351,12 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
 
         base_currency_id = self.currency_combo.currentData()
         default_language_id = self.language_combo.currentData()
+        tax_text = self.default_tax_percent_field.text().strip()
+        try:
+            default_tax_percent = decimal.Decimal(tax_text) if tax_text else None
+        except decimal.InvalidOperation:
+            self.status_label.setText("درصدِ مالیاتِ پیش‌فرض نامعتبر است.")
+            return
 
         try:
             if self._editing_id is not None:
@@ -373,6 +372,7 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
                     economic_code=self.economic_code_field.text().strip() or None,
                     registration_no=self.registration_no_field.text().strip() or None,
                     national_id=self.national_id_field.text().strip() or None,
+                    default_tax_percent=default_tax_percent,
                 )
             else:
                 code = self.code_field.text().strip()
@@ -390,6 +390,7 @@ class CompaniesScreen(FieldHelpMixin, QWidget):
                     economic_code=self.economic_code_field.text().strip() or None,
                     registration_no=self.registration_no_field.text().strip() or None,
                     national_id=self.national_id_field.text().strip() or None,
+                    default_tax_percent=default_tax_percent,
                 )
                 if app_session.current_user is not None:
                     users_service.grant_company_access(app_session.current_user.user_id, new_company.company_id)

@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from peecha.services import languages as languages_service
 from peecha.services import translations as translations_service
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 _COLUMNS = ["ترجمه", "متنِ فارسیِ اصلی"]
 _SOURCE_COL = 1
@@ -38,8 +38,11 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         self._labels: list[translations_service.TranslatableLabel] = []
         self._loading = False
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
         title = QLabel("ترجمه‌ها")
@@ -74,13 +77,13 @@ class TranslationsScreen(FieldHelpMixin, QWidget):
         self.table.horizontalHeader().setSectionResizeMode(_TRANSLATION_COL, QHeaderView.Stretch)
         layout.addWidget(self.table, stretch=1)
 
-        save_row = QHBoxLayout()
-        save_button = QPushButton("ذخیره‌یِ تغییرات")
-        save_button.setObjectName("primaryButton")
+        save_button = QPushButton("💾")
+        save_button.setObjectName("primaryIconButton")
+        save_button.setFixedWidth(48)
+        save_button.setToolTip("ذخیره‌یِ تغییرات")
         save_button.clicked.connect(self._save_all)
-        save_row.addWidget(save_button)
-        save_row.addStretch(1)
-        layout.addLayout(save_row)
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, [save_button]))
 
         self.set_field_help([
             (
