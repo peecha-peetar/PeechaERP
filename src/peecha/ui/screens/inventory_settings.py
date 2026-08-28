@@ -438,25 +438,44 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
     def _on_account_changed(self, key: str, preselect_detail_id: int | None = None) -> None:
         detail_combo = self._detail_combos[key]
         account_id = self._combos[key].currentData()
+        company_id = _company_id()
         detail_combo.blockSignals(True)
         detail_combo.clear()
-        if account_id is None:
+        if account_id is None or company_id is None:
             detail_combo.setEnabled(False)
             self._detail_required[key] = False
             detail_combo.blockSignals(False)
             return
         required = dimensions_service.get_required_dimensions_for_account(account_id)
         other_dims = [d for d in required if d.code not in _AUTO_SUPPLIED_DIMENSION_CODES]
-        self._detail_required[key] = bool(other_dims)
-        if not other_dims:
-            detail_combo.setEnabled(False)
-            detail_combo.blockSignals(False)
-            return
         options = []
         for dim in other_dims:
             label_prefix = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code)
             for d in dim.detail_accounts:
                 options.append((d.detail_account_id, f"{label_prefix}: {d.full_code} — {d.name or ''}"))
+        # طبقِ رفعِ باگِ واقعی («فیلدِ تفصیلیِ حسابِ ماليات غیرفعاله در
+        # صورتیکه معین به گروهِ مشتری/تامین‌کننده/پرسنل وصله»): محدودیتِ
+        # گروهِ اشخاص (AccountPersonGroup) یک سامانه‌یِ کاملاً جدا از
+        # AccountDetailDimension است -- قبلاً این‌جا اصلاً بررسی نمی‌شد.
+        # فقط برایِ SUPPLIER_PAYABLE/CUSTOMER_RECEIVABLE این تفصیلی از
+        # خودِ سند (طرفِ‌حساب) تامین می‌شود؛ برایِ هر نقشِ دیگری (مثلِ
+        # مالیات) که به یکی از این گروه‌ها محدود شده باشد، یک تفصیلیِ
+        # ثابت (یک شخصِ واحد، مثلاً «سازمانِ امورِ مالياتی» به‌عنوانِ
+        # تامین‌کننده) لازم است.
+        if key not in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE"):
+            required_groups = dimensions_service.get_required_person_groups_for_account(account_id)
+            if required_groups:
+                group_ids = {g.person_group_id for g in required_groups}
+                persons = [p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in group_ids]
+                group_names = {g.person_group_id: g.name for g in required_groups}
+                for p in persons:
+                    prefix = group_names.get(p.person_group_id, "")
+                    options.append((p.detail_account_id, f"{prefix}: {p.full_code} — {p.name or ''}"))
+        self._detail_required[key] = bool(options)
+        if not options:
+            detail_combo.setEnabled(False)
+            detail_combo.blockSignals(False)
+            return
         detail_combo.addItem("(تعیین‌نشده — الزامی)", None)
         for detail_id, label in options:
             detail_combo.addItem(label, detail_id)
