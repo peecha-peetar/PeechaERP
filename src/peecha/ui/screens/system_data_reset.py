@@ -30,6 +30,10 @@ class _ResetSection(QWidget):
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
+        self.confirm_hint = QLabel()
+        self.confirm_hint.setObjectName("sectionHint")
+        layout.addWidget(self.confirm_hint)
+
         self.confirm_field = QLineEdit()
         self.confirm_field.setPlaceholderText("برایِ تاییدِ این عملیاتِ برگشت‌ناپذیر، کدِ شرکت را این‌جا تایپ کنید")
         self.confirm_field.textChanged.connect(self._on_text_changed)
@@ -41,11 +45,26 @@ class _ResetSection(QWidget):
         self.action_button.clicked.connect(self._on_click)
         layout.addWidget(self.action_button)
 
+        self._refresh_hint()
+
     def _expected_code(self) -> str:
         return session.current_company.code if session.current_company else ""
 
+    def _refresh_hint(self) -> None:
+        code = self._expected_code()
+        self.confirm_hint.setText(f"کدِ شرکتِ جاری برایِ تایید: «{code}»" if code else "شرکتِ جاری نامشخص است.")
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._refresh_hint()
+
     def _on_text_changed(self, text: str) -> None:
-        self.action_button.setEnabled(bool(self._expected_code()) and text == self._expected_code())
+        self._refresh_hint()
+        expected = self._expected_code()
+        # طبقِ گزارشِ کاربر: تایپِ صحیحِ کد ولی با حروفِ کوچک/بزرگِ متفاوت
+        # یا فاصله‌یِ اضافه، بدونِ هیچ بازخوردی رد می‌شد -- چون مقایسه
+        # قبلاً حساس‌به‌حروف و بدونِ trim بود.
+        self.action_button.setEnabled(bool(expected) and text.strip().casefold() == expected.strip().casefold())
 
     def _on_click(self) -> None:
         confirm = QMessageBox.question(
