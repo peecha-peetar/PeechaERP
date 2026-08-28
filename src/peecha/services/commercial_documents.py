@@ -30,6 +30,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import FiscalYear
 from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, CreditHold
+from peecha.db.models.inventory import Item
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_pricing as pricing_service
@@ -95,6 +96,59 @@ def get_header_dimension_requirement(company_id: int, document_type_code: str, d
             is_required = True
             break
     return is_required, options
+
+
+def _account_requires_dimension(account_id: int, dimension_type_id: int) -> bool:
+    required = dimensions_service.get_required_dimensions_for_account(account_id)
+    return any(r.dimension_type_id == dimension_type_id for r in required)
+
+
+def _role_line_amounts_by_item(
+    line_snapshots: list[tuple], item_detail_account_by_item_id: dict[int, int], amount_of,
+) -> dict[int, decimal.Decimal]:
+    """جمعِ مبلغِ یک نقش (درآمد/تخفیف/مالیات) به‌تفکیکِ تفصیلیِ کالایِ هر
+    ردیفِ فاکتور — طبقِ رفعِ باگِ واقعی («کالا» روی حسابِ درآمد الزامی شده
+    ولی ساختِ خودکارِ سند یک ردیفِ جمعیِ تک‌مبلغ می‌سازد که نمی‌تواند
+    هم‌زمان تفصیلیِ چند کالایِ مختلف را حمل کند)."""
+    amounts: dict[int, decimal.Decimal] = {}
+    for snapshot in line_snapshots:
+        item_id = snapshot[1]
+        detail_account_id = item_detail_account_by_item_id.get(item_id)
+        if detail_account_id is None:
+            continue
+        amount = amount_of(snapshot)
+        if amount <= 0:
+            continue
+        amounts[detail_account_id] = amounts.get(detail_account_id, _ZERO) + amount
+    return amounts
+
+
+def _build_role_je_lines(
+    account_id: int, description: str, extra_dims: dict[int, int], total_amount: decimal.Decimal, is_debit: bool,
+    item_dim_type_id: int, amounts_by_item_detail_account: dict[int, decimal.Decimal],
+) -> list["je_service.LineInput"]:
+    """ردیفِ حسابداریِ یک نقش را می‌سازد — اگر معینِ آن نقش «کالا» را هم
+    الزامی کرده باشد، به‌جایِ یک ردیفِ جمعی، به‌ازایِ هر کالا یک ردیفِ
+    جداگانه با تفصیلیِ همان کالا می‌سازد (وگرنه رفتارِ قبلی: یک ردیفِ جمعی)."""
+    if not _account_requires_dimension(account_id, item_dim_type_id):
+        return [
+            je_service.LineInput(
+                account_id=account_id, description=description,
+                debit=total_amount if is_debit else _ZERO, credit=_ZERO if is_debit else total_amount,
+                details=dict(extra_dims),
+            )
+        ]
+    lines = []
+    for item_detail_account_id, amount in amounts_by_item_detail_account.items():
+        details = {**extra_dims, item_dim_type_id: item_detail_account_id}
+        lines.append(
+            je_service.LineInput(
+                account_id=account_id, description=description,
+                debit=amount if is_debit else _ZERO, credit=_ZERO if is_debit else amount,
+                details=details,
+            )
+        )
+    return lines
 
 _ZERO = decimal.Decimal("0")
 _Q2 = decimal.Decimal("0.01")
@@ -566,7 +620,10 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         discount_amount = doc.discount_amount
         tax_amount = doc.tax_amount
         line_snapshots = [
-            (ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id, ln.serial_id)
+            (
+                ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id,
+                ln.serial_id, ln.discount_amount, ln.tax_amount,
+            )
             for ln in lines
         ]
 
@@ -605,7 +662,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
     stock_document_id = inv_documents_service.create_stock_document(
         company_id, posted_by_user_id, stock_document_type, document_date, header_fields
     )
-    for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id in line_snapshots:
+    for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt in line_snapshots:
         # برایِ ISSUE، unit_cost=None می‌ماند تا موتورِ انبار از میانگینِ
         # موزونِ فعلی استفاده کند (قیمتِ فروش هرگز بهایِ تمام‌شده نیست).
         stock_unit_cost = None if stock_document_type == "ISSUE" else unit_price
@@ -639,28 +696,52 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 details={person_dim_type_id: counterparty_id, **extra_dims},
             )
         )
+        # طبقِ رفعِ باگِ واقعیِ دیگر («کالا» هم می‌تواند رویِ حسابِ درآمد/
+        # تخفیف/مالیات الزامی شده باشد): چون این حساب‌ها فقط یک ردیفِ جمعی
+        # برایِ کلِ فاکتور داشتند، وقتی «کالا» الزامی بود هرگز قابلِ‌تامین
+        # نبود (یک ردیف نمی‌تواند هم‌زمان تفصیلیِ چند کالایِ مختلف را حمل
+        # کند). حالا اگر معین این بُعد را الزامی کرده باشد، به‌جایِ یک
+        # ردیفِ جمعی، به‌ازایِ هر کالایِ فاکتور یک ردیفِ جداگانه ساخته
+        # می‌شود.
+        item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+        item_ids = {snap[1] for snap in line_snapshots}
+        with new_session() as session:
+            item_detail_account_by_item_id = dict(
+                session.execute(
+                    select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(item_ids))
+                ).all()
+            )
         with new_session() as session:
             revenue_account_id = settings_service.resolve_role_account(session, company_id, "SALES_REVENUE")
-            je_lines.append(
-                je_service.LineInput(
-                    account_id=revenue_account_id, description=description, debit=_ZERO, credit=subtotal_amount,
-                    details=dict(extra_dims),
+            revenue_by_item = _role_line_amounts_by_item(
+                line_snapshots, item_detail_account_by_item_id, lambda snap: _money(snap[3] * snap[5])
+            )
+            je_lines.extend(
+                _build_role_je_lines(
+                    revenue_account_id, description, extra_dims, subtotal_amount, is_debit=False,
+                    item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=revenue_by_item,
                 )
             )
             if discount_amount > 0:
                 discount_account_id = settings_service.resolve_role_account(session, company_id, "SALES_DISCOUNT")
-                je_lines.append(
-                    je_service.LineInput(
-                        account_id=discount_account_id, description=description, debit=discount_amount, credit=_ZERO,
-                        details=dict(extra_dims),
+                discount_by_item = _role_line_amounts_by_item(
+                    line_snapshots, item_detail_account_by_item_id, lambda snap: snap[8]
+                )
+                je_lines.extend(
+                    _build_role_je_lines(
+                        discount_account_id, description, extra_dims, discount_amount, is_debit=True,
+                        item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=discount_by_item,
                     )
                 )
             if tax_amount > 0:
                 tax_account_id = settings_service.resolve_role_account(session, company_id, "SALES_TAX_PAYABLE")
-                je_lines.append(
-                    je_service.LineInput(
-                        account_id=tax_account_id, description=description, debit=_ZERO, credit=tax_amount,
-                        details=dict(extra_dims),
+                tax_by_item = _role_line_amounts_by_item(
+                    line_snapshots, item_detail_account_by_item_id, lambda snap: snap[9]
+                )
+                je_lines.extend(
+                    _build_role_je_lines(
+                        tax_account_id, description, extra_dims, tax_amount, is_debit=False,
+                        item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=tax_by_item,
                     )
                 )
 
@@ -676,7 +757,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 rep = session.get(SalesRepresentative, sales_rep_id)
                 rule_id = rep.default_commission_rule_id if rep is not None else None
             if rule_id is not None:
-                for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id in line_snapshots:
+                for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt in line_snapshots:
                     base_amount = _money(quantity * unit_price)
                     contracts_service.create_commission_entry_for_line(line_id, sales_rep_id, rule_id, base_amount)
 
