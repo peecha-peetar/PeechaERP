@@ -299,8 +299,20 @@ def compute_detail_balances(
     """معادلِ compute_account_balances ولی در سطحِ حساب‌هایِ تفصیلیِ یک
     نوع‌بُعدِ مشخص (مثلاً مشتریان یا مراکزِ هزینه)، رول‌آپ‌شده رویِ سلسله‌مراتبِ
     تا ۴سطحیِ acc.detail_accounts.parent_detail_account_id."""
+    # طبقِ گزارشِ صریح («سندِ حسابداری غیرِاستاندارد و برایِ خیلی از
+    # شرکت‌ها غیرِقابلِ‌قبول است»): ردیفِ سیستمیِ «بدون تفصیل» (که
+    # journal_entries._resolve_lines برایِ هر ردیفی که واقعاً به شخصی
+    # مرتبط نیست، خودکار می‌گذارد تا الزامِ همیشگیِ تفصیلیِ اشخاص برآورده
+    # شود) یک حسابِ واقعی نیست و نباید در ترازِ تفصیلی به‌عنوانِ یک
+    # «تفصیلیِ دیگر با گردشِ نامربوط» ظاهر شود -- هم‌الگو با
+    # detail_dimensions.detail_level_has_accounts که همین ردیف را کنار
+    # می‌گذارد.
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     detail_rows = [
-        r for r in dimensions_service.list_all_detail_accounts(company_id) if r.dimension_type_id == dimension_type_id
+        r
+        for r in dimensions_service.list_all_detail_accounts(company_id)
+        if r.dimension_type_id == dimension_type_id
+        and not (dimension_type_id == person_dimension_type_id and r.code == dimensions_service.NO_DETAIL_CODE)
     ]
     ids = [r.detail_account_id for r in detail_rows]
     parent_map = {r.detail_account_id: r.parent_detail_account_id for r in detail_rows}
@@ -394,10 +406,14 @@ def compute_detail_account_breakdown(
             current = accounts_by_id.get(current.parent_account_id)
         return current.account_id if current is not None and current.account_level == gl_level else None
 
+    # طبقِ همان رفعِ باگِ compute_detail_balances -- ردیفِ سیستمیِ «بدون
+    # تفصیل» نباید در این تفکیک هم به‌عنوانِ یک تفصیلیِ واقعی ظاهر شود.
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     detail_rows = {
         r.detail_account_id: r
         for r in dimensions_service.list_all_detail_accounts(company_id)
         if r.dimension_type_id == dimension_type_id
+        and not (dimension_type_id == person_dimension_type_id and r.code == dimensions_service.NO_DETAIL_CODE)
     }
 
     with new_session() as session:
