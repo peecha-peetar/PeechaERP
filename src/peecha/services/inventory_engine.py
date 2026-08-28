@@ -67,6 +67,7 @@ class AccountMappingRow:
     label: str
     account_id: int | None
     account_label: str | None
+    detail_account_id: int | None = None
 
 
 def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
@@ -75,15 +76,30 @@ def get_account_mapping(company_id: int, mapping_key: str) -> int | None:
         return row.account_id if row is not None else None
 
 
-def set_account_mapping(company_id: int, mapping_key: str, account_id: int) -> None:
+def get_account_mapping_detail(company_id: int, mapping_key: str) -> int | None:
+    """تفصیلیِ ثابتِ ازپیش‌تخصیص‌یافته (اگر تنظیم شده باشد) برایِ این
+    حسابِ نقش‌محور -- طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی
+    می‌خواهد ولی جایی برایِ انتخابش نیست»)."""
+    with new_session() as session:
+        row = session.get(InventoryAccountMapping, (company_id, mapping_key))
+        return row.detail_account_id if row is not None else None
+
+
+def set_account_mapping(company_id: int, mapping_key: str, account_id: int, detail_account_id: int | None = None) -> None:
     if mapping_key not in MAPPING_LABELS:
         raise ValueError("کلیدِ نگاشتِ نامعتبر است.")
     with new_session() as session:
         row = session.get(InventoryAccountMapping, (company_id, mapping_key))
         if row is None:
-            session.add(InventoryAccountMapping(company_id=company_id, mapping_key=mapping_key, account_id=account_id))
+            session.add(
+                InventoryAccountMapping(
+                    company_id=company_id, mapping_key=mapping_key, account_id=account_id,
+                    detail_account_id=detail_account_id,
+                )
+            )
         else:
             row.account_id = account_id
+            row.detail_account_id = detail_account_id
         session.commit()
 
 
@@ -92,14 +108,17 @@ def list_account_mappings(company_id: int) -> list[AccountMappingRow]:
 
     with new_session() as session:
         rows = {
-            r.mapping_key: r.account_id
+            r.mapping_key: (r.account_id, r.detail_account_id)
             for r in session.scalars(select(InventoryAccountMapping).where(InventoryAccountMapping.company_id == company_id))
         }
     accounts_by_id = {a.account_id: f"{a.full_code} — {a.name}" for a in coa_service.list_accounts(company_id)}
-    return [
-        AccountMappingRow(key, label, rows.get(key), accounts_by_id.get(rows.get(key)) if rows.get(key) else None)
-        for key, label in MAPPING_LABELS.items()
-    ]
+    result = []
+    for key, label in MAPPING_LABELS.items():
+        account_id, detail_account_id = rows.get(key, (None, None))
+        result.append(
+            AccountMappingRow(key, label, account_id, accounts_by_id.get(account_id) if account_id else None, detail_account_id)
+        )
+    return result
 
 
 def _resolve_role_account(session, company_id: int, mapping_key: str) -> int:
@@ -681,10 +700,29 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
         je_lines: list[je_service.LineInput] = []
         description = doc.description or f"سندِ انبار #{doc.document_no}"
 
+        # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی
+        # جایی برایِ انتخابش نیست»): بعضی حساب‌هایِ نقش‌محور یک تفصیلیِ
+        # الزامی دارند که نه از سرِسند (مرکزِ هزینه/پروژه) و نه از
+        # طرفِ‌حساب/کالایِ ردیف تامین می‌شود -- و معمولاً هم همیشه یک
+        # مقدارِ *ثابت* دارد (مثلاً یک ردیفِ تعریف‌شده برایِ «ماليات»).
+        # این تفصیلیِ ثابت را از خودِ نگاشتِ همان نقش می‌خوانیم.
+        def _fixed_role_detail(role: str) -> tuple[int, int] | None:
+            mapping_row = session.get(InventoryAccountMapping, (company_id, role))
+            if mapping_row is None or mapping_row.detail_account_id is None:
+                return None
+            detail = session.get(DetailAccount, mapping_row.detail_account_id)
+            if detail is None:
+                return None
+            return detail.dimension_type_id, detail.detail_account_id
+
         def _build_lines(role_amounts: dict[str, dict[int | None, decimal.Decimal]], is_debit: bool) -> None:
             for role, by_item in role_amounts.items():
                 account_id = _resolve_role_account(session, company_id, role)
-                base_details = dict(extra_dims)
+                base_details: dict[int, int] = {}
+                fixed_detail = _fixed_role_detail(role)
+                if fixed_detail is not None:
+                    base_details[fixed_detail[0]] = fixed_detail[1]
+                base_details.update(extra_dims)
                 if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
                     base_details[person_dimension_type_id] = doc.counterparty_detail_account_id
                 if _account_requires_item_dim(account_id):

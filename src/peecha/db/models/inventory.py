@@ -762,6 +762,13 @@ class InventoryAccountMapping(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     mapping_key: Mapped[str] = mapped_column(String(30), primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
+    # برایِ انتخابش نیست»): تفصیلیِ ثابتِ ازپیش‌تخصیص‌یافته برایِ این
+    # حسابِ نقش‌محور -- برایِ بُعدهایی که نه از سرِسند (مرکزِ هزینه/
+    # پروژه) و نه از طرفِ‌حساب/کالایِ ردیف قابلِ‌تامین‌اند و همیشه یک
+    # مقدارِ ثابت دارند. دقیقاً هم‌الگو با
+    # treasury.account_mappings.detail_account_id.
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
 class FeatureDefinition(Base):

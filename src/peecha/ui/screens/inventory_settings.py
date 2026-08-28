@@ -25,10 +25,21 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
+
+# طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
+# برایِ انتخابش نیست»): این بُعدها یا از سرِسند (مرکزِ هزینه/پروژه)، یا
+# از انبارِ سند (مرکزِ سود)، یا از خودِ ردیف/طرفِ‌حساب (کالا) به‌طورِ
+# خودکار تامین می‌شوند -- پس نباید در فهرستِ «تفصیلیِ ثابت» بیایند؛ هر
+# نوع‌بُعدِ دیگری که یک حسابِ نقش‌محور الزامی کند، باقی می‌ماند.
+_AUTO_SUPPLIED_DIMENSION_CODES = (
+    dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE,
+    dimensions_service.PROFIT_CENTER_CODE, dimensions_service.INVENTORY_ITEM_CODE,
+)
 
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
 _COSTING_METHOD_LABELS = {"FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
@@ -376,6 +387,13 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._combos: dict[str, QComboBox] = {}
+        # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی
+        # جایی برایِ انتخابش نیست»): کنارِ هر معینِ نقش‌محور، یک کمبویِ
+        # «تفصیلیِ ثابت» -- فقط وقتی آن معین واقعاً یک بُعدِ تفصیلیِ
+        # دیگر (غیر از مرکزِ هزینه/پروژه/مرکزِ سود/کالا که خودکار تامین
+        # می‌شوند) را الزامی کرده باشد، فعال/پرشده نمایش داده می‌شود.
+        self._detail_combos: dict[str, QComboBox] = {}
+        self._detail_required: dict[str, bool] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
@@ -386,10 +404,21 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
 
         mapping_fields = []
         for key, label in engine_service.MAPPING_LABELS.items():
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
             combo = QComboBox()
-            combo.setMinimumWidth(280)
+            combo.setMinimumWidth(220)
+            row_layout.addWidget(combo, stretch=2)
+            detail_combo = QComboBox()
+            detail_combo.setMinimumWidth(160)
+            detail_combo.setEnabled(False)
+            row_layout.addWidget(detail_combo, stretch=1)
+            combo.currentIndexChanged.connect(lambda _index, k=key: self._on_account_changed(k))
             self._combos[key] = combo
-            mapping_fields.append(FieldSpec(key, label, combo, span=3))
+            self._detail_combos[key] = detail_combo
+            mapping_fields.append(FieldSpec(key, label, row_widget, span=3))
         self.mapping_grid = FieldGrid(mapping_fields, columns=3)
         layout.addWidget(self.mapping_grid)
         self.register_field_grids("inventory_settings_account_mappings", [self.mapping_grid])
@@ -406,21 +435,53 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         layout.addWidget(save_button, alignment=Qt.AlignLeft)
         layout.addStretch(1)
 
+    def _on_account_changed(self, key: str, preselect_detail_id: int | None = None) -> None:
+        detail_combo = self._detail_combos[key]
+        account_id = self._combos[key].currentData()
+        detail_combo.blockSignals(True)
+        detail_combo.clear()
+        if account_id is None:
+            detail_combo.setEnabled(False)
+            self._detail_required[key] = False
+            detail_combo.blockSignals(False)
+            return
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        other_dims = [d for d in required if d.code not in _AUTO_SUPPLIED_DIMENSION_CODES]
+        self._detail_required[key] = bool(other_dims)
+        if not other_dims:
+            detail_combo.setEnabled(False)
+            detail_combo.blockSignals(False)
+            return
+        options = []
+        for dim in other_dims:
+            label_prefix = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code)
+            for d in dim.detail_accounts:
+                options.append((d.detail_account_id, f"{label_prefix}: {d.full_code} — {d.name or ''}"))
+        detail_combo.addItem("(تعیین‌نشده — الزامی)", None)
+        for detail_id, label in options:
+            detail_combo.addItem(label, detail_id)
+        if preselect_detail_id is not None:
+            detail_combo.setCurrentIndex(max(0, detail_combo.findData(preselect_detail_id)))
+        detail_combo.setEnabled(True)
+        detail_combo.blockSignals(False)
+
     def refresh(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
         accounts = [(a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable]
         current = engine_service.list_account_mappings(company_id)
-        current_by_key = {c.mapping_key: c.account_id for c in current}
+        current_by_key = {c.mapping_key: (c.account_id, c.detail_account_id) for c in current}
         for key, combo in self._combos.items():
+            account_id, detail_account_id = current_by_key.get(key, (None, None))
             combo.blockSignals(True)
             combo.clear()
             combo.addItem("(تعیین‌نشده)", None)
-            for account_id, label in accounts:
-                combo.addItem(label, account_id)
-            combo.setCurrentIndex(max(0, combo.findData(current_by_key.get(key))))
+            for acc_id, label in accounts:
+                combo.addItem(label, acc_id)
+            combo.setCurrentIndex(max(0, combo.findData(account_id)))
             combo.blockSignals(False)
+            self._on_account_changed(key, preselect_detail_id=detail_account_id)
         self.status_label.setText("")
 
     def _save(self) -> None:
@@ -429,8 +490,13 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
             return
         for key, combo in self._combos.items():
             account_id = combo.currentData()
-            if account_id is not None:
-                engine_service.set_account_mapping(company_id, key, account_id)
+            if account_id is None:
+                continue
+            if self._detail_required.get(key) and self._detail_combos[key].currentData() is None:
+                self.status_label.setObjectName("statusError")
+                self.status_label.setText(f"حسابِ «{engine_service.MAPPING_LABELS[key]}» یک تفصیلیِ ثابت هم لازم دارد.")
+                return
+            engine_service.set_account_mapping(company_id, key, account_id, self._detail_combos[key].currentData())
         self.status_label.setObjectName("statusSuccess")
         self.status_label.setText("ذخیره شد.")
 
