@@ -483,9 +483,16 @@ class JournalBookLineRow:
     # دارند (هم‌الگو با ستون‌بندیِ journal_entry.py)؛ بقیه‌یِ بُعدهایِ
     # ردیف (تفصیلیِ شخص، بانک، کالا، گروه‌هایِ سفارشی، ...) در یک ستونِ
     # واحدِ «تفصیلی» با کاما جمع می‌شوند.
+    # رفعِ باگِ واقعیِ کشف‌شده (با عکسِ دفترِ روزنامه‌یِ کاربر): «مرکزِ سود»
+    # هم -- درست مثلِ مرکزِ هزینه/پروژه -- به‌طورِ خودکار از انبارِ سند به
+    # *هر* ردیف وصل می‌شود، اما قبلاً ستونِ اختصاصیِ خودش را نداشت و در
+    # همین ستونِ «تفصیلی» با تفصیلیِ واقعیِ ردیف (کالا/تامین‌کننده) قاطی
+    # می‌شد -- یعنی کاربر برایِ هر ردیف دو مقدار در ستونِ «تفصیلی» می‌دید
+    # و آن را «دو تفصیلیِ اضافه» تعبیر می‌کرد.
     detail_name: str
     cost_center_name: str
     project_name: str
+    profit_center_name: str
 
 
 def list_journal_book_lines(
@@ -538,12 +545,14 @@ def list_journal_book_lines(
     detail_names_by_id = {d.detail_account_id: (d.name or d.code) for d in dimensions_service.list_all_detail_accounts(company_id)}
     cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
     project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+    profit_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)
 
     result: list[JournalBookLineRow] = []
     for line, document_date, temporary_no, entry_description in rows:
         account = accounts_by_id.get(line.account_id)
         cost_center_name = ""
         project_name = ""
+        profit_center_name = ""
         other_names: list[str] = []
         for dimension_type_id, detail_account_id in details_by_line.get(line.line_id, []):
             name = detail_names_by_id.get(detail_account_id)
@@ -553,6 +562,8 @@ def list_journal_book_lines(
                 cost_center_name = name
             elif dimension_type_id == project_type_id:
                 project_name = name
+            elif dimension_type_id == profit_center_type_id:
+                profit_center_name = name
             else:
                 other_names.append(name)
         result.append(
@@ -567,6 +578,7 @@ def list_journal_book_lines(
                 detail_name="، ".join(other_names),
                 cost_center_name=cost_center_name,
                 project_name=project_name,
+                profit_center_name=profit_center_name,
             )
         )
     return result

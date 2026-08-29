@@ -53,7 +53,7 @@ class JournalBookScreen(ReportScreenBase):
             return numerals.format_money(value, self._currency_decimal_places, None)
 
         headers = [
-            "تاریخ", "شماره‌یِ سند", "کدِ حساب", "نامِ حساب", "تفصیلی", "مرکزِ هزینه", "پروژه", "شرح", "بدهکار", "بستانکار",
+            "تاریخ", "شماره‌یِ سند", "کدِ حساب", "نامِ حساب", "تفصیلی", "مرکزِ هزینه", "پروژه", "مرکزِ سود", "شرح", "بدهکار", "بستانکار",
         ]
         rows: list[list] = []
         total_debit = decimal.Decimal(0)
@@ -70,10 +70,11 @@ class JournalBookScreen(ReportScreenBase):
                     ln.detail_name or "—",
                     ln.cost_center_name or "—",
                     ln.project_name or "—",
+                    ln.profit_center_name or "—",
                     ln.description or "—",
                     fmt(ln.debit) if ln.debit else "",
                     fmt(ln.credit) if ln.credit else "",
                 ]
             )
-        footer = ["", "", "", "", "", "", "", "جمعِ کل", fmt(total_debit), fmt(total_credit)]
+        footer = ["", "", "", "", "", "", "", "", "جمعِ کل", fmt(total_debit), fmt(total_credit)]
         return headers, rows, footer
