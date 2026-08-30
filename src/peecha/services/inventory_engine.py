@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount, FiscalYear
+from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine
 from peecha.db.models.inventory import (
     BinLocation,
     CategoryAccountMapping,
@@ -281,7 +282,11 @@ class ItemLedgerRow:
     quantity_in: decimal.Decimal
     quantity_out: decimal.Decimal
     unit_cost: decimal.Decimal | None
+    value_in: decimal.Decimal
+    value_out: decimal.Decimal
     running_balance: decimal.Decimal
+    running_value_balance: decimal.Decimal
+    sale_unit_price: decimal.Decimal | None
     counterparty_detail_account_id: int | None
 
 
@@ -289,20 +294,33 @@ def list_item_ledger(
     company_id: int, item_id: int, warehouse_id: int | None = None,
     date_from: datetime.date | None = None, date_to: datetime.date | None = None,
 ) -> list[ItemLedgerRow]:
-    """کاردکسِ یک کالا -- مانده‌یِ رواگرد همیشه با جمعِ *همه‌یِ* حرکاتِ
-    تاریخی تا date_to محاسبه می‌شود (نه فقط ردیف‌هایِ نمایش‌داده‌شده)، و
-    فقط پس‌ازآن ردیف‌هایِ زودتر از date_from از خروجی کنار گذاشته می‌شوند --
-    وگرنه مانده‌یِ نمایش‌داده‌شده از همان ابتدایِ بازه غلط می‌شد."""
+    """کاردکسِ یک کالا -- مانده‌یِ رواگرد (مقداری و ریالی) همیشه با جمعِ
+    *همه‌یِ* حرکاتِ تاریخی تا date_to محاسبه می‌شود (نه فقط ردیف‌هایِ
+    نمایش‌داده‌شده)، و فقط پس‌ازآن ردیف‌هایِ زودتر از date_from از خروجی
+    کنار گذاشته می‌شوند -- وگرنه مانده‌یِ نمایش‌داده‌شده از همان ابتدایِ
+    بازه غلط می‌شد.
+
+    طبقِ درخواستِ صریح («کاردکسِ ریالی بهایِ تمام‌شدهٔ ورودی/خروجی و برایِ
+    فاکتورهایِ فروش یک ستونِ قیمتِ فروش داشته باشه»): value_in/value_out
+    مبلغِ کلِ همان حرکت (مقدار × بهایِ واحد) است، و sale_unit_price فقط
+    برایِ حرکاتِ خروجی‌ای پر می‌شود که از یک فاکتورِ فروش آمده باشند --
+    از طریقِ لینکِ comm.commercial_document_lines.stock_document_line_id
+    که در post کردنِ فاکتور ذخیره شده (متمایز از unit_cost که همان
+    بهایِ تمام‌شده/COGSِ داخلی است، نه قیمتِ فروش به مشتری)."""
     with new_session() as session:
         query = (
             select(
                 StockLedger.movement_date, StockDocument.document_type_code, StockDocument.document_no,
                 Warehouse.name, StockLedger.movement_direction, StockLedger.quantity_base, StockLedger.unit_cost,
                 StockLedger.ledger_id, StockDocument.counterparty_detail_account_id, StockDocumentLine.tax_amount,
+                CommercialDocumentLine.unit_price, CommercialDocumentLine.discount_amount,
+                CommercialDocument.document_type_code,
             )
             .join(StockDocumentLine, StockDocumentLine.line_id == StockLedger.stock_document_line_id)
             .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
             .join(Warehouse, Warehouse.warehouse_id == StockLedger.warehouse_id)
+            .outerjoin(CommercialDocumentLine, CommercialDocumentLine.stock_document_line_id == StockDocumentLine.line_id)
+            .outerjoin(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
             .where(StockLedger.company_id == company_id, StockLedger.item_id == item_id)
         )
         if warehouse_id is not None:
@@ -314,12 +332,12 @@ def list_item_ledger(
 
     result: list[ItemLedgerRow] = []
     balance = _ZERO
-    for movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id, counterparty_id, tax_amount in rows:
-        signed = quantity if direction == "IN" else -quantity
-        balance += signed
-        if date_from is not None and movement_date < date_from:
-            continue
-        # طبقِ درخواستِ صریح («بهایِ تمام‌شده باید با احتسابِ مالياتِ
+    value_balance = _ZERO
+    for (
+        movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id,
+        counterparty_id, tax_amount, comm_unit_price, comm_discount_amount, comm_doc_type,
+    ) in rows:
+        # طبقِ رفعِ باگِ واقعی («بهایِ تمام‌شده باید با احتسابِ مالياتِ
         # فاکتور ثبت شود -- فی ۱۰۰ با ۱۰٪ مالیات باید ۱۱۰ نشان بدهد»):
         # بهایِ نمایش‌داده‌شده در کاردکس، بهایِ رواگردِ کالا به‌اضافه‌یِ
         # سهمِ هرواحد از مالياتِ همان ردیف است -- این فقط برایِ *نمایش*
@@ -329,11 +347,24 @@ def list_item_ledger(
         landed_unit_cost = unit_cost
         if unit_cost is not None and tax_amount and quantity:
             landed_unit_cost = _money(unit_cost + (tax_amount / quantity))
+        line_value = _money(quantity * landed_unit_cost) if landed_unit_cost is not None else _ZERO
+        signed_qty = quantity if direction == "IN" else -quantity
+        signed_value = line_value if direction == "IN" else -line_value
+        balance += signed_qty
+        value_balance += signed_value
+
+        sale_unit_price = None
+        if direction == "OUT" and comm_doc_type == "SALES_INVOICE" and comm_unit_price is not None and quantity:
+            sale_unit_price = _money(comm_unit_price - ((comm_discount_amount or _ZERO) / quantity))
+
+        if date_from is not None and movement_date < date_from:
+            continue
         result.append(
             ItemLedgerRow(
                 movement_date, doc_type, doc_no, warehouse_name,
                 quantity if direction == "IN" else _ZERO, quantity if direction == "OUT" else _ZERO,
-                landed_unit_cost, balance, counterparty_id,
+                landed_unit_cost, line_value if direction == "IN" else _ZERO, line_value if direction == "OUT" else _ZERO,
+                balance, value_balance, sale_unit_price, counterparty_id,
             )
         )
     return result

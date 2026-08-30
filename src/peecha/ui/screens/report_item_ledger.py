@@ -27,8 +27,15 @@ from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import JalaliDateEdit
 
-# طبقِ درخواستِ صریح («در کاردکسِ کالا نامِ طرفِ‌حساب هم نمایش داده شود»).
-_COLUMNS = ["تاریخ", "نوعِ سند", "شماره‌یِ سند", "انبار", "طرفِ‌حساب", "ورود", "خروج", "بهایِ واحد", "مانده"]
+# طبقِ درخواستِ صریح («در کاردکسِ کالا نامِ طرفِ‌حساب هم نمایش داده شود» +
+# «کاردکسِ ریالی بهایِ ورودی/خروجی داشته باشد و برایِ فاکتورهایِ فروش
+# ستونِ قیمتِ فروش هم باشد»): بهایِ واحد/بهایِ کل همیشه بهایِ تمام‌شده
+# (COGS) است -- قیمتِ فروش، ستونِ جداگانه‌ای است که فقط برایِ خروجیِ
+# آمده از فاکتورِ فروش پر می‌شود، تا بتوان حاشیهٔ سود را هم دید.
+_COLUMNS = [
+    "تاریخ", "نوعِ سند", "شماره‌یِ سند", "انبار", "طرفِ‌حساب", "ورود", "خروج", "بهایِ واحد",
+    "بهایِ کلِ ورود", "بهایِ کلِ خروج", "قیمتِ فروش", "مانده", "مانده‌یِ ریالی",
+]
 
 
 class ItemLedgerScreen(QWidget):
@@ -164,7 +171,11 @@ class ItemLedgerScreen(QWidget):
                 numerals.format_money(row.quantity_in, qty_decimals) if row.quantity_in else "",
                 numerals.format_money(row.quantity_out, qty_decimals) if row.quantity_out else "",
                 numerals.format_money(row.unit_cost, cost_decimals) if row.unit_cost is not None else "",
+                numerals.format_money(row.value_in, cost_decimals) if row.value_in else "",
+                numerals.format_money(row.value_out, cost_decimals) if row.value_out else "",
+                numerals.format_money(row.sale_unit_price, cost_decimals) if row.sale_unit_price is not None else "",
                 numerals.format_money(row.running_balance, qty_decimals),
+                numerals.format_money(row.running_value_balance, cost_decimals),
             ]
             for col_index, value in enumerate(values):
                 cell = QTableWidgetItem(value)
