@@ -25,3 +25,8 @@ venv/
 # فونت‌ها (باینری؛ طبق assets/fonts/README.md دانلود شوند)
 assets/fonts/*.ttf
 assets/fonts/*.otf
+
+# Jasper report runner (Java) -- طبق tools/jasper-runner/README.md ساخته شود
+tools/jasper-runner/target/
+tools/jasper-runner/dependency-reduced-pom.xml
+tools/jasper-runner/src/main/resources/fonts/*.ttf

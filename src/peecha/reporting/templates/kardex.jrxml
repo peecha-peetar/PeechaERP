@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="kardex" pageWidth="842" pageHeight="595" orientation="Landscape"
+              columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20"
+              whenNoDataType="AllSectionsNoDetail">
+
+    <!-- طبقِ رفعِ باگِ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
+         کافی است؛ pdfFontName/pdfEncoding/isPdfEmbedded از رویِ Font Extensionِ
+         jasper-runner (peecha-fonts.xml) خودکار حل می‌شود. -->
+    <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Title" fontName="Vazirmatn" fontSize="16" isBold="true"/>
+    <style name="SubTitle" fontName="Vazirmatn" fontSize="10"/>
+    <style name="Header" fontName="Vazirmatn" fontSize="8" isBold="true"/>
+    <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
+
+    <parameter name="companyName" class="java.lang.String"/>
+    <parameter name="itemName" class="java.lang.String"/>
+    <parameter name="warehouseName" class="java.lang.String"/>
+    <parameter name="dateRangeLabel" class="java.lang.String"/>
+    <parameter name="generatedAt" class="java.lang.String"/>
+
+    <field name="movement_date_display" class="java.lang.String"/>
+    <field name="document_type_label" class="java.lang.String"/>
+    <field name="document_no_display" class="java.lang.String"/>
+    <field name="warehouse_name" class="java.lang.String"/>
+    <field name="counterparty_label" class="java.lang.String"/>
+    <field name="quantity_in_display" class="java.lang.String"/>
+    <field name="quantity_out_display" class="java.lang.String"/>
+    <field name="unit_cost_display" class="java.lang.String"/>
+    <field name="value_in_display" class="java.lang.String"/>
+    <field name="value_out_display" class="java.lang.String"/>
+    <field name="sale_price_display" class="java.lang.String"/>
+    <field name="running_balance_display" class="java.lang.String"/>
+    <field name="running_value_balance_display" class="java.lang.String"/>
+
+    <!-- طبقِ رفعِ باگِ واقعیِ کشف‌شده: متنِ ۱۶pt Bold با Vazirmatn اگر
+         ارتفاعِ reportElement فقط اندازه‌یِ خطِ فونتِ لاتین باشد، کاملاً
+         خالی/نامرئی رندر می‌شود، بدونِ هیچ خطایی. حداقل ۳۰ ارتفاع لازم است. -->
+    <pageHeader>
+        <band height="72">
+            <staticText>
+                <reportElement style="Title" x="0" y="0" width="802" height="30"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <text><![CDATA[کاردکسِ کالا]]></text>
+            </staticText>
+            <textField>
+                <reportElement style="SubTitle" x="0" y="32" width="802" height="20"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA[$P{companyName} + "  —  کالا: " + $P{itemName}
+                    + ($P{warehouseName} != null && !$P{warehouseName}.isEmpty() ? "  —  انبار: " + $P{warehouseName} : "")
+                    + ($P{dateRangeLabel} != null && !$P{dateRangeLabel}.isEmpty() ? "  —  " + $P{dateRangeLabel} : "")]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="Footer" x="0" y="54" width="802" height="16"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["تاریخِ تولیدِ گزارش: " + $P{generatedAt}]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageHeader>
+
+    <columnHeader>
+        <band height="26">
+            <rectangle>
+                <reportElement x="0" y="0" width="802" height="26" backcolor="#DDDDDD" mode="Opaque"/>
+            </rectangle>
+            <staticText><reportElement style="Header" x="0" y="0" width="70" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[تاریخ]]></text></staticText>
+            <staticText><reportElement style="Header" x="70" y="0" width="65" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[نوعِ سند]]></text></staticText>
+            <staticText><reportElement style="Header" x="135" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[شماره]]></text></staticText>
+            <staticText><reportElement style="Header" x="180" y="0" width="70" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[انبار]]></text></staticText>
+            <staticText><reportElement style="Header" x="250" y="0" width="90" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[طرفِ‌حساب]]></text></staticText>
+            <staticText><reportElement style="Header" x="340" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[ورود]]></text></staticText>
+            <staticText><reportElement style="Header" x="385" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[خروج]]></text></staticText>
+            <staticText><reportElement style="Header" x="430" y="0" width="65" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ واحد]]></text></staticText>
+            <staticText><reportElement style="Header" x="495" y="0" width="68" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ کلِ ورود]]></text></staticText>
+            <staticText><reportElement style="Header" x="563" y="0" width="68" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ کلِ خروج]]></text></staticText>
+            <staticText><reportElement style="Header" x="631" y="0" width="60" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[قیمتِ فروش]]></text></staticText>
+            <staticText><reportElement style="Header" x="691" y="0" width="45" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده]]></text></staticText>
+            <staticText><reportElement style="Header" x="736" y="0" width="66" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده‌یِ ریالی]]></text></staticText>
+        </band>
+    </columnHeader>
+
+    <detail>
+        <band height="18">
+            <textField><reportElement x="0" y="0" width="70" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{movement_date_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="70" y="0" width="65" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{document_type_label}]]></textFieldExpression></textField>
+            <textField><reportElement x="135" y="0" width="45" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{document_no_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="180" y="0" width="70" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{warehouse_name}]]></textFieldExpression></textField>
+            <textField><reportElement x="250" y="0" width="90" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{counterparty_label}]]></textFieldExpression></textField>
+            <textField><reportElement x="340" y="0" width="45" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{quantity_in_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="385" y="0" width="45" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{quantity_out_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="430" y="0" width="65" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{unit_cost_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="495" y="0" width="68" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{value_in_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="563" y="0" width="68" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{value_out_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="631" y="0" width="60" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{sale_price_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="691" y="0" width="45" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{running_balance_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="736" y="0" width="66" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{running_value_balance_display}]]></textFieldExpression></textField>
+        </band>
+    </detail>
+
+    <pageFooter>
+        <band height="18">
+            <textField>
+                <reportElement style="Footer" x="0" y="0" width="802" height="18"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["صفحه‌یِ " + $V{PAGE_NUMBER}]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageFooter>
+
+</jasperReport>

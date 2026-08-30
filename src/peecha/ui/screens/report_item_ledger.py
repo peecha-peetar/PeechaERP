@@ -5,13 +5,18 @@ inv.stock_ledger. طبقِ درخواستِ صریح («دکمه‌ای برای
 
 from __future__ import annotations
 
+import datetime
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -19,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.reporting import jasper_bridge
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -70,6 +76,10 @@ class ItemLedgerScreen(QWidget):
         self.date_from_field.setEnabled(False)
         self.date_to_field.setEnabled(False)
         self.date_filter_checkbox.toggled.connect(self._on_date_filter_toggled)
+
+        self.print_professional_button = QPushButton("چاپِ حرفه‌ای")
+        self.print_professional_button.clicked.connect(self._print_professional)
+        filters_row.addWidget(self.print_professional_button)
         layout.addLayout(filters_row)
 
         self.table = QTableWidget(0, len(_COLUMNS))
@@ -130,18 +140,18 @@ class ItemLedgerScreen(QWidget):
     def _on_filters_changed(self) -> None:
         self._refresh_table()
 
-    def _refresh_table(self) -> None:
-        self.table.setRowCount(0)
+    def _load_ledger_context(self):
+        """طبقِ اشتراکِ منطق بینِ نمایشِ رویِ صفحه و چاپِ حرفه‌ای -- هردو
+        باید دقیقاً همان دیتا/فرمت را ببینند، تا گزارشِ Jasper هیچ‌وقت با
+        جدولِ رویِ صفحه فرق نکند."""
         company_id = self._company_id()
         item_id = self.item_combo.currentData()
         if company_id is None or item_id is None:
-            return
+            return None
         warehouse_id = self.warehouse_combo.currentData()
         use_date_filter = self.date_filter_checkbox.isChecked()
         date_from = self.date_from_field.date() if use_date_filter else None
         date_to = self.date_to_field.date() if use_date_filter else None
-
-        from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES
 
         # طبقِ رفعِ باگِ واقعی («ارقامِ اعشار باید از تنظیمات خونده بشه»):
         # مقدار/مانده با تعدادِ رقمِ اعشارِ واحدِ شمارشِ خودِ کالا، و بهایِ
@@ -160,6 +170,29 @@ class ItemLedgerScreen(QWidget):
         )
 
         rows = engine_service.list_item_ledger(company_id, item_id, warehouse_id, date_from, date_to)
+        return {
+            "item": item,
+            "qty_decimals": qty_decimals,
+            "cost_decimals": cost_decimals,
+            "parties_by_id": parties_by_id,
+            "rows": rows,
+            "warehouse_id": warehouse_id,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+
+    def _refresh_table(self) -> None:
+        self.table.setRowCount(0)
+        context = self._load_ledger_context()
+        if context is None:
+            return
+
+        from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES
+
+        qty_decimals = context["qty_decimals"]
+        cost_decimals = context["cost_decimals"]
+        parties_by_id = context["parties_by_id"]
+        rows = context["rows"]
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             values = [
@@ -184,3 +217,80 @@ class ItemLedgerScreen(QWidget):
                 self.table.setItem(row_index, col_index, cell)
         self.table.resizeRowsToContents()
         self.status_label.setText("" if rows else "برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
+
+    def _print_professional(self) -> None:
+        """طبقِ درخواستِ صریحِ کاربر («بخشِ گزارشات را حرفه‌ای کنیم»):
+        همان دیتایِ رویِ صفحه را با موتورِ JasperReports (نه دیگر با
+        report_export.py دستی) به PDF/Excel تبدیل می‌کند."""
+        context = self._load_ledger_context()
+        if context is None:
+            QMessageBox.information(self, "چاپِ حرفه‌ای", "ابتدا یک کالا انتخاب کنید.")
+            return
+        rows = context["rows"]
+        if not rows:
+            QMessageBox.information(self, "چاپِ حرفه‌ای", "برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
+            return
+
+        from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES
+
+        qty_decimals = context["qty_decimals"]
+        cost_decimals = context["cost_decimals"]
+        parties_by_id = context["parties_by_id"]
+        item = context["item"]
+
+        print_rows = [
+            {
+                "movement_date_display": numerals.format_jalali_date(row.movement_date),
+                "document_type_label": DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
+                "document_no_display": numerals.to_persian_digits(str(row.document_no)),
+                "warehouse_name": row.warehouse_name,
+                "counterparty_label": parties_by_id.get(row.counterparty_detail_account_id, "—"),
+                "quantity_in_display": numerals.format_money(row.quantity_in, qty_decimals) if row.quantity_in else "",
+                "quantity_out_display": numerals.format_money(row.quantity_out, qty_decimals) if row.quantity_out else "",
+                "unit_cost_display": numerals.format_money(row.unit_cost, cost_decimals) if row.unit_cost is not None else "",
+                "value_in_display": numerals.format_money(row.value_in, cost_decimals) if row.value_in else "",
+                "value_out_display": numerals.format_money(row.value_out, cost_decimals) if row.value_out else "",
+                "sale_price_display": numerals.format_money(row.sale_unit_price, cost_decimals) if row.sale_unit_price is not None else "",
+                "running_balance_display": numerals.format_money(row.running_balance, qty_decimals),
+                "running_value_balance_display": numerals.format_money(row.running_value_balance, cost_decimals),
+            }
+            for row in rows
+        ]
+
+        company = app_session.current_company
+        date_range_label = ""
+        if context["date_from"] is not None and context["date_to"] is not None:
+            date_range_label = (
+                f"از {numerals.format_jalali_date(context['date_from'])} "
+                f"تا {numerals.format_jalali_date(context['date_to'])}"
+            )
+        warehouse_name = self.warehouse_combo.currentText() if context["warehouse_id"] is not None else ""
+        params = {
+            "companyName": company.display_name if company else "",
+            "itemName": f"{item.code} — {item.name or ''}" if item else "",
+            "warehouseName": warehouse_name,
+            "dateRangeLabel": date_range_label,
+            "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+        }
+
+        path, chosen_filter = QFileDialog.getSaveFileName(
+            self, "ذخیره‌یِ کاردکسِ حرفه‌ای", "کاردکس.pdf", "PDF (*.pdf);;Excel (*.xlsx)"
+        )
+        if not path:
+            return
+        output_format = "xlsx" if (path.lower().endswith(".xlsx") or "xlsx" in chosen_filter) else "pdf"
+        if output_format == "pdf" and not path.lower().endswith(".pdf"):
+            path += ".pdf"
+        elif output_format == "xlsx" and not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+
+        try:
+            jasper_bridge.render_report("kardex.jrxml", print_rows, params, path, output_format)
+        except jasper_bridge.JasperNotAvailableError as exc:
+            QMessageBox.warning(self, "چاپِ حرفه‌ای", str(exc))
+            return
+        except Exception as exc:
+            QMessageBox.critical(self, "چاپِ حرفه‌ای", f"تولیدِ گزارش ناموفق بود:\n{exc}")
+            return
+
+        QMessageBox.information(self, "چاپِ حرفه‌ای", "گزارش با موفقیت ساخته شد.")

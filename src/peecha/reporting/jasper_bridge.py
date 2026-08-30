@@ -1,0 +1,80 @@
+"""پلِ فراخوانیِ موتورِ چاپِ حرفه‌ای (JasperReports 6.21.3، از طریقِ
+tools/jasper-runner) از پایتون.
+
+طبقِ تصمیمِ معماری (نتیجه‌یِ Spike): این ماژول هیچ محاسبه‌یِ حسابداری/انبار
+انجام نمی‌دهد -- فقط دیتایِ از پیش آماده‌شده (توسطِ reports.py/
+inventory_engine.py + numerals.py، دقیقاً همان دیتایی که رویِ صفحه هم نشان
+داده می‌شود) را به‌صورتِ JSON به jasper-runner.jar می‌دهد و آن، طبقِ فایلِ
+jrxmlِ مشخص‌شده، فقط چیدمان/خروجی (PDF یا Excel) را می‌سازد. JasperReports
+درونِ پروسه‌یِ Python بالا نمی‌آید -- هر بار با subprocess یک JVMِ جدا صدا
+زده می‌شود."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_RUNNER_JAR = _REPO_ROOT / "tools" / "jasper-runner" / "target" / "jasper-runner.jar"
+_TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+
+BUILD_INSTRUCTIONS = "طبقِ tools/jasper-runner/README.md آن را build کنید."
+
+
+class JasperNotAvailableError(RuntimeError):
+    """موتورِ چاپِ حرفه‌ای هنوز build نشده یا Java نصب نیست -- پیامِ راهنما
+    به‌جایِ کرشِ نامفهوم."""
+
+
+def is_available() -> bool:
+    return _RUNNER_JAR.exists()
+
+
+def render_report(
+    template_name: str,
+    rows: list[dict],
+    params: dict,
+    output_path: str,
+    output_format: str = "pdf",
+) -> None:
+    """یک گزارشِ حرفه‌ای می‌سازد و در output_path ذخیره می‌کند.
+
+    rows: لیستی از دیکشنری -- کلیدها باید دقیقاً با نامِ field هایِ همان
+    قالب (jrxml) یکی باشند؛ مقادیر باید از قبل با numerals.format_money/
+    format_jalali_date/to_persian_digits آماده‌شده باشند (JasperReports این‌جا
+    فقط چیدمان می‌کند، نه محاسبه یا فرمت‌دهیِ عدد/تاریخ).
+    params: نگاشتِ رشته‌ای برایِ پارامترهایِ گزارش (عنوان، نامِ شرکت، ...).
+    output_format: "pdf" یا "xlsx".
+    """
+    if not _RUNNER_JAR.exists():
+        raise JasperNotAvailableError(f"موتورِ چاپِ حرفه‌ای هنوز آماده نیست — {BUILD_INSTRUCTIONS}")
+
+    jrxml_path = _TEMPLATES_DIR / template_name
+    if not jrxml_path.exists():
+        raise FileNotFoundError(f"قالبِ گزارش یافت نشد: {jrxml_path}")
+
+    with tempfile.TemporaryDirectory(prefix="peecha_jasper_") as tmp_dir:
+        rows_path = os.path.join(tmp_dir, "rows.json")
+        params_path = os.path.join(tmp_dir, "params.json")
+        with open(rows_path, "w", encoding="utf-8") as f:
+            json.dump({"rows": rows}, f, ensure_ascii=False)
+        with open(params_path, "w", encoding="utf-8") as f:
+            json.dump(params, f, ensure_ascii=False)
+
+        try:
+            result = subprocess.run(
+                ["java", "-jar", str(_RUNNER_JAR), str(jrxml_path), rows_path, params_path, str(output_path), output_format],
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError as exc:
+            raise JasperNotAvailableError(
+                f"Java یافت نشد — برایِ چاپِ حرفه‌ای، JDK ۱۷ یا بالاتر باید نصب و در PATH باشد."
+            ) from exc
+
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(f"تولیدِ گزارشِ حرفه‌ای ناموفق بود:\n{detail}")
