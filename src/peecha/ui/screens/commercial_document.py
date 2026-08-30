@@ -1188,6 +1188,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.history_button.setToolTip("آخرین اسنادِ این طرفِ‌حساب — تعدادِ ردیف قابلِ‌تنظیم است")
         self.history_button.clicked.connect(self._open_counterparty_history)
         self.footer_layout.addWidget(self.history_button)
+
+        self.edit_template_button = QPushButton("🎨")
+        self.edit_template_button.setObjectName("iconButton")
+        self.edit_template_button.setFixedWidth(44)
+        self.edit_template_button.setToolTip(
+            "بازکردنِ قالبِ چاپِ حرفه‌ایِ فاکتور (invoice.jrxml) در Jaspersoft Studio برایِ ویرایش."
+        )
+        self.edit_template_button.clicked.connect(self._edit_invoice_template)
+        self.footer_layout.addWidget(self.edit_template_button)
         self.footer_layout.addStretch(1)
 
         self.set_field_help([
@@ -1206,6 +1215,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         dialog = _CounterpartyHistoryDialog(self, company_id, counterparty_id, self.counterparty_combo.currentText())
         dialog.exec()
+
+    def _edit_invoice_template(self) -> None:
+        try:
+            opened = jasper_bridge.open_template_for_editing("invoice.jrxml")
+        except FileNotFoundError as exc:
+            QMessageBox.warning(self, "ویرایشِ قالب", str(exc))
+            return
+        if not opened:
+            path = jasper_bridge.template_path("invoice.jrxml")
+            QMessageBox.information(
+                self,
+                "ویرایشِ قالب",
+                "Jaspersoft Studio به‌صورتِ خودکار پیدا نشد.\n\n"
+                f"مسیرِ فایلِ قالب: {path}\n\n"
+                "این فایل را به‌صورتِ دستی در Jaspersoft Studio باز کنید، یا "
+                "مسیرِ اجراییِ Studio را در متغیرِ محیطیِ PEECHA_JASPER_STUDIO_PATH تنظیم کنید.",
+            )
 
     def _recompute_due_date(self) -> None:
         """طبقِ درخواستِ صریح: با انتخابِ طرفِ‌حساب، موعدِ تسویه از رویِ

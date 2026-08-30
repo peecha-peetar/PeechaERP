@@ -23,6 +23,8 @@ _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 BUILD_INSTRUCTIONS = "طبقِ tools/jasper-runner/README.md آن را build کنید."
 
+_STUDIO_ENV_VAR = "PEECHA_JASPER_STUDIO_PATH"
+
 
 class JasperNotAvailableError(RuntimeError):
     """موتورِ چاپِ حرفه‌ای هنوز build نشده یا Java نصب نیست -- پیامِ راهنما
@@ -31,6 +33,37 @@ class JasperNotAvailableError(RuntimeError):
 
 def is_available() -> bool:
     return _RUNNER_JAR.exists()
+
+
+def template_path(template_name: str) -> Path:
+    path = _TEMPLATES_DIR / template_name
+    if not path.exists():
+        raise FileNotFoundError(f"قالبِ گزارش یافت نشد: {path}")
+    return path
+
+
+def open_template_for_editing(template_name: str) -> bool:
+    """فایلِ jrxml را برایِ ویرایش در Jaspersoft Studio باز می‌کند.
+
+    ReportRunner همیشه از رویِ همینِ فایلِ روی دیسک -- تازه در همان لحظه --
+    کامپایل می‌کند (نه از رویِ نسخه‌یِ از پیش‌کامپایل‌شده)، پس ذخیره‌کردن در
+    Studio بدونِ هیچ مرحله‌یِ Build جداگانه‌ای بلافاصله در اجرایِ بعدیِ
+    گزارش اثر می‌کند.
+
+    اگر مسیرِ اجراییِ Studio با متغیرِ محیطیِ PEECHA_JASPER_STUDIO_PATH
+    تنظیم شده باشد از همان استفاده می‌شود؛ وگرنه تلاش می‌شود از طریقِ
+    اتصالِ پیش‌فرضِ سیستم‌عامل با پسوندِ jrxml باز شود (نصب‌کننده‌یِ Studio
+    این اتصال را معمولاً خودش ثبت می‌کند). خروجی: آیا بازکردن موفق بود یا نه.
+    """
+    from PySide6.QtCore import QUrl
+    from PySide6.QtGui import QDesktopServices
+
+    path = template_path(template_name)
+    studio_exe = os.environ.get(_STUDIO_ENV_VAR)
+    if studio_exe and Path(studio_exe).exists():
+        subprocess.Popen([studio_exe, str(path)])
+        return True
+    return QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
 
 def render_report(

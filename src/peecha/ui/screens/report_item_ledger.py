@@ -80,6 +80,13 @@ class ItemLedgerScreen(QWidget):
         self.print_professional_button = QPushButton("چاپِ حرفه‌ای")
         self.print_professional_button.clicked.connect(self._print_professional)
         filters_row.addWidget(self.print_professional_button)
+
+        self.edit_template_button = QPushButton("🎨 ویرایشِ قالب")
+        self.edit_template_button.setToolTip(
+            "بازکردنِ قالبِ چاپِ کاردکس (kardex.jrxml) در Jaspersoft Studio برایِ ویرایش."
+        )
+        self.edit_template_button.clicked.connect(self._edit_print_template)
+        filters_row.addWidget(self.edit_template_button)
         layout.addLayout(filters_row)
 
         self.table = QTableWidget(0, len(_COLUMNS))
@@ -294,3 +301,20 @@ class ItemLedgerScreen(QWidget):
             return
 
         QMessageBox.information(self, "چاپِ حرفه‌ای", "گزارش با موفقیت ساخته شد.")
+
+    def _edit_print_template(self) -> None:
+        try:
+            opened = jasper_bridge.open_template_for_editing("kardex.jrxml")
+        except FileNotFoundError as exc:
+            QMessageBox.warning(self, "ویرایشِ قالب", str(exc))
+            return
+        if not opened:
+            path = jasper_bridge.template_path("kardex.jrxml")
+            QMessageBox.information(
+                self,
+                "ویرایشِ قالب",
+                "Jaspersoft Studio به‌صورتِ خودکار پیدا نشد.\n\n"
+                f"مسیرِ فایلِ قالب: {path}\n\n"
+                "این فایل را به‌صورتِ دستی در Jaspersoft Studio باز کنید، یا "
+                "مسیرِ اجراییِ Studio را در متغیرِ محیطیِ PEECHA_JASPER_STUDIO_PATH تنظیم کنید.",
+            )
