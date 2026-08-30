@@ -46,10 +46,22 @@ from peecha.services import roles as roles_service
 DOCUMENT_TYPE_CODES = (
     "SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN",
     "PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN",
+    # طبقِ درخواستِ صریح («سیستمِ فاکتورِ امانی، هردو جهت»): امانیِ خروجی
+    # (کالایِ خودمان نزدِ نماینده/مشتری تا زمانِ فروش) و امانیِ ورودی
+    # (کالایِ تامین‌کننده نزدِ ما تا زمانِ مصرف/فروش) — هردو سندِ قصد/
+    # ردیابی‌اند: مثلِ سفارش، هیچ اثرِ حسابداری‌ای در لحظه‌یِ ثبتِ خودشان
+    # ندارند؛ برخلافِ سفارش، اثرِ انباریِ واقعی (جابه‌جاییِ فیزیکی) دارند.
+    "CONSIGNMENT_OUT", "CONSIGNMENT_IN",
 )
 # سفارش/پیش‌فاکتور فقط سندِ قصد/پیشنهاد هستند — هرگز اثری در انبار یا
 # حسابداری نمی‌گذارند؛ POSTED برایِ این دو یعنی صرفاً «قفل و ارسال‌شده».
 _ORDER_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA")
+# طبقِ همان اصل: این دو POSTED یعنی «کالا فیزیکی جابه‌جا شد» (نه یک سندِ
+# صرفاً کاغذی مثلِ سفارش) اما هنوز هیچ مالکیتی منتقل نشده — پس هیچ‌کدام
+# سندِ حسابداری نمی‌سازند؛ _post_consignment_document جداگانه مدیریتشان
+# می‌کند (نه _STOCK_DOC_TYPE_BY_TYPEِ زیر، چون امانیِ خروجی به دو انبار
+# هم‌زمان نیاز دارد -- ناسازگار با ساختارِ تک‌انبارِ آن نگاشت).
+_CONSIGNMENT_TYPES = ("CONSIGNMENT_OUT", "CONSIGNMENT_IN")
 _STOCK_DOC_TYPE_BY_TYPE = {
     "PURCHASE_INVOICE": "RECEIPT",
     "SALES_INVOICE": "ISSUE",
@@ -57,12 +69,16 @@ _STOCK_DOC_TYPE_BY_TYPE = {
     "PURCHASE_RETURN": "RETURN_OUT",
 }
 # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور باید بتواند به فاکتور تبدیل
-# شود»): مقصدِ تبدیل برایِ هر نوعِ سندِ غیرِمالی.
+# شود»): مقصدِ تبدیل برایِ هر نوعِ سندِ غیرِمالی. امانیِ خروجی/ورودی هم
+# طبقِ همین درخواست («تسویه‌یِ امانی یعنی تبدیل به فاکتورِ واقعی») به
+# همین مکانیزمِ ازپیش‌موجودِ تبدیلِ مرحله‌ای/جزئی وصل می‌شوند.
 _CONVERT_TO_INVOICE_TARGET = {
     "SALES_ORDER": "SALES_INVOICE",
     "SALES_PROFORMA": "SALES_INVOICE",
     "PURCHASE_ORDER": "PURCHASE_INVOICE",
     "PURCHASE_PROFORMA": "PURCHASE_INVOICE",
+    "CONSIGNMENT_OUT": "SALES_INVOICE",
+    "CONSIGNMENT_IN": "PURCHASE_INVOICE",
 }
 
 # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
@@ -197,6 +213,9 @@ class DocumentHeaderFields:
     counterparty_detail_account_id: int
     currency_id: int
     warehouse_id: int | None = None
+    # فقط برایِ CONSIGNMENT_OUT -- انبارِ مقصد/محلِ‌نگه‌داریِ کالایِ امانی
+    # نزدِ طرفِ‌حساب.
+    consignment_warehouse_id: int | None = None
     channel_code: str | None = None
     price_list_id: int | None = None
     pos_session_id: int | None = None
@@ -241,7 +260,8 @@ def create_document(
             company_id=company_id, fiscal_year_id=fiscal_year_id, document_type_code=document_type_code,
             document_no=next_no, document_date=document_date, status_code="DRAFT",
             channel_code=fields.channel_code, counterparty_detail_account_id=fields.counterparty_detail_account_id,
-            warehouse_id=fields.warehouse_id, price_list_id=fields.price_list_id, pos_session_id=fields.pos_session_id,
+            warehouse_id=fields.warehouse_id, consignment_warehouse_id=fields.consignment_warehouse_id,
+            price_list_id=fields.price_list_id, pos_session_id=fields.pos_session_id,
             source_document_id=fields.source_document_id, linked_exchange_document_id=fields.linked_exchange_document_id,
             currency_id=fields.currency_id, exchange_rate=fields.exchange_rate,
             requested_delivery_date=fields.requested_delivery_date, due_date=due_date,
@@ -355,9 +375,15 @@ def convert_to_invoice(
         if not line_snapshots:
             raise ValueError("چیزی برایِ تبدیل به فاکتور باقی نمانده است.")
 
+        # طبقِ اصلِ فاکتورِ امانیِ خروجی: کالا فیزیکی نزدِ طرفِ‌حساب است
+        # (انبارِ consignment_warehouse_id)، نه انبارِ اصلیِ شرکت -- پس
+        # فاکتورِ فروشِ حاصل از تسویه باید دقیقاً از همان انبار کسر کند.
+        invoice_warehouse_id = (
+            source.consignment_warehouse_id if source.document_type_code == "CONSIGNMENT_OUT" else source.warehouse_id
+        )
         header_fields = DocumentHeaderFields(
             counterparty_detail_account_id=source.counterparty_detail_account_id, currency_id=source.currency_id,
-            warehouse_id=source.warehouse_id, channel_code=source.channel_code, price_list_id=source.price_list_id,
+            warehouse_id=invoice_warehouse_id, channel_code=source.channel_code, price_list_id=source.price_list_id,
             source_document_id=source.document_id, exchange_rate=source.exchange_rate,
             sales_rep_detail_account_id=source.sales_rep_detail_account_id,
             cost_center_detail_account_id=source.cost_center_detail_account_id,
@@ -759,6 +785,7 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
         doc.fiscal_year_id = _resolve_fiscal_year_id(session, company_id, document_date)
         doc.counterparty_detail_account_id = fields.counterparty_detail_account_id
         doc.warehouse_id = fields.warehouse_id
+        doc.consignment_warehouse_id = fields.consignment_warehouse_id
         doc.channel_code = fields.channel_code
         doc.price_list_id = fields.price_list_id
         if fields.due_date is not None:
@@ -1085,6 +1112,139 @@ def _build_sales_invoice_commercial_je(
     return journal_entry_id
 
 
+def _build_consignment_in_settlement_je(
+    company_id: int, posted_by_user_id: int, document_date: datetime.date, description: str, counterparty_id: int,
+    extra_dims: dict[int, int], line_snapshots: list[tuple],
+) -> int:
+    """سندِ حسابداریِ تسویه‌یِ امانیِ ورودی -- طبقِ اصلِ فاکتورِ امانی: کالا
+    از پیش (بدونِ اثرِ حسابداری، در لحظه‌یِ خودِ سندِ CONSIGNMENT_IN)
+    فیزیکی وارد شده، پس این‌جا هیچ RECEIPTِ تازه‌ای لازم نیست -- فقط اکنون
+    که مالکیت رسماً منتقل می‌شود، بدهکارِ موجودیِ کالا/بستانکارِ
+    حساب‌هایِ پرداختنی ثبت می‌شود (این معادلِ دقیقِ اثرِ نهاییِ یک RECEIPTِ
+    معمولی است -- چه پیش از تسویه فروخته شده باشد چه هنوز در انبار باشد،
+    چون فروشِ احتمالیِ پیش‌تر همان مقدار را از حسابِ موجودیِ کالا بستانکار
+    کرده بود، این سند دقیقاً آن را جبران می‌کند).
+
+    محدودیتِ آگاهانه: مالياتِ ردیف در این مسیر پشتیبانی نمی‌شود (فقط
+    قیمتِ خالص) و بهایِ تسویه باید همان بهایِ توافق‌شده‌یِ زمانِ
+    CONSIGNMENT_IN بماند -- تغییرِ قیمت در لحظه‌یِ تسویه به یک دورِ بعدی
+    موکول شده است."""
+    person_dim_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    ap_account_id = inv_engine_service.get_account_mapping(company_id, "SUPPLIER_PAYABLE")
+    if ap_account_id is None:
+        raise ValueError("حسابِ «پرداختنیِ تامین‌کنندگان» هنوز در تنظیماتِ انبار مشخص نشده است.")
+    inventory_account_id = inv_engine_service.get_account_mapping(company_id, "INVENTORY_ASSET")
+    if inventory_account_id is None:
+        raise ValueError("حسابِ «موجودیِ کالا» هنوز در تنظیماتِ انبار مشخص نشده است.")
+
+    item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+    item_ids = {snap[1] for snap in line_snapshots}
+    with new_session() as session:
+        item_detail_account_by_item_id = dict(
+            session.execute(select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(item_ids))).all()
+        )
+
+    total = _ZERO
+    inventory_by_item: dict[int, decimal.Decimal] = {}
+    for snap in line_snapshots:
+        item_id, quantity, unit_cost = snap[1], snap[3], snap[5]
+        amount = _money(quantity * unit_cost)
+        total += amount
+        detail_account_id = item_detail_account_by_item_id.get(item_id)
+        if detail_account_id is not None:
+            inventory_by_item[detail_account_id] = inventory_by_item.get(detail_account_id, _ZERO) + amount
+
+    je_lines: list[je_service.LineInput] = _build_role_je_lines(
+        inventory_account_id, description, extra_dims, total, is_debit=True,
+        item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=inventory_by_item,
+    )
+    je_lines.append(
+        je_service.LineInput(
+            account_id=ap_account_id, description=description, debit=_ZERO, credit=total,
+            details={person_dim_type_id: counterparty_id, **extra_dims},
+        )
+    )
+    result = je_service.create_journal_entry(
+        company_id, posted_by_user_id, document_date, description, je_lines, entry_type_code="COMMERCIAL"
+    )
+    return result.journal_entry_id
+
+
+def _post_consignment_document(
+    document_id: int, company_id: int, posted_by_user_id: int, line_snapshots: list[tuple], header_fields: tuple,
+) -> PostResult:
+    """ثبتِ‌نهاییِ CONSIGNMENT_OUT/CONSIGNMENT_IN -- طبقِ اصلِ فاکتورِ
+    امانی: فقط جابه‌جاییِ فیزیکیِ کالاست (بدونِ هیچ اثرِ حسابداری‌ای)، پس
+    به‌جایِ نگاشتِ عمومیِ _STOCK_DOC_TYPE_BY_TYPE (که فرضِ یک‌انباره
+    دارد)، این‌جا مستقیماً سندِ انبارِ مناسب ساخته می‌شود:
+      - CONSIGNMENT_OUT: یک TRANSFERِ عادی از انبارِ مبدا (warehouse_id)
+        به انبارِ امانتِ نزدِ طرفِ‌حساب (consignment_warehouse_id) --
+        TRANSFER هرگز اثرِ حسابداری تولید نمی‌کند (طبقِ قاعدهٔ ۷۶
+        ازپیش‌موجود)، دقیقاً هم‌معنیِ «کالا هنوز مالِ ماست، فقط جایش
+        عوض شده».
+      - CONSIGNMENT_IN: نوعِ تازه‌یِ CONSIGNMENT_IN در inventory_engine.py
+        (مثلِ نیمه‌یِ ورودیِ TRANSFER، بدونِ اثرِ حسابداری) -- بهایِ
+        توافق‌شده لازم است تا اگر پیش از تسویه فروخته شود، بهایِ
+        تمام‌شده درست محاسبه شود."""
+    warehouse_id, consignment_warehouse_id, cost_center_id, project_id, document_date, description = header_fields
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        document_type_code = doc.document_type_code
+
+    if document_type_code == "CONSIGNMENT_OUT":
+        if warehouse_id is None or consignment_warehouse_id is None:
+            raise ValueError("برایِ امانیِ خروجی، انبارِ مبدا و انبارِ امانتِ نزدِ طرفِ‌حساب هردو الزامی‌اند.")
+        stock_document_type = "TRANSFER"
+        stock_header_fields = inv_documents_service.DocumentHeaderFields(
+            source_warehouse_id=warehouse_id, destination_warehouse_id=consignment_warehouse_id,
+            cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
+            reference_no=f"COMM-{document_id}", description=description,
+        )
+    else:
+        if warehouse_id is None:
+            raise ValueError("انبارِ نگه‌داریِ کالایِ امانیِ ورودی الزامی است.")
+        stock_document_type = "CONSIGNMENT_IN"
+        stock_header_fields = inv_documents_service.DocumentHeaderFields(
+            destination_warehouse_id=warehouse_id,
+            cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
+            reference_no=f"COMM-{document_id}", description=description,
+        )
+
+    stock_document_id = inv_documents_service.create_stock_document(
+        company_id, posted_by_user_id, stock_document_type, document_date, stock_header_fields
+    )
+    for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id in line_snapshots:
+        # CONSIGNMENT_OUT چون TRANSFER است، unit_cost=None کافیست (موتورِ
+        # انبار خودش از بهایِ فعلیِ کالا استفاده می‌کند)؛ CONSIGNMENT_IN
+        # چون هیچ سابقه‌ای در انبارِ مقصد ندارد، بهایِ توافق‌شده‌یِ همان
+        # ردیف (unit_price) صریحاً به‌عنوانِ unit_cost منتقل می‌شود.
+        line_unit_cost = unit_price if document_type_code == "CONSIGNMENT_IN" else None
+        inv_line_id = inv_documents_service.add_line(
+            stock_document_id, company_id,
+            inv_documents_service.LineFields(
+                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                batch_id=batch_id, unit_cost=line_unit_cost,
+            ),
+        )
+        with new_session() as session:
+            comm_line = session.get(CommercialDocumentLine, line_id)
+            comm_line.stock_document_line_id = inv_line_id
+            session.commit()
+
+    inv_documents_service.confirm_stock_document(stock_document_id, company_id)
+    inv_documents_service.post_stock_document(stock_document_id, company_id, posted_by_user_id)
+
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        doc.stock_document_id = stock_document_id
+        doc.status_code = "POSTED"
+        doc.posted_by_user_id = posted_by_user_id
+        doc.posted_at = datetime.datetime.now()
+        session.commit()
+
+    return PostResult(document_id=document_id, stock_document_id=stock_document_id, journal_entry_id=None)
+
+
 def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> PostResult:
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
@@ -1105,6 +1265,34 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             doc.posted_at = datetime.datetime.now()
             session.commit()
             return PostResult(document_id=document_id, stock_document_id=None, journal_entry_id=None)
+
+        if document_type_code in _CONSIGNMENT_TYPES:
+            # طبقِ اصلِ فاکتورِ امانی: فقط جابه‌جاییِ فیزیکیِ کالاست، هیچ
+            # اثرِ حسابداری‌ای در همین لحظه ندارد -- _post_consignment_document
+            # جداگانه (خارج از همین session) مدیریتش می‌کند، چون امانیِ
+            # خروجی به دو انبارِ هم‌زمان (مبدا+مقصد) نیاز دارد.
+            lines = session.scalars(
+                select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
+            ).all()
+            if not lines:
+                raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+            consignment_line_snapshots = [(ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id) for ln in lines]
+            consignment_fields = (
+                doc.warehouse_id, doc.consignment_warehouse_id, doc.cost_center_detail_account_id,
+                doc.project_detail_account_id, doc.document_date, doc.description or f"سندِ بازرگانی #{doc.document_no}",
+            )
+        else:
+            consignment_line_snapshots = None
+            consignment_fields = None
+
+        # طبقِ اصلِ تسویه‌یِ امانیِ ورودی: فاکتورِ خریدی که از یک سندِ
+        # CONSIGNMENT_IN تبدیل شده، هرگز نباید دوباره RECEIPT بزند (کالا
+        # از پیش، در لحظه‌یِ خودِ CONSIGNMENT_IN، فیزیکی وارد شده) -- فقط
+        # سندِ حسابداریِ تسویه (موجودی/پرداختنی) لازم دارد.
+        is_consignment_in_settlement = False
+        if document_type_code == "PURCHASE_INVOICE" and doc.source_document_id is not None:
+            source_doc = session.get(CommercialDocument, doc.source_document_id)
+            is_consignment_in_settlement = source_doc is not None and source_doc.document_type_code == "CONSIGNMENT_IN"
 
         open_hold = session.scalar(
             select(CreditHold).where(CreditHold.related_document_id == document_id, CreditHold.released_at.is_(None))
@@ -1136,6 +1324,9 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             for ln in lines
         ]
 
+    if document_type_code in _CONSIGNMENT_TYPES:
+        return _post_consignment_document(document_id, company_id, posted_by_user_id, consignment_line_snapshots, consignment_fields)
+
     # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
     # فراموش شده است» حتی وقتی تفصیلیِ طرفِ‌حساب درست انتخاب شده بود):
     # اگر حسابِ نقش‌محورِ (دریافتنی/پرداختنی/درآمد/موجودی/...) این سند
@@ -1159,81 +1350,91 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 warehouse_row.fields.profit_center_detail_account_id
             )
 
-    stock_document_type = _STOCK_DOC_TYPE_BY_TYPE[document_type_code]
-    is_receipt_like = stock_document_type in ("RECEIPT", "RETURN_IN")
-
-    # طبقِ درخواستِ صریح («کالایِ ردیف بتواند انبارِ مستقل از هدر داشته
-    # باشد، حتی یک کالا در چند انبار، و به‌ازایِ هر انبار یک حوالهٔ
-    # جداگانه صادر شود» — Toggleِ PER_LINE_WAREHOUSE): ردیف‌ها بر اساسِ
-    # انبارِ مؤثرِشان (انبارِ خودِ ردیف، وگرنه انبارِ هدر) گروه‌بندی
-    # می‌شوند و به‌ازایِ هر انبار یک سندِ انبارِ جداگانه ساخته می‌شود —
-    # هرکدام خودکار مرکزِ سودِ همان انبار را می‌گیرد (طبقِ رفعِ باگِ قبلی
-    # در inventory_engine.py، چون هرکدام سندِ انبارِ خودش را دارد). وقتی
-    # همه‌یِ ردیف‌ها به یک انبار برمی‌گردند (پیش‌فرض، بدونِ این Toggle)،
-    # دقیقاً یک سندِ انبار مثلِ قبل ساخته می‌شود — رفتار بدونِ تغییر.
-    lines_by_warehouse: dict[int | None, list[tuple]] = {}
-    for snapshot in line_snapshots:
-        effective_warehouse_id = snapshot[10] or warehouse_id
-        lines_by_warehouse.setdefault(effective_warehouse_id, []).append(snapshot)
-
     stock_document_id = None
     journal_entry_id = None
-    for group_warehouse_id, group_lines in lines_by_warehouse.items():
-        group_header_fields = inv_documents_service.DocumentHeaderFields(
-            destination_warehouse_id=group_warehouse_id if is_receipt_like else None,
-            source_warehouse_id=group_warehouse_id if not is_receipt_like else None,
-            counterparty_detail_account_id=counterparty_id,
-            cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
-            reference_no=f"COMM-{document_id}", description=description,
+
+    if is_consignment_in_settlement:
+        # طبقِ اصلِ تسویه‌یِ امانیِ ورودی: کالا از پیش (بدونِ اثرِ
+        # حسابداری، در لحظه‌یِ خودِ CONSIGNMENT_IN) فیزیکی وارد شده -- پس
+        # این‌جا هیچ RECEIPTِ تازه‌ای ساخته نمی‌شود، فقط سندِ حسابداریِ
+        # موجودی/پرداختنی.
+        journal_entry_id = _build_consignment_in_settlement_je(
+            company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims, line_snapshots,
         )
-        group_stock_document_id = inv_documents_service.create_stock_document(
-            company_id, posted_by_user_id, stock_document_type, document_date, group_header_fields
-        )
-        for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in group_lines:
-            # برایِ ISSUE، unit_cost=None می‌ماند تا موتورِ انبار از میانگینِ
-            # موزونِ فعلی استفاده کند (قیمتِ فروش هرگز بهایِ تمام‌شده نیست).
-            # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید محاسبه
-            # می‌شود ولی سندش ثبت نمی‌شود»): قبلاً این‌جا تخفیف/مالياتِ
-            # ردیف (_discount_amt/_tax_amt) کاملاً نادیده گرفته می‌شد —
-            # بهایِ واحدِ خامِ ردیف (بدونِ کسرِ تخفیف) مستقیماً به‌عنوانِ
-            # ارزشِ موجودی/مبنایِ بستانکاریِ پرداختنی می‌رفت. حالا برایِ
-            # فاکتورِ خرید (RECEIPT)، ارزشِ موجودی خالص از تخفیف است، و
-            # مالياتِ ردیف جداگانه (نه در unit_cost) به موتورِ انبار
-            # منتقل می‌شود تا بدهکارِ «مالياتِ خرید-قابلِ مطالبه» شود و
-            # به بستانکاریِ حساب‌هایِ پرداختنی هم اضافه شود — دقیقاً هم‌
-            # مبلغِ doc.total_amount که کاربر رویِ فاکتور می‌بیند.
-            line_tax_amount = None
-            if stock_document_type == "ISSUE":
-                stock_unit_cost = None
-            elif stock_document_type == "RECEIPT":
-                net_of_discount = (quantity * unit_price - _discount_amt) / quantity if quantity else unit_price
-                stock_unit_cost = _money(net_of_discount)
-                line_tax_amount = _tax_amt
-            else:
-                stock_unit_cost = unit_price
-            inv_line_id = inv_documents_service.add_line(
-                group_stock_document_id, company_id,
-                inv_documents_service.LineFields(
-                    item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
-                    batch_id=batch_id, unit_cost=stock_unit_cost, tax_amount=line_tax_amount,
-                ),
+    else:
+        stock_document_type = _STOCK_DOC_TYPE_BY_TYPE[document_type_code]
+        is_receipt_like = stock_document_type in ("RECEIPT", "RETURN_IN")
+
+        # طبقِ درخواستِ صریح («کالایِ ردیف بتواند انبارِ مستقل از هدر داشته
+        # باشد، حتی یک کالا در چند انبار، و به‌ازایِ هر انبار یک حوالهٔ
+        # جداگانه صادر شود» — Toggleِ PER_LINE_WAREHOUSE): ردیف‌ها بر اساسِ
+        # انبارِ مؤثرِشان (انبارِ خودِ ردیف، وگرنه انبارِ هدر) گروه‌بندی
+        # می‌شوند و به‌ازایِ هر انبار یک سندِ انبارِ جداگانه ساخته می‌شود —
+        # هرکدام خودکار مرکزِ سودِ همان انبار را می‌گیرد (طبقِ رفعِ باگِ قبلی
+        # در inventory_engine.py، چون هرکدام سندِ انبارِ خودش را دارد). وقتی
+        # همه‌یِ ردیف‌ها به یک انبار برمی‌گردند (پیش‌فرض، بدونِ این Toggle)،
+        # دقیقاً یک سندِ انبار مثلِ قبل ساخته می‌شود — رفتار بدونِ تغییر.
+        lines_by_warehouse: dict[int | None, list[tuple]] = {}
+        for snapshot in line_snapshots:
+            effective_warehouse_id = snapshot[10] or warehouse_id
+            lines_by_warehouse.setdefault(effective_warehouse_id, []).append(snapshot)
+
+        for group_warehouse_id, group_lines in lines_by_warehouse.items():
+            group_header_fields = inv_documents_service.DocumentHeaderFields(
+                destination_warehouse_id=group_warehouse_id if is_receipt_like else None,
+                source_warehouse_id=group_warehouse_id if not is_receipt_like else None,
+                counterparty_detail_account_id=counterparty_id,
+                cost_center_detail_account_id=cost_center_id, project_detail_account_id=project_id,
+                reference_no=f"COMM-{document_id}", description=description,
             )
-            with new_session() as session:
-                comm_line = session.get(CommercialDocumentLine, line_id)
-                comm_line.stock_document_line_id = inv_line_id
-                session.commit()
+            group_stock_document_id = inv_documents_service.create_stock_document(
+                company_id, posted_by_user_id, stock_document_type, document_date, group_header_fields
+            )
+            for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in group_lines:
+                # برایِ ISSUE، unit_cost=None می‌ماند تا موتورِ انبار از میانگینِ
+                # موزونِ فعلی استفاده کند (قیمتِ فروش هرگز بهایِ تمام‌شده نیست).
+                # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید محاسبه
+                # می‌شود ولی سندش ثبت نمی‌شود»): قبلاً این‌جا تخفیف/مالياتِ
+                # ردیف (_discount_amt/_tax_amt) کاملاً نادیده گرفته می‌شد —
+                # بهایِ واحدِ خامِ ردیف (بدونِ کسرِ تخفیف) مستقیماً به‌عنوانِ
+                # ارزشِ موجودی/مبنایِ بستانکاریِ پرداختنی می‌رفت. حالا برایِ
+                # فاکتورِ خرید (RECEIPT)، ارزشِ موجودی خالص از تخفیف است، و
+                # مالياتِ ردیف جداگانه (نه در unit_cost) به موتورِ انبار
+                # منتقل می‌شود تا بدهکارِ «مالياتِ خرید-قابلِ مطالبه» شود و
+                # به بستانکاریِ حساب‌هایِ پرداختنی هم اضافه شود — دقیقاً هم‌
+                # مبلغِ doc.total_amount که کاربر رویِ فاکتور می‌بیند.
+                line_tax_amount = None
+                if stock_document_type == "ISSUE":
+                    stock_unit_cost = None
+                elif stock_document_type == "RECEIPT":
+                    net_of_discount = (quantity * unit_price - _discount_amt) / quantity if quantity else unit_price
+                    stock_unit_cost = _money(net_of_discount)
+                    line_tax_amount = _tax_amt
+                else:
+                    stock_unit_cost = unit_price
+                inv_line_id = inv_documents_service.add_line(
+                    group_stock_document_id, company_id,
+                    inv_documents_service.LineFields(
+                        item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                        batch_id=batch_id, unit_cost=stock_unit_cost, tax_amount=line_tax_amount,
+                    ),
+                )
+                with new_session() as session:
+                    comm_line = session.get(CommercialDocumentLine, line_id)
+                    comm_line.stock_document_line_id = inv_line_id
+                    session.commit()
 
-        inv_documents_service.confirm_stock_document(group_stock_document_id, company_id)
-        group_post_result = inv_documents_service.post_stock_document(group_stock_document_id, company_id, posted_by_user_id)
+            inv_documents_service.confirm_stock_document(group_stock_document_id, company_id)
+            group_post_result = inv_documents_service.post_stock_document(group_stock_document_id, company_id, posted_by_user_id)
 
-        # طبقِ محدودیتِ آگاهانه: comm.commercial_documents فقط یک
-        # stock_document_id/journal_entry_id دارد — با چند انبار، این
-        # فیلدها به اولین حواله/سندِ ساخته‌شده اشاره می‌کنند؛ بقیه هم به
-        # همان reference_no («COMM-{document_id}») قابلِ‌پیداکردن در
-        # فهرستِ اسنادِ انبار هستند، فقط از طریقِ این یک FK لینک نمی‌شوند.
-        if stock_document_id is None:
-            stock_document_id = group_stock_document_id
-            journal_entry_id = group_post_result.journal_entry_id
+            # طبقِ محدودیتِ آگاهانه: comm.commercial_documents فقط یک
+            # stock_document_id/journal_entry_id دارد — با چند انبار، این
+            # فیلدها به اولین حواله/سندِ ساخته‌شده اشاره می‌کنند؛ بقیه هم به
+            # همان reference_no («COMM-{document_id}») قابلِ‌پیداکردن در
+            # فهرستِ اسنادِ انبار هستند، فقط از طریقِ این یک FK لینک نمی‌شوند.
+            if stock_document_id is None:
+                stock_document_id = group_stock_document_id
+                journal_entry_id = group_post_result.journal_entry_id
 
     if document_type_code == "SALES_INVOICE":
         journal_entry_id = _build_sales_invoice_commercial_je(

@@ -665,6 +665,53 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                     amount = _money(unit_cost * line.quantity_base)
                     add_debit("INVENTORY_ASSET", amount, item.item_detail_account_id)
                     add_credit("INVENTORY_ADJUSTMENT_GAIN", amount, item.item_detail_account_id)
+
+            elif doc_type == "CONSIGNMENT_IN":
+                # طبقِ اصلِ فاکتورِ امانیِ ورودی: کالا در این لحظه هنوز مالِ
+                # شرکت نیست (فقط در اختیارِ فیزیکی‌اش قرار گرفته) -- پس
+                # درست مثلِ TRANSFER، هیچ اثرِ حسابداری‌ای (add_debit/
+                # add_credit) این‌جا ثبت نمی‌شود. با این‌حال، بهایِ
+                # توافق‌شده باید ثبت شود تا اگر همین کالا پیش از تسویه با
+                # تامین‌کننده فروخته شد، بهایِ تمام‌شده‌اش درست محاسبه شود؛
+                # سندِ حسابداریِ واقعیِ دریافتنی/پرداختنی فقط در لحظهٔ تسویه
+                # (services/commercial_consignment.py) ساخته می‌شود.
+                warehouse_id = doc.destination_warehouse_id
+                bin_id = resolve_bin(warehouse_id, line.bin_location_id)
+                method = costing_method(item)
+                if line.unit_cost is None:
+                    raise ValueError(
+                        f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» در امانیِ ورودی، "
+                        "واردکردنِ بهایِ توافق‌شده الزامی است."
+                    )
+                unit_cost = line.unit_cost
+                in_ledger = insert_ledger(
+                    stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
+                    bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
+                    unit_cost=unit_cost, movement_date=movement_date,
+                )
+                apply_in(item, warehouse_id, bin_id, line.quantity_base, unit_cost, movement_date)
+                if method == "FIFO":
+                    session.add(
+                        CostLayer(
+                            item_id=item.item_id, warehouse_id=warehouse_id, stock_ledger_id=in_ledger.ledger_id,
+                            received_at=datetime.datetime.now(), original_quantity=line.quantity_base,
+                            remaining_quantity=line.quantity_base, unit_cost=unit_cost,
+                        )
+                    )
+
+            elif doc_type == "CONSIGN_RETURN":
+                # طبقِ اصلِ فاکتورِ امانیِ ورودی: بازگرداندنِ کالایِ
+                # مصرف‌نشده به تامین‌کننده -- چون هرگز خریداری نشده، هیچ
+                # اثرِ حسابداری‌ای هم ندارد (بدونِ add_debit/add_credit).
+                warehouse_id = doc.source_warehouse_id
+                bin_id = resolve_bin(warehouse_id, line.bin_location_id)
+                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date)
+                for seg_cost, seg_qty in segments:
+                    insert_ledger(
+                        stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
+                        bin_location_id=bin_id, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
+                        movement_date=movement_date,
+                    )
             else:
                 raise ValueError("نوعِ سند نامعتبر است.")
 

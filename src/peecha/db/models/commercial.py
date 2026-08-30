@@ -279,6 +279,10 @@ class CommercialDocument(Base):
     channel_code: Mapped[str | None] = mapped_column(String(20))
     counterparty_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    # طبقِ درخواستِ صریح («فاکتورِ امانی، هردو جهت»): فقط برایِ
+    # CONSIGNMENT_OUT پر می‌شود -- انبارِ مقصد/محلِ‌نگه‌داریِ کالایِ امانی
+    # نزدِ طرفِ‌حساب (warehouse_id همان انبارِ مبدا/اصلیِ شرکت می‌ماند).
+    consignment_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
     source_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
     linked_exchange_document_id: Mapped[int | None] = mapped_column(
@@ -354,6 +358,11 @@ class CommercialDocumentLine(Base):
     reservation_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_reservations.reservation_id"))
     received_quantity_total: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
     invoiced_quantity_total: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
+    # طبقِ درخواستِ صریح («فاکتورِ امانی، هردو جهت»): فقط برایِ ردیفِ
+    # CONSIGNMENT_OUT/CONSIGNMENT_IN معنا دارد -- مقدارِ بازگردانده‌شده
+    # (کالایِ فروخته‌نشده/مصرف‌نشده)، مکمّلِ source_line_id (که مقدارِ
+    # تسویه‌شده را نشان می‌دهد) برایِ محاسبه‌یِ مانده‌یِ واقعی.
+    returned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
     bundle_parent_line_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("comm.commercial_document_lines.line_id")
     )

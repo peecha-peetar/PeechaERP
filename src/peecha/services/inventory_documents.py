@@ -26,7 +26,15 @@ from peecha.db.models.inventory import (
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_engine as engine_service
 
-DOCUMENT_TYPE_CODES = ("RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT")
+DOCUMENT_TYPE_CODES = (
+    "RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT",
+    # طبقِ درخواستِ صریح («فاکتورِ امانی، هردو جهت»): این دو نوع فقط از
+    # services/commercial_documents.py (سندِ CONSIGNMENT_IN) و
+    # services/commercial_consignment.py (بازگشتِ امانیِ ورودی) ساخته
+    # می‌شوند -- هیچ‌جایِ UIِ عمومیِ اسنادِ انبار مستقیماً این دو را
+    # نمی‌سازد، پس نیازی به فرمِ اختصاصی ندارند.
+    "CONSIGNMENT_IN", "CONSIGN_RETURN",
+)
 _REASON_REQUIRED_TYPES = ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT")
 
 # طبقِ گزارشِ صریح («در فرمِ رسیدِ اصلاح جایی برایِ ورودِ مرکزِ هزینه
@@ -196,6 +204,8 @@ WAREHOUSE_REQUIREMENTS = {
     "ISSUE": {"destination": False, "source": True},
     "RETURN_OUT": {"destination": False, "source": True},
     "TRANSFER": {"destination": True, "source": True},
+    "CONSIGNMENT_IN": {"destination": True, "source": False},
+    "CONSIGN_RETURN": {"destination": False, "source": True},
 }
 
 

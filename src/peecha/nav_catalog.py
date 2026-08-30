@@ -84,6 +84,11 @@ NAV_ITEMS = [
             {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in"},
             {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out"},
             {"code": "INV_ADJUSTMENT", "label": "اصلاحِ موجودی", "screen": "inventory_document_adjustment"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): دیدِ کلیِ
+            # مانده‌یِ همه‌یِ اسنادِ امانیِ بازِ خروجی/ورودی + بازگردانیِ
+            # کالایِ فروخته‌نشده/مصرف‌نشده (تسویه‌یِ واقعی از طریقِ همان
+            # دکمه‌یِ «تبدیل به فاکتور» در خودِ فرمِ سند انجام می‌شود).
+            {"code": "INV_CONSIGNMENT_TRACKING", "label": "پیگیریِ امانی", "screen": "commercial_consignment_tracking"},
         ],
     },
     {
@@ -94,6 +99,9 @@ NAV_ITEMS = [
             {"code": "SALES_PROFORMA", "label": "پیش‌فاکتورِ فروش", "screen": "commercial_document_sales_proforma"},
             {"code": "SALES_INVOICE", "label": "فاکتورِ فروش", "screen": "commercial_document_sales_invoice"},
             {"code": "SALES_RETURN", "label": "برگشت از فروش", "screen": "commercial_document_sales_return"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ
+            # خروجی از نظرِ طرفِ‌حساب هم‌الگویِ فروش است.
+            {"code": "SALES_CONSIGNMENT_OUT", "label": "امانیِ خروجی", "screen": "commercial_document_consignment_out"},
             {"code": "SALES_DOCUMENTS_LIST", "label": "اسنادِ فروش", "screen": "commercial_documents_list_sales"},
             {"code": "SALES_PRICING", "label": "فهرستِ قیمت و تخفیف", "screen": "commercial_pricing"},
             {"code": "SALES_POS_SESSIONS", "label": "ترمینال‌ها و جلسه‌هایِ صندوق", "screen": "commercial_pos_sessions"},
@@ -110,6 +118,9 @@ NAV_ITEMS = [
             {"code": "PURCH_PROFORMA", "label": "پیش‌فاکتورِ خرید", "screen": "commercial_document_purchase_proforma"},
             {"code": "PURCH_INVOICE", "label": "فاکتورِ خرید", "screen": "commercial_document_purchase_invoice"},
             {"code": "PURCH_RETURN", "label": "برگشت به تامین‌کننده", "screen": "commercial_document_purchase_return"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ
+            # ورودی از نظرِ طرفِ‌حساب هم‌الگویِ خرید است.
+            {"code": "PURCH_CONSIGNMENT_IN", "label": "امانیِ ورودی", "screen": "commercial_document_consignment_in"},
             {"code": "PURCH_DOCUMENTS_LIST", "label": "اسنادِ خرید", "screen": "commercial_documents_list_purchase"},
             {"code": "PURCH_EXTRAS", "label": "بهایِ تمام‌شدهٔ وارداتی و ریبیت", "screen": "commercial_purchasing_extras"},
         ],
@@ -267,11 +278,13 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("INV_RETURN_IN", "↩️"),
         ("INV_RETURN_OUT", "↪️"),
         ("INV_ADJUSTMENT", "🛠️"),
+        ("INV_CONSIGNMENT_TRACKING", "🤝"),
     ],
     "SALES": [
         ("SALES_ORDER", "📝"),
         ("SALES_INVOICE", "🧾"),
         ("SALES_RETURN", "↩️"),
+        ("SALES_CONSIGNMENT_OUT", "🤝"),
         ("SALES_DOCUMENTS_LIST", "📚"),
         ("SALES_PRICING", "🏷️"),
         ("SALES_POS_SESSIONS", "🖥️"),
@@ -283,6 +296,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("PURCH_ORDER", "📝"),
         ("PURCH_INVOICE", "🧾"),
         ("PURCH_RETURN", "↪️"),
+        ("PURCH_CONSIGNMENT_IN", "🤝"),
         ("PURCH_DOCUMENTS_LIST", "📚"),
         ("PURCH_EXTRAS", "🚢"),
     ],

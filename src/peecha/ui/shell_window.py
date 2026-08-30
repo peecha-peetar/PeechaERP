@@ -1369,6 +1369,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_purchasing_extras import CommercialPurchasingExtrasScreen
         from peecha.ui.screens.commercial_settlement import InvoiceSettlementScreen
         from peecha.ui.screens.installments_list import InstallmentsListScreen
+        from peecha.ui.screens.commercial_consignment_tracking import ConsignmentTrackingScreen
         from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen
         from peecha.ui.screens.journal_entry import JournalEntryScreen
         from peecha.ui.screens.my_tasks import MyTasksScreen
@@ -1445,14 +1446,21 @@ class MainWindow(QMainWindow):
         self.register_screen("commercial_document_purchase_proforma", CommercialDocumentScreen("PURCHASE_PROFORMA", self))
         self.register_screen("commercial_document_purchase_invoice", CommercialDocumentScreen("PURCHASE_INVOICE", self))
         self.register_screen("commercial_document_purchase_return", CommercialDocumentScreen("PURCHASE_RETURN", self))
+        self.register_screen("commercial_document_consignment_out", CommercialDocumentScreen("CONSIGNMENT_OUT", self))
+        self.register_screen("commercial_document_consignment_in", CommercialDocumentScreen("CONSIGNMENT_IN", self))
         self.register_screen(
             "commercial_documents_list_sales",
-            CommercialDocumentsListScreen(self, type_filter_codes=("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN")),
+            CommercialDocumentsListScreen(
+                self, type_filter_codes=("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN", "CONSIGNMENT_OUT")
+            ),
         )
         self.register_screen(
             "commercial_documents_list_purchase",
-            CommercialDocumentsListScreen(self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN")),
+            CommercialDocumentsListScreen(
+                self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_IN")
+            ),
         )
+        self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sessions", CommercialPosSessionsScreen())
         self.register_screen("commercial_pos_sale", CommercialPosSaleScreen())

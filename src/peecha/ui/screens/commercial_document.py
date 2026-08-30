@@ -64,14 +64,29 @@ DOC_TYPE_TITLES = {
     "PURCHASE_PROFORMA": "پیش‌فاکتورِ خرید",
     "PURCHASE_INVOICE": "فاکتورِ خرید",
     "PURCHASE_RETURN": "برگشت به تامین‌کننده",
+    # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ خروجی
+    # (کالایِ خودمان نزدِ نماینده/مشتری تا فروش) و امانیِ ورودی (کالایِ
+    # تامین‌کننده نزدِ ما تا مصرف/فروش) -- خودِ سند بدونِ اثرِ حسابداری،
+    # تسویه از طریقِ همان دکمه‌یِ «تبدیل به فاکتور».
+    "CONSIGNMENT_OUT": "امانیِ خروجی",
+    "CONSIGNMENT_IN": "امانیِ ورودی",
 }
 STATUS_LABELS = {
     "DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "APPROVED": "تصویب‌شده", "POSTED": "ثبتِ‌نهایی‌شده",
     "CANCELLED": "لغوشده", "CORRECTED": "اصلاح‌شده",
 }
-_SALES_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN")
-# طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل شود»).
-_CONVERTIBLE_TO_INVOICE_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA")
+# امانیِ خروجی از نظرِ طرفِ‌حساب (مشتری/نماینده) و کانالِ فروش، هم‌الگویِ
+# اسنادِ فروش است.
+_SALES_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN", "CONSIGNMENT_OUT")
+# طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل شود»):
+# امانیِ خروجی/ورودی هم از همین مکانیزم (تبدیلِ مرحله‌ایِ مانده به فاکتورِ
+# واقعیِ فروش/خرید) استفاده می‌کنند.
+_CONVERTIBLE_TO_INVOICE_TYPES = (
+    "SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA", "CONSIGNMENT_OUT", "CONSIGNMENT_IN",
+)
+# طبقِ همان تفکیک: کدام از انواعِ قابلِ‌تبدیل به فاکتورِ فروش تبدیل
+# می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
+_CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
 _LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح"]
 
 
@@ -457,7 +472,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.date_field = JalaliDateEdit()
         header_grid.addWidget(self.date_field, 1, 0)
 
-        header_grid.addWidget(QLabel("مشتری" if self._is_sales else "تامین‌کننده"), 0, 1)
+        # طبقِ درخواستِ صریح (فاکتورِ امانی): طرفِ‌حسابِ امانیِ خروجی
+        # نماینده/مشتری است، امانیِ ورودی همان تامین‌کننده -- برچسبِ
+        # روشن‌تر از «مشتری/تامین‌کننده»یِ عمومی.
+        if document_type_code == "CONSIGNMENT_OUT":
+            counterparty_label_text = "نماینده/مشتری (طرفِ امانی)"
+        elif document_type_code == "CONSIGNMENT_IN":
+            counterparty_label_text = "تامین‌کننده (طرفِ امانی)"
+        else:
+            counterparty_label_text = "مشتری" if self._is_sales else "تامین‌کننده"
+        header_grid.addWidget(QLabel(counterparty_label_text), 0, 1)
         counterparty_row = QHBoxLayout()
         counterparty_row.setContentsMargins(0, 0, 0, 0)
         counterparty_row.setSpacing(3)
@@ -573,12 +597,32 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         row2_grid.addWidget(self.due_date_box, 0, 5, 2, 1)
         self.due_date_box.setVisible(self._is_invoice)
 
+        # طبقِ درخواستِ صریح (فاکتورِ امانیِ خروجی): علاوه‌بر انبارِ خودمان
+        # (فیلدِ «انبار» بالا -- مبدأِ ارسال)، یک انبارِ دوم لازم است که
+        # ردِ کالایِ فیزیکاً نزدِ نماینده/مشتری را نگه دارد (تا فروشِ
+        # واقعی/تسویه). فقط برایِ همین یک نوعِ سند نمایش داده می‌شود.
+        self.consignment_warehouse_box = QWidget()
+        consignment_warehouse_layout = QVBoxLayout(self.consignment_warehouse_box)
+        consignment_warehouse_layout.setContentsMargins(0, 0, 0, 0)
+        consignment_warehouse_layout.setSpacing(3)
+        consignment_warehouse_layout.addWidget(QLabel("انبارِ نمایندگی/طرفِ امانی"))
+        consignment_warehouse_row = QHBoxLayout()
+        consignment_warehouse_row.setContentsMargins(0, 0, 0, 0)
+        consignment_warehouse_row.setSpacing(3)
+        self.consignment_warehouse_combo = _EnterComboBox()
+        consignment_warehouse_row.addWidget(self.consignment_warehouse_combo, stretch=1)
+        add_quick_add_button(consignment_warehouse_row, self.consignment_warehouse_combo, main_window, "INV_WAREHOUSES", "تعریفِ انبارِ تازه")
+        consignment_warehouse_layout.addLayout(consignment_warehouse_row)
+        row2_grid.addWidget(self.consignment_warehouse_box, 0, 6, 2, 1)
+        self.consignment_warehouse_box.setVisible(document_type_code == "CONSIGNMENT_OUT")
+
         row2_grid.setColumnStretch(0, 1)
         row2_grid.setColumnStretch(1, 1)
         row2_grid.setColumnStretch(2, 2)
         row2_grid.setColumnStretch(3, 1)
         row2_grid.setColumnStretch(4, 1)
         row2_grid.setColumnStretch(5, 1)
+        row2_grid.setColumnStretch(6, 1)
         header_grid.addWidget(row2_widget, 2, 0, 1, 5)
 
         header_grid.setColumnStretch(0, 1)
@@ -774,7 +818,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         warehouses = locations_service.list_warehouses(company_id, active_only=True)
         self._warehouses = warehouses
         self._per_line_warehouse_enabled = documents_service.is_per_line_warehouse_enabled(company_id)
-        self.warehouse_label.setText("انبار (پیش‌فرضِ ردیف‌ها)" if self._per_line_warehouse_enabled else "انبار")
+        if self.document_type_code == "CONSIGNMENT_IN":
+            # طبقِ درخواستِ صریح: در امانیِ ورودی، همین فیلدِ «انبار»
+            # جایی‌ست که کالایِ تامین‌کننده تا مصرف/فروش/تسویه نگه‌داری
+            # می‌شود -- نه انبارِ نهاییِ فروش.
+            self.warehouse_label.setText("انبارِ نگه‌داری")
+        else:
+            self.warehouse_label.setText("انبار (پیش‌فرضِ ردیف‌ها)" if self._per_line_warehouse_enabled else "انبار")
         current_wh = self.warehouse_combo.currentData()
         self.warehouse_combo.blockSignals(True)
         self.warehouse_combo.clear()
@@ -784,6 +834,17 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if current_wh is not None:
             self.warehouse_combo.setCurrentIndex(max(0, self.warehouse_combo.findData(current_wh)))
         self.warehouse_combo.blockSignals(False)
+
+        if self.document_type_code == "CONSIGNMENT_OUT":
+            current_consignment_wh = self.consignment_warehouse_combo.currentData()
+            self.consignment_warehouse_combo.blockSignals(True)
+            self.consignment_warehouse_combo.clear()
+            self.consignment_warehouse_combo.addItem("(انتخاب کنید)", None)
+            for w in warehouses:
+                self.consignment_warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
+            if current_consignment_wh is not None:
+                self.consignment_warehouse_combo.setCurrentIndex(max(0, self.consignment_warehouse_combo.findData(current_consignment_wh)))
+            self.consignment_warehouse_combo.blockSignals(False)
 
         if self._is_sales:
             counterparty_options = [(c["detail_account_id"], f"{c['code']} — {c['name'] or ''}") for c in dimensions_service.list_customers(company_id)]
@@ -877,6 +938,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.counterparty_combo.setCurrentIndex(index)
         if doc.warehouse_id is not None:
             self.warehouse_combo.setCurrentIndex(max(0, self.warehouse_combo.findData(doc.warehouse_id)))
+        if self.document_type_code == "CONSIGNMENT_OUT" and doc.consignment_warehouse_id is not None:
+            self.consignment_warehouse_combo.setCurrentIndex(
+                max(0, self.consignment_warehouse_combo.findData(doc.consignment_warehouse_id))
+            )
         if doc.price_list_id is not None:
             self.price_list_combo.setCurrentIndex(max(0, self.price_list_combo.findData(doc.price_list_id)))
         if self._is_sales and doc.channel_code is not None:
@@ -971,6 +1036,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         for widget in (
             self.date_field, self.counterparty_combo, self.warehouse_combo, self.price_list_combo, self.channel_combo,
             self.cost_center_combo, self.project_combo, self.reference_field, self.description_field,
+            self.consignment_warehouse_combo,
         ):
             widget.setEnabled(is_editable)
         self.save_button.setEnabled(is_editable)
@@ -1010,6 +1076,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.due_date_field.setDate(datetime.date.today())
         self.counterparty_combo.setCurrentIndex(0)
         self.warehouse_combo.setCurrentIndex(0)
+        if self.document_type_code == "CONSIGNMENT_OUT":
+            self.consignment_warehouse_combo.setCurrentIndex(0)
         self.price_list_combo.setCurrentIndex(0)
         self.channel_combo.setCurrentIndex(0)
         self.cost_center_combo.setCurrentIndex(0)
@@ -1045,10 +1113,17 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             if self.project_combo.currentData() is None and self._project_required:
                 self.status_label.setText("انتخابِ «پروژه» برایِ این نوعِ سند الزامی است.")
                 return None
+        consignment_warehouse_id = None
+        if self.document_type_code == "CONSIGNMENT_OUT":
+            consignment_warehouse_id = self.consignment_warehouse_combo.currentData()
+            if consignment_warehouse_id is None:
+                self.status_label.setText("انتخابِ «انبارِ نمایندگی/طرفِ امانی» الزامی است.")
+                return None
         company = app_session.current_company
         return documents_service.DocumentHeaderFields(
             counterparty_detail_account_id=counterparty_id, currency_id=company.base_currency_id,
             warehouse_id=self.warehouse_combo.currentData(),
+            consignment_warehouse_id=consignment_warehouse_id,
             channel_code=self.channel_combo.currentData() if self._is_sales else None,
             price_list_id=self.price_list_combo.currentData(),
             cost_center_detail_account_id=self.cost_center_combo.currentData(),
@@ -1309,8 +1384,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id)
         if dialog.exec() != QDialog.Accepted:
             return
-        is_sales = self.document_type_code.startswith("SALES")
-        target_title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
+        converts_to_sales = self.document_type_code in _CONVERTS_TO_SALES_INVOICE
+        target_title = "فاکتورِ فروش" if converts_to_sales else "فاکتورِ خرید"
         try:
             new_document_id = documents_service.convert_to_invoice(
                 self._document_id, company_id, app_session.current_user.user_id, datetime.date.today(),

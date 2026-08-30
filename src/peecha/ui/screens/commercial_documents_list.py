@@ -29,6 +29,7 @@ from peecha.ui.screens.commercial_document import (
     DOC_TYPE_TITLES,
     STATUS_LABELS,
     _CONVERTIBLE_TO_INVOICE_TYPES,
+    _CONVERTS_TO_SALES_INVOICE,
     _ConvertToInvoiceDialog,
 )
 
@@ -48,6 +49,8 @@ _TYPE_TO_NAV_CODE = {
     "PURCHASE_PROFORMA": "PURCH_PROFORMA",
     "PURCHASE_INVOICE": "PURCH_INVOICE",
     "PURCHASE_RETURN": "PURCH_RETURN",
+    "CONSIGNMENT_OUT": "SALES_CONSIGNMENT_OUT",
+    "CONSIGNMENT_IN": "PURCH_CONSIGNMENT_IN",
 }
 
 
@@ -264,8 +267,8 @@ class CommercialDocumentsListScreen(QWidget):
         dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id)
         if dialog.exec() != QDialog.Accepted:
             return
-        is_sales = doc.document_type_code.startswith("SALES")
-        target_title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
+        converts_to_sales = doc.document_type_code in _CONVERTS_TO_SALES_INVOICE
+        target_title = "فاکتورِ فروش" if converts_to_sales else "فاکتورِ خرید"
         try:
             new_document_id = documents_service.convert_to_invoice(
                 document_id, company_id, app_session.current_user.user_id, datetime.date.today(),
