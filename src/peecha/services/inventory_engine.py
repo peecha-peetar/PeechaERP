@@ -298,7 +298,7 @@ def list_item_ledger(
             select(
                 StockLedger.movement_date, StockDocument.document_type_code, StockDocument.document_no,
                 Warehouse.name, StockLedger.movement_direction, StockLedger.quantity_base, StockLedger.unit_cost,
-                StockLedger.ledger_id, StockDocument.counterparty_detail_account_id,
+                StockLedger.ledger_id, StockDocument.counterparty_detail_account_id, StockDocumentLine.tax_amount,
             )
             .join(StockDocumentLine, StockDocumentLine.line_id == StockLedger.stock_document_line_id)
             .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
@@ -314,16 +314,26 @@ def list_item_ledger(
 
     result: list[ItemLedgerRow] = []
     balance = _ZERO
-    for movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id, counterparty_id in rows:
+    for movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id, counterparty_id, tax_amount in rows:
         signed = quantity if direction == "IN" else -quantity
         balance += signed
         if date_from is not None and movement_date < date_from:
             continue
+        # طبقِ درخواستِ صریح («بهایِ تمام‌شده باید با احتسابِ مالياتِ
+        # فاکتور ثبت شود -- فی ۱۰۰ با ۱۰٪ مالیات باید ۱۱۰ نشان بدهد»):
+        # بهایِ نمایش‌داده‌شده در کاردکس، بهایِ رواگردِ کالا به‌اضافه‌یِ
+        # سهمِ هرواحد از مالياتِ همان ردیف است -- این فقط برایِ *نمایش*
+        # در همین گزارش است، نه بهایِ خالصی که در حسابداری (دفترِ کل/
+        # موجودی) طبقِ رفعِ باگِ قبلی (R17-2/R17-3) عمداً بدونِ مالیات و
+        # مبنایِ بدهکارِ «مالياتِ خرید-قابلِ مطالبه» ثبت می‌شود.
+        landed_unit_cost = unit_cost
+        if unit_cost is not None and tax_amount and quantity:
+            landed_unit_cost = _money(unit_cost + (tax_amount / quantity))
         result.append(
             ItemLedgerRow(
                 movement_date, doc_type, doc_no, warehouse_name,
                 quantity if direction == "IN" else _ZERO, quantity if direction == "OUT" else _ZERO,
-                unit_cost, balance, counterparty_id,
+                landed_unit_cost, balance, counterparty_id,
             )
         )
     return result
@@ -342,12 +352,17 @@ def list_item_cost_history(
     company_id: int, item_id: int, counterparty_detail_account_id: int, limit: int = 10,
 ) -> list[ItemCostHistoryRow]:
     """طبقِ درخواستِ صریح («۱۰ قیمتِ آخرِ کالا به طرفِ‌حساب» -- در فرم‌هایِ
-    انبار معادلِ آن بهایِ واحدِ رسیدهایِ ثبت‌شده از همان طرفِ‌حساب است)."""
+    انبار معادلِ آن بهایِ واحدِ رسیدهایِ ثبت‌شده از همان طرفِ‌حساب است).
+    طبقِ رفعِ باگِ واقعیِ بعدی («بهایِ تمام‌شده باید با احتسابِ مالياتِ
+    فاکتور نمایش داده شود»)، بهایِ برگردانده‌شده، بهایِ رواگرد به‌اضافه‌یِ
+    سهمِ هرواحد از مالياتِ همان ردیف است -- فقط برایِ نمایش، بدونِ تغییر
+    در بهایِ خالصی که در حسابداری/موجودی ثبت شده."""
     with new_session() as session:
         rows = session.execute(
             select(
                 StockDocument.stock_document_id, StockDocument.document_type_code, StockDocument.document_no,
-                StockDocument.document_date, StockDocumentLine.unit_cost,
+                StockDocument.document_date, StockDocumentLine.unit_cost, StockDocumentLine.tax_amount,
+                StockDocumentLine.quantity_base,
             )
             .join(StockDocumentLine, StockDocumentLine.stock_document_id == StockDocument.stock_document_id)
             .where(
@@ -360,7 +375,13 @@ def list_item_cost_history(
             .order_by(StockDocument.document_date.desc(), StockDocument.stock_document_id.desc())
             .limit(limit)
         ).all()
-        return [ItemCostHistoryRow(*row) for row in rows]
+        result = []
+        for stock_document_id, doc_type, doc_no, doc_date, unit_cost, tax_amount, quantity in rows:
+            landed_unit_cost = unit_cost
+            if tax_amount and quantity:
+                landed_unit_cost = _money(unit_cost + (tax_amount / quantity))
+            result.append(ItemCostHistoryRow(stock_document_id, doc_type, doc_no, doc_date, landed_unit_cost))
+        return result
 
 
 # ---------------------------------------------------------------------
