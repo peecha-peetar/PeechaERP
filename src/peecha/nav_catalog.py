@@ -46,7 +46,10 @@ NAV_ITEMS = [
             # داشته باشد و مدیریتِ تسویه‌یِ فاکتورها را ایجاد کن»): تخصیصِ
             # (بخشی از) یک سندِ دریافت/پرداختِ ثبت‌شده به یک یا چند فاکتورِ
             # بازِ فروش/خرید.
-            {"code": "TREASURY_INVOICE_SETTLEMENT", "label": "تسویه‌یِ فاکتورها", "screen": "commercial_invoice_settlement"},
+            # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
+            # هم باشه»): یک آیتمِ مشترک قبلاً هردو را با هم نشان می‌داد.
+            {"code": "TREASURY_SETTLEMENT_SALES", "label": "تسویه‌یِ فاکتورهایِ فروش", "screen": "commercial_invoice_settlement_sales"},
+            {"code": "TREASURY_SETTLEMENT_PURCHASE", "label": "تسویه‌یِ فاکتورهایِ خرید", "screen": "commercial_invoice_settlement_purchase"},
             # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): دیدِ کلیِ
             # همه‌یِ اقساطِ برنامه‌ریزی‌شده -- خودِ دریافت/پرداخت از فرمِ
             # بالا (دکمه‌یِ 🔗) انجام می‌شود.
@@ -254,7 +257,8 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("TREASURY_RECEIPT", "💵"),
         ("TREASURY_PAYMENT", "💸"),
         ("TREASURY_LIST", "📚"),
-        ("TREASURY_INVOICE_SETTLEMENT", "🔗"),
+        ("TREASURY_SETTLEMENT_SALES", "🔗"),
+        ("TREASURY_SETTLEMENT_PURCHASE", "🔁"),
         ("TREASURY_INSTALLMENTS", "📆"),
         ("TREASURY_PETTY_CASH", "👛"),
         ("TREASURY_PETTY_CASH_LIST", "🧾"),

@@ -1467,7 +1467,11 @@ class MainWindow(QMainWindow):
         self.register_screen("commercial_ecommerce", CommercialEcommerceScreen())
         self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
         self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())
-        self.register_screen("commercial_invoice_settlement", InvoiceSettlementScreen(self))
+        # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
+        # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
+        # همان کلاس با invoice_type متفاوت است.
+        self.register_screen("commercial_invoice_settlement_sales", InvoiceSettlementScreen(self, "SALES_INVOICE"))
+        self.register_screen("commercial_invoice_settlement_purchase", InvoiceSettlementScreen(self, "PURCHASE_INVOICE"))
         self.register_screen("installments_list", InstallmentsListScreen(self))
         self.register_screen("treasury_voucher_receipt", TreasuryVoucherScreen("RECEIPT", self))
         self.register_screen("treasury_voucher_payment", TreasuryVoucherScreen("PAYMENT", self))

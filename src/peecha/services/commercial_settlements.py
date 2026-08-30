@@ -109,17 +109,21 @@ def list_unsettled_invoices(company_id: int, document_type_code: str | None = No
         return result
 
 
-def list_invoices_due_soon(company_id: int) -> list[InvoiceSettlementStatus]:
+def list_invoices_due_soon(company_id: int, document_type_code: str | None = None) -> list[InvoiceSettlementStatus]:
     """طبقِ درخواستِ صریح («آپشنی که N روز مانده به موعدِ تسویه آلارم
     بدهد»): فقط اگر آلارم برایِ این شرکت فعال باشد، فاکتورهایِ
     تسویه‌نشده‌ای که سررسیدشان ظرفِ alarm_days_before روزِ آینده است (یا
-    گذشته -- معوقه) را برمی‌گرداند."""
+    گذشته -- معوقه) را برمی‌گرداند.
+
+    طبقِ رفعِ باگِ واقعی («این آلارم کجا نمایش داده می‌شود؟» -- تا این‌جا
+    هیچ صفحه‌ای این تابع را صدا نمی‌زد): حالا در commercial_settlement.py
+    مستقیماً به‌عنوانِ یک بنرِ هشدار در بالایِ فرمِ تسویه استفاده می‌شود."""
     settings = get_alarm_settings(company_id)
     if not settings.is_enabled or settings.alarm_days_before <= 0:
         return []
     threshold = datetime.date.today() + datetime.timedelta(days=settings.alarm_days_before)
     return [
-        status for status in list_unsettled_invoices(company_id)
+        status for status in list_unsettled_invoices(company_id, document_type_code)
         if status.due_date is not None and status.due_date <= threshold
     ]
 
