@@ -49,6 +49,19 @@ def _run_delete_sequence(company_id: int, statements: list[str]) -> None:
 # ۱) اسناد — فروش/خرید + انبار + مالی/حسابداری، با هم، یک تراکنشِ واحد.
 # ---------------------------------------------------------------------
 _DOCUMENT_DELETE_STATEMENTS = [
+    # طبقِ رفعِ باگِ واقعی («هنوز رکوردهایی به این وابسته‌اند -- invoice_
+    # settlements»): تسویه‌یِ فاکتورها (comm.invoice_settlements) و
+    # اقساط (comm.installment_plans/installment_lines) بعدِ ساختِ اولیه‌یِ
+    # این ابزار اضافه شدند و مستقیم/غیرِمستقیم به commercial_documents و
+    # journal_entries اشاره می‌کنند -- باید پیش از حذفِ خودِ آن‌ها (چه در
+    # همین لیست، چه در acc.journal_entries که پایینِ همین لیست حذف
+    # می‌شود) پاک شوند.
+    "DELETE FROM comm.invoice_settlements WHERE company_id = :company_id",
+    "DELETE FROM comm.installment_lines WHERE plan_id IN "
+    "(SELECT plan_id FROM comm.installment_plans WHERE document_id IN "
+    " (SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id))",
+    "DELETE FROM comm.installment_plans WHERE document_id IN "
+    "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     # فروش/خرید
     "DELETE FROM comm.credit_holds WHERE related_document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
@@ -250,6 +263,9 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM treasury.account_mappings WHERE company_id = :company_id",
     "DELETE FROM treasury.counterparty_account_mappings WHERE company_id = :company_id",
     "DELETE FROM treasury.description_templates WHERE company_id = :company_id",
+    # طبقِ همان رفعِ باگ: تنظیماتِ آلارمِ موعدِ تسویه هم بعدِ ساختِ اولیه‌یِ
+    # این ابزار اضافه شد.
+    "DELETE FROM comm.settlement_alarm_settings WHERE company_id = :company_id",
 ]
 
 
