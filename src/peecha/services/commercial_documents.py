@@ -540,32 +540,6 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
             for ln in draft_lines
         ]
 
-    # طبقِ رفعِ باگِ واقعی («اصلاحِ فاکتوری که شاملِ کالایِ FIFO است، نیمه‌
-    # کاره سندِ حسابداری را برگشت می‌زند/می‌سازد و بعد با خطا متوقف
-    # می‌شود، سند را در وضعیتِ ناسازگار رها می‌کند»): پیش از هرگونه
-    # نوشتن (برگشت‌زدنِ JEِ اصلی یا ساختِ JEِ تازه)، اعتبارسنجیِ کاملِ
-    # همه‌یِ کالاهایی که واقعاً نیاز به تغییرِ انبار دارند -- اگر یکی‌شان
-    # FIFO باشد، اصلاً هیچ‌کاری شروع نمی‌شود.
-    for item_id in all_item_ids:
-        old = original_by_item.get(item_id)
-        new = draft_by_item.get(item_id)
-        old_qty = old["quantity_base"] if old else _ZERO
-        new_qty = new["quantity_base"] if new else _ZERO
-        if draft.document_type_code == "SALES_INVOICE":
-            # طبقِ منطقِ واقعیِ شاخه‌یِ SALES_INVOICE پایین‌تر: آن‌جا فقط
-            # به quantity_base کاری دارد -- unit_price آن‌جا قیمتِ فروش
-            # است، نه بهایِ انبار، پس اصلاً معیارِ «تغییرِ بها» نیست.
-            needs_stock_change = old_qty != new_qty
-        else:
-            old_unit_cost = (old["net_value"] / old_qty) if old and old_qty else _ZERO
-            new_unit_cost = (new["net_value"] / new_qty) if new and new_qty else old_unit_cost
-            needs_stock_change = old_qty != new_qty or (old_unit_cost != new_unit_cost and old_qty > 0)
-        if needs_stock_change and inv_engine_service.get_effective_costing_method(item_id, company_id) == "FIFO":
-            raise ValueError(
-                "این اصلاح شاملِ کالایی است که با روشِ FIFO قیمت‌گذاری می‌شود و مقدار/بهایِ آن تغییر کرده -- "
-                "اصلاحِ فاکتور برایِ کالایِ FIFO فعلاً پشتیبانی نمی‌شود."
-            )
-
     extra_dims: dict[int, int] = {}
     if cost_center_id is not None:
         extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = cost_center_id
@@ -589,13 +563,12 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
     zero = decimal.Decimal(0)
 
     if document_type_code == "SALES_INVOICE":
-        if original_journal_entry_id is not None:
-            je_service.reverse_journal_entry(original_journal_entry_id, company_id, posted_by_user_id)
-        journal_entry_id = _build_sales_invoice_commercial_je(
-            company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims,
-            subtotal_amount, discount_amount, tax_amount, sales_rep_id, line_snapshots,
-        )
-
+        # طبقِ رفعِ باگِ واقعی («اصلاحِ فاکتوری که شاملِ کالایِ FIFO است،
+        # نیمه‌کاره سندِ حسابداری را برگشت می‌زند/می‌سازد و بعد با خطا
+        # متوقف می‌شود»): سمتِ انبار (که ممکن است روی یک لبه‌یِ نادر خطا
+        # بدهد -- مثلاً سابقه‌یِ مصرفِ FIFOِ ناکافی) قبل از هرگونه
+        # برگشت‌زدن/ساختنِ سندِ حسابداری اجرا می‌شود -- تا اگر شکست خورد،
+        # هیچ اثری در حسابداری باقی نماند.
         adj_je_lines: list[je_service.LineInput] = []
         for item_id in all_item_ids:
             old_qty = original_by_item.get(item_id, {}).get("quantity_base", zero)
@@ -604,10 +577,19 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
             if delta == 0:
                 continue
             effective_warehouse_id = (draft_by_item.get(item_id) or original_by_item.get(item_id))["warehouse_id"] or warehouse_id
+            in_unit_cost = None
+            if delta < 0 and inv_engine_service.get_effective_costing_method(item_id, company_id) == "FIFO":
+                # طبقِ طراحی: FIFO میانگینی برایِ «بازگرداندنِ خنثی» ندارد --
+                # بهایِ صادقانه‌یِ همان واحدهایی که در همین فاکتورِ اصلی
+                # واقعاً مصرف شده بودند از رویِ خودِ Ledger خوانده می‌شود.
+                in_unit_cost = inv_engine_service.get_recent_consumption_cost(
+                    original_stock_document_id, item_id, -delta
+                )
             result = inv_engine_service.adjust_stock_quantity(
                 item_id, effective_warehouse_id, None, company_id, delta, posted_by_user_id,
                 reference_no=f"CORR-{document_id}",
                 description=f"اصلاحِ مقدارِ فاکتورِ فروشِ شماره‌ی {original_document_no}",
+                in_unit_cost=in_unit_cost,
             )
             if stock_document_id is None:
                 stock_document_id = result.stock_document_id
@@ -619,6 +601,13 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
             else:
                 adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=result.amount, credit=_ZERO))
                 adj_je_lines.append(je_service.LineInput(account_id=cogs_account_id, description=description, debit=_ZERO, credit=result.amount))
+
+        if original_journal_entry_id is not None:
+            je_service.reverse_journal_entry(original_journal_entry_id, company_id, posted_by_user_id)
+        journal_entry_id = _build_sales_invoice_commercial_je(
+            company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims,
+            subtotal_amount, discount_amount, tax_amount, sales_rep_id, line_snapshots,
+        )
 
         if adj_je_lines:
             adj_result = je_service.create_journal_entry(
@@ -661,9 +650,14 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
                     adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=result.amount, credit=_ZERO))
                     adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=_ZERO, credit=result.amount))
             elif old_unit_cost != new_unit_cost and old_qty > 0:
-                cost_result = inv_engine_service.apply_purchase_cost_correction(
-                    item_id, effective_warehouse_id, None, company_id, old_qty, new_unit_cost - old_unit_cost,
-                )
+                if inv_engine_service.get_effective_costing_method(item_id, company_id) == "FIFO":
+                    cost_result = inv_engine_service.apply_purchase_cost_correction_fifo(
+                        original_stock_document_id, item_id, new_unit_cost - old_unit_cost,
+                    )
+                else:
+                    cost_result = inv_engine_service.apply_purchase_cost_correction(
+                        item_id, effective_warehouse_id, None, company_id, old_qty, new_unit_cost - old_unit_cost,
+                    )
                 total = cost_result.inventory_value_delta + cost_result.variance_value_delta
                 inventory_account_id = _role_account("INVENTORY_ASSET")
                 variance_account_id = _role_account("INVENTORY_COST_VARIANCE")

@@ -962,6 +962,43 @@ def get_effective_costing_method(item_id: int, company_id: int) -> str:
         return item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
 
 
+def get_recent_consumption_cost(stock_document_id: int, item_id: int, quantity: decimal.Decimal) -> decimal.Decimal:
+    """میانگینِ وزنیِ بهایِ *آخرین* quantity واحدِ مصرف‌شده (OUT) برایِ این
+    کالا در همین سندِ انبار -- به‌ترتیبِ معکوسِ ثبت (جدیدترین بخشِ
+    مصرف‌شده اول). طبقِ درخواستِ صریح («اصلاحِ فاکتور برایِ کالایِ FIFO
+    هم پیاده شود»): وقتی اصلاحِ فاکتورِ فروش تعدادِ فروخته‌شده‌یِ یک
+    کالایِ FIFO را *کم* می‌کند (یعنی چند واحد باید «برگردانده» شوند)،
+    میانگینِ فعلیِ کالا معنایی برایِ FIFO ندارد -- به‌جایش بهایِ صادقانه‌یِ
+    همان واحدهایی که واقعاً در همین فاکتور مصرف شده بودند از رویِ خودِ
+    Ledger خوانده می‌شود."""
+    with new_session() as session:
+        line_ids = list(
+            session.scalars(
+                select(StockDocumentLine.line_id).where(
+                    StockDocumentLine.stock_document_id == stock_document_id, StockDocumentLine.item_id == item_id,
+                )
+            )
+        )
+        rows = session.scalars(
+            select(StockLedger)
+            .where(StockLedger.stock_document_line_id.in_(line_ids), StockLedger.movement_direction == "OUT")
+            .order_by(StockLedger.ledger_id.desc())
+        ).all()
+        remaining = quantity
+        total_value = _ZERO
+        total_qty = _ZERO
+        for row in rows:
+            if remaining <= 0:
+                break
+            take = min(row.quantity_base, remaining)
+            total_value += take * row.unit_cost
+            total_qty += take
+            remaining -= take
+        if total_qty == 0:
+            raise ValueError("سابقه‌یِ مصرفِ این کالا در سندِ انبارِ اصلی یافت نشد.")
+        return total_value / total_qty
+
+
 @dataclass
 class AdjustmentResult:
     stock_document_id: int
@@ -985,15 +1022,19 @@ def adjust_stock_quantity(
 
     quantity_delta مثبت یعنی مصرفِ بیشتر (OUT — مثلِ افزایشِ مقدارِ
     فروخته‌شده)، منفی یعنی افزودن (IN — مثلِ کاهشِ مقدارِ فروخته‌شده، یا
-    افزایشِ مقدارِ خریداری‌شده). برایِ OUT همیشه با میانگینِ *فعلی* (بدونِ
-    تغییرِ میانگین، طبقِ فرمولِ apply_in/consume_out). برایِ IN: اگر
-    in_unit_cost داده نشود، بازگرداندنِ خنثی است (میانگین دقیقاً در قیمتِ
-    خودش وارد می‌شود، پس جابه‌جا نمی‌شود) — مناسبِ «کاهشِ مقدارِ فروخته‌
-    شده». اگر in_unit_cost داده شود (مثلاً اصلاحِ فاکتورِ خرید با
-    افزایشِ مقدار)، یک apply_in واقعی با آن بهایِ مشخص انجام می‌شود و
-    میانگین طبقِ فرمولِ استاندارد بلند می‌شود. محدودیتِ آگاهانه: مثلِ
-    reverse_stock_document، فقط برایِ کالاهایِ میانگینِ موزون/استاندارد
-    (نه FIFO)."""
+    افزایشِ مقدارِ خریداری‌شده).
+
+    برایِ میانگینِ موزون/استاندارد: OUT همیشه با میانگینِ *فعلی* (بدونِ
+    تغییرِ میانگین)؛ IN بدونِ in_unit_cost یعنی بازگرداندنِ خنثی (دقیقاً
+    در قیمتِ خودِ میانگین وارد می‌شود)، با in_unit_cost یعنی یک apply_in
+    واقعی با همان بهایِ مشخص.
+
+    برایِ FIFO: OUT دقیقاً مثلِ consume_out معمولی از لایه‌هایِ موجود
+    (قدیمی‌ترین اول) مصرف می‌کند -- رو به جلو و کاملاً امن، چون به هیچ
+    لایه‌یِ گذشته‌ای دست نمی‌زند. IN برایِ FIFO همیشه به in_unit_cost نیاز
+    دارد (میانگینی برایِ بلندکردن وجود ندارد) و یک لایه‌یِ هزینه‌یِ *تازه*
+    می‌سازد -- دقیقاً مثلِ یک رسیدِ معمولیِ امروز؛ لایه‌هایِ قدیمی هرگز
+    دست‌کاری نمی‌شوند."""
     if quantity_delta == 0:
         raise ValueError("مقدارِ تفاوت نمی‌تواند صفر باشد.")
     with new_session() as session:
@@ -1004,14 +1045,9 @@ def adjust_stock_quantity(
         if warehouse is None:
             raise ValueError("انبار نامعتبر است.")
 
-        costing_settings = session.get(CompanyCostingSettings, company_id)
-        default_costing_method_code = None
-        if costing_settings is not None:
-            method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
-            default_costing_method_code = method_row.code if method_row is not None else None
-        method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
-        if method == "FIFO":
-            raise ValueError("اصلاحِ مقدار برایِ کالایی که با روشِ FIFO قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود.")
+        method = get_effective_costing_method(item_id, company_id)
+        if method == "FIFO" and quantity_delta < 0 and in_unit_cost is None:
+            raise ValueError("برایِ کالایِ FIFO، بازگرداندن/افزایشِ مقدار بدونِ مشخص‌کردنِ بهایِ واحد ممکن نیست.")
 
         if bin_location_id is None:
             default_bin = session.scalar(
@@ -1036,6 +1072,9 @@ def adjust_stock_quantity(
             session.flush()
 
         today = datetime.date.today()
+        # (unit_cost, quantity) به‌ازایِ هر بخش -- برایِ FIFOِ OUT ممکن
+        # است چند لایه‌یِ جداگانه باشد؛ در بقیه‌یِ حالت‌ها همیشه یکی است.
+        segments: list[tuple[decimal.Decimal, decimal.Decimal]] = []
 
         if quantity_delta > 0:
             qty = quantity_delta
@@ -1045,13 +1084,38 @@ def adjust_stock_quantity(
                     f"(موجود: {bal.quantity_on_hand}، نیاز به کاهشِ: {qty})."
                 )
             direction = "OUT"
-            unit_cost = _standard_cost(session, item_id, today) if method == "STANDARD" else (bal.average_unit_cost or _ZERO)
+            if method == "FIFO":
+                remaining = qty
+                layers = session.scalars(
+                    select(CostLayer)
+                    .where(CostLayer.item_id == item_id, CostLayer.warehouse_id == warehouse_id, CostLayer.remaining_quantity > 0)
+                    .order_by(CostLayer.received_at)
+                    .with_for_update()
+                ).all()
+                for layer in layers:
+                    if remaining <= 0:
+                        break
+                    take = min(layer.remaining_quantity, remaining)
+                    layer.remaining_quantity -= take
+                    segments.append((layer.unit_cost, take))
+                    remaining -= take
+                if remaining > 0:
+                    segments.append((bal.average_unit_cost or _ZERO, remaining))
+            elif method == "STANDARD":
+                segments.append((_standard_cost(session, item_id, today), qty))
+            else:
+                segments.append((bal.average_unit_cost or _ZERO, qty))
             bal.quantity_on_hand -= qty
         else:
             qty = -quantity_delta
             direction = "IN"
             if method == "STANDARD":
-                unit_cost = _standard_cost(session, item_id, today)
+                segments.append((_standard_cost(session, item_id, today), qty))
+            elif method == "FIFO":
+                # طبقِ طراحی: بازگرداندن/افزایشِ مقدارِ FIFO همیشه یک
+                # لایه‌یِ هزینه‌یِ *تازه* می‌سازد، دقیقاً مثلِ یک رسیدِ
+                # معمولیِ امروز -- لایه‌هایِ قدیمی هرگز دست‌کاری نمی‌شوند.
+                segments.append((in_unit_cost, qty))
             elif in_unit_cost is not None:
                 # طبقِ درخواستِ صریح (اصلاحِ فاکتورِ خرید با افزایشِ مقدار):
                 # این‌جا برخلافِ حالتِ خنثی، واقعاً کالایِ *تازه‌ای* با
@@ -1062,9 +1126,9 @@ def adjust_stock_quantity(
                     ((bal.quantity_on_hand * bal.average_unit_cost) + (qty * in_unit_cost)) / denom
                     if denom != 0 else in_unit_cost
                 )
-                unit_cost = in_unit_cost
+                segments.append((in_unit_cost, qty))
             else:
-                unit_cost = bal.average_unit_cost or _ZERO
+                segments.append((bal.average_unit_cost or _ZERO, qty))
             bal.quantity_on_hand += qty
         bal.last_movement_at = datetime.datetime.now()
 
@@ -1095,25 +1159,42 @@ def adjust_stock_quantity(
         )
         session.add(adjustment_doc)
         session.flush()
+        # طبقِ الگویِ خودِ post_stock_document: برایِ RECEIPT بهایِ ردیف
+        # پر می‌شود، برایِ ISSUE خالی می‌ماند (بهایِ واقعی از رویِ خودِ
+        # ردیف‌هایِ Ledger -- که ممکن است چند لایه‌یِ FIFOِ جدا باشند --
+        # خوانده می‌شود، نه از یک عددِ تکی رویِ خودِ سند).
         line = StockDocumentLine(
             stock_document_id=adjustment_doc.stock_document_id, line_no=1, item_id=item_id, uom_id=item.base_uom_id,
-            quantity=qty, quantity_base=qty, bin_location_id=bin_location_id, unit_cost=unit_cost,
+            quantity=qty, quantity_base=qty, bin_location_id=bin_location_id,
+            unit_cost=segments[0][0] if direction == "IN" else None,
         )
         session.add(line)
         session.flush()
-        session.add(
-            StockLedger(
+        total_amount = _ZERO
+        for seg_cost, seg_qty in segments:
+            in_ledger = StockLedger(
                 company_id=company_id, stock_document_line_id=line.line_id, item_id=item_id, warehouse_id=warehouse_id,
-                bin_location_id=bin_location_id, movement_direction=direction, quantity_base=qty, unit_cost=unit_cost,
+                bin_location_id=bin_location_id, movement_direction=direction, quantity_base=seg_qty, unit_cost=seg_cost,
                 movement_date=today,
             )
-        )
+            session.add(in_ledger)
+            session.flush()
+            if direction == "IN" and method == "FIFO":
+                session.add(
+                    CostLayer(
+                        item_id=item_id, warehouse_id=warehouse_id, stock_ledger_id=in_ledger.ledger_id,
+                        received_at=datetime.datetime.now(), original_quantity=seg_qty,
+                        remaining_quantity=seg_qty, unit_cost=seg_cost,
+                    )
+                )
+            total_amount += _money(seg_cost * seg_qty)
         adjustment_doc.posted_by_user_id = created_by_user_id
         adjustment_doc.posted_at = datetime.datetime.now()
         session.commit()
+        weighted_unit_cost = (total_amount / qty) if qty else _ZERO
         return AdjustmentResult(
-            stock_document_id=adjustment_doc.stock_document_id, direction=direction, unit_cost=unit_cost, quantity=qty,
-            amount=_money(unit_cost * qty),
+            stock_document_id=adjustment_doc.stock_document_id, direction=direction, unit_cost=weighted_unit_cost,
+            quantity=qty, amount=total_amount,
         )
 
 
@@ -1182,6 +1263,60 @@ def apply_purchase_cost_correction(
         session.commit()
         return CostCorrectionResult(
             quantity_remaining=quantity_remaining, quantity_consumed=quantity_consumed,
+            inventory_value_delta=inventory_value_delta, variance_value_delta=variance_value_delta,
+        )
+
+
+def apply_purchase_cost_correction_fifo(
+    original_stock_document_id: int, item_id: int, unit_cost_delta: decimal.Decimal,
+) -> CostCorrectionResult:
+    """هم‌ارزِ apply_purchase_cost_correction، ولی برایِ FIFO -- و در واقع
+    *دقیق‌تر*: چون FIFO هر رسید را در یک CostLayer جداگانه ردیابی
+    می‌کند (نه یک میانگینِ سراسری)، اینجا لازم نیست نسبتِ «هنوز مانده به
+    مصرف‌شده» را از رویِ موجودیِ کلِ کالا حدس زد -- خودِ لایه‌یِ دقیقِ
+    همین رسید (از طریقِ ردیفِ آن در سندِ انبار -> ردیفِ Ledgerِ IN -> خودِ
+    CostLayer) پیدا و مستقیماً اصلاح می‌شود: سهمِ هنوز-باقی‌مانده
+    (remaining_quantity) با تغییرِ unit_cost خودِ لایه (بدونِ لمسِ
+    مقدارش -- پس اثری رویِ مصرفِ آینده جز بهایِ درست ندارد)، سهمِ
+    قبلاً-مصرف‌شده هم مثلِ حالتِ میانگینِ موزون، به حسابِ مغایرتِ بها."""
+    with new_session() as session:
+        lines = session.scalars(
+            select(StockDocumentLine).where(
+                StockDocumentLine.stock_document_id == original_stock_document_id, StockDocumentLine.item_id == item_id,
+            )
+        ).all()
+        if not lines:
+            raise ValueError("ردیفِ این کالا در سندِ رسیدِ اصلی یافت نشد.")
+        layers = []
+        for ln in lines:
+            ledger_row = session.scalar(
+                select(StockLedger).where(
+                    StockLedger.stock_document_line_id == ln.line_id, StockLedger.movement_direction == "IN",
+                )
+            )
+            if ledger_row is None:
+                continue
+            layer = session.scalar(
+                select(CostLayer).where(CostLayer.stock_ledger_id == ledger_row.ledger_id).with_for_update()
+            )
+            if layer is not None:
+                layers.append(layer)
+        if not layers:
+            raise ValueError("لایه‌یِ هزینه‌یِ این رسید یافت نشد.")
+
+        total_remaining = sum((layer.remaining_quantity for layer in layers), _ZERO)
+        total_original = sum((layer.original_quantity for layer in layers), _ZERO)
+        total_consumed = total_original - total_remaining
+
+        for layer in layers:
+            if layer.remaining_quantity > 0:
+                layer.unit_cost = layer.unit_cost + unit_cost_delta
+
+        inventory_value_delta = _money(total_remaining * unit_cost_delta)
+        variance_value_delta = _money(total_consumed * unit_cost_delta)
+        session.commit()
+        return CostCorrectionResult(
+            quantity_remaining=total_remaining, quantity_consumed=total_consumed,
             inventory_value_delta=inventory_value_delta, variance_value_delta=variance_value_delta,
         )
 
