@@ -136,7 +136,9 @@ def create_role(company_id: int, code: str, parent_role_id: int | None) -> Role:
         return role
 
 
-def update_role(role_id: int, company_id: int, parent_role_id: int | None, is_active: bool) -> Role:
+def update_role(role_id: int, company_id: int, code: str, parent_role_id: int | None, is_active: bool) -> Role:
+    """طبقِ گزارشِ صریح («نقش را می‌شود ساخت ولی نمی‌شود ویرایش کرد»): حالا
+    کدِ نقش هم -- نه فقط والد/فعال‌بودن -- قابلِ‌تغییر است."""
     with new_session() as session:
         role = session.get(Role, role_id)
         if role is None or role.company_id != company_id:
@@ -145,12 +147,39 @@ def update_role(role_id: int, company_id: int, parent_role_id: int | None, is_ac
             raise ValueError("یک نقش نمی‌تواند والدِ خودش باشد.")
         if role.is_system_role and not is_active:
             raise ValueError("نقش‌های سیستمی غیرقابل‌غیرفعال‌سازی‌اند.")
+        code = code.strip()
+        if not code:
+            raise ValueError("کدِ نقش نمی‌تواند خالی باشد.")
+        if code != role.code and session.scalar(
+            select(Role).where(Role.company_id == company_id, Role.code == code, Role.role_id != role_id)
+        ):
+            raise ValueError("این کدِ نقش قبلاً در این شرکت تعریف شده است.")
+        role.code = code
         role.parent_role_id = parent_role_id
         role.is_active = is_active
         session.commit()
         session.refresh(role)
         session.expunge(role)
         return role
+
+
+def delete_role(role_id: int, company_id: int) -> None:
+    """طبقِ گزارشِ صریح: حذفِ کاملِ نقش -- شاملِ دسترسی‌ها و تخصیص‌هایِ
+    خودش (که چیزی جز تنظیماتِ کنترلِ‌دسترسی نیستند، نه داده‌یِ مالی، پس
+    حذفِ آبشاری‌شان بی‌خطر است)."""
+    with new_session() as session:
+        role = session.get(Role, role_id)
+        if role is None or role.company_id != company_id:
+            raise ValueError("نقش نامعتبر است.")
+        if role.is_system_role:
+            raise ValueError("نقش‌هایِ سیستمی حذف‌ناپذیرند.")
+        has_children = session.scalar(select(Role.role_id).where(Role.parent_role_id == role_id))
+        if has_children is not None:
+            raise ValueError("ابتدا نقش‌هایِ فرزندِ این نقش را حذف کنید یا والدِشان را عوض کنید.")
+        session.query(RoleFormPermission).filter(RoleFormPermission.role_id == role_id).delete()
+        session.query(UserRole).filter(UserRole.role_id == role_id).delete()
+        session.delete(role)
+        session.commit()
 
 
 def get_role_permissions(role_id: int) -> set[tuple[int, str]]:
@@ -242,6 +271,12 @@ _MANAGER_ROLE_CODES = {"ADMIN", "SUPERVISOR", "MANAGER", "ادمین", "سوپر
 
 def is_manager(user_id: int, company_id: int) -> bool:
     with new_session() as session:
+        # طبقِ رفعِ باگِ واقعی («وقتی کاربر مدیرِ کلِ سیستم است، دیگر
+        # نیازی به نقشِ جداگانه نیست -- او همه‌یِ دسترسی‌ها را دارد»):
+        # is_super_admin از سیستمِ نقش‌هایِ این شرکت کاملاً مستقل است.
+        user = session.get(User, user_id)
+        if user is not None and user.is_super_admin:
+            return True
         codes = session.scalars(
             select(Role.code)
             .join(UserRole, UserRole.role_id == Role.role_id)
