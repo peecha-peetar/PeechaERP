@@ -8,4 +8,5 @@ from __future__ import annotations
 FORM_DEFINITIONS: dict[str, dict[str, str]] = {
     "ITEM_LEDGER": {"label": "کاردکسِ کالا", "base_template": "kardex.jrxml"},
     "COMMERCIAL_INVOICE": {"label": "فاکتور / سندِ بازرگانی", "base_template": "invoice.jrxml"},
+    "TRIAL_BALANCE": {"label": "تراز آزمایشی", "base_template": "trial_balance.jrxml"},
 }

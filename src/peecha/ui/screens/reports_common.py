@@ -24,10 +24,12 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QCompleter,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -36,10 +38,13 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
+from peecha.reporting import jasper_bridge
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import report_templates as report_templates_service
 from peecha.services.reports import code_in_range
 from peecha.ui import report_export
+from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, PersianDigitLineEdit
 
 _ZERO = decimal.Decimal("0")
@@ -225,6 +230,20 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
         search_row.addWidget(excel_button)
+
+        # طبقِ درخواستِ صریح («این قابلیت برایِ بقیه‌یِ گزارش‌ها هم باشد»):
+        # زیرکلاسی که چاپِ حرفه‌ای (Jasper) برایش آماده شده با
+        # enable_jasper_report(form_code) این دکمه را نمایان می‌کند --
+        # پیش‌فرض مخفی، چون هنوز همه‌یِ گزارش‌ها قالبِ jrxml ندارند.
+        self.jasper_form_code: str | None = None
+        self.jasper_report_button = QPushButton("📄 گزارشِ حرفه‌ای")
+        self.jasper_report_button.setToolTip(
+            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به این فرم -- "
+            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
+        )
+        self.jasper_report_button.clicked.connect(self._on_jasper_report)
+        self.jasper_report_button.setVisible(False)
+        search_row.addWidget(self.jasper_report_button)
         layout.addLayout(search_row)
 
         self.table = QTableWidget(0, 0)
@@ -290,6 +309,56 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
     def enable_cost_center_filter(self) -> None:
         self.cost_center_label.setVisible(True)
         self.cost_center_combo.setVisible(True)
+
+    def enable_jasper_report(self, form_code: str) -> None:
+        """زیرکلاسی که یک قالبِ jrxml برایِ خودش دارد (و
+        _build_jasper_rows_and_params را override کرده) این را در
+        __init__ صدا می‌زند تا دکمه‌یِ «📄 گزارشِ حرفه‌ای» نمایان شود."""
+        self.jasper_form_code = form_code
+        self.jasper_report_button.setVisible(True)
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        """زیرکلاس‌هایی که enable_jasper_report را صدا می‌زنند این را
+        override می‌کنند: self._rows/self._footerِ همینِ فعلاً رویِ صفحه
+        (بعدِ فیلتر/جستجو) را به دیکشنری‌هایِ هم‌نامِ فیلدهایِ قالبِ jrxml
+        تبدیل می‌کند. اگر حالتِ فعلیِ فیلترها را پشتیبانی نمی‌کند، خودش
+        پیامِ راهنما نشان می‌دهد و None برمی‌گرداند."""
+        raise NotImplementedError
+
+    def _on_jasper_report(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self.jasper_form_code is None:
+            return
+        built = self._build_jasper_rows_and_params()
+        if built is None:
+            return
+        print_rows, params = built
+
+        template_row = pick_report_template(self, company_id, self.jasper_form_code)
+        if template_row is None:
+            return
+        jrxml_path = report_templates_service.get_template_path(template_row.report_template_id, company_id)
+
+        path, chosen_filter = QFileDialog.getSaveFileName(
+            self, f"ذخیره‌یِ {self._title}", f"{self._title}.pdf", "PDF (*.pdf);;Excel (*.xlsx)"
+        )
+        if not path:
+            return
+        output_format = "xlsx" if (path.lower().endswith(".xlsx") or "xlsx" in chosen_filter) else "pdf"
+        if output_format == "pdf" and not path.lower().endswith(".pdf"):
+            path += ".pdf"
+        elif output_format == "xlsx" and not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+
+        try:
+            jasper_bridge.render_report_at_path(jrxml_path, print_rows, params, path, output_format)
+        except jasper_bridge.JasperNotAvailableError as exc:
+            QMessageBox.warning(self, "گزارش", str(exc))
+            return
+        except Exception as exc:
+            QMessageBox.critical(self, "گزارش", f"تولیدِ گزارش ناموفق بود:\n{exc}")
+            return
+        QMessageBox.information(self, "گزارش", "گزارش با موفقیت ساخته شد.")
 
     def enable_document_no_filter(self) -> None:
         self.document_no_label.setVisible(True)

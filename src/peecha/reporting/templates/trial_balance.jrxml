@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="trial_balance" pageWidth="842" pageHeight="595" orientation="Landscape"
+              columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20"
+              whenNoDataType="AllSectionsNoDetail">
+
+    <!-- طبقِ رفعِ باگِ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
+         کافی است. طبقِ رفعِ باگِ ارتفاعِ متنِ Bold: تایتلِ ۱۶pt حداقل به
+         ارتفاعِ ۳۰ نیاز دارد وگرنه کاملاً نامرئی رندر می‌شود. -->
+    <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Title" fontName="Vazirmatn" fontSize="16" isBold="true"/>
+    <style name="SubTitle" fontName="Vazirmatn" fontSize="10"/>
+    <style name="Header" fontName="Vazirmatn" fontSize="8" isBold="true"/>
+    <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
+    <style name="TotalsLabel" fontName="Vazirmatn" fontSize="9" isBold="true"/>
+
+    <parameter name="companyName" class="java.lang.String"/>
+    <parameter name="dateRangeLabel" class="java.lang.String"/>
+    <parameter name="levelLabel" class="java.lang.String"/>
+    <parameter name="generatedAt" class="java.lang.String"/>
+    <parameter name="totalOpeningDebitDisplay" class="java.lang.String"/>
+    <parameter name="totalOpeningCreditDisplay" class="java.lang.String"/>
+    <parameter name="totalPeriodDebitDisplay" class="java.lang.String"/>
+    <parameter name="totalPeriodCreditDisplay" class="java.lang.String"/>
+    <parameter name="totalClosingDebitDisplay" class="java.lang.String"/>
+    <parameter name="totalClosingCreditDisplay" class="java.lang.String"/>
+
+    <field name="account_code" class="java.lang.String"/>
+    <field name="account_name" class="java.lang.String"/>
+    <field name="opening_debit_display" class="java.lang.String"/>
+    <field name="opening_credit_display" class="java.lang.String"/>
+    <field name="period_debit_display" class="java.lang.String"/>
+    <field name="period_credit_display" class="java.lang.String"/>
+    <field name="closing_debit_display" class="java.lang.String"/>
+    <field name="closing_credit_display" class="java.lang.String"/>
+
+    <pageHeader>
+        <band height="72">
+            <staticText>
+                <reportElement style="Title" x="0" y="0" width="802" height="30"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <text><![CDATA[تراز آزمایشی]]></text>
+            </staticText>
+            <textField>
+                <reportElement style="SubTitle" x="0" y="32" width="802" height="20"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA[$P{companyName} + "  —  سطح: " + $P{levelLabel}
+                    + ($P{dateRangeLabel} != null && !$P{dateRangeLabel}.isEmpty() ? "  —  " + $P{dateRangeLabel} : "")]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="Footer" x="0" y="54" width="802" height="16"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["تاریخِ تولیدِ گزارش: " + $P{generatedAt}]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageHeader>
+
+    <columnHeader>
+        <band height="26">
+            <rectangle>
+                <reportElement x="0" y="0" width="802" height="26" backcolor="#DDDDDD" mode="Opaque"/>
+            </rectangle>
+            <staticText><reportElement style="Header" x="0" y="0" width="60" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[کد]]></text></staticText>
+            <staticText><reportElement style="Header" x="60" y="0" width="150" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[نام]]></text></staticText>
+            <staticText><reportElement style="Header" x="210" y="0" width="98" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده‌ی اول (بد)]]></text></staticText>
+            <staticText><reportElement style="Header" x="308" y="0" width="98" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده‌ی اول (بس)]]></text></staticText>
+            <staticText><reportElement style="Header" x="406" y="0" width="98" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[گردش (بد)]]></text></staticText>
+            <staticText><reportElement style="Header" x="504" y="0" width="98" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[گردش (بس)]]></text></staticText>
+            <staticText><reportElement style="Header" x="602" y="0" width="98" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده‌ی آخر (بد)]]></text></staticText>
+            <staticText><reportElement style="Header" x="700" y="0" width="102" height="26"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مانده‌ی آخر (بس)]]></text></staticText>
+        </band>
+    </columnHeader>
+
+    <detail>
+        <band height="18">
+            <textField><reportElement x="0" y="0" width="60" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{account_code}]]></textFieldExpression></textField>
+            <textField><reportElement x="60" y="0" width="150" height="18"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4"/></textElement><textFieldExpression><![CDATA[$F{account_name}]]></textFieldExpression></textField>
+            <textField><reportElement x="210" y="0" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{opening_debit_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="308" y="0" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{opening_credit_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="406" y="0" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{period_debit_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="504" y="0" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{period_credit_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="602" y="0" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{closing_debit_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="700" y="0" width="102" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{closing_credit_display}]]></textFieldExpression></textField>
+        </band>
+    </detail>
+
+    <pageFooter>
+        <band height="18">
+            <textField>
+                <reportElement style="Footer" x="0" y="0" width="802" height="18"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["صفحه‌یِ " + $V{PAGE_NUMBER}]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageFooter>
+
+    <summary>
+        <band height="30">
+            <line>
+                <reportElement x="0" y="0" width="802" height="1"/>
+            </line>
+            <staticText><reportElement style="TotalsLabel" x="60" y="6" width="150" height="18"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4"/></textElement><text><![CDATA[جمعِ کل]]></text></staticText>
+            <textField><reportElement style="TotalsLabel" x="210" y="6" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$P{totalOpeningDebitDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="TotalsLabel" x="308" y="6" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$P{totalOpeningCreditDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="TotalsLabel" x="406" y="6" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$P{totalPeriodDebitDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="TotalsLabel" x="504" y="6" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$P{totalPeriodCreditDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="TotalsLabel" x="602" y="6" width="98" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$P{totalClosingDebitDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="TotalsLabel" x="700" y="6" width="102" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$P{totalClosingCreditDisplay}]]></textFieldExpression></textField>
+        </band>
+    </summary>
+
+</jasperReport>
