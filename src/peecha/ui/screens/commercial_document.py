@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import os
+import tempfile
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -31,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.reporting import jasper_bridge
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
@@ -150,8 +154,116 @@ def _build_invoice_print_html(
     """
 
 
+def _money_or_blank(value: decimal.Decimal | None, decimal_places: int) -> str:
+    return numerals.format_money(value, decimal_places) if value else ""
+
+
+def _build_invoice_print_rows_and_params(company_id: int, doc, lines: list) -> tuple[list[dict], dict]:
+    """طبقِ درخواستِ صریح («طراحیِ فاکتورِ حرفه‌ای»): دیتایِ کاملِ سند --
+    اطلاعاتِ شرکت (شناسه‌یِ ملی/کدِ اقتصادی)، اطلاعاتِ کاملِ طرفِ‌حساب
+    (تلفن/موبایل/آدرس)، واحدِ شمارشِ هر ردیف، و جمعِ کل (شاملِ هزینه‌یِ
+    حمل -- که در نسخه‌یِ قبلیِ HTML سهواً از جمعِ چاپی جا افتاده بود) --
+    برایِ قالبِ templates/invoice.jrxml آماده می‌کند."""
+    decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+    company = companies_service.get_company_model(company_id)
+    company_ids_parts = []
+    if company.national_id:
+        company_ids_parts.append(f"شناسه‌یِ ملی: {numerals.to_persian_digits(company.national_id)}")
+    if company.economic_code:
+        company_ids_parts.append(f"کدِ اقتصادی: {numerals.to_persian_digits(company.economic_code)}")
+    if company.registration_no:
+        company_ids_parts.append(f"شماره‌یِ ثبت: {numerals.to_persian_digits(company.registration_no)}")
+
+    is_customer_side = doc.document_type_code in _SALES_TYPES
+    party_rows = dimensions_service.list_customers(company_id) if is_customer_side else dimensions_service.list_suppliers(company_id)
+    party_detail = next((p for p in party_rows if p["detail_account_id"] == doc.counterparty_detail_account_id), None)
+    counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
+    counterparty_ids_parts = []
+    if party_detail and party_detail.get("national_id"):
+        counterparty_ids_parts.append(f"شناسه‌یِ ملی: {numerals.to_persian_digits(party_detail['national_id'])}")
+    if party_detail and party_detail.get("economic_code"):
+        counterparty_ids_parts.append(f"کدِ اقتصادی: {numerals.to_persian_digits(party_detail['economic_code'])}")
+    counterparty_contact_parts = []
+    if party_detail and party_detail.get("phone"):
+        counterparty_contact_parts.append(f"تلفن: {numerals.to_persian_digits(party_detail['phone'])}")
+    if party_detail and party_detail.get("mobile"):
+        counterparty_contact_parts.append(f"موبایل: {numerals.to_persian_digits(party_detail['mobile'])}")
+
+    warehouse_name = ""
+    if doc.warehouse_id:
+        warehouse = next((w for w in locations_service.list_warehouses(company_id) if w.warehouse_id == doc.warehouse_id), None)
+        warehouse_name = warehouse.name if warehouse else ""
+
+    items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+    uoms_by_id = {u.uom_id: u for u in catalog_service.list_uoms(company_id)}
+
+    print_rows = []
+    for row_no, ln in enumerate(lines, start=1):
+        item = items_by_id.get(ln.item_id)
+        item_label = f"{item.code} — {item.name or ''}" if item else str(ln.item_id)
+        if ln.description:
+            item_label = f"{item_label} — {ln.description}"
+        uom = uoms_by_id.get(ln.uom_id)
+        print_rows.append({
+            "row_no_display": numerals.to_persian_digits(str(row_no)),
+            "item_label": item_label,
+            "uom_display": uom.name if uom else "",
+            "quantity_display": numerals.format_money(ln.quantity, uom.decimal_places if uom else 2),
+            "unit_price_display": numerals.format_money(ln.unit_price, decimal_places),
+            "discount_display": _money_or_blank(ln.discount_amount, decimal_places),
+            "tax_display": _money_or_blank(ln.tax_amount, decimal_places),
+            "line_total_display": numerals.format_money(ln.line_total, decimal_places),
+        })
+
+    params = {
+        "companyDisplayName": app_session.current_company.display_name if app_session.current_company else "",
+        "companyLegalName": company.legal_name or "",
+        "companyIdsLine": "  —  ".join(company_ids_parts),
+        "documentTypeLabel": DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code),
+        "documentNoDisplay": numerals.to_persian_digits(str(doc.document_no)),
+        "documentDateDisplay": numerals.format_jalali_date(doc.document_date),
+        "dueDateDisplay": numerals.format_jalali_date(doc.due_date) if doc.due_date else "—",
+        "referenceNo": doc.reference_no or "",
+        "statusLabel": STATUS_LABELS.get(doc.status_code, doc.status_code),
+        "warehouseName": warehouse_name,
+        "counterpartyLabel": counterparty_label,
+        "counterpartyIdsLine": "  —  ".join(counterparty_ids_parts),
+        "counterpartyContactLine": "  —  ".join(counterparty_contact_parts),
+        "counterpartyAddress": (party_detail.get("address") or "") if party_detail else "",
+        "headerDescription": doc.description or "",
+        "subtotalDisplay": numerals.format_money(doc.subtotal_amount, decimal_places),
+        "discountDisplay": _money_or_blank(doc.discount_amount, decimal_places),
+        "taxDisplay": _money_or_blank(doc.tax_amount, decimal_places),
+        "shippingDisplay": _money_or_blank(doc.shipping_amount, decimal_places),
+        "totalDisplay": numerals.format_money(doc.total_amount, decimal_places),
+        "totalInWordsDisplay": numerals.amount_to_words(doc.total_amount),
+        "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+    }
+    return print_rows, params
+
+
 def _show_invoice_print(parent: QWidget, company_id: int, document_id: int, counterparty_label: str | None = None) -> None:
     doc, lines = documents_service.get_document(document_id, company_id)
+
+    if jasper_bridge.is_available():
+        print_rows, params = _build_invoice_print_rows_and_params(company_id, doc, lines)
+        if counterparty_label is not None:
+            params["counterpartyLabel"] = counterparty_label
+        try:
+            fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="peecha_invoice_")
+            os.close(fd)
+            jasper_bridge.render_report("invoice.jrxml", print_rows, params, tmp_path, "pdf")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(tmp_path))
+            return
+        except Exception as exc:
+            QMessageBox.warning(
+                parent, "چاپِ حرفه‌ای",
+                f"ساختِ فاکتورِ حرفه‌ای ناموفق بود؛ نسخه‌یِ ساده نمایش داده می‌شود.\n{exc}",
+            )
+
+    # طبقِ حفظِ سازگاری: اگر موتورِ چاپِ حرفه‌ای هنوز build نشده (یا خطا
+    # داد)، همان پیش‌نمایشِ HTMLِ ساده -- که قبلاً کار می‌کرد -- جایگزین
+    # می‌شود؛ چاپِ فاکتور نباید برایِ کاربرانِ بدونِ Java کاملاً از کار بیفتد.
     decimal_places = companies_service.get_base_currency_decimal_places(company_id)
     if counterparty_label is None:
         counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
