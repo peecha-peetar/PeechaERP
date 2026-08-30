@@ -230,3 +230,21 @@ def set_user_role(user_id: int, role_id: int, company_id: int, assigned: bool) -
         elif not assigned and existing is not None:
             session.delete(existing)
         session.commit()
+
+
+# طبقِ درخواستِ صریح («مدیر — با نقشِ سوپروایزر/ادمین — بتواند فاکتورِ
+# ثبت‌شده را اصلاح کند»): چون این سیستمِ نقش‌ها کاملاً آزاد و کاربرساخته
+# است (بدونِ هیچ نقشِ سیستمیِ ازپیش‌ساخته)، «مدیر بودن» یعنی کاربر حداقل
+# یکی از نقش‌هایِ زیر را داشته باشد -- کدها به‌صورتِ غیرِحساس‌به‌بزرگی/
+# کوچکیِ حروف و هم‌فارسی/هم‌انگلیسی بررسی می‌شوند.
+_MANAGER_ROLE_CODES = {"ADMIN", "SUPERVISOR", "MANAGER", "ادمین", "سوپروایزر", "مدیر"}
+
+
+def is_manager(user_id: int, company_id: int) -> bool:
+    with new_session() as session:
+        codes = session.scalars(
+            select(Role.code)
+            .join(UserRole, UserRole.role_id == Role.role_id)
+            .where(UserRole.user_id == user_id, UserRole.company_id == company_id)
+        ).all()
+        return any(code.strip().upper() in _MANAGER_ROLE_CODES for code in codes)

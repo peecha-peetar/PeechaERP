@@ -302,6 +302,16 @@ class CommercialDocument(Base):
     )
     stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
     journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    # طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند، بدونِ
+    # backdate»): این فاکتور به‌جایِ ویرایشِ فاکتورِ قدیمی، رفرنسِ صریح به
+    # آن دارد (corrects_document_id) و فاکتورِ قدیمی هم رفرنسِ برعکس به
+    # این یکی دارد (corrected_by_document_id) -- هردو self-FK.
+    corrects_document_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("comm.commercial_documents.document_id")
+    )
+    corrected_by_document_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("comm.commercial_documents.document_id")
+    )
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     posted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))

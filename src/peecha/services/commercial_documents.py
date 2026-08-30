@@ -30,7 +30,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import FiscalYear
 from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, CreditHold
-from peecha.db.models.inventory import Item
+from peecha.db.models.inventory import Item, StockDocument
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_pricing as pricing_service
@@ -40,6 +40,7 @@ from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as inv_engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import journal_entries as je_service
+from peecha.services import roles as roles_service
 
 DOCUMENT_TYPE_CODES = (
     "SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN",
@@ -363,6 +364,115 @@ def convert_to_invoice(
             serial_id=snap["serial_id"], source_line_id=snap["line_id"], description=snap["description"],
             warehouse_id=snap["warehouse_id"],
         )
+    return new_document_id
+
+
+def can_correct_posted_document(company_id: int, correcting_user_id: int) -> bool:
+    """طبقِ درخواستِ صریح: فقط برایِ نمایش/پنهان‌کردنِ دکمه‌یِ «اصلاح» در
+    UI -- خودِ start_invoice_correction هم دوباره همین دو شرط را
+    اعتبارسنجی می‌کند."""
+    return (
+        roles_service.is_manager(correcting_user_id, company_id)
+        and settings_service.is_feature_enabled(company_id, "ALLOW_EDIT_POSTED_INVOICE")
+    )
+
+
+def start_invoice_correction(document_id: int, company_id: int, correcting_user_id: int) -> int:
+    """طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند، بدونِ
+    اینکه سند با تاریخِ عقب‌دار برگردد -- چون این ترتیبِ محاسبه‌یِ
+    میانگینِ موزونِ سندهایِ بعدی را به‌هم می‌ریزد و حسابِ طرف‌حساب را هم
+    قاطی می‌کند»): اثرِ مالی/انبارِ فاکتورِ اصلی *عیناً* در تاریخِ *امروز*
+    برگشت می‌خورد (نه با تاریخِ فاکتورِ اصلی)، خودِ فاکتورِ اصلی وضعیتِ
+    CORRECTED می‌گیرد (دیگر هرگز در آمارِ خرید/فروش شمرده نمی‌شود)، و یک
+    فاکتورِ *پیش‌نویسِ* تازه (کپیِ کاملِ سرِسند/ردیف‌ها، با رفرنسِ صریح به
+    فاکتورِ اصلی) ساخته می‌شود که از همینِ فرمِ عادیِ فاکتور قابلِ‌ویرایش و
+    دوبارهْ ثبتِ‌نهایی است -- بدونِ نیاز به هیچ مسیرِ جداگانه‌یِ ثبت."""
+    if not roles_service.is_manager(correcting_user_id, company_id):
+        raise ValueError("فقط مدیر (نقشِ سوپروایزر/ادمین) اجازه‌یِ اصلاحِ فاکتورِ ثبت‌شده را دارد.")
+    if not settings_service.is_feature_enabled(company_id, "ALLOW_EDIT_POSTED_INVOICE"):
+        raise ValueError("اصلاحِ فاکتورِ ثبت‌شده در تنظیماتِ این شرکت مجاز نشده است.")
+
+    with new_session() as session:
+        original = session.get(CommercialDocument, document_id)
+        if original is None or original.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if original.status_code != "POSTED":
+            raise ValueError("فقط سندِ ثبتِ‌نهایی‌شده قابلِ‌اصلاح است.")
+        if original.document_type_code not in ("SALES_INVOICE", "PURCHASE_INVOICE"):
+            raise ValueError("اصلاح فقط برایِ فاکتورِ خرید/فروش پشتیبانی می‌شود.")
+
+        lines = session.scalars(
+            select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
+        ).all()
+        line_snapshots = [
+            {
+                "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": ln.quantity, "quantity_base": ln.quantity_base,
+                "unit_price": ln.unit_price, "discount_amount": ln.discount_amount, "discount_percent": ln.discount_percent,
+                "tax_percent": ln.tax_percent, "batch_id": ln.batch_id, "serial_id": ln.serial_id,
+                "description": ln.description, "warehouse_id": ln.warehouse_id,
+            }
+            for ln in lines
+        ]
+        header_fields = DocumentHeaderFields(
+            counterparty_detail_account_id=original.counterparty_detail_account_id, currency_id=original.currency_id,
+            warehouse_id=original.warehouse_id, channel_code=original.channel_code, price_list_id=original.price_list_id,
+            exchange_rate=original.exchange_rate,
+            sales_rep_detail_account_id=original.sales_rep_detail_account_id,
+            cost_center_detail_account_id=original.cost_center_detail_account_id,
+            project_detail_account_id=original.project_detail_account_id,
+            reference_no=original.reference_no, description=original.description,
+        )
+        original_type = original.document_type_code
+        commercial_je_id = original.journal_entry_id
+        stock_document_ids = list(
+            session.scalars(
+                select(StockDocument.stock_document_id).where(
+                    StockDocument.company_id == company_id, StockDocument.reference_no == f"COMM-{document_id}",
+                )
+            )
+        )
+        stock_je_ids = [
+            je_id
+            for je_id in session.scalars(
+                select(StockDocument.journal_entry_id).where(StockDocument.stock_document_id.in_(stock_document_ids))
+            )
+            if je_id is not None
+        ]
+
+    if not stock_document_ids:
+        raise ValueError("سندِ انبارِ این فاکتور یافت نشد.")
+
+    # --- برگشت‌زدنِ اثرِ فیزیکیِ انبار -- ممکن است چند انبار/سندِ جدا
+    # باشد (طبقِ Toggleِ per-line-warehouse). ---
+    for stock_document_id in stock_document_ids:
+        inv_documents_service.reverse_stock_document(stock_document_id, company_id, correcting_user_id)
+
+    # --- برگشت‌زدنِ عینیِ سندهایِ حسابداری -- سندِ خودِ سندِ انبار (برایِ
+    # فاکتورِ خرید همان سندِ اصلیِ فاکتور هم هست، پس فقط یک‌بار برگشت
+    # می‌خورد)، و برایِ فاکتورِ فروش، سندِ جداگانه‌یِ بازرگانی (AR/درآمد)
+    # هم جداگانه. ---
+    for je_id in stock_je_ids:
+        je_service.reverse_journal_entry(je_id, company_id, correcting_user_id)
+    if original_type == "SALES_INVOICE" and commercial_je_id is not None and commercial_je_id not in stock_je_ids:
+        je_service.reverse_journal_entry(commercial_je_id, company_id, correcting_user_id)
+
+    new_document_id = create_document(company_id, correcting_user_id, original_type, datetime.date.today(), header_fields)
+    for snap in line_snapshots:
+        add_line(
+            new_document_id, company_id, item_id=snap["item_id"], uom_id=snap["uom_id"], quantity=snap["quantity"],
+            quantity_base=snap["quantity_base"], unit_price=snap["unit_price"], discount_amount=snap["discount_amount"],
+            discount_percent=snap["discount_percent"], tax_percent=snap["tax_percent"], batch_id=snap["batch_id"],
+            serial_id=snap["serial_id"], description=snap["description"], warehouse_id=snap["warehouse_id"],
+        )
+
+    with new_session() as session:
+        original = session.get(CommercialDocument, document_id)
+        original.status_code = "CORRECTED"
+        original.corrected_by_document_id = new_document_id
+        new_doc = session.get(CommercialDocument, new_document_id)
+        new_doc.corrects_document_id = document_id
+        session.commit()
+
     return new_document_id
 
 
