@@ -1116,43 +1116,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if confirm != QMessageBox.Yes:
             return
         company_id = self._company_id()
-        posted_type = self.document_type_code
-
-        # طبقِ درخواستِ صریح («تا وقتی سندِ دریافت/پرداخت نهایی نشده، فاکتور
-        # هم نهایی نشود؛ برایِ نقد/بانکِ فوری یک سندِ حسابداریِ واحد»): برایِ
-        # فاکتورِ خرید/فروش، پیش از خودِ ثبتِ نهایی می‌پرسیم که آیا دریافت/
-        # پرداخت هم‌زمان است و به چه روشی — نقد/بانکِ فوری یعنی همین یک
-        # سندِ فاکتور مستقیماً با حسابِ نقد/بانک بسته می‌شود (بدونِ هیچ
-        # حسابِ واسطِ دریافتنی/پرداختنی)، پس دیگر نیازی به بازکردنِ فرمِ
-        # جداگانه‌یِ دریافت/پرداخت نیست. چک/سایرِ روش‌ها (که فوری نیستند)
-        # همچنان رفتارِ قدیمی را دارند: فاکتور اول با دریافتنی/پرداختنیِ
-        # معمولی ثبت می‌شود، بعد فرمِ دریافت/پرداختِ جداگانه باز می‌شود.
-        immediate_method: str | None = None
-        open_payment_form_after = False
-        if posted_type in ("SALES_INVOICE", "PURCHASE_INVOICE"):
-            is_sales = posted_type == "SALES_INVOICE"
-            noun = "دریافتِ وجه" if is_sales else "پرداختِ وجه"
-            box = QMessageBox(self)
-            box.setWindowTitle(noun)
-            box.setText(f"آیا برایِ این فاکتور {noun} هم‌زمان ثبت می‌شود؟")
-            cash_button = box.addButton("نقد (فوری — یک سند)", QMessageBox.AcceptRole)
-            bank_button = box.addButton("بانک (فوری — یک سند)", QMessageBox.AcceptRole)
-            other_button = box.addButton("چک / سایرِ روش‌ها", QMessageBox.ActionRole)
-            box.addButton("نسیه (بدونِ پرداخت)", QMessageBox.RejectRole)
-            box.exec()
-            clicked = box.clickedButton()
-            if clicked is cash_button:
-                immediate_method = "CASH"
-            elif clicked is bank_button:
-                immediate_method = "BANK"
-            elif clicked is other_button:
-                open_payment_form_after = True
-
         try:
-            result = documents_service.post_document(
-                self._document_id, company_id, app_session.current_user.user_id,
-                immediate_payment_method=immediate_method,
-            )
+            result = documents_service.post_document(self._document_id, company_id, app_session.current_user.user_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در ثبتِ نهایی", str(exc))
@@ -1165,26 +1130,32 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             f" (سندِ حسابداریِ #{numerals.to_persian_digits(str(result.journal_entry_id))} ساخته شد.)"
             if result.journal_entry_id is not None else ""
         )
-        if immediate_method is not None:
-            je_note += " (دریافت/پرداخت در همین سند ادغام شد.)"
         # طبقِ درخواستِ صریح («بعدِ تاییدِ فاکتورِ فروش فرمِ دریافت باز
         # بشه ... همین‌طور برایِ فاکتورِ خرید فرمِ پرداخت»): پیش از ریست،
         # اطلاعاتِ لازم برایِ فرمِ دریافت/پرداخت را نگه می‌داریم.
         posted_doc, _ = documents_service.get_document(self._document_id, company_id)
+        posted_type = self.document_type_code
         posted_counterparty_id = posted_doc.counterparty_detail_account_id
         posted_total = posted_doc.total_amount
         posted_no = posted_doc.document_no
         self._reset_form()
         theme.set_status_label(self.status_label, f"سند ثبتِ نهایی شد.{je_note}", ok=True)
 
-        if open_payment_form_after and self._main_window is not None:
+        if posted_type in ("SALES_INVOICE", "PURCHASE_INVOICE") and self._main_window is not None:
             is_sales = posted_type == "SALES_INVOICE"
-            nav_code = "TREASURY_RECEIPT" if is_sales else "TREASURY_PAYMENT"
-            description = f"بابتِ {DOC_TYPE_TITLES[posted_type]}ِ #{numerals.to_persian_digits(str(posted_no))}"
-            self._main_window.open_screen(
-                nav_code,
-                then=lambda screen: screen.prefill_for_invoice(posted_counterparty_id, posted_total, description),
+            noun = "دریافتِ وجه" if is_sales else "پرداختِ وجه"
+            confirm_payment = QMessageBox.question(
+                self, noun,
+                f"آیا برایِ این فاکتور {noun} ثبت می‌شود؟\n(اگر نسیه است و هنوز پرداختی صورت نگرفته، «خیر» را انتخاب کنید.)",
+                QMessageBox.Yes | QMessageBox.No,
             )
+            if confirm_payment == QMessageBox.Yes:
+                nav_code = "TREASURY_RECEIPT" if is_sales else "TREASURY_PAYMENT"
+                description = f"بابتِ {DOC_TYPE_TITLES[posted_type]}ِ #{numerals.to_persian_digits(str(posted_no))}"
+                self._main_window.open_screen(
+                    nav_code,
+                    then=lambda screen: screen.prefill_for_invoice(posted_counterparty_id, posted_total, description),
+                )
 
     def _cancel(self) -> None:
         if self._document_id is None:
