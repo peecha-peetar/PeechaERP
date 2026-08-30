@@ -35,6 +35,7 @@ from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settings as settings_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as inv_engine_service
@@ -203,6 +204,10 @@ class DocumentHeaderFields:
     linked_exchange_document_id: int | None = None
     exchange_rate: decimal.Decimal = decimal.Decimal(1)
     requested_delivery_date: datetime.date | None = None
+    # None یعنی «خودکار از رویِ payment_term_days طرفِ‌حساب محاسبه شود»
+    # (فقط برایِ SALES_INVOICE/PURCHASE_INVOICE) -- برایِ تنظیمِ دستی،
+    # مقداری غیرِ None بدهید.
+    due_date: datetime.date | None = None
     sales_rep_detail_account_id: int | None = None
     cost_center_detail_account_id: int | None = None
     project_detail_account_id: int | None = None
@@ -227,6 +232,11 @@ def create_document(
             )
             or 0
         ) + 1
+        due_date = fields.due_date
+        if due_date is None:
+            due_date = settlements_service.compute_due_date(
+                company_id, document_type_code, fields.counterparty_detail_account_id, document_date,
+            )
         doc = CommercialDocument(
             company_id=company_id, fiscal_year_id=fiscal_year_id, document_type_code=document_type_code,
             document_no=next_no, document_date=document_date, status_code="DRAFT",
@@ -234,7 +244,7 @@ def create_document(
             warehouse_id=fields.warehouse_id, price_list_id=fields.price_list_id, pos_session_id=fields.pos_session_id,
             source_document_id=fields.source_document_id, linked_exchange_document_id=fields.linked_exchange_document_id,
             currency_id=fields.currency_id, exchange_rate=fields.exchange_rate,
-            requested_delivery_date=fields.requested_delivery_date,
+            requested_delivery_date=fields.requested_delivery_date, due_date=due_date,
             sales_rep_detail_account_id=fields.sales_rep_detail_account_id,
             cost_center_detail_account_id=fields.cost_center_detail_account_id,
             project_detail_account_id=fields.project_detail_account_id,
@@ -433,6 +443,10 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
             counterparty_detail_account_id=original.counterparty_detail_account_id, currency_id=original.currency_id,
             warehouse_id=original.warehouse_id, channel_code=original.channel_code, price_list_id=original.price_list_id,
             exchange_rate=original.exchange_rate,
+            # موعدِ تسویه‌یِ اصلی عیناً منتقل می‌شود (نه بازمحاسبه) -- اگر
+            # کاربر آن را دستی تغییر داده بود، اصلاح نباید بی‌سروصدا
+            # نادیده‌اش بگیرد.
+            due_date=original.due_date,
             sales_rep_detail_account_id=original.sales_rep_detail_account_id,
             cost_center_detail_account_id=original.cost_center_detail_account_id,
             project_detail_account_id=original.project_detail_account_id,
@@ -747,6 +761,12 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
         doc.warehouse_id = fields.warehouse_id
         doc.channel_code = fields.channel_code
         doc.price_list_id = fields.price_list_id
+        if fields.due_date is not None:
+            doc.due_date = fields.due_date
+        else:
+            doc.due_date = settlements_service.compute_due_date(
+                company_id, doc.document_type_code, fields.counterparty_detail_account_id, document_date,
+            )
         doc.sales_rep_detail_account_id = fields.sales_rep_detail_account_id
         doc.cost_center_detail_account_id = fields.cost_center_detail_account_id
         doc.project_detail_account_id = fields.project_detail_account_id

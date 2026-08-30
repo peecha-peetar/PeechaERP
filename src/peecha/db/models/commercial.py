@@ -288,6 +288,10 @@ class CommercialDocument(Base):
     currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     exchange_rate: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     requested_delivery_date: Mapped[datetime.date | None] = mapped_column(Date)
+    # طبقِ درخواستِ صریح («موعدِ تسویه را بر اساسِ تعاریفِ طرفِ‌حساب نمایش
+    # بدهد و بتوان ویرایشش کرد»): در لحظه‌یِ ساخت از رویِ payment_term_days
+    # طرفِ‌حساب محاسبه می‌شود، ولی دستی هم قابلِ‌تغییر است.
+    due_date: Mapped[datetime.date | None] = mapped_column(Date)
     sales_rep_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
@@ -936,3 +940,32 @@ class DocumentNumberingSequence(Base):
     prefix: Mapped[str] = mapped_column(String(10), default="")
     next_number: Mapped[int] = mapped_column(BigInteger, default=1)
     reset_policy_code: Mapped[str] = mapped_column(String(10), default="YEARLY")
+
+
+# =======================================================================
+# تسویه‌یِ فاکتور — معادلِ 094_invoice_settlements.sql /
+# 095_settlement_alarm_settings.sql
+# =======================================================================
+class InvoiceSettlement(Base):
+    __tablename__ = "invoice_settlements"
+    __table_args__ = ({"schema": "comm"},)
+
+    settlement_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    invoice_document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    settlement_date: Mapped[datetime.date] = mapped_column(Date)
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    reference_no: Mapped[str | None] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class SettlementAlarmSettings(Base):
+    __tablename__ = "settlement_alarm_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    is_enabled: Mapped[bool] = mapped_column(default=False)
+    alarm_days_before: Mapped[int] = mapped_column(SmallInteger, default=2)

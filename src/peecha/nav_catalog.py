@@ -42,6 +42,11 @@ NAV_ITEMS = [
             {"code": "TREASURY_RECEIPT", "label": "سندِ دریافت", "screen": "treasury_voucher_receipt"},
             {"code": "TREASURY_PAYMENT", "label": "سندِ پرداخت", "screen": "treasury_voucher_payment"},
             {"code": "TREASURY_LIST", "label": "اسنادِ خزانه‌داری", "screen": "treasury_vouchers_list"},
+            # طبقِ درخواستِ صریح («هر دریافت و پرداخت رفرنسِ فاکتور را
+            # داشته باشد و مدیریتِ تسویه‌یِ فاکتورها را ایجاد کن»): تخصیصِ
+            # (بخشی از) یک سندِ دریافت/پرداختِ ثبت‌شده به یک یا چند فاکتورِ
+            # بازِ فروش/خرید.
+            {"code": "TREASURY_INVOICE_SETTLEMENT", "label": "تسویه‌یِ فاکتورها", "screen": "commercial_invoice_settlement"},
             # طبقِ ساختارِ واقعیِ تنخواه‌گردان: هر تنخواه‌دار (تفصیلیِ سطحِ
             # آخرِ گروهِ «تنخواه») چند تنخواهِ باز با شماره‌یِ خودکارِ
             # مستقل می‌تواند داشته باشد.
@@ -234,6 +239,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("TREASURY_RECEIPT", "💵"),
         ("TREASURY_PAYMENT", "💸"),
         ("TREASURY_LIST", "📚"),
+        ("TREASURY_INVOICE_SETTLEMENT", "🔗"),
         ("TREASURY_PETTY_CASH", "👛"),
         ("TREASURY_PETTY_CASH_LIST", "🧾"),
         ("TREASURY_CHECKS_RECEIVED", "📥"),

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -19,6 +20,7 @@ from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settings as settings_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
@@ -255,6 +257,58 @@ class _IndustryProfileTab(QWidget):
             return
         settings_service.apply_industry_profile(company_id, profile_code)
         self.status_label.setText("نمایه اعمال شد.")
+
+
+class _SettlementAlarmTab(QWidget):
+    """طبقِ درخواستِ صریح («در تنظیمات آپشنی باشد که تعداد مثلاً ۲ روز
+    مانده به موعدِ تسویه برنامه آلارم بدهد»)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("هشدارِ موعدِ تسویه")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+
+        self.enabled_checkbox = QCheckBox("نمایشِ هشدار برایِ فاکتورهایِ نزدیک به موعدِ تسویه/معوقه")
+        self.enabled_checkbox.toggled.connect(self._save)
+        layout.addWidget(self.enabled_checkbox)
+
+        days_row = QHBoxLayout()
+        days_row.addWidget(QLabel("چند روز مانده به موعد هشدار داده شود"))
+        self.days_spin = QSpinBox()
+        self.days_spin.setRange(0, 90)
+        self.days_spin.valueChanged.connect(self._save)
+        days_row.addWidget(self.days_spin)
+        days_row.addStretch(1)
+        layout.addLayout(days_row)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        settings = settlements_service.get_alarm_settings(company_id)
+        self.enabled_checkbox.blockSignals(True)
+        self.days_spin.blockSignals(True)
+        self.enabled_checkbox.setChecked(settings.is_enabled)
+        self.days_spin.setValue(settings.alarm_days_before)
+        self.enabled_checkbox.blockSignals(False)
+        self.days_spin.blockSignals(False)
+        self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        settlements_service.set_alarm_settings(company_id, self.enabled_checkbox.isChecked(), self.days_spin.value())
+        self.status_label.setText("ذخیره شد.")
 
 
 class _NumberingSequencesTab(LayoutEditMixin, QWidget):

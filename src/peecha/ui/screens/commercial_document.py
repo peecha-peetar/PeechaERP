@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -406,6 +407,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         super().__init__()
         self.document_type_code = document_type_code
         self._is_sales = document_type_code in _SALES_TYPES
+        # طبقِ درخواستِ صریح («موعدِ تسویه فقط برایِ فاکتور معنا دارد»):
+        # سفارش/پیش‌فاکتور/برگشت این فیلد را نمی‌بینند.
+        self._is_invoice = document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE")
         self._main_window = main_window
         self._document_id: int | None = None
         self._status_code = "DRAFT"
@@ -554,11 +558,27 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         project_layout.addLayout(project_row)
         row2_grid.addWidget(self.project_box, 0, 4, 2, 1)
 
+        # طبقِ درخواستِ صریح («در هر فاکتور موعدِ تسویه را بر اساسِ
+        # تعاریفِ آن در تفصیلی نمایش دهد و بتوان آن را هم ویرایش کرد»):
+        # فقط برایِ فاکتورِ خرید/فروش نمایش داده می‌شود -- با انتخابِ
+        # طرفِ‌حساب خودکار از رویِ payment_term_days محاسبه می‌شود، ولی
+        # کاملاً قابلِ‌ویرایشِ دستی هم هست.
+        self.due_date_box = QWidget()
+        due_date_layout = QVBoxLayout(self.due_date_box)
+        due_date_layout.setContentsMargins(0, 0, 0, 0)
+        due_date_layout.setSpacing(3)
+        due_date_layout.addWidget(QLabel("موعدِ تسویه"))
+        self.due_date_field = JalaliDateEdit()
+        due_date_layout.addWidget(self.due_date_field)
+        row2_grid.addWidget(self.due_date_box, 0, 5, 2, 1)
+        self.due_date_box.setVisible(self._is_invoice)
+
         row2_grid.setColumnStretch(0, 1)
         row2_grid.setColumnStretch(1, 1)
         row2_grid.setColumnStretch(2, 2)
         row2_grid.setColumnStretch(3, 1)
         row2_grid.setColumnStretch(4, 1)
+        row2_grid.setColumnStretch(5, 1)
         header_grid.addWidget(row2_widget, 2, 0, 1, 5)
 
         header_grid.setColumnStretch(0, 1)
@@ -580,6 +600,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # اولین ردیف»): زنجیره‌یِ Enterِ هدر حالا مستقیم به افزودنِ اولین
         # ردیف می‌رسد، به‌جایِ متوقف‌شدن روی توضیح.
         _enter_signal(header_chain[-1]).connect(self._add_line)
+        if self._is_invoice:
+            self.counterparty_combo.currentIndexChanged.connect(self._recompute_due_date)
 
         # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): وضعیت و
         # پیوندهایِ سند هردو متنِ کوتاهِ اطلاعاتی‌اند — قبلاً هرکدام یک
@@ -730,6 +752,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
 
+    def _recompute_due_date(self) -> None:
+        """طبقِ درخواستِ صریح: با انتخابِ طرفِ‌حساب، موعدِ تسویه از رویِ
+        payment_term_days همان طرفِ‌حساب دوباره محاسبه می‌شود -- ویرایشِ
+        دستیِ بعدی (بدونِ تغییرِ طرفِ‌حساب) دست‌نخورده می‌ماند."""
+        company_id = self._company_id()
+        counterparty_id = self.counterparty_combo.currentData()
+        if company_id is None or counterparty_id is None:
+            return
+        due = settlements_service.compute_due_date(
+            company_id, self.document_type_code, counterparty_id, self.date_field.date(),
+        )
+        self.due_date_field.setDate(due or self.date_field.date())
+
     def refresh(self) -> None:
         company_id = self._company_id()
         if company_id is None:
@@ -850,6 +885,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.cost_center_combo.setCurrentIndex(max(0, self.cost_center_combo.findData(doc.cost_center_detail_account_id)))
         if doc.project_detail_account_id is not None:
             self.project_combo.setCurrentIndex(max(0, self.project_combo.findData(doc.project_detail_account_id)))
+        if self._is_invoice:
+            # طبقِ رفعِ باگِ واقعی: setCurrentIndexِ بالا برایِ
+            # counterparty_combo سیگنالِ _recompute_due_date را هم شلیک
+            # می‌کند -- این‌جا با مقدارِ واقعاً ذخیره‌شده رویِ سند
+            # جای‌گزینش می‌کنیم تا موعدِ دستی‌تنظیم‌شده گم نشود.
+            self.due_date_field.setDate(doc.due_date or doc.document_date)
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
         # طبقِ رفعِ باگِ واقعی («سندِ بهایِ تمام‌شده/موجودی انجام نمی‌شود»
@@ -965,6 +1006,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setText("")
         self.links_label.setText("")
         self.date_field.setDate(datetime.date.today())
+        if self._is_invoice:
+            self.due_date_field.setDate(datetime.date.today())
         self.counterparty_combo.setCurrentIndex(0)
         self.warehouse_combo.setCurrentIndex(0)
         self.price_list_combo.setCurrentIndex(0)
@@ -1010,6 +1053,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             price_list_id=self.price_list_combo.currentData(),
             cost_center_detail_account_id=self.cost_center_combo.currentData(),
             project_detail_account_id=self.project_combo.currentData(),
+            due_date=self.due_date_field.date() if self._is_invoice else None,
             reference_no=self.reference_field.text().strip() or None,
             description=self.description_field.text().strip() or None,
         )
