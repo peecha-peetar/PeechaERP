@@ -72,6 +72,11 @@ _METHOD_LABELS = {
 }
 _RECEIPT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING", "INSTALLMENT"]
 _PAYMENT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "CHECK_DISBURSEMENT", "NETTING", "INSTALLMENT"]
+# طبقِ درخواستِ صریح («در فرمِ دریافت/پرداخت هم دکمه‌ای باشد که به
+# فاکتورهایِ تسویه‌نشده لینک باشد»): مسیرِ معکوسِ همان چیزی که در
+# commercial_settlement.py ساخته شد.
+_INVOICE_TYPE_BY_DIRECTION = {"RECEIPT": "SALES_INVOICE", "PAYMENT": "PURCHASE_INVOICE"}
+_LINK_INVOICE_COLUMNS = ["نوع", "شماره", "موعدِ تسویه", "جمعِ کل", "مانده", "مبلغِ تسویه"]
 # طبقِ درخواستِ صریح: تهاتر هم مثلِ نقد/بانک/تخفیف/کالابرگ/بن، تفصیلیِ
 # احتمالیِ خودش را (از رویِ نگاشتِ تنظیمات) نشان می‌دهد — پس دیگر همیشه از
 # دیالوگِ جزئیات معاف نیست؛ اگر برایِ آن معینی تفصیلی/بُعدِ الزامی نداشت،
@@ -1597,6 +1602,84 @@ class _MethodRow:
         return treasury_service.MethodLine(**kwargs)
 
 
+class _LinkInvoicesDialog(LayoutEditMixin, QDialog):
+    """طبقِ درخواستِ صریح («در فرمِ دریافت/پرداخت هم دکمه‌ای باشد که به
+    فاکتورهایِ تسویه‌نشده لینک باشد و بتوان مبلغِ تسویه را برایِ
+    فاکتورهایِ همان شخص وارد کرد»): مسیرِ معکوسِ همان چیزی که در
+    commercial_settlement.py ساخته شد — این‌جا خودِ فرمِ دریافت/پرداخت
+    فهرستِ فاکتورهایِ بازِ طرفِ‌حسابِ انتخاب‌شده را نشان می‌دهد."""
+
+    def __init__(self, parent: QWidget, statuses: list, docs_by_id: dict, direction: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("لینک به فاکتورهایِ بازِ این طرفِ‌حساب")
+        self.setMinimumWidth(560)
+        self._statuses = statuses
+        self._qty_fields: dict[int, _AmountField] = {}
+        invoice_title = "فاکتورِ فروش" if direction == "RECEIPT" else "فاکتورِ خرید"
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("مبلغِ تسویه‌یِ هرکدام از فاکتورهایِ بازِ این طرفِ‌حساب را مشخص کنید (پیش‌فرض: صفر)."))
+
+        table = QTableWidget(len(statuses), len(_LINK_INVOICE_COLUMNS))
+        table.setHorizontalHeaderLabels(_LINK_INVOICE_COLUMNS)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for row_index, status in enumerate(statuses):
+            doc = docs_by_id[status.document_id]
+            values = [
+                invoice_title,
+                numerals.to_persian_digits(str(doc.document_no)),
+                numerals.format_jalali_date(status.due_date) if status.due_date else "—",
+                numerals.format_amount(status.total_amount),
+                numerals.format_amount(status.remaining_amount),
+            ]
+            for col_index, value in enumerate(values):
+                table.setItem(row_index, col_index, QTableWidgetItem(value))
+            qty_field = _AmountField()
+            qty_field.setValue(0)
+            self._qty_fields[status.document_id] = qty_field
+            table.setCellWidget(row_index, len(_LINK_INVOICE_COLUMNS) - 1, qty_field)
+        table.resizeRowsToContents()
+        layout.addWidget(table)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("تایید")
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        # هم‌الگو با _ConvertToInvoiceDialog در commercial_document.py --
+        # جلوگیری از باگِ autoDefaultِ QDialogButtonBox.
+        buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
+        layout.addWidget(buttons)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _on_accept(self) -> None:
+        entries = {doc_id: decimal.Decimal(str(field.value())) for doc_id, field in self._qty_fields.items() if field.value() > 0}
+        if not entries:
+            self.status_label.setText("حداقل برایِ یک فاکتور مبلغی وارد کنید.")
+            return
+        for status in self._statuses:
+            amount = entries.get(status.document_id)
+            if amount is not None and amount > status.remaining_amount:
+                self.status_label.setText("مبلغِ واردشده برایِ یک فاکتور از مانده‌اش بیشتر است.")
+                return
+        self.accept()
+
+    def result_entries(self) -> dict[int, decimal.Decimal]:
+        return {doc_id: decimal.Decimal(str(field.value())) for doc_id, field in self._qty_fields.items() if field.value() > 0}
+
+
 class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
     def __init__(self, direction: str, main_window=None) -> None:
         super().__init__()
@@ -1705,6 +1788,15 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.ledger_button.setMaximumWidth(28)
         self.ledger_button.clicked.connect(self._open_counterparty_ledger)
         account_row.addWidget(self.ledger_button)
+        # طبقِ درخواستِ صریح («در فرمِ دریافت/پرداخت هم دکمه‌ای باشد که
+        # به فاکتورهایِ تسویه‌نشده لینک باشد و بتوان مبلغِ تسویه را برایِ
+        # فاکتورهایِ همان شخص وارد کرد»).
+        self.link_invoices_button = QPushButton("🔗")
+        self.link_invoices_button.setObjectName("iconButton")
+        self.link_invoices_button.setToolTip("لینک به فاکتورهایِ بازِ این طرفِ‌حساب — واردکردنِ مبلغِ تسویه برایِ هرکدام")
+        self.link_invoices_button.setMaximumWidth(28)
+        self.link_invoices_button.clicked.connect(self._open_link_invoices_dialog)
+        account_row.addWidget(self.link_invoices_button)
         header_layout.addLayout(account_row, 1, 1)
 
         # طبقِ درخواستِ صریح: مرکزِ هزینه/پروژه (اگر رویِ حسابِ طرف‌حساب
@@ -2035,6 +2127,49 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._main_window.open_screen(
             "REPORTS_ACCOUNT_LEDGER",
             then=lambda screen: screen.show_ledger_for_detail(detail_account_id, label),
+        )
+
+    def _open_link_invoices_dialog(self) -> None:
+        """طبقِ درخواستِ صریح: فهرستِ فاکتورهایِ بازِ همین طرفِ‌حساب (بر
+        اساسِ جهتِ سند -- دریافت یعنی فاکتورِ فروش، پرداخت یعنی فاکتورِ
+        خرید) را نشان می‌دهد؛ بعدِ تاییدِ کاربر، مبلغ‌هایِ واردشده در
+        self._settle_invoices نگه داشته می‌شوند تا _save() خودکار آن‌ها
+        را تسویه کند -- دقیقاً همان مکانیزمِ prefill_for_invoice، فقط از
+        همین‌جا (نه از فرمِ تسویه) شروع می‌شود."""
+        detail_account_id = self.account_combo.currentData()
+        if self.company_id is None or detail_account_id is None:
+            theme.set_status_label(self.status_label, "ابتدا طرفِ‌حساب را انتخاب کنید.", ok=False)
+            return
+        invoice_type = _INVOICE_TYPE_BY_DIRECTION[self.direction]
+        statuses = settlements_service.list_unsettled_invoices(self.company_id, invoice_type)
+        docs_by_id = {}
+        matching = []
+        for status in statuses:
+            try:
+                doc, _lines = documents_service.get_document(status.document_id, self.company_id)
+            except ValueError:
+                continue
+            if doc is not None and doc.counterparty_detail_account_id == detail_account_id:
+                docs_by_id[status.document_id] = doc
+                matching.append(status)
+        if not matching:
+            QMessageBox.information(self, "فاکتورهایِ باز", "این طرفِ‌حساب فاکتورِ بازِ تسویه‌نشده‌ای ندارد.")
+            return
+        dialog = _LinkInvoicesDialog(self, matching, docs_by_id, self.direction)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        entries = dialog.result_entries()
+        if not entries:
+            return
+        self._settle_invoices = list(entries.items())
+        total = sum(entries.values(), decimal.Decimal(0))
+        self.total_amount_field.setValue(float(total))
+        self._update_rows_summary()
+        theme.set_status_label(
+            self.status_label,
+            f"{numerals.to_persian_digits(str(len(entries)))} فاکتور لینک شد — جمعِ مبلغ "
+            f"({numerals.format_money(total, self.currency_decimal_places)}) در بالایِ فرم پر شد.",
+            ok=True,
         )
 
     def _quick_add_counterparty(self) -> None:

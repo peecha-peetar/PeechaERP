@@ -157,17 +157,25 @@ class InvoiceSettlementScreen(QWidget):
         self.invoice_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.invoice_table.verticalHeader().setVisible(False)
         # طبقِ رفعِ باگِ واقعی («عرضِ ستونِ طرفِ‌حساب زیاد و مبلغِ تسویه کمه
-        # و تناسب نداره»): قبلاً فقط همین یک ستون Stretch بود و تنهاییِ
-        # کلِ فضایِ باقی‌مانده را می‌بلعید، درحالی‌که ستونِ مبلغِ تسویه
-        # (که یک فیلدِ واردکردنیِ تعاملی است، نه فقط متن) با عرضِ
-        # پیش‌فرضِ کوچک می‌ماند. حالا ستون‌هایِ کوتاه با محتوایشان تنظیم
-        # می‌شوند، طرفِ‌حساب عرضی معقول و قابلِ‌تغییر دارد، و فضایِ
-        # باقی‌مانده به ستونِ مبلغِ تسویه می‌رسد.
+        # و تناسب نداره» + گزارشِ بعدی «اندازه‌یِ ستون‌ها نامتقارن است»):
+        # ResizeToContents هر ستون را جدا و بر اساسِ طولِ عددِ همان ستون
+        # اندازه می‌کند -- مثلاً «تسویه‌شده» با مقدارِ ۰ خیلی باریک‌تر از
+        # «جمعِ کل» با یک عددِ بزرگ می‌شود، درحالی‌که هر دو از یک جنس‌اند
+        # (مبلغ) و باید یک‌اندازه دیده شوند. حالا هر گروهِ هم‌جنس (سه
+        # ستونِ مبلغ، شماره، تاریخ) عرضِ ثابت و برابرِ صریح دارد -- نه
+        # اندازه‌یِ خودکارِ وابسته به محتوایِ همان لحظه -- و فقط طرفِ‌حساب/
+        # مبلغِ تسویه (که به‌طورِ ذاتی متغیرترند) قابلِ‌تغییرِ دستی یا
+        # کِش‌دارند.
         invoice_header = self.invoice_table.horizontalHeader()
-        for col in (0, 2, 3, 4, 5):
-            invoice_header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        invoice_header.setSectionResizeMode(0, QHeaderView.Interactive)
+        self.invoice_table.setColumnWidth(0, 70)
         invoice_header.setSectionResizeMode(1, QHeaderView.Interactive)
         self.invoice_table.setColumnWidth(1, 200)
+        invoice_header.setSectionResizeMode(2, QHeaderView.Interactive)
+        self.invoice_table.setColumnWidth(2, 100)
+        for col in (3, 4, 5):
+            invoice_header.setSectionResizeMode(col, QHeaderView.Interactive)
+            self.invoice_table.setColumnWidth(col, 110)
         invoice_header.setSectionResizeMode(len(_INVOICE_COLUMNS) - 1, QHeaderView.Stretch)
         self.invoice_table.itemSelectionChanged.connect(self._on_invoice_selected)
         # طبقِ درخواستِ صریح («روی ردیفِ فاکتور بتوان فاکتور را کامل دید»):
