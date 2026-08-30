@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import DetailAccount
+from peecha.db.models.accounting import DetailAccount, FiscalYear
 from peecha.db.models.inventory import (
     BinLocation,
     CategoryAccountMapping,
@@ -770,6 +770,178 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
             session.commit()
 
     return PostResult(stock_document_id=result_stock_document_id, journal_entry_id=journal_entry_id)
+
+
+def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> PostResult:
+    """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ ثبت‌شده باید عیناً برگشت بخورد،
+    نه اینکه سندِ اصلی با تاریخِ عقب‌دار دست‌کاری شود»): دقیقاً هم‌الگو با
+    journal_entries.reverse_journal_entry -- یک سندِ انبارِ *تازه* با نوعِ
+    معکوس (RECEIPT<->ISSUE)، همان کالا/مقدار/انبار/مکان، در تاریخِ *امروز*
+    ساخته و بلافاصله ثبتِ نهایی می‌شود؛ سندِ اصلی هرگز دست‌کاری نمی‌شود
+    (stock_ledger هم طبقِ طراحیِ دیتابیس Append-Only است).
+
+    برخلافِ post_stock_document، این‌جا میانگینِ موزونِ جدید با فرمولِ
+    معکوسِ همان فرمولِ apply_in محاسبه می‌شود -- نه از طریقِ یک ردیفِ
+    عادیِ ISSUE/RECEIPT، چون ISSUE هرگز average_unit_cost را تغییر
+    نمی‌دهد و نمی‌تواند اثرِ یک RECEیPT را واقعاً خنثی کند.
+
+    محدودیتِ آگاهانه: فقط برایِ کالاهایِ میانگینِ موزون/استاندارد (نه
+    FIFO، که ردیابیِ دقیقِ لایه‌به‌لایه لازم دارد) و فقط وقتی این سند
+    هنوز *آخرین* حرکتِ انبار برایِ کالاهایِ خودش باشد -- وگرنه برگشت‌زدنِ
+    آن ترتیبِ محاسبه‌یِ هزینه‌یِ سندهایِ بعدی را به‌هم می‌ریزد. سندِ
+    حسابداریِ خودش را هم نمی‌سازد -- بازتابِ حسابداریِ درست از طریقِ
+    برگشت‌زدنِ عینیِ سندِ حسابداریِ *سندِ اصلی* (journal_entries.
+    reverse_journal_entry، توسطِ تماس‌گیرنده) به‌دست می‌آید."""
+    with new_session() as session:
+        doc = session.get(StockDocument, stock_document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.status_code != "POSTED":
+            raise ValueError("فقط سندهایِ ثبت‌نهایی‌شده قابلِ برگشت‌اند.")
+        if doc.document_type_code not in ("RECEIPT", "ISSUE"):
+            raise ValueError("برگشت‌زدنِ این نوعِ سندِ انبار فعلاً پشتیبانی نمی‌شود.")
+
+        lines = session.scalars(
+            select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
+        ).all()
+        if not lines:
+            raise ValueError("سند ردیفی ندارد.")
+        line_ids = [ln.line_id for ln in lines]
+
+        original_ledger_rows = session.scalars(
+            select(StockLedger).where(StockLedger.stock_document_line_id.in_(line_ids))
+        ).all()
+        if len(original_ledger_rows) != len(lines):
+            raise ValueError("سند هنوز کاملاً به دفترِ انبار منتقل نشده — برگشت‌زدن ممکن نیست.")
+
+        item_ids = {r.item_id for r in original_ledger_rows}
+        items_by_id = {it.item_id: it for it in session.scalars(select(Item).where(Item.item_id.in_(item_ids)))}
+
+        costing_settings = session.get(CompanyCostingSettings, company_id)
+        default_costing_method_code = None
+        if costing_settings is not None:
+            method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
+            default_costing_method_code = method_row.code if method_row is not None else None
+
+        for item in items_by_id.values():
+            method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
+            if method == "FIFO":
+                raise ValueError(
+                    "برگشت‌زدنِ سند برایِ کالایی که با روشِ FIFO قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود."
+                )
+
+        is_receipt = doc.document_type_code == "RECEIPT"
+
+        # قاعده‌یِ ایمنی: این سند باید همچنان آخرین حرکتِ انبار برایِ
+        # کالا/انبارِ خودش باشد -- وگرنه ترتیبِ محاسبه‌یِ میانگینِ موزونِ
+        # سندهایِ بعدی به‌هم می‌ریزد.
+        this_doc_max_ledger_id = max(r.ledger_id for r in original_ledger_rows)
+        for r in original_ledger_rows:
+            later_count = session.scalar(
+                select(func.count()).select_from(StockLedger).where(
+                    StockLedger.item_id == r.item_id,
+                    StockLedger.warehouse_id == r.warehouse_id,
+                    StockLedger.bin_location_id == r.bin_location_id,
+                    StockLedger.ledger_id > this_doc_max_ledger_id,
+                )
+            )
+            if later_count:
+                raise ValueError(
+                    "این سند دیگر آخرین حرکتِ انبار برایِ یکی از کالاهایش نیست — سندهایِ دیگری "
+                    "بعد از آن رویِ همین کالا/انبار ثبت شده‌اند، پس اصلاحِ آن دیگر ایمن نیست."
+                )
+
+        fiscal_year = session.scalar(
+            select(FiscalYear).where(
+                FiscalYear.company_id == company_id,
+                FiscalYear.start_date <= datetime.date.today(),
+                FiscalYear.end_date >= datetime.date.today(),
+            )
+        )
+        if fiscal_year is None:
+            raise ValueError("سالِ مالیِ امروز تعریف نشده است.")
+
+        original_warehouse_id = doc.destination_warehouse_id if is_receipt else doc.source_warehouse_id
+        reversal_type = "ISSUE" if is_receipt else "RECEIPT"
+        next_no = (
+            session.scalar(
+                select(func.max(StockDocument.document_no)).where(
+                    StockDocument.company_id == company_id, StockDocument.fiscal_year_id == fiscal_year.fiscal_year_id,
+                    StockDocument.document_type_code == reversal_type,
+                )
+            )
+            or 0
+        ) + 1
+        today = datetime.date.today()
+        reversal_doc = StockDocument(
+            company_id=company_id, fiscal_year_id=fiscal_year.fiscal_year_id, document_type_code=reversal_type,
+            document_no=next_no, document_date=today, status_code="POSTED",
+            source_warehouse_id=original_warehouse_id if reversal_type == "ISSUE" else None,
+            destination_warehouse_id=original_warehouse_id if reversal_type == "RECEIPT" else None,
+            counterparty_detail_account_id=doc.counterparty_detail_account_id,
+            cost_center_detail_account_id=doc.cost_center_detail_account_id,
+            project_detail_account_id=doc.project_detail_account_id,
+            reference_no=f"REVERSAL-{stock_document_id}",
+            description=f"سندِ برگشتیِ سندِ انبارِ شماره‌ی {doc.document_no}",
+            created_by_user_id=reversed_by_user_id,
+        )
+        session.add(reversal_doc)
+        session.flush()
+
+        for line_no, r in enumerate(original_ledger_rows, start=1):
+            item = items_by_id[r.item_id]
+            bal = session.scalar(
+                select(StockBalance).where(
+                    StockBalance.item_id == r.item_id, StockBalance.warehouse_id == r.warehouse_id,
+                    StockBalance.bin_location_id == r.bin_location_id, StockBalance.batch_id.is_(None),
+                ).with_for_update()
+            )
+            if bal is None:
+                raise ValueError("موجودیِ این کالا/انبار یافت نشد.")
+
+            method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
+            q = r.quantity_base
+            if r.movement_direction == "IN":
+                # طبقِ فرمولِ معکوسِ apply_in: Q0 = Q1 - q؛
+                # A0 = (A1*Q1 - q*C) / Q0 (اگر Q0 > 0).
+                new_qty = bal.quantity_on_hand - q
+                if new_qty > 0:
+                    if method == "STANDARD":
+                        new_avg = _standard_cost(session, item.item_id, today)
+                    else:
+                        new_avg = ((bal.average_unit_cost * bal.quantity_on_hand) - (q * r.unit_cost)) / new_qty
+                else:
+                    new_avg = _ZERO
+                bal.quantity_on_hand = new_qty
+                bal.average_unit_cost = new_avg
+                reversal_direction = "OUT"
+            else:
+                # طبقِ apply_in/consume_out: OUT هرگز average_unit_cost را
+                # تغییر نمی‌دهد، پس برگشتِ آن هم صرفاً بازگردانِ مقدار است.
+                bal.quantity_on_hand += q
+                reversal_direction = "IN"
+            bal.last_movement_at = datetime.datetime.now()
+
+            new_line = StockDocumentLine(
+                stock_document_id=reversal_doc.stock_document_id, line_no=line_no, item_id=r.item_id,
+                uom_id=item.base_uom_id, quantity=q, quantity_base=q,
+                bin_location_id=r.bin_location_id, unit_cost=r.unit_cost,
+            )
+            session.add(new_line)
+            session.flush()
+            session.add(
+                StockLedger(
+                    company_id=company_id, stock_document_line_id=new_line.line_id, item_id=r.item_id,
+                    warehouse_id=r.warehouse_id, bin_location_id=r.bin_location_id,
+                    movement_direction=reversal_direction, quantity_base=q, unit_cost=r.unit_cost,
+                    movement_date=today,
+                )
+            )
+
+        reversal_doc.posted_by_user_id = reversed_by_user_id
+        reversal_doc.posted_at = datetime.datetime.now()
+        session.commit()
+        return PostResult(stock_document_id=reversal_doc.stock_document_id, journal_entry_id=None)
 
 
 # ---------------------------------------------------------------------

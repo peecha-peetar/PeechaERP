@@ -917,8 +917,12 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
         if original is None or original.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         original_status = session.get(JournalEntryStatus, original.status_id)
-        if original_status is None or original_status.code != "PERMANENT":
-            raise ValueError("فقط سندهایِ دائم قابلِ برگشت‌زدن‌اند.")
+        # طبقِ نیازِ واقعیِ «اصلاحِ فاکتورِ ثبت‌شده»: سندِ حسابداریِ خودکارِ
+        # یک فاکتور معمولاً هنوز TEMPORARY است (شماره‌یِ دائم نگرفته)، نه
+        # PERMANENT -- برگشت‌زدنِ آن هم دقیقاً همان مکانیزم را لازم دارد،
+        # پس این محدودیت به TEMPORARY هم تعمیم داده شد.
+        if original_status is None or original_status.code not in ("TEMPORARY", "PERMANENT"):
+            raise ValueError("فقط سندهایِ موقت یا دائم قابلِ برگشت‌زدن‌اند.")
 
         company = session.get(Company, company_id)
         if company is None:
@@ -956,7 +960,8 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
         ) + 1
         next_permanent_no = _next_permanent_no(session, company_id, fiscal_year.fiscal_year_id)
 
-        original_no = original.permanent_no
+        original_no = original.permanent_no if original.permanent_no is not None else original.temporary_no
+        original_no_label = "دائمِ" if original.permanent_no is not None else "موقتِ"
         reversal = JournalEntry(
             company_id=company_id,
             fiscal_year_id=fiscal_year.fiscal_year_id,
@@ -965,7 +970,7 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
             document_date=document_date,
             entry_type_id=entry_type.entry_type_id,
             status_id=permanent_status.status_id,
-            description=f"سندِ برگشتیِ سندِ دائمِ شماره‌ی {original_no}",
+            description=f"سندِ برگشتیِ سندِ {original_no_label} شماره‌ی {original_no}",
             is_system_generated=True,
             reversed_entry_id=original.journal_entry_id,
             created_by_user_id=created_by_user_id,

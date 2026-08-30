@@ -14,7 +14,15 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import FiscalYear
-from peecha.db.models.inventory import DocumentReasonCode, Item, StockDocument, StockDocumentLine
+from peecha.db.models.inventory import (
+    CompanyCostingSettings,
+    CostingMethod,
+    DocumentReasonCode,
+    Item,
+    StockDocument,
+    StockDocumentLine,
+    StockLedger,
+)
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_engine as engine_service
 
@@ -556,3 +564,11 @@ def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
 
 def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_id: int) -> engine_service.PostResult:
     return engine_service.post_stock_document(stock_document_id, company_id, posted_by_user_id)
+
+
+def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> engine_service.PostResult:
+    """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ ثبت‌شده باید عیناً برگشت بخورد،
+    نه اینکه سندِ اصلی با تاریخِ عقب‌دار دست‌کاری شود») -- پیاده‌سازیِ کاملش
+    در inventory_engine.py است (تنها نقطه‌یِ نوشتنِ stock_ledger/
+    stock_balance)؛ این‌جا فقط delegate می‌کند، هم‌الگو با post_stock_document."""
+    return engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)
