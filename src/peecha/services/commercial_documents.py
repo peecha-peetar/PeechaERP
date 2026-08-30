@@ -540,6 +540,32 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
             for ln in draft_lines
         ]
 
+    # طبقِ رفعِ باگِ واقعی («اصلاحِ فاکتوری که شاملِ کالایِ FIFO است، نیمه‌
+    # کاره سندِ حسابداری را برگشت می‌زند/می‌سازد و بعد با خطا متوقف
+    # می‌شود، سند را در وضعیتِ ناسازگار رها می‌کند»): پیش از هرگونه
+    # نوشتن (برگشت‌زدنِ JEِ اصلی یا ساختِ JEِ تازه)، اعتبارسنجیِ کاملِ
+    # همه‌یِ کالاهایی که واقعاً نیاز به تغییرِ انبار دارند -- اگر یکی‌شان
+    # FIFO باشد، اصلاً هیچ‌کاری شروع نمی‌شود.
+    for item_id in all_item_ids:
+        old = original_by_item.get(item_id)
+        new = draft_by_item.get(item_id)
+        old_qty = old["quantity_base"] if old else _ZERO
+        new_qty = new["quantity_base"] if new else _ZERO
+        if draft.document_type_code == "SALES_INVOICE":
+            # طبقِ منطقِ واقعیِ شاخه‌یِ SALES_INVOICE پایین‌تر: آن‌جا فقط
+            # به quantity_base کاری دارد -- unit_price آن‌جا قیمتِ فروش
+            # است، نه بهایِ انبار، پس اصلاً معیارِ «تغییرِ بها» نیست.
+            needs_stock_change = old_qty != new_qty
+        else:
+            old_unit_cost = (old["net_value"] / old_qty) if old and old_qty else _ZERO
+            new_unit_cost = (new["net_value"] / new_qty) if new and new_qty else old_unit_cost
+            needs_stock_change = old_qty != new_qty or (old_unit_cost != new_unit_cost and old_qty > 0)
+        if needs_stock_change and inv_engine_service.get_effective_costing_method(item_id, company_id) == "FIFO":
+            raise ValueError(
+                "این اصلاح شاملِ کالایی است که با روشِ FIFO قیمت‌گذاری می‌شود و مقدار/بهایِ آن تغییر کرده -- "
+                "اصلاحِ فاکتور برایِ کالایِ FIFO فعلاً پشتیبانی نمی‌شود."
+            )
+
     extra_dims: dict[int, int] = {}
     if cost_center_id is not None:
         extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = cost_center_id
@@ -934,6 +960,15 @@ def cancel_document(document_id: int, company_id: int) -> None:
         if doc.status_code not in ("DRAFT", "CONFIRMED", "APPROVED"):
             raise ValueError("سندِ ثبت‌شده هرگز لغو نمی‌شود — برایِ اصلاح، سندِ تازه‌ای ثبت کنید.")
         doc.status_code = "CANCELLED"
+        # طبقِ رفعِ باگِ واقعی («اگر پیش‌نویسِ اصلاح لغو شود، سندِ اصلی برایِ
+        # همیشه قفل می‌ماند»): وقتی خودِ این سند یک پیش‌نویسِ اصلاحیِ
+        # ناتمام است، لغوش یعنی «اصلاح منصرف شد» -- قفلِ سندِ اصلی هم باید
+        # باز شود تا بشود دوباره اصلاح را (مثلاً با اعدادِ درست) از نو
+        # شروع کرد.
+        if doc.corrects_document_id is not None:
+            original = session.get(CommercialDocument, doc.corrects_document_id)
+            if original is not None and original.corrected_by_document_id == document_id:
+                original.corrected_by_document_id = None
         session.commit()
 
 

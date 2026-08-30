@@ -944,6 +944,24 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
         return PostResult(stock_document_id=reversal_doc.stock_document_id, journal_entry_id=None)
 
 
+def get_effective_costing_method(item_id: int, company_id: int) -> str:
+    """روشِ قیمت‌گذاریِ واقعاً مؤثرِ این کالا (خودِ کالا، وگرنه پیش‌فرضِ
+    شرکت) -- طبقِ رفعِ باگِ واقعی («اصلاحِ فاکتوری که شاملِ کالایِ FIFO
+    است، نیمه‌کاره حسابداری‌اش را برگشت می‌زند و بعد با خطا متوقف
+    می‌شود»): این تابع اجازه می‌دهد اهلیتِ FIFO پیش از هر نوشتنی
+    (برگشت‌زدنِ سند یا ساختِ سندِ تازه) بررسی شود، نه وسطِ کار."""
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None:
+            raise ValueError("کالا نامعتبر است.")
+        costing_settings = session.get(CompanyCostingSettings, company_id)
+        default_costing_method_code = None
+        if costing_settings is not None:
+            method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
+            default_costing_method_code = method_row.code if method_row is not None else None
+        return item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
+
+
 @dataclass
 class AdjustmentResult:
     stock_document_id: int
