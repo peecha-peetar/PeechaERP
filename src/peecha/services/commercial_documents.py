@@ -377,6 +377,19 @@ def can_correct_posted_document(company_id: int, correcting_user_id: int) -> boo
     )
 
 
+def describe_correction_ineligibility(company_id: int, correcting_user_id: int) -> str:
+    """طبقِ گزارشِ صریح («دکمه‌یِ اصلاح غیرِفعال است ولی معلوم نیست چرا»):
+    برخلافِ can_correct_posted_document (که فقط True/False می‌دهد)، این
+    تابع دقیقاً می‌گوید کدام‌یک از دو شرط برقرار نیست -- برایِ نمایش در
+    Tooltipِ دکمه، نه برایِ اعتبارسنجیِ خودِ عملیات."""
+    reasons = []
+    if not roles_service.is_manager(correcting_user_id, company_id):
+        reasons.append("شما نقشِ مدیر (ادمین/سوپروایزر) ندارید -- در تنظیماتِ سیستم، تبِ «نقش‌ها و دسترسی‌ها»، نقشی با این عنوان به کاربرِ خودتان بدهید")
+    if not settings_service.is_feature_enabled(company_id, "ALLOW_EDIT_POSTED_INVOICE"):
+        reasons.append("تنظیمِ «اجازه‌یِ اصلاحِ فاکتورِ ثبت‌شده» در تنظیماتِ بازرگانی، تبِ «قابلیت‌هایِ فعال»، خاموش است")
+    return "؛ و همچنین ".join(reasons)
+
+
 def start_invoice_correction(document_id: int, company_id: int, correcting_user_id: int) -> int:
     """طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند، بدونِ
     اینکه سند با تاریخِ عقب‌دار برگردد») و بازخوردِ بعدی («اصلاحِ فاکتوری

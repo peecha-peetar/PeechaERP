@@ -939,7 +939,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         is_posted = self._status_code == "POSTED"
         self.convert_button.setEnabled(is_confirmed or is_approved or is_posted)
-        self.correct_button.setEnabled(is_posted and self._document_id is not None and self._can_correct_posted())
+        can_correct = is_posted and self._document_id is not None and self._can_correct_posted()
+        self.correct_button.setEnabled(can_correct)
+        if is_posted and self._document_id is not None and not can_correct:
+            # طبقِ گزارشِ صریح («دکمه غیرِفعاله ولی معلوم نیست چرا»): به‌جایِ
+            # فقط خاکستری‌کردن، دلیلِ دقیق را در Tooltip نشان می‌دهیم.
+            company_id = self._company_id()
+            user = app_session.current_user
+            reason = documents_service.describe_correction_ineligibility(company_id, user.user_id) if company_id and user else ""
+            self.correct_button.setToolTip(f"اصلاحِ فاکتورِ ثبت‌شده -- غیرِفعال است، چون: {reason}")
+        else:
+            self.correct_button.setToolTip(
+                "اصلاحِ فاکتورِ ثبت‌شده — فقط برایِ مدیر و در صورتِ فعال‌بودنِ تنظیمِ «اجازه‌یِ اصلاحِ فاکتورِ ثبت‌شده».\n"
+                "سندِ فعلی عیناً و با تاریخِ امروز برگشت می‌خورد (بدونِ تغییرِ تاریخِ فاکتورهایِ قبلی) "
+                "و یک پیش‌نویسِ تازه برایِ ویرایش باز می‌شود."
+            )
 
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
