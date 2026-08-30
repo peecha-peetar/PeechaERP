@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import FiscalYear
+from peecha.db.models.accounting import DetailAccount, FiscalYear
 from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, CreditHold
 from peecha.db.models.inventory import Item
 from peecha.services import commercial_contracts as contracts_service
@@ -39,6 +39,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as inv_engine_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import treasury as treasury_service
 from peecha.services import journal_entries as je_service
 
 DOCUMENT_TYPE_CODES = (
@@ -605,15 +606,43 @@ class PostResult:
     journal_entry_id: int | None
 
 
-def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> PostResult:
+def post_document(
+    document_id: int, company_id: int, posted_by_user_id: int, *, immediate_payment_method: str | None = None,
+) -> PostResult:
+    """immediate_payment_method: طبقِ درخواستِ صریح («تا وقتی سندِ دریافت/
+    پرداخت نهایی نشده، فاکتور هم نهایی نشود؛ برایِ نقد/بانک، یک شماره‌یِ
+    مشترک») -- وقتی "CASH" یا "BANK" داده شود، به‌جایِ ثبتِ سندِ فاکتور با
+    حسابِ دریافتنی/پرداختنیِ معمولی و بعد یک سندِ دومِ جداگانه برایِ
+    دریافت/پرداخت، همان یک سندِ فاکتور مستقیماً با حسابِ نقد/بانکِ مربوطه
+    (طبقِ تنظیماتِ خزانه‌داری) بسته می‌شود -- بدونِ هیچ حسابِ واسطِ
+    دریافتنی/پرداختنی و بدونِ سندِ دوم. برایِ چک (که چرخهٔ چندمرحله‌ای دارد
+    و «فوری» نیست)، این پارامتر استفاده نمی‌شود -- رفتارِ دومرحله‌ایِ
+    قدیمی (فاکتور، بعد سندِ چک) دست‌نخورده می‌ماند."""
+    override_counterparty_role: tuple[str, int, dict[int, int]] | None = None
+    if immediate_payment_method is not None:
+        with new_session() as session:
+            doc = session.get(CommercialDocument, document_id)
+            if doc is None or doc.company_id != company_id:
+                raise ValueError("سند نامعتبر است.")
+            document_type_code_early = doc.document_type_code
+        if document_type_code_early not in ("SALES_INVOICE", "PURCHASE_INVOICE"):
+            raise ValueError("پرداخت/دریافتِ فوری فقط برایِ فاکتور خرید/فروش معنا دارد.")
+        direction = "RECEIPT" if document_type_code_early == "SALES_INVOICE" else "PAYMENT"
+        mapping_key = f"{direction}_{immediate_payment_method}"
+        cash_account_id, cash_detail_id = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
+        if cash_account_id is None:
+            raise ValueError(f"حسابِ «{treasury_service.MAPPING_LABELS.get(mapping_key, mapping_key)}» هنوز در تنظیماتِ خزانه‌داری مشخص نشده است.")
+        role_name = "SUPPLIER_PAYABLE" if document_type_code_early == "PURCHASE_INVOICE" else "CUSTOMER_RECEIVABLE"
+        extra_details: dict[int, int] = {}
+        if cash_detail_id is not None:
+            with new_session() as session:
+                detail_row = session.get(DetailAccount, cash_detail_id)
+            if detail_row is not None:
+                extra_details[detail_row.dimension_type_id] = cash_detail_id
+        override_counterparty_role = (role_name, cash_account_id, extra_details)
+
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
-        if doc is None or doc.company_id != company_id:
-            raise ValueError("سند نامعتبر است.")
-        if doc.status_code == "POSTED":
-            raise ValueError("این سند قبلاً ثبتِ نهایی شده است.")
-        if doc.status_code not in ("CONFIRMED", "APPROVED"):
-            raise ValueError("فقط سندِ تاییدشده قابلِ‌ثبتِ‌نهایی است.")
 
         document_type_code = doc.document_type_code
 
@@ -744,7 +773,10 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 session.commit()
 
         inv_documents_service.confirm_stock_document(group_stock_document_id, company_id)
-        group_post_result = inv_documents_service.post_stock_document(group_stock_document_id, company_id, posted_by_user_id)
+        group_post_result = inv_documents_service.post_stock_document(
+            group_stock_document_id, company_id, posted_by_user_id,
+            override_counterparty_role=override_counterparty_role if stock_document_type == "RECEIPT" else None,
+        )
 
         # طبقِ محدودیتِ آگاهانه: comm.commercial_documents فقط یک
         # stock_document_id/journal_entry_id دارد — با چند انبار، این
@@ -758,14 +790,19 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
     if document_type_code == "SALES_INVOICE":
         person_dim_type_id = dimensions_service.get_person_dimension_type_id(company_id)
         je_lines: list[je_service.LineInput] = []
-        ar_account_id = inv_engine_service.get_account_mapping(company_id, "CUSTOMER_RECEIVABLE")
-        if ar_account_id is None:
-            raise ValueError("حسابِ «حساب‌هایِ دریافتنیِ مشتریان» هنوز در تنظیماتِ انبار مشخص نشده است.")
+        if override_counterparty_role is not None:
+            _, ar_account_id, ar_extra_details = override_counterparty_role
+            ar_details = {**extra_dims, **ar_extra_details}
+        else:
+            ar_account_id = inv_engine_service.get_account_mapping(company_id, "CUSTOMER_RECEIVABLE")
+            if ar_account_id is None:
+                raise ValueError("حسابِ «حساب‌هایِ دریافتنیِ مشتریان» هنوز در تنظیماتِ انبار مشخص نشده است.")
+            ar_details = {person_dim_type_id: counterparty_id, **extra_dims}
         total = _money(subtotal_amount - discount_amount + tax_amount)
         je_lines.append(
             je_service.LineInput(
                 account_id=ar_account_id, description=description, debit=total, credit=_ZERO,
-                details={person_dim_type_id: counterparty_id, **extra_dims},
+                details=ar_details,
             )
         )
         # طبقِ رفعِ باگِ واقعیِ دیگر («کالا» هم می‌تواند رویِ حسابِ درآمد/

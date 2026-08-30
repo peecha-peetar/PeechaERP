@@ -554,5 +554,10 @@ def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
         session.commit()
 
 
-def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_id: int) -> engine_service.PostResult:
-    return engine_service.post_stock_document(stock_document_id, company_id, posted_by_user_id)
+def post_stock_document(
+    stock_document_id: int, company_id: int, posted_by_user_id: int,
+    *, override_counterparty_role: tuple[str, int, dict[int, int]] | None = None,
+) -> engine_service.PostResult:
+    return engine_service.post_stock_document(
+        stock_document_id, company_id, posted_by_user_id, override_counterparty_role=override_counterparty_role,
+    )

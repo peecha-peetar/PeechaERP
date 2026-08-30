@@ -299,7 +299,17 @@ def _source_line_unit_cost(session, source_line_id: int) -> decimal.Decimal:
     return (total_cost / total_qty) if total_qty else _ZERO
 
 
-def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_id: int) -> PostResult:
+def post_stock_document(
+    stock_document_id: int, company_id: int, posted_by_user_id: int,
+    *, override_counterparty_role: tuple[str, int, dict[int, int]] | None = None,
+) -> PostResult:
+    """override_counterparty_role: طبقِ درخواستِ صریح («فاکتور+دریافت/پرداختِ
+    فوریِ نقد/بانک در یک سندِ حسابداریِ واحد»)، وقتی مشخص شده باشد
+    (role_name, account_id, extra_details)، به‌جایِ نگاشتِ معمولیِ
+    SUPPLIER_PAYABLE/CUSTOMER_RECEIVABLE، مستقیماً حسابِ نقد/بانکِ داده‌شده
+    استفاده می‌شود -- یعنی هیچ حسابِ دریافتنی/پرداختنیِ واسط ساخته نمی‌شود
+    و کلِ اثرِ مالی (موجودی/مالیات در برابرِ نقد/بانک) در همین یک سند
+    می‌ماند."""
     with new_session() as session:
         doc = session.get(StockDocument, stock_document_id)
         if doc is None or doc.company_id != company_id:
@@ -717,13 +727,19 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
 
         def _build_lines(role_amounts: dict[str, dict[int | None, decimal.Decimal]], is_debit: bool) -> None:
             for role, by_item in role_amounts.items():
-                account_id = _resolve_role_account(session, company_id, role)
+                is_overridden = override_counterparty_role is not None and role == override_counterparty_role[0]
+                if is_overridden:
+                    account_id = override_counterparty_role[1]
+                else:
+                    account_id = _resolve_role_account(session, company_id, role)
                 base_details: dict[int, int] = {}
                 fixed_detail = _fixed_role_detail(role)
                 if fixed_detail is not None:
                     base_details[fixed_detail[0]] = fixed_detail[1]
                 base_details.update(extra_dims)
-                if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
+                if is_overridden:
+                    base_details.update(override_counterparty_role[2])
+                elif role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
                     base_details[person_dimension_type_id] = doc.counterparty_detail_account_id
                 if _account_requires_item_dim(account_id):
                     for item_detail_account_id, item_amount in by_item.items():
