@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -36,6 +37,7 @@ from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
@@ -88,6 +90,155 @@ _CONVERTIBLE_TO_INVOICE_TYPES = (
 # می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
 _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
 _LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح"]
+# طبقِ درخواستِ صریح («در انتهایِ فرم‌هایِ بازرگانی دکمه‌ای برایِ نمایشِ
+# آخرین اسنادِ طرفِ‌حساب»): چون سندی از هر نوع می‌تواند در همان تاریخچه
+# ظاهر شود (نه فقط نوعِ فرمِ فعلی)، نگاشتِ document_type_code -> کدِ
+# ناوبری این‌جا لازم است -- کدهایِ ناوبری با document_type_code یکی
+# نیستند (مثلاً «PURCHASE_INVOICE» در پایگاه‌داده، «PURCH_INVOICE» در
+# nav_catalog.py).
+_NAV_CODE_BY_DOCUMENT_TYPE = {
+    "SALES_ORDER": "SALES_ORDER",
+    "SALES_PROFORMA": "SALES_PROFORMA",
+    "SALES_INVOICE": "SALES_INVOICE",
+    "SALES_RETURN": "SALES_RETURN",
+    "CONSIGNMENT_OUT": "SALES_CONSIGNMENT_OUT",
+    "PURCHASE_ORDER": "PURCH_ORDER",
+    "PURCHASE_PROFORMA": "PURCH_PROFORMA",
+    "PURCHASE_INVOICE": "PURCH_INVOICE",
+    "PURCHASE_RETURN": "PURCH_RETURN",
+    "CONSIGNMENT_IN": "PURCH_CONSIGNMENT_IN",
+}
+_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمعِ کل"]
+
+
+class _CounterpartyHistoryDialog(QDialog):
+    """طبقِ درخواستِ صریح: مثلاً ۱۰ فاکتورِ آخرِ طرفِ‌حساب -- با تعدادِ
+    ردیفِ قابلِ‌تنظیم. دابل‌کلیک رویِ هر ردیف، همان سند را (با نوعِ
+    خودش -- نه لزوماً نوعِ فرمِ فعلی) برایِ مشاهده باز می‌کند."""
+
+    def __init__(self, parent: QWidget, main_window, company_id: int, counterparty_id: int, counterparty_label: str) -> None:
+        super().__init__(parent)
+        self._main_window = main_window
+        self._company_id = company_id
+        self._counterparty_id = counterparty_id
+        self.setWindowTitle(f"آخرین اسنادِ «{counterparty_label}»")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(420)
+        layout = QVBoxLayout(self)
+
+        count_row = QHBoxLayout()
+        count_row.addWidget(QLabel("تعدادِ ردیفِ نمایش‌داده‌شده:"))
+        self.count_spin = QSpinBox()
+        self.count_spin.setRange(1, 500)
+        self.count_spin.setValue(10)
+        self.count_spin.valueChanged.connect(self._refresh)
+        count_row.addWidget(self.count_spin)
+        count_row.addStretch(1)
+        layout.addLayout(count_row)
+
+        self.table = QTableWidget(0, len(_HISTORY_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_HISTORY_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.cellDoubleClicked.connect(self._open_selected)
+        layout.addWidget(self.table, stretch=1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self._documents: list = []
+        self._refresh()
+
+    def _refresh(self) -> None:
+        self._documents = documents_service.list_documents(
+            self._company_id, counterparty_detail_account_id=self._counterparty_id, limit=self.count_spin.value(),
+        )
+        self.table.setRowCount(len(self._documents))
+        for row_index, doc in enumerate(self._documents):
+            total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
+            values = [
+                DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code),
+                numerals.to_persian_digits(str(doc.document_no)),
+                numerals.format_jalali_date(doc.document_date),
+                STATUS_LABELS.get(doc.status_code, doc.status_code),
+                numerals.format_amount(total),
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, doc.document_id)
+                self.table.setItem(row_index, col_index, item)
+        self.table.resizeRowsToContents()
+
+    def _open_selected(self, row: int, _column: int) -> None:
+        doc = self._documents[row]
+        nav_code = _NAV_CODE_BY_DOCUMENT_TYPE.get(doc.document_type_code)
+        if nav_code is None or self._main_window is None:
+            return
+        self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(doc.document_id))
+        self.accept()
+
+
+_PRICE_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
+
+
+class _ItemPriceHistoryDialog(QDialog):
+    """طبقِ درخواستِ صریح: ۱۰ قیمتِ آخرِ این کالا به همین طرفِ‌حساب --
+    با کلیک رویِ هر ردیف، خلاصهٔ همان سند نمایش داده می‌شود (بدونِ
+    بستنِ خودِ دیالوگِ ردیف که این پنجره از آن باز شده)."""
+
+    def __init__(self, parent: QWidget, company_id: int, item_id: int, counterparty_id: int, item_label: str) -> None:
+        super().__init__(parent)
+        self._company_id = company_id
+        self.setWindowTitle(f"قیمت‌هایِ قبلیِ «{item_label}»")
+        self.setMinimumWidth(480)
+        layout = QVBoxLayout(self)
+
+        self._rows = documents_service.list_item_price_history(company_id, item_id, counterparty_id)
+        if not self._rows:
+            layout.addWidget(QLabel("برایِ این کالا و این طرفِ‌حساب هنوز سابقه‌یِ قیمتی ثبت نشده است."))
+
+        self.table = QTableWidget(0, len(_PRICE_HISTORY_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_PRICE_HISTORY_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.cellDoubleClicked.connect(self._show_summary)
+        layout.addWidget(self.table, stretch=1)
+        layout.addWidget(QLabel("برایِ دیدنِ خلاصهٔ سند، رویِ ردیفِ موردِنظر دابل‌کلیک کنید."))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.table.setRowCount(len(self._rows))
+        for row_index, row in enumerate(self._rows):
+            values = [
+                DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
+                numerals.to_persian_digits(str(row.document_no)),
+                numerals.format_jalali_date(row.document_date),
+                numerals.format_amount(row.unit_price),
+            ]
+            for col_index, value in enumerate(values):
+                self.table.setItem(row_index, col_index, QTableWidgetItem(value))
+        self.table.resizeRowsToContents()
+
+    def _show_summary(self, row: int, _column: int) -> None:
+        history_row = self._rows[row]
+        doc, lines = documents_service.get_document(history_row.document_id, self._company_id)
+        total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
+        lines_text = "\n".join(
+            f"— کالا #{ln.item_id}: {numerals.format_amount(ln.quantity)} × {numerals.format_amount(ln.unit_price)} = {numerals.format_amount(ln.line_total)}"
+            for ln in lines
+        )
+        QMessageBox.information(
+            self, "خلاصهٔ سند",
+            f"{DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code)} — شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))}\n"
+            f"تاریخ: {numerals.format_jalali_date(doc.document_date)}\n"
+            f"جمعِ کل: {numerals.format_amount(total)}\n\n{lines_text}",
+        )
 
 
 class _LineDialog(LayoutEditMixin, QDialog):
@@ -106,6 +257,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._price_list_id = price_list_id
         self._document_type_code = document_type_code
         self._document_date = document_date
+        self._main_window = main_window
         layout = QVBoxLayout(self)
         self._items_by_id = {it.item_id: it for it in items}
 
@@ -117,6 +269,24 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.item_combo = _make_searchable_combo(item_options)
         item_row_layout.addWidget(self.item_combo, stretch=1)
         add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
+
+        stock_row_widget = QWidget()
+        stock_row_layout = QHBoxLayout(stock_row_widget)
+        stock_row_layout.setContentsMargins(0, 0, 0, 0)
+        self.stock_info_label = QLabel("")
+        self.stock_info_label.setWordWrap(True)
+        stock_row_layout.addWidget(self.stock_info_label, stretch=1)
+        self.kardex_button = QPushButton("📇 کاردکس")
+        self.kardex_button.setObjectName("flatButton")
+        self.kardex_button.setEnabled(False)
+        self.kardex_button.clicked.connect(self._open_kardex)
+        stock_row_layout.addWidget(self.kardex_button)
+        self.price_history_button = QPushButton("🕘 قیمت‌هایِ قبلی")
+        self.price_history_button.setObjectName("flatButton")
+        self.price_history_button.setEnabled(False)
+        self.price_history_button.setToolTip("۱۰ قیمتِ آخرِ این کالا به همین طرفِ‌حساب")
+        self.price_history_button.clicked.connect(self._open_price_history)
+        stock_row_layout.addWidget(self.price_history_button)
 
         # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۲/۶.۳): فیلدهایِ مبلغ/عدد باید
         # _AmountField باشند (گروه‌بندیِ سه‌رقمیِ زنده + ارقامِ فارسی)، نه
@@ -159,6 +329,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.warehouse_combo: _EnterComboBox | None = None
         field_specs = [
             FieldSpec("item", "کالا", item_row_widget, span=2),
+            FieldSpec("stock_info", "", stock_row_widget, span=3),
             FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
             FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
             FieldSpec("discount", "تخفیف", discount_row_widget, span=1),
@@ -262,12 +433,46 @@ class _LineDialog(LayoutEditMixin, QDialog):
         نه هنگامِ ویرایشِ ردیفِ ازپیش‌ذخیره‌شده که مقدارِ ثبت‌شده‌اش را
         نباید بازنویسی کند."""
         item_id = self.item_combo.currentData()
+        self._refresh_stock_info()
         if item_id is None:
             return
         default_tax = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
         self.tax_percent_field.setValue(float(default_tax))
         self._price_manually_edited = False
         self._suggest_price()
+
+    def _refresh_stock_info(self) -> None:
+        item_id = self.item_combo.currentData()
+        if item_id is None:
+            self.stock_info_label.setText("")
+            self.kardex_button.setEnabled(False)
+            self.price_history_button.setEnabled(False)
+            return
+        rows = engine_service.get_item_stock_by_warehouse(self._company_id, item_id)
+        nonzero = [r for r in rows if r.quantity_on_hand]
+        if not nonzero:
+            self.stock_info_label.setText("موجودی: صفر")
+        else:
+            total = sum((r.quantity_on_hand for r in nonzero), decimal.Decimal(0))
+            per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_amount(r.quantity_on_hand)}" for r in nonzero)
+            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_amount(total)} ({per_warehouse})")
+        self.kardex_button.setEnabled(True)
+        self.price_history_button.setEnabled(self._counterparty_id is not None)
+
+    def _open_kardex(self) -> None:
+        item_id = self.item_combo.currentData()
+        if item_id is None or self._main_window is None:
+            return
+        self._main_window.open_screen("REPORTS_ITEM_LEDGER", then=lambda screen: screen.show_ledger_for_item(item_id))
+
+    def _open_price_history(self) -> None:
+        item_id = self.item_combo.currentData()
+        if item_id is None or self._counterparty_id is None:
+            return
+        item = self._items_by_id.get(item_id)
+        item_label = f"{item.code} — {item.name or ''}" if item else str(item_id)
+        dialog = _ItemPriceHistoryDialog(self, self._company_id, item_id, self._counterparty_id, item_label)
+        dialog.exec()
 
     def _on_price_edited_manually(self) -> None:
         self._price_manually_edited = True
@@ -786,6 +991,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.convert_button.clicked.connect(self._convert_to_invoice)
         self.convert_button.setVisible(document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
         self.footer_layout.addWidget(self.convert_button)
+
+        # طبقِ درخواستِ صریح («در انتهایِ فرم‌هایِ بازرگانی دکمه‌ای که
+        # مثلاً ۱۰ فاکتورِ آخرِ طرفِ‌حساب نمایش داده بشه»): فقط وقتی
+        # طرفِ‌حسابی انتخاب شده باشد فعال است.
+        self.history_button = QPushButton("🕘")
+        self.history_button.setObjectName("iconButton")
+        self.history_button.setFixedWidth(44)
+        self.history_button.setToolTip("آخرین اسنادِ این طرفِ‌حساب — تعدادِ ردیف قابلِ‌تنظیم است")
+        self.history_button.clicked.connect(self._open_counterparty_history)
+        self.footer_layout.addWidget(self.history_button)
         self.footer_layout.addStretch(1)
 
         self.set_field_help([
@@ -795,6 +1010,17 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
+
+    def _open_counterparty_history(self) -> None:
+        company_id = self._company_id()
+        counterparty_id = self.counterparty_combo.currentData()
+        if company_id is None or counterparty_id is None:
+            QMessageBox.information(self, "طرفِ‌حساب", "ابتدا یک طرفِ‌حساب انتخاب کنید.")
+            return
+        dialog = _CounterpartyHistoryDialog(
+            self, self._main_window, company_id, counterparty_id, self.counterparty_combo.currentText(),
+        )
+        dialog.exec()
 
     def _recompute_due_date(self) -> None:
         """طبقِ درخواستِ صریح: با انتخابِ طرفِ‌حساب، موعدِ تسویه از رویِ

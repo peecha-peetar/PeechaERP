@@ -77,6 +77,25 @@ _PAYMENT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "CHECK_DISBURSEMEN
 # commercial_settlement.py ساخته شد.
 _INVOICE_TYPE_BY_DIRECTION = {"RECEIPT": "SALES_INVOICE", "PAYMENT": "PURCHASE_INVOICE"}
 _LINK_INVOICE_COLUMNS = ["نوع", "شماره", "موعدِ تسویه", "جمعِ کل", "مانده", "مبلغِ تسویه"]
+
+
+def _describe_invoice_settlement(direction: str, entries_info: list[tuple], counterparty_label: str) -> str:
+    """طبقِ درخواستِ صریح («وقتی مقدارِ تسویه برایِ یک فاکتورِ خاص وارد
+    می‌شود، شرحِ پیش‌فرضِ هدر را سیستم ایجاد کند -- مثلاً "پرداخت بابتِ
+    تسویه‌یِ قسمتی از فاکتورِ شماره‌یِ .... «نامِ طرفِ‌حساب»"»).
+    entries_info: فهرستی از (document_no, remaining_amount, entered_amount)."""
+    noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
+    is_partial = any(entered < remaining for _no, remaining, entered in entries_info)
+    numbers = "، ".join(f"#{numerals.to_persian_digits(str(no))}" for no, _r, _e in entries_info)
+    body = f"فاکتورِ شماره‌یِ {numbers}" if len(entries_info) == 1 else f"فاکتورهایِ شماره‌یِ {numbers}"
+    extent = "قسمتی از " if is_partial else ""
+    # طبقِ باگِ واقعیِ کشف‌شده با تستِ زنده: گزینه‌هایِ کمبویِ طرفِ‌حساب
+    # همیشه به‌شکلِ «کد — نام» ساخته می‌شوند؛ بدونِ این جداکردن، شرحِ
+    # خودکار به‌جایِ «... — مشتریِ آزمایشی»، «... — 1 — مشتریِ آزمایشی»
+    # می‌شد.
+    name_only = counterparty_label.rsplit(" — ", 1)[-1].strip() if counterparty_label else ""
+    suffix = f" — {name_only}" if name_only else ""
+    return f"{noun} بابتِ تسویه‌یِ {extent}{body}{suffix}"
 # طبقِ درخواستِ صریح: تهاتر هم مثلِ نقد/بانک/تخفیف/کالابرگ/بن، تفصیلیِ
 # احتمالیِ خودش را (از رویِ نگاشتِ تنظیمات) نشان می‌دهد — پس دیگر همیشه از
 # دیالوگِ جزئیات معاف نیست؛ اگر برایِ آن معینی تفصیلی/بُعدِ الزامی نداشت،
@@ -2164,6 +2183,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._settle_invoices = list(entries.items())
         total = sum(entries.values(), decimal.Decimal(0))
         self.total_amount_field.setValue(float(total))
+        if not self.description_field.text().strip():
+            remaining_by_id = {status.document_id: status.remaining_amount for status in matching}
+            entries_info = [
+                (docs_by_id[doc_id].document_no, remaining_by_id[doc_id], amount) for doc_id, amount in entries.items()
+            ]
+            self.description_field.setText(
+                _describe_invoice_settlement(self.direction, entries_info, self._counterparty_label())
+            )
         self._update_rows_summary()
         theme.set_status_label(
             self.status_label,

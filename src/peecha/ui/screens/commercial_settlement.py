@@ -52,7 +52,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import journal_entries as je_service
 from peecha.ui import theme
-from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES
+from peecha.ui.screens.treasury_voucher import _describe_invoice_settlement
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
 from peecha.ui.screens.treasury_voucher import _EnterComboBox
@@ -536,15 +536,17 @@ class InvoiceSettlementScreen(QWidget):
         manual_description = self.description_field.text().strip()
         if manual_description:
             description = manual_description
-        elif len(docs) == 1:
-            description = (
-                f"بابتِ {DOC_TYPE_TITLES.get(docs[0].document_type_code, docs[0].document_type_code)}ِ "
-                f"#{numerals.to_persian_digits(str(docs[0].document_no))}"
-            )
         else:
-            numbers = "، ".join(f"#{numerals.to_persian_digits(str(d.document_no))}" for d in docs)
-            title = DOC_TYPE_TITLES.get(docs[0].document_type_code, docs[0].document_type_code)
-            description = f"بابتِ {numerals.to_persian_digits(str(len(docs)))} {title} ({numbers})"
+            # طبقِ درخواستِ صریح («وقتی مقدارِ تسویه برایِ یک فاکتورِ خاص
+            # وارد می‌شود، شرحِ پیش‌فرضِ هدر را سیستم ایجاد کند»): همان
+            # قالبِ استفاده‌شده در treasury_voucher.py، برایِ یکدستی.
+            direction = "RECEIPT" if self._is_sales else "PAYMENT"
+            entries_info = [
+                (doc.document_no, settlements_service.get_invoice_settlement_status(doc.document_id, company_id).remaining_amount, amount)
+                for (doc_id, amount), doc in zip(entries, docs)
+            ]
+            counterparty_label = self._parties_by_id.get(counterparty_id, "")
+            description = _describe_invoice_settlement(direction, entries_info, counterparty_label)
         self._main_window.open_screen(
             nav_code,
             then=lambda screen: screen.prefill_for_invoice(

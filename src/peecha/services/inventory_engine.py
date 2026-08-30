@@ -251,6 +251,117 @@ def get_item_total_on_hand(item_id: int) -> decimal.Decimal:
         return total or _ZERO
 
 
+@dataclass
+class WarehouseStockRow:
+    warehouse_id: int
+    warehouse_name: str
+    quantity_on_hand: decimal.Decimal
+
+
+def get_item_stock_by_warehouse(company_id: int, item_id: int) -> list[WarehouseStockRow]:
+    """موجودیِ یک کالا در هر انبار -- برخلافِ list_balances، بدونِ فیلترِ
+    batch_id تا موجودیِ ردیابی‌شده بر اساسِ بچ هم در جمعِ هر انبار بیاید."""
+    with new_session() as session:
+        rows = session.execute(
+            select(Warehouse.warehouse_id, Warehouse.name, func.coalesce(func.sum(StockBalance.quantity_on_hand), 0))
+            .join(StockBalance, StockBalance.warehouse_id == Warehouse.warehouse_id)
+            .where(StockBalance.company_id == company_id, StockBalance.item_id == item_id)
+            .group_by(Warehouse.warehouse_id, Warehouse.name)
+            .order_by(Warehouse.name)
+        ).all()
+        return [WarehouseStockRow(wid, name, qty or _ZERO) for wid, name, qty in rows]
+
+
+@dataclass
+class ItemLedgerRow:
+    movement_date: datetime.date
+    document_type_code: str
+    document_no: int
+    warehouse_name: str
+    quantity_in: decimal.Decimal
+    quantity_out: decimal.Decimal
+    unit_cost: decimal.Decimal | None
+    running_balance: decimal.Decimal
+
+
+def list_item_ledger(
+    company_id: int, item_id: int, warehouse_id: int | None = None,
+    date_from: datetime.date | None = None, date_to: datetime.date | None = None,
+) -> list[ItemLedgerRow]:
+    """کاردکسِ یک کالا -- مانده‌یِ رواگرد همیشه با جمعِ *همه‌یِ* حرکاتِ
+    تاریخی تا date_to محاسبه می‌شود (نه فقط ردیف‌هایِ نمایش‌داده‌شده)، و
+    فقط پس‌ازآن ردیف‌هایِ زودتر از date_from از خروجی کنار گذاشته می‌شوند --
+    وگرنه مانده‌یِ نمایش‌داده‌شده از همان ابتدایِ بازه غلط می‌شد."""
+    with new_session() as session:
+        query = (
+            select(
+                StockLedger.movement_date, StockDocument.document_type_code, StockDocument.document_no,
+                Warehouse.name, StockLedger.movement_direction, StockLedger.quantity_base, StockLedger.unit_cost,
+                StockLedger.ledger_id,
+            )
+            .join(StockDocumentLine, StockDocumentLine.line_id == StockLedger.stock_document_line_id)
+            .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
+            .join(Warehouse, Warehouse.warehouse_id == StockLedger.warehouse_id)
+            .where(StockLedger.company_id == company_id, StockLedger.item_id == item_id)
+        )
+        if warehouse_id is not None:
+            query = query.where(StockLedger.warehouse_id == warehouse_id)
+        if date_to is not None:
+            query = query.where(StockLedger.movement_date <= date_to)
+        query = query.order_by(StockLedger.movement_date, StockLedger.ledger_id)
+        rows = session.execute(query).all()
+
+    result: list[ItemLedgerRow] = []
+    balance = _ZERO
+    for movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id in rows:
+        signed = quantity if direction == "IN" else -quantity
+        balance += signed
+        if date_from is not None and movement_date < date_from:
+            continue
+        result.append(
+            ItemLedgerRow(
+                movement_date, doc_type, doc_no, warehouse_name,
+                quantity if direction == "IN" else _ZERO, quantity if direction == "OUT" else _ZERO,
+                unit_cost, balance,
+            )
+        )
+    return result
+
+
+@dataclass
+class ItemCostHistoryRow:
+    stock_document_id: int
+    document_type_code: str
+    document_no: int
+    document_date: datetime.date
+    unit_cost: decimal.Decimal
+
+
+def list_item_cost_history(
+    company_id: int, item_id: int, counterparty_detail_account_id: int, limit: int = 10,
+) -> list[ItemCostHistoryRow]:
+    """طبقِ درخواستِ صریح («۱۰ قیمتِ آخرِ کالا به طرفِ‌حساب» -- در فرم‌هایِ
+    انبار معادلِ آن بهایِ واحدِ رسیدهایِ ثبت‌شده از همان طرفِ‌حساب است)."""
+    with new_session() as session:
+        rows = session.execute(
+            select(
+                StockDocument.stock_document_id, StockDocument.document_type_code, StockDocument.document_no,
+                StockDocument.document_date, StockDocumentLine.unit_cost,
+            )
+            .join(StockDocumentLine, StockDocumentLine.stock_document_id == StockDocument.stock_document_id)
+            .where(
+                StockDocument.company_id == company_id,
+                StockDocument.counterparty_detail_account_id == counterparty_detail_account_id,
+                StockDocument.status_code == "POSTED",
+                StockDocumentLine.item_id == item_id,
+                StockDocumentLine.unit_cost.is_not(None),
+            )
+            .order_by(StockDocument.document_date.desc(), StockDocument.stock_document_id.desc())
+            .limit(limit)
+        ).all()
+        return [ItemCostHistoryRow(*row) for row in rows]
+
+
 # ---------------------------------------------------------------------
 # موتورِ Post
 # ---------------------------------------------------------------------

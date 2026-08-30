@@ -813,14 +813,56 @@ def get_document(document_id: int, company_id: int) -> tuple[CommercialDocument,
         return doc, list(lines)
 
 
-def list_documents(company_id: int, document_type_code: str | None = None, status_code: str | None = None) -> list[CommercialDocument]:
+def list_documents(
+    company_id: int, document_type_code: str | None = None, status_code: str | None = None,
+    counterparty_detail_account_id: int | None = None, limit: int | None = None,
+) -> list[CommercialDocument]:
     with new_session() as session:
         stmt = select(CommercialDocument).where(CommercialDocument.company_id == company_id)
         if document_type_code:
             stmt = stmt.where(CommercialDocument.document_type_code == document_type_code)
         if status_code:
             stmt = stmt.where(CommercialDocument.status_code == status_code)
-        return list(session.scalars(stmt.order_by(CommercialDocument.document_id.desc())))
+        if counterparty_detail_account_id is not None:
+            stmt = stmt.where(CommercialDocument.counterparty_detail_account_id == counterparty_detail_account_id)
+        stmt = stmt.order_by(CommercialDocument.document_id.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(session.scalars(stmt))
+
+
+@dataclass
+class ItemPriceHistoryRow:
+    document_id: int
+    document_type_code: str
+    document_no: int
+    document_date: datetime.date
+    unit_price: decimal.Decimal
+
+
+def list_item_price_history(
+    company_id: int, item_id: int, counterparty_detail_account_id: int, limit: int = 10,
+) -> list[ItemPriceHistoryRow]:
+    """طبقِ درخواستِ صریح («۱۰ قیمتِ آخرِ کالا به همین طرفِ‌حساب»): فقط
+    اسنادِ ثبتِ‌نهایی‌شده (POSTED) -- پیش‌نویس/لغوشده معیارِ قیمت‌گذاری
+    نیستند."""
+    with new_session() as session:
+        rows = session.execute(
+            select(
+                CommercialDocument.document_id, CommercialDocument.document_type_code,
+                CommercialDocument.document_no, CommercialDocument.document_date, CommercialDocumentLine.unit_price,
+            )
+            .join(CommercialDocumentLine, CommercialDocumentLine.document_id == CommercialDocument.document_id)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.counterparty_detail_account_id == counterparty_detail_account_id,
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocumentLine.item_id == item_id,
+            )
+            .order_by(CommercialDocument.document_date.desc(), CommercialDocument.document_id.desc())
+            .limit(limit)
+        ).all()
+        return [ItemPriceHistoryRow(*row) for row in rows]
 
 
 def _recompute_header_totals(session, document_id: int) -> None:

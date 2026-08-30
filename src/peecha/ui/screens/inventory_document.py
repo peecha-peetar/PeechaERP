@@ -35,6 +35,7 @@ from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
+from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
@@ -63,17 +64,76 @@ def _enter_signal(widget: QWidget):
     return widget.returnPressed
 
 
+_COST_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
+
+
+class _ItemCostHistoryDialog(QDialog):
+    """طبقِ درخواستِ صریح: ۱۰ بهایِ آخرِ این کالا از همین طرفِ‌حساب --
+    با دابل‌کلیک رویِ هر ردیف، خلاصهٔ همان سندِ انبار نمایش داده می‌شود."""
+
+    def __init__(self, parent: QWidget, company_id: int, item_id: int, counterparty_id: int, item_label: str) -> None:
+        super().__init__(parent)
+        self._company_id = company_id
+        self.setWindowTitle(f"بهایِ قبلیِ «{item_label}»")
+        self.setMinimumWidth(460)
+        layout = QVBoxLayout(self)
+
+        self._rows = engine_service.list_item_cost_history(company_id, item_id, counterparty_id)
+        if not self._rows:
+            layout.addWidget(QLabel("برایِ این کالا و این طرفِ‌حساب هنوز سابقه‌یِ بهایی ثبت نشده است."))
+
+        self.table = QTableWidget(0, len(_COST_HISTORY_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COST_HISTORY_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.cellDoubleClicked.connect(self._show_summary)
+        layout.addWidget(self.table, stretch=1)
+        layout.addWidget(QLabel("برایِ دیدنِ خلاصهٔ سند، رویِ ردیفِ موردِنظر دابل‌کلیک کنید."))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.table.setRowCount(len(self._rows))
+        for row_index, row in enumerate(self._rows):
+            values = [
+                DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
+                numerals.to_persian_digits(str(row.document_no)),
+                numerals.format_jalali_date(row.document_date),
+                numerals.format_amount(row.unit_cost),
+            ]
+            for col_index, value in enumerate(values):
+                self.table.setItem(row_index, col_index, QTableWidgetItem(value))
+        self.table.resizeRowsToContents()
+
+    def _show_summary(self, row: int, _column: int) -> None:
+        history_row = self._rows[row]
+        doc, lines = documents_service.get_stock_document(history_row.stock_document_id, self._company_id)
+        lines_text = "\n".join(
+            f"— کالا #{ln.item_id}: {numerals.format_amount(ln.quantity)} × {numerals.format_amount(ln.unit_cost or 0)}"
+            for ln in lines
+        )
+        QMessageBox.information(
+            self, "خلاصهٔ سند",
+            f"{DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code)} — شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))}\n"
+            f"تاریخ: {numerals.format_jalali_date(doc.document_date)}\n\n{lines_text}",
+        )
+
+
 class _LineDialog(QDialog):
     def __init__(
         self, parent: QWidget, document_type_code: str, items: list[catalog_service.ItemRow],
         source_bins: list[locations_service.BinLocationRow], destination_bins: list[locations_service.BinLocationRow],
         reasons: list[documents_service.ReasonCodeRow], initial: documents_service.LineFields | None = None,
         uom_decimal_places: dict[int, int] | None = None, unit_cost_decimal_places: int = 2,
-        main_window=None,
+        main_window=None, counterparty_id: int | None = None,
     ) -> None:
         super().__init__(parent)
         self.document_type_code = document_type_code
         self._uom_decimal_places = uom_decimal_places or {}
+        self._main_window = main_window
+        self._counterparty_id = counterparty_id
         self.setWindowTitle("ردیفِ سند")
         self.setMinimumWidth(380)
         layout = QVBoxLayout(self)
@@ -88,6 +148,24 @@ class _LineDialog(QDialog):
         add_quick_add_button(item_row, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
         layout.addLayout(item_row)
         self._items_by_id = {it.item_id: it for it in items}
+
+        stock_row = QHBoxLayout()
+        stock_row.setContentsMargins(0, 0, 0, 0)
+        self.stock_info_label = QLabel("")
+        self.stock_info_label.setWordWrap(True)
+        stock_row.addWidget(self.stock_info_label, stretch=1)
+        self.kardex_button = QPushButton("📇 کاردکس")
+        self.kardex_button.setObjectName("flatButton")
+        self.kardex_button.setEnabled(False)
+        self.kardex_button.clicked.connect(self._open_kardex)
+        stock_row.addWidget(self.kardex_button)
+        self.price_history_button = QPushButton("🕘 قیمت‌هایِ قبلی")
+        self.price_history_button.setObjectName("flatButton")
+        self.price_history_button.setEnabled(False)
+        self.price_history_button.setToolTip("۱۰ بهایِ آخرِ این کالا از همین طرفِ‌حساب")
+        self.price_history_button.clicked.connect(self._open_price_history)
+        stock_row.addWidget(self.price_history_button)
+        layout.addLayout(stock_row)
 
         layout.addWidget(QLabel("مقدار (واحدِ پایهٔ کالا)"))
         # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۲/۶.۳): _AmountField به‌جایِ
@@ -223,6 +301,42 @@ class _LineDialog(QDialog):
         item = self._items_by_id.get(self.item_combo.currentData())
         decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 6
         self.quantity_field.setDecimals(decimals)
+        self._refresh_stock_info()
+
+    def _refresh_stock_info(self) -> None:
+        item_id = self.item_combo.currentData()
+        company_id = app_session.current_company.company_id if app_session.current_company else None
+        if item_id is None or company_id is None:
+            self.stock_info_label.setText("")
+            self.kardex_button.setEnabled(False)
+            self.price_history_button.setEnabled(False)
+            return
+        rows = engine_service.get_item_stock_by_warehouse(company_id, item_id)
+        nonzero = [r for r in rows if r.quantity_on_hand]
+        if not nonzero:
+            self.stock_info_label.setText("موجودی: صفر")
+        else:
+            total = sum((r.quantity_on_hand for r in nonzero), decimal.Decimal(0))
+            per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_amount(r.quantity_on_hand)}" for r in nonzero)
+            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_amount(total)} ({per_warehouse})")
+        self.kardex_button.setEnabled(True)
+        self.price_history_button.setEnabled(self._counterparty_id is not None)
+
+    def _open_kardex(self) -> None:
+        item_id = self.item_combo.currentData()
+        if item_id is None or self._main_window is None:
+            return
+        self._main_window.open_screen("REPORTS_ITEM_LEDGER", then=lambda screen: screen.show_ledger_for_item(item_id))
+
+    def _open_price_history(self) -> None:
+        item_id = self.item_combo.currentData()
+        company_id = app_session.current_company.company_id if app_session.current_company else None
+        if item_id is None or company_id is None or self._counterparty_id is None:
+            return
+        item = self._items_by_id.get(item_id)
+        item_label = f"{item.code} — {item.name or ''}" if item else str(item_id)
+        dialog = _ItemCostHistoryDialog(self, company_id, item_id, self._counterparty_id, item_label)
+        dialog.exec()
 
     def _on_accept(self) -> None:
         if self.item_combo.currentData() is None:
@@ -888,6 +1002,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 self, self.document_type_code, self._items, source_bins, destination_bins, reasons,
                 uom_decimal_places=self._uom_decimal_places, unit_cost_decimal_places=self._unit_cost_decimal_places,
                 main_window=self._main_window,
+                counterparty_id=self.counterparty_combo.currentData() if self.counterparty_box.isVisible() else None,
             )
             if dialog.exec() != QDialog.Accepted:
                 break
@@ -926,6 +1041,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self, self.document_type_code, self._items, source_bins, destination_bins, reasons, initial,
             uom_decimal_places=self._uom_decimal_places, unit_cost_decimal_places=self._unit_cost_decimal_places,
             main_window=self._main_window,
+            counterparty_id=self.counterparty_combo.currentData() if self.counterparty_box.isVisible() else None,
         )
         if dialog.exec() != QDialog.Accepted:
             return
