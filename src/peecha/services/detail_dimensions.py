@@ -58,6 +58,19 @@ MAX_DETAIL_LEVEL = 4
 _VALID_FIELD_KINDS = ("text", "decimal", "date", "boolean", "bank", "account_type")
 
 
+def get_detail_account_label(detail_account_id: int | None) -> str:
+    """برچسبِ «کد — نام»یِ یک حسابِ تفصیلی -- برایِ جاهایی (مثلِ چاپِ
+    فاکتور) که فقط شناسه در دسترس است، نه کاملِ فهرستِ مشتریان/تامین‌
+    کنندگان."""
+    if detail_account_id is None:
+        return ""
+    with new_session() as session:
+        row = session.get(DetailAccount, detail_account_id)
+        if row is None:
+            return ""
+        return f"{row.code} — {row.name or ''}"
+
+
 @dataclass
 class DimensionTypeRow:
     dimension_type_id: int

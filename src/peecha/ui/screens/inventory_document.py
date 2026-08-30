@@ -39,7 +39,12 @@ from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
-from peecha.ui.screens.treasury_voucher import _EnterComboBox
+from peecha.ui.screens.treasury_voucher import (
+    _EnterComboBox,
+    _escape_receipt_html,
+    _print_receipt_document,
+    _receipt_font_family,
+)
 from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper, add_quick_add_button
 
 DOC_TYPE_TITLES = {
@@ -65,6 +70,64 @@ def _enter_signal(widget: QWidget):
 
 
 _COST_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
+
+
+# طبقِ درخواستِ صریح («به‌جایِ خلاصه، پرینتِ سند را نشان بده»): هم‌الگو با
+# _build_invoice_print_html در commercial_document.py -- از همان زیرساختِ
+# چاپِ HTML/QPrintPreviewDialogِ treasury_voucher.py استفاده می‌شود.
+def _build_stock_document_print_html(
+    company_name: str, doc, lines: list, items_by_id: dict, counterparty_label: str, decimal_places: int,
+    font_family: str,
+) -> str:
+    esc = _escape_receipt_html
+    rows_html = ""
+    for ln in lines:
+        item = items_by_id.get(ln.item_id)
+        item_label = f"{item.code} — {item.name or ''}" if item else str(ln.item_id)
+        rows_html += (
+            "<tr>"
+            f"<td>{esc(item_label)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.quantity, 3)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.unit_cost, decimal_places) if ln.unit_cost is not None else '—'}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.line_total_cost, decimal_places) if ln.line_total_cost is not None else '—'}</td>"
+            f"<td>{esc(ln.description or '')}</td>"
+            "</tr>"
+        )
+    return f"""
+    <html dir="rtl"><head><meta charset="utf-8"></head>
+    <body style="font-family:'{font_family}', Tahoma, sans-serif; font-size:11pt;">
+      <div style="text-align:center; font-size:13pt; font-weight:bold;">{esc(company_name)}</div>
+      <div style="text-align:center; font-size:12pt; font-weight:bold; margin:6px 0 16px 0;">
+        سندِ {esc(DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code))}
+      </div>
+      <table width="100%" style="margin-bottom:12px;">
+        <tr>
+          <td>شماره‌یِ سند: {numerals.to_persian_digits(str(doc.document_no))}</td>
+          <td style="text-align:center;">تاریخ: {numerals.format_jalali_date(doc.document_date)}</td>
+          <td style="text-align:left;">طرفِ‌حساب: {esc(counterparty_label)}</td>
+        </tr>
+      </table>
+      <table width="100%" border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;">
+        <tr style="background:#eee; font-weight:bold;">
+          <td>کالا</td><td>مقدار</td><td>بهایِ واحد</td><td>بهایِ کل</td><td>توضیح</td>
+        </tr>
+        {rows_html}
+      </table>
+    </body></html>
+    """
+
+
+def _show_stock_document_print(parent: QWidget, company_id: int, stock_document_id: int, counterparty_label: str | None = None) -> None:
+    doc, lines = documents_service.get_stock_document(stock_document_id, company_id)
+    decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+    if counterparty_label is None:
+        counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
+    company_name = app_session.current_company.display_name if app_session.current_company else ""
+    items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+    html = _build_stock_document_print_html(
+        company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
+    )
+    _print_receipt_document(parent, html)
 
 
 class _ItemCostHistoryDialog(QDialog):
@@ -113,17 +176,10 @@ class _ItemCostHistoryDialog(QDialog):
         self.table.resizeRowsToContents()
 
     def _show_summary(self, row: int, _column: int) -> None:
+        # طبقِ درخواستِ صریح («خلاصه اطلاعاتِ به‌دردبخوری نداره، پرینتِ
+        # فاکتور را نشان بده»).
         history_row = self._rows[row]
-        doc, lines = documents_service.get_stock_document(history_row.stock_document_id, self._company_id)
-        lines_text = "\n".join(
-            f"— کالا #{ln.item_id}: {numerals.format_money(ln.quantity, self._qty_decimal_places)} × {numerals.format_money(ln.unit_cost or 0, self._unit_cost_decimal_places)}"
-            for ln in lines
-        )
-        QMessageBox.information(
-            self, "خلاصهٔ سند",
-            f"{DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code)} — شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))}\n"
-            f"تاریخ: {numerals.format_jalali_date(doc.document_date)}\n\n{lines_text}",
-        )
+        _show_stock_document_print(self, self._company_id, history_row.stock_document_id)
 
 
 class _LineDialog(QDialog):

@@ -20,13 +20,15 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import companies as companies_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import JalaliDateEdit
 
-_COLUMNS = ["تاریخ", "نوعِ سند", "شماره‌یِ سند", "انبار", "ورود", "خروج", "بهایِ واحد", "مانده"]
+# طبقِ درخواستِ صریح («در کاردکسِ کالا نامِ طرفِ‌حساب هم نمایش داده شود»).
+_COLUMNS = ["تاریخ", "نوعِ سند", "شماره‌یِ سند", "انبار", "طرفِ‌حساب", "ورود", "خروج", "بهایِ واحد", "مانده"]
 
 
 class ItemLedgerScreen(QWidget):
@@ -143,6 +145,12 @@ class ItemLedgerScreen(QWidget):
         item = items_by_id.get(item_id)
         qty_decimals = uom_decimal_places.get(item.base_uom_id, 2) if item else 2
         cost_decimals = companies_service.get_base_currency_decimal_places(company_id)
+        parties_by_id = {
+            c["detail_account_id"]: f"{c['code']} — {c['name'] or ''}" for c in dimensions_service.list_customers(company_id)
+        }
+        parties_by_id.update(
+            {s["detail_account_id"]: f"{s['code']} — {s['name'] or ''}" for s in dimensions_service.list_suppliers(company_id)}
+        )
 
         rows = engine_service.list_item_ledger(company_id, item_id, warehouse_id, date_from, date_to)
         self.table.setRowCount(len(rows))
@@ -152,15 +160,16 @@ class ItemLedgerScreen(QWidget):
                 DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
                 numerals.to_persian_digits(str(row.document_no)),
                 row.warehouse_name,
+                parties_by_id.get(row.counterparty_detail_account_id, "—"),
                 numerals.format_money(row.quantity_in, qty_decimals) if row.quantity_in else "",
                 numerals.format_money(row.quantity_out, qty_decimals) if row.quantity_out else "",
                 numerals.format_money(row.unit_cost, cost_decimals) if row.unit_cost is not None else "",
                 numerals.format_money(row.running_balance, qty_decimals),
             ]
             for col_index, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                if col_index >= 4:
-                    item.setTextAlignment(Qt.AlignCenter)
-                self.table.setItem(row_index, col_index, item)
+                cell = QTableWidgetItem(value)
+                if col_index >= 5:
+                    cell.setTextAlignment(Qt.AlignCenter)
+                self.table.setItem(row_index, col_index, cell)
         self.table.resizeRowsToContents()
         self.status_label.setText("" if rows else "برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")

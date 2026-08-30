@@ -43,7 +43,12 @@ from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
-from peecha.ui.screens.treasury_voucher import _EnterComboBox
+from peecha.ui.screens.treasury_voucher import (
+    _EnterComboBox,
+    _escape_receipt_html,
+    _print_receipt_document,
+    _receipt_font_family,
+)
 from peecha.ui.widgets import (
     FieldGrid,
     FieldHelpMixin,
@@ -93,6 +98,71 @@ _LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", 
 _HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمعِ کل"]
 
 
+# طبقِ درخواستِ صریح («به‌جایِ خلاصهٔ فاکتور، پرینتِ فاکتور را نمایش
+# بده»): چون «خلاصه»یِ متنیِ قبلی اطلاعاتِ به‌دردبخوری نداشت، این‌جا به‌جایِ
+# آن، از همان زیرساختِ چاپِ HTML/QPrintPreviewDialogِ رسیدِ دریافت‌وپرداخت
+# (treasury_voucher.py) -- که از پیش جواب داده -- برایِ ساختِ یک پیش‌نمایشِ
+# چاپیِ کاملِ سند (هدر + جدولِ ردیف‌ها + جمعِ کل) استفاده می‌شود.
+def _build_invoice_print_html(
+    company_name: str, doc, lines: list, items_by_id: dict, counterparty_label: str, decimal_places: int,
+    font_family: str,
+) -> str:
+    esc = _escape_receipt_html
+    rows_html = ""
+    for ln in lines:
+        item = items_by_id.get(ln.item_id)
+        item_label = f"{item.code} — {item.name or ''}" if item else str(ln.item_id)
+        rows_html += (
+            "<tr>"
+            f"<td>{esc(item_label)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.quantity, 3)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.unit_price, decimal_places)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.discount_amount, decimal_places)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.tax_amount, decimal_places)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.line_total, decimal_places)}</td>"
+            "</tr>"
+        )
+    total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
+    return f"""
+    <html dir="rtl"><head><meta charset="utf-8"></head>
+    <body style="font-family:'{font_family}', Tahoma, sans-serif; font-size:11pt;">
+      <div style="text-align:center; font-size:13pt; font-weight:bold;">{esc(company_name)}</div>
+      <div style="text-align:center; font-size:12pt; font-weight:bold; margin:6px 0 16px 0;">
+        {esc(DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code))}
+      </div>
+      <table width="100%" style="margin-bottom:12px;">
+        <tr>
+          <td>شماره‌یِ سند: {numerals.to_persian_digits(str(doc.document_no))}</td>
+          <td style="text-align:center;">تاریخ: {numerals.format_jalali_date(doc.document_date)}</td>
+          <td style="text-align:left;">طرفِ‌حساب: {esc(counterparty_label)}</td>
+        </tr>
+      </table>
+      <table width="100%" border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;">
+        <tr style="background:#eee; font-weight:bold;">
+          <td>کالا</td><td>مقدار</td><td>بهایِ واحد</td><td>تخفیف</td><td>مالیات</td><td>جمعِ ردیف</td>
+        </tr>
+        {rows_html}
+      </table>
+      <div style="text-align:left; margin-top:12px; font-weight:bold;">
+        جمعِ کل: {numerals.format_money(total, decimal_places)}
+      </div>
+    </body></html>
+    """
+
+
+def _show_invoice_print(parent: QWidget, company_id: int, document_id: int, counterparty_label: str | None = None) -> None:
+    doc, lines = documents_service.get_document(document_id, company_id)
+    decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+    if counterparty_label is None:
+        counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
+    company_name = app_session.current_company.display_name if app_session.current_company else ""
+    items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+    html = _build_invoice_print_html(
+        company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
+    )
+    _print_receipt_document(parent, html)
+
+
 class _CounterpartyHistoryDialog(QDialog):
     """طبقِ درخواستِ صریح: مثلاً ۱۰ فاکتورِ آخرِ طرفِ‌حساب -- با تعدادِ
     ردیفِ قابلِ‌تنظیم. دابل‌کلیک رویِ هر ردیف، خلاصهٔ همان سند را نمایش
@@ -105,6 +175,7 @@ class _CounterpartyHistoryDialog(QDialog):
         super().__init__(parent)
         self._company_id = company_id
         self._counterparty_id = counterparty_id
+        self._counterparty_label = counterparty_label
         self.setWindowTitle(f"آخرین اسنادِ «{counterparty_label}»")
         self.setMinimumWidth(600)
         self.setMinimumHeight(420)
@@ -162,21 +233,10 @@ class _CounterpartyHistoryDialog(QDialog):
         # کلیک‌شده جایگزین می‌شود»): چون این صفحه‌هایِ سند (به‌ازایِ هر
         # نوع) نمونه‌یِ واحد و مشترک‌اند، ناوبریِ مستقیم به آن‌ها از اینجا
         # هر ویرایشِ درحالِ‌انجامِ کاربر رویِ همان صفحه را پاک می‌کرد --
-        # به‌جایش، مثلِ دیالوگِ تاریخچه‌یِ قیمت، فقط خلاصه نمایش داده می‌شود.
+        # به‌جایش، طبقِ درخواستِ صریح («خلاصه اطلاعاتِ به‌دردبخوری نداره،
+        # پرینتِ فاکتور را نشان بده»)، پیش‌نمایشِ چاپیِ کاملِ سند باز می‌شود.
         doc = self._documents[row]
-        _, lines = documents_service.get_document(doc.document_id, self._company_id)
-        decimal_places = companies_service.get_base_currency_decimal_places(self._company_id)
-        total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
-        lines_text = "\n".join(
-            f"— کالا #{ln.item_id}: {numerals.format_money(ln.quantity, 3)} × {numerals.format_money(ln.unit_price, decimal_places)} = {numerals.format_money(ln.line_total, decimal_places)}"
-            for ln in lines
-        )
-        QMessageBox.information(
-            self, "خلاصهٔ سند",
-            f"{DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code)} — شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))}\n"
-            f"تاریخ: {numerals.format_jalali_date(doc.document_date)}\n"
-            f"جمعِ کل: {numerals.format_money(total, decimal_places)}\n\n{lines_text}",
-        )
+        _show_invoice_print(self, self._company_id, doc.document_id, self._counterparty_label)
 
 
 _PRICE_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
@@ -225,19 +285,10 @@ class _ItemPriceHistoryDialog(QDialog):
         self.table.resizeRowsToContents()
 
     def _show_summary(self, row: int, _column: int) -> None:
+        # طبقِ درخواستِ صریح («خلاصه اطلاعاتِ به‌دردبخوری نداره، پرینتِ
+        # فاکتور را نشان بده»).
         history_row = self._rows[row]
-        doc, lines = documents_service.get_document(history_row.document_id, self._company_id)
-        total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
-        lines_text = "\n".join(
-            f"— کالا #{ln.item_id}: {numerals.format_money(ln.quantity, 3)} × {numerals.format_money(ln.unit_price, self._decimal_places)} = {numerals.format_money(ln.line_total, self._decimal_places)}"
-            for ln in lines
-        )
-        QMessageBox.information(
-            self, "خلاصهٔ سند",
-            f"{DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code)} — شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))}\n"
-            f"تاریخ: {numerals.format_jalali_date(doc.document_date)}\n"
-            f"جمعِ کل: {numerals.format_money(total, self._decimal_places)}\n\n{lines_text}",
-        )
+        _show_invoice_print(self, self._company_id, history_row.document_id)
 
 
 class _LineDialog(LayoutEditMixin, QDialog):

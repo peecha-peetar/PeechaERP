@@ -282,6 +282,7 @@ class ItemLedgerRow:
     quantity_out: decimal.Decimal
     unit_cost: decimal.Decimal | None
     running_balance: decimal.Decimal
+    counterparty_detail_account_id: int | None
 
 
 def list_item_ledger(
@@ -297,7 +298,7 @@ def list_item_ledger(
             select(
                 StockLedger.movement_date, StockDocument.document_type_code, StockDocument.document_no,
                 Warehouse.name, StockLedger.movement_direction, StockLedger.quantity_base, StockLedger.unit_cost,
-                StockLedger.ledger_id,
+                StockLedger.ledger_id, StockDocument.counterparty_detail_account_id,
             )
             .join(StockDocumentLine, StockDocumentLine.line_id == StockLedger.stock_document_line_id)
             .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
@@ -313,7 +314,7 @@ def list_item_ledger(
 
     result: list[ItemLedgerRow] = []
     balance = _ZERO
-    for movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id in rows:
+    for movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id, counterparty_id in rows:
         signed = quantity if direction == "IN" else -quantity
         balance += signed
         if date_from is not None and movement_date < date_from:
@@ -322,7 +323,7 @@ def list_item_ledger(
             ItemLedgerRow(
                 movement_date, doc_type, doc_no, warehouse_name,
                 quantity if direction == "IN" else _ZERO, quantity if direction == "OUT" else _ZERO,
-                unit_cost, balance,
+                unit_cost, balance, counterparty_id,
             )
         )
     return result
