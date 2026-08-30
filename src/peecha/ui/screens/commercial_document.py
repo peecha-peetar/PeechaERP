@@ -44,9 +44,11 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import report_templates as report_templates_service
 from peecha.ui import theme
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
+from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.screens.treasury_voucher import (
     _EnterComboBox,
     _escape_receipt_html,
@@ -242,17 +244,30 @@ def _build_invoice_print_rows_and_params(company_id: int, doc, lines: list) -> t
     return print_rows, params
 
 
-def _show_invoice_print(parent: QWidget, company_id: int, document_id: int, counterparty_label: str | None = None) -> None:
+def _show_invoice_print(
+    parent: QWidget,
+    company_id: int,
+    document_id: int,
+    counterparty_label: str | None = None,
+    jrxml_path=None,
+) -> None:
     doc, lines = documents_service.get_document(document_id, company_id)
 
     if jasper_bridge.is_available():
+        # طبقِ رجیستریِ گزارش‌هایِ حرفه‌ای: اگر مسیرِ صریحی داده نشده
+        # (مثلاً از دکمه‌یِ «📄 گزارش»ِ خودِ فرم)، گزارشِ پیش‌فرضِ همین
+        # شرکت برایِ فاکتور استفاده می‌شود، وگرنه قالبِ پایه‌یِ داخلِ ریپازیتوری.
+        if jrxml_path is None:
+            jrxml_path = report_templates_service.get_default_template_path(company_id, "COMMERCIAL_INVOICE")
+        if jrxml_path is None:
+            jrxml_path = jasper_bridge.template_path("invoice.jrxml")
         print_rows, params = _build_invoice_print_rows_and_params(company_id, doc, lines)
         if counterparty_label is not None:
             params["counterpartyLabel"] = counterparty_label
         try:
             fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="peecha_invoice_")
             os.close(fd)
-            jasper_bridge.render_report("invoice.jrxml", print_rows, params, tmp_path, "pdf")
+            jasper_bridge.render_report_at_path(jrxml_path, print_rows, params, tmp_path, "pdf")
             QDesktopServices.openUrl(QUrl.fromLocalFile(tmp_path))
             return
         except Exception as exc:
@@ -1189,14 +1204,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.history_button.clicked.connect(self._open_counterparty_history)
         self.footer_layout.addWidget(self.history_button)
 
-        self.edit_template_button = QPushButton("🎨")
-        self.edit_template_button.setObjectName("iconButton")
-        self.edit_template_button.setFixedWidth(44)
-        self.edit_template_button.setToolTip(
-            "بازکردنِ قالبِ چاپِ حرفه‌ایِ فاکتور (invoice.jrxml) در Jaspersoft Studio برایِ ویرایش."
+        self.report_button = QPushButton("📄")
+        self.report_button.setObjectName("iconButton")
+        self.report_button.setFixedWidth(44)
+        self.report_button.setToolTip(
+            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به فاکتور -- "
+            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
         )
-        self.edit_template_button.clicked.connect(self._edit_invoice_template)
-        self.footer_layout.addWidget(self.edit_template_button)
+        self.report_button.clicked.connect(self._run_invoice_report)
+        self.footer_layout.addWidget(self.report_button)
         self.footer_layout.addStretch(1)
 
         self.set_field_help([
@@ -1216,22 +1232,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         dialog = _CounterpartyHistoryDialog(self, company_id, counterparty_id, self.counterparty_combo.currentText())
         dialog.exec()
 
-    def _edit_invoice_template(self) -> None:
-        try:
-            opened = jasper_bridge.open_template_for_editing("invoice.jrxml")
-        except FileNotFoundError as exc:
-            QMessageBox.warning(self, "ویرایشِ قالب", str(exc))
+    def _run_invoice_report(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._document_id is None:
+            QMessageBox.information(self, "گزارش", "ابتدا سند را ذخیره کنید.")
             return
-        if not opened:
-            path = jasper_bridge.template_path("invoice.jrxml")
-            QMessageBox.information(
-                self,
-                "ویرایشِ قالب",
-                "Jaspersoft Studio به‌صورتِ خودکار پیدا نشد.\n\n"
-                f"مسیرِ فایلِ قالب: {path}\n\n"
-                "این فایل را به‌صورتِ دستی در Jaspersoft Studio باز کنید، یا "
-                "مسیرِ اجراییِ Studio را در متغیرِ محیطیِ PEECHA_JASPER_STUDIO_PATH تنظیم کنید.",
-            )
+        template_row = pick_report_template(self, company_id, "COMMERCIAL_INVOICE")
+        if template_row is None:
+            return
+        jrxml_path = report_templates_service.get_template_path(template_row.report_template_id, company_id)
+        _show_invoice_print(self, company_id, self._document_id, self.counterparty_combo.currentText(), jrxml_path=jrxml_path)
 
     def _recompute_due_date(self) -> None:
         """طبقِ درخواستِ صریح: با انتخابِ طرفِ‌حساب، موعدِ تسویه از رویِ

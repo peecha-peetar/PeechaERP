@@ -42,6 +42,7 @@ from peecha.ui.screens.payroll_settings import (
     _PoliciesTab,
     _TaxTab,
 )
+from peecha.ui.screens.report_template_settings import _ReportTemplatesTab
 from peecha.ui.screens.roles import RolesScreen
 from peecha.ui.screens.translations import TranslationsScreen
 from peecha.ui.screens.treasury_banks import TreasuryBanksScreen
@@ -110,6 +111,10 @@ class SystemSettingsScreen(QWidget):
         # طبقِ همان الگو: تنظیماتِ مدیریتِ بازرگانی هم این‌جا و هم از
         # آیکونِ چرخ‌دنده‌یِ کنارِ گروه‌هایِ «فروش»/«خرید» در دسترس است.
         self._add_outer_tab("مدیریتِ بازرگانی", self._build_commercial_tab())
+        # طبقِ درخواستِ صریح («برایِ هر فرم بتوان چند گزارشِ نام‌گذاری‌شده
+        # تعریف/ویرایش/اجرا کرد»): رجیستریِ گزارش‌هایِ حرفه‌ای (Jasper) --
+        # هر فرمِ پشتیبانی‌شده (کاردکس، فاکتور) یک پنلِ مستقل این‌جا دارد.
+        self._add_outer_tab("گزارش‌هایِ حرفه‌ای", self._build_reports_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
 
@@ -295,6 +300,15 @@ class SystemSettingsScreen(QWidget):
                 ("هشدارِ موعدِ تسویه", _SettlementAlarmTab()),
             ]
         )
+
+    def _build_reports_tab(self):
+        screen = _ReportTemplatesTab()
+        self._sub_screens.append(screen)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(screen)
+        return scroll, screen.refresh
 
     def refresh(self) -> None:
         # فقط زیرصفحه‌یِ *فعلاً قابلِ‌مشاهده* رفرش می‌شود، نه هر ~۴۰ زیرصفحه —

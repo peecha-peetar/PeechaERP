@@ -30,7 +30,9 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import report_templates as templates_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
+from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.widgets import JalaliDateEdit
 
 # طبقِ درخواستِ صریح («در کاردکسِ کالا نامِ طرفِ‌حساب هم نمایش داده شود» +
@@ -77,16 +79,13 @@ class ItemLedgerScreen(QWidget):
         self.date_to_field.setEnabled(False)
         self.date_filter_checkbox.toggled.connect(self._on_date_filter_toggled)
 
-        self.print_professional_button = QPushButton("چاپِ حرفه‌ای")
+        self.print_professional_button = QPushButton("📄 گزارش")
+        self.print_professional_button.setToolTip(
+            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به کاردکس -- "
+            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
+        )
         self.print_professional_button.clicked.connect(self._print_professional)
         filters_row.addWidget(self.print_professional_button)
-
-        self.edit_template_button = QPushButton("🎨 ویرایشِ قالب")
-        self.edit_template_button.setToolTip(
-            "بازکردنِ قالبِ چاپِ کاردکس (kardex.jrxml) در Jaspersoft Studio برایِ ویرایش."
-        )
-        self.edit_template_button.clicked.connect(self._edit_print_template)
-        filters_row.addWidget(self.edit_template_button)
         layout.addLayout(filters_row)
 
         self.table = QTableWidget(0, len(_COLUMNS))
@@ -238,6 +237,12 @@ class ItemLedgerScreen(QWidget):
             QMessageBox.information(self, "چاپِ حرفه‌ای", "برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
             return
 
+        company_id = self._company_id()
+        template_row = pick_report_template(self, company_id, "ITEM_LEDGER")
+        if template_row is None:
+            return
+        template_path = templates_service.get_template_path(template_row.report_template_id, company_id)
+
         from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES
 
         qty_decimals = context["qty_decimals"]
@@ -292,7 +297,7 @@ class ItemLedgerScreen(QWidget):
             path += ".xlsx"
 
         try:
-            jasper_bridge.render_report("kardex.jrxml", print_rows, params, path, output_format)
+            jasper_bridge.render_report_at_path(template_path, print_rows, params, path, output_format)
         except jasper_bridge.JasperNotAvailableError as exc:
             QMessageBox.warning(self, "چاپِ حرفه‌ای", str(exc))
             return
@@ -301,20 +306,3 @@ class ItemLedgerScreen(QWidget):
             return
 
         QMessageBox.information(self, "چاپِ حرفه‌ای", "گزارش با موفقیت ساخته شد.")
-
-    def _edit_print_template(self) -> None:
-        try:
-            opened = jasper_bridge.open_template_for_editing("kardex.jrxml")
-        except FileNotFoundError as exc:
-            QMessageBox.warning(self, "ویرایشِ قالب", str(exc))
-            return
-        if not opened:
-            path = jasper_bridge.template_path("kardex.jrxml")
-            QMessageBox.information(
-                self,
-                "ویرایشِ قالب",
-                "Jaspersoft Studio به‌صورتِ خودکار پیدا نشد.\n\n"
-                f"مسیرِ فایلِ قالب: {path}\n\n"
-                "این فایل را به‌صورتِ دستی در Jaspersoft Studio باز کنید، یا "
-                "مسیرِ اجراییِ Studio را در متغیرِ محیطیِ PEECHA_JASPER_STUDIO_PATH تنظیم کنید.",
-            )

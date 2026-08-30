@@ -7,7 +7,13 @@ inventory_engine.py + numerals.py، دقیقاً همان دیتایی که رو
 داده می‌شود) را به‌صورتِ JSON به jasper-runner.jar می‌دهد و آن، طبقِ فایلِ
 jrxmlِ مشخص‌شده، فقط چیدمان/خروجی (PDF یا Excel) را می‌سازد. JasperReports
 درونِ پروسه‌یِ Python بالا نمی‌آید -- هر بار با subprocess یک JVMِ جدا صدا
-زده می‌شود."""
+زده می‌شود.
+
+توابعِ *_at_path رویِ هر مسیرِ jrxmlِ دلخواه کار می‌کنند (از جمله فایل‌هایِ
+اختصاصیِ هر شرکت که در peecha.services.report_templates مدیریت می‌شوند)؛
+توابعِ نام‌دار (render_report/template_path/open_template_for_editing) فقط
+برایِ قالب‌هایِ پایه‌ی این ریپازیتوری (templates/) هستند و رویِ همان توابع
+سوار شده‌اند."""
 
 from __future__ import annotations
 
@@ -42,7 +48,7 @@ def template_path(template_name: str) -> Path:
     return path
 
 
-def open_template_for_editing(template_name: str) -> bool:
+def open_path_for_editing(jrxml_path: Path | str) -> bool:
     """فایلِ jrxml را برایِ ویرایش در Jaspersoft Studio باز می‌کند.
 
     ReportRunner همیشه از رویِ همینِ فایلِ روی دیسک -- تازه در همان لحظه --
@@ -58,7 +64,9 @@ def open_template_for_editing(template_name: str) -> bool:
     from PySide6.QtCore import QUrl
     from PySide6.QtGui import QDesktopServices
 
-    path = template_path(template_name)
+    path = Path(jrxml_path)
+    if not path.exists():
+        raise FileNotFoundError(f"قالبِ گزارش یافت نشد: {path}")
     studio_exe = os.environ.get(_STUDIO_ENV_VAR)
     if studio_exe and Path(studio_exe).exists():
         subprocess.Popen([studio_exe, str(path)])
@@ -66,8 +74,12 @@ def open_template_for_editing(template_name: str) -> bool:
     return QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
 
-def render_report(
-    template_name: str,
+def open_template_for_editing(template_name: str) -> bool:
+    return open_path_for_editing(template_path(template_name))
+
+
+def render_report_at_path(
+    jrxml_path: Path | str,
     rows: list[dict],
     params: dict,
     output_path: str,
@@ -85,7 +97,7 @@ def render_report(
     if not _RUNNER_JAR.exists():
         raise JasperNotAvailableError(f"موتورِ چاپِ حرفه‌ای هنوز آماده نیست — {BUILD_INSTRUCTIONS}")
 
-    jrxml_path = _TEMPLATES_DIR / template_name
+    jrxml_path = Path(jrxml_path)
     if not jrxml_path.exists():
         raise FileNotFoundError(f"قالبِ گزارش یافت نشد: {jrxml_path}")
 
@@ -111,3 +123,13 @@ def render_report(
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "").strip()
             raise RuntimeError(f"تولیدِ گزارشِ حرفه‌ای ناموفق بود:\n{detail}")
+
+
+def render_report(
+    template_name: str,
+    rows: list[dict],
+    params: dict,
+    output_path: str,
+    output_format: str = "pdf",
+) -> None:
+    render_report_at_path(template_path(template_name), rows, params, output_path, output_format)
