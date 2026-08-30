@@ -1628,6 +1628,12 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # قالبِ متنِ خودکارِ شرحِ هر روش — در refresh() از تنظیمات بارگذاری
         # می‌شود (به‌جایِ کوئریِ جداگانه به‌ازایِ هر کلیدزنیِ مبلغ).
         self._description_templates: dict[str, str] = {}
+        # طبقِ درخواستِ صریح («از همان فرمِ تسویه‌یِ فاکتورها، دکمه‌یِ تسویه
+        # فرمِ دریافت/پرداخت را باز کند و رفرنس بدهد»): وقتی این فرم از
+        # طریقِ commercial_settlement.py برایِ تسویه‌یِ یک فاکتورِ مشخص باز
+        # می‌شود، شناسه‌یِ همان فاکتور این‌جا نگه داشته می‌شود تا بعدِ ثبتِ
+        # موفقِ سند، خودکار به‌عنوانِ تسویه‌یِ همان فاکتور هم ثبت شود.
+        self._settle_invoice_document_id: int | None = None
 
         noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
         row_methods_hint = (
@@ -2271,13 +2277,22 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         if base_index >= 0:
             self.currency_combo.setCurrentIndex(base_index)
         self.status_label.setText("")
+        self._settle_invoice_document_id = None
         self._update_rows_summary()
 
-    def prefill_for_invoice(self, counterparty_id: int | None, amount: decimal.Decimal, description: str) -> None:
+    def prefill_for_invoice(
+        self, counterparty_id: int | None, amount: decimal.Decimal, description: str, invoice_document_id: int | None = None,
+    ) -> None:
         """طبقِ درخواستِ صریح: بعدِ ثبتِ نهاییِ فاکتورِ فروش/خرید، همین فرم
         (دریافت/پرداخت) با طرفِ‌حساب و مبلغِ همان فاکتور باز شود — کاربر
         فقط روشِ پرداخت (نقد/بانک/چک) را انتخاب و مبلغ را تایید می‌کند
-        (یا با اسپیس در فیلدِ ردیف، مبلغِ بالای فرم را کپی می‌کند)."""
+        (یا با اسپیس در فیلدِ ردیف، مبلغِ بالای فرم را کپی می‌کند).
+
+        اگر invoice_document_id داده شود (طبقِ درخواستِ صریح: بازکردنِ
+        همین فرم مستقیماً از «مدیریتِ تسویه‌یِ فاکتورها»)، بعدِ ثبتِ موفقِ
+        همین سند، خودکار به‌عنوانِ تسویه‌یِ همان فاکتور هم ثبت می‌شود --
+        دیگر نیازی به دوباره رفتن به فرمِ تسویه و انتخابِ دستیِ این سند
+        نیست."""
         self._reset_form()
         if counterparty_id is not None:
             index = self.account_combo.findData(counterparty_id)
@@ -2285,6 +2300,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
                 self.account_combo.setCurrentIndex(index)
         self.total_amount_field.setValue(float(amount))
         self.description_field.setText(description)
+        self._settle_invoice_document_id = invoice_document_id
         self._update_rows_summary()
 
     def _compose_description(self) -> str:
@@ -2386,13 +2402,31 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         receipt_counterparty_label = self._counterparty_label()
         receipt_date_text = self.date_field.text()
         receipt_manual_description = self.description_field.text().strip()
+        # طبقِ درخواستِ صریح («از فرمِ تسویه‌یِ فاکتورها بازشود و رفرنس
+        # بدهد»): پیش از reset (که این فیلد را هم پاک می‌کند) نگه داشته
+        # می‌شود -- اگر از commercial_settlement.py برایِ همین منظور باز
+        # شده باشد، بعدِ ثبتِ موفقِ سند، خودکار تسویه‌یِ همان فاکتور هم
+        # ثبت می‌شود.
+        settle_invoice_document_id = self._settle_invoice_document_id
+        settlement_error: str | None = None
+        if settle_invoice_document_id is not None:
+            try:
+                settlements_service.allocate_settlement(
+                    self.company_id, settle_invoice_document_id, result.journal_entry_id,
+                    self.date_field.date(), header_total, session.current_user.user_id,
+                    description=self._compose_description(),
+                )
+            except ValueError as exc:
+                settlement_error = str(exc)
 
         self._reset_form()
-        theme.set_status_label(
-            self.status_label,
-            f"سند با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد.",
-            ok=True,
-        )
+        success_message = f"سند با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
+        if settle_invoice_document_id is not None:
+            if settlement_error is None:
+                success_message += " تسویه‌یِ فاکتورِ مربوطه هم ثبت شد."
+            else:
+                success_message += f" (هشدار: سند ثبت شد، اما تسویه به فاکتور وصل نشد -- {settlement_error})"
+        theme.set_status_label(self.status_label, success_message, ok=(settlement_error is None))
         _prompt_and_print_receipt(
             self,
             self.direction,
