@@ -1410,7 +1410,7 @@ class MainWindow(QMainWindow):
             ),
         )
 
-        self.register_screen("dashboard", DashboardScreen())
+        self.register_screen("dashboard", DashboardScreen(self))
         self.register_screen("my_tasks", MyTasksScreen(self))
         self.register_screen("placeholder", PlaceholderScreen())
         self.register_screen("chart_of_accounts", ChartOfAccountsScreen())

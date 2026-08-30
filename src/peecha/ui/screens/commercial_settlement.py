@@ -59,6 +59,7 @@ from peecha.ui.screens.treasury_voucher import _EnterComboBox
 from peecha.ui.widgets import JalaliDateEdit
 
 _VOUCHER_NAV_CODE_BY_INVOICE_TYPE = {"SALES_INVOICE": "TREASURY_RECEIPT", "PURCHASE_INVOICE": "TREASURY_PAYMENT"}
+_INVOICE_EDIT_NAV_CODE_BY_TYPE = {"SALES_INVOICE": "SALES_INVOICE", "PURCHASE_INVOICE": "PURCH_INVOICE"}
 _VOUCHER_ENTRY_TYPE_BY_INVOICE_TYPE = {"SALES_INVOICE": ["RECEIPT"], "PURCHASE_INVOICE": ["PAYMENT"]}
 _DUE_STATUS_FILTER_OPTIONS = [("(همه)", None), ("معوقه", "OVERDUE"), ("نزدیکِ سررسید", "DUE_SOON")]
 
@@ -90,15 +91,6 @@ class InvoiceSettlementScreen(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         layout.addWidget(QLabel("فقط فاکتورهایِ ثبتِ‌نهایی‌شده که هنوز به‌طورِ کامل تسویه نشده‌اند نمایش داده می‌شوند."))
-
-        # طبقِ رفعِ باگِ واقعی («آلارمِ موعدِ تسویه کجا نمایش داده می‌شود؟»):
-        # تا پیش‌ازاین settlements_service.list_invoices_due_soon هرگز از
-        # هیچ صفحه‌ای صدا زده نمی‌شد -- تنظیماتش (فعال/غیرفعال + چند روزِ
-        # پیش‌ازموعد) قابلِ‌تغییر بود ولی هیچ اثری در UI نداشت.
-        self.alarm_banner = QLabel("")
-        self.alarm_banner.setWordWrap(True)
-        self.alarm_banner.setVisible(False)
-        layout.addWidget(self.alarm_banner)
 
         # --- فیلترها: طبقِ درخواستِ صریح («فیلترها و جستجوی فاکتور بر
         # اساسِ شخص و کالا و تاریخ»). ---
@@ -164,8 +156,26 @@ class InvoiceSettlementScreen(QWidget):
         self.invoice_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.invoice_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.invoice_table.verticalHeader().setVisible(False)
-        self.invoice_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        # طبقِ رفعِ باگِ واقعی («عرضِ ستونِ طرفِ‌حساب زیاد و مبلغِ تسویه کمه
+        # و تناسب نداره»): قبلاً فقط همین یک ستون Stretch بود و تنهاییِ
+        # کلِ فضایِ باقی‌مانده را می‌بلعید، درحالی‌که ستونِ مبلغِ تسویه
+        # (که یک فیلدِ واردکردنیِ تعاملی است، نه فقط متن) با عرضِ
+        # پیش‌فرضِ کوچک می‌ماند. حالا ستون‌هایِ کوتاه با محتوایشان تنظیم
+        # می‌شوند، طرفِ‌حساب عرضی معقول و قابلِ‌تغییر دارد، و فضایِ
+        # باقی‌مانده به ستونِ مبلغِ تسویه می‌رسد.
+        invoice_header = self.invoice_table.horizontalHeader()
+        for col in (0, 2, 3, 4, 5):
+            invoice_header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        invoice_header.setSectionResizeMode(1, QHeaderView.Interactive)
+        self.invoice_table.setColumnWidth(1, 200)
+        invoice_header.setSectionResizeMode(len(_INVOICE_COLUMNS) - 1, QHeaderView.Stretch)
         self.invoice_table.itemSelectionChanged.connect(self._on_invoice_selected)
+        # طبقِ درخواستِ صریح («روی ردیفِ فاکتور بتوان فاکتور را کامل دید»):
+        # دابل‌کلیک رویِ هر ردیف، همان فاکتورِ واقعی را در فرمِ خودش
+        # (فقط‌مشاهده اگر ثبتِ‌نهایی شده باشد) باز می‌کند -- هم‌الگو با
+        # commercial_documents_list.py.
+        self.invoice_table.setToolTip("برایِ مشاهده‌یِ کاملِ فاکتور، رویِ ردیف دوبار کلیک کنید.")
+        self.invoice_table.cellDoubleClicked.connect(self._open_invoice_document)
         layout.addWidget(self.invoice_table, stretch=2)
 
         # --- طبقِ درخواستِ صریح («مبلغِ دریافتی برایِ چند فاکتور هم وارد
@@ -276,28 +286,16 @@ class InvoiceSettlementScreen(QWidget):
             if index >= 0:
                 self.voucher_combo.setCurrentIndex(index)
 
+        # طبقِ درخواستِ صریح («آلارم در فرمِ تسویه فایده نداره»): بنرِ
+        # هشدار از این فرم برداشته شد و به داشبوردِ اصلیِ برنامه منتقل شد
+        # (dashboard.py) -- کاربر بدونِ بازکردنِ این فرمِ خاص هم مطلع
+        # می‌شود. این‌جا فقط تنظیماتش برایِ فیلترِ «نزدیکِ سررسید» پایین‌تر
+        # لازم است.
         self._alarm_settings = settlements_service.get_alarm_settings(company_id)
         self._all_statuses = settlements_service.list_unsettled_invoices(company_id, self._invoice_type)
         self._doc_cache = {status.document_id: self._document_lookup(company_id, status.document_id) for status in self._all_statuses}
-        self._update_alarm_banner(company_id)
         self._apply_filters()
         self.status_label.setText("")
-
-    def _update_alarm_banner(self, company_id: int) -> None:
-        if self._alarm_settings is None or not self._alarm_settings.is_enabled:
-            self.alarm_banner.setVisible(False)
-            return
-        due_soon = settlements_service.list_invoices_due_soon(company_id, self._invoice_type)
-        if not due_soon:
-            self.alarm_banner.setVisible(False)
-            return
-        self.alarm_banner.setStyleSheet(f"color: {theme.WARNING}; font-weight: bold;")
-        self.alarm_banner.setText(
-            f"⏰ {numerals.to_persian_digits(str(len(due_soon)))} فاکتور تا "
-            f"{numerals.to_persian_digits(str(self._alarm_settings.alarm_days_before))} روزِ دیگر (یا پیش‌ازاین) به "
-            "موعدِ تسویه می‌رسند -- برایِ دیدنِ فقط همین‌ها، فیلترِ «سررسید: نزدیکِ سررسید» را انتخاب کنید."
-        )
-        self.alarm_banner.setVisible(True)
 
     def _document_lookup(self, company_id: int, document_id: int):
         try:
@@ -408,6 +406,16 @@ class InvoiceSettlementScreen(QWidget):
             item = self.invoice_table.item(rows[0].row(), 0)
             self._selected_document_id = item.data(Qt.UserRole)
         self._refresh_settlements_table()
+
+    def _open_invoice_document(self, row: int, _column: int) -> None:
+        if self._main_window is None:
+            return
+        item = self.invoice_table.item(row, 0)
+        if item is None:
+            return
+        document_id = item.data(Qt.UserRole)
+        nav_code = _INVOICE_EDIT_NAV_CODE_BY_TYPE[self._invoice_type]
+        self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
 
     def _refresh_settlements_table(self) -> None:
         company_id = self._company_id()

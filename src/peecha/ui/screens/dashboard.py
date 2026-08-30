@@ -14,11 +14,12 @@ from __future__ import annotations
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QPieSeries, QValueAxis
 from PySide6.QtCore import Qt, QMargins
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QGridLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from peecha import session
 from peecha.ui import theme
 from peecha.ui.widgets import KpiCard
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import dashboard as dashboard_service
 
 
@@ -35,8 +36,12 @@ def _to_persian_digits(text: str) -> str:
 
 
 class DashboardScreen(QWidget):
-    def __init__(self) -> None:
+    def __init__(self, main_window=None) -> None:
         super().__init__()
+        self._main_window = main_window
+        self._due_sales_count = 0
+        self._due_purchase_count = 0
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(32, 32, 32, 32)
         outer.setSpacing(24)
@@ -48,6 +53,17 @@ class DashboardScreen(QWidget):
         subtitle = QLabel("خلاصه‌ی وضعیتِ سیستم")
         subtitle.setObjectName("sectionHint")
         outer.addWidget(subtitle)
+
+        # طبقِ درخواستِ صریح («آلارم در فرمِ اصلیِ برنامه نمایش بده تا
+        # کاربر مطلع بشه -- آلارم در فرمِ تسویه فایده نداره»): بنرِ
+        # هشدارِ موعدِ تسویه (settlements_service.list_invoices_due_soon)
+        # از فرمِ تسویه به همین‌جا -- اولین صفحه‌ای که کاربر با آن روبه‌رو
+        # می‌شود -- منتقل شد؛ با کلیک مستقیم به فرمِ تسویه‌یِ مربوطه می‌رود.
+        self.alarm_banner = QPushButton("")
+        self.alarm_banner.setCursor(Qt.PointingHandCursor)
+        self.alarm_banner.setVisible(False)
+        self.alarm_banner.clicked.connect(self._open_due_settlements)
+        outer.addWidget(self.alarm_banner)
 
         cards_layout = QGridLayout()
         cards_layout.setSpacing(16)
@@ -123,6 +139,41 @@ class DashboardScreen(QWidget):
 
         breakdown = dashboard_service.chart_of_accounts_by_category(company_id)
         self._render_donut_chart(breakdown)
+
+        self._refresh_alarm_banner(company_id)
+
+    def _refresh_alarm_banner(self, company_id: int | None) -> None:
+        self._due_sales_count = 0
+        self._due_purchase_count = 0
+        if company_id is None:
+            self.alarm_banner.setVisible(False)
+            return
+        alarm_settings = settlements_service.get_alarm_settings(company_id)
+        if not alarm_settings.is_enabled:
+            self.alarm_banner.setVisible(False)
+            return
+        self._due_sales_count = len(settlements_service.list_invoices_due_soon(company_id, "SALES_INVOICE"))
+        self._due_purchase_count = len(settlements_service.list_invoices_due_soon(company_id, "PURCHASE_INVOICE"))
+        total = self._due_sales_count + self._due_purchase_count
+        if total == 0:
+            self.alarm_banner.setVisible(False)
+            return
+        self.alarm_banner.setText(
+            f"⏰ {_to_persian_digits(str(total))} فاکتور تا {_to_persian_digits(str(alarm_settings.alarm_days_before))} "
+            f"روزِ دیگر (یا پیش‌ازاین) به موعدِ تسویه می‌رسند — {_to_persian_digits(str(self._due_sales_count))} فروش، "
+            f"{_to_persian_digits(str(self._due_purchase_count))} خرید. برایِ مشاهده کلیک کنید."
+        )
+        self.alarm_banner.setStyleSheet(
+            f"background-color: {theme.WARNING}; color: white; font-weight: bold; padding: 10px 14px; "
+            "border-radius: 8px; text-align: right; border: none;"
+        )
+        self.alarm_banner.setVisible(True)
+
+    def _open_due_settlements(self) -> None:
+        if self._main_window is None:
+            return
+        nav_code = "TREASURY_SETTLEMENT_SALES" if self._due_sales_count > 0 else "TREASURY_SETTLEMENT_PURCHASE"
+        self._main_window.open_screen(nav_code)
 
     def _themed_chart(self) -> QChart:
         chart = QChart()
