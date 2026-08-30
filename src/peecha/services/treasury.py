@@ -35,9 +35,12 @@ from peecha.db.models.treasury import (
     ReceivedCheck,
     TreasuryAccountMapping,
 )
+from peecha.db.models.commercial import CommercialDocument
 from peecha.services import audit as audit_service
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import installments as installments_service
 from peecha.services import journal_entries as je_service
 
 MAPPING_KEYS = [
@@ -48,12 +51,14 @@ MAPPING_KEYS = [
     "RECEIPT_NETTING",
     "RECEIPT_GOODS_COUPON",
     "RECEIPT_VOUCHER",
+    "RECEIPT_INSTALLMENT",
     "PAYMENT_CASH",
     "PAYMENT_BANK",
     "PAYMENT_CHECK",
     "PAYMENT_DISCOUNT",
     "PAYMENT_CHECK_DISBURSEMENT",
     "PAYMENT_NETTING",
+    "PAYMENT_INSTALLMENT",
     # طبقِ درخواستِ صریح: «برایِ هرِ مرحله یک ردیفِ جداگانه در تنظیمات باشه»
     # — این‌ها مستقل از کلیدهایِ فرمِ دریافت/پرداختِ بالا، مخصوصِ مراحلِ
     # چرخه‌یِ عمرِ چک‌اند (حتی اگر عملاً به همان حساب اشاره کنند).
@@ -74,12 +79,18 @@ MAPPING_LABELS: dict[str, str] = {
     "RECEIPT_NETTING": "تهاترِ دریافت",
     "RECEIPT_GOODS_COUPON": "کالابرگِ دریافتی",
     "RECEIPT_VOUCHER": "بنِ دریافتی",
+    # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): این حساب، سهمی از
+    # طلب/بدهیِ همان طرفِ‌حساب را که قرار است طیِ چند قسط دریافت/پرداخت
+    # شود نگه می‌دارد -- معمولاً یک زیرحسابِ اختصاصیِ «دریافتنی/پرداختنیِ
+    # اقساطی» (تا از AR/APِ عادی جدا و قابلِ‌ردیابی بماند).
+    "RECEIPT_INSTALLMENT": "دریافتنیِ اقساطی",
     "PAYMENT_CASH": "پرداختِ نقدی",
     "PAYMENT_BANK": "پرداختِ بانکی",
     "PAYMENT_CHECK": "چک‌هایِ پرداختنی",
     "PAYMENT_DISCOUNT": "تخفیفاتِ نقدیِ دریافت‌شده",
     "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
     "PAYMENT_NETTING": "تهاترِ پرداخت",
+    "PAYMENT_INSTALLMENT": "پرداختنیِ اقساطی",
     "CHECK_RECEIVED_FUND_TRANSFER": "انتقالِ چکِ دریافتی بینِ صندوق‌ها",
     "CHECK_RECEIVED_CASH_COLLECT": "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق",
     "CHECK_RECEIVED_BANK_DEPOSIT": "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک",
@@ -98,7 +109,7 @@ MAPPING_LABELS: dict[str, str] = {
     "PETTY_CASH_ADVANCE": "پیش‌پرداختِ تنخواه‌گردان",
 }
 
-METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER")
+METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER", "INSTALLMENT")
 
 # --- تاریخچه‌یِ چرخه‌یِ عمرِ چک -----------------------------------------------
 # طبقِ درخواستِ صریح: «چک‌ها باید در هر مرحله ثبت بشه و بتوان گزارش گرفت» —
@@ -1224,6 +1235,19 @@ class MethodLine:
     # یک معین تنظیم شده باشد، همیشه None می‌ماند و رفتار دقیقاً مثلِ قبل
     # از رویِ mapping_key به‌تنهایی resolve می‌شود.
     account_id_override: int | None = None
+    # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): فقط برایِ
+    # method == "INSTALLMENT" -- کدام فاکتورِ ثبت‌شده (همانِ طرفِ‌حسابِ
+    # سند) قرار است طیِ چند قسط دریافت/پرداخت شود، به همراهِ تعدادِ اقساط
+    # و تاریخِ سررسیدِ اولین قسط (بقیه هرکدام ۳۰ روز بعدِ قبلی).
+    installment_document_id: int | None = None
+    installment_count: int | None = None
+    installment_first_due_date: datetime.date | None = None
+    # طبقِ همان درخواست: برایِ هر روشِ دیگر (نقد/بانک/چک/...)، اگر این
+    # ردیف در واقع وصولِ یکی از همان اقساطِ ازپیش‌برنامه‌ریزی‌شده باشد،
+    # با تنظیمِ همین فیلد، آن قسط PAID علامت می‌خورد و خودکار به‌عنوانِ
+    # یک تسویه (comm.invoice_settlements) رویِ فاکتورِ اصلیِ همان طرح هم
+    # ثبت می‌شود -- هم‌افزایی با سیستمِ تسویه‌یِ فاکتورها.
+    collect_installment_line_id: int | None = None
 
 
 def create_treasury_voucher(
@@ -1266,6 +1290,11 @@ def create_treasury_voucher(
             raise ValueError("روشِ ردیف نامعتبر است.")
         if ml.amount <= 0:
             raise ValueError("مبلغِ هر ردیف باید مثبت باشد.")
+        if ml.method == "INSTALLMENT":
+            if ml.installment_document_id is None or ml.installment_count is None or ml.installment_first_due_date is None:
+                raise ValueError("برایِ روشِ اقساط، فاکتور، تعدادِ اقساط، و تاریخِ سررسیدِ اولین قسط را مشخص کنید.")
+            if ml.installment_count < 2:
+                raise ValueError("تعدادِ اقساط باید حداقل ۲ باشد.")
 
     total = sum((ml.amount for ml in method_lines), decimal.Decimal(0))
 
@@ -1341,6 +1370,38 @@ def create_treasury_voucher(
                 current_code = session.scalar(select(CheckStatus.code).where(CheckStatus.status_id == check.status_id))
                 if current_code not in ("IN_HAND", "DEPOSITED"):
                     raise ValueError(f"چکِ شماره‌ی {check.check_no} دیگر قابلِ خرج‌کردن نیست.")
+
+        # اعتبارسنجیِ روشِ اقساط (INSTALLMENT) -- فاکتورِ هدف باید متعلق به
+        # همین شرکت، ثبتِ‌نهایی‌شده، از نوعِ فروش/خرید، و هم‌طرفِ‌حسابِ همین
+        # سند باشد.
+        for ml in method_lines:
+            if ml.method != "INSTALLMENT":
+                continue
+            doc = session.get(CommercialDocument, ml.installment_document_id)
+            if doc is None or doc.company_id != company_id:
+                raise ValueError("فاکتورِ انتخاب‌شده برایِ اقساط نامعتبر است.")
+            if doc.document_type_code not in ("SALES_INVOICE", "PURCHASE_INVOICE"):
+                raise ValueError("اقساط فقط برایِ فاکتورِ فروش/خرید ممکن است.")
+            if doc.status_code != "POSTED":
+                raise ValueError("فقط فاکتورِ ثبتِ‌نهایی‌شده قابلِ‌تقسیط است.")
+            if doc.counterparty_detail_account_id != counterparty_account_id:
+                raise ValueError("طرفِ‌حسابِ فاکتورِ انتخاب‌شده با طرفِ‌حسابِ این سند یکی نیست.")
+
+        # اعتبارسنجیِ وصولِ قسط (هر روشِ دیگری که collect_installment_line_id
+        # داشته باشد) -- قسط باید معتبر، متعلق به همین شرکت، و هنوز
+        # پرداخت‌نشده باشد.
+        for ml in method_lines:
+            if ml.collect_installment_line_id is None:
+                continue
+            line = installments_service.get_installment_line(ml.collect_installment_line_id)
+            if line is None:
+                raise ValueError("قسطِ انتخاب‌شده نامعتبر است.")
+            if line.status_code == "PAID":
+                raise ValueError("این قسط قبلاً دریافت/پرداخت شده است.")
+            plan = installments_service.get_installment_plan(line.plan_id)
+            plan_doc = session.get(CommercialDocument, plan.document_id)
+            if plan_doc is None or plan_doc.company_id != company_id:
+                raise ValueError("قسطِ انتخاب‌شده متعلق به این شرکت نیست.")
 
         # طبقِ همین دلیل، commit این تخصیص‌ها پیش از ساختِ خودِ سند انجام
         # می‌شود (create_journal_entry خودش new_session جداگانه باز می‌کند)
@@ -1532,6 +1593,25 @@ def create_treasury_voucher(
                         document_date, None, "ISSUED", result.journal_entry_id, created_by_user_id,
                     )
         session.commit()
+
+    # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): بعدِ ثبتِ موفقِ
+    # خودِ سند -- تا خطایِ احتمالیِ بالاتر هرگز یک طرحِ اقساطِ یتیم/بی‌سند
+    # نسازد -- ردیفِ INSTALLMENT طرحِ اقساط را می‌سازد، و هر ردیفی که
+    # collect_installment_line_id داشته باشد آن قسط را PAID می‌کند و
+    # خودکار به‌عنوانِ تسویه‌یِ همان فاکتور هم ثبت می‌شود.
+    for ml in method_lines:
+        if ml.method == "INSTALLMENT":
+            installments_service.create_installment_plan(
+                ml.installment_document_id, ml.installment_count, ml.installment_first_due_date, ml.amount,
+            )
+        if ml.collect_installment_line_id is not None:
+            installments_service.mark_installment_paid(ml.collect_installment_line_id, result.journal_entry_id)
+            line = installments_service.get_installment_line(ml.collect_installment_line_id)
+            plan = installments_service.get_installment_plan(line.plan_id)
+            settlements_service.allocate_settlement(
+                company_id, plan.document_id, result.journal_entry_id, document_date, ml.amount, created_by_user_id,
+                description=f"وصولِ قسطِ #{line.installment_no}",
+            )
 
     return result
 

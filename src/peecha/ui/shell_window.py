@@ -1368,6 +1368,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_aftersales import CommercialAftersalesScreen
         from peecha.ui.screens.commercial_purchasing_extras import CommercialPurchasingExtrasScreen
         from peecha.ui.screens.commercial_settlement import InvoiceSettlementScreen
+        from peecha.ui.screens.installments_list import InstallmentsListScreen
         from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen
         from peecha.ui.screens.journal_entry import JournalEntryScreen
         from peecha.ui.screens.my_tasks import MyTasksScreen
@@ -1459,6 +1460,7 @@ class MainWindow(QMainWindow):
         self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
         self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())
         self.register_screen("commercial_invoice_settlement", InvoiceSettlementScreen(self))
+        self.register_screen("installments_list", InstallmentsListScreen(self))
         self.register_screen("treasury_voucher_receipt", TreasuryVoucherScreen("RECEIPT", self))
         self.register_screen("treasury_voucher_payment", TreasuryVoucherScreen("PAYMENT", self))
         self.register_screen(

@@ -239,53 +239,11 @@ def redeem_gift_card(code: str, amount: decimal.Decimal) -> None:
         session.commit()
 
 
-# ---------------------------------------------------------------------
-# فروشِ اقساطی
-# ---------------------------------------------------------------------
-def create_installment_plan(document_id: int, number_of_installments: int, first_due_date: datetime.date, total_amount: decimal.Decimal) -> int:
-    if number_of_installments <= 0:
-        raise ValueError("تعدادِ اقساط باید بزرگ‌تر از صفر باشد.")
-    per_installment = _money(total_amount / number_of_installments)
-    with new_session() as session:
-        plan = InstallmentPlan(document_id=document_id, number_of_installments=number_of_installments, first_due_date=first_due_date)
-        session.add(plan)
-        session.flush()
-        remaining = total_amount
-        due_date = first_due_date
-        for i in range(1, number_of_installments + 1):
-            amount = per_installment if i < number_of_installments else _money(remaining)
-            remaining -= amount
-            session.add(InstallmentLine(plan_id=plan.plan_id, installment_no=i, due_date=due_date, amount=amount))
-            due_date = due_date + datetime.timedelta(days=30)
-        session.commit()
-        return plan.plan_id
-
-
-def mark_installment_paid(line_id: int, paid_journal_entry_id: int | None = None) -> None:
-    with new_session() as session:
-        line = session.get(InstallmentLine, line_id)
-        if line is None:
-            raise ValueError("قسط نامعتبر است.")
-        line.status_code = "PAID"
-        line.paid_journal_entry_id = paid_journal_entry_id
-        session.commit()
-        plan = session.get(InstallmentPlan, line.plan_id)
-        remaining = session.scalar(
-            select(InstallmentLine).where(InstallmentLine.plan_id == plan.plan_id, InstallmentLine.status_code != "PAID")
-        )
-        if remaining is None:
-            plan.status_code = "COMPLETED"
-            session.commit()
-
-
-def list_overdue_installments(as_of_date: datetime.date | None = None) -> list[InstallmentLine]:
-    as_of_date = as_of_date or datetime.date.today()
-    with new_session() as session:
-        lines = session.scalars(select(InstallmentLine).where(InstallmentLine.status_code == "PENDING", InstallmentLine.due_date < as_of_date)).all()
-        for line in lines:
-            line.status_code = "OVERDUE"
-        session.commit()
-        return list(lines)
+# طبقِ عمومی‌سازیِ صریح («روشِ دریافت/پرداختِ اقساطی برایِ همه‌یِ
+# فاکتورها، نه فقط POS»): create_installment_plan/mark_installment_paid/
+# list_overdue_installments به services/installments.py منتقل شدند --
+# این‌جا فقط payments_cover_total (بالا) مستقیماً از مدل‌هایِ
+# InstallmentPlan/InstallmentLine برایِ جمعِ ساده استفاده می‌کند.
 
 
 # ---------------------------------------------------------------------
