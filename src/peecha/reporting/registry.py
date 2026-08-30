@@ -9,4 +9,12 @@ FORM_DEFINITIONS: dict[str, dict[str, str]] = {
     "ITEM_LEDGER": {"label": "کاردکسِ کالا", "base_template": "kardex.jrxml"},
     "COMMERCIAL_INVOICE": {"label": "فاکتور / سندِ بازرگانی", "base_template": "invoice.jrxml"},
     "TRIAL_BALANCE": {"label": "تراز آزمایشی", "base_template": "trial_balance.jrxml"},
+    "JOURNAL_BOOK": {"label": "دفترِ روزنامه", "base_template": "journal_book.jrxml"},
+    # طبقِ اشتراکِ شکلِ ستونی: حالتِ «خلاصه»یِ دفترِ کل/معین/تفصیلی دقیقاً
+    # همان جدولِ تراز آزمایشیِ ۶ ستونی است -- از همان قالبِ پایه شروع می‌شود.
+    "ACCOUNT_LEDGER_SUMMARY": {"label": "دفترِ کل/معین/تفصیلی — خلاصه", "base_template": "trial_balance.jrxml"},
+    "ACCOUNT_LEDGER_DETAIL": {"label": "دفترِ کل/معین/تفصیلی — گردشِ حساب", "base_template": "account_ledger_detail.jrxml"},
+    "INCOME_STATEMENT": {"label": "صورتِ سود و زیان", "base_template": "income_statement.jrxml"},
+    "BALANCE_SHEET": {"label": "ترازنامه", "base_template": "balance_sheet.jrxml"},
+    "STOCK_DOCUMENT": {"label": "سندِ انبار (رسید/حواله/انتقال/برگشت/اصلاح)", "base_template": "stock_document.jrxml"},
 }

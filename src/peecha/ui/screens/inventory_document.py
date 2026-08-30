@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import os
+import tempfile
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -31,14 +34,17 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.reporting import jasper_bridge
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import report_templates as report_templates_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
+from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.screens.treasury_voucher import (
     _EnterComboBox,
     _escape_receipt_html,
@@ -122,8 +128,84 @@ def _build_stock_document_print_html(
     """
 
 
-def _show_stock_document_print(parent: QWidget, company_id: int, stock_document_id: int, counterparty_label: str | None = None) -> None:
+def _build_stock_document_print_rows_and_params(company_id: int, doc, lines: list, counterparty_label: str | None = None):
+    """طبقِ همان الگویِ commercial_documents._build_invoice_print_rows_and_params:
+    دیتایِ آماده‌شده برایِ جدولِ رجیستریِ گزارش‌هایِ حرفه‌ای (فرمِ
+    STOCK_DOCUMENT، پوششِ مشترکِ رسید/حواله/انتقال/برگشت/اصلاح/امانی)."""
+    items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+    uoms_by_id = {u.uom_id: u for u in catalog_service.list_uoms(company_id)}
+    warehouses_by_id = {w.warehouse_id: w.name for w in locations_service.list_warehouses(company_id)}
+    reasons_by_id: dict[int, str] = {}
+    for applies_to in ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT"):
+        for r in documents_service.list_reason_codes(company_id, applies_to, active_only=False):
+            reasons_by_id[r.reason_code_id] = r.name
+    decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+    if counterparty_label is None and doc.counterparty_detail_account_id is not None:
+        counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
+    company = app_session.current_company
+
+    print_rows = []
+    total_cost = decimal.Decimal(0)
+    for index, ln in enumerate(lines, start=1):
+        item = items_by_id.get(ln.item_id)
+        uom = uoms_by_id.get(ln.uom_id)
+        qty_decimals = uom.decimal_places if uom else 3
+        total_cost += ln.line_total_cost or decimal.Decimal(0)
+        print_rows.append(
+            {
+                "row_no_display": numerals.to_persian_digits(str(index)),
+                "item_label": f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
+                "uom_display": uom.name if uom else "",
+                "quantity_display": numerals.format_money(ln.quantity, qty_decimals),
+                "unit_cost_display": numerals.format_money(ln.unit_cost, decimal_places) if ln.unit_cost is not None else "",
+                "line_total_display": numerals.format_money(ln.line_total_cost, decimal_places) if ln.line_total_cost is not None else "",
+                "reason_display": reasons_by_id.get(ln.reason_code_id, "") if ln.reason_code_id else "",
+                "description": ln.description or "",
+            }
+        )
+
+    params = {
+        "companyDisplayName": company.display_name if company else "",
+        "documentTypeLabel": DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code),
+        "documentNoDisplay": numerals.to_persian_digits(str(doc.document_no)),
+        "documentDateDisplay": numerals.format_jalali_date(doc.document_date),
+        "statusLabel": STATUS_LABELS.get(doc.status_code, doc.status_code),
+        "counterpartyLabel": counterparty_label or "",
+        "sourceWarehouseName": warehouses_by_id.get(doc.source_warehouse_id, "") if doc.source_warehouse_id else "",
+        "destinationWarehouseName": warehouses_by_id.get(doc.destination_warehouse_id, "") if doc.destination_warehouse_id else "",
+        "referenceNo": doc.reference_no or "",
+        "headerDescription": doc.description or "",
+        "totalCostDisplay": numerals.format_money(total_cost, decimal_places),
+        "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+    }
+    return print_rows, params
+
+
+def _show_stock_document_print(
+    parent: QWidget, company_id: int, stock_document_id: int, counterparty_label: str | None = None, jrxml_path=None,
+) -> None:
     doc, lines = documents_service.get_stock_document(stock_document_id, company_id)
+
+    if jasper_bridge.is_available():
+        if jrxml_path is None:
+            jrxml_path = report_templates_service.get_default_template_path(company_id, "STOCK_DOCUMENT")
+        if jrxml_path is None:
+            jrxml_path = jasper_bridge.template_path("stock_document.jrxml")
+        print_rows, params = _build_stock_document_print_rows_and_params(company_id, doc, lines, counterparty_label)
+        try:
+            fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="peecha_stockdoc_")
+            os.close(fd)
+            jasper_bridge.render_report_at_path(jrxml_path, print_rows, params, tmp_path, "pdf")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(tmp_path))
+            return
+        except Exception as exc:
+            QMessageBox.warning(
+                parent, "چاپِ حرفه‌ای",
+                f"ساختِ سندِ حرفه‌ای ناموفق بود؛ نسخه‌یِ ساده نمایش داده می‌شود.\n{exc}",
+            )
+
+    # طبقِ حفظِ سازگاری: اگر موتورِ چاپِ حرفه‌ای هنوز build نشده (یا خطا
+    # داد)، همان پیش‌نمایشِ HTMLِ ساده -- که قبلاً کار می‌کرد -- جایگزین می‌شود.
     decimal_places = companies_service.get_base_currency_decimal_places(company_id)
     if counterparty_label is None:
         counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
@@ -742,6 +824,16 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
 
+        self.report_button = QPushButton("📄")
+        self.report_button.setObjectName("iconButton")
+        self.report_button.setFixedWidth(44)
+        self.report_button.setToolTip(
+            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به سندِ انبار -- "
+            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
+        )
+        self.report_button.clicked.connect(self._run_stock_document_report)
+        self.footer_layout.addWidget(self.report_button)
+
         # طبقِ درخواستِ صریح: توضیحِ سند به‌جایِ اشغالِ یک ردیفِ کاملِ هدر،
         # کنارِ دکمه‌ها در همین فوترِ ثابت جا می‌گیرد — دکمه‌ها هنوز کنارِ
         # هم و سمتِ چپ می‌مانند، توضیح باقیِ فضایِ فوتر را پر می‌کند.
@@ -816,6 +908,18 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
+
+    def _run_stock_document_report(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._document_id is None:
+            QMessageBox.information(self, "گزارش", "ابتدا سند را ذخیره کنید.")
+            return
+        template_row = pick_report_template(self, company_id, "STOCK_DOCUMENT")
+        if template_row is None:
+            return
+        jrxml_path = report_templates_service.get_template_path(template_row.report_template_id, company_id)
+        counterparty_label = self.counterparty_combo.currentText() if self.counterparty_box.isVisible() else None
+        _show_stock_document_print(self, company_id, self._document_id, counterparty_label, jrxml_path=jrxml_path)
 
     def _current_warehouse_ids(self) -> tuple[int | None, int | None]:
         t = self.document_type_code

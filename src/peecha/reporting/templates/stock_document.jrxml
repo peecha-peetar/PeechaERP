@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="stock_document" pageWidth="595" pageHeight="842"
+              columnWidth="535" leftMargin="30" rightMargin="30" topMargin="20" bottomMargin="20"
+              whenNoDataType="AllSectionsNoDetail">
+
+    <!-- طبقِ رفعِ باگِ فونت در Spike: فقط یک style پیش‌فرض با fontName="Vazirmatn"
+         کافی است. طبقِ رفعِ باگِ ارتفاعِ متنِ Bold: تایتلِ ۱۳pt حداقل به
+         ارتفاعِ ۲۶ نیاز دارد وگرنه کاملاً نامرئی رندر می‌شود. -->
+    <style name="Default" isDefault="true" fontName="Vazirmatn" fontSize="8.5"/>
+    <style name="CompanyName" fontName="Vazirmatn" fontSize="14" isBold="true"/>
+    <style name="DocTitle" fontName="Vazirmatn" fontSize="13" isBold="true"/>
+    <style name="InfoLabel" fontName="Vazirmatn" fontSize="8"/>
+    <style name="Header" fontName="Vazirmatn" fontSize="8" isBold="true"/>
+    <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
+    <style name="TotalsLabel" fontName="Vazirmatn" fontSize="9.5" isBold="true"/>
+
+    <parameter name="companyDisplayName" class="java.lang.String"/>
+    <parameter name="documentTypeLabel" class="java.lang.String"/>
+    <parameter name="documentNoDisplay" class="java.lang.String"/>
+    <parameter name="documentDateDisplay" class="java.lang.String"/>
+    <parameter name="statusLabel" class="java.lang.String"/>
+    <parameter name="counterpartyLabel" class="java.lang.String"/>
+    <parameter name="sourceWarehouseName" class="java.lang.String"/>
+    <parameter name="destinationWarehouseName" class="java.lang.String"/>
+    <parameter name="referenceNo" class="java.lang.String"/>
+    <parameter name="headerDescription" class="java.lang.String"/>
+    <parameter name="totalCostDisplay" class="java.lang.String"/>
+    <parameter name="generatedAt" class="java.lang.String"/>
+
+    <field name="row_no_display" class="java.lang.String"/>
+    <field name="item_label" class="java.lang.String"/>
+    <field name="uom_display" class="java.lang.String"/>
+    <field name="quantity_display" class="java.lang.String"/>
+    <field name="unit_cost_display" class="java.lang.String"/>
+    <field name="line_total_display" class="java.lang.String"/>
+    <field name="reason_display" class="java.lang.String"/>
+    <field name="description" class="java.lang.String"/>
+
+    <pageHeader>
+        <band height="126">
+            <textField>
+                <reportElement style="CompanyName" x="0" y="0" width="535" height="24"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA[$P{companyDisplayName}]]></textFieldExpression>
+            </textField>
+            <line><reportElement x="0" y="26" width="535" height="1"/></line>
+            <textField>
+                <reportElement style="DocTitle" x="0" y="32" width="535" height="26"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["سندِ " + $P{documentTypeLabel}]]></textFieldExpression>
+            </textField>
+            <textField><reportElement style="InfoLabel" x="435" y="62" width="100" height="14"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA["شماره: " + $P{documentNoDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="InfoLabel" x="330" y="62" width="100" height="14"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA["تاریخ: " + $P{documentDateDisplay}]]></textFieldExpression></textField>
+            <textField><reportElement style="InfoLabel" x="435" y="78" width="100" height="14"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA["وضعیت: " + $P{statusLabel}]]></textFieldExpression></textField>
+            <textField><reportElement style="InfoLabel" x="0" y="62" width="300" height="14"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA["طرفِ‌حساب: " + $P{counterpartyLabel}]]></textFieldExpression></textField>
+            <textField>
+                <reportElement style="InfoLabel" x="0" y="78" width="300" height="14">
+                    <printWhenExpression><![CDATA[$P{sourceWarehouseName} != null && !$P{sourceWarehouseName}.isEmpty()]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Right" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["انبارِ مبدأ: " + $P{sourceWarehouseName}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="InfoLabel" x="0" y="94" width="300" height="14">
+                    <printWhenExpression><![CDATA[$P{destinationWarehouseName} != null && !$P{destinationWarehouseName}.isEmpty()]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Right" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["انبارِ مقصد: " + $P{destinationWarehouseName}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement style="InfoLabel" x="330" y="94" width="205" height="14">
+                    <printWhenExpression><![CDATA[$P{referenceNo} != null && !$P{referenceNo}.isEmpty()]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Right" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["مرجع: " + $P{referenceNo}]]></textFieldExpression>
+            </textField>
+            <line><reportElement x="0" y="112" width="535" height="1"/></line>
+        </band>
+    </pageHeader>
+
+    <columnHeader>
+        <band height="22">
+            <rectangle>
+                <reportElement x="0" y="0" width="535" height="22" backcolor="#DDDDDD" mode="Opaque"/>
+            </rectangle>
+            <staticText><reportElement style="Header" x="0" y="0" width="25" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[#]]></text></staticText>
+            <staticText><reportElement style="Header" x="25" y="0" width="150" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[کالا]]></text></staticText>
+            <staticText><reportElement style="Header" x="175" y="0" width="45" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[واحد]]></text></staticText>
+            <staticText><reportElement style="Header" x="220" y="0" width="55" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[مقدار]]></text></staticText>
+            <staticText><reportElement style="Header" x="275" y="0" width="70" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ واحد]]></text></staticText>
+            <staticText><reportElement style="Header" x="345" y="0" width="70" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[بهایِ کل]]></text></staticText>
+            <staticText><reportElement style="Header" x="415" y="0" width="60" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[دلیل]]></text></staticText>
+            <staticText><reportElement style="Header" x="475" y="0" width="60" height="22"/><textElement textAlignment="Center" verticalAlignment="Middle"/><text><![CDATA[توضیح]]></text></staticText>
+        </band>
+    </columnHeader>
+
+    <detail>
+        <band height="18">
+            <textField><reportElement x="0" y="0" width="25" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{row_no_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="25" y="0" width="150" height="18"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="3"/></textElement><textFieldExpression><![CDATA[$F{item_label}]]></textFieldExpression></textField>
+            <textField><reportElement x="175" y="0" width="45" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{uom_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="220" y="0" width="55" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{quantity_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="275" y="0" width="70" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{unit_cost_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="345" y="0" width="70" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{line_total_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="415" y="0" width="60" height="18"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{reason_display}]]></textFieldExpression></textField>
+            <textField><reportElement x="475" y="0" width="60" height="18"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="3"/></textElement><textFieldExpression><![CDATA[$F{description}]]></textFieldExpression></textField>
+        </band>
+    </detail>
+
+    <pageFooter>
+        <band height="18">
+            <textField>
+                <reportElement style="Footer" x="0" y="0" width="535" height="18"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["صفحه‌یِ " + $V{PAGE_NUMBER} + "  —  تاریخِ تولیدِ گزارش: " + $P{generatedAt}]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageFooter>
+
+    <summary>
+        <band height="52">
+            <line><reportElement x="0" y="0" width="535" height="1"/></line>
+            <rectangle>
+                <reportElement x="345" y="6" width="70" height="20" backcolor="#EFEFEF" mode="Opaque"/>
+            </rectangle>
+            <staticText><reportElement style="TotalsLabel" x="415" y="6" width="60" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"><paragraph rightIndent="4"/></textElement><text><![CDATA[جمعِ کل:]]></text></staticText>
+            <textField><reportElement style="TotalsLabel" x="345" y="6" width="70" height="20"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$P{totalCostDisplay}]]></textFieldExpression></textField>
+            <textField>
+                <reportElement style="InfoLabel" x="0" y="32" width="535" height="14">
+                    <printWhenExpression><![CDATA[$P{headerDescription} != null && !$P{headerDescription}.isEmpty()]]></printWhenExpression>
+                </reportElement>
+                <textElement textAlignment="Center" verticalAlignment="Middle"/>
+                <textFieldExpression><![CDATA["توضیح: " + $P{headerDescription}]]></textFieldExpression>
+            </textField>
+        </band>
+    </summary>
+
+</jasperReport>
