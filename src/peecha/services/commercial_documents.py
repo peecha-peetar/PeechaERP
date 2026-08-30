@@ -1255,17 +1255,27 @@ def _post_consignment_document(
     stock_document_id = inv_documents_service.create_stock_document(
         company_id, posted_by_user_id, stock_document_type, document_date, stock_header_fields
     )
-    for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id in line_snapshots:
+    for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, discount_amount, tax_amount in line_snapshots:
         # CONSIGNMENT_OUT چون TRANSFER است، unit_cost=None کافیست (موتورِ
         # انبار خودش از بهایِ فعلیِ کالا استفاده می‌کند)؛ CONSIGNMENT_IN
         # چون هیچ سابقه‌ای در انبارِ مقصد ندارد، بهایِ توافق‌شده‌یِ همان
-        # ردیف (unit_price) صریحاً به‌عنوانِ unit_cost منتقل می‌شود.
-        line_unit_cost = unit_price if document_type_code == "CONSIGNMENT_IN" else None
+        # ردیف صریحاً به‌عنوانِ unit_cost منتقل می‌شود -- طبقِ رفعِ باگِ
+        # واقعیِ گزارش‌شده («ردیفِ فاکتور با ۱۰٪ مالیات شد ۱۱٬۰۰۰٬۰۰۰ ولی
+        # در کاردکس ۱۰٬۰۰۰٬۰۰۰ نشان می‌داد»): این‌جا هم -- درست هم‌الگو با
+        # RECEIPTِ فاکتورِ خرید -- خالص از تخفیف محاسبه و مالياتِ ردیف
+        # جداگانه منتقل می‌شود تا کاردکس بتواند بهایِ تمام‌شده را با
+        # احتسابِ مالیات نشان بدهد.
+        line_unit_cost = None
+        line_tax_amount = None
+        if document_type_code == "CONSIGNMENT_IN":
+            net_of_discount = (quantity * unit_price - discount_amount) / quantity if quantity else unit_price
+            line_unit_cost = _money(net_of_discount)
+            line_tax_amount = tax_amount
         inv_line_id = inv_documents_service.add_line(
             stock_document_id, company_id,
             inv_documents_service.LineFields(
                 item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
-                batch_id=batch_id, unit_cost=line_unit_cost,
+                batch_id=batch_id, unit_cost=line_unit_cost, tax_amount=line_tax_amount,
             ),
         )
         with new_session() as session:
@@ -1318,7 +1328,10 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             ).all()
             if not lines:
                 raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
-            consignment_line_snapshots = [(ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id) for ln in lines]
+            consignment_line_snapshots = [
+                (ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id, ln.discount_amount, ln.tax_amount)
+                for ln in lines
+            ]
             consignment_fields = (
                 doc.warehouse_id, doc.consignment_warehouse_id, doc.cost_center_detail_account_id,
                 doc.project_detail_account_id, doc.document_date, doc.description or f"سندِ بازرگانی #{doc.document_no}",

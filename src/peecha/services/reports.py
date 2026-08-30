@@ -308,14 +308,24 @@ def compute_detail_balances(
     # detail_dimensions.detail_level_has_accounts که همین ردیف را کنار
     # می‌گذارد.
     person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
-    detail_rows = [
+    all_type_rows = [
         r
         for r in dimensions_service.list_all_detail_accounts(company_id)
         if r.dimension_type_id == dimension_type_id
         and not (dimension_type_id == person_dimension_type_id and r.code == dimensions_service.NO_DETAIL_CODE)
     ]
-    ids = [r.detail_account_id for r in detail_rows]
-    parent_map = {r.detail_account_id: r.parent_detail_account_id for r in detail_rows}
+    ids = [r.detail_account_id for r in all_type_rows]
+    parent_map = {r.detail_account_id: r.parent_detail_account_id for r in all_type_rows}
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («تراز تفصیلی گردشِ اضافی دارد و
+    # جمعِ کل با گردشِ واقعی نمی‌خواند»): _rollup_sums مانده‌یِ هر گره
+    # (چه برگ چه والد) را با احتسابِ همه‌یِ فرزندانش حساب می‌کند -- پس
+    # اگر ردیفِ والد (مثلاً «۹۹۹») و ردیفِ فرزندش («۹۹۹-۹۹۹۹۹۹۹») هردو در
+    # جدولِ خروجی باشند، جمعِ‌کلِ پایینِ گزارش دوبار همان گردش را می‌شمارد.
+    # چون تفصیلی برخلافِ حساب (که سطحِ گروه/کل/معین را کاربر جداگانه
+    # انتخاب می‌کند) این‌جا یک سطحِ واحد ندارد، فقط برگ‌هایِ درخت -- یعنی
+    # حساب‌هایِ تفصیلیِ واقعاً قابلِ‌ثبتِ سند -- باید نمایش داده شوند.
+    parent_ids = {p for p in parent_map.values() if p is not None}
+    detail_rows = [r for r in all_type_rows if r.detail_account_id not in parent_ids]
 
     with new_session() as session:
         opening_leaf = (
