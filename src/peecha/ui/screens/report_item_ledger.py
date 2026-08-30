@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.services import companies as companies_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
@@ -133,6 +134,16 @@ class ItemLedgerScreen(QWidget):
 
         from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES
 
+        # طبقِ رفعِ باگِ واقعی («ارقامِ اعشار باید از تنظیمات خونده بشه»):
+        # مقدار/مانده با تعدادِ رقمِ اعشارِ واحدِ شمارشِ خودِ کالا، و بهایِ
+        # واحد با تعدادِ رقمِ اعشارِ ارزِ پایه‌یِ شرکت -- نه رقمِ خامِ
+        # ذخیره‌شده در ستونِ Numeric.
+        items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+        uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        item = items_by_id.get(item_id)
+        qty_decimals = uom_decimal_places.get(item.base_uom_id, 2) if item else 2
+        cost_decimals = companies_service.get_base_currency_decimal_places(company_id)
+
         rows = engine_service.list_item_ledger(company_id, item_id, warehouse_id, date_from, date_to)
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
@@ -141,10 +152,10 @@ class ItemLedgerScreen(QWidget):
                 DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
                 numerals.to_persian_digits(str(row.document_no)),
                 row.warehouse_name,
-                numerals.format_amount(row.quantity_in) if row.quantity_in else "",
-                numerals.format_amount(row.quantity_out) if row.quantity_out else "",
-                numerals.format_amount(row.unit_cost) if row.unit_cost is not None else "",
-                numerals.format_amount(row.running_balance),
+                numerals.format_money(row.quantity_in, qty_decimals) if row.quantity_in else "",
+                numerals.format_money(row.quantity_out, qty_decimals) if row.quantity_out else "",
+                numerals.format_money(row.unit_cost, cost_decimals) if row.unit_cost is not None else "",
+                numerals.format_money(row.running_balance, qty_decimals),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)

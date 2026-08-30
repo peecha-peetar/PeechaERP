@@ -71,9 +71,14 @@ class _ItemCostHistoryDialog(QDialog):
     """طبقِ درخواستِ صریح: ۱۰ بهایِ آخرِ این کالا از همین طرفِ‌حساب --
     با دابل‌کلیک رویِ هر ردیف، خلاصهٔ همان سندِ انبار نمایش داده می‌شود."""
 
-    def __init__(self, parent: QWidget, company_id: int, item_id: int, counterparty_id: int, item_label: str) -> None:
+    def __init__(
+        self, parent: QWidget, company_id: int, item_id: int, counterparty_id: int, item_label: str,
+        unit_cost_decimal_places: int, qty_decimal_places: int,
+    ) -> None:
         super().__init__(parent)
         self._company_id = company_id
+        self._unit_cost_decimal_places = unit_cost_decimal_places
+        self._qty_decimal_places = qty_decimal_places
         self.setWindowTitle(f"بهایِ قبلیِ «{item_label}»")
         self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
@@ -101,7 +106,7 @@ class _ItemCostHistoryDialog(QDialog):
                 DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
                 numerals.to_persian_digits(str(row.document_no)),
                 numerals.format_jalali_date(row.document_date),
-                numerals.format_amount(row.unit_cost),
+                numerals.format_money(row.unit_cost, self._unit_cost_decimal_places),
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))
@@ -111,7 +116,7 @@ class _ItemCostHistoryDialog(QDialog):
         history_row = self._rows[row]
         doc, lines = documents_service.get_stock_document(history_row.stock_document_id, self._company_id)
         lines_text = "\n".join(
-            f"— کالا #{ln.item_id}: {numerals.format_amount(ln.quantity)} × {numerals.format_amount(ln.unit_cost or 0)}"
+            f"— کالا #{ln.item_id}: {numerals.format_money(ln.quantity, self._qty_decimal_places)} × {numerals.format_money(ln.unit_cost or 0, self._unit_cost_decimal_places)}"
             for ln in lines
         )
         QMessageBox.information(
@@ -132,6 +137,7 @@ class _LineDialog(QDialog):
         super().__init__(parent)
         self.document_type_code = document_type_code
         self._uom_decimal_places = uom_decimal_places or {}
+        self._unit_cost_decimal_places = unit_cost_decimal_places
         self._main_window = main_window
         self._counterparty_id = counterparty_id
         self.setWindowTitle("ردیفِ سند")
@@ -313,20 +319,41 @@ class _LineDialog(QDialog):
             return
         rows = engine_service.get_item_stock_by_warehouse(company_id, item_id)
         nonzero = [r for r in rows if r.quantity_on_hand]
+        # طبقِ رفعِ باگِ واقعی («موجودیِ کالا هم باید رقمِ اعشارش را از
+        # تنظیمات بگیرد»): همان تعدادِ رقمِ اعشارِ واحدِ شمارشِ خودِ کالا
+        # که برایِ quantity_field هم استفاده می‌شود -- نه ۶ رقمِ خامِ
+        # ذخیره‌شده در ستونِ Numeric(18,6).
+        item = self._items_by_id.get(item_id)
+        qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
         if not nonzero:
             self.stock_info_label.setText("موجودی: صفر")
         else:
             total = sum((r.quantity_on_hand for r in nonzero), decimal.Decimal(0))
-            per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_amount(r.quantity_on_hand)}" for r in nonzero)
-            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_amount(total)} ({per_warehouse})")
+            per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_money(r.quantity_on_hand, qty_decimals)}" for r in nonzero)
+            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_money(total, qty_decimals)} ({per_warehouse})")
         self.kardex_button.setEnabled(True)
         self.price_history_button.setEnabled(self._counterparty_id is not None)
 
     def _open_kardex(self) -> None:
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فرمِ کاردکس زیرِ دیالوگِ ردیف
+        # می‌رود»): چون این دیالوگ با exec() به‌صورتِ Application-Modal
+        # نمایش داده می‌شود، ناوبری به main_window (یک پنجره‌یِ کاملاً
+        # جدا، از طریقِ MDI) اصلاً نمی‌تواند بالا بیاید -- کاردکس این‌جا
+        # به‌جایش درونِ یک دیالوگِ فرزندِ همین دیالوگ نمایش داده می‌شود.
         item_id = self.item_combo.currentData()
-        if item_id is None or self._main_window is None:
+        if item_id is None:
             return
-        self._main_window.open_screen("REPORTS_ITEM_LEDGER", then=lambda screen: screen.show_ledger_for_item(item_id))
+        from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.resize(900, 560)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        ledger_screen = ItemLedgerScreen()
+        dialog_layout.addWidget(ledger_screen)
+        ledger_screen.show_ledger_for_item(item_id)
+        dialog.exec()
 
     def _open_price_history(self) -> None:
         item_id = self.item_combo.currentData()
@@ -335,7 +362,11 @@ class _LineDialog(QDialog):
             return
         item = self._items_by_id.get(item_id)
         item_label = f"{item.code} — {item.name or ''}" if item else str(item_id)
-        dialog = _ItemCostHistoryDialog(self, company_id, item_id, self._counterparty_id, item_label)
+        qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
+        dialog = _ItemCostHistoryDialog(
+            self, company_id, item_id, self._counterparty_id, item_label,
+            self._unit_cost_decimal_places, qty_decimals,
+        )
         dialog.exec()
 
     def _on_accept(self) -> None:

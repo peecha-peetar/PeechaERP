@@ -90,35 +90,19 @@ _CONVERTIBLE_TO_INVOICE_TYPES = (
 # می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
 _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
 _LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح"]
-# طبقِ درخواستِ صریح («در انتهایِ فرم‌هایِ بازرگانی دکمه‌ای برایِ نمایشِ
-# آخرین اسنادِ طرفِ‌حساب»): چون سندی از هر نوع می‌تواند در همان تاریخچه
-# ظاهر شود (نه فقط نوعِ فرمِ فعلی)، نگاشتِ document_type_code -> کدِ
-# ناوبری این‌جا لازم است -- کدهایِ ناوبری با document_type_code یکی
-# نیستند (مثلاً «PURCHASE_INVOICE» در پایگاه‌داده، «PURCH_INVOICE» در
-# nav_catalog.py).
-_NAV_CODE_BY_DOCUMENT_TYPE = {
-    "SALES_ORDER": "SALES_ORDER",
-    "SALES_PROFORMA": "SALES_PROFORMA",
-    "SALES_INVOICE": "SALES_INVOICE",
-    "SALES_RETURN": "SALES_RETURN",
-    "CONSIGNMENT_OUT": "SALES_CONSIGNMENT_OUT",
-    "PURCHASE_ORDER": "PURCH_ORDER",
-    "PURCHASE_PROFORMA": "PURCH_PROFORMA",
-    "PURCHASE_INVOICE": "PURCH_INVOICE",
-    "PURCHASE_RETURN": "PURCH_RETURN",
-    "CONSIGNMENT_IN": "PURCH_CONSIGNMENT_IN",
-}
 _HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمعِ کل"]
 
 
 class _CounterpartyHistoryDialog(QDialog):
     """طبقِ درخواستِ صریح: مثلاً ۱۰ فاکتورِ آخرِ طرفِ‌حساب -- با تعدادِ
-    ردیفِ قابلِ‌تنظیم. دابل‌کلیک رویِ هر ردیف، همان سند را (با نوعِ
-    خودش -- نه لزوماً نوعِ فرمِ فعلی) برایِ مشاهده باز می‌کند."""
+    ردیفِ قابلِ‌تنظیم. دابل‌کلیک رویِ هر ردیف، خلاصهٔ همان سند را نمایش
+    می‌دهد -- طبقِ رفعِ باگِ واقعی، ناوبریِ مستقیم به آن سند از این‌جا
+    عمداً حذف شده، چون آن صفحه (به‌ازایِ هر نوعِ سند) نمونه‌یِ واحد و
+    مشترکِ همه‌جایِ برنامه است و چنین ناوبری‌ای هر ویرایشِ درحال‌انجامِ
+    کاربر رویِ همان صفحه را پاک می‌کرد."""
 
-    def __init__(self, parent: QWidget, main_window, company_id: int, counterparty_id: int, counterparty_label: str) -> None:
+    def __init__(self, parent: QWidget, company_id: int, counterparty_id: int, counterparty_label: str) -> None:
         super().__init__(parent)
-        self._main_window = main_window
         self._company_id = company_id
         self._counterparty_id = counterparty_id
         self.setWindowTitle(f"آخرین اسنادِ «{counterparty_label}»")
@@ -156,6 +140,7 @@ class _CounterpartyHistoryDialog(QDialog):
         self._documents = documents_service.list_documents(
             self._company_id, counterparty_detail_account_id=self._counterparty_id, limit=self.count_spin.value(),
         )
+        decimal_places = companies_service.get_base_currency_decimal_places(self._company_id)
         self.table.setRowCount(len(self._documents))
         for row_index, doc in enumerate(self._documents):
             total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
@@ -164,7 +149,7 @@ class _CounterpartyHistoryDialog(QDialog):
                 numerals.to_persian_digits(str(doc.document_no)),
                 numerals.format_jalali_date(doc.document_date),
                 STATUS_LABELS.get(doc.status_code, doc.status_code),
-                numerals.format_amount(total),
+                numerals.format_money(total, decimal_places),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -173,12 +158,25 @@ class _CounterpartyHistoryDialog(QDialog):
         self.table.resizeRowsToContents()
 
     def _open_selected(self, row: int, _column: int) -> None:
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سندِ بازِ فعلی پاک و با سندِ
+        # کلیک‌شده جایگزین می‌شود»): چون این صفحه‌هایِ سند (به‌ازایِ هر
+        # نوع) نمونه‌یِ واحد و مشترک‌اند، ناوبریِ مستقیم به آن‌ها از اینجا
+        # هر ویرایشِ درحالِ‌انجامِ کاربر رویِ همان صفحه را پاک می‌کرد --
+        # به‌جایش، مثلِ دیالوگِ تاریخچه‌یِ قیمت، فقط خلاصه نمایش داده می‌شود.
         doc = self._documents[row]
-        nav_code = _NAV_CODE_BY_DOCUMENT_TYPE.get(doc.document_type_code)
-        if nav_code is None or self._main_window is None:
-            return
-        self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(doc.document_id))
-        self.accept()
+        _, lines = documents_service.get_document(doc.document_id, self._company_id)
+        decimal_places = companies_service.get_base_currency_decimal_places(self._company_id)
+        total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
+        lines_text = "\n".join(
+            f"— کالا #{ln.item_id}: {numerals.format_money(ln.quantity, 3)} × {numerals.format_money(ln.unit_price, decimal_places)} = {numerals.format_money(ln.line_total, decimal_places)}"
+            for ln in lines
+        )
+        QMessageBox.information(
+            self, "خلاصهٔ سند",
+            f"{DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code)} — شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))}\n"
+            f"تاریخ: {numerals.format_jalali_date(doc.document_date)}\n"
+            f"جمعِ کل: {numerals.format_money(total, decimal_places)}\n\n{lines_text}",
+        )
 
 
 _PRICE_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
@@ -192,6 +190,7 @@ class _ItemPriceHistoryDialog(QDialog):
     def __init__(self, parent: QWidget, company_id: int, item_id: int, counterparty_id: int, item_label: str) -> None:
         super().__init__(parent)
         self._company_id = company_id
+        self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
         self.setWindowTitle(f"قیمت‌هایِ قبلیِ «{item_label}»")
         self.setMinimumWidth(480)
         layout = QVBoxLayout(self)
@@ -219,7 +218,7 @@ class _ItemPriceHistoryDialog(QDialog):
                 DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
                 numerals.to_persian_digits(str(row.document_no)),
                 numerals.format_jalali_date(row.document_date),
-                numerals.format_amount(row.unit_price),
+                numerals.format_money(row.unit_price, self._decimal_places),
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))
@@ -230,14 +229,14 @@ class _ItemPriceHistoryDialog(QDialog):
         doc, lines = documents_service.get_document(history_row.document_id, self._company_id)
         total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
         lines_text = "\n".join(
-            f"— کالا #{ln.item_id}: {numerals.format_amount(ln.quantity)} × {numerals.format_amount(ln.unit_price)} = {numerals.format_amount(ln.line_total)}"
+            f"— کالا #{ln.item_id}: {numerals.format_money(ln.quantity, 3)} × {numerals.format_money(ln.unit_price, self._decimal_places)} = {numerals.format_money(ln.line_total, self._decimal_places)}"
             for ln in lines
         )
         QMessageBox.information(
             self, "خلاصهٔ سند",
             f"{DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code)} — شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))}\n"
             f"تاریخ: {numerals.format_jalali_date(doc.document_date)}\n"
-            f"جمعِ کل: {numerals.format_amount(total)}\n\n{lines_text}",
+            f"جمعِ کل: {numerals.format_money(total, self._decimal_places)}\n\n{lines_text}",
         )
 
 
@@ -258,6 +257,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._document_type_code = document_type_code
         self._document_date = document_date
         self._main_window = main_window
+        self._decimal_places = decimal_places
+        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
         layout = QVBoxLayout(self)
         self._items_by_id = {it.item_id: it for it in items}
 
@@ -450,20 +451,43 @@ class _LineDialog(LayoutEditMixin, QDialog):
             return
         rows = engine_service.get_item_stock_by_warehouse(self._company_id, item_id)
         nonzero = [r for r in rows if r.quantity_on_hand]
+        # طبقِ رفعِ باگِ واقعی («موجودیِ کالا هم باید رقمِ اعشارش را از
+        # تنظیمات بگیرد»): قبلاً numerals.format_amount خامِ Decimal را
+        # (با ۶ رقمِ اعشارِ ذخیره‌شده در ستونِ Numeric(18,6)) بی‌کم‌وکاست
+        # نشان می‌داد -- حالا مثلِ quantity_field، تعدادِ رقمِ اعشارِ واحدِ
+        # شمارشِ خودِ همان کالا اعمال می‌شود.
+        item = self._items_by_id.get(item_id)
+        qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
         if not nonzero:
             self.stock_info_label.setText("موجودی: صفر")
         else:
             total = sum((r.quantity_on_hand for r in nonzero), decimal.Decimal(0))
-            per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_amount(r.quantity_on_hand)}" for r in nonzero)
-            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_amount(total)} ({per_warehouse})")
+            per_warehouse = " | ".join(f"{r.warehouse_name}: {numerals.format_money(r.quantity_on_hand, qty_decimals)}" for r in nonzero)
+            self.stock_info_label.setText(f"موجودیِ کل: {numerals.format_money(total, qty_decimals)} ({per_warehouse})")
         self.kardex_button.setEnabled(True)
         self.price_history_button.setEnabled(self._counterparty_id is not None)
 
     def _open_kardex(self) -> None:
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فرمِ کاردکس زیرِ دیالوگِ ردیف
+        # می‌رود»): چون این دیالوگ با exec() به‌صورتِ Application-Modal
+        # نمایش داده می‌شود، ناوبری به main_window (یک پنجره‌یِ کاملاً
+        # جدا، از طریقِ MDI) اصلاً نمی‌تواند بالا بیاید -- کاردکس این‌جا
+        # به‌جایش درونِ یک دیالوگِ فرزندِ همین دیالوگ (که به‌درستی رویِ آن
+        # می‌نشیند) نمایش داده می‌شود.
         item_id = self.item_combo.currentData()
-        if item_id is None or self._main_window is None:
+        if item_id is None:
             return
-        self._main_window.open_screen("REPORTS_ITEM_LEDGER", then=lambda screen: screen.show_ledger_for_item(item_id))
+        from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.resize(900, 560)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        ledger_screen = ItemLedgerScreen()
+        dialog_layout.addWidget(ledger_screen)
+        ledger_screen.show_ledger_for_item(item_id)
+        dialog.exec()
 
     def _open_price_history(self) -> None:
         item_id = self.item_combo.currentData()
@@ -1017,9 +1041,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if company_id is None or counterparty_id is None:
             QMessageBox.information(self, "طرفِ‌حساب", "ابتدا یک طرفِ‌حساب انتخاب کنید.")
             return
-        dialog = _CounterpartyHistoryDialog(
-            self, self._main_window, company_id, counterparty_id, self.counterparty_combo.currentText(),
-        )
+        dialog = _CounterpartyHistoryDialog(self, company_id, counterparty_id, self.counterparty_combo.currentText())
         dialog.exec()
 
     def _recompute_due_date(self) -> None:
