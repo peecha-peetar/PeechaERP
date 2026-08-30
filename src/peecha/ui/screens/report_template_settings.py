@@ -1,14 +1,18 @@
 """تنظیماتِ رجیستریِ گزارش‌هایِ حرفه‌ای -- طبقِ درخواستِ صریح («برایِ هر
-فرم بتوان چند گزارشِ نام‌گذاری‌شده تعریف/ویرایش/اجرا کرد»): هر فرمِ
-پشتیبانی‌شده (peecha.reporting.registry.FORM_DEFINITIONS) یک پنلِ مستقل
-دارد؛ افزودن یک کپیِ تازه از قالبِ پایه‌یِ همان فرم می‌سازد، ویرایش همان
-کپی را در Jaspersoft Studio باز می‌کند."""
+فرم بتوان چند گزارشِ نام‌گذاری‌شده تعریف/ویرایش/اجرا کرد»). طبقِ اصلاحِ
+صریحِ بعدی («یک پنل به‌ازایِ هر فرم فضایِ زیادی می‌گیرد»): همه‌یِ
+گزارش‌هایِ همه‌یِ فرم‌ها در یک جدولِ واحد (فرم/نام/پیش‌فرض) نشان داده
+می‌شوند؛ ستونِ «فرم» مشخص می‌کند هر ردیف مالِ کدام فرم است، و دکمه‌های
+عملیات (افزودن/ویرایش/تغییرِ نام/پیش‌فرض/حذف) رویِ همان یک جدول کار
+می‌کنند -- افزودنِ فرمِ جدید هیچ فضایِ اضافه‌ای در این صفحه نمی‌گیرد،
+فقط ردیف‌هایِ بیشتری به همان جدول اضافه می‌شود."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -29,40 +33,61 @@ from peecha.reporting import jasper_bridge
 from peecha.reporting.registry import FORM_DEFINITIONS
 from peecha.services import report_templates as templates_service
 
+_COLUMNS = ["فرم", "نامِ گزارش", "پیش‌فرض"]
+
 
 def _company_id() -> int | None:
     return app_session.current_company.company_id if app_session.current_company else None
 
 
+class _NewReportDialog(QDialog):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("گزارشِ جدید")
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("فرم"))
+        self.form_combo = QComboBox()
+        for form_code, definition in FORM_DEFINITIONS.items():
+            self.form_combo.addItem(definition["label"], form_code)
+        layout.addWidget(self.form_combo)
+        layout.addWidget(QLabel("نامِ گزارش"))
+        self.name_field = QLineEdit()
+        layout.addWidget(self.name_field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def selected_form_code(self) -> str:
+        return self.form_combo.currentData()
+
+    def name(self) -> str:
+        return self.name_field.text().strip()
+
+
 class _ReportTemplatesTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self._tables: dict[str, QTableWidget] = {}
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(16)
-        for form_code, definition in FORM_DEFINITIONS.items():
-            layout.addWidget(self._build_section(form_code, definition["label"]), stretch=1)
+        layout.setSpacing(10)
 
-    def _build_section(self, form_code: str, label: str) -> QWidget:
-        panel = QWidget()
-        panel_layout = QVBoxLayout(panel)
-        title = QLabel(label)
+        title = QLabel("گزارش‌هایِ حرفه‌ای")
         title.setObjectName("pageTitle")
-        panel_layout.addWidget(title)
+        layout.addWidget(title)
 
         add_button = QPushButton("➕ گزارشِ جدید")
         add_button.setObjectName("primaryIconButton")
-        add_button.clicked.connect(lambda: self._add(form_code))
-        panel_layout.addWidget(add_button, alignment=Qt.AlignLeft)
+        add_button.clicked.connect(self._add)
+        layout.addWidget(add_button, alignment=Qt.AlignLeft)
 
-        table = QTableWidget(0, 2)
-        table.setHorizontalHeaderLabels(["نام", "پیش‌فرض"])
-        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        panel_layout.addWidget(table)
+        self.table = QTableWidget(0, len(_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        layout.addWidget(self.table, stretch=1)
 
         button_cluster = QWidget()
         button_cluster.setLayoutDirection(Qt.LeftToRight)
@@ -71,112 +96,111 @@ class _ReportTemplatesTab(QWidget):
 
         edit_button = QPushButton("✏️ ویرایش")
         edit_button.setToolTip("بازکردنِ فایلِ این گزارش در Jaspersoft Studio")
-        edit_button.clicked.connect(lambda: self._edit(form_code))
+        edit_button.clicked.connect(self._edit)
         buttons.addWidget(edit_button)
 
         rename_button = QPushButton("🖊️ تغییرِ نام")
-        rename_button.clicked.connect(lambda: self._rename(form_code))
+        rename_button.clicked.connect(self._rename)
         buttons.addWidget(rename_button)
 
         default_button = QPushButton("⭐ پیش‌فرض")
-        default_button.setToolTip("این گزارش پیش‌فرضِ این فرم شود")
-        default_button.clicked.connect(lambda: self._set_default(form_code))
+        default_button.setToolTip("این گزارش پیش‌فرضِ همان فرم شود")
+        default_button.clicked.connect(self._set_default)
         buttons.addWidget(default_button)
 
         delete_button = QPushButton("🗑️")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
         delete_button.setToolTip("حذفِ این گزارش")
-        delete_button.clicked.connect(lambda: self._delete(form_code))
+        delete_button.clicked.connect(self._delete)
         buttons.addWidget(delete_button)
-        panel_layout.addWidget(button_cluster)
+        layout.addWidget(button_cluster)
 
-        self._tables[form_code] = table
-        return panel
+        self._rows: list[templates_service.ReportTemplateRow] = []
 
     def refresh(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
-        for form_code, table in self._tables.items():
-            rows = templates_service.list_templates(company_id, form_code)
-            table.setRowCount(len(rows))
-            for row_index, row in enumerate(rows):
-                name_item = QTableWidgetItem(row.name)
-                name_item.setData(Qt.UserRole, row.report_template_id)
-                table.setItem(row_index, 0, name_item)
-                table.setItem(row_index, 1, QTableWidgetItem("✓" if row.is_default else ""))
+        self._rows = templates_service.list_all_templates(company_id)
+        self.table.setRowCount(len(self._rows))
+        for row_index, row in enumerate(self._rows):
+            form_label = FORM_DEFINITIONS.get(row.form_code, {}).get("label", row.form_code)
+            form_item = QTableWidgetItem(form_label)
+            form_item.setData(Qt.UserRole, row.report_template_id)
+            self.table.setItem(row_index, 0, form_item)
+            self.table.setItem(row_index, 1, QTableWidgetItem(row.name))
+            self.table.setItem(row_index, 2, QTableWidgetItem("✓" if row.is_default else ""))
 
-    def _selected_id(self, form_code: str) -> int | None:
-        table = self._tables[form_code]
-        selected = table.selectedItems()
+    def _selected_row(self) -> templates_service.ReportTemplateRow | None:
+        selected = self.table.selectedItems()
         if not selected:
             return None
-        return table.item(selected[0].row(), 0).data(Qt.UserRole)
+        return self._rows[selected[0].row()]
 
-    def _add(self, form_code: str) -> None:
+    def _add(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
-        name, ok = QInputDialog.getText(self, "گزارشِ جدید", "نامِ گزارش:")
-        if not ok or not name.strip():
+        dialog = _NewReportDialog(self)
+        if dialog.exec() != QDialog.Accepted or not dialog.name():
             return
         try:
-            templates_service.create_template(company_id, form_code, name.strip())
+            templates_service.create_template(company_id, dialog.selected_form_code(), dialog.name())
         except (ValueError, FileNotFoundError) as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self.refresh()
 
-    def _rename(self, form_code: str) -> None:
+    def _rename(self) -> None:
         company_id = _company_id()
-        report_template_id = self._selected_id(form_code)
-        if company_id is None or report_template_id is None:
+        row = self._selected_row()
+        if company_id is None or row is None:
             QMessageBox.information(self, "تغییرِ نام", "ابتدا یک گزارش را انتخاب کنید.")
             return
-        new_name, ok = QInputDialog.getText(self, "تغییرِ نام", "نامِ جدید:")
+        new_name, ok = QInputDialog.getText(self, "تغییرِ نام", "نامِ جدید:", text=row.name)
         if not ok or not new_name.strip():
             return
         try:
-            templates_service.rename_template(report_template_id, company_id, new_name.strip())
+            templates_service.rename_template(row.report_template_id, company_id, new_name.strip())
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self.refresh()
 
-    def _set_default(self, form_code: str) -> None:
+    def _set_default(self) -> None:
         company_id = _company_id()
-        report_template_id = self._selected_id(form_code)
-        if company_id is None or report_template_id is None:
+        row = self._selected_row()
+        if company_id is None or row is None:
             QMessageBox.information(self, "پیش‌فرض", "ابتدا یک گزارش را انتخاب کنید.")
             return
-        templates_service.set_default(report_template_id, company_id)
+        templates_service.set_default(row.report_template_id, company_id)
         self.refresh()
 
-    def _delete(self, form_code: str) -> None:
+    def _delete(self) -> None:
         company_id = _company_id()
-        report_template_id = self._selected_id(form_code)
-        if company_id is None or report_template_id is None:
+        row = self._selected_row()
+        if company_id is None or row is None:
             QMessageBox.information(self, "حذف", "ابتدا یک گزارش را انتخاب کنید.")
             return
         confirm = QMessageBox.question(self, "حذف", "این گزارش حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
-            templates_service.delete_template(report_template_id, company_id)
+            templates_service.delete_template(row.report_template_id, company_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self.refresh()
 
-    def _edit(self, form_code: str) -> None:
+    def _edit(self) -> None:
         company_id = _company_id()
-        report_template_id = self._selected_id(form_code)
-        if company_id is None or report_template_id is None:
+        row = self._selected_row()
+        if company_id is None or row is None:
             QMessageBox.information(self, "ویرایش", "ابتدا یک گزارش را انتخاب کنید.")
             return
         try:
-            path = templates_service.get_template_path(report_template_id, company_id)
+            path = templates_service.get_template_path(row.report_template_id, company_id)
             opened = jasper_bridge.open_path_for_editing(path)
         except (ValueError, FileNotFoundError) as exc:
             QMessageBox.warning(self, "ویرایش", str(exc))

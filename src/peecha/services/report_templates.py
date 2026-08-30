@@ -41,6 +41,19 @@ def _to_row(r: ReportTemplate) -> ReportTemplateRow:
     return ReportTemplateRow(r.report_template_id, r.form_code, r.name, r.file_name, r.is_default)
 
 
+def list_all_templates(company_id: int) -> list[ReportTemplateRow]:
+    """همه‌یِ گزارش‌هایِ این شرکت، رویِ همه‌یِ فرم‌ها -- برایِ نمایشِ یک
+    لیستِ واحد در تنظیمات (به‌جایِ یک پنلِ جدا به‌ازایِ هر فرم که با
+    زیادشدنِ فرم‌ها فضا می‌گیرد)."""
+    with new_session() as session:
+        rows = session.scalars(
+            select(ReportTemplate)
+            .where(ReportTemplate.company_id == company_id)
+            .order_by(ReportTemplate.form_code, ReportTemplate.name)
+        ).all()
+        return [_to_row(r) for r in rows]
+
+
 def list_templates(company_id: int, form_code: str) -> list[ReportTemplateRow]:
     with new_session() as session:
         rows = session.scalars(
