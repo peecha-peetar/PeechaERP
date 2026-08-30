@@ -409,6 +409,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._main_window = main_window
         self._document_id: int | None = None
         self._status_code = "DRAFT"
+        self._corrects_document_id: int | None = None
         self._lines: list = []
         self._items: list[catalog_service.ItemRow] = []
         self._decimal_places = 0
@@ -832,6 +833,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             return
         self._status_code = doc.status_code
+        self._corrects_document_id = doc.corrects_document_id
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]} #{numerals.to_persian_digits(str(doc.document_no))}")
         self.document_no_field.setText(numerals.to_persian_digits(str(doc.document_no)))
         self.date_field.setDate(doc.document_date)
@@ -942,6 +944,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
         self._status_code = "DRAFT"
+        self._corrects_document_id = None
         self._lines = []
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]}ِ جدید")
         self.document_no_field.setText("—")
@@ -1138,7 +1141,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         company_id = self._company_id()
         try:
-            result = documents_service.post_document(self._document_id, company_id, app_session.current_user.user_id)
+            if self._corrects_document_id is not None:
+                result = documents_service.post_invoice_correction(self._document_id, company_id, app_session.current_user.user_id)
+            else:
+                result = documents_service.post_document(self._document_id, company_id, app_session.current_user.user_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در ثبتِ نهایی", str(exc))

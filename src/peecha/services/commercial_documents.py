@@ -379,14 +379,15 @@ def can_correct_posted_document(company_id: int, correcting_user_id: int) -> boo
 
 def start_invoice_correction(document_id: int, company_id: int, correcting_user_id: int) -> int:
     """طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند، بدونِ
-    اینکه سند با تاریخِ عقب‌دار برگردد -- چون این ترتیبِ محاسبه‌یِ
-    میانگینِ موزونِ سندهایِ بعدی را به‌هم می‌ریزد و حسابِ طرف‌حساب را هم
-    قاطی می‌کند»): اثرِ مالی/انبارِ فاکتورِ اصلی *عیناً* در تاریخِ *امروز*
-    برگشت می‌خورد (نه با تاریخِ فاکتورِ اصلی)، خودِ فاکتورِ اصلی وضعیتِ
-    CORRECTED می‌گیرد (دیگر هرگز در آمارِ خرید/فروش شمرده نمی‌شود)، و یک
-    فاکتورِ *پیش‌نویسِ* تازه (کپیِ کاملِ سرِسند/ردیف‌ها، با رفرنسِ صریح به
-    فاکتورِ اصلی) ساخته می‌شود که از همینِ فرمِ عادیِ فاکتور قابلِ‌ویرایش و
-    دوبارهْ ثبتِ‌نهایی است -- بدونِ نیاز به هیچ مسیرِ جداگانه‌یِ ثبت."""
+    اینکه سند با تاریخِ عقب‌دار برگردد») و بازخوردِ بعدی («اصلاحِ فاکتوری
+    که آخرین حرکتِ انبار نیست هم فکری بشود»): این تابع هیچ اثرِ مالی/
+    انباری فوری ایجاد نمی‌کند -- فقط یک فاکتورِ *پیش‌نویسِ* تازه (کپیِ
+    کاملِ سرِسند/ردیف‌ها، دیگر با تاریخِ *امروز*، با رفرنسِ صریح به فاکتورِ
+    اصلی) می‌سازد که از همینِ فرمِ عادیِ فاکتور قابلِ‌ویرایش است. فاکتورِ
+    اصلی هم‌چنان POSTED می‌ماند (و اثرش دست‌نخورده) تا وقتی همین پیش‌نویس
+    واقعاً ثبتِ‌نهایی شود -- محاسبه/برگشت‌زدنِ واقعی در همان لحظه، توسطِ
+    post_invoice_correction، انجام می‌شود (نه این‌جا)، چون فقط آن‌جاست که
+    مقدار/بهایِ *نهاییِ* اصلاح‌شده معلوم است."""
     if not roles_service.is_manager(correcting_user_id, company_id):
         raise ValueError("فقط مدیر (نقشِ سوپروایزر/ادمین) اجازه‌یِ اصلاحِ فاکتورِ ثبت‌شده را دارد.")
     if not settings_service.is_feature_enabled(company_id, "ALLOW_EDIT_POSTED_INVOICE"):
@@ -400,6 +401,8 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
             raise ValueError("فقط سندِ ثبتِ‌نهایی‌شده قابلِ‌اصلاح است.")
         if original.document_type_code not in ("SALES_INVOICE", "PURCHASE_INVOICE"):
             raise ValueError("اصلاح فقط برایِ فاکتورِ خرید/فروش پشتیبانی می‌شود.")
+        if original.corrected_by_document_id is not None:
+            raise ValueError("برایِ این سند از قبل یک اصلاح در جریان است یا قبلاً اصلاح شده است.")
 
         lines = session.scalars(
             select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
@@ -423,38 +426,6 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
             reference_no=original.reference_no, description=original.description,
         )
         original_type = original.document_type_code
-        commercial_je_id = original.journal_entry_id
-        stock_document_ids = list(
-            session.scalars(
-                select(StockDocument.stock_document_id).where(
-                    StockDocument.company_id == company_id, StockDocument.reference_no == f"COMM-{document_id}",
-                )
-            )
-        )
-        stock_je_ids = [
-            je_id
-            for je_id in session.scalars(
-                select(StockDocument.journal_entry_id).where(StockDocument.stock_document_id.in_(stock_document_ids))
-            )
-            if je_id is not None
-        ]
-
-    if not stock_document_ids:
-        raise ValueError("سندِ انبارِ این فاکتور یافت نشد.")
-
-    # --- برگشت‌زدنِ اثرِ فیزیکیِ انبار -- ممکن است چند انبار/سندِ جدا
-    # باشد (طبقِ Toggleِ per-line-warehouse). ---
-    for stock_document_id in stock_document_ids:
-        inv_documents_service.reverse_stock_document(stock_document_id, company_id, correcting_user_id)
-
-    # --- برگشت‌زدنِ عینیِ سندهایِ حسابداری -- سندِ خودِ سندِ انبار (برایِ
-    # فاکتورِ خرید همان سندِ اصلیِ فاکتور هم هست، پس فقط یک‌بار برگشت
-    # می‌خورد)، و برایِ فاکتورِ فروش، سندِ جداگانه‌یِ بازرگانی (AR/درآمد)
-    # هم جداگانه. ---
-    for je_id in stock_je_ids:
-        je_service.reverse_journal_entry(je_id, company_id, correcting_user_id)
-    if original_type == "SALES_INVOICE" and commercial_je_id is not None and commercial_je_id not in stock_je_ids:
-        je_service.reverse_journal_entry(commercial_je_id, company_id, correcting_user_id)
 
     new_document_id = create_document(company_id, correcting_user_id, original_type, datetime.date.today(), header_fields)
     for snap in line_snapshots:
@@ -467,13 +438,252 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
 
     with new_session() as session:
         original = session.get(CommercialDocument, document_id)
-        original.status_code = "CORRECTED"
+        # طبقِ درخواستِ صریح: original هنوز POSTED می‌ماند -- فقط
+        # corrected_by_document_id به‌عنوانِ قفلِ «اصلاحِ دیگری در جریان
+        # است» تنظیم می‌شود؛ وضعیتِ نهاییِ CORRECTED را
+        # post_invoice_correction، بعدِ ثبتِ واقعیِ همین پیش‌نویس، تنظیم
+        # می‌کند.
         original.corrected_by_document_id = new_document_id
         new_doc = session.get(CommercialDocument, new_document_id)
         new_doc.corrects_document_id = document_id
         session.commit()
 
     return new_document_id
+
+
+def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id: int) -> PostResult:
+    """طبقِ بازخوردِ صریح («اگر فاکتور اصلاح بشه ولی از تاریخِ آن تا الان
+    حرکتِ دیگری رویِ همان کالا رخ داده باشد، برگشت‌زدنِ کامل سودِ آن کالا
+    را به‌هم می‌ریزد»): به‌جایِ برگشت‌زدنِ کاملِ اثرِ انبارِ سندِ اصلی (که
+    فقط وقتی امن است که آن سند هنوز آخرین حرکتِ انبار باشد -- محدودیتِ
+    reverse_stock_document)، این تابع سندِ اصلی را دست‌نخورده می‌گذارد و
+    فقط *تفاوتِ* مقدار/بها بینِ فاکتورِ اصلی و همین پیش‌نویسِ اصلاح‌شده را،
+    با تاریخِ امروز، ثبت می‌کند -- دقیقاً مثلِ یک فروش/خریدِ کوچکِ تازه.
+    وقتی از فاکتورِ اصلی تا امروز هیچ حرکتِ دیگری رویِ آن کالا نبوده، این
+    روش دقیقاً همان نتیجه‌یِ برگشتِ کامل را می‌دهد؛ وقتی بوده، سهمِ اصلی
+    (با بهایِ تاریخیِ خودش) دست‌نخورده و صادقانه می‌ماند و فقط تفاوت با
+    قیمتِ امروز ثبت می‌شود -- پس هرگز به «آخرین حرکت بودن» نیاز ندارد.
+
+    سمتِ بازرگانیِ فاکتورِ فروش (دریافتنی/درآمد/تخفیف/مالیات) همیشه به‌طورِ
+    کامل برگشت‌وتازه‌سازی می‌شود -- آن بخش هیچ ارتباطی به انبار/قیمت‌گذاری
+    ندارد، پس همیشه ۱۰۰٪ امن است، فارغ از این‌که سند آخرین حرکت باشد یا
+    نه."""
+    with new_session() as session:
+        draft = session.get(CommercialDocument, document_id)
+        if draft is None or draft.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if draft.corrects_document_id is None:
+            raise ValueError("این سند یک پیش‌نویسِ اصلاحی نیست.")
+        if draft.status_code == "POSTED":
+            raise ValueError("این سند قبلاً ثبتِ نهایی شده است.")
+        if draft.status_code not in ("CONFIRMED", "APPROVED"):
+            raise ValueError("فقط سندِ تاییدشده قابلِ‌ثبتِ‌نهایی است.")
+        original = session.get(CommercialDocument, draft.corrects_document_id)
+        if original is None:
+            raise ValueError("سندِ اصلیِ این اصلاح یافت نشد.")
+
+        original_lines = session.scalars(
+            select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == original.document_id)
+        ).all()
+        draft_lines = session.scalars(
+            select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
+        ).all()
+        if not draft_lines:
+            raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+
+        document_type_code = draft.document_type_code
+        warehouse_id = draft.warehouse_id
+        counterparty_id = draft.counterparty_detail_account_id
+        document_date = draft.document_date
+        description = draft.description or f"سندِ بازرگانی #{draft.document_no}"
+        sales_rep_id = draft.sales_rep_detail_account_id
+        cost_center_id = draft.cost_center_detail_account_id
+        project_id = draft.project_detail_account_id
+        subtotal_amount = draft.subtotal_amount
+        discount_amount = draft.discount_amount
+        tax_amount = draft.tax_amount
+        original_journal_entry_id = original.journal_entry_id
+        original_stock_document_id = original.stock_document_id
+        original_document_no = original.document_no
+
+        def _aggregate_by_item(lines_):
+            agg: dict[int, dict] = {}
+            for ln in lines_:
+                bucket = agg.setdefault(
+                    ln.item_id,
+                    {"quantity_base": _ZERO, "net_value": _ZERO, "tax_amount": _ZERO, "warehouse_id": ln.warehouse_id},
+                )
+                bucket["quantity_base"] += ln.quantity_base
+                bucket["net_value"] += _money(ln.quantity * ln.unit_price - ln.discount_amount)
+                bucket["tax_amount"] += ln.tax_amount
+            return agg
+
+        original_by_item = _aggregate_by_item(original_lines)
+        draft_by_item = _aggregate_by_item(draft_lines)
+        all_item_ids = set(original_by_item) | set(draft_by_item)
+        line_snapshots = [
+            (ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id,
+             ln.serial_id, ln.discount_amount, ln.tax_amount, ln.warehouse_id)
+            for ln in draft_lines
+        ]
+
+    extra_dims: dict[int, int] = {}
+    if cost_center_id is not None:
+        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = cost_center_id
+    if project_id is not None:
+        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = project_id
+    if warehouse_id is not None:
+        warehouse_row = locations_service.get_warehouse(warehouse_id, company_id)
+        if warehouse_row is not None and warehouse_row.fields.profit_center_detail_account_id is not None:
+            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
+                warehouse_row.fields.profit_center_detail_account_id
+            )
+
+    def _role_account(role_key: str) -> int:
+        account_id = inv_engine_service.get_account_mapping(company_id, role_key)
+        if account_id is None:
+            raise ValueError(f"حسابِ «{inv_engine_service.MAPPING_LABELS.get(role_key, role_key)}» هنوز در تنظیماتِ انبار مشخص نشده است.")
+        return account_id
+
+    stock_document_id: int | None = None
+    journal_entry_id: int | None = None
+    zero = decimal.Decimal(0)
+
+    if document_type_code == "SALES_INVOICE":
+        if original_journal_entry_id is not None:
+            je_service.reverse_journal_entry(original_journal_entry_id, company_id, posted_by_user_id)
+        journal_entry_id = _build_sales_invoice_commercial_je(
+            company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims,
+            subtotal_amount, discount_amount, tax_amount, sales_rep_id, line_snapshots,
+        )
+
+        adj_je_lines: list[je_service.LineInput] = []
+        for item_id in all_item_ids:
+            old_qty = original_by_item.get(item_id, {}).get("quantity_base", zero)
+            new_qty = draft_by_item.get(item_id, {}).get("quantity_base", zero)
+            delta = new_qty - old_qty
+            if delta == 0:
+                continue
+            effective_warehouse_id = (draft_by_item.get(item_id) or original_by_item.get(item_id))["warehouse_id"] or warehouse_id
+            result = inv_engine_service.adjust_stock_quantity(
+                item_id, effective_warehouse_id, None, company_id, delta, posted_by_user_id,
+                reference_no=f"CORR-{document_id}",
+                description=f"اصلاحِ مقدارِ فاکتورِ فروشِ شماره‌ی {original_document_no}",
+            )
+            if stock_document_id is None:
+                stock_document_id = result.stock_document_id
+            cogs_account_id = _role_account("COGS")
+            inventory_account_id = _role_account("INVENTORY_ASSET")
+            if result.direction == "OUT":
+                adj_je_lines.append(je_service.LineInput(account_id=cogs_account_id, description=description, debit=result.amount, credit=_ZERO))
+                adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=_ZERO, credit=result.amount))
+            else:
+                adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=result.amount, credit=_ZERO))
+                adj_je_lines.append(je_service.LineInput(account_id=cogs_account_id, description=description, debit=_ZERO, credit=result.amount))
+
+        if adj_je_lines:
+            adj_result = je_service.create_journal_entry(
+                company_id, posted_by_user_id, document_date, description, adj_je_lines, entry_type_code="COMMERCIAL",
+            )
+            if stock_document_id is not None:
+                with new_session() as session:
+                    session.get(StockDocument, stock_document_id).journal_entry_id = adj_result.journal_entry_id
+                    session.commit()
+
+    elif document_type_code == "PURCHASE_INVOICE":
+        adj_je_lines = []
+        for item_id in all_item_ids:
+            old = original_by_item.get(item_id)
+            new = draft_by_item.get(item_id)
+            old_qty = old["quantity_base"] if old else zero
+            new_qty = new["quantity_base"] if new else zero
+            delta = new_qty - old_qty
+            effective_warehouse_id = (new or old)["warehouse_id"] or warehouse_id
+            old_unit_cost = (old["net_value"] / old_qty) if old and old_qty else zero
+            new_unit_cost = (new["net_value"] / new_qty) if new and new_qty else old_unit_cost
+            old_tax = old["tax_amount"] if old else zero
+            new_tax = new["tax_amount"] if new else zero
+
+            if delta != 0:
+                result = inv_engine_service.adjust_stock_quantity(
+                    item_id, effective_warehouse_id, None, company_id, -delta, posted_by_user_id,
+                    reference_no=f"CORR-{document_id}",
+                    description=f"اصلاحِ مقدارِ فاکتورِ خریدِ شماره‌ی {original_document_no}",
+                    in_unit_cost=new_unit_cost if delta > 0 else None,
+                )
+                if stock_document_id is None:
+                    stock_document_id = result.stock_document_id
+                inventory_account_id = _role_account("INVENTORY_ASSET")
+                payable_account_id = _role_account("SUPPLIER_PAYABLE")
+                if result.direction == "IN":
+                    adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=result.amount, credit=_ZERO))
+                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=_ZERO, credit=result.amount))
+                else:
+                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=result.amount, credit=_ZERO))
+                    adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=_ZERO, credit=result.amount))
+            elif old_unit_cost != new_unit_cost and old_qty > 0:
+                cost_result = inv_engine_service.apply_purchase_cost_correction(
+                    item_id, effective_warehouse_id, None, company_id, old_qty, new_unit_cost - old_unit_cost,
+                )
+                total = cost_result.inventory_value_delta + cost_result.variance_value_delta
+                inventory_account_id = _role_account("INVENTORY_ASSET")
+                variance_account_id = _role_account("INVENTORY_COST_VARIANCE")
+                payable_account_id = _role_account("SUPPLIER_PAYABLE")
+                if total > 0:
+                    if cost_result.inventory_value_delta:
+                        adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=cost_result.inventory_value_delta, credit=_ZERO))
+                    if cost_result.variance_value_delta:
+                        adj_je_lines.append(je_service.LineInput(account_id=variance_account_id, description=description, debit=cost_result.variance_value_delta, credit=_ZERO))
+                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=_ZERO, credit=total))
+                elif total < 0:
+                    if cost_result.inventory_value_delta:
+                        adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=_ZERO, credit=-cost_result.inventory_value_delta))
+                    if cost_result.variance_value_delta:
+                        adj_je_lines.append(je_service.LineInput(account_id=variance_account_id, description=description, debit=_ZERO, credit=-cost_result.variance_value_delta))
+                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=-total, credit=_ZERO))
+
+            tax_delta = new_tax - old_tax
+            if tax_delta != 0:
+                tax_account_id = _role_account("PURCHASE_TAX_RECEIVABLE")
+                payable_account_id = _role_account("SUPPLIER_PAYABLE")
+                if tax_delta > 0:
+                    adj_je_lines.append(je_service.LineInput(account_id=tax_account_id, description=description, debit=tax_delta, credit=_ZERO))
+                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=_ZERO, credit=tax_delta))
+                else:
+                    adj_je_lines.append(je_service.LineInput(account_id=tax_account_id, description=description, debit=_ZERO, credit=-tax_delta))
+                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=-tax_delta, credit=_ZERO))
+
+        if adj_je_lines:
+            adj_result = je_service.create_journal_entry(
+                company_id, posted_by_user_id, document_date, description, adj_je_lines, entry_type_code="COMMERCIAL",
+            )
+            journal_entry_id = adj_result.journal_entry_id
+            if stock_document_id is not None:
+                with new_session() as session:
+                    session.get(StockDocument, stock_document_id).journal_entry_id = journal_entry_id
+                    session.commit()
+        else:
+            # هیچ چیزِ مالی‌ای عوض نشده (فقط مثلاً توضیحات/مرجع) --
+            # سندِ حسابداری/انبارِ اصلی هم‌چنان معتبر است، همان را به
+            # اشتراک می‌گذاریم.
+            stock_document_id = original_stock_document_id
+            journal_entry_id = original_journal_entry_id
+
+    else:
+        raise ValueError("اصلاح فقط برایِ فاکتورِ خرید/فروش پشتیبانی می‌شود.")
+
+    with new_session() as session:
+        draft = session.get(CommercialDocument, document_id)
+        draft.stock_document_id = stock_document_id
+        draft.journal_entry_id = journal_entry_id
+        draft.status_code = "POSTED"
+        draft.posted_by_user_id = posted_by_user_id
+        draft.posted_at = datetime.datetime.now()
+        original = session.get(CommercialDocument, draft.corrects_document_id)
+        original.status_code = "CORRECTED"
+        session.commit()
+
+    return PostResult(document_id=document_id, stock_document_id=stock_document_id, journal_entry_id=journal_entry_id)
 
 
 # طبقِ درخواستِ صریح («سفارشات در حال حاضر ویرایش نمیشه»): برخلافِ
@@ -721,6 +931,98 @@ class PostResult:
     journal_entry_id: int | None
 
 
+def _build_sales_invoice_commercial_je(
+    company_id: int, posted_by_user_id: int, document_date: datetime.date, description: str, counterparty_id: int,
+    extra_dims: dict[int, int], subtotal_amount: decimal.Decimal, discount_amount: decimal.Decimal,
+    tax_amount: decimal.Decimal, sales_rep_id: int | None, line_snapshots: list[tuple],
+) -> int:
+    """سندِ حسابداریِ «بازرگانیِ» فاکتورِ فروش (دریافتنی/درآمد/تخفیف/
+    مالیات + کمیسیونِ فروشنده) -- استخراج‌شده از دلِ post_document تا هم
+    آن‌جا و هم start_invoice_correction/post_invoice_correction بتوانند
+    دقیقاً همان منطق را (بدونِ تکرار) صدا بزنند."""
+    person_dim_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    je_lines: list[je_service.LineInput] = []
+    ar_account_id = inv_engine_service.get_account_mapping(company_id, "CUSTOMER_RECEIVABLE")
+    if ar_account_id is None:
+        raise ValueError("حسابِ «حساب‌هایِ دریافتنیِ مشتریان» هنوز در تنظیماتِ انبار مشخص نشده است.")
+    total = _money(subtotal_amount - discount_amount + tax_amount)
+    je_lines.append(
+        je_service.LineInput(
+            account_id=ar_account_id, description=description, debit=total, credit=_ZERO,
+            details={person_dim_type_id: counterparty_id, **extra_dims},
+        )
+    )
+    # طبقِ رفعِ باگِ واقعیِ دیگر («کالا» هم می‌تواند رویِ حسابِ درآمد/
+    # تخفیف/مالیات الزامی شده باشد): چون این حساب‌ها فقط یک ردیفِ جمعی
+    # برایِ کلِ فاکتور داشتند، وقتی «کالا» الزامی بود هرگز قابلِ‌تامین
+    # نبود (یک ردیف نمی‌تواند هم‌زمان تفصیلیِ چند کالایِ مختلف را حمل
+    # کند). حالا اگر معین این بُعد را الزامی کرده باشد، به‌جایِ یک
+    # ردیفِ جمعی، به‌ازایِ هر کالایِ فاکتور یک ردیفِ جداگانه ساخته
+    # می‌شود.
+    item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+    item_ids = {snap[1] for snap in line_snapshots}
+    with new_session() as session:
+        item_detail_account_by_item_id = dict(
+            session.execute(
+                select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(item_ids))
+            ).all()
+        )
+    with new_session() as session:
+        revenue_account_id = settings_service.resolve_role_account(session, company_id, "SALES_REVENUE")
+        revenue_by_item = _role_line_amounts_by_item(
+            line_snapshots, item_detail_account_by_item_id, lambda snap: _money(snap[3] * snap[5])
+        )
+        je_lines.extend(
+            _build_role_je_lines(
+                revenue_account_id, description, extra_dims, subtotal_amount, is_debit=False,
+                item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=revenue_by_item,
+                fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_REVENUE"),
+            )
+        )
+        if discount_amount > 0:
+            discount_account_id = settings_service.resolve_role_account(session, company_id, "SALES_DISCOUNT")
+            discount_by_item = _role_line_amounts_by_item(
+                line_snapshots, item_detail_account_by_item_id, lambda snap: snap[8]
+            )
+            je_lines.extend(
+                _build_role_je_lines(
+                    discount_account_id, description, extra_dims, discount_amount, is_debit=True,
+                    item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=discount_by_item,
+                    fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_DISCOUNT"),
+                )
+            )
+        if tax_amount > 0:
+            tax_account_id = settings_service.resolve_role_account(session, company_id, "SALES_TAX_PAYABLE")
+            tax_by_item = _role_line_amounts_by_item(
+                line_snapshots, item_detail_account_by_item_id, lambda snap: snap[9]
+            )
+            je_lines.extend(
+                _build_role_je_lines(
+                    tax_account_id, description, extra_dims, tax_amount, is_debit=False,
+                    item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=tax_by_item,
+                    fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_TAX_PAYABLE"),
+                )
+            )
+
+    je_result = je_service.create_journal_entry(
+        company_id, posted_by_user_id, document_date, description, je_lines, entry_type_code="COMMERCIAL"
+    )
+    journal_entry_id = je_result.journal_entry_id
+
+    if sales_rep_id is not None:
+        with new_session() as session:
+            from peecha.db.models.commercial import SalesRepresentative
+
+            rep = session.get(SalesRepresentative, sales_rep_id)
+            rule_id = rep.default_commission_rule_id if rep is not None else None
+        if rule_id is not None:
+            for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in line_snapshots:
+                base_amount = _money(quantity * unit_price)
+                contracts_service.create_commission_entry_for_line(line_id, sales_rep_id, rule_id, base_amount)
+
+    return journal_entry_id
+
+
 def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> PostResult:
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
@@ -872,85 +1174,10 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             journal_entry_id = group_post_result.journal_entry_id
 
     if document_type_code == "SALES_INVOICE":
-        person_dim_type_id = dimensions_service.get_person_dimension_type_id(company_id)
-        je_lines: list[je_service.LineInput] = []
-        ar_account_id = inv_engine_service.get_account_mapping(company_id, "CUSTOMER_RECEIVABLE")
-        if ar_account_id is None:
-            raise ValueError("حسابِ «حساب‌هایِ دریافتنیِ مشتریان» هنوز در تنظیماتِ انبار مشخص نشده است.")
-        total = _money(subtotal_amount - discount_amount + tax_amount)
-        je_lines.append(
-            je_service.LineInput(
-                account_id=ar_account_id, description=description, debit=total, credit=_ZERO,
-                details={person_dim_type_id: counterparty_id, **extra_dims},
-            )
+        journal_entry_id = _build_sales_invoice_commercial_je(
+            company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims,
+            subtotal_amount, discount_amount, tax_amount, sales_rep_id, line_snapshots,
         )
-        # طبقِ رفعِ باگِ واقعیِ دیگر («کالا» هم می‌تواند رویِ حسابِ درآمد/
-        # تخفیف/مالیات الزامی شده باشد): چون این حساب‌ها فقط یک ردیفِ جمعی
-        # برایِ کلِ فاکتور داشتند، وقتی «کالا» الزامی بود هرگز قابلِ‌تامین
-        # نبود (یک ردیف نمی‌تواند هم‌زمان تفصیلیِ چند کالایِ مختلف را حمل
-        # کند). حالا اگر معین این بُعد را الزامی کرده باشد، به‌جایِ یک
-        # ردیفِ جمعی، به‌ازایِ هر کالایِ فاکتور یک ردیفِ جداگانه ساخته
-        # می‌شود.
-        item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
-        item_ids = {snap[1] for snap in line_snapshots}
-        with new_session() as session:
-            item_detail_account_by_item_id = dict(
-                session.execute(
-                    select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(item_ids))
-                ).all()
-            )
-        with new_session() as session:
-            revenue_account_id = settings_service.resolve_role_account(session, company_id, "SALES_REVENUE")
-            revenue_by_item = _role_line_amounts_by_item(
-                line_snapshots, item_detail_account_by_item_id, lambda snap: _money(snap[3] * snap[5])
-            )
-            je_lines.extend(
-                _build_role_je_lines(
-                    revenue_account_id, description, extra_dims, subtotal_amount, is_debit=False,
-                    item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=revenue_by_item,
-                    fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_REVENUE"),
-                )
-            )
-            if discount_amount > 0:
-                discount_account_id = settings_service.resolve_role_account(session, company_id, "SALES_DISCOUNT")
-                discount_by_item = _role_line_amounts_by_item(
-                    line_snapshots, item_detail_account_by_item_id, lambda snap: snap[8]
-                )
-                je_lines.extend(
-                    _build_role_je_lines(
-                        discount_account_id, description, extra_dims, discount_amount, is_debit=True,
-                        item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=discount_by_item,
-                        fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_DISCOUNT"),
-                    )
-                )
-            if tax_amount > 0:
-                tax_account_id = settings_service.resolve_role_account(session, company_id, "SALES_TAX_PAYABLE")
-                tax_by_item = _role_line_amounts_by_item(
-                    line_snapshots, item_detail_account_by_item_id, lambda snap: snap[9]
-                )
-                je_lines.extend(
-                    _build_role_je_lines(
-                        tax_account_id, description, extra_dims, tax_amount, is_debit=False,
-                        item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=tax_by_item,
-                        fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_TAX_PAYABLE"),
-                    )
-                )
-
-        je_result = je_service.create_journal_entry(
-            company_id, posted_by_user_id, document_date, description, je_lines, entry_type_code="COMMERCIAL"
-        )
-        journal_entry_id = je_result.journal_entry_id
-
-        if sales_rep_id is not None:
-            with new_session() as session:
-                from peecha.db.models.commercial import SalesRepresentative
-
-                rep = session.get(SalesRepresentative, sales_rep_id)
-                rule_id = rep.default_commission_rule_id if rep is not None else None
-            if rule_id is not None:
-                for line_id, item_id, uom_id, quantity, quantity_base, unit_price, batch_id, serial_id, _discount_amt, _tax_amt, _wh_id in line_snapshots:
-                    base_amount = _money(quantity * unit_price)
-                    contracts_service.create_commission_entry_for_line(line_id, sales_rep_id, rule_id, base_amount)
 
     elif document_type_code == "SALES_RETURN":
         with new_session() as session:

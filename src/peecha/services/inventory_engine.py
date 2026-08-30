@@ -944,6 +944,230 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
         return PostResult(stock_document_id=reversal_doc.stock_document_id, journal_entry_id=None)
 
 
+@dataclass
+class AdjustmentResult:
+    stock_document_id: int
+    direction: str
+    unit_cost: decimal.Decimal
+    quantity: decimal.Decimal
+    amount: decimal.Decimal
+
+
+def adjust_stock_quantity(
+    item_id: int, warehouse_id: int, bin_location_id: int | None, company_id: int, quantity_delta: decimal.Decimal,
+    created_by_user_id: int, reference_no: str, description: str, in_unit_cost: decimal.Decimal | None = None,
+) -> AdjustmentResult:
+    """طبقِ درخواستِ صریح («اصلاحِ فاکتوری که آخرین حرکتِ انبار نیست هم
+    فکری بشود»): برخلافِ reverse_stock_document (که تلاش می‌کند دقیقاً
+    یک حرکتِ خاصِ گذشته را خنثی کند و برایِ همین به قاعده‌یِ «هنوز آخرین
+    حرکت باشد» نیاز دارد)، این تابع هرگز به گذشته کاری ندارد — فقط یک
+    حرکتِ *تازه* و رو به جلو ثبت می‌کند؛ دقیقاً مثلِ این‌که همین امروز یک
+    فروش/خریدِ معمولیِ کوچک اتفاق افتاده باشد. پس هیچ‌وقت به «آخرین حرکت
+    بودن» نیاز ندارد و همیشه امن است.
+
+    quantity_delta مثبت یعنی مصرفِ بیشتر (OUT — مثلِ افزایشِ مقدارِ
+    فروخته‌شده)، منفی یعنی افزودن (IN — مثلِ کاهشِ مقدارِ فروخته‌شده، یا
+    افزایشِ مقدارِ خریداری‌شده). برایِ OUT همیشه با میانگینِ *فعلی* (بدونِ
+    تغییرِ میانگین، طبقِ فرمولِ apply_in/consume_out). برایِ IN: اگر
+    in_unit_cost داده نشود، بازگرداندنِ خنثی است (میانگین دقیقاً در قیمتِ
+    خودش وارد می‌شود، پس جابه‌جا نمی‌شود) — مناسبِ «کاهشِ مقدارِ فروخته‌
+    شده». اگر in_unit_cost داده شود (مثلاً اصلاحِ فاکتورِ خرید با
+    افزایشِ مقدار)، یک apply_in واقعی با آن بهایِ مشخص انجام می‌شود و
+    میانگین طبقِ فرمولِ استاندارد بلند می‌شود. محدودیتِ آگاهانه: مثلِ
+    reverse_stock_document، فقط برایِ کالاهایِ میانگینِ موزون/استاندارد
+    (نه FIFO)."""
+    if quantity_delta == 0:
+        raise ValueError("مقدارِ تفاوت نمی‌تواند صفر باشد.")
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None:
+            raise ValueError("کالا نامعتبر است.")
+        warehouse = session.get(Warehouse, warehouse_id)
+        if warehouse is None:
+            raise ValueError("انبار نامعتبر است.")
+
+        costing_settings = session.get(CompanyCostingSettings, company_id)
+        default_costing_method_code = None
+        if costing_settings is not None:
+            method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
+            default_costing_method_code = method_row.code if method_row is not None else None
+        method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
+        if method == "FIFO":
+            raise ValueError("اصلاحِ مقدار برایِ کالایی که با روشِ FIFO قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود.")
+
+        if bin_location_id is None:
+            default_bin = session.scalar(
+                select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == "GENERAL")
+            )
+            if default_bin is None:
+                raise ValueError("مکانِ انبارِ پیش‌فرض یافت نشد.")
+            bin_location_id = default_bin.bin_location_id
+
+        bal = session.scalar(
+            select(StockBalance).where(
+                StockBalance.item_id == item_id, StockBalance.warehouse_id == warehouse_id,
+                StockBalance.bin_location_id == bin_location_id, StockBalance.batch_id.is_(None),
+            ).with_for_update()
+        )
+        if bal is None:
+            bal = StockBalance(
+                company_id=company_id, item_id=item_id, warehouse_id=warehouse_id, bin_location_id=bin_location_id,
+                quantity_on_hand=_ZERO, average_unit_cost=_ZERO,
+            )
+            session.add(bal)
+            session.flush()
+
+        today = datetime.date.today()
+
+        if quantity_delta > 0:
+            qty = quantity_delta
+            if bal.quantity_on_hand < qty and not warehouse.allow_negative_stock:
+                raise ValueError(
+                    f"موجودیِ کافی برایِ اعمالِ این اصلاح در انبار «{warehouse.name}» وجود ندارد "
+                    f"(موجود: {bal.quantity_on_hand}، نیاز به کاهشِ: {qty})."
+                )
+            direction = "OUT"
+            unit_cost = _standard_cost(session, item_id, today) if method == "STANDARD" else (bal.average_unit_cost or _ZERO)
+            bal.quantity_on_hand -= qty
+        else:
+            qty = -quantity_delta
+            direction = "IN"
+            if method == "STANDARD":
+                unit_cost = _standard_cost(session, item_id, today)
+            elif in_unit_cost is not None:
+                # طبقِ درخواستِ صریح (اصلاحِ فاکتورِ خرید با افزایشِ مقدار):
+                # این‌جا برخلافِ حالتِ خنثی، واقعاً کالایِ *تازه‌ای* با
+                # بهایِ *واقعیِ* خودش وارد می‌شود -- پس باید مثلِ apply_in
+                # واقعی در میانگین بلند شود، نه با میانگینِ فعلی.
+                denom = bal.quantity_on_hand + qty
+                bal.average_unit_cost = (
+                    ((bal.quantity_on_hand * bal.average_unit_cost) + (qty * in_unit_cost)) / denom
+                    if denom != 0 else in_unit_cost
+                )
+                unit_cost = in_unit_cost
+            else:
+                unit_cost = bal.average_unit_cost or _ZERO
+            bal.quantity_on_hand += qty
+        bal.last_movement_at = datetime.datetime.now()
+
+        fiscal_year = session.scalar(
+            select(FiscalYear).where(
+                FiscalYear.company_id == company_id, FiscalYear.start_date <= today, FiscalYear.end_date >= today,
+            )
+        )
+        if fiscal_year is None:
+            raise ValueError("سالِ مالیِ امروز تعریف نشده است.")
+
+        doc_type = "ISSUE" if direction == "OUT" else "RECEIPT"
+        next_no = (
+            session.scalar(
+                select(func.max(StockDocument.document_no)).where(
+                    StockDocument.company_id == company_id, StockDocument.fiscal_year_id == fiscal_year.fiscal_year_id,
+                    StockDocument.document_type_code == doc_type,
+                )
+            )
+            or 0
+        ) + 1
+        adjustment_doc = StockDocument(
+            company_id=company_id, fiscal_year_id=fiscal_year.fiscal_year_id, document_type_code=doc_type,
+            document_no=next_no, document_date=today, status_code="POSTED",
+            source_warehouse_id=warehouse_id if doc_type == "ISSUE" else None,
+            destination_warehouse_id=warehouse_id if doc_type == "RECEIPT" else None,
+            reference_no=reference_no, description=description, created_by_user_id=created_by_user_id,
+        )
+        session.add(adjustment_doc)
+        session.flush()
+        line = StockDocumentLine(
+            stock_document_id=adjustment_doc.stock_document_id, line_no=1, item_id=item_id, uom_id=item.base_uom_id,
+            quantity=qty, quantity_base=qty, bin_location_id=bin_location_id, unit_cost=unit_cost,
+        )
+        session.add(line)
+        session.flush()
+        session.add(
+            StockLedger(
+                company_id=company_id, stock_document_line_id=line.line_id, item_id=item_id, warehouse_id=warehouse_id,
+                bin_location_id=bin_location_id, movement_direction=direction, quantity_base=qty, unit_cost=unit_cost,
+                movement_date=today,
+            )
+        )
+        adjustment_doc.posted_by_user_id = created_by_user_id
+        adjustment_doc.posted_at = datetime.datetime.now()
+        session.commit()
+        return AdjustmentResult(
+            stock_document_id=adjustment_doc.stock_document_id, direction=direction, unit_cost=unit_cost, quantity=qty,
+            amount=_money(unit_cost * qty),
+        )
+
+
+@dataclass
+class CostCorrectionResult:
+    quantity_remaining: decimal.Decimal
+    quantity_consumed: decimal.Decimal
+    inventory_value_delta: decimal.Decimal
+    variance_value_delta: decimal.Decimal
+
+
+def apply_purchase_cost_correction(
+    item_id: int, warehouse_id: int, bin_location_id: int | None, company_id: int,
+    original_quantity: decimal.Decimal, unit_cost_delta: decimal.Decimal,
+) -> CostCorrectionResult:
+    """طبقِ رویه‌یِ استانداردِ صنعت (مشابهِ حسابِ Purchase/Invoice Price
+    Variance در ERPهایِ بزرگ): وقتی فقط بهایِ واحدِ یک فاکتورِ خریدِ
+    قدیمی (که دیگر آخرین حرکتِ انبار نیست) اصلاح می‌شود، بدونِ بازمحاسبه‌
+    یِ کاملِ زنجیره نمی‌شود دقیقاً تشخیص داد کدام واحدها هنوز مانده‌اند و
+    کدام قبلاً مصرف/فروخته شده‌اند -- پس اختلافِ ارزش دو‌تکه می‌شود: سهمِ
+    مقداری که هنوز در انبار مانده (طبقِ نسبتِ فعلی، مستقیم در میانگینِ
+    موجودی بلند می‌شود) و سهمِ مقداری که قبلاً مصرف شده (چون نمی‌شود
+    فروش‌هایِ گذشته را دوباره نوشت، به‌جایش با یک حسابِ مغایرتِ بها ثبت
+    می‌شود -- شفاف و جداگانه، نه قاطی‌شده در بهایِ‌تمام‌شده‌یِ امروز).
+    برایِ کالایِ استاندارد-قیمت‌گذاری، ارزشِ موجودی همیشه با بهایِ
+    استاندارد ثابت می‌ماند -- پس کلِ اختلاف به حسابِ مغایرت می‌رود، دقیقاً
+    هم‌الگو با نحوه‌یِ رفتارِ خودِ post_stock_document با اختلافِ بهایِ
+    واقعی/استاندارد در لحظه‌یِ رسیدِ اصلی."""
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None:
+            raise ValueError("کالا نامعتبر است.")
+        costing_settings = session.get(CompanyCostingSettings, company_id)
+        default_costing_method_code = None
+        if costing_settings is not None:
+            method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
+            default_costing_method_code = method_row.code if method_row is not None else None
+        method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
+        if method == "FIFO":
+            raise ValueError("اصلاحِ بهایِ واحد برایِ کالایی که با روشِ FIFO قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود.")
+
+        if bin_location_id is None:
+            default_bin = session.scalar(
+                select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == "GENERAL")
+            )
+            bin_location_id = default_bin.bin_location_id if default_bin is not None else None
+
+        bal = session.scalar(
+            select(StockBalance).where(
+                StockBalance.item_id == item_id, StockBalance.warehouse_id == warehouse_id,
+                StockBalance.bin_location_id == bin_location_id, StockBalance.batch_id.is_(None),
+            ).with_for_update()
+        )
+        current_on_hand = bal.quantity_on_hand if bal is not None else _ZERO
+        quantity_remaining = min(original_quantity, current_on_hand) if current_on_hand > 0 else _ZERO
+        quantity_consumed = original_quantity - quantity_remaining
+
+        if method == "STANDARD" or bal is None or quantity_remaining <= 0:
+            inventory_value_delta = _ZERO
+            variance_value_delta = _money(original_quantity * unit_cost_delta)
+        else:
+            inventory_value_delta = _money(quantity_remaining * unit_cost_delta)
+            variance_value_delta = _money(quantity_consumed * unit_cost_delta)
+            bal.average_unit_cost = bal.average_unit_cost + (inventory_value_delta / current_on_hand)
+            bal.last_movement_at = datetime.datetime.now()
+        session.commit()
+        return CostCorrectionResult(
+            quantity_remaining=quantity_remaining, quantity_consumed=quantity_consumed,
+            inventory_value_delta=inventory_value_delta, variance_value_delta=variance_value_delta,
+        )
+
+
 # ---------------------------------------------------------------------
 # نگاشتِ حسابِ حسابداری در سطحِ دسته‌بندی — بخشِ ۱۴ (override رویِ نگاشتِ
 # سراسری). این دور فقط CRUD است؛ post_stock_document/_resolve_role_account
