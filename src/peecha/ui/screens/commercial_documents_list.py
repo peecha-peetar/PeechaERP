@@ -199,7 +199,7 @@ class CommercialDocumentsListScreen(QWidget):
         delete_button = QPushButton("✕")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedSize(44, 32)
-        if d.status_code != "POSTED":
+        if d.status_code not in ("POSTED", "CORRECTED"):
             # طبقِ services/commercial_documents.py:delete_document —
             # DRAFT/CONFIRMED/APPROVED/CANCELLED هرگز اثری در انبار یا
             # حسابداری نگذاشته‌اند، پس حذفِ مستقیم همیشه بی‌خطر است.
@@ -207,7 +207,11 @@ class CommercialDocumentsListScreen(QWidget):
             delete_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._delete_document(doc_id))
         else:
             delete_button.setEnabled(False)
-            delete_button.setToolTip("این سند ثبتِ‌نهایی شده و در انبار/حسابداری اثر دارد — حذفِ مستقیم ممکن نیست.")
+            delete_button.setToolTip(
+                "این سند اصلاح شده و تاریخچه‌اش باید دست‌نخورده بماند — حذفِ مستقیم ممکن نیست."
+                if d.status_code == "CORRECTED" else
+                "این سند ثبتِ‌نهایی شده و در انبار/حسابداری اثر دارد — حذفِ مستقیم ممکن نیست."
+            )
         actions_layout.addWidget(delete_button)
 
         # طبقِ درخواستِ صریح («تبدیل باید همین‌جا در صفحه‌یِ اسناد انجام

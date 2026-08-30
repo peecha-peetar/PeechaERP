@@ -627,6 +627,12 @@ def delete_document(document_id: int, company_id: int) -> None:
         # پس حذفِ مستقیمِ هرکدام از این چهار وضعیت همیشه بی‌خطر است.
         if doc.status_code == "POSTED":
             raise ValueError("سندِ ثبت‌شده هرگز حذف نمی‌شود — برایِ اصلاح، سندِ تازه‌ای ثبت کنید.")
+        # طبقِ همان منطق: CORRECTED هم (برخلافِ DRAFT/CONFIRMED/APPROVED/
+        # CANCELLED) واقعاً stock_document_id/journal_entry_id دارد --
+        # چون خودش قبلاً POSTED بوده -- و corrected_by_document_id به
+        # فاکتورِ اصلاحیِ دیگری اشاره دارد که نباید یتیم بماند.
+        if doc.status_code == "CORRECTED":
+            raise ValueError("سندِ اصلاح‌شده هرگز حذف نمی‌شود — تاریخچه‌یِ اصلاح باید دست‌نخورده بماند.")
         # طبقِ صحتِ ردگیریِ تبدیل‌شدنِ سفارش به فاکتور: اگر این سند (یا
         # یکی از ردیف‌هایش) مبدایِ فاکتوریِ دیگر است، حذفش آن پیوند را
         # یتیم می‌کند — هم به خاطرِ FK (بدونِ ON DELETE) خطایِ خام می‌داد.

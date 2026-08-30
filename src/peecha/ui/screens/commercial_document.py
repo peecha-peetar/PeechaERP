@@ -64,7 +64,10 @@ DOC_TYPE_TITLES = {
     "PURCHASE_INVOICE": "فاکتورِ خرید",
     "PURCHASE_RETURN": "برگشت به تامین‌کننده",
 }
-STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "APPROVED": "تصویب‌شده", "POSTED": "ثبتِ‌نهایی‌شده", "CANCELLED": "لغوشده"}
+STATUS_LABELS = {
+    "DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "APPROVED": "تصویب‌شده", "POSTED": "ثبتِ‌نهایی‌شده",
+    "CANCELLED": "لغوشده", "CORRECTED": "اصلاح‌شده",
+}
 _SALES_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN")
 # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل شود»).
 _CONVERTIBLE_TO_INVOICE_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA")
@@ -690,6 +693,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
 
+        # طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند»):
+        # فقط برایِ فاکتورِ خرید/فروش نمایش داده می‌شود؛ فعال‌بودنش هم به
+        # وضعیتِ POSTED هم به مجازبودنِ کاربر (نقشِ مدیر + تنظیمِ روشنِ
+        # شرکت) بستگی دارد -- can_correct_posted_document() هردو را
+        # دوباره در start_invoice_correction() هم اعتبارسنجی می‌کند.
+        self.correct_button = QPushButton("♻️")
+        self.correct_button.setObjectName("iconButton")
+        self.correct_button.setFixedWidth(44)
+        self.correct_button.setToolTip(
+            "اصلاحِ فاکتورِ ثبت‌شده — فقط برایِ مدیر و در صورتِ فعال‌بودنِ تنظیمِ «اجازه‌یِ اصلاحِ فاکتورِ ثبت‌شده».\n"
+            "سندِ فعلی عیناً و با تاریخِ امروز برگشت می‌خورد (بدونِ تغییرِ تاریخِ فاکتورهایِ قبلی) "
+            "و یک پیش‌نویسِ تازه برایِ ویرایش باز می‌شود."
+        )
+        self.correct_button.clicked.connect(self._correct_invoice)
+        self.correct_button.setVisible(document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
+        self.footer_layout.addWidget(self.correct_button)
+
         # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل
         # شود»): فقط برایِ انواعِ سفارش/پیش‌فاکتور نمایش داده می‌شود.
         self.convert_button = QPushButton("→")
@@ -917,6 +937,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         is_posted = self._status_code == "POSTED"
         self.convert_button.setEnabled(is_confirmed or is_approved or is_posted)
+        self.correct_button.setEnabled(is_posted and self._document_id is not None and self._can_correct_posted())
 
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
@@ -1173,6 +1194,40 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
         self._reset_form()
         theme.set_status_label(self.status_label, "سند لغو شد.", ok=True)
+
+    def _can_correct_posted(self) -> bool:
+        company_id = self._company_id()
+        user = app_session.current_user
+        if company_id is None or user is None:
+            return False
+        return documents_service.can_correct_posted_document(company_id, user.user_id)
+
+    def _correct_invoice(self) -> None:
+        if self._document_id is None:
+            return
+        company_id = self._company_id()
+        confirm = QMessageBox.question(
+            self, "اصلاحِ فاکتور",
+            "این فاکتور اصلاح شود؟\n"
+            "سندِ انبار و حسابداریِ فعلی عیناً و با تاریخِ امروز برگشت می‌خورد (بدونِ تغییرِ تاریخِ فاکتورهایِ ثبت‌شده‌یِ "
+            "دیگر) و یک پیش‌نویسِ تازه با اطلاعاتِ همین فاکتور برایِ ویرایش باز می‌شود.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            new_document_id = documents_service.start_invoice_correction(
+                self._document_id, company_id, app_session.current_user.user_id
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در اصلاحِ فاکتور", str(exc))
+            return
+        self.edit_document(new_document_id)
+        theme.set_status_label(
+            self.status_label,
+            f"فاکتورِ اصلی برگشت خورد و اصلاح شد؛ اکنون پیش‌نویسِ اصلاحیِ #{numerals.to_persian_digits(str(new_document_id))} را ویرایش کنید.",
+            ok=True,
+        )
 
     def _convert_to_invoice(self) -> None:
         if self._document_id is None:
