@@ -17,9 +17,12 @@ jrxmlِ مشخص‌شده، فقط چیدمان/خروجی (PDF یا Excel) را
 
 from __future__ import annotations
 
+import glob
 import json
 import os
+import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -28,6 +31,49 @@ _RUNNER_JAR = _REPO_ROOT / "tools" / "jasper-runner" / "target" / "jasper-runner
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 BUILD_INSTRUCTIONS = "طبقِ tools/jasper-runner/README.md آن را build کنید."
+
+JAVA_DOWNLOAD_URL = "https://adoptium.net/temurin/releases/?version=17"
+JAVA_MISSING_MESSAGE = (
+    "برایِ چاپِ حرفه‌ای، جاوا (JRE ۱۷ یا بالاتر) روی این سیستم نصب نیست.\n\n"
+    f"از این آدرس (نسخه‌یِ ۱۷، Windows x64، پکیجِ JRE، فایلِ .msi) دانلود و نصب کنید:\n{JAVA_DOWNLOAD_URL}\n\n"
+    "بعد از نصب، برنامه را ببندید و دوباره باز کنید."
+)
+
+
+def _find_java() -> str | None:
+    """مسیرِ اجراییِ جاوا را پیدا می‌کند -- اول در PATH، بعد JAVA_HOME، و در
+    نبودِ این دو (مثلاً وقتی نصب‌کننده PATH را تازه تنظیم کرده ولی برنامه
+    هنوز با محیطِ قدیمی باز است) در پوشه‌هایِ رایجِ نصبِ JRE/JDK جست‌وجو
+    می‌کند."""
+    found = shutil.which("java")
+    if found:
+        return found
+
+    java_home = os.environ.get("JAVA_HOME")
+    if java_home:
+        candidate = Path(java_home) / "bin" / ("java.exe" if sys.platform == "win32" else "java")
+        if candidate.exists():
+            return str(candidate)
+
+    if sys.platform == "win32":
+        patterns = [
+            r"C:\Program Files\Eclipse Adoptium\*\bin\java.exe",
+            r"C:\Program Files\Java\*\bin\java.exe",
+            r"C:\Program Files\Amazon Corretto\*\bin\java.exe",
+            r"C:\Program Files\Zulu\*\bin\java.exe",
+            r"C:\Program Files (x86)\Eclipse Adoptium\*\bin\java.exe",
+            r"C:\Program Files (x86)\Java\*\bin\java.exe",
+        ]
+    elif sys.platform == "darwin":
+        patterns = ["/Library/Java/JavaVirtualMachines/*/Contents/Home/bin/java"]
+    else:
+        patterns = ["/usr/lib/jvm/*/bin/java"]
+
+    for pattern in patterns:
+        matches = sorted(glob.glob(pattern), reverse=True)
+        if matches:
+            return matches[0]
+    return None
 
 _STUDIO_ENV_VAR = "PEECHA_JASPER_STUDIO_PATH"
 
@@ -97,6 +143,10 @@ def render_report_at_path(
     if not _RUNNER_JAR.exists():
         raise JasperNotAvailableError(f"موتورِ چاپِ حرفه‌ای هنوز آماده نیست — {BUILD_INSTRUCTIONS}")
 
+    java_exe = _find_java()
+    if java_exe is None:
+        raise JasperNotAvailableError(JAVA_MISSING_MESSAGE)
+
     jrxml_path = Path(jrxml_path)
     if not jrxml_path.exists():
         raise FileNotFoundError(f"قالبِ گزارش یافت نشد: {jrxml_path}")
@@ -111,14 +161,12 @@ def render_report_at_path(
 
         try:
             result = subprocess.run(
-                ["java", "-jar", str(_RUNNER_JAR), str(jrxml_path), rows_path, params_path, str(output_path), output_format],
+                [java_exe, "-jar", str(_RUNNER_JAR), str(jrxml_path), rows_path, params_path, str(output_path), output_format],
                 capture_output=True,
                 text=True,
             )
         except FileNotFoundError as exc:
-            raise JasperNotAvailableError(
-                f"Java یافت نشد — برایِ چاپِ حرفه‌ای، JDK ۱۷ یا بالاتر باید نصب و در PATH باشد."
-            ) from exc
+            raise JasperNotAvailableError(JAVA_MISSING_MESSAGE) from exc
 
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "").strip()
