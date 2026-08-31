@@ -14,11 +14,11 @@
 تعریف‌هایِ مشترکِ بینِ همه‌یِ شرکت‌ها هستند) دست نمی‌زنند.
 
 محدودیتِ آگاهانه: ماژول‌هایِ کمتر-رایجِ باقی‌مانده (POS/باشگاهِ مشتریان/
-بازارهایِ آنلاین/ریبیتِ تامین‌کننده/شمارشِ چرخه‌ای/BOM/صورت‌حسابِ اشتراکی/
-بهایِ تمام‌شدهٔ وارداتی/گردشِ کار) این‌جا پوشش داده نمی‌شوند -- گارانتی/
-RMA/تیکتِ خدمات طبقِ رفعِ باگِ واقعی (که این محدودیت را عملاً مسدودکننده
-می‌کرد) اضافه شدند. اگر داده‌ای در ماژول‌هایِ باقی‌مانده به همین اسناد
-وابسته باشد، عملیات با خطایِ صریحِ دیتابیس (نه خرابیِ خاموش) متوقف
+بازارهایِ آنلاین/شمارشِ چرخه‌ای/BOM/صورت‌حسابِ اشتراکی/گردشِ کار) این‌جا
+پوشش داده نمی‌شوند -- گارانتی/RMA/تیکتِ خدمات و هزینه‌یِ تمام‌شدهٔ وارداتی/
+تعهدِ ریبیتِ تامین‌کننده طبقِ رفعِ باگِ واقعی (که این محدودیت را عملاً
+مسدودکننده می‌کرد) اضافه شدند. اگر داده‌ای در ماژول‌هایِ باقی‌مانده به همین
+اسناد وابسته باشد، عملیات با خطایِ صریحِ دیتابیس (نه خرابیِ خاموش) متوقف
 می‌شود و هیچ‌چیز حذف نمی‌شود (تراکنشِ واحد، همه‌یا-هیچ)."""
 
 from __future__ import annotations
@@ -85,6 +85,11 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM comm.warranties WHERE sales_document_line_id IN "
     "(SELECT cdl.line_id FROM comm.commercial_document_lines cdl "
     " JOIN comm.commercial_documents cd ON cd.document_id = cdl.document_id WHERE cd.company_id = :company_id)",
+    # طبقِ رفعِ باگِ واقعیِ مشابه (ریبیتِ تامین‌کننده/بهایِ تمام‌شدهٔ
+    # وارداتی): این جدول هم به commercial_documents (فاکتورِ خرید) وصل
+    # است و مانعِ حذفِ اسناد می‌شد.
+    "DELETE FROM comm.landed_cost_allocations WHERE purchase_invoice_document_id IN "
+    "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     "DELETE FROM comm.commission_entries WHERE document_line_id IN "
     "(SELECT cdl.line_id FROM comm.commercial_document_lines cdl "
     " JOIN comm.commercial_documents cd ON cd.document_id = cdl.document_id WHERE cd.company_id = :company_id)",
@@ -121,6 +126,13 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM inv.stock_documents WHERE company_id = :company_id",
     "DELETE FROM inv.stock_reservations WHERE company_id = :company_id",
     "DELETE FROM inv.stock_balance WHERE company_id = :company_id",
+    # طبقِ همان رفعِ باگ: تعهدِ ریبیتِ تامین‌کننده (VendorRebateAccrual) هم
+    # می‌تواند به یک سندِ حسابداری اشاره کند و مانعِ حذفِ acc.journal_entries
+    # پایینِ همین لیست شود -- فقط خودِ تعهد پاک می‌شود (نه قراردادِ ریبیتِ
+    # تامین‌کننده که ماژولِ کمتر-رایجِ خودش است و همچنان دست‌نخورده می‌ماند).
+    "DELETE FROM comm.vendor_rebate_accruals WHERE agreement_id IN "
+    "(SELECT agreement_id FROM comm.vendor_rebate_agreements WHERE supplier_detail_account_id IN "
+    " (SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id))",
     # حسابداری
     "DELETE FROM acc.journal_entry_line_details WHERE line_id IN "
     "(SELECT jel.line_id FROM acc.journal_entry_lines jel "
