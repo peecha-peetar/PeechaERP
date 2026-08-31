@@ -146,7 +146,7 @@ class CommercialDocumentsListScreen(QWidget):
                 numerals.to_persian_digits(str(d.document_no)),
                 numerals.format_jalali_date(d.document_date),
                 self._parties_by_id.get(d.counterparty_detail_account_id, "—"),
-                numerals.format_amount(d.total_amount),
+                numerals.format_company_amount(d.total_amount),
                 STATUS_LABELS.get(d.status_code, d.status_code),
                 d.reference_no or "—",
                 self._fulfillment_text(fulfillment),
@@ -156,6 +156,12 @@ class CommercialDocumentsListScreen(QWidget):
                 item.setData(Qt.UserRole, d.document_id)
                 self.table.setItem(row_index, col_index, item)
             self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d, fulfillment))
+        # طبقِ رفعِ باگِ واقعیِ هم‌پوشانیِ دکمه‌ها: در این نسخه‌یِ Qt،
+        # ResizeToContents فقط یک‌بار (بر مبنایِ متنِ هدر) اندازه‌گیری
+        # می‌شود و بعدِ setCellWidget دوباره محاسبه نمی‌شود -- باید صریحاً
+        # این ستون را با اندازه‌یِ واقعیِ ویجت‌هایِ داخلش (که بسته به
+        # سه‌دکمه‌ای/دودکمه‌ای بودنِ سند فرق می‌کند) دوباره اندازه‌گیری کرد.
+        self.table.resizeColumnToContents(len(_COLUMNS) - 1)
         self.table.resizeRowsToContents()
 
     def _fulfillment_summary(self, d, company_id: int) -> tuple[decimal.Decimal, decimal.Decimal] | None:

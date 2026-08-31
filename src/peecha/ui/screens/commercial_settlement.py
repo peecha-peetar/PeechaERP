@@ -363,9 +363,9 @@ class InvoiceSettlementScreen(QWidget):
                 numerals.to_persian_digits(str(doc.document_no)) if doc else "—",
                 self._parties_by_id.get(doc.counterparty_detail_account_id, "—") if doc else "—",
                 numerals.format_jalali_date(status.due_date) if status.due_date else "—",
-                numerals.format_amount(status.total_amount),
-                numerals.format_amount(status.settled_amount),
-                numerals.format_amount(status.remaining_amount),
+                numerals.format_company_amount(status.total_amount),
+                numerals.format_company_amount(status.settled_amount),
+                numerals.format_company_amount(status.remaining_amount),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -438,7 +438,7 @@ class InvoiceSettlementScreen(QWidget):
                 je_label = f"#{numerals.to_persian_digits(str(settlement.journal_entry_id))}"
             values = [
                 numerals.format_jalali_date(settlement.settlement_date),
-                numerals.format_amount(settlement.amount),
+                numerals.format_company_amount(settlement.amount),
                 je_label,
                 settlement.reference_no or "—",
                 settlement.description or "—",

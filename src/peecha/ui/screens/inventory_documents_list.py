@@ -125,6 +125,7 @@ class InventoryDocumentsListScreen(QWidget):
                 item.setData(Qt.UserRole, d.stock_document_id)
                 self.table.setItem(row_index, col_index, item)
             self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d))
+        self.table.resizeColumnToContents(len(_COLUMNS) - 1)
         self.table.resizeRowsToContents()
 
     def _build_row_actions(self, d: documents_service.StockDocumentRow) -> QWidget:

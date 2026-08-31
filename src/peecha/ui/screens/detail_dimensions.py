@@ -562,7 +562,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for row_index, c in enumerate(self._pay_components):
             values = [
                 f"{c.pay_item_code} — {c.pay_item_name}",
-                numerals.format_amount(c.amount) if c.amount is not None else "—",
+                numerals.format_company_amount(c.amount) if c.amount is not None else "—",
                 numerals.to_persian_digits(c.effective_from.isoformat()),
                 numerals.to_persian_digits(c.effective_to.isoformat()) if c.effective_to else "—",
             ]
@@ -798,7 +798,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     r["detail_account_id"], r["parent_detail_account_id"], r["full_code"], r["name"],
                     r["level_no"], r["is_active"],
                     r.get("org_unit_name") or "—", r.get("position_name") or "—",
-                    numerals.format_amount(r["base_salary"]) if r.get("base_salary") is not None else "—",
+                    numerals.format_company_amount(r["base_salary"]) if r.get("base_salary") is not None else "—",
                     _EMPLOYEE_STATUS_LABELS.get(r.get("employee_status"), "—"),
                 )
                 for r in self._person_rows_by_id.values()

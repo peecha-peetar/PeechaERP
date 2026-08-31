@@ -98,7 +98,7 @@ class InstallmentsListScreen(QWidget):
                 self._parties_by_id.get(doc.counterparty_detail_account_id, "—") if doc else "—",
                 numerals.to_persian_digits(str(line.installment_no)),
                 numerals.format_jalali_date(line.due_date),
-                numerals.format_amount(line.amount),
+                numerals.format_company_amount(line.amount),
                 _STATUS_LABELS.get(line.status_code, line.status_code),
             ]
             for col_index, value in enumerate(values):

@@ -277,7 +277,7 @@ class CommercialPosSaleScreen(QWidget):
         self._lines = lines
         self._is_posted = doc.status_code == "POSTED"
         self._refresh_lines_table()
-        self.total_label.setText(f"جمعِ کل: {numerals.format_amount(doc.total_amount)}")
+        self.total_label.setText(f"جمعِ کل: {numerals.format_company_amount(doc.total_amount)}")
         self._refresh_payments_label(doc.total_amount)
 
     def _refresh_lines_table(self) -> None:

@@ -172,7 +172,7 @@ class CommercialPricingScreen(QWidget):
                 f"{item.code} — {item.name or ''}" if item else str(r.item_id),
                 "",
                 numerals.to_persian_digits(str(r.min_quantity)),
-                numerals.format_amount(r.unit_price),
+                numerals.format_company_amount(r.unit_price),
             ]
             for col_index, value in enumerate(values):
                 self.pl_items_table.setItem(row_index, col_index, QTableWidgetItem(value))
@@ -291,7 +291,7 @@ class CommercialPricingScreen(QWidget):
         self.rules_table.setRowCount(len(self._discount_rules))
         for row_index, r in enumerate(self._discount_rules):
             value_text = "پلکانی" if r.discount_type_code == "TIERED" else (
-                f"{r.discount_value}٪" if r.discount_type_code == "PERCENT" else numerals.format_amount(r.discount_value)
+                f"{r.discount_value}٪" if r.discount_type_code == "PERCENT" else numerals.format_company_amount(r.discount_value)
             )
             values = [r.code, r.name, _DISCOUNT_TYPE_LABELS.get(r.discount_type_code, r.discount_type_code), value_text, str(r.priority)]
             for col_index, value in enumerate(values):

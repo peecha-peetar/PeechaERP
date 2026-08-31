@@ -260,9 +260,9 @@ class CommercialPosSessionsScreen(QWidget):
             values = [
                 numerals.to_persian_digits(str(s.session_id)),
                 _SESSION_STATUS_LABELS.get(s.status_code, s.status_code),
-                numerals.format_amount(s.opening_cash_amount),
-                numerals.format_amount(s.closing_cash_amount) if s.closing_cash_amount is not None else "—",
-                numerals.format_amount(s.variance_amount) if s.variance_amount is not None else "—",
+                numerals.format_company_amount(s.opening_cash_amount),
+                numerals.format_company_amount(s.closing_cash_amount) if s.closing_cash_amount is not None else "—",
+                numerals.format_company_amount(s.variance_amount) if s.variance_amount is not None else "—",
                 "بله" if s.variance_override_by_user_id is not None else ("—" if s.variance_amount is None else "خیر"),
             ]
             for col_index, value in enumerate(values):

@@ -56,14 +56,21 @@ class ItemLedgerScreen(QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
+        # طبقِ رفعِ باگِ واقعیِ عدمِ تناسبِ فیلدها (این کاردکس استثنایی بود --
+        # همه‌یِ فرم‌هایِ مشابه مثلِ تسویه از هم‌این الگو با
+        # setMinimumWidth(170) + addStretch(1) در انتهایِ ردیف استفاده
+        # می‌کنند، به‌جایِ دادنِ stretch به یک فیلدِ خاص که کاملاً
+        # نامتناسب بزرگش می‌کند).
         filters_row = QHBoxLayout()
         filters_row.addWidget(QLabel("کالا"))
         self.item_combo = _make_searchable_combo([])
+        self.item_combo.setMinimumWidth(170)
         self.item_combo.currentIndexChanged.connect(self._on_filters_changed)
-        filters_row.addWidget(self.item_combo, stretch=1)
+        filters_row.addWidget(self.item_combo)
 
         filters_row.addWidget(QLabel("انبار"))
         self.warehouse_combo = _make_searchable_combo([])
+        self.warehouse_combo.setMinimumWidth(170)
         self.warehouse_combo.currentIndexChanged.connect(self._on_filters_changed)
         filters_row.addWidget(self.warehouse_combo)
 
@@ -85,6 +92,7 @@ class ItemLedgerScreen(QWidget):
         )
         self.print_professional_button.clicked.connect(self._print_professional)
         filters_row.addWidget(self.print_professional_button)
+        filters_row.addStretch(1)
         layout.addLayout(filters_row)
 
         self.table = QTableWidget(0, len(_COLUMNS))

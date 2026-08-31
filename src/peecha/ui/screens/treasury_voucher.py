@@ -1650,8 +1650,8 @@ class _LinkInvoicesDialog(LayoutEditMixin, QDialog):
                 invoice_title,
                 numerals.to_persian_digits(str(doc.document_no)),
                 numerals.format_jalali_date(status.due_date) if status.due_date else "—",
-                numerals.format_amount(status.total_amount),
-                numerals.format_amount(status.remaining_amount),
+                numerals.format_company_amount(status.total_amount),
+                numerals.format_company_amount(status.remaining_amount),
             ]
             for col_index, value in enumerate(values):
                 table.setItem(row_index, col_index, QTableWidgetItem(value))
