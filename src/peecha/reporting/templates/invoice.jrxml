@@ -92,6 +92,42 @@
         <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
     </parameter>
 
+    <!-- طبقِ درخواستِ صریح («همه‌یِ فیلدهایِ ممکن در گزارش باشند، حتی
+         استفاده‌نشده»): پارامترها/فیلدهایِ زیر عمداً در چیدمانِ فعلی جایی
+         ندارند، ولی چون این‌جا تعریف شده‌اند در پنلِ Outlineِ Jaspersoft
+         Studio ظاهر می‌شوند؛ کاربر می‌تواند هرکدام را با Drag & Drop به
+         گزارش اضافه کند، بدونِ نیاز به تغییرِ کدِ پایتون. -->
+    <parameter name="companyNationalId" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسه‌یِ ملیِ شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="companyEconomicCode" class="java.lang.String">
+        <parameterDescription><![CDATA[کدِ اقتصادیِ شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="companyRegistrationNo" class="java.lang.String">
+        <parameterDescription><![CDATA[شماره‌یِ ثبتِ شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyPhone" class="java.lang.String">
+        <parameterDescription><![CDATA[تلفنِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyMobile" class="java.lang.String">
+        <parameterDescription><![CDATA[موبایلِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyNationalId" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسه‌یِ ملیِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyEconomicCode" class="java.lang.String">
+        <parameterDescription><![CDATA[کدِ اقتصادیِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyCreditLimitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[سقفِ اعتبارِ مشتری]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyBankAccountNo" class="java.lang.String">
+        <parameterDescription><![CDATA[شماره‌حسابِ بانکیِ تامین‌کننده]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyNotes" class="java.lang.String">
+        <parameterDescription><![CDATA[یادداشتِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+
     <field name="row_no_display" class="java.lang.String">
 
         <property name="net.sf.jasperreports.json.field.expression" value="row_no_display"/>
@@ -126,6 +162,30 @@
     <field name="line_total_display" class="java.lang.String">
         <property name="net.sf.jasperreports.json.field.expression" value="line_total_display"/>
         <fieldDescription><![CDATA[جمعِ ردیف]]></fieldDescription>
+    </field>
+    <field name="item_code" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="item_code"/>
+        <fieldDescription><![CDATA[کدِ کالا]]></fieldDescription>
+    </field>
+    <field name="item_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="item_name"/>
+        <fieldDescription><![CDATA[نامِ کالا (بدونِ کد)]]></fieldDescription>
+    </field>
+    <field name="line_description" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="line_description"/>
+        <fieldDescription><![CDATA[توضیحاتِ ردیف]]></fieldDescription>
+    </field>
+    <field name="discount_percent_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="discount_percent_display"/>
+        <fieldDescription><![CDATA[درصدِ تخفیف]]></fieldDescription>
+    </field>
+    <field name="tax_percent_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="tax_percent_display"/>
+        <fieldDescription><![CDATA[درصدِ مالیات]]></fieldDescription>
+    </field>
+    <field name="line_warehouse_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="line_warehouse_name"/>
+        <fieldDescription><![CDATA[انبارِ ردیف]]></fieldDescription>
     </field>
 
     <!-- طبقِ رفعِ باگِ ارتفاعِ فونتِ فارسیِ Bold (کشف‌شده در فازِ اول): متنِ

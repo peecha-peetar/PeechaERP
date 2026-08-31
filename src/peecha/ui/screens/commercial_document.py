@@ -198,7 +198,14 @@ def _build_invoice_print_rows_and_params(company_id: int, doc, lines: list) -> t
 
     items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
     uoms_by_id = {u.uom_id: u for u in catalog_service.list_uoms(company_id)}
+    warehouses_by_id = {w.warehouse_id: w.name for w in locations_service.list_warehouses(company_id)}
 
+    # طبقِ درخواستِ صریح («همه‌یِ فیلدهایِ ممکن در گزارش باشند، حتی اگر
+    # فعلاً در چیدمان استفاده نشوند»): فیلدها/پارامترهایِ زیر عمداً در
+    # جدولِ ردیف‌ها/سرِسندِ فعلیِ invoice.jrxml چیده نشده‌اند، ولی چون در
+    # لیستِ Fields/Parametersِ Studio ظاهر می‌شوند، کاربر می‌تواند خودش
+    # با Drag & Drop هرکدام را به گزارش اضافه کند، بدونِ نیاز به کدنویسیِ
+    # جدید.
     print_rows = []
     for row_no, ln in enumerate(lines, start=1):
         item = items_by_id.get(ln.item_id)
@@ -215,6 +222,13 @@ def _build_invoice_print_rows_and_params(company_id: int, doc, lines: list) -> t
             "discount_display": _money_or_blank(ln.discount_amount, decimal_places),
             "tax_display": _money_or_blank(ln.tax_amount, decimal_places),
             "line_total_display": numerals.format_money(ln.line_total, decimal_places),
+            # فیلدهایِ اضافیِ در دسترس (فعلاً در چیدمان استفاده نشده):
+            "item_code": item.code if item else "",
+            "item_name": item.name or "" if item else "",
+            "line_description": ln.description or "",
+            "discount_percent_display": numerals.format_money(ln.discount_percent, 2) if ln.discount_percent else "",
+            "tax_percent_display": numerals.format_money(ln.tax_percent, 2) if ln.tax_percent else "",
+            "line_warehouse_name": warehouses_by_id.get(ln.warehouse_id, "") if ln.warehouse_id else "",
         })
 
     params = {
@@ -240,6 +254,24 @@ def _build_invoice_print_rows_and_params(company_id: int, doc, lines: list) -> t
         "totalDisplay": numerals.format_money(doc.total_amount, decimal_places),
         "totalInWordsDisplay": numerals.amount_to_words(doc.total_amount),
         "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+        # پارامترهایِ اضافیِ در دسترس (فعلاً در چیدمان استفاده نشده --
+        # همان توضیحِ بالایِ حلقه‌یِ ردیف‌ها):
+        "companyNationalId": numerals.to_persian_digits(company.national_id) if company.national_id else "",
+        "companyEconomicCode": numerals.to_persian_digits(company.economic_code) if company.economic_code else "",
+        "companyRegistrationNo": numerals.to_persian_digits(company.registration_no) if company.registration_no else "",
+        "counterpartyPhone": numerals.to_persian_digits(party_detail["phone"]) if party_detail and party_detail.get("phone") else "",
+        "counterpartyMobile": numerals.to_persian_digits(party_detail["mobile"]) if party_detail and party_detail.get("mobile") else "",
+        "counterpartyNationalId": numerals.to_persian_digits(party_detail["national_id"]) if party_detail and party_detail.get("national_id") else "",
+        "counterpartyEconomicCode": numerals.to_persian_digits(party_detail["economic_code"]) if party_detail and party_detail.get("economic_code") else "",
+        "counterpartyCreditLimitDisplay": (
+            numerals.format_money(party_detail["credit_limit"], decimal_places)
+            if is_customer_side and party_detail and party_detail.get("credit_limit") else ""
+        ),
+        "counterpartyBankAccountNo": (
+            numerals.to_persian_digits(party_detail["bank_account_no"])
+            if not is_customer_side and party_detail and party_detail.get("bank_account_no") else ""
+        ),
+        "counterpartyNotes": (party_detail.get("notes") or "") if party_detail else "",
     }
     return print_rows, params
 
