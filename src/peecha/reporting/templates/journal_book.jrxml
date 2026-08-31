@@ -16,23 +16,71 @@
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
     <style name="TotalsLabel" fontName="Vazirmatn" fontSize="8" isBold="true"/>
 
-    <parameter name="companyName" class="java.lang.String"/>
-    <parameter name="dateRangeLabel" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
-    <parameter name="totalDebitDisplay" class="java.lang.String"/>
-    <parameter name="totalCreditDisplay" class="java.lang.String"/>
+    <parameter name="companyName" class="java.lang.String">
 
-    <field name="document_date_display" class="java.lang.String"/>
-    <field name="document_no_display" class="java.lang.String"/>
-    <field name="account_code" class="java.lang.String"/>
-    <field name="account_name" class="java.lang.String"/>
-    <field name="detail_name" class="java.lang.String"/>
-    <field name="cost_center_name" class="java.lang.String"/>
-    <field name="project_name" class="java.lang.String"/>
-    <field name="profit_center_name" class="java.lang.String"/>
-    <field name="description" class="java.lang.String"/>
-    <field name="debit_display" class="java.lang.String"/>
-    <field name="credit_display" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="dateRangeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[بازه‌یِ تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="totalDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بدهکار]]></parameterDescription>
+    </parameter>
+    <parameter name="totalCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بستانکار]]></parameterDescription>
+    </parameter>
+
+    <field name="document_date_display" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="document_date_display"/>
+
+        <fieldDescription><![CDATA[تاریخِ سند]]></fieldDescription>
+
+    </field>
+    <field name="document_no_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="document_no_display"/>
+        <fieldDescription><![CDATA[شماره‌یِ سند]]></fieldDescription>
+    </field>
+    <field name="account_code" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="account_code"/>
+        <fieldDescription><![CDATA[کدِ حساب]]></fieldDescription>
+    </field>
+    <field name="account_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="account_name"/>
+        <fieldDescription><![CDATA[نامِ حساب]]></fieldDescription>
+    </field>
+    <field name="detail_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="detail_name"/>
+        <fieldDescription><![CDATA[تفصیلی]]></fieldDescription>
+    </field>
+    <field name="cost_center_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="cost_center_name"/>
+        <fieldDescription><![CDATA[مرکزِ هزینه]]></fieldDescription>
+    </field>
+    <field name="project_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="project_name"/>
+        <fieldDescription><![CDATA[پروژه]]></fieldDescription>
+    </field>
+    <field name="profit_center_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="profit_center_name"/>
+        <fieldDescription><![CDATA[مرکزِ سود]]></fieldDescription>
+    </field>
+    <field name="description" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="description"/>
+        <fieldDescription><![CDATA[شرح]]></fieldDescription>
+    </field>
+    <field name="debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="debit_display"/>
+        <fieldDescription><![CDATA[بدهکار]]></fieldDescription>
+    </field>
+    <field name="credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="credit_display"/>
+        <fieldDescription><![CDATA[بستانکار]]></fieldDescription>
+    </field>
 
     <pageHeader>
         <band height="72">

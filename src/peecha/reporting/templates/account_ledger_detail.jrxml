@@ -16,21 +16,62 @@
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
     <style name="TotalsLabel" fontName="Vazirmatn" fontSize="9" isBold="true"/>
 
-    <parameter name="companyName" class="java.lang.String"/>
-    <parameter name="accountLabel" class="java.lang.String"/>
-    <parameter name="dateRangeLabel" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
-    <parameter name="totalDebitDisplay" class="java.lang.String"/>
-    <parameter name="totalCreditDisplay" class="java.lang.String"/>
+    <parameter name="companyName" class="java.lang.String">
 
-    <field name="date_display" class="java.lang.String"/>
-    <field name="document_no_display" class="java.lang.String"/>
-    <field name="description" class="java.lang.String"/>
-    <field name="debit_display" class="java.lang.String"/>
-    <field name="credit_display" class="java.lang.String"/>
-    <field name="balance_display" class="java.lang.String"/>
-    <field name="fc_amount_display" class="java.lang.String"/>
-    <field name="fc_currency_display" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="accountLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[نامِ حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="dateRangeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[بازه‌یِ تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="totalDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بدهکار]]></parameterDescription>
+    </parameter>
+    <parameter name="totalCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بستانکار]]></parameterDescription>
+    </parameter>
+
+    <field name="date_display" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="date_display"/>
+
+        <fieldDescription><![CDATA[تاریخ]]></fieldDescription>
+
+    </field>
+    <field name="document_no_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="document_no_display"/>
+        <fieldDescription><![CDATA[شماره‌یِ سند]]></fieldDescription>
+    </field>
+    <field name="description" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="description"/>
+        <fieldDescription><![CDATA[شرح]]></fieldDescription>
+    </field>
+    <field name="debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="debit_display"/>
+        <fieldDescription><![CDATA[بدهکار]]></fieldDescription>
+    </field>
+    <field name="credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="credit_display"/>
+        <fieldDescription><![CDATA[بستانکار]]></fieldDescription>
+    </field>
+    <field name="balance_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="balance_display"/>
+        <fieldDescription><![CDATA[مانده]]></fieldDescription>
+    </field>
+    <field name="fc_amount_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="fc_amount_display"/>
+        <fieldDescription><![CDATA[مبلغِ ارزی]]></fieldDescription>
+    </field>
+    <field name="fc_currency_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="fc_currency_display"/>
+        <fieldDescription><![CDATA[ارز]]></fieldDescription>
+    </field>
 
     <pageHeader>
         <band height="72">

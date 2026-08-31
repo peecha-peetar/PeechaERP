@@ -16,25 +16,74 @@
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
     <style name="TotalsLabel" fontName="Vazirmatn" fontSize="9" isBold="true"/>
 
-    <parameter name="companyName" class="java.lang.String"/>
-    <parameter name="dateRangeLabel" class="java.lang.String"/>
-    <parameter name="levelLabel" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
-    <parameter name="totalOpeningDebitDisplay" class="java.lang.String"/>
-    <parameter name="totalOpeningCreditDisplay" class="java.lang.String"/>
-    <parameter name="totalPeriodDebitDisplay" class="java.lang.String"/>
-    <parameter name="totalPeriodCreditDisplay" class="java.lang.String"/>
-    <parameter name="totalClosingDebitDisplay" class="java.lang.String"/>
-    <parameter name="totalClosingCreditDisplay" class="java.lang.String"/>
+    <parameter name="companyName" class="java.lang.String">
 
-    <field name="account_code" class="java.lang.String"/>
-    <field name="account_name" class="java.lang.String"/>
-    <field name="opening_debit_display" class="java.lang.String"/>
-    <field name="opening_credit_display" class="java.lang.String"/>
-    <field name="period_debit_display" class="java.lang.String"/>
-    <field name="period_credit_display" class="java.lang.String"/>
-    <field name="closing_debit_display" class="java.lang.String"/>
-    <field name="closing_credit_display" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="dateRangeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[بازه‌یِ تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="levelLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[سطحِ حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="totalOpeningDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بدهکارِ اولِ دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalOpeningCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بستانکارِ اولِ دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalPeriodDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بدهکارِ دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalPeriodCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بستانکارِ دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalClosingDebitDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بدهکارِ پایانِ دوره]]></parameterDescription>
+    </parameter>
+    <parameter name="totalClosingCreditDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بستانکارِ پایانِ دوره]]></parameterDescription>
+    </parameter>
+
+    <field name="account_code" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="account_code"/>
+
+        <fieldDescription><![CDATA[کدِ حساب]]></fieldDescription>
+
+    </field>
+    <field name="account_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="account_name"/>
+        <fieldDescription><![CDATA[نامِ حساب]]></fieldDescription>
+    </field>
+    <field name="opening_debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="opening_debit_display"/>
+        <fieldDescription><![CDATA[بدهکارِ اولِ دوره]]></fieldDescription>
+    </field>
+    <field name="opening_credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="opening_credit_display"/>
+        <fieldDescription><![CDATA[بستانکارِ اولِ دوره]]></fieldDescription>
+    </field>
+    <field name="period_debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="period_debit_display"/>
+        <fieldDescription><![CDATA[بدهکارِ دوره]]></fieldDescription>
+    </field>
+    <field name="period_credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="period_credit_display"/>
+        <fieldDescription><![CDATA[بستانکارِ دوره]]></fieldDescription>
+    </field>
+    <field name="closing_debit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="closing_debit_display"/>
+        <fieldDescription><![CDATA[بدهکارِ پایانِ دوره]]></fieldDescription>
+    </field>
+    <field name="closing_credit_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="closing_credit_display"/>
+        <fieldDescription><![CDATA[بستانکارِ پایانِ دوره]]></fieldDescription>
+    </field>
 
     <pageHeader>
         <band height="72">

@@ -16,19 +16,54 @@
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
     <style name="TotalsLabel" fontName="Vazirmatn" fontSize="8.5" isBold="true"/>
 
-    <parameter name="companyName" class="java.lang.String"/>
-    <parameter name="dateLabel" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
-    <parameter name="totalRightLine" class="java.lang.String"/>
-    <parameter name="totalLeftLine" class="java.lang.String"/>
-    <parameter name="balanceNote" class="java.lang.String"/>
+    <parameter name="companyName" class="java.lang.String">
 
-    <field name="right_code" class="java.lang.String"/>
-    <field name="right_name" class="java.lang.String"/>
-    <field name="right_amount_display" class="java.lang.String"/>
-    <field name="left_code" class="java.lang.String"/>
-    <field name="left_name" class="java.lang.String"/>
-    <field name="left_amount_display" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="dateLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="totalRightLine" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ سطرِ راست]]></parameterDescription>
+    </parameter>
+    <parameter name="totalLeftLine" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ سطرِ چپ]]></parameterDescription>
+    </parameter>
+    <parameter name="balanceNote" class="java.lang.String">
+        <parameterDescription><![CDATA[یادداشتِ توازن]]></parameterDescription>
+    </parameter>
+
+    <field name="right_code" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="right_code"/>
+
+        <fieldDescription><![CDATA[کدِ حساب (راست)]]></fieldDescription>
+
+    </field>
+    <field name="right_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="right_name"/>
+        <fieldDescription><![CDATA[نامِ حساب (راست)]]></fieldDescription>
+    </field>
+    <field name="right_amount_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="right_amount_display"/>
+        <fieldDescription><![CDATA[مبلغ (راست)]]></fieldDescription>
+    </field>
+    <field name="left_code" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="left_code"/>
+        <fieldDescription><![CDATA[کدِ حساب (چپ)]]></fieldDescription>
+    </field>
+    <field name="left_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="left_name"/>
+        <fieldDescription><![CDATA[نامِ حساب (چپ)]]></fieldDescription>
+    </field>
+    <field name="left_amount_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="left_amount_display"/>
+        <fieldDescription><![CDATA[مبلغ (چپ)]]></fieldDescription>
+    </field>
 
     <pageHeader>
         <band height="72">

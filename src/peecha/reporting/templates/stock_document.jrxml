@@ -17,27 +17,80 @@
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
     <style name="TotalsLabel" fontName="Vazirmatn" fontSize="9.5" isBold="true"/>
 
-    <parameter name="companyDisplayName" class="java.lang.String"/>
-    <parameter name="documentTypeLabel" class="java.lang.String"/>
-    <parameter name="documentNoDisplay" class="java.lang.String"/>
-    <parameter name="documentDateDisplay" class="java.lang.String"/>
-    <parameter name="statusLabel" class="java.lang.String"/>
-    <parameter name="counterpartyLabel" class="java.lang.String"/>
-    <parameter name="sourceWarehouseName" class="java.lang.String"/>
-    <parameter name="destinationWarehouseName" class="java.lang.String"/>
-    <parameter name="referenceNo" class="java.lang.String"/>
-    <parameter name="headerDescription" class="java.lang.String"/>
-    <parameter name="totalCostDisplay" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
+    <parameter name="companyDisplayName" class="java.lang.String">
 
-    <field name="row_no_display" class="java.lang.String"/>
-    <field name="item_label" class="java.lang.String"/>
-    <field name="uom_display" class="java.lang.String"/>
-    <field name="quantity_display" class="java.lang.String"/>
-    <field name="unit_cost_display" class="java.lang.String"/>
-    <field name="line_total_display" class="java.lang.String"/>
-    <field name="reason_display" class="java.lang.String"/>
-    <field name="description" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ نمایشیِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="documentTypeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[نوعِ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="documentNoDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[شماره‌یِ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="documentDateDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="statusLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[وضعیت]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="sourceWarehouseName" class="java.lang.String">
+        <parameterDescription><![CDATA[انبارِ مبدا]]></parameterDescription>
+    </parameter>
+    <parameter name="destinationWarehouseName" class="java.lang.String">
+        <parameterDescription><![CDATA[انبارِ مقصد]]></parameterDescription>
+    </parameter>
+    <parameter name="referenceNo" class="java.lang.String">
+        <parameterDescription><![CDATA[شماره‌یِ مرجع]]></parameterDescription>
+    </parameter>
+    <parameter name="headerDescription" class="java.lang.String">
+        <parameterDescription><![CDATA[شرحِ سرِسند]]></parameterDescription>
+    </parameter>
+    <parameter name="totalCostDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ بهایِ تمام‌شده]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+
+    <field name="row_no_display" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="row_no_display"/>
+
+        <fieldDescription><![CDATA[ردیف]]></fieldDescription>
+
+    </field>
+    <field name="item_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="item_label"/>
+        <fieldDescription><![CDATA[کالا]]></fieldDescription>
+    </field>
+    <field name="uom_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="uom_display"/>
+        <fieldDescription><![CDATA[واحد]]></fieldDescription>
+    </field>
+    <field name="quantity_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="quantity_display"/>
+        <fieldDescription><![CDATA[تعداد/مقدار]]></fieldDescription>
+    </field>
+    <field name="unit_cost_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="unit_cost_display"/>
+        <fieldDescription><![CDATA[بهایِ واحد]]></fieldDescription>
+    </field>
+    <field name="line_total_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="line_total_display"/>
+        <fieldDescription><![CDATA[جمعِ ردیف]]></fieldDescription>
+    </field>
+    <field name="reason_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="reason_display"/>
+        <fieldDescription><![CDATA[علت]]></fieldDescription>
+    </field>
+    <field name="description" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="description"/>
+        <fieldDescription><![CDATA[شرح]]></fieldDescription>
+    </field>
 
     <pageHeader>
         <band height="126">

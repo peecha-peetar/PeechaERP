@@ -15,25 +15,79 @@
     <style name="Header" fontName="Vazirmatn" fontSize="8" isBold="true"/>
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
 
-    <parameter name="companyName" class="java.lang.String"/>
-    <parameter name="itemName" class="java.lang.String"/>
-    <parameter name="warehouseName" class="java.lang.String"/>
-    <parameter name="dateRangeLabel" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
+    <parameter name="companyName" class="java.lang.String">
 
-    <field name="movement_date_display" class="java.lang.String"/>
-    <field name="document_type_label" class="java.lang.String"/>
-    <field name="document_no_display" class="java.lang.String"/>
-    <field name="warehouse_name" class="java.lang.String"/>
-    <field name="counterparty_label" class="java.lang.String"/>
-    <field name="quantity_in_display" class="java.lang.String"/>
-    <field name="quantity_out_display" class="java.lang.String"/>
-    <field name="unit_cost_display" class="java.lang.String"/>
-    <field name="value_in_display" class="java.lang.String"/>
-    <field name="value_out_display" class="java.lang.String"/>
-    <field name="sale_price_display" class="java.lang.String"/>
-    <field name="running_balance_display" class="java.lang.String"/>
-    <field name="running_value_balance_display" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="itemName" class="java.lang.String">
+        <parameterDescription><![CDATA[نامِ کالا]]></parameterDescription>
+    </parameter>
+    <parameter name="warehouseName" class="java.lang.String">
+        <parameterDescription><![CDATA[انبار]]></parameterDescription>
+    </parameter>
+    <parameter name="dateRangeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[بازه‌یِ تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+
+    <field name="movement_date_display" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="movement_date_display"/>
+
+        <fieldDescription><![CDATA[تاریخِ حرکت]]></fieldDescription>
+
+    </field>
+    <field name="document_type_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="document_type_label"/>
+        <fieldDescription><![CDATA[نوعِ سند]]></fieldDescription>
+    </field>
+    <field name="document_no_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="document_no_display"/>
+        <fieldDescription><![CDATA[شماره‌یِ سند]]></fieldDescription>
+    </field>
+    <field name="warehouse_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="warehouse_name"/>
+        <fieldDescription><![CDATA[انبار]]></fieldDescription>
+    </field>
+    <field name="counterparty_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="counterparty_label"/>
+        <fieldDescription><![CDATA[طرفِ‌حساب]]></fieldDescription>
+    </field>
+    <field name="quantity_in_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="quantity_in_display"/>
+        <fieldDescription><![CDATA[ورود]]></fieldDescription>
+    </field>
+    <field name="quantity_out_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="quantity_out_display"/>
+        <fieldDescription><![CDATA[خروج]]></fieldDescription>
+    </field>
+    <field name="unit_cost_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="unit_cost_display"/>
+        <fieldDescription><![CDATA[بهایِ واحد]]></fieldDescription>
+    </field>
+    <field name="value_in_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="value_in_display"/>
+        <fieldDescription><![CDATA[بهایِ کلِ ورود]]></fieldDescription>
+    </field>
+    <field name="value_out_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="value_out_display"/>
+        <fieldDescription><![CDATA[بهایِ کلِ خروج]]></fieldDescription>
+    </field>
+    <field name="sale_price_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="sale_price_display"/>
+        <fieldDescription><![CDATA[قیمتِ فروش]]></fieldDescription>
+    </field>
+    <field name="running_balance_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="running_balance_display"/>
+        <fieldDescription><![CDATA[مانده]]></fieldDescription>
+    </field>
+    <field name="running_value_balance_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="running_value_balance_display"/>
+        <fieldDescription><![CDATA[مانده‌یِ ریالی]]></fieldDescription>
+    </field>
 
     <!-- طبقِ رفعِ باگِ واقعیِ کشف‌شده: متنِ ۱۶pt Bold با Vazirmatn اگر
          ارتفاعِ reportElement فقط اندازه‌یِ خطِ فونتِ لاتین باشد، کاملاً

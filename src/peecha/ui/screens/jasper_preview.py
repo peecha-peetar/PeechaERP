@@ -12,11 +12,16 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
 from PySide6.QtPrintSupport import QPrintDialog
-from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QMessageBox, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout
+
+_ZOOM_STEP = 1.2
+_ZOOM_MIN = 0.2
+_ZOOM_MAX = 5.0
 
 from peecha.reporting import jasper_bridge
 
@@ -34,6 +39,7 @@ class JasperReportPreviewDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(950, 1050)
+        self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
 
         self._jrxml_path = jrxml_path
         self._rows = rows
@@ -48,10 +54,20 @@ class JasperReportPreviewDialog(QDialog):
         self.save_pdf_button = QPushButton("💾 ذخیره‌یِ PDF")
         self.save_excel_button = QPushButton("📊 خروجیِ Excel")
         self.print_button = QPushButton("🖨 چاپ")
+        self.zoom_out_button = QPushButton("🔍−")
+        self.zoom_out_button.setToolTip("کوچک‌نمایی")
+        self.zoom_label = QLabel()
+        self.zoom_in_button = QPushButton("🔍+")
+        self.zoom_in_button.setToolTip("بزرگ‌نمایی")
+        self.fit_width_button = QPushButton("عرضِ صفحه")
         self.close_button = QPushButton("بستن")
         for button in (self.save_pdf_button, self.save_excel_button, self.print_button):
             toolbar.addWidget(button)
         toolbar.addStretch()
+        toolbar.addWidget(self.zoom_out_button)
+        toolbar.addWidget(self.zoom_label)
+        toolbar.addWidget(self.zoom_in_button)
+        toolbar.addWidget(self.fit_width_button)
         toolbar.addWidget(self.close_button)
         layout.addLayout(toolbar)
 
@@ -59,18 +75,38 @@ class JasperReportPreviewDialog(QDialog):
         self._view = QPdfView(self)
         self._view.setDocument(self._document)
         self._view.setPageMode(QPdfView.PageMode.MultiPage)
+        self._view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
         layout.addWidget(self._view)
 
         self.save_pdf_button.clicked.connect(self._save_pdf)
         self.save_excel_button.clicked.connect(self._save_excel)
         self.print_button.clicked.connect(self._print)
+        self.zoom_in_button.clicked.connect(self._zoom_in)
+        self.zoom_out_button.clicked.connect(self._zoom_out)
+        self.fit_width_button.clicked.connect(self._fit_width)
         self.close_button.clicked.connect(self.close)
+        self._view.zoomFactorChanged.connect(self._update_zoom_label)
+        self._update_zoom_label()
 
         if pdf_path is not None:
             shutil.copy2(pdf_path, self._pdf_path)
             self._document.load(self._pdf_path)
         else:
             self._render_preview()
+
+    def _zoom_in(self) -> None:
+        self._view.setZoomMode(QPdfView.ZoomMode.Custom)
+        self._view.setZoomFactor(min(_ZOOM_MAX, self._view.zoomFactor() * _ZOOM_STEP))
+
+    def _zoom_out(self) -> None:
+        self._view.setZoomMode(QPdfView.ZoomMode.Custom)
+        self._view.setZoomFactor(max(_ZOOM_MIN, self._view.zoomFactor() / _ZOOM_STEP))
+
+    def _fit_width(self) -> None:
+        self._view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
+
+    def _update_zoom_label(self) -> None:
+        self.zoom_label.setText(f"{round(self._view.zoomFactor() * 100)}٪")
 
     def _render_preview(self) -> None:
         try:

@@ -16,17 +16,47 @@
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
     <style name="TotalsLabel" fontName="Vazirmatn" fontSize="10" isBold="true"/>
 
-    <parameter name="companyName" class="java.lang.String"/>
-    <parameter name="dateRangeLabel" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
-    <parameter name="netIncomeLabel" class="java.lang.String"/>
-    <parameter name="netIncomeDisplay" class="java.lang.String"/>
+    <parameter name="companyName" class="java.lang.String">
 
-    <field name="account_code" class="java.lang.String"/>
-    <field name="account_name" class="java.lang.String"/>
-    <field name="category_label" class="java.lang.String"/>
-    <field name="current_amount_display" class="java.lang.String"/>
-    <field name="previous_amount_display" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="dateRangeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[بازه‌یِ تاریخ]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+    <parameter name="netIncomeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[برچسبِ سودِ خالص]]></parameterDescription>
+    </parameter>
+    <parameter name="netIncomeDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[سودِ خالص]]></parameterDescription>
+    </parameter>
+
+    <field name="account_code" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="account_code"/>
+
+        <fieldDescription><![CDATA[کدِ حساب]]></fieldDescription>
+
+    </field>
+    <field name="account_name" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="account_name"/>
+        <fieldDescription><![CDATA[نامِ حساب]]></fieldDescription>
+    </field>
+    <field name="category_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="category_label"/>
+        <fieldDescription><![CDATA[دسته]]></fieldDescription>
+    </field>
+    <field name="current_amount_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="current_amount_display"/>
+        <fieldDescription><![CDATA[مبلغِ دورهٔ جاری]]></fieldDescription>
+    </field>
+    <field name="previous_amount_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="previous_amount_display"/>
+        <fieldDescription><![CDATA[مبلغِ دورهٔ قبل]]></fieldDescription>
+    </field>
 
     <pageHeader>
         <band height="72">

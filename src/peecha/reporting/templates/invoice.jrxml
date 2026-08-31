@@ -23,37 +23,110 @@
     <style name="GrandTotalValue" fontName="Vazirmatn" fontSize="11" isBold="true"/>
     <style name="Footer" fontName="Vazirmatn" fontSize="7"/>
 
-    <parameter name="companyDisplayName" class="java.lang.String"/>
-    <parameter name="companyLegalName" class="java.lang.String"/>
-    <parameter name="companyIdsLine" class="java.lang.String"/>
-    <parameter name="documentTypeLabel" class="java.lang.String"/>
-    <parameter name="documentNoDisplay" class="java.lang.String"/>
-    <parameter name="documentDateDisplay" class="java.lang.String"/>
-    <parameter name="dueDateDisplay" class="java.lang.String"/>
-    <parameter name="referenceNo" class="java.lang.String"/>
-    <parameter name="statusLabel" class="java.lang.String"/>
-    <parameter name="warehouseName" class="java.lang.String"/>
-    <parameter name="counterpartyLabel" class="java.lang.String"/>
-    <parameter name="counterpartyIdsLine" class="java.lang.String"/>
-    <parameter name="counterpartyContactLine" class="java.lang.String"/>
-    <parameter name="counterpartyAddress" class="java.lang.String"/>
-    <parameter name="headerDescription" class="java.lang.String"/>
-    <parameter name="subtotalDisplay" class="java.lang.String"/>
-    <parameter name="discountDisplay" class="java.lang.String"/>
-    <parameter name="taxDisplay" class="java.lang.String"/>
-    <parameter name="shippingDisplay" class="java.lang.String"/>
-    <parameter name="totalDisplay" class="java.lang.String"/>
-    <parameter name="totalInWordsDisplay" class="java.lang.String"/>
-    <parameter name="generatedAt" class="java.lang.String"/>
+    <parameter name="companyDisplayName" class="java.lang.String">
 
-    <field name="row_no_display" class="java.lang.String"/>
-    <field name="item_label" class="java.lang.String"/>
-    <field name="uom_display" class="java.lang.String"/>
-    <field name="quantity_display" class="java.lang.String"/>
-    <field name="unit_price_display" class="java.lang.String"/>
-    <field name="discount_display" class="java.lang.String"/>
-    <field name="tax_display" class="java.lang.String"/>
-    <field name="line_total_display" class="java.lang.String"/>
+        <parameterDescription><![CDATA[نامِ نمایشیِ شرکت]]></parameterDescription>
+
+    </parameter>
+    <parameter name="companyLegalName" class="java.lang.String">
+        <parameterDescription><![CDATA[نامِ حقوقیِ شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="companyIdsLine" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسه‌هایِ شرکت]]></parameterDescription>
+    </parameter>
+    <parameter name="documentTypeLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[نوعِ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="documentNoDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[شماره‌یِ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="documentDateDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ سند]]></parameterDescription>
+    </parameter>
+    <parameter name="dueDateDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ سررسید]]></parameterDescription>
+    </parameter>
+    <parameter name="referenceNo" class="java.lang.String">
+        <parameterDescription><![CDATA[شماره‌یِ مرجع]]></parameterDescription>
+    </parameter>
+    <parameter name="statusLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[وضعیت]]></parameterDescription>
+    </parameter>
+    <parameter name="warehouseName" class="java.lang.String">
+        <parameterDescription><![CDATA[انبار]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyLabel" class="java.lang.String">
+        <parameterDescription><![CDATA[طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyIdsLine" class="java.lang.String">
+        <parameterDescription><![CDATA[شناسه‌هایِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyContactLine" class="java.lang.String">
+        <parameterDescription><![CDATA[تماسِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="counterpartyAddress" class="java.lang.String">
+        <parameterDescription><![CDATA[آدرسِ طرفِ‌حساب]]></parameterDescription>
+    </parameter>
+    <parameter name="headerDescription" class="java.lang.String">
+        <parameterDescription><![CDATA[شرحِ سرِسند]]></parameterDescription>
+    </parameter>
+    <parameter name="subtotalDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ جزء]]></parameterDescription>
+    </parameter>
+    <parameter name="discountDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[تخفیف]]></parameterDescription>
+    </parameter>
+    <parameter name="taxDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[مالیات]]></parameterDescription>
+    </parameter>
+    <parameter name="shippingDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[هزینه‌یِ حمل]]></parameterDescription>
+    </parameter>
+    <parameter name="totalDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ کل]]></parameterDescription>
+    </parameter>
+    <parameter name="totalInWordsDisplay" class="java.lang.String">
+        <parameterDescription><![CDATA[جمعِ کل به حروف]]></parameterDescription>
+    </parameter>
+    <parameter name="generatedAt" class="java.lang.String">
+        <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
+    </parameter>
+
+    <field name="row_no_display" class="java.lang.String">
+
+        <property name="net.sf.jasperreports.json.field.expression" value="row_no_display"/>
+
+        <fieldDescription><![CDATA[ردیف]]></fieldDescription>
+
+    </field>
+    <field name="item_label" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="item_label"/>
+        <fieldDescription><![CDATA[کالا]]></fieldDescription>
+    </field>
+    <field name="uom_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="uom_display"/>
+        <fieldDescription><![CDATA[واحد]]></fieldDescription>
+    </field>
+    <field name="quantity_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="quantity_display"/>
+        <fieldDescription><![CDATA[تعداد/مقدار]]></fieldDescription>
+    </field>
+    <field name="unit_price_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="unit_price_display"/>
+        <fieldDescription><![CDATA[قیمتِ واحد]]></fieldDescription>
+    </field>
+    <field name="discount_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="discount_display"/>
+        <fieldDescription><![CDATA[تخفیف]]></fieldDescription>
+    </field>
+    <field name="tax_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="tax_display"/>
+        <fieldDescription><![CDATA[مالیات]]></fieldDescription>
+    </field>
+    <field name="line_total_display" class="java.lang.String">
+        <property name="net.sf.jasperreports.json.field.expression" value="line_total_display"/>
+        <fieldDescription><![CDATA[جمعِ ردیف]]></fieldDescription>
+    </field>
 
     <!-- طبقِ رفعِ باگِ ارتفاعِ فونتِ فارسیِ Bold (کشف‌شده در فازِ اول): متنِ
          Bold با اندازه‌یِ ۱۵pt هم (نه فقط ۱۶pt) با ارتفاعِ کم کاملاً
