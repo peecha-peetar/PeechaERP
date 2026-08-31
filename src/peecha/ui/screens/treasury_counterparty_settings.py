@@ -509,6 +509,9 @@ _RECEIPT_METHOD_KEYS = [
     "RECEIPT_VOUCHER",
     "RECEIPT_NETTING",
     "RECEIPT_INSTALLMENT",
+    # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط»): حسابِ درآمدی که سهمِ بهره/هزینه‌یِ
+    # متفرقهٔ اقساطِ دریافتی به آن ثبت می‌شود.
+    "RECEIPT_INSTALLMENT_INTEREST",
 ]
 _PAYMENT_METHOD_KEYS = [
     "PAYMENT_CASH",
@@ -518,6 +521,9 @@ _PAYMENT_METHOD_KEYS = [
     "PAYMENT_CHECK_DISBURSEMENT",
     "PAYMENT_NETTING",
     "PAYMENT_INSTALLMENT",
+    # همان موردِ ۶، سمتِ پرداخت: حسابِ هزینه‌ای که سهمِ بهره/هزینه‌یِ
+    # متفرقهٔ اقساطِ پرداختی به آن ثبت می‌شود.
+    "PAYMENT_INSTALLMENT_INTEREST",
 ]
 _METHOD_KEYS_BY_DIRECTION = {"RECEIPT": _RECEIPT_METHOD_KEYS, "PAYMENT": _PAYMENT_METHOD_KEYS}
 

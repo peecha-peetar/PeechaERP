@@ -13,12 +13,13 @@
 جدول‌هایِ سراسری (مثلِ inv.feature_definitions/comm.industry_profiles که
 تعریف‌هایِ مشترکِ بینِ همه‌یِ شرکت‌ها هستند) دست نمی‌زنند.
 
-محدودیتِ آگاهانه: ماژول‌هایِ کمتر-رایج (POS/باشگاهِ مشتریان/بازارهایِ
-آنلاین/گارانتی و RMA/ریبیتِ تامین‌کننده/شمارشِ چرخه‌ای/BOM/صورت‌حسابِ
-اشتراکی/بهایِ تمام‌شدهٔ وارداتی/گردشِ کار) این‌جا پوشش داده نمی‌شوند —
-اگر داده‌ای در آن‌ها به همین اسناد وابسته باشد، عملیات با خطایِ صریحِ
-دیتابیس (نه خرابیِ خاموش) متوقف می‌شود و هیچ‌چیز حذف نمی‌شود (تراکنشِ
-واحد، همه‌یا-هیچ)."""
+محدودیتِ آگاهانه: ماژول‌هایِ کمتر-رایجِ باقی‌مانده (POS/باشگاهِ مشتریان/
+بازارهایِ آنلاین/ریبیتِ تامین‌کننده/شمارشِ چرخه‌ای/BOM/صورت‌حسابِ اشتراکی/
+بهایِ تمام‌شدهٔ وارداتی/گردشِ کار) این‌جا پوشش داده نمی‌شوند -- گارانتی/
+RMA/تیکتِ خدمات طبقِ رفعِ باگِ واقعی (که این محدودیت را عملاً مسدودکننده
+می‌کرد) اضافه شدند. اگر داده‌ای در ماژول‌هایِ باقی‌مانده به همین اسناد
+وابسته باشد، عملیات با خطایِ صریحِ دیتابیس (نه خرابیِ خاموش) متوقف
+می‌شود و هیچ‌چیز حذف نمی‌شود (تراکنشِ واحد، همه‌یا-هیچ)."""
 
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ from sqlalchemy.exc import IntegrityError
 from peecha.db.base import new_session
 
 _FK_HINT = (
-    "برخی اطلاعاتِ دیگر (احتمالاً از ماژولی مثلِ فروشگاه/باشگاهِ مشتریان/گارانتی/RMA/"
+    "برخی اطلاعاتِ دیگر (احتمالاً از ماژولی مثلِ فروشگاه/باشگاهِ مشتریان/"
     "شمارشِ چرخه‌ای/بازارهایِ آنلاین که این ابزار پوشش نمی‌دهد) هنوز به این رکوردها "
     "وابسته‌اند — هیچ‌چیز حذف نشد. جزئیاتِ فنی: "
 )
@@ -65,6 +66,25 @@ _DOCUMENT_DELETE_STATEMENTS = [
     # فروش/خرید
     "DELETE FROM comm.credit_holds WHERE related_document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
+    # طبقِ رفعِ باگِ واقعی (گارانتی/RMA/تیکتِ خدمات -- «محدودیتِ آگاهانه‌»یِ
+    # بالا حالا واقعاً کاربر را مسدود می‌کرد): این چهار جدول قبلاً جزوِ
+    # همان ماژول‌هایِ کمتر-رایجِ پوشش‌نداده بودند، ولی چون به‌طورِ مستقیم
+    # به commercial_document_lines/commercial_documents وصل‌اند، حالا
+    # (به‌ترتیبِ وابستگی: rma_requests/service_ticket_parts_used قبل از
+    # service_tickets، و service_tickets قبل از warranties، چون
+    # service_tickets.warranty_id به warranties اشاره می‌کند) این‌جا هم
+    # پاک می‌شوند.
+    "DELETE FROM comm.rma_requests WHERE original_document_id IN "
+    "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id) "
+    "OR customer_detail_account_id IN (SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id)",
+    "DELETE FROM comm.service_ticket_parts_used WHERE ticket_id IN "
+    "(SELECT ticket_id FROM comm.service_tickets WHERE customer_detail_account_id IN "
+    " (SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id))",
+    "DELETE FROM comm.service_tickets WHERE customer_detail_account_id IN "
+    "(SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id)",
+    "DELETE FROM comm.warranties WHERE sales_document_line_id IN "
+    "(SELECT cdl.line_id FROM comm.commercial_document_lines cdl "
+    " JOIN comm.commercial_documents cd ON cd.document_id = cdl.document_id WHERE cd.company_id = :company_id)",
     "DELETE FROM comm.commission_entries WHERE document_line_id IN "
     "(SELECT cdl.line_id FROM comm.commercial_document_lines cdl "
     " JOIN comm.commercial_documents cd ON cd.document_id = cdl.document_id WHERE cd.company_id = :company_id)",

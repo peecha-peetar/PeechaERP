@@ -532,6 +532,16 @@ class _MethodDetailsDialog(QDialog):
             self.installment_due_interval_field.setDecimals(0)
             self.installment_due_interval_field.setValue(float(current.get("installment_due_interval_days") or 30))
             layout.addRow("فاصلهٔ سررسید (روز)", self.installment_due_interval_field)
+
+            # طبقِ درخواستِ صریح («بتوان با اینتر پیمایش کرد»): هم‌الگو با
+            # بقیه‌یِ فرم‌ها -- هر فیلد Enterِ خودش را به فوکوسِ فیلدِ بعدی
+            # وصل می‌کند و فیلدِ آخر فرم را تایید می‌کند.
+            self.installment_document_combo.lineEdit().returnPressed.connect(self.installment_count_field.setFocus)
+            self.installment_count_field.returnPressed.connect(self.installment_first_due_field.setFocus)
+            self.installment_first_due_field.returnPressed.connect(self.installment_interest_rate_field.setFocus)
+            self.installment_interest_rate_field.returnPressed.connect(self.installment_misc_fee_field.setFocus)
+            self.installment_misc_fee_field.returnPressed.connect(self.installment_due_interval_field.setFocus)
+            self.installment_due_interval_field.returnPressed.connect(self.accept)
         if method == "VOUCHER":
             self.voucher_serial_field = PersianDigitLineEdit(current.get("voucher_serial") or "")
             layout.addRow("سریالِ بن", self.voucher_serial_field)
