@@ -40,6 +40,25 @@ JAVA_MISSING_MESSAGE = (
 )
 
 
+def _win_short_path(path: str) -> str:
+    """در ویندوز، اگر خودِ مسیرِ TEMP هم (مثلاً به‌خاطرِ نامِ کاربریِ فارسی)
+    غیرِاسکی باشد، معادلِ کوتاهِ ۸.۳ی آن (که همیشه اسکی است) را برمی‌گرداند
+    -- تا باگِ رمزگشاییِ آرگومانِ جاوا در ویندوز (ر.ک. JAVA_MISSING_MESSAGE)
+    حتی برایِ خودِ پوشه‌یِ موقت هم رخ ندهد. اگر ناموفق بود، همان مسیرِ
+    اصلی را برمی‌گرداند (best effort)."""
+    if sys.platform != "win32":
+        return path
+    try:
+        import ctypes
+
+        buf = ctypes.create_unicode_buffer(260)
+        if ctypes.windll.kernel32.GetShortPathNameW(path, buf, 260):
+            return buf.value
+    except Exception:
+        pass
+    return path
+
+
 def _find_java() -> str | None:
     """مسیرِ اجراییِ جاوا را پیدا می‌کند -- اول در PATH، بعد JAVA_HOME، و در
     نبودِ این دو (مثلاً وقتی نصب‌کننده PATH را تازه تنظیم کرده ولی برنامه
@@ -152,6 +171,19 @@ def render_report_at_path(
         raise FileNotFoundError(f"قالبِ گزارش یافت نشد: {jrxml_path}")
 
     with tempfile.TemporaryDirectory(prefix="peecha_jasper_") as tmp_dir:
+        tmp_dir = _win_short_path(tmp_dir)
+        # جاوا در ویندوز، وقتی رمزینه‌یِ بومیِ سیستم (sun.jnu.encoding) با
+        # UTF-8 یکی نباشد، پارامترهایِ خط‌فرمان و مسیرهایِ فارسی/غیرِ‌اسکی
+        # را به‌درستی رمزگشایی نمی‌کند (نویسه‌ها به «?» تبدیل می‌شوند که در
+        # نامِ فایلِ ویندوز غیرِمجاز است). برایِ دورزدنِ این باگِ شناخته‌شده‌یِ
+        # JVM، همه‌یِ مسیرهایی که به‌عنوانِ آرگومان به java داده می‌شوند
+        # (قالب، rows/params، خروجی) با نام‌هایِ کاملاً اسکی در همین پوشه‌یِ
+        # موقت کپی/تولید می‌شوند؛ فقط در انتها فایلِ خروجی (با پایتون --
+        # که با مسیرهایِ یونیکد در ویندوز مشکلی ندارد) به مسیرِ نهاییِ
+        # درخواستی -- که می‌تواند فارسی باشد -- منتقل می‌شود.
+        safe_template_path = os.path.join(tmp_dir, "template.jrxml")
+        shutil.copyfile(jrxml_path, safe_template_path)
+
         rows_path = os.path.join(tmp_dir, "rows.json")
         params_path = os.path.join(tmp_dir, "params.json")
         with open(rows_path, "w", encoding="utf-8") as f:
@@ -159,9 +191,11 @@ def render_report_at_path(
         with open(params_path, "w", encoding="utf-8") as f:
             json.dump(params, f, ensure_ascii=False)
 
+        safe_output_path = os.path.join(tmp_dir, f"output.{output_format}")
+
         try:
             result = subprocess.run(
-                [java_exe, "-jar", str(_RUNNER_JAR), str(jrxml_path), rows_path, params_path, str(output_path), output_format],
+                [java_exe, "-jar", str(_RUNNER_JAR), safe_template_path, rows_path, params_path, safe_output_path, output_format],
                 capture_output=True,
                 text=True,
             )
@@ -171,6 +205,8 @@ def render_report_at_path(
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "").strip()
             raise RuntimeError(f"تولیدِ گزارشِ حرفه‌ای ناموفق بود:\n{detail}")
+
+        shutil.move(safe_output_path, output_path)
 
 
 def render_report(
