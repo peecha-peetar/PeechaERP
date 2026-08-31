@@ -43,6 +43,13 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import installments as installments_service
 from peecha.services import journal_entries as je_service
 
+_MONEY_Q = decimal.Decimal("0.01")
+
+
+def _money(value: decimal.Decimal) -> decimal.Decimal:
+    return value.quantize(_MONEY_Q, rounding=decimal.ROUND_HALF_UP)
+
+
 MAPPING_KEYS = [
     "RECEIPT_CASH",
     "RECEIPT_BANK",
@@ -52,6 +59,7 @@ MAPPING_KEYS = [
     "RECEIPT_GOODS_COUPON",
     "RECEIPT_VOUCHER",
     "RECEIPT_INSTALLMENT",
+    "RECEIPT_INSTALLMENT_INTEREST",
     "PAYMENT_CASH",
     "PAYMENT_BANK",
     "PAYMENT_CHECK",
@@ -59,6 +67,7 @@ MAPPING_KEYS = [
     "PAYMENT_CHECK_DISBURSEMENT",
     "PAYMENT_NETTING",
     "PAYMENT_INSTALLMENT",
+    "PAYMENT_INSTALLMENT_INTEREST",
     # طبقِ درخواستِ صریح: «برایِ هرِ مرحله یک ردیفِ جداگانه در تنظیمات باشه»
     # — این‌ها مستقل از کلیدهایِ فرمِ دریافت/پرداختِ بالا، مخصوصِ مراحلِ
     # چرخه‌یِ عمرِ چک‌اند (حتی اگر عملاً به همان حساب اشاره کنند).
@@ -84,6 +93,10 @@ MAPPING_LABELS: dict[str, str] = {
     # شود نگه می‌دارد -- معمولاً یک زیرحسابِ اختصاصیِ «دریافتنی/پرداختنیِ
     # اقساطی» (تا از AR/APِ عادی جدا و قابلِ‌ردیابی بماند).
     "RECEIPT_INSTALLMENT": "دریافتنیِ اقساطی",
+    # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط و هزینه‌هایِ متفرقه»): سهمِ بهره/
+    # هزینه‌یِ متفرقه‌یِ اقساط (مازاد بر اصلِ مبلغ) در همان سندِ ساختِ طرحِ
+    # اقساط، مستقیماً به‌عنوانِ درآمد شناسایی می‌شود.
+    "RECEIPT_INSTALLMENT_INTEREST": "درآمدِ بهره/کارمزدِ اقساط",
     "PAYMENT_CASH": "پرداختِ نقدی",
     "PAYMENT_BANK": "پرداختِ بانکی",
     "PAYMENT_CHECK": "چک‌هایِ پرداختنی",
@@ -91,6 +104,9 @@ MAPPING_LABELS: dict[str, str] = {
     "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
     "PAYMENT_NETTING": "تهاترِ پرداخت",
     "PAYMENT_INSTALLMENT": "پرداختنیِ اقساطی",
+    # طبقِ همان موردِ ۶، سمتِ پرداخت: سهمِ بهره/هزینه‌یِ متفرقه به‌عنوانِ
+    # هزینه شناسایی می‌شود (حسابِ هزینه‌یِ انتخابی).
+    "PAYMENT_INSTALLMENT_INTEREST": "هزینه‌یِ بهره/کارمزدِ اقساط",
     "CHECK_RECEIVED_FUND_TRANSFER": "انتقالِ چکِ دریافتی بینِ صندوق‌ها",
     "CHECK_RECEIVED_CASH_COLLECT": "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق",
     "CHECK_RECEIVED_BANK_DEPOSIT": "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک",
@@ -1242,6 +1258,16 @@ class MethodLine:
     installment_document_id: int | None = None
     installment_count: int | None = None
     installment_first_due_date: datetime.date | None = None
+    # طبقِ موردِ ۵ («روشِ اقساط منوط به فاکتور نباشد»): installment_document_id
+    # حالا اختیاری است -- اگر None باشد، طرحِ اقساط بدونِ فاکتور و رویِ
+    # مبلغِ آزادِ همین ردیف (ml.amount به‌عنوانِ اصلِ مبلغ) ساخته می‌شود،
+    # با استفاده از company_id/طرفِ‌حسابِ شخصِ همین سند.
+    # طبقِ موردِ ۶ («درصدِ بهره/هزینه‌یِ متفرقه + فاصله‌یِ سررسیدِ آزاد»):
+    # این سه فیلد اختیاری‌اند (پیش‌فرض بدونِ بهره/هزینه، فاصله‌یِ ۳۰روزه --
+    # دقیقاً رفتارِ قبلی) و فقط برایِ method == "INSTALLMENT" معنا دارند.
+    installment_interest_rate_percent: decimal.Decimal | None = None
+    installment_misc_fee_amount: decimal.Decimal | None = None
+    installment_due_interval_days: int | None = None
     # طبقِ همان درخواست: برایِ هر روشِ دیگر (نقد/بانک/چک/...)، اگر این
     # ردیف در واقع وصولِ یکی از همان اقساطِ ازپیش‌برنامه‌ریزی‌شده باشد،
     # با تنظیمِ همین فیلد، آن قسط PAID علامت می‌خورد و خودکار به‌عنوانِ
@@ -1291,10 +1317,19 @@ def create_treasury_voucher(
         if ml.amount <= 0:
             raise ValueError("مبلغِ هر ردیف باید مثبت باشد.")
         if ml.method == "INSTALLMENT":
-            if ml.installment_document_id is None or ml.installment_count is None or ml.installment_first_due_date is None:
-                raise ValueError("برایِ روشِ اقساط، فاکتور، تعدادِ اقساط، و تاریخِ سررسیدِ اولین قسط را مشخص کنید.")
+            # طبقِ موردِ ۵: installment_document_id دیگر الزامی نیست --
+            # نبودنش یعنی طرحِ اقساطِ آزاد (بدونِ فاکتور)، که در ادامه
+            # (پس از تعیینِ counterparty_person_detail_id) اعتبارسنجی می‌شود.
+            if ml.installment_count is None or ml.installment_first_due_date is None:
+                raise ValueError("برایِ روشِ اقساط، تعدادِ اقساط و تاریخِ سررسیدِ اولین قسط را مشخص کنید.")
             if ml.installment_count < 2:
                 raise ValueError("تعدادِ اقساط باید حداقل ۲ باشد.")
+            if ml.installment_interest_rate_percent is not None and ml.installment_interest_rate_percent < 0:
+                raise ValueError("درصدِ بهرهٔ اقساط نمی‌تواند منفی باشد.")
+            if ml.installment_misc_fee_amount is not None and ml.installment_misc_fee_amount < 0:
+                raise ValueError("هزینهٔ متفرقهٔ اقساط نمی‌تواند منفی باشد.")
+            if ml.installment_due_interval_days is not None and ml.installment_due_interval_days < 1:
+                raise ValueError("فاصلهٔ سررسیدِ اقساط باید حداقل ۱ روز باشد.")
 
     total = sum((ml.amount for ml in method_lines), decimal.Decimal(0))
 
@@ -1371,11 +1406,18 @@ def create_treasury_voucher(
                 if current_code not in ("IN_HAND", "DEPOSITED"):
                     raise ValueError(f"چکِ شماره‌ی {check.check_no} دیگر قابلِ خرج‌کردن نیست.")
 
-        # اعتبارسنجیِ روشِ اقساط (INSTALLMENT) -- فاکتورِ هدف باید متعلق به
-        # همین شرکت، ثبتِ‌نهایی‌شده، از نوعِ فروش/خرید، و هم‌طرفِ‌حسابِ همین
-        # سند باشد.
+        # اعتبارسنجیِ روشِ اقساط (INSTALLMENT) -- اگر فاکتور انتخاب شده،
+        # باید متعلق به همین شرکت، ثبتِ‌نهایی‌شده، از نوعِ فروش/خرید، و
+        # هم‌طرفِ‌حسابِ همین سند باشد؛ اگر فاکتور انتخاب نشده (طرحِ اقساطِ
+        # آزاد -- موردِ ۵)، طرحِ اقساط به تفصیلیِ شخصِ همین سند
+        # (counterparty_person_detail_id) وصل می‌شود -- برایِ همین، سند
+        # باید دارایِ تفصیلیِ شخص باشد.
         for ml in method_lines:
             if ml.method != "INSTALLMENT":
+                continue
+            if ml.installment_document_id is None:
+                if counterparty_person_detail_id is None:
+                    raise ValueError("برایِ طرحِ اقساطِ بدونِ فاکتور، طرفِ‌حسابِ سند باید دارایِ تفصیلیِ شخص باشد.")
                 continue
             doc = session.get(CommercialDocument, ml.installment_document_id)
             if doc is None or doc.company_id != company_id:
@@ -1399,8 +1441,13 @@ def create_treasury_voucher(
             if line.status_code == "PAID":
                 raise ValueError("این قسط قبلاً دریافت/پرداخت شده است.")
             plan = installments_service.get_installment_plan(line.plan_id)
-            plan_doc = session.get(CommercialDocument, plan.document_id)
-            if plan_doc is None or plan_doc.company_id != company_id:
+            if plan is None:
+                raise ValueError("طرحِ اقساطِ مربوط به این قسط یافت نشد.")
+            if plan.document_id is not None:
+                plan_doc = session.get(CommercialDocument, plan.document_id)
+                if plan_doc is None or plan_doc.company_id != company_id:
+                    raise ValueError("قسطِ انتخاب‌شده متعلق به این شرکت نیست.")
+            elif plan.company_id != company_id:
                 raise ValueError("قسطِ انتخاب‌شده متعلق به این شرکت نیست.")
 
         # طبقِ همین دلیل، commit این تخصیص‌ها پیش از ساختِ خودِ سند انجام
@@ -1442,8 +1489,20 @@ def create_treasury_voucher(
                 person_dimension_type_id = dimension_type_by_detail_id.get(ml.person_detail_account_id)
                 if person_dimension_type_id is not None:
                     details[person_dimension_type_id] = ml.person_detail_account_id
-            line_debit = ml.amount if direction == "RECEIPT" else decimal.Decimal(0)
-            line_credit = ml.amount if direction == "PAYMENT" else decimal.Decimal(0)
+            # طبقِ موردِ ۶: برایِ روشِ اقساط، اگر درصدِ بهره/هزینه‌یِ متفرقه
+            # تنظیم شده باشد، مبلغِ این ردیف (که رویِ حسابِ دریافتنی/
+            # پرداختنیِ اقساطی می‌رود) بزرگ‌تر از اصلِ مبلغ می‌شود -- چون
+            # آن حساب باید کلِ مبلغِ نهاییِ قابلِ‌وصول/پرداخت را نگه دارد --
+            # و سهمِ بهره/هزینه به‌صورتِ یک ردیفِ جداگانه، همین‌جا (در همان
+            # سندِ ساختِ طرح) به‌عنوانِ درآمد/هزینه شناسایی می‌شود.
+            installment_interest_fee = decimal.Decimal(0)
+            if ml.method == "INSTALLMENT":
+                rate = ml.installment_interest_rate_percent or decimal.Decimal(0)
+                fee = ml.installment_misc_fee_amount or decimal.Decimal(0)
+                installment_interest_fee = _money(ml.amount * rate / decimal.Decimal(100)) + fee
+            method_amount = ml.amount + installment_interest_fee
+            line_debit = method_amount if direction == "RECEIPT" else decimal.Decimal(0)
+            line_credit = method_amount if direction == "PAYMENT" else decimal.Decimal(0)
             lines.append(
                 je_service.LineInput(
                     account_id=account_id,
@@ -1455,6 +1514,21 @@ def create_treasury_voucher(
                     exchange_rate=exchange_rate,
                 )
             )
+            if installment_interest_fee > 0:
+                interest_account_id = _get_mapped_account_id(session, company_id, f"{direction}_INSTALLMENT_INTEREST")
+                interest_debit = decimal.Decimal(0) if direction == "RECEIPT" else installment_interest_fee
+                interest_credit = installment_interest_fee if direction == "RECEIPT" else decimal.Decimal(0)
+                lines.append(
+                    je_service.LineInput(
+                        account_id=interest_account_id,
+                        description=ml.description or description,
+                        debit=interest_debit,
+                        credit=interest_credit,
+                        details=dict(shared_details),
+                        currency_id=currency_id,
+                        exchange_rate=exchange_rate,
+                    )
+                )
 
     result = je_service.create_journal_entry(
         company_id,
@@ -1603,15 +1677,25 @@ def create_treasury_voucher(
         if ml.method == "INSTALLMENT":
             installments_service.create_installment_plan(
                 ml.installment_document_id, ml.installment_count, ml.installment_first_due_date, ml.amount,
+                company_id=company_id if ml.installment_document_id is None else None,
+                counterparty_detail_account_id=counterparty_person_detail_id if ml.installment_document_id is None else None,
+                direction=direction if ml.installment_document_id is None else None,
+                interest_rate_percent=ml.installment_interest_rate_percent or decimal.Decimal(0),
+                misc_fee_amount=ml.installment_misc_fee_amount or decimal.Decimal(0),
+                due_interval_days=ml.installment_due_interval_days or 30,
             )
         if ml.collect_installment_line_id is not None:
             installments_service.mark_installment_paid(ml.collect_installment_line_id, result.journal_entry_id)
             line = installments_service.get_installment_line(ml.collect_installment_line_id)
             plan = installments_service.get_installment_plan(line.plan_id)
-            settlements_service.allocate_settlement(
-                company_id, plan.document_id, result.journal_entry_id, document_date, ml.amount, created_by_user_id,
-                description=f"وصولِ قسطِ #{line.installment_no}",
-            )
+            # طبقِ موردِ ۵: طرحِ اقساطِ بدونِ فاکتور، سندی برایِ تخصیصِ
+            # تسویه ندارد -- allocate_settlement فقط برایِ طرحِ متصل‌به‌فاکتور
+            # فراخوانی می‌شود.
+            if plan.document_id is not None:
+                settlements_service.allocate_settlement(
+                    company_id, plan.document_id, result.journal_entry_id, document_date, ml.amount, created_by_user_id,
+                    description=f"وصولِ قسطِ #{line.installment_no}",
+                )
 
     return result
 

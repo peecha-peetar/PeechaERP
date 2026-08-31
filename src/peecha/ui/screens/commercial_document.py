@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.reporting import jasper_bridge
+from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
@@ -1649,6 +1650,36 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._save_header()
         return self._document_id is not None
 
+    def _warn_if_consignment_cost_mixing(self, item_id: int | None, warehouse_id: int | None) -> None:
+        """طبقِ بررسیِ موردِ ۳ (رهگیریِ کالایِ امانیِ ورودی): وقتی روشِ
+        بهایابی WEIGHTED_AVERAGE است، اگر همین انبار از قبل موجودیِ
+        *خریداری‌شده* (نه امانی) از همین کالا هم داشته باشد، بهایِ
+        توافقیِ امانی با آن مخلوط می‌شود و ممکن است در تسویه‌یِ نهایی
+        (که همیشه دقیقاً با بهایِ توافقیِ اصلی جمع می‌بندد) یک اختلافِ
+        جزئی در حسابِ موجودیِ کالا باقی بگذارد. این فقط یک هشدارِ
+        اطلاع‌رسانی است -- هیچ‌چیزی مسدود نمی‌شود، چون فروشِ امانیِ
+        تسویه‌نشده پیش از تسویه یک ویژگیِ آگاهانه و تست‌شده است."""
+        if self.document_type_code != "CONSIGNMENT_IN" or item_id is None or warehouse_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        if item is not None and item.costing_method_code not in (None, "WEIGHTED_AVERAGE"):
+            return
+        on_hand_by_warehouse = {r.warehouse_id: r.quantity_on_hand for r in engine_service.get_item_stock_by_warehouse(company_id, item_id)}
+        on_hand = on_hand_by_warehouse.get(warehouse_id, decimal.Decimal(0))
+        unsettled = consignment_service.unsettled_consignment_in_quantity(company_id, item_id, warehouse_id)
+        if on_hand > unsettled:
+            QMessageBox.information(
+                self, "هشدارِ اختلاطِ بهایِ میانگین",
+                "این انبار از قبل، علاوه‌بر امانی، موجودیِ خریداری‌شده از همین کالا هم دارد. "
+                "چون روشِ بهایابی «میانگینِ موزون» است، بهایِ توافقیِ امانی با بهایِ خریدِ واقعی مخلوط "
+                "می‌شود و ممکن است در تسویه‌یِ نهاییِ امانی یک اختلافِ جزئی در حسابِ موجودیِ کالا "
+                "باقی بماند. برایِ جلوگیریِ کامل از این اختلاط، توصیه می‌شود کالاهایِ امانیِ ورودی را "
+                "در یک انبارِ مجزا نگه‌داری کنید.",
+            )
+
     def _add_line(self) -> None:
         if not self._ensure_saved():
             return
@@ -1661,11 +1692,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         if dialog.exec() != QDialog.Accepted:
             return
+        fields = dialog.result_fields()
         try:
-            documents_service.add_line(self._document_id, self._company_id(), **dialog.result_fields())
+            documents_service.add_line(self._document_id, self._company_id(), **fields)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
+        self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
         self._load_document()
 
     def _selected_line(self):
@@ -1692,12 +1725,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         if dialog.exec() != QDialog.Accepted:
             return
+        fields = dialog.result_fields()
         try:
             documents_service.delete_line(line.line_id, self._document_id, self._company_id())
-            documents_service.add_line(self._document_id, self._company_id(), **dialog.result_fields())
+            documents_service.add_line(self._document_id, self._company_id(), **fields)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
+        self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
         self._load_document()
 
     def _delete_line(self) -> None:

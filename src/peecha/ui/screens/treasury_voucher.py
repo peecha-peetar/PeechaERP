@@ -451,6 +451,9 @@ class _MethodDetailsDialog(QDialog):
         self.installment_document_combo: QComboBox | None = None
         self.installment_count_field: _AmountField | None = None
         self.installment_first_due_field: JalaliDateEdit | None = None
+        self.installment_interest_rate_field: _AmountField | None = None
+        self.installment_misc_fee_field: _AmountField | None = None
+        self.installment_due_interval_field: _AmountField | None = None
         self._detail_names: dict[int, str] = {}
         self._person_detail_names: dict[int, str] = {}
         # طبقِ آیتمِ ۹: اگر چند معین برایِ این mapping_key تنظیم شده باشد،
@@ -481,7 +484,10 @@ class _MethodDetailsDialog(QDialog):
             # نشده‌اند قابلِ‌انتخاب‌اند.
             invoice_type = "SALES_INVOICE" if direction == "RECEIPT" else "PURCHASE_INVOICE"
             unsettled = settlements_service.list_unsettled_invoices(company_id, document_type_code=invoice_type)
-            options = []
+            # طبقِ موردِ ۵ («روشِ اقساط منوط به فاکتور نباشد»): گزینه‌یِ اول
+            # همیشه «بدونِ فاکتور» است -- یعنی مبلغِ همین ردیف (آزاد، بدونِ
+            # اتصال به هیچ فاکتوری) طیِ چند قسط دریافت/پرداخت می‌شود.
+            options = [(None, "(بدونِ فاکتور -- مبلغِ آزادِ همین ردیف)")]
             for status in unsettled:
                 try:
                     doc, _lines = documents_service.get_document(status.document_id, company_id)
@@ -508,6 +514,24 @@ class _MethodDetailsDialog(QDialog):
                 current.get("installment_first_due_date") or (datetime.date.today() + datetime.timedelta(days=30))
             )
             layout.addRow("سررسیدِ اولین قسط", self.installment_first_due_field)
+
+            # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط، هزینه‌هایِ متفرقه، و فاصله‌یِ
+            # سررسیدِ آزاد»): پیش‌فرض‌ها دقیقاً معادلِ رفتارِ قبلی‌اند (بدونِ
+            # بهره/هزینه، فاصله‌یِ ۳۰روزه) -- این فیلدها کاملاً اختیاری‌اند.
+            self.installment_interest_rate_field = _AmountField()
+            self.installment_interest_rate_field.setDecimals(3)
+            self.installment_interest_rate_field.setValue(float(current.get("installment_interest_rate_percent") or 0))
+            layout.addRow("درصدِ بهره (٪)", self.installment_interest_rate_field)
+
+            self.installment_misc_fee_field = _AmountField()
+            self.installment_misc_fee_field.setDecimals(self._decimal_places)
+            self.installment_misc_fee_field.setValue(float(current.get("installment_misc_fee_amount") or 0))
+            layout.addRow("هزینهٔ متفرقه", self.installment_misc_fee_field)
+
+            self.installment_due_interval_field = _AmountField()
+            self.installment_due_interval_field.setDecimals(0)
+            self.installment_due_interval_field.setValue(float(current.get("installment_due_interval_days") or 30))
+            layout.addRow("فاصلهٔ سررسید (روز)", self.installment_due_interval_field)
         if method == "VOUCHER":
             self.voucher_serial_field = PersianDigitLineEdit(current.get("voucher_serial") or "")
             layout.addRow("سریالِ بن", self.voucher_serial_field)
@@ -726,6 +750,9 @@ class _MethodDetailsDialog(QDialog):
             data["installment_document_id"] = self.installment_document_combo.currentData()
             data["installment_count"] = int(self.installment_count_field.value())
             data["installment_first_due_date"] = self.installment_first_due_field.date()
+            data["installment_interest_rate_percent"] = decimal.Decimal(str(self.installment_interest_rate_field.value()))
+            data["installment_misc_fee_amount"] = decimal.Decimal(str(self.installment_misc_fee_field.value()))
+            data["installment_due_interval_days"] = int(self.installment_due_interval_field.value())
         return data
 
 
@@ -1615,6 +1642,9 @@ class _MethodRow:
             kwargs["installment_document_id"] = self.details.get("installment_document_id")
             kwargs["installment_count"] = self.details.get("installment_count")
             kwargs["installment_first_due_date"] = self.details.get("installment_first_due_date")
+            kwargs["installment_interest_rate_percent"] = self.details.get("installment_interest_rate_percent")
+            kwargs["installment_misc_fee_amount"] = self.details.get("installment_misc_fee_amount")
+            kwargs["installment_due_interval_days"] = self.details.get("installment_due_interval_days")
         # طبقِ درخواستِ صریح: هر ردیفی (نه فقط اقساط) می‌تواند وصولِ یک
         # قسطِ ازپیش‌برنامه‌ریزی‌شده باشد -- با دکمه‌یِ «🔗» انتخاب می‌شود.
         kwargs["collect_installment_line_id"] = self.collect_installment_line_id

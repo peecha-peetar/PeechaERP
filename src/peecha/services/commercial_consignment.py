@@ -65,6 +65,23 @@ def get_consignment_status(document_id: int, company_id: int) -> list[Consignmen
     return result
 
 
+def unsettled_consignment_in_quantity(company_id: int, item_id: int, warehouse_id: int) -> decimal.Decimal:
+    """جمعِ مقدارِ باقی‌مانده (هنوز تسویه/بازگردانده‌نشده) از همه‌یِ
+    اسنادِ CONSIGNMENT_IN بازِ یک کالا در یک انبارِ مشخص -- برایِ
+    هشدارِ غیرمسدودکننده‌یِ اختلاطِ بهایِ میانگین (WEIGHTED_AVERAGE) با
+    موجودیِ خریداری‌شده‌یِ همان کالا در همان انبار، نه برایِ جلوگیری از
+    فروش (که یک ویژگیِ آگاهانه و تست‌شده است -- به `list_open_consignments`
+    نگاه کنید)."""
+    total = _ZERO
+    for doc in list_open_consignments(company_id, "CONSIGNMENT_IN"):
+        if doc.warehouse_id != warehouse_id:
+            continue
+        for status in get_consignment_status(doc.document_id, company_id):
+            if status.item_id == item_id:
+                total += status.remaining_quantity
+    return total
+
+
 def list_open_consignments(company_id: int, document_type_code: str | None = None) -> list[CommercialDocument]:
     """فاکتورهایِ امانیِ ثبت‌شده‌ای که هنوز کاملاً تسویه/بازگردانده
     نشده‌اند."""

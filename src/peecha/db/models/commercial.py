@@ -637,10 +637,24 @@ class InstallmentPlan(Base):
     __table_args__ = ({"schema": "comm"},)
 
     plan_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    # طبقِ موردِ ۵ («روشِ اقساط منوط به فاکتور نباشد»): document_id دیگر
+    # الزامی نیست -- NULL یعنی طرحِ اقساطِ آزاد، که در آن صورت سه فیلدِ
+    # زیر (company_id/counterparty_detail_account_id/direction) جایگزینِ
+    # همان اطلاعاتی می‌شوند که پیش‌تر از رویِ سند استنتاج می‌شد.
+    document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("core.companies.company_id"))
+    counterparty_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    direction: Mapped[str | None] = mapped_column(String(10))  # RECEIPT | PAYMENT -- فقط برایِ طرحِ بدونِ فاکتور
     number_of_installments: Mapped[int] = mapped_column(SmallInteger)
     first_due_date: Mapped[datetime.date] = mapped_column(Date)
     status_code: Mapped[str] = mapped_column(String(15), default="ACTIVE")
+    # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط و هزینه‌هایِ متفرقه»): اصلِ مبلغ
+    # (بدونِ بهره/هزینه) + پارامترهایِ محاسبه‌یِ مبلغِ نهایی + فاصله‌یِ
+    # سررسیدِ قابلِ‌تنظیم (پیش‌فرض ۳۰ روز، رفتارِ قبلی).
+    principal_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    interest_rate_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 3), default=decimal.Decimal("0"))
+    misc_fee_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal("0"))
+    due_interval_days: Mapped[int] = mapped_column(SmallInteger, default=30)
 
 
 class InstallmentLine(Base):
@@ -652,6 +666,9 @@ class InstallmentLine(Base):
     installment_no: Mapped[int] = mapped_column(SmallInteger)
     due_date: Mapped[datetime.date] = mapped_column(Date)
     amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    # طبقِ موردِ ۶: سهمِ این قسط از بهره/هزینه‌یِ متفرقه (زیرمجموعه‌یِ
+    # amount، نه جدا از آن) -- برایِ تفکیکِ اصل/بهره در گزارش‌گیری.
+    interest_fee_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal("0"))
     status_code: Mapped[str] = mapped_column(String(15), default="PENDING")
     paid_journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
 
