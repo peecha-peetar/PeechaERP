@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QCompleter,
-    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -38,12 +37,12 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
-from peecha.reporting import jasper_bridge
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import report_templates as report_templates_service
 from peecha.services.reports import code_in_range
 from peecha.ui import report_export
+from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, PersianDigitLineEdit
 
@@ -339,26 +338,8 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
             return
         jrxml_path = report_templates_service.get_template_path(template_row.report_template_id, company_id)
 
-        path, chosen_filter = QFileDialog.getSaveFileName(
-            self, f"ذخیره‌یِ {self._title}", f"{self._title}.pdf", "PDF (*.pdf);;Excel (*.xlsx)"
-        )
-        if not path:
-            return
-        output_format = "xlsx" if (path.lower().endswith(".xlsx") or "xlsx" in chosen_filter) else "pdf"
-        if output_format == "pdf" and not path.lower().endswith(".pdf"):
-            path += ".pdf"
-        elif output_format == "xlsx" and not path.lower().endswith(".xlsx"):
-            path += ".xlsx"
-
-        try:
-            jasper_bridge.render_report_at_path(jrxml_path, print_rows, params, path, output_format)
-        except jasper_bridge.JasperNotAvailableError as exc:
-            QMessageBox.warning(self, "گزارش", str(exc))
-            return
-        except Exception as exc:
-            QMessageBox.critical(self, "گزارش", f"تولیدِ گزارش ناموفق بود:\n{exc}")
-            return
-        QMessageBox.information(self, "گزارش", "گزارش با موفقیت ساخته شد.")
+        dialog = JasperReportPreviewDialog(self, jrxml_path, print_rows, params, self._title, title=self._title)
+        dialog.exec()
 
     def enable_document_no_filter(self) -> None:
         self.document_no_label.setVisible(True)

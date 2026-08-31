@@ -13,8 +13,7 @@ import decimal
 import os
 import tempfile
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -43,6 +42,7 @@ from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import report_templates as report_templates_service
 from peecha.ui import theme
+from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
 from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.screens.treasury_voucher import (
@@ -196,7 +196,8 @@ def _show_stock_document_print(
             fd, tmp_path = tempfile.mkstemp(suffix=".pdf", prefix="peecha_stockdoc_")
             os.close(fd)
             jasper_bridge.render_report_at_path(jrxml_path, print_rows, params, tmp_path, "pdf")
-            QDesktopServices.openUrl(QUrl.fromLocalFile(tmp_path))
+            dialog = JasperReportPreviewDialog(parent, jrxml_path, print_rows, params, "سندِ انبار", title="پیش‌نمایشِ سندِ انبار", pdf_path=tmp_path)
+            dialog.exec()
             return
         except Exception as exc:
             QMessageBox.warning(

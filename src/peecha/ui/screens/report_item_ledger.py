@@ -11,7 +11,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
-    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -24,13 +23,13 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
-from peecha.reporting import jasper_bridge
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import report_templates as templates_service
+from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.widgets import JalaliDateEdit
@@ -285,24 +284,5 @@ class ItemLedgerScreen(QWidget):
             "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
         }
 
-        path, chosen_filter = QFileDialog.getSaveFileName(
-            self, "ذخیره‌یِ کاردکسِ حرفه‌ای", "کاردکس.pdf", "PDF (*.pdf);;Excel (*.xlsx)"
-        )
-        if not path:
-            return
-        output_format = "xlsx" if (path.lower().endswith(".xlsx") or "xlsx" in chosen_filter) else "pdf"
-        if output_format == "pdf" and not path.lower().endswith(".pdf"):
-            path += ".pdf"
-        elif output_format == "xlsx" and not path.lower().endswith(".xlsx"):
-            path += ".xlsx"
-
-        try:
-            jasper_bridge.render_report_at_path(template_path, print_rows, params, path, output_format)
-        except jasper_bridge.JasperNotAvailableError as exc:
-            QMessageBox.warning(self, "چاپِ حرفه‌ای", str(exc))
-            return
-        except Exception as exc:
-            QMessageBox.critical(self, "چاپِ حرفه‌ای", f"تولیدِ گزارش ناموفق بود:\n{exc}")
-            return
-
-        QMessageBox.information(self, "چاپِ حرفه‌ای", "گزارش با موفقیت ساخته شد.")
+        dialog = JasperReportPreviewDialog(self, template_path, print_rows, params, "کاردکس", title="کاردکسِ کالا")
+        dialog.exec()
