@@ -126,6 +126,10 @@ NAV_ITEMS = [
             {"code": "PURCH_CONSIGNMENT_IN", "label": "امانیِ ورودی", "screen": "commercial_document_consignment_in"},
             {"code": "PURCH_DOCUMENTS_LIST", "label": "اسنادِ خرید", "screen": "commercial_documents_list_purchase"},
             {"code": "PURCH_EXTRAS", "label": "ریبیتِ تامین‌کننده", "screen": "commercial_purchasing_extras"},
+            # طبقِ درخواستِ صریح («زیرماژولِ مدیریتِ سفارشات»): پیگیریِ
+            # پرداخت‌هایِ سفارشاتِ در راه (ترخیص/بهایِ اولیهٔ کالا و...) با
+            # همان فرمِ دریافت/پرداختِ خزانه‌داری.
+            {"code": "PURCH_ORDER_TRACKING", "label": "مدیریتِ سفارشات", "screen": "order_tracking"},
         ],
     },
     {

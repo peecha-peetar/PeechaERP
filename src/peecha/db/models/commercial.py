@@ -1007,3 +1007,37 @@ class SettlementAlarmSettings(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     is_enabled: Mapped[bool] = mapped_column(default=False)
     alarm_days_before: Mapped[int] = mapped_column(SmallInteger, default=2)
+
+
+# =======================================================================
+# مدیریتِ سفارشات — معادلِ 103_order_management.sql
+# =======================================================================
+class OrderTrackingSetting(Base):
+    """تنظیمِ یک‌بارهٔ هر شرکت: کدام گروهِ تفصیلی «سفارشاتِ در راه» است."""
+
+    __tablename__ = "order_tracking_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
+
+
+class OrderTracking(Base):
+    """یک سفارش -- دقیقاً یک تفصیلیِ همان گروهِ تعیین‌شده در
+    OrderTrackingSetting را دنبال می‌کند. پرداخت‌هایِ خودِ سفارش این‌جا
+    ذخیره نمی‌شوند -- با پرس‌وجویِ acc.journal_entry_line_details بر
+    اساسِ همین detail_account_id به‌دست می‌آیند (طبقِ اصلِ «هرچه از
+    داده‌هایِ حسابداریِ موجود مشتق می‌شود، دوباره ذخیره نشود»)."""
+
+    __tablename__ = "order_trackings"
+    __table_args__ = ({"schema": "comm"},)
+
+    order_tracking_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"), unique=True)
+    description: Mapped[str | None] = mapped_column(String(500))
+    status_code: Mapped[str] = mapped_column(String(15), default="OPEN")  # OPEN | CLOSED
+    opened_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    opened_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    closed_at: Mapped[datetime.datetime | None]
