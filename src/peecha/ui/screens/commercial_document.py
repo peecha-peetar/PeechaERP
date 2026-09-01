@@ -1057,6 +1057,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         row2_grid.addWidget(self.consignment_warehouse_box, 0, 6, 2, 1)
         self.consignment_warehouse_box.setVisible(document_type_code == "CONSIGNMENT_OUT")
 
+        # طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): فقط برایِ
+        # فاکتورِ خرید/فروش -- override رویِ همین سند، پیش‌فرض یعنی از
+        # تنظیماتِ سراسریِ شرکت (Feature Toggleِ INFORMAL_TAX_POSTING)
+        # پیروی کن.
+        self.tax_posting_mode_box = QWidget()
+        tax_posting_mode_layout = QVBoxLayout(self.tax_posting_mode_box)
+        tax_posting_mode_layout.setContentsMargins(0, 0, 0, 0)
+        tax_posting_mode_layout.setSpacing(3)
+        tax_posting_mode_layout.addWidget(QLabel("نوعِ ثبت"))
+        self.tax_posting_mode_combo = _EnterComboBox()
+        self.tax_posting_mode_combo.addItem("پیش‌فرضِ شرکت", None)
+        self.tax_posting_mode_combo.addItem("رسمی", "OFFICIAL")
+        self.tax_posting_mode_combo.addItem("غیررسمی", "INFORMAL")
+        tax_posting_mode_layout.addWidget(self.tax_posting_mode_combo)
+        row2_grid.addWidget(self.tax_posting_mode_box, 0, 7, 2, 1)
+        self.tax_posting_mode_box.setVisible(self._is_invoice)
+
         row2_grid.setColumnStretch(0, 1)
         row2_grid.setColumnStretch(1, 1)
         row2_grid.setColumnStretch(2, 2)
@@ -1064,6 +1081,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         row2_grid.setColumnStretch(4, 1)
         row2_grid.setColumnStretch(5, 1)
         row2_grid.setColumnStretch(6, 1)
+        row2_grid.setColumnStretch(7, 1)
         header_grid.addWidget(row2_widget, 2, 0, 1, 5)
 
         header_grid.setColumnStretch(0, 1)
@@ -1439,6 +1457,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.due_date_field.setDate(doc.due_date or doc.document_date)
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
+        self.tax_posting_mode_combo.setCurrentIndex(max(0, self.tax_posting_mode_combo.findData(doc.tax_posting_mode)))
         # طبقِ رفعِ باگِ واقعی («سندِ بهایِ تمام‌شده/موجودی انجام نمی‌شود»
         # — درواقع انجام می‌شد، فقط دیده نمی‌شد): برایِ SALES_INVOICE دو
         # سندِ حسابداریِ کاملاً جدا ساخته می‌شود (طبقِ اصلِ همین فایل، بالایِ
@@ -1565,6 +1584,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.project_combo.setCurrentIndex(0)
         self.reference_field.clear()
         self.description_field.clear()
+        self.tax_posting_mode_combo.setCurrentIndex(0)
         for key in ("subtotal", "discount_tax", "grand_total"):
             self.summary_cards.set_value(key, "۰")
         self._refresh_lines_table()
@@ -1612,6 +1632,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             due_date=self.due_date_field.date() if self._is_invoice else None,
             reference_no=self.reference_field.text().strip() or None,
             description=self.description_field.text().strip() or None,
+            tax_posting_mode=self.tax_posting_mode_combo.currentData() if self._is_invoice else None,
         )
 
     def _save_header(self) -> None:

@@ -82,6 +82,18 @@ _DOC_TYPE_TITLES = {
 }
 
 
+def _is_informal_tax_posting(company_id: int, tax_posting_mode: str | None) -> bool:
+    """طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): tax_posting_mode
+    رویِ خودِ سند (اگر تنظیم شده) اولویت دارد؛ وگرنه پیش‌فرضِ سراسریِ
+    شرکت (Feature Toggleِ INFORMAL_TAX_POSTING، پیش‌فرضِ خاموش = همان
+    رفتارِ فعلی/رسمی) ملاک است."""
+    if tax_posting_mode == "OFFICIAL":
+        return False
+    if tax_posting_mode == "INFORMAL":
+        return True
+    return settings_service.is_feature_enabled(company_id, "INFORMAL_TAX_POSTING")
+
+
 def _default_document_description(document_type_code: str, document_no: int, counterparty_id: int | None) -> str:
     title = _DOC_TYPE_TITLES.get(document_type_code, "سندِ بازرگانی")
     counterparty_name = ""
@@ -262,6 +274,10 @@ class DocumentHeaderFields:
     project_detail_account_id: int | None = None
     reference_no: str | None = None
     description: str | None = None
+    # طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): None یعنی از
+    # پیش‌فرضِ سراسریِ شرکت پیروی کن؛ "OFFICIAL"/"INFORMAL" یعنی override
+    # رویِ همین سند.
+    tax_posting_mode: str | None = None
 
 
 def create_document(
@@ -270,6 +286,8 @@ def create_document(
 ) -> int:
     if document_type_code not in DOCUMENT_TYPE_CODES:
         raise ValueError("نوعِ سند نامعتبر است.")
+    if fields.tax_posting_mode is not None and fields.tax_posting_mode not in ("OFFICIAL", "INFORMAL"):
+        raise ValueError("نوعِ ثبتِ سند نامعتبر است.")
     with new_session() as session:
         fiscal_year_id = _resolve_fiscal_year_id(session, company_id, document_date)
         next_no = (
@@ -299,6 +317,7 @@ def create_document(
             cost_center_detail_account_id=fields.cost_center_detail_account_id,
             project_detail_account_id=fields.project_detail_account_id,
             reference_no=(fields.reference_no or None), description=(fields.description or None),
+            tax_posting_mode=fields.tax_posting_mode,
             created_by_user_id=created_by_user_id,
         )
         session.add(doc)
@@ -585,6 +604,7 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
         subtotal_amount = draft.subtotal_amount
         discount_amount = draft.discount_amount
         tax_amount = draft.tax_amount
+        is_informal_tax = _is_informal_tax_posting(company_id, draft.tax_posting_mode)
         original_journal_entry_id = original.journal_entry_id
         original_stock_document_id = original.stock_document_id
         original_document_no = original.document_no
@@ -677,6 +697,7 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
         journal_entry_id = _build_sales_invoice_commercial_je(
             company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims,
             subtotal_amount, discount_amount, tax_amount, sales_rep_id, line_snapshots,
+            is_informal_tax=is_informal_tax,
         )
 
         if adj_je_lines:
@@ -809,6 +830,8 @@ def _get_editable_document(session, document_id: int, company_id: int) -> Commer
 
 
 def update_document_header(document_id: int, company_id: int, document_date: datetime.date, fields: DocumentHeaderFields) -> None:
+    if fields.tax_posting_mode is not None and fields.tax_posting_mode not in ("OFFICIAL", "INFORMAL"):
+        raise ValueError("نوعِ ثبتِ سند نامعتبر است.")
     with new_session() as session:
         doc = _get_editable_document(session, document_id, company_id)
         doc.document_date = document_date
@@ -829,6 +852,7 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
         doc.project_detail_account_id = fields.project_detail_account_id
         doc.reference_no = fields.reference_no or None
         doc.description = fields.description or None
+        doc.tax_posting_mode = fields.tax_posting_mode
         session.commit()
 
 
@@ -1096,11 +1120,17 @@ def _build_sales_invoice_commercial_je(
     company_id: int, posted_by_user_id: int, document_date: datetime.date, description: str, counterparty_id: int,
     extra_dims: dict[int, int], subtotal_amount: decimal.Decimal, discount_amount: decimal.Decimal,
     tax_amount: decimal.Decimal, sales_rep_id: int | None, line_snapshots: list[tuple],
+    is_informal_tax: bool = False,
 ) -> int:
     """سندِ حسابداریِ «بازرگانیِ» فاکتورِ فروش (دریافتنی/درآمد/تخفیف/
     مالیات + کمیسیونِ فروشنده) -- استخراج‌شده از دلِ post_document تا هم
     آن‌جا و هم start_invoice_correction/post_invoice_correction بتوانند
-    دقیقاً همان منطق را (بدونِ تکرار) صدا بزنند."""
+    دقیقاً همان منطق را (بدونِ تکرار) صدا بزنند.
+
+    is_informal_tax=True (طبقِ درخواستِ صریح، «ثبتِ غیررسمی»): مالیات
+    ردیفِ جداگانه‌یِ «مالياتِ فروش-پرداختنی» نمی‌گیرد -- مستقیماً به
+    درآمدِ فروش اضافه می‌شود (بدهکارِ دریافتنیِ مشتری هیچ تغییری نمی‌کند،
+    چون آن از پیش با احتسابِ مالیات محاسبه شده است)."""
     person_dim_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     je_lines: list[je_service.LineInput] = []
     ar_account_id = inv_engine_service.get_account_mapping(company_id, "CUSTOMER_RECEIVABLE")
@@ -1128,14 +1158,24 @@ def _build_sales_invoice_commercial_je(
                 select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(item_ids))
             ).all()
         )
+    # طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): در حالتِ غیررسمی،
+    # مالياتِ فروش ردیفِ جداگانه‌یِ «مالياتِ فروش-پرداختنی» نمی‌گیرد --
+    # مستقیماً به درآمدِ فروش اضافه می‌شود (اگر مالياتی نباشد، دو حالت
+    # یکسان‌اند).
+    fold_tax_into_revenue = is_informal_tax and tax_amount > 0
+    revenue_total = subtotal_amount + tax_amount if fold_tax_into_revenue else subtotal_amount
+    if fold_tax_into_revenue:
+        revenue_amount_of = lambda snap: _money(snap[3] * snap[5]) + snap[9]
+    else:
+        revenue_amount_of = lambda snap: _money(snap[3] * snap[5])
     with new_session() as session:
         revenue_account_id = settings_service.resolve_role_account(session, company_id, "SALES_REVENUE")
         revenue_by_item = _role_line_amounts_by_item(
-            line_snapshots, item_detail_account_by_item_id, lambda snap: _money(snap[3] * snap[5])
+            line_snapshots, item_detail_account_by_item_id, revenue_amount_of
         )
         je_lines.extend(
             _build_role_je_lines(
-                revenue_account_id, description, extra_dims, subtotal_amount, is_debit=False,
+                revenue_account_id, description, extra_dims, revenue_total, is_debit=False,
                 item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=revenue_by_item,
                 fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_REVENUE"),
             )
@@ -1152,7 +1192,7 @@ def _build_sales_invoice_commercial_je(
                     fixed_detail=settings_service.get_fixed_detail_for_mapping(company_id, "SALES_DISCOUNT"),
                 )
             )
-        if tax_amount > 0:
+        if tax_amount > 0 and not fold_tax_into_revenue:
             tax_account_id = settings_service.resolve_role_account(session, company_id, "SALES_TAX_PAYABLE")
             tax_by_item = _role_line_amounts_by_item(
                 line_snapshots, item_detail_account_by_item_id, lambda snap: snap[9]
@@ -1402,6 +1442,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         subtotal_amount = doc.subtotal_amount
         discount_amount = doc.discount_amount
         tax_amount = doc.tax_amount
+        is_informal_tax = _is_informal_tax_posting(company_id, doc.tax_posting_mode)
         line_snapshots = [
             (
                 ln.line_id, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.unit_price, ln.batch_id,
@@ -1494,8 +1535,16 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     stock_unit_cost = None
                 elif stock_document_type == "RECEIPT":
                     net_of_discount = (quantity * unit_price - _discount_amt) / quantity if quantity else unit_price
+                    # طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): در
+                    # حالتِ غیررسمی، مالياتِ خرید ردیفِ جداگانه‌یِ «مالياتِ
+                    # خرید-قابلِ‌مطالبه» نمی‌گیرد -- مستقیماً به بهایِ
+                    # موجودیِ همین ردیف اضافه می‌شود (اگر ماليات صفر باشد
+                    # هردو حالت یکسان‌اند).
+                    if is_informal_tax and _tax_amt and quantity:
+                        net_of_discount += _tax_amt / quantity
+                    else:
+                        line_tax_amount = _tax_amt
                     stock_unit_cost = _money(net_of_discount)
-                    line_tax_amount = _tax_amt
                 else:
                     stock_unit_cost = unit_price
                 inv_line_id = inv_documents_service.add_line(
@@ -1526,6 +1575,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         journal_entry_id = _build_sales_invoice_commercial_je(
             company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims,
             subtotal_amount, discount_amount, tax_amount, sales_rep_id, line_snapshots,
+            is_informal_tax=is_informal_tax,
         )
 
     elif document_type_code == "SALES_RETURN":

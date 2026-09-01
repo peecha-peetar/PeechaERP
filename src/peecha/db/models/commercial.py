@@ -301,6 +301,10 @@ class CommercialDocument(Base):
     project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     reference_no: Mapped[str | None] = mapped_column(String(50))
     description: Mapped[str | None] = mapped_column(Text)
+    # طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): NULL یعنی از
+    # پیش‌فرضِ سراسریِ شرکت (Feature Toggleِ INFORMAL_TAX_POSTING) پیروی
+    # کن؛ OFFICIAL/INFORMAL یعنی override رویِ همین سند.
+    tax_posting_mode: Mapped[str | None] = mapped_column(String(10))
     subtotal_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     discount_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     tax_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
