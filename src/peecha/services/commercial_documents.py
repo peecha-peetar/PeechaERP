@@ -62,6 +62,36 @@ _ORDER_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PRO
 # می‌کند (نه _STOCK_DOC_TYPE_BY_TYPEِ زیر، چون امانیِ خروجی به دو انبار
 # هم‌زمان نیاز دارد -- ناسازگار با ساختارِ تک‌انبارِ آن نگاشت).
 _CONSIGNMENT_TYPES = ("CONSIGNMENT_OUT", "CONSIGNMENT_IN")
+
+# طبقِ رفعِ باگِ واقعی («در دفترِ روزنامه شرحِ همه‌یِ فاکتورها یکسان و
+# مبهم -- «سندِ بازرگانی #۱» -- است، نه مشخص که فاکتورِ فروش/خرید است و
+# نه طرفِ‌حساب»): این جدول هم‌الگو با DOC_TYPE_TITLESِ خودِ UI
+# (ui/screens/commercial_document.py) است -- در همین لایه هم لازم بود تا
+# شرحِ پیش‌فرض (وقتی کاربر شرحِ دستی وارد نکرده) معنادار باشد.
+_DOC_TYPE_TITLES = {
+    "SALES_ORDER": "سفارشِ فروش",
+    "SALES_PROFORMA": "پیش‌فاکتورِ فروش",
+    "SALES_INVOICE": "فاکتورِ فروش",
+    "SALES_RETURN": "برگشت از فروش",
+    "PURCHASE_ORDER": "سفارشِ خرید",
+    "PURCHASE_PROFORMA": "پیش‌فاکتورِ خرید",
+    "PURCHASE_INVOICE": "فاکتورِ خرید",
+    "PURCHASE_RETURN": "برگشت به تامین‌کننده",
+    "CONSIGNMENT_OUT": "امانیِ خروجی",
+    "CONSIGNMENT_IN": "امانیِ ورودی",
+}
+
+
+def _default_document_description(document_type_code: str, document_no: int, counterparty_id: int | None) -> str:
+    title = _DOC_TYPE_TITLES.get(document_type_code, "سندِ بازرگانی")
+    counterparty_name = ""
+    if counterparty_id is not None:
+        label = dimensions_service.get_detail_account_label(counterparty_id)
+        counterparty_name = label.split("—", 1)[-1].strip() if "—" in label else label
+    text = f"{title} #{document_no}"
+    return f"{text} {counterparty_name}" if counterparty_name else text
+
+
 _STOCK_DOC_TYPE_BY_TYPE = {
     "PURCHASE_INVOICE": "RECEIPT",
     "SALES_INVOICE": "ISSUE",
@@ -548,7 +578,7 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
         warehouse_id = draft.warehouse_id
         counterparty_id = draft.counterparty_detail_account_id
         document_date = draft.document_date
-        description = draft.description or f"سندِ بازرگانی #{draft.document_no}"
+        description = draft.description or _default_document_description(document_type_code, draft.document_no, counterparty_id)
         sales_rep_id = draft.sales_rep_detail_account_id
         cost_center_id = draft.cost_center_detail_account_id
         project_id = draft.project_detail_account_id
@@ -1334,7 +1364,8 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             ]
             consignment_fields = (
                 doc.warehouse_id, doc.consignment_warehouse_id, doc.cost_center_detail_account_id,
-                doc.project_detail_account_id, doc.document_date, doc.description or f"سندِ بازرگانی #{doc.document_no}",
+                doc.project_detail_account_id, doc.document_date,
+                doc.description or _default_document_description(document_type_code, doc.document_no, doc.counterparty_detail_account_id),
             )
         else:
             consignment_line_snapshots = None
@@ -1364,7 +1395,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         warehouse_id = doc.warehouse_id
         counterparty_id = doc.counterparty_detail_account_id
         document_date = doc.document_date
-        description = doc.description or f"سندِ بازرگانی #{doc.document_no}"
+        description = doc.description or _default_document_description(document_type_code, doc.document_no, counterparty_id)
         sales_rep_id = doc.sales_rep_detail_account_id
         cost_center_id = doc.cost_center_detail_account_id
         project_id = doc.project_detail_account_id
