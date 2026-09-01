@@ -839,10 +839,18 @@ class LandedCostAllocation(Base):
     purchase_invoice_document_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("comm.commercial_documents.document_id")
     )
-    cost_type_code: Mapped[str] = mapped_column(String(15))  # FREIGHT|CUSTOMS|INSURANCE|HANDLING|OTHER
+    cost_type_code: Mapped[str | None] = mapped_column(String(15))  # FREIGHT|CUSTOMS|INSURANCE|HANDLING|OTHER
     amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
-    allocation_method_code: Mapped[str] = mapped_column(String(15))  # BY_VALUE|BY_QUANTITY|BY_WEIGHT
+    allocation_method_code: Mapped[str | None] = mapped_column(String(15))  # BY_VALUE|BY_QUANTITY|BY_WEIGHT
     notes: Mapped[str | None] = mapped_column(String(500))
+    # طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه، حسابِ معین و تفصیلیِ
+    # بستانکار را بتوانیم وارد کنیم»): حسابِ آزادانه‌ای که با ثبتِ نهاییِ
+    # فاکتورِ خرید بستانکار می‌شود (مثلاً یک تفصیلیِ گروهِ «سفارشاتِ در
+    # راه») -- نه یک نقشِ ثابت.
+    credit_account_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("acc.chart_of_accounts.account_id"))
+    credit_detail_account_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("acc.detail_accounts.detail_account_id")
+    )
 
 
 class VendorRebateAgreement(Base):

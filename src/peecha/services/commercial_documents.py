@@ -28,12 +28,13 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import FiscalYear
-from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, CreditHold
+from peecha.db.models.accounting import DetailAccount, FiscalYear
+from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation
 from peecha.db.models.inventory import Item, StockDocument
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import commercial_settings as settings_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -1470,6 +1471,47 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             for ln in lines
         ]
 
+        # طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه رویِ فاکتورِ خرید — مبلغ +
+        # حسابِ معین و تفصیلیِ بستانکار برایِ هر ردیف، همراهِ خودِ سندِ
+        # فاکتور»): سهمِ هر ردیفِ فاکتور از جمعِ هزینه‌هایِ جانبی (متناسب
+        # با ارزشِ خالص از تخفیفِ همان ردیف) این‌جا محاسبه می‌شود؛ باقیماندهٔ
+        # گردِکردن به آخرین ردیف داده می‌شود تا جمعِ سهم‌ها دقیقاً با جمعِ
+        # هزینه‌ها برابر بماند. ردیف‌هایِ بستانکاریِ سندِ حسابداری (حسابِ
+        # آزادانه‌ایِ خودِ کاربر برایِ هر هزینه) هم همین‌جا ساخته می‌شوند تا
+        # مستقیماً به سندِ حسابداریِ خودکارِ همین فاکتور اضافه شوند.
+        landed_cost_share_by_line: dict[int, decimal.Decimal] = {}
+        landed_cost_je_lines: list[je_service.LineInput] = []
+        if document_type_code == "PURCHASE_INVOICE":
+            allocations = session.scalars(
+                select(LandedCostAllocation).where(LandedCostAllocation.purchase_invoice_document_id == document_id)
+            ).all()
+            landed_cost_total = sum((a.amount for a in allocations), _ZERO)
+            if landed_cost_total > 0:
+                line_values = {ln.line_id: _money(ln.quantity * ln.unit_price - ln.discount_amount) for ln in lines}
+                total_value = sum(line_values.values(), _ZERO)
+                if total_value > 0:
+                    allocated_so_far = _ZERO
+                    ordered_line_ids = [ln.line_id for ln in lines]
+                    for idx, line_id in enumerate(ordered_line_ids):
+                        if idx == len(ordered_line_ids) - 1:
+                            share = landed_cost_total - allocated_so_far
+                        else:
+                            share = _money(landed_cost_total * line_values[line_id] / total_value)
+                            allocated_so_far += share
+                        landed_cost_share_by_line[line_id] = share
+                for allocation in allocations:
+                    credit_details: dict[int, int] = {}
+                    if allocation.credit_detail_account_id is not None:
+                        credit_detail = session.get(DetailAccount, allocation.credit_detail_account_id)
+                        if credit_detail is not None:
+                            credit_details[credit_detail.dimension_type_id] = credit_detail.detail_account_id
+                    landed_cost_je_lines.append(
+                        je_service.LineInput(
+                            account_id=allocation.credit_account_id, description=allocation.notes or description,
+                            debit=_ZERO, credit=allocation.amount, details=credit_details,
+                        )
+                    )
+
     if document_type_code in _CONSIGNMENT_TYPES:
         return _post_consignment_document(document_id, company_id, posted_by_user_id, consignment_line_snapshots, consignment_fields)
 
@@ -1583,6 +1625,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     inv_documents_service.LineFields(
                         item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
                         batch_id=batch_id, unit_cost=stock_unit_cost, tax_amount=line_tax_amount,
+                        landed_cost_amount=landed_cost_share_by_line.get(line_id, _ZERO),
                         reason_code_id=line_reason_code_id,
                     ),
                 )
@@ -1592,8 +1635,15 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     session.commit()
 
             inv_documents_service.confirm_stock_document(group_stock_document_id, company_id)
+            # طبقِ همان محدودیتِ آگاهانه‌یِ چند-انباره (پایین‌تر): ردیف‌هایِ
+            # بستانکاریِ هزینه‌هایِ جانبی فقط به سندِ *اولین* گروه اضافه
+            # می‌شوند (stock_document_id هنوز None است، یعنی هنوز هیچ
+            # گروهی پردازش نشده) -- طبقِ تصمیمِ صریح («همراهِ سندِ خودِ
+            # فاکتور»)، این تنها JEای است که comm.commercial_documents هم
+            # به آن لینک می‌شود.
             group_post_result = inv_documents_service.post_stock_document(
                 group_stock_document_id, company_id, posted_by_user_id, is_informal_tax=is_informal_tax,
+                extra_je_lines=(landed_cost_je_lines if stock_document_id is None else None),
             )
 
             # طبقِ محدودیتِ آگاهانه: comm.commercial_documents فقط یک

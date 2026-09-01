@@ -1,6 +1,8 @@
-"""بهایِ تمام‌شدهٔ وارداتی و ریبیتِ تامین‌کننده (مرحلهٔ ۴) — تسهیمِ
-هزینه‌هایِ جانبیِ خرید رویِ ردیف‌هایِ فاکتور، و قراردادها/تعهداتِ ریبیتِ
-تامین‌کننده."""
+"""ریبیتِ تامین‌کننده — قراردادها/پله‌ها/تعهداتِ ریبیتِ تامین‌کننده
+(مرحلهٔ ۴). طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه رویِ خودِ فاکتورِ
+خرید»)، هزینه‌هایِ جانبیِ خرید دیگر این‌جا مدیریت نمی‌شوند — از دکمهٔ
+«🧮 هزینه‌هایِ جانبی» رویِ خودِ فرمِ فاکتورِ خرید (commercial_document.py)
+قابلِ‌دسترسی است."""
 
 from __future__ import annotations
 
@@ -19,7 +21,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -32,8 +33,6 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
 
-_COST_TYPE_LABELS = {"FREIGHT": "حمل‌ونقل", "CUSTOMS": "حقوقِ گمرکی", "INSURANCE": "بیمه", "HANDLING": "بارگیری/تخلیه", "OTHER": "سایر"}
-_ALLOCATION_METHOD_LABELS = {"BY_VALUE": "به‌نسبتِ ارزش", "BY_QUANTITY": "به‌نسبتِ تعداد", "BY_WEIGHT": "به‌نسبتِ وزن"}
 _REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصدِ ثابت", "VOLUME_TIER": "پلکانیِ حجمی"}
 _ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحالِ تجمیع", "SETTLED": "تسویه‌شده"}
 
@@ -50,125 +49,14 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(12)
 
-        title = QLabel("بهایِ تمام‌شدهٔ وارداتی و ریبیتِ تامین‌کننده")
+        title = QLabel("ریبیتِ تامین‌کننده")
         title.setObjectName("pageTitle")
         outer.addWidget(title)
 
-        tabs = QTabWidget()
-        tabs.addTab(self._build_landed_cost_tab(), "بهایِ تمام‌شدهٔ وارداتی")
-        tabs.addTab(self._build_rebate_tab(), "ریبیتِ تامین‌کننده")
-        outer.addWidget(tabs, stretch=1)
+        outer.addWidget(self._build_rebate_tab(), stretch=1)
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
-
-    # --- بهایِ تمام‌شدهٔ وارداتی ---------------------------------------------
-    def _build_landed_cost_tab(self) -> QWidget:
-        page = QWidget()
-        outer = QVBoxLayout(page)
-
-        self.landed_invoice_combo = QComboBox()
-        self.landed_invoice_combo.currentIndexChanged.connect(self._refresh_landed_costs)
-        outer.addWidget(self.landed_invoice_combo)
-
-        self.landed_cost_table = QTableWidget(0, 4)
-        self.landed_cost_table.setHorizontalHeaderLabels(["نوعِ هزینه", "مبلغ", "روشِ تسهیم", "توضیحات"])
-        self.landed_cost_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.landed_cost_table.verticalHeader().setVisible(False)
-        self.landed_cost_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        outer.addWidget(self.landed_cost_table, stretch=1)
-
-        form = QHBoxLayout()
-        self.landed_cost_type_combo = QComboBox()
-        for code, label in _COST_TYPE_LABELS.items():
-            self.landed_cost_type_combo.addItem(label, code)
-        form.addWidget(self.landed_cost_type_combo)
-        self.landed_amount_field = QLineEdit()
-        self.landed_amount_field.setPlaceholderText("مبلغ")
-        form.addWidget(self.landed_amount_field)
-        self.landed_method_combo = QComboBox()
-        for code, label in _ALLOCATION_METHOD_LABELS.items():
-            self.landed_method_combo.addItem(label, code)
-        form.addWidget(self.landed_method_combo)
-        self.landed_notes_field = QLineEdit()
-        self.landed_notes_field.setPlaceholderText("توضیحات (اختیاری)")
-        form.addWidget(self.landed_notes_field, stretch=1)
-        add_button = QPushButton("➕")
-        add_button.setObjectName("primaryIconButton")
-        add_button.setFixedWidth(48)
-        add_button.setToolTip("هزینهٔ تازه")
-        add_button.clicked.connect(self._add_landed_cost)
-        form.addWidget(add_button)
-        outer.addLayout(form)
-
-        apply_row = QHBoxLayout()
-        apply_button = QPushButton("🧮")
-        apply_button.setObjectName("primaryIconButton")
-        apply_button.setFixedWidth(48)
-        apply_button.setToolTip("اعمالِ هزینه‌هایِ تمام‌شده رویِ ردیف‌هایِ فاکتور")
-        apply_button.clicked.connect(self._apply_landed_costs)
-        apply_row.addWidget(apply_button)
-        apply_row.addStretch(1)
-        outer.addLayout(apply_row)
-
-        self.landed_status_label = QLabel("")
-        self.landed_status_label.setObjectName("statusError")
-        outer.addWidget(self.landed_status_label)
-        return wrap_scrollable(page)
-
-    def _refresh_landed_costs(self) -> None:
-        self.landed_cost_table.setRowCount(0)
-        document_id = self.landed_invoice_combo.currentData()
-        if document_id is None:
-            return
-        allocations = purchasing_service.list_landed_cost_allocations(document_id)
-        self.landed_cost_table.setRowCount(len(allocations))
-        for row_index, a in enumerate(allocations):
-            values = [
-                _COST_TYPE_LABELS.get(a.cost_type_code, a.cost_type_code), str(a.amount),
-                _ALLOCATION_METHOD_LABELS.get(a.allocation_method_code, a.allocation_method_code), a.notes or "",
-            ]
-            for col_index, value in enumerate(values):
-                self.landed_cost_table.setItem(row_index, col_index, QTableWidgetItem(value))
-
-    def _add_landed_cost(self) -> None:
-        document_id = self.landed_invoice_combo.currentData()
-        if document_id is None:
-            self.landed_status_label.setText("ابتدا یک فاکتورِ خریدِ پیش‌نویس را انتخاب کنید.")
-            return
-        try:
-            amount = decimal.Decimal(self.landed_amount_field.text().strip() or "0")
-        except decimal.InvalidOperation:
-            self.landed_status_label.setText("مبلغ نامعتبر است.")
-            return
-        if amount <= 0:
-            self.landed_status_label.setText("مبلغ باید بزرگ‌تر از صفر باشد.")
-            return
-        try:
-            purchasing_service.add_landed_cost_allocation(
-                document_id, self.landed_cost_type_combo.currentData(), amount, self.landed_method_combo.currentData(),
-                notes=self.landed_notes_field.text().strip() or None,
-            )
-        except ValueError as exc:
-            self.landed_status_label.setText(str(exc))
-            return
-        self.landed_amount_field.clear()
-        self.landed_notes_field.clear()
-        self.landed_status_label.setText("")
-        self._refresh_landed_costs()
-
-    def _apply_landed_costs(self) -> None:
-        company_id = self._company_id()
-        document_id = self.landed_invoice_combo.currentData()
-        if company_id is None or document_id is None:
-            self.landed_status_label.setText("ابتدا یک فاکتورِ خریدِ پیش‌نویس را انتخاب کنید.")
-            return
-        try:
-            purchasing_service.apply_landed_costs(document_id, company_id)
-        except ValueError as exc:
-            self.landed_status_label.setText(str(exc))
-            return
-        self.landed_status_label.setText("هزینه‌هایِ تمام‌شده رویِ بهایِ واحدِ ردیف‌ها اعمال شد.")
 
     # --- ریبیتِ تامین‌کننده -----------------------------------------------
     def _build_rebate_tab(self) -> QWidget:
@@ -394,13 +282,6 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
             return
         self._suppliers = dimensions_service.list_suppliers(company_id)
         self._items = catalog_service.list_items(company_id, active_only=True)
-
-        self.landed_invoice_combo.blockSignals(True)
-        self.landed_invoice_combo.clear()
-        for d in documents_service.list_documents(company_id, document_type_code="PURCHASE_INVOICE", status_code="DRAFT"):
-            self.landed_invoice_combo.addItem(f"فاکتورِ شمارهٔ {d.document_no}", d.document_id)
-        self.landed_invoice_combo.blockSignals(False)
-        self._refresh_landed_costs()
 
         self.rebate_invoice_combo.clear()
         for d in documents_service.list_documents(company_id, document_type_code="PURCHASE_INVOICE", status_code="POSTED"):

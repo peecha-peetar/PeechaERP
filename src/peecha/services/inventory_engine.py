@@ -472,6 +472,7 @@ def _source_line_unit_cost(session, source_line_id: int) -> decimal.Decimal:
 
 def post_stock_document(
     stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
+    extra_je_lines: list[je_service.LineInput] | None = None,
 ) -> PostResult:
     with new_session() as session:
         doc = session.get(StockDocument, stock_document_id)
@@ -688,6 +689,18 @@ def post_stock_document(
 
                 ledger_unit_cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else actual_cost
 
+                # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ
+                # اقلامِ فاکتور، به حسابِ موجودی و بهایِ تمام‌شده لحاظ
+                # بشه»): سهمِ همین ردیف از هزینه‌هایِ جانبی (که
+                # commercial_documents.py از رویِ ارزشِ نسبیِ ردیف‌ها
+                # محاسبه کرده) به بهایِ لجر/موجودی اضافه می‌شود -- تا هم
+                # ارزشِ موجودیِ همین لحظه هم بهایِ تمام‌شده‌یِ فروشِ آینده
+                # (میانگین/FIFO) درست باشد. فقط RECEIPT (فاکتورِ خرید) این
+                # ردیف را دارد.
+                landed_cost_amount = (line.landed_cost_amount or _ZERO) if doc_type == "RECEIPT" else _ZERO
+                if landed_cost_amount and line.quantity_base:
+                    ledger_unit_cost = ledger_unit_cost + (landed_cost_amount / line.quantity_base)
+
                 in_ledger = insert_ledger(
                     stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
                     bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
@@ -706,7 +719,13 @@ def post_stock_document(
                 inventory_amount = _money(ledger_unit_cost * line.quantity_base)
                 payable_amount = _money(actual_cost * line.quantity_base)
                 add_debit("INVENTORY_ASSET", inventory_amount, item.item_detail_account_id)
-                variance = payable_amount - inventory_amount
+                # طبقِ همان تسهیمِ هزینه‌هایِ جانبی: این سهم نباید بستانکاریِ
+                # حساب‌هایِ پرداختنیِ تامین‌کننده (payable_amount) را عوض
+                # کند -- پس در محاسبهٔ مغایرتِ بهایِ استاندارد (که فقط
+                # اختلافِ actual_cost/ledger_unit_costِ خودِ آن دو مکانیزم
+                # را باید نشان دهد) دوباره کسر می‌شود، وگرنه به‌اشتباه
+                # به‌عنوانِ «مغایرتِ بهایِ استاندارد» ثبت می‌شد.
+                variance = payable_amount - inventory_amount + landed_cost_amount
                 if doc_type == "RECEIPT" and variance != 0:
                     if variance > 0:
                         add_debit("INVENTORY_COST_VARIANCE", variance, item.item_detail_account_id)
@@ -993,6 +1012,14 @@ def post_stock_document(
 
         _build_lines(debits, is_debit=True)
         _build_lines(credits, is_debit=False)
+
+        # طبقِ درخواستِ صریح («بستانکاریِ حسابِ سفارشات همراهِ سندِ خودِ
+        # فاکتورِ خرید»): ردیف‌هایِ حسابِ آزادانه‌ایِ هزینه‌هایِ جانبی
+        # (commercial_documents.py، حسابِ معین+تفصیلیِ انتخابیِ خودِ
+        # کاربر برایِ هر ردیفِ هزینه) مستقیماً به همین سند اضافه می‌شوند —
+        # نه یک نقشِ ازپیش‌نگاشته‌شده، پس از مکانیزمِ debits/credits بالا
+        # عبور نمی‌کنند.
+        je_lines.extend(extra_je_lines or [])
 
         doc.status_code = "POSTED"
         doc.posted_by_user_id = posted_by_user_id

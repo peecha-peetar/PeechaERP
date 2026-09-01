@@ -34,9 +34,11 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.reporting import jasper_bridge
+from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -45,6 +47,7 @@ from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import report_templates as report_templates_service
+from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
@@ -858,6 +861,171 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
         return {line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items() if field.value() > 0}
 
 
+class _LandedCostDialog(QDialog):
+    """طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه در فاکتورِ خرید»): مدیریتِ
+    هزینه‌هایِ جانبیِ همین فاکتورِ خرید (ترخیص/گمرک/هزینه‌هایِ ارزیِ دیگر).
+    هر ردیف یک مبلغ و یک حسابِ معین+تفصیلیِ آزادانه دارد (مثلاً یک
+    تفصیلیِ گروهِ «سفارشاتِ در راه») که با Postِ فاکتور بستانکار می‌شود --
+    تسهیمِ خودِ مبلغ رویِ ردیف‌هایِ فاکتور (به بهایِ موجودی/تمام‌شده) و
+    ساختِ ردیف‌هایِ بستانکاریِ سندِ حسابداری، هردو در همان لحظه (درونِ
+    commercial_documents.post_document، همراهِ خودِ سندِ فاکتور) انجام
+    می‌شود -- این فرم فقط ردیف‌هایِ هزینه را قبل از Post مدیریت می‌کند."""
+
+    def __init__(self, document_id: int, company_id: int, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("تسهیمِ هزینه‌هایِ جانبیِ خرید")
+        self.resize(760, 480)
+        self._document_id = document_id
+        self._company_id = company_id
+        self._account_options = [
+            (a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable
+        ]
+        self._required_dimension_type_by_detail_id: dict[int, int] = {}
+
+        layout = QVBoxLayout(self)
+
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["مبلغ", "حساب", "تفصیلی", "توضیحات", ""])
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        layout.addWidget(self.table, stretch=1)
+
+        entry_row = QHBoxLayout()
+        self.amount_field = _AmountField()
+        entry_row.addWidget(self.amount_field, stretch=1)
+        self.account_combo = _make_searchable_combo(self._account_options)
+        entry_row.addWidget(self.account_combo, stretch=2)
+        self.detail_combo = _make_searchable_combo([])
+        entry_row.addWidget(self.detail_combo, stretch=2)
+        self.notes_field = QLineEdit()
+        self.notes_field.setPlaceholderText("توضیحات (اختیاری)")
+        entry_row.addWidget(self.notes_field, stretch=2)
+        add_button = QPushButton("➕")
+        add_button.setObjectName("primaryIconButton")
+        add_button.setFixedWidth(44)
+        add_button.setToolTip("افزودنِ ردیفِ هزینه")
+        add_button.clicked.connect(self._add_row)
+        entry_row.addWidget(add_button)
+        layout.addLayout(entry_row)
+
+        # طبقِ درخواستِ صریح («با زدنِ اینتر ردیفِ جدید ایجاد بشه و همینطور
+        # تا ردیف‌هایِ بعدی»): زنجیره‌یِ Enter رویِ همین چهار فیلد.
+        self.amount_field.returnPressed.connect(self.account_combo.setFocus)
+        self.account_combo.lineEdit().returnPressed.connect(self.detail_combo.setFocus)
+        self.detail_combo.lineEdit().returnPressed.connect(self.notes_field.setFocus)
+        self.notes_field.returnPressed.connect(self._add_row)
+
+        self.account_combo.currentIndexChanged.connect(self._refresh_detail_options)
+        self.detail_combo.currentIndexChanged.connect(self._refresh_balance_label)
+
+        self.balance_label = QLabel("")
+        layout.addWidget(self.balance_label)
+
+        self.total_label = QLabel("")
+        layout.addWidget(self.total_label)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        layout.addWidget(self.status_label)
+
+        close_row = QHBoxLayout()
+        close_row.addStretch(1)
+        close_button = QPushButton("بستن")
+        close_button.clicked.connect(self.accept)
+        close_row.addWidget(close_button)
+        layout.addLayout(close_row)
+
+        self._refresh_detail_options()
+        self._refresh_table()
+
+    def _refresh_detail_options(self) -> None:
+        account_id = self.account_combo.currentData()
+        self._required_dimension_type_by_detail_id = {}
+        if account_id is None:
+            _fill_options(self.detail_combo, [])
+            self.balance_label.setText("")
+            return
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        detail_options: list[tuple[int, str]] = []
+        for dim in required:
+            prefix = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code)
+            for d in dim.detail_accounts:
+                self._required_dimension_type_by_detail_id[d.detail_account_id] = dim.dimension_type_id
+                label = f"{d.code} — {d.name or ''}" if prefix is None else f"{prefix}: {d.code} — {d.name or ''}"
+                detail_options.append((d.detail_account_id, label))
+        _fill_options(self.detail_combo, detail_options)
+        self.detail_combo.setToolTip("تفصیلی (الزامی)" if required else "")
+        self._refresh_balance_label()
+
+    def _refresh_balance_label(self) -> None:
+        detail_account_id = self.detail_combo.currentData()
+        if detail_account_id is None:
+            self.balance_label.setText("")
+            return
+        balance, nature = treasury_service.get_counterparty_balance(self._company_id, detail_account_id)
+        self.balance_label.setText(f"ماندهٔ فعلیِ همین تفصیلی: {numerals.format_money(balance, 2)} ({nature})")
+
+    def _refresh_table(self) -> None:
+        allocations = purchasing_service.list_landed_cost_allocations(self._document_id)
+        accounts_by_id = dict(self._account_options)
+        self.table.setRowCount(len(allocations))
+        total = decimal.Decimal(0)
+        for row_index, a in enumerate(allocations):
+            total += a.amount
+            detail_label = (
+                dimensions_service.get_detail_account_label(a.credit_detail_account_id)
+                if a.credit_detail_account_id is not None else ""
+            )
+            values = [
+                numerals.format_money(a.amount, 2), accounts_by_id.get(a.credit_account_id, str(a.credit_account_id)),
+                detail_label, a.notes or "",
+            ]
+            for col_index, value in enumerate(values):
+                self.table.setItem(row_index, col_index, QTableWidgetItem(value))
+            delete_button = QPushButton("✕")
+            delete_button.setObjectName("dangerIconButton")
+            delete_button.setFixedWidth(32)
+            delete_button.clicked.connect(lambda _checked=False, allocation_id=a.allocation_id: self._delete_row(allocation_id))
+            self.table.setCellWidget(row_index, 4, delete_button)
+        self.total_label.setText(f"جمعِ کلِ هزینه‌هایِ جانبی: {numerals.format_money(total, 2)}")
+
+    def _add_row(self) -> None:
+        account_id = self.account_combo.currentData()
+        if account_id is None:
+            self.status_label.setText("انتخابِ حساب الزامی است.")
+            return
+        detail_account_id = self.detail_combo.currentData()
+        if self._required_dimension_type_by_detail_id and detail_account_id is None:
+            self.status_label.setText("این حساب نیازمندِ انتخابِ تفصیلی است.")
+            return
+        amount = decimal.Decimal(str(self.amount_field.value()))
+        if amount <= 0:
+            self.status_label.setText("مبلغ باید بزرگ‌تر از صفر باشد.")
+            return
+        try:
+            purchasing_service.add_landed_cost_line(
+                self._document_id, amount, account_id, credit_detail_account_id=detail_account_id,
+                notes=self.notes_field.text().strip() or None,
+            )
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.status_label.setText("")
+        self.amount_field.setValue(0)
+        self.notes_field.clear()
+        self._refresh_table()
+        self.amount_field.setFocus()
+
+    def _delete_row(self, allocation_id: int) -> None:
+        try:
+            purchasing_service.delete_landed_cost_line(allocation_id, self._company_id)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self._refresh_table()
+
+
 class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def __init__(self, document_type_code: str, main_window) -> None:
         super().__init__()
@@ -1242,6 +1410,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.correct_button.setVisible(document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
         self.footer_layout.addWidget(self.correct_button)
 
+        # طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه در فاکتورِ خرید»): فقط
+        # برایِ فاکتورِ خرید، و فقط پیش از Post (سندِ ذخیره‌شده باشد).
+        self.landed_cost_button = QPushButton("🧮")
+        self.landed_cost_button.setObjectName("iconButton")
+        self.landed_cost_button.setFixedWidth(44)
+        self.landed_cost_button.setToolTip(
+            "تسهیمِ هزینه‌هایِ جانبیِ خرید (ترخیص/گمرک/هزینه‌هایِ ارزیِ دیگر) — "
+            "با Postِ فاکتور، این هزینه‌ها متناسب با ارزشِ ردیف‌ها به بهایِ موجودی/تمام‌شده اضافه می‌شوند "
+            "و حساب‌هایِ انتخاب‌شده برایِ هرکدام بستانکار می‌شوند."
+        )
+        self.landed_cost_button.clicked.connect(self._open_landed_costs)
+        self.landed_cost_button.setVisible(document_type_code == "PURCHASE_INVOICE")
+        self.footer_layout.addWidget(self.landed_cost_button)
+
         # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل
         # شود»): فقط برایِ انواعِ سفارش/پیش‌فاکتور نمایش داده می‌شود.
         self.convert_button = QPushButton("→")
@@ -1550,6 +1732,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.approve_button.setEnabled(is_confirmed)
         self.post_button.setEnabled(is_confirmed or is_approved)
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
+        self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
         self.convert_button.setEnabled(is_confirmed or is_approved or is_posted)
         can_correct = is_posted and self._document_id is not None and self._can_correct_posted()
@@ -1875,6 +2058,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
         self._reset_form()
         theme.set_status_label(self.status_label, "سند لغو شد.", ok=True)
+
+    def _open_landed_costs(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._document_id is None:
+            return
+        dialog = _LandedCostDialog(self._document_id, company_id, self)
+        dialog.exec()
 
     def _can_correct_posted(self) -> bool:
         company_id = self._company_id()

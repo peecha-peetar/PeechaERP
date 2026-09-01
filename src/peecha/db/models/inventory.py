@@ -522,6 +522,13 @@ class StockDocumentLine(Base):
     # را زیاد کند و بدهکارِ «مالياتِ خرید-قابلِ مطالبه» شود -- بدونِ اینکه
     # وارد ارزشِ خودِ موجودی (unit_cost) شود.
     tax_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ اقلامِ
+    # فاکتور، به حسابِ موجودی/بهایِ تمام‌شده لحاظ بشه»): سهمِ همین ردیف از
+    # هزینه‌هایِ جانبیِ فاکتورِ خرید (ترخیص/گمرک/...) -- به ارزشِ
+    # موجودی/بهایِ لجرِ همین ردیف اضافه می‌شود، بدونِ اینکه وارد
+    # بستانکاریِ حساب‌هایِ پرداختنیِ تامین‌کنندهٔ کالا شود (آن، حساب‌هایِ
+    # جداگانه‌ایِ خودِ هزینه را بستانکار می‌کند).
+    landed_cost_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     quality_status_code: Mapped[str] = mapped_column(String(15), default="APPROVED")
     reason_code_id: Mapped[int | None] = mapped_column(ForeignKey("inv.document_reason_codes.reason_code_id"))
     source_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))

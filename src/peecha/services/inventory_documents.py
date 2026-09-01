@@ -25,6 +25,7 @@ from peecha.db.models.inventory import (
 )
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_engine as engine_service
+from peecha.services import journal_entries as je_service
 
 DOCUMENT_TYPE_CODES = (
     "RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT",
@@ -436,6 +437,12 @@ class LineFields:
     # خرید) می‌آید، مالياتِ همان ردیف جداگانه این‌جا هم منتقل می‌شود —
     # نه بخشی از unit_cost (که ارزشِ خودِ موجودی است).
     tax_amount: decimal.Decimal | None = None
+    # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ اقلامِ
+    # فاکتور»): سهمِ همین ردیف از هزینه‌هایِ جانبیِ فاکتورِ خرید -- مثلِ
+    # tax_amount، جداگانه از unit_cost منتقل می‌شود (خودِ engine_service
+    # آن را به بهایِ لجر اضافه می‌کند، بدونِ اینکه وارد بستانکاریِ
+    # پرداختنیِ تامین‌کنندهٔ کالا شود).
+    landed_cost_amount: decimal.Decimal | None = None
     reason_code_id: int | None = None
     source_line_id: int | None = None
     description: str | None = None
@@ -460,6 +467,7 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
             quantity=fields.quantity, quantity_base=fields.quantity_base, bin_location_id=fields.bin_location_id,
             destination_bin_location_id=fields.destination_bin_location_id, batch_id=fields.batch_id,
             unit_cost=fields.unit_cost, tax_amount=(fields.tax_amount or decimal.Decimal(0)),
+            landed_cost_amount=(fields.landed_cost_amount or decimal.Decimal(0)),
             reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
             description=(fields.description or None),
         )
@@ -487,6 +495,7 @@ def update_line(line_id: int, stock_document_id: int, company_id: int, fields: L
         line.batch_id = fields.batch_id
         line.unit_cost = fields.unit_cost
         line.tax_amount = fields.tax_amount or decimal.Decimal(0)
+        line.landed_cost_amount = fields.landed_cost_amount or decimal.Decimal(0)
         line.reason_code_id = fields.reason_code_id
         line.source_line_id = fields.source_line_id
         line.description = fields.description or None
@@ -574,8 +583,11 @@ def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
 
 def post_stock_document(
     stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
+    extra_je_lines: list[je_service.LineInput] | None = None,
 ) -> engine_service.PostResult:
-    return engine_service.post_stock_document(stock_document_id, company_id, posted_by_user_id, is_informal_tax)
+    return engine_service.post_stock_document(
+        stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines,
+    )
 
 
 def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> engine_service.PostResult:

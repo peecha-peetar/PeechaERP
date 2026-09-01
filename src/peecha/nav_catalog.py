@@ -125,7 +125,7 @@ NAV_ITEMS = [
             # ورودی از نظرِ طرفِ‌حساب هم‌الگویِ خرید است.
             {"code": "PURCH_CONSIGNMENT_IN", "label": "امانیِ ورودی", "screen": "commercial_document_consignment_in"},
             {"code": "PURCH_DOCUMENTS_LIST", "label": "اسنادِ خرید", "screen": "commercial_documents_list_purchase"},
-            {"code": "PURCH_EXTRAS", "label": "بهایِ تمام‌شدهٔ وارداتی و ریبیت", "screen": "commercial_purchasing_extras"},
+            {"code": "PURCH_EXTRAS", "label": "ریبیتِ تامین‌کننده", "screen": "commercial_purchasing_extras"},
         ],
     },
     {
