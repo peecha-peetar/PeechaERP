@@ -1471,6 +1471,32 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             for ln in lines
         ]
 
+        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
+        # فراموش شده است» حتی وقتی تفصیلیِ طرفِ‌حساب درست انتخاب شده بود):
+        # اگر حسابِ نقش‌محورِ (دریافتنی/پرداختنی/درآمد/موجودی/...) این سند
+        # یک بُعدِ الزامیِ اضافه (مثلاً مرکزِ هزینه/پروژه) هم داشته باشد،
+        # ساختِ خودکارِ سندِ حسابداری قبلاً فقط تفصیلیِ طرفِ‌حساب را می‌فرستاد
+        # و آن بُعدِ اضافه را هیچ‌وقت نمی‌فرستاد — دقیقاً هم‌الگو با باگِ حسابِ
+        # پیش‌پرداختِ تنخواه که پیش‌تر رفع شد. حالا مرکزِ هزینه/پروژهٔ خودِ سند
+        # (اگر در سرِسند انتخاب شده باشد) به همه‌یِ ردیف‌هایِ سندِ حسابداری
+        # (این سند و سندِ انبارِ خودکارِ همراهش، و ردیف‌هایِ هزینه‌هایِ جانبی
+        # پایین‌تر) فرستاده می‌شود. این‌جا (پیش‌تر از محاسبهٔ هزینه‌هایِ
+        # جانبی) محاسبه می‌شود تا آن‌ها هم بتوانند از همین extra_dims
+        # استفاده کنند.
+        extra_dims: dict[int, int] = {}
+        if cost_center_id is not None:
+            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = cost_center_id
+        if project_id is not None:
+            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = project_id
+        # «مرکزِ سود» فیلدی در سرِسندِ اسنادِ بازرگانی ندارد — تنها منبعِ آن
+        # انبارِ خودِ سند است (طبقِ رفعِ همین باگ در inventory_engine.py).
+        if warehouse_id is not None:
+            warehouse_row = locations_service.get_warehouse(warehouse_id, company_id)
+            if warehouse_row is not None and warehouse_row.fields.profit_center_detail_account_id is not None:
+                extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
+                    warehouse_row.fields.profit_center_detail_account_id
+                )
+
         # طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه رویِ فاکتورِ خرید — مبلغ +
         # حسابِ معین و تفصیلیِ بستانکار برایِ هر ردیف، همراهِ خودِ سندِ
         # فاکتور»): سهمِ هر ردیفِ فاکتور از جمعِ هزینه‌هایِ جانبی (متناسب
@@ -1478,7 +1504,10 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         # گردِکردن به آخرین ردیف داده می‌شود تا جمعِ سهم‌ها دقیقاً با جمعِ
         # هزینه‌ها برابر بماند. ردیف‌هایِ بستانکاریِ سندِ حسابداری (حسابِ
         # آزادانه‌ایِ خودِ کاربر برایِ هر هزینه) هم همین‌جا ساخته می‌شوند تا
-        # مستقیماً به سندِ حسابداریِ خودکارِ همین فاکتور اضافه شوند.
+        # مستقیماً به سندِ حسابداریِ خودکارِ همین فاکتور اضافه شوند — طبقِ
+        # گزارشِ صریح («مرکزِ هزینه/پروژهٔ رویِ فاکتور برایِ حساب‌هایِ فرمِ
+        # هزینه‌ها هم لحاظ شود»)، extra_dimsِ سرِسند به این ردیف‌ها هم
+        # اضافه می‌شود.
         landed_cost_share_by_line: dict[int, decimal.Decimal] = {}
         landed_cost_je_lines: list[je_service.LineInput] = []
         if document_type_code == "PURCHASE_INVOICE":
@@ -1500,7 +1529,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                             allocated_so_far += share
                         landed_cost_share_by_line[line_id] = share
                 for allocation in allocations:
-                    credit_details: dict[int, int] = {}
+                    credit_details: dict[int, int] = dict(extra_dims)
                     if allocation.credit_detail_account_id is not None:
                         credit_detail = session.get(DetailAccount, allocation.credit_detail_account_id)
                         if credit_detail is not None:
@@ -1514,29 +1543,6 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
 
     if document_type_code in _CONSIGNMENT_TYPES:
         return _post_consignment_document(document_id, company_id, posted_by_user_id, consignment_line_snapshots, consignment_fields)
-
-    # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ الزامی
-    # فراموش شده است» حتی وقتی تفصیلیِ طرفِ‌حساب درست انتخاب شده بود):
-    # اگر حسابِ نقش‌محورِ (دریافتنی/پرداختنی/درآمد/موجودی/...) این سند
-    # یک بُعدِ الزامیِ اضافه (مثلاً مرکزِ هزینه/پروژه) هم داشته باشد،
-    # ساختِ خودکارِ سندِ حسابداری قبلاً فقط تفصیلیِ طرفِ‌حساب را می‌فرستاد
-    # و آن بُعدِ اضافه را هیچ‌وقت نمی‌فرستاد — دقیقاً هم‌الگو با باگِ حسابِ
-    # پیش‌پرداختِ تنخواه که پیش‌تر رفع شد. حالا مرکزِ هزینه/پروژهٔ خودِ سند
-    # (اگر در سرِسند انتخاب شده باشد) به همه‌یِ ردیف‌هایِ سندِ حسابداری
-    # (این سند و سندِ انبارِ خودکارِ همراهش) فرستاده می‌شود.
-    extra_dims: dict[int, int] = {}
-    if cost_center_id is not None:
-        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = cost_center_id
-    if project_id is not None:
-        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = project_id
-    # «مرکزِ سود» فیلدی در سرِسندِ اسنادِ بازرگانی ندارد — تنها منبعِ آن
-    # انبارِ خودِ سند است (طبقِ رفعِ همین باگ در inventory_engine.py).
-    if warehouse_id is not None:
-        warehouse_row = locations_service.get_warehouse(warehouse_id, company_id)
-        if warehouse_row is not None and warehouse_row.fields.profit_center_detail_account_id is not None:
-            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
-                warehouse_row.fields.profit_center_detail_account_id
-            )
 
     stock_document_id = None
     journal_entry_id = None

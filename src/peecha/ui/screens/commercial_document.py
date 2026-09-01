@@ -888,7 +888,19 @@ class _LandedCostDialog(QDialog):
         self.table.setHorizontalHeaderLabels(["مبلغ", "حساب", "تفصیلی", "توضیحات", ""])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        # طبقِ گزارشِ صریح («عرضِ ستون‌ها متناسب نیست و مبلغ خیلی کنه
+        # است»): بدونِ عرضِ صریح، ستونِ «مبلغ» فقط به‌اندازهٔ همان چهار
+        # حرفِ سرستون تنگ می‌ماند، نه به‌اندازهٔ مبلغِ واقعی.
+        table_header = self.table.horizontalHeader()
+        table_header.setSectionResizeMode(0, QHeaderView.Interactive)
+        self.table.setColumnWidth(0, 140)
+        table_header.setSectionResizeMode(1, QHeaderView.Interactive)
+        self.table.setColumnWidth(1, 220)
+        table_header.setSectionResizeMode(2, QHeaderView.Interactive)
+        self.table.setColumnWidth(2, 200)
+        table_header.setSectionResizeMode(3, QHeaderView.Stretch)
+        table_header.setSectionResizeMode(4, QHeaderView.Fixed)
+        self.table.setColumnWidth(4, 40)
         layout.addWidget(self.table, stretch=1)
 
         entry_row = QHBoxLayout()
@@ -1860,6 +1872,31 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._save_header()
         return self._document_id is not None
 
+    def _flush_header_changes(self) -> bool:
+        """طبقِ گزارشِ صریح («نوعِ ثبت را عوض می‌کنم ولی اثر نمی‌کند»):
+        اگر کاربر پیش از تاییدِ سند یک فیلدِ هدر (مثلاً نوعِ ثبتِ رسمی/
+        غیررسمی) را تغییر داده باشد ولی دوباره رویِ «ذخیره» نزده باشد،
+        آن تغییر هرگز به سرور نمی‌رسید -- confirm_document فقط وضعیت را
+        عوض می‌کند، هیچ فیلدی از خودِ فرم نمی‌خواند. حالا پیش از هر
+        تاییدی، آخرین مقادیرِ فرم دوباره ذخیره می‌شود تا تصمیمِ رسمی/
+        غیررسمی (و تسهیمِ هزینه‌هایِ جانبی، که هردو در لحظهٔ Post خوانده
+        می‌شوند) همیشه با چیزی که کاربر واقعاً رویِ صفحه می‌بیند یکی باشد."""
+        if self._document_id is None:
+            return True
+        company_id = self._company_id()
+        if company_id is None:
+            return False
+        fields = self._header_fields()
+        if fields is None:
+            return False
+        try:
+            documents_service.update_document_header(self._document_id, company_id, self.date_field.date(), fields)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "خطا در ذخیره", str(exc))
+            return False
+        return True
+
     def _warn_if_consignment_cost_mixing(self, item_id: int | None, warehouse_id: int | None) -> None:
         """طبقِ بررسیِ موردِ ۳ (رهگیریِ کالایِ امانیِ ورودی): وقتی روشِ
         بهایابی WEIGHTED_AVERAGE است، اگر همین انبار از قبل موجودیِ
@@ -1961,6 +1998,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _confirm(self) -> None:
         if self._document_id is None:
+            return
+        if not self._flush_header_changes():
             return
         try:
             documents_service.confirm_document(self._document_id, self._company_id(), app_session.current_user.user_id)
