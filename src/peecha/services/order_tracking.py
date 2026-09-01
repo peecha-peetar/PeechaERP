@@ -68,14 +68,43 @@ class OrderRow:
     closed_at: datetime.datetime | None
 
 
-def create_order(company_id: int, user_id: int, code: str, name: str, description: str | None = None) -> int:
+def list_available_detail_accounts(company_id: int) -> list[dimensions_service.DetailAccountRow]:
+    """طبقِ گزارشِ صریح («یک گروهِ تفصیلی انتخاب می‌کنم، تفصیلی‌هایِ سطحِ
+    آخرش را باید نمایش بدهد»): تفصیلی‌هایِ سطحِ آخرِ همان گروهِ تنظیم‌شده
+    («سفارشاتِ در راه») که هنوز به‌عنوانِ یک سفارش پیگیری نمی‌شوند -- یعنی
+    آماده‌یِ انتخاب برایِ شروعِ یک سفارشِ تازه‌اند."""
+    dimension_type_id = get_dimension_type_id(company_id)
+    if dimension_type_id is None:
+        return []
+    already_tracked_ids = set()
+    with new_session() as session:
+        already_tracked_ids = set(
+            session.scalars(select(OrderTracking.detail_account_id).where(OrderTracking.company_id == company_id))
+        )
+    return [
+        d
+        for d in dimensions_service.list_leaf_detail_accounts(company_id, dimension_type_id)
+        if d.detail_account_id not in already_tracked_ids
+    ]
+
+
+def create_order(company_id: int, user_id: int, detail_account_id: int, description: str | None = None) -> int:
     dimension_type_id = get_dimension_type_id(company_id)
     if dimension_type_id is None:
         raise ValueError("ابتدا باید گروهِ تفصیلیِ «سفارشاتِ در راه» را در همین صفحه تنظیم کنید.")
-    detail_account = dimensions_service.create_detail_account(company_id, dimension_type_id, code, name)
     with new_session() as session:
+        detail_account = session.get(DetailAccount, detail_account_id)
+        if (
+            detail_account is None
+            or detail_account.company_id != company_id
+            or detail_account.dimension_type_id != dimension_type_id
+        ):
+            raise ValueError("تفصیلیِ انتخاب‌شده متعلق به گروهِ «سفارشاتِ در راه» نیست.")
+        existing = session.scalar(select(OrderTracking).where(OrderTracking.detail_account_id == detail_account_id))
+        if existing is not None:
+            raise ValueError("این تفصیلی قبلاً به‌عنوانِ یک سفارش پیگیری می‌شود.")
         row = OrderTracking(
-            company_id=company_id, detail_account_id=detail_account.detail_account_id, description=description,
+            company_id=company_id, detail_account_id=detail_account_id, description=description,
             status_code="OPEN", opened_by_user_id=user_id,
         )
         session.add(row)

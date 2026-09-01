@@ -30,7 +30,7 @@ from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import order_tracking as order_tracking_service
 from peecha.services import treasury as treasury_service
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase
+from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, add_quick_add_button
 
 
 class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
@@ -73,15 +73,21 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         order_row.addWidget(self.reopen_button)
         self.body_layout.addLayout(order_row)
 
-        # سفارشِ تازه
+        # سفارشِ تازه: طبقِ گزارشِ صریح («یک گروهِ تفصیلی انتخاب می‌کنم،
+        # تفصیلی‌هایِ سطحِ آخرش را باید نمایش بدهد») -- این کمبو دقیقاً
+        # همان تفصیلی‌هایِ سطحِ آخرِ گروهِ تنظیم‌شده را نشان می‌دهد (که هنوز
+        # به‌عنوانِ سفارش پیگیری نمی‌شوند)؛ دکمه‌یِ + هم‌الگو با بقیه‌یِ
+        # برنامه، تفصیلیِ تازه را از صفحه‌یِ تعریفِ تفصیلی‌ها می‌سازد.
         new_order_row = QHBoxLayout()
-        self.new_code_field = QLineEdit()
-        self.new_code_field.setPlaceholderText("کدِ سفارش")
-        new_order_row.addWidget(self.new_code_field)
-        self.new_name_field = QLineEdit()
-        self.new_name_field.setPlaceholderText("نام/شرحِ سفارش")
-        new_order_row.addWidget(self.new_name_field, stretch=1)
-        add_order_button = QPushButton("➕ سفارشِ تازه")
+        self.new_detail_combo = QComboBox()
+        self.new_detail_combo.setEditable(True)
+        self.new_detail_combo.setInsertPolicy(QComboBox.NoInsert)
+        new_order_row.addWidget(self.new_detail_combo, stretch=1)
+        add_quick_add_button(new_order_row, self.new_detail_combo, main_window, "GL_DIM", "تعریفِ تفصیلیِ تازه برایِ سفارش")
+        self.new_description_field = QLineEdit()
+        self.new_description_field.setPlaceholderText("شرحِ سفارش (اختیاری)")
+        new_order_row.addWidget(self.new_description_field, stretch=1)
+        add_order_button = QPushButton("➕ شروعِ پیگیریِ سفارش")
         add_order_button.clicked.connect(self._add_order)
         new_order_row.addWidget(add_order_button)
         self.body_layout.addLayout(new_order_row)
@@ -147,6 +153,14 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self.order_combo.blockSignals(False)
         self._on_order_selected()
 
+        self.new_detail_combo.blockSignals(True)
+        self.new_detail_combo.clear()
+        for detail_account in order_tracking_service.list_available_detail_accounts(company_id):
+            label = f"{detail_account.full_code} — {detail_account.name}" if detail_account.name else detail_account.full_code
+            self.new_detail_combo.addItem(label, detail_account.detail_account_id)
+        self.new_detail_combo.setCurrentIndex(-1)
+        self.new_detail_combo.blockSignals(False)
+
     def _save_dimension_setting(self) -> None:
         company_id = self._company_id()
         dimension_type_id = self.dimension_combo.currentData()
@@ -157,26 +171,29 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setText("")
         self.status_label.setObjectName("statusOk")
         self.status_label.setText("گروهِ تفصیلیِ «سفارشاتِ در راه» ذخیره شد.")
+        # طبقِ گزارشِ صریح: بلافاصله بعدِ ذخیره، تفصیلی‌هایِ سطحِ آخرِ همین
+        # گروه در کمبویِ «سفارشِ تازه» نمایش داده شوند -- بدونِ نیازِ کاربر
+        # به خروج/ورودِ دوباره به این صفحه.
+        self.refresh()
 
     def _add_order(self) -> None:
         company_id = self._company_id()
         user = app_session.current_user
         if company_id is None or user is None:
             return
-        code = self.new_code_field.text().strip()
-        name = self.new_name_field.text().strip()
-        if not code:
+        detail_account_id = self.new_detail_combo.currentData()
+        if detail_account_id is None:
             self.status_label.setObjectName("statusError")
-            self.status_label.setText("کدِ سفارش الزامی است.")
+            self.status_label.setText("یک تفصیلی از گروهِ «سفارشاتِ در راه» انتخاب کنید.")
             return
+        description = self.new_description_field.text().strip() or None
         try:
-            order_tracking_service.create_order(company_id, user.user_id, code, name or code)
+            order_tracking_service.create_order(company_id, user.user_id, detail_account_id, description)
         except ValueError as exc:
             self.status_label.setObjectName("statusError")
             self.status_label.setText(str(exc))
             return
-        self.new_code_field.clear()
-        self.new_name_field.clear()
+        self.new_description_field.clear()
         self.status_label.setText("")
         self.refresh()
 
