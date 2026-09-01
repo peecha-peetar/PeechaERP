@@ -52,6 +52,13 @@ MAPPING_LABELS: dict[str, str] = {
     "SUPPLIER_PAYABLE": "حساب‌هایِ پرداختنیِ تامین‌کنندگان",
     "CUSTOMER_RECEIVABLE": "حساب‌هایِ دریافتنیِ مشتریان",
     "PURCHASE_TAX_RECEIVABLE": "مالياتِ خرید — قابلِ مطالبه",
+    # طبقِ درخواستِ صریح («برای برگشت از خرید و برگشت از فروش هم به همین
+    # صورت انجام بشه»): سندِ RETURN_IN (برگشت از فروش) کاملاً درونِ همین
+    # موتور ساخته می‌شود (برخلافِ فاکتورِ فروش که یک سندِ حسابداریِ جداگانه
+    # در commercial_documents.py دارد) — پس نگاشتِ «مالياتِ فروش-پرداختنی»
+    # این‌جا هم (جدا از نگاشتِ هم‌نامِ خودِ تنظیماتِ بازرگانی که فاکتورِ
+    # فروش از آن استفاده می‌کند) لازم است.
+    "SALES_TAX_PAYABLE": "مالياتِ فروشِ پرداختنی (برایِ برگشت از فروش)",
 }
 
 
@@ -463,7 +470,9 @@ def _source_line_unit_cost(session, source_line_id: int) -> decimal.Decimal:
     return (total_cost / total_qty) if total_qty else _ZERO
 
 
-def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_id: int) -> PostResult:
+def post_stock_document(
+    stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
+) -> PostResult:
     with new_session() as session:
         doc = session.get(StockDocument, stock_document_id)
         if doc is None or doc.company_id != company_id:
@@ -708,9 +717,19 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                 # یک فاکتورِ خرید آمده باشد) بدهکارِ «مالياتِ خرید-قابلِ
                 # مطالبه» می‌شود و رویِ بستانکاریِ حساب‌هایِ پرداختنی هم
                 # افزوده می‌شود — بدونِ اینکه وارد ارزشِ خودِ موجودی شود.
+                # برایِ RETURN_IN (برگشت از فروش)، همین مالیات بازگشتِ
+                # «مالياتِ فروش-پرداختنی»یِ فاکتورِ اصلی است، نه مطالبه‌یِ
+                # خرید. طبقِ دو نوعِ ثبتِ رسمی/غیررسمی: در حالتِ غیررسمی
+                # ردیفِ جداگانه‌یِ مالياتی ساخته نمی‌شود -- همان مبلغ به
+                # ارزشِ موجودی افزوده می‌شود (بهایِ واحدِ Ledger/میانگین
+                # دست‌نخورده می‌ماند، این فقط یک تعدیلِ سطحِ سند است).
                 tax_amount = line.tax_amount or _ZERO
                 if tax_amount:
-                    add_debit("PURCHASE_TAX_RECEIVABLE", tax_amount, item.item_detail_account_id)
+                    if is_informal_tax:
+                        add_debit("INVENTORY_ASSET", tax_amount, item.item_detail_account_id)
+                    else:
+                        tax_role = "PURCHASE_TAX_RECEIVABLE" if doc_type == "RECEIPT" else "SALES_TAX_PAYABLE"
+                        add_debit(tax_role, tax_amount, item.item_detail_account_id)
                 credit_amount = payable_amount + tax_amount
                 credit_role = "SUPPLIER_PAYABLE" if doc_type == "RECEIPT" else "CUSTOMER_RECEIVABLE"
                 if doc.counterparty_detail_account_id is not None:
@@ -733,10 +752,24 @@ def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_
                 add_credit("INVENTORY_ASSET", total_amount, item.item_detail_account_id)
                 if doc_type == "ISSUE":
                     add_debit("COGS", total_amount, item.item_detail_account_id)
-                elif doc.counterparty_detail_account_id is not None:
-                    add_debit("SUPPLIER_PAYABLE", total_amount, item.item_detail_account_id)
                 else:
-                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount, item.item_detail_account_id)
+                    # طبقِ دو نوعِ ثبتِ رسمی/غیررسمی برایِ برگشت به تامین‌کننده:
+                    # رسمی مالياتِ ردیف را جداگانه بستانکارِ «مالياتِ
+                    # خرید-قابلِ‌مطالبه» می‌کند (یعنی همان مطالبه‌یِ قبلی را
+                    # برمی‌گرداند)؛ غیررسمی همان مبلغ را مستقیماً به بستانکاریِ
+                    # موجودی می‌افزاید -- بدهکاریِ پرداختنی (یا زیانِ تعدیل)
+                    # در هردو حالت با احتسابِ مالیات یکسان است.
+                    tax_amount = line.tax_amount or _ZERO
+                    if tax_amount:
+                        if is_informal_tax:
+                            add_credit("INVENTORY_ASSET", tax_amount, item.item_detail_account_id)
+                        else:
+                            add_credit("PURCHASE_TAX_RECEIVABLE", tax_amount, item.item_detail_account_id)
+                    debit_amount = total_amount + tax_amount
+                    if doc.counterparty_detail_account_id is not None:
+                        add_debit("SUPPLIER_PAYABLE", debit_amount, item.item_detail_account_id)
+                    else:
+                        add_debit("INVENTORY_ADJUSTMENT_LOSS", debit_amount, item.item_detail_account_id)
 
             elif doc_type == "TRANSFER":
                 source_wh, dest_wh = doc.source_warehouse_id, doc.destination_warehouse_id

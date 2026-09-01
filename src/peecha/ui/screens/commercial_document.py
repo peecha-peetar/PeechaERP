@@ -866,6 +866,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ درخواستِ صریح («موعدِ تسویه فقط برایِ فاکتور معنا دارد»):
         # سفارش/پیش‌فاکتور/برگشت این فیلد را نمی‌بینند.
         self._is_invoice = document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE")
+        # طبقِ درخواستِ صریح («برای برگشت از خرید و برگشت از فروش هم به
+        # همین صورت انجام بشه»): نوعِ ثبتِ رسمی/غیررسمی رویِ برگشت هم
+        # قابلِ‌override است، نه فقط فاکتور.
+        self._supports_tax_posting_mode = document_type_code in (
+            "SALES_INVOICE", "PURCHASE_INVOICE", "SALES_RETURN", "PURCHASE_RETURN",
+        )
         self._main_window = main_window
         self._document_id: int | None = None
         self._status_code = "DRAFT"
@@ -1072,7 +1078,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.tax_posting_mode_combo.addItem("غیررسمی", "INFORMAL")
         tax_posting_mode_layout.addWidget(self.tax_posting_mode_combo)
         row2_grid.addWidget(self.tax_posting_mode_box, 0, 7, 2, 1)
-        self.tax_posting_mode_box.setVisible(self._is_invoice)
+        self.tax_posting_mode_box.setVisible(self._supports_tax_posting_mode)
 
         row2_grid.setColumnStretch(0, 1)
         row2_grid.setColumnStretch(1, 1)
@@ -1632,7 +1638,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             due_date=self.due_date_field.date() if self._is_invoice else None,
             reference_no=self.reference_field.text().strip() or None,
             description=self.description_field.text().strip() or None,
-            tax_posting_mode=self.tax_posting_mode_combo.currentData() if self._is_invoice else None,
+            tax_posting_mode=self.tax_posting_mode_combo.currentData() if self._supports_tax_posting_mode else None,
         )
 
     def _save_header(self) -> None:

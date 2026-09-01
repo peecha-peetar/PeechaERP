@@ -110,6 +110,25 @@ _STOCK_DOC_TYPE_BY_TYPE = {
     "SALES_RETURN": "RETURN_IN",
     "PURCHASE_RETURN": "RETURN_OUT",
 }
+
+# طبقِ کشفِ یک باگِ واقعیِ مسدودکننده در حینِ تستِ همین قابلیت: موتورِ
+# انبار برایِ RETURN_IN/RETURN_OUT همیشه یک reason_code_id بر رویِ ردیف
+# می‌خواهد (تاییدِ سندِ انبار با «انتخابِ دلیل الزامی است» رد می‌شود)، ولی
+# فرمِ سندِ بازرگانی (برگشت از خرید/فروش) هیچ فیلدی برایِ انتخابِ آن ندارد
+# -- پس تا پیش از این، ثبتِ نهاییِ هر برگشتِ بازرگانی‌ای (چه رسمی چه
+# غیررسمی) شکست می‌خورد. یک دلیلِ عمومیِ خودکار (به‌ازایِ هر شرکت، یک‌بار
+# ساخته می‌شود) این‌جا استفاده می‌شود تا برگشت‌ها قابلِ‌ثبت شوند؛ انتخابِ
+# دستیِ دلیل‌هایِ خاص‌تر (کالایِ معیوب/اضافی/...) یک نیازِ UIِ جداگانه است.
+_AUTO_RETURN_REASON_CODE = "COMM-RETURN"
+
+
+def _ensure_return_reason_code(company_id: int, stock_document_type: str) -> int:
+    for row in inv_documents_service.list_reason_codes(company_id, stock_document_type, active_only=False):
+        if row.code == _AUTO_RETURN_REASON_CODE:
+            return row.reason_code_id
+    return inv_documents_service.create_reason_code(
+        company_id, stock_document_type, _AUTO_RETURN_REASON_CODE, "برگشتِ سندِ بازرگانی"
+    )
 # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور باید بتواند به فاکتور تبدیل
 # شود»): مقصدِ تبدیل برایِ هر نوعِ سندِ غیرِمالی. امانیِ خروجی/ورودی هم
 # طبقِ همین درخواست («تسویه‌یِ امانی یعنی تبدیل به فاکتورِ واقعی») به
@@ -1546,12 +1565,25 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                         line_tax_amount = _tax_amt
                     stock_unit_cost = _money(net_of_discount)
                 else:
+                    # RETURN_IN/RETURN_OUT (برگشت از فروش/خرید): طبقِ درخواستِ
+                    # صریح («برای برگشت از خرید و برگشت از فروش هم به همین
+                    # صورت انجام بشه»)، مالياتِ ردیف این‌جا هم منتقل می‌شود؛
+                    # تصمیمِ رسمی/غیررسمی (ردیفِ جداگانه یا ادغام در موجودی)
+                    # خودِ موتورِ انبار می‌گیرد (پارامترِ is_informal_tax در
+                    # پایین‌تر) — چون بهایِ برگشت از رویِ سابقهٔ همان کالا
+                    # محاسبه می‌شود، نه از unit_price همین ردیف.
                     stock_unit_cost = unit_price
+                    line_tax_amount = _tax_amt
+                line_reason_code_id = (
+                    _ensure_return_reason_code(company_id, stock_document_type)
+                    if stock_document_type in ("RETURN_IN", "RETURN_OUT") else None
+                )
                 inv_line_id = inv_documents_service.add_line(
                     group_stock_document_id, company_id,
                     inv_documents_service.LineFields(
                         item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
                         batch_id=batch_id, unit_cost=stock_unit_cost, tax_amount=line_tax_amount,
+                        reason_code_id=line_reason_code_id,
                     ),
                 )
                 with new_session() as session:
@@ -1560,7 +1592,9 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     session.commit()
 
             inv_documents_service.confirm_stock_document(group_stock_document_id, company_id)
-            group_post_result = inv_documents_service.post_stock_document(group_stock_document_id, company_id, posted_by_user_id)
+            group_post_result = inv_documents_service.post_stock_document(
+                group_stock_document_id, company_id, posted_by_user_id, is_informal_tax=is_informal_tax,
+            )
 
             # طبقِ محدودیتِ آگاهانه: comm.commercial_documents فقط یک
             # stock_document_id/journal_entry_id دارد — با چند انبار، این
