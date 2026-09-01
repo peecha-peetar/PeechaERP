@@ -877,6 +877,7 @@ class _LandedCostDialog(QDialog):
         self.resize(760, 480)
         self._document_id = document_id
         self._company_id = company_id
+        self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
         self._account_options = [
             (a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable
         ]
@@ -903,16 +904,26 @@ class _LandedCostDialog(QDialog):
         self.table.setColumnWidth(4, 40)
         layout.addWidget(self.table, stretch=1)
 
+        # طبقِ گزارشِ صریح («فیلدهایِ ورودی تناسب با اطلاعاتِ ورودی
+        # ندارند»): بدونِ حداقلِ عرضِ صریح، کمبویِ حساب (که متنِ طولانیِ
+        # کد+نامِ حساب دارد) کل فضا را می‌گرفت و فیلدهایِ مبلغ/توضیحات به
+        # عرضی نزدیکِ صفر فشرده می‌شدند -- ضریبِ stretch به‌تنهایی مانعِ این
+        # فشردگی نمی‌شود، چون Qt اول حداقل‌سایزِ هر ویجت را برآورده می‌کند.
         entry_row = QHBoxLayout()
         self.amount_field = _AmountField()
+        self.amount_field.setDecimals(self._decimal_places)
+        self.amount_field.setMinimumWidth(110)
         entry_row.addWidget(self.amount_field, stretch=1)
         self.account_combo = _make_searchable_combo(self._account_options)
+        self.account_combo.setMinimumWidth(180)
         entry_row.addWidget(self.account_combo, stretch=2)
         self.detail_combo = _make_searchable_combo([])
+        self.detail_combo.setMinimumWidth(160)
         entry_row.addWidget(self.detail_combo, stretch=2)
         self.notes_field = QLineEdit()
         self.notes_field.setPlaceholderText("توضیحات (اختیاری)")
-        entry_row.addWidget(self.notes_field, stretch=2)
+        self.notes_field.setMinimumWidth(140)
+        entry_row.addWidget(self.notes_field, stretch=1)
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(44)
@@ -976,7 +987,7 @@ class _LandedCostDialog(QDialog):
             self.balance_label.setText("")
             return
         balance, nature = treasury_service.get_counterparty_balance(self._company_id, detail_account_id)
-        self.balance_label.setText(f"ماندهٔ فعلیِ همین تفصیلی: {numerals.format_money(balance, 2)} ({nature})")
+        self.balance_label.setText(f"ماندهٔ فعلیِ همین تفصیلی: {numerals.format_money(balance, self._decimal_places)} ({nature})")
 
     def _refresh_table(self) -> None:
         allocations = purchasing_service.list_landed_cost_allocations(self._document_id)
@@ -990,7 +1001,7 @@ class _LandedCostDialog(QDialog):
                 if a.credit_detail_account_id is not None else ""
             )
             values = [
-                numerals.format_money(a.amount, 2), accounts_by_id.get(a.credit_account_id, str(a.credit_account_id)),
+                numerals.format_money(a.amount, self._decimal_places), accounts_by_id.get(a.credit_account_id, str(a.credit_account_id)),
                 detail_label, a.notes or "",
             ]
             for col_index, value in enumerate(values):
@@ -1000,7 +1011,7 @@ class _LandedCostDialog(QDialog):
             delete_button.setFixedWidth(32)
             delete_button.clicked.connect(lambda _checked=False, allocation_id=a.allocation_id: self._delete_row(allocation_id))
             self.table.setCellWidget(row_index, 4, delete_button)
-        self.total_label.setText(f"جمعِ کلِ هزینه‌هایِ جانبی: {numerals.format_money(total, 2)}")
+        self.total_label.setText(f"جمعِ کلِ هزینه‌هایِ جانبی: {numerals.format_money(total, self._decimal_places)}")
 
     def _add_row(self) -> None:
         account_id = self.account_combo.currentData()
