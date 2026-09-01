@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -31,6 +32,20 @@ from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
+
+
+class _NoAutoCheckToggleDelegate(QStyledItemDelegate):
+    """طبقِ گزارشِ صریح («روی چک‌باکس کلیک می‌کنم ولی هیچی تیک نمی‌خورد»):
+    علتِ ریشه‌ای این بود که وقتی کلیک دقیقاً رویِ خودِ نشانگرِ چک‌باکس
+    می‌افتد، خودِ Qt (از طریقِ همین editorEvent در QStyledItemDelegate)
+    مستقلاً هم تیک را toggle می‌کند -- یعنی هم‌زمان با _toggle_item که با
+    سیگنالِ pressed این‌جا صدا زده می‌شود، دو بار toggle اتفاق می‌افتد و
+    نتیجه‌یِ خالص صفر می‌شود (کلیکِ رویِ متنِ ردیف مشکلی نداشت، چون آن‌جا
+    فقط _toggle_item صدا زده می‌شود). این‌جا آن هندلِ خودکارِ Qt کاملاً
+    غیرفعال می‌شود تا فقط _toggle_item مسئولِ toggleکردن باشد."""
+
+    def editorEvent(self, event, model, option, index):  # noqa: N802 — نامِ متدِ Qt
+        return False
 
 
 class _MultiSelectComboBox(QComboBox):
@@ -64,6 +79,7 @@ class _MultiSelectComboBox(QComboBox):
             item.setData(value, Qt.UserRole)
             model.appendRow(item)
         self.setModel(model)
+        self.view().setItemDelegate(_NoAutoCheckToggleDelegate(self.view()))
         self.view().pressed.connect(self._toggle_item)
         # طبقِ گزارشِ صریح («چند تا نمیشه با هم انتخاب کرد»): override
         # کردنِ hidePopup به‌تنهایی گاهی کافی نیست — کانتینرِ داخلیِ Qt
