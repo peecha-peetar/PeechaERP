@@ -2487,6 +2487,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
     def prefill_for_invoice(
         self, counterparty_id: int | None, amount: decimal.Decimal, description: str,
         settle_invoices: list[tuple[int, decimal.Decimal]] | None = None,
+        currency_id: int | None = None, exchange_rate: decimal.Decimal | None = None,
     ) -> None:
         """طبقِ درخواستِ صریح: بعدِ ثبتِ نهاییِ فاکتورِ فروش/خرید، همین فرم
         (دریافت/پرداخت) با طرفِ‌حساب و مبلغِ همان فاکتور باز شود — کاربر
@@ -2498,12 +2499,24 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         هم‌زمانِ یک طرفِ‌حساب)، بعدِ ثبتِ موفقِ همین سند، خودکار به‌عنوانِ
         تسویه‌یِ همه‌یِ آن فاکتورها (هرکدام با مبلغِ خودش از همین فهرست،
         نه لزوماً amountِ سرِ فرم) هم ثبت می‌شود -- دیگر نیازی به دوباره
-        رفتن به فرمِ تسویه و انتخابِ دستیِ آن‌ها نیست."""
+        رفتن به فرمِ تسویه و انتخابِ دستیِ آن‌ها نیست.
+
+        currency_id/exchange_rate: طبقِ درخواستِ صریح («مدیریتِ سفارشات» --
+        پرداخت‌هایِ ارزی)؛ اگر currency_id همان ارزِ پایه نباشد، ارزِ سند و
+        نرخِ روزِ داده‌شده از پیش ست می‌شوند (کاربر فقط روشِ پرداخت را
+        انتخاب می‌کند، دیگر نیازی به بازتنظیمِ ارز/نرخ نیست)."""
         self._reset_form()
         if counterparty_id is not None:
             index = self.account_combo.findData(counterparty_id)
             if index >= 0:
                 self.account_combo.setCurrentIndex(index)
+        if currency_id is not None and currency_id != self._base_currency_id:
+            currency_index = self.currency_combo.findData(currency_id)
+            if currency_index >= 0:
+                self.currency_combo.setCurrentIndex(currency_index)
+                if exchange_rate is not None:
+                    self.header_exchange_rate = exchange_rate
+                    self.rate_field.setText(numerals.format_amount(exchange_rate))
         self.total_amount_field.setValue(float(amount))
         self.description_field.setText(description)
         self._settle_invoices = list(settle_invoices) if settle_invoices else []

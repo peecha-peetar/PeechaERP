@@ -27,9 +27,11 @@ from peecha.config import SETTINGS_DIR
 from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount, JournalEntry, JournalEntryLine, JournalEntryLineDetail
 from peecha.db.models.commercial import OrderTracking, OrderTrackingSetting
+from peecha.db.models.core import Company
 from peecha.db.models.documents import Attachment
 from peecha.db.models.security import Form
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import roles as roles_service
 
 _ATTACHMENTS_DIR = SETTINGS_DIR / "attachments"
 
@@ -183,14 +185,26 @@ class OrderPaymentRow:
     description: str
     debit: decimal.Decimal
     credit: decimal.Decimal
+    # طبقِ درخواستِ صریح («اکثرا با ارزهای دیگه هم کار می‌کنن»): ارزِ خودِ
+    # ردیف (نه لزوماً ارزِ پایه‌یِ شرکت) + نرخِ همان روز + مبلغِ ارزیِ خامِ
+    # همان ردیف -- debit/credit بالا همیشه به ارزِ پایه‌اند (برایِ ماندهٔ
+    # سفارش)، این سه فیلد برایِ نمایشِ «چه ارزی، چه نرخی، چه مبلغی» است.
+    currency_id: int
+    is_base_currency: bool
+    exchange_rate: decimal.Decimal
+    debit_fc: decimal.Decimal
+    credit_fc: decimal.Decimal
 
 
 def list_order_payments(company_id: int, detail_account_id: int) -> list[OrderPaymentRow]:
     with new_session() as session:
+        base_currency_id = session.scalar(select(Company.base_currency_id).where(Company.company_id == company_id))
         rows = session.execute(
             select(
                 JournalEntry.journal_entry_id, JournalEntry.document_date, JournalEntry.description,
                 JournalEntryLine.debit_amount_base, JournalEntryLine.credit_amount_base,
+                JournalEntryLine.currency_id, JournalEntryLine.exchange_rate,
+                JournalEntryLine.debit_amount_fc, JournalEntryLine.credit_amount_fc,
             )
             .join(JournalEntryLine, JournalEntryLine.journal_entry_id == JournalEntry.journal_entry_id)
             .join(JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id)
@@ -198,7 +212,11 @@ def list_order_payments(company_id: int, detail_account_id: int) -> list[OrderPa
             .order_by(JournalEntry.document_date, JournalEntry.journal_entry_id)
         ).all()
         return [
-            OrderPaymentRow(journal_entry_id=r[0], document_date=r[1], description=r[2] or "", debit=r[3], credit=r[4])
+            OrderPaymentRow(
+                journal_entry_id=r[0], document_date=r[1], description=r[2] or "", debit=r[3], credit=r[4],
+                currency_id=r[5], is_base_currency=(r[5] == base_currency_id), exchange_rate=r[6],
+                debit_fc=r[7], credit_fc=r[8],
+            )
             for r in rows
         ]
 
@@ -211,6 +229,14 @@ _FORM_CODE = "order_tracking"
 
 
 def _get_form_id(session, company_id: int) -> int:
+    """طبقِ باگِ کشف‌شده (گزارشِ صریح: «هیچ عکسی نمی‌شود الصاق کنم» --
+    که در واقع علتِ ریشه‌ایِ «فقط پرداختِ اول نمایش داده می‌شود» هم بود):
+    sec.forms فقط با ensure_catalog() پر می‌شود، که تا پیش از این فقط از
+    صفحه‌ی «نقش‌ها» یا کارتیبل صدا زده می‌شد -- اگر کاربر هیچ‌کدام را باز
+    نکرده باشد، ردیفِ این فرم اصلاً وجود ندارد. این‌جا idempotent صدا
+    زده می‌شود تا این پیش‌نیاز همیشه، بدونِ وابستگی به بازکردنِ صفحه‌ی
+    دیگری، برقرار باشد."""
+    roles_service.ensure_catalog()
     form = session.scalar(select(Form).where(Form.code == _FORM_CODE))
     if form is None:
         raise ValueError("فرمِ «مدیریتِ سفارشات» هنوز در فهرستِ فرم‌ها ثبت نشده است.")

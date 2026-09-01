@@ -12,6 +12,7 @@ import decimal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -27,10 +28,99 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import companies as companies_service
+from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import order_tracking as order_tracking_service
 from peecha.services import treasury as treasury_service
+from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, add_quick_add_button
+
+
+class _PaymentCurrencyDialog(QDialog):
+    """طبقِ درخواستِ صریح («اکثرا با ارزهای دیگه هم کار می‌کنن، بعدِ زدنِ
+    کلیدِ پرداخت بپرسه ارز کدومه و چقدر بوده و نرخِ روز را وارد کنیم»):
+    قبل از بازشدنِ فرمِ دریافت/پرداختِ خزانه‌داری، ارز/مبلغ/نرخِ همان
+    پرداخت این‌جا پرسیده می‌شود -- فرمِ خزانه‌داری با همین سه مقدار
+    پیش‌پر باز می‌شود (کاربر فقط روشِ پرداخت را انتخاب می‌کند)."""
+
+    def __init__(self, company_id: int, base_currency_id: int, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("مشخصاتِ پرداخت")
+        self._company_id = company_id
+        self._base_currency_id = base_currency_id
+        self.result_currency_id: int | None = None
+        self.result_amount: decimal.Decimal | None = None
+        self.result_exchange_rate: decimal.Decimal | None = None
+
+        layout = QVBoxLayout(self)
+
+        currency_row = QHBoxLayout()
+        currency_row.addWidget(QLabel("ارز:"))
+        self.currency_combo = QComboBox()
+        for c in currencies_service.list_transactable_currencies(company_id):
+            label = f"{c.iso_code} ({c.symbol})" if c.symbol else c.iso_code
+            self.currency_combo.addItem(label, c.currency_id)
+        currency_row.addWidget(self.currency_combo, stretch=1)
+        layout.addLayout(currency_row)
+
+        amount_row = QHBoxLayout()
+        amount_row.addWidget(QLabel("مبلغ:"))
+        self.amount_field = _AmountField()
+        amount_row.addWidget(self.amount_field, stretch=1)
+        layout.addLayout(amount_row)
+
+        self.rate_row_widget = QWidget()
+        rate_row = QHBoxLayout(self.rate_row_widget)
+        rate_row.setContentsMargins(0, 0, 0, 0)
+        rate_row.addWidget(QLabel("نرخِ روز:"))
+        self.rate_field = QLineEdit()
+        rate_row.addWidget(self.rate_field, stretch=1)
+        layout.addWidget(self.rate_row_widget)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        layout.addWidget(self.status_label)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        ok_button = QPushButton("تایید و رفتن به فرمِ پرداخت")
+        ok_button.clicked.connect(self._on_accept)
+        button_row.addWidget(ok_button)
+        cancel_button = QPushButton("انصراف")
+        cancel_button.clicked.connect(self.reject)
+        button_row.addWidget(cancel_button)
+        layout.addLayout(button_row)
+
+        self.currency_combo.currentIndexChanged.connect(self._on_currency_changed)
+        self._on_currency_changed()
+
+    def _on_currency_changed(self) -> None:
+        currency_id = self.currency_combo.currentData()
+        is_base = currency_id == self._base_currency_id
+        self.rate_row_widget.setVisible(not is_base)
+        if not is_base and currency_id is not None:
+            latest = currencies_service.get_latest_rate(self._company_id, currency_id, datetime.date.today())
+            self.rate_field.setText(numerals.format_amount(latest) if latest is not None else "")
+
+    def _on_accept(self) -> None:
+        currency_id = self.currency_combo.currentData()
+        amount = decimal.Decimal(str(self.amount_field.value()))
+        if amount <= 0:
+            self.status_label.setText("مبلغ را وارد کنید.")
+            return
+        exchange_rate = decimal.Decimal(1)
+        if currency_id != self._base_currency_id:
+            try:
+                exchange_rate = numerals.parse_decimal(self.rate_field.text())
+            except ValueError:
+                exchange_rate = decimal.Decimal(0)
+            if exchange_rate <= 0:
+                self.status_label.setText("نرخِ روزِ ارز را وارد کنید.")
+                return
+        self.result_currency_id = currency_id
+        self.result_amount = amount
+        self.result_exchange_rate = exchange_rate
+        self.accept()
 
 
 class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
@@ -39,6 +129,8 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self._main_window = main_window
         self._selected_order: order_tracking_service.OrderRow | None = None
         self._decimal_places = 0
+        self._base_currency_id: int | None = None
+        self._currency_iso_by_id: dict[int, str] = {}
 
         title = QLabel("مدیریتِ سفارشات")
         title.setObjectName("pageTitle")
@@ -110,15 +202,24 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         payment_row.addStretch(1)
         self.body_layout.addLayout(payment_row)
 
-        self.payments_table = QTableWidget(0, 5)
-        self.payments_table.setHorizontalHeaderLabels(["تاریخ", "شرح", "بدهکار", "بستانکار", "عکس"])
+        # طبقِ درخواستِ صریح («ستون‌هایِ نوعِ ارز/نرخِ ارز/جمعِ مبلغِ
+        # ارزی هم اضافه شود»): سه ستونِ آخر مبلغِ همان پرداخت را به ارزِ
+        # خودش (نه لزوماً ارزِ پایه) نشان می‌دهند -- برایِ پرداختِ ریالی
+        # خالی می‌مانند.
+        self.payments_table = QTableWidget(0, 8)
+        self.payments_table.setHorizontalHeaderLabels(
+            ["تاریخ", "شرح", "بدهکار", "بستانکار", "ارز", "نرخِ ارز", "مبلغِ ارزی", "عکس"]
+        )
         self.payments_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.payments_table.verticalHeader().setVisible(False)
         self.payments_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.payments_table.setColumnWidth(0, 110)
         self.payments_table.setColumnWidth(2, 120)
         self.payments_table.setColumnWidth(3, 120)
-        self.payments_table.setColumnWidth(4, 90)
+        self.payments_table.setColumnWidth(4, 70)
+        self.payments_table.setColumnWidth(5, 100)
+        self.payments_table.setColumnWidth(6, 120)
+        self.payments_table.setColumnWidth(7, 90)
         self.body_layout.addWidget(self.payments_table, stretch=1)
 
         self.status_label = QLabel("")
@@ -133,6 +234,8 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         if company_id is None:
             return
         self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+        self._base_currency_id = app_session.current_company.base_currency_id if app_session.current_company else None
+        self._currency_iso_by_id = {c.currency_id: c.iso_code for c in currencies_service.list_all_currencies()}
 
         self.dimension_combo.blockSignals(True)
         self.dimension_combo.clear()
@@ -236,20 +339,31 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         payments = order_tracking_service.list_order_payments(company_id, self._selected_order.detail_account_id)
         self.payments_table.setRowCount(len(payments))
         for row_index, payment in enumerate(payments):
+            fc_amount = payment.debit_fc if payment.debit_fc else payment.credit_fc
             values = [
                 numerals.to_persian_digits(payment.document_date.isoformat()), payment.description,
                 numerals.format_money(payment.debit, self._decimal_places) if payment.debit else "",
                 numerals.format_money(payment.credit, self._decimal_places) if payment.credit else "",
+                "" if payment.is_base_currency else self._currency_iso_by_id.get(payment.currency_id, ""),
+                "" if payment.is_base_currency else numerals.format_amount(payment.exchange_rate),
+                "" if payment.is_base_currency else numerals.format_money(fc_amount, 2),
             ]
             for col_index, value in enumerate(values):
                 self.payments_table.setItem(row_index, col_index, QTableWidgetItem(value))
-            has_photo = bool(order_tracking_service.list_photos(company_id, payment.journal_entry_id))
+            # طبقِ باگِ کشف‌شده: اگر فرمِ «مدیریتِ سفارشات» هنوز در
+            # sec.forms ثبت نشده باشد، list_photos خطا می‌دهد -- این خطا
+            # دیگر نباید کلِ جدول را (از همان ردیفِ اول به بعد) خالی
+            # بگذارد، پس این‌جا مجزا محافظت می‌شود.
+            try:
+                has_photo = bool(order_tracking_service.list_photos(company_id, payment.journal_entry_id))
+            except ValueError:
+                has_photo = False
             photo_button = QPushButton("📎" if has_photo else "➕📷")
             photo_button.setToolTip("افزودنِ عکس" if not has_photo else "این پرداخت عکس دارد — افزودنِ عکسِ دیگر")
             photo_button.clicked.connect(
                 lambda _checked=False, journal_entry_id=payment.journal_entry_id: self._attach_photo(journal_entry_id)
             )
-            self.payments_table.setCellWidget(row_index, 4, photo_button)
+            self.payments_table.setCellWidget(row_index, 7, photo_button)
 
     def _open_payment_form(self) -> None:
         company_id = self._company_id()
@@ -264,11 +378,21 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
                 "طرفِ‌حساب‌هایِ دریافت/پرداخت» یک حساب برایِ همین گروهِ تفصیلی (جهتِ پرداخت) مشخص کنید.",
             )
             return
+        # طبقِ درخواستِ صریح («اکثرا با ارزهای دیگه هم کار می‌کنن»): پیش
+        # از بازکردنِ فرمِ خزانه‌داری، ارز/مبلغ/نرخ همین‌جا پرسیده می‌شود.
+        dialog = _PaymentCurrencyDialog(company_id, self._base_currency_id, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
         description = f"پرداختِ سفارشِ {self._selected_order.code} — {self._selected_order.name or ''}"
         detail_account_id = self._selected_order.detail_account_id
+        currency_id = dialog.result_currency_id
+        amount = dialog.result_amount
+        exchange_rate = dialog.result_exchange_rate
         self._main_window.open_screen(
             "TREASURY_PAYMENT",
-            then=lambda screen: screen.prefill_for_invoice(detail_account_id, decimal.Decimal(0), description),
+            then=lambda screen: screen.prefill_for_invoice(
+                detail_account_id, amount, description, currency_id=currency_id, exchange_rate=exchange_rate
+            ),
         )
 
     def _attach_photo(self, journal_entry_id: int) -> None:
