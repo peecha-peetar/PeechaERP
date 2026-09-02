@@ -1439,7 +1439,15 @@ def create_treasury_voucher(
             if line is None:
                 raise ValueError("قسطِ انتخاب‌شده نامعتبر است.")
             if line.status_code == "PAID":
-                raise ValueError("این قسط قبلاً دریافت/پرداخت شده است.")
+                raise ValueError("این قسط قبلاً به‌طورِ کامل دریافت/پرداخت شده است.")
+            # طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): مبلغِ
+            # این ردیف نباید از ماندهٔ واقعیِ قسط (کل منهایِ وصولی‌هایِ
+            # قبلی) بیشتر باشد -- این بررسی باید همین‌جا، پیش از ساختِ
+            # سند، انجام شود (نه بعداً در record_installment_collection)
+            # تا خطا هرگز یک سندِ ازقبل‌ثبت‌شده و بدونِ تخصیص برجای نگذارد.
+            remaining = installments_service.get_installment_remaining_amount(ml.collect_installment_line_id)
+            if ml.amount > remaining:
+                raise ValueError(f"مبلغِ این ردیف از ماندهٔ قسطِ انتخاب‌شده ({remaining}) بیشتر است.")
             plan = installments_service.get_installment_plan(line.plan_id)
             if plan is None:
                 raise ValueError("طرحِ اقساطِ مربوط به این قسط یافت نشد.")
@@ -1685,7 +1693,10 @@ def create_treasury_voucher(
                 due_interval_days=ml.installment_due_interval_days or 30,
             )
         if ml.collect_installment_line_id is not None:
-            installments_service.mark_installment_paid(ml.collect_installment_line_id, result.journal_entry_id)
+            installments_service.record_installment_collection(
+                ml.collect_installment_line_id, ml.amount, result.journal_entry_id, document_date, created_by_user_id,
+                description=ml.description or description,
+            )
             line = installments_service.get_installment_line(ml.collect_installment_line_id)
             plan = installments_service.get_installment_plan(line.plan_id)
             # طبقِ موردِ ۵: طرحِ اقساطِ بدونِ فاکتور، سندی برایِ تخصیصِ

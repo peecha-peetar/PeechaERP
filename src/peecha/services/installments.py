@@ -11,10 +11,11 @@ import datetime
 import decimal
 from dataclasses import dataclass
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 
 from peecha.db.base import new_session
-from peecha.db.models.commercial import CommercialDocument, InstallmentLine, InstallmentPlan
+from peecha.db.models.accounting import DetailAccount
+from peecha.db.models.commercial import CommercialDocument, InstallmentCollection, InstallmentLine, InstallmentPlan
 
 _ZERO = decimal.Decimal("0")
 _Q2 = decimal.Decimal("0.01")
@@ -104,23 +105,71 @@ def get_installment_plan(plan_id: int) -> InstallmentPlan | None:
         return session.get(InstallmentPlan, plan_id)
 
 
-def mark_installment_paid(line_id: int, paid_journal_entry_id: int | None = None) -> None:
+def get_installment_collected_amount(line_id: int, session=None) -> decimal.Decimal:
+    def _query(s):
+        return _money(
+            s.scalar(
+                select(func.coalesce(func.sum(InstallmentCollection.amount), _ZERO)).where(
+                    InstallmentCollection.line_id == line_id
+                )
+            )
+        )
+
+    if session is not None:
+        return _query(session)
+    with new_session() as session:
+        return _query(session)
+
+
+def get_installment_remaining_amount(line_id: int) -> decimal.Decimal:
+    with new_session() as session:
+        line = session.get(InstallmentLine, line_id)
+        if line is None:
+            raise ValueError("قسط نامعتبر است.")
+        return _money(line.amount - get_installment_collected_amount(line_id, session))
+
+
+def record_installment_collection(
+    line_id: int, amount: decimal.Decimal, journal_entry_id: int | None, collection_date: datetime.date,
+    created_by_user_id: int, description: str | None = None,
+) -> None:
+    """طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): جایگزینِ
+    mark_installment_paid که همیشه کلِ قسط را یک‌جا PAID می‌کرد -- این‌جا
+    فقط amountِ واقعاً وصول‌شده (که می‌تواند کمتر از مبلغِ کلِ قسط باشد)
+    به‌عنوانِ یک رویدادِ InstallmentCollection ثبت می‌شود؛ قسط فقط وقتی
+    که مجموعِ همه‌یِ وصولی‌هایش به مبلغِ کلش برسد PAID می‌شود، وگرنه
+    وضعیتش (PENDING/OVERDUE) دست‌نخورده می‌ماند و «مانده» از تفاضلِ
+    amount منهایِ مجموعِ وصولی‌ها محاسبه می‌شود."""
+    if amount <= _ZERO:
+        raise ValueError("مبلغِ وصول باید مثبت باشد.")
     with new_session() as session:
         line = session.get(InstallmentLine, line_id)
         if line is None:
             raise ValueError("قسط نامعتبر است.")
         if line.status_code == "PAID":
-            raise ValueError("این قسط قبلاً دریافت/پرداخت شده است.")
-        line.status_code = "PAID"
-        line.paid_journal_entry_id = paid_journal_entry_id
-        session.commit()
-        plan = session.get(InstallmentPlan, line.plan_id)
-        remaining = session.scalar(
-            select(InstallmentLine).where(InstallmentLine.plan_id == plan.plan_id, InstallmentLine.status_code != "PAID")
+            raise ValueError("این قسط قبلاً به‌طورِ کامل دریافت/پرداخت شده است.")
+        collected_so_far = get_installment_collected_amount(line_id, session)
+        remaining = _money(line.amount - collected_so_far)
+        if amount > remaining:
+            raise ValueError(f"مبلغِ واردشده از ماندهٔ این قسط ({_money(remaining)}) بیشتر است.")
+        session.add(
+            InstallmentCollection(
+                line_id=line_id, journal_entry_id=journal_entry_id, collection_date=collection_date,
+                amount=amount, description=description, created_by_user_id=created_by_user_id,
+            )
         )
-        if remaining is None:
-            plan.status_code = "COMPLETED"
-            session.commit()
+        line.paid_journal_entry_id = journal_entry_id
+        if amount >= remaining:
+            line.status_code = "PAID"
+        session.commit()
+        if line.status_code == "PAID":
+            plan = session.get(InstallmentPlan, line.plan_id)
+            still_open = session.scalar(
+                select(InstallmentLine).where(InstallmentLine.plan_id == plan.plan_id, InstallmentLine.status_code != "PAID")
+            )
+            if still_open is None:
+                plan.status_code = "COMPLETED"
+                session.commit()
 
 
 def list_overdue_installments(company_id: int, as_of_date: datetime.date | None = None) -> list[InstallmentLine]:
@@ -150,26 +199,62 @@ class InstallmentLineRow:
     line_id: int
     plan_id: int
     document_id: int | None
+    document_type_code: str | None
+    document_no: int | None
     installment_no: int
     due_date: datetime.date
     amount: decimal.Decimal
     status_code: str
     interest_fee_amount: decimal.Decimal = _ZERO
+    counterparty_detail_account_id: int | None = None
+    counterparty_label: str = ""
+    direction: str | None = None  # RECEIPT | PAYMENT
+    collected_amount: decimal.Decimal = _ZERO
+    remaining_amount: decimal.Decimal = _ZERO
 
 
 def list_installments(
     company_id: int, status_codes: list[str] | None = None, document_id: int | None = None,
     counterparty_detail_account_id: int | None = None,
+    due_date_from: datetime.date | None = None, due_date_to: datetime.date | None = None,
 ) -> list[InstallmentLineRow]:
-    """طبقِ درخواستِ صریح: فهرستِ اقساط (همه یا فیلترشده) برایِ صفحه‌یِ
-    مدیریتِ اقساط -- پیش از خواندن، معوقه‌هایِ تازه را OVERDUE علامت
-    می‌زند تا وضعیتِ نمایش‌داده‌شده همیشه به‌روز باشد."""
+    """طبقِ درخواستِ صریح: فهرستِ اقساط (همه یا فیلترشده -- طرفِ‌حساب/
+    بازه‌یِ تاریخِ سررسید) برایِ صفحه‌یِ مدیریتِ اقساط -- پیش از خواندن،
+    معوقه‌هایِ تازه را OVERDUE علامت می‌زند تا وضعیتِ نمایش‌داده‌شده
+    همیشه به‌روز باشد.
+
+    طبقِ گزارشِ صریح («جدول نامِ طرفِ‌حساب را نمی‌آورد»): علتِ ریشه‌ای
+    این بود که UI فقط از رویِ سند (که برایِ طرحِ اقساطِ بدونِ فاکتور
+    اصلاً وجود ندارد) و فقط از فهرستِ مشتریان/تامین‌کنندگان (نه هر
+    تفصیلیِ دیگری) طرفِ‌حساب را می‌ساخت -- این‌جا مستقیماً با join به
+    acc.detail_accounts، برایِ هر دو حالت (بافاکتور/بدونِ فاکتور) و هر
+    نوع تفصیلی‌ای برچسب ساخته می‌شود."""
     list_overdue_installments(company_id)
     with new_session() as session:
+        collected_subq = (
+            select(InstallmentCollection.line_id, func.sum(InstallmentCollection.amount).label("collected"))
+            .group_by(InstallmentCollection.line_id)
+            .subquery()
+        )
+        counterparty_id_expr = func.coalesce(
+            CommercialDocument.counterparty_detail_account_id, InstallmentPlan.counterparty_detail_account_id
+        )
+        direction_expr = case(
+            (CommercialDocument.document_id.is_(None), InstallmentPlan.direction),
+            (CommercialDocument.document_type_code == "SALES_INVOICE", "RECEIPT"),
+            else_="PAYMENT",
+        )
         stmt = (
-            select(InstallmentLine, InstallmentPlan.document_id)
+            select(
+                InstallmentLine, InstallmentPlan.document_id, CommercialDocument.document_type_code,
+                CommercialDocument.document_no, counterparty_id_expr, direction_expr,
+                DetailAccount.code, DetailAccount.name,
+                func.coalesce(collected_subq.c.collected, _ZERO),
+            )
             .join(InstallmentPlan, InstallmentPlan.plan_id == InstallmentLine.plan_id)
             .outerjoin(CommercialDocument, CommercialDocument.document_id == InstallmentPlan.document_id)
+            .outerjoin(collected_subq, collected_subq.c.line_id == InstallmentLine.line_id)
+            .outerjoin(DetailAccount, DetailAccount.detail_account_id == counterparty_id_expr)
             .where(or_(CommercialDocument.company_id == company_id, InstallmentPlan.company_id == company_id))
         )
         if status_codes:
@@ -177,18 +262,23 @@ def list_installments(
         if document_id is not None:
             stmt = stmt.where(InstallmentPlan.document_id == document_id)
         if counterparty_detail_account_id is not None:
-            stmt = stmt.where(
-                or_(
-                    CommercialDocument.counterparty_detail_account_id == counterparty_detail_account_id,
-                    InstallmentPlan.counterparty_detail_account_id == counterparty_detail_account_id,
+            stmt = stmt.where(counterparty_id_expr == counterparty_detail_account_id)
+        if due_date_from is not None:
+            stmt = stmt.where(InstallmentLine.due_date >= due_date_from)
+        if due_date_to is not None:
+            stmt = stmt.where(InstallmentLine.due_date <= due_date_to)
+        rows = session.execute(stmt.order_by(InstallmentLine.due_date)).all()
+        result = []
+        for line, doc_id, doc_type_code, doc_no, party_id, direction, party_code, party_name, collected in rows:
+            collected = _money(collected)
+            label = f"{party_code} — {party_name}" if party_name else (party_code or "")
+            result.append(
+                InstallmentLineRow(
+                    line_id=line.line_id, plan_id=line.plan_id, document_id=doc_id, document_type_code=doc_type_code,
+                    document_no=doc_no, installment_no=line.installment_no, due_date=line.due_date, amount=line.amount,
+                    status_code=line.status_code, interest_fee_amount=line.interest_fee_amount,
+                    counterparty_detail_account_id=party_id, counterparty_label=label, direction=direction,
+                    collected_amount=collected, remaining_amount=_money(line.amount - collected),
                 )
             )
-        rows = session.execute(stmt.order_by(InstallmentLine.due_date)).all()
-        return [
-            InstallmentLineRow(
-                line_id=line.line_id, plan_id=line.plan_id, document_id=doc_id, installment_no=line.installment_no,
-                due_date=line.due_date, amount=line.amount, status_code=line.status_code,
-                interest_fee_amount=line.interest_fee_amount,
-            )
-            for line, doc_id in rows
-        ]
+        return result

@@ -2522,6 +2522,30 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self._settle_invoices = list(settle_invoices) if settle_invoices else []
         self._update_rows_summary()
 
+    def prefill_for_installment_collection(
+        self, line_id: int, counterparty_id: int | None, amount: decimal.Decimal, description: str,
+    ) -> None:
+        """طبقِ درخواستِ صریح («وصولِ اقساط بتونه مستقل هم کار بکنه»):
+        بازکردنِ همین فرم مستقیماً از دکمه‌یِ «وصول» در صفحه‌یِ مدیریتِ
+        اقساط -- بدونِ نیازِ به بازکردنِ دستیِ فرم و جستجویِ قسط از
+        دکمه‌یِ 🔗 (که خودش هم‌چنان برایِ حالتِ عمومی/مستقل کار می‌کند).
+        قسط از پیش روی همان ردیفِ اول متصل می‌شود و مبلغ (که می‌تواند
+        کمتر از ماندهٔ کلِ قسط -- یعنی یک وصولِ جزئی -- باشد) هم از پیش
+        پر می‌شود؛ کاربر فقط باید روشِ واقعیِ دریافت/پرداخت (نقد/بانک/
+        چک/...) را انتخاب کند."""
+        self._reset_form()
+        if counterparty_id is not None:
+            index = self.account_combo.findData(counterparty_id)
+            if index >= 0:
+                self.account_combo.setCurrentIndex(index)
+        self.total_amount_field.setValue(float(amount))
+        self.description_field.setText(description)
+        row = self._method_rows[0]
+        row.amount_field.setValue(float(amount))
+        row.collect_installment_line_id = line_id
+        row.installment_link_button.setStyleSheet("font-weight: bold;")
+        self._update_rows_summary()
+
     def _compose_description(self) -> str:
         """طبقِ درخواستِ صریح: شرحِ سمتِ بستانکارِ سندِ دریافت خودکار
         بشود: «دریافت از {طرفِ‌حساب} - {روش‌هایِ استفاده‌شده} - {شرحِ

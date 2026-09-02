@@ -677,6 +677,25 @@ class InstallmentLine(Base):
     paid_journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
 
 
+class InstallmentCollection(Base):
+    """طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): هر رویدادِ
+    وصول (کامل یا جزئی) رویِ یک قسط، جداگانه این‌جا ثبت می‌شود -- مجموعِ
+    amount این ردیف‌ها برایِ یک line_id همان مبلغِ وصول‌شده‌یِ آن قسط
+    است. هم‌الگو با InvoiceSettlement برایِ فاکتورها."""
+
+    __tablename__ = "installment_collections"
+    __table_args__ = ({"schema": "comm"},)
+
+    collection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.installment_lines.line_id"))
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    collection_date: Mapped[datetime.date] = mapped_column(Date)
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    description: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
 # =======================================================================
 # اتصال‌گرِ انتزاعی و DOM — معادلِ 072_commercial_ecommerce.sql
 # =======================================================================
