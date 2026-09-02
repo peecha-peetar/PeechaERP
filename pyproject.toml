@@ -12,6 +12,8 @@ dependencies = [
     "jdatetime>=5.0",         # تقویم شمسی (پیش‌فرض طبق docs/ui-ux-guidelines.md بخش ۱)
     "openpyxl>=3.1",          # خروجیِ Excel برایِ ماژولِ گزارش‌ها
     "pdfplumber>=0.11",       # خواندنِ جدولِ لیستِ قیمتِ تامین‌کننده از PDFِ متنی (مجوزِ MIT -- نه AGPL)
+    "pytesseract>=0.3.10",    # OCR برایِ لیستِ قیمتِ تامین‌کننده از عکس/PDFِ اسکن‌شده (مجوزِ Apache-2.0)
+    "pypdfium2>=4.0",         # رندرِ صفحهٔ PDFِ اسکن‌شده به تصویر برایِ OCR (مجوزِ Apache-2.0/BSD-3)
 ]
 
 [project.optional-dependencies]

@@ -383,7 +383,8 @@ class CommercialPricingScreen(QWidget):
         outer.addWidget(QLabel(
             "فایلِ اکسل یا PDFِ متنیِ لیستِ قیمتِ تامین‌کننده را انتخاب کنید. "
             "ستونِ کد و ستونِ قیمت را مشخص کنید تا هر ردیف با کدهایِ تامین‌کننده‌یِ "
-            "ثبت‌شده‌یِ هر کالا تطبیق داده شود. (فازِ فعلی: فقط اکسل و PDFِ متنی — بدونِ عکس/اسکن)"
+            "ثبت‌شده‌یِ هر کالا تطبیق داده شود. عکس و PDFِ اسکن‌شده هم با OCR پشتیبانی می‌شوند، "
+            "ولی چون OCR همیشه ۱۰۰٪ دقیق نیست، پیش از ثبت حتماً پیش‌نمایش را بازبینی کنید."
         ))
 
         file_row = QHBoxLayout()
@@ -401,6 +402,20 @@ class CommercialPricingScreen(QWidget):
         self.spi_sheet_combo.setVisible(False)
         file_row.addWidget(self.spi_sheet_combo)
         outer.addLayout(file_row)
+
+        ocr_row = QHBoxLayout()
+        self.spi_ocr_checkbox = QCheckBox("خواندن با OCR (برایِ عکس/PDFِ اسکن‌شده)")
+        self.spi_ocr_checkbox.setVisible(False)
+        ocr_row.addWidget(self.spi_ocr_checkbox)
+        self.spi_ocr_lang_combo = QComboBox()
+        self.spi_ocr_lang_combo.addItem("لاتین (دقت‌ترِ کد/قیمت)", "eng")
+        self.spi_ocr_lang_combo.addItem("فارسی + لاتین", "fas+eng")
+        self.spi_ocr_lang_combo.setVisible(False)
+        ocr_row.addWidget(self.spi_ocr_lang_combo)
+        self.spi_ocr_status_label = QLabel("")
+        self.spi_ocr_status_label.setObjectName("statusHint")
+        ocr_row.addWidget(self.spi_ocr_status_label, stretch=1)
+        outer.addLayout(ocr_row)
 
         mapping_row = QHBoxLayout()
         mapping_row.addWidget(QLabel("ستونِ کد:"))
@@ -498,17 +513,32 @@ class CommercialPricingScreen(QWidget):
 
     def _spi_choose_file(self) -> None:
         path, _filter = QFileDialog.getOpenFileName(
-            self, "انتخابِ فایلِ قیمتِ تامین‌کننده", "", "فایل‌هایِ پشتیبانی‌شده (*.xlsx *.xls *.pdf)"
+            self, "انتخابِ فایلِ قیمتِ تامین‌کننده", "",
+            "فایل‌هایِ پشتیبانی‌شده (*.xlsx *.xls *.pdf *.png *.jpg *.jpeg)",
         )
         if not path:
             return
+        ext = os.path.splitext(path)[1].lower()
+        if ext in (".xlsx", ".xls"):
+            file_kind = "excel"
+        elif ext == ".pdf":
+            file_kind = "pdf"
+        elif ext in (".png", ".jpg", ".jpeg"):
+            file_kind = "image"
+        else:
+            self.spi_status_label.setText("فرمتِ این فایل پشتیبانی نمی‌شود.")
+            return
         self._spi_file_path = path
-        self._spi_file_kind = "excel" if os.path.splitext(path)[1].lower() in (".xlsx", ".xls") else "pdf"
+        self._spi_file_kind = file_kind
         self.spi_file_label.setText(os.path.basename(path))
         self.spi_status_label.setText("")
+        self.spi_ocr_status_label.setText("")
         self.spi_sheet_combo.clear()
         self.spi_sheet_combo.setVisible(False)
-        if self._spi_file_kind == "excel":
+        self.spi_ocr_checkbox.setVisible(False)
+        self.spi_ocr_checkbox.setChecked(False)
+        self.spi_ocr_lang_combo.setVisible(False)
+        if file_kind == "excel":
             try:
                 sheets = spi_service.list_excel_sheet_names(path)
             except Exception as exc:  # noqa: BLE001 -- فایلِ کاربر، خطایِ فرمت متغیر است
@@ -517,7 +547,40 @@ class CommercialPricingScreen(QWidget):
             if len(sheets) > 1:
                 self.spi_sheet_combo.addItems(sheets)
                 self.spi_sheet_combo.setVisible(True)
+        elif file_kind == "pdf":
+            try:
+                text_based = spi_service.is_pdf_text_based(path)
+            except Exception as exc:  # noqa: BLE001 -- فایلِ کاربر، خطایِ فرمت متغیر است
+                self.spi_status_label.setText(f"خطا در خواندنِ فایل: {exc}")
+                return
+            if not text_based:
+                self._spi_show_ocr_controls(required=False)
+        elif file_kind == "image":
+            self._spi_show_ocr_controls(required=True)
         self._on_spi_supplier_changed()
+
+    def _spi_show_ocr_controls(self, required: bool) -> None:
+        """required=True یعنی این فایل (عکس) بدونِ OCR اصلاً قابلِ‌خواندن
+        نیست؛ required=False یعنی PDFِ اسکن‌شده است و OCR راهِ پیشنهادی
+        است ولی کاربر می‌تواند تیک را بردارد (مثلاً اگر فایل را اشتباه
+        انتخاب کرده)."""
+        self.spi_ocr_checkbox.setVisible(True)
+        self.spi_ocr_lang_combo.setVisible(True)
+        if spi_service.is_ocr_available():
+            self.spi_ocr_checkbox.setChecked(True)
+            self.spi_ocr_checkbox.setEnabled(not required)
+            self.spi_ocr_lang_combo.setEnabled(True)
+            self.spi_ocr_status_label.setText(
+                "⚠️ این فایل نیازمندِ OCR است -- دقتِ آن ۱۰۰٪ نیست، پیش از ثبت، پیش‌نمایش را بازبینی کنید."
+            )
+        else:
+            self.spi_ocr_checkbox.setChecked(False)
+            self.spi_ocr_checkbox.setEnabled(False)
+            self.spi_ocr_lang_combo.setEnabled(False)
+            self.spi_ocr_status_label.setText(
+                "این فایل نیازمندِ OCR است ولی Tesseract OCR روی این سیستم نصب نیست. "
+                "Tesseract را (با بستهٔ زبانِ لاتین حداقل) نصب کنید و برنامه را دوباره باز کنید."
+            )
 
     def _spi_load_and_match_file(self) -> None:
         company_id = self._company_id()
@@ -529,19 +592,28 @@ class CommercialPricingScreen(QWidget):
         if not file_path:
             self.spi_status_label.setText("ابتدا فایل را انتخاب کنید.")
             return
+        used_ocr = self._spi_file_kind == "image" or (self._spi_file_kind == "pdf" and self.spi_ocr_checkbox.isChecked())
+        if used_ocr and not spi_service.is_ocr_available():
+            self.spi_status_label.setText("Tesseract OCR روی این سیستم نصب نیست؛ نمی‌توان این فایل را خواند.")
+            return
         try:
             if self._spi_file_kind == "excel":
                 sheet_name = self.spi_sheet_combo.currentText() if self.spi_sheet_combo.isVisible() else None
                 grid = spi_service.extract_excel_grid(file_path, sheet_name)
+            elif self._spi_file_kind == "pdf":
+                if used_ocr:
+                    grid = spi_service.extract_pdf_grid_ocr(file_path, lang=self.spi_ocr_lang_combo.currentData())
+                else:
+                    grid = spi_service.extract_pdf_grid(file_path)
             else:
-                grid = spi_service.extract_pdf_grid(file_path)
+                grid = spi_service.extract_image_grid(file_path, lang=self.spi_ocr_lang_combo.currentData())
         except Exception as exc:  # noqa: BLE001 -- فایلِ کاربر، خطایِ فرمت متغیر است
             self.spi_status_label.setText(f"خطا در خواندنِ فایل: {exc}")
             return
         if not grid:
             self.spi_status_label.setText(
-                "هیچ داده‌ای از فایل استخراج نشد. اگر این PDF یک عکسِ اسکن‌شده است (بدونِ لایه‌یِ متن)، "
-                "این نسخه هنوز از آن پشتیبانی نمی‌کند."
+                "هیچ داده‌ای از فایل استخراج نشد."
+                + (" اگر این عکس/PDF کیفیتِ پایینی دارد، OCR ممکن است چیزی تشخیص ندهد." if used_ocr else "")
             )
             self._matched_rows = []
             self._spi_rebuild_preview_table()
@@ -558,7 +630,10 @@ class CommercialPricingScreen(QWidget):
                 sheet_name=self.spi_sheet_combo.currentText() if self.spi_sheet_combo.isVisible() else None,
             )
         matched_count = sum(1 for r in self._matched_rows if r.item_id is not None)
-        self.spi_status_label.setText(f"{len(self._matched_rows)} ردیف خوانده شد؛ {matched_count} ردیف با کالا تطبیق یافت.")
+        message = f"{len(self._matched_rows)} ردیف خوانده شد؛ {matched_count} ردیف با کالا تطبیق یافت."
+        if used_ocr:
+            message += " ⚠️ این داده‌ها با OCR استخراج شده‌اند -- دقتِ ۱۰۰٪ ندارند؛ پیش از ثبت بازبینی کنید."
+        self.spi_status_label.setText(message)
         self._spi_rebuild_preview_table()
 
     def _spi_add_adjustment_step(self) -> None:

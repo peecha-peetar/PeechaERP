@@ -1,18 +1,29 @@
-"""واردکردنِ لیستِ قیمتِ تامین‌کننده از اکسل/PDF -- طبقِ درخواستِ صریح:
+"""واردکردنِ لیستِ قیمتِ تامین‌کننده از اکسل/PDF/عکس -- طبقِ درخواستِ صریح:
 هر کالا می‌تواند چند «کدِ تامین‌کننده» داشته باشد (کدِ خودِ کالا نزدِ آن
 تامین‌کننده، که با کدِ داخلیِ ما فرق دارد) تا ردیف‌هایِ فایلِ قیمتِ او
 خودکار به کالایِ داخلی متصل شوند. سپس رویِ قیمتِ تامین‌کننده چند ستونِ
 افزایشیِ درصدی/مبلغی اعمال و نتیجه در یک فهرستِ قیمتِ موجود ثبت می‌شود.
 
-طبقِ محدودیتِ صریحِ توافق‌شده («فازِ اول فقط اکسل و PDFِ متنی، بدونِ
-OCR/عکس»): اگر PDF یک اسکنِ عکسی باشد (بدونِ لایه‌یِ متن)، استخراج چیزی
-برنمی‌گرداند -- این حالت باید در UI با پیامِ روشن («این PDF یک عکسِ
-اسکن‌شده است، نه متنی») به کاربر گفته شود، نه خطایِ فنی."""
+فازِ اول فقط اکسل و PDFِ متنی را پشتیبانی می‌کرد. **فازِ دوم**: پشتیبانیِ
+عکس (jpg/png) و PDFِ اسکن‌شده (بدونِ لایه‌یِ متن) با OCR -- از Tesseract
+OCR (مجوزِ Apache-2.0، سازگار با توزیعِ تجاری/بسته) از طریقِ pytesseract
+استفاده شده. برخلافِ استخراجِ PDFِ متنی که تقریباً همیشه دقیق است، OCR
+ذاتاً خطاپذیر است (خصوصاً وقتی کد/توضیح به خطِ فارسی باشد کنارِ کدهایِ
+لاتین) -- به همین دلیل: (۱) در UI همیشه یک هشدارِ «نیازمندِ بازبینیِ
+دستی» نشان داده می‌شود، (۲) همان مسیرِ «🔗 اتصال»ِ فازِ اول برایِ
+ردیف‌هایی که کدشان غلط خوانده شده هم کار می‌کند (چون آن ردیف صرفاً
+تطبیق‌نیافته دیده می‌شود، نه اینکه به کالایِ اشتباه بچسبد). آزمایش نشان
+داد OCR با lang="eng" برایِ ستون‌هایِ کد/قیمت (که تقریباً همیشه
+لاتین/رقمی‌اند) دقیقِ بسیار بهتری از حالتِ ترکیبیِ "fas+eng" دارد --
+چون توضیحِ فارسی برایِ تطبیق استفاده نمی‌شود، پیش‌فرض را رویِ "eng"
+گذاشتیم و "fas+eng" را به‌عنوانِ گزینه برایِ کدهایِ فارسی/مختلط نگه
+داشتیم."""
 
 from __future__ import annotations
 
 import decimal
 import re
+import statistics
 from dataclasses import dataclass
 
 import openpyxl
@@ -188,13 +199,116 @@ def extract_excel_grid(file_path: str, sheet_name: str | None = None) -> list[li
         workbook.close()
 
 
+def is_pdf_text_based(file_path: str) -> bool:
+    """اگر حتی یک صفحه لایهٔ متنِ واقعی داشته باشد True -- یعنی PDF متنی
+    است و extract_pdf_grid کافی است. اگر False باشد یعنی این PDF یک
+    اسکنِ عکسی است و باید با extract_pdf_grid_ocr خوانده شود."""
+    with pdfplumber.open(file_path) as pdf:
+        for page in pdf.pages:
+            if page.extract_words():
+                return True
+    return False
+
+
+def is_ocr_available() -> bool:
+    """آیا Tesseract OCR رویِ این سیستم نصب است. pytesseract فقط یک پوستهٔ
+    نازک است -- خودِ برنامهٔ Tesseract باید جداگانه رویِ سیستم نصب شده
+    باشد (این یک وابستگیِ سیستمی است، نه یک بستهٔ pip)."""
+    try:
+        import pytesseract
+
+        pytesseract.get_tesseract_version()
+        return True
+    except Exception:
+        return False
+
+
+_OCR_MIN_COLUMN_GAP_PX = 15.0
+_OCR_COLUMN_GAP_RATIO = 1.5
+_OCR_PSM = 6  # «یک بلوکِ یکنواختِ متن» -- برایِ متنِ جدولی/ردیفی به‌مراتب دقیق‌تر از حالتِ خودکارِ پیش‌فرض
+
+
+def _extract_grid_from_ocr_image(image, lang: str) -> list[list[str]]:
+    """معادلِ _extract_grid_from_words ولی رویِ خروجیِ OCR: کلمه‌هایِ
+    هم‌خط (بر اساسِ block/paragraph/line) را کنارِ هم می‌گذارد و هرجا
+    فاصله‌یِ افقی از یک آستانه (نسبت به قدِ متوسطِ کلمه‌ها -- نه یک عددِ
+    ثابتِ پیکسلی، چون وضوحِ تصویر متغیر است) بیشتر شود، ستونِ تازه شروع
+    می‌کند."""
+    import pytesseract
+
+    data = pytesseract.image_to_data(image, lang=lang, config=f"--psm {_OCR_PSM}", output_type=pytesseract.Output.DICT)
+    words: list[dict] = []
+    for i in range(len(data["text"])):
+        text = data["text"][i].strip()
+        if not text:
+            continue
+        try:
+            conf = float(data["conf"][i])
+        except (TypeError, ValueError):
+            conf = -1.0
+        if conf < 0:
+            continue
+        words.append({
+            "text": text, "left": data["left"][i], "width": data["width"][i], "height": data["height"][i],
+            "line_key": (data["block_num"][i], data["par_num"][i], data["line_num"][i]),
+        })
+    if not words:
+        return []
+    median_height = statistics.median(w["height"] for w in words)
+    gap_threshold = max(_OCR_MIN_COLUMN_GAP_PX, median_height * _OCR_COLUMN_GAP_RATIO)
+    rows: dict[tuple, list[dict]] = {}
+    for w in words:
+        rows.setdefault(w["line_key"], []).append(w)
+    grid: list[list[str]] = []
+    for key in sorted(rows.keys()):
+        row_words = sorted(rows[key], key=lambda w: w["left"])
+        cells: list[str] = []
+        current_cell = [row_words[0]["text"]]
+        prev_right = row_words[0]["left"] + row_words[0]["width"]
+        for w in row_words[1:]:
+            if w["left"] - prev_right > gap_threshold:
+                cells.append(" ".join(current_cell))
+                current_cell = [w["text"]]
+            else:
+                current_cell.append(w["text"])
+            prev_right = w["left"] + w["width"]
+        cells.append(" ".join(current_cell))
+        grid.append(cells)
+    return grid
+
+
+def extract_image_grid(file_path: str, lang: str = "eng") -> list[list[str]]:
+    from PIL import Image
+
+    with Image.open(file_path) as image:
+        return _extract_grid_from_ocr_image(image, lang)
+
+
+def extract_pdf_grid_ocr(file_path: str, lang: str = "eng", dpi: int = 300) -> list[list[str]]:
+    """رندرِ هر صفحهٔ PDFِ اسکن‌شده به تصویر و سپس OCR -- برایِ زمانی که
+    is_pdf_text_based همان فایل False برگردانده باشد."""
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(file_path)
+    try:
+        scale = dpi / 72
+        grid: list[list[str]] = []
+        for page in pdf:
+            bitmap = page.render(scale=scale)
+            grid.extend(_extract_grid_from_ocr_image(bitmap.to_pil(), lang))
+        return grid
+    finally:
+        pdf.close()
+
+
 def extract_pdf_grid(file_path: str) -> list[list[str]]:
     """اول با تشخیصِ جدولِ بومیِ pdfplumber (بهترین دقت، وقتی PDF واقعاً
     خط‌کشیِ جدول دارد)؛ اگر چیزی پیدا نشد (رایج در فاکتور/لیست‌هایِ
     بدونِ خط‌کشیِ صریح)، به استخراجِ متنِ خام برمی‌گردد و ستون‌ها را از
     رویِ فاصله‌هایِ متوالی (رایج‌ترین الگویِ تراز-چپ/راستِ جدولی) حدس
     می‌زند. اگر PDF یک اسکنِ عکسی باشد (بدونِ لایه‌یِ متن)، هردو راه چیزی
-    برنمی‌گردانند -- خروجیِ خالی یعنی همین."""
+    برنمی‌گردانند -- این حالت را UI با is_pdf_text_based از قبل تشخیص
+    می‌دهد و به‌جایِ این تابع، extract_pdf_grid_ocr را صدا می‌زند."""
     grid: list[list[str]] = []
     with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
