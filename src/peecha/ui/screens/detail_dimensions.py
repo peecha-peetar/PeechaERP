@@ -259,8 +259,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
-        outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_account_panel(), stretch=2)
+        # طبقِ درخواستِ صریح («تسلطی بر ورودِ اطلاعات وجود ندارد، عرضِ
+        # فهرست را کم کن و به فرمِ ورودِ اطلاعات اضافه کن»): قبلاً فهرست
+        # سهمِ بیشتری از عرض داشت (۳ به ۲)؛ حالا برعکس شد.
+        outer.addWidget(self._build_list_panel(), stretch=2)
+        outer.addWidget(self._build_account_panel(), stretch=3)
 
         self.set_field_help([
             (

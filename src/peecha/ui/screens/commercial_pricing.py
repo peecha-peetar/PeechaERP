@@ -502,13 +502,15 @@ class CommercialPricingScreen(QWidget):
     def _build_supplier_import_tab(self) -> QWidget:
         page = QWidget()
         outer = QVBoxLayout(page)
-        intro_label = QLabel(
+        outer.setSpacing(8)
+        intro_label = QLabel("فایل را انتخاب کنید، رویِ سرستون‌هایِ پیش‌نمایش کلیک کنید، سپس تطبیق بزنید.")
+        intro_label.setObjectName("statusHint")
+        intro_label.setToolTip(
             "فایلِ اکسل، PDF یا عکسِ لیستِ قیمتِ تامین‌کننده را انتخاب کنید. سپس رویِ سرستون‌هایِ "
             "پیش‌نمایشِ زیر کلیک کنید تا ستونِ «کد/نامِ کالا» و ستونِ «قیمت» مشخص شود (تشخیص ترکیبی "
             "است: هم کد و هم نام امتحان می‌شود). عکس/PDFِ اسکن‌شده با OCR خوانده می‌شود -- چون OCR "
             "همیشه ۱۰۰٪ دقیق نیست، پیش از ثبت حتماً پیش‌نمایشِ نتیجه را بازبینی کنید."
         )
-        intro_label.setWordWrap(True)
         outer.addWidget(intro_label)
 
         file_row = QHBoxLayout()
@@ -556,18 +558,22 @@ class CommercialPricingScreen(QWidget):
         ocr_row.addWidget(self.spi_ocr_status_label, stretch=1)
         outer.addLayout(ocr_row)
 
-        outer.addWidget(QLabel(
-            "پیش‌نمایشِ فایل — رویِ سرستون کلیک کنید: بار اول = ستونِ «کد/نام»، بار دوم = ستونِ «قیمت»، "
-            "بار سوم = بی‌اثر. رویِ شمارهٔ ردیف (سمتِ راست) کلیک کنید تا آخرین سطرِ سربرگ مشخص شود."
-        ))
+        raw_grid_hint = QLabel("پیش‌نمایشِ فایل — رویِ سرستون‌ها و شمارهٔ ردیف کلیک کنید:")
+        raw_grid_hint.setObjectName("statusHint")
+        raw_grid_hint.setToolTip(
+            "رویِ سرستون کلیک کنید: بار اول = ستونِ «کد/نام»، بار دوم = ستونِ «قیمت»، بار سوم = بی‌اثر. "
+            "رویِ شمارهٔ ردیف (سمتِ راست) کلیک کنید تا آخرین سطرِ سربرگ مشخص شود."
+        )
+        outer.addWidget(raw_grid_hint)
         self.spi_raw_grid_table = QTableWidget(0, 0)
         self.spi_raw_grid_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.spi_raw_grid_table.setMaximumHeight(220)
+        self.spi_raw_grid_table.setMinimumHeight(260)
+        self.spi_raw_grid_table.setMaximumHeight(360)
         self.spi_raw_grid_table.horizontalHeader().setSectionsClickable(True)
         self.spi_raw_grid_table.horizontalHeader().sectionClicked.connect(self._spi_on_raw_column_clicked)
         self.spi_raw_grid_table.verticalHeader().setSectionsClickable(True)
         self.spi_raw_grid_table.verticalHeader().sectionClicked.connect(self._spi_on_raw_row_clicked)
-        outer.addWidget(self.spi_raw_grid_table)
+        outer.addWidget(self.spi_raw_grid_table, stretch=1)
 
         mapping_row = QHBoxLayout()
         self.spi_mapping_hint_label = QLabel("")

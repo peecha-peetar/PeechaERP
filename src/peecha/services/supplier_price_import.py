@@ -38,17 +38,37 @@ from peecha.db.models.inventory import Item, ItemSupplierCode
 _ZERO = decimal.Decimal("0")
 _Q2 = decimal.Decimal("0.01")
 
+# طبقِ باگِ گزارش‌شده («کد از فایل و کدِ ثبت‌شده در تنظیماتِ کالا هردو
+# ۱۰۰۱ دیده می‌شوند ولی تطبیق نمی‌خورند»): کاراکترهایِ نامرئی (نیم‌فاصله،
+# نشانه‌هایِ جهت، فاصله‌یِ بدونِ‌شکست، BOM) اغلب هنگامِ کپی از اکسل/PDF/
+# سایتِ تامین‌کننده وارد متن می‌شوند و با چشم دیده نمی‌شوند، ولی برایِ
+# مقایسه‌یِ رشته‌ای دو مقدار را «متفاوت» می‌کنند. str.strip() فقط انتهایِ
+# رشته را پاک می‌کند، نه وسطِ آن را -- پس این‌ها را از کلِ رشته حذف می‌کنیم.
+_INVISIBLE_CHARS_RE = re.compile(
+    "[​‌‍‎‏﻿\xa0]"
+)  # ZWSP, ZWNJ (نیم‌فاصله), ZWJ, LRM, RLM, BOM, NBSP
+
+
+def _strip_invisible_chars(text: str) -> str:
+    return _INVISIBLE_CHARS_RE.sub("", text)
+
 
 def _normalize_code(code: str) -> str:
-    return numerals.to_ascii_digits(code).strip().upper()
+    text = _strip_invisible_chars(numerals.to_ascii_digits(code)).strip().upper()
+    # کدهایِ کاملاً عددی: اکسل معمولاً صفرهایِ ابتدایی را در نوعِ «عدد» از
+    # دست می‌دهد (۰۱۰۰۱ می‌شود ۱۰۰۱)، درحالی‌که کدِ ثبت‌شده در تنظیماتِ
+    # کالا ممکن است با صفرِ ابتدایی تایپ شده باشد -- برایِ جلوگیری از
+    # عدم‌تطبیقِ کاذب، صفرهایِ ابتدایی را نادیده می‌گیریم.
+    if text.isdigit() and len(text) > 1:
+        text = text.lstrip("0") or "0"
+    return text
 
 
 def _normalize_name(name: str) -> str:
     """طبقِ درخواستِ صریح («بعضی تامین‌کننده‌ها فقط نامِ کالا دارند»):
     نام‌ها معمولاً در چاپ‌هایِ مختلف با فاصله/نیم‌فاصله متفاوت‌اند --
     این تابع همه را به یک شکلِ یکسان می‌رساند تا تطبیقِ دقیق ممکن شود."""
-    text = numerals.to_ascii_digits(name).strip().casefold()
-    text = re.sub(r"[‌‏‎]", " ", text)  # نیم‌فاصله/نشانه‌هایِ جهتِ نامرئی
+    text = _strip_invisible_chars(numerals.to_ascii_digits(name)).strip().casefold()
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
