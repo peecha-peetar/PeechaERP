@@ -11,6 +11,7 @@ dependencies = [
     "alembic>=1.13",
     "jdatetime>=5.0",         # تقویم شمسی (پیش‌فرض طبق docs/ui-ux-guidelines.md بخش ۱)
     "openpyxl>=3.1",          # خروجیِ Excel برایِ ماژولِ گزارش‌ها
+    "pdfplumber>=0.11",       # خواندنِ جدولِ لیستِ قیمتِ تامین‌کننده از PDFِ متنی (مجوزِ MIT -- نه AGPL)
 ]
 
 [project.optional-dependencies]

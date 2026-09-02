@@ -83,6 +83,28 @@ class PriceListItem(Base):
     unit_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
 
 
+class SupplierPriceImportTemplate(Base):
+    """طبقِ درخواستِ صریح («این تطبیق را برایِ دفعاتِ بعد ذخیره کن»):
+    تنظیماتِ ستون‌بندیِ فایلِ قیمتِ هر تامین‌کننده (اکسل/PDF) -- کدامین
+    ستون کد است، کدامین قیمت، و چند ردیفِ اول (هدر/عنوان) نادیده گرفته
+    شود -- تا واردکردنِ دفعاتِ بعدیِ همان تامین‌کننده نیازِ تطبیقِ دستی
+    نداشته باشد."""
+
+    __tablename__ = "supplier_price_import_templates"
+    __table_args__ = (
+        UniqueConstraint("company_id", "supplier_detail_account_id"),
+        {"schema": "comm"},
+    )
+
+    template_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    supplier_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    code_column_index: Mapped[int] = mapped_column(SmallInteger)
+    price_column_index: Mapped[int] = mapped_column(SmallInteger)
+    header_row_index: Mapped[int] = mapped_column(SmallInteger, default=0)
+    sheet_name: Mapped[str | None] = mapped_column(String(100))
+
+
 class DiscountRule(Base):
     __tablename__ = "discount_rules"
     __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "comm"})

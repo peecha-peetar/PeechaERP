@@ -1,23 +1,35 @@
 """فهرستِ قیمت و تخفیف (مرحلهٔ ۶) — فهرستِ قیمتِ پلکانی + قواعدِ تخفیف.
 طبقِ اسکوپِ آگاهانهٔ این دور: قاعدهٔ تخفیف فقط با scope_type_code='ALL'
 ساخته می‌شود (تنها حالتی که commercial_pricing.resolve_price واقعاً
-اعمال می‌کند) — کوپن/پروموشن/باندل به دورِ بعدی موکول شده‌اند."""
+اعمال می‌کند) — کوپن/پروموشن/باندل به دورِ بعدی موکول شده‌اند.
+
+طبقِ درخواستِ صریح («لیستِ قیمتِ تامین‌کننده از اکسل/PDF»): یک تبِ سوم
+اضافه شد که فایلِ قیمتِ تامین‌کننده را می‌خواند، با کدهایِ تامین‌کننده‌یِ
+ثبت‌شده‌یِ هر کالا تطبیق می‌دهد، چند ستونِ افزایشیِ درصدی/مبلغی رویِ
+قیمتِ تامین‌کننده اعمال می‌کند، و نتیجه را در یک فهرستِ قیمتِ موجود ثبت
+می‌کند -- طبقِ توافقِ صریح، فازِ اول فقط اکسل و PDFِ متنی (بدونِ OCR/عکس)."""
 
 from __future__ import annotations
 
 import datetime
 import decimal
+import os
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -29,11 +41,16 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import supplier_price_import as spi_service
+from peecha.ui import theme
+from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import JalaliDateEdit, wrap_scrollable
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "AMOUNT": "مبلغِ ثابت", "TIERED": "پلکانی"}
+_PREVIEW_FIXED_COLUMNS = ["ردیف", "کدِ تامین‌کننده", "کالایِ شناسایی‌شده", "قیمتِ تامین‌کننده"]
 
 
 class CommercialPricingScreen(QWidget):
@@ -46,6 +63,13 @@ class CommercialPricingScreen(QWidget):
         self._discount_rules: list = []
         self._selected_rule_id: int | None = None
 
+        self._suppliers: list[dict] = []
+        self._spi_file_path: str | None = None
+        self._spi_file_kind: str | None = None
+        self._matched_rows: list[spi_service.MatchedPriceRow] = []
+        self._adjustment_steps: list[spi_service.PriceAdjustmentStep] = []
+        self._sales_price_lists: list = []
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
@@ -57,6 +81,7 @@ class CommercialPricingScreen(QWidget):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_price_lists_tab(), "فهرستِ قیمت")
         self.tabs.addTab(self._build_discount_rules_tab(), "قواعدِ تخفیف")
+        self.tabs.addTab(self._build_supplier_import_tab(), "واردکردنِ لیستِ قیمتِ تامین‌کننده")
         layout.addWidget(self.tabs, stretch=1)
 
     def _company_id(self) -> int | None:
@@ -154,6 +179,23 @@ class CommercialPricingScreen(QWidget):
         self._discount_rules = pricing_service.list_discount_rules(company_id, active_only=False)
         self._refresh_discount_rules_table()
         self._refresh_price_list_items()
+
+        self._suppliers = dimensions_service.list_suppliers(company_id)
+        supplier_options = [(s["detail_account_id"], f"{s['code']} — {s['name'] or ''}") for s in self._suppliers]
+        current_supplier = self.spi_supplier_combo.currentData()
+        _fill_options(self.spi_supplier_combo, supplier_options)
+        if current_supplier is not None and self.spi_supplier_combo.findData(current_supplier) >= 0:
+            self.spi_supplier_combo.setCurrentIndex(self.spi_supplier_combo.findData(current_supplier))
+
+        self._sales_price_lists = [pl for pl in self._price_lists if pl.price_list_type_code == "SALES"]
+        current_target = self.spi_target_price_list_combo.currentData()
+        self.spi_target_price_list_combo.clear()
+        for pl in self._sales_price_lists:
+            self.spi_target_price_list_combo.addItem(f"{pl.code} — {pl.name}", pl.price_list_id)
+        if current_target is not None:
+            index = self.spi_target_price_list_combo.findData(current_target)
+            if index >= 0:
+                self.spi_target_price_list_combo.setCurrentIndex(index)
 
     def _on_price_list_selected(self, row: int, _column: int) -> None:
         self._selected_price_list_id = self.price_lists_table.item(row, 0).data(Qt.UserRole)
@@ -333,3 +375,315 @@ class CommercialPricingScreen(QWidget):
             min_quantity=decimal.Decimal(str(self.tier_min_qty_field.value())),
         )
         self.rule_status_label.setText("پله افزوده شد.")
+
+    # --- واردکردنِ لیستِ قیمتِ تامین‌کننده --------------------------------
+    def _build_supplier_import_tab(self) -> QWidget:
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.addWidget(QLabel(
+            "فایلِ اکسل یا PDFِ متنیِ لیستِ قیمتِ تامین‌کننده را انتخاب کنید. "
+            "ستونِ کد و ستونِ قیمت را مشخص کنید تا هر ردیف با کدهایِ تامین‌کننده‌یِ "
+            "ثبت‌شده‌یِ هر کالا تطبیق داده شود. (فازِ فعلی: فقط اکسل و PDFِ متنی — بدونِ عکس/اسکن)"
+        ))
+
+        file_row = QHBoxLayout()
+        file_row.addWidget(QLabel("تامین‌کننده:"))
+        self.spi_supplier_combo = _make_searchable_combo([])
+        self.spi_supplier_combo.currentIndexChanged.connect(self._on_spi_supplier_changed)
+        file_row.addWidget(self.spi_supplier_combo, stretch=2)
+        choose_file_button = QPushButton("انتخابِ فایل…")
+        choose_file_button.clicked.connect(self._spi_choose_file)
+        file_row.addWidget(choose_file_button)
+        self.spi_file_label = QLabel("فایلی انتخاب نشده.")
+        self.spi_file_label.setObjectName("statusHint")
+        file_row.addWidget(self.spi_file_label, stretch=2)
+        self.spi_sheet_combo = QComboBox()
+        self.spi_sheet_combo.setVisible(False)
+        file_row.addWidget(self.spi_sheet_combo)
+        outer.addLayout(file_row)
+
+        mapping_row = QHBoxLayout()
+        mapping_row.addWidget(QLabel("ستونِ کد:"))
+        self.spi_code_column_spin = QSpinBox()
+        self.spi_code_column_spin.setRange(1, 200)
+        self.spi_code_column_spin.setValue(1)
+        mapping_row.addWidget(self.spi_code_column_spin)
+        mapping_row.addWidget(QLabel("ستونِ قیمت:"))
+        self.spi_price_column_spin = QSpinBox()
+        self.spi_price_column_spin.setRange(1, 200)
+        self.spi_price_column_spin.setValue(2)
+        mapping_row.addWidget(self.spi_price_column_spin)
+        mapping_row.addWidget(QLabel("تعدادِ سطرهایِ سربرگ برایِ رد کردن:"))
+        self.spi_header_row_spin = QSpinBox()
+        self.spi_header_row_spin.setRange(0, 50)
+        self.spi_header_row_spin.setValue(1)
+        mapping_row.addWidget(self.spi_header_row_spin)
+        self.spi_save_template_checkbox = QCheckBox("ذخیرهٔ این تنظیم برایِ دفعاتِ بعد")
+        self.spi_save_template_checkbox.setChecked(True)
+        mapping_row.addWidget(self.spi_save_template_checkbox)
+        load_button = QPushButton("خواندن و تطبیق")
+        load_button.setObjectName("primaryIconButton")
+        load_button.clicked.connect(self._spi_load_and_match_file)
+        mapping_row.addWidget(load_button)
+        outer.addLayout(mapping_row)
+
+        steps_row = QHBoxLayout()
+        steps_row.addWidget(QLabel("ستونِ افزایشیِ تازه:"))
+        self.spi_step_kind_combo = QComboBox()
+        self.spi_step_kind_combo.addItem("درصدی", "PERCENT")
+        self.spi_step_kind_combo.addItem("مبلغِ ثابت", "AMOUNT")
+        steps_row.addWidget(self.spi_step_kind_combo)
+        self.spi_step_value_field = QDoubleSpinBox()
+        self.spi_step_value_field.setDecimals(2)
+        self.spi_step_value_field.setRange(-999999999, 999999999)
+        steps_row.addWidget(self.spi_step_value_field)
+        self.spi_step_label_field = QLineEdit()
+        self.spi_step_label_field.setPlaceholderText("عنوانِ ستون (اختیاری)")
+        steps_row.addWidget(self.spi_step_label_field, stretch=1)
+        add_step_button = QPushButton("➕")
+        add_step_button.setObjectName("iconButton")
+        add_step_button.setFixedWidth(44)
+        add_step_button.setToolTip("افزودنِ ستونِ افزایشی")
+        add_step_button.clicked.connect(self._spi_add_adjustment_step)
+        steps_row.addWidget(add_step_button)
+        remove_step_button = QPushButton("➖")
+        remove_step_button.setObjectName("iconButton")
+        remove_step_button.setFixedWidth(44)
+        remove_step_button.setToolTip("حذفِ ستونِ انتخاب‌شده")
+        remove_step_button.clicked.connect(self._spi_remove_selected_step)
+        steps_row.addWidget(remove_step_button)
+        outer.addLayout(steps_row)
+
+        self.spi_steps_list = QListWidget()
+        self.spi_steps_list.setMaximumHeight(70)
+        outer.addWidget(self.spi_steps_list)
+
+        self.spi_preview_table = QTableWidget(0, len(_PREVIEW_FIXED_COLUMNS) + 1)
+        self.spi_preview_table.setHorizontalHeaderLabels(_PREVIEW_FIXED_COLUMNS + ["قیمتِ نهایی"])
+        self.spi_preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.spi_preview_table.verticalHeader().setVisible(False)
+        self.spi_preview_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        outer.addWidget(self.spi_preview_table, stretch=1)
+
+        commit_row = QHBoxLayout()
+        commit_row.addWidget(QLabel("ثبت در فهرستِ قیمت:"))
+        self.spi_target_price_list_combo = QComboBox()
+        commit_row.addWidget(self.spi_target_price_list_combo, stretch=1)
+        commit_button = QPushButton("✅ ثبتِ قیمت‌هایِ تطبیق‌یافته")
+        commit_button.setObjectName("primaryIconButton")
+        commit_button.clicked.connect(self._spi_commit_to_price_list)
+        commit_row.addWidget(commit_button)
+        outer.addLayout(commit_row)
+
+        self.spi_status_label = QLabel("")
+        self.spi_status_label.setObjectName("statusError")
+        outer.addWidget(self.spi_status_label)
+        return wrap_scrollable(page)
+
+    def _on_spi_supplier_changed(self) -> None:
+        company_id = self._company_id()
+        supplier_id = self.spi_supplier_combo.currentData()
+        if company_id is None or supplier_id is None:
+            return
+        template = spi_service.get_import_template(company_id, supplier_id)
+        if template is None:
+            return
+        self.spi_code_column_spin.setValue(template.code_column_index + 1)
+        self.spi_price_column_spin.setValue(template.price_column_index + 1)
+        self.spi_header_row_spin.setValue(template.header_row_index + 1)
+        if template.sheet_name:
+            index = self.spi_sheet_combo.findText(template.sheet_name)
+            if index >= 0:
+                self.spi_sheet_combo.setCurrentIndex(index)
+
+    def _spi_choose_file(self) -> None:
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "انتخابِ فایلِ قیمتِ تامین‌کننده", "", "فایل‌هایِ پشتیبانی‌شده (*.xlsx *.xls *.pdf)"
+        )
+        if not path:
+            return
+        self._spi_file_path = path
+        self._spi_file_kind = "excel" if os.path.splitext(path)[1].lower() in (".xlsx", ".xls") else "pdf"
+        self.spi_file_label.setText(os.path.basename(path))
+        self.spi_status_label.setText("")
+        self.spi_sheet_combo.clear()
+        self.spi_sheet_combo.setVisible(False)
+        if self._spi_file_kind == "excel":
+            try:
+                sheets = spi_service.list_excel_sheet_names(path)
+            except Exception as exc:  # noqa: BLE001 -- فایلِ کاربر، خطایِ فرمت متغیر است
+                self.spi_status_label.setText(f"خطا در خواندنِ فایل: {exc}")
+                return
+            if len(sheets) > 1:
+                self.spi_sheet_combo.addItems(sheets)
+                self.spi_sheet_combo.setVisible(True)
+        self._on_spi_supplier_changed()
+
+    def _spi_load_and_match_file(self) -> None:
+        company_id = self._company_id()
+        supplier_id = self.spi_supplier_combo.currentData()
+        file_path = getattr(self, "_spi_file_path", None)
+        if company_id is None or supplier_id is None:
+            self.spi_status_label.setText("ابتدا تامین‌کننده را انتخاب کنید.")
+            return
+        if not file_path:
+            self.spi_status_label.setText("ابتدا فایل را انتخاب کنید.")
+            return
+        try:
+            if self._spi_file_kind == "excel":
+                sheet_name = self.spi_sheet_combo.currentText() if self.spi_sheet_combo.isVisible() else None
+                grid = spi_service.extract_excel_grid(file_path, sheet_name)
+            else:
+                grid = spi_service.extract_pdf_grid(file_path)
+        except Exception as exc:  # noqa: BLE001 -- فایلِ کاربر، خطایِ فرمت متغیر است
+            self.spi_status_label.setText(f"خطا در خواندنِ فایل: {exc}")
+            return
+        if not grid:
+            self.spi_status_label.setText(
+                "هیچ داده‌ای از فایل استخراج نشد. اگر این PDF یک عکسِ اسکن‌شده است (بدونِ لایه‌یِ متن)، "
+                "این نسخه هنوز از آن پشتیبانی نمی‌کند."
+            )
+            self._matched_rows = []
+            self._spi_rebuild_preview_table()
+            return
+        code_column = self.spi_code_column_spin.value() - 1
+        price_column = self.spi_price_column_spin.value() - 1
+        header_row_index = self.spi_header_row_spin.value() - 1
+        self._matched_rows = spi_service.match_grid_rows(
+            company_id, grid, code_column, price_column, header_row_index, supplier_id
+        )
+        if self.spi_save_template_checkbox.isChecked():
+            spi_service.save_import_template(
+                company_id, supplier_id, code_column, price_column, header_row_index,
+                sheet_name=self.spi_sheet_combo.currentText() if self.spi_sheet_combo.isVisible() else None,
+            )
+        matched_count = sum(1 for r in self._matched_rows if r.item_id is not None)
+        self.spi_status_label.setText(f"{len(self._matched_rows)} ردیف خوانده شد؛ {matched_count} ردیف با کالا تطبیق یافت.")
+        self._spi_rebuild_preview_table()
+
+    def _spi_add_adjustment_step(self) -> None:
+        kind = self.spi_step_kind_combo.currentData()
+        value = decimal.Decimal(str(self.spi_step_value_field.value()))
+        label = self.spi_step_label_field.text().strip()
+        if not label:
+            label = f"{numerals.to_persian_digits(str(value))}٪" if kind == "PERCENT" else numerals.format_company_amount(value)
+        self._adjustment_steps.append(spi_service.PriceAdjustmentStep(kind=kind, value=value, label=label))
+        self.spi_step_label_field.clear()
+        self._spi_refresh_steps_list()
+        self._spi_rebuild_preview_table()
+
+    def _spi_remove_selected_step(self) -> None:
+        row = self.spi_steps_list.currentRow()
+        if row < 0:
+            return
+        del self._adjustment_steps[row]
+        self._spi_refresh_steps_list()
+        self._spi_rebuild_preview_table()
+
+    def _spi_refresh_steps_list(self) -> None:
+        self.spi_steps_list.clear()
+        for step in self._adjustment_steps:
+            sign = "+" if step.value >= 0 else ""
+            unit = "٪" if step.kind == "PERCENT" else ""
+            self.spi_steps_list.addItem(f"{step.label} ({sign}{step.value}{unit})")
+
+    def _spi_rebuild_preview_table(self) -> None:
+        step_headers = [step.label or f"مرحلهٔ {i + 1}" for i, step in enumerate(self._adjustment_steps)]
+        headers = _PREVIEW_FIXED_COLUMNS + step_headers + ["قیمتِ نهایی", "عملیات"]
+        self.spi_preview_table.setColumnCount(len(headers))
+        self.spi_preview_table.setHorizontalHeaderLabels(headers)
+        self.spi_preview_table.setRowCount(len(self._matched_rows))
+        for row_index, r in enumerate(self._matched_rows):
+            col = 0
+            self.spi_preview_table.setItem(row_index, col, QTableWidgetItem(numerals.to_persian_digits(str(r.row_no + 1))))
+            col += 1
+            self.spi_preview_table.setItem(row_index, col, QTableWidgetItem(r.raw_code))
+            col += 1
+            item_cell = QTableWidgetItem(r.item_label or "— تطبیق‌نیافته —")
+            if r.item_id is None:
+                item_cell.setForeground(QColor(theme.DANGER))
+            self.spi_preview_table.setItem(row_index, col, item_cell)
+            col += 1
+            running = r.supplier_price
+            self.spi_preview_table.setItem(
+                row_index, col, QTableWidgetItem(numerals.format_company_amount(running) if running is not None else "—")
+            )
+            col += 1
+            for step in self._adjustment_steps:
+                if running is not None:
+                    running = spi_service.apply_adjustments(running, [step])
+                self.spi_preview_table.setItem(
+                    row_index, col, QTableWidgetItem(numerals.format_company_amount(running) if running is not None else "—")
+                )
+                col += 1
+            self.spi_preview_table.setItem(
+                row_index, col, QTableWidgetItem(numerals.format_company_amount(running) if running is not None else "—")
+            )
+            col += 1
+            if r.item_id is None:
+                link_button = QPushButton("🔗 اتصال")
+                link_button.clicked.connect(lambda _checked=False, idx=row_index: self._spi_link_unmatched_row(idx))
+                self.spi_preview_table.setCellWidget(row_index, col, link_button)
+
+    def _spi_link_unmatched_row(self, row_index: int) -> None:
+        company_id = self._company_id()
+        supplier_id = self.spi_supplier_combo.currentData()
+        if company_id is None or row_index >= len(self._matched_rows):
+            return
+        row = self._matched_rows[row_index]
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("اتصالِ کدِ تامین‌کننده به کالا")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(f"کدِ تامین‌کننده: {row.raw_code}"))
+        item_combo = _make_searchable_combo(
+            [(it.item_id, f"{it.code} — {it.name or ''}") for it in self._items]
+        )
+        layout.addWidget(item_combo)
+        remember_checkbox = QCheckBox("ذخیرهٔ این کد برایِ دفعاتِ بعد (نزدِ همین تامین‌کننده)")
+        remember_checkbox.setChecked(True)
+        layout.addWidget(remember_checkbox)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+        item_id = item_combo.currentData()
+        if item_id is None:
+            return
+        if remember_checkbox.isChecked() and row.raw_code:
+            try:
+                spi_service.add_item_supplier_code(item_id, row.raw_code, supplier_id)
+            except ValueError:
+                pass  # کد از قبل برایِ این کالا/تامین‌کننده ثبت شده — مشکلی نیست
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        row.item_id = item_id
+        row.item_label = f"{item.code} — {item.name or ''}" if item else ""
+        self._spi_rebuild_preview_table()
+
+    def _spi_commit_to_price_list(self) -> None:
+        price_list_id = self.spi_target_price_list_combo.currentData()
+        if price_list_id is None:
+            self.spi_status_label.setText("ابتدا فهرستِ قیمتِ مقصد را انتخاب کنید.")
+            return
+        if not self._matched_rows:
+            self.spi_status_label.setText("ابتدا یک فایل را بخوانید.")
+            return
+        items_by_id = {it.item_id: it for it in self._items}
+        written = 0
+        skipped = 0
+        for row in self._matched_rows:
+            if row.item_id is None or row.supplier_price is None:
+                skipped += 1
+                continue
+            item = items_by_id.get(row.item_id)
+            if item is None:
+                skipped += 1
+                continue
+            final_price = spi_service.apply_adjustments(row.supplier_price, self._adjustment_steps)
+            pricing_service.set_price_list_item(price_list_id, row.item_id, item.base_uom_id, final_price)
+            written += 1
+        self.spi_status_label.setText(f"{written} قیمت ثبت شد؛ {skipped} ردیف (بدونِ تطبیق یا بدونِ قیمت) نادیده گرفته شد.")
+        self.refresh()
