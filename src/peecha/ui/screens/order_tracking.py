@@ -9,6 +9,8 @@ from __future__ import annotations
 import datetime
 import decimal
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -21,6 +23,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -74,6 +77,23 @@ class _PaymentCurrencyDialog(QDialog):
         add_title_button.setToolTip("افزودنِ عنوانِ پرداختِ تازه")
         add_title_button.clicked.connect(self._add_title)
         title_row.addWidget(add_title_button)
+        # طبقِ گزارشِ صریح («عنوانِ پرداخت وقتی وارد می‌شود نمی‌شود حذف یا
+        # ویرایش کرد»): دو دکمه‌یِ ویرایش/حذف، رویِ همان عنوانِ انتخاب‌شده
+        # در کمبو -- ویرایش/حذفِ یک عنوان هیچ سندِ حسابداریِ قبلی را که
+        # قبلاً با همان عنوان ثبت شده تغییر نمی‌دهد (شرحِ آن پرداخت‌ها یک
+        # متنِ ثابتِ کپی‌شده است، نه ارجاعِ زنده).
+        edit_title_button = QPushButton("✎")
+        edit_title_button.setObjectName("iconButton")
+        edit_title_button.setFixedWidth(28)
+        edit_title_button.setToolTip("ویرایشِ عنوانِ انتخاب‌شده")
+        edit_title_button.clicked.connect(self._edit_title)
+        title_row.addWidget(edit_title_button)
+        delete_title_button = QPushButton("🗑")
+        delete_title_button.setObjectName("dangerIconButton")
+        delete_title_button.setFixedWidth(28)
+        delete_title_button.setToolTip("حذفِ عنوانِ انتخاب‌شده")
+        delete_title_button.clicked.connect(self._delete_title)
+        title_row.addWidget(delete_title_button)
         layout.addLayout(title_row)
 
         currency_row = QHBoxLayout()
@@ -152,6 +172,41 @@ class _PaymentCurrencyDialog(QDialog):
             return
         self._reload_titles(select_title_id=title_id)
 
+    def _edit_title(self) -> None:
+        title_id = self.title_combo.currentData()
+        if title_id is None:
+            QMessageBox.information(self, "ویرایشِ عنوان", "ابتدا یک عنوان از فهرست انتخاب کنید.")
+            return
+        new_label, ok = QInputDialog.getText(self, "ویرایشِ عنوانِ پرداخت", "عنوانِ تازه:", text=self.title_combo.currentText())
+        if not ok or not new_label.strip():
+            return
+        try:
+            order_tracking_service.update_payment_title(self._company_id, title_id, new_label)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._reload_titles(select_title_id=title_id)
+
+    def _delete_title(self) -> None:
+        title_id = self.title_combo.currentData()
+        if title_id is None:
+            QMessageBox.information(self, "حذفِ عنوان", "ابتدا یک عنوان از فهرست انتخاب کنید.")
+            return
+        confirm = QMessageBox.question(
+            self, "حذفِ عنوان",
+            f"عنوانِ «{self.title_combo.currentText()}» حذف شود؟ (سندهایِ پرداختِ قبلی که با این عنوان ثبت شده‌اند "
+            "بدونِ تغییر باقی می‌مانند.)",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            order_tracking_service.delete_payment_title(self._company_id, title_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._reload_titles()
+
     def _refresh_balance_footer(self) -> None:
         balance, nature = treasury_service.get_counterparty_balance(self._company_id, self._detail_account_id)
         self.balance_footer_label.setText(
@@ -178,6 +233,104 @@ class _PaymentCurrencyDialog(QDialog):
         self.result_exchange_rate = exchange_rate
         self.result_title_label = self.title_combo.currentText() if self.title_combo.currentData() is not None else None
         self.accept()
+
+
+class _PhotoManagerDialog(QDialog):
+    """طبقِ گزارشِ صریح («ستونِ الصاقِ عکس هیچ آیکنی نداره، عکسِ الصاق‌شده
+    پیش‌نمایش/حذف/تعویض ندارد»): با کلیک رویِ دکمهٔ عکسِ هر ردیف، این
+    دیالوگ همه‌یِ عکس‌هایِ همان پرداخت را با یک پیش‌نمایشِ کوچک نشان
+    می‌دهد -- هرکدام با دکمه‌یِ حذفِ خودش، به‌علاوه‌یِ دکمه‌یِ افزودنِ
+    عکسِ تازه."""
+
+    def __init__(self, company_id: int, journal_entry_id: int, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("عکس‌هایِ این پرداخت")
+        self.resize(420, 420)
+        self._company_id = company_id
+        self._journal_entry_id = journal_entry_id
+
+        layout = QVBoxLayout(self)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        self._list_widget = QWidget()
+        self._list_layout = QVBoxLayout(self._list_widget)
+        self._list_layout.addStretch(1)
+        scroll.setWidget(self._list_widget)
+        layout.addWidget(scroll, stretch=1)
+
+        add_button = QPushButton("➕ افزودنِ عکسِ تازه")
+        add_button.clicked.connect(self._add_photo)
+        layout.addWidget(add_button)
+
+        close_row = QHBoxLayout()
+        close_row.addStretch(1)
+        close_button = QPushButton("بستن")
+        close_button.clicked.connect(self.accept)
+        close_row.addWidget(close_button)
+        layout.addLayout(close_row)
+
+        self._refresh()
+
+    def _refresh(self) -> None:
+        while self._list_layout.count() > 1:
+            item = self._list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        photos = order_tracking_service.list_photos(self._company_id, self._journal_entry_id)
+        for photo in photos:
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            thumb_label = QLabel()
+            thumb_label.setFixedSize(96, 96)
+            pixmap = QPixmap(photo.storage_key)
+            if not pixmap.isNull():
+                thumb_label.setPixmap(pixmap.scaled(96, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                thumb_label.setText("—")
+            row_layout.addWidget(thumb_label)
+            name_label = QLabel(photo.file_name)
+            row_layout.addWidget(name_label, stretch=1)
+            delete_button = QPushButton("🗑")
+            delete_button.setObjectName("dangerIconButton")
+            delete_button.setFixedWidth(36)
+            delete_button.setToolTip("حذفِ این عکس")
+            delete_button.clicked.connect(
+                lambda _checked=False, attachment_id=photo.attachment_id: self._delete_photo(attachment_id)
+            )
+            row_layout.addWidget(delete_button)
+            self._list_layout.insertWidget(self._list_layout.count() - 1, row)
+        if not photos:
+            empty_label = QLabel("هنوز عکسی برایِ این پرداخت الصاق نشده.")
+            self._list_layout.insertWidget(0, empty_label)
+
+    def _add_photo(self) -> None:
+        user = app_session.current_user
+        if user is None:
+            return
+        file_path, _ = QFileDialog.getOpenFileName(self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp)")
+        if not file_path:
+            return
+        try:
+            order_tracking_service.attach_photo(self._company_id, self._journal_entry_id, user.user_id, file_path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh()
+
+    def _delete_photo(self, attachment_id: int) -> None:
+        user = app_session.current_user
+        if user is None:
+            return
+        confirm = QMessageBox.question(self, "حذفِ عکس", "این عکس حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            order_tracking_service.delete_photo(attachment_id, self._company_id, user.user_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh()
 
 
 class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
@@ -415,10 +568,16 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
                 has_photo = bool(order_tracking_service.list_photos(company_id, payment.journal_entry_id))
             except ValueError:
                 has_photo = False
+            # طبقِ گزارشِ صریح («ستونِ عکس هیچ آیکنی نداره»): بدونِ
+            # objectName صریح، این دکمه از استایلِ عمومیِ QPushButton
+            # (پدینگِ ۹px۱۸px) استفاده می‌کرد که در ستونِ باریکِ جدول
+            # عملاً چیزی برایِ گلیف نمی‌گذاشت -- همان استایلِ استانداردِ
+            # iconButton این‌جا هم اعمال شد.
             photo_button = QPushButton("📎" if has_photo else "➕📷")
-            photo_button.setToolTip("افزودنِ عکس" if not has_photo else "این پرداخت عکس دارد — افزودنِ عکسِ دیگر")
+            photo_button.setObjectName("iconButton")
+            photo_button.setToolTip("مدیریتِ عکس‌هایِ این پرداخت (افزودن/پیش‌نمایش/حذف)")
             photo_button.clicked.connect(
-                lambda _checked=False, journal_entry_id=payment.journal_entry_id: self._attach_photo(journal_entry_id)
+                lambda _checked=False, journal_entry_id=payment.journal_entry_id: self._open_photo_manager(journal_entry_id)
             )
             self.payments_table.setCellWidget(row_index, 7, photo_button)
 
@@ -454,19 +613,12 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
             ),
         )
 
-    def _attach_photo(self, journal_entry_id: int) -> None:
+    def _open_photo_manager(self, journal_entry_id: int) -> None:
         company_id = self._company_id()
-        user = app_session.current_user
-        if company_id is None or user is None:
+        if company_id is None:
             return
-        file_path, _ = QFileDialog.getOpenFileName(self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp)")
-        if not file_path:
-            return
-        try:
-            order_tracking_service.attach_photo(company_id, journal_entry_id, user.user_id, file_path)
-        except ValueError as exc:
-            QMessageBox.warning(self, "خطا", str(exc))
-            return
+        dialog = _PhotoManagerDialog(company_id, journal_entry_id, self)
+        dialog.exec()
         self._refresh_payments()
 
     def _close_order(self) -> None:

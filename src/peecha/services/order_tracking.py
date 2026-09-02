@@ -209,6 +209,40 @@ def create_payment_title(company_id: int, label: str) -> int:
         return row.payment_title_id
 
 
+def update_payment_title(company_id: int, payment_title_id: int, new_label: str) -> None:
+    """طبقِ گزارشِ صریح («عنوانِ پرداخت وقتی وارد می‌شود نمی‌شود ویرایش
+    کرد»): عنوان‌هایِ ثبت‌شده صرفاً یک برچسبِ ساده‌اند -- ویرایش/حذفشان
+    هیچ سندِ حسابداریِ قبلی را تغییر نمی‌دهد (شرحِ همان پرداخت‌ها، طبقِ
+    طراحی، یک متنِ ثابتِ کپی‌شده است، نه ارجاعِ زنده به این جدول)."""
+    new_label = new_label.strip()
+    if not new_label:
+        raise ValueError("عنوانِ پرداخت نمی‌تواند خالی باشد.")
+    with new_session() as session:
+        row = session.get(OrderPaymentTitle, payment_title_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("عنوان نامعتبر است.")
+        existing = session.scalar(
+            select(OrderPaymentTitle).where(
+                OrderPaymentTitle.company_id == company_id,
+                OrderPaymentTitle.label == new_label,
+                OrderPaymentTitle.payment_title_id != payment_title_id,
+            )
+        )
+        if existing is not None:
+            raise ValueError("این عنوان قبلاً تعریف شده است.")
+        row.label = new_label
+        session.commit()
+
+
+def delete_payment_title(company_id: int, payment_title_id: int) -> None:
+    with new_session() as session:
+        row = session.get(OrderPaymentTitle, payment_title_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("عنوان نامعتبر است.")
+        session.delete(row)
+        session.commit()
+
+
 # ---------------------------------------------------------------------
 # پرداخت‌هایِ سفارش (مشتق از سندهایِ حسابداریِ موجود -- بدونِ جدولِ واسط)
 # ---------------------------------------------------------------------
