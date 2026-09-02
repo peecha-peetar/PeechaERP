@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -43,6 +44,7 @@ class InstallmentsListScreen(QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
         self._main_window = main_window
+        self._rows: list[installments_service.InstallmentLineRow] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
@@ -51,7 +53,11 @@ class InstallmentsListScreen(QWidget):
         title = QLabel("مدیریتِ اقساط")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
-        layout.addWidget(QLabel("با کلیکِ «وصول» رویِ هر ردیف، فرمِ دریافت/پرداخت با طرفِ‌حساب و ماندهٔ همان قسط باز می‌شود -- وصولِ جزئی هم ممکن است."))
+        layout.addWidget(QLabel(
+            "با کلیکِ «وصول» رویِ هر ردیف، فرمِ دریافت/پرداخت با طرفِ‌حساب و ماندهٔ همان قسط باز می‌شود -- وصولِ جزئی "
+            "هم ممکن است. برایِ وصولِ هم‌زمانِ چند قسطِ یک طرفِ‌حساب زیرِ یک سند، چند ردیف را انتخاب (با Ctrl/Shift) و "
+            "دکمهٔ «وصولِ گروهی» را بزنید."
+        ))
 
         # --- فیلترها: طبقِ درخواستِ صریح («بالای فرم افرادی که اقساط
         # دارند فیلتر و بر اساسِ تاریخ و طرفِ‌حساب بشه فیلتر کرد»). ---
@@ -98,9 +104,23 @@ class InstallmentsListScreen(QWidget):
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        # طبقِ درخواستِ صریح («هم‌زمان جمعِ دو یا چند قسط هم دریافت
+        # بشه»): انتخابِ چندگانه (Ctrl/Shift+کلیک) برایِ وصولِ گروهی.
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         layout.addWidget(self.table, stretch=1)
+
+        batch_row = QHBoxLayout()
+        batch_collect_button = QPushButton("💰 وصولِ گروهی (ردیف‌هایِ انتخاب‌شده)")
+        batch_collect_button.setToolTip(
+            "ردیف‌هایِ انتخاب‌شده باید همه متعلق به یک طرفِ‌حساب و یک جهت (دریافت یا پرداخت) باشند -- "
+            "همه با هم، زیرِ یک سندِ واحد، وصول می‌شوند."
+        )
+        batch_collect_button.clicked.connect(self._collect_selected)
+        batch_row.addWidget(batch_collect_button)
+        batch_row.addStretch(1)
+        layout.addLayout(batch_row)
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -148,6 +168,7 @@ class InstallmentsListScreen(QWidget):
             counterparty_detail_account_id=counterparty_filter,
             due_date_from=due_date_from, due_date_to=due_date_to,
         )
+        self._rows = rows
         self.table.setRowCount(len(rows))
         today = datetime.date.today()
         for row_index, line in enumerate(rows):
@@ -193,5 +214,41 @@ class InstallmentsListScreen(QWidget):
             nav_code,
             then=lambda screen: screen.prefill_for_installment_collection(
                 line.line_id, line.counterparty_detail_account_id, line.remaining_amount, description,
+            ),
+        )
+
+    def _collect_selected(self) -> None:
+        """طبقِ درخواستِ صریح («هم‌زمان جمعِ دو یا چند قسط هم دریافت
+        بشه»): همه‌یِ ردیف‌هایِ انتخاب‌شده (که هنوز کاملاً وصول نشده‌اند)
+        باید یک طرفِ‌حساب و یک جهت داشته باشند -- در آن صورت، یک فرمِ
+        دریافت/پرداختِ واحد با یک ردیفِ روش به‌ازایِ هرکدام (هرکدام از
+        قبل به همان قسط متصل، با مبلغِ ماندهٔ خودش) باز می‌شود."""
+        selected_row_indexes = sorted({index.row() for index in self.table.selectedIndexes()})
+        lines = [self._rows[r] for r in selected_row_indexes if 0 <= r < len(self._rows) and self._rows[r].status_code != "PAID"]
+        if not lines:
+            QMessageBox.warning(self, "خطا", "ابتدا یک یا چند قسطِ هنوز-وصول‌نشده را از جدول انتخاب کنید.")
+            return
+        if len(lines) == 1:
+            self._collect(lines[0])
+            return
+        first = lines[0]
+        if any(
+            line.counterparty_detail_account_id != first.counterparty_detail_account_id or line.direction != first.direction
+            for line in lines
+        ):
+            QMessageBox.warning(
+                self, "خطا",
+                "ردیف‌هایِ انتخاب‌شده باید همه متعلق به یک طرفِ‌حساب و یک جهت (دریافت یا پرداخت) باشند.",
+            )
+            return
+        if first.direction not in ("RECEIPT", "PAYMENT"):
+            QMessageBox.warning(self, "خطا", "جهتِ اقساطِ انتخاب‌شده (دریافت/پرداخت) مشخص نیست.")
+            return
+        nav_code = "TREASURY_RECEIPT" if first.direction == "RECEIPT" else "TREASURY_PAYMENT"
+        description = f"وصولِ گروهیِ {numerals.to_persian_digits(str(len(lines)))} قسط"
+        self._main_window.open_screen(
+            nav_code,
+            then=lambda screen: screen.prefill_for_installment_collections(
+                [(line.line_id, line.remaining_amount) for line in lines], first.counterparty_detail_account_id, description,
             ),
         )

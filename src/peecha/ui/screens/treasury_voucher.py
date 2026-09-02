@@ -2533,17 +2533,30 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         کمتر از ماندهٔ کلِ قسط -- یعنی یک وصولِ جزئی -- باشد) هم از پیش
         پر می‌شود؛ کاربر فقط باید روشِ واقعیِ دریافت/پرداخت (نقد/بانک/
         چک/...) را انتخاب کند."""
+        self.prefill_for_installment_collections([(line_id, amount)], counterparty_id, description)
+
+    def prefill_for_installment_collections(
+        self, lines: list[tuple[int, decimal.Decimal]], counterparty_id: int | None, description: str,
+    ) -> None:
+        """طبقِ درخواستِ صریح («هم‌زمان جمعِ دو یا چند قسط هم دریافت
+        بشه»): نسخهٔ عمومی‌ترِ بالا -- هر تاپلِ (line_id, amount) یک
+        ردیفِ روشِ مجزا می‌سازد (همه از پیش به همان قسطِ خودشان متصل)،
+        همه زیرِ یک سندِ واحد؛ مبلغِ سرِ فرم هم مجموعِ همه‌شان می‌شود.
+        کاربر فقط روشِ واقعیِ هر ردیف را انتخاب می‌کند (لزوماً یکسان
+        نیست -- مثلاً یکی نقد و دیگری بانک)."""
         self._reset_form()
         if counterparty_id is not None:
             index = self.account_combo.findData(counterparty_id)
             if index >= 0:
                 self.account_combo.setCurrentIndex(index)
-        self.total_amount_field.setValue(float(amount))
+        total = sum((amount for _line_id, amount in lines), decimal.Decimal(0))
+        self.total_amount_field.setValue(float(total))
         self.description_field.setText(description)
-        row = self._method_rows[0]
-        row.amount_field.setValue(float(amount))
-        row.collect_installment_line_id = line_id
-        row.installment_link_button.setStyleSheet("font-weight: bold;")
+        for index, (line_id, amount) in enumerate(lines):
+            row = self._method_rows[0] if index == 0 else self._add_row()
+            row.amount_field.setValue(float(amount))
+            row.collect_installment_line_id = line_id
+            row.installment_link_button.setStyleSheet("font-weight: bold;")
         self._update_rows_summary()
 
     def _compose_description(self) -> str:

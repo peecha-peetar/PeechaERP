@@ -56,12 +56,20 @@ _DOCUMENT_DELETE_STATEMENTS = [
     # این ابزار اضافه شدند و مستقیم/غیرِمستقیم به commercial_documents و
     # journal_entries اشاره می‌کنند -- باید پیش از حذفِ خودِ آن‌ها (چه در
     # همین لیست، چه در acc.journal_entries که پایینِ همین لیست حذف
-    # می‌شود) پاک شوند.
+    # می‌شود) پاک شوند. طبقِ رفعِ باگِ واقعیِ بعدی («خام‌کردنِ اطلاعات
+    # خطا می‌دهد»): comm.installment_collections (وصولِ جزئی/کاملِ هر
+    # قسط) هم به همین installment_lines وصل است -- باید پیش از آن پاک
+    # شود؛ و طرحِ اقساطِ بدونِ فاکتور (company_id مستقیم، document_id
+    # خالی -- طبقِ موردِ ۵) هم قبلاً اصلاً پاک نمی‌شد، این‌جا اضافه شد.
     "DELETE FROM comm.invoice_settlements WHERE company_id = :company_id",
+    "DELETE FROM comm.installment_collections WHERE line_id IN "
+    "(SELECT line_id FROM comm.installment_lines WHERE plan_id IN "
+    " (SELECT plan_id FROM comm.installment_plans WHERE company_id = :company_id OR document_id IN "
+    "  (SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)))",
     "DELETE FROM comm.installment_lines WHERE plan_id IN "
-    "(SELECT plan_id FROM comm.installment_plans WHERE document_id IN "
+    "(SELECT plan_id FROM comm.installment_plans WHERE company_id = :company_id OR document_id IN "
     " (SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id))",
-    "DELETE FROM comm.installment_plans WHERE document_id IN "
+    "DELETE FROM comm.installment_plans WHERE company_id = :company_id OR document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     # فروش/خرید
     "DELETE FROM comm.credit_holds WHERE related_document_id IN "
