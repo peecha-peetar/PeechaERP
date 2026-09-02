@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -43,16 +44,37 @@ class _PaymentCurrencyDialog(QDialog):
     پرداخت این‌جا پرسیده می‌شود -- فرمِ خزانه‌داری با همین سه مقدار
     پیش‌پر باز می‌شود (کاربر فقط روشِ پرداخت را انتخاب می‌کند)."""
 
-    def __init__(self, company_id: int, base_currency_id: int, parent=None) -> None:
+    def __init__(
+        self, company_id: int, base_currency_id: int, detail_account_id: int, decimal_places: int, parent=None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("مشخصاتِ پرداخت")
         self._company_id = company_id
         self._base_currency_id = base_currency_id
+        self._detail_account_id = detail_account_id
+        self._decimal_places = decimal_places
         self.result_currency_id: int | None = None
         self.result_amount: decimal.Decimal | None = None
         self.result_exchange_rate: decimal.Decimal | None = None
+        self.result_title_label: str | None = None
 
         layout = QVBoxLayout(self)
+
+        # طبقِ درخواستِ صریح: «عنوانِ پرداخت» (هزینه‌یِ ترخیص/بهایِ اولیه‌یِ
+        # کالا/...) از یک فهرستِ قابلِ‌گسترش انتخاب می‌شود؛ دکمه‌یِ + همان‌جا
+        # (بدونِ بستنِ همین دیالوگ) عنوانِ تازه اضافه می‌کند.
+        title_row = QHBoxLayout()
+        title_row.addWidget(QLabel("عنوانِ پرداخت:"))
+        self.title_combo = QComboBox()
+        self._reload_titles()
+        title_row.addWidget(self.title_combo, stretch=1)
+        add_title_button = QPushButton("+")
+        add_title_button.setObjectName("iconButton")
+        add_title_button.setFixedWidth(28)
+        add_title_button.setToolTip("افزودنِ عنوانِ پرداختِ تازه")
+        add_title_button.clicked.connect(self._add_title)
+        title_row.addWidget(add_title_button)
+        layout.addLayout(title_row)
 
         currency_row = QHBoxLayout()
         currency_row.addWidget(QLabel("ارز:"))
@@ -81,6 +103,13 @@ class _PaymentCurrencyDialog(QDialog):
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
 
+        # طبقِ درخواستِ صریح: «در فوترِ همین فرم جمعِ مانده را هم نمایش
+        # بدهد» -- ماندهٔ فعلیِ همین سفارش، برایِ تصمیم‌گیریِ بهترِ کاربر
+        # درباره‌یِ مبلغِ همین پرداخت.
+        self.balance_footer_label = QLabel("")
+        layout.addWidget(self.balance_footer_label)
+        self._refresh_balance_footer()
+
         button_row = QHBoxLayout()
         button_row.addStretch(1)
         ok_button = QPushButton("تایید و رفتن به فرمِ پرداخت")
@@ -102,6 +131,33 @@ class _PaymentCurrencyDialog(QDialog):
             latest = currencies_service.get_latest_rate(self._company_id, currency_id, datetime.date.today())
             self.rate_field.setText(numerals.format_amount(latest) if latest is not None else "")
 
+    def _reload_titles(self, select_title_id: int | None = None) -> None:
+        self.title_combo.clear()
+        self.title_combo.addItem("— بدونِ عنوان —", None)
+        for t in order_tracking_service.list_payment_titles(self._company_id):
+            self.title_combo.addItem(t.label, t.payment_title_id)
+        if select_title_id is not None:
+            index = self.title_combo.findData(select_title_id)
+            if index >= 0:
+                self.title_combo.setCurrentIndex(index)
+
+    def _add_title(self) -> None:
+        label, ok = QInputDialog.getText(self, "افزودنِ عنوانِ پرداخت", "عنوانِ تازه (مثلاً «هزینه‌یِ ترخیص»):")
+        if not ok or not label.strip():
+            return
+        try:
+            title_id = order_tracking_service.create_payment_title(self._company_id, label)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._reload_titles(select_title_id=title_id)
+
+    def _refresh_balance_footer(self) -> None:
+        balance, nature = treasury_service.get_counterparty_balance(self._company_id, self._detail_account_id)
+        self.balance_footer_label.setText(
+            f"ماندهٔ فعلیِ سفارش: {numerals.format_money(balance, self._decimal_places)} ({nature})"
+        )
+
     def _on_accept(self) -> None:
         currency_id = self.currency_combo.currentData()
         amount = decimal.Decimal(str(self.amount_field.value()))
@@ -120,6 +176,7 @@ class _PaymentCurrencyDialog(QDialog):
         self.result_currency_id = currency_id
         self.result_amount = amount
         self.result_exchange_rate = exchange_rate
+        self.result_title_label = self.title_combo.currentText() if self.title_combo.currentData() is not None else None
         self.accept()
 
 
@@ -379,12 +436,14 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
             )
             return
         # طبقِ درخواستِ صریح («اکثرا با ارزهای دیگه هم کار می‌کنن»): پیش
-        # از بازکردنِ فرمِ خزانه‌داری، ارز/مبلغ/نرخ همین‌جا پرسیده می‌شود.
-        dialog = _PaymentCurrencyDialog(company_id, self._base_currency_id, self)
+        # از بازکردنِ فرمِ خزانه‌داری، ارز/مبلغ/نرخ (و طبقِ گزارشِ بعدی،
+        # عنوانِ پرداخت) همین‌جا پرسیده می‌شود.
+        detail_account_id = self._selected_order.detail_account_id
+        dialog = _PaymentCurrencyDialog(company_id, self._base_currency_id, detail_account_id, self._decimal_places, self)
         if dialog.exec() != QDialog.Accepted:
             return
-        description = f"پرداختِ سفارشِ {self._selected_order.code} — {self._selected_order.name or ''}"
-        detail_account_id = self._selected_order.detail_account_id
+        title_part = f"{dialog.result_title_label} — " if dialog.result_title_label else ""
+        description = f"{title_part}پرداختِ سفارشِ {self._selected_order.code} — {self._selected_order.name or ''}"
         currency_id = dialog.result_currency_id
         amount = dialog.result_amount
         exchange_rate = dialog.result_exchange_rate

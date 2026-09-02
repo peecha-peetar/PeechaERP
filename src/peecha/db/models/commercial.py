@@ -1041,3 +1041,17 @@ class OrderTracking(Base):
     opened_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     closed_at: Mapped[datetime.datetime | None]
+
+
+class OrderPaymentTitle(Base):
+    """طبقِ درخواستِ صریح («عنوانِ پرداخت» در فرمِ افزودنِ پرداختِ سفارش):
+    فهرستِ قابلِ‌گسترشِ عنوان‌هایی مثلِ «هزینه‌یِ ترخیص»/«بهایِ اولیه‌یِ
+    کالا» که کاربر با دکمه‌یِ + همان‌جا اضافه می‌کند -- معادلِ
+    104_order_payment_titles.sql."""
+
+    __tablename__ = "order_payment_titles"
+    __table_args__ = (UniqueConstraint("company_id", "label"), {"schema": "comm"})
+
+    payment_title_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    label: Mapped[str] = mapped_column(String(200))

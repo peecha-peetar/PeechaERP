@@ -26,7 +26,7 @@ from sqlalchemy import select
 from peecha.config import SETTINGS_DIR
 from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount, JournalEntry, JournalEntryLine, JournalEntryLineDetail
-from peecha.db.models.commercial import OrderTracking, OrderTrackingSetting
+from peecha.db.models.commercial import OrderPaymentTitle, OrderTracking, OrderTrackingSetting
 from peecha.db.models.core import Company
 from peecha.db.models.documents import Attachment
 from peecha.db.models.security import Form
@@ -173,6 +173,40 @@ def reopen_order(order_tracking_id: int, company_id: int) -> None:
         row.closed_by_user_id = None
         row.closed_at = None
         session.commit()
+
+
+# ---------------------------------------------------------------------
+# عنوانِ پرداخت (طبقِ درخواستِ صریح: «هزینه‌یِ ترخیص»/«بهایِ اولیه‌یِ
+# کالا»/... -- فهرستی که با دکمه‌یِ + همان‌جا گسترش می‌یابد)
+# ---------------------------------------------------------------------
+@dataclass
+class PaymentTitleRow:
+    payment_title_id: int
+    label: str
+
+
+def list_payment_titles(company_id: int) -> list[PaymentTitleRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(OrderPaymentTitle).where(OrderPaymentTitle.company_id == company_id).order_by(OrderPaymentTitle.label)
+        )
+        return [PaymentTitleRow(payment_title_id=r.payment_title_id, label=r.label) for r in rows]
+
+
+def create_payment_title(company_id: int, label: str) -> int:
+    label = label.strip()
+    if not label:
+        raise ValueError("عنوانِ پرداخت نمی‌تواند خالی باشد.")
+    with new_session() as session:
+        existing = session.scalar(
+            select(OrderPaymentTitle).where(OrderPaymentTitle.company_id == company_id, OrderPaymentTitle.label == label)
+        )
+        if existing is not None:
+            raise ValueError("این عنوان قبلاً تعریف شده است.")
+        row = OrderPaymentTitle(company_id=company_id, label=label)
+        session.add(row)
+        session.commit()
+        return row.payment_title_id
 
 
 # ---------------------------------------------------------------------
