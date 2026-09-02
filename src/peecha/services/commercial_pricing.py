@@ -21,6 +21,7 @@ from peecha.db.models.commercial import (
     DiscountRuleTier,
     PriceList,
     PriceListItem,
+    PriceListItemPriceHistory,
     PricingPolicy,
     Promotion,
 )
@@ -80,7 +81,14 @@ def create_price_list(
         return row.price_list_id
 
 
-def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_price: decimal.Decimal, min_quantity: decimal.Decimal = decimal.Decimal(1)) -> int:
+def set_price_list_item(
+    price_list_id: int, item_id: int, uom_id: int, unit_price: decimal.Decimal,
+    min_quantity: decimal.Decimal = decimal.Decimal(1), *, changed_by_user_id: int | None = None,
+    source_code: str = "MANUAL", note: str | None = None,
+) -> int:
+    """طبقِ درخواستِ صریح («لاگِ قیمت‌ها را نگه دار تا سابقه حفظ شود»):
+    هر تغییرِ واقعیِ قیمت (نه فراخوانیِ بی‌اثر با همان مقدارِ قبلی) یک
+    ردیف در PriceListItemPriceHistory ثبت می‌کند."""
     with new_session() as session:
         row = session.scalar(
             select(PriceListItem).where(
@@ -88,6 +96,7 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
                 PriceListItem.uom_id == uom_id, PriceListItem.min_quantity == min_quantity,
             )
         )
+        old_price = row.unit_price if row is not None else None
         if row is None:
             row = PriceListItem(
                 price_list_id=price_list_id, item_id=item_id, uom_id=uom_id, min_quantity=min_quantity,
@@ -96,6 +105,12 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
             session.add(row)
         else:
             row.unit_price = unit_price
+        if old_price is None or old_price != unit_price:
+            session.add(PriceListItemPriceHistory(
+                price_list_id=price_list_id, item_id=item_id, uom_id=uom_id, min_quantity=min_quantity,
+                old_price=old_price, new_price=unit_price, source_code=source_code, note=note,
+                changed_by_user_id=changed_by_user_id,
+            ))
         session.commit()
         return row.price_list_item_id
 
@@ -103,6 +118,68 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
 def list_price_list_items(price_list_id: int) -> list[PriceListItem]:
     with new_session() as session:
         return list(session.scalars(select(PriceListItem).where(PriceListItem.price_list_id == price_list_id)))
+
+
+# ---------------------------------------------------------------------
+# تاریخچهٔ قیمت -- طبقِ درخواستِ صریح («لاگِ قیمت‌ها ... اگر اشتباهی شد
+# بشه قیمتو برگردوند»)
+# ---------------------------------------------------------------------
+@dataclass
+class PriceHistoryRow:
+    history_id: int
+    price_list_id: int
+    item_id: int
+    uom_id: int
+    min_quantity: decimal.Decimal
+    old_price: decimal.Decimal | None
+    new_price: decimal.Decimal
+    source_code: str
+    note: str | None
+    changed_by_user_id: int | None
+    changed_at: datetime.datetime
+
+
+def list_price_history(price_list_id: int, item_id: int | None = None) -> list[PriceHistoryRow]:
+    with new_session() as session:
+        stmt = select(PriceListItemPriceHistory).where(PriceListItemPriceHistory.price_list_id == price_list_id)
+        if item_id is not None:
+            stmt = stmt.where(PriceListItemPriceHistory.item_id == item_id)
+        stmt = stmt.order_by(PriceListItemPriceHistory.changed_at.desc(), PriceListItemPriceHistory.history_id.desc())
+        return [
+            PriceHistoryRow(
+                r.history_id, r.price_list_id, r.item_id, r.uom_id, r.min_quantity, r.old_price, r.new_price,
+                r.source_code, r.note, r.changed_by_user_id, r.changed_at,
+            )
+            for r in session.scalars(stmt).all()
+        ]
+
+
+def revert_price_history(history_id: int, changed_by_user_id: int | None = None) -> None:
+    """قیمت را دقیقاً به old_priceِ همین ردیفِ تاریخچه برمی‌گرداند --
+    خودِ برگشت هم یک ردیفِ تازه (source_code='REVERT') ثبت می‌کند تا
+    لاگ همیشه append-only بماند و چیزی حذف/بازنویسی نشود."""
+    with new_session() as session:
+        hist = session.get(PriceListItemPriceHistory, history_id)
+        if hist is None:
+            raise ValueError("این ردیفِ تاریخچه یافت نشد.")
+        if hist.old_price is None:
+            raise ValueError("این ردیف اولین قیمتِ ثبت‌شده بوده؛ چیزی برایِ برگشت وجود ندارد.")
+        row = session.scalar(
+            select(PriceListItem).where(
+                PriceListItem.price_list_id == hist.price_list_id, PriceListItem.item_id == hist.item_id,
+                PriceListItem.uom_id == hist.uom_id, PriceListItem.min_quantity == hist.min_quantity,
+            )
+        )
+        if row is None:
+            raise ValueError("ردیفِ قیمتِ مربوطه دیگر در فهرستِ قیمت وجود ندارد.")
+        current_price = row.unit_price
+        row.unit_price = hist.old_price
+        session.add(PriceListItemPriceHistory(
+            price_list_id=hist.price_list_id, item_id=hist.item_id, uom_id=hist.uom_id, min_quantity=hist.min_quantity,
+            old_price=current_price, new_price=hist.old_price, source_code="REVERT",
+            note=f"بازگشت به قیمتِ ردیفِ تاریخچهٔ #{history_id}", changed_by_user_id=changed_by_user_id,
+        ))
+        session.commit()
 
 
 def _lookup_tiered_price(session, price_list_id: int, item_id: int, uom_id: int, quantity: decimal.Decimal) -> decimal.Decimal | None:

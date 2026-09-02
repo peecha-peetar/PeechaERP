@@ -43,45 +43,67 @@ def _normalize_code(code: str) -> str:
     return numerals.to_ascii_digits(code).strip().upper()
 
 
+def _normalize_name(name: str) -> str:
+    """طبقِ درخواستِ صریح («بعضی تامین‌کننده‌ها فقط نامِ کالا دارند»):
+    نام‌ها معمولاً در چاپ‌هایِ مختلف با فاصله/نیم‌فاصله متفاوت‌اند --
+    این تابع همه را به یک شکلِ یکسان می‌رساند تا تطبیقِ دقیق ممکن شود."""
+    text = numerals.to_ascii_digits(name).strip().casefold()
+    text = re.sub(r"[‌‏‎]", " ", text)  # نیم‌فاصله/نشانه‌هایِ جهتِ نامرئی
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _normalize_by_type(value: str, value_type: str) -> str:
+    return _normalize_code(value) if value_type == "CODE" else _normalize_name(value)
+
+
 # ---------------------------------------------------------------------
-# کدهایِ تامین‌کننده برایِ هر کالا
+# کدها/نام‌هایِ تامین‌کننده برایِ هر کالا -- طبقِ درخواستِ صریح، تشخیص
+# باید «ترکیبی» باشد: هم کد و هم نام، هرکدام موجود باشد کافی است.
 # ---------------------------------------------------------------------
 @dataclass
 class ItemSupplierCodeRow:
     item_supplier_code_id: int
     item_id: int
     supplier_detail_account_id: int | None
+    value_type: str  # CODE | NAME
     supplier_code: str
 
 
 def list_item_supplier_codes(item_id: int) -> list[ItemSupplierCodeRow]:
     with new_session() as session:
         rows = session.scalars(
-            select(ItemSupplierCode).where(ItemSupplierCode.item_id == item_id).order_by(ItemSupplierCode.item_supplier_code_id)
+            select(ItemSupplierCode).where(ItemSupplierCode.item_id == item_id)
+            .order_by(ItemSupplierCode.value_type, ItemSupplierCode.item_supplier_code_id)
         ).all()
         return [
-            ItemSupplierCodeRow(r.item_supplier_code_id, r.item_id, r.supplier_detail_account_id, r.supplier_code)
+            ItemSupplierCodeRow(r.item_supplier_code_id, r.item_id, r.supplier_detail_account_id, r.value_type, r.supplier_code)
             for r in rows
         ]
 
 
-def add_item_supplier_code(item_id: int, supplier_code: str, supplier_detail_account_id: int | None = None) -> int:
+def add_item_supplier_code(
+    item_id: int, supplier_code: str, supplier_detail_account_id: int | None = None, value_type: str = "CODE",
+) -> int:
+    if value_type not in ("CODE", "NAME"):
+        raise ValueError("نوعِ مقدار باید کد یا نام باشد.")
     supplier_code = supplier_code.strip()
     if not supplier_code:
-        raise ValueError("کدِ تامین‌کننده نمی‌تواند خالی باشد.")
-    normalized = _normalize_code(supplier_code)
+        raise ValueError("مقدار نمی‌تواند خالی باشد.")
+    normalized = _normalize_by_type(supplier_code, value_type)
     with new_session() as session:
         existing = session.scalar(
             select(ItemSupplierCode).where(
                 ItemSupplierCode.item_id == item_id,
                 ItemSupplierCode.supplier_detail_account_id == supplier_detail_account_id,
+                ItemSupplierCode.value_type == value_type,
                 ItemSupplierCode.normalized_code == normalized,
             )
         )
         if existing is not None:
-            raise ValueError("این کد قبلاً برایِ همین کالا (نزدِ همین تامین‌کننده) ثبت شده است.")
+            raise ValueError("این مقدار قبلاً برایِ همین کالا (نزدِ همین تامین‌کننده) ثبت شده است.")
         row = ItemSupplierCode(
-            item_id=item_id, supplier_detail_account_id=supplier_detail_account_id,
+            item_id=item_id, supplier_detail_account_id=supplier_detail_account_id, value_type=value_type,
             supplier_code=supplier_code, normalized_code=normalized,
         )
         session.add(row)
@@ -89,44 +111,84 @@ def add_item_supplier_code(item_id: int, supplier_code: str, supplier_detail_acc
         return row.item_supplier_code_id
 
 
+def update_item_supplier_code(
+    item_supplier_code_id: int, supplier_code: str, supplier_detail_account_id: int | None, value_type: str,
+) -> None:
+    if value_type not in ("CODE", "NAME"):
+        raise ValueError("نوعِ مقدار باید کد یا نام باشد.")
+    supplier_code = supplier_code.strip()
+    if not supplier_code:
+        raise ValueError("مقدار نمی‌تواند خالی باشد.")
+    normalized = _normalize_by_type(supplier_code, value_type)
+    with new_session() as session:
+        row = session.get(ItemSupplierCode, item_supplier_code_id)
+        if row is None:
+            raise ValueError("این مقدار یافت نشد.")
+        duplicate = session.scalar(
+            select(ItemSupplierCode).where(
+                ItemSupplierCode.item_id == row.item_id,
+                ItemSupplierCode.supplier_detail_account_id == supplier_detail_account_id,
+                ItemSupplierCode.value_type == value_type,
+                ItemSupplierCode.normalized_code == normalized,
+                ItemSupplierCode.item_supplier_code_id != item_supplier_code_id,
+            )
+        )
+        if duplicate is not None:
+            raise ValueError("این مقدار قبلاً برایِ همین کالا (نزدِ همین تامین‌کننده) ثبت شده است.")
+        row.supplier_code = supplier_code
+        row.supplier_detail_account_id = supplier_detail_account_id
+        row.value_type = value_type
+        row.normalized_code = normalized
+        session.commit()
+
+
 def delete_item_supplier_code(item_supplier_code_id: int) -> None:
     with new_session() as session:
         row = session.get(ItemSupplierCode, item_supplier_code_id)
         if row is None:
-            raise ValueError("این کد یافت نشد.")
+            raise ValueError("این مقدار یافت نشد.")
         session.delete(row)
         session.commit()
 
 
-def find_item_by_supplier_code(company_id: int, code: str, supplier_detail_account_id: int | None) -> int | None:
-    """اول با همان تامین‌کننده تلاش می‌کند؛ اگر نبود، با کدِ عمومی
-    (بدونِ تامین‌کننده -- مثلاً بارکدِ رایجِ صنعتی) تلاش می‌کند."""
-    if not code:
+def find_item_by_supplier_reference(company_id: int, raw_text: str, supplier_detail_account_id: int | None) -> int | None:
+    """تشخیصِ ترکیبی: اول کد را امتحان می‌کند (اول نزدِ همین تامین‌کننده،
+    بعد کدِ عمومی)؛ اگر چیزی پیدا نشد، همان متن را به‌عنوانِ «نام» امتحان
+    می‌کند (باز هم اول نزدِ همین تامین‌کننده، بعد نامِ عمومی) -- چون
+    بعضی تامین‌کننده‌ها به‌جایِ کد، فقط نامِ کالا را در فایل می‌نویسند."""
+    if not raw_text:
         return None
-    normalized = _normalize_code(code)
     with new_session() as session:
-        if supplier_detail_account_id is not None:
+        for value_type in ("CODE", "NAME"):
+            normalized = _normalize_by_type(raw_text, value_type)
+            if not normalized:
+                continue
+            if supplier_detail_account_id is not None:
+                row = session.scalar(
+                    select(ItemSupplierCode)
+                    .join(Item, Item.item_id == ItemSupplierCode.item_id)
+                    .where(
+                        Item.company_id == company_id,
+                        ItemSupplierCode.supplier_detail_account_id == supplier_detail_account_id,
+                        ItemSupplierCode.value_type == value_type,
+                        ItemSupplierCode.normalized_code == normalized,
+                    )
+                )
+                if row is not None:
+                    return row.item_id
             row = session.scalar(
                 select(ItemSupplierCode)
                 .join(Item, Item.item_id == ItemSupplierCode.item_id)
                 .where(
                     Item.company_id == company_id,
-                    ItemSupplierCode.supplier_detail_account_id == supplier_detail_account_id,
+                    ItemSupplierCode.supplier_detail_account_id.is_(None),
+                    ItemSupplierCode.value_type == value_type,
                     ItemSupplierCode.normalized_code == normalized,
                 )
             )
             if row is not None:
                 return row.item_id
-        row = session.scalar(
-            select(ItemSupplierCode)
-            .join(Item, Item.item_id == ItemSupplierCode.item_id)
-            .where(
-                Item.company_id == company_id,
-                ItemSupplierCode.supplier_detail_account_id.is_(None),
-                ItemSupplierCode.normalized_code == normalized,
-            )
-        )
-        return row.item_id if row is not None else None
+    return None
 
 
 # ---------------------------------------------------------------------
@@ -397,7 +459,7 @@ def match_grid_rows(
         if not raw_code and not raw_price_text:
             continue
         price = parse_price(raw_price_text)
-        item_id = find_item_by_supplier_code(company_id, raw_code, supplier_detail_account_id) if raw_code else None
+        item_id = find_item_by_supplier_reference(company_id, raw_code, supplier_detail_account_id) if raw_code else None
         item = items_by_id.get(item_id) if item_id is not None else None
         item_label = f"{item.code} — {item.name or ''}" if item else ""
         results.append(MatchedPriceRow(row_no=row_no, raw_code=raw_code, supplier_price=price, item_id=item_id, item_label=item_label))

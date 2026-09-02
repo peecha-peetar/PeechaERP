@@ -179,20 +179,22 @@ class Item(Base):
 
 
 class ItemSupplierCode(Base):
-    """طبقِ درخواستِ صریح («کدهایِ تامین‌کننده با کدهایِ من فرق دارد»):
-    یک کالا می‌تواند چند کدِ تامین‌کننده داشته باشد -- برایِ شناساییِ
-    خودکارِ ردیف‌هایِ فایلِ قیمتِ هر تامین‌کننده (اکسل/PDF) و تطبیقشان به
-    کالایِ داخلی."""
+    """طبقِ درخواستِ صریح («کدهایِ تامین‌کننده با کدهایِ من فرق دارد» و
+    بعداً «بعضی تامین‌کننده‌ها فقط نامِ کالا دارند»): یک کالا می‌تواند چند
+    کد و چند نامِ تامین‌کننده داشته باشد (value_type می‌گوید کدام‌اند) --
+    برایِ شناساییِ خودکارِ ترکیبی (کد یا نام) در وارداتِ فایلِ قیمتِ هر
+    تامین‌کننده (اکسل/PDF/عکس) و تطبیقشان به کالایِ داخلی."""
 
     __tablename__ = "item_supplier_codes"
     __table_args__ = (
-        UniqueConstraint("item_id", "supplier_detail_account_id", "normalized_code"),
+        UniqueConstraint("item_id", "supplier_detail_account_id", "value_type", "normalized_code"),
         {"schema": "inv"},
     )
 
     item_supplier_code_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
     supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    value_type: Mapped[str] = mapped_column(String(10), default="CODE")  # CODE | NAME
     supplier_code: Mapped[str] = mapped_column(String(60))
     normalized_code: Mapped[str] = mapped_column(String(60))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

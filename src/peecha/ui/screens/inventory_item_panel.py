@@ -36,7 +36,10 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_extended as extended_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import supplier_price_import as spi_service
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
+
+_SUPPLIER_CODE_TYPE_LABELS = {"CODE": "کد", "NAME": "نام"}
 
 _KIND_LABELS = {
     "GOOD": "کالا", "SERVICE": "خدمت", "RAW_MATERIAL": "مادهٔ اولیه", "SEMI_FINISHED": "نیمه‌ساخته",
@@ -300,6 +303,48 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         remove_supplier_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
         remove_supplier_button.clicked.connect(self._remove_supplier)
         layout.addWidget(remove_supplier_button)
+
+        # طبقِ درخواستِ صریح («چندین کد کالایِ تامین‌کننده و حتی نامِ کالا
+        # ... تشخیص باید ترکیبی باشد»): این بخش مستقل از جدولِ بالاست --
+        # آن یکی «کدامین تامین‌کننده‌ها این کالا را می‌فروشند» را نگه
+        # می‌دارد، این یکی «آن تامین‌کننده این کالا را با چه کد/نامی در
+        # فایلِ قیمتِ خودش صدا می‌زند» را -- برایِ شناساییِ خودکار در
+        # وارداتِ قیمتِ تامین‌کننده.
+        layout.addWidget(QLabel("کد/نامِ کالا نزدِ تامین‌کننده (برایِ شناساییِ خودکار در وارداتِ قیمت)"))
+        code_form = QHBoxLayout()
+        self.item_code_type_combo = QComboBox()
+        self.item_code_type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["CODE"], "CODE")
+        self.item_code_type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["NAME"], "NAME")
+        code_form.addWidget(self.item_code_type_combo)
+        self.item_code_supplier_combo = QComboBox()
+        code_form.addWidget(self.item_code_supplier_combo, stretch=1)
+        self.item_code_value_field = QLineEdit()
+        self.item_code_value_field.setPlaceholderText("کد یا نامِ کالا نزدِ این تامین‌کننده")
+        code_form.addWidget(self.item_code_value_field, stretch=1)
+        add_code_button = QPushButton("➕")
+        add_code_button.setObjectName("iconButton")
+        add_code_button.setFixedWidth(44)
+        add_code_button.setToolTip("افزودن")
+        add_code_button.clicked.connect(self._add_item_supplier_code)
+        code_form.addWidget(add_code_button)
+        layout.addLayout(code_form)
+
+        self.item_codes_table = QTableWidget(0, 3)
+        self.item_codes_table.setHorizontalHeaderLabels(["نوع", "تامین‌کننده", "مقدار"])
+        self.item_codes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.item_codes_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.item_codes_table.verticalHeader().setVisible(False)
+        self.item_codes_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.item_codes_table.setMaximumHeight(140)
+        self.item_codes_table.setToolTip("برایِ ویرایش، رویِ ردیف دوبار کلیک کنید.")
+        self.item_codes_table.cellDoubleClicked.connect(self._edit_item_supplier_code)
+        layout.addWidget(self.item_codes_table)
+        remove_code_button = QPushButton("🗑️")
+        remove_code_button.setObjectName("dangerIconButton")
+        remove_code_button.setFixedWidth(44)
+        remove_code_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_code_button.clicked.connect(self._remove_item_supplier_code)
+        layout.addWidget(remove_code_button)
 
         layout.addStretch(1)
         return tab
@@ -719,6 +764,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         for s in dimensions_service.list_suppliers(company_id):
             self.supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
 
+        self.item_code_supplier_combo.clear()
+        self.item_code_supplier_combo.addItem("(همهٔ تامین‌کنندگان)", None)
+        for s in dimensions_service.list_suppliers(company_id):
+            self.item_code_supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
+
         self._rebuild_related_item_combo()
 
         self._apply_visibility()
@@ -825,6 +875,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.asset_status_label.setText("")
         self._apply_visibility()
         self._refresh_suppliers_table()
+        self._refresh_item_codes_table()
         self._refresh_related_table()
         self._refresh_bom_lines()
 
@@ -896,6 +947,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.asset_status_label.setText("")
 
         self.supplier_table.setRowCount(0)
+        self.item_codes_table.setRowCount(0)
         self.related_table.setRowCount(0)
         self.bom_lines_table.setRowCount(0)
         self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
@@ -997,6 +1049,93 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self._refresh_suppliers_table()
+
+    # --- کد/نامِ کالا نزدِ تامین‌کننده -----------------------------------------
+    def _refresh_item_codes_table(self) -> None:
+        self.item_codes_table.setRowCount(0)
+        if self._item_id is None:
+            return
+        rows = spi_service.list_item_supplier_codes(self._item_id)
+        self.item_codes_table.setRowCount(len(rows))
+        for row_index, r in enumerate(rows):
+            if r.supplier_detail_account_id is None:
+                supplier_label = "(همهٔ تامین‌کنندگان)"
+            else:
+                idx = self.item_code_supplier_combo.findData(r.supplier_detail_account_id)
+                supplier_label = self.item_code_supplier_combo.itemText(idx) if idx >= 0 else str(r.supplier_detail_account_id)
+            values = [_SUPPLIER_CODE_TYPE_LABELS.get(r.value_type, r.value_type), supplier_label, r.supplier_code]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, r.item_supplier_code_id)
+                self.item_codes_table.setItem(row_index, col_index, item)
+
+    def _add_item_supplier_code(self) -> None:
+        if self._item_id is None:
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس کد/نامِ تامین‌کننده اضافه کنید.")
+            return
+        value = self.item_code_value_field.text().strip()
+        if not value:
+            return
+        try:
+            spi_service.add_item_supplier_code(
+                self._item_id, value, self.item_code_supplier_combo.currentData(), self.item_code_type_combo.currentData(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.item_code_value_field.clear()
+        self._refresh_item_codes_table()
+
+    def _edit_item_supplier_code(self, row: int, _column: int) -> None:
+        item_supplier_code_id = self.item_codes_table.item(row, 0).data(Qt.UserRole)
+        current = next(
+            (r for r in spi_service.list_item_supplier_codes(self._item_id) if r.item_supplier_code_id == item_supplier_code_id),
+            None,
+        )
+        if current is None:
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ویرایشِ کد/نامِ تامین‌کننده")
+        form = QVBoxLayout(dialog)
+        type_combo = QComboBox()
+        type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["CODE"], "CODE")
+        type_combo.addItem(_SUPPLIER_CODE_TYPE_LABELS["NAME"], "NAME")
+        type_combo.setCurrentIndex(max(0, type_combo.findData(current.value_type)))
+        form.addWidget(type_combo)
+        supplier_combo = QComboBox()
+        for i in range(self.item_code_supplier_combo.count()):
+            supplier_combo.addItem(self.item_code_supplier_combo.itemText(i), self.item_code_supplier_combo.itemData(i))
+        supplier_combo.setCurrentIndex(max(0, supplier_combo.findData(current.supplier_detail_account_id)))
+        form.addWidget(supplier_combo)
+        value_field = QLineEdit(current.supplier_code)
+        form.addWidget(value_field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addWidget(buttons)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            spi_service.update_item_supplier_code(
+                item_supplier_code_id, value_field.text(), supplier_combo.currentData(), type_combo.currentData(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_item_codes_table()
+
+    def _remove_item_supplier_code(self) -> None:
+        selected = self.item_codes_table.selectedItems()
+        if not selected:
+            return
+        try:
+            spi_service.delete_item_supplier_code(selected[0].data(Qt.UserRole))
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_item_codes_table()
 
     # --- کالاهایِ مرتبط ------------------------------------------------------
     def _refresh_related_table(self) -> None:

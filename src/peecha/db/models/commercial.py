@@ -83,6 +83,29 @@ class PriceListItem(Base):
     unit_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
 
 
+class PriceListItemPriceHistory(Base):
+    """طبقِ درخواستِ صریح («لاگِ قیمت‌ها را نگه دار تا سابقه حفظ شود و
+    اگر اشتباهی شد بشه قیمتو برگردوند»): هر تغییرِ unit_price در
+    PriceListItem (چه دستی، چه از وارداتِ قیمتِ تامین‌کننده) این‌جا یک
+    ردیف ثبت می‌کند -- old_price=NULL یعنی این اولین‌بار است که این
+    ترکیب (کالا/واحد/حداقلِ‌مقدار) در این فهرستِ قیمت مقدار گرفته."""
+
+    __tablename__ = "price_list_item_price_history"
+    __table_args__ = {"schema": "comm"}
+
+    history_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    price_list_id: Mapped[int] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    min_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    old_price: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    new_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    source_code: Mapped[str] = mapped_column(String(30), default="MANUAL")
+    note: Mapped[str | None] = mapped_column(String(255))
+    changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    changed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
 class SupplierPriceImportTemplate(Base):
     """طبقِ درخواستِ صریح («این تطبیق را برایِ دفعاتِ بعد ذخیره کن»):
     تنظیماتِ ستون‌بندیِ فایلِ قیمتِ هر تامین‌کننده (اکسل/PDF) -- کدامین
