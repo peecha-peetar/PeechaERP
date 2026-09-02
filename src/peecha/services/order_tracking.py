@@ -33,7 +33,7 @@ from peecha.db.models.security import Form
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import roles as roles_service
 
-_ATTACHMENTS_DIR = SETTINGS_DIR / "attachments"
+_LOCAL_ATTACHMENTS_DIR = SETTINGS_DIR / "attachments"
 
 
 # ---------------------------------------------------------------------
@@ -53,6 +53,34 @@ def set_dimension_type_id(company_id: int, dimension_type_id: int) -> None:
         else:
             row.dimension_type_id = dimension_type_id
         session.commit()
+
+
+def get_attachments_dir_setting(company_id: int) -> str | None:
+    with new_session() as session:
+        row = session.get(OrderTrackingSetting, company_id)
+        return row.attachments_dir if row is not None else None
+
+
+def set_attachments_dir_setting(company_id: int, path: str | None) -> None:
+    """طبقِ درخواستِ صریح («امکانِ دیدنِ عکس برایِ همه‌یِ کاربرانِ شبکه»):
+    یک مسیرِ اشتراکیِ شبکه‌ای (مثلاً \\\\SERVER\\Share\\PeechaAttachments یا
+    یک درایوِ نگاشته‌شده که رویِ همهٔ کامپیوترها به یک پوشه اشاره کند) --
+    چون همین یک ردیف در دیتابیس ذخیره می‌شود، همهٔ کاربرانِ متصل به همان
+    شرکت همین یک مسیر را می‌بینند. اگر خالی بماند، رفتارِ قبلی (پوشهٔ
+    محلیِ تنظیماتِ همان کامپیوتر -- فقط رویِ همان یک دستگاه قابلِ‌دیدن)
+    ادامه می‌یابد."""
+    path = (path or "").strip() or None
+    with new_session() as session:
+        row = session.get(OrderTrackingSetting, company_id)
+        if row is None:
+            raise ValueError("ابتدا باید گروهِ تفصیلیِ «سفارشاتِ در راه» را تنظیم کنید.")
+        row.attachments_dir = path
+        session.commit()
+
+
+def _attachments_dir(company_id: int) -> Path:
+    configured = get_attachments_dir_setting(company_id)
+    return Path(configured) if configured else _LOCAL_ATTACHMENTS_DIR
 
 
 # ---------------------------------------------------------------------
@@ -290,8 +318,9 @@ def list_order_payments(company_id: int, detail_account_id: int) -> list[OrderPa
 
 
 # ---------------------------------------------------------------------
-# عکسِ ضمیمهٔ هر ردیفِ پرداخت (doc.attachments، source_record_id =
-# journal_entry_id همان پرداخت)
+# فایلِ ضمیمهٔ هر ردیفِ پرداخت (doc.attachments، source_record_id =
+# journal_entry_id همان پرداخت) -- طبقِ درخواستِ صریح، هر نوع فایلی
+# (عکس/PDF/...) می‌تواند ضمیمه شود، نه فقط عکس.
 # ---------------------------------------------------------------------
 _FORM_CODE = "order_tracking"
 
@@ -311,16 +340,26 @@ def _get_form_id(session, company_id: int) -> int:
     return form.form_id
 
 
-def attach_photo(company_id: int, journal_entry_id: int, user_id: int, file_path: str) -> int:
+def attach_file(company_id: int, journal_entry_id: int, user_id: int, file_path: str) -> int:
+    """طبقِ درخواستِ صریح («عکس در دیتابیس ذخیره نشود، فقط مسیر، چون
+    دیتابیس حجیم می‌شود»): فقط storage_key (مسیرِ فایل) در دیتابیس
+    می‌رود؛ خودِ فایل در _attachments_dir(company_id) کپی می‌شود -- که
+    اگر مدیر یک مسیرِ شبکه‌ایِ اشتراکی تنظیم کرده باشد، همان پوشه است
+    (پس همهٔ کاربران به همان فایل دسترسی دارند)، وگرنه پوشهٔ محلیِ
+    تنظیماتِ همین کامپیوتر (رفتارِ پیش‌فرض/قدیمی)."""
     source = Path(file_path)
     if not source.is_file():
         raise ValueError("فایل یافت نشد.")
-    _ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    target_dir = _attachments_dir(company_id)
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"پوشهٔ ضمائم («{target_dir}») در دسترس نیست: {exc}") from exc
     content = source.read_bytes()
     digest = hashlib.sha256(content).digest()
     extension = source.suffix.lstrip(".")
     storage_name = f"{uuid.uuid4().hex}.{extension}" if extension else uuid.uuid4().hex
-    destination = _ATTACHMENTS_DIR / storage_name
+    destination = target_dir / storage_name
     shutil.copyfile(source, destination)
     with new_session() as session:
         form_id = _get_form_id(session, company_id)
@@ -334,7 +373,7 @@ def attach_photo(company_id: int, journal_entry_id: int, user_id: int, file_path
         return row.attachment_id
 
 
-def list_photos(company_id: int, journal_entry_id: int) -> list[Attachment]:
+def list_files(company_id: int, journal_entry_id: int) -> list[Attachment]:
     with new_session() as session:
         form_id = _get_form_id(session, company_id)
         return list(
@@ -347,7 +386,7 @@ def list_photos(company_id: int, journal_entry_id: int) -> list[Attachment]:
         )
 
 
-def delete_photo(attachment_id: int, company_id: int, user_id: int) -> None:
+def delete_file(attachment_id: int, company_id: int, user_id: int) -> None:
     with new_session() as session:
         row = session.get(Attachment, attachment_id)
         if row is None or row.company_id != company_id:

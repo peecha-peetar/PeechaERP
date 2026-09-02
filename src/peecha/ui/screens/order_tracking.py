@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import datetime
 import decimal
+from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -235,17 +236,22 @@ class _PaymentCurrencyDialog(QDialog):
         self.accept()
 
 
-class _PhotoManagerDialog(QDialog):
+_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "bmp", "gif"}
+
+
+class _AttachmentManagerDialog(QDialog):
     """طبقِ گزارشِ صریح («ستونِ الصاقِ عکس هیچ آیکنی نداره، عکسِ الصاق‌شده
-    پیش‌نمایش/حذف/تعویض ندارد»): با کلیک رویِ دکمهٔ عکسِ هر ردیف، این
-    دیالوگ همه‌یِ عکس‌هایِ همان پرداخت را با یک پیش‌نمایشِ کوچک نشان
-    می‌دهد -- هرکدام با دکمه‌یِ حذفِ خودش، به‌علاوه‌یِ دکمه‌یِ افزودنِ
-    عکسِ تازه."""
+    پیش‌نمایش/حذف/تعویض ندارد» + «امکانِ الصاقِ فایل‌هایِ دیگر مثلِ
+    PDF»): با کلیک رویِ دکمهٔ عکسِ هر ردیف، این دیالوگ همه‌یِ ضمیمه‌هایِ
+    همان پرداخت (عکس یا هر فایلِ دیگری) را نشان می‌دهد -- پیش‌نمایشِ
+    کوچک برایِ عکس‌ها، برچسبِ پسوند برایِ بقیه؛ هرکدام با دکمه‌یِ «بازکردنِ
+    تمام‌صفحه/با برنامهٔ پیش‌فرض» و دکمه‌یِ حذفِ خودش، به‌علاوه‌یِ دکمه‌یِ
+    افزودنِ فایلِ تازه."""
 
     def __init__(self, company_id: int, journal_entry_id: int, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("عکس‌هایِ این پرداخت")
-        self.resize(420, 420)
+        self.setWindowTitle("ضمیمه‌هایِ این پرداخت")
+        self.resize(460, 420)
         self._company_id = company_id
         self._journal_entry_id = journal_entry_id
 
@@ -259,8 +265,8 @@ class _PhotoManagerDialog(QDialog):
         scroll.setWidget(self._list_widget)
         layout.addWidget(scroll, stretch=1)
 
-        add_button = QPushButton("➕ افزودنِ عکسِ تازه")
-        add_button.clicked.connect(self._add_photo)
+        add_button = QPushButton("➕ افزودنِ فایلِ تازه (عکس، PDF، ...)")
+        add_button.clicked.connect(self._add_file)
         layout.addWidget(add_button)
 
         close_row = QHBoxLayout()
@@ -277,56 +283,78 @@ class _PhotoManagerDialog(QDialog):
             item = self._list_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        photos = order_tracking_service.list_photos(self._company_id, self._journal_entry_id)
-        for photo in photos:
+        files = order_tracking_service.list_files(self._company_id, self._journal_entry_id)
+        for attachment in files:
             row = QWidget()
             row_layout = QHBoxLayout(row)
             thumb_label = QLabel()
-            thumb_label.setFixedSize(96, 96)
-            pixmap = QPixmap(photo.storage_key)
+            thumb_label.setFixedSize(64, 64)
+            thumb_label.setAlignment(Qt.AlignCenter)
+            is_image = attachment.file_extension.lower() in _IMAGE_EXTENSIONS
+            pixmap = QPixmap(attachment.storage_key) if is_image else QPixmap()
             if not pixmap.isNull():
-                thumb_label.setPixmap(pixmap.scaled(96, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                thumb_label.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             else:
-                thumb_label.setText("—")
+                thumb_label.setText(f"📄\n{attachment.file_extension.upper()}")
             row_layout.addWidget(thumb_label)
-            name_label = QLabel(photo.file_name)
+            name_label = QLabel(attachment.file_name)
             row_layout.addWidget(name_label, stretch=1)
+            # طبقِ درخواستِ صریح («تمامِ صفحه عکس را باز کرد»): بازکردن با
+            # برنامهٔ پیش‌فرضِ سیستم‌عامل -- برایِ عکس یعنی نمایشگرِ عکسِ
+            # سیستم (تمام‌صفحه‌پذیر)، برایِ PDF یعنی همان برنامهٔ PDFِ کاربر.
+            open_button = QPushButton("🔍")
+            open_button.setObjectName("iconButton")
+            open_button.setFixedWidth(36)
+            open_button.setToolTip("بازکردنِ این فایل (تمام‌صفحه، با برنامهٔ پیش‌فرضِ سیستم)")
+            open_button.clicked.connect(
+                lambda _checked=False, storage_key=attachment.storage_key: self._open_file(storage_key)
+            )
+            row_layout.addWidget(open_button)
             delete_button = QPushButton("🗑")
             delete_button.setObjectName("dangerIconButton")
             delete_button.setFixedWidth(36)
-            delete_button.setToolTip("حذفِ این عکس")
+            delete_button.setToolTip("حذفِ این ضمیمه")
             delete_button.clicked.connect(
-                lambda _checked=False, attachment_id=photo.attachment_id: self._delete_photo(attachment_id)
+                lambda _checked=False, attachment_id=attachment.attachment_id: self._delete_file(attachment_id)
             )
             row_layout.addWidget(delete_button)
             self._list_layout.insertWidget(self._list_layout.count() - 1, row)
-        if not photos:
-            empty_label = QLabel("هنوز عکسی برایِ این پرداخت الصاق نشده.")
+        if not files:
+            empty_label = QLabel("هنوز فایلی برایِ این پرداخت الصاق نشده.")
             self._list_layout.insertWidget(0, empty_label)
 
-    def _add_photo(self) -> None:
+    def _open_file(self, storage_key: str) -> None:
+        if not Path(storage_key).is_file():
+            QMessageBox.warning(self, "خطا", "فایل در مسیرِ ذخیره‌شده یافت نشد.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(storage_key))
+
+    def _add_file(self) -> None:
         user = app_session.current_user
         if user is None:
             return
-        file_path, _ = QFileDialog.getOpenFileName(self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp)")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "انتخابِ فایل", "",
+            "همه‌یِ فایل‌ها (*.*);;تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;PDF (*.pdf)",
+        )
         if not file_path:
             return
         try:
-            order_tracking_service.attach_photo(self._company_id, self._journal_entry_id, user.user_id, file_path)
+            order_tracking_service.attach_file(self._company_id, self._journal_entry_id, user.user_id, file_path)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self._refresh()
 
-    def _delete_photo(self, attachment_id: int) -> None:
+    def _delete_file(self, attachment_id: int) -> None:
         user = app_session.current_user
         if user is None:
             return
-        confirm = QMessageBox.question(self, "حذفِ عکس", "این عکس حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "حذفِ ضمیمه", "این فایل حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:
-            order_tracking_service.delete_photo(attachment_id, self._company_id, user.user_id)
+            order_tracking_service.delete_file(attachment_id, self._company_id, user.user_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
@@ -358,6 +386,22 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         save_dimension_button.clicked.connect(self._save_dimension_setting)
         settings_row.addWidget(save_dimension_button)
         self.body_layout.addLayout(settings_row)
+
+        # طبقِ درخواستِ صریح («امکانِ دیدنِ عکس برایِ همه‌یِ کاربرانِ
+        # شبکه»): اگر خالی بماند، ضمیمه‌ها فقط در پوشهٔ محلیِ همین
+        # کامپیوتر ذخیره می‌شوند (مثلِ قبل)؛ با واردکردنِ یک مسیرِ
+        # شبکه‌ایِ اشتراکی (که رویِ همه‌یِ کامپیوترهایِ کاربران به یک
+        # پوشه اشاره کند)، همه می‌توانند همان فایل‌ها را ببینند.
+        attachments_dir_row = QHBoxLayout()
+        attachments_dir_row.addWidget(QLabel("پوشهٔ اشتراکیِ ضمیمه‌ها (شبکه):"))
+        self.attachments_dir_field = QLineEdit()
+        self.attachments_dir_field.setPlaceholderText(r"مثلاً \\SERVER\Share\PeechaAttachments -- خالی یعنی پوشهٔ محلی")
+        attachments_dir_row.addWidget(self.attachments_dir_field, stretch=1)
+        save_attachments_dir_button = QPushButton("ذخیره")
+        save_attachments_dir_button.setToolTip("این مسیر باید رویِ همه‌یِ کامپیوترهایِ کاربران به یک پوشهٔ مشترک اشاره کند")
+        save_attachments_dir_button.clicked.connect(self._save_attachments_dir_setting)
+        attachments_dir_row.addWidget(save_attachments_dir_button)
+        self.body_layout.addLayout(attachments_dir_row)
 
         # انتخابِ سفارش
         order_row = QHBoxLayout()
@@ -458,6 +502,8 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
                 self.dimension_combo.setCurrentIndex(idx)
         self.dimension_combo.blockSignals(False)
 
+        self.attachments_dir_field.setText(order_tracking_service.get_attachments_dir_setting(company_id) or "")
+
         self.order_combo.blockSignals(True)
         self.order_combo.clear()
         for order in order_tracking_service.list_orders(company_id):
@@ -488,6 +534,19 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         # گروه در کمبویِ «سفارشِ تازه» نمایش داده شوند -- بدونِ نیازِ کاربر
         # به خروج/ورودِ دوباره به این صفحه.
         self.refresh()
+
+    def _save_attachments_dir_setting(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            order_tracking_service.set_attachments_dir_setting(company_id, self.attachments_dir_field.text())
+        except ValueError as exc:
+            self.status_label.setObjectName("statusError")
+            self.status_label.setText(str(exc))
+            return
+        self.status_label.setObjectName("statusOk")
+        self.status_label.setText("پوشهٔ اشتراکیِ ضمیمه‌ها ذخیره شد.")
 
     def _add_order(self) -> None:
         company_id = self._company_id()
@@ -551,7 +610,10 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         for row_index, payment in enumerate(payments):
             fc_amount = payment.debit_fc if payment.debit_fc else payment.credit_fc
             values = [
-                numerals.to_persian_digits(payment.document_date.isoformat()), payment.description,
+                # طبقِ گزارشِ صریح («تاریخ شمسی نیست»): isoformat() تاریخِ
+                # میلادی را فقط با ارقامِ فارسی نشان می‌داد -- تبدیلِ
+                # واقعی به شمسی با numerals.format_jalali_date لازم بود.
+                numerals.format_jalali_date(payment.document_date), payment.description,
                 numerals.format_money(payment.debit, self._decimal_places) if payment.debit else "",
                 numerals.format_money(payment.credit, self._decimal_places) if payment.credit else "",
                 "" if payment.is_base_currency else self._currency_iso_by_id.get(payment.currency_id, ""),
@@ -561,25 +623,25 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
             for col_index, value in enumerate(values):
                 self.payments_table.setItem(row_index, col_index, QTableWidgetItem(value))
             # طبقِ باگِ کشف‌شده: اگر فرمِ «مدیریتِ سفارشات» هنوز در
-            # sec.forms ثبت نشده باشد، list_photos خطا می‌دهد -- این خطا
+            # sec.forms ثبت نشده باشد، list_files خطا می‌دهد -- این خطا
             # دیگر نباید کلِ جدول را (از همان ردیفِ اول به بعد) خالی
             # بگذارد، پس این‌جا مجزا محافظت می‌شود.
             try:
-                has_photo = bool(order_tracking_service.list_photos(company_id, payment.journal_entry_id))
+                has_file = bool(order_tracking_service.list_files(company_id, payment.journal_entry_id))
             except ValueError:
-                has_photo = False
+                has_file = False
             # طبقِ گزارشِ صریح («ستونِ عکس هیچ آیکنی نداره»): بدونِ
             # objectName صریح، این دکمه از استایلِ عمومیِ QPushButton
             # (پدینگِ ۹px۱۸px) استفاده می‌کرد که در ستونِ باریکِ جدول
             # عملاً چیزی برایِ گلیف نمی‌گذاشت -- همان استایلِ استانداردِ
             # iconButton این‌جا هم اعمال شد.
-            photo_button = QPushButton("📎" if has_photo else "➕📷")
-            photo_button.setObjectName("iconButton")
-            photo_button.setToolTip("مدیریتِ عکس‌هایِ این پرداخت (افزودن/پیش‌نمایش/حذف)")
-            photo_button.clicked.connect(
-                lambda _checked=False, journal_entry_id=payment.journal_entry_id: self._open_photo_manager(journal_entry_id)
+            file_button = QPushButton("📎" if has_file else "➕📎")
+            file_button.setObjectName("iconButton")
+            file_button.setToolTip("مدیریتِ ضمیمه‌هایِ این پرداخت (افزودن/پیش‌نمایش/حذف — عکس، PDF، ...)")
+            file_button.clicked.connect(
+                lambda _checked=False, journal_entry_id=payment.journal_entry_id: self._open_attachment_manager(journal_entry_id)
             )
-            self.payments_table.setCellWidget(row_index, 7, photo_button)
+            self.payments_table.setCellWidget(row_index, 7, file_button)
 
     def _open_payment_form(self) -> None:
         company_id = self._company_id()
@@ -613,11 +675,11 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
             ),
         )
 
-    def _open_photo_manager(self, journal_entry_id: int) -> None:
+    def _open_attachment_manager(self, journal_entry_id: int) -> None:
         company_id = self._company_id()
         if company_id is None:
             return
-        dialog = _PhotoManagerDialog(company_id, journal_entry_id, self)
+        dialog = _AttachmentManagerDialog(company_id, journal_entry_id, self)
         dialog.exec()
         self._refresh_payments()
 

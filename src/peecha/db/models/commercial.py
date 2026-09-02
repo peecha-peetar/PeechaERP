@@ -1020,6 +1020,10 @@ class OrderTrackingSetting(Base):
 
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
+    # طبقِ درخواستِ صریح («امکانِ دیدنِ عکس برایِ همه‌یِ کاربرانِ شبکه»):
+    # اگر تنظیم شود، ضمیمه‌ها این‌جا (مثلاً یک مسیرِ شبکه‌ایِ اشتراکی)
+    # ذخیره می‌شوند، نه در پوشهٔ محلیِ تنظیماتِ همان کامپیوتر.
+    attachments_dir: Mapped[str | None] = mapped_column(String(500))
 
 
 class OrderTracking(Base):
