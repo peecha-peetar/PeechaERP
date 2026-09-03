@@ -76,6 +76,7 @@ class CommercialPricingScreen(QWidget):
         self._spi_file_kind: str | None = None
         self._spi_raw_grid: list[list[str]] = []
         self._spi_column_roles: dict[int, str] = {}  # col_index -> "CODE" | "PRICE"
+        self._spi_role_combos: list[QComboBox] = []
         self._spi_pending_template = None
         self._matched_rows: list[spi_service.MatchedPriceRow] = []
         self._spi_visible_row_indices: list[int] = []
@@ -503,13 +504,13 @@ class CommercialPricingScreen(QWidget):
         page = QWidget()
         outer = QVBoxLayout(page)
         outer.setSpacing(8)
-        intro_label = QLabel("فایل را انتخاب کنید، رویِ سرستون‌هایِ پیش‌نمایش کلیک کنید، سپس تطبیق بزنید.")
+        intro_label = QLabel("فایل را انتخاب کنید، زیرِ هر ستون فیلدِ موردنظر را انتخاب کنید، سپس تطبیق بزنید.")
         intro_label.setObjectName("statusHint")
         intro_label.setToolTip(
-            "فایلِ اکسل، PDF یا عکسِ لیستِ قیمتِ تامین‌کننده را انتخاب کنید. سپس رویِ سرستون‌هایِ "
-            "پیش‌نمایشِ زیر کلیک کنید تا ستونِ «کد/نامِ کالا» و ستونِ «قیمت» مشخص شود (تشخیص ترکیبی "
-            "است: هم کد و هم نام امتحان می‌شود). عکس/PDFِ اسکن‌شده با OCR خوانده می‌شود -- چون OCR "
-            "همیشه ۱۰۰٪ دقیق نیست، پیش از ثبت حتماً پیش‌نمایشِ نتیجه را بازبینی کنید."
+            "فایلِ اکسل، PDF یا عکسِ لیستِ قیمتِ تامین‌کننده را انتخاب کنید. سپس زیرِ هر ستونِ پیش‌نمایش، "
+            "از بازِ روبه‌رویش «کد/نامِ کالا» یا «قیمت» را انتخاب کنید (تشخیص ترکیبی است: هم کد و هم نام "
+            "امتحان می‌شود). عکس/PDFِ اسکن‌شده با OCR خوانده می‌شود -- چون OCR همیشه ۱۰۰٪ دقیق نیست، "
+            "پیش از ثبت حتماً پیش‌نمایشِ نتیجه را بازبینی کنید."
         )
         outer.addWidget(intro_label)
 
@@ -558,19 +559,17 @@ class CommercialPricingScreen(QWidget):
         ocr_row.addWidget(self.spi_ocr_status_label, stretch=1)
         outer.addLayout(ocr_row)
 
-        raw_grid_hint = QLabel("پیش‌نمایشِ فایل — رویِ سرستون‌ها و شمارهٔ ردیف کلیک کنید:")
+        raw_grid_hint = QLabel("پیش‌نمایشِ فایل — زیرِ هر ستون، فیلدِ موردنظر را انتخاب کنید:")
         raw_grid_hint.setObjectName("statusHint")
         raw_grid_hint.setToolTip(
-            "رویِ سرستون کلیک کنید: بار اول = ستونِ «کد/نام»، بار دوم = ستونِ «قیمت»، بار سوم = بی‌اثر. "
-            "رویِ شمارهٔ ردیف (سمتِ راست) کلیک کنید تا آخرین سطرِ سربرگ مشخص شود."
+            "برایِ هر ستون، از بازِ روبه‌رویش «کد/نامِ کالا» یا «قیمت» را انتخاب کنید (یا «—» یعنی این "
+            "ستون استفاده نمی‌شود). رویِ شمارهٔ ردیف (سمتِ راست) کلیک کنید تا آخرین سطرِ سربرگ مشخص شود."
         )
         outer.addWidget(raw_grid_hint)
         self.spi_raw_grid_table = QTableWidget(0, 0)
         self.spi_raw_grid_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.spi_raw_grid_table.setMinimumHeight(260)
         self.spi_raw_grid_table.setMaximumHeight(360)
-        self.spi_raw_grid_table.horizontalHeader().setSectionsClickable(True)
-        self.spi_raw_grid_table.horizontalHeader().sectionClicked.connect(self._spi_on_raw_column_clicked)
         self.spi_raw_grid_table.verticalHeader().setSectionsClickable(True)
         self.spi_raw_grid_table.verticalHeader().sectionClicked.connect(self._spi_on_raw_row_clicked)
         outer.addWidget(self.spi_raw_grid_table, stretch=1)
@@ -821,30 +820,47 @@ class CommercialPricingScreen(QWidget):
         self._spi_apply_pending_template_roles()
 
     def _spi_set_raw_grid_table(self, grid: list[list[str]]) -> None:
+        """طبقِ درخواستِ صریح («ستون‌ها را نمایش بده و زیرِ هر ستون فیلد
+        را انتخاب کنیم»): سطرِ اولِ جدول همیشه یک ردیفِ ثابتِ انتخابگر
+        است (یک کمبو زیرِ هر ستون: «—» / «کد/نامِ کالا» / «قیمت»)؛
+        دادهٔ واقعیِ فایل از سطرِ دوم به بعد نمایش داده می‌شود."""
         preview_rows = grid[:_RAW_GRID_PREVIEW_ROWS]
         max_cols = max((len(r) for r in preview_rows), default=0)
-        self.spi_raw_grid_table.setRowCount(len(preview_rows))
+        self.spi_raw_grid_table.setRowCount(len(preview_rows) + 1)
         self.spi_raw_grid_table.setColumnCount(max_cols)
+        self.spi_raw_grid_table.setVerticalHeaderItem(0, QTableWidgetItem("فیلد"))
+
+        self._spi_role_combos = []
+        for col_index in range(max_cols):
+            combo = QComboBox()
+            combo.addItem("—", None)
+            combo.addItem("کد/نامِ کالا", "CODE")
+            combo.addItem("قیمت", "PRICE")
+            combo.currentIndexChanged.connect(lambda _i, c=col_index: self._spi_on_role_combo_changed(c))
+            self.spi_raw_grid_table.setCellWidget(0, col_index, combo)
+            self._spi_role_combos.append(combo)
+        self.spi_raw_grid_table.resizeRowToContents(0)
+
         for row_index, row in enumerate(preview_rows):
             for col_index in range(max_cols):
                 text = row[col_index] if col_index < len(row) else ""
-                self.spi_raw_grid_table.setItem(row_index, col_index, QTableWidgetItem(text))
+                self.spi_raw_grid_table.setItem(row_index + 1, col_index, QTableWidgetItem(text))
         self._spi_refresh_raw_grid_headers()
 
     def _spi_refresh_raw_grid_headers(self) -> None:
         header_row_count = self.spi_header_row_spin.value()
         max_cols = self.spi_raw_grid_table.columnCount()
-        labels = []
-        for col_index in range(max_cols):
-            role = self._spi_column_roles.get(col_index)
-            base = numerals.to_persian_digits(str(col_index + 1))
-            if role == "CODE":
-                labels.append(f"🔎 {base}")
-            elif role == "PRICE":
-                labels.append(f"💰 {base}")
-            else:
-                labels.append(base)
-        self.spi_raw_grid_table.setHorizontalHeaderLabels(labels)
+        self.spi_raw_grid_table.setHorizontalHeaderLabels(
+            [numerals.to_persian_digits(str(c + 1)) for c in range(max_cols)]
+        )
+
+        for col_index in range(min(max_cols, len(self._spi_role_combos))):
+            combo = self._spi_role_combos[col_index]
+            target_index = combo.findData(self._spi_column_roles.get(col_index))
+            if combo.currentIndex() != target_index:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(max(0, target_index))
+                combo.blockSignals(False)
 
         code_tint = QColor(theme.ACCENT)
         code_tint.setAlpha(55)
@@ -853,13 +869,14 @@ class CommercialPricingScreen(QWidget):
         header_tint = QColor(theme.TEXT_DISABLED)
         header_tint.setAlpha(55)
         default_bg = QColor(theme.SURFACE)
-        for row_index in range(self.spi_raw_grid_table.rowCount()):
+        row_count = self.spi_raw_grid_table.rowCount()
+        for table_row in range(1, row_count):  # سطرِ ۰ = ردیفِ انتخابگر، رنگ نمی‌گیرد
             for col_index in range(max_cols):
-                item = self.spi_raw_grid_table.item(row_index, col_index)
+                item = self.spi_raw_grid_table.item(table_row, col_index)
                 if item is None:
                     continue
                 role = self._spi_column_roles.get(col_index)
-                if row_index < header_row_count:
+                if table_row <= header_row_count:
                     item.setBackground(header_tint)
                 elif role == "CODE":
                     item.setBackground(code_tint)
@@ -876,18 +893,12 @@ class CommercialPricingScreen(QWidget):
             f"ستونِ کد/نام: {code_text}   |   ستونِ قیمت: {price_text}"
         )
 
-    def _spi_on_raw_column_clicked(self, col_index: int) -> None:
-        current = self._spi_column_roles.get(col_index)
-        if current is None:
-            new_role = "CODE"
-        elif current == "CODE":
-            new_role = "PRICE"
-        else:
-            new_role = None
+    def _spi_on_role_combo_changed(self, col_index: int) -> None:
+        new_role = self._spi_role_combos[col_index].currentData()
         if new_role is not None:
-            for c, r in list(self._spi_column_roles.items()):
-                if r == new_role:
-                    del self._spi_column_roles[c]
+            for other_col, role in list(self._spi_column_roles.items()):
+                if role == new_role and other_col != col_index:
+                    self._spi_column_roles.pop(other_col, None)
         if new_role is None:
             self._spi_column_roles.pop(col_index, None)
         else:
@@ -895,7 +906,9 @@ class CommercialPricingScreen(QWidget):
         self._spi_refresh_raw_grid_headers()
 
     def _spi_on_raw_row_clicked(self, row_index: int) -> None:
-        self.spi_header_row_spin.setValue(row_index + 1)
+        if row_index == 0:
+            return  # ردیفِ انتخابگرِ فیلد، نه دادهٔ واقعی
+        self.spi_header_row_spin.setValue(row_index)
 
     def _spi_match_file(self) -> None:
         company_id = self._company_id()
