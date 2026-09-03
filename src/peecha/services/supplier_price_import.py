@@ -171,6 +171,40 @@ def delete_item_supplier_code(item_supplier_code_id: int) -> None:
         session.commit()
 
 
+def _lookup_item_by_typed_value(
+    session, company_id: int, raw_text: str, value_type: str, supplier_detail_account_id: int | None,
+) -> int | None:
+    """جست‌وجویِ یک مقدار (کد یا نام) از یک نوعِ مشخص -- اول نزدِ همین
+    تامین‌کننده، اگر پیدا نشد، نزدِ مقدارِ عمومی (بدونِ تامین‌کننده)."""
+    normalized = _normalize_by_type(raw_text, value_type)
+    if not normalized:
+        return None
+    if supplier_detail_account_id is not None:
+        row = session.scalar(
+            select(ItemSupplierCode)
+            .join(Item, Item.item_id == ItemSupplierCode.item_id)
+            .where(
+                Item.company_id == company_id,
+                ItemSupplierCode.supplier_detail_account_id == supplier_detail_account_id,
+                ItemSupplierCode.value_type == value_type,
+                ItemSupplierCode.normalized_code == normalized,
+            )
+        )
+        if row is not None:
+            return row.item_id
+    row = session.scalar(
+        select(ItemSupplierCode)
+        .join(Item, Item.item_id == ItemSupplierCode.item_id)
+        .where(
+            Item.company_id == company_id,
+            ItemSupplierCode.supplier_detail_account_id.is_(None),
+            ItemSupplierCode.value_type == value_type,
+            ItemSupplierCode.normalized_code == normalized,
+        )
+    )
+    return row.item_id if row is not None else None
+
+
 def find_item_by_supplier_reference(company_id: int, raw_text: str, supplier_detail_account_id: int | None) -> int | None:
     """تشخیصِ ترکیبی: اول کد را امتحان می‌کند (اول نزدِ همین تامین‌کننده،
     بعد کدِ عمومی)؛ اگر چیزی پیدا نشد، همان متن را به‌عنوانِ «نام» امتحان
@@ -180,34 +214,26 @@ def find_item_by_supplier_reference(company_id: int, raw_text: str, supplier_det
         return None
     with new_session() as session:
         for value_type in ("CODE", "NAME"):
-            normalized = _normalize_by_type(raw_text, value_type)
-            if not normalized:
-                continue
-            if supplier_detail_account_id is not None:
-                row = session.scalar(
-                    select(ItemSupplierCode)
-                    .join(Item, Item.item_id == ItemSupplierCode.item_id)
-                    .where(
-                        Item.company_id == company_id,
-                        ItemSupplierCode.supplier_detail_account_id == supplier_detail_account_id,
-                        ItemSupplierCode.value_type == value_type,
-                        ItemSupplierCode.normalized_code == normalized,
-                    )
-                )
-                if row is not None:
-                    return row.item_id
-            row = session.scalar(
-                select(ItemSupplierCode)
-                .join(Item, Item.item_id == ItemSupplierCode.item_id)
-                .where(
-                    Item.company_id == company_id,
-                    ItemSupplierCode.supplier_detail_account_id.is_(None),
-                    ItemSupplierCode.value_type == value_type,
-                    ItemSupplierCode.normalized_code == normalized,
-                )
-            )
-            if row is not None:
-                return row.item_id
+            item_id = _lookup_item_by_typed_value(session, company_id, raw_text, value_type, supplier_detail_account_id)
+            if item_id is not None:
+                return item_id
+    return None
+
+
+def find_item_by_supplier_code_and_name(
+    company_id: int, raw_code: str, raw_name: str, supplier_detail_account_id: int | None,
+) -> int | None:
+    """وقتی فایل هم ستونِ کدِ کالا و هم ستونِ نامِ کالا را جداگانه دارد
+    (نه یک ستونِ ترکیبی): اول کد امتحان می‌شود، اگر تطبیق نیافت، نام."""
+    with new_session() as session:
+        if raw_code:
+            item_id = _lookup_item_by_typed_value(session, company_id, raw_code, "CODE", supplier_detail_account_id)
+            if item_id is not None:
+                return item_id
+        if raw_name:
+            item_id = _lookup_item_by_typed_value(session, company_id, raw_name, "NAME", supplier_detail_account_id)
+            if item_id is not None:
+                return item_id
     return None
 
 
@@ -218,10 +244,11 @@ def find_item_by_supplier_reference(company_id: int, raw_text: str, supplier_det
 class ImportTemplateRow:
     template_id: int
     supplier_detail_account_id: int
-    code_column_index: int
+    code_column_index: int | None
     price_column_index: int
     header_row_index: int
     sheet_name: str | None
+    name_column_index: int | None = None
 
 
 def get_import_template(company_id: int, supplier_detail_account_id: int) -> ImportTemplateRow | None:
@@ -236,13 +263,13 @@ def get_import_template(company_id: int, supplier_detail_account_id: int) -> Imp
             return None
         return ImportTemplateRow(
             row.template_id, row.supplier_detail_account_id, row.code_column_index, row.price_column_index,
-            row.header_row_index, row.sheet_name,
+            row.header_row_index, row.sheet_name, row.name_column_index,
         )
 
 
 def save_import_template(
-    company_id: int, supplier_detail_account_id: int, code_column_index: int, price_column_index: int,
-    header_row_index: int, sheet_name: str | None = None,
+    company_id: int, supplier_detail_account_id: int, code_column_index: int | None, price_column_index: int,
+    header_row_index: int, sheet_name: str | None = None, name_column_index: int | None = None,
 ) -> None:
     with new_session() as session:
         row = session.scalar(
@@ -258,6 +285,7 @@ def save_import_template(
         row.price_column_index = price_column_index
         row.header_row_index = header_row_index
         row.sheet_name = sheet_name
+        row.name_column_index = name_column_index
         session.commit()
 
 
@@ -310,12 +338,66 @@ _OCR_COLUMN_GAP_RATIO = 1.5
 _OCR_PSM = 6  # «یک بلوکِ یکنواختِ متن» -- برایِ متنِ جدولی/ردیفی به‌مراتب دقیق‌تر از حالتِ خودکارِ پیش‌فرض
 
 
+def _looks_like_grid_line_artifact(text: str, width: int, height: int) -> bool:
+    """در تصاویرِ جدولِ خط‌کشی‌شده، pytesseract گاهی خودِ خطِ عمودیِ جدول
+    را به‌اشتباه یک «کلمه»یِ تک‌کاراکتری (مثلِ | ) تشخیص می‌دهد که هیچ
+    حرف/رقمی ندارد و کادرِ بسیار کشیده (خیلی باریک-و-بلند یا خیلی
+    پهن-و-کوتاه) دارد. اگر چنین نشانه‌ای در محاسبه‌یِ قدِ متوسطِ کلمه‌ها
+    وارد شود، آستانه‌یِ تشخیصِ فاصله‌یِ ستون‌ها به‌شدت منحرف می‌شود و چند
+    ستونِ واقعی در یکی ادغام می‌شوند (دقیقاً همان علتِ گزارش‌شده)."""
+    if any(ch.isalnum() for ch in text):
+        return False
+    if len(text) > 2 or width <= 0 or height <= 0:
+        return False
+    return (height / width) >= 2.5 or (width / height) >= 4.0
+
+
+def _compute_ocr_gap_threshold(words: list[dict]) -> float:
+    """آستانه‌یِ فاصله‌یِ افقیِ لازم برایِ شروعِ ستونِ تازه. روشِ اصلی این
+    است که همه‌یِ فاصله‌هایِ افقیِ بینِ کلمه‌هایِ متوالیِ هم‌ردیف را جمع
+    می‌کند و بزرگ‌ترین «جهش» در توزیعِ مرتب‌شده‌یِ این فاصله‌ها را مرزِ
+    بینِ «فاصله‌یِ داخلِ یک سلول» و «فاصله‌یِ بینِ دو ستون» در نظر
+    می‌گیرد -- این روش مستقیماً همان چیزی را اندازه می‌گیرد که به آن نیاز
+    داریم (فاصله‌یِ افقی)، برخلافِ روشِ قدیمی که بر اساسِ قدِ متوسطِ
+    باکسِ OCR حدس می‌زد و با لمسِ خط‌کشیِ جدول یا نویز به‌آسانی منحرف
+    می‌شد. اگر داده‌یِ کافی برایِ این تشخیص نبود (مثلاً هر ردیف فقط یک
+    کلمه دارد، یا همه‌یِ فاصله‌ها یکدست‌اند)، به روشِ پشتیبانِ مبتنی‌بر
+    قدِ متوسطِ کلمه‌ها برمی‌گردد."""
+    rows: dict[tuple, list[dict]] = {}
+    for w in words:
+        rows.setdefault(w["line_key"], []).append(w)
+    gaps: list[float] = []
+    for row_words in rows.values():
+        row_words = sorted(row_words, key=lambda w: w["left"])
+        for a, b in zip(row_words, row_words[1:]):
+            gap = b["left"] - (a["left"] + a["width"])
+            if gap > 0:
+                gaps.append(gap)
+    median_height = statistics.median(w["height"] for w in words)
+    fallback = max(_OCR_MIN_COLUMN_GAP_PX, median_height * _OCR_COLUMN_GAP_RATIO)
+    if len(gaps) < 2:
+        return fallback
+    sorted_gaps = sorted(gaps)
+    best_idx, best_jump = 0, -1.0
+    for i in range(len(sorted_gaps) - 1):
+        jump = sorted_gaps[i + 1] - sorted_gaps[i]
+        if jump > best_jump:
+            best_jump = jump
+            best_idx = i
+    if best_jump < _OCR_MIN_COLUMN_GAP_PX:
+        # یعنی فاصله‌ها یکدست‌اند (بدونِ مرزِ روشنی بینِ داخلِ‌سلول و
+        # بینِ‌ستون) -- به روشِ پشتیبان برمی‌گردیم تا اشتباهاً هر کلمه
+        # را یک ستونِ جدا نکنیم.
+        return fallback
+    threshold = (sorted_gaps[best_idx] + sorted_gaps[best_idx + 1]) / 2
+    return max(threshold, _OCR_MIN_COLUMN_GAP_PX)
+
+
 def _extract_grid_from_ocr_image(image, lang: str) -> list[list[str]]:
     """معادلِ _extract_grid_from_words ولی رویِ خروجیِ OCR: کلمه‌هایِ
     هم‌خط (بر اساسِ block/paragraph/line) را کنارِ هم می‌گذارد و هرجا
-    فاصله‌یِ افقی از یک آستانه (نسبت به قدِ متوسطِ کلمه‌ها -- نه یک عددِ
-    ثابتِ پیکسلی، چون وضوحِ تصویر متغیر است) بیشتر شود، ستونِ تازه شروع
-    می‌کند."""
+    فاصله‌یِ افقی از یک آستانه (بر اساسِ تحلیلِ توزیعِ فاصله‌ها --
+    _compute_ocr_gap_threshold) بیشتر شود، ستونِ تازه شروع می‌کند."""
     import pytesseract
 
     data = pytesseract.image_to_data(image, lang=lang, config=f"--psm {_OCR_PSM}", output_type=pytesseract.Output.DICT)
@@ -330,14 +412,16 @@ def _extract_grid_from_ocr_image(image, lang: str) -> list[list[str]]:
             conf = -1.0
         if conf < 0:
             continue
+        width, height = data["width"][i], data["height"][i]
+        if _looks_like_grid_line_artifact(text, width, height):
+            continue
         words.append({
-            "text": text, "left": data["left"][i], "width": data["width"][i], "height": data["height"][i],
+            "text": text, "left": data["left"][i], "width": width, "height": height,
             "line_key": (data["block_num"][i], data["par_num"][i], data["line_num"][i]),
         })
     if not words:
         return []
-    median_height = statistics.median(w["height"] for w in words)
-    gap_threshold = max(_OCR_MIN_COLUMN_GAP_PX, median_height * _OCR_COLUMN_GAP_RATIO)
+    gap_threshold = _compute_ocr_gap_threshold(words)
     rows: dict[tuple, list[dict]] = {}
     for w in words:
         rows.setdefault(w["line_key"], []).append(w)
@@ -459,30 +543,44 @@ class MatchedPriceRow:
     supplier_price: decimal.Decimal | None
     item_id: int | None
     item_label: str
+    raw_name: str = ""
 
 
 def match_grid_rows(
-    company_id: int, grid: list[list[str]], code_column: int, price_column: int, header_row_index: int,
-    supplier_detail_account_id: int | None,
+    company_id: int, grid: list[list[str]], code_column: int | None, price_column: int, header_row_index: int,
+    supplier_detail_account_id: int | None, name_column: int | None = None,
 ) -> list[MatchedPriceRow]:
+    """کدِ ستون و/یا نامِ ستون -- لااقل یکی از این دو باید مشخص شود. اگر
+    هردو مشخص باشند (فایل هم کد و هم نامِ کالا را جداگانه دارد)، اول
+    تلاشِ تطبیق بر اساسِ کد و اگر نیافت بر اساسِ نام انجام می‌شود."""
     from peecha.services import inventory_catalog as catalog_service
+
+    if code_column is None and name_column is None:
+        raise ValueError("لااقل یکی از ستونِ کدِ کالا یا نامِ کالا باید مشخص شود.")
 
     items_by_id = {i.item_id: i for i in catalog_service.list_items(company_id)}
     results: list[MatchedPriceRow] = []
     for row_no, row in enumerate(grid):
         if row_no <= header_row_index:
             continue
-        if code_column >= len(row) or price_column >= len(row):
+        if price_column >= len(row):
             continue
-        raw_code = (row[code_column] or "").strip()
+        raw_code = (row[code_column] or "").strip() if code_column is not None and code_column < len(row) else ""
+        raw_name = (row[name_column] or "").strip() if name_column is not None and name_column < len(row) else ""
         raw_price_text = (row[price_column] or "").strip()
-        if not raw_code and not raw_price_text:
+        if not raw_code and not raw_name and not raw_price_text:
             continue
         price = parse_price(raw_price_text)
-        item_id = find_item_by_supplier_reference(company_id, raw_code, supplier_detail_account_id) if raw_code else None
+        if code_column is not None and name_column is not None:
+            item_id = find_item_by_supplier_code_and_name(company_id, raw_code, raw_name, supplier_detail_account_id)
+        else:
+            raw_reference = raw_code or raw_name
+            item_id = find_item_by_supplier_reference(company_id, raw_reference, supplier_detail_account_id) if raw_reference else None
         item = items_by_id.get(item_id) if item_id is not None else None
         item_label = f"{item.code} — {item.name or ''}" if item else ""
-        results.append(MatchedPriceRow(row_no=row_no, raw_code=raw_code, supplier_price=price, item_id=item_id, item_label=item_label))
+        results.append(MatchedPriceRow(
+            row_no=row_no, raw_code=raw_code, supplier_price=price, item_id=item_id, item_label=item_label, raw_name=raw_name,
+        ))
     return results
 
 

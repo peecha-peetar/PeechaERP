@@ -54,7 +54,7 @@ from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_comb
 from peecha.ui.widgets import JalaliDateEdit, wrap_scrollable
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "AMOUNT": "مبلغِ ثابت", "TIERED": "پلکانی"}
-_PREVIEW_FIXED_COLUMNS = ["ردیف", "کدِ تامین‌کننده", "کالایِ شناسایی‌شده", "قیمتِ تامین‌کننده"]
+_PREVIEW_FIXED_COLUMNS = ["ردیف", "کدِ تامین‌کننده", "نامِ تامین‌کننده", "کالایِ شناسایی‌شده", "قیمتِ تامین‌کننده"]
 _HISTORY_SOURCE_LABELS = {"MANUAL": "دستی", "SUPPLIER_IMPORT": "وارداتِ قیمتِ تامین‌کننده", "REVERT": "بازگشت"}
 _RAW_GRID_PREVIEW_ROWS = 30
 
@@ -75,7 +75,7 @@ class CommercialPricingScreen(QWidget):
         self._spi_file_path: str | None = None
         self._spi_file_kind: str | None = None
         self._spi_raw_grid: list[list[str]] = []
-        self._spi_column_roles: dict[int, str] = {}  # col_index -> "CODE" | "PRICE"
+        self._spi_column_roles: dict[int, str] = {}  # col_index -> "CODE" | "NAME" | "PRICE"
         self._spi_role_combos: list[QComboBox] = []
         self._spi_pending_template = None
         self._matched_rows: list[spi_service.MatchedPriceRow] = []
@@ -695,8 +695,10 @@ class CommercialPricingScreen(QWidget):
             return
         max_cols = max((len(r) for r in self._spi_raw_grid), default=0)
         roles: dict[int, str] = {}
-        if 0 <= template.code_column_index < max_cols:
+        if template.code_column_index is not None and 0 <= template.code_column_index < max_cols:
             roles[template.code_column_index] = "CODE"
+        if template.name_column_index is not None and 0 <= template.name_column_index < max_cols:
+            roles[template.name_column_index] = "NAME"
         if 0 <= template.price_column_index < max_cols:
             roles[template.price_column_index] = "PRICE"
         self._spi_column_roles = roles
@@ -815,7 +817,9 @@ class CommercialPricingScreen(QWidget):
             )
             return
         self.spi_status_label.setText(
-            f"{numerals.to_persian_digits(str(len(grid)))} سطر از فایل خوانده شد. رویِ سرستون‌ها کلیک کنید تا ستونِ کد/نام و قیمت مشخص شود."
+            f"{numerals.to_persian_digits(str(len(grid)))} سطر از فایل خوانده شد و "
+            f"{numerals.to_persian_digits(str(max((len(r) for r in grid), default=0)))} ستون شناسایی شد. "
+            "با انتخابگرِ زیرِ هر ستون مشخص کنید کدامین ستون کدِ کالا، کدامین نامِ کالا و کدامین قیمت است."
         )
         self._spi_apply_pending_template_roles()
 
@@ -834,7 +838,8 @@ class CommercialPricingScreen(QWidget):
         for col_index in range(max_cols):
             combo = QComboBox()
             combo.addItem("—", None)
-            combo.addItem("کد/نامِ کالا", "CODE")
+            combo.addItem("کدِ کالا", "CODE")
+            combo.addItem("نامِ کالا", "NAME")
             combo.addItem("قیمت", "PRICE")
             combo.currentIndexChanged.connect(lambda _i, c=col_index: self._spi_on_role_combo_changed(c))
             self.spi_raw_grid_table.setCellWidget(0, col_index, combo)
@@ -864,6 +869,8 @@ class CommercialPricingScreen(QWidget):
 
         code_tint = QColor(theme.ACCENT)
         code_tint.setAlpha(55)
+        name_tint = QColor(theme.INFO)
+        name_tint.setAlpha(55)
         price_tint = QColor(theme.SUCCESS)
         price_tint.setAlpha(55)
         header_tint = QColor(theme.TEXT_DISABLED)
@@ -880,17 +887,21 @@ class CommercialPricingScreen(QWidget):
                     item.setBackground(header_tint)
                 elif role == "CODE":
                     item.setBackground(code_tint)
+                elif role == "NAME":
+                    item.setBackground(name_tint)
                 elif role == "PRICE":
                     item.setBackground(price_tint)
                 else:
                     item.setBackground(default_bg)
 
         code_col = next((c for c, r in self._spi_column_roles.items() if r == "CODE"), None)
+        name_col = next((c for c, r in self._spi_column_roles.items() if r == "NAME"), None)
         price_col = next((c for c, r in self._spi_column_roles.items() if r == "PRICE"), None)
         code_text = numerals.to_persian_digits(str(code_col + 1)) if code_col is not None else "—"
+        name_text = numerals.to_persian_digits(str(name_col + 1)) if name_col is not None else "—"
         price_text = numerals.to_persian_digits(str(price_col + 1)) if price_col is not None else "—"
         self.spi_mapping_hint_label.setText(
-            f"ستونِ کد/نام: {code_text}   |   ستونِ قیمت: {price_text}"
+            f"ستونِ کدِ کالا: {code_text}   |   ستونِ نامِ کالا: {name_text}   |   ستونِ قیمت: {price_text}"
         )
 
     def _spi_on_role_combo_changed(self, col_index: int) -> None:
@@ -920,18 +931,23 @@ class CommercialPricingScreen(QWidget):
             self.spi_status_label.setText("ابتدا فایل را انتخاب کنید.")
             return
         code_column = next((c for c, r in self._spi_column_roles.items() if r == "CODE"), None)
+        name_column = next((c for c, r in self._spi_column_roles.items() if r == "NAME"), None)
         price_column = next((c for c, r in self._spi_column_roles.items() if r == "PRICE"), None)
-        if code_column is None or price_column is None:
-            self.spi_status_label.setText("ابتدا با کلیک رویِ سرستون‌ها، ستونِ کد/نام و ستونِ قیمت را مشخص کنید.")
+        if price_column is None or (code_column is None and name_column is None):
+            self.spi_status_label.setText(
+                "ابتدا با انتخابگرِ زیرِ ستون‌ها، ستونِ قیمت و لااقل یکی از ستونِ کدِ کالا یا نامِ کالا را مشخص کنید."
+            )
             return
         header_row_index = self.spi_header_row_spin.value() - 1
         self._matched_rows = spi_service.match_grid_rows(
-            company_id, self._spi_raw_grid, code_column, price_column, header_row_index, supplier_id
+            company_id, self._spi_raw_grid, code_column, price_column, header_row_index, supplier_id,
+            name_column=name_column,
         )
         if self.spi_save_template_checkbox.isChecked():
             spi_service.save_import_template(
                 company_id, supplier_id, code_column, price_column, header_row_index,
                 sheet_name=self.spi_sheet_combo.currentText() if self.spi_sheet_combo.isVisible() else None,
+                name_column_index=name_column,
             )
         matched_count = sum(1 for r in self._matched_rows if r.item_id is not None)
         used_ocr = self._spi_file_kind == "image" or (self._spi_file_kind == "pdf" and self.spi_ocr_checkbox.isChecked())
@@ -997,6 +1013,8 @@ class CommercialPricingScreen(QWidget):
             col += 1
             self.spi_preview_table.setItem(display_row, col, QTableWidgetItem(r.raw_code))
             col += 1
+            self.spi_preview_table.setItem(display_row, col, QTableWidgetItem(r.raw_name))
+            col += 1
             item_cell = QTableWidgetItem(r.item_label or "— تطبیق‌نیافته —")
             if r.item_id is None:
                 item_cell.setForeground(QColor(theme.DANGER))
@@ -1045,18 +1063,22 @@ class CommercialPricingScreen(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle("اتصالِ کد/نامِ تامین‌کننده به کالا")
         layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel(f"مقدارِ خوانده‌شده از فایل: {row.raw_code}"))
+        if row.raw_code:
+            layout.addWidget(QLabel(f"کدِ خوانده‌شده از فایل: {row.raw_code}"))
+        if row.raw_name:
+            layout.addWidget(QLabel(f"نامِ خوانده‌شده از فایل: {row.raw_name}"))
         item_combo = _make_searchable_combo(
             [(it.item_id, f"{it.code} — {it.name or ''}") for it in self._items]
         )
         layout.addWidget(item_combo)
-        value_type_combo = QComboBox()
-        value_type_combo.addItem("این کد است", "CODE")
-        value_type_combo.addItem("این نامِ کالاست", "NAME")
-        layout.addWidget(value_type_combo)
-        remember_checkbox = QCheckBox("ذخیره برایِ دفعاتِ بعد (نزدِ همین تامین‌کننده)")
-        remember_checkbox.setChecked(True)
-        layout.addWidget(remember_checkbox)
+        remember_code_checkbox = QCheckBox("این کد برایِ دفعاتِ بعد (نزدِ همین تامین‌کننده) ذخیره شود")
+        remember_code_checkbox.setChecked(True)
+        remember_code_checkbox.setVisible(bool(row.raw_code))
+        layout.addWidget(remember_code_checkbox)
+        remember_name_checkbox = QCheckBox("این نام برایِ دفعاتِ بعد (نزدِ همین تامین‌کننده) ذخیره شود")
+        remember_name_checkbox.setChecked(True)
+        remember_name_checkbox.setVisible(bool(row.raw_name))
+        layout.addWidget(remember_name_checkbox)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
@@ -1067,9 +1089,14 @@ class CommercialPricingScreen(QWidget):
         item_id = item_combo.currentData()
         if item_id is None:
             return
-        if remember_checkbox.isChecked() and row.raw_code:
+        if remember_code_checkbox.isChecked() and row.raw_code:
             try:
-                spi_service.add_item_supplier_code(item_id, row.raw_code, supplier_id, value_type_combo.currentData())
+                spi_service.add_item_supplier_code(item_id, row.raw_code, supplier_id, "CODE")
+            except ValueError:
+                pass  # مقدار از قبل برایِ همین کالا/تامین‌کننده ثبت شده — مشکلی نیست
+        if remember_name_checkbox.isChecked() and row.raw_name:
+            try:
+                spi_service.add_item_supplier_code(item_id, row.raw_name, supplier_id, "NAME")
             except ValueError:
                 pass  # مقدار از قبل برایِ همین کالا/تامین‌کننده ثبت شده — مشکلی نیست
         item = next((it for it in self._items if it.item_id == item_id), None)

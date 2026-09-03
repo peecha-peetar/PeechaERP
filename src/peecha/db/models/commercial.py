@@ -122,10 +122,11 @@ class SupplierPriceImportTemplate(Base):
     template_id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
     supplier_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
-    code_column_index: Mapped[int] = mapped_column(SmallInteger)
+    code_column_index: Mapped[int | None] = mapped_column(SmallInteger)
     price_column_index: Mapped[int] = mapped_column(SmallInteger)
     header_row_index: Mapped[int] = mapped_column(SmallInteger, default=0)
     sheet_name: Mapped[str | None] = mapped_column(String(100))
+    name_column_index: Mapped[int | None] = mapped_column(SmallInteger)
 
 
 class DiscountRule(Base):
