@@ -327,6 +327,49 @@ def top_counterparties(
 
 
 @dataclass
+class SmartAlert:
+    severity: str  # "danger" | "warning"
+    title: str
+    nav_code: str
+
+
+def list_smart_alerts(company_id: int | None) -> list[SmartAlert]:
+    """طبقِ ادامهٔ فهرستِ درخواستی («هشدارهایِ هوشمندِ فراگیر»): بنرِ
+    قبلیِ تبِ «کلی» فقط موعدِ تسویه را پوشش می‌داد (و همچنان مستقل و
+    دست‌نخورده باقی می‌ماند)؛ این تابع دقیقاً همان اصل را به دو منبعِ
+    هشدارِ ازپیش‌ساخته‌شده‌یِ دیگر که تا امروز در هیچ‌جایِ داشبورد
+    نمایش داده نمی‌شدند تعمیم می‌دهد -- اقساطِ معوقه و اقداماتِ
+    فوریِ دستیارِ فروش (ریسکِ ریزش/عبور از سقفِ اعتبار) -- هرکدام
+    مستقیماً از سرویسِ ازپیش‌تست‌شده‌یِ خودش، بدونِ محاسبه‌یِ موازیِ
+    تازه و بدونِ تکرارِ هشدارِ تسویه."""
+    alerts: list[SmartAlert] = []
+    if company_id is None:
+        return alerts
+    from peecha.services import installments as installments_service
+    from peecha.services import sales_assistant as sales_assistant_service
+
+    overdue = installments_service.list_installments(company_id, status_codes=["OVERDUE"])
+    if overdue:
+        alerts.append(SmartAlert(
+            severity="danger", title=f"{len(overdue)} قسطِ معوقه نیاز به پیگیری دارد",
+            nav_code="TREASURY_INSTALLMENTS",
+        ))
+
+    actions = sales_assistant_service.get_daily_actions(company_id, limit=5)
+    danger_actions = [a for a in actions if a.severity == "danger"]
+    if danger_actions:
+        alerts.append(SmartAlert(
+            severity="danger",
+            title=f"{len(danger_actions)} مشتری نیازمندِ اقدامِ فوری‌اند -- دستیارِ فروش را ببینید",
+            nav_code="SALES_ASSISTANT",
+        ))
+
+    severity_rank = {"danger": 0, "warning": 1}
+    alerts.sort(key=lambda a: severity_rank.get(a.severity, 2))
+    return alerts
+
+
+@dataclass
 class SalesCommandCenter:
     forecast_next_month: decimal.Decimal | None = None
     action_items_count: int = 0

@@ -184,6 +184,15 @@ class _OverviewTab(QWidget):
         self.alarm_banner.clicked.connect(self._open_due_settlements)
         outer.addWidget(self.alarm_banner)
 
+        # طبقِ ادامهٔ فهرستِ درخواستی («هشدارهایِ هوشمندِ فراگیر»): بنرِ
+        # بالا فقط موعدِ تسویه را پوشش می‌دهد -- این کانتینرِ جداگانه،
+        # هشدارهایِ ازپیش‌ساخته‌شدهٔ ماژول‌هایِ دیگر (اقساطِ معوقه،
+        # اقداماتِ فوریِ دستیارِ فروش) را کنارِ هم نشان می‌دهد.
+        self._smart_alerts_layout = QVBoxLayout()
+        self._smart_alerts_layout.setSpacing(8)
+        outer.addLayout(self._smart_alerts_layout)
+        self._smart_alert_buttons: list[QPushButton] = []
+
         self.card_companies = _KpiCard("شرکت‌ها", "🏢", theme.ACCENT)
         self.card_users = _KpiCard("کاربران", "👥", theme.CHART_TEAL)
         _kpi_row(outer, [self.card_companies, self.card_users])
@@ -196,6 +205,31 @@ class _OverviewTab(QWidget):
         self.card_companies.set_value(dashboard_service.count_companies())
         self.card_users.set_value(dashboard_service.count_users())
         self._refresh_alarm_banner(company_id)
+        self._refresh_smart_alerts(company_id)
+
+    def _refresh_smart_alerts(self, company_id: int | None) -> None:
+        while self._smart_alerts_layout.count():
+            item = self._smart_alerts_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        self._smart_alert_buttons = []
+
+        severity_colors = {"danger": theme.DANGER, "warning": theme.WARNING}
+        for alert in dashboard_service.list_smart_alerts(company_id):
+            button = QPushButton(f"🔔 {alert.title} — برایِ مشاهده کلیک کنید.")
+            button.setCursor(Qt.PointingHandCursor)
+            color = severity_colors.get(alert.severity, theme.WARNING)
+            button.setStyleSheet(
+                f"background-color: {color}; color: white; font-weight: bold; padding: 10px 14px; "
+                "border-radius: 8px; text-align: right; border: none;"
+            )
+            button.clicked.connect(lambda _checked=False, code=alert.nav_code: self._open_nav_code(code))
+            self._smart_alerts_layout.addWidget(button)
+            self._smart_alert_buttons.append(button)
+
+    def _open_nav_code(self, nav_code: str) -> None:
+        if self._main_window is not None:
+            self._main_window.open_screen(nav_code)
 
     def _refresh_alarm_banner(self, company_id: int | None) -> None:
         self._due_sales_count = 0
