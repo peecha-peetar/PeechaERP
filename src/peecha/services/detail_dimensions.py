@@ -234,74 +234,157 @@ def _get_photo_form_id(session) -> int:
     return form.form_id
 
 
-def set_detail_account_photo(company_id: int, detail_account_id: int, user_id: int, file_path: str) -> int:
-    """هر حسابِ تفصیلی فقط یک عکسِ فعال دارد -- عکسِ قبلی (اگر بود) نرم‌
-    حذف می‌شود (مثلِ ضمیمه‌یِ سفارشات، فقط مسیر در دیتابیس، خودِ فایل رویِ
-    دیسک)."""
+# طبقِ درخواستِ صریح («چند تا عکس هم بتونیم بزاریم... فایل الصاق کنیم
+# مثل فایل کاتالوگ»): هر حسابِ تفصیلی می‌تواند چند فایل داشته باشد؛
+# پسوندهایِ زیر «عکس» محسوب می‌شوند (بندانگشتی/زوم/عکسِ اصلی)، بقیه صرفاً
+# «فایل» (کاتالوگ/سند و ...، فقط قابلِ بازکردن).
+_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "bmp", "gif"}
+
+
+def is_image_extension(extension: str) -> bool:
+    return extension.lower().lstrip(".") in _IMAGE_EXTENSIONS
+
+
+def attach_detail_account_file(company_id: int, detail_account_id: int, user_id: int, file_path: str) -> int:
+    """افزودنِ یک عکس/فایلِ تازه به حسابِ تفصیلی (بدونِ حذفِ فایل‌هایِ
+    قبلی -- بر خلافِ set_detail_account_photوِ قدیمی). اگر این فایل عکس
+    باشد و هنوز هیچ عکسِ فعالی برایِ این حساب ثبت نشده، خودکار «عکسِ
+    اصلی» می‌شود."""
     source = Path(file_path)
     if not source.is_file():
         raise ValueError("فایل یافت نشد.")
     try:
         _PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise ValueError(f"پوشهٔ عکس‌ها («{_PHOTOS_DIR}») در دسترس نیست: {exc}") from exc
+        raise ValueError(f"پوشهٔ ضمائم («{_PHOTOS_DIR}») در دسترس نیست: {exc}") from exc
     content = source.read_bytes()
     digest = hashlib.sha256(content).digest()
     extension = source.suffix.lstrip(".")
     storage_name = f"{uuid.uuid4().hex}.{extension}" if extension else uuid.uuid4().hex
     destination = _PHOTOS_DIR / storage_name
     shutil.copyfile(source, destination)
+    is_image = is_image_extension(extension)
     with new_session() as session:
         form_id = _get_photo_form_id(session)
-        existing = session.scalars(
-            select(Attachment).where(
-                Attachment.form_id == form_id, Attachment.source_record_id == detail_account_id,
-                Attachment.is_deleted.is_(False),
+        is_primary = False
+        if is_image:
+            has_primary = session.scalar(
+                select(func.count())
+                .select_from(Attachment)
+                .where(
+                    Attachment.form_id == form_id,
+                    Attachment.source_record_id == detail_account_id,
+                    Attachment.is_deleted.is_(False),
+                    Attachment.is_primary.is_(True),
+                )
             )
-        ).all()
-        now = datetime.datetime.now()
-        for row in existing:
-            row.is_deleted = True
-            row.deleted_by_user_id = user_id
-            row.deleted_at = now
+            is_primary = not has_primary
         new_row = Attachment(
             company_id=company_id, form_id=form_id, source_record_id=detail_account_id,
             file_name=source.name, file_extension=extension, file_size_bytes=len(content),
             storage_key=str(destination), content_sha256=digest, uploaded_by_user_id=user_id,
+            is_primary=is_primary,
         )
         session.add(new_row)
         session.commit()
         return new_row.attachment_id
 
 
-def get_detail_account_photo(company_id: int, detail_account_id: int) -> Attachment | None:
+def list_detail_account_files(company_id: int, detail_account_id: int) -> list[Attachment]:
+    """فهرستِ همه‌یِ عکس‌ها و فایل‌هایِ فعالِ این حساب -- عکسِ اصلی (اگر
+    باشد) اول، سپس بقیه به‌ترتیبِ زمانِ آپلود."""
     with new_session() as session:
         form_id = _get_photo_form_id(session)
-        return session.scalar(
+        rows = session.scalars(
             select(Attachment)
             .where(
                 Attachment.company_id == company_id, Attachment.form_id == form_id,
                 Attachment.source_record_id == detail_account_id, Attachment.is_deleted.is_(False),
             )
-            .order_by(Attachment.uploaded_at.desc())
+            .order_by(Attachment.is_primary.desc(), Attachment.uploaded_at)
+        ).all()
+        session.expunge_all()
+        return list(rows)
+
+
+def delete_detail_account_file(attachment_id: int, company_id: int, user_id: int) -> None:
+    """حذفِ نرمِ یک عکس/فایل -- اگر عکسِ حذف‌شده «اصلی» بود، قدیمی‌ترینِ
+    عکسِ باقی‌مانده (اگر باشد) خودکار جایگزینش می‌شود."""
+    with new_session() as session:
+        row = session.get(Attachment, attachment_id)
+        if row is None or row.company_id != company_id or row.is_deleted:
+            raise ValueError("فایل یافت نشد.")
+        was_primary = row.is_primary
+        detail_account_id = row.source_record_id
+        row.is_deleted = True
+        row.deleted_by_user_id = user_id
+        row.deleted_at = datetime.datetime.now()
+        row.is_primary = False
+        if was_primary:
+            next_photo = session.scalar(
+                select(Attachment)
+                .where(
+                    Attachment.form_id == row.form_id,
+                    Attachment.source_record_id == detail_account_id,
+                    Attachment.is_deleted.is_(False),
+                    Attachment.attachment_id != attachment_id,
+                )
+                .order_by(Attachment.uploaded_at)
+            )
+            if next_photo is not None and is_image_extension(next_photo.file_extension):
+                next_photo.is_primary = True
+        session.commit()
+
+
+def set_primary_detail_account_photo(attachment_id: int, company_id: int) -> None:
+    with new_session() as session:
+        row = session.get(Attachment, attachment_id)
+        if row is None or row.company_id != company_id or row.is_deleted:
+            raise ValueError("فایل یافت نشد.")
+        if not is_image_extension(row.file_extension):
+            raise ValueError("فقط عکس می‌تواند «عکسِ اصلی» باشد.")
+        siblings = session.scalars(
+            select(Attachment).where(
+                Attachment.form_id == row.form_id,
+                Attachment.source_record_id == row.source_record_id,
+                Attachment.is_deleted.is_(False),
+                Attachment.attachment_id != attachment_id,
+            )
+        ).all()
+        for sibling in siblings:
+            sibling.is_primary = False
+        row.is_primary = True
+        session.commit()
+
+
+def get_primary_detail_account_photo(company_id: int, detail_account_id: int) -> Attachment | None:
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        return session.scalar(
+            select(Attachment).where(
+                Attachment.company_id == company_id, Attachment.form_id == form_id,
+                Attachment.source_record_id == detail_account_id, Attachment.is_deleted.is_(False),
+                Attachment.is_primary.is_(True),
+            )
         )
 
 
-def remove_detail_account_photo(company_id: int, detail_account_id: int, user_id: int) -> None:
+def get_primary_photos_for_accounts(company_id: int, detail_account_ids: list[int]) -> dict[int, Attachment]:
+    """واکشیِ دسته‌ای -- برایِ گذاشتنِ بندانگشتی کنارِ نام در فهرستِ درختیِ
+    حساب‌هایِ تفصیلی، بدونِ یک کوئریِ جدا به‌ازایِ هر ردیف."""
+    if not detail_account_ids:
+        return {}
     with new_session() as session:
         form_id = _get_photo_form_id(session)
         rows = session.scalars(
             select(Attachment).where(
                 Attachment.company_id == company_id, Attachment.form_id == form_id,
-                Attachment.source_record_id == detail_account_id, Attachment.is_deleted.is_(False),
+                Attachment.source_record_id.in_(detail_account_ids), Attachment.is_deleted.is_(False),
+                Attachment.is_primary.is_(True),
             )
         ).all()
-        now = datetime.datetime.now()
-        for row in rows:
-            row.is_deleted = True
-            row.deleted_by_user_id = user_id
-            row.deleted_at = now
-        session.commit()
+        session.expunge_all()
+        return {row.source_record_id: row for row in rows}
 
 
 def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:

@@ -23,13 +23,15 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QPixmap
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QBrush, QColor, QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
+    QDialog,
     QDoubleSpinBox,
     QFileDialog,
     QFrame,
@@ -43,6 +45,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -232,6 +235,39 @@ def _make_field_widget(kind: str) -> QWidget:
     return PersianDigitLineEdit()
 
 
+class _ClickableLabel(QLabel):
+    """طبقِ درخواستِ صریح («با کلیک روی عکسهای آپلود شده زوم هم بشه»):
+    QLabelِ معمولی سیگنالِ کلیک ندارد -- این زیرکلاسِ ساده همان را اضافه
+    می‌کند."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (نامِ متدِ Qt)
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class _PhotoZoomDialog(QDialog):
+    """طبقِ درخواستِ صریح («تمام صفحه ببینیم»): نمایِ بزرگِ یک عکس، تا
+    حدِ ۸۰٪ اندازه‌یِ صفحه‌نمایش (بدونِ خرابیِ نسبت)."""
+
+    def __init__(self, pixmap: QPixmap, title: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        layout = QVBoxLayout(self)
+        label = QLabel()
+        label.setAlignment(Qt.AlignCenter)
+        screen = QApplication.primaryScreen()
+        if screen is not None and not pixmap.isNull():
+            max_size = screen.availableSize() * 0.8
+            if pixmap.width() > max_size.width() or pixmap.height() > max_size.height():
+                pixmap = pixmap.scaled(
+                    max_size.width(), max_size.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+        label.setPixmap(pixmap)
+        layout.addWidget(label)
+
+
 class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -379,31 +415,6 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addWidget(self.account_basic_grid)
         self.register_field_grids("detail_dimensions", [self.account_basic_grid])
 
-        # طبقِ درخواستِ صریح («برایِ گروه‌هایی که تیک می‌زنیم عکس آپلود
-        # کرد»): فقط وقتی گروهِ انتخاب‌شده این امکان را روشن کرده باشد
-        # (dimension_group_config.py) و رکورد از قبل ذخیره شده باشد
-        # (عکس به detail_account_id متصل می‌شود، نه به فرمِ هنوز-ذخیره‌
-        # نشده) نمایان می‌شود.
-        photo_row = QHBoxLayout()
-        self.photo_thumbnail = QLabel("بدونِ عکس")
-        self.photo_thumbnail.setFixedSize(64, 64)
-        self.photo_thumbnail.setAlignment(Qt.AlignCenter)
-        self.photo_thumbnail.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px;")
-        photo_row.addWidget(self.photo_thumbnail)
-        photo_buttons = QVBoxLayout()
-        upload_photo_button = QPushButton("📷 آپلودِ عکس")
-        upload_photo_button.clicked.connect(self._upload_photo)
-        photo_buttons.addWidget(upload_photo_button)
-        remove_photo_button = QPushButton("🚫 حذفِ عکس")
-        remove_photo_button.clicked.connect(self._remove_photo)
-        photo_buttons.addWidget(remove_photo_button)
-        photo_row.addLayout(photo_buttons)
-        photo_row.addStretch(1)
-        self.photo_widget = QWidget()
-        self.photo_widget.setLayout(photo_row)
-        self.photo_widget.setVisible(False)
-        layout.addWidget(self.photo_widget)
-
         # طبقِ درخواستِ صریح: گروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل)
         # فیلدهایِ هاردکدِ اختصاصیِ خودشان را هم دارند (چون در جدولِ
         # جداگانه‌یِ SQL ذخیره می‌شوند) — این ردیف فقط وقتی آن گروه‌ها
@@ -458,7 +469,15 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         wrapper_layout = QVBoxLayout(wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
         wrapper_layout.setSpacing(0)
-        wrapper_layout.addWidget(scroll, stretch=1)
+
+        # طبقِ درخواستِ صریح («یک تب درست بشه که عکسها و کاتالوگ و
+        # فایلها در آنجا مدیریت بشه»): تبِ دوم فقط وقتی گروهِ انتخاب‌شده
+        # امکانِ آپلودِ عکس را روشن کرده باشد نمایان می‌شود (_refresh_files_tab).
+        self.account_tabs = QTabWidget()
+        self.account_tabs.addTab(scroll, "اطلاعات")
+        self.files_tab = self._build_files_tab()
+        self.account_tabs.addTab(self.files_tab, "عکس‌ها و فایل‌ها")
+        wrapper_layout.addWidget(self.account_tabs, stretch=1)
 
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
@@ -497,6 +516,192 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.account_panel = wrapper
         wrapper.setEnabled(False)
         return wrapper
+
+    # --- تبِ «عکس‌ها و فایل‌ها» (طبقِ درخواستِ صریح: چند عکس + فایلِ
+    # کاتالوگ + زوم + عکسِ اصلی، همه در یک تبِ جدا از فیلدهایِ اصلی) -----
+    def _build_files_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+
+        upload_row = QHBoxLayout()
+        upload_photo_button = QPushButton("📷 آپلودِ عکس")
+        upload_photo_button.clicked.connect(self._upload_photo)
+        upload_row.addWidget(upload_photo_button)
+        upload_file_button = QPushButton("📎 الصاقِ فایل (کاتالوگ و ...)")
+        upload_file_button.clicked.connect(self._upload_file)
+        upload_row.addWidget(upload_file_button)
+        upload_row.addStretch(1)
+        self.files_upload_row_widget = QWidget()
+        self.files_upload_row_widget.setLayout(upload_row)
+        layout.addWidget(self.files_upload_row_widget)
+
+        self.files_gallery_container = QWidget()
+        self.files_gallery_layout = QVBoxLayout(self.files_gallery_container)
+        self.files_gallery_layout.setContentsMargins(0, 0, 0, 0)
+        self.files_gallery_layout.setSpacing(6)
+        self.files_gallery_layout.addStretch(1)
+
+        gallery_scroll = QScrollArea()
+        gallery_scroll.setWidgetResizable(True)
+        gallery_scroll.setFrameShape(QFrame.NoFrame)
+        gallery_scroll.setWidget(self.files_gallery_container)
+        layout.addWidget(gallery_scroll, stretch=1)
+
+        self.files_empty_label = QLabel("هنوز عکس یا فایلی برایِ این حساب ثبت نشده.")
+        self.files_empty_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.files_empty_label)
+
+        return tab
+
+    def _build_file_row(self, attachment) -> QWidget:
+        row_widget = QWidget()
+        row = QHBoxLayout(row_widget)
+        row.setContentsMargins(4, 4, 4, 4)
+
+        is_image = dimensions_service.is_image_extension(attachment.file_extension)
+        if is_image:
+            thumb = _ClickableLabel()
+            thumb.setFixedSize(56, 56)
+            thumb.setAlignment(Qt.AlignCenter)
+            thumb.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px;")
+            pixmap = QPixmap(attachment.storage_key)
+            if not pixmap.isNull():
+                thumb.setPixmap(pixmap.scaled(56, 56, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            thumb.setCursor(Qt.PointingHandCursor)
+            thumb.setToolTip("برایِ نمایِ بزرگ کلیک کنید")
+            thumb.clicked.connect(lambda a=attachment: self._zoom_photo(a))
+            row.addWidget(thumb)
+        else:
+            file_label = QLabel("📄")
+            file_label.setFixedSize(56, 56)
+            file_label.setAlignment(Qt.AlignCenter)
+            file_label.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px; font-size: 22px;")
+            row.addWidget(file_label)
+
+        name_text = attachment.file_name + ("  ⭐ عکسِ اصلی" if attachment.is_primary else "")
+        name_label = QLabel(name_text)
+        row.addWidget(name_label, stretch=1)
+
+        if is_image and not attachment.is_primary:
+            primary_button = QPushButton("⭐ عکسِ اصلی")
+            primary_button.clicked.connect(lambda _checked=False, a=attachment: self._set_primary_photo(a.attachment_id))
+            row.addWidget(primary_button)
+        if not is_image:
+            open_button = QPushButton("🔗 بازکردن")
+            open_button.clicked.connect(lambda _checked=False, a=attachment: self._open_file(a))
+            row.addWidget(open_button)
+
+        remove_button = QPushButton("🚫 حذف")
+        remove_button.clicked.connect(lambda _checked=False, a=attachment: self._remove_attachment(a.attachment_id))
+        row.addWidget(remove_button)
+
+        return row_widget
+
+    def _refresh_files_tab(self) -> None:
+        while self.files_gallery_layout.count() > 1:
+            item = self.files_gallery_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if self._selected is None:
+            self.account_tabs.setTabVisible(self.account_tabs.indexOf(self.files_tab), False)
+            return
+
+        photo_enabled = dimensions_service.get_group_photo_enabled(self._dimension_type_id(), self._person_group_id())
+        tab_index = self.account_tabs.indexOf(self.files_tab)
+        self.account_tabs.setTabVisible(tab_index, photo_enabled)
+        if not photo_enabled:
+            return
+
+        # عکس/فایل به detail_account_id متصل می‌شود، نه به فرمِ هنوز-
+        # ذخیره‌نشده -- پس برایِ رکوردِ تازه، فقط پیامِ راهنما نشان داده می‌شود.
+        can_show = self._editing_account_id is not None
+        self.files_upload_row_widget.setVisible(can_show)
+        if not can_show:
+            self.files_empty_label.setVisible(True)
+            self.files_empty_label.setText("برایِ آپلودِ عکس/فایل، اول این حساب را ذخیره کنید.")
+            return
+
+        company_id = self._company_id()
+        files = dimensions_service.list_detail_account_files(company_id, self._editing_account_id) if company_id else []
+        self.files_empty_label.setVisible(not files)
+        self.files_empty_label.setText("هنوز عکس یا فایلی برایِ این حساب ثبت نشده.")
+        for attachment in files:
+            self.files_gallery_layout.insertWidget(self.files_gallery_layout.count() - 1, self._build_file_row(attachment))
+
+    def _zoom_photo(self, attachment) -> None:
+        pixmap = QPixmap(attachment.storage_key)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "خطا", "بارگذاریِ عکس ممکن نشد.")
+            return
+        dialog = _PhotoZoomDialog(pixmap, attachment.file_name, self)
+        dialog.exec()
+
+    def _open_file(self, attachment) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(attachment.storage_key))
+
+    def _upload_photo(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+        )
+        if not path:
+            return
+        try:
+            dimensions_service.attach_detail_account_file(
+                company_id, self._editing_account_id, session.current_user.user_id, path
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
+
+    def _upload_file(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ فایل", "", "همه‌ی فایل‌ها (*)")
+        if not path:
+            return
+        try:
+            dimensions_service.attach_detail_account_file(
+                company_id, self._editing_account_id, session.current_user.user_id, path
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
+
+    def _set_primary_photo(self, attachment_id: int) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            dimensions_service.set_primary_detail_account_photo(attachment_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
+
+    def _remove_attachment(self, attachment_id: int) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            dimensions_service.delete_detail_account_file(attachment_id, company_id, session.current_user.user_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
 
     # --- حکمِ حقوق (فقط برایِ گروهِ پرسنل، رویِ کارمندِ ازپیش‌ذخیره‌شده) -----
     def _build_pay_components_section(self) -> QWidget:
@@ -883,6 +1088,19 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 for r in self._accounts_by_id.values()
             ]
 
+        # طبقِ درخواستِ صریح («بندانگشتی کنارِ نام»): عکسِ اصلیِ هر حساب
+        # (اگر گروه این امکان را روشن کرده و آن حساب عکسِ اصلی دارد) به‌
+        # صورتِ آیکونِ کوچک کنارِ ستونِ «نام» نشان داده می‌شود — یک واکشیِ
+        # دسته‌ای، نه یک کوئریِ جدا به‌ازایِ هر ردیف.
+        photo_enabled = dimensions_service.get_group_photo_enabled(self._dimension_type_id(), self._person_group_id())
+        primary_photos: dict[int, object] = {}
+        if photo_enabled:
+            company_id = self._company_id()
+            if company_id is not None:
+                primary_photos = dimensions_service.get_primary_photos_for_accounts(
+                    company_id, [row[0] for row in rows]
+                )
+
         def make_item(row: tuple) -> QTreeWidgetItem:
             detail_account_id, _parent_id, full_code, name, level_no, is_active = row[:6]
             values = [full_code, name or "—", str(level_no), "فعال" if is_active else "غیرفعال"]
@@ -893,6 +1111,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             if color:
                 for col in range(len(columns)):
                     item.setForeground(col, QBrush(QColor(color)))
+            photo = primary_photos.get(detail_account_id)
+            if photo is not None:
+                pixmap = QPixmap(photo.storage_key)
+                if not pixmap.isNull():
+                    item.setIcon(1, QIcon(pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
             return item
 
         if self.show_all_levels_checkbox.isChecked():
@@ -1142,7 +1365,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.terminate_employee_button.setVisible(is_employee and row.get("employee_status") != "TERMINATED")
             self._refresh_pay_components_section(row.get("employee_id") if is_employee else None)
             self._update_partner_status_display(row)
-            self._refresh_photo_widget()
+            self._refresh_files_tab()
             return
 
         account = self._accounts_by_id.get(detail_account_id)
@@ -1168,7 +1391,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setVisible(True)
         self.terminate_employee_button.setVisible(False)
         self._refresh_pay_components_section(None)
-        self._refresh_photo_widget()
+        self._refresh_files_tab()
 
     def _on_copy_from_changed(self) -> None:
         source_id = self.copy_from_combo.currentData()
@@ -1219,65 +1442,6 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 item_row = self._item_rows_by_detail_id.get(source_id)
             self._render_item_panel(item_row)
         self._suggest_code_for_current_parent()
-
-    # --- عکسِ حسابِ تفصیلی (طبقِ درخواستِ صریح: «برایِ گروه‌هایی که تیک
-    # می‌زنیم عکس آپلود کرد») --------------------------------------------
-    def _refresh_photo_widget(self) -> None:
-        if self._selected is None:
-            self.photo_widget.setVisible(False)
-            return
-        photo_enabled = dimensions_service.get_group_photo_enabled(self._dimension_type_id(), self._person_group_id())
-        # فقط برایِ رکوردِ از قبل ذخیره‌شده معنا دارد -- عکس به
-        # detail_account_id متصل می‌شود، نه به فرمِ هنوز-ذخیره‌نشده.
-        self.photo_widget.setVisible(photo_enabled and self._editing_account_id is not None)
-        if not self.photo_widget.isVisible():
-            return
-        company_id = self._company_id()
-        photo = (
-            dimensions_service.get_detail_account_photo(company_id, self._editing_account_id)
-            if company_id is not None
-            else None
-        )
-        if photo is not None:
-            pixmap = QPixmap(photo.storage_key)
-            if not pixmap.isNull():
-                self.photo_thumbnail.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-                self.photo_thumbnail.setText("")
-            else:
-                self.photo_thumbnail.setPixmap(QPixmap())
-                self.photo_thumbnail.setText("خطا در بارگذاری")
-        else:
-            self.photo_thumbnail.setPixmap(QPixmap())
-            self.photo_thumbnail.setText("بدونِ عکس")
-
-    def _upload_photo(self) -> None:
-        if self._editing_account_id is None:
-            return
-        company_id = self._company_id()
-        if company_id is None:
-            return
-        path, _filter = QFileDialog.getOpenFileName(
-            self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp)"
-        )
-        if not path:
-            return
-        try:
-            dimensions_service.set_detail_account_photo(
-                company_id, self._editing_account_id, session.current_user.user_id, path
-            )
-        except ValueError as exc:
-            QMessageBox.warning(self, "خطا", str(exc))
-            return
-        self._refresh_photo_widget()
-
-    def _remove_photo(self) -> None:
-        if self._editing_account_id is None:
-            return
-        company_id = self._company_id()
-        if company_id is None:
-            return
-        dimensions_service.remove_detail_account_photo(company_id, self._editing_account_id, session.current_user.user_id)
-        self._refresh_photo_widget()
 
     def _update_partner_status_display(self, row: dict) -> None:
         group_code = self._selected[1] if self._selected else None
@@ -1339,7 +1503,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.terminate_employee_button.setVisible(False)
         self.partner_status_label.setVisible(False)
         self.approve_partner_button.setVisible(False)
-        self._refresh_photo_widget()
+        self._refresh_files_tab()
 
     def _terminate_employee(self) -> None:
         if self._editing_account_id is None:
