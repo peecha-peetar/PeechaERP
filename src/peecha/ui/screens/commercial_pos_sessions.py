@@ -1,5 +1,7 @@
-"""ترمینال‌ها و جلسه‌هایِ صندوق (مرحلهٔ ۷) — بازکردن/بستنِ جلسه، آزادسازیِ
-مغایرت، و تنظیماتِ صندوق (مشتریِ متفرقه/آستانهٔ مغایرت)."""
+"""ترمینال‌ها و شیفت‌هایِ صندوق (مرحلهٔ ۷) — بازکردن/بستنِ شیفت، آزادسازیِ
+مغایرت، و تنظیماتِ صندوق (مشتریِ متفرقه/آستانهٔ مغایرت). طبقِ درخواستِ
+صریح («اصطلاحِ جلسه گنگ است»)، برچسبِ نمایشی «شیفت» است -- شناسه‌هایِ
+داخلیِ کد (session_id, PosSession) بدونِ تغییر مانده‌اند."""
 
 from __future__ import annotations
 
@@ -111,7 +113,7 @@ class CommercialPosSessionsScreen(QWidget):
         self.open_session_button = QPushButton("📂")
         self.open_session_button.setObjectName("primaryIconButton")
         self.open_session_button.setFixedWidth(48)
-        self.open_session_button.setToolTip("بازکردنِ جلسه")
+        self.open_session_button.setToolTip("بازکردنِ شیفت")
         self.open_session_button.clicked.connect(self._open_session)
         open_box.addWidget(self.open_session_button)
         right.addLayout(open_box)
@@ -125,7 +127,7 @@ class CommercialPosSessionsScreen(QWidget):
         self.close_session_button = QPushButton("🔒")
         self.close_session_button.setObjectName("dangerIconButton")
         self.close_session_button.setFixedWidth(44)
-        self.close_session_button.setToolTip("بستنِ جلسه")
+        self.close_session_button.setToolTip("بستنِ شیفت")
         self.close_session_button.clicked.connect(self._close_session)
         close_box.addWidget(self.close_session_button)
         right.addLayout(close_box)
@@ -142,7 +144,7 @@ class CommercialPosSessionsScreen(QWidget):
         override_box.addWidget(self.override_button)
         right.addLayout(override_box)
 
-        history_title = QLabel("تاریخچهٔ جلسه‌ها")
+        history_title = QLabel("تاریخچهٔ شیفت‌ها")
         history_title.setObjectName("sectionTitle")
         right.addWidget(history_title)
         self.sessions_table = QTableWidget(0, 6)
@@ -231,7 +233,7 @@ class CommercialPosSessionsScreen(QWidget):
                 widget.setEnabled(False)
             return
         terminal = next((t for t in self._terminals if t.terminal_id == self._selected_terminal_id), None)
-        self.session_title.setText(f"جلسه‌هایِ ترمینالِ «{terminal.name}»" if terminal else "")
+        self.session_title.setText(f"شیفت‌هایِ ترمینالِ «{terminal.name}»" if terminal else "")
         open_session = pos_service.get_open_session(self._selected_terminal_id)
         sessions = pos_service.list_sessions(self._selected_terminal_id)
 
@@ -243,11 +245,11 @@ class CommercialPosSessionsScreen(QWidget):
         )
 
         if open_session is not None:
-            self.session_status_label.setText(f"جلسهٔ باز — شناسه: {numerals.to_persian_digits(str(open_session.session_id))}")
+            self.session_status_label.setText(f"شیفتِ باز — شناسه: {numerals.to_persian_digits(str(open_session.session_id))}")
         elif has_unresolved_variance:
-            self.session_status_label.setText("جلسهٔ قبلی مغایرتِ آزادنشده دارد — ابتدا آزادسازی کنید.")
+            self.session_status_label.setText("شیفتِ قبلی مغایرتِ آزادنشده دارد — ابتدا آزادسازی کنید.")
         else:
-            self.session_status_label.setText("جلسه‌یِ بازی وجود ندارد.")
+            self.session_status_label.setText("شیفتِ بازی وجود ندارد.")
 
         self.open_session_button.setEnabled(open_session is None and not has_unresolved_variance)
         self.close_session_button.setEnabled(open_session is not None)
@@ -282,7 +284,7 @@ class CommercialPosSessionsScreen(QWidget):
     def _close_session(self) -> None:
         if getattr(self, "_open_session_id", None) is None:
             return
-        confirm = QMessageBox.question(self, "بستنِ جلسه", "این جلسه بسته شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "بستنِ شیفت", "این شیفت بسته شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
         try:

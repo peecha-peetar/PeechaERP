@@ -304,6 +304,23 @@ class PosSettings(Base):
     cash_variance_threshold_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
 
 
+class PosCashierSettings(Base):
+    """تنظیماتِ صندوق‌داریِ هر (کاربر، شرکت) -- معادلِ
+    112_pos_cashier_settings.sql. ترمینال/فهرستِ‌قیمت/مشتری هرکدام به یک
+    شرکتِ مشخص تعلق دارند، پس این تنظیمات هم به‌ازایِ شرکت جداست."""
+
+    __tablename__ = "pos_cashier_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    default_terminal_id: Mapped[int | None] = mapped_column(ForeignKey("comm.pos_terminals.terminal_id"))
+    default_price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
+    default_customer_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+
+
 # =======================================================================
 # اسکلتِ یکپارچهٔ سند — معادلِ 067_commercial_documents.sql
 # =======================================================================
@@ -335,6 +352,10 @@ class CommercialDocument(Base):
         BigInteger, ForeignKey("comm.commercial_documents.document_id")
     )
     pos_session_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.pos_sessions.session_id"))
+    # طبقِ رفعِ شکافِ کشف‌شده: کاریرِ POS فقط confirm می‌کند و نوعِ پرداختِ
+    # موردنظرش (نقدی/نسیه) را یادداشت می‌کند؛ ثبتِ واقعیِ پرداخت/سندِ
+    # حسابداری با تاییدِ سرپرست، جداگانه (در زمانِ approve/post) انجام می‌شود.
+    pos_intended_payment_type: Mapped[str | None] = mapped_column(String(10))
     currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     exchange_rate: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     requested_delivery_date: Mapped[datetime.date | None] = mapped_column(Date)

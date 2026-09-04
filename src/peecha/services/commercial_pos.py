@@ -19,6 +19,7 @@ from peecha.db.models.commercial import (
     InstallmentPlan,
     LoyaltyAccount,
     LoyaltyTransaction,
+    PosCashierSettings,
     PosPayment,
     PosSession,
     PosSettings,
@@ -128,6 +129,42 @@ def override_session_variance(session_id: int, overridden_by_user_id: int, reaso
         pos_session.variance_override_by_user_id = overridden_by_user_id
         pos_session.variance_override_reason = reason
         session.commit()
+
+
+# ---------------------------------------------------------------------
+# چرخهٔ تاییدِ فروشِ حضوری -- طبقِ تصمیمِ صریح («کاریر فقط تایید می‌کند،
+# ثبتِ واقعیِ پرداخت/سندِ حسابداری با تاییدِ سرپرست انجام می‌شود»):
+# کاریر فقط نوعِ پرداختِ موردنظرش را یادداشت می‌کند؛ خودِ POST/JE اینجا
+# اتفاق نمی‌افتد.
+# ---------------------------------------------------------------------
+def set_intended_payment_type(document_id: int, company_id: int, payment_type: str) -> None:
+    if payment_type not in ("CASH", "CREDIT"):
+        raise ValueError("نوعِ پرداخت نامعتبر است.")
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        doc.pos_intended_payment_type = payment_type
+        session.commit()
+
+
+def list_pending_pos_documents(company_id: int, pos_session_id: int) -> list[CommercialDocument]:
+    """فاکتورهایِ این شیفت که کاریر تایید کرده ولی هنوز سرپرست
+    approve/post نکرده -- برایِ صفحه‌یِ تاییدِ سرپرست و برایِ لیستِ
+    «فروش‌هایِ درجریان/رزروشده» در خودِ صفحه‌یِ فروش."""
+    with new_session() as session:
+        return list(
+            session.scalars(
+                select(CommercialDocument)
+                .where(
+                    CommercialDocument.company_id == company_id,
+                    CommercialDocument.document_type_code == "SALES_INVOICE",
+                    CommercialDocument.pos_session_id == pos_session_id,
+                    CommercialDocument.status_code.in_(("DRAFT", "CONFIRMED")),
+                )
+                .order_by(CommercialDocument.document_id.desc())
+            )
+        )
 
 
 # ---------------------------------------------------------------------
@@ -335,4 +372,37 @@ def set_pos_settings(company_id: int, default_guest_customer_detail_account_id: 
         else:
             row.default_guest_customer_detail_account_id = default_guest_customer_detail_account_id
             row.cash_variance_threshold_amount = cash_variance_threshold_amount
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# تنظیماتِ صندوق‌داریِ هر (کاربر، شرکت) -- طبقِ درخواستِ صریح («این
+# تنظیمات در قسمتِ تنظیماتِ کاربر با نقشِ صندوق‌دار باید تعریف بشه»):
+# هر کاربر می‌تواند ترمینال/فهرستِ‌قیمت/مشتریِ پیش‌فرضِ خودش را (به‌ازایِ
+# هر شرکت، چون این‌ها همه چیزهایِ شرکت‌محورند) داشته باشد تا صفحه‌یِ
+# فروشِ حضوری دیگر هر بار این‌ها را از او نپرسد.
+# ---------------------------------------------------------------------
+def get_cashier_settings(user_id: int, company_id: int) -> PosCashierSettings | None:
+    with new_session() as session:
+        return session.get(PosCashierSettings, {"user_id": user_id, "company_id": company_id})
+
+
+def set_cashier_settings(
+    user_id: int, company_id: int, default_terminal_id: int | None, default_price_list_id: int | None,
+    default_customer_detail_account_id: int | None,
+) -> None:
+    with new_session() as session:
+        row = session.get(PosCashierSettings, {"user_id": user_id, "company_id": company_id})
+        if row is None:
+            session.add(
+                PosCashierSettings(
+                    user_id=user_id, company_id=company_id, default_terminal_id=default_terminal_id,
+                    default_price_list_id=default_price_list_id,
+                    default_customer_detail_account_id=default_customer_detail_account_id,
+                )
+            )
+        else:
+            row.default_terminal_id = default_terminal_id
+            row.default_price_list_id = default_price_list_id
+            row.default_customer_detail_account_id = default_customer_detail_account_id
         session.commit()

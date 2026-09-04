@@ -1480,7 +1480,7 @@ class MainWindow(QMainWindow):
         self.register_screen("sales_assistant", SalesAssistantScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sessions", CommercialPosSessionsScreen())
-        self.register_screen("commercial_pos_sale", CommercialPosSaleScreen())
+        self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
         self.register_screen("commercial_ecommerce", CommercialEcommerceScreen())
         self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
         self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())

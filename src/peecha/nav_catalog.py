@@ -110,7 +110,7 @@ NAV_ITEMS = [
             {"code": "SALES_CONSIGNMENT_OUT", "label": "امانیِ خروجی", "screen": "commercial_document_consignment_out"},
             {"code": "SALES_DOCUMENTS_LIST", "label": "اسنادِ فروش", "screen": "commercial_documents_list_sales"},
             {"code": "SALES_PRICING", "label": "فهرستِ قیمت و تخفیف", "screen": "commercial_pricing"},
-            {"code": "SALES_POS_SESSIONS", "label": "ترمینال‌ها و جلسه‌هایِ صندوق", "screen": "commercial_pos_sessions"},
+            {"code": "SALES_POS_SESSIONS", "label": "ترمینال‌ها و شیفت‌هایِ صندوق", "screen": "commercial_pos_sessions"},
             {"code": "SALES_POS_SALE", "label": "فروشِ حضوری (POS)", "screen": "commercial_pos_sale"},
             {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی و Omnichannel", "screen": "commercial_ecommerce"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},

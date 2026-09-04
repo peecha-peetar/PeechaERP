@@ -890,6 +890,7 @@ def get_document(document_id: int, company_id: int) -> tuple[CommercialDocument,
 def list_documents(
     company_id: int, document_type_code: str | None = None, status_code: str | None = None,
     counterparty_detail_account_id: int | None = None, limit: int | None = None,
+    pos_session_id: int | None = None,
 ) -> list[CommercialDocument]:
     with new_session() as session:
         stmt = select(CommercialDocument).where(CommercialDocument.company_id == company_id)
@@ -899,6 +900,8 @@ def list_documents(
             stmt = stmt.where(CommercialDocument.status_code == status_code)
         if counterparty_detail_account_id is not None:
             stmt = stmt.where(CommercialDocument.counterparty_detail_account_id == counterparty_detail_account_id)
+        if pos_session_id is not None:
+            stmt = stmt.where(CommercialDocument.pos_session_id == pos_session_id)
         stmt = stmt.order_by(CommercialDocument.document_id.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
