@@ -354,9 +354,11 @@ class _CommercialTab(QWidget):
     """تبِ «فروش»/«خرید» -- هردو دقیقاً یک الگو دارند، فقط نوعِ سند
     (SALES_INVOICE/PURCHASE_INVOICE) و برچسب‌ها فرق می‌کند."""
 
-    def __init__(self, document_type_code: str, month_title: str, party_title: str) -> None:
+    def __init__(self, document_type_code: str, month_title: str, party_title: str, main_window=None) -> None:
         super().__init__()
         self._document_type_code = document_type_code
+        self._main_window = main_window
+        self._is_sales = document_type_code == "SALES_INVOICE"
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 24, 24, 24)
@@ -366,6 +368,23 @@ class _CommercialTab(QWidget):
         self.card_unsettled_count = _KpiCard("فاکتورهایِ تسویه‌نشده", "⏳", theme.WARNING)
         self.card_unsettled_amount = KpiCard("مبلغِ تسویه‌نشده", "💳", theme.WARNING)
         _kpi_row(outer, [self.card_month, self.card_unsettled_count, self.card_unsettled_amount])
+
+        if self._is_sales:
+            # طبقِ ادامهٔ فهرستِ درخواستی («پیشخوانِ فروش»): به‌جایِ ساختِ
+            # یک صفحه‌یِ کاملاً جدا، همین تبِ ازپیش‌موجودِ «فروش» به
+            # پیشخوانِ فروش تبدیل می‌شود -- سه محورِ هوشِ فروشِ ازپیش‌
+            # ساخته‌شده (پیش‌بینی از R79، اقداماتِ پیشنهادی از R70/R74،
+            # سودآورترین مشتری از R78) کنارِ هم قرار می‌گیرند.
+            self.card_forecast = KpiCard("پیش‌بینیِ فروشِ ماهِ بعد", "🔮", theme.CHART_PURPLE)
+            self.card_actions = _KpiCard("اقداماتِ پیشنهادیِ امروز", "📋", theme.DANGER)
+            self.card_top_profit = KpiCard("سودآورترین مشتریِ این ماه", "🏆", theme.CHART_TEAL)
+            _kpi_row(outer, [self.card_forecast, self.card_actions, self.card_top_profit])
+
+            self.top_action_banner = QPushButton("")
+            self.top_action_banner.setCursor(Qt.PointingHandCursor)
+            self.top_action_banner.setVisible(False)
+            self.top_action_banner.clicked.connect(self._open_sales_assistant)
+            outer.addWidget(self.top_action_banner)
 
         charts_layout = QGridLayout()
         charts_layout.setSpacing(16)
@@ -393,6 +412,44 @@ class _CommercialTab(QWidget):
 
         top = dashboard_service.top_counterparties(company_id, self._document_type_code)
         _render_donut_chart(self.top_chart_view, top)
+
+        if self._is_sales:
+            self.card_forecast.refresh_theme(theme.CHART_PURPLE)
+            self.card_actions.refresh_theme(theme.DANGER)
+            self.card_top_profit.refresh_theme(theme.CHART_TEAL)
+            center = dashboard_service.sales_command_center(company_id)
+            self.card_forecast.set_value(
+                numerals.format_company_amount(center.forecast_next_month)
+                if center.forecast_next_month is not None else "—"
+            )
+            self.card_actions.set_value(center.action_items_count)
+            if center.top_profit_customer_name is not None:
+                self.card_top_profit.set_value(
+                    f"{center.top_profit_customer_name} "
+                    f"({numerals.format_company_amount(center.top_profit_customer_amount)})"
+                )
+            else:
+                self.card_top_profit.set_value("—")
+            self._refresh_top_action_banner(center)
+
+    def _refresh_top_action_banner(self, center) -> None:
+        if center.top_action_title is None:
+            self.top_action_banner.setVisible(False)
+            return
+        severity_colors = {"danger": theme.DANGER, "warning": theme.WARNING, "success": theme.CHART_TEAL}
+        color = severity_colors.get(center.top_action_severity, theme.WARNING)
+        self.top_action_banner.setText(
+            f"🧠 مهم‌ترین اقدامِ پیشنهادیِ امروز: {center.top_action_title} — برایِ مشاهده‌یِ کامل کلیک کنید."
+        )
+        self.top_action_banner.setStyleSheet(
+            f"background-color: {color}; color: white; font-weight: bold; padding: 10px 14px; "
+            "border-radius: 8px; text-align: right; border: none;"
+        )
+        self.top_action_banner.setVisible(True)
+
+    def _open_sales_assistant(self) -> None:
+        if self._main_window is not None:
+            self._main_window.open_screen("SALES_ASSISTANT")
 
 
 class _HrTab(QWidget):
@@ -444,7 +501,7 @@ class DashboardScreen(QWidget):
         self.tabs.addTab(self._treasury_tab, "خزانه‌داری")
         self._inventory_tab = _InventoryTab()
         self.tabs.addTab(self._inventory_tab, "انبار")
-        self._sales_tab = _CommercialTab("SALES_INVOICE", "فروشِ این ماه", "پُرفروش‌ترین مشتریان")
+        self._sales_tab = _CommercialTab("SALES_INVOICE", "فروشِ این ماه", "پُرفروش‌ترین مشتریان", main_window)
         self.tabs.addTab(self._sales_tab, "فروش")
         self._purchase_tab = _CommercialTab("PURCHASE_INVOICE", "خریدِ این ماه", "پُرخریدترین تامین‌کنندگان")
         self.tabs.addTab(self._purchase_tab, "خرید")

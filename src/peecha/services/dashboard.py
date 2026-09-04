@@ -327,6 +327,49 @@ def top_counterparties(
 
 
 @dataclass
+class SalesCommandCenter:
+    forecast_next_month: decimal.Decimal | None = None
+    action_items_count: int = 0
+    top_action_title: str | None = None
+    top_action_severity: str = "warning"
+    top_profit_customer_name: str | None = None
+    top_profit_customer_amount: decimal.Decimal | None = None
+
+
+def sales_command_center(company_id: int | None) -> SalesCommandCenter:
+    """طبقِ ادامهٔ فهرستِ درخواستی («پیشخوانِ فروش»): سه محورِ این تب،
+    مستقیماً از رویِ سرویس‌هایِ ازپیش‌ساخته‌شده‌یِ «دستیارِ فروش»
+    (get_daily_actions)، «پیش‌بینیِ فروش» (compute_sales_trend)، و «سودِ
+    واقعیِ مشتریان» (compute_customer_profit) پر می‌شوند -- بدونِ هیچ
+    محاسبه‌یِ موازیِ تازه، دقیقاً طبقِ اصلِ «استفاده‌یِ مجدد پیش از
+    بازسازی» که در تمامِ این سرویس قبلاً رعایت شده."""
+    result = SalesCommandCenter()
+    if company_id is None:
+        return result
+    from peecha.services import commercial_documents as documents_service
+    from peecha.services import reports as reports_service
+    from peecha.services import sales_assistant as sales_assistant_service
+
+    today = datetime.date.today()
+    periods = reports_service.generate_jalali_periods(today, "MONTHLY", 6)
+    trend = documents_service.compute_sales_trend(company_id, periods)
+    result.forecast_next_month = trend.forecast_next
+
+    actions = sales_assistant_service.get_daily_actions(company_id, limit=5)
+    result.action_items_count = len(actions)
+    if actions:
+        result.top_action_title = actions[0].title
+        result.top_action_severity = actions[0].severity
+
+    month_start = datetime.date(today.year, today.month, 1)
+    profit_rows = documents_service.compute_customer_profit(company_id, month_start, today)
+    if profit_rows:
+        result.top_profit_customer_name = profit_rows[0].customer_name
+        result.top_profit_customer_amount = profit_rows[0].gross_profit
+    return result
+
+
+@dataclass
 class HrSummary:
     total_employees: int = 0
     active_employees: int = 0
