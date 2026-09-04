@@ -7,10 +7,12 @@ import datetime
 import decimal
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDoubleSpinBox,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -27,6 +29,7 @@ from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
@@ -74,6 +77,19 @@ class CommercialPosSaleScreen(QWidget):
         new_sale_button.setToolTip("فروشِ تازه")
         new_sale_button.clicked.connect(self._reset_sale)
         outer.addWidget(new_sale_button, alignment=Qt.AlignLeft)
+
+        scan_row = QHBoxLayout()
+        self.scan_field = QLineEdit()
+        self.scan_field.setObjectName("posScanField")
+        self.scan_field.setPlaceholderText("🔍 بارکد را اسکن کنید یا کد/نامِ کالا را تایپ کنید و Enter بزنید")
+        self.scan_field.setStyleSheet("font-size: 15pt; padding: 8px;")
+        self.scan_field.returnPressed.connect(self._scan_or_search)
+        scan_row.addWidget(self.scan_field)
+        outer.addLayout(scan_row)
+
+        self.quick_access_layout = QGridLayout()
+        self.quick_access_layout.setSpacing(6)
+        outer.addLayout(self.quick_access_layout)
 
         line_form = QHBoxLayout()
         self.item_combo = _make_searchable_combo([])
@@ -152,6 +168,8 @@ class CommercialPosSaleScreen(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(wrap_scrollable(page))
 
+        QShortcut(QKeySequence("F10"), self, activated=self._quick_cash_checkout)
+
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
 
@@ -161,6 +179,8 @@ class CommercialPosSaleScreen(QWidget):
             return
         self._items = catalog_service.list_items(company_id, active_only=True)
         _fill_options(self.item_combo, [(it.item_id, f"{it.code} — {it.name or ''}") for it in self._items])
+        self._rebuild_quick_access()
+        self.scan_field.setFocus()
 
         current_terminal = self.terminal_combo.currentData()
         self.terminal_combo.blockSignals(True)
@@ -209,6 +229,57 @@ class CommercialPosSaleScreen(QWidget):
         self.session_label.style().unpolish(self.session_label)
         self.session_label.style().polish(self.session_label)
 
+    def _rebuild_quick_access(self) -> None:
+        while self.quick_access_layout.count():
+            item = self.quick_access_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        quick_items = [it for it in self._items if it.pos_button_color]
+        columns = 6
+        for index, item in enumerate(quick_items):
+            button = QPushButton(item.short_name or item.name or item.code)
+            button.setStyleSheet(
+                f"background-color: {item.pos_button_color}; color: #ffffff; font-weight: 600; "
+                "padding: 12px 6px; border-radius: 6px;"
+            )
+            tooltip = f"{item.code} — {item.name or ''}"
+            if item.pos_shortcut_key:
+                tooltip += f" ({item.pos_shortcut_key})"
+            button.setToolTip(tooltip)
+            button.clicked.connect(lambda _checked=False, it=item: self._add_item_to_cart(it, decimal.Decimal("1")))
+            self.quick_access_layout.addWidget(button, index // columns, index % columns)
+
+    def _resolve_scanned_item(self, query: str) -> catalog_service.ItemRow | None:
+        needle = query.strip().lower()
+        if not needle:
+            return None
+        barcode_matches = [it for it in self._items if it.barcode and it.barcode.strip().lower() == needle]
+        if len(barcode_matches) == 1:
+            return barcode_matches[0]
+        code_matches = [it for it in self._items if it.code.strip().lower() == needle]
+        if len(code_matches) == 1:
+            return code_matches[0]
+        name_matches = [it for it in self._items if it.name and needle in it.name.lower()]
+        if len(name_matches) == 1:
+            return name_matches[0]
+        if name_matches or barcode_matches or code_matches:
+            self.status_label.setText(f"چند کالا با «{query}» یافت شد -- از فهرستِ کالا انتخاب کنید.")
+        else:
+            self.status_label.setText(f"کالایی با «{query}» یافت نشد.")
+        return None
+
+    def _scan_or_search(self) -> None:
+        query = self.scan_field.text().strip()
+        self.scan_field.clear()
+        if not query:
+            return
+        item = self._resolve_scanned_item(query)
+        if item is None:
+            return
+        self._add_item_to_cart(item, decimal.Decimal("1"))
+        self.scan_field.setFocus()
+
     def _reset_sale(self) -> None:
         self._document_id = None
         self._lines = []
@@ -246,11 +317,6 @@ class CommercialPosSaleScreen(QWidget):
         return True
 
     def _add_line(self) -> None:
-        if self._is_posted:
-            self.status_label.setText("این فروش قبلاً نهایی شده — برایِ فروشِ تازه، «فروشِ تازه» را بزنید.")
-            return
-        if not self._ensure_document():
-            return
         item_id = self.item_combo.currentData()
         item = next((it for it in self._items if it.item_id == item_id), None)
         if item is None:
@@ -258,17 +324,28 @@ class CommercialPosSaleScreen(QWidget):
             return
         quantity = decimal.Decimal(str(self.quantity_field.value()))
         unit_price = decimal.Decimal(str(self.unit_price_field.value())) if self.unit_price_field.value() > 0 else None
+        if self._add_item_to_cart(item, quantity, unit_price):
+            self.unit_price_field.setValue(0)
+            self.quantity_field.setValue(1)
+
+    def _add_item_to_cart(
+        self, item: catalog_service.ItemRow, quantity: decimal.Decimal, unit_price: decimal.Decimal | None = None,
+    ) -> bool:
+        if self._is_posted:
+            self.status_label.setText("این فروش قبلاً نهایی شده — برایِ فروشِ تازه، «فروشِ تازه» را بزنید.")
+            return False
+        if not self._ensure_document():
+            return False
         try:
             documents_service.add_line(
                 self._document_id, self._company_id(), item.item_id, item.base_uom_id, quantity, quantity, unit_price=unit_price,
             )
         except ValueError as exc:
             self.status_label.setText(str(exc))
-            return
+            return False
         self.status_label.setText("")
-        self.unit_price_field.setValue(0)
-        self.quantity_field.setValue(1)
         self._load_document()
+        return True
 
     def _load_document(self) -> None:
         if self._document_id is None:
@@ -335,6 +412,39 @@ class CommercialPosSaleScreen(QWidget):
         self.payment_reference_field.clear()
         self.status_label.setText("")
         self._load_document()
+
+    def _quick_cash_checkout(self) -> None:
+        """میان‌برِ F10 — رایج‌ترین سناریوی فروشِ حضوری (مشتری نقد و دقیقاً
+        هم‌ارزِ فاکتور می‌پردازد) را در یک کلید انجام می‌دهد: تکمیلِ فروش
+        (در صورتِ نیاز) + ثبتِ کاملِ مبلغِ باقی‌مانده به‌صورتِ نقد."""
+        if not self.isVisible():
+            return
+        if self._document_id is None or not self._lines:
+            self.status_label.setText("ابتدا حداقل یک کالا به سبد اضافه کنید.")
+            return
+        company_id = self._company_id()
+        if not self._is_posted:
+            try:
+                documents_service.confirm_document(self._document_id, company_id, app_session.current_user.user_id)
+                documents_service.post_document(self._document_id, company_id, app_session.current_user.user_id)
+            except ValueError as exc:
+                self.status_label.setText(str(exc))
+                return
+            self._load_document()
+        status = settlements_service.get_invoice_settlement_status(self._document_id, company_id)
+        if status.is_fully_settled:
+            self.status_label.setText("این فروش قبلاً تسویه شده است.")
+            return
+        try:
+            pos_service.record_payment_and_settle(
+                company_id, app_session.current_user.user_id, self._document_id, "CASH", status.remaining_amount,
+            )
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.status_label.setText("")
+        self._load_document()
+        self.scan_field.setFocus()
 
     def _refresh_payments_label(self, total_amount: decimal.Decimal) -> None:
         covered = pos_service.payments_cover_total(self._document_id) if self._document_id else False
