@@ -53,9 +53,22 @@ class CommercialPosSaleScreen(QWidget):
         self._cashier_settings: pos_service.PosCashierSettings | None = None
 
         page = QWidget()
-        outer = QVBoxLayout(page)
-        outer.setContentsMargins(20, 14, 20, 14)
+        page_row = QHBoxLayout(page)
+        page_row.setContentsMargins(20, 14, 20, 14)
+        page_row.setSpacing(14)
+
+        # طبقِ درخواستِ صریح («دکمه‌ها به‌صورتِ عمودی و بدونِ متن باشه»):
+        # ستونِ کلیدهایِ فوری، فقط آیکن با tooltip -- دقیقاً هم‌الگو با
+        # سایرِ iconButtonهایِ برنامه. چون برنامه RTL است (main.py)،
+        # ستونی که اول به QHBoxLayout اضافه می‌شود در سمتِ راست می‌نشیند
+        # -- هم‌جهت با عکسِ مرجعِ کاربر.
+        quick_keys_column = QVBoxLayout()
+        quick_keys_column.setSpacing(6)
+        page_row.addLayout(quick_keys_column)
+
+        outer = QVBoxLayout()
         outer.setSpacing(10)
+        page_row.addLayout(outer, stretch=1)
 
         title = QLabel("فروشِ حضوری (صندوق)")
         title.setObjectName("pageTitle")
@@ -126,42 +139,28 @@ class CommercialPosSaleScreen(QWidget):
 
         # طبقِ چرخه‌یِ بازطراحی‌شده: کاریر فقط تایید می‌کند (نقدی/نسیه،
         # با/بدونِ پرینت)؛ ثبتِ واقعیِ پرداخت/سندِ حسابداری با approve/
-        # postِ سرپرست در صفحه‌یِ جداگانه انجام می‌شود.
-        confirm_row = QHBoxLayout()
-        cash_print_button = QPushButton("💵🖨️ نقدی + پرینت")
-        cash_print_button.setObjectName("primaryIconButton")
-        cash_print_button.clicked.connect(lambda: self._confirm_sale("CASH", print_receipt=True))
-        confirm_row.addWidget(cash_print_button)
-        cash_noprint_button = QPushButton("💵 نقدی")
-        cash_noprint_button.setObjectName("iconButton")
-        cash_noprint_button.clicked.connect(lambda: self._confirm_sale("CASH", print_receipt=False))
-        confirm_row.addWidget(cash_noprint_button)
-        credit_print_button = QPushButton("📒🖨️ نسیه + پرینت")
-        credit_print_button.setObjectName("primaryIconButton")
-        credit_print_button.clicked.connect(lambda: self._confirm_sale("CREDIT", print_receipt=True))
-        confirm_row.addWidget(credit_print_button)
-        credit_noprint_button = QPushButton("📒 نسیه")
-        credit_noprint_button.setObjectName("iconButton")
-        credit_noprint_button.clicked.connect(lambda: self._confirm_sale("CREDIT", print_receipt=False))
-        confirm_row.addWidget(credit_noprint_button)
-        outer.addLayout(confirm_row)
+        # postِ سرپرست در صفحه‌یِ جداگانه انجام می‌شود. طبقِ درخواستِ
+        # صریح، این کلیدهایِ فوری عمودی و بدونِ متن (فقط آیکن+tooltip) اند.
+        def _quick_key(icon: str, tooltip: str, object_name: str, handler) -> QPushButton:
+            button = QPushButton(icon)
+            button.setObjectName(object_name)
+            button.setFixedWidth(48)
+            button.setToolTip(tooltip)
+            button.clicked.connect(handler)
+            quick_keys_column.addWidget(button)
+            return button
 
-        extra_row = QHBoxLayout()
-        suspend_button = QPushButton("📌 رزرو")
-        suspend_button.setObjectName("iconButton")
-        suspend_button.setToolTip("این فروش را نگه دار و سراغِ مشتریِ بعدی برو -- بعداً از «نمایشِ رزروها» بازش کن.")
-        suspend_button.clicked.connect(self._suspend_sale)
-        extra_row.addWidget(suspend_button)
-        show_suspended_button = QPushButton("👁️ نمایشِ رزروها")
-        show_suspended_button.setObjectName("iconButton")
-        show_suspended_button.clicked.connect(self._show_suspended_dialog)
-        extra_row.addWidget(show_suspended_button)
-        item_form_button = QPushButton("🛠️ تعریف/اصلاحِ کالا")
-        item_form_button.setObjectName("iconButton")
-        item_form_button.clicked.connect(self._open_item_form)
-        extra_row.addWidget(item_form_button)
-        extra_row.addStretch(1)
-        outer.addLayout(extra_row)
+        _quick_key("💵🖨️", "نقدی + پرینت", "primaryIconButton", lambda: self._confirm_sale("CASH", print_receipt=True))
+        _quick_key("💵", "نقدی (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CASH", print_receipt=False))
+        _quick_key("📒🖨️", "نسیه + پرینت", "primaryIconButton", lambda: self._confirm_sale("CREDIT", print_receipt=True))
+        _quick_key("📒", "نسیه (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CREDIT", print_receipt=False))
+        _quick_key(
+            "📌", "رزرو -- این فروش را نگه دار و سراغِ مشتریِ بعدی برو؛ بعداً از «نمایشِ رزروها» بازش کن.",
+            "iconButton", self._suspend_sale,
+        )
+        _quick_key("👁️", "نمایشِ رزروها", "iconButton", self._show_suspended_dialog)
+        _quick_key("🛠️", "تعریف/اصلاحِ کالا", "iconButton", self._open_item_form)
+        quick_keys_column.addStretch(1)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")

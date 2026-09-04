@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
     CommercialDocument,
@@ -196,10 +197,10 @@ def payments_cover_total(document_id: int) -> bool:
         return _money(sum(paid, _ZERO) + sum(plan_amounts, _ZERO)) == _money(doc.total_amount)
 
 
-def record_payment_and_settle(
-    company_id: int, user_id: int, document_id: int, method_code: str,
-    amount: decimal.Decimal, reference_no: str | None = None,
-) -> int:
+def record_payment_and_settle_batch(
+    company_id: int, user_id: int, document_ids: list[int], method_code: str,
+    amounts: dict[int, decimal.Decimal] | None = None, reference_no: str | None = None,
+) -> list[int]:
     """طبقِ رفعِ شکافِ کشف‌شده: record_payment (بالا) از اول فقط یک
     ردیفِ comm.pos_payments ثبت می‌کرد -- بدونِ هیچ اثری در حساب‌هایِ
     نقد/بانک یا در comm.invoice_settlements؛ یعنی مشتری برایِ همیشه در
@@ -207,27 +208,45 @@ def record_payment_and_settle(
     صندوق/بانک نمی‌رسید. این تابع هر پرداختِ POS را به نتیجهٔ حسابداریِ
     واقعی‌اش وصل می‌کند:
     - نقد/کارت‌خوان: یک سندِ خزانه‌داریِ واقعی (create_treasury_voucher،
-      دقیقاً هم‌الگو با فرمِ دریافتِ معمولی) ساخته و به فاکتور تسویه
+      دقیقاً هم‌الگو با فرمِ دریافتِ معمولی) ساخته و به فاکتور(ها) تسویه
       می‌شود.
     - کیف‌پول/کارتِ‌هدیه/اعتبارِ فروشگاهی: نیازی به سندِ خزانه‌داریِ تازه
       نیست (این‌ها از پیش داخلِ سیستم‌اند)، فقط تسویه (بدونِ ژورنالِ
-      جدید) ثبت می‌شود."""
+      جدید) ثبت می‌شود.
+
+    طبقِ تصمیمِ صریح («ادغام فقط رویِ سندِ حسابداری باشد، نه خودِ
+    فاکتور -- تعداد فاکتورها ممکنه زیاد بشه»): وقتی چند document_id
+    (همه‌ متعلق به یک طرفِ‌حساب) با هم پاس داده شوند و روشِ پرداخت
+    نقد/کارت‌خوان باشد، به‌جایِ N سندِ حسابداریِ جدا، فقط یک سندِ واحد
+    برایِ مجموع ساخته می‌شود -- خودِ فاکتورها دست‌نخورده و جدا می‌مانند،
+    هرکدام فقط یک ردیفِ تسویه به همان یک سندِ حسابداری می‌گیرند (پس
+    ریزِ فاکتورهایِ یک سند از طریقِ list_settlements_for_invoice/
+    فیلترِ journal_entry_id هنوز قابلِ‌مشاهده است)."""
     with new_session() as session:
-        doc = session.get(CommercialDocument, document_id)
-        if doc is None or doc.company_id != company_id:
-            raise ValueError("سند نامعتبر است.")
-        customer_id = doc.counterparty_detail_account_id
-        document_date = doc.document_date
-        document_no = doc.document_no
+        docs = []
+        for document_id in document_ids:
+            doc = session.get(CommercialDocument, document_id)
+            if doc is None or doc.company_id != company_id:
+                raise ValueError("سند نامعتبر است.")
+            docs.append(doc)
+        if len({d.counterparty_detail_account_id for d in docs}) > 1:
+            raise ValueError("ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب مجاز است.")
+        customer_id = docs[0].counterparty_detail_account_id
+        document_date = docs[0].document_date
+        document_numbers = [d.document_no for d in docs]
 
-    if method_code == "GIFT_CARD":
-        if not reference_no:
-            raise ValueError("کدِ کارتِ‌هدیه را وارد کنید.")
-        redeem_gift_card(reference_no, amount)
-    elif method_code == "WALLET":
-        redeem_wallet(customer_id, amount, document_id=document_id)
+    amounts = amounts or {d.document_id: d.total_amount for d in docs}
 
-    payment_id = record_payment(document_id, method_code, amount, reference_no=reference_no)
+    payment_ids = []
+    for doc in docs:
+        amount = amounts[doc.document_id]
+        if method_code == "GIFT_CARD":
+            if not reference_no:
+                raise ValueError("کدِ کارتِ‌هدیه را وارد کنید.")
+            redeem_gift_card(reference_no, amount)
+        elif method_code == "WALLET":
+            redeem_wallet(customer_id, amount, document_id=doc.document_id)
+        payment_ids.append(record_payment(doc.document_id, method_code, amount, reference_no=reference_no))
 
     journal_entry_id = None
     if method_code in ("CASH", "CARD"):
@@ -246,19 +265,34 @@ def record_payment_and_settle(
         if mapping_account_id is None:
             raise ValueError("نگاشتِ حسابِ دریافت برایِ گروهِ «مشتری» در تنظیماتِ خزانه‌داری مشخص نشده است.")
         treasury_method = "CASH" if method_code == "CASH" else "BANK"
+        total_amount = sum(amounts[d.document_id] for d in docs)
+        description = (
+            f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_numbers[0]}" if len(docs) == 1
+            else f"دریافتِ صندوق (POS) -- بابتِ {numerals.to_persian_digits(str(len(docs)))} فاکتورِ فروش"
+        )
         voucher_result = treasury_service.create_treasury_voucher(
             company_id, user_id, "RECEIPT", mapping_account_id,
-            {person_dimension_type_id: customer_id}, document_date,
-            f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_no}",
-            [treasury_service.MethodLine(method=treasury_method, amount=amount)],
+            {person_dimension_type_id: customer_id}, document_date, description,
+            [treasury_service.MethodLine(method=treasury_method, amount=total_amount)],
         )
         journal_entry_id = voucher_result.journal_entry_id
 
-    settlements_service.allocate_settlement(
-        company_id, document_id, journal_entry_id, datetime.date.today(), amount, user_id,
-        reference_no=reference_no, description="تسویه‌یِ خودکارِ فروشِ حضوری (POS)",
-    )
-    return payment_id
+    description = "تسویه‌یِ خودکارِ فروشِ حضوری (POS)" if len(docs) == 1 else "تسویه‌یِ ادغام‌شده‌یِ فروشِ حضوری (POS)"
+    for doc in docs:
+        settlements_service.allocate_settlement(
+            company_id, doc.document_id, journal_entry_id, datetime.date.today(), amounts[doc.document_id], user_id,
+            reference_no=reference_no, description=description,
+        )
+    return payment_ids
+
+
+def record_payment_and_settle(
+    company_id: int, user_id: int, document_id: int, method_code: str,
+    amount: decimal.Decimal, reference_no: str | None = None,
+) -> int:
+    return record_payment_and_settle_batch(
+        company_id, user_id, [document_id], method_code, {document_id: amount}, reference_no,
+    )[0]
 
 
 # ---------------------------------------------------------------------
