@@ -1369,6 +1369,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.inventory_documents_list import InventoryDocumentsListScreen
         from peecha.ui.screens.commercial_document import CommercialDocumentScreen
         from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
+        from peecha.ui.screens.sales_assistant import SalesAssistantScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
@@ -1471,6 +1472,7 @@ class MainWindow(QMainWindow):
             ),
         )
         self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
+        self.register_screen("sales_assistant", SalesAssistantScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sessions", CommercialPosSessionsScreen())
         self.register_screen("commercial_pos_sale", CommercialPosSaleScreen())

@@ -98,6 +98,9 @@ NAV_ITEMS = [
         "code": "SALES",
         "label": "فروش و بازاریابی",
         "children": [
+            # طبقِ درخواستِ صریح («دستیارِ فروش داخلِ ERP»): فهرستِ رتبه‌بندی‌
+            # شده‌یِ مهم‌ترین اقداماتِ امروز (ریسکِ ریزش/فروشِ مکمل/رشدِ مشتری).
+            {"code": "SALES_ASSISTANT", "label": "دستیارِ فروش", "screen": "sales_assistant"},
             {"code": "SALES_ORDER", "label": "سفارشِ فروش", "screen": "commercial_document_sales_order"},
             {"code": "SALES_PROFORMA", "label": "پیش‌فاکتورِ فروش", "screen": "commercial_document_sales_proforma"},
             {"code": "SALES_INVOICE", "label": "فاکتورِ فروش", "screen": "commercial_document_sales_invoice"},
@@ -296,6 +299,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("INV_CONSIGNMENT_TRACKING", "🤝"),
     ],
     "SALES": [
+        ("SALES_ASSISTANT", "🧠"),
         ("SALES_ORDER", "📝"),
         ("SALES_INVOICE", "🧾"),
         ("SALES_RETURN", "↩️"),
