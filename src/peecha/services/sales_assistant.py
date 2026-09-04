@@ -220,9 +220,16 @@ def get_daily_actions(company_id: int, limit: int = 5) -> list[ActionItem]:
     today = datetime.date.today()
     year_start, last_year_start, last_year_same_day = _jalali_year_bounds(today)
 
-    customers = [
-        c for c in partners_service.list_customer_detail_accounts(company_id) if c.get("status_code") == "ACTIVE"
-    ]
+    # باگِ واقعیِ کشف‌شده («رتبه‌بندی نمایش نمی‌دهد»): فیلترِ قبلیِ
+    # status_code=="ACTIVE" با «فعال‌بودنِ حساب» (is_active) اشتباه گرفته
+    # شده بود -- status_code وضعیتِ گردشِ کارِ *تاییدِ اعتباری* است
+    # (comm.customer_profiles.status_code) که هر مشتریِ تازه‌ثبت‌شده از
+    # طریقِ فرمِ معمولی با آن، در PENDING_APPROVAL می‌ماند مگر کسی صریحاً
+    # «تاییدِ اعتباری» را بزند -- یعنی تقریباً هیچ مشتری‌ای امتیاز
+    # نمی‌گرفت. list_customer_detail_accounts خودش از قبل فقط حساب‌هایِ
+    # تفصیلیِ *فعالِ* برگ (is_active=True) را برمی‌گرداند، پس نیازی به
+    # این فیلترِ اضافه‌یِ نادرست نیست.
+    customers = partners_service.list_customer_detail_accounts(company_id)
 
     items: list[ActionItem] = []
     for customer in customers:
@@ -317,9 +324,11 @@ def list_customer_scores(company_id: int) -> list[CustomerScoreRow]:
     year_start, last_year_start, last_year_same_day = _jalali_year_bounds(today)
     twelve_months_ago = today - datetime.timedelta(days=365)
 
-    customers = [
-        c for c in partners_service.list_customer_detail_accounts(company_id) if c.get("status_code") == "ACTIVE"
-    ]
+    # طبقِ رفعِ باگِ واقعی (نبودِ status_code=="ACTIVE" با is_active خلط
+    # شده بود -- بنگرید توضیحِ کاملِ آن در get_daily_actions):
+    # list_customer_detail_accounts خودش فقط حساب‌هایِ فعالِ برگ را
+    # می‌دهد، پس فیلترِ اضافه‌یِ گردشِ‌کارِ اعتباری نباید این‌جا اعمال شود.
+    customers = partners_service.list_customer_detail_accounts(company_id)
 
     raw: list[tuple] = []
     for customer in customers:
