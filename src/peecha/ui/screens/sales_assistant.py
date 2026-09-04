@@ -161,7 +161,13 @@ class SalesAssistantScreen(QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
-        dialog = _CounterpartyHistoryDialog(self, company_id, item.customer_id, item.customer_name)
+        # طبقِ گزارشِ صریحِ کاربر («فقط خریدِ قطعی مهم است»): تمامِ محاسباتِ
+        # این دستیار (ریسکِ ریزش، رشد، ...) فقط بر اساسِ فاکتورِ فروشِ
+        # ثبت‌نهایی‌شده است -- پیش‌فرضِ این دیالوگ هم باید همان باشد.
+        dialog = _CounterpartyHistoryDialog(
+            self, company_id, item.customer_id, item.customer_name,
+            default_document_type_code="SALES_INVOICE",
+        )
         dialog.exec()
 
     def open_customer_form(self, customer_id: int) -> None:

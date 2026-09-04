@@ -356,7 +356,10 @@ class _CounterpartyHistoryDialog(QDialog):
     مشترکِ همه‌جایِ برنامه است و چنین ناوبری‌ای هر ویرایشِ درحال‌انجامِ
     کاربر رویِ همان صفحه را پاک می‌کرد."""
 
-    def __init__(self, parent: QWidget, company_id: int, counterparty_id: int, counterparty_label: str) -> None:
+    def __init__(
+        self, parent: QWidget, company_id: int, counterparty_id: int, counterparty_label: str,
+        *, default_document_type_code: str | None = None,
+    ) -> None:
         super().__init__(parent)
         self._company_id = company_id
         self._counterparty_id = counterparty_id
@@ -366,15 +369,29 @@ class _CounterpartyHistoryDialog(QDialog):
         self.setMinimumHeight(420)
         layout = QVBoxLayout(self)
 
-        count_row = QHBoxLayout()
-        count_row.addWidget(QLabel("تعدادِ ردیفِ نمایش‌داده‌شده:"))
+        # طبقِ گزارشِ صریحِ کاربر («هم فاکتور و هم سفارش نمایش می‌دهد،
+        # فقط خریدِ قطعی مهم است»): پیش‌فرض رویِ همان نوعِ سندِ قطعی
+        # (فاکتور) قرار می‌گیرد، ولی این فیلتر برایِ دیدنِ بقیه‌یِ انواع
+        # هم قابلِ‌تغییر است.
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("نوعِ سند:"))
+        self.type_combo = _EnterComboBox()
+        self.type_combo.addItem("همه‌یِ انواع", None)
+        for code, title in DOC_TYPE_TITLES.items():
+            self.type_combo.addItem(title, code)
+        default_index = self.type_combo.findData(default_document_type_code)
+        self.type_combo.setCurrentIndex(default_index if default_index >= 0 else 0)
+        self.type_combo.currentIndexChanged.connect(self._refresh)
+        filter_row.addWidget(self.type_combo)
+        filter_row.addSpacing(16)
+        filter_row.addWidget(QLabel("تعدادِ ردیفِ نمایش‌داده‌شده:"))
         self.count_spin = QSpinBox()
         self.count_spin.setRange(1, 500)
         self.count_spin.setValue(10)
         self.count_spin.valueChanged.connect(self._refresh)
-        count_row.addWidget(self.count_spin)
-        count_row.addStretch(1)
-        layout.addLayout(count_row)
+        filter_row.addWidget(self.count_spin)
+        filter_row.addStretch(1)
+        layout.addLayout(filter_row)
 
         self.table = QTableWidget(0, len(_HISTORY_COLUMNS))
         self.table.setHorizontalHeaderLabels(_HISTORY_COLUMNS)
@@ -394,7 +411,8 @@ class _CounterpartyHistoryDialog(QDialog):
 
     def _refresh(self) -> None:
         self._documents = documents_service.list_documents(
-            self._company_id, counterparty_detail_account_id=self._counterparty_id, limit=self.count_spin.value(),
+            self._company_id, document_type_code=self.type_combo.currentData(),
+            counterparty_detail_account_id=self._counterparty_id, limit=self.count_spin.value(),
         )
         decimal_places = companies_service.get_base_currency_decimal_places(self._company_id)
         self.table.setRowCount(len(self._documents))
@@ -1630,7 +1648,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if company_id is None or counterparty_id is None:
             QMessageBox.information(self, "طرفِ‌حساب", "ابتدا یک طرفِ‌حساب انتخاب کنید.")
             return
-        dialog = _CounterpartyHistoryDialog(self, company_id, counterparty_id, self.counterparty_combo.currentText())
+        default_type = "SALES_INVOICE" if self.document_type_code in _SALES_TYPES else "PURCHASE_INVOICE"
+        dialog = _CounterpartyHistoryDialog(
+            self, company_id, counterparty_id, self.counterparty_combo.currentText(),
+            default_document_type_code=default_type,
+        )
         dialog.exec()
 
     def _run_invoice_report(self) -> None:
