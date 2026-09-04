@@ -80,16 +80,33 @@ def _churn_risk_item(
     )
 
 
-def _growth_item(
-    customer_id: int,
-    customer_name: str,
+def _jalali_year_bounds(today: datetime.date) -> tuple[datetime.date, datetime.date, datetime.date]:
+    """طبقِ همان مبنایِ سالِ مالیِ کلِ برنامه (که بر اساسِ تقویمِ جلالی
+    تعریف می‌شود، نه میلادی): «امسال»/«سالِ قبل» یعنی سالِ جلالیِ جاری و
+    ماقبلش -- وگرنه مرزِ ۱ ژانویه هیچ معنایی برایِ کاربرِ فارسی‌زبان و
+    برایِ سال‌هایِ مالیِ ثبت‌شده در دیتابیس ندارد. برمی‌گرداند:
+    (شروعِ سالِ جاری، شروعِ سالِ قبل، همان‌روزِ سالِ قبل)."""
+    jalali_today = jdatetime.date.fromgregorian(date=today)
+    year_start = jdatetime.date(jalali_today.year, 1, 1).togregorian()
+    last_year_start = jdatetime.date(jalali_today.year - 1, 1, 1).togregorian()
+    try:
+        last_year_same_day = jdatetime.date(jalali_today.year - 1, jalali_today.month, jalali_today.day).togregorian()
+    except ValueError:
+        # ۲۹/۳۰ اسفند در سالِ غیرِکبیسه -- طبقِ قاعده‌یِ رایج، به ۲۹ برمی‌گردیم.
+        last_year_same_day = jdatetime.date(jalali_today.year - 1, jalali_today.month, 29).togregorian()
+    return year_start, last_year_start, last_year_same_day
+
+
+def _compute_growth_percent(
     docs_sorted: list,
     year_start: datetime.date,
     today: datetime.date,
     last_year_start: datetime.date,
     last_year_same_day: datetime.date,
-    credit_limit_amount,
-) -> ActionItem | None:
+) -> decimal.Decimal | None:
+    """درصدِ رشدِ خریدِ امسال (تا امروز) نسبت به همان بازه‌یِ سالِ قبل --
+    None یعنی مشتری سالِ قبل در این بازه خریدی نداشته (مبنایی برایِ
+    مقایسه نیست)."""
     this_year_total = sum(
         (d.total_amount or decimal.Decimal(0) for d in docs_sorted if d.document_date and year_start <= d.document_date <= today),
         decimal.Decimal(0),
@@ -104,8 +121,21 @@ def _growth_item(
     )
     if last_year_total <= 0:
         return None
-    growth_percent = decimal.Decimal(round(float((this_year_total - last_year_total) / last_year_total) * 100))
-    if growth_percent < _GROWTH_MIN_PERCENT:
+    return decimal.Decimal(round(float((this_year_total - last_year_total) / last_year_total) * 100))
+
+
+def _growth_item(
+    customer_id: int,
+    customer_name: str,
+    docs_sorted: list,
+    year_start: datetime.date,
+    today: datetime.date,
+    last_year_start: datetime.date,
+    last_year_same_day: datetime.date,
+    credit_limit_amount,
+) -> ActionItem | None:
+    growth_percent = _compute_growth_percent(docs_sorted, year_start, today, last_year_start, last_year_same_day)
+    if growth_percent is None or growth_percent < _GROWTH_MIN_PERCENT:
         return None
     from peecha import numerals
 
@@ -188,18 +218,7 @@ def get_daily_actions(company_id: int, limit: int = 5) -> list[ActionItem]:
     («۵ اقدامِ مهمِ امروز»)، ابتدا بر اساسِ شدت (قرمز > زرد > سبز) و سپس
     بر اساسِ خودِ درصدِ معیار مرتب می‌شود."""
     today = datetime.date.today()
-    # طبقِ همان مبنایِ سالِ مالیِ کلِ برنامه (که بر اساسِ تقویمِ جلالی
-    # تعریف می‌شود، نه میلادی): «امسال»/«سالِ قبل» یعنی سالِ جلالیِ جاری
-    # و ماقبلش -- وگرنه مرزِ ۱ ژانویه هیچ معنایی برایِ کاربرِ فارسی‌زبان
-    # و برایِ سال‌هایِ مالیِ ثبت‌شده در دیتابیس ندارد.
-    jalali_today = jdatetime.date.fromgregorian(date=today)
-    year_start = jdatetime.date(jalali_today.year, 1, 1).togregorian()
-    last_year_start = jdatetime.date(jalali_today.year - 1, 1, 1).togregorian()
-    try:
-        last_year_same_day = jdatetime.date(jalali_today.year - 1, jalali_today.month, jalali_today.day).togregorian()
-    except ValueError:
-        # ۲۹/۳۰ اسفند در سالِ غیرِکبیسه -- طبقِ قاعده‌یِ رایج، به ۲۹ برمی‌گردیم.
-        last_year_same_day = jdatetime.date(jalali_today.year - 1, jalali_today.month, 29).togregorian()
+    year_start, last_year_start, last_year_same_day = _jalali_year_bounds(today)
 
     customers = [
         c for c in partners_service.list_customer_detail_accounts(company_id) if c.get("status_code") == "ACTIVE"
@@ -235,3 +254,144 @@ def get_daily_actions(company_id: int, limit: int = 5) -> list[ActionItem]:
 
     items.sort(key=lambda item: (_SEVERITY_RANK[item.severity], -float(item.metric_percent or 0)))
     return items[:limit]
+
+
+# ---------------------------------------------------------------------
+# رتبه‌بندیِ هوشمندِ مشتریان (طبقِ درخواستِ صریح: «Customer Score... هر
+# مشتری یک امتیاز... VIP/در حالِ رشد/نیازمندِ پیگیری/در معرضِ ریزش/
+# کم‌ارزش») -- طبقِ تصمیمِ طراحیِ توافق‌شده، این امتیاز به‌جایِ یک
+# داشبوردِ جداگانه، به‌صورتِ یک بَج در فرم‌هایِ موجود (فرمِ فاکتور و فرمِ
+# تعریفِ مشتری) نمایش داده می‌شود.
+# ---------------------------------------------------------------------
+_TIER_LABELS = {
+    "VIP": "VIP",
+    "GROWING": "در حالِ رشد",
+    "NEEDS_ATTENTION": "نیازمندِ پیگیری",
+    "AT_RISK": "در معرضِ ریزش",
+    "LOW_VALUE": "کم‌ارزش",
+}
+_TIER_EMOJI = {"VIP": "🟢", "GROWING": "🔵", "NEEDS_ATTENTION": "🟡", "AT_RISK": "🔴", "LOW_VALUE": "⚫"}
+
+
+@dataclass
+class CustomerScoreRow:
+    customer_id: int
+    customer_name: str
+    score: int  # ۰ تا ۱۰۰
+    tier: str  # "VIP" | "GROWING" | "NEEDS_ATTENTION" | "AT_RISK" | "LOW_VALUE"
+    invoice_count_12m: int
+    revenue_12m: decimal.Decimal
+    days_since_last: int | None
+    avg_interval_days: float | None
+    growth_percent: decimal.Decimal | None
+
+    @property
+    def emoji(self) -> str:
+        return _TIER_EMOJI[self.tier]
+
+    @property
+    def tier_label(self) -> str:
+        return _TIER_LABELS[self.tier]
+
+
+def _percentile_rank(value: float, sorted_values: list[float]) -> float:
+    if not sorted_values:
+        return 0.0
+    if len(sorted_values) == 1:
+        return 100.0 if value > 0 else 0.0
+    rank = sum(1 for v in sorted_values if v <= value)
+    return (rank - 1) / (len(sorted_values) - 1) * 100
+
+
+def list_customer_scores(company_id: int) -> list[CustomerScoreRow]:
+    """امتیازی از ۰ تا ۱۰۰ برایِ هر مشتریِ فعال، از ترکیبِ چهار معیارِ
+    نرمال‌شده (صدک‌بندی‌شده در میانِ همان مشتریانِ فعال):
+      - تکرارِ خرید (۳۰٪): تعدادِ فاکتورِ پُست‌شده‌یِ ۱۲‌ماهِ اخیر.
+      - حجمِ مالی (۳۰٪): جمعِ مبلغِ فروشِ ۱۲‌ماهِ اخیر.
+      - تازگیِ خرید (۲۵٪): فاصله‌یِ آخرین خرید نسبت به میانگینِ تاریخیِ
+        خودِ همان مشتری (نه مقایسه با بقیه).
+      - رشد (۱۵٪): رشدِ خریدِ امسال نسبت به مدتِ مشابهِ سالِ قبل.
+    مشتریِ بدونِ هیچ فاکتورِ ۱۲‌ماهِ اخیر همیشه «کم‌ارزش» با امتیازِ صفر
+    است -- بدونِ فعالیتِ اخیر، محاسبه‌یِ صدک بی‌معناست."""
+    today = datetime.date.today()
+    year_start, last_year_start, last_year_same_day = _jalali_year_bounds(today)
+    twelve_months_ago = today - datetime.timedelta(days=365)
+
+    customers = [
+        c for c in partners_service.list_customer_detail_accounts(company_id) if c.get("status_code") == "ACTIVE"
+    ]
+
+    raw: list[tuple] = []
+    for customer in customers:
+        customer_id = customer["detail_account_id"]
+        customer_name = customer.get("name") or customer.get("code") or str(customer_id)
+        docs = documents_service.list_documents(
+            company_id, document_type_code="SALES_INVOICE", status_code="POSTED",
+            counterparty_detail_account_id=customer_id,
+        )
+        if not docs:
+            raw.append((customer_id, customer_name, 0, decimal.Decimal(0), None, None, None))
+            continue
+        docs_sorted = sorted(docs, key=lambda d: (d.document_date or today, d.document_id))
+        dates = [d.document_date for d in docs_sorted if d.document_date is not None]
+        recent_docs = [d for d in docs_sorted if d.document_date and d.document_date >= twelve_months_ago]
+        invoice_count_12m = len(recent_docs)
+        revenue_12m = sum((d.total_amount or decimal.Decimal(0) for d in recent_docs), decimal.Decimal(0))
+        days_since_last = (today - dates[-1]).days if dates else None
+        avg_interval_days = None
+        if len(dates) >= 2:
+            span_days = (dates[-1] - dates[0]).days
+            if span_days > 0:
+                avg_interval_days = span_days / (len(dates) - 1)
+        growth_percent = _compute_growth_percent(docs_sorted, year_start, today, last_year_start, last_year_same_day)
+        raw.append(
+            (customer_id, customer_name, invoice_count_12m, revenue_12m, days_since_last, avg_interval_days, growth_percent)
+        )
+
+    freq_values = [float(r[2]) for r in raw]
+    revenue_values = [float(r[3]) for r in raw]
+
+    rows: list[CustomerScoreRow] = []
+    for customer_id, customer_name, invoice_count_12m, revenue_12m, days_since_last, avg_interval_days, growth_percent in raw:
+        if invoice_count_12m == 0:
+            rows.append(
+                CustomerScoreRow(
+                    customer_id=customer_id, customer_name=customer_name, score=0, tier="LOW_VALUE",
+                    invoice_count_12m=0, revenue_12m=decimal.Decimal(0), days_since_last=days_since_last,
+                    avg_interval_days=avg_interval_days, growth_percent=growth_percent,
+                )
+            )
+            continue
+
+        frequency_score = _percentile_rank(float(invoice_count_12m), freq_values)
+        monetary_score = _percentile_rank(float(revenue_12m), revenue_values)
+        if days_since_last is None or avg_interval_days is None or avg_interval_days <= 0:
+            recency_score = 60.0
+        else:
+            ratio = days_since_last / avg_interval_days
+            recency_score = max(0.0, min(100.0, 100 - (ratio - 1) * 50))
+        growth_score = 50.0 if growth_percent is None else max(0.0, min(100.0, 50 + float(growth_percent) / 4))
+
+        score = round(frequency_score * 0.30 + monetary_score * 0.30 + recency_score * 0.25 + growth_score * 0.15)
+        score = max(1, min(100, score))
+        if score >= 80:
+            tier = "VIP"
+        elif score >= 60:
+            tier = "GROWING"
+        elif score >= 40:
+            tier = "NEEDS_ATTENTION"
+        else:
+            tier = "AT_RISK"
+
+        rows.append(
+            CustomerScoreRow(
+                customer_id=customer_id, customer_name=customer_name, score=score, tier=tier,
+                invoice_count_12m=invoice_count_12m, revenue_12m=revenue_12m, days_since_last=days_since_last,
+                avg_interval_days=avg_interval_days, growth_percent=growth_percent,
+            )
+        )
+    return rows
+
+
+def get_customer_score(company_id: int, customer_id: int) -> CustomerScoreRow | None:
+    return next((row for row in list_customer_scores(company_id) if row.customer_id == customer_id), None)

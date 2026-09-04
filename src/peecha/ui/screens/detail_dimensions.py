@@ -60,6 +60,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import hr as hr_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import payroll as payroll_service
+from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, PersianDigitLineEdit, build_action_footer
@@ -427,6 +428,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.partner_status_label = QLabel("")
         self.partner_status_label.setVisible(False)
         layout.addWidget(self.partner_status_label)
+        # طبقِ درخواستِ صریح («رتبه‌بندیِ هوشمندِ مشتریان... Customer
+        # Score») و تصمیمِ طراحیِ توافق‌شده (نمایش به‌صورتِ یک بَج در همینِ
+        # فرمِ موجود، نه یک داشبوردِ جداگانه) -- فقط برایِ مشتری (نه
+        # تامین‌کننده) و فقط رویِ رکوردِ از قبل ذخیره‌شده.
+        self.customer_score_label = QLabel("")
+        self.customer_score_label.setVisible(False)
+        layout.addWidget(self.customer_score_label)
         self.person_fields_grid = QGridLayout()
         person_fields_widget = QWidget()
         person_fields_widget.setLayout(self.person_fields_grid)
@@ -1450,10 +1458,26 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if status_code is None:
             self.partner_status_label.setVisible(False)
             self.approve_partner_button.setVisible(False)
+        else:
+            self.partner_status_label.setText(f"وضعیتِ اعتباری: {_PARTNER_STATUS_LABELS.get(status_code, status_code)}")
+            self.partner_status_label.setVisible(True)
+            self.approve_partner_button.setVisible(status_code == "PENDING_APPROVAL")
+
+        company_id = self._company_id()
+        is_customer = group_code == dimensions_service.CUSTOMER_GROUP_CODE
+        detail_account_id = row.get("detail_account_id")
+        score_row = (
+            assistant_service.get_customer_score(company_id, detail_account_id)
+            if is_customer and company_id is not None and detail_account_id is not None
+            else None
+        )
+        if score_row is None:
+            self.customer_score_label.setVisible(False)
             return
-        self.partner_status_label.setText(f"وضعیتِ اعتباری: {_PARTNER_STATUS_LABELS.get(status_code, status_code)}")
-        self.partner_status_label.setVisible(True)
-        self.approve_partner_button.setVisible(status_code == "PENDING_APPROVAL")
+        self.customer_score_label.setText(
+            f"امتیازِ مشتری: {score_row.emoji} {score_row.score} ({score_row.tier_label})"
+        )
+        self.customer_score_label.setVisible(True)
 
     def _approve_partner(self) -> None:
         if self._editing_account_id is None or self._selected is None:
@@ -1503,6 +1527,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.terminate_employee_button.setVisible(False)
         self.partner_status_label.setVisible(False)
         self.approve_partner_button.setVisible(False)
+        self.customer_score_label.setVisible(False)
         self._refresh_files_tab()
 
     def _terminate_employee(self) -> None:

@@ -36,7 +36,9 @@ from peecha import numerals, session as app_session
 from peecha.reporting import jasper_bridge
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
+from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_documents as documents_service
+from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import commercial_settlements as settlements_service
@@ -47,6 +49,7 @@ from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import report_templates as report_templates_service
+from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.screens.inventory_document import _enter_signal
@@ -1294,6 +1297,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         header_grid.setColumnStretch(4, 1)
         self.body_layout.addWidget(header_card)
 
+        # طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند... کنارِ مشتری: آخرین
+        # خرید، میانگینِ خرید، اعتبار، بدهی، امتیازِ مشتری») -- فقط برایِ
+        # اسنادِ روبه‌جلویِ فروش (همان مجموعه‌ای که سبدِ پیشنهادی دارند)
+        # و فقط وقتی طرفِ‌حساب انتخاب شده باشد.
+        self.customer_summary_box = QWidget()
+        self.customer_summary_box.setObjectName("card")
+        customer_summary_layout = QHBoxLayout(self.customer_summary_box)
+        customer_summary_layout.setContentsMargins(12, 6, 12, 6)
+        self.customer_summary_label = QLabel("")
+        self.customer_summary_label.setWordWrap(True)
+        customer_summary_layout.addWidget(self.customer_summary_label)
+        self.customer_summary_box.setVisible(False)
+        self.body_layout.addWidget(self.customer_summary_box)
+
         # زنجیره‌ی کاملِ Enter رویِ هدر — بدونِ استثنا (طبقِ سندِ راهنما).
         header_chain = [
             self.date_field, self.counterparty_combo, self.warehouse_combo, self.reference_field,
@@ -1308,6 +1325,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         _enter_signal(header_chain[-1]).connect(self._add_line)
         if self._is_invoice:
             self.counterparty_combo.currentIndexChanged.connect(self._recompute_due_date)
+        if self._supports_cross_sell:
+            self.counterparty_combo.currentIndexChanged.connect(self._refresh_customer_summary)
 
         # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): وضعیت و
         # پیوندهایِ سند هردو متنِ کوتاهِ اطلاعاتی‌اند — قبلاً هرکدام یک
@@ -1723,6 +1742,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             "discount_tax", numerals.format_money(doc.discount_amount + doc.tax_amount, dp)
         )
         self.summary_cards.set_value("grand_total", numerals.format_money(doc.total_amount, dp))
+        if self._supports_cross_sell:
+            self._refresh_customer_summary()
         self._apply_status_state()
 
     def _refresh_lines_table(self) -> None:
@@ -1821,6 +1842,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         for key in ("subtotal", "discount_tax", "grand_total"):
             self.summary_cards.set_value(key, "۰")
         self._refresh_lines_table()
+        if self._supports_cross_sell:
+            self._refresh_customer_summary()
         self._apply_status_state()
         if not clear_only:
             self.refresh()
@@ -1980,6 +2003,36 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
         self._load_document()
         self._refresh_cross_sell_suggestion(fields.get("item_id"))
+
+    def _refresh_customer_summary(self) -> None:
+        """طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند»): خلاصه‌یِ وضعیتِ همان
+        مشتریِ رویِ هدر -- آخرین خرید، میانگینِ فاصله‌یِ خرید، سقفِ اعتبار،
+        بدهیِ جاری، و امتیاز/ردیفِ مشتری -- درست زیرِ هدرِ سند."""
+        company_id = self._company_id()
+        counterparty_id = self.counterparty_combo.currentData()
+        if not self._supports_cross_sell or company_id is None or counterparty_id is None:
+            self.customer_summary_box.setVisible(False)
+            return
+
+        score_row = assistant_service.get_customer_score(company_id, counterparty_id)
+        if score_row is None:
+            self.customer_summary_box.setVisible(False)
+            return
+
+        parts = [f"{score_row.emoji} امتیازِ مشتری: {numerals.to_persian_digits(str(score_row.score))} ({score_row.tier_label})"]
+        if score_row.days_since_last is not None:
+            parts.append(f"آخرین خرید: {numerals.to_persian_digits(str(score_row.days_since_last))} روز پیش")
+        if score_row.avg_interval_days is not None:
+            parts.append(f"میانگینِ خرید: هر {numerals.to_persian_digits(str(round(score_row.avg_interval_days)))} روز")
+
+        profile = partners_service.get_customer_profile(counterparty_id)
+        if profile is not None and profile.credit_limit_amount:
+            parts.append(f"سقفِ اعتبار: {numerals.format_company_amount(profile.credit_limit_amount)}")
+            exposure = credit_service.compute_customer_exposure(company_id, counterparty_id)
+            parts.append(f"بدهیِ جاری: {numerals.format_company_amount(exposure)}")
+
+        self.customer_summary_label.setText("  |  ".join(parts))
+        self.customer_summary_box.setVisible(True)
 
     def _clear_cross_sell_box(self) -> None:
         self._cross_sell_suggestions = []
