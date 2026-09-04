@@ -1195,6 +1195,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # تازه) و نه امانی (که مسیرِ تسویه‌اش جداست).
         self._supports_cross_sell = document_type_code in ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE")
         self._cross_sell_suggestions: list = []
+        self._upsell_suggestions: list = []
         self._main_window = main_window
         self._document_id: int | None = None
         self._status_code = "DRAFT"
@@ -1519,6 +1520,18 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._cross_sell_layout.setSpacing(4)
         self.cross_sell_box.setVisible(False)
         self.body_layout.addWidget(self.cross_sell_box)
+
+        # طبقِ درخواستِ صریح («فروشِ ارتقایی»): زیرساختِ کالاهایِ
+        # جایگزین (catalog_service.list_related_items, نوعِ SUBSTITUTE)
+        # از قبل در فرمِ کالا قابلِ‌تعریف بود ولی هیچ‌جا استفاده نمی‌شد --
+        # این‌جا اگر کالایِ همین ردیف جایگزینی با قیمتِ فروشِ بالاتر
+        # دارد، پیشنهادِ ارتقا نشان داده می‌شود.
+        self.upsell_box = QWidget()
+        self._upsell_layout = QVBoxLayout(self.upsell_box)
+        self._upsell_layout.setContentsMargins(0, 0, 0, 0)
+        self._upsell_layout.setSpacing(4)
+        self.upsell_box.setVisible(False)
+        self.body_layout.addWidget(self.upsell_box)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -2130,6 +2143,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
         self._load_document()
         self._refresh_cross_sell_suggestion(fields.get("item_id"))
+        self._refresh_upsell_suggestion(fields.get("item_id"))
 
     def _refresh_customer_summary(self) -> None:
         """طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند»): خلاصه‌یِ وضعیتِ همان
@@ -2263,6 +2277,90 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._load_document()
         self._refresh_cross_sell_suggestion(item.item_id)
+
+    def _clear_upsell_box(self) -> None:
+        self._upsell_suggestions = []
+        while self._upsell_layout.count():
+            item = self._upsell_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().setParent(None)
+        self.upsell_box.setVisible(False)
+
+    def _refresh_upsell_suggestion(self, item_id: int | None) -> None:
+        """طبقِ درخواستِ صریح («فروشِ ارتقایی»): اگر کالایِ همین ردیف در
+        فرمِ کالا یک یا چند «جایگزین» (RelatedItem با نوعِ SUBSTITUTE)
+        دارد که قیمتِ فروشِ حل‌شده‌اش (طبقِ همان فهرستِ قیمت/طرفِ‌حسابِ
+        همین سند) از قیمتِ همین ردیف بالاتر باشد، پیشنهادِ ارتقا نشان
+        داده می‌شود -- یک جایگزینِ بدونِ قیمتِ قابلِ‌حل در همین بافت
+        بی‌صدا نادیده گرفته می‌شود (چون سوگیریِ آن قابلِ‌فروش نیست)."""
+        self._clear_upsell_box()
+        company_id = self._company_id()
+        counterparty_id = self.counterparty_combo.currentData()
+        if not self._supports_cross_sell or item_id is None or company_id is None or counterparty_id is None:
+            return
+        original_line = next((ln for ln in self._lines if ln.item_id == item_id), None)
+        if original_line is None:
+            return
+        substitute_ids = [
+            related_item_id for related_item_id, relation_type_code in catalog_service.list_related_items(item_id)
+            if relation_type_code == "SUBSTITUTE"
+        ]
+        if not substitute_ids:
+            return
+        suggestions = []
+        for related_item_id in substitute_ids:
+            substitute_item = next((it for it in self._items if it.item_id == related_item_id), None)
+            if substitute_item is None:
+                continue
+            try:
+                resolved = pricing_service.resolve_price(
+                    company_id, counterparty_id, related_item_id, substitute_item.base_uom_id, decimal.Decimal(1),
+                    self.price_list_combo.currentData(), self.document_type_code, self.date_field.date(),
+                )
+            except ValueError:
+                continue
+            if resolved.unit_price <= original_line.unit_price:
+                continue
+            suggestions.append((original_line, substitute_item, resolved.unit_price))
+        if not suggestions:
+            return
+        for original, substitute_item, upgraded_price in suggestions:
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            label = QLabel(
+                f"⬆️ نسخهٔ بالاترِ این کالا هم موجود است: «{substitute_item.code} — {substitute_item.name}» "
+                f"به‌قیمتِ {numerals.format_money(upgraded_price, self._decimal_places)}"
+            )
+            label.setWordWrap(True)
+            row_layout.addWidget(label, stretch=1)
+            upgrade_button = QPushButton("🔁 جایگزینی")
+            upgrade_button.setObjectName("flatButton")
+            upgrade_button.clicked.connect(
+                lambda _checked=False, o=original, it=substitute_item: self._add_upsell_suggestion(o, it)
+            )
+            row_layout.addWidget(upgrade_button)
+            self._upsell_layout.addWidget(row_widget)
+        self._upsell_suggestions = suggestions
+        self.upsell_box.setVisible(True)
+        QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(self.upsell_box))
+
+    def _add_upsell_suggestion(self, original_line, substitute_item) -> None:
+        company_id = self._company_id()
+        if self._document_id is None or company_id is None:
+            return
+        try:
+            documents_service.add_line(
+                self._document_id, company_id, item_id=substitute_item.item_id, uom_id=substitute_item.base_uom_id,
+                quantity=original_line.quantity, quantity_base=original_line.quantity_base,
+                warehouse_id=self.warehouse_combo.currentData() if self.warehouse_combo is not None else None,
+            )
+            documents_service.delete_line(original_line.line_id, self._document_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._load_document()
+        self._clear_upsell_box()
 
     def _selected_line(self):
         selected = self.lines_table.selectedItems()
