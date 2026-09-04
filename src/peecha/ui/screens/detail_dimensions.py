@@ -24,13 +24,14 @@ import datetime
 import decimal
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor
+from PySide6.QtGui import QBrush, QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDateEdit,
     QDoubleSpinBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -343,6 +344,22 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.account_form_title.setObjectName("pageTitle")
         layout.addWidget(self.account_form_title)
 
+        # طبقِ درخواستِ صریح («بشه از تفضیلی‌هایِ دیگر کپی کرد و تفصیلیِ
+        # جدید ایجاد نمود»): وقتی در حالِ ساختنِ رکوردِ تازه هستیم، انتخابِ
+        # یک حسابِ تفصیلیِ موجود از همین گروه، تمامِ فیلدهایش (بجز کد --
+        # که باید یکتا بماند) را در فرم پر می‌کند؛ فقط یک محرکِ یک‌باره
+        # است، بعدِ کپی خودش به حالتِ اولیه برمی‌گردد.
+        copy_from_row = QHBoxLayout()
+        copy_from_row.setContentsMargins(0, 0, 0, 0)
+        copy_from_row.addWidget(QLabel("کپی از:"))
+        self.copy_from_combo = QComboBox()
+        self.copy_from_combo.addItem("— انتخابِ نمونه برایِ کپی —", None)
+        self.copy_from_combo.currentIndexChanged.connect(self._on_copy_from_changed)
+        copy_from_row.addWidget(self.copy_from_combo, stretch=1)
+        self.copy_from_widget = QWidget()
+        self.copy_from_widget.setLayout(copy_from_row)
+        layout.addWidget(self.copy_from_widget)
+
         self.parent_combo = QComboBox()
         self.parent_combo.currentIndexChanged.connect(self._on_parent_combo_changed)
 
@@ -361,6 +378,31 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         ])
         layout.addWidget(self.account_basic_grid)
         self.register_field_grids("detail_dimensions", [self.account_basic_grid])
+
+        # طبقِ درخواستِ صریح («برایِ گروه‌هایی که تیک می‌زنیم عکس آپلود
+        # کرد»): فقط وقتی گروهِ انتخاب‌شده این امکان را روشن کرده باشد
+        # (dimension_group_config.py) و رکورد از قبل ذخیره شده باشد
+        # (عکس به detail_account_id متصل می‌شود، نه به فرمِ هنوز-ذخیره‌
+        # نشده) نمایان می‌شود.
+        photo_row = QHBoxLayout()
+        self.photo_thumbnail = QLabel("بدونِ عکس")
+        self.photo_thumbnail.setFixedSize(64, 64)
+        self.photo_thumbnail.setAlignment(Qt.AlignCenter)
+        self.photo_thumbnail.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px;")
+        photo_row.addWidget(self.photo_thumbnail)
+        photo_buttons = QVBoxLayout()
+        upload_photo_button = QPushButton("📷 آپلودِ عکس")
+        upload_photo_button.clicked.connect(self._upload_photo)
+        photo_buttons.addWidget(upload_photo_button)
+        remove_photo_button = QPushButton("🚫 حذفِ عکس")
+        remove_photo_button.clicked.connect(self._remove_photo)
+        photo_buttons.addWidget(remove_photo_button)
+        photo_row.addLayout(photo_buttons)
+        photo_row.addStretch(1)
+        self.photo_widget = QWidget()
+        self.photo_widget.setLayout(photo_row)
+        self.photo_widget.setVisible(False)
+        layout.addWidget(self.photo_widget)
 
         # طبقِ درخواستِ صریح: گروه‌هایِ اشخاص (مشتری/تامین‌کننده/پرسنل)
         # فیلدهایِ هاردکدِ اختصاصیِ خودشان را هم دارند (چون در جدولِ
@@ -769,6 +811,22 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     self.parent_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
         self.parent_combo.blockSignals(False)
 
+        # طبقِ درخواستِ صریح («کپی از تفصیلی‌هایِ دیگر»): همه‌یِ حساب‌هایِ
+        # همین گروه (در هر سطحی) به‌عنوانِ نمونه‌یِ کپی در دسترس‌اند.
+        self.copy_from_combo.blockSignals(True)
+        self.copy_from_combo.clear()
+        self.copy_from_combo.addItem("— انتخابِ نمونه برایِ کپی —", None)
+        if self._is_person():
+            for r in rows:
+                if r["detail_account_id"] != self._editing_account_id:
+                    self.copy_from_combo.addItem(f"{r['full_code']} — {r['name'] or ''}", r["detail_account_id"])
+        else:
+            for r in rows:
+                if r.detail_account_id != self._editing_account_id:
+                    self.copy_from_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
+        self.copy_from_combo.blockSignals(False)
+        self.copy_from_widget.setVisible(self._editing_account_id is None)
+
         self._rebuild_accounts_tree()
         self._render_person_fields()
         self._render_extra_fields()
@@ -1084,6 +1142,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.terminate_employee_button.setVisible(is_employee and row.get("employee_status") != "TERMINATED")
             self._refresh_pay_components_section(row.get("employee_id") if is_employee else None)
             self._update_partner_status_display(row)
+            self._refresh_photo_widget()
             return
 
         account = self._accounts_by_id.get(detail_account_id)
@@ -1109,6 +1168,116 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setVisible(True)
         self.terminate_employee_button.setVisible(False)
         self._refresh_pay_components_section(None)
+        self._refresh_photo_widget()
+
+    def _on_copy_from_changed(self) -> None:
+        source_id = self.copy_from_combo.currentData()
+        if source_id is None:
+            return
+        self._apply_copy_from(source_id)
+        # طبقِ طراحی: این کمبو فقط یک محرکِ یک‌باره است، نه یک انتخابِ
+        # پایدار -- بعدِ اعمالِ کپی به حالتِ «— انتخابِ نمونه... —» برمی‌گردد
+        # تا کاربر بتواند دوباره از نمونه‌یِ دیگری هم کپی کند.
+        self.copy_from_combo.blockSignals(True)
+        self.copy_from_combo.setCurrentIndex(0)
+        self.copy_from_combo.blockSignals(False)
+
+    def _apply_copy_from(self, source_id: int) -> None:
+        """طبقِ درخواستِ صریح («بشه از تفصیلی‌هایِ دیگر کپی کرد»): تمامِ
+        فیلدهایِ یک حسابِ تفصیلیِ موجود -- بجز کد، که باید یکتا بماند و
+        دوباره پیشنهاد می‌شود -- در فرمِ «حسابِ تفصیلیِ جدید» از پیش پر
+        می‌شود. فقط وقتی معنا دارد که در حالِ ساختنِ رکوردِ تازه باشیم
+        (نه ویرایشِ یک رکوردِ موجود) -- copy_from_widget هم دقیقاً به
+        همین شرط پنهان/نمایان می‌شود."""
+        if self._editing_account_id is not None:
+            return
+        if self._is_person():
+            row = self._person_rows_by_id.get(source_id)
+            if row is None:
+                return
+            self.account_name_field.setText(row["name"] or "")
+            self.account_active_checkbox.setChecked(row["is_active"])
+            parent_id = row.get("parent_detail_account_id")
+            index = self.parent_combo.findData(parent_id) if parent_id is not None else 0
+            self.parent_combo.setCurrentIndex(index if index >= 0 else 0)
+            self._render_person_fields(row)
+            self._render_extra_fields(row.get("custom_fields"))
+        else:
+            account = self._accounts_by_id.get(source_id)
+            if account is None:
+                return
+            self.account_name_field.setText(account.name or "")
+            self.account_active_checkbox.setChecked(account.is_active)
+            if account.parent_detail_account_id is not None:
+                index = self.parent_combo.findData(account.parent_detail_account_id)
+                self.parent_combo.setCurrentIndex(index if index >= 0 else 0)
+            else:
+                self.parent_combo.setCurrentIndex(0)
+            self._render_extra_fields(account.extra_fields)
+            item_row = None
+            if self._is_inventory_item_group():
+                item_row = self._item_rows_by_detail_id.get(source_id)
+            self._render_item_panel(item_row)
+        self._suggest_code_for_current_parent()
+
+    # --- عکسِ حسابِ تفصیلی (طبقِ درخواستِ صریح: «برایِ گروه‌هایی که تیک
+    # می‌زنیم عکس آپلود کرد») --------------------------------------------
+    def _refresh_photo_widget(self) -> None:
+        if self._selected is None:
+            self.photo_widget.setVisible(False)
+            return
+        photo_enabled = dimensions_service.get_group_photo_enabled(self._dimension_type_id(), self._person_group_id())
+        # فقط برایِ رکوردِ از قبل ذخیره‌شده معنا دارد -- عکس به
+        # detail_account_id متصل می‌شود، نه به فرمِ هنوز-ذخیره‌نشده.
+        self.photo_widget.setVisible(photo_enabled and self._editing_account_id is not None)
+        if not self.photo_widget.isVisible():
+            return
+        company_id = self._company_id()
+        photo = (
+            dimensions_service.get_detail_account_photo(company_id, self._editing_account_id)
+            if company_id is not None
+            else None
+        )
+        if photo is not None:
+            pixmap = QPixmap(photo.storage_key)
+            if not pixmap.isNull():
+                self.photo_thumbnail.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self.photo_thumbnail.setText("")
+            else:
+                self.photo_thumbnail.setPixmap(QPixmap())
+                self.photo_thumbnail.setText("خطا در بارگذاری")
+        else:
+            self.photo_thumbnail.setPixmap(QPixmap())
+            self.photo_thumbnail.setText("بدونِ عکس")
+
+    def _upload_photo(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp)"
+        )
+        if not path:
+            return
+        try:
+            dimensions_service.set_detail_account_photo(
+                company_id, self._editing_account_id, session.current_user.user_id, path
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_photo_widget()
+
+    def _remove_photo(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        dimensions_service.remove_detail_account_photo(company_id, self._editing_account_id, session.current_user.user_id)
+        self._refresh_photo_widget()
 
     def _update_partner_status_display(self, row: dict) -> None:
         group_code = self._selected[1] if self._selected else None
@@ -1149,6 +1318,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _cancel_account_edit(self) -> None:
         self._editing_account_id = None
         self.account_form_title.setText("حسابِ تفصیلیِ جدید")
+        self.copy_from_widget.setVisible(True)
+        self.copy_from_combo.blockSignals(True)
+        self.copy_from_combo.setCurrentIndex(0)
+        self.copy_from_combo.blockSignals(False)
         self.account_status_label.setText("")
         self.account_code_field.clear()
         self.account_name_field.clear()
@@ -1166,6 +1339,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.terminate_employee_button.setVisible(False)
         self.partner_status_label.setVisible(False)
         self.approve_partner_button.setVisible(False)
+        self._refresh_photo_widget()
 
     def _terminate_employee(self) -> None:
         if self._editing_account_id is None:

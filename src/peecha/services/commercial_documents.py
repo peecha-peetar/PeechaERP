@@ -949,29 +949,37 @@ class CrossSellSuggestion:
     confidence_percent: decimal.Decimal
 
 
-def suggest_frequently_bought_together(company_id: int, item_id: int, limit: int = 3) -> list[CrossSellSuggestion]:
+def suggest_frequently_bought_together(
+    company_id: int, item_id: int, limit: int = 3, counterparty_detail_account_id: int | None = None,
+) -> list[CrossSellSuggestion]:
     """طبقِ درخواستِ صریح («سبدِ پیشنهادی» -- وقتی فروشنده یک کالا به
     فاکتور اضافه می‌کند، کالاهایی که معمولاً همراهِ آن خریده می‌شوند
     پیشنهاد شود): از رویِ فاکتورهایِ فروشِ ثبتِ‌نهایی‌شده (POSTED) --
     پیش‌نویس/لغوشده معیار نیستند -- کالاهایی که بیشترین هم‌خریدی را با
     این کالا دارند پیدا می‌کند. این فقط یک هم‌بستگیِ آماریِ ساده
     (co-occurrence) است، نه یادگیریِ ماشین، ولی برایِ پیشنهادِ فروشِ
-    مکمل کافی است."""
+    مکمل کافی است.
+
+    طبقِ رفعِ بازخوردِ صریح («این پیام باید به همان مشتریِ رویِ هدرِ سند
+    اشاره کند، نه به «مشتری‌ها» به‌طورِ کلی»): وقتی counterparty_
+    detail_account_id داده شود، فقط سابقهٔ خریدِ همان مشتریِ خاص در نظر
+    گرفته می‌شود -- نه هم‌بستگیِ آماریِ کلِ مشتریان."""
     with new_session() as session:
-        base_doc_ids = [
-            row[0]
-            for row in session.execute(
-                select(CommercialDocumentLine.document_id)
-                .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
-                .where(
-                    CommercialDocument.company_id == company_id,
-                    CommercialDocument.document_type_code == "SALES_INVOICE",
-                    CommercialDocument.status_code == "POSTED",
-                    CommercialDocumentLine.item_id == item_id,
-                )
-                .distinct()
-            ).all()
-        ]
+        base_query = (
+            select(CommercialDocumentLine.document_id)
+            .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocumentLine.item_id == item_id,
+            )
+        )
+        if counterparty_detail_account_id is not None:
+            base_query = base_query.where(
+                CommercialDocument.counterparty_detail_account_id == counterparty_detail_account_id
+            )
+        base_doc_ids = [row[0] for row in session.execute(base_query.distinct()).all()]
         if not base_doc_ids:
             return []
         base_count = len(base_doc_ids)

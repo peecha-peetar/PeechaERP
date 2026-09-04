@@ -8,12 +8,18 @@
 
 from __future__ import annotations
 
+import datetime
+import hashlib
+import shutil
+import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
+from peecha.config import SETTINGS_DIR
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
@@ -30,7 +36,10 @@ from peecha.db.models.accounting import (
     PersonnelDetail,
     SupplierDetail,
 )
+from peecha.db.models.documents import Attachment
+from peecha.db.models.security import Form
 from peecha.db.models.treasury import CounterpartyAccountMapping
+from peecha.services import roles as roles_service
 
 # نوع‌بُعدِ سیستمی/رزروشده‌ی «تفصیلیِ اشخاص» — بر خلافِ نوع‌بُعدهایی مثلِ
 # مرکزِ هزینه/پروژه که کاربر خودش می‌سازد، این یکی برای هر شرکت خودکار
@@ -176,6 +185,123 @@ def get_group_color(dimension_type_id: int, person_group_id: int = 0) -> str | N
             return group.color if group is not None else None
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         return dimension_type.color if dimension_type is not None else None
+
+
+# ---------------------------------------------------------------------
+# امکانِ آپلودِ عکس به‌ازایِ گروه (طبقِ درخواستِ صریح: «برایِ گروه‌هایی که
+# تیک می‌زنیم عکس آپلود کرد») + خودِ عکسِ هر حسابِ تفصیلی
+# ---------------------------------------------------------------------
+def set_dimension_type_photo_enabled(dimension_type_id: int, company_id: int, enabled: bool) -> None:
+    with new_session() as session:
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        if dimension_type is None or dimension_type.company_id != company_id:
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
+        dimension_type.photo_enabled = enabled
+        session.commit()
+
+
+def set_person_group_photo_enabled(person_group_id: int, company_id: int, enabled: bool) -> None:
+    with new_session() as session:
+        group = session.get(PersonGroup, person_group_id)
+        if group is None or group.company_id != company_id:
+            raise ValueError("گروه نامعتبر است.")
+        group.photo_enabled = enabled
+        session.commit()
+
+
+def get_group_photo_enabled(dimension_type_id: int, person_group_id: int = 0) -> bool:
+    with new_session() as session:
+        if person_group_id:
+            group = session.get(PersonGroup, person_group_id)
+            return bool(group.photo_enabled) if group is not None else False
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        return bool(dimension_type.photo_enabled) if dimension_type is not None else False
+
+
+# طبقِ همان الگویِ order_tracking.attach_file: فقط مسیرِ فایل در
+# دیتابیس می‌رود (نه خودِ فایل)؛ چون این فرم (GL_DIM/detail_dimensions)
+# از قبل در فهرستِ فرم‌ها (sec.forms، از nav_catalog) ثبت است، نیازی به
+# کدِ فرمِ تازه نیست.
+_PHOTO_FORM_CODE = "detail_dimensions"
+_PHOTOS_DIR = SETTINGS_DIR / "attachments"
+
+
+def _get_photo_form_id(session) -> int:
+    roles_service.ensure_catalog()
+    form = session.scalar(select(Form).where(Form.code == _PHOTO_FORM_CODE))
+    if form is None:
+        raise ValueError("فرمِ «تعریفِ تفصیلی» هنوز در فهرستِ فرم‌ها ثبت نشده است.")
+    return form.form_id
+
+
+def set_detail_account_photo(company_id: int, detail_account_id: int, user_id: int, file_path: str) -> int:
+    """هر حسابِ تفصیلی فقط یک عکسِ فعال دارد -- عکسِ قبلی (اگر بود) نرم‌
+    حذف می‌شود (مثلِ ضمیمه‌یِ سفارشات، فقط مسیر در دیتابیس، خودِ فایل رویِ
+    دیسک)."""
+    source = Path(file_path)
+    if not source.is_file():
+        raise ValueError("فایل یافت نشد.")
+    try:
+        _PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"پوشهٔ عکس‌ها («{_PHOTOS_DIR}») در دسترس نیست: {exc}") from exc
+    content = source.read_bytes()
+    digest = hashlib.sha256(content).digest()
+    extension = source.suffix.lstrip(".")
+    storage_name = f"{uuid.uuid4().hex}.{extension}" if extension else uuid.uuid4().hex
+    destination = _PHOTOS_DIR / storage_name
+    shutil.copyfile(source, destination)
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        existing = session.scalars(
+            select(Attachment).where(
+                Attachment.form_id == form_id, Attachment.source_record_id == detail_account_id,
+                Attachment.is_deleted.is_(False),
+            )
+        ).all()
+        now = datetime.datetime.now()
+        for row in existing:
+            row.is_deleted = True
+            row.deleted_by_user_id = user_id
+            row.deleted_at = now
+        new_row = Attachment(
+            company_id=company_id, form_id=form_id, source_record_id=detail_account_id,
+            file_name=source.name, file_extension=extension, file_size_bytes=len(content),
+            storage_key=str(destination), content_sha256=digest, uploaded_by_user_id=user_id,
+        )
+        session.add(new_row)
+        session.commit()
+        return new_row.attachment_id
+
+
+def get_detail_account_photo(company_id: int, detail_account_id: int) -> Attachment | None:
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        return session.scalar(
+            select(Attachment)
+            .where(
+                Attachment.company_id == company_id, Attachment.form_id == form_id,
+                Attachment.source_record_id == detail_account_id, Attachment.is_deleted.is_(False),
+            )
+            .order_by(Attachment.uploaded_at.desc())
+        )
+
+
+def remove_detail_account_photo(company_id: int, detail_account_id: int, user_id: int) -> None:
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        rows = session.scalars(
+            select(Attachment).where(
+                Attachment.company_id == company_id, Attachment.form_id == form_id,
+                Attachment.source_record_id == detail_account_id, Attachment.is_deleted.is_(False),
+            )
+        ).all()
+        now = datetime.datetime.now()
+        for row in rows:
+            row.is_deleted = True
+            row.deleted_by_user_id = user_id
+            row.deleted_at = now
+        session.commit()
 
 
 def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:

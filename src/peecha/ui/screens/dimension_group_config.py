@@ -319,6 +319,13 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         self.is_personnel_checkbox.toggled.connect(self._on_is_personnel_toggled)
         layout.addWidget(self.is_personnel_checkbox)
 
+        # طبقِ درخواستِ صریح («برایِ گروه‌هایی که تیک می‌زنیم عکس آپلود
+        # کرد»): برخلافِ is_personnel، این یکی برایِ همه‌یِ گروه‌ها معنا
+        # دارد (نه فقط زیرگروه‌هایِ اشخاص)، پس همیشه نمایان است.
+        self.photo_enabled_checkbox = QCheckBox("امکانِ آپلودِ عکس برایِ حساب‌هایِ تفصیلیِ این گروه فعال باشد")
+        self.photo_enabled_checkbox.toggled.connect(self._on_photo_enabled_toggled)
+        layout.addWidget(self.photo_enabled_checkbox)
+
         # طبقِ بازخوردِ کاربر: قبلاً «تعدادِ سطح» و «بازه‌ی سطوح» دو دکمه‌ی
         # ذخیره‌یِ جدا داشتند — کاربر با کلیک‌کردنِ فقط دکمه‌یِ کنارِ «تعدادِ
         # سطح» (چون همان‌جا، کنارِ فیلدی که تازه تغییرش داده، در دسترس‌تر
@@ -479,6 +486,10 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
             self.is_personnel_checkbox.blockSignals(True)
             self.is_personnel_checkbox.setChecked(dimensions_service.is_personnel_group(person_group_id))
             self.is_personnel_checkbox.blockSignals(False)
+
+        self.photo_enabled_checkbox.blockSignals(True)
+        self.photo_enabled_checkbox.setChecked(dimensions_service.get_group_photo_enabled(dimension_type_id, person_group_id))
+        self.photo_enabled_checkbox.blockSignals(False)
 
         company_id = self._company_id()
         digit_config_by_level = (
@@ -682,6 +693,20 @@ class DimensionGroupConfigScreen(FieldHelpMixin, QWidget):
         if not self._selected_person_group_id:
             return
         dimensions_service.set_group_is_personnel(self._selected_person_group_id, checked)
+        self._show_type_status("ذخیره شد.", ok=True)
+
+    def _on_photo_enabled_toggled(self, checked: bool) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._selected_type_id is None:
+            return
+        try:
+            if self._selected_person_group_id:
+                dimensions_service.set_person_group_photo_enabled(self._selected_person_group_id, company_id, checked)
+            else:
+                dimensions_service.set_dimension_type_photo_enabled(self._selected_type_id, company_id, checked)
+        except ValueError as exc:
+            self._show_type_status(str(exc), ok=False)
+            return
         self._show_type_status("ذخیره شد.", ok=True)
 
     def _delete_group(self) -> None:

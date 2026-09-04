@@ -13,7 +13,7 @@ import decimal
 import os
 import tempfile
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -1068,7 +1068,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # به جلو معنا دارد -- نه برگشت (که خودش یک اصلاح است، نه فروشِ
         # تازه) و نه امانی (که مسیرِ تسویه‌اش جداست).
         self._supports_cross_sell = document_type_code in ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE")
-        self._cross_sell_suggestion: object | None = None
+        self._cross_sell_suggestions: list = []
         self._main_window = main_window
         self._document_id: int | None = None
         self._status_code = "DRAFT"
@@ -1368,21 +1368,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.body_layout.addWidget(line_button_cluster, alignment=Qt.AlignLeft)
 
         # طبقِ درخواستِ صریح («سبدِ پیشنهادی»): بعدِ افزودنِ هر ردیف، اگر
-        # کالایی وجود دارد که معمولاً همراهِ آن خریده می‌شود، این‌جا
-        # نشان داده می‌شود -- هم‌الگو با ویجت‌هایِ کمکیِ R37 (لیبل + دکمهٔ
-        # flatButton)، غیرِمزاحم و پیش‌فرض پنهان.
-        self.cross_sell_row = QWidget()
-        cross_sell_layout = QHBoxLayout(self.cross_sell_row)
-        cross_sell_layout.setContentsMargins(0, 0, 0, 0)
-        self.cross_sell_label = QLabel("")
-        self.cross_sell_label.setWordWrap(True)
-        cross_sell_layout.addWidget(self.cross_sell_label, stretch=1)
-        self.cross_sell_add_button = QPushButton("➕ افزودن")
-        self.cross_sell_add_button.setObjectName("flatButton")
-        self.cross_sell_add_button.clicked.connect(self._add_cross_sell_suggestion)
-        cross_sell_layout.addWidget(self.cross_sell_add_button)
-        self.cross_sell_row.setVisible(False)
-        self.body_layout.addWidget(self.cross_sell_row)
+        # کالاهایی وجود دارند که همینِ مشتری معمولاً همراهِ آن خریده،
+        # همه‌شان این‌جا (هرکدام یک ردیفِ جدا با دکمهٔ افزودنِ خودش) نشان
+        # داده می‌شوند -- غیرِمزاحم و پیش‌فرض پنهان.
+        self.cross_sell_box = QWidget()
+        self._cross_sell_layout = QVBoxLayout(self.cross_sell_box)
+        self._cross_sell_layout.setContentsMargins(0, 0, 0, 0)
+        self._cross_sell_layout.setSpacing(4)
+        self.cross_sell_box.setVisible(False)
+        self.body_layout.addWidget(self.cross_sell_box)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -1657,8 +1651,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # (مثلاً بعدِ تایید/تصویب/ثبتِ نهایی) -- پس این‌جا همیشه پنهان
         # می‌شود و فقط _add_line/_add_cross_sell_suggestion دوباره نشانش
         # می‌دهند.
-        self._cross_sell_suggestion = None
-        self.cross_sell_row.setVisible(False)
+        self._clear_cross_sell_box()
         company_id = self._company_id()
         try:
             doc, lines = documents_service.get_document(self._document_id, company_id)
@@ -1806,8 +1799,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._status_code = "DRAFT"
         self._corrects_document_id = None
         self._lines = []
-        self._cross_sell_suggestion = None
-        self.cross_sell_row.setVisible(False)
+        self._clear_cross_sell_box()
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]}ِ جدید")
         self.document_no_field.setText("—")
         self.status_label.setText("")
@@ -1989,38 +1981,74 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._load_document()
         self._refresh_cross_sell_suggestion(fields.get("item_id"))
 
+    def _clear_cross_sell_box(self) -> None:
+        self._cross_sell_suggestions = []
+        while self._cross_sell_layout.count():
+            item = self._cross_sell_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().setParent(None)
+        self.cross_sell_box.setVisible(False)
+
     def _refresh_cross_sell_suggestion(self, item_id: int | None) -> None:
         """طبقِ درخواستِ صریح («سبدِ پیشنهادی»): بعدِ افزودنِ یک ردیف، اگر
-        کالایی هست که در فاکتورهایِ فروشِ قبلی معمولاً همراهِ همین کالا
-        خریده شده، این‌جا نشان داده می‌شود. کاملاً غیرِمزاحم -- هیچ‌چیزی
-        اگر داده‌یِ کافی نبود نمایش داده نمی‌شود.
+        کالاهایی هست که همینِ مشتریِ رویِ هدرِ سند معمولاً همراهِ همین
+        کالا خریده، همه‌شان این‌جا نشان داده می‌شوند (نه فقط یکی) --
+        کاملاً غیرِمزاحم -- بدونِ مشتریِ انتخاب‌شده یا بدونِ سابقه‌یِ
+        کافی، هیچ‌چیزی نمایش داده نمی‌شود.
 
-        باگِ واقعیِ گزارش‌شده: چون کالایِ A و B معمولاً هردو باهم دیده
-        می‌شوند، بعدِ افزودنِ B (که خودش به‌خاطرِ A پیشنهاد شده بود)،
-        دوباره خودِ A پیشنهاد می‌شد -- در حالی‌که از قبل در همین فاکتور
-        هست. پس این‌جا کالاهایی که از پیش در سندِ جاری‌اند فیلتر می‌شوند."""
-        self._cross_sell_suggestion = None
-        self.cross_sell_row.setVisible(False)
+        باگِ واقعیِ گزارش‌شده (۱): چون کالایِ A و B معمولاً هردو باهم
+        دیده می‌شوند، بعدِ افزودنِ B (که خودش به‌خاطرِ A پیشنهاد شده
+        بود)، دوباره خودِ A پیشنهاد می‌شد -- در حالی‌که از قبل در همین
+        فاکتور هست. پس این‌جا کالاهایی که از پیش در سندِ جاری‌اند فیلتر
+        می‌شوند.
+
+        باگِ واقعیِ گزارش‌شده (۲): پیام به «مشتری‌ها» به‌طورِ کلی اشاره
+        می‌کرد، در حالی‌که نامِ مشتریِ مشخص از قبل رویِ هدر هست -- حالا
+        فقط سابقه‌یِ خودِ همین مشتری در نظر گرفته می‌شود و در متنِ پیام
+        هم به نامِ او اشاره می‌شود."""
+        self._clear_cross_sell_box()
         company_id = self._company_id()
-        if not self._supports_cross_sell or item_id is None or company_id is None:
+        counterparty_id = self.counterparty_combo.currentData()
+        if not self._supports_cross_sell or item_id is None or company_id is None or counterparty_id is None:
             return
         existing_item_ids = {ln.item_id for ln in self._lines}
-        suggestions = documents_service.suggest_frequently_bought_together(company_id, item_id, limit=10)
-        suggestion = next((s for s in suggestions if s.item_id not in existing_item_ids), None)
-        if suggestion is None:
+        suggestions = [
+            s
+            for s in documents_service.suggest_frequently_bought_together(
+                company_id, item_id, limit=10, counterparty_detail_account_id=counterparty_id,
+            )
+            if s.item_id not in existing_item_ids
+        ]
+        if not suggestions:
             return
-        self._cross_sell_suggestion = suggestion
-        self.cross_sell_label.setText(
-            f"💡 مشتری‌ها معمولاً همراهِ این کالا «{suggestion.item_code} — {suggestion.item_name}» را هم می‌خرند "
-            f"({numerals.to_persian_digits(str(suggestion.confidence_percent))}٪)"
-        )
-        self.cross_sell_row.setVisible(True)
-        self._scroll.ensureWidgetVisible(self.cross_sell_row)
+        customer_name = self.counterparty_combo.currentText()
+        for suggestion in suggestions:
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            label = QLabel(
+                f"💡 «{customer_name}» معمولاً همراهِ این کالا «{suggestion.item_code} — {suggestion.item_name}» را هم می‌خرد "
+                f"({numerals.to_persian_digits(str(suggestion.confidence_percent))}٪)"
+            )
+            label.setWordWrap(True)
+            row_layout.addWidget(label, stretch=1)
+            add_button = QPushButton("➕ افزودن")
+            add_button.setObjectName("flatButton")
+            add_button.clicked.connect(lambda _checked=False, s=suggestion: self._add_cross_sell_suggestion(s))
+            row_layout.addWidget(add_button)
+            self._cross_sell_layout.addWidget(row_widget)
+        self._cross_sell_suggestions = suggestions
+        self.cross_sell_box.setVisible(True)
+        # طبقِ رفعِ بازخوردِ صریح («پیام زیرِ فرم می‌ماند و اسکرول هم به
+        # آن نمی‌رسد»): ensureWidgetVisible باید *بعدِ* اجرایِ واقعیِ
+        # چیدمانِ Qt (که هنوز اندازه/جایگاهِ تازه‌یِ این ویجت را محاسبه
+        # نکرده) صدا زده شود، نه بلافاصله در همین Frame -- وگرنه با
+        # جایگاهِ کهنه/نادرست کار می‌کند.
+        QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(self.cross_sell_box))
 
-    def _add_cross_sell_suggestion(self) -> None:
-        suggestion = self._cross_sell_suggestion
+    def _add_cross_sell_suggestion(self, suggestion) -> None:
         company_id = self._company_id()
-        if suggestion is None or self._document_id is None or company_id is None:
+        if self._document_id is None or company_id is None:
             return
         item = next((it for it in self._items if it.item_id == suggestion.item_id), None)
         if item is None:
