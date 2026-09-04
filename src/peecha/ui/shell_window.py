@@ -1397,6 +1397,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
         from peecha.ui.screens.report_journal_book import JournalBookScreen
         from peecha.ui.screens.report_period_comparison import PeriodComparisonScreen
+        from peecha.ui.screens.report_sales_forecast import SalesForecastScreen
         from peecha.ui.screens.report_trial_balance import TrialBalanceScreen
         from peecha.ui.screens.statement_template_designer import (
             StatementTemplateDesignerScreen,
@@ -1538,6 +1539,7 @@ class MainWindow(QMainWindow):
         self.register_screen("report_item_ledger", ItemLedgerScreen())
         self.register_screen("report_anomalies", AnomaliesScreen())
         self.register_screen("report_customer_profit", CustomerProfitScreen())
+        self.register_screen("report_sales_forecast", SalesForecastScreen())
 
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget

@@ -240,6 +240,11 @@ NAV_ITEMS = [
                         "label": "سودِ واقعیِ مشتریان",
                         "screen": "report_customer_profit",
                     },
+                    {
+                        "code": "REPORTS_SALES_FORECAST",
+                        "label": "پیش‌بینیِ فروش",
+                        "screen": "report_sales_forecast",
+                    },
                 ],
             },
         ],
@@ -360,6 +365,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("REPORTS_COST_CENTER", "🏗️"),
         ("REPORTS_ITEM_LEDGER", "📋"),
         ("REPORTS_CUSTOMER_PROFIT", "💹"),
+        ("REPORTS_SALES_FORECAST", "🔮"),
     ],
     "SETTINGS": [],
 }

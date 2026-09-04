@@ -1858,3 +1858,56 @@ def compute_customer_profit(
         ))
     rows.sort(key=lambda r: r.gross_profit, reverse=True)
     return rows
+
+
+@dataclass
+class SalesTrendResult:
+    period_labels: list[str]
+    amounts: list[decimal.Decimal]
+    forecast_next: decimal.Decimal | None
+
+
+def compute_sales_trend(
+    company_id: int, periods: list[tuple[datetime.date, datetime.date, str]],
+) -> SalesTrendResult:
+    """طبقِ درخواستِ صریح («پیش‌بینیِ فروش»): هم‌الگو با اصلِ رعایت‌شده در
+    sales_assistant.py («بدونِ هیچ مدلِ یادگیریِ ماشین، فقط آمارِ ساده‌یِ
+    توصیفی») -- فروشِ خالصِ هر دوره جمع بسته می‌شود و با یک رگرسیونِ
+    خطیِ سادهٔ حداقلِ مربعات (نه ARIMA/ML)، فروشِ دورهٔ بعدی تخمین زده
+    می‌شود. اگر کمتر از دو دوره وجود داشته باشد، امکانِ رسمِ خط نیست --
+    forecast_next برابرِ None می‌ماند."""
+    amounts: list[decimal.Decimal] = []
+    with new_session() as session:
+        for date_from, date_to, _label in periods:
+            stmt = select(
+                func.coalesce(func.sum(CommercialDocument.subtotal_amount - CommercialDocument.discount_amount), 0)
+            ).where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocument.document_date >= date_from,
+                CommercialDocument.document_date <= date_to,
+            )
+            amounts.append(session.scalar(stmt))
+
+    forecast_next = None
+    n = len(amounts)
+    if n >= 2:
+        x_mean = decimal.Decimal(n - 1) / 2
+        y_mean = sum(amounts, decimal.Decimal(0)) / n
+        numerator = sum(
+            ((decimal.Decimal(x) - x_mean) * (amounts[x] - y_mean) for x in range(n)), decimal.Decimal(0)
+        )
+        denominator = sum(((decimal.Decimal(x) - x_mean) ** 2 for x in range(n)), decimal.Decimal(0))
+        if denominator != 0:
+            slope = numerator / denominator
+            intercept = y_mean - slope * x_mean
+            # طبقِ منطقِ کسب‌وکار: فروشِ منفی بی‌معناست -- روندِ نزولیِ
+            # تندی که خطِ رگرسیون را زیرِ صفر ببرد، به صفر محدود می‌شود.
+            forecast_next = max(decimal.Decimal(0), intercept + slope * n)
+
+    return SalesTrendResult(
+        period_labels=[label for _f, _t, label in periods],
+        amounts=amounts,
+        forecast_next=forecast_next,
+    )
