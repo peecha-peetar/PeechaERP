@@ -36,9 +36,7 @@ from peecha import numerals, session as app_session
 from peecha.reporting import jasper_bridge
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
-from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_documents as documents_service
-from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import commercial_settlements as settlements_service
@@ -2030,7 +2028,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         بدهیِ جاری، و امتیاز/ردیفِ مشتری -- درست زیرِ هدرِ سند. طبقِ
         درخواستِ صریحِ بعدی، خودِ فیلدِ انتخابِ مشتری هم رنگ‌آمیزی می‌شود:
         گرادیانِ افقی از رنگِ (قرمز تا سبز، متناسب با امتیاز) در سمتِ چپ
-        تا سفید در سمتِ راست -- تا نامِ مشتری همیشه خوانا بماند."""
+        تا سفید در سمتِ راست -- تا نامِ مشتری همیشه خوانا بماند.
+
+        طبقِ گزارشِ صریحِ بعدی («بدهی از سقفِ اعتبار عبور کرده، آیا نباید
+        تاثیری داشته باشه؟»): طبقِ تصمیمِ طراحی، این عمداً امتیازِ کلی را
+        عوض نمی‌کند (چون امتیاز معیارِ ارزشِ رابطه است، نه ریسکِ لحظه‌ای)
+        ولی یک نشانه‌یِ جداگانه و فوری می‌گیرد -- به‌جایِ چشمک‌زدن (که برایِ
+        نرم‌افزارِ حرفه‌ای معمولاً توصیه نمی‌شود)، یک قابِ قرمزِ ثابت دورِ
+        فیلد و یک خطِ هشدار در پنل، تا هم دیده شود و هم اذیت‌کننده نباشد."""
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
         if not self._supports_cross_sell or company_id is None or counterparty_id is None:
@@ -2045,9 +2050,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
 
         gradient_color = _score_gradient_color(score_row.score)
+        border_rule = "border: 2px solid #dc2626;" if score_row.over_credit_limit else ""
         self.counterparty_combo.setStyleSheet(
             "QComboBox { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
-            f"stop:0 {gradient_color}, stop:1 white); color: #1a1a1a; }}"
+            f"stop:0 {gradient_color}, stop:1 white); color: #1a1a1a; {border_rule} }}"
         )
 
         parts = [f"{score_row.emoji} امتیازِ مشتری: {numerals.to_persian_digits(str(score_row.score))} ({score_row.tier_label})"]
@@ -2056,11 +2062,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if score_row.avg_interval_days is not None:
             parts.append(f"میانگینِ خرید: هر {numerals.to_persian_digits(str(round(score_row.avg_interval_days)))} روز")
 
-        profile = partners_service.get_customer_profile(counterparty_id)
-        if profile is not None and profile.credit_limit_amount:
-            parts.append(f"سقفِ اعتبار: {numerals.format_company_amount(profile.credit_limit_amount)}")
-            exposure = credit_service.compute_customer_exposure(company_id, counterparty_id)
-            parts.append(f"بدهیِ جاری: {numerals.format_company_amount(exposure)}")
+        if score_row.credit_limit_amount:
+            parts.append(f"سقفِ اعتبار: {numerals.format_company_amount(score_row.credit_limit_amount)}")
+            parts.append(f"بدهیِ جاری: {numerals.format_company_amount(score_row.current_exposure)}")
+            if score_row.over_credit_limit:
+                parts.append("🚨 بدهی از سقفِ اعتبار عبور کرده")
 
         self.customer_summary_label.setText("  |  ".join(parts))
         self.customer_summary_box.setVisible(True)

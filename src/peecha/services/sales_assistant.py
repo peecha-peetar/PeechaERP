@@ -22,6 +22,7 @@ from sqlalchemy import select
 
 from peecha.db.base import new_session
 from peecha.db.models.commercial import CommercialDocumentLine
+from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_partners as partners_service
 from peecha.services import inventory_catalog as catalog_service
@@ -213,6 +214,37 @@ def _cross_sell_item(company_id: int, customer_id: int, customer_name: str, docs
     )
 
 
+def _credit_limit_exceeded_item(
+    customer_id: int, customer_name: str, credit_limit_amount: decimal.Decimal, exposure: decimal.Decimal
+) -> ActionItem | None:
+    """طبقِ گزارشِ صریحِ کاربر («اعتبار ۵۰ میلیون بوده، بدهی ۸۰ میلیون شده،
+    آیا نباید تاثیری داشته باشه؟»): طبقِ تصمیمِ طراحی، این یک هشدارِ
+    مالیِ فوری و *مستقل* از امتیازِ ۰-۱۰۰ است -- عبورِ موقتِ یک مشتریِ
+    باارزش از سقفِ اعتبار نباید امتیازِ کلیِ رابطه‌اش را پایین بیاورد،
+    ولی همچنان باید فوراً به فروشنده هشدار داده شود، پس یک اقدامِ
+    جداگانه با بالاترین اولویت (قرمز) در دستیارِ فروش می‌سازیم."""
+    if not credit_limit_amount or exposure <= credit_limit_amount:
+        return None
+    from peecha import numerals
+
+    over_amount = exposure - credit_limit_amount
+    over_percent = min(decimal.Decimal(99), decimal.Decimal(round(float(over_amount / credit_limit_amount) * 100)))
+    return ActionItem(
+        severity="danger",
+        category="credit_limit_exceeded",
+        customer_id=customer_id,
+        customer_name=customer_name,
+        title=f"مشتری «{customer_name}»",
+        detail_lines=[
+            f"سقفِ اعتبار: {numerals.format_company_amount(credit_limit_amount)}",
+            f"بدهیِ جاری: {numerals.format_company_amount(exposure)}",
+            f"عبور از سقف: {numerals.format_company_amount(over_amount)} ({over_percent:.0f}٪)",
+        ],
+        suggested_action="توقفِ فروشِ نسیه تا وصولِ بخشی از مطالبات",
+        metric_percent=over_percent,
+    )
+
+
 def get_daily_actions(company_id: int, limit: int = 5) -> list[ActionItem]:
     """فهرستِ رتبه‌بندی‌شده‌یِ مهم‌ترین اقداماتِ امروز -- طبقِ درخواستِ صریح
     («۵ اقدامِ مهمِ امروز»)، ابتدا بر اساسِ شدت (قرمز > زرد > سبز) و سپس
@@ -235,6 +267,14 @@ def get_daily_actions(company_id: int, limit: int = 5) -> list[ActionItem]:
     for customer in customers:
         customer_id = customer["detail_account_id"]
         customer_name = customer.get("name") or customer.get("code") or str(customer_id)
+
+        credit_limit_amount = customer.get("credit_limit_amount")
+        if credit_limit_amount:
+            exposure = credit_service.compute_customer_exposure(company_id, customer_id)
+            credit_item = _credit_limit_exceeded_item(customer_id, customer_name, credit_limit_amount, exposure)
+            if credit_item is not None:
+                items.append(credit_item)
+
         docs = documents_service.list_documents(
             company_id, document_type_code="SALES_INVOICE", status_code="POSTED",
             counterparty_detail_account_id=customer_id,
@@ -291,6 +331,15 @@ class CustomerScoreRow:
     days_since_last: int | None
     avg_interval_days: float | None
     growth_percent: decimal.Decimal | None
+    # طبقِ تصمیمِ طراحیِ توافق‌شده (بنگرید توضیحِ _credit_limit_exceeded_item):
+    # عبورِ از سقفِ اعتبار عمداً در امتیازِ ۰-۱۰۰ بالا دخیل نمی‌شود --
+    # یک پرچمِ کاملاً جدا و فوری است، مستقلِ از ارزشِ کلیِ رابطه.
+    credit_limit_amount: decimal.Decimal | None = None
+    current_exposure: decimal.Decimal | None = None
+
+    @property
+    def over_credit_limit(self) -> bool:
+        return bool(self.credit_limit_amount) and self.current_exposure is not None and self.current_exposure > self.credit_limit_amount
 
     @property
     def emoji(self) -> str:
@@ -334,12 +383,14 @@ def list_customer_scores(company_id: int) -> list[CustomerScoreRow]:
     for customer in customers:
         customer_id = customer["detail_account_id"]
         customer_name = customer.get("name") or customer.get("code") or str(customer_id)
+        credit_limit_amount = customer.get("credit_limit_amount") or None
+        current_exposure = credit_service.compute_customer_exposure(company_id, customer_id) if credit_limit_amount else None
         docs = documents_service.list_documents(
             company_id, document_type_code="SALES_INVOICE", status_code="POSTED",
             counterparty_detail_account_id=customer_id,
         )
         if not docs:
-            raw.append((customer_id, customer_name, 0, decimal.Decimal(0), None, None, None))
+            raw.append((customer_id, customer_name, 0, decimal.Decimal(0), None, None, None, credit_limit_amount, current_exposure))
             continue
         docs_sorted = sorted(docs, key=lambda d: (d.document_date or today, d.document_id))
         dates = [d.document_date for d in docs_sorted if d.document_date is not None]
@@ -354,20 +405,27 @@ def list_customer_scores(company_id: int) -> list[CustomerScoreRow]:
                 avg_interval_days = span_days / (len(dates) - 1)
         growth_percent = _compute_growth_percent(docs_sorted, year_start, today, last_year_start, last_year_same_day)
         raw.append(
-            (customer_id, customer_name, invoice_count_12m, revenue_12m, days_since_last, avg_interval_days, growth_percent)
+            (
+                customer_id, customer_name, invoice_count_12m, revenue_12m, days_since_last, avg_interval_days,
+                growth_percent, credit_limit_amount, current_exposure,
+            )
         )
 
     freq_values = [float(r[2]) for r in raw]
     revenue_values = [float(r[3]) for r in raw]
 
     rows: list[CustomerScoreRow] = []
-    for customer_id, customer_name, invoice_count_12m, revenue_12m, days_since_last, avg_interval_days, growth_percent in raw:
+    for (
+        customer_id, customer_name, invoice_count_12m, revenue_12m, days_since_last, avg_interval_days,
+        growth_percent, credit_limit_amount, current_exposure,
+    ) in raw:
         if invoice_count_12m == 0:
             rows.append(
                 CustomerScoreRow(
                     customer_id=customer_id, customer_name=customer_name, score=0, tier="LOW_VALUE",
                     invoice_count_12m=0, revenue_12m=decimal.Decimal(0), days_since_last=days_since_last,
                     avg_interval_days=avg_interval_days, growth_percent=growth_percent,
+                    credit_limit_amount=credit_limit_amount, current_exposure=current_exposure,
                 )
             )
             continue
@@ -397,6 +455,7 @@ def list_customer_scores(company_id: int) -> list[CustomerScoreRow]:
                 customer_id=customer_id, customer_name=customer_name, score=score, tier=tier,
                 invoice_count_12m=invoice_count_12m, revenue_12m=revenue_12m, days_since_last=days_since_last,
                 avg_interval_days=avg_interval_days, growth_percent=growth_percent,
+                credit_limit_amount=credit_limit_amount, current_exposure=current_exposure,
             )
         )
     return rows
