@@ -1063,6 +1063,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._supports_tax_posting_mode = document_type_code in (
             "SALES_INVOICE", "PURCHASE_INVOICE", "SALES_RETURN", "PURCHASE_RETURN",
         )
+        # طبقِ درخواستِ صریح («سبدِ پیشنهادی» -- کالاهایی که معمولاً همراهِ
+        # کالایِ تازه‌اضافه‌شده خریده می‌شوند): فقط برایِ اسنادِ فروشِ رو
+        # به جلو معنا دارد -- نه برگشت (که خودش یک اصلاح است، نه فروشِ
+        # تازه) و نه امانی (که مسیرِ تسویه‌اش جداست).
+        self._supports_cross_sell = document_type_code in ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE")
+        self._cross_sell_suggestion: object | None = None
         self._main_window = main_window
         self._document_id: int | None = None
         self._status_code = "DRAFT"
@@ -1364,6 +1370,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         line_buttons.addWidget(delete_line_button)
         self.body_layout.addWidget(line_button_cluster, alignment=Qt.AlignLeft)
 
+        # طبقِ درخواستِ صریح («سبدِ پیشنهادی»): بعدِ افزودنِ هر ردیف، اگر
+        # کالایی وجود دارد که معمولاً همراهِ آن خریده می‌شود، این‌جا
+        # نشان داده می‌شود -- هم‌الگو با ویجت‌هایِ کمکیِ R37 (لیبل + دکمهٔ
+        # flatButton)، غیرِمزاحم و پیش‌فرض پنهان.
+        self.cross_sell_row = QWidget()
+        cross_sell_layout = QHBoxLayout(self.cross_sell_row)
+        cross_sell_layout.setContentsMargins(0, 0, 0, 0)
+        self.cross_sell_label = QLabel("")
+        self.cross_sell_label.setWordWrap(True)
+        cross_sell_layout.addWidget(self.cross_sell_label, stretch=1)
+        self.cross_sell_add_button = QPushButton("➕ افزودن")
+        self.cross_sell_add_button.setObjectName("flatButton")
+        self.cross_sell_add_button.clicked.connect(self._add_cross_sell_suggestion)
+        cross_sell_layout.addWidget(self.cross_sell_add_button)
+        self.cross_sell_row.setVisible(False)
+        self.body_layout.addWidget(self.cross_sell_row)
+
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
@@ -1632,6 +1655,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.date_field.selectAll()
 
     def _load_document(self) -> None:
+        # طبقِ درخواستِ صریح («سبدِ پیشنهادی»): این نکته فقط بلافاصله
+        # بعدِ افزودنِ یک ردیفِ تازه معنا دارد، نه بعدِ هر بارگذاریِ سند
+        # (مثلاً بعدِ تایید/تصویب/ثبتِ نهایی) -- پس این‌جا همیشه پنهان
+        # می‌شود و فقط _add_line/_add_cross_sell_suggestion دوباره نشانش
+        # می‌دهند.
+        self._cross_sell_suggestion = None
+        self.cross_sell_row.setVisible(False)
         company_id = self._company_id()
         try:
             doc, lines = documents_service.get_document(self._document_id, company_id)
@@ -1779,6 +1809,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._status_code = "DRAFT"
         self._corrects_document_id = None
         self._lines = []
+        self._cross_sell_suggestion = None
+        self.cross_sell_row.setVisible(False)
         self.page_title.setText(f"{DOC_TYPE_TITLES[self.document_type_code]}ِ جدید")
         self.document_no_field.setText("—")
         self.status_label.setText("")
@@ -1958,6 +1990,48 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
         self._load_document()
+        self._refresh_cross_sell_suggestion(fields.get("item_id"))
+
+    def _refresh_cross_sell_suggestion(self, item_id: int | None) -> None:
+        """طبقِ درخواستِ صریح («سبدِ پیشنهادی»): بعدِ افزودنِ یک ردیف، اگر
+        کالایی هست که در فاکتورهایِ فروشِ قبلی معمولاً همراهِ همین کالا
+        خریده شده، این‌جا نشان داده می‌شود. کاملاً غیرِمزاحم -- هیچ‌چیزی
+        اگر داده‌یِ کافی نبود نمایش داده نمی‌شود."""
+        self._cross_sell_suggestion = None
+        self.cross_sell_row.setVisible(False)
+        company_id = self._company_id()
+        if not self._supports_cross_sell or item_id is None or company_id is None:
+            return
+        suggestions = documents_service.suggest_frequently_bought_together(company_id, item_id, limit=1)
+        if not suggestions:
+            return
+        suggestion = suggestions[0]
+        self._cross_sell_suggestion = suggestion
+        self.cross_sell_label.setText(
+            f"💡 مشتری‌ها معمولاً همراهِ این کالا «{suggestion.item_code} — {suggestion.item_name}» را هم می‌خرند "
+            f"({numerals.to_persian_digits(str(suggestion.confidence_percent))}٪)"
+        )
+        self.cross_sell_row.setVisible(True)
+
+    def _add_cross_sell_suggestion(self) -> None:
+        suggestion = self._cross_sell_suggestion
+        company_id = self._company_id()
+        if suggestion is None or self._document_id is None or company_id is None:
+            return
+        item = next((it for it in self._items if it.item_id == suggestion.item_id), None)
+        if item is None:
+            return
+        try:
+            documents_service.add_line(
+                self._document_id, company_id, item_id=item.item_id, uom_id=item.base_uom_id,
+                quantity=decimal.Decimal(1), quantity_base=decimal.Decimal(1),
+                warehouse_id=self.warehouse_combo.currentData() if self.warehouse_combo is not None else None,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._load_document()
+        self._refresh_cross_sell_suggestion(item.item_id)
 
     def _selected_line(self):
         selected = self.lines_table.selectedItems()

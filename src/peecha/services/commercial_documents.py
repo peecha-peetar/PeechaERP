@@ -939,6 +939,80 @@ def list_item_price_history(
         return [ItemPriceHistoryRow(*row) for row in rows]
 
 
+@dataclass
+class CrossSellSuggestion:
+    item_id: int
+    item_code: str
+    item_name: str
+    co_occurrence_count: int
+    base_count: int
+    confidence_percent: decimal.Decimal
+
+
+def suggest_frequently_bought_together(company_id: int, item_id: int, limit: int = 3) -> list[CrossSellSuggestion]:
+    """طبقِ درخواستِ صریح («سبدِ پیشنهادی» -- وقتی فروشنده یک کالا به
+    فاکتور اضافه می‌کند، کالاهایی که معمولاً همراهِ آن خریده می‌شوند
+    پیشنهاد شود): از رویِ فاکتورهایِ فروشِ ثبتِ‌نهایی‌شده (POSTED) --
+    پیش‌نویس/لغوشده معیار نیستند -- کالاهایی که بیشترین هم‌خریدی را با
+    این کالا دارند پیدا می‌کند. این فقط یک هم‌بستگیِ آماریِ ساده
+    (co-occurrence) است، نه یادگیریِ ماشین، ولی برایِ پیشنهادِ فروشِ
+    مکمل کافی است."""
+    with new_session() as session:
+        base_doc_ids = [
+            row[0]
+            for row in session.execute(
+                select(CommercialDocumentLine.document_id)
+                .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+                .where(
+                    CommercialDocument.company_id == company_id,
+                    CommercialDocument.document_type_code == "SALES_INVOICE",
+                    CommercialDocument.status_code == "POSTED",
+                    CommercialDocumentLine.item_id == item_id,
+                )
+                .distinct()
+            ).all()
+        ]
+        if not base_doc_ids:
+            return []
+        base_count = len(base_doc_ids)
+
+        rows = session.execute(
+            select(
+                CommercialDocumentLine.item_id,
+                func.count(func.distinct(CommercialDocumentLine.document_id)).label("co_count"),
+            )
+            .where(
+                CommercialDocumentLine.document_id.in_(base_doc_ids),
+                CommercialDocumentLine.item_id != item_id,
+            )
+            .group_by(CommercialDocumentLine.item_id)
+            .order_by(func.count(func.distinct(CommercialDocumentLine.document_id)).desc())
+            .limit(limit)
+        ).all()
+
+    if not rows:
+        return []
+    # کد/نامِ کالا رویِ acc.detail_accounts است، نه خودِ inv.items -- طبقِ
+    # همان الگویِ inventory_catalog.list_items -- پس این‌جا هم از همان
+    # سرویس استفاده می‌کنیم به‌جایِ تکرارِ Joinِ تفصیلی.
+    from peecha.services import inventory_catalog as catalog_service
+
+    items_by_id = {i.item_id: i for i in catalog_service.list_items(company_id)}
+    result: list[CrossSellSuggestion] = []
+    for r in rows:
+        item = items_by_id.get(r.item_id)
+        if item is None:
+            continue
+        result.append(
+            CrossSellSuggestion(
+                item_id=r.item_id, item_code=item.code, item_name=item.name or "",
+                co_occurrence_count=r.co_count, base_count=base_count,
+                confidence_percent=(decimal.Decimal(r.co_count) / decimal.Decimal(base_count) * 100).quantize(decimal.Decimal("1")),
+            )
+        )
+    return result
+
+
 def _recompute_header_totals(session, document_id: int) -> None:
     lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id)).all()
     subtotal = sum((_money(ln.quantity * ln.unit_price) for ln in lines), _ZERO)
