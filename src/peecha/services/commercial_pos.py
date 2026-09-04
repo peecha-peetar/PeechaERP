@@ -24,6 +24,9 @@ from peecha.db.models.commercial import (
     PosSettings,
     PosTerminal,
 )
+from peecha.services import commercial_settlements as settlements_service
+from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import treasury as treasury_service
 
 _ZERO = decimal.Decimal("0")
 _Q2 = decimal.Decimal("0.01")
@@ -154,6 +157,71 @@ def payments_cover_total(document_id: int) -> bool:
             .where(InstallmentPlan.document_id == document_id)
         ).scalars().all()
         return _money(sum(paid, _ZERO) + sum(plan_amounts, _ZERO)) == _money(doc.total_amount)
+
+
+def record_payment_and_settle(
+    company_id: int, user_id: int, document_id: int, method_code: str,
+    amount: decimal.Decimal, reference_no: str | None = None,
+) -> int:
+    """طبقِ رفعِ شکافِ کشف‌شده: record_payment (بالا) از اول فقط یک
+    ردیفِ comm.pos_payments ثبت می‌کرد -- بدونِ هیچ اثری در حساب‌هایِ
+    نقد/بانک یا در comm.invoice_settlements؛ یعنی مشتری برایِ همیشه در
+    گزارش‌هایِ تسویه «بدهکار» می‌ماند و نقدِ واقعاً دریافت‌شده هیچ‌وقت به
+    صندوق/بانک نمی‌رسید. این تابع هر پرداختِ POS را به نتیجهٔ حسابداریِ
+    واقعی‌اش وصل می‌کند:
+    - نقد/کارت‌خوان: یک سندِ خزانه‌داریِ واقعی (create_treasury_voucher،
+      دقیقاً هم‌الگو با فرمِ دریافتِ معمولی) ساخته و به فاکتور تسویه
+      می‌شود.
+    - کیف‌پول/کارتِ‌هدیه/اعتبارِ فروشگاهی: نیازی به سندِ خزانه‌داریِ تازه
+      نیست (این‌ها از پیش داخلِ سیستم‌اند)، فقط تسویه (بدونِ ژورنالِ
+      جدید) ثبت می‌شود."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        customer_id = doc.counterparty_detail_account_id
+        document_date = doc.document_date
+        document_no = doc.document_no
+
+    if method_code == "GIFT_CARD":
+        if not reference_no:
+            raise ValueError("کدِ کارتِ‌هدیه را وارد کنید.")
+        redeem_gift_card(reference_no, amount)
+    elif method_code == "WALLET":
+        redeem_wallet(customer_id, amount, document_id=document_id)
+
+    payment_id = record_payment(document_id, method_code, amount, reference_no=reference_no)
+
+    journal_entry_id = None
+    if method_code in ("CASH", "CARD"):
+        person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+        customer_group_id = next(
+            (g.person_group_id for g in dimensions_service.list_person_groups(company_id) if g.code == "CUSTOMER"),
+            None,
+        )
+        mapping_account_id = next(
+            (
+                m.account_id for m in treasury_service.list_counterparty_mappings(company_id, "RECEIPT")
+                if m.person_group_id == customer_group_id
+            ),
+            None,
+        )
+        if mapping_account_id is None:
+            raise ValueError("نگاشتِ حسابِ دریافت برایِ گروهِ «مشتری» در تنظیماتِ خزانه‌داری مشخص نشده است.")
+        treasury_method = "CASH" if method_code == "CASH" else "BANK"
+        voucher_result = treasury_service.create_treasury_voucher(
+            company_id, user_id, "RECEIPT", mapping_account_id,
+            {person_dimension_type_id: customer_id}, document_date,
+            f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_no}",
+            [treasury_service.MethodLine(method=treasury_method, amount=amount)],
+        )
+        journal_entry_id = voucher_result.journal_entry_id
+
+    settlements_service.allocate_settlement(
+        company_id, document_id, journal_entry_id, datetime.date.today(), amount, user_id,
+        reference_no=reference_no, description="تسویه‌یِ خودکارِ فروشِ حضوری (POS)",
+    )
+    return payment_id
 
 
 # ---------------------------------------------------------------------

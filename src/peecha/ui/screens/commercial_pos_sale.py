@@ -320,12 +320,14 @@ class CommercialPosSaleScreen(QWidget):
             return
         reference = self.payment_reference_field.text().strip() or None
         try:
-            if method_code == "GIFT_CARD":
-                if not reference:
-                    self.status_label.setText("کدِ کارتِ‌هدیه را وارد کنید.")
-                    return
-                pos_service.redeem_gift_card(reference, amount)
-            pos_service.record_payment(self._document_id, method_code, amount, reference_no=reference)
+            # طبقِ رفعِ شکافِ کشف‌شده («پرداختِ POS به هیچ حسابِ نقد/بانکی
+            # نمی‌رسید و فاکتور هیچ‌وقت تسویه‌شده علامت نمی‌خورد»):
+            # record_payment_and_settle هم ثبتِ پرداخت، هم سندِ خزانه‌داریِ
+            # واقعی (برایِ نقد/کارت)، هم تسویهٔ فاکتور را یک‌جا انجام می‌دهد.
+            pos_service.record_payment_and_settle(
+                self._company_id(), app_session.current_user.user_id, self._document_id, method_code, amount,
+                reference_no=reference,
+            )
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
