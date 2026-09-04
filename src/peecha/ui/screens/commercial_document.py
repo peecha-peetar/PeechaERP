@@ -1312,9 +1312,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): وضعیت و
         # پیوندهایِ سند هردو متنِ کوتاهِ اطلاعاتی‌اند — قبلاً هرکدام یک
         # ردیفِ کاملِ جدا بودند؛ حالا کنارِ هم، یک ردیف.
+        # طبقِ درخواستِ صریح («فضایِ بینِ هدر خیلی خالی است و فقط دکمه‌یِ
+        # افزودنِ ردیف دارد؛ این دکمه برود داخلِ هدر تا فضایِ بیشتری برایِ
+        # جزئیاتِ فاکتور آزاد شود»): ردیفِ جداگانه‌یِ «ردیف‌ها + دکمه‌یِ
+        # افزودن» حذف شد -- عنوانِ بخش و دکمه‌یِ افزودن حالا کنارِ نوارِ
+        # وضعیت/پیوندهایِ سند می‌نشینند، در همان یک ردیفِ فشرده.
         status_row = QHBoxLayout()
         status_row.setContentsMargins(0, 0, 0, 0)
         status_row.setSpacing(8)
+        lines_title = QLabel("ردیف‌ها")
+        lines_title.setObjectName("sectionTitle")
+        status_row.addWidget(lines_title)
+        add_line_button = QPushButton("➕")
+        add_line_button.setObjectName("primaryIconButton")
+        add_line_button.setFixedWidth(48)
+        add_line_button.setToolTip("افزودنِ ردیف")
+        add_line_button.clicked.connect(self._add_line)
+        status_row.addWidget(add_line_button)
         self.status_badge = QLabel("")
         self.status_badge.setObjectName("statusBadge")
         status_row.addWidget(self.status_badge)
@@ -1322,23 +1336,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         status_row.addWidget(self.links_label)
         status_row.addStretch(1)
         self.body_layout.addLayout(status_row)
-
-        # همان‌طور: عنوانِ بخشِ «ردیف‌ها» و دکمهٔ افزودن هرکدام یک ردیفِ
-        # کاملِ جدا بودند، بدونِ نیازِ واقعی — حالا کنارِ هم.
-        lines_header_row = QHBoxLayout()
-        lines_header_row.setContentsMargins(0, 0, 0, 0)
-        lines_header_row.setSpacing(8)
-        lines_title = QLabel("ردیف‌ها")
-        lines_title.setObjectName("sectionTitle")
-        lines_header_row.addWidget(lines_title)
-        add_line_button = QPushButton("➕")
-        add_line_button.setObjectName("primaryIconButton")
-        add_line_button.setFixedWidth(48)
-        add_line_button.setToolTip("افزودنِ ردیف")
-        add_line_button.clicked.connect(self._add_line)
-        lines_header_row.addWidget(add_line_button)
-        lines_header_row.addStretch(1)
-        self.body_layout.addLayout(lines_header_row)
 
         self.lines_table = QTableWidget(0, len(_LINE_COLUMNS))
         self.lines_table.setHorizontalHeaderLabels(_LINE_COLUMNS)
@@ -1996,22 +1993,29 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         """طبقِ درخواستِ صریح («سبدِ پیشنهادی»): بعدِ افزودنِ یک ردیف، اگر
         کالایی هست که در فاکتورهایِ فروشِ قبلی معمولاً همراهِ همین کالا
         خریده شده، این‌جا نشان داده می‌شود. کاملاً غیرِمزاحم -- هیچ‌چیزی
-        اگر داده‌یِ کافی نبود نمایش داده نمی‌شود."""
+        اگر داده‌یِ کافی نبود نمایش داده نمی‌شود.
+
+        باگِ واقعیِ گزارش‌شده: چون کالایِ A و B معمولاً هردو باهم دیده
+        می‌شوند، بعدِ افزودنِ B (که خودش به‌خاطرِ A پیشنهاد شده بود)،
+        دوباره خودِ A پیشنهاد می‌شد -- در حالی‌که از قبل در همین فاکتور
+        هست. پس این‌جا کالاهایی که از پیش در سندِ جاری‌اند فیلتر می‌شوند."""
         self._cross_sell_suggestion = None
         self.cross_sell_row.setVisible(False)
         company_id = self._company_id()
         if not self._supports_cross_sell or item_id is None or company_id is None:
             return
-        suggestions = documents_service.suggest_frequently_bought_together(company_id, item_id, limit=1)
-        if not suggestions:
+        existing_item_ids = {ln.item_id for ln in self._lines}
+        suggestions = documents_service.suggest_frequently_bought_together(company_id, item_id, limit=10)
+        suggestion = next((s for s in suggestions if s.item_id not in existing_item_ids), None)
+        if suggestion is None:
             return
-        suggestion = suggestions[0]
         self._cross_sell_suggestion = suggestion
         self.cross_sell_label.setText(
             f"💡 مشتری‌ها معمولاً همراهِ این کالا «{suggestion.item_code} — {suggestion.item_name}» را هم می‌خرند "
             f"({numerals.to_persian_digits(str(suggestion.confidence_percent))}٪)"
         )
         self.cross_sell_row.setVisible(True)
+        self._scroll.ensureWidgetVisible(self.cross_sell_row)
 
     def _add_cross_sell_suggestion(self) -> None:
         suggestion = self._cross_sell_suggestion

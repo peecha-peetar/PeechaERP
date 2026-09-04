@@ -59,6 +59,7 @@ from peecha.services import languages as languages_service
 from peecha.services import translations as translations_service
 from peecha.ui import theme
 from peecha.ui.widgets import HoverButton, field_help_is_enabled, set_field_help_enabled
+from peecha.version import APP_VERSION
 
 _NAV_ICONS = {
     "dashboard": "🏠",
@@ -960,6 +961,13 @@ class MainWindow(QMainWindow):
         brand.setFont(brand_font)
         brand.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
         brand_row.addWidget(brand)
+
+        # طبقِ درخواستِ صریح («نسخه‌یِ برنامه در نوارِ بالایی نمایش داده
+        # بشه تا مطمئن بشیم آخرین نسخه در حالِ اجراست»)
+        self.version_label = QLabel(APP_VERSION)
+        self.version_label.setStyleSheet(f"color: {theme.TEXT_DISABLED}; font-size: 11px;")
+        self.version_label.setToolTip("نسخه‌یِ نصب‌شده‌یِ برنامه")
+        brand_row.addWidget(self.version_label)
         layout.addLayout(brand_row)
 
         divider0 = QFrame()
