@@ -15,6 +15,7 @@ from peecha.ui.screens.commercial_settings import (
     _FeatureToggleTab,
     _IndustryProfileTab,
     _NumberingSequencesTab,
+    _PricingPolicyTab,
     _SettlementAlarmTab,
 )
 from peecha.ui.screens.companies import CompaniesScreen
@@ -298,6 +299,7 @@ class SystemSettingsScreen(QWidget):
                 ("شماره‌گذاریِ اسناد", _NumberingSequencesTab()),
                 ("کانال‌ها", _CommercialChannelsTab()),
                 ("هشدارِ موعدِ تسویه", _SettlementAlarmTab()),
+                ("حاشیهٔ سود و پیشنهادِ قیمت", _PricingPolicyTab()),
             ]
         )
 

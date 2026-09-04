@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import decimal
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -257,6 +259,71 @@ class _IndustryProfileTab(QWidget):
             return
         settings_service.apply_industry_profile(company_id, profile_code)
         self.status_label.setText("نمایه اعمال شد.")
+
+
+class _PricingPolicyTab(QWidget):
+    """طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت... حاشیهٔ سود... تخفیفِ
+    مجاز»): سقفِ حداقلِ حاشیهٔ سودِ مجاز -- این تنظیم و لایهٔ سرویسش
+    (commercial_pricing.get/set_pricing_policy) از قبل ساخته شده بود ولی
+    به هیچ فرمی وصل نبود؛ همین‌جا وصل می‌شود تا دیالوگِ ردیفِ سند بتواند
+    آن را بخواند."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("حاشیهٔ سود و پیشنهادِ قیمت")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "این حداقل، مبنایِ «حداکثرِ تخفیفِ مجاز» و هشدارِ افتِ سود در دیالوگِ افزودنِ ردیفِ فاکتورِ فروش قرار می‌گیرد."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        margin_row = QHBoxLayout()
+        margin_row.addWidget(QLabel("حداقلِ حاشیهٔ سودِ مجاز (٪)"))
+        self.min_margin_spin = QSpinBox()
+        self.min_margin_spin.setRange(0, 95)
+        self.min_margin_spin.setSpecialValueText("بدونِ محدودیت")
+        self.min_margin_spin.valueChanged.connect(self._save)
+        margin_row.addWidget(self.min_margin_spin)
+        margin_row.addStretch(1)
+        layout.addLayout(margin_row)
+
+        self.requires_approval_checkbox = QCheckBox("عبور از این حداقل نیازمندِ تاییدِ مدیر باشد")
+        self.requires_approval_checkbox.toggled.connect(self._save)
+        layout.addWidget(self.requires_approval_checkbox)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        policy = pricing_service.get_pricing_policy(company_id)
+        self.min_margin_spin.blockSignals(True)
+        self.requires_approval_checkbox.blockSignals(True)
+        self.min_margin_spin.setValue(int(policy.min_margin_percent_default) if policy and policy.min_margin_percent_default is not None else 0)
+        self.requires_approval_checkbox.setChecked(bool(policy and policy.below_margin_requires_approval))
+        self.min_margin_spin.blockSignals(False)
+        self.requires_approval_checkbox.blockSignals(False)
+        self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        margin = self.min_margin_spin.value()
+        pricing_service.set_pricing_policy(
+            company_id, decimal.Decimal(margin) if margin > 0 else None, self.requires_approval_checkbox.isChecked()
+        )
+        self.status_label.setText("ذخیره شد.")
 
 
 class _SettlementAlarmTab(QWidget):

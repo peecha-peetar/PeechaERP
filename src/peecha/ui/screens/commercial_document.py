@@ -525,6 +525,16 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.price_history_button.clicked.connect(self._open_price_history)
         stock_row_layout.addWidget(self.price_history_button)
 
+        # طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت»): بهایِ تمام‌شدهٔ
+        # تخمینی، حاشیهٔ سود در قیمتِ فعلی، حداکثرِ تخفیفِ مجاز (طبقِ
+        # حداقلِ حاشیهٔ سودِ تنظیم‌شده در تنظیمات)، و هشدارِ زنده اگر
+        # تخفیفِ واردشده سود را زیرِ آن حد ببرد -- فقط برایِ اسنادِ فروش،
+        # چون «حاشیهٔ سود» برایِ فاکتورِ خرید بی‌معناست.
+        self.price_suggestion_label = QLabel("")
+        self.price_suggestion_label.setWordWrap(True)
+        self.price_suggestion_label.setObjectName("sectionHint")
+        self.price_suggestion_label.setVisible(False)
+
         # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۲/۶.۳): فیلدهایِ مبلغ/عدد باید
         # _AmountField باشند (گروه‌بندیِ سه‌رقمیِ زنده + ارقامِ فارسی)، نه
         # QDoubleSpinBoxِ خام — دقیقاً هم‌الگو با journal_entry.py/
@@ -571,6 +581,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
             FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
             FieldSpec("discount", "تخفیف", discount_row_widget, span=1),
             FieldSpec("tax_percent", "درصدِ مالیات (بعدِ تخفیف)", self.tax_percent_field, span=1),
+            FieldSpec("price_suggestion", "", self.price_suggestion_label, span=3),
         ]
         if per_line_warehouse_enabled:
             warehouse_row_widget = QWidget()
@@ -629,6 +640,14 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.unit_price_field.textEdited.connect(self._on_price_edited_manually)
         self.item_combo.currentIndexChanged.connect(self._on_item_changed)
         self.quantity_field.valueChanged.connect(self._suggest_price)
+
+        # طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت»): با هر تغییرِ کالا/
+        # قیمت/تخفیف/مقدار، پنلِ حاشیهٔ سود دوباره محاسبه می‌شود.
+        self.unit_price_field.valueChanged.connect(self._refresh_price_suggestion)
+        self.discount_field.valueChanged.connect(self._refresh_price_suggestion)
+        self.discount_type_combo.currentIndexChanged.connect(self._refresh_price_suggestion)
+        self.quantity_field.valueChanged.connect(self._refresh_price_suggestion)
+        self.item_combo.currentIndexChanged.connect(self._refresh_price_suggestion)
 
         if initial is not None:
             index = self.item_combo.findData(initial["item_id"])
@@ -763,6 +782,74 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.unit_price_field.setValue(float(resolved.unit_price))
         if resolved.discount_amount and self.discount_field.value() == 0:
             self.discount_field.setValue(float(resolved.discount_amount))
+
+    def _estimate_item_cost(self, item_id: int) -> decimal.Decimal | None:
+        """طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت... قیمتِ خرید»): چون
+        این پروژه یک تابعِ آماده‌یِ «بهایِ فعلی» ندارد، این‌جا میانگینِ
+        موزونِ average_unit_cost را از رویِ موجودیِ همه‌یِ انبارها
+        می‌سازیم -- همان بهایی که موتورِ انبار خودش برایِ محاسبه‌یِ
+        بهایِ تمام‌شده استفاده می‌کند."""
+        balances = engine_service.list_balances(self._company_id, item_id=item_id)
+        total_qty = sum((b.quantity_on_hand for b in balances), decimal.Decimal(0))
+        if total_qty <= 0:
+            return None
+        total_value = sum((b.total_value for b in balances), decimal.Decimal(0))
+        return total_value / total_qty
+
+    def _refresh_price_suggestion(self) -> None:
+        """طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت»): بهایِ تمام‌شدهٔ
+        تخمینی، حاشیهٔ سود در قیمتِ فعلی، حداکثرِ تخفیفِ مجاز (طبقِ
+        حداقلِ حاشیهٔ سودِ تنظیم‌شده در تنظیماتِ بازرگانی)، و هشدارِ زنده
+        اگر تخفیفِ واردشده سود را زیرِ آن حد ببرد."""
+        if self._document_type_code not in _SALES_TYPES:
+            self.price_suggestion_label.setVisible(False)
+            return
+        item_id = self.item_combo.currentData()
+        unit_price = decimal.Decimal(str(self.unit_price_field.value()))
+        if item_id is None or unit_price <= 0:
+            self.price_suggestion_label.setVisible(False)
+            return
+        unit_cost = self._estimate_item_cost(item_id)
+        if unit_cost is None or unit_cost <= 0:
+            self.price_suggestion_label.setVisible(False)
+            return
+
+        quantity = decimal.Decimal(str(self.quantity_field.value())) or decimal.Decimal(1)
+        is_percent_discount = self.discount_type_combo.currentData() == "PERCENT"
+        discount_value = decimal.Decimal(str(self.discount_field.value()))
+        if is_percent_discount:
+            effective_price = unit_price * (1 - discount_value / 100)
+        else:
+            # تخفیفِ مبلغی رویِ جمعِ ناخالصِ ردیف اعمال می‌شود، نه لزوماً
+            # تکِ واحد -- برایِ نمایشِ زنده، تقسیم بر مقدار کافی است.
+            effective_price = unit_price - (discount_value / quantity)
+
+        margin_percent = (unit_price - unit_cost) / unit_price * 100
+        parts = [
+            f"بهایِ تمام‌شدهٔ تخمینی: {numerals.format_money(unit_cost, self._decimal_places)}",
+            f"حاشیهٔ سود در این قیمت: {numerals.format_money(margin_percent, 1)}٪",
+        ]
+
+        policy = pricing_service.get_pricing_policy(self._company_id)
+        floor = policy.min_margin_percent_default if policy is not None else None
+        if floor is not None:
+            floor_ratio = decimal.Decimal(1) - (floor / decimal.Decimal(100))
+            if floor_ratio > 0:
+                min_price = unit_cost / floor_ratio
+                max_discount_percent = max(decimal.Decimal(0), (1 - min_price / unit_price) * 100)
+                parts.append(f"حداکثرِ تخفیفِ مجاز: {numerals.format_money(max_discount_percent, 1)}٪")
+
+            no_discount_profit = unit_price - unit_cost
+            discounted_profit = effective_price - unit_cost
+            effective_margin_percent = (
+                (effective_price - unit_cost) / effective_price * 100 if effective_price > 0 else decimal.Decimal(-999)
+            )
+            if effective_margin_percent < floor and no_discount_profit > 0:
+                profit_drop_percent = (1 - discounted_profit / no_discount_profit) * 100
+                parts.append(f"⚠️ این تخفیف سودِ این ردیف را {numerals.format_money(profit_drop_percent, 0)}٪ کاهش می‌دهد.")
+
+        self.price_suggestion_label.setText("  |  ".join(parts))
+        self.price_suggestion_label.setVisible(True)
 
     def _on_accept(self) -> None:
         if self.item_combo.currentData() is None:
