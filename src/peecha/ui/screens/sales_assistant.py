@@ -26,6 +26,7 @@ from peecha.services import commercial_partners as partners_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.ui import theme
+from peecha.ui.screens.commercial_document import _CounterpartyHistoryDialog
 
 _SEVERITY_META = {
     "danger": ("🔴", "DANGER"),
@@ -80,6 +81,15 @@ class _ActionCard(QFrame):
             action_button.setText("👤 بازکردنِ فرمِ مشتری")
             action_button.clicked.connect(lambda: self._screen.open_customer_form(item.customer_id))
         bottom_row.addWidget(action_button)
+
+        # طبقِ درخواستِ صریح («ریسکِ ریزش... چرا؟»): این دکمه سابقهٔ
+        # واقعیِ اسنادِ همین طرفِ‌حساب را نشان می‌دهد -- همان دیالوگی که
+        # از قبل در فرمِ سندِ بازرگانی ساخته شده بود (R37-3) -- تا
+        # فروشنده به‌جایِ اعتماد به یک عددِ محاسبه‌شده، خودِ روندِ
+        # خریدهای گذشته را ببیند.
+        history_button = QPushButton("🕘 سابقهٔ خرید")
+        history_button.clicked.connect(lambda: self._screen.open_purchase_history(item))
+        bottom_row.addWidget(history_button)
         layout.addLayout(bottom_row)
 
         self.setStyleSheet(
@@ -146,6 +156,13 @@ class SalesAssistantScreen(QWidget):
         self._empty_label.setVisible(not actions)
         for action_item in actions:
             self._cards_layout.insertWidget(self._cards_layout.count() - 1, _ActionCard(action_item, self))
+
+    def open_purchase_history(self, item: assistant_service.ActionItem) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        dialog = _CounterpartyHistoryDialog(self, company_id, item.customer_id, item.customer_name)
+        dialog.exec()
 
     def open_customer_form(self, customer_id: int) -> None:
         self._main_window.open_screen(
