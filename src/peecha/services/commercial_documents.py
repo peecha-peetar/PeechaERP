@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import DetailAccount, FiscalYear
+from peecha.db.models.accounting import DetailAccount, FiscalYear, JournalEntryLine
 from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation
 from peecha.db.models.inventory import Item, StockDocument
 from peecha.services import commercial_contracts as contracts_service
@@ -1767,3 +1767,94 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         session.commit()
 
     return PostResult(document_id=document_id, stock_document_id=stock_document_id, journal_entry_id=journal_entry_id)
+
+
+@dataclass
+class CustomerProfitRow:
+    counterparty_detail_account_id: int
+    customer_name: str
+    invoice_count: int
+    net_revenue: decimal.Decimal
+    cogs: decimal.Decimal
+    gross_profit: decimal.Decimal
+    margin_percent: decimal.Decimal | None
+
+
+def compute_customer_profit(
+    company_id: int, date_from: datetime.date, date_to: datetime.date,
+) -> list[CustomerProfitRow]:
+    """طبقِ درخواستِ صریح («سودِ واقعیِ هر مشتری»): برخلافِ گزارش‌هایِ
+    مالیِ موجود (که فقط رویِ acc.journal_entry_lines کار می‌کنند)، این‌جا
+    باید فروشِ خالص (طبقِ خودِ سندِ فاکتور) با بهایِ تمام‌شده‌یِ واقعیِ
+    کالایِ خارج‌شده (طبقِ inv.stock_document_lines، همان بهایی که موتورِ
+    انبار در Postِ فاکتور محاسبه کرده) به‌ازایِ هر مشتری جمع بسته شود --
+    نه بازنویسیِ این منطق در قالبِ SQLِ حسابداری.
+
+    دو کوئریِ جداگانه (نه یک JOIN): چون هر فاکتور دقیقاً یک سندِ انبار
+    دارد ولی آن سند می‌تواند چند ردیف داشته باشد، JOINِ مستقیم مقادیرِ
+    سرِسندِ فاکتور (subtotal/discount) را به‌ازایِ هر ردیف تکرار می‌کرد."""
+    with new_session() as session:
+        revenue_stmt = (
+            select(
+                CommercialDocument.counterparty_detail_account_id,
+                func.count(CommercialDocument.document_id),
+                func.coalesce(func.sum(CommercialDocument.subtotal_amount), 0),
+                func.coalesce(func.sum(CommercialDocument.discount_amount), 0),
+            )
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocument.document_date >= date_from,
+                CommercialDocument.document_date <= date_to,
+            )
+            .group_by(CommercialDocument.counterparty_detail_account_id)
+        )
+        revenue_by_customer = {
+            row[0]: (row[1], row[2] - row[3]) for row in session.execute(revenue_stmt)
+        }
+
+        # طبقِ رفعِ باگِ واقعی («بهایِ تمام‌شده همیشه صفر می‌آمد»): برخلافِ
+        # فرضِ اولیه، inv.stock_document_lines.unit_cost برایِ سمتِ ISSUE
+        # (خروجِ فروش) هرگز پر نمی‌شود -- تنها جایی که مبلغِ واقعیِ COGS
+        # ثبت می‌شود، ردیفِ بدهکارِ حسابِ COGS در همان سندِ حسابداریِ دومِ
+        # «بهایِ تمام‌شده/موجودی» است (StockDocument.journal_entry_id) --
+        # دقیقاً همان سندی که خودِ فرمِ سند (R12-2) پیوندش را نشان می‌دهد.
+        cogs_account_id = inv_engine_service.get_account_mapping(company_id, "COGS")
+        cogs_by_customer: dict[int, decimal.Decimal] = {}
+        if cogs_account_id is not None:
+            cogs_stmt = (
+                select(
+                    CommercialDocument.counterparty_detail_account_id,
+                    func.coalesce(func.sum(JournalEntryLine.debit_amount_base), 0),
+                )
+                .join(StockDocument, StockDocument.stock_document_id == CommercialDocument.stock_document_id)
+                .join(JournalEntryLine, JournalEntryLine.journal_entry_id == StockDocument.journal_entry_id)
+                .where(
+                    CommercialDocument.company_id == company_id,
+                    CommercialDocument.document_type_code == "SALES_INVOICE",
+                    CommercialDocument.status_code == "POSTED",
+                    CommercialDocument.document_date >= date_from,
+                    CommercialDocument.document_date <= date_to,
+                    JournalEntryLine.account_id == cogs_account_id,
+                )
+                .group_by(CommercialDocument.counterparty_detail_account_id)
+            )
+            cogs_by_customer = {row[0]: row[1] for row in session.execute(cogs_stmt)}
+
+    rows: list[CustomerProfitRow] = []
+    for counterparty_id, (invoice_count, net_revenue) in revenue_by_customer.items():
+        cogs = cogs_by_customer.get(counterparty_id, decimal.Decimal(0))
+        gross_profit = net_revenue - cogs
+        margin_percent = (gross_profit / net_revenue * 100) if net_revenue > 0 else None
+        rows.append(CustomerProfitRow(
+            counterparty_detail_account_id=counterparty_id,
+            customer_name=dimensions_service.get_detail_account_label(counterparty_id),
+            invoice_count=invoice_count,
+            net_revenue=net_revenue,
+            cogs=cogs,
+            gross_profit=gross_profit,
+            margin_percent=margin_percent,
+        ))
+    rows.sort(key=lambda r: r.gross_profit, reverse=True)
+    return rows

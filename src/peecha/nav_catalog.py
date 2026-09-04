@@ -231,6 +231,17 @@ NAV_ITEMS = [
                     {"code": "REPORTS_ITEM_LEDGER", "label": "کاردکسِ کالا", "screen": "report_item_ledger"},
                 ],
             },
+            {
+                "code": "REPORTS_SALES",
+                "label": "فروش",
+                "children": [
+                    {
+                        "code": "REPORTS_CUSTOMER_PROFIT",
+                        "label": "سودِ واقعیِ مشتریان",
+                        "screen": "report_customer_profit",
+                    },
+                ],
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ
@@ -348,6 +359,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("REPORTS_ANOMALIES", "⚠️"),
         ("REPORTS_COST_CENTER", "🏗️"),
         ("REPORTS_ITEM_LEDGER", "📋"),
+        ("REPORTS_CUSTOMER_PROFIT", "💹"),
     ],
     "SETTINGS": [],
 }
