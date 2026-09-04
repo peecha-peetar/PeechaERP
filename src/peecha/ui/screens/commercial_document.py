@@ -163,6 +163,26 @@ def _build_invoice_print_html(
     """
 
 
+def _score_gradient_color(score: int) -> str:
+    """طبقِ درخواستِ صریح («فیلدِ مشتری بر اساسِ امتیاز رنگ‌آمیزی شود --
+    از قرمز تا سبز»): امتیازِ ۰ تا ۱۰۰ را به یک رنگِ پیوسته (قرمز →
+    زرد → سبز، مثلِ چراغ‌راهنما) تبدیل می‌کند -- مستقل از قالبِ روشن/
+    تیره، چون این رنگ همیشه باید همان معنایِ «خطر/میانه/خوب» را برساند."""
+    score = max(0, min(100, score))
+    if score <= 50:
+        ratio = score / 50
+        r1, g1, b1 = 220, 38, 38  # قرمز
+        r2, g2, b2 = 234, 179, 8  # زرد
+    else:
+        ratio = (score - 50) / 50
+        r1, g1, b1 = 234, 179, 8  # زرد
+        r2, g2, b2 = 22, 163, 74  # سبز
+    r = round(r1 + (r2 - r1) * ratio)
+    g = round(g1 + (g2 - g1) * ratio)
+    b = round(b1 + (b2 - b1) * ratio)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 def _money_or_blank(value: decimal.Decimal | None, decimal_places: int) -> str:
     return numerals.format_money(value, decimal_places) if value else ""
 
@@ -2007,17 +2027,28 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _refresh_customer_summary(self) -> None:
         """طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند»): خلاصه‌یِ وضعیتِ همان
         مشتریِ رویِ هدر -- آخرین خرید، میانگینِ فاصله‌یِ خرید، سقفِ اعتبار،
-        بدهیِ جاری، و امتیاز/ردیفِ مشتری -- درست زیرِ هدرِ سند."""
+        بدهیِ جاری، و امتیاز/ردیفِ مشتری -- درست زیرِ هدرِ سند. طبقِ
+        درخواستِ صریحِ بعدی، خودِ فیلدِ انتخابِ مشتری هم رنگ‌آمیزی می‌شود:
+        گرادیانِ افقی از رنگِ (قرمز تا سبز، متناسب با امتیاز) در سمتِ چپ
+        تا سفید در سمتِ راست -- تا نامِ مشتری همیشه خوانا بماند."""
         company_id = self._company_id()
         counterparty_id = self.counterparty_combo.currentData()
         if not self._supports_cross_sell or company_id is None or counterparty_id is None:
             self.customer_summary_box.setVisible(False)
+            self.counterparty_combo.setStyleSheet("")
             return
 
         score_row = assistant_service.get_customer_score(company_id, counterparty_id)
         if score_row is None:
             self.customer_summary_box.setVisible(False)
+            self.counterparty_combo.setStyleSheet("")
             return
+
+        gradient_color = _score_gradient_color(score_row.score)
+        self.counterparty_combo.setStyleSheet(
+            "QComboBox { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+            f"stop:0 {gradient_color}, stop:1 white); color: #1a1a1a; }}"
+        )
 
         parts = [f"{score_row.emoji} امتیازِ مشتری: {numerals.to_persian_digits(str(score_row.score))} ({score_row.tier_label})"]
         if score_row.days_since_last is not None:
