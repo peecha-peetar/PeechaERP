@@ -416,6 +416,27 @@ def flatten_nav_items() -> list[dict]:
     return flat
 
 
+def flatten_nav_items_with_breadcrumb() -> list[tuple[str, str, str]]:
+    """مشابهِ flatten_nav_items، ولی به‌ازایِ هر آیتمِ برگ، مسیرِ کاملِ
+    منو (breadcrumb) را هم برمی‌گرداند -- طبقِ نیازِ جستجویِ سراسری
+    (کادرِ ازپیش‌موجودِ ولی تا امروز بی‌اتصالِ «جستجو در سیستم» در
+    نوارِ بالایی): وقتی چند آیتمِ برگ در زیرمنوهایِ مختلف برچسبِ یکسان
+    دارند (مثلاً «نگاشتِ حساب‌ها» هم زیرِ انبار هم زیرِ بازرگانی است)،
+    این مسیر برایِ نمایشِ متمایز و ناوبریِ درست لازم است."""
+    result: list[tuple[str, str, str]] = []
+
+    def _walk(items: list[dict], path: list[str]) -> None:
+        for item in items:
+            if item.get("children"):
+                _walk(item["children"], path + [item["label"]])
+            elif item.get("screen"):
+                breadcrumb = " › ".join(path + [item["label"]]) if path else item["label"]
+                result.append((item["code"], item["label"], breadcrumb))
+
+    _walk(NAV_ITEMS, [])
+    return result
+
+
 def build_form_catalog() -> list[tuple[str, str, str]]:
     """(form_code, module_code, label) برایِ همه‌ی صفحاتِ برنامه — از رویِ
     NAV_ITEMS + زیرتب‌هایِ «تنظیماتِ سیستم» — تکِ منبعِ حقیقتی که

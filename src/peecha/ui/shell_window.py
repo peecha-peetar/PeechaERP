@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QCompleter,
     QDialog,
     QDialogButtonBox,
     QFrame,
@@ -53,6 +54,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.nav_catalog import DEFAULT_QUICK_ACCESS_BY_MODULE, NAV_ITEMS
 from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
+from peecha.nav_catalog import flatten_nav_items_with_breadcrumb
 from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
@@ -1018,6 +1020,7 @@ class MainWindow(QMainWindow):
         self.search_field.setPlaceholderText("⌕  جستجو در سیستم...")
         self.search_field.setFixedWidth(320)
         layout.addWidget(self.search_field)
+        self._setup_global_search()
 
         layout.addStretch(1)
 
@@ -1741,6 +1744,57 @@ class MainWindow(QMainWindow):
         active_sub = self.mdi_area.activeSubWindow()
         if active_sub is not None and hasattr(active_sub.widget(), "refresh"):
             active_sub.widget().refresh()
+
+    def _setup_global_search(self) -> None:
+        """طبقِ ادامهٔ فهرستِ درخواستی («جستجویِ زبانِ‌طبیعی در سراسرِ
+        سیستم»): این کادر از اولِ ساختِ نوارِ بالایی وجود داشت ولی به
+        هیچ signalای وصل نبود -- عملاً یک ورودیِ کاملاً بی‌اثر. حالا
+        از رویِ همان تکِ‌منبعِ حقیقتیِ منو (nav_catalog) یک نمایه‌یِ
+        جستجو ساخته می‌شود: نوشتن هر بخشی از نامِ هر صفحه/گزارش (حتی با
+        مسیرِ منویش، مثلاً «فروش › سودِ واقعیِ مشتریان») آن را در یک
+        منویِ کشویی پیشنهاد می‌دهد؛ زدنِ Enter، حتی بدونِ انتخابِ دقیقِ
+        یک گزینه، بهترین تطبیقِ چندکلمه‌ای را مستقیماً باز می‌کند --
+        بدونِ نیاز به مدلِ یادگیریِ ماشین، فقط تطبیقِ متنیِ ساده رویِ
+        همان کاتالوگِ ازپیش‌موجود."""
+        self._search_entries = flatten_nav_items_with_breadcrumb()
+        self._search_code_by_breadcrumb = {breadcrumb: code for code, _label, breadcrumb in self._search_entries}
+
+        completer = QCompleter([breadcrumb for _code, _label, breadcrumb in self._search_entries], self.search_field)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCompletionMode(QCompleter.PopupCompletion)
+        self.search_field.setCompleter(completer)
+        completer.activated[str].connect(self._on_global_search_selected)
+        self.search_field.returnPressed.connect(self._on_global_search_return_pressed)
+
+    def _on_global_search_selected(self, breadcrumb: str) -> None:
+        code = self._search_code_by_breadcrumb.get(breadcrumb)
+        if code is not None:
+            self.open_screen(code)
+        self.search_field.clear()
+
+    def _on_global_search_return_pressed(self) -> None:
+        """طبقِ ادامهٔ فهرستِ درخواستی: به‌جایِ تکیه بر
+        completer().currentCompletion() (که فقط پیشوندِ همان
+        completionPrefixِ درونیِ QCompleter را می‌شناسد و در حالتِ
+        MatchContains می‌تواند با آنچه کاربر واقعاً می‌بیند هم‌خوان
+        نباشد)، مستقیماً همان نمایه‌یِ ساختگیِ خودمان با تطبیقِ توکنی
+        (همه‌یِ کلماتِ عبارت، در هر ترتیبی) جست‌وجو می‌شود -- پیش‌بینی‌
+        پذیرتر و مستقل از حالتِ داخلیِ ویجت."""
+        query = self.search_field.text().strip()
+        if not query:
+            return
+        words = [w.casefold() for w in query.split()]
+        code = next(
+            (
+                item_code for item_code, _label, breadcrumb in self._search_entries
+                if all(word in breadcrumb.casefold() for word in words)
+            ),
+            None,
+        )
+        if code is not None:
+            self.open_screen(code)
+            self.search_field.clear()
 
     def _on_language_changed(self, index: int) -> None:
         """طبقِ حسابرسیِ صریح: قبلاً این سوییچر هیچ signalای وصل نداشت —
