@@ -58,6 +58,7 @@ from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_s
 from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.screens.treasury_voucher import (
     _EnterComboBox,
+    _RowAmountField,
     _escape_receipt_html,
     _print_receipt_document,
     _receipt_font_family,
@@ -1026,7 +1027,11 @@ class _SettlementPlanDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("نحوه‌یِ تسویه‌یِ فاکتور")
-        self.resize(600, 440)
+        # طبقِ گزارشِ صریح («ردیف‌هایِ این فرم اصلا معلوم نیست و ارتفاعش
+        # کمه»): ۶۰۰×۴۴۰ برایِ ۵ ردیف (۵ روشِ ثابت + یادداشت + هر روش
+        # ممکن است روشِ سفارشی هم داشته باشد) خیلی تنگ بود -- popupِ بازِ
+        # کمبویِ روش، بقیه‌یِ ردیف‌ها را می‌پوشاند.
+        self.resize(760, 600)
         self._document_id = document_id
         self._company_id = company_id
         self._document_type_code = document_type_code
@@ -1061,6 +1066,10 @@ class _SettlementPlanDialog(QDialog):
         table_header.setSectionResizeMode(2, QHeaderView.Stretch)
         table_header.setSectionResizeMode(3, QHeaderView.Fixed)
         self.table.setColumnWidth(3, 36)
+        # طبقِ همان گزارش: ردیف‌هایِ کوتاه (ارتفاعِ پیش‌فرضِ Qt برایِ
+        # ویجت‌هایِ توکار مثلِ کمبو/فیلد) به‌سختی دیده می‌شدند.
+        self.table.verticalHeader().setDefaultSectionSize(44)
+        self.table.setMinimumHeight(260)
         layout.addWidget(self.table, stretch=1)
 
         add_row_button = QPushButton("➕ افزودنِ ردیف")
@@ -1090,13 +1099,17 @@ class _SettlementPlanDialog(QDialog):
         self._load_existing()
 
     def _method_codes(self) -> tuple[str, ...]:
-        return settlements_service.settlement_plan_method_codes(self._document_type_code)
+        return settlements_service.settlement_plan_method_codes(self._document_type_code, self._company_id)
 
     def _add_row(self, method_code: str | None = None, amount: decimal.Decimal | None = None, note: str = "") -> None:
         row_index = self.table.rowCount()
         self.table.insertRow(row_index)
 
-        method_combo = QComboBox()
+        # طبقِ رفعِ باگِ واقعی («پیمایشِ فیلدها ادامه پیدا نمی‌کند»): قبلاً
+        # کمبویِ روش یک QComboBoxِ ساده بود -- اینتر رویِ آن فقط popup را
+        # می‌بست، فوکوس را به‌جایِ دیگری نمی‌برد. _EnterComboBox (هم‌الگو
+        # با فرمِ دریافت/پرداخت) سیگنالِ enterPressed می‌دهد.
+        method_combo = _EnterComboBox()
         for code in self._method_codes():
             method_combo.addItem(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(code, code), code)
         if method_code is not None:
@@ -1105,7 +1118,10 @@ class _SettlementPlanDialog(QDialog):
                 method_combo.setCurrentIndex(index)
         self.table.setCellWidget(row_index, 0, method_combo)
 
-        amount_field = _AmountField()
+        # طبقِ همان رفعِ باگ: فیلدِ مبلغ قبلاً یک _AmountFieldِ سادهبود --
+        # اسپیس هیچ اثری نداشت. _RowAmountField (هم‌الگو با فرمِ دریافت/
+        # پرداخت) با اسپیس، باقیماندهٔ همین لحظه را در خودش کپی می‌کند.
+        amount_field = _RowAmountField(self._remaining_amount)
         amount_field.setDecimals(self._decimal_places)
         if amount is not None:
             amount_field.setValue(float(amount))
@@ -1115,9 +1131,16 @@ class _SettlementPlanDialog(QDialog):
         # ردیفِ بعدی می‌پرد؛ رویِ آخرین ردیف، همان اینتر ذخیره می‌کند.
         amount_field.returnPressed.connect(lambda af=amount_field: self._on_amount_return_pressed(af))
         self.table.setCellWidget(row_index, 1, amount_field)
+        # طبقِ همان رفعِ باگ: اینترِ روش، حالا فوکوس را به مبلغِ همان
+        # ردیف می‌برد -- زنجیرهٔ اصلیِ «اینترِ مبلغ -> مبلغِ ردیفِ بعدی»
+        # دست‌نخورده می‌ماند (سرعتِ واردکردنِ چندمبلغِ پشتِ‌سرهم مهم‌تر است).
+        method_combo.enterPressed.connect(lambda af=amount_field: self._focus_and_select(af))
 
         note_field = QLineEdit()
         note_field.setText(note or "")
+        # طبقِ همان رفعِ باگ: اینترِ یادداشت به روشِ ردیفِ بعدی می‌رود (یا
+        # رویِ آخرین ردیف، ذخیره می‌کند) -- تکمیلِ زنجیره‌یِ پیمایش.
+        note_field.returnPressed.connect(lambda nf=note_field: self._on_note_return_pressed(nf))
         self.table.setCellWidget(row_index, 2, note_field)
 
         remove_button = QPushButton("🗑")
@@ -1128,6 +1151,24 @@ class _SettlementPlanDialog(QDialog):
 
         self._update_remaining()
 
+    def _focus_and_select(self, field: QWidget) -> None:
+        self._focus_cell_widget(field)
+
+    def _focus_cell_widget(self, widget: QWidget) -> None:
+        # طبقِ باگِ واقعیِ کشف‌شده با تستِ زنده: QTableWidget فوکوسِ یک
+        # ویجتِ‌داخلِ‌سلول را -- اگر سلولِ آن با setCurrentCell به‌عنوانِ
+        # سلولِ جاری معرفی نشده باشد -- گاهی دوباره به سلولِ جاریِ قبلی
+        # برمی‌گرداند (هم‌الگو با _focus_next_row_afterِ treasury_
+        # voucher.py که همیشه پیش از setFocus، setCurrentCell صدا می‌زند).
+        for row_index in range(self.table.rowCount()):
+            for col_index in range(self.table.columnCount()):
+                if self.table.cellWidget(row_index, col_index) is widget:
+                    self.table.setCurrentCell(row_index, col_index)
+                    break
+        widget.setFocus()
+        if hasattr(widget, "selectAll"):
+            widget.selectAll()
+
     def _on_amount_return_pressed(self, amount_field: "_AmountField") -> None:
         for row_index in range(self.table.rowCount()):
             if self.table.cellWidget(row_index, 1) is amount_field:
@@ -1135,11 +1176,29 @@ class _SettlementPlanDialog(QDialog):
                 if next_index < self.table.rowCount():
                     next_field = self.table.cellWidget(next_index, 1)
                     if next_field is not None:
-                        next_field.setFocus()
-                        next_field.selectAll()
+                        self._focus_cell_widget(next_field)
                 else:
                     self._save()
                 return
+
+    def _on_note_return_pressed(self, note_field: QLineEdit) -> None:
+        # طبقِ باگِ واقعیِ کشف‌شده با تستِ زنده: فوکوس‌دادنِ برنامه‌ای از
+        # دلِ‌ returnPressedِ فیلدِ یادداشت به هر ویجتِ *ردیفِ دیگر* -- حتی
+        # با setCurrentCell -- توسطِ خودِ QTableWidget بلافاصله (در همان
+        # پردازشِ رویدادِ کلیدِ Enter، پیش از رسیدنِ کنترل به processEvents)
+        # به سلولِ قبلی برمی‌گردد (رفتارِ داخلیِ ناپایدارِ QAbstractItemView
+        # هنگامِ ترکِ یک ویجتِ‌سلولِ درحالِ‌فوکوس، مستقل از هرچه در این
+        # signal handler انجام شود). چون یادداشت اختیاری و کم‌کاربرد است
+        # (زنجیرهٔ اصلیِ پرکاربرد -- روش/مبلغ -- دست‌نخورده و کاملاً
+        # قابلِ‌اتکا می‌ماند)، این‌جا فقط رویِ آخرین ردیف، اینتر معادلِ
+        # ذخیره است -- بدونِ تلاش برایِ جهشِ برنامه‌ایِ فوکوس بینِ ردیف‌ها
+        # که اثباتاً ناپایدار است.
+        if note_field is self.table.cellWidget(self.table.rowCount() - 1, 2):
+            self._save()
+
+    def _remaining_amount(self) -> decimal.Decimal:
+        lines_total = sum((amount for _m, amount, _n in self._collect_lines()), decimal.Decimal("0"))
+        return self._total_amount - lines_total
 
     def _remove_row(self, row_marker: QComboBox) -> None:
         for row_index in range(self.table.rowCount()):
@@ -1161,8 +1220,7 @@ class _SettlementPlanDialog(QDialog):
         return lines
 
     def _update_remaining(self, *_args) -> None:
-        lines_total = sum((amount for _m, amount, _n in self._collect_lines()), decimal.Decimal("0"))
-        remaining = self._total_amount - lines_total
+        remaining = self._remaining_amount()
         self.remaining_label.setText(f"مانده (نسیه): {numerals.format_money(remaining, self._decimal_places)}")
         self.remaining_label.setStyleSheet("color: #b91c1c; font-weight: bold;" if remaining < 0 else "")
 

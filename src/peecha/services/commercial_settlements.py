@@ -50,8 +50,25 @@ _SETTLEMENT_PLAN_RECEIPT_METHODS = ("CASH", "BANK", "GOODS_COUPON", "VOUCHER", "
 _SETTLEMENT_PLAN_PAYMENT_METHODS = ("CASH", "BANK", "DISCOUNT")
 
 
-def settlement_plan_method_codes(document_type_code: str) -> tuple[str, ...]:
-    return _SETTLEMENT_PLAN_RECEIPT_METHODS if document_type_code == "SALES_INVOICE" else _SETTLEMENT_PLAN_PAYMENT_METHODS
+def settlement_plan_method_codes(document_type_code: str, company_id: int | None = None) -> tuple[str, ...]:
+    """طبقِ درخواستِ صریح («همه روش‌هایِ دریافتی که در روش‌هایِ دریافت
+    تعریف شده اینجا هم بیاره»): روش‌هایِ ثابت (چک/تهاتر/اقساط عمداً
+    مستثنا، چون این دیالوگ برایِ آن‌ها -- که خودشان جریانِ کاری/داده‌یِ
+    مخصوصِ خودشان لازم دارند -- طراحی نشده) + روش‌هایِ سفارشیِ همین شرکت
+    (از «انواعِ سندِ دریافت/پرداخت» در تنظیماتِ خزانه‌داری -- کدشان با
+    treasury_voucher.py هم‌الگو است: CUSTOM_<id>). وقتی company_id داده
+    نشود (مثلاً در سرویس‌هایِ دیگری که فقط کدهایِ ثابت را می‌خواهند)،
+    فقط همان روش‌هایِ ثابت برمی‌گردد."""
+    fixed = _SETTLEMENT_PLAN_RECEIPT_METHODS if document_type_code == "SALES_INVOICE" else _SETTLEMENT_PLAN_PAYMENT_METHODS
+    if company_id is None:
+        return fixed
+    from peecha.services import treasury as treasury_service  # وارد‌کردنِ تنبل -- treasury.py خودش این ماژول را وارد می‌کند.
+
+    direction = "RECEIPT" if document_type_code == "SALES_INVOICE" else "PAYMENT"
+    custom_methods = treasury_service.list_custom_methods(company_id, direction, active_only=True)
+    for custom_method in custom_methods:
+        SETTLEMENT_PLAN_METHOD_LABELS[f"CUSTOM_{custom_method.custom_method_id}"] = custom_method.label
+    return fixed + tuple(f"CUSTOM_{custom_method.custom_method_id}" for custom_method in custom_methods)
 
 
 @dataclass
@@ -127,7 +144,7 @@ def save_settlement_plan(
             raise ValueError("نقشه‌یِ تسویه فقط برایِ فاکتورِ خرید/فروش ممکن است.")
         if doc.status_code == "POSTED":
             raise ValueError("فاکتورِ ثبتِ‌نهایی‌شده دیگر نقشه‌یِ تسویه‌اش قابلِ‌تغییر نیست.")
-        allowed_methods = set(settlement_plan_method_codes(doc.document_type_code))
+        allowed_methods = set(settlement_plan_method_codes(doc.document_type_code, company_id))
         cleaned: list[tuple[str, decimal.Decimal, str | None]] = []
         for method_code, amount, note in lines:
             if method_code not in allowed_methods:
