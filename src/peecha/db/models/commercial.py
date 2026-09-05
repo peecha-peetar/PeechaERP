@@ -1211,3 +1211,22 @@ class OrderPaymentTitle(Base):
     payment_title_id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
     label: Mapped[str] = mapped_column(String(200))
+
+
+class PosInvoiceAuditLog(Base):
+    """طبقِ درخواستِ صریح («فاکتورهایِ صادرشده تا قبل از ثبتِ سند توسطِ
+    صندوق‌دار هم بتونه حذف و اصلاح کنه و در هنگامِ بستنِ شیفت، فاکتورهایِ
+    اصلاح‌شده و حذف‌شده به سرپرست گزارش بشه»): معادلِ 117_pos_invoice_
+    audit.sql."""
+
+    __tablename__ = "pos_invoice_audit_log"
+    __table_args__ = ({"schema": "comm"},)
+
+    audit_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    pos_session_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.pos_sessions.session_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    action_code: Mapped[str] = mapped_column(String(20))
+    performed_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    performed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    note: Mapped[str | None] = mapped_column(String(300))

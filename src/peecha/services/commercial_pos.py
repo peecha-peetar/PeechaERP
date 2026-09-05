@@ -21,6 +21,7 @@ from peecha.db.models.commercial import (
     LoyaltyAccount,
     LoyaltyTransaction,
     PosCashierSettings,
+    PosInvoiceAuditLog,
     PosMenuGroup,
     PosPayment,
     PosSession,
@@ -28,6 +29,7 @@ from peecha.db.models.commercial import (
     PosTerminal,
 )
 from peecha.db.models.inventory import Item
+from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
@@ -171,6 +173,83 @@ def list_pending_pos_documents(company_id: int, pos_session_id: int) -> list[Com
                 .order_by(CommercialDocument.document_id.desc())
             )
         )
+
+
+# ---------------------------------------------------------------------
+# اصلاح/حذفِ فروشِ تاییدشده توسطِ صندوق‌دار (پیش از تاییدِ سرپرست) --
+# طبقِ درخواستِ صریح («فاکتورهایِ صادرشده تا قبل از ثبتِ سند توسطِ
+# صندوق‌دار هم بتونه حذف و اصلاح کنه و در هنگامِ بستنِ شیفت، فاکتورهایِ
+# اصلاح‌شده و حذف‌شده به سرپرست گزارش بشه»).
+# ---------------------------------------------------------------------
+def _get_reopenable_pos_document(session, document_id: int, company_id: int) -> CommercialDocument:
+    doc = session.get(CommercialDocument, document_id)
+    if doc is None or doc.company_id != company_id:
+        raise ValueError("سند نامعتبر است.")
+    if doc.pos_session_id is None or doc.document_type_code != "SALES_INVOICE":
+        raise ValueError("این عملیات فقط برایِ فروشِ صندوق ممکن است.")
+    if doc.status_code != "CONFIRMED":
+        raise ValueError("فقط فروشِ تاییدشده (پیش از تاییدِ سرپرست) قابلِ‌اصلاح/حذف است.")
+    return doc
+
+
+def reopen_confirmed_sale(document_id: int, company_id: int, user_id: int) -> None:
+    """صندوق‌دار یک فروشِ تاییدشده را برایِ اصلاح (افزودن/حذف/تغییرِ
+    ردیف) دوباره به پیش‌نویس برمی‌گرداند -- بعدِ اصلاح، دوباره از همان
+    دکمه‌هایِ تاییدِ فروش عبور می‌کند."""
+    with new_session() as session:
+        doc = _get_reopenable_pos_document(session, document_id, company_id)
+        pos_session_id = doc.pos_session_id
+        doc.status_code = "DRAFT"
+        session.add(
+            PosInvoiceAuditLog(
+                company_id=company_id, pos_session_id=pos_session_id, document_id=document_id,
+                action_code="REOPENED", performed_by_user_id=user_id,
+            )
+        )
+        session.commit()
+
+
+def delete_confirmed_sale(document_id: int, company_id: int, user_id: int) -> None:
+    """صندوق‌دار یک فروشِ تاییدشده (پیش از تاییدِ سرپرست) را لغو می‌کند --
+    طبقِ الگویِ عمومیِ برنامه، لغو (نه حذفِ خام) تا تاریخچه از بین
+    نرود؛ در گزارشِ بستنِ شیفت به‌عنوانِ «حذف‌شده» نشان داده می‌شود."""
+    with new_session() as session:
+        doc = _get_reopenable_pos_document(session, document_id, company_id)
+        pos_session_id = doc.pos_session_id
+        session.add(
+            PosInvoiceAuditLog(
+                company_id=company_id, pos_session_id=pos_session_id, document_id=document_id,
+                action_code="DELETED", performed_by_user_id=user_id,
+            )
+        )
+        session.commit()
+    documents_service.cancel_document(document_id, company_id)
+
+
+@dataclass
+class PosInvoiceAuditEntry:
+    document_id: int
+    action_code: str
+    performed_by_user_id: int
+    performed_at: datetime.datetime
+
+
+def list_session_audit_log(pos_session_id: int) -> list[PosInvoiceAuditEntry]:
+    """فهرستِ فاکتورهایِ اصلاح‌شده/حذف‌شده‌یِ این شیفت -- برایِ گزارش به
+    سرپرست هنگامِ بستنِ شیفت."""
+    with new_session() as session:
+        rows = session.scalars(
+            select(PosInvoiceAuditLog)
+            .where(PosInvoiceAuditLog.pos_session_id == pos_session_id)
+            .order_by(PosInvoiceAuditLog.audit_id)
+        ).all()
+        return [
+            PosInvoiceAuditEntry(
+                document_id=r.document_id, action_code=r.action_code,
+                performed_by_user_id=r.performed_by_user_id, performed_at=r.performed_at,
+            )
+            for r in rows
+        ]
 
 
 # ---------------------------------------------------------------------

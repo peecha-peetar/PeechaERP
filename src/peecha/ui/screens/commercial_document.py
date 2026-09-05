@@ -1071,8 +1071,10 @@ class _SettlementPlanDialog(QDialog):
         layout.addWidget(self.remaining_label)
 
         buttons_row = QHBoxLayout()
-        self.save_button = QPushButton("💾 ذخیره")
+        self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
+        self.save_button.setFixedWidth(44)
+        self.save_button.setToolTip("ذخیره")
         self.save_button.clicked.connect(self._save)
         buttons_row.addWidget(self.save_button)
         self.approve_button = QPushButton("👍 تاییدِ مدیر")
@@ -1108,6 +1110,10 @@ class _SettlementPlanDialog(QDialog):
         if amount is not None:
             amount_field.setValue(float(amount))
         amount_field.valueChanged.connect(self._update_remaining)
+        # طبقِ درخواستِ صریح («صندوق‌دار با اینتر زدن روی فیلدها مبالغ را
+        # وارد کنه و درنهایت تایید کنه»): اینتر رویِ هر ردیف به مبلغِ
+        # ردیفِ بعدی می‌پرد؛ رویِ آخرین ردیف، همان اینتر ذخیره می‌کند.
+        amount_field.returnPressed.connect(lambda af=amount_field: self._on_amount_return_pressed(af))
         self.table.setCellWidget(row_index, 1, amount_field)
 
         note_field = QLineEdit()
@@ -1121,6 +1127,19 @@ class _SettlementPlanDialog(QDialog):
         self.table.setCellWidget(row_index, 3, remove_button)
 
         self._update_remaining()
+
+    def _on_amount_return_pressed(self, amount_field: "_AmountField") -> None:
+        for row_index in range(self.table.rowCount()):
+            if self.table.cellWidget(row_index, 1) is amount_field:
+                next_index = row_index + 1
+                if next_index < self.table.rowCount():
+                    next_field = self.table.cellWidget(next_index, 1)
+                    if next_field is not None:
+                        next_field.setFocus()
+                        next_field.selectAll()
+                else:
+                    self._save()
+                return
 
     def _remove_row(self, row_marker: QComboBox) -> None:
         for row_index in range(self.table.rowCount()):
@@ -1150,10 +1169,20 @@ class _SettlementPlanDialog(QDialog):
     def _load_existing(self) -> None:
         plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
         if plan is None:
-            self._update_remaining()
+            # طبقِ درخواستِ صریح («این فرم وقتی باز می‌شه همه روش‌هایِ
+            # دریافت را آماده داشته باشه»): همان اول، به‌ازایِ هر روشِ
+            # ممکن یک ردیف (با مبلغِ صفر) ساخته می‌شود -- صندوق‌دار فقط
+            # مبلغِ روش‌هایِ موردنیاز را با اینتر پر می‌کند؛ ردیف‌هایِ
+            # صفرمانده در ذخیره (_collect_lines) حذف می‌شوند.
+            for code in self._method_codes():
+                self._add_row(code)
             self.approve_button.setEnabled(False)
             if self._require_manager_approval:
                 self.status_banner.setText("هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است.")
+            if self.table.rowCount() > 0:
+                first_amount_field = self.table.cellWidget(0, 1)
+                if first_amount_field is not None:
+                    first_amount_field.setFocus()
             return
         for line in plan.lines:
             self._add_row(line.method_code, line.amount, line.note)
@@ -1190,7 +1219,11 @@ class _SettlementPlanDialog(QDialog):
         if self._require_manager_approval:
             QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه ذخیره شد؛ برایِ ثبتِ نهایی نیازِ تاییدِ مدیر دارد.")
         else:
-            QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه ذخیره شد.")
+            # طبقِ درخواستِ صریح («صندوق‌دار با اینتر ... درنهایت تایید
+            # کنه»): در حالتِ صندوق (بدونِ تاییدِ مدیر)، ذخیره یعنی
+            # تاییدِ نهایی -- دیگر نیازی به پیامِ تاییدیه و بستنِ دستی
+            # نیست.
+            self.accept()
 
     def _approve(self) -> None:
         try:

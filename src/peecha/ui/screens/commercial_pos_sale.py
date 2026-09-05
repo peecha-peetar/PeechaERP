@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QTableWidget,
@@ -151,12 +152,14 @@ class CommercialPosSaleScreen(QWidget):
         # جستجو/اسکن مستقیماً با ۱ عدد و قیمتِ لیست به جدول اضافه کند؛
         # اصلاح فقط با کلیک روی خودِ ردیف»): دیگر کمبویِ دستیِ افزودن
         # نداریم -- ویرایش با دوبار-کلیک روی ردیف انجام می‌شود.
-        self.lines_table = QTableWidget(0, 4)
-        self.lines_table.setHorizontalHeaderLabels(["کالا", "مقدار", "بهایِ واحد", "جمعِ ردیف"])
+        self.lines_table = QTableWidget(0, 5)
+        self.lines_table.setHorizontalHeaderLabels(["کالا", "مقدار", "بهایِ واحد", "جمعِ ردیف", ""])
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.lines_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
+        self.lines_table.setColumnWidth(4, 36)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         outer.addWidget(self.lines_table)
 
@@ -501,6 +504,12 @@ class CommercialPosSaleScreen(QWidget):
         self.scan_field.setFocus()
 
     def _show_suspended_dialog(self) -> None:
+        # طبقِ درخواستِ صریح («فاکتورهایِ صادرشده تا قبل از ثبتِ سند
+        # توسطِ صندوق‌دار هم بتونه حذف و اصلاح کنه»): این دیالوگ دیگر
+        # فقط رزروهایِ DRAFT را نشان نمی‌دهد -- list_pending_pos_
+        # documents از قبل DRAFT+CONFIRMED هردو را برمی‌گرداند؛ برایِ
+        # CONFIRMED دو اکشنِ تازه (بازگشایی/حذف) اضافه شده که با ثبتِ
+        # ردی در comm.pos_invoice_audit_log همراه است.
         company_id = self._company_id()
         session_id = self._current_open_session_id()
         if company_id is None or session_id is None:
@@ -508,33 +517,72 @@ class CommercialPosSaleScreen(QWidget):
             return
         pending = pos_service.list_pending_pos_documents(company_id, session_id)
         if not pending:
-            self.status_label.setText("در این شیفت فروشِ رزروشده‌ای وجود ندارد.")
+            self.status_label.setText("در این شیفت فروشِ رزروشده/تاییدشده‌ای وجود ندارد.")
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("فروش‌هایِ رزروشده/درجریانِ این شیفت")
-        dialog.setMinimumWidth(380)
+        dialog.setWindowTitle("فروش‌هایِ رزروشده/تاییدشده‌یِ این شیفت (پیش از تاییدِ سرپرست)")
+        dialog.setMinimumWidth(420)
         layout = QVBoxLayout(dialog)
         list_widget = QListWidget()
-        for doc in pending:
-            label = f"سند #{doc.document_id} — {numerals.format_company_amount(doc.total_amount)}"
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, doc.document_id)
-            list_widget.addItem(item)
         layout.addWidget(list_widget)
+
+        def _reload() -> None:
+            list_widget.clear()
+            for doc in pos_service.list_pending_pos_documents(company_id, session_id):
+                status_label = "تاییدشده (در انتظارِ سرپرست)" if doc.status_code == "CONFIRMED" else "رزروشده"
+                label = f"سند #{doc.document_id} — {status_label} — {numerals.format_company_amount(doc.total_amount)}"
+                item = QListWidgetItem(label)
+                item.setData(Qt.UserRole, doc.document_id)
+                item.setData(Qt.UserRole + 1, doc.status_code)
+                list_widget.addItem(item)
 
         def _resume() -> None:
             current = list_widget.currentItem()
             if current is None:
                 return
-            self._document_id = current.data(Qt.UserRole)
+            document_id = current.data(Qt.UserRole)
+            status_code = current.data(Qt.UserRole + 1)
+            if status_code == "CONFIRMED":
+                try:
+                    pos_service.reopen_confirmed_sale(document_id, company_id, app_session.current_user.user_id)
+                except ValueError as exc:
+                    self.status_label.setText(str(exc))
+                    return
+            self._document_id = document_id
             self._load_document()
             dialog.accept()
 
+        def _delete() -> None:
+            current = list_widget.currentItem()
+            if current is None:
+                return
+            document_id = current.data(Qt.UserRole)
+            status_code = current.data(Qt.UserRole + 1)
+            confirm = QMessageBox.question(dialog, "حذفِ فروش", "این فروش حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+            if confirm != QMessageBox.Yes:
+                return
+            try:
+                if status_code == "CONFIRMED":
+                    pos_service.delete_confirmed_sale(document_id, company_id, app_session.current_user.user_id)
+                else:
+                    documents_service.delete_document(document_id, company_id)
+            except ValueError as exc:
+                self.status_label.setText(str(exc))
+                return
+            if self._document_id == document_id:
+                self._clear_cart_view()
+            _reload()
+
+        _reload()
         list_widget.itemDoubleClicked.connect(lambda _item: _resume())
         resume_button = QPushButton("بازکردنِ این فروش")
         resume_button.setObjectName("primaryIconButton")
         resume_button.clicked.connect(_resume)
         layout.addWidget(resume_button)
+        delete_button = QPushButton("🗑 حذفِ این فروش")
+        delete_button.setObjectName("dangerIconButton")
+        delete_button.clicked.connect(_delete)
+        layout.addWidget(delete_button)
         dialog.exec()
 
     def _open_item_form(self) -> None:
@@ -609,15 +657,30 @@ class CommercialPosSaleScreen(QWidget):
 
     def _refresh_lines_table(self) -> None:
         items_by_id = {it.item_id: it for it in self._items}
+        company_id = self._company_id()
+        # طبقِ درخواستِ صریح («مبالغ روی فرم فروش نقدی ... بر اساسِ
+        # تنظیماتِ واحدِ پولی باشه و سه‌رقم‌سه‌رقم جدا باشه، مثلاً مانندِ
+        # فرمِ دریافت»): قبلاً str() خام بود -- بدونِ رقمِ فارسی/گروه‌بندی.
+        decimal_places = companies_service.get_base_currency_decimal_places(company_id) if company_id else 2
         self.lines_table.setRowCount(len(self._lines))
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
-                str(ln.quantity), str(ln.unit_price), str(ln.line_total),
+                numerals.format_money(ln.quantity, 3),
+                numerals.format_money(ln.unit_price, decimal_places),
+                numerals.format_money(ln.line_total, decimal_places),
             ]
             for col_index, value in enumerate(values):
                 self.lines_table.setItem(row_index, col_index, QTableWidgetItem(value))
+            # طبقِ درخواستِ صریح («ردیف‌هایِ فاکتور فوری حذف و اصلاح
+            # بشه»): دکمه‌یِ حذفِ سریعِ همان ردیف.
+            delete_button = QPushButton("🗑")
+            delete_button.setObjectName("dangerIconButton")
+            delete_button.setFixedWidth(30)
+            delete_button.setEnabled(not self._is_confirmed)
+            delete_button.clicked.connect(lambda _checked=False, line_id=ln.line_id: self._delete_line(line_id))
+            self.lines_table.setCellWidget(row_index, 4, delete_button)
 
     def _edit_line(self, row: int, _column: int = 0) -> None:
         if row < 0 or row >= len(self._lines):
@@ -646,6 +709,19 @@ class CommercialPosSaleScreen(QWidget):
         try:
             documents_service.delete_line(line.line_id, self._document_id, company_id)
             documents_service.add_line(self._document_id, company_id, **fields)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.status_label.setText("")
+        self._load_document()
+
+    def _delete_line(self, line_id: int) -> None:
+        if self._is_confirmed:
+            self.status_label.setText("این فروش قبلاً تایید شده — ردیف‌ها قابلِ‌حذف نیستند.")
+            return
+        company_id = self._company_id()
+        try:
+            documents_service.delete_line(line_id, self._document_id, company_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return

@@ -439,12 +439,27 @@ class CommercialPosSessionsScreen(QWidget):
         confirm = QMessageBox.question(self, "بستنِ شیفت", "این شیفت بسته شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
+        session_id = self._open_session_id
         try:
-            pos_service.close_session(self._open_session_id, app_session.current_user.user_id, decimal.Decimal(str(self.closing_cash_field.value())))
+            pos_service.close_session(session_id, app_session.current_user.user_id, decimal.Decimal(str(self.closing_cash_field.value())))
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
         self.status_label.setText("")
+        # طبقِ درخواستِ صریح («در هنگامِ بستنِ فاکتورهایِ اصلاح‌شده و
+        # حذف‌شده به سرپرست را گزارش بده»).
+        audit_entries = pos_service.list_session_audit_log(session_id)
+        if audit_entries:
+            action_labels = {"REOPENED": "بازگشایی/اصلاح‌شده", "DELETED": "حذف‌شده"}
+            lines = [
+                f"سند #{e.document_id} — {action_labels.get(e.action_code, e.action_code)} — "
+                f"{numerals.to_persian_digits(e.performed_at.strftime('%Y-%m-%d %H:%M'))}"
+                for e in audit_entries
+            ]
+            QMessageBox.information(
+                self, "گزارشِ اصلاح/حذفِ فاکتورهایِ این شیفت",
+                "فاکتورهایِ زیر توسطِ صندوق‌دار، پیش از تاییدِ سرپرست، اصلاح یا حذف شده‌اند:\n\n" + "\n".join(lines),
+            )
         self.refresh()
 
     def _override_variance(self) -> None:

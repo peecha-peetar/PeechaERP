@@ -108,6 +108,9 @@ _DOCUMENT_DELETE_STATEMENTS = [
     # commercial_documents پاک شود (ردیف‌هایِ plan_lines با ON DELETE
     # CASCADE خودکار پاک می‌شوند، نیازی به DELETE جداگانه ندارند).
     "DELETE FROM comm.commercial_document_settlement_plans WHERE company_id = :company_id",
+    # طبقِ همان الگو -- گزارشِ اصلاح/حذفِ فاکتورهایِ صندوق (دکمه‌یِ
+    # «نمایشِ رزروها» + گزارشِ بستنِ شیفت) هم به document_id اشاره می‌کند.
+    "DELETE FROM comm.pos_invoice_audit_log WHERE company_id = :company_id",
     "DELETE FROM comm.commercial_document_lines WHERE document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     "DELETE FROM comm.commercial_documents WHERE company_id = :company_id",
