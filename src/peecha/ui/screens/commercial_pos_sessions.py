@@ -143,6 +143,28 @@ class CommercialPosSessionsScreen(QWidget):
         quick_settings_box.addWidget(save_quick_settings_button)
         retail_layout.addLayout(quick_settings_box)
 
+        # طبقِ درخواستِ صریح («کلیدهایِ فوری از سمتِ راست/چپ، عمودی/افقی
+        # در لوکیشن‌هایِ مختلفِ صفحه و ترازبندی‌هایِ مختلف قرار بگیرد»).
+        layout_settings_box = QHBoxLayout()
+        layout_settings_box.addWidget(QLabel("جایگاهِ منویِ دسترسیِ‌سریع"))
+        self.quick_access_position_combo = QComboBox()
+        self.quick_access_position_combo.addItem("چپِ صفحه", "LEFT")
+        self.quick_access_position_combo.addItem("راستِ صفحه", "RIGHT")
+        layout_settings_box.addWidget(self.quick_access_position_combo)
+        layout_settings_box.addWidget(QLabel("جهتِ چیدمانِ کلیدها"))
+        self.quick_access_orientation_combo = QComboBox()
+        self.quick_access_orientation_combo.addItem("افقی", "HORIZONTAL")
+        self.quick_access_orientation_combo.addItem("عمودی", "VERTICAL")
+        layout_settings_box.addWidget(self.quick_access_orientation_combo)
+        save_layout_settings_button = QPushButton("💾")
+        save_layout_settings_button.setObjectName("iconButton")
+        save_layout_settings_button.setFixedWidth(44)
+        save_layout_settings_button.setToolTip("ذخیره")
+        save_layout_settings_button.clicked.connect(self._save_settings)
+        layout_settings_box.addWidget(save_layout_settings_button)
+        layout_settings_box.addStretch(1)
+        retail_layout.addLayout(layout_settings_box)
+
         # طبقِ بازبینیِ عکس‌هایِ تنظیماتِ نرم‌افزارِ مرجع (تنظیماتِ
         # عمومیِ فاکتور/تنظیماتِ تک‌فروشی) -- فقط مواردِ واقعاً قابلِ‌اجرا
         # و مرتبط با دامنهٔ فعلی، طبقِ لیست/پیشنهادِ ارائه‌شده به کاربر.
@@ -289,6 +311,10 @@ class CommercialPosSessionsScreen(QWidget):
             self.scan_beep_enabled_checkbox.setChecked(settings.scan_beep_enabled)
             self.receipt_header_field.setText(settings.receipt_header_text or "")
             self.receipt_footer_field.setText(settings.receipt_footer_text or "")
+            index = self.quick_access_position_combo.findData(settings.quick_access_position)
+            self.quick_access_position_combo.setCurrentIndex(index if index >= 0 else 0)
+            index = self.quick_access_orientation_combo.findData(settings.quick_access_orientation)
+            self.quick_access_orientation_combo.setCurrentIndex(index if index >= 0 else 0)
         else:
             if current_guest is not None:
                 index = self.guest_customer_combo.findData(current_guest)
@@ -303,6 +329,8 @@ class CommercialPosSessionsScreen(QWidget):
             self.scan_beep_enabled_checkbox.setChecked(True)
             self.receipt_header_field.clear()
             self.receipt_footer_field.clear()
+            self.quick_access_position_combo.setCurrentIndex(0)
+            self.quick_access_orientation_combo.setCurrentIndex(0)
 
         self.menu_groups_panel.refresh()
         self._refresh_session_panel()
@@ -325,6 +353,8 @@ class CommercialPosSessionsScreen(QWidget):
             scan_beep_enabled=self.scan_beep_enabled_checkbox.isChecked(),
             receipt_header_text=self.receipt_header_field.text().strip() or None,
             receipt_footer_text=self.receipt_footer_field.text().strip() or None,
+            quick_access_position=self.quick_access_position_combo.currentData(),
+            quick_access_orientation=self.quick_access_orientation_combo.currentData(),
         )
         self.status_label.setText("")
 

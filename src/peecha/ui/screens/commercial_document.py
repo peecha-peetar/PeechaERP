@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.reporting import jasper_bridge
+from peecha.reporting import registry as report_templates_registry
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
@@ -317,17 +318,21 @@ def _show_invoice_print(
     jrxml_path=None,
     header_text: str | None = None,
     footer_text: str | None = None,
+    form_code: str = "COMMERCIAL_INVOICE",
 ) -> None:
     doc, lines = documents_service.get_document(document_id, company_id)
 
     if jasper_bridge.is_available():
         # طبقِ رجیستریِ گزارش‌هایِ حرفه‌ای: اگر مسیرِ صریحی داده نشده
         # (مثلاً از دکمه‌یِ «📄 گزارش»ِ خودِ فرم)، گزارشِ پیش‌فرضِ همین
-        # شرکت برایِ فاکتور استفاده می‌شود، وگرنه قالبِ پایه‌یِ داخلِ ریپازیتوری.
+        # شرکت برایِ همین form_code استفاده می‌شود، وگرنه قالبِ پایه‌یِ
+        # داخلِ ریپازیتوری برایِ همان form_code -- طبقِ درخواستِ صریح
+        # («نمونهٔ فاکتورِ تک‌فروشی مجزا از فاکتورِ عمده») صفحه‌یِ POS
+        # اکنون form_code="POS_RECEIPT" را جدا از فاکتورِ عمده می‌فرستد.
         if jrxml_path is None:
-            jrxml_path = report_templates_service.get_default_template_path(company_id, "COMMERCIAL_INVOICE")
+            jrxml_path = report_templates_service.get_default_template_path(company_id, form_code)
         if jrxml_path is None:
-            jrxml_path = jasper_bridge.template_path("invoice.jrxml")
+            jrxml_path = jasper_bridge.template_path(report_templates_registry.FORM_DEFINITIONS[form_code]["base_template"])
         print_rows, params = _build_invoice_print_rows_and_params(company_id, doc, lines)
         if counterparty_label is not None:
             params["counterpartyLabel"] = counterparty_label
@@ -1502,6 +1507,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
+        # طبقِ درخواستِ صریح («فضایِ ردیف‌ها بیشتر بشه در فرمِ فاکتور»):
+        # ارتفاعِ پیش‌فرضِ Qt برایِ ردیف‌ها فشرده است؛ این‌جا آگاهانه
+        # بزرگ‌تر شده تا خواناییِ ردیف‌هایِ فاکتور بهتر شود.
+        self.lines_table.verticalHeader().setDefaultSectionSize(40)
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)

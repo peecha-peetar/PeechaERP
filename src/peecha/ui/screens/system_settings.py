@@ -18,6 +18,7 @@ from peecha.ui.screens.commercial_settings import (
     _PricingPolicyTab,
     _SettlementAlarmTab,
 )
+from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
 from peecha.ui.screens.field_labels import FieldLabelsScreen
@@ -188,6 +189,9 @@ class SystemSettingsScreen(QWidget):
             [
                 ("انواعِ سندِ دریافت/پرداخت", TreasuryCounterpartySettingsScreen()),
                 ("بانک‌ها", TreasuryBanksScreen()),
+                # طبقِ درخواستِ صریح («تمامیِ تنظیماتِ POS از منوها برداشته
+                # شود و در تنظیماتِ اصلی، زیرِ خزانه‌داری بیاید»).
+                ("ترمینال‌ها، شیفت‌ها و تنظیماتِ تک‌فروشی", CommercialPosSessionsScreen()),
             ]
         )
 

@@ -401,6 +401,7 @@ def set_pos_settings(
     quick_grid_columns: int = 6, allow_price_override: bool = True, allow_discount_override: bool = True,
     quick_access_enabled: bool = True, scan_beep_enabled: bool = True,
     receipt_header_text: str | None = None, receipt_footer_text: str | None = None,
+    quick_access_position: str = "LEFT", quick_access_orientation: str = "HORIZONTAL",
 ) -> None:
     with new_session() as session:
         row = session.get(PosSettings, company_id)
@@ -414,6 +415,7 @@ def set_pos_settings(
                     allow_price_override=allow_price_override, allow_discount_override=allow_discount_override,
                     quick_access_enabled=quick_access_enabled, scan_beep_enabled=scan_beep_enabled,
                     receipt_header_text=receipt_header_text, receipt_footer_text=receipt_footer_text,
+                    quick_access_position=quick_access_position, quick_access_orientation=quick_access_orientation,
                 )
             )
         else:
@@ -429,6 +431,8 @@ def set_pos_settings(
             row.scan_beep_enabled = scan_beep_enabled
             row.receipt_header_text = receipt_header_text
             row.receipt_footer_text = receipt_footer_text
+            row.quick_access_position = quick_access_position
+            row.quick_access_orientation = quick_access_orientation
         session.commit()
 
 

@@ -316,6 +316,11 @@ class PosSettings(Base):
     scan_beep_enabled: Mapped[bool] = mapped_column(default=True)
     receipt_header_text: Mapped[str | None] = mapped_column(String(200))
     receipt_footer_text: Mapped[str | None] = mapped_column(String(200))
+    # طبقِ درخواستِ صریح («کلیدهایِ فوری از سمتِ راست/چپ، عمودی/افقی در
+    # لوکیشن‌هایِ مختلفِ صفحه»): جایگاه (LEFT/RIGHT) و جهتِ چیدمانِ
+    # داخلیِ دکمه‌ها (HORIZONTAL/VERTICAL) اکنون قابلِ‌تنظیم است.
+    quick_access_position: Mapped[str] = mapped_column(String(10), default="LEFT")
+    quick_access_orientation: Mapped[str] = mapped_column(String(10), default="HORIZONTAL")
 
 
 class PosMenuGroup(Base):

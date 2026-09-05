@@ -74,9 +74,19 @@ class CommercialPosSaleScreen(QWidget):
         quick_keys_column.setSpacing(6)
         page_row.addLayout(quick_keys_column)
 
-        outer = QVBoxLayout()
+        # طبقِ درخواستِ صریح («کلیدهایِ فوری از سمتِ راست/چپ، عمودی/افقی
+        # در لوکیشن‌هایِ مختلفِ صفحه»): تبِ دسترسیِ‌سریعِ کالاها دیگر
+        # همیشه در پایینِ ستونِ اصلی نیست -- می‌تواند به‌عنوانِ یک ستونِ
+        # مستقل، در سمتِ چپ یا راستِ کلِ محتوا جا بگیرد؛ محلِ دقیقش با
+        # self._apply_quick_access_position(...) در refresh() تعیین می‌شود.
+        self._content_row = QHBoxLayout()
+        self._content_row.setSpacing(14)
+        page_row.addLayout(self._content_row, stretch=1)
+
+        self._outer_widget = QWidget()
+        outer = QVBoxLayout(self._outer_widget)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(10)
-        page_row.addLayout(outer, stretch=1)
 
         title = QLabel("فروشِ حضوری (صندوق)")
         title.setObjectName("pageTitle")
@@ -187,13 +197,36 @@ class CommercialPosSaleScreen(QWidget):
         # شورت‌کاتِ کالاهایِ پرمصرف را در تب‌هایِ مختلف بگذار»): جایِ
         # خالیِ پایینِ صفحه به یک تب‌ویجتِ دسترسیِ‌سریع اختصاص یافت --
         # هر تب یک دسته‌یِ کالاست (از رویِ همان دسته‌بندیِ ازپیش‌موجودِ
-        # کالا)، به‌علاوهٔ یک تبِ «همه» در ابتدا.
+        # کالا)، به‌علاوهٔ یک تبِ «همه» در ابتدا. اکنون به‌جایِ اینکه
+        # همیشه زیرِ جدولِ سبد بنشیند، در یک ستونِ مستقل جاسازی شده که
+        # می‌تواند به سمتِ چپ یا راستِ کلِ محتوا منتقل شود (تنظیماتِ
+        # quick_access_position).
         self.quick_access_tabs = QTabWidget()
-        outer.addWidget(self.quick_access_tabs, stretch=1)
+        self._quick_access_wrapper = QWidget()
+        quick_access_wrapper_layout = QVBoxLayout(self._quick_access_wrapper)
+        quick_access_wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        quick_access_wrapper_layout.addWidget(self.quick_access_tabs)
+        self._quick_access_position = "LEFT"
+        self._apply_quick_access_position("LEFT")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(wrap_scrollable(page))
+
+    def _apply_quick_access_position(self, position: str) -> None:
+        if position == self._quick_access_position and self._content_row.count() == 2:
+            return
+        self._quick_access_position = position
+        while self._content_row.count():
+            self._content_row.takeAt(0)
+        # طبقِ چیدمانِ RTLِ برنامه (main.py): اولین آیتمی که به یک
+        # QHBoxLayout اضافه می‌شود، در سمتِ راست می‌نشیند.
+        if position == "RIGHT":
+            self._content_row.addWidget(self._quick_access_wrapper, stretch=1)
+            self._content_row.addWidget(self._outer_widget, stretch=2)
+        else:
+            self._content_row.addWidget(self._outer_widget, stretch=2)
+            self._content_row.addWidget(self._quick_access_wrapper, stretch=1)
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -301,7 +334,10 @@ class CommercialPosSaleScreen(QWidget):
     def _update_session_label(self) -> None:
         session_id = self._current_open_session_id()
         if session_id is None:
-            self.session_label.setText("این ترمینال شیفتِ بازی ندارد — ابتدا از صفحهٔ «ترمینال‌ها و شیفت‌هایِ صندوق» یک شیفت باز کنید.")
+            self.session_label.setText(
+                "این ترمینال شیفتِ بازی ندارد — ابتدا از «تنظیمات ‹ خزانه‌داری ‹ ترمینال‌ها، شیفت‌ها و "
+                "تنظیماتِ تک‌فروشی» یک شیفت باز کنید."
+            )
             self.session_label.setObjectName("statusError")
         else:
             self.session_label.setText(f"شیفتِ باز — شناسه: {numerals.to_persian_digits(str(session_id))}")
@@ -312,6 +348,9 @@ class CommercialPosSaleScreen(QWidget):
     def _build_quick_grid(self, items: list[catalog_service.ItemRow]) -> QWidget:
         settings = self._quick_button_settings
         width, height, font_size, columns = settings
+        # طبقِ درخواستِ صریح («جهتِ چیدمانِ کلیدها افقی/عمودی»): افقی یعنی
+        # ردیف‌به‌ردیف پر می‌شود (رفتارِ قبلی)؛ عمودی یعنی ستون‌به‌ستون.
+        vertical = self._pos_settings is not None and self._pos_settings.quick_access_orientation == "VERTICAL"
         page = QWidget()
         grid = QGridLayout(page)
         grid.setSpacing(6)
@@ -327,8 +366,15 @@ class CommercialPosSaleScreen(QWidget):
                 tooltip += f" ({item.pos_shortcut_key})"
             button.setToolTip(tooltip)
             button.clicked.connect(lambda _checked=False, it=item: self._add_item_to_cart(it, decimal.Decimal("1")))
-            grid.addWidget(button, index // columns, index % columns)
-        grid.setRowStretch((len(items) - 1) // columns + 1 if items else 0, 1)
+            if vertical:
+                grid.addWidget(button, index % columns, index // columns)
+            else:
+                grid.addWidget(button, index // columns, index % columns)
+        last_line = (len(items) - 1) // columns + 1 if items else 0
+        if vertical:
+            grid.setColumnStretch(last_line, 1)
+        else:
+            grid.setRowStretch(last_line, 1)
         # طبقِ رفعِ باگ: تبِ دسترسیِ‌سریع قبلاً فقط با اسکرولِ کلِ صفحه
         # (که هدر/جدولِ ردیف‌ها را هم می‌بَرد) قابلِ‌دیدن بود -- برایِ
         # گروه‌هایِ پرتعداد، خودِ گرید اکنون مستقلاً اسکرول‌پذیر است.
@@ -343,10 +389,13 @@ class CommercialPosSaleScreen(QWidget):
         self.quick_access_tabs.clear()
         company_id = self._company_id()
         pos_settings = self._pos_settings
+        self._apply_quick_access_position(pos_settings.quick_access_position if pos_settings else "LEFT")
         if pos_settings is not None and not pos_settings.quick_access_enabled:
             self.quick_access_tabs.setVisible(False)
+            self._quick_access_wrapper.setVisible(False)
             return
         self.quick_access_tabs.setVisible(True)
+        self._quick_access_wrapper.setVisible(True)
         self._quick_button_settings = (
             pos_settings.quick_button_width if pos_settings else 110,
             pos_settings.quick_button_height if pos_settings else 64,
@@ -614,6 +663,7 @@ class CommercialPosSaleScreen(QWidget):
                 self, company_id, document_id,
                 header_text=self._pos_settings.receipt_header_text if self._pos_settings else None,
                 footer_text=self._pos_settings.receipt_footer_text if self._pos_settings else None,
+                form_code="POS_RECEIPT",
             )
         self.status_label.setText("فروش تایید شد و برایِ تاییدِ سرپرست به‌صفِ انتظار رفت.")
         self._clear_cart_view()

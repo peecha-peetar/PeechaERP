@@ -10,9 +10,11 @@ import datetime
 import decimal
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDateEdit,
     QDialog,
@@ -461,19 +463,37 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.setSpacing(8)
 
         self.pos_shortcut_field = QLineEdit()
+        # طبقِ درخواستِ صریح («رنگِ دکمه با پالتِ رنگی انتخاب بشه»): فیلدِ
+        # متنیِ هگز فقط برایِ نمایش/ذخیره‌سازی باقی می‌ماند (read-only)؛
+        # انتخابِ واقعیِ رنگ از طریقِ QColorDialog انجام می‌شود.
         self.pos_color_field = QLineEdit()
         self.pos_color_field.setPlaceholderText("#RRGGBB")
+        self.pos_color_field.setReadOnly(True)
+        pos_color_button = QPushButton("🎨")
+        pos_color_button.setObjectName("iconButton")
+        pos_color_button.setFixedWidth(32)
+        pos_color_button.setToolTip("انتخابِ رنگ از پالت")
+        pos_color_button.clicked.connect(self._pick_pos_color)
+        pos_color_row = QWidget()
+        pos_color_row_layout = QHBoxLayout(pos_color_row)
+        pos_color_row_layout.setContentsMargins(0, 0, 0, 0)
+        pos_color_row_layout.setSpacing(3)
+        pos_color_row_layout.addWidget(self.pos_color_field, stretch=1)
+        pos_color_row_layout.addWidget(pos_color_button)
         self.pos_requires_weight_checkbox = QCheckBox("نیازمندِ توزین")
         self.pos_requires_serial_checkbox = QCheckBox("نیازمندِ سریال")
         # طبقِ بازخوردِ صریح («دسته‌بندیِ مخصوصِ POS، جدا از دسته‌بندیِ
         # عمومیِ کالا»): این گروه فقط تعیین می‌کند این کالا در کدام تبِ
         # دسترسیِ‌سریعِ صفحه‌یِ فروشِ حضوری نمایش داده شود.
         self.pos_menu_group_combo = QComboBox()
+        pos_menu_group_row = self._make_combo_with_add_row(
+            "گروهِ POS (تبِ دسترسیِ‌سریع)", self.pos_menu_group_combo, self._quick_add_pos_menu_group,
+        )
 
         self.pos_grid = FieldGrid([
             FieldSpec("shortcut", "کلیدِ میان‌بر", self.pos_shortcut_field, span=1),
-            FieldSpec("color", "رنگِ دکمه", self.pos_color_field, span=1),
-            FieldSpec("menu_group", "گروهِ POS (تبِ دسترسیِ‌سریع)", self.pos_menu_group_combo, span=1),
+            FieldSpec("color", "رنگِ دکمه", pos_color_row, span=1),
+            FieldSpec("menu_group", "", pos_menu_group_row, span=1),
             FieldSpec("requires_weight", "", self.pos_requires_weight_checkbox, span=1),
             FieldSpec("requires_serial", "", self.pos_requires_serial_checkbox, span=1),
         ])
@@ -661,6 +681,57 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._reload_categories()
         self.category_combo.setCurrentIndex(max(0, self.category_combo.findData(new_id)))
 
+    def _pick_pos_color(self) -> None:
+        current = QColor(self.pos_color_field.text().strip()) if self.pos_color_field.text().strip() else QColor("#4A90D9")
+        if not current.isValid():
+            current = QColor("#4A90D9")
+        color = QColorDialog.getColor(current, self, "رنگِ دکمهٔ کالا در POS")
+        if not color.isValid():
+            return
+        self.pos_color_field.setText(color.name())
+        self._apply_pos_color_swatch(color.name())
+
+    def _apply_pos_color_swatch(self, color_text: str) -> None:
+        color = QColor(color_text) if color_text else None
+        if color is not None and color.isValid():
+            self.pos_color_field.setStyleSheet(f"background-color: {color.name()}; color: #ffffff;")
+        else:
+            self.pos_color_field.setStyleSheet("")
+
+    def _quick_add_pos_menu_group(self) -> None:
+        # طبقِ درخواستِ صریح («تعریفِ گروه‌ها از طریقِ کالا و تبِ POS هم
+        # امکان‌پذیر باشد»): دیگر نیازی نیست کاربر برایِ ساختنِ یک گروهِ
+        # تازه از فرمِ کالا خارج شود و به تنظیماتِ تک‌فروشی برود.
+        if self._company_id is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("گروهِ POSِ تازه")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("نام"))
+        name_field = QLineEdit()
+        layout.addWidget(name_field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted or not name_field.text().strip():
+            return
+        try:
+            new_id = pos_service.create_menu_group(self._company_id, name_field.text().strip())
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._reload_menu_groups()
+        self.pos_menu_group_combo.setCurrentIndex(max(0, self.pos_menu_group_combo.findData(new_id)))
+
+    def _reload_menu_groups(self) -> None:
+        self.pos_menu_group_combo.blockSignals(True)
+        self.pos_menu_group_combo.clear()
+        self.pos_menu_group_combo.addItem("(بدونِ گروه)", None)
+        for g in pos_service.list_menu_groups(self._company_id):
+            self.pos_menu_group_combo.addItem(g.name, g.group_id)
+        self.pos_menu_group_combo.blockSignals(False)
+
     def _quick_add_code_name_dialog(self, title: str, create_fn) -> int | None:
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
@@ -773,12 +844,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.default_warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
         self.default_warehouse_combo.blockSignals(False)
 
-        self.pos_menu_group_combo.blockSignals(True)
-        self.pos_menu_group_combo.clear()
-        self.pos_menu_group_combo.addItem("(بدونِ گروه)", None)
-        for g in pos_service.list_menu_groups(company_id):
-            self.pos_menu_group_combo.addItem(g.name, g.group_id)
-        self.pos_menu_group_combo.blockSignals(False)
+        self._reload_menu_groups()
 
         self.supplier_combo.clear()
         for s in dimensions_service.list_suppliers(company_id):
@@ -859,6 +925,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.pos_shortcut_field.setText(it.pos_shortcut_key or "")
         self.pos_color_field.setText(it.pos_button_color or "")
+        self._apply_pos_color_swatch(it.pos_button_color or "")
         self.pos_menu_group_combo.setCurrentIndex(max(0, self.pos_menu_group_combo.findData(it.pos_menu_group_id)))
         self.pos_requires_weight_checkbox.setChecked(it.pos_requires_weight)
         self.pos_requires_serial_checkbox.setChecked(it.pos_requires_serial)
@@ -945,6 +1012,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.pos_shortcut_field.clear()
         self.pos_color_field.clear()
+        self._apply_pos_color_swatch("")
         self.pos_menu_group_combo.setCurrentIndex(0)
         self.pos_requires_weight_checkbox.setChecked(False)
         self.pos_requires_serial_checkbox.setChecked(False)

@@ -8,6 +8,12 @@ from __future__ import annotations
 FORM_DEFINITIONS: dict[str, dict[str, str]] = {
     "ITEM_LEDGER": {"label": "کاردکسِ کالا", "base_template": "kardex.jrxml"},
     "COMMERCIAL_INVOICE": {"label": "فاکتور / سندِ بازرگانی", "base_template": "invoice.jrxml"},
+    # طبقِ درخواستِ صریح («نمونه فاکتورِ تک‌فروشی ایجاد بشه که از فاکتورِ
+    # عمده مجزا باشه»): فرمِ کاملاً جداگانه -- قالبِ اولیه‌اش کپیِ همان
+    # invoice.jrxml است، ولی از این پس مستقل و قابلِ‌ویرایشِ جداگانه (از
+    # همین صفحه‌یِ «گزارش‌هایِ حرفه‌ای») است و هیچ تغییری رویِ نمونه‌یِ
+    # فاکتورِ عمده اثر نمی‌گذارد.
+    "POS_RECEIPT": {"label": "فاکتور/فیشِ تک‌فروشی (POS)", "base_template": "pos_receipt.jrxml"},
     "TRIAL_BALANCE": {"label": "تراز آزمایشی", "base_template": "trial_balance.jrxml"},
     "JOURNAL_BOOK": {"label": "دفترِ روزنامه", "base_template": "journal_book.jrxml"},
     # طبقِ اشتراکِ شکلِ ستونی: حالتِ «خلاصه»یِ دفترِ کل/معین/تفصیلی دقیقاً
