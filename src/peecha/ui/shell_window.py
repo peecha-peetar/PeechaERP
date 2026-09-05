@@ -1375,6 +1375,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.sales_assistant import SalesAssistantScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
+        from peecha.ui.screens.commercial_pos_menu_groups import CommercialPosMenuGroupsScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
         from peecha.ui.screens.commercial_pos_approval import CommercialPosApprovalScreen
         from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
@@ -1481,6 +1482,7 @@ class MainWindow(QMainWindow):
         self.register_screen("sales_assistant", SalesAssistantScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sessions", CommercialPosSessionsScreen())
+        self.register_screen("commercial_pos_menu_groups", CommercialPosMenuGroupsScreen())
         self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
         self.register_screen("commercial_pos_approval", CommercialPosApprovalScreen())
         self.register_screen("commercial_ecommerce", CommercialEcommerceScreen())

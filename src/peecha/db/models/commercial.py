@@ -302,6 +302,28 @@ class PosSettings(Base):
         ForeignKey("acc.detail_accounts.detail_account_id")
     )
     cash_variance_threshold_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    # طبقِ بازخوردِ صریح («اندازه/جهتِ کلیدهایِ فوری قابلِ‌تنظیم باشد»):
+    # اندازه‌یِ دکمه‌هایِ گریدِ دسترسیِ‌سریعِ کالا در صفحه‌یِ فروشِ حضوری.
+    quick_button_width: Mapped[int] = mapped_column(default=110)
+    quick_button_height: Mapped[int] = mapped_column(default=64)
+    quick_button_font_size: Mapped[int] = mapped_column(default=10)
+    quick_grid_columns: Mapped[int] = mapped_column(default=6)
+
+
+class PosMenuGroup(Base):
+    """گروه‌بندیِ کاملاً مستقلِ POS برایِ چیدمانِ تب‌هایِ دسترسیِ‌سریع --
+    معادلِ 113_pos_menu_groups.sql. طبقِ درخواستِ صریح («دسته‌بندیِ
+    مخصوصِ POS، جدا از دسته‌بندیِ عمومیِ انبار»)، این هیچ ربطی به
+    inv.item_categories (سلسله‌مراتبِ کاردکس/گزارش) ندارد."""
+
+    __tablename__ = "pos_menu_groups"
+    __table_args__ = ({"schema": "comm"},)
+
+    group_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(100))
+    display_order: Mapped[int] = mapped_column(default=0)
+    is_active: Mapped[bool] = mapped_column(default=True)
 
 
 class PosCashierSettings(Base):

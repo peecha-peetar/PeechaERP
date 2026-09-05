@@ -53,6 +53,7 @@ class CommercialPosSaleScreen(QWidget):
         self._lines: list = []
         self._is_confirmed = False
         self._cashier_settings: pos_service.PosCashierSettings | None = None
+        self._quick_button_settings: tuple[int, int, int, int] = (110, 64, 10, 6)
 
         page = QWidget()
         page_row = QHBoxLayout(page)
@@ -282,15 +283,17 @@ class CommercialPosSaleScreen(QWidget):
         self.session_label.style().polish(self.session_label)
 
     def _build_quick_grid(self, items: list[catalog_service.ItemRow]) -> QWidget:
+        settings = self._quick_button_settings
+        width, height, font_size, columns = settings
         page = QWidget()
         grid = QGridLayout(page)
         grid.setSpacing(6)
-        columns = 6
         for index, item in enumerate(items):
             button = QPushButton(item.short_name or item.name or item.code)
+            button.setFixedSize(width, height)
             button.setStyleSheet(
                 f"background-color: {item.pos_button_color}; color: #ffffff; font-weight: 600; "
-                "padding: 12px 6px; border-radius: 6px;"
+                f"font-size: {font_size}pt; padding: 4px; border-radius: 6px;"
             )
             tooltip = f"{item.code} — {item.name or ''}"
             if item.pos_shortcut_key:
@@ -304,22 +307,34 @@ class CommercialPosSaleScreen(QWidget):
     def _rebuild_quick_access(self) -> None:
         current_tab_text = self.quick_access_tabs.tabText(self.quick_access_tabs.currentIndex())
         self.quick_access_tabs.clear()
+        company_id = self._company_id()
+        pos_settings = pos_service.get_pos_settings(company_id) if company_id else None
+        self._quick_button_settings = (
+            pos_settings.quick_button_width if pos_settings else 110,
+            pos_settings.quick_button_height if pos_settings else 64,
+            pos_settings.quick_button_font_size if pos_settings else 10,
+            pos_settings.quick_grid_columns if pos_settings else 6,
+        )
+
         quick_items = [it for it in self._items if it.pos_button_color]
         if not quick_items:
             return
-        company_id = self._company_id()
-        categories = {c.category_id: c for c in catalog_service.list_categories(company_id)} if company_id else {}
 
         self.quick_access_tabs.addTab(self._build_quick_grid(quick_items), "همه")
 
         groups: dict[int | None, list] = {}
         for item in quick_items:
-            groups.setdefault(item.category_id, []).append(item)
-        for category_id, items_in_group in sorted(
-            groups.items(), key=lambda pair: categories[pair[0]].name if pair[0] in categories else "￿",
-        ):
-            label = categories[category_id].name if category_id in categories else "سایر"
-            self.quick_access_tabs.addTab(self._build_quick_grid(items_in_group), label)
+            groups.setdefault(item.pos_menu_group_id, []).append(item)
+        menu_groups = pos_service.list_menu_groups(company_id, active_only=True) if company_id else []
+        for menu_group in sorted(menu_groups, key=lambda g: g.display_order):
+            items_in_group = groups.pop(menu_group.group_id, None)
+            if items_in_group:
+                self.quick_access_tabs.addTab(self._build_quick_grid(items_in_group), menu_group.name)
+        ungrouped = groups.pop(None, [])
+        for leftover_items in groups.values():
+            ungrouped.extend(leftover_items)
+        if ungrouped:
+            self.quick_access_tabs.addTab(self._build_quick_grid(ungrouped), "سایر")
 
         for tab_index in range(self.quick_access_tabs.count()):
             if self.quick_access_tabs.tabText(tab_index) == current_tab_text:

@@ -9,7 +9,7 @@ import datetime
 import decimal
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha import numerals
 from peecha.db.base import new_session
@@ -21,11 +21,13 @@ from peecha.db.models.commercial import (
     LoyaltyAccount,
     LoyaltyTransaction,
     PosCashierSettings,
+    PosMenuGroup,
     PosPayment,
     PosSession,
     PosSettings,
     PosTerminal,
 )
+from peecha.db.models.inventory import Item
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import treasury as treasury_service
@@ -393,7 +395,11 @@ def get_pos_settings(company_id: int) -> PosSettings | None:
         return session.get(PosSettings, company_id)
 
 
-def set_pos_settings(company_id: int, default_guest_customer_detail_account_id: int | None, cash_variance_threshold_amount: decimal.Decimal) -> None:
+def set_pos_settings(
+    company_id: int, default_guest_customer_detail_account_id: int | None, cash_variance_threshold_amount: decimal.Decimal,
+    quick_button_width: int = 110, quick_button_height: int = 64, quick_button_font_size: int = 10,
+    quick_grid_columns: int = 6,
+) -> None:
     with new_session() as session:
         row = session.get(PosSettings, company_id)
         if row is None:
@@ -401,11 +407,70 @@ def set_pos_settings(company_id: int, default_guest_customer_detail_account_id: 
                 PosSettings(
                     company_id=company_id, default_guest_customer_detail_account_id=default_guest_customer_detail_account_id,
                     cash_variance_threshold_amount=cash_variance_threshold_amount,
+                    quick_button_width=quick_button_width, quick_button_height=quick_button_height,
+                    quick_button_font_size=quick_button_font_size, quick_grid_columns=quick_grid_columns,
                 )
             )
         else:
             row.default_guest_customer_detail_account_id = default_guest_customer_detail_account_id
             row.cash_variance_threshold_amount = cash_variance_threshold_amount
+            row.quick_button_width = quick_button_width
+            row.quick_button_height = quick_button_height
+            row.quick_button_font_size = quick_button_font_size
+            row.quick_grid_columns = quick_grid_columns
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# گروه‌هایِ POS -- طبقِ درخواستِ صریح («کالا باید یک فیلدِ دسته‌بندیِ
+# مخصوصِ POS داشته باشد که با دسته‌بندی‌هایِ دیگر فرق کند»): این
+# گروه‌بندی کاملاً مستقل از inv.item_categories (دسته‌بندیِ عمومیِ
+# انبار/گزارش) است -- فقط برایِ چیدمانِ تب‌هایِ دسترسیِ‌سریعِ صفحه‌یِ
+# فروشِ حضوری، معادلِ «تعیینِ گروهِ کالاهایِ فروشگاه» در نمونه‌یِ ارجاعی.
+# ---------------------------------------------------------------------
+def list_menu_groups(company_id: int, active_only: bool = False) -> list[PosMenuGroup]:
+    with new_session() as session:
+        stmt = select(PosMenuGroup).where(PosMenuGroup.company_id == company_id)
+        if active_only:
+            stmt = stmt.where(PosMenuGroup.is_active.is_(True))
+        stmt = stmt.order_by(PosMenuGroup.display_order, PosMenuGroup.group_id)
+        return list(session.scalars(stmt))
+
+
+def create_menu_group(company_id: int, name: str, display_order: int = 0) -> int:
+    name = name.strip()
+    if not name:
+        raise ValueError("نامِ گروه را وارد کنید.")
+    with new_session() as session:
+        row = PosMenuGroup(company_id=company_id, name=name, display_order=display_order)
+        session.add(row)
+        session.commit()
+        return row.group_id
+
+
+def update_menu_group(group_id: int, company_id: int, name: str, display_order: int, is_active: bool) -> None:
+    name = name.strip()
+    if not name:
+        raise ValueError("نامِ گروه را وارد کنید.")
+    with new_session() as session:
+        row = session.get(PosMenuGroup, group_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("گروه نامعتبر است.")
+        row.name = name
+        row.display_order = display_order
+        row.is_active = is_active
+        session.commit()
+
+
+def delete_menu_group(group_id: int, company_id: int) -> None:
+    with new_session() as session:
+        row = session.get(PosMenuGroup, group_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("گروه نامعتبر است.")
+        in_use = session.scalar(select(func.count()).select_from(Item).where(Item.pos_menu_group_id == group_id))
+        if in_use:
+            raise ValueError("این گروه به کالایی نسبت داده شده و قابلِ‌حذف نیست.")
+        session.delete(row)
         session.commit()
 
 

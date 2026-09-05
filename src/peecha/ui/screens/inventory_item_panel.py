@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha.services import commercial_pos as pos_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
@@ -463,10 +464,15 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.pos_color_field.setPlaceholderText("#RRGGBB")
         self.pos_requires_weight_checkbox = QCheckBox("نیازمندِ توزین")
         self.pos_requires_serial_checkbox = QCheckBox("نیازمندِ سریال")
+        # طبقِ بازخوردِ صریح («دسته‌بندیِ مخصوصِ POS، جدا از دسته‌بندیِ
+        # عمومیِ کالا»): این گروه فقط تعیین می‌کند این کالا در کدام تبِ
+        # دسترسیِ‌سریعِ صفحه‌یِ فروشِ حضوری نمایش داده شود.
+        self.pos_menu_group_combo = QComboBox()
 
         self.pos_grid = FieldGrid([
             FieldSpec("shortcut", "کلیدِ میان‌بر", self.pos_shortcut_field, span=1),
             FieldSpec("color", "رنگِ دکمه", self.pos_color_field, span=1),
+            FieldSpec("menu_group", "گروهِ POS (تبِ دسترسیِ‌سریع)", self.pos_menu_group_combo, span=1),
             FieldSpec("requires_weight", "", self.pos_requires_weight_checkbox, span=1),
             FieldSpec("requires_serial", "", self.pos_requires_serial_checkbox, span=1),
         ])
@@ -766,6 +772,13 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.default_warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
         self.default_warehouse_combo.blockSignals(False)
 
+        self.pos_menu_group_combo.blockSignals(True)
+        self.pos_menu_group_combo.clear()
+        self.pos_menu_group_combo.addItem("(بدونِ گروه)", None)
+        for g in pos_service.list_menu_groups(company_id):
+            self.pos_menu_group_combo.addItem(g.name, g.group_id)
+        self.pos_menu_group_combo.blockSignals(False)
+
         self.supplier_combo.clear()
         for s in dimensions_service.list_suppliers(company_id):
             self.supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
@@ -845,6 +858,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.pos_shortcut_field.setText(it.pos_shortcut_key or "")
         self.pos_color_field.setText(it.pos_button_color or "")
+        self.pos_menu_group_combo.setCurrentIndex(max(0, self.pos_menu_group_combo.findData(it.pos_menu_group_id)))
         self.pos_requires_weight_checkbox.setChecked(it.pos_requires_weight)
         self.pos_requires_serial_checkbox.setChecked(it.pos_requires_serial)
 
@@ -930,6 +944,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.pos_shortcut_field.clear()
         self.pos_color_field.clear()
+        self.pos_menu_group_combo.setCurrentIndex(0)
         self.pos_requires_weight_checkbox.setChecked(False)
         self.pos_requires_serial_checkbox.setChecked(False)
 
@@ -1001,6 +1016,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             website_tags=self.website_tags_field.text().strip() or None,
             pos_shortcut_key=self.pos_shortcut_field.text().strip() or None,
             pos_button_color=self.pos_color_field.text().strip() or None,
+            pos_menu_group_id=self.pos_menu_group_combo.currentData(),
             pos_requires_weight=self.pos_requires_weight_checkbox.isChecked(),
             pos_requires_serial=self.pos_requires_serial_checkbox.isChecked(),
             length_cm=_decimal_or_none(self.length_field.text()),

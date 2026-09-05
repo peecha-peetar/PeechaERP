@@ -175,6 +175,10 @@ class Item(Base):
     pos_button_color: Mapped[str | None] = mapped_column(String(20))
     pos_requires_weight: Mapped[bool] = mapped_column(default=False)
     pos_requires_serial: Mapped[bool] = mapped_column(default=False)
+    # طبقِ بازخوردِ صریح («دسته‌بندیِ مخصوصِ POS، جدا از category_id»):
+    # این کاملاً مستقل از category_id (دسته‌بندیِ عمومیِ انبار) است --
+    # فقط برایِ تعیینِ تبِ دسترسیِ‌سریع در صفحه‌یِ فروشِ حضوری.
+    pos_menu_group_id: Mapped[int | None] = mapped_column(ForeignKey("comm.pos_menu_groups.group_id"))
     updated_at: Mapped[datetime.datetime | None]
 
 

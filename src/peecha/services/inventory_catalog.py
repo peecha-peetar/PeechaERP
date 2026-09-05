@@ -59,7 +59,7 @@ _EXTENDED_ITEM_FIELD_KEYS = (
     "default_tax_percent",
     "warranty_months", "seo_title", "seo_url_slug", "seo_meta_description", "seo_meta_keywords",
     "website_category", "website_tags", "pos_shortcut_key", "pos_button_color", "pos_requires_weight",
-    "pos_requires_serial",
+    "pos_requires_serial", "pos_menu_group_id",
 )
 
 
@@ -320,6 +320,7 @@ class ItemRow:
     pos_button_color: str | None = None
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
+    pos_menu_group_id: int | None = None
 
 
 def _item_dimension_type_id(company_id: int) -> int:
@@ -462,6 +463,7 @@ class ItemFields:
     pos_button_color: str | None = None
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
+    pos_menu_group_id: int | None = None
 
 
 def _validate_item_fields(fields: ItemFields) -> None:

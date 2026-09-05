@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -94,6 +95,35 @@ class CommercialPosSessionsScreen(QWidget):
         save_settings_button.clicked.connect(self._save_settings)
         settings_box.addWidget(save_settings_button)
         left.addLayout(settings_box)
+
+        quick_settings_title = QLabel("اندازه/جهتِ کلیدهایِ فوریِ صفحه‌یِ فروش")
+        quick_settings_title.setObjectName("sectionTitle")
+        left.addWidget(quick_settings_title)
+        quick_settings_box = QHBoxLayout()
+        quick_settings_box.addWidget(QLabel("عرض"))
+        self.quick_button_width_field = QSpinBox()
+        self.quick_button_width_field.setRange(60, 400)
+        quick_settings_box.addWidget(self.quick_button_width_field)
+        quick_settings_box.addWidget(QLabel("ارتفاع"))
+        self.quick_button_height_field = QSpinBox()
+        self.quick_button_height_field.setRange(40, 300)
+        quick_settings_box.addWidget(self.quick_button_height_field)
+        quick_settings_box.addWidget(QLabel("اندازهٔ فونت"))
+        self.quick_button_font_size_field = QSpinBox()
+        self.quick_button_font_size_field.setRange(6, 32)
+        quick_settings_box.addWidget(self.quick_button_font_size_field)
+        quick_settings_box.addWidget(QLabel("تعدادِ ستون"))
+        self.quick_grid_columns_field = QSpinBox()
+        self.quick_grid_columns_field.setRange(2, 12)
+        quick_settings_box.addWidget(self.quick_grid_columns_field)
+        save_quick_settings_button = QPushButton("💾")
+        save_quick_settings_button.setObjectName("iconButton")
+        save_quick_settings_button.setFixedWidth(44)
+        save_quick_settings_button.setToolTip("ذخیره")
+        save_quick_settings_button.clicked.connect(self._save_settings)
+        quick_settings_box.addWidget(save_quick_settings_button)
+        left.addLayout(quick_settings_box)
+
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
@@ -193,9 +223,18 @@ class CommercialPosSessionsScreen(QWidget):
             index = self.guest_customer_combo.findData(settings.default_guest_customer_detail_account_id)
             self.guest_customer_combo.setCurrentIndex(index if index >= 0 else 0)
             self.threshold_field.setValue(float(settings.cash_variance_threshold_amount))
-        elif current_guest is not None:
-            index = self.guest_customer_combo.findData(current_guest)
-            self.guest_customer_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.quick_button_width_field.setValue(settings.quick_button_width)
+            self.quick_button_height_field.setValue(settings.quick_button_height)
+            self.quick_button_font_size_field.setValue(settings.quick_button_font_size)
+            self.quick_grid_columns_field.setValue(settings.quick_grid_columns)
+        else:
+            if current_guest is not None:
+                index = self.guest_customer_combo.findData(current_guest)
+                self.guest_customer_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.quick_button_width_field.setValue(110)
+            self.quick_button_height_field.setValue(64)
+            self.quick_button_font_size_field.setValue(10)
+            self.quick_grid_columns_field.setValue(6)
 
         self._refresh_session_panel()
 
@@ -203,7 +242,15 @@ class CommercialPosSessionsScreen(QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
-        pos_service.set_pos_settings(company_id, self.guest_customer_combo.currentData(), decimal.Decimal(str(self.threshold_field.value())))
+        pos_service.set_pos_settings(
+            company_id,
+            self.guest_customer_combo.currentData(),
+            decimal.Decimal(str(self.threshold_field.value())),
+            quick_button_width=self.quick_button_width_field.value(),
+            quick_button_height=self.quick_button_height_field.value(),
+            quick_button_font_size=self.quick_button_font_size_field.value(),
+            quick_grid_columns=self.quick_grid_columns_field.value(),
+        )
         self.status_label.setText("")
 
     def _add_terminal(self) -> None:
