@@ -43,6 +43,8 @@ from peecha.ui.screens.commercial_document import _LineDialog, _show_invoice_pri
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import wrap_scrollable
 
+_DEFAULT_QUICK_BUTTON_COLOR = "#4A90D9"
+
 
 class CommercialPosSaleScreen(QWidget):
     def __init__(self, main_window=None) -> None:
@@ -292,8 +294,8 @@ class CommercialPosSaleScreen(QWidget):
             button = QPushButton(item.short_name or item.name or item.code)
             button.setFixedSize(width, height)
             button.setStyleSheet(
-                f"background-color: {item.pos_button_color}; color: #ffffff; font-weight: 600; "
-                f"font-size: {font_size}pt; padding: 4px; border-radius: 6px;"
+                f"background-color: {item.pos_button_color or _DEFAULT_QUICK_BUTTON_COLOR}; color: #ffffff; "
+                f"font-weight: 600; font-size: {font_size}pt; padding: 4px; border-radius: 6px;"
             )
             tooltip = f"{item.code} — {item.name or ''}"
             if item.pos_shortcut_key:
@@ -316,7 +318,11 @@ class CommercialPosSaleScreen(QWidget):
             pos_settings.quick_grid_columns if pos_settings else 6,
         )
 
-        quick_items = [it for it in self._items if it.pos_button_color]
+        # طبقِ رفعِ باگِ گزارش‌شده («وقتی گروهِ POS تعیین می‌شود چیزی نشان
+        # داده نمی‌شود»): پیش‌تر فقط pos_button_color باعثِ ورودِ کالا به
+        # دسترسیِ‌سریع می‌شد؛ اکنون قرارگرفتن در یک گروهِ POS هم به‌تنهایی
+        # کافی است (رنگِ پیش‌فرض برایِ آن‌هایی که رنگِ اختصاصی ندارند).
+        quick_items = [it for it in self._items if it.pos_button_color or it.pos_menu_group_id is not None]
         if not quick_items:
             return
 

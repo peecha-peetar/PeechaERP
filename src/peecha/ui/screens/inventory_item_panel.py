@@ -98,7 +98,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             ("sales_extra", self._build_sales_extra_tab(), "فروشِ تکمیلی"),
             ("production", self._build_production_tab(), "تولید (BOM)"),
             ("ecommerce", self._build_ecommerce_tab(), "فروشگاهِ اینترنتی"),
-            ("pos", self._build_pos_tab(), "POS"),
+            ("pos", self._build_pos_tab(), "فروشِ حضوری (POS)"),
             ("shipping", self._build_shipping_tab(), "حمل‌ونقل"),
             ("qc", self._build_qc_tab(), "کنترلِ کیفیت"),
             ("asset", self._build_asset_tab(), "دارایی"),
@@ -184,6 +184,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.is_sellable_checkbox = QCheckBox("قابلِ‌فروش")
         self.is_sellable_checkbox.setChecked(True)
+        self.is_sellable_checkbox.toggled.connect(self._apply_visibility)
 
         self.is_purchasable_checkbox = QCheckBox("قابلِ‌خرید")
         self.is_purchasable_checkbox.setChecked(True)
@@ -743,7 +744,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.tabs.setTabVisible(self.tab_indexes["sales_extra"], kind in _CONSUMER_FACING_KINDS)
         self.tabs.setTabVisible(self.tab_indexes["production"], kind == "FINISHED_GOOD")
         self.tabs.setTabVisible(self.tab_indexes["ecommerce"], kind in _CONSUMER_FACING_KINDS)
-        self.tabs.setTabVisible(self.tab_indexes["pos"], kind in _CONSUMER_FACING_KINDS)
+        self.tabs.setTabVisible(self.tab_indexes["pos"], self.is_sellable_checkbox.isChecked())
         self.tabs.setTabVisible(
             self.tab_indexes["shipping"], kind != "SERVICE" and "LOGISTICS_DIMENSIONS" in self._enabled_features
         )

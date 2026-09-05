@@ -1,7 +1,12 @@
 """گروه‌هایِ POS (مرحلهٔ ۹) — گروه‌بندیِ کاملاً مستقل از دسته‌بندیِ عمومیِ
 انبار (inv.item_categories)، فقط برایِ چیدمانِ تب‌هایِ دسترسیِ‌سریعِ
 صفحه‌یِ فروشِ حضوری. طبقِ بازخوردِ صریح («کالا باید یک فیلدِ
-دسته‌بندیِ مخصوصِ POS داشته باشد که با دسته‌بندی‌هایِ دیگر فرق کند»)."""
+دسته‌بندیِ مخصوصِ POS داشته باشد که با دسته‌بندی‌هایِ دیگر فرق کند»).
+
+طبقِ بازخوردِ صریحِ دیگر («منویِ تازه اضافه نکن»)، این ویجت دیگر یک
+صفحه/مسیرِ ناوبریِ مستقل نیست -- به‌عنوانِ یک تب («تک‌فروشی») درونِ
+صفحه‌یِ تنظیماتِ فاکتورِ صندوق (commercial_pos_sessions.py) جاسازی
+می‌شود."""
 
 from __future__ import annotations
 
@@ -38,8 +43,8 @@ class CommercialPosMenuGroupsScreen(QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(10)
 
-        title = QLabel("گروه‌هایِ POS (تب‌هایِ دسترسیِ‌سریع)")
-        title.setObjectName("pageTitle")
+        title = QLabel("گروه‌هایِ POS (تب‌هایِ دسترسیِ‌سریعِ صفحه‌یِ فروش)")
+        title.setObjectName("sectionTitle")
         outer.addWidget(title)
 
         hint = QLabel(

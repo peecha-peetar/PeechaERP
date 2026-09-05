@@ -1,7 +1,13 @@
 """ترمینال‌ها و شیفت‌هایِ صندوق (مرحلهٔ ۷) — بازکردن/بستنِ شیفت، آزادسازیِ
-مغایرت، و تنظیماتِ صندوق (مشتریِ متفرقه/آستانهٔ مغایرت). طبقِ درخواستِ
-صریح («اصطلاحِ جلسه گنگ است»)، برچسبِ نمایشی «شیفت» است -- شناسه‌هایِ
-داخلیِ کد (session_id, PosSession) بدونِ تغییر مانده‌اند."""
+مغایرت، و تنظیماتِ فاکتورِ صندوق (تک‌فروشی). طبقِ درخواستِ صریح
+(«اصطلاحِ جلسه گنگ است»)، برچسبِ نمایشی «شیفت» است -- شناسه‌هایِ داخلیِ
+کد (session_id, PosSession) بدونِ تغییر مانده‌اند.
+
+طبقِ بازخوردِ صریحِ کاربر («منویِ تازه اضافه نکن -- همه‌یِ تنظیماتِ
+تک‌فروشی باید همین‌جا، در تب‌هایِ مختلف بیاید»)، هیچ نویِ جداگانه‌ای
+برایِ تنظیماتِ POS در ناوبری وجود ندارد -- گروه‌هایِ POS و اندازهٔ
+کلیدهایِ فوری هم به‌عنوانِ تب در همین صفحه (بخشِ «تنظیماتِ تک‌فروشی»)
+جا گرفته‌اند، نه یک صفحه/منویِ مستقل."""
 
 from __future__ import annotations
 
@@ -19,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -29,6 +36,7 @@ from peecha import numerals, session as app_session
 from peecha.services import commercial_pos as pos_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui.screens.commercial_pos_menu_groups import CommercialPosMenuGroupsScreen
 from peecha.ui.widgets import wrap_scrollable
 
 _SESSION_STATUS_LABELS = {"OPEN": "باز", "CLOSED": "بسته"}
@@ -76,9 +84,14 @@ class CommercialPosSessionsScreen(QWidget):
         new_terminal_box.addWidget(add_terminal_button)
         left.addLayout(new_terminal_box)
 
-        settings_title = QLabel("تنظیماتِ صندوق")
+        settings_title = QLabel("تنظیماتِ فاکتورِ صندوق (تک‌فروشی)")
         settings_title.setObjectName("sectionTitle")
         left.addWidget(settings_title)
+
+        self.settings_tabs = QTabWidget()
+
+        general_tab = QWidget()
+        general_layout = QVBoxLayout(general_tab)
         settings_box = QHBoxLayout()
         settings_box.addWidget(QLabel("مشتریِ متفرقهٔ پیش‌فرض"))
         self.guest_customer_combo = QComboBox()
@@ -94,11 +107,16 @@ class CommercialPosSessionsScreen(QWidget):
         save_settings_button.setToolTip("ذخیره")
         save_settings_button.clicked.connect(self._save_settings)
         settings_box.addWidget(save_settings_button)
-        left.addLayout(settings_box)
+        general_layout.addLayout(settings_box)
+        general_layout.addStretch(1)
+        self.settings_tabs.addTab(general_tab, "عمومی")
 
-        quick_settings_title = QLabel("اندازه/جهتِ کلیدهایِ فوریِ صفحه‌یِ فروش")
-        quick_settings_title.setObjectName("sectionTitle")
-        left.addWidget(quick_settings_title)
+        retail_tab = QWidget()
+        retail_layout = QVBoxLayout(retail_tab)
+        quick_settings_title = QLabel("اندازه/جهتِ کلیدهایِ فوریِ صفحه‌یِ فروش (سراسریِ شرکت -- نه به‌ازایِ هر کاربر)")
+        quick_settings_title.setObjectName("sectionHint")
+        quick_settings_title.setWordWrap(True)
+        retail_layout.addWidget(quick_settings_title)
         quick_settings_box = QHBoxLayout()
         quick_settings_box.addWidget(QLabel("عرض"))
         self.quick_button_width_field = QSpinBox()
@@ -122,7 +140,13 @@ class CommercialPosSessionsScreen(QWidget):
         save_quick_settings_button.setToolTip("ذخیره")
         save_quick_settings_button.clicked.connect(self._save_settings)
         quick_settings_box.addWidget(save_quick_settings_button)
-        left.addLayout(quick_settings_box)
+        retail_layout.addLayout(quick_settings_box)
+
+        self.menu_groups_panel = CommercialPosMenuGroupsScreen()
+        retail_layout.addWidget(self.menu_groups_panel, stretch=1)
+        self.settings_tabs.addTab(retail_tab, "تک‌فروشی")
+
+        left.addWidget(self.settings_tabs)
 
         outer.addLayout(left, stretch=2)
 
@@ -236,6 +260,7 @@ class CommercialPosSessionsScreen(QWidget):
             self.quick_button_font_size_field.setValue(10)
             self.quick_grid_columns_field.setValue(6)
 
+        self.menu_groups_panel.refresh()
         self._refresh_session_panel()
 
     def _save_settings(self) -> None:
