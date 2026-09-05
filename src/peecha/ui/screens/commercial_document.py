@@ -1688,11 +1688,32 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.body_layout.addWidget(self.customer_summary_box)
 
         # زنجیره‌ی کاملِ Enter رویِ هدر — بدونِ استثنا (طبقِ سندِ راهنما).
+        # طبقِ رفعِ باگِ واقعی («پیمایشِ فیلدها ادامه پیدا نمی‌کند»): این
+        # زنجیره قبلاً همیشه channel_combo/cost_center/project را
+        # به‌صورتِ ثابت می‌گنجاند و due_date_field/consignment_warehouse_
+        # combo/tax_posting_mode_combo را اصلاً نمی‌گنجاند -- برایِ فاکتورِ
+        # خرید (که channel_box مخفی است) Enter رویِ فهرستِ قیمت، فوکوس را
+        # به یک ویجتِ نامرئی می‌فرستاد و زنجیره همان‌جا متوقف می‌شد؛ و
+        # برایِ هر فاکتوری، فیلدهایِ موعدِ تسویه/نوعِ ثبت (که واقعاً نمایان‌
+        # اند) هیچ‌وقت با Enter قابلِ‌دسترس نبودند. حالا فقط فیلدهایِ واقعاً
+        # نمایانِ همین نوعِ سند (که در سازنده‌یِ همین صفحه یک‌بار و برایِ
+        # همیشه مشخص می‌شوند) به زنجیره اضافه می‌شوند -- طبقِ isHidden()
+        # (نه isVisible()، چون این‌جا صفحه هنوز show() نشده و isVisible()
+        # همیشه False برمی‌گرداند).
         header_chain = [
             self.date_field, self.counterparty_combo, self.warehouse_combo, self.reference_field,
-            self.price_list_combo, self.channel_combo, self.description_field,
-            self.cost_center_combo, self.project_combo,
+            self.price_list_combo,
         ]
+        if not self.channel_box.isHidden():
+            header_chain.append(self.channel_combo)
+        header_chain.append(self.description_field)
+        header_chain += [self.cost_center_combo, self.project_combo]
+        if not self.due_date_box.isHidden():
+            header_chain.append(self.due_date_field)
+        if not self.consignment_warehouse_box.isHidden():
+            header_chain.append(self.consignment_warehouse_combo)
+        if not self.tax_posting_mode_box.isHidden():
+            header_chain.append(self.tax_posting_mode_combo)
         for widget, next_widget in zip(header_chain, header_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
         # طبقِ درخواستِ صریح («بعدِ اینترِ فیلدِ آخرِ هدر خودکار برود به

@@ -1742,6 +1742,16 @@ class _LinkInvoicesDialog(LayoutEditMixin, QDialog):
 class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
     def __init__(self, direction: str, main_window=None) -> None:
         super().__init__()
+        # طبقِ گزارشِ صریح («ردیف‌هایِ فرمِ دریافت اصلاً معلوم نیست و
+        # ارتفاعش کمه»): این صفحه تا امروز هیچ حداقلِ‌ارتفاعی نداشت -- اگر
+        # زیرپنجره‌اش (که اندازه‌اش با QSettings بینِ اجراها نگه داشته
+        # می‌شود؛ رجوع به _restore_or_size_subwindow در shell_window.py)
+        # از دفعاتِ قبل کوچک مانده باشد (مثلاً از وقتی این فرم ردیف‌هایِ
+        # کمتری داشت)، QScrollAreaِ FormScreenBase بدونِ هیچ نشانه‌یِ
+        # واضحی (فریم ندارد) فقط اسکرول لازم می‌کند و جدولِ ردیف‌ها عملاً
+        # از دیدِ کاربر بیرون می‌ماند. حالا Qt خودش زیرپنجره را کوچک‌تر
+        # از این حد نمی‌گذارد.
+        self.setMinimumSize(860, 620)
         self.direction = direction  # "RECEIPT" یا "PAYMENT"
         # طبقِ آیتمِ ۹: برایِ بازکردنِ گزارشِ معینِ طرفِ‌حساب از همین فرم لازم
         # است — هم‌الگو با JournalEntriesListScreen (شکلِ شناخته‌شده‌یِ
@@ -1976,7 +1986,9 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # ویجت‌هایِ setCellWidget (کمبو/فیلدِ مبلغ با padding خودشان) نه —
         # دقیقاً هم‌الگو با جدولِ ردیف‌هایِ journal_entry.py.
         self.table.verticalHeader().setDefaultSectionSize(52)
-        self.table.setMinimumHeight(160)
+        # طبقِ همان گزارشِ صریح: ۱۶۰px فقط کمی بیشتر از ارتفاعِ سرستون +
+        # یک‌ونیم ردیف بود -- عملاً هیچ ردیفی به‌طورِ کامل دیده نمی‌شد.
+        self.table.setMinimumHeight(220)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.setColumnWidth(0, 110)
         self.table.setColumnWidth(1, 150)
