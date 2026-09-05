@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QCompleter,
     QDialog,
     QGridLayout,
     QHBoxLayout,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -113,12 +115,19 @@ class CommercialPosSaleScreen(QWidget):
         self.scan_field.setPlaceholderText("🔍 بارکد را اسکن کنید یا کد/نامِ کالا را تایپ کنید و Enter بزنید")
         self.scan_field.setStyleSheet("font-size: 15pt; padding: 8px;")
         self.scan_field.returnPressed.connect(self._scan_or_search)
+        # طبقِ درخواستِ صریح («جستجو پیشنهاد نمی‌دهد و برایِ چندتایی فقط
+        # پیامِ خطا می‌دهد؛ وقت‌گیر است»): حالا همان‌طور که تایپ می‌شود
+        # فهرستِ کالاهایِ مطابق پیشنهاد داده می‌شود -- انتخابِ یک پیشنهاد
+        # همان کالا را مستقیماً به سبد اضافه می‌کند؛ اسکنِ بارکد (Enter با
+        # تطبیقِ دقیق) دست‌نخورده باقی می‌ماند.
+        self._scan_completer = QCompleter([])
+        self._scan_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._scan_completer.setFilterMode(Qt.MatchContains)
+        self._scan_completer.activated.connect(self._on_scan_suggestion_selected)
+        self.scan_field.setCompleter(self._scan_completer)
+        self._scan_label_to_item_id: dict[str, int] = {}
         scan_row.addWidget(self.scan_field, stretch=1)
         outer.addLayout(scan_row)
-
-        self.quick_access_layout = QGridLayout()
-        self.quick_access_layout.setSpacing(6)
-        outer.addLayout(self.quick_access_layout)
 
         # طبقِ درخواستِ صریح («ردیفِ کالا/تعداد/قیمتِ دستی لازم نیست؛
         # جستجو/اسکن مستقیماً با ۱ عدد و قیمتِ لیست به جدول اضافه کند؛
@@ -166,7 +175,14 @@ class CommercialPosSaleScreen(QWidget):
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         outer.addWidget(self.status_label)
-        outer.addStretch(1)
+
+        # طبقِ درخواستِ صریح («پایینِ صفحه جایِ خالیِ زیادی دارد؛ آنجا
+        # شورت‌کاتِ کالاهایِ پرمصرف را در تب‌هایِ مختلف بگذار»): جایِ
+        # خالیِ پایینِ صفحه به یک تب‌ویجتِ دسترسیِ‌سریع اختصاص یافت --
+        # هر تب یک دسته‌یِ کالاست (از رویِ همان دسته‌بندیِ ازپیش‌موجودِ
+        # کالا)، به‌علاوهٔ یک تبِ «همه» در ابتدا.
+        self.quick_access_tabs = QTabWidget()
+        outer.addWidget(self.quick_access_tabs, stretch=1)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -181,6 +197,10 @@ class CommercialPosSaleScreen(QWidget):
             return
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._rebuild_quick_access()
+        self._scan_label_to_item_id = {
+            f"{it.code} — {it.name or ''}": it.item_id for it in self._items
+        }
+        self._scan_completer.model().setStringList(list(self._scan_label_to_item_id.keys()))
         self.scan_field.setFocus()
 
         self._cashier_settings = (
@@ -261,15 +281,12 @@ class CommercialPosSaleScreen(QWidget):
         self.session_label.style().unpolish(self.session_label)
         self.session_label.style().polish(self.session_label)
 
-    def _rebuild_quick_access(self) -> None:
-        while self.quick_access_layout.count():
-            item = self.quick_access_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-        quick_items = [it for it in self._items if it.pos_button_color]
+    def _build_quick_grid(self, items: list[catalog_service.ItemRow]) -> QWidget:
+        page = QWidget()
+        grid = QGridLayout(page)
+        grid.setSpacing(6)
         columns = 6
-        for index, item in enumerate(quick_items):
+        for index, item in enumerate(items):
             button = QPushButton(item.short_name or item.name or item.code)
             button.setStyleSheet(
                 f"background-color: {item.pos_button_color}; color: #ffffff; font-weight: 600; "
@@ -280,7 +297,34 @@ class CommercialPosSaleScreen(QWidget):
                 tooltip += f" ({item.pos_shortcut_key})"
             button.setToolTip(tooltip)
             button.clicked.connect(lambda _checked=False, it=item: self._add_item_to_cart(it, decimal.Decimal("1")))
-            self.quick_access_layout.addWidget(button, index // columns, index % columns)
+            grid.addWidget(button, index // columns, index % columns)
+        grid.setRowStretch((len(items) - 1) // columns + 1 if items else 0, 1)
+        return page
+
+    def _rebuild_quick_access(self) -> None:
+        current_tab_text = self.quick_access_tabs.tabText(self.quick_access_tabs.currentIndex())
+        self.quick_access_tabs.clear()
+        quick_items = [it for it in self._items if it.pos_button_color]
+        if not quick_items:
+            return
+        company_id = self._company_id()
+        categories = {c.category_id: c for c in catalog_service.list_categories(company_id)} if company_id else {}
+
+        self.quick_access_tabs.addTab(self._build_quick_grid(quick_items), "همه")
+
+        groups: dict[int | None, list] = {}
+        for item in quick_items:
+            groups.setdefault(item.category_id, []).append(item)
+        for category_id, items_in_group in sorted(
+            groups.items(), key=lambda pair: categories[pair[0]].name if pair[0] in categories else "￿",
+        ):
+            label = categories[category_id].name if category_id in categories else "سایر"
+            self.quick_access_tabs.addTab(self._build_quick_grid(items_in_group), label)
+
+        for tab_index in range(self.quick_access_tabs.count()):
+            if self.quick_access_tabs.tabText(tab_index) == current_tab_text:
+                self.quick_access_tabs.setCurrentIndex(tab_index)
+                break
 
     def _resolve_scanned_item(self, query: str) -> catalog_service.ItemRow | None:
         needle = query.strip().lower()
@@ -295,18 +339,27 @@ class CommercialPosSaleScreen(QWidget):
         name_matches = [it for it in self._items if it.name and needle in it.name.lower()]
         if len(name_matches) == 1:
             return name_matches[0]
-        if name_matches or barcode_matches or code_matches:
-            self.status_label.setText(f"چند کالا با «{query}» یافت شد -- دقیق‌تر جستجو کنید.")
-        else:
+        if not (name_matches or barcode_matches or code_matches):
             self.status_label.setText(f"کالایی با «{query}» یافت نشد.")
         return None
 
     def _scan_or_search(self) -> None:
         query = self.scan_field.text().strip()
-        self.scan_field.clear()
-        if not query:
-            return
         item = self._resolve_scanned_item(query)
+        if item is None:
+            # طبقِ درخواستِ صریح: به‌جایِ فقط پیامِ خطا برایِ چندتایی،
+            # کادر را خالی نمی‌کنیم -- کاربر پیشنهادهایِ زنده‌یِ همین‌الان
+            # (کامل‌کنندهٔ متصل به کادر) را می‌بیند و می‌تواند از همان‌جا
+            # انتخاب کند، به‌جایِ تایپِ دوباره.
+            return
+        self.scan_field.clear()
+        self._add_item_to_cart(item, decimal.Decimal("1"))
+        self.scan_field.setFocus()
+
+    def _on_scan_suggestion_selected(self, label: str) -> None:
+        item_id = self._scan_label_to_item_id.get(label)
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        self.scan_field.clear()
         if item is None:
             return
         self._add_item_to_cart(item, decimal.Decimal("1"))
