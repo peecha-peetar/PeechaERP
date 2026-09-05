@@ -63,6 +63,7 @@ _ORDER_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PRO
 # می‌کند (نه _STOCK_DOC_TYPE_BY_TYPEِ زیر، چون امانیِ خروجی به دو انبار
 # هم‌زمان نیاز دارد -- ناسازگار با ساختارِ تک‌انبارِ آن نگاشت).
 _CONSIGNMENT_TYPES = ("CONSIGNMENT_OUT", "CONSIGNMENT_IN")
+_INVOICE_TYPES = ("SALES_INVOICE", "PURCHASE_INVOICE")
 
 # طبقِ رفعِ باگِ واقعی («در دفترِ روزنامه شرحِ همه‌یِ فاکتورها یکسان و
 # مبهم -- «سندِ بازرگانی #۱» -- است، نه مشخص که فاکتورِ فروش/خرید است و
@@ -1483,6 +1484,16 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             raise ValueError("فقط سندِ تاییدشده قابلِ‌ثبتِ‌نهایی است.")
 
         document_type_code = doc.document_type_code
+
+        # طبقِ درخواستِ صریح («یک دکمه در فرمِ فاکتور... با تاییدِ مدیر
+        # نسبت به نحوه‌یِ تسویه، فاکتور سند بخوره و تسویه بشه»): این
+        # گذرگاه فقط برایِ فاکتورهایِ واردشده از همان فرمِ عمومیِ فاکتور
+        # (commercial_document.py) اجباری است -- فروشِ صندوق/POS
+        # (pos_session_id مشخص) سیستمِ پرداختِ کاملاً جداگانه و ازپیش‌
+        # تکمیل‌شده‌یِ خودش را دارد (نقد/کارت/دسترسیِ‌سریع، …) و نباید با
+        # این نقشه‌یِ تسویه‌یِ جدید تداخل کند.
+        if document_type_code in _INVOICE_TYPES and doc.pos_session_id is None:
+            settlements_service.require_approved_settlement_plan(document_id, company_id)
 
         if document_type_code in _ORDER_TYPES:
             # برایِ سفارش، POSTED فقط یعنی «قفل و ارسال‌شده» — بدونِ اثرِ

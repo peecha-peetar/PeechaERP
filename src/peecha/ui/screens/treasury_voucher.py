@@ -2488,6 +2488,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self, counterparty_id: int | None, amount: decimal.Decimal, description: str,
         settle_invoices: list[tuple[int, decimal.Decimal]] | None = None,
         currency_id: int | None = None, exchange_rate: decimal.Decimal | None = None,
+        method_lines: list[tuple[str, decimal.Decimal, str | None]] | None = None,
     ) -> None:
         """طبقِ درخواستِ صریح: بعدِ ثبتِ نهاییِ فاکتورِ فروش/خرید، همین فرم
         (دریافت/پرداخت) با طرفِ‌حساب و مبلغِ همان فاکتور باز شود — کاربر
@@ -2504,7 +2505,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         currency_id/exchange_rate: طبقِ درخواستِ صریح («مدیریتِ سفارشات» --
         پرداخت‌هایِ ارزی)؛ اگر currency_id همان ارزِ پایه نباشد، ارزِ سند و
         نرخِ روزِ داده‌شده از پیش ست می‌شوند (کاربر فقط روشِ پرداخت را
-        انتخاب می‌کند، دیگر نیازی به بازتنظیمِ ارز/نرخ نیست)."""
+        انتخاب می‌کند، دیگر نیازی به بازتنظیمِ ارز/نرخ نیست).
+
+        method_lines: طبقِ درخواستِ صریح («دکمه‌یِ نحوهٔ تسویه در فرمِ
+        فاکتور» -- ترکیبِ نقد/بانک/بن/کالابرگ/تخفیفِ ازپیش‌تاییدشده): اگر
+        داده شود، به‌جایِ یک ردیفِ خالی، دقیقاً همان ردیف‌هایِ روش (با
+        مبلغِ خودشان) از پیش ساخته می‌شوند -- کاربر/مدیر فقط بازبینی و
+        ثبت می‌کند، دیگر نیازی به واردکردنِ دوباره‌یِ چیزی که پیش‌تر در
+        فرمِ فاکتور تعیین و تاییدشده نیست."""
         self._reset_form()
         if counterparty_id is not None:
             index = self.account_combo.findData(counterparty_id)
@@ -2520,6 +2528,15 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.total_amount_field.setValue(float(amount))
         self.description_field.setText(description)
         self._settle_invoices = list(settle_invoices) if settle_invoices else []
+        if method_lines:
+            for index, (method_code, line_amount, note) in enumerate(method_lines):
+                row = self._method_rows[0] if index == 0 else self._add_row()
+                method_index = row.method_combo.findData(method_code)
+                if method_index >= 0:
+                    row.method_combo.setCurrentIndex(method_index)
+                row.amount_field.setValue(float(line_amount))
+                if note:
+                    row.description_field.setText(note)
         self._update_rows_summary()
 
     def prefill_for_installment_collection(

@@ -101,6 +101,13 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM comm.commission_entries WHERE document_line_id IN "
     "(SELECT cdl.line_id FROM comm.commercial_document_lines cdl "
     " JOIN comm.commercial_documents cd ON cd.document_id = cdl.document_id WHERE cd.company_id = :company_id)",
+    # طبقِ رفعِ باگِ واقعیِ مشابه (نقشه‌یِ تسویه‌یِ فاکتور -- ویژگیِ دکمه‌یِ
+    # «نحوه‌یِ تسویه»): چون ثبتِ نهاییِ هر فاکتورِ خرید/فروش (غیرِ POS) از
+    # این پس مستلزمِ یک نقشه‌یِ تسویه است، تقریباً هر شرکتِ دارایِ فاکتورِ
+    # ثبت‌شده یک ردیف در این جدول هم دارد -- باید پیش از حذفِ خودِ
+    # commercial_documents پاک شود (ردیف‌هایِ plan_lines با ON DELETE
+    # CASCADE خودکار پاک می‌شوند، نیازی به DELETE جداگانه ندارند).
+    "DELETE FROM comm.commercial_document_settlement_plans WHERE company_id = :company_id",
     "DELETE FROM comm.commercial_document_lines WHERE document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     "DELETE FROM comm.commercial_documents WHERE company_id = :company_id",

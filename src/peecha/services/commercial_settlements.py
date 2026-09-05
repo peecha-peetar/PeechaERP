@@ -20,14 +20,218 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import JournalEntry
 from peecha.db.models.commercial import (
     CommercialDocument,
+    CommercialDocumentSettlementPlan,
+    CommercialDocumentSettlementPlanLine,
     CustomerProfile,
     InvoiceSettlement,
     SettlementAlarmSettings,
     SupplierProfile,
 )
+from peecha.services import roles as roles_service
 
 _ZERO = decimal.Decimal("0")
 _INVOICE_TYPES = ("SALES_INVOICE", "PURCHASE_INVOICE")
+
+# طبقِ درخواستِ صریح («نقد/نسیه/بانک یا همون کارتخوان/بن/کالابرگ/تخفیف»):
+# «نسیه» ردیفِ روش نیست -- همان مانده‌یِ پوشش‌داده‌نشده‌یِ فاکتور است که
+# خودکار محاسبه می‌شود؛ «بانک یا همون کارتخوان» هم یک روش است (BANK) --
+# کارتخوان صرفاً روشِ وصولِ همان تسویه‌یِ بانکی است. کدها/برچسب‌ها هم‌الگو
+# با METHOD_CODES/_METHOD_LABELS در services/treasury.py و
+# ui/screens/treasury_voucher.py (زیرمجموعه‌یِ همان‌ها، بدونِ چک/تهاتر/
+# اقساط که این‌جا موضوعیت ندارند).
+SETTLEMENT_PLAN_METHOD_LABELS = {
+    "CASH": "نقدی",
+    "BANK": "بانکی / کارتخوان",
+    "DISCOUNT": "تخفیف",
+    "GOODS_COUPON": "کالابرگ",
+    "VOUCHER": "بن",
+}
+_SETTLEMENT_PLAN_RECEIPT_METHODS = ("CASH", "BANK", "GOODS_COUPON", "VOUCHER", "DISCOUNT")
+_SETTLEMENT_PLAN_PAYMENT_METHODS = ("CASH", "BANK", "DISCOUNT")
+
+
+def settlement_plan_method_codes(document_type_code: str) -> tuple[str, ...]:
+    return _SETTLEMENT_PLAN_RECEIPT_METHODS if document_type_code == "SALES_INVOICE" else _SETTLEMENT_PLAN_PAYMENT_METHODS
+
+
+@dataclass
+class SettlementPlanLine:
+    method_code: str
+    amount: decimal.Decimal
+    note: str | None = None
+
+
+@dataclass
+class SettlementPlan:
+    plan_id: int
+    document_id: int
+    status_code: str
+    total_amount: decimal.Decimal
+    lines: list[SettlementPlanLine]
+    created_by_user_id: int
+    created_at: datetime.datetime
+    approved_by_user_id: int | None
+    approved_at: datetime.datetime | None
+
+    @property
+    def is_approved(self) -> bool:
+        return self.status_code == "APPROVED"
+
+    @property
+    def lines_total(self) -> decimal.Decimal:
+        return sum((ln.amount for ln in self.lines), _ZERO)
+
+    @property
+    def remaining_on_credit(self) -> decimal.Decimal:
+        """طبقِ درخواستِ صریح: مانده‌یِ پوشش‌داده‌نشده‌یِ فاکتور یعنی «نسیه» --
+        نیازی به ردیفِ جداگانه ندارد."""
+        return self.total_amount - self.lines_total
+
+
+def get_settlement_plan(document_id: int, company_id: int) -> SettlementPlan | None:
+    with new_session() as session:
+        plan = session.scalar(
+            select(CommercialDocumentSettlementPlan).where(
+                CommercialDocumentSettlementPlan.document_id == document_id,
+                CommercialDocumentSettlementPlan.company_id == company_id,
+            )
+        )
+        if plan is None:
+            return None
+        line_rows = session.scalars(
+            select(CommercialDocumentSettlementPlanLine)
+            .where(CommercialDocumentSettlementPlanLine.plan_id == plan.plan_id)
+            .order_by(CommercialDocumentSettlementPlanLine.display_order)
+        ).all()
+        return SettlementPlan(
+            plan_id=plan.plan_id, document_id=plan.document_id, status_code=plan.status_code,
+            total_amount=plan.total_amount,
+            lines=[SettlementPlanLine(method_code=ln.method_code, amount=ln.amount, note=ln.note) for ln in line_rows],
+            created_by_user_id=plan.created_by_user_id, created_at=plan.created_at,
+            approved_by_user_id=plan.approved_by_user_id, approved_at=plan.approved_at,
+        )
+
+
+def save_settlement_plan(
+    document_id: int, company_id: int, created_by_user_id: int, lines: list[tuple[str, decimal.Decimal, str | None]],
+) -> int:
+    """ذخیره/بازنویسیِ نقشه‌یِ تسویه‌یِ یک فاکتورِ خرید/فروش -- طبقِ درخواستِ
+    صریح («چند تا مورد از این نحوه تسویه... و با تاییدِ مدیر»): هر بار که
+    نقشه ذخیره می‌شود (حتی بعدِ تایید)، وضعیت به PENDING_APPROVAL برمی‌گردد
+    -- تاییدِ قبلی برایِ ترکیبِ تازه دیگر معتبر نیست و باید دوباره تاییدشود."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("فاکتور نامعتبر است.")
+        if doc.document_type_code not in _INVOICE_TYPES:
+            raise ValueError("نقشه‌یِ تسویه فقط برایِ فاکتورِ خرید/فروش ممکن است.")
+        if doc.status_code == "POSTED":
+            raise ValueError("فاکتورِ ثبتِ‌نهایی‌شده دیگر نقشه‌یِ تسویه‌اش قابلِ‌تغییر نیست.")
+        allowed_methods = set(settlement_plan_method_codes(doc.document_type_code))
+        cleaned: list[tuple[str, decimal.Decimal, str | None]] = []
+        for method_code, amount, note in lines:
+            if method_code not in allowed_methods:
+                raise ValueError("روشِ ردیف نامعتبر است.")
+            if amount <= _ZERO:
+                raise ValueError("مبلغِ هر ردیف باید مثبت باشد.")
+            cleaned.append((method_code, amount, note))
+        lines_total = sum((amount for _m, amount, _n in cleaned), _ZERO)
+        if lines_total > doc.total_amount:
+            raise ValueError(f"جمعِ ردیف‌ها ({lines_total}) از مبلغِ کلِ فاکتور ({doc.total_amount}) بیشتر است.")
+
+        plan = session.scalar(
+            select(CommercialDocumentSettlementPlan).where(CommercialDocumentSettlementPlan.document_id == document_id)
+        )
+        if plan is None:
+            plan = CommercialDocumentSettlementPlan(
+                company_id=company_id, document_id=document_id, status_code="PENDING_APPROVAL",
+                total_amount=doc.total_amount, created_by_user_id=created_by_user_id,
+            )
+            session.add(plan)
+            session.flush()
+        else:
+            session.execute(
+                CommercialDocumentSettlementPlanLine.__table__.delete().where(
+                    CommercialDocumentSettlementPlanLine.plan_id == plan.plan_id
+                )
+            )
+            plan.status_code = "PENDING_APPROVAL"
+            plan.total_amount = doc.total_amount
+            plan.approved_by_user_id = None
+            plan.approved_at = None
+
+        for display_order, (method_code, amount, note) in enumerate(cleaned):
+            session.add(
+                CommercialDocumentSettlementPlanLine(
+                    plan_id=plan.plan_id, method_code=method_code, amount=amount, note=(note or None),
+                    display_order=display_order,
+                )
+            )
+        session.commit()
+        return plan.plan_id
+
+
+def can_approve_settlement_plan(user_id: int, company_id: int) -> bool:
+    """طبقِ درخواستِ صریح: فقط برایِ نمایش/پنهان‌کردنِ دکمه‌یِ «تاییدِ
+    مدیر» در UI -- خودِ approve_settlement_plan هم دوباره همین شرط را
+    اعتبارسنجی می‌کند (هم‌الگو با can_correct_posted_document)."""
+    return roles_service.is_manager(user_id, company_id)
+
+
+def approve_settlement_plan(document_id: int, company_id: int, approved_by_user_id: int) -> None:
+    if not roles_service.is_manager(approved_by_user_id, company_id):
+        raise ValueError("تاییدِ نحوه‌یِ تسویه فقط برایِ مدیر (نقشِ ادمین/سوپروایزر/مدیر) ممکن است.")
+    with new_session() as session:
+        plan = session.scalar(
+            select(CommercialDocumentSettlementPlan).where(
+                CommercialDocumentSettlementPlan.document_id == document_id,
+                CommercialDocumentSettlementPlan.company_id == company_id,
+            )
+        )
+        if plan is None:
+            raise ValueError("ابتدا نحوه‌یِ تسویه را ذخیره کنید.")
+        if plan.status_code == "APPROVED":
+            raise ValueError("این نقشه‌یِ تسویه قبلاً تاییدشده است.")
+        doc = session.get(CommercialDocument, document_id)
+        if doc is not None and plan.total_amount != doc.total_amount:
+            raise ValueError("مبلغِ فاکتور پس از ذخیره‌یِ نقشه تغییر کرده — ابتدا نقشه را دوباره ذخیره کنید.")
+        plan.status_code = "APPROVED"
+        plan.approved_by_user_id = approved_by_user_id
+        plan.approved_at = datetime.datetime.now()
+        session.commit()
+
+
+def require_approved_settlement_plan(document_id: int, company_id: int) -> SettlementPlan:
+    """طبقِ درخواستِ صریح («با تاییدِ مدیر... فاکتور سند بخوره و تسویه
+    بشه»): برایِ فاکتورِ خرید/فروش، ثبتِ نهایی بدونِ نقشه‌یِ تسویه‌یِ
+    تاییدشده مسدود می‌شود -- این تابع همان دروازه است (هم در سرویسِ
+    ثبتِ‌نهایی و هم در UI بررسی می‌شود)."""
+    plan = get_settlement_plan(document_id, company_id)
+    if plan is None:
+        raise ValueError("پیش از ثبتِ نهایی، ابتدا از دکمه‌یِ «نحوه‌یِ تسویه» نحوه‌یِ پرداخت را مشخص کنید.")
+    if not plan.is_approved:
+        raise ValueError("نحوه‌یِ تسویه هنوز توسطِ مدیر تاییدنشده است.")
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is not None and plan.total_amount != doc.total_amount:
+            raise ValueError("مبلغِ فاکتور پس از تاییدِ نقشه‌یِ تسویه تغییر کرده — نقشه را دوباره ذخیره و تایید کنید.")
+    return plan
+
+
+def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, user_id: int) -> None:
+    """میان‌بُرِ برنامه‌نویسی/تستی -- برایِ جاهایی (مثلاً ابزارهایِ داخلی
+    یا فراخوانی‌هایِ خودکار) که واقعاً به ترکیبِ تسویه اهمیتی نمی‌دهند و
+    فقط می‌خواهند مسیرِ استانداردِ ثبتِ نهایی را طیّ کنند: کلِ مبلغِ فاکتور
+    را یک‌جا «نقدی» ثبت و بلافاصله (با همین کاربر) تاییدِ مدیر می‌کند.
+    گذرگاهِ واقعیِ کاربرِ نهایی همچنان دکمه‌یِ «نحوه‌یِ تسویه» در UI است."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("فاکتور نامعتبر است.")
+        total_amount = doc.total_amount
+    lines = [("CASH", total_amount, None)] if total_amount > _ZERO else []
+    save_settlement_plan(document_id, company_id, user_id, lines)
+    approve_settlement_plan(document_id, company_id, user_id)
 
 
 def compute_due_date(

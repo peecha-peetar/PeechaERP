@@ -16,6 +16,7 @@ import tempfile
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QGridLayout,
@@ -1009,6 +1010,183 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
         return {line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items() if field.value() > 0}
 
 
+class _SettlementPlanDialog(QDialog):
+    """طبقِ درخواستِ صریح («یک دکمه سمت راست... نحوه تسویه که ممکنه نقد/
+    نسیه/بانک یا همون کارتخوان/بن/کالابرگ/تخفیف... و با تاییدِ مدیر»):
+    ترکیبِ چند روشِ هم‌زمان + مانده‌یِ خودکار به‌عنوانِ نسیه؛ ذخیره‌یِ
+    دوباره (حتی بعدِ تاییدِ قبلی) تاییدِ قبلی را باطل می‌کند -- ترکیبِ
+    تازه باید دوباره تاییدشود. تاییدِ نهایی فقط برایِ مدیر (نقشِ ادمین/
+    سوپروایزر/مدیر) ممکن است -- approve_settlement_plan خودش هم دوباره
+    همین را اعتبارسنجی می‌کند."""
+
+    def __init__(
+        self, document_id: int, company_id: int, document_type_code: str,
+        total_amount: decimal.Decimal, decimal_places: int, parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("نحوه‌یِ تسویه‌یِ فاکتور")
+        self.resize(600, 440)
+        self._document_id = document_id
+        self._company_id = company_id
+        self._document_type_code = document_type_code
+        self._total_amount = total_amount
+        self._decimal_places = decimal_places
+
+        layout = QVBoxLayout(self)
+
+        total_label = QLabel(f"مبلغِ کلِ فاکتور: {numerals.format_money(total_amount, decimal_places)}")
+        total_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(total_label)
+
+        self.status_banner = QLabel("")
+        self.status_banner.setWordWrap(True)
+        layout.addWidget(self.status_banner)
+
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["روش", "مبلغ", "یادداشت", ""])
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        table_header = self.table.horizontalHeader()
+        table_header.setSectionResizeMode(0, QHeaderView.Interactive)
+        self.table.setColumnWidth(0, 160)
+        table_header.setSectionResizeMode(1, QHeaderView.Interactive)
+        self.table.setColumnWidth(1, 140)
+        table_header.setSectionResizeMode(2, QHeaderView.Stretch)
+        table_header.setSectionResizeMode(3, QHeaderView.Fixed)
+        self.table.setColumnWidth(3, 36)
+        layout.addWidget(self.table, stretch=1)
+
+        add_row_button = QPushButton("➕ افزودنِ ردیف")
+        add_row_button.clicked.connect(lambda: self._add_row())
+        layout.addWidget(add_row_button)
+
+        self.remaining_label = QLabel("")
+        layout.addWidget(self.remaining_label)
+
+        buttons_row = QHBoxLayout()
+        self.save_button = QPushButton("💾 ذخیره")
+        self.save_button.setObjectName("primaryIconButton")
+        self.save_button.clicked.connect(self._save)
+        buttons_row.addWidget(self.save_button)
+        self.approve_button = QPushButton("👍 تاییدِ مدیر")
+        self.approve_button.setToolTip("فقط برایِ کاربرِ با نقشِ ادمین/سوپروایزر/مدیر فعال است.")
+        self.approve_button.clicked.connect(self._approve)
+        buttons_row.addWidget(self.approve_button)
+        close_button = QPushButton("بستن")
+        close_button.clicked.connect(self.accept)
+        buttons_row.addWidget(close_button)
+        layout.addLayout(buttons_row)
+
+        self._load_existing()
+
+    def _method_codes(self) -> tuple[str, ...]:
+        return settlements_service.settlement_plan_method_codes(self._document_type_code)
+
+    def _add_row(self, method_code: str | None = None, amount: decimal.Decimal | None = None, note: str = "") -> None:
+        row_index = self.table.rowCount()
+        self.table.insertRow(row_index)
+
+        method_combo = QComboBox()
+        for code in self._method_codes():
+            method_combo.addItem(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(code, code), code)
+        if method_code is not None:
+            index = method_combo.findData(method_code)
+            if index >= 0:
+                method_combo.setCurrentIndex(index)
+        self.table.setCellWidget(row_index, 0, method_combo)
+
+        amount_field = _AmountField()
+        amount_field.setDecimals(self._decimal_places)
+        if amount is not None:
+            amount_field.setValue(float(amount))
+        amount_field.valueChanged.connect(self._update_remaining)
+        self.table.setCellWidget(row_index, 1, amount_field)
+
+        note_field = QLineEdit()
+        note_field.setText(note or "")
+        self.table.setCellWidget(row_index, 2, note_field)
+
+        remove_button = QPushButton("🗑")
+        remove_button.setObjectName("dangerIconButton")
+        remove_button.setFixedWidth(30)
+        remove_button.clicked.connect(lambda: self._remove_row(method_combo))
+        self.table.setCellWidget(row_index, 3, remove_button)
+
+        self._update_remaining()
+
+    def _remove_row(self, row_marker: QComboBox) -> None:
+        for row_index in range(self.table.rowCount()):
+            if self.table.cellWidget(row_index, 0) is row_marker:
+                self.table.removeRow(row_index)
+                break
+        self._update_remaining()
+
+    def _collect_lines(self) -> list[tuple[str, decimal.Decimal, str | None]]:
+        lines: list[tuple[str, decimal.Decimal, str | None]] = []
+        for row_index in range(self.table.rowCount()):
+            method_combo = self.table.cellWidget(row_index, 0)
+            amount_field = self.table.cellWidget(row_index, 1)
+            note_field = self.table.cellWidget(row_index, 2)
+            amount = decimal.Decimal(str(amount_field.value()))
+            if amount <= 0:
+                continue
+            lines.append((method_combo.currentData(), amount, note_field.text().strip() or None))
+        return lines
+
+    def _update_remaining(self, *_args) -> None:
+        lines_total = sum((amount for _m, amount, _n in self._collect_lines()), decimal.Decimal("0"))
+        remaining = self._total_amount - lines_total
+        self.remaining_label.setText(f"مانده (نسیه): {numerals.format_money(remaining, self._decimal_places)}")
+        self.remaining_label.setStyleSheet("color: #b91c1c; font-weight: bold;" if remaining < 0 else "")
+
+    def _load_existing(self) -> None:
+        plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
+        if plan is None:
+            self._update_remaining()
+            self.approve_button.setEnabled(False)
+            self.status_banner.setText("هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است.")
+            return
+        for line in plan.lines:
+            self._add_row(line.method_code, line.amount, line.note)
+        self._apply_plan_status(plan)
+
+    def _apply_plan_status(self, plan: settlements_service.SettlementPlan) -> None:
+        self.table.setEnabled(not plan.is_approved)
+        self.approve_button.setEnabled(not plan.is_approved)
+        if plan.is_approved:
+            approved_at = numerals.to_persian_digits(plan.approved_at.strftime("%Y-%m-%d %H:%M")) if plan.approved_at else ""
+            self.status_banner.setText(f"✅ نحوه‌یِ تسویه تاییدِ مدیر شد. ({approved_at})")
+            self.status_banner.setStyleSheet("color: #15803d; font-weight: bold;")
+        else:
+            self.status_banner.setText("⏳ ذخیره شد؛ در انتظارِ تاییدِ مدیر است -- تا تاییدنشدن، ثبتِ نهاییِ فاکتور مسدود می‌ماند.")
+            self.status_banner.setStyleSheet("color: #b45309; font-weight: bold;")
+
+    def _save(self) -> None:
+        lines = self._collect_lines()
+        try:
+            settlements_service.save_settlement_plan(
+                self._document_id, self._company_id, app_session.current_user.user_id, lines,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
+        self._apply_plan_status(plan)
+        QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه ذخیره شد؛ برایِ ثبتِ نهایی نیازِ تاییدِ مدیر دارد.")
+
+    def _approve(self) -> None:
+        try:
+            settlements_service.approve_settlement_plan(
+                self._document_id, self._company_id, app_session.current_user.user_id,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
+        self._apply_plan_status(plan)
+        QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه تاییدِ مدیر شد.")
+
+
 class _LandedCostDialog(QDialog):
     """طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه در فاکتورِ خرید»): مدیریتِ
     هزینه‌هایِ جانبیِ همین فاکتورِ خرید (ترخیص/گمرک/هزینه‌هایِ ارزیِ دیگر).
@@ -1220,6 +1398,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._upsell_suggestions: list = []
         self._main_window = main_window
         self._document_id: int | None = None
+        self._settlement_plan: settlements_service.SettlementPlan | None = None
         self._status_code = "DRAFT"
         self._corrects_document_id: int | None = None
         self._lines: list = []
@@ -1564,6 +1743,22 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setWordWrap(True)
         self.body_layout.addWidget(self.status_label)
         self.body_layout.addStretch(1)
+
+        # طبقِ درخواستِ صریح («یک دکمه سمت راست اضافه کن که بتونم نحوه‌یِ
+        # تسویه را مشخص کنم»): چون در چیدمانِ راست‌به‌چپ اولین ویجتِ
+        # اضافه‌شده به یک QHBoxLayout در سمتِ راست ظاهر می‌شود، این دکمه
+        # پیش از همه‌یِ دکمه‌هایِ دیگرِ فوتر اضافه می‌شود -- فقط برایِ
+        # فاکتورِ خرید/فروش نمایان است.
+        self.settlement_plan_button = QPushButton("🧾")
+        self.settlement_plan_button.setObjectName("iconButton")
+        self.settlement_plan_button.setFixedWidth(44)
+        self.settlement_plan_button.setToolTip(
+            "نحوه‌یِ تسویه — تعیینِ ترکیبِ نقد/بانک(کارتخوان)/بن/کالابرگ/تخفیف/نسیه؛ "
+            "پیش از ثبتِ نهایی نیازِ تاییدِ مدیر دارد."
+        )
+        self.settlement_plan_button.clicked.connect(self._open_settlement_plan)
+        self.settlement_plan_button.setVisible(document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
+        self.footer_layout.addWidget(self.settlement_plan_button)
 
         # طبقِ گزارشِ صریح («بعضی فرم‌ها روی دکمه‌هاش نوشته داره و نصف
         # نوشته‌هاست»): این فوتر ۶ دکمه‌یِ متنیِ کنارِ هم داشت — دقیقاً
@@ -1910,6 +2105,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.summary_cards.set_value("grand_total", numerals.format_money(doc.total_amount, dp))
         if self._supports_cross_sell:
             self._refresh_customer_summary()
+        # طبقِ درخواستِ صریح («دکمه‌یِ نحوهٔ تسویه در فرمِ فاکتور»): نقشه‌یِ
+        # تسویه (اگر برایِ این فاکتور ذخیره شده) با هر بارگذاریِ سند
+        # دوباره خوانده می‌شود -- هم برایِ نمایشِ وضعیت، هم برایِ گذرگاهِ
+        # اجباریِ پیش از ثبتِ نهایی.
+        self._settlement_plan = (
+            settlements_service.get_settlement_plan(self._document_id, company_id) if self._is_invoice else None
+        )
         self._apply_status_state()
 
     def _refresh_lines_table(self) -> None:
@@ -1960,7 +2162,22 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.save_button.setEnabled(is_editable)
         self.confirm_button.setEnabled(is_draft and self._document_id is not None)
         self.approve_button.setEnabled(is_confirmed)
-        self.post_button.setEnabled(is_confirmed or is_approved)
+        # طبقِ درخواستِ صریح («با تاییدِ مدیر نسبت به نحوه‌یِ تسویه، فاکتور
+        # سند بخوره و تسویه بشه»): برایِ فاکتورِ خرید/فروش، ثبتِ نهایی
+        # بدونِ نقشه‌یِ تسویه‌یِ تاییدشده مسدود است (سرویس هم دوباره همین
+        # را اعتبارسنجی می‌کند -- این‌جا فقط UX است).
+        self.settlement_plan_button.setEnabled((is_draft or is_confirmed or is_approved) and self._document_id is not None)
+        if self._is_invoice:
+            has_approved_plan = self._settlement_plan is not None and self._settlement_plan.is_approved
+            self.post_button.setEnabled((is_confirmed or is_approved) and has_approved_plan)
+            if self._settlement_plan is None:
+                self.settlement_plan_button.setStyleSheet("font-weight: bold; color: #b45309;")
+            elif not self._settlement_plan.is_approved:
+                self.settlement_plan_button.setStyleSheet("font-weight: bold; color: #b91c1c;")
+            else:
+                self.settlement_plan_button.setStyleSheet("color: #15803d;")
+        else:
+            self.post_button.setEnabled(is_confirmed or is_approved)
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
@@ -1983,6 +2200,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
+        self._settlement_plan = None
         self._status_code = "DRAFT"
         self._corrects_document_id = None
         self._lines = []
@@ -2499,27 +2717,57 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # اطلاعاتِ لازم برایِ فرمِ دریافت/پرداخت را نگه می‌داریم.
         posted_doc, _ = documents_service.get_document(self._document_id, company_id)
         posted_type = self.document_type_code
+        posted_document_id = self._document_id
         posted_counterparty_id = posted_doc.counterparty_detail_account_id
         posted_total = posted_doc.total_amount
         posted_no = posted_doc.document_no
+        # طبقِ درخواستِ صریح («با تاییدِ مدیر نسبت به نحوه‌یِ تسویه، فاکتور
+        # سند بخوره و تسویه بشه»): مسیرِ اصلاحِ فاکتور (که هیچ‌وقت نقشه‌یِ
+        # تسویه نمی‌سازد) از این‌جا مستثنا می‌ماند -- طبقِ رفتارِ قبلی.
+        # طبقِ رفعِ باگِ واقعی: self._settlement_plan فقط با _load_document
+        # تازه می‌شود -- اگر نقشه بینِ آخرین رفرش و همین کلیکِ «ثبتِ
+        # نهایی» ذخیره/تاییدشده باشد (بدونِ رفرشِ دوباره‌یِ فرم)، آن
+        # کَشِ قدیمی هنوز None یا تاییدنشده می‌ماند. این‌جا -- درست مثلِ
+        # posted_doc چند خط پایین‌تر -- دوباره از پایگاه‌داده خوانده می‌شود.
+        posted_settlement_plan = (
+            settlements_service.get_settlement_plan(self._document_id, company_id)
+            if self._corrects_document_id is None else None
+        )
         self._reset_form()
         theme.set_status_label(self.status_label, f"سند ثبتِ نهایی شد.{je_note}", ok=True)
 
         if posted_type in ("SALES_INVOICE", "PURCHASE_INVOICE") and self._main_window is not None:
             is_sales = posted_type == "SALES_INVOICE"
-            noun = "دریافتِ وجه" if is_sales else "پرداختِ وجه"
-            confirm_payment = QMessageBox.question(
-                self, noun,
-                f"آیا برایِ این فاکتور {noun} ثبت می‌شود؟\n(اگر نسیه است و هنوز پرداختی صورت نگرفته، «خیر» را انتخاب کنید.)",
-                QMessageBox.Yes | QMessageBox.No,
-            )
-            if confirm_payment == QMessageBox.Yes:
-                nav_code = "TREASURY_RECEIPT" if is_sales else "TREASURY_PAYMENT"
-                description = f"بابتِ {DOC_TYPE_TITLES[posted_type]}ِ #{numerals.to_persian_digits(str(posted_no))}"
+            nav_code = "TREASURY_RECEIPT" if is_sales else "TREASURY_PAYMENT"
+            description = f"بابتِ {DOC_TYPE_TITLES[posted_type]}ِ #{numerals.to_persian_digits(str(posted_no))}"
+            if posted_settlement_plan is not None and posted_settlement_plan.lines_total > 0:
+                # نقشه‌یِ تسویه‌یِ ازپیش‌تاییدشده مستقیماً در فرمِ دریافت/
+                # پرداخت پر می‌شود (دیگر پرسیدنِ «آیا ثبت شود؟» لازم
+                # نیست -- خودِ ثبتِ نهایی مستلزمِ داشتنِ همین نقشه بود) و
+                # با ذخیرهٔ همان فرم، خودکار به همین فاکتور هم تسویه/وصل
+                # می‌شود (settle_invoices).
+                method_lines = [(ln.method_code, ln.amount, ln.note) for ln in posted_settlement_plan.lines]
                 self._main_window.open_screen(
                     nav_code,
-                    then=lambda screen: screen.prefill_for_invoice(posted_counterparty_id, posted_total, description),
+                    then=lambda screen: screen.prefill_for_invoice(
+                        posted_counterparty_id, posted_settlement_plan.lines_total, description,
+                        settle_invoices=[(posted_document_id, posted_settlement_plan.lines_total)],
+                        method_lines=method_lines,
+                    ),
                 )
+            elif posted_settlement_plan is None:
+                noun = "دریافتِ وجه" if is_sales else "پرداختِ وجه"
+                confirm_payment = QMessageBox.question(
+                    self, noun,
+                    f"آیا برایِ این فاکتور {noun} ثبت می‌شود؟\n(اگر نسیه است و هنوز پرداختی صورت نگرفته، «خیر» را انتخاب کنید.)",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if confirm_payment == QMessageBox.Yes:
+                    self._main_window.open_screen(
+                        nav_code,
+                        then=lambda screen: screen.prefill_for_invoice(posted_counterparty_id, posted_total, description),
+                    )
+            # وگرنه (نقشه تاییدشده ولی lines_total == ۰): کاملاً نسیه است -- هیچ فرمِ دریافت/پرداختی باز نمی‌شود.
 
     def _cancel(self) -> None:
         if self._document_id is None:
@@ -2537,6 +2785,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
         self._reset_form()
         theme.set_status_label(self.status_label, "سند لغو شد.", ok=True)
+
+    def _open_settlement_plan(self) -> None:
+        if self._document_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        doc, _lines = documents_service.get_document(self._document_id, company_id)
+        dialog = _SettlementPlanDialog(
+            self._document_id, company_id, self.document_type_code, doc.total_amount, self._decimal_places, self,
+        )
+        dialog.exec()
+        self._load_document()
 
     def _open_landed_costs(self) -> None:
         company_id = self._company_id()

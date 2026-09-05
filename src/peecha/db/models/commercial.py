@@ -1130,6 +1130,37 @@ class SettlementAlarmSettings(Base):
     alarm_days_before: Mapped[int] = mapped_column(SmallInteger, default=2)
 
 
+# طبقِ درخواستِ صریح («دکمه‌یِ نحوهٔ تسویه در فرمِ فاکتور»): نقشه‌یِ
+# ترکیبیِ تسویه (چند روش هم‌زمان + مانده به‌عنوانِ نسیه) که پیش از ثبتِ
+# نهایی با فاکتور نگهداری و نیازِ تاییدِ مدیر دارد — معادلِ
+# 116_settlement_plans.sql
+class CommercialDocumentSettlementPlan(Base):
+    __tablename__ = "commercial_document_settlement_plans"
+    __table_args__ = ({"schema": "comm"},)
+
+    plan_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"), unique=True)
+    status_code: Mapped[str] = mapped_column(String(20), default="PENDING_APPROVAL")
+    total_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    approved_at: Mapped[datetime.datetime | None]
+
+
+class CommercialDocumentSettlementPlanLine(Base):
+    __tablename__ = "commercial_document_settlement_plan_lines"
+    __table_args__ = ({"schema": "comm"},)
+
+    line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_settlement_plans.plan_id"))
+    method_code: Mapped[str] = mapped_column(String(30))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    note: Mapped[str | None] = mapped_column(String(200))
+    display_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+
+
 # =======================================================================
 # مدیریتِ سفارشات — معادلِ 103_order_management.sql
 # =======================================================================
