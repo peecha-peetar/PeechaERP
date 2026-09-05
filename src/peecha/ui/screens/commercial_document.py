@@ -1043,6 +1043,19 @@ class _SettlementPlanDialog(QDialog):
         # کند، بدونِ نیازِ به تاییدِ جداگانهٔ مدیر -- تاییدِ سرپرست برایِ
         # POS از قبل با صفحهٔ «تاییدِ سرپرست» انجام می‌شود (نه این نقشه).
         self._require_manager_approval = require_manager_approval
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده با گزارشِ زندهٔ کاربر («همه‌یِ
+        # روش‌ها فیکس بشه»؛ «بعدِ اینترِ روشِ ردیفِ اول، ردیف پرید و دیگه
+        # نبود»؛ «برایِ فاکتورهایِ بعدی دیگه هیچ ردیفی نیست»): طرحِ قبلی
+        # -- کمبویِ آزادِ روش در هر ردیف + دکمه‌هایِ افزودن/حذفِ ردیف --
+        # روی QTableWidget با _EnterComboBoxِ توکار به‌شدت ناپایدار بود
+        # (فوکوسِ برنامه‌ای بینِ سلول‌هایِ حاویِ کمبو گاهی خودِ جدول را در
+        # وضعیتِ نامعتبر می‌گذاشت). حالا هر ردیف دقیقاً به یک روشِ ثابت
+        # (از self._method_codes()) قفل است -- فقط یک برچسبِ متنی، نه
+        # کمبو -- و افزودن/حذفِ ردیف اصلاً وجود ندارد؛ صندوق‌دار/مدیر فقط
+        # مبلغِ هر روش را وارد می‌کند. این هم با خواستهٔ صریحِ «همه
+        # روش‌ها فیکس بشه» یکی است، هم چون دیگر هیچ کمبویی داخلِ جدول
+        # نیست، کلِ آن دسته از ناپایداری‌ها از ریشه از بین می‌رود.
+        self._row_method_codes: list[str] = []
 
         layout = QVBoxLayout(self)
 
@@ -1054,27 +1067,19 @@ class _SettlementPlanDialog(QDialog):
         self.status_banner.setWordWrap(True)
         layout.addWidget(self.status_banner)
 
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["روش", "مبلغ", "یادداشت", ""])
+        self.table = QTableWidget(0, 2)
+        self.table.setHorizontalHeaderLabels(["روش", "مبلغ"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         table_header = self.table.horizontalHeader()
         table_header.setSectionResizeMode(0, QHeaderView.Interactive)
-        self.table.setColumnWidth(0, 160)
-        table_header.setSectionResizeMode(1, QHeaderView.Interactive)
-        self.table.setColumnWidth(1, 140)
-        table_header.setSectionResizeMode(2, QHeaderView.Stretch)
-        table_header.setSectionResizeMode(3, QHeaderView.Fixed)
-        self.table.setColumnWidth(3, 36)
+        self.table.setColumnWidth(0, 200)
+        table_header.setSectionResizeMode(1, QHeaderView.Stretch)
         # طبقِ همان گزارش: ردیف‌هایِ کوتاه (ارتفاعِ پیش‌فرضِ Qt برایِ
-        # ویجت‌هایِ توکار مثلِ کمبو/فیلد) به‌سختی دیده می‌شدند.
+        # ویجت‌هایِ توکار مثلِ فیلدِ مبلغ) به‌سختی دیده می‌شدند.
         self.table.verticalHeader().setDefaultSectionSize(44)
         self.table.setMinimumHeight(260)
         layout.addWidget(self.table, stretch=1)
-
-        add_row_button = QPushButton("➕ افزودنِ ردیف")
-        add_row_button.clicked.connect(lambda: self._add_row())
-        layout.addWidget(add_row_button)
 
         self.remaining_label = QLabel("")
         layout.addWidget(self.remaining_label)
@@ -1084,14 +1089,28 @@ class _SettlementPlanDialog(QDialog):
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(44)
         self.save_button.setToolTip("ذخیره")
+        # طبقِ رفعِ ریشه‌ایِ باگِ واقعیِ گزارش‌شده («بعدِ اینترِ ردیفِ اول،
+        # ردیف پرید و دیگه نبود»؛ «برایِ فاکتورهایِ بعدی هیچ ردیفی نیست»):
+        # علتِ واقعی اصلاً ناپایداریِ فوکوسِ QTableWidget نبود -- چون اولین
+        # دکمه‌یِ افزوده‌شده به یک QDialog به‌صورتِ خودکار isDefault()
+        # می‌شود، هر اینترِ زده‌شده در هر QLineEdit (که Enter را مصرف
+        # نمی‌کند تا رفتارِ استانداردِ دکمه‌یِ پیش‌فرض خراب نشود) هم‌زمان با
+        # جابه‌جاییِ فوکوسِ خودمان، دکمه‌یِ ذخیره را هم کلیک می‌کرد -- یعنی
+        # `_save()` وسطِ واردکردنِ مبالغ اجرا و دیالوگ زودهنگام بسته
+        # می‌شد (با دیتایِ ناقص). راه‌حل: هیچ دکمه‌ای در این دیالوگ نباید
+        # autoDefault باشد؛ ذخیره فقط با کلیکِ مستقیم یا رسیدنِ زنجیره‌یِ
+        # اینتر به آخرین ردیف (که آگاهانه _save() را صدا می‌زند) انجام شود.
+        self.save_button.setAutoDefault(False)
         self.save_button.clicked.connect(self._save)
         buttons_row.addWidget(self.save_button)
         self.approve_button = QPushButton("👍 تاییدِ مدیر")
         self.approve_button.setToolTip("فقط برایِ کاربرِ با نقشِ ادمین/سوپروایزر/مدیر فعال است.")
+        self.approve_button.setAutoDefault(False)
         self.approve_button.clicked.connect(self._approve)
         self.approve_button.setVisible(self._require_manager_approval)
         buttons_row.addWidget(self.approve_button)
         close_button = QPushButton("بستن")
+        close_button.setAutoDefault(False)
         close_button.clicked.connect(self.accept)
         buttons_row.addWidget(close_button)
         layout.addLayout(buttons_row)
@@ -1101,26 +1120,19 @@ class _SettlementPlanDialog(QDialog):
     def _method_codes(self) -> tuple[str, ...]:
         return settlements_service.settlement_plan_method_codes(self._document_type_code, self._company_id)
 
-    def _add_row(self, method_code: str | None = None, amount: decimal.Decimal | None = None, note: str = "") -> None:
+    def _add_row(self, method_code: str, amount: decimal.Decimal | None = None) -> None:
         row_index = self.table.rowCount()
         self.table.insertRow(row_index)
+        self._row_method_codes.append(method_code)
 
-        # طبقِ رفعِ باگِ واقعی («پیمایشِ فیلدها ادامه پیدا نمی‌کند»): قبلاً
-        # کمبویِ روش یک QComboBoxِ ساده بود -- اینتر رویِ آن فقط popup را
-        # می‌بست، فوکوس را به‌جایِ دیگری نمی‌برد. _EnterComboBox (هم‌الگو
-        # با فرمِ دریافت/پرداخت) سیگنالِ enterPressed می‌دهد.
-        method_combo = _EnterComboBox()
-        for code in self._method_codes():
-            method_combo.addItem(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(code, code), code)
-        if method_code is not None:
-            index = method_combo.findData(method_code)
-            if index >= 0:
-                method_combo.setCurrentIndex(index)
-        self.table.setCellWidget(row_index, 0, method_combo)
+        method_label = QLabel(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(method_code, method_code))
+        method_label.setAlignment(Qt.AlignCenter)
+        self.table.setCellWidget(row_index, 0, method_label)
 
-        # طبقِ همان رفعِ باگ: فیلدِ مبلغ قبلاً یک _AmountFieldِ سادهبود --
-        # اسپیس هیچ اثری نداشت. _RowAmountField (هم‌الگو با فرمِ دریافت/
-        # پرداخت) با اسپیس، باقیماندهٔ همین لحظه را در خودش کپی می‌کند.
+        # طبقِ رفعِ باگِ واقعی («فیلدِ مبلغ قبلاً یک _AmountFieldِ ساده
+        # بود -- اسپیس هیچ اثری نداشت»): _RowAmountField (هم‌الگو با
+        # فرمِ دریافت/پرداخت) با اسپیس، باقیماندهٔ همین لحظه را در خودش
+        # کپی می‌کند.
         amount_field = _RowAmountField(self._remaining_amount)
         amount_field.setDecimals(self._decimal_places)
         if amount is not None:
@@ -1131,43 +1143,8 @@ class _SettlementPlanDialog(QDialog):
         # ردیفِ بعدی می‌پرد؛ رویِ آخرین ردیف، همان اینتر ذخیره می‌کند.
         amount_field.returnPressed.connect(lambda af=amount_field: self._on_amount_return_pressed(af))
         self.table.setCellWidget(row_index, 1, amount_field)
-        # طبقِ همان رفعِ باگ: اینترِ روش، حالا فوکوس را به مبلغِ همان
-        # ردیف می‌برد -- زنجیرهٔ اصلیِ «اینترِ مبلغ -> مبلغِ ردیفِ بعدی»
-        # دست‌نخورده می‌ماند (سرعتِ واردکردنِ چندمبلغِ پشتِ‌سرهم مهم‌تر است).
-        method_combo.enterPressed.connect(lambda af=amount_field: self._focus_and_select(af))
-
-        note_field = QLineEdit()
-        note_field.setText(note or "")
-        # طبقِ همان رفعِ باگ: اینترِ یادداشت به روشِ ردیفِ بعدی می‌رود (یا
-        # رویِ آخرین ردیف، ذخیره می‌کند) -- تکمیلِ زنجیره‌یِ پیمایش.
-        note_field.returnPressed.connect(lambda nf=note_field: self._on_note_return_pressed(nf))
-        self.table.setCellWidget(row_index, 2, note_field)
-
-        remove_button = QPushButton("🗑")
-        remove_button.setObjectName("dangerIconButton")
-        remove_button.setFixedWidth(30)
-        remove_button.clicked.connect(lambda: self._remove_row(method_combo))
-        self.table.setCellWidget(row_index, 3, remove_button)
 
         self._update_remaining()
-
-    def _focus_and_select(self, field: QWidget) -> None:
-        self._focus_cell_widget(field)
-
-    def _focus_cell_widget(self, widget: QWidget) -> None:
-        # طبقِ باگِ واقعیِ کشف‌شده با تستِ زنده: QTableWidget فوکوسِ یک
-        # ویجتِ‌داخلِ‌سلول را -- اگر سلولِ آن با setCurrentCell به‌عنوانِ
-        # سلولِ جاری معرفی نشده باشد -- گاهی دوباره به سلولِ جاریِ قبلی
-        # برمی‌گرداند (هم‌الگو با _focus_next_row_afterِ treasury_
-        # voucher.py که همیشه پیش از setFocus، setCurrentCell صدا می‌زند).
-        for row_index in range(self.table.rowCount()):
-            for col_index in range(self.table.columnCount()):
-                if self.table.cellWidget(row_index, col_index) is widget:
-                    self.table.setCurrentCell(row_index, col_index)
-                    break
-        widget.setFocus()
-        if hasattr(widget, "selectAll"):
-            widget.selectAll()
 
     def _on_amount_return_pressed(self, amount_field: "_AmountField") -> None:
         for row_index in range(self.table.rowCount()):
@@ -1176,47 +1153,24 @@ class _SettlementPlanDialog(QDialog):
                 if next_index < self.table.rowCount():
                     next_field = self.table.cellWidget(next_index, 1)
                     if next_field is not None:
-                        self._focus_cell_widget(next_field)
+                        next_field.setFocus()
+                        next_field.selectAll()
                 else:
                     self._save()
                 return
-
-    def _on_note_return_pressed(self, note_field: QLineEdit) -> None:
-        # طبقِ باگِ واقعیِ کشف‌شده با تستِ زنده: فوکوس‌دادنِ برنامه‌ای از
-        # دلِ‌ returnPressedِ فیلدِ یادداشت به هر ویجتِ *ردیفِ دیگر* -- حتی
-        # با setCurrentCell -- توسطِ خودِ QTableWidget بلافاصله (در همان
-        # پردازشِ رویدادِ کلیدِ Enter، پیش از رسیدنِ کنترل به processEvents)
-        # به سلولِ قبلی برمی‌گردد (رفتارِ داخلیِ ناپایدارِ QAbstractItemView
-        # هنگامِ ترکِ یک ویجتِ‌سلولِ درحالِ‌فوکوس، مستقل از هرچه در این
-        # signal handler انجام شود). چون یادداشت اختیاری و کم‌کاربرد است
-        # (زنجیرهٔ اصلیِ پرکاربرد -- روش/مبلغ -- دست‌نخورده و کاملاً
-        # قابلِ‌اتکا می‌ماند)، این‌جا فقط رویِ آخرین ردیف، اینتر معادلِ
-        # ذخیره است -- بدونِ تلاش برایِ جهشِ برنامه‌ایِ فوکوس بینِ ردیف‌ها
-        # که اثباتاً ناپایدار است.
-        if note_field is self.table.cellWidget(self.table.rowCount() - 1, 2):
-            self._save()
 
     def _remaining_amount(self) -> decimal.Decimal:
         lines_total = sum((amount for _m, amount, _n in self._collect_lines()), decimal.Decimal("0"))
         return self._total_amount - lines_total
 
-    def _remove_row(self, row_marker: QComboBox) -> None:
-        for row_index in range(self.table.rowCount()):
-            if self.table.cellWidget(row_index, 0) is row_marker:
-                self.table.removeRow(row_index)
-                break
-        self._update_remaining()
-
     def _collect_lines(self) -> list[tuple[str, decimal.Decimal, str | None]]:
         lines: list[tuple[str, decimal.Decimal, str | None]] = []
         for row_index in range(self.table.rowCount()):
-            method_combo = self.table.cellWidget(row_index, 0)
             amount_field = self.table.cellWidget(row_index, 1)
-            note_field = self.table.cellWidget(row_index, 2)
             amount = decimal.Decimal(str(amount_field.value()))
             if amount <= 0:
                 continue
-            lines.append((method_combo.currentData(), amount, note_field.text().strip() or None))
+            lines.append((self._row_method_codes[row_index], amount, None))
         return lines
 
     def _update_remaining(self, *_args) -> None:
@@ -1225,26 +1179,35 @@ class _SettlementPlanDialog(QDialog):
         self.remaining_label.setStyleSheet("color: #b91c1c; font-weight: bold;" if remaining < 0 else "")
 
     def _load_existing(self) -> None:
+        # طبقِ درخواستِ صریح («همه روش‌هایِ دریافت... فیکس بشه»): همیشه
+        # به‌ازایِ هر روشِ ممکن (self._method_codes()) دقیقاً یک ردیفِ
+        # ثابت ساخته می‌شود -- چه نقشه‌ای از قبل ذخیره شده باشد چه نه.
+        # اگر نقشه‌ای از قبل باشد، مبلغِ همان روش در ردیفِ متناظرش پر
+        # می‌شود.
         plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
+        amount_by_method: dict[str, decimal.Decimal] = {}
+        if plan is not None:
+            amount_by_method = {line.method_code: line.amount for line in plan.lines}
+        method_codes = self._method_codes()
+        for code in method_codes:
+            self._add_row(code, amount_by_method.get(code))
+        # اگر نقشه ردیفی با روشی خارج از فهرستِ فعلی داشته باشد (مثلاً
+        # روشِ سفارشیِ بعداً غیرفعال‌شده)، برایِ اینکه مبلغِ آن گم نشود،
+        # همان ردیف هم (فقط همین یک‌بار) اضافه می‌شود.
+        for code, amount in amount_by_method.items():
+            if code not in method_codes:
+                self._add_row(code, amount)
+
         if plan is None:
-            # طبقِ درخواستِ صریح («این فرم وقتی باز می‌شه همه روش‌هایِ
-            # دریافت را آماده داشته باشه»): همان اول، به‌ازایِ هر روشِ
-            # ممکن یک ردیف (با مبلغِ صفر) ساخته می‌شود -- صندوق‌دار فقط
-            # مبلغِ روش‌هایِ موردنیاز را با اینتر پر می‌کند؛ ردیف‌هایِ
-            # صفرمانده در ذخیره (_collect_lines) حذف می‌شوند.
-            for code in self._method_codes():
-                self._add_row(code)
             self.approve_button.setEnabled(False)
             if self._require_manager_approval:
                 self.status_banner.setText("هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است.")
-            if self.table.rowCount() > 0:
-                first_amount_field = self.table.cellWidget(0, 1)
-                if first_amount_field is not None:
-                    first_amount_field.setFocus()
-            return
-        for line in plan.lines:
-            self._add_row(line.method_code, line.amount, line.note)
-        self._apply_plan_status(plan)
+        else:
+            self._apply_plan_status(plan)
+        if self.table.rowCount() > 0:
+            first_amount_field = self.table.cellWidget(0, 1)
+            if first_amount_field is not None:
+                first_amount_field.setFocus()
 
     def _apply_plan_status(self, plan: settlements_service.SettlementPlan) -> None:
         if not self._require_manager_approval:
