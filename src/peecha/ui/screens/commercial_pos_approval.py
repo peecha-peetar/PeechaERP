@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui.widgets import wrap_scrollable
 
@@ -40,7 +41,11 @@ _PAYMENT_OPTIONS = [
     ("WALLET", "کیفِ‌پول"),
     ("GIFT_CARD", "کارتِ‌هدیه"),
 ]
-_PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه"}
+# طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه...»): فروشِ ثبت‌شده
+# با دیالوگِ «نحوهٔ تسویه» (چندروشی: نقد/بانک/تخفیف/کالابرگ/بن) برچسبِ
+# «ترکیبی» می‌گیرد؛ نیازی به انتخابِ روش در همین منویِ سرپرست ندارد
+# (پایین‌تر، پیشِ خواندنِ نقشهٔ تسویه‌یِ خودِ سند تشخیص داده می‌شود).
+_PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه", "MIXED": "ترکیبی"}
 _MERGEABLE_METHODS = ("CASH", "CARD")
 
 
@@ -185,31 +190,55 @@ class CommercialPosApprovalScreen(QWidget):
             self.status_label.setText("حداقل یک فاکتور انتخاب کنید.")
             return
         method_code = self.method_combo.currentData()
-        distinct_counterparties = {d.counterparty_detail_account_id for d in selected}
+        company_id = self._company_id()
+
+        # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
+        # روش‌ها را نمی‌تونه ثبت کنه»): فاکتورهایی که صندوق‌دار از دیالوگِ
+        # «نحوهٔ تسویه» (نه دو دکمهٔ نقدی/نسیه) استفاده کرده، از پیش یک
+        # نقشهٔ تسویهٔ چندروشی دارند -- این‌ها دیگر از منویِ تک‌روشیِ
+        # سرپرست (نقد/کارت/کیف‌پول/...) پیروی نمی‌کنند، بلکه دقیقاً همان
+        # ترکیبِ ازپیش‌تعیین‌شده ثبت می‌شود؛ پس هم از بررسیِ ادغام و هم از
+        # منطقِ متدِ تکی زیر جدا و پیشاپیش کنار گذاشته می‌شوند.
+        with_plan = []
+        without_plan = []
+        for doc in selected:
+            plan = settlements_service.get_settlement_plan(doc.document_id, company_id)
+            if plan is not None and plan.lines:
+                with_plan.append((doc, plan))
+            else:
+                without_plan.append(doc)
+
+        distinct_counterparties = {d.counterparty_detail_account_id for d in without_plan}
         if method_code in _MERGEABLE_METHODS and self.merge_checkbox.isChecked() and len(distinct_counterparties) > 1:
             self.status_label.setText(
                 "ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب ممکن است -- "
                 "یا ادغام را خاموش کنید، یا فقط فاکتورهایِ یک طرفِ‌حساب را انتخاب کنید."
             )
             return
-        if method_code == "GIFT_CARD" and not self.reference_field.text().strip():
+        if method_code == "GIFT_CARD" and without_plan and not self.reference_field.text().strip():
             self.status_label.setText("کدِ کارتِ‌هدیه را وارد کنید.")
             return
 
-        company_id = self._company_id()
         user_id = app_session.current_user.user_id
         reference = self.reference_field.text().strip() or None
         try:
             for doc in selected:
                 documents_service.approve_document(doc.document_id, company_id)
                 documents_service.post_document(doc.document_id, company_id, user_id)
-            if method_code != "NONE":
-                if method_code in _MERGEABLE_METHODS and self.merge_checkbox.isChecked() and len(selected) > 1:
+
+            for doc, plan in with_plan:
+                pos_service.record_mixed_payment_and_settle(
+                    company_id, user_id, doc.document_id,
+                    [(ln.method_code, ln.amount, ln.note) for ln in plan.lines], reference_no=reference,
+                )
+
+            if method_code != "NONE" and without_plan:
+                if method_code in _MERGEABLE_METHODS and self.merge_checkbox.isChecked() and len(without_plan) > 1:
                     pos_service.record_payment_and_settle_batch(
-                        company_id, user_id, [d.document_id for d in selected], method_code, reference_no=reference,
+                        company_id, user_id, [d.document_id for d in without_plan], method_code, reference_no=reference,
                     )
                 else:
-                    for doc in selected:
+                    for doc in without_plan:
                         pos_service.record_payment_and_settle(
                             company_id, user_id, doc.document_id, method_code, doc.total_amount, reference_no=reference,
                         )

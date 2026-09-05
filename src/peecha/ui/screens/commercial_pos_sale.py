@@ -38,10 +38,11 @@ from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
-from peecha.ui.screens.commercial_document import _LineDialog, _show_invoice_print
+from peecha.ui.screens.commercial_document import _LineDialog, _SettlementPlanDialog, _show_invoice_print
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import wrap_scrollable
 
@@ -180,6 +181,14 @@ class CommercialPosSaleScreen(QWidget):
         _quick_key("💵", "نقدی (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CASH", print_receipt=False))
         _quick_key("📒🖨️", "نسیه + پرینت", "primaryIconButton", lambda: self._confirm_sale("CREDIT", print_receipt=True))
         _quick_key("📒", "نسیه (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CREDIT", print_receipt=False))
+        # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/
+        # کارتخوان/تخفیف/کالابرگ/بن یا ترکیبی از چند روش را نمی‌تونه ثبت
+        # کنه»): همان دیالوگِ «نحوهٔ تسویه»یِ فرمِ فاکتور، این‌جا هم
+        # (بدونِ نیازِ به تاییدِ مدیر -- تاییدِ سرپرست برایِ POS از قبل
+        # جداگانه در صفحهٔ «تاییدِ سرپرست» انجام می‌شود) در دسترسِ
+        # صندوق‌دار قرار می‌گیرد.
+        _quick_key("🧾🖨️", "چندروشی/بانکی/تخفیف + پرینت", "primaryIconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=True))
+        _quick_key("🧾", "چندروشی/بانکی/تخفیف (بدونِ پرینت)", "iconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=False))
         _quick_key(
             "📌", "رزرو -- این فروش را نگه دار و سراغِ مشتریِ بعدی برو؛ بعداً از «نمایشِ رزروها» بازش کن.",
             "iconButton", self._suspend_sale,
@@ -642,6 +651,34 @@ class CommercialPosSaleScreen(QWidget):
             return
         self.status_label.setText("")
         self._load_document()
+
+    def _open_settlement_plan_and_confirm(self, print_receipt: bool) -> None:
+        """طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/
+        سایرِ روش‌ها را نمی‌تونه ثبت کنه»): همان فرمِ «نحوهٔ تسویه»یِ
+        فاکتور -- ترکیبِ نقد/بانک/تخفیف/کالابرگ/بن + مانده به‌عنوانِ
+        نسیه -- این‌جا بدونِ نیازِ به تاییدِ مدیر (require_manager_approval=
+        False) باز می‌شود؛ خودِ صندوق‌دار ذخیره می‌کند. تاییدِ سرپرست برایِ
+        POS از قبل جداگانه در صفحهٔ «تاییدِ سرپرست» (commercial_pos_
+        approval.py) انجام می‌شود که هنگامِ ثبتِ نهایی، همین نقشه را
+        می‌خواند و به‌ازایِ هر ردیف یک پرداخت/تسویهٔ واقعی ثبت می‌کند."""
+        if self._document_id is None or not self._lines:
+            self.status_label.setText("ابتدا حداقل یک کالا به سبد اضافه کنید.")
+            return
+        if self._is_confirmed:
+            self.status_label.setText("این فروش قبلاً تایید شده است.")
+            return
+        company_id = self._company_id()
+        doc, _lines = documents_service.get_document(self._document_id, company_id)
+        decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+        dialog = _SettlementPlanDialog(
+            self._document_id, company_id, "SALES_INVOICE", doc.total_amount, decimal_places, self,
+            require_manager_approval=False,
+        )
+        dialog.exec()
+        plan = settlements_service.get_settlement_plan(self._document_id, company_id)
+        if plan is None or not plan.lines:
+            return
+        self._confirm_sale("MIXED", print_receipt=print_receipt)
 
     def _confirm_sale(self, payment_type: str, print_receipt: bool) -> None:
         if self._document_id is None or not self._lines:

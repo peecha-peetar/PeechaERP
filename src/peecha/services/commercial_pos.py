@@ -141,7 +141,10 @@ def override_session_variance(session_id: int, overridden_by_user_id: int, reaso
 # اتفاق نمی‌افتد.
 # ---------------------------------------------------------------------
 def set_intended_payment_type(document_id: int, company_id: int, payment_type: str) -> None:
-    if payment_type not in ("CASH", "CREDIT"):
+    # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه...»): «ترکیبی»
+    # طبقِ همان الگو -- برایِ فروشی که صندوق‌دار از دیالوگِ «نحوهٔ
+    # تسویه» (نه دو دکمهٔ نقدی/نسیه) استفاده کرده.
+    if payment_type not in ("CASH", "CREDIT", "MIXED"):
         raise ValueError("نوعِ پرداخت نامعتبر است.")
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
@@ -295,6 +298,57 @@ def record_payment_and_settle(
     return record_payment_and_settle_batch(
         company_id, user_id, [document_id], method_code, {document_id: amount}, reference_no,
     )[0]
+
+
+def record_mixed_payment_and_settle(
+    company_id: int, user_id: int, document_id: int,
+    method_lines: list[tuple[str, decimal.Decimal, str | None]], reference_no: str | None = None,
+) -> int | None:
+    """طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
+    روش‌ها را نمی‌تونه ثبت کنه»): نسخهٔ چندروشیِ record_payment_and_settle
+    -- برایِ فروشی که صندوق‌دار از دیالوگِ «نحوهٔ تسویه» (کدهایِ روشِ
+    هم‌الگو با treasury.METHOD_CODES: CASH/BANK/DISCOUNT/GOODS_COUPON/
+    VOUCHER، نه واژگانِ CARD/WALLET/GIFT_CARDِ منویِ تکی‌روشِ سرپرست)
+    استفاده کرده. برخلافِ نسخهٔ تک‌روشی، همه‌یِ ردیف‌ها در یک سندِ
+    حسابداریِ واحد (create_treasury_voucher با چند MethodLine) ثبت
+    می‌شوند -- دقیقاً هم‌الگو با فرمِ فاکتورِ عمومی."""
+    if not method_lines:
+        return None
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        customer_id = doc.counterparty_detail_account_id
+        document_date = doc.document_date
+        document_no = doc.document_no
+
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    customer_group_id = next(
+        (g.person_group_id for g in dimensions_service.list_person_groups(company_id) if g.code == "CUSTOMER"),
+        None,
+    )
+    mapping_account_id = next(
+        (
+            m.account_id for m in treasury_service.list_counterparty_mappings(company_id, "RECEIPT")
+            if m.person_group_id == customer_group_id
+        ),
+        None,
+    )
+    if mapping_account_id is None:
+        raise ValueError("نگاشتِ حسابِ دریافت برایِ گروهِ «مشتری» در تنظیماتِ خزانه‌داری مشخص نشده است.")
+
+    total_amount = sum((amount for _m, amount, _n in method_lines), decimal.Decimal("0"))
+    description = f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_no}"
+    voucher_result = treasury_service.create_treasury_voucher(
+        company_id, user_id, "RECEIPT", mapping_account_id,
+        {person_dimension_type_id: customer_id}, document_date, description,
+        [treasury_service.MethodLine(method=m, amount=a, description=n or "") for m, a, n in method_lines],
+    )
+    settlements_service.allocate_settlement(
+        company_id, document_id, voucher_result.journal_entry_id, datetime.date.today(), total_amount, user_id,
+        reference_no=reference_no, description=description,
+    )
+    return voucher_result.journal_entry_id
 
 
 # ---------------------------------------------------------------------

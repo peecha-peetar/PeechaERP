@@ -1022,6 +1022,7 @@ class _SettlementPlanDialog(QDialog):
     def __init__(
         self, document_id: int, company_id: int, document_type_code: str,
         total_amount: decimal.Decimal, decimal_places: int, parent=None,
+        require_manager_approval: bool = True,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("نحوه‌یِ تسویه‌یِ فاکتور")
@@ -1031,6 +1032,12 @@ class _SettlementPlanDialog(QDialog):
         self._document_type_code = document_type_code
         self._total_amount = total_amount
         self._decimal_places = decimal_places
+        # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
+        # روش‌ها را نمی‌تونه ثبت کنه»): برایِ فروشِ حضوریِ POS، صندوق‌دار
+        # (که نقشِ مدیر ندارد) باید بتواند خودش همین‌جا ترکیب را ذخیره
+        # کند، بدونِ نیازِ به تاییدِ جداگانهٔ مدیر -- تاییدِ سرپرست برایِ
+        # POS از قبل با صفحهٔ «تاییدِ سرپرست» انجام می‌شود (نه این نقشه).
+        self._require_manager_approval = require_manager_approval
 
         layout = QVBoxLayout(self)
 
@@ -1071,6 +1078,7 @@ class _SettlementPlanDialog(QDialog):
         self.approve_button = QPushButton("👍 تاییدِ مدیر")
         self.approve_button.setToolTip("فقط برایِ کاربرِ با نقشِ ادمین/سوپروایزر/مدیر فعال است.")
         self.approve_button.clicked.connect(self._approve)
+        self.approve_button.setVisible(self._require_manager_approval)
         buttons_row.addWidget(self.approve_button)
         close_button = QPushButton("بستن")
         close_button.clicked.connect(self.accept)
@@ -1144,13 +1152,20 @@ class _SettlementPlanDialog(QDialog):
         if plan is None:
             self._update_remaining()
             self.approve_button.setEnabled(False)
-            self.status_banner.setText("هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است.")
+            if self._require_manager_approval:
+                self.status_banner.setText("هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است.")
             return
         for line in plan.lines:
             self._add_row(line.method_code, line.amount, line.note)
         self._apply_plan_status(plan)
 
     def _apply_plan_status(self, plan: settlements_service.SettlementPlan) -> None:
+        if not self._require_manager_approval:
+            # طبقِ همان دلیل: صندوق‌دار خودش ذخیره می‌کند، تاییدِ جداگانه
+            # لازم نیست -- جدول همیشه قابلِ‌ویرایش می‌ماند.
+            self.status_banner.setText("✅ ذخیره شد.")
+            self.status_banner.setStyleSheet("color: #15803d; font-weight: bold;")
+            return
         self.table.setEnabled(not plan.is_approved)
         self.approve_button.setEnabled(not plan.is_approved)
         if plan.is_approved:
@@ -1172,7 +1187,10 @@ class _SettlementPlanDialog(QDialog):
             return
         plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
         self._apply_plan_status(plan)
-        QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه ذخیره شد؛ برایِ ثبتِ نهایی نیازِ تاییدِ مدیر دارد.")
+        if self._require_manager_approval:
+            QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه ذخیره شد؛ برایِ ثبتِ نهایی نیازِ تاییدِ مدیر دارد.")
+        else:
+            QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه ذخیره شد.")
 
     def _approve(self) -> None:
         try:
