@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from peecha import numerals
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
+    CommercialDocumentLine,
     CommercialDocument,
     GiftCard,
     InstallmentLine,
@@ -581,6 +582,8 @@ def set_pos_settings(
     quick_access_enabled: bool = True, scan_beep_enabled: bool = True,
     receipt_header_text: str | None = None, receipt_footer_text: str | None = None,
     quick_access_position: str = "LEFT", quick_access_orientation: str = "HORIZONTAL",
+    show_price_list_field: bool = True, show_tax_discount_breakdown: bool = True,
+    show_customer_credit_warning: bool = True, recent_invoices_count: int = 10,
 ) -> None:
     with new_session() as session:
         row = session.get(PosSettings, company_id)
@@ -595,6 +598,8 @@ def set_pos_settings(
                     quick_access_enabled=quick_access_enabled, scan_beep_enabled=scan_beep_enabled,
                     receipt_header_text=receipt_header_text, receipt_footer_text=receipt_footer_text,
                     quick_access_position=quick_access_position, quick_access_orientation=quick_access_orientation,
+                    show_price_list_field=show_price_list_field, show_tax_discount_breakdown=show_tax_discount_breakdown,
+                    show_customer_credit_warning=show_customer_credit_warning, recent_invoices_count=recent_invoices_count,
                 )
             )
         else:
@@ -612,6 +617,10 @@ def set_pos_settings(
             row.receipt_footer_text = receipt_footer_text
             row.quick_access_position = quick_access_position
             row.quick_access_orientation = quick_access_orientation
+            row.show_price_list_field = show_price_list_field
+            row.show_tax_discount_breakdown = show_tax_discount_breakdown
+            row.show_customer_credit_warning = show_customer_credit_warning
+            row.recent_invoices_count = recent_invoices_count
         session.commit()
 
 
@@ -642,7 +651,10 @@ def create_menu_group(company_id: int, name: str, display_order: int = 0) -> int
         return row.group_id
 
 
-def update_menu_group(group_id: int, company_id: int, name: str, display_order: int, is_active: bool) -> None:
+def update_menu_group(
+    group_id: int, company_id: int, name: str, display_order: int, is_active: bool,
+    target_printer_name: str | None = None,
+) -> None:
     name = name.strip()
     if not name:
         raise ValueError("نامِ گروه را وارد کنید.")
@@ -653,7 +665,38 @@ def update_menu_group(group_id: int, company_id: int, name: str, display_order: 
         row.name = name
         row.display_order = display_order
         row.is_active = is_active
+        row.target_printer_name = target_printer_name or None
         session.commit()
+
+
+def resolve_target_printers_for_document(company_id: int, document_id: int) -> list[str]:
+    """طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
+    مختلف»): فهرستِ نام‌هایِ متمایزِ پرینترهایی که اقلامِ این فاکتور
+    (بر اساسِ pos_menu_group_id) به آن‌ها تخصیص یافته‌اند -- خالی یعنی
+    هیچ‌کدام از گروه‌هایِ اقلامِ این فاکتور پرینترِ اختصاصی ندارند (پس
+    از همان جریانِ چاپِ معمولی/پیش‌فرض استفاده شود)."""
+    with new_session() as session:
+        line_item_ids = list(
+            session.scalars(
+                select(CommercialDocumentLine.item_id).where(CommercialDocumentLine.document_id == document_id)
+            ).all()
+        )
+        if not line_item_ids:
+            return []
+        group_ids = set(
+            session.scalars(
+                select(Item.pos_menu_group_id).where(Item.item_id.in_(line_item_ids), Item.pos_menu_group_id.is_not(None))
+            ).all()
+        )
+        if not group_ids:
+            return []
+        printer_names = session.scalars(
+            select(PosMenuGroup.target_printer_name).where(
+                PosMenuGroup.group_id.in_(group_ids), PosMenuGroup.company_id == company_id,
+                PosMenuGroup.target_printer_name.is_not(None),
+            )
+        ).all()
+        return sorted({name for name in printer_names if name})
 
 
 def delete_menu_group(group_id: int, company_id: int) -> None:
@@ -699,3 +742,47 @@ def set_cashier_settings(
             row.default_price_list_id = default_price_list_id
             row.default_customer_detail_account_id = default_customer_detail_account_id
         session.commit()
+
+
+def set_quick_button_layout(
+    user_id: int, company_id: int, order: str | None, width_override: int | None, height_override: int | None,
+) -> None:
+    """طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس + عرضِ
+    قابلِ‌تنظیم، به‌ازایِ هر کاربر»): برخلافِ set_cashier_settings (که
+    ترمینال/فهرستِ‌قیمت/مشتری را یک‌جا جایگزین می‌کند)، این تابع فقط
+    همین سه فیلدِ چیدمان را به‌روز می‌کند -- بدونِ نیاز به دانستنِ سایرِ
+    مقادیرِ تنظیماتِ صندوق‌دار در هر بار."""
+    with new_session() as session:
+        row = session.get(PosCashierSettings, {"user_id": user_id, "company_id": company_id})
+        if row is None:
+            session.add(
+                PosCashierSettings(
+                    user_id=user_id, company_id=company_id, quick_button_order=order,
+                    quick_button_width_override=width_override, quick_button_height_override=height_override,
+                )
+            )
+        else:
+            row.quick_button_order = order
+            row.quick_button_width_override = width_override
+            row.quick_button_height_override = height_override
+        session.commit()
+
+
+def list_recent_pos_invoices(company_id: int, limit: int = 10) -> list[CommercialDocument]:
+    """طبقِ درخواستِ صریح («۱۰ فاکتور یا تعدادِ دلخواهِ تک‌فروشی را نمایش
+    و از همان‌جا هم بتوان اصلاح کرد»): برخلافِ list_pending_pos_documents
+    (که فقط رزروها/تاییدشده‌هایِ همین شیفتِ باز را می‌خواند)، این‌جا
+    آخرین فاکتورهایِ تک‌فروشیِ همین شرکت -- در هر وضعیت و هر شیفتی --
+    برمی‌گردد."""
+    with new_session() as session:
+        stmt = (
+            select(CommercialDocument)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.pos_session_id.is_not(None),
+            )
+            .order_by(CommercialDocument.document_id.desc())
+            .limit(limit)
+        )
+        return list(session.scalars(stmt))

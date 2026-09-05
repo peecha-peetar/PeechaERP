@@ -11,7 +11,8 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QMimeData
+from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -43,11 +45,56 @@ from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
-from peecha.ui.screens.commercial_document import _LineDialog, _SettlementPlanDialog, _show_invoice_print
+from peecha.ui.screens.commercial_document import STATUS_LABELS, _LineDialog, _SettlementPlanDialog, _show_invoice_print
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import wrap_scrollable
 
 _DEFAULT_QUICK_BUTTON_COLOR = "#4A90D9"
+
+
+class _QuickAccessButton(QPushButton):
+    """طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس در
+    همان‌جا»): این دکمه هم منبعِ درگ (کلیک+کشیدن) و هم مقصدِ دراپ است --
+    رهاکردنِ یک دکمه رویِ دکمهٔ دیگر، جایِ آن دو کالا را در ترتیبِ
+    ذخیره‌شده (به‌ازایِ همین کاربر) عوض می‌کند."""
+
+    def __init__(self, item_id: int, on_reorder) -> None:
+        super().__init__()
+        self._item_id = item_id
+        self._on_reorder = on_reorder
+        self._press_pos = None
+        self.setAcceptDrops(True)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        if event.button() == Qt.LeftButton:
+            self._press_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        if self._press_pos is not None and event.buttons() & Qt.LeftButton:
+            current_pos = event.position().toPoint()
+            if (current_pos - self._press_pos).manhattanLength() >= QApplication.startDragDistance():
+                self._press_pos = None
+                drag = QDrag(self)
+                mime = QMimeData()
+                mime.setText(str(self._item_id))
+                drag.setMimeData(mime)
+                drag.exec(Qt.MoveAction)
+                return
+        super().mouseMoveEvent(event)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
+        try:
+            source_item_id = int(event.mimeData().text())
+        except (TypeError, ValueError):
+            return
+        if source_item_id != self._item_id:
+            self._on_reorder(source_item_id, self._item_id)
+        event.acceptProposedAction()
 
 
 class CommercialPosSaleScreen(QWidget):
@@ -61,6 +108,10 @@ class CommercialPosSaleScreen(QWidget):
         self._cashier_settings: pos_service.PosCashierSettings | None = None
         self._quick_button_settings: tuple[int, int, int, int] = (110, 64, 10, 6)
         self._pos_settings: pos_service.PosSettings | None = None
+        # طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری، به‌ازایِ هر
+        # کاربر»): ترتیبِ فعلیِ کالاها (item_id) که با درگ/دراپ به‌روز
+        # می‌شود و در PosCashierSettings.quick_button_order ذخیره می‌شود.
+        self._quick_button_order: list[int] = []
 
         page = QWidget()
         page_row = QHBoxLayout(page)
@@ -163,6 +214,19 @@ class CommercialPosSaleScreen(QWidget):
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         outer.addWidget(self.lines_table)
 
+        # طبقِ درخواستِ صریح («مالیاتِ کالا... در قسمتِ فوتر نمایش داده
+        # بشه»): قبلاً فوتر فقط جمعِ‌کل را نشان می‌داد -- بدونِ اینکه
+        # جمعِ تخفیف/مالیات اصلاً معلوم باشد.
+        footer_row = QHBoxLayout()
+        self.subtotal_label = QLabel("جمعِ اقلام: ۰")
+        footer_row.addWidget(self.subtotal_label)
+        self.discount_label = QLabel("تخفیف: ۰")
+        footer_row.addWidget(self.discount_label)
+        self.tax_label = QLabel("مالیات: ۰")
+        footer_row.addWidget(self.tax_label)
+        footer_row.addStretch(1)
+        outer.addLayout(footer_row)
+
         self.total_label = QLabel("جمعِ کل: ۰")
         self.total_label.setObjectName("sectionTitle")
         outer.addWidget(self.total_label)
@@ -180,9 +244,13 @@ class CommercialPosSaleScreen(QWidget):
             quick_keys_column.addWidget(button)
             return button
 
-        _quick_key("💵🖨️", "نقدی + پرینت", "primaryIconButton", lambda: self._confirm_sale("CASH", print_receipt=True))
+        # طبقِ درخواستِ صریح («آیکنِ دکمه‌هایِ تسویه با پرینتِ دوتایی زیاد
+        # جالب نیست، آیکنِ تکی بهتره»): همان ایموجیِ تکیِ خودِ روش
+        # (بدونِ 🖨️ی اضافه) برایِ هر دو حالتِ با/بدونِ‌پرینت -- تمایز با
+        # رنگِ primary/عادی و tooltip، نه با دو ایموجیِ چسبیده به هم.
+        _quick_key("💵", "نقدی + پرینت", "primaryIconButton", lambda: self._confirm_sale("CASH", print_receipt=True))
         _quick_key("💵", "نقدی (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CASH", print_receipt=False))
-        _quick_key("📒🖨️", "نسیه + پرینت", "primaryIconButton", lambda: self._confirm_sale("CREDIT", print_receipt=True))
+        _quick_key("📒", "نسیه + پرینت", "primaryIconButton", lambda: self._confirm_sale("CREDIT", print_receipt=True))
         _quick_key("📒", "نسیه (بدونِ پرینت)", "iconButton", lambda: self._confirm_sale("CREDIT", print_receipt=False))
         # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/
         # کارتخوان/تخفیف/کالابرگ/بن یا ترکیبی از چند روش را نمی‌تونه ثبت
@@ -190,7 +258,7 @@ class CommercialPosSaleScreen(QWidget):
         # (بدونِ نیازِ به تاییدِ مدیر -- تاییدِ سرپرست برایِ POS از قبل
         # جداگانه در صفحهٔ «تاییدِ سرپرست» انجام می‌شود) در دسترسِ
         # صندوق‌دار قرار می‌گیرد.
-        _quick_key("🧾🖨️", "چندروشی/بانکی/تخفیف + پرینت", "primaryIconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=True))
+        _quick_key("🧾", "چندروشی/بانکی/تخفیف + پرینت", "primaryIconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=True))
         _quick_key("🧾", "چندروشی/بانکی/تخفیف (بدونِ پرینت)", "iconButton", lambda: self._open_settlement_plan_and_confirm(print_receipt=False))
         _quick_key(
             "📌", "رزرو -- این فروش را نگه دار و سراغِ مشتریِ بعدی برو؛ بعداً از «نمایشِ رزروها» بازش کن.",
@@ -213,11 +281,47 @@ class CommercialPosSaleScreen(QWidget):
         # همیشه زیرِ جدولِ سبد بنشیند، در یک ستونِ مستقل جاسازی شده که
         # می‌تواند به سمتِ چپ یا راستِ کلِ محتوا منتقل شود (تنظیماتِ
         # quick_access_position).
+        # طبقِ درخواستِ صریح («دکمه‌هایِ فوری و تب‌ها قابلیتِ تنظیم و
+        # بزرگ/کوچک‌شدنِ عرض داشته باشه... به‌ازایِ هر کاربر»): این دو
+        # اسپین‌باکس، بازنویسیِ اندازه‌یِ همینِ کاربر را (نه سراسریِ شرکت)
+        # تنظیم می‌کنند -- خالی/صفر یعنی همان اندازه‌یِ تنظیماتِ شرکت.
+        resize_row = QHBoxLayout()
+        resize_row.addWidget(QLabel("عرضِ دکمه"))
+        self.quick_button_width_field = QSpinBox()
+        self.quick_button_width_field.setRange(0, 400)
+        self.quick_button_width_field.setSpecialValueText("پیش‌فرض")
+        resize_row.addWidget(self.quick_button_width_field)
+        resize_row.addWidget(QLabel("ارتفاعِ دکمه"))
+        self.quick_button_height_field = QSpinBox()
+        self.quick_button_height_field.setRange(0, 300)
+        self.quick_button_height_field.setSpecialValueText("پیش‌فرض")
+        resize_row.addWidget(self.quick_button_height_field)
+        save_button_size_button = QPushButton("💾")
+        save_button_size_button.setObjectName("iconButton")
+        save_button_size_button.setFixedWidth(36)
+        save_button_size_button.setToolTip("ذخیرهٔ اندازهٔ دکمه (فقط برایِ همین کاربر)")
+        save_button_size_button.clicked.connect(self._save_quick_button_size)
+        resize_row.addWidget(save_button_size_button)
+        resize_row.addStretch(1)
+
         self.quick_access_tabs = QTabWidget()
         self._quick_access_wrapper = QWidget()
         quick_access_wrapper_layout = QVBoxLayout(self._quick_access_wrapper)
         quick_access_wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        quick_access_wrapper_layout.addLayout(resize_row)
         quick_access_wrapper_layout.addWidget(self.quick_access_tabs)
+
+        # طبقِ درخواستِ صریح («در قسمتِ سمتِ راست زیرِ تبِ کلیدِ فوری، ۱۰
+        # فاکتور یا تعدادِ دلخواهِ تک‌فروشی را نمایش و از همان‌جا هم
+        # بتوان اصلاح کرد»).
+        recent_title = QLabel("آخرین فاکتورهایِ تک‌فروشی")
+        recent_title.setObjectName("sectionTitle")
+        quick_access_wrapper_layout.addWidget(recent_title)
+        self.recent_invoices_list = QListWidget()
+        self.recent_invoices_list.setMaximumHeight(220)
+        self.recent_invoices_list.itemDoubleClicked.connect(self._open_recent_invoice)
+        quick_access_wrapper_layout.addWidget(self.recent_invoices_list)
+
         self._quick_access_position = "LEFT"
         self._apply_quick_access_position("LEFT")
 
@@ -248,18 +352,34 @@ class CommercialPosSaleScreen(QWidget):
         if company_id is None:
             return
         self._pos_settings = pos_service.get_pos_settings(company_id)
+        # طبقِ درخواستِ صریح («جابه‌جاییِ کلیدهایِ فوری/اندازه، به‌ازایِ هر
+        # کاربر»): تنظیماتِ صندوق‌دار باید پیش از rebuildِ کلیدهایِ فوری
+        # خوانده شود -- چون ترتیب/اندازهٔ آن‌ها از همین‌جا می‌آید.
+        self._cashier_settings = (
+            pos_service.get_cashier_settings(app_session.current_user.user_id, company_id)
+            if app_session.current_user else None
+        )
+        order_text = self._cashier_settings.quick_button_order if self._cashier_settings else None
+        self._quick_button_order = [int(x) for x in order_text.split(",") if x.strip().isdigit()] if order_text else []
+        self.quick_button_width_field.blockSignals(True)
+        self.quick_button_height_field.blockSignals(True)
+        self.quick_button_width_field.setValue(
+            self._cashier_settings.quick_button_width_override or 0 if self._cashier_settings else 0
+        )
+        self.quick_button_height_field.setValue(
+            self._cashier_settings.quick_button_height_override or 0 if self._cashier_settings else 0
+        )
+        self.quick_button_width_field.blockSignals(False)
+        self.quick_button_height_field.blockSignals(False)
+
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._rebuild_quick_access()
+        self._refresh_recent_invoices()
         self._scan_label_to_item_id = {
             f"{it.code} — {it.name or ''}": it.item_id for it in self._items
         }
         self._scan_completer.model().setStringList(list(self._scan_label_to_item_id.keys()))
         self.scan_field.setFocus()
-
-        self._cashier_settings = (
-            pos_service.get_cashier_settings(app_session.current_user.user_id, company_id)
-            if app_session.current_user else None
-        )
 
         current_terminal = self.terminal_combo.currentData()
         self.terminal_combo.blockSignals(True)
@@ -299,6 +419,14 @@ class CommercialPosSaleScreen(QWidget):
             if index >= 0:
                 self.price_list_combo.setCurrentIndex(index)
 
+        # طبقِ درخواستِ صریح («تنظیمات جایی باشه که بتوان نمایش یا عدمِ
+        # نمایشِ بخش‌هایِ فاکتورِ تک‌فروشی را انتخاب کرد»).
+        self.price_list_combo.setVisible(pos_settings is None or pos_settings.show_price_list_field)
+        show_tax_discount = pos_settings is None or pos_settings.show_tax_discount_breakdown
+        self.subtotal_label.setVisible(show_tax_discount)
+        self.discount_label.setVisible(show_tax_discount)
+        self.tax_label.setVisible(show_tax_discount)
+
         self._update_customer_credit_indicator()
         self._apply_header_visibility()
         self._update_session_label()
@@ -324,7 +452,8 @@ class CommercialPosSaleScreen(QWidget):
         customer_id = self.customer_combo.currentData()
         company_id = self._company_id()
         over_limit = False
-        if customer_id is not None and company_id is not None:
+        show_warning = self._pos_settings is None or self._pos_settings.show_customer_credit_warning
+        if show_warning and customer_id is not None and company_id is not None:
             from peecha.services import sales_assistant as assistant_service
             score_row = assistant_service.get_customer_score(company_id, customer_id)
             over_limit = score_row is not None and score_row.over_credit_limit
@@ -357,17 +486,41 @@ class CommercialPosSaleScreen(QWidget):
         self.session_label.style().unpolish(self.session_label)
         self.session_label.style().polish(self.session_label)
 
+    def _sort_by_user_order(self, items: list[catalog_service.ItemRow]) -> list[catalog_service.ItemRow]:
+        # طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدها با ماوس، به‌ازایِ هر
+        # کاربر»): اگر این کاربر ترتیبِ سفارشی ذخیره‌کرده باشد، همان
+        # ترتیب اعمال می‌شود -- کالاهایِ تازه/بی‌ترتیب به انتها می‌روند.
+        if not self._quick_button_order:
+            return items
+        order_index = {item_id: idx for idx, item_id in enumerate(self._quick_button_order)}
+        indexed = list(enumerate(items))
+        indexed.sort(key=lambda pair: (order_index.get(pair[1].item_id, len(order_index)), pair[0]))
+        return [item for _original_index, item in indexed]
+
     def _build_quick_grid(self, items: list[catalog_service.ItemRow]) -> QWidget:
+        items = self._sort_by_user_order(items)
         settings = self._quick_button_settings
         width, height, font_size, columns = settings
-        # طبقِ درخواستِ صریح («جهتِ چیدمانِ کلیدها افقی/عمودی»): افقی یعنی
-        # ردیف‌به‌ردیف پر می‌شود (رفتارِ قبلی)؛ عمودی یعنی ستون‌به‌ستون.
+        # طبقِ درخواستِ صریح («دکمه‌ها... قابلیتِ بزرگ/کوچک‌شدنِ عرض، به‌ازایِ
+        # هر کاربر»): بازنویسیِ اندازه‌یِ همینِ کاربر (اگر ذخیره شده) روی
+        # اندازهٔ سراسریِ شرکت اولویت دارد.
+        if self._cashier_settings is not None:
+            width = self._cashier_settings.quick_button_width_override or width
+            height = self._cashier_settings.quick_button_height_override or height
+        # طبقِ درخواستِ صریح («هیچ نظمی ندارند و پراکنده هستن»): افزودنِ
+        # alignment باعث می‌شود دکمه‌ها همیشه از یک گوشه (بالا/راست، چونان
+        # RTL) فشرده بچینند -- قبلاً بدونِ این، جای‌گیریِ QGridLayout رویِ
+        # فضایِ کاملِ اسکرول‌ناحیه پخش/پراکنده به‌نظر می‌رسید.
         vertical = self._pos_settings is not None and self._pos_settings.quick_access_orientation == "VERTICAL"
         page = QWidget()
         grid = QGridLayout(page)
         grid.setSpacing(6)
+        grid.setAlignment(Qt.AlignRight | Qt.AlignTop)
         for index, item in enumerate(items):
-            button = QPushButton(item.short_name or item.name or item.code)
+            # طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس در
+            # همان‌جا»): _QuickAccessButton هم منبع/مقصدِ درگ‌ودراپ است.
+            button = _QuickAccessButton(item.item_id, self._on_button_reorder)
+            button.setText(item.short_name or item.name or item.code)
             button.setFixedSize(width, height)
             button.setStyleSheet(
                 f"background-color: {item.pos_button_color or _DEFAULT_QUICK_BUTTON_COLOR}; color: #ffffff; "
@@ -444,6 +597,62 @@ class CommercialPosSaleScreen(QWidget):
                 self.quick_access_tabs.setCurrentIndex(tab_index)
                 break
 
+    def _on_button_reorder(self, source_item_id: int, target_item_id: int) -> None:
+        """طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس در
+        همان‌جا»): رهاکردنِ دکمهٔ source رویِ دکمهٔ target، آن را دقیقاً
+        جایِ target در ترتیبِ ذخیره‌شده می‌گذارد."""
+        quick_items = [it for it in self._items if it.pos_button_color or it.pos_menu_group_id is not None]
+        ordered_ids = [it.item_id for it in self._sort_by_user_order(quick_items)]
+        if source_item_id not in ordered_ids or target_item_id not in ordered_ids:
+            return
+        ordered_ids.remove(source_item_id)
+        target_index = ordered_ids.index(target_item_id)
+        ordered_ids.insert(target_index, source_item_id)
+        self._quick_button_order = ordered_ids
+        company_id = self._company_id()
+        if company_id is not None and app_session.current_user:
+            pos_service.set_quick_button_layout(
+                app_session.current_user.user_id, company_id, ",".join(str(i) for i in ordered_ids),
+                self._cashier_settings.quick_button_width_override if self._cashier_settings else None,
+                self._cashier_settings.quick_button_height_override if self._cashier_settings else None,
+            )
+        self._rebuild_quick_access()
+
+    def _save_quick_button_size(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or not app_session.current_user:
+            return
+        width_override = self.quick_button_width_field.value() or None
+        height_override = self.quick_button_height_field.value() or None
+        order_text = ",".join(str(i) for i in self._quick_button_order) if self._quick_button_order else None
+        pos_service.set_quick_button_layout(
+            app_session.current_user.user_id, company_id, order_text, width_override, height_override,
+        )
+        self._cashier_settings = pos_service.get_cashier_settings(app_session.current_user.user_id, company_id)
+        self._rebuild_quick_access()
+
+    def _refresh_recent_invoices(self) -> None:
+        company_id = self._company_id()
+        self.recent_invoices_list.clear()
+        if company_id is None:
+            return
+        limit = self._pos_settings.recent_invoices_count if self._pos_settings else 10
+        for doc in pos_service.list_recent_pos_invoices(company_id, limit):
+            status_label = STATUS_LABELS.get(doc.status_code, doc.status_code)
+            label = f"سند #{doc.document_id} — {status_label} — {numerals.format_company_amount(doc.total_amount)}"
+            list_item = QListWidgetItem(label)
+            list_item.setData(Qt.UserRole, doc.document_id)
+            self.recent_invoices_list.addItem(list_item)
+
+    def _open_recent_invoice(self, list_item: QListWidgetItem) -> None:
+        # طبقِ درخواستِ صریح («از همان‌جا هم بتوان اصلاح کرد»): فقط
+        # فاکتورهایِ پیش‌از‌تاییدِ‌سرپرست (DRAFT/CONFIRMED) واقعاً در همین
+        # فرم قابلِ‌بازگشایی‌اند -- open_document_for_edit خودش دوباره
+        # این را بررسی می‌کند (reopen_confirmed_sale برایِ CONFIRMED).
+        document_id = list_item.data(Qt.UserRole)
+        if document_id is not None:
+            self.open_document_for_edit(document_id)
+
     def _resolve_scanned_item(self, query: str) -> catalog_service.ItemRow | None:
         needle = query.strip().lower()
         if not needle:
@@ -488,6 +697,9 @@ class CommercialPosSaleScreen(QWidget):
         self._lines = []
         self._is_confirmed = False
         self._refresh_lines_table()
+        self.subtotal_label.setText("جمعِ اقلام: ۰")
+        self.discount_label.setText("تخفیف: ۰")
+        self.tax_label.setText("مالیات: ۰")
         self.total_label.setText("جمعِ کل: ۰")
 
     def _reset_sale(self) -> None:
@@ -585,6 +797,26 @@ class CommercialPosSaleScreen(QWidget):
         layout.addWidget(delete_button)
         dialog.exec()
 
+    def open_document_for_edit(self, document_id: int) -> None:
+        """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ تک‌فروشی جدا از اصلاحِ
+        فاکتور باشه... در همان فرمِ تک‌فروشی باز بشه و اصلاح بشه»):
+        نقطهٔ ورودِ عمومی -- از فهرستِ اسنادِ فروش صدا زده می‌شود --
+        هم‌الگو با _show_suspended_dialog._resume() (بازگشاییِ CONFIRMED
+        + بارگذاریِ سند در همینِ صفحه)."""
+        self.refresh()
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        doc, _lines = documents_service.get_document(document_id, company_id)
+        if doc.status_code == "CONFIRMED":
+            try:
+                pos_service.reopen_confirmed_sale(document_id, company_id, app_session.current_user.user_id)
+            except ValueError as exc:
+                self.status_label.setText(str(exc))
+                return
+        self._document_id = document_id
+        self._load_document()
+
     def _open_item_form(self) -> None:
         if self._main_window is not None:
             self._main_window.open_screen("GL_DIM")
@@ -628,14 +860,27 @@ class CommercialPosSaleScreen(QWidget):
         existing = next((ln for ln in self._lines if ln.item_id == item.item_id), None)
         try:
             if existing is not None:
+                # طبقِ رفعِ باگِ واقعی («مالیاتِ کالا محاسبه بشه»): قبلاً
+                # با افزایشِ تعداد (اسکنِ دوبارهٔ همان کالا)، مالیات/
+                # تخفیفِ ازپیش‌ثبت‌شدهٔ همین ردیف با حذف+افزودنِ دوباره
+                # پاک می‌شد (تنظیم نمی‌شد چون این‌جا پاس داده نمی‌شد).
                 documents_service.delete_line(existing.line_id, self._document_id, company_id)
                 documents_service.add_line(
                     self._document_id, company_id, item.item_id, item.base_uom_id,
                     existing.quantity + quantity, existing.quantity + quantity, unit_price=existing.unit_price,
+                    discount_amount=existing.discount_amount, discount_percent=existing.discount_percent,
+                    tax_percent=existing.tax_percent,
                 )
             else:
+                # طبقِ درخواستِ صریح («مالیاتِ کالا... اگر در قسمتِ کالا
+                # ست شده باشه اتوماتیک بیاره»): قبلاً افزودنِ سریع (اسکن/
+                # کلیدِ فوری) هیچ‌وقت tax_percent را پاس نمی‌داد -- یعنی
+                # مالیاتِ پیش‌فرضِ خودِ کالا هم نادیده گرفته می‌شد و ردیف
+                # همیشه با ۰٪ مالیات ثبت می‌شد؛ فقط اگر کاربر با دوبار‌کلیک
+                # واردِ فرمِ ردیف می‌شد اعمال می‌شد.
                 documents_service.add_line(
                     self._document_id, company_id, item.item_id, item.base_uom_id, quantity, quantity, unit_price=unit_price,
+                    tax_percent=catalog_service.resolve_default_tax_percent(company_id, item.item_id),
                 )
         except ValueError as exc:
             self.status_label.setText(str(exc))
@@ -653,6 +898,9 @@ class CommercialPosSaleScreen(QWidget):
         self._lines = lines
         self._is_confirmed = doc.status_code != "DRAFT"
         self._refresh_lines_table()
+        self.subtotal_label.setText(f"جمعِ اقلام: {numerals.format_company_amount(doc.subtotal_amount)}")
+        self.discount_label.setText(f"تخفیف: {numerals.format_company_amount(doc.discount_amount)}")
+        self.tax_label.setText(f"مالیات: {numerals.format_company_amount(doc.tax_amount)}")
         self.total_label.setText(f"جمعِ کل: {numerals.format_company_amount(doc.total_amount)}")
 
     def _refresh_lines_table(self) -> None:
@@ -772,11 +1020,17 @@ class CommercialPosSaleScreen(QWidget):
             return
         document_id = self._document_id
         if print_receipt:
+            # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند
+            # پرینترِ مختلف»): اگر اقلامِ این فاکتور به گروه‌هایِ POSِ
+            # دارایِ پرینترِ اختصاصی تعلق داشته باشند، مستقیم به همان(ها)
+            # فرستاده می‌شود؛ وگرنه همان جریانِ پیش‌فرض (Jasper/HTML +
+            # انتخابِ پرینتر توسطِ خودِ کاربر) بدونِ تغییر ادامه می‌یابد.
+            printer_names = pos_service.resolve_target_printers_for_document(company_id, document_id)
             _show_invoice_print(
                 self, company_id, document_id,
                 header_text=self._pos_settings.receipt_header_text if self._pos_settings else None,
                 footer_text=self._pos_settings.receipt_footer_text if self._pos_settings else None,
-                form_code="POS_RECEIPT",
+                form_code="POS_RECEIPT", printer_names=printer_names or None,
             )
         self.status_label.setText("فروش تایید شد و برایِ تاییدِ سرپرست به‌صفِ انتظار رفت.")
         self._clear_cart_view()

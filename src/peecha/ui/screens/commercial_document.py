@@ -321,8 +321,28 @@ def _show_invoice_print(
     header_text: str | None = None,
     footer_text: str | None = None,
     form_code: str = "COMMERCIAL_INVOICE",
+    printer_names: list[str] | None = None,
 ) -> None:
     doc, lines = documents_service.get_document(document_id, company_id)
+
+    # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
+    # مختلف»): اگر بر اساسِ گروهِ POSِ اقلامِ این فاکتور، یک یا چند
+    # پرینترِ مشخص resolve شده باشد، مستقیم رویِ همان(ها) چاپ می‌شود --
+    # یک پیش‌نمایش به‌ازایِ هر پرینترِ متمایز؛ مسیرِ حرفه‌ایِ Jasper (که
+    # فعلاً پرینترِ مقصد را نمی‌گیرد) این‌جا دور زده می‌شود.
+    if printer_names:
+        decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+        if counterparty_label is None:
+            counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
+        company_name = app_session.current_company.display_name if app_session.current_company else ""
+        items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+        html = _build_invoice_print_html(
+            company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
+            header_text=header_text, footer_text=footer_text,
+        )
+        for printer_name in printer_names:
+            _print_receipt_document(parent, html, printer_name=printer_name)
+        return
 
     if jasper_bridge.is_available():
         # طبقِ رجیستریِ گزارش‌هایِ حرفه‌ای: اگر مسیرِ صریحی داده نشده

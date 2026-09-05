@@ -88,6 +88,17 @@ class CommercialDocumentsListScreen(QWidget):
             self.status_filter.addItem(label, code)
         self.status_filter.currentIndexChanged.connect(self.refresh)
         filters.addWidget(self.status_filter)
+
+        # طبقِ درخواستِ صریح («چون تعدادِ فاکتورهایِ تک‌فروشی زیاده باید
+        # فیلتری رویِ اسنادِ فروش باشه»): فیلترِ منبعِ سند -- عمومی/
+        # تک‌فروشی (POS) -- بر اساسِ pos_session_id.
+        filters.addWidget(QLabel("منبع"))
+        self.source_filter = QComboBox()
+        self.source_filter.addItem("(همه)", None)
+        self.source_filter.addItem("عمومی", "GENERAL")
+        self.source_filter.addItem("تک‌فروشی (POS)", "POS")
+        self.source_filter.currentIndexChanged.connect(self.refresh)
+        filters.addWidget(self.source_filter)
         filters.addStretch(1)
         layout.addLayout(filters)
 
@@ -137,12 +148,21 @@ class CommercialDocumentsListScreen(QWidget):
         else:
             self._rows = documents_service.list_documents(company_id, document_type_code=type_code, status_code=self.status_filter.currentData())
 
+        source = self.source_filter.currentData()
+        if source == "POS":
+            self._rows = [d for d in self._rows if d.pos_session_id is not None]
+        elif source == "GENERAL":
+            self._rows = [d for d in self._rows if d.pos_session_id is None]
+
         self.table.setRowCount(len(self._rows))
         for row_index, d in enumerate(self._rows):
             fulfillment = self._fulfillment_summary(d, company_id)
+            type_label = DOC_TYPE_TITLES.get(d.document_type_code, d.document_type_code)
+            if d.pos_session_id is not None:
+                type_label += " (تک‌فروشی)"
             values = [
                 str(row_index + 1),
-                DOC_TYPE_TITLES.get(d.document_type_code, d.document_type_code),
+                type_label,
                 numerals.to_persian_digits(str(d.document_no)),
                 numerals.format_jalali_date(d.document_date),
                 self._parties_by_id.get(d.counterparty_detail_account_id, "—"),
@@ -191,7 +211,16 @@ class CommercialDocumentsListScreen(QWidget):
         # برخلافِ فاکتور/برگشت، بعدِ تاییدشدن هم قابلِ‌ویرایش می‌مانند
         # (services/commercial_documents.py:_get_editable_document).
         is_order_type = d.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
-        is_editable = d.status_code == "DRAFT" or (is_order_type and d.status_code in ("CONFIRMED", "APPROVED"))
+        # طبقِ R100: فاکتورِ فروشِ تک‌فروشی هم -- تا پیش از تاییدِ سرپرست
+        # (CONFIRMED) -- قابلِ‌اصلاح است (از فرمِ تک‌فروشیِ خودش، طبقِ
+        # _open_existing بالا).
+        is_pos_pre_approval = (
+            d.document_type_code == "SALES_INVOICE" and d.pos_session_id is not None and d.status_code == "CONFIRMED"
+        )
+        is_editable = (
+            d.status_code == "DRAFT" or (is_order_type and d.status_code in ("CONFIRMED", "APPROVED"))
+            or is_pos_pre_approval
+        )
         # طبقِ رفعِ باگِ واقعی («علامتهایِ حذف و ویرایش و تبدیل در ردیف
         # معلوم نیست»): ✏️/🗑️/🧾 ایموجی‌هایِ نسبتاً تازه‌اند (یونیکدِ ۹ به
         # بعد) و روی فونت/سیستمِ کاربر بدونِ گلیفِ رنگی به‌صورتِ جعبه‌یِ
@@ -250,6 +279,21 @@ class CommercialDocumentsListScreen(QWidget):
     def _open_existing(self, document_id: int) -> None:
         doc = next((d for d in self._rows if d.document_id == document_id), None)
         if doc is None:
+            return
+        # طبقِ درخواستِ صریح («اصلاحِ فاکتورِ تک‌فروشی جدا از اصلاحِ
+        # فاکتور باشه... اگر فاکتور تک‌فروشی اصلاح بشه در همان فرمِ
+        # تک‌فروشی باز بشه»): فاکتورِ فروشِ تک‌فروشی (pos_session_id
+        # دارد) که هنوز پیش‌از‌تاییدِ‌سرپرست است (DRAFT/CONFIRMED -- طبقِ
+        # R100، همان بازه‌ای که اصلاً قابلِ‌اصلاح است)، در فرمِ تک‌فروشیِ
+        # خودش باز می‌شود -- نه فرمِ عمومیِ فاکتور. برایِ فاکتورِ
+        # POSTEDِ تک‌فروشی (مسیرِ جداگانه‌یِ «اصلاحِ فاکتورِ ثبت‌نهایی‌شده»)
+        # همچنان همان فرمِ عمومی باز می‌شود -- طبقِ تصمیمِ صریح، این دو
+        # مسیر قاطی نمی‌شوند.
+        if (
+            doc.document_type_code == "SALES_INVOICE" and doc.pos_session_id is not None
+            and doc.status_code in ("DRAFT", "CONFIRMED")
+        ):
+            self._main_window.open_screen("SALES_POS_SALE", then=lambda screen: screen.open_document_for_edit(document_id))
             return
         nav_code = _TYPE_TO_NAV_CODE[doc.document_type_code]
         self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))

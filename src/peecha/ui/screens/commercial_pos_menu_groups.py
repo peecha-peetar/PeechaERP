@@ -11,9 +11,11 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtPrintSupport import QPrinterInfo
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -56,8 +58,8 @@ class CommercialPosMenuGroupsScreen(QWidget):
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["نام", "ترتیب", "فعال"])
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["نام", "ترتیب", "فعال", "پرینترِ مقصد"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -76,6 +78,15 @@ class CommercialPosMenuGroupsScreen(QWidget):
         self.active_checkbox = QCheckBox("فعال")
         self.active_checkbox.setChecked(True)
         form_row.addWidget(self.active_checkbox)
+        # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
+        # مختلف»): پرینترِ مقصدِ این گروه -- از پرینترهایِ نصب‌شدهٔ همین
+        # سیستم؛ «(پیش‌فرض)» یعنی این گروه پرینترِ اختصاصی ندارد.
+        form_row.addWidget(QLabel("پرینترِ مقصد"))
+        self.target_printer_combo = QComboBox()
+        self.target_printer_combo.addItem("(پیش‌فرض)", None)
+        for printer_name in QPrinterInfo.availablePrinterNames():
+            self.target_printer_combo.addItem(printer_name, printer_name)
+        form_row.addWidget(self.target_printer_combo)
         save_button = QPushButton("💾")
         save_button.setObjectName("primaryIconButton")
         save_button.setFixedWidth(48)
@@ -116,7 +127,7 @@ class CommercialPosMenuGroupsScreen(QWidget):
         self._groups = pos_service.list_menu_groups(company_id)
         self.table.setRowCount(len(self._groups))
         for row_index, g in enumerate(self._groups):
-            values = [g.name, str(g.display_order), "بله" if g.is_active else "خیر"]
+            values = [g.name, str(g.display_order), "بله" if g.is_active else "خیر", g.target_printer_name or "(پیش‌فرض)"]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, g.group_id)
@@ -129,6 +140,8 @@ class CommercialPosMenuGroupsScreen(QWidget):
         self.name_field.setText(group.name)
         self.order_field.setValue(group.display_order)
         self.active_checkbox.setChecked(group.is_active)
+        printer_index = self.target_printer_combo.findData(group.target_printer_name)
+        self.target_printer_combo.setCurrentIndex(printer_index if printer_index >= 0 else 0)
         self.status_label.setText("")
 
     def _reset_form(self) -> None:
@@ -136,19 +149,26 @@ class CommercialPosMenuGroupsScreen(QWidget):
         self.name_field.clear()
         self.order_field.setValue(0)
         self.active_checkbox.setChecked(True)
+        self.target_printer_combo.setCurrentIndex(0)
         self.status_label.setText("")
         self.table.clearSelection()
 
     def _save(self) -> None:
         company_id = self._company_id()
         name = self.name_field.text().strip()
+        target_printer_name = self.target_printer_combo.currentData()
         try:
             if self._editing_id is not None:
                 pos_service.update_menu_group(
                     self._editing_id, company_id, name, self.order_field.value(), self.active_checkbox.isChecked(),
+                    target_printer_name=target_printer_name,
                 )
             else:
-                pos_service.create_menu_group(company_id, name, self.order_field.value())
+                group_id = pos_service.create_menu_group(company_id, name, self.order_field.value())
+                if target_printer_name:
+                    pos_service.update_menu_group(
+                        group_id, company_id, name, self.order_field.value(), True, target_printer_name=target_printer_name,
+                    )
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return

@@ -321,6 +321,12 @@ class PosSettings(Base):
     # داخلیِ دکمه‌ها (HORIZONTAL/VERTICAL) اکنون قابلِ‌تنظیم است.
     quick_access_position: Mapped[str] = mapped_column(String(10), default="LEFT")
     quick_access_orientation: Mapped[str] = mapped_column(String(10), default="HORIZONTAL")
+    # طبقِ درخواستِ صریح: نمایش/عدمِ‌نمایشِ بخش‌هایِ فاکتورِ تک‌فروشی +
+    # تعدادِ فاکتورهایِ اخیر که در پنلِ کنارِ کلیدهایِ فوری نشان داده شود.
+    show_price_list_field: Mapped[bool] = mapped_column(default=True)
+    show_tax_discount_breakdown: Mapped[bool] = mapped_column(default=True)
+    show_customer_credit_warning: Mapped[bool] = mapped_column(default=True)
+    recent_invoices_count: Mapped[int] = mapped_column(default=10)
 
 
 class PosMenuGroup(Base):
@@ -337,6 +343,11 @@ class PosMenuGroup(Base):
     name: Mapped[str] = mapped_column(String(100))
     display_order: Mapped[int] = mapped_column(default=0)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
+    # مختلف»): پرینترِ مقصدِ این گروه -- نامِ پرینترِ سیستم (از
+    # QPrinterInfo.availablePrinterNames)؛ None یعنی از پرینترِ
+    # پیش‌فرض/دیالوگِ معمولیِ چاپ استفاده شود.
+    target_printer_name: Mapped[str | None] = mapped_column(String(200))
 
 
 class PosCashierSettings(Base):
@@ -354,6 +365,13 @@ class PosCashierSettings(Base):
     default_customer_detail_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("acc.detail_accounts.detail_account_id")
     )
+    # طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس + عرضِ
+    # قابلِ‌تنظیم، به‌ازایِ هر کاربر»): ترتیبِ کالاها (فهرستِ item_id با
+    # کاما جدا شده) و بازنویسیِ اندازه‌یِ دکمه -- اگر None باشند، از
+    # تنظیماتِ سراسریِ PosSettings استفاده می‌شود.
+    quick_button_order: Mapped[str | None] = mapped_column(Text)
+    quick_button_width_override: Mapped[int | None]
+    quick_button_height_override: Mapped[int | None]
 
 
 # =======================================================================

@@ -182,6 +182,22 @@ class CommercialPosSessionsScreen(QWidget):
         toggles_box.addStretch(1)
         retail_layout.addLayout(toggles_box)
 
+        # طبقِ درخواستِ صریح («جایی باشه که بتوان نمایش یا عدمِ نمایشِ
+        # بخش‌هایِ فاکتورِ تک‌فروشی را انتخاب کرد»).
+        visibility_box = QHBoxLayout()
+        self.show_price_list_field_checkbox = QCheckBox("نمایشِ فیلدِ «فهرستِ قیمت»")
+        visibility_box.addWidget(self.show_price_list_field_checkbox)
+        self.show_tax_discount_breakdown_checkbox = QCheckBox("نمایشِ ریزِ تخفیف/مالیات در فوتر")
+        visibility_box.addWidget(self.show_tax_discount_breakdown_checkbox)
+        self.show_customer_credit_warning_checkbox = QCheckBox("نمایشِ هشدارِ سقفِ اعتبار")
+        visibility_box.addWidget(self.show_customer_credit_warning_checkbox)
+        visibility_box.addWidget(QLabel("تعدادِ فاکتورهایِ اخیر"))
+        self.recent_invoices_count_field = QSpinBox()
+        self.recent_invoices_count_field.setRange(1, 100)
+        visibility_box.addWidget(self.recent_invoices_count_field)
+        visibility_box.addStretch(1)
+        retail_layout.addLayout(visibility_box)
+
         receipt_box = QHBoxLayout()
         receipt_box.addWidget(QLabel("سرتیترِ فیش"))
         self.receipt_header_field = QLineEdit()
@@ -354,6 +370,10 @@ class CommercialPosSessionsScreen(QWidget):
             self.quick_access_position_combo.setCurrentIndex(index if index >= 0 else 0)
             index = self.quick_access_orientation_combo.findData(settings.quick_access_orientation)
             self.quick_access_orientation_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.show_price_list_field_checkbox.setChecked(settings.show_price_list_field)
+            self.show_tax_discount_breakdown_checkbox.setChecked(settings.show_tax_discount_breakdown)
+            self.show_customer_credit_warning_checkbox.setChecked(settings.show_customer_credit_warning)
+            self.recent_invoices_count_field.setValue(settings.recent_invoices_count)
         else:
             if current_guest is not None:
                 index = self.guest_customer_combo.findData(current_guest)
@@ -370,6 +390,10 @@ class CommercialPosSessionsScreen(QWidget):
             self.receipt_footer_field.clear()
             self.quick_access_position_combo.setCurrentIndex(0)
             self.quick_access_orientation_combo.setCurrentIndex(0)
+            self.show_price_list_field_checkbox.setChecked(True)
+            self.show_tax_discount_breakdown_checkbox.setChecked(True)
+            self.show_customer_credit_warning_checkbox.setChecked(True)
+            self.recent_invoices_count_field.setValue(10)
 
         self.menu_groups_panel.refresh()
         self._load_settlement_defaults(company_id)
@@ -466,6 +490,10 @@ class CommercialPosSessionsScreen(QWidget):
             receipt_footer_text=self.receipt_footer_field.text().strip() or None,
             quick_access_position=self.quick_access_position_combo.currentData(),
             quick_access_orientation=self.quick_access_orientation_combo.currentData(),
+            show_price_list_field=self.show_price_list_field_checkbox.isChecked(),
+            show_tax_discount_breakdown=self.show_tax_discount_breakdown_checkbox.isChecked(),
+            show_customer_credit_warning=self.show_customer_credit_warning_checkbox.isChecked(),
+            recent_invoices_count=self.recent_invoices_count_field.value(),
         )
         self.status_label.setText("")
 

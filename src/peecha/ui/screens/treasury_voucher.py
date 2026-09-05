@@ -2809,9 +2809,16 @@ def _build_receipt_html(
     """
 
 
-def _print_receipt_document(parent: QWidget, html: str) -> None:
+def _print_receipt_document(parent: QWidget, html: str, printer_name: str | None = None) -> None:
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     printer.setPageMargins(QMarginsF(10, 10, 10, 10), QPageLayout.Unit.Millimeter)
+    # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
+    # مختلف»): اگر پرینترِ مشخصی (طبقِ گروهِ POSِ اقلامِ همین فاکتور)
+    # داده شده باشد، همان از قبل رویِ QPrinter تنظیم می‌شود -- کاربر در
+    # همان دیالوگِ پیش‌نمایشِ همیشگی فقط تاییدِ نهاییِ چاپ را می‌زند،
+    # دیگر لازم نیست خودش هر بار پرینتر را از فهرست انتخاب کند.
+    if printer_name:
+        printer.setPrinterName(printer_name)
     doc = QTextDocument()
     doc.setHtml(html)
     preview = QPrintPreviewDialog(printer, parent)
