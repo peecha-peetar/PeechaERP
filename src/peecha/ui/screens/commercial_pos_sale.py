@@ -14,6 +14,7 @@ import decimal
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QCompleter,
     QDialog,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -56,6 +58,7 @@ class CommercialPosSaleScreen(QWidget):
         self._is_confirmed = False
         self._cashier_settings: pos_service.PosCashierSettings | None = None
         self._quick_button_settings: tuple[int, int, int, int] = (110, 64, 10, 6)
+        self._pos_settings: pos_service.PosSettings | None = None
 
         page = QWidget()
         page_row = QHBoxLayout(page)
@@ -92,6 +95,7 @@ class CommercialPosSaleScreen(QWidget):
         header_row.addWidget(self.terminal_combo)
         header_row.addWidget(QLabel("مشتری"))
         self.customer_combo = _make_searchable_combo([])
+        self.customer_combo.currentIndexChanged.connect(self._update_customer_credit_indicator)
         header_row.addWidget(self.customer_combo)
         header_row.addWidget(QLabel("فهرستِ قیمت"))
         self.price_list_combo = QComboBox()
@@ -198,6 +202,7 @@ class CommercialPosSaleScreen(QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
+        self._pos_settings = pos_service.get_pos_settings(company_id)
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._rebuild_quick_access()
         self._scan_label_to_item_id = {
@@ -224,7 +229,7 @@ class CommercialPosSaleScreen(QWidget):
                 self.terminal_combo.setCurrentIndex(index)
         self.terminal_combo.blockSignals(False)
 
-        pos_settings = pos_service.get_pos_settings(company_id)
+        pos_settings = self._pos_settings
         current_customer = self.customer_combo.currentData()
         customer_options = [(c["detail_account_id"], f"{c['code']} — {c['name'] or ''}") for c in dimensions_service.list_customers(company_id)]
         _fill_options(self.customer_combo, customer_options)
@@ -249,6 +254,7 @@ class CommercialPosSaleScreen(QWidget):
             if index >= 0:
                 self.price_list_combo.setCurrentIndex(index)
 
+        self._update_customer_credit_indicator()
         self._apply_header_visibility()
         self._update_session_label()
 
@@ -257,11 +263,30 @@ class CommercialPosSaleScreen(QWidget):
         self.header_widget.setVisible(not has_defaults)
         self.summary_label.setVisible(has_defaults)
         if has_defaults:
+            warning = " | 🚨 بدهی از سقفِ اعتبار عبور کرده" if getattr(self, "_customer_over_credit_limit", False) else ""
             self.summary_label.setText(
                 f"ترمینال: {self.terminal_combo.currentText()} | "
                 f"مشتری: {self.customer_combo.currentText()} | "
-                f"فهرستِ قیمت: {self.price_list_combo.currentText()}"
+                f"فهرستِ قیمت: {self.price_list_combo.currentText()}{warning}"
             )
+
+    def _update_customer_credit_indicator(self) -> None:
+        # طبقِ بازبینیِ عکس‌هایِ تنظیماتِ نرم‌افزارِ مرجع («اخطارِ سقفِ
+        # اعتبار در فاکتورِ فروشِ فوری») -- این قابلیت از دورِ R74 در
+        # commercial_document.py وجود داشت ولی به صفحه‌یِ POS وصل نشده
+        # بود؛ همان منطق (assistant_service.get_customer_score) این‌جا
+        # هم استفاده می‌شود.
+        customer_id = self.customer_combo.currentData()
+        company_id = self._company_id()
+        over_limit = False
+        if customer_id is not None and company_id is not None:
+            from peecha.services import sales_assistant as assistant_service
+            score_row = assistant_service.get_customer_score(company_id, customer_id)
+            over_limit = score_row is not None and score_row.over_credit_limit
+        self._customer_over_credit_limit = over_limit
+        border_rule = "border: 2px solid #dc2626;" if over_limit else ""
+        self.customer_combo.setStyleSheet(f"QComboBox {{ {border_rule} }}")
+        self._apply_header_visibility()
 
     def _current_open_session_id(self) -> int | None:
         terminal_id = self.terminal_combo.currentData()
@@ -304,13 +329,24 @@ class CommercialPosSaleScreen(QWidget):
             button.clicked.connect(lambda _checked=False, it=item: self._add_item_to_cart(it, decimal.Decimal("1")))
             grid.addWidget(button, index // columns, index % columns)
         grid.setRowStretch((len(items) - 1) // columns + 1 if items else 0, 1)
-        return page
+        # طبقِ رفعِ باگ: تبِ دسترسیِ‌سریع قبلاً فقط با اسکرولِ کلِ صفحه
+        # (که هدر/جدولِ ردیف‌ها را هم می‌بَرد) قابلِ‌دیدن بود -- برایِ
+        # گروه‌هایِ پرتعداد، خودِ گرید اکنون مستقلاً اسکرول‌پذیر است.
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(page)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+        return scroll_area
 
     def _rebuild_quick_access(self) -> None:
         current_tab_text = self.quick_access_tabs.tabText(self.quick_access_tabs.currentIndex())
         self.quick_access_tabs.clear()
         company_id = self._company_id()
-        pos_settings = pos_service.get_pos_settings(company_id) if company_id else None
+        pos_settings = self._pos_settings
+        if pos_settings is not None and not pos_settings.quick_access_enabled:
+            self.quick_access_tabs.setVisible(False)
+            return
+        self.quick_access_tabs.setVisible(True)
         self._quick_button_settings = (
             pos_settings.quick_button_width if pos_settings else 110,
             pos_settings.quick_button_height if pos_settings else 64,
@@ -500,6 +536,8 @@ class CommercialPosSaleScreen(QWidget):
             return False
         self.status_label.setText("")
         self._load_document()
+        if self._pos_settings is None or self._pos_settings.scan_beep_enabled:
+            QApplication.beep()
         return True
 
     def _load_document(self) -> None:
@@ -541,6 +579,8 @@ class CommercialPosSaleScreen(QWidget):
             self, self._items, company_id, self._main_window, decimal_places, initial,
             counterparty_id=self.customer_combo.currentData(), price_list_id=self.price_list_combo.currentData(),
             document_type_code="SALES_INVOICE", document_date=datetime.date.today(),
+            lock_price=self._pos_settings is not None and not self._pos_settings.allow_price_override,
+            lock_discount=self._pos_settings is not None and not self._pos_settings.allow_discount_override,
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -570,7 +610,11 @@ class CommercialPosSaleScreen(QWidget):
             return
         document_id = self._document_id
         if print_receipt:
-            _show_invoice_print(self, company_id, document_id)
+            _show_invoice_print(
+                self, company_id, document_id,
+                header_text=self._pos_settings.receipt_header_text if self._pos_settings else None,
+                footer_text=self._pos_settings.receipt_footer_text if self._pos_settings else None,
+            )
         self.status_label.setText("فروش تایید شد و برایِ تاییدِ سرپرست به‌صفِ انتظار رفت.")
         self._clear_cart_view()
         self.refresh()

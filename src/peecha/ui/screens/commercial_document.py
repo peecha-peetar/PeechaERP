@@ -116,9 +116,15 @@ _HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمع�
 # چاپیِ کاملِ سند (هدر + جدولِ ردیف‌ها + جمعِ کل) استفاده می‌شود.
 def _build_invoice_print_html(
     company_name: str, doc, lines: list, items_by_id: dict, counterparty_label: str, decimal_places: int,
-    font_family: str,
+    font_family: str, header_text: str | None = None, footer_text: str | None = None,
 ) -> str:
     esc = _escape_receipt_html
+    header_html = (
+        f'<div style="text-align:center; font-size:10pt; margin-bottom:6px;">{esc(header_text)}</div>' if header_text else ""
+    )
+    footer_html = (
+        f'<div style="text-align:center; font-size:10pt; margin-top:12px;">{esc(footer_text)}</div>' if footer_text else ""
+    )
     rows_html = ""
     for ln in lines:
         item = items_by_id.get(ln.item_id)
@@ -137,6 +143,7 @@ def _build_invoice_print_html(
     return f"""
     <html dir="rtl"><head><meta charset="utf-8"></head>
     <body style="font-family:'{font_family}', Tahoma, sans-serif; font-size:11pt;">
+      {header_html}
       <div style="text-align:center; font-size:13pt; font-weight:bold;">{esc(company_name)}</div>
       <div style="text-align:center; font-size:12pt; font-weight:bold; margin:6px 0 16px 0;">
         {esc(DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code))}
@@ -157,6 +164,7 @@ def _build_invoice_print_html(
       <div style="text-align:left; margin-top:12px; font-weight:bold;">
         جمعِ کل: {numerals.format_money(total, decimal_places)}
       </div>
+      {footer_html}
     </body></html>
     """
 
@@ -307,6 +315,8 @@ def _show_invoice_print(
     document_id: int,
     counterparty_label: str | None = None,
     jrxml_path=None,
+    header_text: str | None = None,
+    footer_text: str | None = None,
 ) -> None:
     doc, lines = documents_service.get_document(document_id, company_id)
 
@@ -344,6 +354,7 @@ def _show_invoice_print(
     items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
     html = _build_invoice_print_html(
         company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
+        header_text=header_text, footer_text=footer_text,
     )
     _print_receipt_document(parent, html)
 
@@ -501,6 +512,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         price_list_id: int | None = None, document_type_code: str | None = None,
         document_date: datetime.date | None = None, warehouses: list | None = None,
         default_warehouse_id: int | None = None, per_line_warehouse_enabled: bool = False,
+        lock_price: bool = False, lock_discount: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("ردیفِ سند")
@@ -562,6 +574,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
 
         self.unit_price_field = _AmountField()
         self.unit_price_field.setDecimals(decimal_places)
+        if lock_price:
+            self.unit_price_field.setReadOnly(True)
 
         # طبقِ درخواستِ صریح («تخفیف روی ردیف کالا فقط مبلغی است، باید
         # درصدی هم باشد»): یک کمبویِ نوعِ تخفیف کنارِ همان فیلدِ عددیِ
@@ -575,6 +589,9 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.discount_type_combo.addItem("مبلغی", "AMOUNT")
         self.discount_type_combo.addItem("درصدی", "PERCENT")
         self.discount_type_combo.setMaximumWidth(80)
+        if lock_discount:
+            self.discount_field.setReadOnly(True)
+            self.discount_type_combo.setEnabled(False)
         discount_row_widget = QWidget()
         discount_row_layout = QHBoxLayout(discount_row_widget)
         discount_row_layout.setContentsMargins(0, 0, 0, 0)

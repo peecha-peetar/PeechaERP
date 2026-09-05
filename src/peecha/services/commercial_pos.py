@@ -398,7 +398,9 @@ def get_pos_settings(company_id: int) -> PosSettings | None:
 def set_pos_settings(
     company_id: int, default_guest_customer_detail_account_id: int | None, cash_variance_threshold_amount: decimal.Decimal,
     quick_button_width: int = 110, quick_button_height: int = 64, quick_button_font_size: int = 10,
-    quick_grid_columns: int = 6,
+    quick_grid_columns: int = 6, allow_price_override: bool = True, allow_discount_override: bool = True,
+    quick_access_enabled: bool = True, scan_beep_enabled: bool = True,
+    receipt_header_text: str | None = None, receipt_footer_text: str | None = None,
 ) -> None:
     with new_session() as session:
         row = session.get(PosSettings, company_id)
@@ -409,6 +411,9 @@ def set_pos_settings(
                     cash_variance_threshold_amount=cash_variance_threshold_amount,
                     quick_button_width=quick_button_width, quick_button_height=quick_button_height,
                     quick_button_font_size=quick_button_font_size, quick_grid_columns=quick_grid_columns,
+                    allow_price_override=allow_price_override, allow_discount_override=allow_discount_override,
+                    quick_access_enabled=quick_access_enabled, scan_beep_enabled=scan_beep_enabled,
+                    receipt_header_text=receipt_header_text, receipt_footer_text=receipt_footer_text,
                 )
             )
         else:
@@ -418,6 +423,12 @@ def set_pos_settings(
             row.quick_button_height = quick_button_height
             row.quick_button_font_size = quick_button_font_size
             row.quick_grid_columns = quick_grid_columns
+            row.allow_price_override = allow_price_override
+            row.allow_discount_override = allow_discount_override
+            row.quick_access_enabled = quick_access_enabled
+            row.scan_beep_enabled = scan_beep_enabled
+            row.receipt_header_text = receipt_header_text
+            row.receipt_footer_text = receipt_footer_text
         session.commit()
 
 

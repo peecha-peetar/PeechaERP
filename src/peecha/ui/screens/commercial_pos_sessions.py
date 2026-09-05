@@ -16,6 +16,7 @@ import decimal
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QHBoxLayout,
@@ -142,6 +143,37 @@ class CommercialPosSessionsScreen(QWidget):
         quick_settings_box.addWidget(save_quick_settings_button)
         retail_layout.addLayout(quick_settings_box)
 
+        # طبقِ بازبینیِ عکس‌هایِ تنظیماتِ نرم‌افزارِ مرجع (تنظیماتِ
+        # عمومیِ فاکتور/تنظیماتِ تک‌فروشی) -- فقط مواردِ واقعاً قابلِ‌اجرا
+        # و مرتبط با دامنهٔ فعلی، طبقِ لیست/پیشنهادِ ارائه‌شده به کاربر.
+        toggles_box = QHBoxLayout()
+        self.allow_price_override_checkbox = QCheckBox("اجازهٔ تغییرِ قیمت توسط کاربر")
+        toggles_box.addWidget(self.allow_price_override_checkbox)
+        self.allow_discount_override_checkbox = QCheckBox("اجازهٔ تغییرِ تخفیف توسط کاربر")
+        toggles_box.addWidget(self.allow_discount_override_checkbox)
+        self.quick_access_enabled_checkbox = QCheckBox("نمایشِ منویِ دسترسیِ‌سریع")
+        toggles_box.addWidget(self.quick_access_enabled_checkbox)
+        self.scan_beep_enabled_checkbox = QCheckBox("بوقِ تاییدِ اسکن/افزودن")
+        toggles_box.addWidget(self.scan_beep_enabled_checkbox)
+        toggles_box.addStretch(1)
+        retail_layout.addLayout(toggles_box)
+
+        receipt_box = QHBoxLayout()
+        receipt_box.addWidget(QLabel("سرتیترِ فیش"))
+        self.receipt_header_field = QLineEdit()
+        self.receipt_header_field.setPlaceholderText("مثلاً: با تشکر از خریدِ شما")
+        receipt_box.addWidget(self.receipt_header_field, stretch=1)
+        receipt_box.addWidget(QLabel("توضیحاتِ انتهایِ فیش"))
+        self.receipt_footer_field = QLineEdit()
+        receipt_box.addWidget(self.receipt_footer_field, stretch=1)
+        save_toggles_button = QPushButton("💾")
+        save_toggles_button.setObjectName("iconButton")
+        save_toggles_button.setFixedWidth(44)
+        save_toggles_button.setToolTip("ذخیره")
+        save_toggles_button.clicked.connect(self._save_settings)
+        receipt_box.addWidget(save_toggles_button)
+        retail_layout.addLayout(receipt_box)
+
         self.menu_groups_panel = CommercialPosMenuGroupsScreen()
         retail_layout.addWidget(self.menu_groups_panel, stretch=1)
         self.settings_tabs.addTab(retail_tab, "تک‌فروشی")
@@ -251,6 +283,12 @@ class CommercialPosSessionsScreen(QWidget):
             self.quick_button_height_field.setValue(settings.quick_button_height)
             self.quick_button_font_size_field.setValue(settings.quick_button_font_size)
             self.quick_grid_columns_field.setValue(settings.quick_grid_columns)
+            self.allow_price_override_checkbox.setChecked(settings.allow_price_override)
+            self.allow_discount_override_checkbox.setChecked(settings.allow_discount_override)
+            self.quick_access_enabled_checkbox.setChecked(settings.quick_access_enabled)
+            self.scan_beep_enabled_checkbox.setChecked(settings.scan_beep_enabled)
+            self.receipt_header_field.setText(settings.receipt_header_text or "")
+            self.receipt_footer_field.setText(settings.receipt_footer_text or "")
         else:
             if current_guest is not None:
                 index = self.guest_customer_combo.findData(current_guest)
@@ -259,6 +297,12 @@ class CommercialPosSessionsScreen(QWidget):
             self.quick_button_height_field.setValue(64)
             self.quick_button_font_size_field.setValue(10)
             self.quick_grid_columns_field.setValue(6)
+            self.allow_price_override_checkbox.setChecked(True)
+            self.allow_discount_override_checkbox.setChecked(True)
+            self.quick_access_enabled_checkbox.setChecked(True)
+            self.scan_beep_enabled_checkbox.setChecked(True)
+            self.receipt_header_field.clear()
+            self.receipt_footer_field.clear()
 
         self.menu_groups_panel.refresh()
         self._refresh_session_panel()
@@ -275,6 +319,12 @@ class CommercialPosSessionsScreen(QWidget):
             quick_button_height=self.quick_button_height_field.value(),
             quick_button_font_size=self.quick_button_font_size_field.value(),
             quick_grid_columns=self.quick_grid_columns_field.value(),
+            allow_price_override=self.allow_price_override_checkbox.isChecked(),
+            allow_discount_override=self.allow_discount_override_checkbox.isChecked(),
+            quick_access_enabled=self.quick_access_enabled_checkbox.isChecked(),
+            scan_beep_enabled=self.scan_beep_enabled_checkbox.isChecked(),
+            receipt_header_text=self.receipt_header_field.text().strip() or None,
+            receipt_footer_text=self.receipt_footer_field.text().strip() or None,
         )
         self.status_label.setText("")
 

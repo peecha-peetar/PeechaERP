@@ -308,6 +308,14 @@ class PosSettings(Base):
     quick_button_height: Mapped[int] = mapped_column(default=64)
     quick_button_font_size: Mapped[int] = mapped_column(default=10)
     quick_grid_columns: Mapped[int] = mapped_column(default=6)
+    # طبقِ بازبینیِ عکس‌هایِ تنظیماتِ نرم‌افزارِ مرجع: موارد واقعاً
+    # قابلِ‌اجرا و مرتبط با دامنهٔ فعلی -- نه هر چیزی که در آن عکس‌ها بود.
+    allow_price_override: Mapped[bool] = mapped_column(default=True)
+    allow_discount_override: Mapped[bool] = mapped_column(default=True)
+    quick_access_enabled: Mapped[bool] = mapped_column(default=True)
+    scan_beep_enabled: Mapped[bool] = mapped_column(default=True)
+    receipt_header_text: Mapped[str | None] = mapped_column(String(200))
+    receipt_footer_text: Mapped[str | None] = mapped_column(String(200))
 
 
 class PosMenuGroup(Base):
