@@ -1274,6 +1274,14 @@ class MethodLine:
     # یک تسویه (comm.invoice_settlements) رویِ فاکتورِ اصلیِ همان طرح هم
     # ثبت می‌شود -- هم‌افزایی با سیستمِ تسویه‌یِ فاکتورها.
     collect_installment_line_id: int | None = None
+    # طبقِ درخواستِ صریح («اگر تفصیلی‌ها مراکزِ هزینه و پروژه داشتند...
+    # پیش‌فرض تنظیم شود»): برایِ فرمِ نحوهٔ تسویهٔ تک‌فروشی -- مرکزِ هزینه/
+    # پروژهٔ پیش‌فرضِ همین روش (از تنظیماتِ POS)، به‌عنوانِ {dimension_type_id:
+    # detail_account_id} مستقیم به ردیفِ همین روش اضافه می‌شود (نه به همهٔ
+    # سند، مثلِ shared_details -- چون این پیش‌فرض فقط مالِ همین یک روش
+    # است). سایرِ استفاده‌هایِ create_treasury_voucher این را None می‌گذارند
+    # و رفتارشان بدونِ تغییر می‌ماند.
+    extra_details: dict[int, int] | None = None
 
 
 def create_treasury_voucher(
@@ -1483,6 +1491,8 @@ def create_treasury_voucher(
             mapping_key = f"{direction}_{ml.method}"
             account_id = ml.account_id_override or _get_mapped_account_id(session, company_id, mapping_key)
             details: dict[int, int] = dict(shared_details)
+            if ml.extra_details:
+                details.update(ml.extra_details)
             if counterparty_person_group_id is not None:
                 required_person_group_ids = {
                     g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)

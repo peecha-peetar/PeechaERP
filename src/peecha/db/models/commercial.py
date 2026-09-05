@@ -1159,6 +1159,22 @@ class CommercialDocumentSettlementPlanLine(Base):
     amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
     note: Mapped[str | None] = mapped_column(String(200))
     display_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
+class PosSettlementMethodDefault(Base):
+    """پیش‌فرضِ تفصیلی (+ مرکزِ هزینه/پروژه) به‌ازایِ هر روشِ دریافت/پرداختِ
+    فرمِ «نحوهٔ تسویه»یِ تک‌فروشی -- تا در لحظهٔ فروش دوباره پرسیده نشود."""
+
+    __tablename__ = "pos_settlement_method_defaults"
+    __table_args__ = (UniqueConstraint("company_id", "method_code"), {"schema": "comm"})
+
+    default_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    method_code: Mapped[str] = mapped_column(String(30))
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
 # =======================================================================

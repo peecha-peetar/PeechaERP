@@ -24,6 +24,7 @@ from peecha.db.models.commercial import (
     CommercialDocumentSettlementPlanLine,
     CustomerProfile,
     InvoiceSettlement,
+    PosSettlementMethodDefault,
     SettlementAlarmSettings,
     SupplierProfile,
 )
@@ -76,6 +77,10 @@ class SettlementPlanLine:
     method_code: str
     amount: decimal.Decimal
     note: str | None = None
+    # طبقِ درخواستِ صریح («جلویِ هر ردیف... فیلدِ انتخابِ تفصیلی... همیشه
+    # یک ستونِ ثابت در جدول»): تفصیلیِ انتخاب‌شده (یا پیش‌فرضِ خوانده‌شده
+    # از تنظیمات) برایِ همین روش، همراهِ خودِ ردیف نگه‌داری می‌شود.
+    detail_account_id: int | None = None
 
 
 @dataclass
@@ -123,19 +128,30 @@ def get_settlement_plan(document_id: int, company_id: int) -> SettlementPlan | N
         return SettlementPlan(
             plan_id=plan.plan_id, document_id=plan.document_id, status_code=plan.status_code,
             total_amount=plan.total_amount,
-            lines=[SettlementPlanLine(method_code=ln.method_code, amount=ln.amount, note=ln.note) for ln in line_rows],
+            lines=[
+                SettlementPlanLine(
+                    method_code=ln.method_code, amount=ln.amount, note=ln.note,
+                    detail_account_id=ln.detail_account_id,
+                )
+                for ln in line_rows
+            ],
             created_by_user_id=plan.created_by_user_id, created_at=plan.created_at,
             approved_by_user_id=plan.approved_by_user_id, approved_at=plan.approved_at,
         )
 
 
 def save_settlement_plan(
-    document_id: int, company_id: int, created_by_user_id: int, lines: list[tuple[str, decimal.Decimal, str | None]],
+    document_id: int, company_id: int, created_by_user_id: int, lines: list[tuple],
 ) -> int:
     """ذخیره/بازنویسیِ نقشه‌یِ تسویه‌یِ یک فاکتورِ خرید/فروش -- طبقِ درخواستِ
     صریح («چند تا مورد از این نحوه تسویه... و با تاییدِ مدیر»): هر بار که
     نقشه ذخیره می‌شود (حتی بعدِ تایید)، وضعیت به PENDING_APPROVAL برمی‌گردد
-    -- تاییدِ قبلی برایِ ترکیبِ تازه دیگر معتبر نیست و باید دوباره تاییدشود."""
+    -- تاییدِ قبلی برایِ ترکیبِ تازه دیگر معتبر نیست و باید دوباره تاییدشود.
+
+    هر ردیفِ lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code, amount[,
+    note[, detail_account_id]]) -- طبقِ درخواستِ صریح («جلویِ هر ردیف...
+    فیلدِ تفصیلی»)، عضوِ چهارم اختیاری است و فراخوان‌هایِ قدیمیِ ۳عضوی
+    بدونِ تغییر کار می‌کنند."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -145,14 +161,17 @@ def save_settlement_plan(
         if doc.status_code == "POSTED":
             raise ValueError("فاکتورِ ثبتِ‌نهایی‌شده دیگر نقشه‌یِ تسویه‌اش قابلِ‌تغییر نیست.")
         allowed_methods = set(settlement_plan_method_codes(doc.document_type_code, company_id))
-        cleaned: list[tuple[str, decimal.Decimal, str | None]] = []
-        for method_code, amount, note in lines:
+        cleaned: list[tuple[str, decimal.Decimal, str | None, int | None]] = []
+        for entry in lines:
+            method_code, amount = entry[0], entry[1]
+            note = entry[2] if len(entry) > 2 else None
+            detail_account_id = entry[3] if len(entry) > 3 else None
             if method_code not in allowed_methods:
                 raise ValueError("روشِ ردیف نامعتبر است.")
             if amount <= _ZERO:
                 raise ValueError("مبلغِ هر ردیف باید مثبت باشد.")
-            cleaned.append((method_code, amount, note))
-        lines_total = sum((amount for _m, amount, _n in cleaned), _ZERO)
+            cleaned.append((method_code, amount, note, detail_account_id))
+        lines_total = sum((amount for _m, amount, _n, _d in cleaned), _ZERO)
         if lines_total > doc.total_amount:
             raise ValueError(f"جمعِ ردیف‌ها ({lines_total}) از مبلغِ کلِ فاکتور ({doc.total_amount}) بیشتر است.")
 
@@ -177,15 +196,157 @@ def save_settlement_plan(
             plan.approved_by_user_id = None
             plan.approved_at = None
 
-        for display_order, (method_code, amount, note) in enumerate(cleaned):
+        for display_order, (method_code, amount, note, detail_account_id) in enumerate(cleaned):
             session.add(
                 CommercialDocumentSettlementPlanLine(
                     plan_id=plan.plan_id, method_code=method_code, amount=amount, note=(note or None),
-                    display_order=display_order,
+                    display_order=display_order, detail_account_id=detail_account_id,
                 )
             )
         session.commit()
         return plan.plan_id
+
+
+def delete_settlement_plan(document_id: int, company_id: int) -> None:
+    """طبقِ درخواستِ صریح («روشِ پرداخت‌هایِ مربوط به همان فاکتور نیز
+    به‌همراهِ فاکتور ویرایش یا حذف بشه»): وقتی یک فروشِ تک‌فروشیِ
+    تاییدشده دوباره برایِ اصلاح باز می‌شود یا لغو می‌شود، نقشه‌یِ تسویه‌یِ
+    قبلی‌اش -- که دیگر با محتوایِ تازه‌یِ سبد/فاکتور هم‌خوان نیست -- هم
+    باید حذف شود؛ صندوق‌دار پس از تاییدِ دوباره، نحوه‌یِ تسویه را از نو
+    مشخص می‌کند."""
+    with new_session() as session:
+        plan = session.scalar(
+            select(CommercialDocumentSettlementPlan).where(
+                CommercialDocumentSettlementPlan.document_id == document_id,
+                CommercialDocumentSettlementPlan.company_id == company_id,
+            )
+        )
+        if plan is None:
+            return
+        session.execute(
+            CommercialDocumentSettlementPlanLine.__table__.delete().where(
+                CommercialDocumentSettlementPlanLine.plan_id == plan.plan_id
+            )
+        )
+        session.delete(plan)
+        session.commit()
+
+
+@dataclass
+class PosSettlementMethodDefaultInfo:
+    method_code: str
+    detail_account_id: int | None = None
+    cost_center_detail_account_id: int | None = None
+    project_detail_account_id: int | None = None
+
+
+def _method_default_to_info(row: PosSettlementMethodDefault) -> PosSettlementMethodDefaultInfo:
+    return PosSettlementMethodDefaultInfo(
+        method_code=row.method_code, detail_account_id=row.detail_account_id,
+        cost_center_detail_account_id=row.cost_center_detail_account_id,
+        project_detail_account_id=row.project_detail_account_id,
+    )
+
+
+def get_pos_settlement_method_default(company_id: int, method_code: str) -> PosSettlementMethodDefaultInfo | None:
+    with new_session() as session:
+        row = session.scalar(
+            select(PosSettlementMethodDefault).where(
+                PosSettlementMethodDefault.company_id == company_id,
+                PosSettlementMethodDefault.method_code == method_code,
+            )
+        )
+        return _method_default_to_info(row) if row is not None else None
+
+
+def list_pos_settlement_method_defaults(company_id: int) -> dict[str, PosSettlementMethodDefaultInfo]:
+    """طبقِ درخواستِ صریح: پیش‌فرضِ تفصیلی (+ مرکزِ هزینه/پروژه) به‌ازایِ
+    هر روشِ دریافت/پرداختِ فرمِ نحوهٔ تسویه‌یِ تک‌فروشی -- برایِ صفحهٔ
+    تنظیمات و برایِ پیش‌پرکردنِ خودِ دیالوگ."""
+    with new_session() as session:
+        rows = session.scalars(
+            select(PosSettlementMethodDefault).where(PosSettlementMethodDefault.company_id == company_id)
+        ).all()
+        return {row.method_code: _method_default_to_info(row) for row in rows}
+
+
+def set_pos_settlement_method_default(
+    company_id: int, method_code: str,
+    detail_account_id: int | None, cost_center_detail_account_id: int | None, project_detail_account_id: int | None,
+) -> None:
+    with new_session() as session:
+        row = session.scalar(
+            select(PosSettlementMethodDefault).where(
+                PosSettlementMethodDefault.company_id == company_id,
+                PosSettlementMethodDefault.method_code == method_code,
+            )
+        )
+        if row is None:
+            row = PosSettlementMethodDefault(company_id=company_id, method_code=method_code)
+            session.add(row)
+        row.detail_account_id = detail_account_id
+        row.cost_center_detail_account_id = cost_center_detail_account_id
+        row.project_detail_account_id = project_detail_account_id
+        session.commit()
+
+
+def resolve_method_detail_options(company_id: int, direction: str, method_code: str) -> tuple[int | None, list]:
+    """گزینه‌هایِ تفصیلیِ معتبر برایِ یک روشِ دریافت/پرداخت -- هم برایِ
+    گزینشِ صندوق‌دار در فرمِ نحوهٔ تسویه، هم برایِ تنظیمِ پیش‌فرض. خروجی:
+    (account_id یا None اگر این روش نگاشتِ حسابی ندارد، فهرستِ ردیف‌هایِ
+    تفصیلیِ مجاز -- اگر معین هیچ بُعدِ الزامی‌ای نداشته باشد، فهرستِ آزادِ
+    همه‌یِ تفصیلی‌هایِ برگ برمی‌گردد، هم‌الگو با treasury_voucher.py)."""
+    from peecha.services import detail_dimensions as dimensions_service
+    from peecha.services import treasury as treasury_service
+
+    mapping_key = f"{direction}_{method_code}"
+    account_id, _preset = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
+    if account_id is None:
+        return None, []
+    required = dimensions_service.get_required_dimensions_for_account(account_id)
+    other_dims = [
+        r for r in required
+        if r.code not in (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
+    ]
+    person_group_ids = [
+        g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)
+    ]
+    options: list = []
+    if person_group_ids:
+        options.extend(
+            p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in person_group_ids
+        )
+    for dim in other_dims:
+        options.extend(dim.detail_accounts)
+    if not options:
+        excluded_type_ids = {
+            dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE),
+            dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE),
+        }
+        options = [
+            d for d in dimensions_service.list_all_leaf_detail_accounts(company_id)
+            if d.dimension_type_id not in excluded_type_ids
+        ]
+    return account_id, options
+
+
+def method_requires_cost_center_or_project(company_id: int, direction: str, method_code: str) -> tuple[bool, bool]:
+    """آیا معینِ نگاشته‌شده‌یِ این روش، مرکزِ هزینه/پروژه را الزامی کرده --
+    طبقِ درخواستِ صریح («اگر تفصیلی‌ها مراکزِ هزینه و پروژه داشتند در
+    همان تنظیمات... انجام شود»)، فقط در این حالت فیلدهایِ پیش‌فرضِ
+    مربوطه در صفحهٔ تنظیمات فعال/معنی‌دار می‌شوند."""
+    from peecha.services import detail_dimensions as dimensions_service
+    from peecha.services import treasury as treasury_service
+
+    mapping_key = f"{direction}_{method_code}"
+    account_id, _preset = treasury_service.get_account_mapping_with_detail(company_id, mapping_key)
+    if account_id is None:
+        return False, False
+    required_codes = {r.code for r in dimensions_service.get_required_dimensions_for_account(account_id)}
+    return (
+        dimensions_service.COST_CENTER_CODE in required_codes,
+        dimensions_service.PROJECT_CODE in required_codes,
+    )
 
 
 def can_approve_settlement_plan(user_id: int, company_id: int) -> bool:

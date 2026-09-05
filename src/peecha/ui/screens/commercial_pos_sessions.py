@@ -34,7 +34,9 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.commercial_pos_menu_groups import CommercialPosMenuGroupsScreen
@@ -200,6 +202,43 @@ class CommercialPosSessionsScreen(QWidget):
         retail_layout.addWidget(self.menu_groups_panel, stretch=1)
         self.settings_tabs.addTab(retail_tab, "تک‌فروشی")
 
+        # طبقِ درخواستِ صریح («اگر تفصیلیِ پیش‌فرضِ روش‌هایِ دریافتِ
+        # تفصیلی داشتند از تنظیمات بخواند... اگر مراکزِ هزینه و پروژه
+        # داشتند در همان تنظیمات انجام شود»): پیش‌فرضِ تفصیلی/مرکزِ
+        # هزینه/پروژهٔ هر روشِ دریافتِ فرمِ نحوهٔ تسویه‌یِ تک‌فروشی --
+        # هربار در تنظیمات ذخیره شود، دیگر در فرمِ فروش پرسیده نمی‌شود
+        # (ولی صندوق‌دار همچنان می‌تواند همان‌جا عوضش کند).
+        self._settlement_default_widgets: list[tuple[str, QComboBox, QComboBox, QComboBox]] = []
+        defaults_tab = QWidget()
+        defaults_layout = QVBoxLayout(defaults_tab)
+        defaults_hint = QLabel(
+            "برایِ هر روشِ دریافتِ فرمِ «نحوهٔ تسویه»یِ تک‌فروشی، تفصیلیِ "
+            "پیش‌فرض را این‌جا مشخص کنید -- صندوق‌دار دیگر هر بار در لحظهٔ "
+            "فروش پرسیده نمی‌شود (ولی همان‌جا هم می‌تواند عوضش کند). "
+            "مرکزِ هزینه/پروژه هم فقط وقتی فعال است که معینِ همان روش "
+            "این ابعاد را الزامی کرده باشد."
+        )
+        defaults_hint.setObjectName("sectionHint")
+        defaults_hint.setWordWrap(True)
+        defaults_layout.addWidget(defaults_hint)
+        self.settlement_defaults_table = QTableWidget(0, 4)
+        self.settlement_defaults_table.setHorizontalHeaderLabels(["روش", "تفصیلیِ پیش‌فرض", "مرکزِ هزینه", "پروژه"])
+        self.settlement_defaults_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.settlement_defaults_table.verticalHeader().setVisible(False)
+        sd_header = self.settlement_defaults_table.horizontalHeader()
+        sd_header.setSectionResizeMode(0, QHeaderView.Interactive)
+        self.settlement_defaults_table.setColumnWidth(0, 160)
+        for col in (1, 2, 3):
+            sd_header.setSectionResizeMode(col, QHeaderView.Stretch)
+        defaults_layout.addWidget(self.settlement_defaults_table, stretch=1)
+        save_defaults_button = QPushButton("💾")
+        save_defaults_button.setObjectName("iconButton")
+        save_defaults_button.setFixedWidth(44)
+        save_defaults_button.setToolTip("ذخیره")
+        save_defaults_button.clicked.connect(self._save_settlement_method_defaults)
+        defaults_layout.addWidget(save_defaults_button)
+        self.settings_tabs.addTab(defaults_tab, "پیش‌فرضِ تسویه")
+
         left.addWidget(self.settings_tabs)
 
         outer.addLayout(left, stretch=2)
@@ -333,7 +372,79 @@ class CommercialPosSessionsScreen(QWidget):
             self.quick_access_orientation_combo.setCurrentIndex(0)
 
         self.menu_groups_panel.refresh()
+        self._load_settlement_defaults(company_id)
         self._refresh_session_panel()
+
+    def _load_settlement_defaults(self, company_id: int) -> None:
+        method_codes = settlements_service.settlement_plan_method_codes("SALES_INVOICE", company_id)
+        defaults = settlements_service.list_pos_settlement_method_defaults(company_id)
+        _cc_required, cc_options = documents_service.get_header_dimension_requirement(
+            company_id, "SALES_INVOICE", dimensions_service.COST_CENTER_CODE
+        )
+        _proj_required, proj_options = documents_service.get_header_dimension_requirement(
+            company_id, "SALES_INVOICE", dimensions_service.PROJECT_CODE
+        )
+        self.settlement_defaults_table.setRowCount(len(method_codes))
+        self._settlement_default_widgets = []
+        for row_index, method_code in enumerate(method_codes):
+            default = defaults.get(method_code)
+
+            method_label = QLabel(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(method_code, method_code))
+            method_label.setAlignment(Qt.AlignCenter)
+            self.settlement_defaults_table.setCellWidget(row_index, 0, method_label)
+
+            account_id, detail_options = settlements_service.resolve_method_detail_options(
+                company_id, "RECEIPT", method_code
+            )
+            detail_combo = QComboBox()
+            detail_combo.addItem("(بدونِ پیش‌فرض)", None)
+            for option in detail_options:
+                detail_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+            if default is not None and default.detail_account_id is not None:
+                index = detail_combo.findData(default.detail_account_id)
+                if index >= 0:
+                    detail_combo.setCurrentIndex(index)
+            detail_combo.setEnabled(account_id is not None and bool(detail_options))
+            self.settlement_defaults_table.setCellWidget(row_index, 1, detail_combo)
+
+            requires_cost_center, requires_project = settlements_service.method_requires_cost_center_or_project(
+                company_id, "RECEIPT", method_code
+            )
+
+            cc_combo = QComboBox()
+            cc_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+            for option in cc_options:
+                cc_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+            if default is not None and default.cost_center_detail_account_id is not None:
+                index = cc_combo.findData(default.cost_center_detail_account_id)
+                if index >= 0:
+                    cc_combo.setCurrentIndex(index)
+            cc_combo.setEnabled(requires_cost_center)
+            self.settlement_defaults_table.setCellWidget(row_index, 2, cc_combo)
+
+            proj_combo = QComboBox()
+            proj_combo.addItem("(بدونِ پروژه)", None)
+            for option in proj_options:
+                proj_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+            if default is not None and default.project_detail_account_id is not None:
+                index = proj_combo.findData(default.project_detail_account_id)
+                if index >= 0:
+                    proj_combo.setCurrentIndex(index)
+            proj_combo.setEnabled(requires_project)
+            self.settlement_defaults_table.setCellWidget(row_index, 3, proj_combo)
+
+            self._settlement_default_widgets.append((method_code, detail_combo, cc_combo, proj_combo))
+
+    def _save_settlement_method_defaults(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        for method_code, detail_combo, cc_combo, proj_combo in self._settlement_default_widgets:
+            settlements_service.set_pos_settlement_method_default(
+                company_id, method_code,
+                detail_combo.currentData(), cc_combo.currentData(), proj_combo.currentData(),
+            )
+        self.status_label.setText("")
 
     def _save_settings(self) -> None:
         company_id = self._company_id()

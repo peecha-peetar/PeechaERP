@@ -229,7 +229,8 @@ class CommercialPosApprovalScreen(QWidget):
             for doc, plan in with_plan:
                 pos_service.record_mixed_payment_and_settle(
                     company_id, user_id, doc.document_id,
-                    [(ln.method_code, ln.amount, ln.note) for ln in plan.lines], reference_no=reference,
+                    [(ln.method_code, ln.amount, ln.note, ln.detail_account_id) for ln in plan.lines],
+                    reference_no=reference,
                 )
 
             if method_code != "NONE" and without_plan:

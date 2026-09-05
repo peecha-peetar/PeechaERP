@@ -1027,16 +1027,24 @@ class _SettlementPlanDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("نحوه‌یِ تسویه‌یِ فاکتور")
+        # طبقِ گزارشِ صریح («اندازهٔ فونت‌ها و فیلدها کمی بزرگ‌تر باشه»):
+        # فونتِ کلِ دیالوگ یک واحد بزرگ‌تر از فونتِ پیش‌فرضِ برنامه -- باید
+        # پیش از ساختِ هر ویجتِ فرزند تنظیم شود تا رویِ همه اثر بگذارد.
+        _dialog_font = self.font()
+        _dialog_font.setPointSize(_dialog_font.pointSize() + 1)
+        self.setFont(_dialog_font)
         # طبقِ گزارشِ صریح («ردیف‌هایِ این فرم اصلا معلوم نیست و ارتفاعش
         # کمه»): ۶۰۰×۴۴۰ برایِ ۵ ردیف (۵ روشِ ثابت + یادداشت + هر روش
         # ممکن است روشِ سفارشی هم داشته باشد) خیلی تنگ بود -- popupِ بازِ
-        # کمبویِ روش، بقیه‌یِ ردیف‌ها را می‌پوشاند.
-        self.resize(760, 600)
+        # کمبویِ روش، بقیه‌یِ ردیف‌ها را می‌پوشاند. حالا با ستونِ تفصیلیِ
+        # تازه (+ در حالتِ تک‌فروشی، ستونِ افزودنِ ردیف) هم عریض‌تر شده.
+        self.resize(940, 640)
         self._document_id = document_id
         self._company_id = company_id
         self._document_type_code = document_type_code
         self._total_amount = total_amount
         self._decimal_places = decimal_places
+        self._direction = "RECEIPT" if document_type_code == "SALES_INVOICE" else "PAYMENT"
         # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
         # روش‌ها را نمی‌تونه ثبت کنه»): برایِ فروشِ حضوریِ POS، صندوق‌دار
         # (که نقشِ مدیر ندارد) باید بتواند خودش همین‌جا ترکیب را ذخیره
@@ -1051,11 +1059,13 @@ class _SettlementPlanDialog(QDialog):
         # (فوکوسِ برنامه‌ای بینِ سلول‌هایِ حاویِ کمبو گاهی خودِ جدول را در
         # وضعیتِ نامعتبر می‌گذاشت). حالا هر ردیف دقیقاً به یک روشِ ثابت
         # (از self._method_codes()) قفل است -- فقط یک برچسبِ متنی، نه
-        # کمبو -- و افزودن/حذفِ ردیف اصلاً وجود ندارد؛ صندوق‌دار/مدیر فقط
-        # مبلغِ هر روش را وارد می‌کند. این هم با خواستهٔ صریحِ «همه
-        # روش‌ها فیکس بشه» یکی است، هم چون دیگر هیچ کمبویی داخلِ جدول
-        # نیست، کلِ آن دسته از ناپایداری‌ها از ریشه از بین می‌رود.
+        # کمبو. طبقِ گزارشِ بعدی («بتوان ردیفِ دومِ همان روش را هم اضافه
+        # کرد» -- فقط در فرمِ تک‌فروشی)، دکمهٔ ➕ کنارِ هر ردیف، یک ردیفِ
+        # تازه با همان روش را در انتهایِ جدول اضافه می‌کند -- باز هم
+        # بدونِ کمبو، پس همان ناپایداری برنمی‌گردد.
+        self._pos_mode = not require_manager_approval
         self._row_method_codes: list[str] = []
+        self._row_detail_ids: list[int | None] = []
 
         layout = QVBoxLayout(self)
 
@@ -1067,18 +1077,26 @@ class _SettlementPlanDialog(QDialog):
         self.status_banner.setWordWrap(True)
         layout.addWidget(self.status_banner)
 
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["روش", "مبلغ"])
+        column_count = 4 if self._pos_mode else 3
+        headers = ["روش", "مبلغ", "تفصیلی"] + ([""] if self._pos_mode else [])
+        self.table = QTableWidget(0, column_count)
+        self.table.setHorizontalHeaderLabels(headers)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         table_header = self.table.horizontalHeader()
         table_header.setSectionResizeMode(0, QHeaderView.Interactive)
-        self.table.setColumnWidth(0, 200)
+        self.table.setColumnWidth(0, 190)
         table_header.setSectionResizeMode(1, QHeaderView.Stretch)
+        table_header.setSectionResizeMode(2, QHeaderView.Interactive)
+        self.table.setColumnWidth(2, 220)
+        if self._pos_mode:
+            table_header.setSectionResizeMode(3, QHeaderView.Fixed)
+            self.table.setColumnWidth(3, 40)
         # طبقِ همان گزارش: ردیف‌هایِ کوتاه (ارتفاعِ پیش‌فرضِ Qt برایِ
-        # ویجت‌هایِ توکار مثلِ فیلدِ مبلغ) به‌سختی دیده می‌شدند.
-        self.table.verticalHeader().setDefaultSectionSize(44)
-        self.table.setMinimumHeight(260)
+        # ویجت‌هایِ توکار مثلِ فیلدِ مبلغ) به‌سختی دیده می‌شدند -- با
+        # فونتِ بزرگ‌ترِ تازه، ارتفاع هم کمی بیشتر شد.
+        self.table.verticalHeader().setDefaultSectionSize(50)
+        self.table.setMinimumHeight(280)
         layout.addWidget(self.table, stretch=1)
 
         self.remaining_label = QLabel("")
@@ -1120,10 +1138,61 @@ class _SettlementPlanDialog(QDialog):
     def _method_codes(self) -> tuple[str, ...]:
         return settlements_service.settlement_plan_method_codes(self._document_type_code, self._company_id)
 
-    def _add_row(self, method_code: str, amount: decimal.Decimal | None = None) -> None:
+    def _row_index_for_widget(self, column: int, widget) -> int | None:
+        for row_index in range(self.table.rowCount()):
+            if self.table.cellWidget(row_index, column) is widget:
+                return row_index
+        return None
+
+    def _detail_label(self, detail_account_id: int | None, options: list) -> str:
+        if detail_account_id is None:
+            return "— انتخاب —"
+        for option in options:
+            if option.detail_account_id == detail_account_id:
+                return option.name or option.code
+        return "— انتخاب —"
+
+    def _pick_detail(self, button: QPushButton, options: list) -> None:
+        row_index = self._row_index_for_widget(2, button)
+        if row_index is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("انتخابِ تفصیلی")
+        dialog.resize(420, 140)
+        dialog_layout = QVBoxLayout(dialog)
+        combo_options = [(None, "— هیچ‌کدام —")] + [
+            (option.detail_account_id, option.name or option.code) for option in options
+        ]
+        combo = _make_searchable_combo(combo_options)
+        current_id = self._row_detail_ids[row_index] if row_index < len(self._row_detail_ids) else None
+        if current_id is not None:
+            found_index = combo.findData(current_id)
+            if found_index >= 0:
+                combo.setCurrentIndex(found_index)
+        dialog_layout.addWidget(combo)
+        dialog_buttons = QHBoxLayout()
+        ok_button = QPushButton("تایید")
+        ok_button.setAutoDefault(False)
+        ok_button.clicked.connect(dialog.accept)
+        dialog_buttons.addWidget(ok_button)
+        cancel_button = QPushButton("انصراف")
+        cancel_button.setAutoDefault(False)
+        cancel_button.clicked.connect(dialog.reject)
+        dialog_buttons.addWidget(cancel_button)
+        dialog_layout.addLayout(dialog_buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        chosen_id = combo.currentData()
+        self._row_detail_ids[row_index] = chosen_id
+        button.setText(self._detail_label(chosen_id, options))
+
+    def _add_row(
+        self, method_code: str, amount: decimal.Decimal | None = None, detail_account_id: int | None = None,
+    ) -> None:
         row_index = self.table.rowCount()
         self.table.insertRow(row_index)
         self._row_method_codes.append(method_code)
+        self._row_detail_ids.append(None)
 
         method_label = QLabel(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(method_code, method_code))
         method_label.setAlignment(Qt.AlignCenter)
@@ -1144,33 +1213,70 @@ class _SettlementPlanDialog(QDialog):
         amount_field.returnPressed.connect(lambda af=amount_field: self._on_amount_return_pressed(af))
         self.table.setCellWidget(row_index, 1, amount_field)
 
+        # طبقِ درخواستِ صریح («جلویِ هر ردیف... فیلدِ انتخابِ تفصیلی...
+        # همیشه یک ستونِ ثابت در جدول»): اگر معینِ نگاشته‌شده‌یِ این روش
+        # اصلاً وجود نداشته باشد یا هیچ گزینه‌ای نداشته باشد، دکمه
+        # غیرفعال با «—» نشان داده می‌شود -- در غیرِ این صورت، اگر
+        # تفصیلی صریحاً داده نشده، پیش‌فرضِ همین روش (از تنظیماتِ
+        # pos_settlement_method_defaults) خوانده می‌شود.
+        _account_id, options = settlements_service.resolve_method_detail_options(
+            self._company_id, self._direction, method_code,
+        )
+        detail_button = QPushButton()
+        detail_button.setAutoDefault(False)
+        if _account_id is None or not options:
+            detail_button.setText("—")
+            detail_button.setEnabled(False)
+        else:
+            if detail_account_id is None:
+                default = settlements_service.get_pos_settlement_method_default(self._company_id, method_code)
+                if default is not None:
+                    detail_account_id = default.detail_account_id
+            self._row_detail_ids[row_index] = detail_account_id
+            detail_button.setText(self._detail_label(detail_account_id, options))
+            detail_button.clicked.connect(lambda _checked=False, b=detail_button, o=options: self._pick_detail(b, o))
+        self.table.setCellWidget(row_index, 2, detail_button)
+
+        if self._pos_mode:
+            # طبقِ درخواستِ صریح («بتوان ردیفِ دومِ همان روش را هم اضافه
+            # کرد»): این دکمه یک ردیفِ تازه با همان روش در انتهایِ جدول
+            # اضافه می‌کند -- نه در همین‌جا (وسطِ جدول)، تا شماره‌ردیفِ
+            # ردیف‌هایِ دیگر جابه‌جا نشود.
+            add_button = QPushButton("➕")
+            add_button.setAutoDefault(False)
+            add_button.setFixedWidth(34)
+            add_button.setToolTip("افزودنِ ردیفِ دیگری با همین روش")
+            add_button.clicked.connect(lambda _checked=False, mc=method_code: self._add_row(mc))
+            self.table.setCellWidget(row_index, 3, add_button)
+
         self._update_remaining()
 
     def _on_amount_return_pressed(self, amount_field: "_AmountField") -> None:
-        for row_index in range(self.table.rowCount()):
-            if self.table.cellWidget(row_index, 1) is amount_field:
-                next_index = row_index + 1
-                if next_index < self.table.rowCount():
-                    next_field = self.table.cellWidget(next_index, 1)
-                    if next_field is not None:
-                        next_field.setFocus()
-                        next_field.selectAll()
-                else:
-                    self._save()
-                return
+        row_index = self._row_index_for_widget(1, amount_field)
+        if row_index is None:
+            return
+        next_index = row_index + 1
+        if next_index < self.table.rowCount():
+            next_field = self.table.cellWidget(next_index, 1)
+            if next_field is not None:
+                next_field.setFocus()
+                next_field.selectAll()
+        else:
+            self._save()
 
     def _remaining_amount(self) -> decimal.Decimal:
-        lines_total = sum((amount for _m, amount, _n in self._collect_lines()), decimal.Decimal("0"))
+        lines_total = sum((amount for _m, amount, _n, _d in self._collect_lines()), decimal.Decimal("0"))
         return self._total_amount - lines_total
 
-    def _collect_lines(self) -> list[tuple[str, decimal.Decimal, str | None]]:
-        lines: list[tuple[str, decimal.Decimal, str | None]] = []
+    def _collect_lines(self) -> list[tuple[str, decimal.Decimal, str | None, int | None]]:
+        lines: list[tuple[str, decimal.Decimal, str | None, int | None]] = []
         for row_index in range(self.table.rowCount()):
             amount_field = self.table.cellWidget(row_index, 1)
             amount = decimal.Decimal(str(amount_field.value()))
             if amount <= 0:
                 continue
-            lines.append((self._row_method_codes[row_index], amount, None))
+            detail_id = self._row_detail_ids[row_index] if row_index < len(self._row_detail_ids) else None
+            lines.append((self._row_method_codes[row_index], amount, None, detail_id))
         return lines
 
     def _update_remaining(self, *_args) -> None:
@@ -1182,21 +1288,30 @@ class _SettlementPlanDialog(QDialog):
         # طبقِ درخواستِ صریح («همه روش‌هایِ دریافت... فیکس بشه»): همیشه
         # به‌ازایِ هر روشِ ممکن (self._method_codes()) دقیقاً یک ردیفِ
         # ثابت ساخته می‌شود -- چه نقشه‌ای از قبل ذخیره شده باشد چه نه.
-        # اگر نقشه‌ای از قبل باشد، مبلغِ همان روش در ردیفِ متناظرش پر
-        # می‌شود.
+        # اگر نقشه‌ای از قبل باشد، مبلغ/تفصیلیِ همان روش در ردیفِ
+        # متناظرش پر می‌شود. طبقِ گزارشِ بعدی («ردیفِ دومِ همان روش»)،
+        # اگر نقشه بیش‌از‌یک ردیف با همان روش داشته باشد (دوپلیکیت)، هر
+        # ردیفِ اضافی هم -- به همان ترتیب -- بازسازی می‌شود.
         plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
-        amount_by_method: dict[str, decimal.Decimal] = {}
+        lines_by_method: dict[str, list] = {}
         if plan is not None:
-            amount_by_method = {line.method_code: line.amount for line in plan.lines}
+            for line in plan.lines:
+                lines_by_method.setdefault(line.method_code, []).append(line)
         method_codes = self._method_codes()
         for code in method_codes:
-            self._add_row(code, amount_by_method.get(code))
+            bucket = lines_by_method.get(code) or []
+            if bucket:
+                first_line = bucket.pop(0)
+                self._add_row(code, first_line.amount, first_line.detail_account_id)
+            else:
+                self._add_row(code)
         # اگر نقشه ردیفی با روشی خارج از فهرستِ فعلی داشته باشد (مثلاً
-        # روشِ سفارشیِ بعداً غیرفعال‌شده)، برایِ اینکه مبلغِ آن گم نشود،
-        # همان ردیف هم (فقط همین یک‌بار) اضافه می‌شود.
-        for code, amount in amount_by_method.items():
-            if code not in method_codes:
-                self._add_row(code, amount)
+        # روشِ سفارشیِ بعداً غیرفعال‌شده)، یا ردیفِ دومِ همان روش
+        # (دوپلیکیت) باشد، برایِ اینکه مبلغِ آن گم نشود همان ردیف هم
+        # اضافه می‌شود.
+        for code, bucket in lines_by_method.items():
+            for line in bucket:
+                self._add_row(code, line.amount, line.detail_account_id)
 
         if plan is None:
             self.approve_button.setEnabled(False)

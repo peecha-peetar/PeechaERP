@@ -195,7 +195,12 @@ def _get_reopenable_pos_document(session, document_id: int, company_id: int) -> 
 def reopen_confirmed_sale(document_id: int, company_id: int, user_id: int) -> None:
     """صندوق‌دار یک فروشِ تاییدشده را برایِ اصلاح (افزودن/حذف/تغییرِ
     ردیف) دوباره به پیش‌نویس برمی‌گرداند -- بعدِ اصلاح، دوباره از همان
-    دکمه‌هایِ تاییدِ فروش عبور می‌کند."""
+    دکمه‌هایِ تاییدِ فروش عبور می‌کند. طبقِ درخواستِ صریح («روشِ
+    پرداخت‌هایِ مربوط به همان فاکتور نیز به‌همراهِ فاکتور ویرایش یا حذف
+    بشه»): نقشه‌یِ تسویه‌یِ قبلی (اگر باشد) هم حذف می‌شود -- چون بعدِ
+    اصلاحِ سبد، مبلغِ کلِ فاکتور احتمالاً عوض شده و نقشه‌یِ قدیمی دیگر
+    معتبر نیست؛ صندوق‌دار بعدِ تاییدِ دوباره، نحوه‌یِ تسویه را از نو
+    مشخص می‌کند."""
     with new_session() as session:
         doc = _get_reopenable_pos_document(session, document_id, company_id)
         pos_session_id = doc.pos_session_id
@@ -207,12 +212,15 @@ def reopen_confirmed_sale(document_id: int, company_id: int, user_id: int) -> No
             )
         )
         session.commit()
+    settlements_service.delete_settlement_plan(document_id, company_id)
 
 
 def delete_confirmed_sale(document_id: int, company_id: int, user_id: int) -> None:
     """صندوق‌دار یک فروشِ تاییدشده (پیش از تاییدِ سرپرست) را لغو می‌کند --
     طبقِ الگویِ عمومیِ برنامه، لغو (نه حذفِ خام) تا تاریخچه از بین
-    نرود؛ در گزارشِ بستنِ شیفت به‌عنوانِ «حذف‌شده» نشان داده می‌شود."""
+    نرود؛ در گزارشِ بستنِ شیفت به‌عنوانِ «حذف‌شده» نشان داده می‌شود. طبقِ
+    همان درخواستِ صریح، نقشه‌یِ تسویه‌یِ این فاکتور هم همراهِ آن حذف
+    می‌شود."""
     with new_session() as session:
         doc = _get_reopenable_pos_document(session, document_id, company_id)
         pos_session_id = doc.pos_session_id
@@ -223,6 +231,7 @@ def delete_confirmed_sale(document_id: int, company_id: int, user_id: int) -> No
             )
         )
         session.commit()
+    settlements_service.delete_settlement_plan(document_id, company_id)
     documents_service.cancel_document(document_id, company_id)
 
 
@@ -381,7 +390,7 @@ def record_payment_and_settle(
 
 def record_mixed_payment_and_settle(
     company_id: int, user_id: int, document_id: int,
-    method_lines: list[tuple[str, decimal.Decimal, str | None]], reference_no: str | None = None,
+    method_lines: list[tuple], reference_no: str | None = None,
 ) -> int | None:
     """طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
     روش‌ها را نمی‌تونه ثبت کنه»): نسخهٔ چندروشیِ record_payment_and_settle
@@ -390,7 +399,15 @@ def record_mixed_payment_and_settle(
     VOUCHER، نه واژگانِ CARD/WALLET/GIFT_CARDِ منویِ تکی‌روشِ سرپرست)
     استفاده کرده. برخلافِ نسخهٔ تک‌روشی، همه‌یِ ردیف‌ها در یک سندِ
     حسابداریِ واحد (create_treasury_voucher با چند MethodLine) ثبت
-    می‌شوند -- دقیقاً هم‌الگو با فرمِ فاکتورِ عمومی."""
+    می‌شوند -- دقیقاً هم‌الگو با فرمِ فاکتورِ عمومی.
+
+    هر ردیفِ method_lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code,
+    amount[, note[, detail_account_id]]) -- طبقِ درخواستِ صریح (تفصیلیِ
+    انتخاب‌شده/پیش‌فرضِ همان روش هم به سندِ حسابداری منتقل شود). اگر
+    تفصیلی صریحاً داده نشده باشد، پیش‌فرضِ همان روش (از تنظیماتِ
+    pos_settlement_method_defaults) استفاده می‌شود؛ مرکزِ هزینه/پروژهٔ
+    پیش‌فرضِ همان تنظیمات هم -- اگر معینِ نگاشته‌شده نیازشان داشته باشد --
+    مستقیم به همان ردیف اضافه می‌شود."""
     if not method_lines:
         return None
     with new_session() as session:
@@ -416,12 +433,41 @@ def record_mixed_payment_and_settle(
     if mapping_account_id is None:
         raise ValueError("نگاشتِ حسابِ دریافت برایِ گروهِ «مشتری» در تنظیماتِ خزانه‌داری مشخص نشده است.")
 
-    total_amount = sum((amount for _m, amount, _n in method_lines), decimal.Decimal("0"))
+    cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(
+        company_id, dimensions_service.COST_CENTER_CODE
+    )
+    project_type_id = dimensions_service.get_specialized_dimension_type_id(
+        company_id, dimensions_service.PROJECT_CODE
+    )
+
+    total_amount = decimal.Decimal("0")
+    voucher_lines: list[treasury_service.MethodLine] = []
+    for entry in method_lines:
+        method_code, amount = entry[0], entry[1]
+        note = entry[2] if len(entry) > 2 else None
+        detail_account_id = entry[3] if len(entry) > 3 else None
+        total_amount += amount
+        default = settlements_service.get_pos_settlement_method_default(company_id, method_code)
+        extra_details: dict[int, int] = {}
+        if default is not None:
+            if detail_account_id is None:
+                detail_account_id = default.detail_account_id
+            if default.cost_center_detail_account_id is not None:
+                extra_details[cost_center_type_id] = default.cost_center_detail_account_id
+            if default.project_detail_account_id is not None:
+                extra_details[project_type_id] = default.project_detail_account_id
+        voucher_lines.append(
+            treasury_service.MethodLine(
+                method=method_code, amount=amount, description=note or "",
+                detail_account_id=detail_account_id, extra_details=(extra_details or None),
+            )
+        )
+
     description = f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_no}"
     voucher_result = treasury_service.create_treasury_voucher(
         company_id, user_id, "RECEIPT", mapping_account_id,
         {person_dimension_type_id: customer_id}, document_date, description,
-        [treasury_service.MethodLine(method=m, amount=a, description=n or "") for m, a, n in method_lines],
+        voucher_lines,
     )
     settlements_service.allocate_settlement(
         company_id, document_id, voucher_result.journal_entry_id, datetime.date.today(), total_amount, user_id,
