@@ -127,6 +127,34 @@ def close_session(session_id: int, closed_by_user_id: int, closing_cash_amount: 
         return pos_session.variance_amount
 
 
+@dataclass
+class PosSessionSalesSummary:
+    """طبقِ درخواستِ صریح («جمعِ فروشِ صندوق و تخفیف و تعدادِ فاکتور و
+    مالیات در زیرِ صندوق نمایش داده شود»): رویِ همه‌یِ فروش‌هایِ همین
+    شیفت (هر وضعیتی جز CANCELLED)، نه فقط فاکتورهایِ ثبتِ‌نهایی‌شده --
+    چون هدف نمایشِ زنده‌یِ کارِ همین شیفت است، نه گزارشِ مالیِ رسمی."""
+
+    invoice_count: int
+    total_amount: decimal.Decimal
+    discount_amount: decimal.Decimal
+    tax_amount: decimal.Decimal
+
+
+def get_session_sales_summary(session_id: int) -> PosSessionSalesSummary:
+    with new_session() as session:
+        rows = session.scalars(
+            select(CommercialDocument).where(
+                CommercialDocument.pos_session_id == session_id, CommercialDocument.status_code != "CANCELLED",
+            )
+        ).all()
+        return PosSessionSalesSummary(
+            invoice_count=len(rows),
+            total_amount=sum((d.total_amount for d in rows), _ZERO),
+            discount_amount=sum((d.discount_amount for d in rows), _ZERO),
+            tax_amount=sum((d.tax_amount for d in rows), _ZERO),
+        )
+
+
 def override_session_variance(session_id: int, overridden_by_user_id: int, reason: str) -> None:
     with new_session() as session:
         pos_session = session.get(PosSession, session_id)
@@ -364,10 +392,37 @@ def record_payment_and_settle_batch(
             f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_numbers[0]}" if len(docs) == 1
             else f"دریافتِ صندوق (POS) -- بابتِ {numerals.to_persian_digits(str(len(docs)))} فاکتورِ فروش"
         )
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («بعد از تاییدِ سرپرست می‌گوید
+        # حساب مرکزِ هزینه و پروژه ندارد»): برخلافِ record_mixed_payment_
+        # and_settle، این مسیرِ تک‌روشی (دکمه‌هایِ سادهٔ نقدی/نسیهٔ صندوق‌دار)
+        # هیچ‌وقت پیش‌فرضِ تفصیلی/مرکزِهزینه/پروژهٔ همان روش (تنظیماتِ
+        # «پیش‌فرضِ تسویه») را نمی‌خواند -- اگر حسابِ نگاشت‌شده نیازِ
+        # این ابعاد را داشته باشد، create_treasury_voucher بدونِ آن‌ها
+        # خطا می‌داد.
+        cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(
+            company_id, dimensions_service.COST_CENTER_CODE
+        )
+        project_type_id = dimensions_service.get_specialized_dimension_type_id(
+            company_id, dimensions_service.PROJECT_CODE
+        )
+        default = settlements_service.get_pos_settlement_method_default(company_id, treasury_method)
+        detail_account_id = None
+        extra_details: dict[int, int] = {}
+        if default is not None:
+            detail_account_id = default.detail_account_id
+            if default.cost_center_detail_account_id is not None:
+                extra_details[cost_center_type_id] = default.cost_center_detail_account_id
+            if default.project_detail_account_id is not None:
+                extra_details[project_type_id] = default.project_detail_account_id
         voucher_result = treasury_service.create_treasury_voucher(
             company_id, user_id, "RECEIPT", mapping_account_id,
             {person_dimension_type_id: customer_id}, document_date, description,
-            [treasury_service.MethodLine(method=treasury_method, amount=total_amount)],
+            [
+                treasury_service.MethodLine(
+                    method=treasury_method, amount=total_amount, detail_account_id=detail_account_id,
+                    extra_details=(extra_details or None),
+                )
+            ],
         )
         journal_entry_id = voucher_result.journal_entry_id
 
@@ -584,6 +639,7 @@ def set_pos_settings(
     quick_access_position: str = "LEFT", quick_access_orientation: str = "HORIZONTAL",
     show_price_list_field: bool = True, show_tax_discount_breakdown: bool = True,
     show_customer_credit_warning: bool = True, recent_invoices_count: int = 10,
+    fast_receipt_printing: bool = True,
 ) -> None:
     with new_session() as session:
         row = session.get(PosSettings, company_id)
@@ -600,6 +656,7 @@ def set_pos_settings(
                     quick_access_position=quick_access_position, quick_access_orientation=quick_access_orientation,
                     show_price_list_field=show_price_list_field, show_tax_discount_breakdown=show_tax_discount_breakdown,
                     show_customer_credit_warning=show_customer_credit_warning, recent_invoices_count=recent_invoices_count,
+                    fast_receipt_printing=fast_receipt_printing,
                 )
             )
         else:
@@ -621,6 +678,7 @@ def set_pos_settings(
             row.show_tax_discount_breakdown = show_tax_discount_breakdown
             row.show_customer_credit_warning = show_customer_credit_warning
             row.recent_invoices_count = recent_invoices_count
+            row.fast_receipt_printing = fast_receipt_printing
         session.commit()
 
 

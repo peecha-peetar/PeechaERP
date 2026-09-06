@@ -145,6 +145,35 @@ class CommercialPosSessionsScreen(QWidget):
         quick_settings_box.addWidget(save_quick_settings_button)
         retail_layout.addLayout(quick_settings_box)
 
+        # طبقِ درخواستِ صریح («دلیلی نداره اندازهٔ عرض/ارتفاعِ کلیدِ فوری در
+        # خودِ فرمِ فاکتور باشه -- باید به تنظیمات منتقل بشه»): برخلافِ
+        # کنترل‌هایِ بالا (سراسریِ شرکت)، این دو فقط رویِ حسابِ کاربرِ
+        # جاری اثر می‌گذارد (PosCashierSettings.quick_button_*_override) --
+        # قبلاً این دو اسپین‌باکس مستقیماً در commercial_pos_sale.py بود.
+        my_size_title = QLabel("اندازهٔ کلیدهایِ فوریِ من (فقط برایِ حسابِ جاری -- بازنویسیِ اندازهٔ سراسریِ بالا)")
+        my_size_title.setObjectName("sectionHint")
+        my_size_title.setWordWrap(True)
+        retail_layout.addWidget(my_size_title)
+        my_size_box = QHBoxLayout()
+        my_size_box.addWidget(QLabel("عرض"))
+        self.my_quick_button_width_field = QSpinBox()
+        self.my_quick_button_width_field.setRange(0, 400)
+        self.my_quick_button_width_field.setSpecialValueText("پیش‌فرض")
+        my_size_box.addWidget(self.my_quick_button_width_field)
+        my_size_box.addWidget(QLabel("ارتفاع"))
+        self.my_quick_button_height_field = QSpinBox()
+        self.my_quick_button_height_field.setRange(0, 300)
+        self.my_quick_button_height_field.setSpecialValueText("پیش‌فرض")
+        my_size_box.addWidget(self.my_quick_button_height_field)
+        save_my_size_button = QPushButton("💾")
+        save_my_size_button.setObjectName("iconButton")
+        save_my_size_button.setFixedWidth(44)
+        save_my_size_button.setToolTip("ذخیره (فقط برایِ من)")
+        save_my_size_button.clicked.connect(self._save_my_quick_button_size)
+        my_size_box.addWidget(save_my_size_button)
+        my_size_box.addStretch(1)
+        retail_layout.addLayout(my_size_box)
+
         # طبقِ درخواستِ صریح («کلیدهایِ فوری از سمتِ راست/چپ، عمودی/افقی
         # در لوکیشن‌هایِ مختلفِ صفحه و ترازبندی‌هایِ مختلف قرار بگیرد»).
         layout_settings_box = QHBoxLayout()
@@ -198,6 +227,14 @@ class CommercialPosSessionsScreen(QWidget):
         visibility_box.addStretch(1)
         retail_layout.addLayout(visibility_box)
 
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («دکمهٔ تسویه با پرینت خیلی طول
+        # می‌کشد»): چاپِ حرفه‌ایِ Jasper هر بار یک JVMِ تازه بالا می‌آورد.
+        print_box = QHBoxLayout()
+        self.fast_receipt_printing_checkbox = QCheckBox("چاپِ سریعِ فیش (بدونِ Jasper -- توصیه‌شده برایِ صندوق)")
+        print_box.addWidget(self.fast_receipt_printing_checkbox)
+        print_box.addStretch(1)
+        retail_layout.addLayout(print_box)
+
         receipt_box = QHBoxLayout()
         receipt_box.addWidget(QLabel("سرتیترِ فیش"))
         self.receipt_header_field = QLineEdit()
@@ -241,6 +278,12 @@ class CommercialPosSessionsScreen(QWidget):
         self.settlement_defaults_table.setHorizontalHeaderLabels(["روش", "تفصیلیِ پیش‌فرض", "مرکزِ هزینه", "پروژه"])
         self.settlement_defaults_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.settlement_defaults_table.verticalHeader().setVisible(False)
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («ارتفاعِ فیلدها خیلی کمه»):
+        # ارتفاعِ پیش‌فرضِ ردیف (بر مبنایِ فقط متنِ سلولِ اول) برایِ جا
+        # دادنِ سه QComboBoxِ کاملِ سلول‌هایِ دیگر کافی نبود -- هم‌الگو با
+        # رفعِ همین باگ در commercial_documents_list.py.
+        self.settlement_defaults_table.verticalHeader().setMinimumSectionSize(40)
+        self.settlement_defaults_table.verticalHeader().setDefaultSectionSize(40)
         sd_header = self.settlement_defaults_table.horizontalHeader()
         sd_header.setSectionResizeMode(0, QHeaderView.Interactive)
         self.settlement_defaults_table.setColumnWidth(0, 160)
@@ -257,7 +300,13 @@ class CommercialPosSessionsScreen(QWidget):
 
         left.addWidget(self.settings_tabs)
 
-        outer.addLayout(left, stretch=2)
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فرم سمتِ راستش خالیه و سمتِ چپ
+        # بسیار فشرده است»): این ستون (ترمینال‌ها + سه تبِ تنظیماتِ
+        # پرمحتوا) چگالیِ محتوایِ بیشتری از ستونِ کناریِ شیفت/صندوق دارد --
+        # قبلاً stretchِ کمتری می‌گرفت (۲ در برابرِ ۳) که باعث می‌شد
+        # فیلدهایِ این ستون در عرضِ کم فشرده شوند و ستونِ شیفت با وجودِ
+        # محتوایِ اسپارس‌تر، فضایِ خالیِ بیشتری بگیرد.
+        outer.addLayout(left, stretch=3)
 
         right = QVBoxLayout()
         self.session_title = QLabel("یک ترمینال از فهرست انتخاب کنید")
@@ -320,7 +369,7 @@ class CommercialPosSessionsScreen(QWidget):
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         right.addWidget(self.status_label)
-        outer.addLayout(right, stretch=3)
+        outer.addLayout(right, stretch=2)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -374,6 +423,7 @@ class CommercialPosSessionsScreen(QWidget):
             self.show_tax_discount_breakdown_checkbox.setChecked(settings.show_tax_discount_breakdown)
             self.show_customer_credit_warning_checkbox.setChecked(settings.show_customer_credit_warning)
             self.recent_invoices_count_field.setValue(settings.recent_invoices_count)
+            self.fast_receipt_printing_checkbox.setChecked(settings.fast_receipt_printing)
         else:
             if current_guest is not None:
                 index = self.guest_customer_combo.findData(current_guest)
@@ -394,10 +444,34 @@ class CommercialPosSessionsScreen(QWidget):
             self.show_tax_discount_breakdown_checkbox.setChecked(True)
             self.show_customer_credit_warning_checkbox.setChecked(True)
             self.recent_invoices_count_field.setValue(10)
+            self.fast_receipt_printing_checkbox.setChecked(True)
+
+        cashier_settings = (
+            pos_service.get_cashier_settings(app_session.current_user.user_id, company_id)
+            if app_session.current_user else None
+        )
+        self.my_quick_button_width_field.setValue(
+            cashier_settings.quick_button_width_override or 0 if cashier_settings else 0
+        )
+        self.my_quick_button_height_field.setValue(
+            cashier_settings.quick_button_height_override or 0 if cashier_settings else 0
+        )
 
         self.menu_groups_panel.refresh()
         self._load_settlement_defaults(company_id)
         self._refresh_session_panel()
+
+    def _save_my_quick_button_size(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or not app_session.current_user:
+            return
+        user_id = app_session.current_user.user_id
+        existing = pos_service.get_cashier_settings(user_id, company_id)
+        order_text = existing.quick_button_order if existing else None
+        width_override = self.my_quick_button_width_field.value() or None
+        height_override = self.my_quick_button_height_field.value() or None
+        pos_service.set_quick_button_layout(user_id, company_id, order_text, width_override, height_override)
+        self.status_label.setText("")
 
     def _load_settlement_defaults(self, company_id: int) -> None:
         method_codes = settlements_service.settlement_plan_method_codes("SALES_INVOICE", company_id)
@@ -494,6 +568,7 @@ class CommercialPosSessionsScreen(QWidget):
             show_tax_discount_breakdown=self.show_tax_discount_breakdown_checkbox.isChecked(),
             show_customer_credit_warning=self.show_customer_credit_warning_checkbox.isChecked(),
             recent_invoices_count=self.recent_invoices_count_field.value(),
+            fast_receipt_printing=self.fast_receipt_printing_checkbox.isChecked(),
         )
         self.status_label.setText("")
 

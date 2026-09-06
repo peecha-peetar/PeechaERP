@@ -322,6 +322,7 @@ def _show_invoice_print(
     footer_text: str | None = None,
     form_code: str = "COMMERCIAL_INVOICE",
     printer_names: list[str] | None = None,
+    fast: bool = False,
 ) -> None:
     doc, lines = documents_service.get_document(document_id, company_id)
 
@@ -330,7 +331,12 @@ def _show_invoice_print(
     # پرینترِ مشخص resolve شده باشد، مستقیم رویِ همان(ها) چاپ می‌شود --
     # یک پیش‌نمایش به‌ازایِ هر پرینترِ متمایز؛ مسیرِ حرفه‌ایِ Jasper (که
     # فعلاً پرینترِ مقصد را نمی‌گیرد) این‌جا دور زده می‌شود.
-    if printer_names:
+    #
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («دکمهٔ تسویه با پرینت خیلی طول
+    # می‌کشد»): fast=True (پیش‌فرضِ فیشِ POS) هم همین مسیرِ سریعِ HTML را
+    # انتخاب می‌کند -- حتی وقتی هیچ پرینترِ اختصاصی‌ای resolve نشده --
+    # چون Jasper هر بار یک JVMِ تازه بالا می‌آورد (چند ثانیه طول می‌کشد).
+    if printer_names or fast:
         decimal_places = companies_service.get_base_currency_decimal_places(company_id)
         if counterparty_label is None:
             counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
@@ -340,7 +346,7 @@ def _show_invoice_print(
             company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
             header_text=header_text, footer_text=footer_text,
         )
-        for printer_name in printer_names:
+        for printer_name in (printer_names or [None]):
             _print_receipt_document(parent, html, printer_name=printer_name)
         return
 

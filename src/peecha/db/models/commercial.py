@@ -327,6 +327,13 @@ class PosSettings(Base):
     show_tax_discount_breakdown: Mapped[bool] = mapped_column(default=True)
     show_customer_credit_warning: Mapped[bool] = mapped_column(default=True)
     recent_invoices_count: Mapped[int] = mapped_column(default=10)
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («دکمهٔ تسویه با پرینت خیلی طول
+    # می‌کشد»): چاپِ حرفه‌ایِ Jasper هر بار یک JVMِ تازه بالا می‌آورد
+    # (چند ثانیه) -- برایِ فیشِ صندوق که در هر فروش استفاده می‌شود، این
+    # سویچ به‌طورِ پیش‌فرض همان مسیرِ سریعِ HTML/QTextDocument (بدونِ
+    # Jasper) را انتخاب می‌کند؛ خاموش‌کردنش چاپِ حرفه‌ایِ Jasper را
+    # برمی‌گرداند.
+    fast_receipt_printing: Mapped[bool] = mapped_column(default=True)
 
 
 class PosMenuGroup(Base):

@@ -307,6 +307,12 @@ class _AmountField(QLineEdit):
     def _on_text_edited(self, text: str) -> None:
         cursor = self.cursorPosition()
         ascii_text = numerals.to_ascii_digits(text)
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («۱.۲۵ وارد می‌کنم، ۱۲۵.۰۰۰ نمایش
+        # می‌دهد»): جداکنندهٔ اعشاریِ عربی (٫ U+066B) -- که کیبوردِ فارسی/
+        # نامپَدِ ویندوز روی لایه‌بندیِ فارسی معمولاً به‌جایِ نقطه تولید
+        # می‌کند -- قبلاً توسطِ regexِ زیر (که فقط "." را نگه می‌داشت) به‌طورِ
+        # کامل حذف می‌شد؛ یعنی «۱٫۲۵» به «۱۲۵» تبدیل می‌شد.
+        ascii_text = ascii_text.replace("٫", ".")
         digits_before_cursor = len(re.sub(r"[^0-9]", "", ascii_text[:cursor]))
         raw = re.sub(r"[^0-9.]", "", ascii_text)
         if self._decimals == 0:

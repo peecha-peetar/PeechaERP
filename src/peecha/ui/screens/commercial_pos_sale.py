@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -50,6 +49,7 @@ from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_comb
 from peecha.ui.widgets import wrap_scrollable
 
 _DEFAULT_QUICK_BUTTON_COLOR = "#4A90D9"
+_POS_PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه", "MIXED": "ترکیبی"}
 
 
 class _QuickAccessButton(QPushButton):
@@ -172,6 +172,14 @@ class CommercialPosSaleScreen(QWidget):
         self.session_label = QLabel("")
         outer.addWidget(self.session_label)
 
+        # طبقِ درخواستِ صریح («جمعِ فروشِ صندوق و تخفیف و تعدادِ فاکتور و
+        # مالیات در زیرِ صندوق نمایش داده شود»): جمعِ زندهٔ همین شیفتِ باز
+        # -- هر بار refresh()/تاییدِ فروش، دوباره محاسبه می‌شود.
+        self.session_summary_label = QLabel("")
+        self.session_summary_label.setObjectName("sectionHint")
+        self.session_summary_label.setWordWrap(True)
+        outer.addWidget(self.session_summary_label)
+
         # طبقِ درخواستِ صریح («دکمه‌یِ نیو، فیلدِ جستجو در یک ردیف باشه»)
         scan_row = QHBoxLayout()
         new_sale_button = QPushButton("🆕")
@@ -281,46 +289,35 @@ class CommercialPosSaleScreen(QWidget):
         # همیشه زیرِ جدولِ سبد بنشیند، در یک ستونِ مستقل جاسازی شده که
         # می‌تواند به سمتِ چپ یا راستِ کلِ محتوا منتقل شود (تنظیماتِ
         # quick_access_position).
-        # طبقِ درخواستِ صریح («دکمه‌هایِ فوری و تب‌ها قابلیتِ تنظیم و
-        # بزرگ/کوچک‌شدنِ عرض داشته باشه... به‌ازایِ هر کاربر»): این دو
-        # اسپین‌باکس، بازنویسیِ اندازه‌یِ همینِ کاربر را (نه سراسریِ شرکت)
-        # تنظیم می‌کنند -- خالی/صفر یعنی همان اندازه‌یِ تنظیماتِ شرکت.
-        resize_row = QHBoxLayout()
-        resize_row.addWidget(QLabel("عرضِ دکمه"))
-        self.quick_button_width_field = QSpinBox()
-        self.quick_button_width_field.setRange(0, 400)
-        self.quick_button_width_field.setSpecialValueText("پیش‌فرض")
-        resize_row.addWidget(self.quick_button_width_field)
-        resize_row.addWidget(QLabel("ارتفاعِ دکمه"))
-        self.quick_button_height_field = QSpinBox()
-        self.quick_button_height_field.setRange(0, 300)
-        self.quick_button_height_field.setSpecialValueText("پیش‌فرض")
-        resize_row.addWidget(self.quick_button_height_field)
-        save_button_size_button = QPushButton("💾")
-        save_button_size_button.setObjectName("iconButton")
-        save_button_size_button.setFixedWidth(36)
-        save_button_size_button.setToolTip("ذخیرهٔ اندازهٔ دکمه (فقط برایِ همین کاربر)")
-        save_button_size_button.clicked.connect(self._save_quick_button_size)
-        resize_row.addWidget(save_button_size_button)
-        resize_row.addStretch(1)
-
         self.quick_access_tabs = QTabWidget()
         self._quick_access_wrapper = QWidget()
         quick_access_wrapper_layout = QVBoxLayout(self._quick_access_wrapper)
         quick_access_wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        quick_access_wrapper_layout.addLayout(resize_row)
         quick_access_wrapper_layout.addWidget(self.quick_access_tabs)
 
         # طبقِ درخواستِ صریح («در قسمتِ سمتِ راست زیرِ تبِ کلیدِ فوری، ۱۰
         # فاکتور یا تعدادِ دلخواهِ تک‌فروشی را نمایش و از همان‌جا هم
         # بتوان اصلاح کرد»).
-        recent_title = QLabel("آخرین فاکتورهایِ تک‌فروشی")
+        recent_title = QLabel("آخرین فاکتورهایِ تک‌فروشی (دابل‌کلیک برایِ اصلاح)")
         recent_title.setObjectName("sectionTitle")
         quick_access_wrapper_layout.addWidget(recent_title)
         self.recent_invoices_list = QListWidget()
         self.recent_invoices_list.setMaximumHeight(220)
         self.recent_invoices_list.itemDoubleClicked.connect(self._open_recent_invoice)
         quick_access_wrapper_layout.addWidget(self.recent_invoices_list)
+        # طبقِ درخواستِ صریح («فاکتورهایِ آخری که نمایش می‌دهد، همان‌جا
+        # صندوق‌دار بتواند حذف یا ویرایش کند»): ویرایش با دابل‌کلیکِ بالا
+        # از قبل ممکن بود؛ این ردیف فقط حذفِ مستقیم را اضافه می‌کند.
+        recent_actions_row = QHBoxLayout()
+        recent_edit_button = QPushButton("✎ اصلاحِ انتخاب‌شده")
+        recent_edit_button.setObjectName("iconButton")
+        recent_edit_button.clicked.connect(self._edit_selected_recent_invoice)
+        recent_actions_row.addWidget(recent_edit_button)
+        recent_delete_button = QPushButton("🗑 حذفِ انتخاب‌شده")
+        recent_delete_button.setObjectName("dangerIconButton")
+        recent_delete_button.clicked.connect(self._delete_selected_recent_invoice)
+        recent_actions_row.addWidget(recent_delete_button)
+        quick_access_wrapper_layout.addLayout(recent_actions_row)
 
         self._quick_access_position = "LEFT"
         self._apply_quick_access_position("LEFT")
@@ -361,16 +358,6 @@ class CommercialPosSaleScreen(QWidget):
         )
         order_text = self._cashier_settings.quick_button_order if self._cashier_settings else None
         self._quick_button_order = [int(x) for x in order_text.split(",") if x.strip().isdigit()] if order_text else []
-        self.quick_button_width_field.blockSignals(True)
-        self.quick_button_height_field.blockSignals(True)
-        self.quick_button_width_field.setValue(
-            self._cashier_settings.quick_button_width_override or 0 if self._cashier_settings else 0
-        )
-        self.quick_button_height_field.setValue(
-            self._cashier_settings.quick_button_height_override or 0 if self._cashier_settings else 0
-        )
-        self.quick_button_width_field.blockSignals(False)
-        self.quick_button_height_field.blockSignals(False)
 
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._rebuild_quick_access()
@@ -480,9 +467,17 @@ class CommercialPosSaleScreen(QWidget):
                 "تنظیماتِ تک‌فروشی» یک شیفت باز کنید."
             )
             self.session_label.setObjectName("statusError")
+            self.session_summary_label.setText("")
         else:
             self.session_label.setText(f"شیفتِ باز — شناسه: {numerals.to_persian_digits(str(session_id))}")
             self.session_label.setObjectName("")
+            summary = pos_service.get_session_sales_summary(session_id)
+            self.session_summary_label.setText(
+                f"جمعِ فروشِ این شیفت: {numerals.format_company_amount(summary.total_amount)} | "
+                f"تخفیف: {numerals.format_company_amount(summary.discount_amount)} | "
+                f"مالیات: {numerals.format_company_amount(summary.tax_amount)} | "
+                f"تعدادِ فاکتور: {numerals.to_persian_digits(str(summary.invoice_count))}"
+            )
         self.session_label.style().unpolish(self.session_label)
         self.session_label.style().polish(self.session_label)
 
@@ -618,19 +613,6 @@ class CommercialPosSaleScreen(QWidget):
             )
         self._rebuild_quick_access()
 
-    def _save_quick_button_size(self) -> None:
-        company_id = self._company_id()
-        if company_id is None or not app_session.current_user:
-            return
-        width_override = self.quick_button_width_field.value() or None
-        height_override = self.quick_button_height_field.value() or None
-        order_text = ",".join(str(i) for i in self._quick_button_order) if self._quick_button_order else None
-        pos_service.set_quick_button_layout(
-            app_session.current_user.user_id, company_id, order_text, width_override, height_override,
-        )
-        self._cashier_settings = pos_service.get_cashier_settings(app_session.current_user.user_id, company_id)
-        self._rebuild_quick_access()
-
     def _refresh_recent_invoices(self) -> None:
         company_id = self._company_id()
         self.recent_invoices_list.clear()
@@ -642,6 +624,7 @@ class CommercialPosSaleScreen(QWidget):
             label = f"سند #{doc.document_id} — {status_label} — {numerals.format_company_amount(doc.total_amount)}"
             list_item = QListWidgetItem(label)
             list_item.setData(Qt.UserRole, doc.document_id)
+            list_item.setData(Qt.UserRole + 1, doc.status_code)
             self.recent_invoices_list.addItem(list_item)
 
     def _open_recent_invoice(self, list_item: QListWidgetItem) -> None:
@@ -652,6 +635,42 @@ class CommercialPosSaleScreen(QWidget):
         document_id = list_item.data(Qt.UserRole)
         if document_id is not None:
             self.open_document_for_edit(document_id)
+
+    def _edit_selected_recent_invoice(self) -> None:
+        current = self.recent_invoices_list.currentItem()
+        if current is None:
+            self.status_label.setText("یک فاکتور را از فهرستِ «آخرین فاکتورها» انتخاب کنید.")
+            return
+        self._open_recent_invoice(current)
+
+    def _delete_selected_recent_invoice(self) -> None:
+        current = self.recent_invoices_list.currentItem()
+        if current is None:
+            self.status_label.setText("یک فاکتور را از فهرستِ «آخرین فاکتورها» انتخاب کنید.")
+            return
+        document_id = current.data(Qt.UserRole)
+        status_code = current.data(Qt.UserRole + 1)
+        company_id = self._company_id()
+        if document_id is None or company_id is None:
+            return
+        if status_code not in ("DRAFT", "CONFIRMED"):
+            self.status_label.setText("فقط فاکتورهایِ پیش‌از‌تاییدِ‌سرپرست (پیش‌نویس/تاییدشده) از این‌جا قابلِ‌حذف‌اند.")
+            return
+        confirm = QMessageBox.question(self, "حذفِ فروش", "این فروش حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            if status_code == "CONFIRMED":
+                pos_service.delete_confirmed_sale(document_id, company_id, app_session.current_user.user_id)
+            else:
+                documents_service.delete_document(document_id, company_id)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        if self._document_id == document_id:
+            self._clear_cart_view()
+        self.status_label.setText("")
+        self._refresh_recent_invoices()
 
     def _resolve_scanned_item(self, query: str) -> catalog_service.ItemRow | None:
         needle = query.strip().lower()
@@ -755,13 +774,13 @@ class CommercialPosSaleScreen(QWidget):
             document_id = current.data(Qt.UserRole)
             status_code = current.data(Qt.UserRole + 1)
             if status_code == "CONFIRMED":
-                try:
-                    pos_service.reopen_confirmed_sale(document_id, company_id, app_session.current_user.user_id)
-                except ValueError as exc:
-                    self.status_label.setText(str(exc))
-                    return
-            self._document_id = document_id
-            self._load_document()
+                # طبقِ رفعِ باگِ واقعیِ گزارش‌شده: بازگشاییِ CONFIRMED هم
+                # باید از همان دیالوگِ تاییدِ open_document_for_edit عبور
+                # کند -- نه یک مسیرِ جدایِ بدونِ تایید.
+                self.open_document_for_edit(document_id)
+            else:
+                self._document_id = document_id
+                self._load_document()
             dialog.accept()
 
         def _delete() -> None:
@@ -797,18 +816,54 @@ class CommercialPosSaleScreen(QWidget):
         layout.addWidget(delete_button)
         dialog.exec()
 
+    def _settlement_summary_text(self, document_id: int, company_id: int, doc) -> str:
+        """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («وقتی فاکتور در حالتِ ویرایش باز
+        می‌شود، نحوهٔ تسویهٔ آن را از کجا بفهمیم؟»): پیش از پاک‌شدنِ نقشهٔ
+        تسویه (که reopen_confirmed_sale انجام می‌دهد)، این متن نحوهٔ
+        تسویهٔ فعلی را نشان می‌دهد."""
+        plan = settlements_service.get_settlement_plan(document_id, company_id)
+        if plan is not None and plan.lines:
+            parts = [
+                f"{settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(ln.method_code, ln.method_code)}: "
+                f"{numerals.format_company_amount(ln.amount)}"
+                for ln in plan.lines
+            ]
+            return " + ".join(parts)
+        return _POS_PAYMENT_TYPE_LABELS.get(doc.pos_intended_payment_type, "ثبت‌نشده")
+
     def open_document_for_edit(self, document_id: int) -> None:
         """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ تک‌فروشی جدا از اصلاحِ
         فاکتور باشه... در همان فرمِ تک‌فروشی باز بشه و اصلاح بشه»):
         نقطهٔ ورودِ عمومی -- از فهرستِ اسنادِ فروش صدا زده می‌شود --
         هم‌الگو با _show_suspended_dialog._resume() (بازگشاییِ CONFIRMED
-        + بارگذاریِ سند در همینِ صفحه)."""
+        + بارگذاریِ سند در همینِ صفحه).
+
+        طبقِ رفعِ باگِ واقعیِ گزارش‌شده («بعد از انصراف از ویرایش، فاکتور
+        همچنان پیش‌نویس می‌ماند»): قبلاً بازگشاییِ CONFIRMED→DRAFT (که
+        نقشهٔ تسویه را هم پاک می‌کند) بلافاصله و بدونِ هیچ تاییدی انجام
+        می‌شد -- یعنی حتی «بازکردنِ صرفاً برایِ دیدن» هم فاکتور را برایِ
+        همیشه پیش‌نویس می‌کرد. حالا پیش از این کار، یک دیالوگِ تاییدِ
+        صریح (با نمایشِ نحوهٔ تسویهٔ فعلی) نشان داده می‌شود؛ اگر کاربر
+        «خیر» بزند، هیچ تغییری اعمال نمی‌شود -- فاکتور دقیقاً همان
+        «تاییدشده» باقی می‌ماند."""
         self.refresh()
         company_id = self._company_id()
         if company_id is None:
             return
         doc, _lines = documents_service.get_document(document_id, company_id)
         if doc.status_code == "CONFIRMED":
+            summary_text = self._settlement_summary_text(document_id, company_id, doc)
+            confirm = QMessageBox.question(
+                self, "اصلاحِ فاکتورِ تاییدشده",
+                f"این فاکتور قبلاً توسط صندوق‌دار تایید شده و در انتظارِ تاییدِ سرپرست است.\n"
+                f"نحوهٔ تسویهٔ ثبت‌شده: {summary_text}\n\n"
+                "اگر ادامه دهید، این فاکتور به پیش‌نویس بازمی‌گردد و نحوهٔ تسویهٔ بالا پاک می‌شود -- "
+                "پس از اصلاح، باید دوباره تایید و نحوهٔ تسویه را ثبت کنید.\n"
+                "اگر «خیر» را بزنید، هیچ تغییری اعمال نمی‌شود -- فاکتور همچنان «تاییدشده» باقی می‌ماند.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if confirm != QMessageBox.Yes:
+                return
             try:
                 pos_service.reopen_confirmed_sale(document_id, company_id, app_session.current_user.user_id)
             except ValueError as exc:
@@ -1031,6 +1086,7 @@ class CommercialPosSaleScreen(QWidget):
                 header_text=self._pos_settings.receipt_header_text if self._pos_settings else None,
                 footer_text=self._pos_settings.receipt_footer_text if self._pos_settings else None,
                 form_code="POS_RECEIPT", printer_names=printer_names or None,
+                fast=self._pos_settings is None or self._pos_settings.fast_receipt_printing,
             )
         self.status_label.setText("فروش تایید شد و برایِ تاییدِ سرپرست به‌صفِ انتظار رفت.")
         self._clear_cart_view()
