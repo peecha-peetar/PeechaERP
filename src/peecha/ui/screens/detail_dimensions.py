@@ -297,11 +297,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
-        # طبقِ درخواستِ صریح («تسلطی بر ورودِ اطلاعات وجود ندارد، عرضِ
-        # فهرست را کم کن و به فرمِ ورودِ اطلاعات اضافه کن»): قبلاً فهرست
-        # سهمِ بیشتری از عرض داشت (۳ به ۲)؛ حالا برعکس شد.
-        outer.addWidget(self._build_list_panel(), stretch=2)
-        outer.addWidget(self._build_account_panel(), stretch=3)
+        # طبقِ درخواستِ صریحِ کاربر («لیستِ تفصیلی حذف بشه و فقط ورودِ
+        # تفصیلیِ جدید باشه، تا تبِ تعریفِ تفصیلی (مثلاً فرمِ کالا) فضایِ
+        # بهتری داشته باشد»): فهرستِ همیشه-نمایانِ حساب‌ها (که قبلاً یک
+        # ستونِ کاملِ کنارِ فرم بود) کاملاً حذف شد؛ کلِ عرضِ صفحه به فرمِ
+        # ورودِ اطلاعات می‌رسد. انتخابِ گروه به‌تنهایی فرم را برایِ ثبتِ
+        # رکوردِ *تازه* آماده می‌کند (طبقِ منطقِ ازپیش‌موجودِ _select)؛
+        # برایِ بازکردنِ یک حسابِ *موجود* جهتِ ویرایش، دکمهٔ 🔍 یک دیالوگِ
+        # جداگانه (حاویِ همان درختِ قبلی) باز می‌کند -- پس امکانِ ویرایش
+        # از بین نرفته، فقط دیگر همیشه فضا اشغال نمی‌کند.
+        outer.addWidget(self._build_account_panel(), stretch=1)
+        self._account_picker_dialog = self._build_account_picker_dialog()
 
         self.set_field_help([
             (
@@ -330,29 +336,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             ),
         ])
 
-    # --- ستونِ چپ: انتخابِ گروه + فهرستِ حساب‌ها -----------------------------
-    def _build_list_panel(self) -> QWidget:
-        panel = QWidget()
-        panel.setObjectName("card")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(10)
-
-        title = QLabel("تعریفِ حساب‌هایِ تفصیلی")
-        title.setObjectName("pageTitle")
-        layout.addWidget(title)
-
-        hint = QLabel(
-            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود."
-        )
-        hint.setObjectName("sectionHint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-
-        layout.addWidget(QLabel("گروه"))
-        self.group_combo = QComboBox()
-        self.group_combo.currentIndexChanged.connect(self._on_group_changed)
-        layout.addWidget(self.group_combo)
+    # --- دیالوگِ انتخابِ حسابِ تفصیلیِ *موجود* (برایِ ویرایش) -----------------
+    def _build_account_picker_dialog(self) -> QDialog:
+        """طبقِ رفعِ باگِ گزارش‌شده («لیستِ تفصیلی حذف بشه»): درختِ حساب‌ها
+        دیگر همیشه رویِ صفحه نیست -- فقط با زدنِ دکمهٔ 🔍 (کنارِ کمبویِ
+        گروه در فرمِ اصلی) به‌صورتِ یک دیالوگِ جدا باز می‌شود؛ کلیک رویِ
+        هر ردیف هم مثلِ قبل رکورد را در فرم بارگذاری می‌کند و هم خودش
+        دیالوگ را می‌بندد."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("بازکردنِ حسابِ تفصیلیِ موجود")
+        dialog.resize(680, 560)
+        layout = QVBoxLayout(dialog)
 
         self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
         self.show_all_levels_checkbox.toggled.connect(lambda _checked: self._rebuild_accounts_tree())
@@ -362,9 +356,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.accounts_table.setColumnCount(len(_COLUMNS))
         self.accounts_table.setHeaderLabels(_COLUMNS)
         self.accounts_table.itemClicked.connect(self._on_account_item_clicked)
+        self.accounts_table.itemClicked.connect(lambda *_args: dialog.accept())
         layout.addWidget(self.accounts_table, stretch=1)
 
-        return panel
+        return dialog
+
+    def _open_account_picker(self) -> None:
+        if self._selected is None:
+            self.account_status_label.setText("ابتدا یک گروه انتخاب کنید.")
+            return
+        self._rebuild_accounts_tree()
+        self._account_picker_dialog.exec()
 
     # --- ستونِ راست: فرمِ حسابِ تفصیلی ---------------------------------------
     def _build_account_panel(self) -> QWidget:
@@ -523,7 +525,47 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.account_panel = wrapper
         wrapper.setEnabled(False)
-        return wrapper
+
+        # طبقِ درخواستِ صریح: کمبویِ گروه باید همیشه (حتی پیش از انتخابِ
+        # هیچ گروهی) فعال بماند تا اصلاً بشود گروه را انتخاب کرد -- پس
+        # این هدر بیرونِ wrapperِ غیرِفعال‌شدنی قرار می‌گیرد، نه داخلش.
+        header = QWidget()
+        header.setObjectName("card")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(14, 10, 14, 10)
+        header_layout.setSpacing(8)
+
+        header_title = QLabel("تعریفِ حساب‌هایِ تفصیلی")
+        header_title.setObjectName("pageTitle")
+        header_layout.addWidget(header_title)
+
+        header_hint = QLabel(
+            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود."
+        )
+        header_hint.setObjectName("sectionHint")
+        header_hint.setWordWrap(True)
+        header_layout.addWidget(header_hint)
+
+        group_row = QHBoxLayout()
+        group_row.addWidget(QLabel("گروه"))
+        self.group_combo = QComboBox()
+        self.group_combo.currentIndexChanged.connect(self._on_group_changed)
+        group_row.addWidget(self.group_combo, stretch=1)
+        open_picker_button = QPushButton("🔍")
+        open_picker_button.setObjectName("iconButton")
+        open_picker_button.setFixedWidth(44)
+        open_picker_button.setToolTip("بازکردنِ حسابِ تفصیلیِ موجود برایِ ویرایش")
+        open_picker_button.clicked.connect(self._open_account_picker)
+        group_row.addWidget(open_picker_button)
+        header_layout.addLayout(group_row)
+
+        combined = QWidget()
+        combined_layout = QVBoxLayout(combined)
+        combined_layout.setContentsMargins(0, 0, 0, 0)
+        combined_layout.setSpacing(12)
+        combined_layout.addWidget(header)
+        combined_layout.addWidget(wrapper, stretch=1)
+        return combined
 
     # --- تبِ «عکس‌ها و فایل‌ها» (طبقِ درخواستِ صریح: چند عکس + فایلِ
     # کاتالوگ + زوم + عکسِ اصلی، همه در یک تبِ جدا از فیلدهایِ اصلی) -----

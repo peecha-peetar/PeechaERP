@@ -28,18 +28,22 @@ class ItemAttributeRow:
     code: str
     name: str
     is_active: bool
+    display_order: int = 0
 
 
 def list_item_attributes(company_id: int, active_only: bool = False) -> list[ItemAttributeRow]:
+    """طبقِ درخواستِ صریح («الویت و ترتیبِ ویژگی‌ها چجوری مشخص میشه؟»):
+    ترتیبِ ویژگی‌ها دیگر صرفاً ترتیبِ ساخته‌شدن نیست -- بر اساسِ
+    display_order (قابلِ‌تغییر با دکمه‌هایِ اولویت در فرم) مرتب می‌شود."""
     with new_session() as session:
         query = select(ItemAttribute).where(ItemAttribute.company_id == company_id)
         if active_only:
             query = query.where(ItemAttribute.is_active)
-        rows = session.scalars(query.order_by(ItemAttribute.name)).all()
-        return [ItemAttributeRow(r.attribute_id, r.code, r.name, r.is_active) for r in rows]
+        rows = session.scalars(query.order_by(ItemAttribute.display_order, ItemAttribute.name)).all()
+        return [ItemAttributeRow(r.attribute_id, r.code, r.name, r.is_active, r.display_order) for r in rows]
 
 
-def create_item_attribute(company_id: int, code: str, name: str) -> int:
+def create_item_attribute(company_id: int, code: str, name: str, display_order: int | None = None) -> int:
     code = code.strip()
     name = name.strip()
     if not code or not name:
@@ -49,13 +53,22 @@ def create_item_attribute(company_id: int, code: str, name: str) -> int:
             select(ItemAttribute).where(ItemAttribute.company_id == company_id, ItemAttribute.code == code)
         ):
             raise ValueError(f"ویژگی‌ای با کدِ «{code}» از قبل وجود دارد.")
-        attribute = ItemAttribute(company_id=company_id, code=code, name=name)
+        if display_order is None:
+            # طبقِ رفتارِ پیش‌فرضِ منطقی: ویژگیِ تازه به انتهایِ ترتیب اضافه
+            # می‌شود، نه ابتدا -- تا اولویتِ ویژگی‌هایِ قبلی به‌هم نخورد.
+            max_order = session.scalar(
+                select(func.max(ItemAttribute.display_order)).where(ItemAttribute.company_id == company_id)
+            )
+            display_order = (max_order or 0) + 1
+        attribute = ItemAttribute(company_id=company_id, code=code, name=name, display_order=display_order)
         session.add(attribute)
         session.commit()
         return attribute.attribute_id
 
 
-def update_item_attribute(attribute_id: int, company_id: int, code: str, name: str, is_active: bool) -> None:
+def update_item_attribute(
+    attribute_id: int, company_id: int, code: str, name: str, is_active: bool, display_order: int,
+) -> None:
     code = code.strip()
     name = name.strip()
     if not code or not name:
@@ -75,6 +88,34 @@ def update_item_attribute(attribute_id: int, company_id: int, code: str, name: s
         attribute.code = code
         attribute.name = name
         attribute.is_active = is_active
+        attribute.display_order = display_order
+        session.commit()
+
+
+def swap_item_attribute_order(company_id: int, attribute_id: int, direction: str) -> None:
+    """طبقِ درخواستِ صریح («الویت و ترتیبِ ویژگی‌ها چجوری مشخص میشه؟»):
+    جابه‌جاییِ اولویتِ یک ویژگی با همسایه‌یِ بلافصلش در همان ترتیبِ فعلی
+    (direction: "UP" یعنی زودتر/بالاتر، "DOWN" یعنی دیرتر/پایین‌تر) --
+    برایِ دکمه‌هایِ ⬆️/⬇️ در فرم."""
+    if direction not in ("UP", "DOWN"):
+        raise ValueError("جهتِ جابه‌جایی نامعتبر است.")
+    ordered = list_item_attributes(company_id)
+    index = next((i for i, a in enumerate(ordered) if a.attribute_id == attribute_id), None)
+    if index is None:
+        raise ValueError("ویژگی نامعتبر است.")
+    neighbor_index = index - 1 if direction == "UP" else index + 1
+    if not (0 <= neighbor_index < len(ordered)):
+        return
+    # طبقِ رفعِ باگِ احتمالی: اگر چند ویژگی مقدارِ display_order یکسان
+    # داشته باشند (مثلاً همه‌یِ ویژگی‌هایِ ازپیش‌موجود پیش از این ستون،
+    # همه صفرند)، فقط جابه‌جاکردنِ دو مقدار هیچ اثری ندارد -- به‌جایش کلِ
+    # ترتیبِ فعلی، بعدِ جابه‌جاییِ دو عضو، دوباره صفر-تا-N به‌صورتِ
+    # پیاپی شماره‌گذاری می‌شود تا جابه‌جایی همیشه واقعاً اثر کند.
+    ordered[index], ordered[neighbor_index] = ordered[neighbor_index], ordered[index]
+    with new_session() as session:
+        for sequence, row in enumerate(ordered):
+            attribute = session.get(ItemAttribute, row.attribute_id)
+            attribute.display_order = sequence
         session.commit()
 
 
@@ -297,7 +338,19 @@ def generate_item_variants(
     if parent_detail is None:
         raise ValueError("تفصیلیِ کالایِ اصلی یافت نشد.")
 
-    attribute_ids_sorted = sorted(attribute_value_ids.keys())
+    # طبقِ درخواستِ صریح («الویت و ترتیبِ ویژگی‌ها چجوری مشخص میشه؟»):
+    # ترتیبِ بخش‌هایِ نامِ خودکارِ متغیر (مثلاً «سایز / رنگ») از رویِ
+    # display_order هرِ ویژگی تعیین می‌شود، نه ترتیبِ ساخته‌شدنشان.
+    with new_session() as session:
+        attribute_display_orders = {
+            row.attribute_id: row.display_order
+            for row in session.scalars(
+                select(ItemAttribute).where(ItemAttribute.attribute_id.in_(attribute_value_ids.keys()))
+            )
+        }
+    attribute_ids_sorted = sorted(
+        attribute_value_ids.keys(), key=lambda aid: (attribute_display_orders.get(aid, 0), aid)
+    )
     with new_session() as session:
         values_by_id: dict[int, ItemAttributeValue] = {}
         for attribute_id in attribute_ids_sorted:

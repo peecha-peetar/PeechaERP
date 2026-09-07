@@ -225,6 +225,7 @@ class ItemAttribute(Base):
     code: Mapped[str] = mapped_column(String(20))
     name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(default=True)
+    display_order: Mapped[int] = mapped_column(SmallInteger, default=0)
 
 
 class ItemAttributeValue(Base):

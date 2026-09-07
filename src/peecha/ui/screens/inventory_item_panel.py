@@ -390,11 +390,30 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         own_barcode_row.addWidget(print_own_barcode_button)
         layout.addLayout(own_barcode_row)
 
-        layout.addWidget(QLabel("ویژگی‌ها و مقادیرِ قابلِ‌انتخاب برایِ تولیدِ متغیر"))
+        layout.addWidget(
+            QLabel("ویژگی‌ها و مقادیرِ قابلِ‌انتخاب برایِ تولیدِ متغیر -- ترتیبِ زیر همان اولویتِ نام‌گذاریِ خودکارِ متغیر است")
+        )
         attribute_row = QHBoxLayout()
         self.variant_attribute_combo = QComboBox()
         self.variant_attribute_combo.currentIndexChanged.connect(self._load_attribute_values_list)
         attribute_row.addWidget(self.variant_attribute_combo, stretch=1)
+        # طبقِ درخواستِ صریح («چند ویژگی داریم، الویت و ترتیبشون چجوری
+        # مشخص میشه؟»): این دو دکمه دقیقاً همان سوال را جواب می‌دهند --
+        # اولویتِ ویژگیِ انتخاب‌شده را با همسایه‌اش در فهرست جابه‌جا
+        # می‌کنند (که هم ترتیبِ همین کمبو، هم ترتیبِ بخش‌هایِ نامِ
+        # خودکارِ متغیر را عوض می‌کند).
+        move_up_button = QPushButton("⬆️")
+        move_up_button.setObjectName("iconButton")
+        move_up_button.setFixedWidth(32)
+        move_up_button.setToolTip("افزایشِ اولویتِ این ویژگی (بالاتر/زودتر)")
+        move_up_button.clicked.connect(lambda: self._move_item_attribute("UP"))
+        attribute_row.addWidget(move_up_button)
+        move_down_button = QPushButton("⬇️")
+        move_down_button.setObjectName("iconButton")
+        move_down_button.setFixedWidth(32)
+        move_down_button.setToolTip("کاهشِ اولویتِ این ویژگی (پایین‌تر/دیرتر)")
+        move_down_button.clicked.connect(lambda: self._move_item_attribute("DOWN"))
+        attribute_row.addWidget(move_down_button)
         add_attribute_button = QPushButton("+")
         add_attribute_button.setObjectName("iconButton")
         add_attribute_button.setFixedWidth(28)
@@ -512,6 +531,18 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if current is not None:
             self.variant_attribute_combo.setCurrentIndex(max(0, self.variant_attribute_combo.findData(current)))
         self._load_attribute_values_list()
+
+    def _move_item_attribute(self, direction: str) -> None:
+        attribute_id = self.variant_attribute_combo.currentData()
+        if attribute_id is None or self._company_id is None:
+            return
+        try:
+            variants_service.swap_item_attribute_order(self._company_id, attribute_id, direction)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self._reload_item_attributes()
+        self.variant_attribute_combo.setCurrentIndex(max(0, self.variant_attribute_combo.findData(attribute_id)))
 
     def _add_item_attribute(self) -> None:
         if self._company_id is None:
