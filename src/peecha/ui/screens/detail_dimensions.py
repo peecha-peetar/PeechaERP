@@ -396,6 +396,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # یک حسابِ تفصیلیِ موجود از همین گروه، تمامِ فیلدهایش (بجز کد --
         # که باید یکتا بماند) را در فرم پر می‌کند؛ فقط یک محرکِ یک‌باره
         # است، بعدِ کپی خودش به حالتِ اولیه برمی‌گردد.
+        # طبقِ درخواستِ صریحِ کاربر («این فضاهایِ هدرِ کالا می‌تونه در یک
+        # ردیف هم باشه و نیاز به ردیف‌هایِ اضافی نیست»): «کپی از» هم یک
+        # فیلدِ دیگرِ همینِ FieldGrid است (نه یک ردیفِ جداگانه‌یِ بالاتر)
+        # تا کپی‌از/والد/کد/نام/فعال هرچه‌بیشتر در یک ردیف جا شوند؛ چون
+        # خودش از قبل یک QLabelِ داخلی («کپی از:») دارد، با label=""
+        # اضافه می‌شود تا برچسبِ تکراری ساخته نشود.
         copy_from_row = QHBoxLayout()
         copy_from_row.setContentsMargins(0, 0, 0, 0)
         copy_from_row.addWidget(QLabel("کپی از:"))
@@ -405,24 +411,29 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         copy_from_row.addWidget(self.copy_from_combo, stretch=1)
         self.copy_from_widget = QWidget()
         self.copy_from_widget.setLayout(copy_from_row)
-        layout.addWidget(self.copy_from_widget)
 
         self.parent_combo = QComboBox()
         self.parent_combo.currentIndexChanged.connect(self._on_parent_combo_changed)
 
         self.account_code_field = QLineEdit()
+        self.account_code_field.setMaximumWidth(90)
 
         self.account_name_field = QLineEdit()
 
         self.account_active_checkbox = QCheckBox("فعال")
         self.account_active_checkbox.setChecked(True)
 
+        # ستون‌بندی=۸ تا هر پنج فیلد (کپی‌از/والد/کد/نام/فعال) در یک
+        # ردیفِ واحد جا شوند؛ نسبتِ عرضِ فیلدها (والد/نامِ پهن‌تر از
+        # کد/فعالِ کوتاه) همانِ نسبتِ قبلی حفظ شده، فقط با ستونِ اضافه
+        # برایِ «کپی از».
         self.account_basic_grid = FieldGrid([
+            FieldSpec("copy_from", "", self.copy_from_widget, span=2),
             FieldSpec("parent", "والد", self.parent_combo, span=2),
             FieldSpec("code", "کد", self.account_code_field, span=1),
             FieldSpec("name", "نام", self.account_name_field, span=2),
             FieldSpec("active", "", self.account_active_checkbox, span=1),
-        ])
+        ], columns=8)
         layout.addWidget(self.account_basic_grid)
         self.register_field_grids("detail_dimensions", [self.account_basic_grid])
 
