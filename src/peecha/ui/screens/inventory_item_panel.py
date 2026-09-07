@@ -39,7 +39,9 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_extended as extended_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import item_variants as variants_service
 from peecha.services import supplier_price_import as spi_service
+from peecha.ui.barcode_print import print_barcode_labels
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
 
 _SUPPLIER_CODE_TYPE_LABELS = {"CODE": "کد", "NAME": "نام"}
@@ -97,6 +99,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             ("tracking", self._build_sales_tracking_tab(), "فروش/خرید و ردیابی"),
             ("grouping", self._build_grouping_tab(), "گروه‌بندی و شناسه"),
             ("purchasing", self._build_purchasing_tab(), "خرید"),
+            ("variants", self._build_variants_tab(), "ویژگی‌ها و متغیرها"),
             ("sales_extra", self._build_sales_extra_tab(), "فروشِ تکمیلی"),
             ("production", self._build_production_tab(), "تولید (BOM)"),
             ("ecommerce", self._build_ecommerce_tab(), "فروشگاهِ اینترنتی"),
@@ -356,6 +359,282 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         layout.addStretch(1)
         return tab
+
+    # --- تبِ ویژگی‌ها و متغیرها --------------------------------------------------
+    def _build_variants_tab(self) -> QWidget:
+        """طبقِ درخواستِ صریح: ویژگی (سایز/وزن/مدل/...) قابلِ‌تعریف، مقادیرِ
+        هر ویژگی، تولیدِ ترکیبی‌ِ متغیرها برایِ این کالا، بارکدِ مجزا برایِ
+        خودِ کالا و بارکدِ ترکیبی برایِ هر متغیر + پرینت."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(4, 8, 4, 4)
+        layout.setSpacing(8)
+        self._variant_selection: dict[int, set[int]] = {}
+
+        layout.addWidget(QLabel("بارکدِ کالایِ اصلی"))
+        own_barcode_row = QHBoxLayout()
+        self.own_barcode_label = QLabel("(بدونِ بارکد)")
+        own_barcode_row.addWidget(self.own_barcode_label, stretch=1)
+        make_own_barcode_button = QPushButton("🏷️")
+        make_own_barcode_button.setObjectName("iconButton")
+        make_own_barcode_button.setToolTip("ساختنِ بارکدِ کالایِ اصلی")
+        make_own_barcode_button.clicked.connect(self._make_own_barcode)
+        own_barcode_row.addWidget(make_own_barcode_button)
+        print_own_barcode_button = QPushButton("🖨️")
+        print_own_barcode_button.setObjectName("iconButton")
+        print_own_barcode_button.setToolTip("پرینتِ بارکدِ کالایِ اصلی")
+        print_own_barcode_button.clicked.connect(self._print_own_barcode)
+        own_barcode_row.addWidget(print_own_barcode_button)
+        layout.addLayout(own_barcode_row)
+
+        layout.addWidget(QLabel("ویژگی‌ها و مقادیرِ قابلِ‌انتخاب برایِ تولیدِ متغیر"))
+        attribute_row = QHBoxLayout()
+        self.variant_attribute_combo = QComboBox()
+        self.variant_attribute_combo.currentIndexChanged.connect(self._load_attribute_values_list)
+        attribute_row.addWidget(self.variant_attribute_combo, stretch=1)
+        add_attribute_button = QPushButton("+")
+        add_attribute_button.setObjectName("iconButton")
+        add_attribute_button.setFixedWidth(28)
+        add_attribute_button.setToolTip("ویژگیِ تازه")
+        add_attribute_button.clicked.connect(self._add_item_attribute)
+        attribute_row.addWidget(add_attribute_button)
+        layout.addLayout(attribute_row)
+
+        value_row = QHBoxLayout()
+        self.variant_value_field = QLineEdit()
+        self.variant_value_field.setPlaceholderText("مقدارِ تازه (مثلاً M یا قرمز)")
+        value_row.addWidget(self.variant_value_field, stretch=1)
+        add_value_button = QPushButton("+")
+        add_value_button.setObjectName("iconButton")
+        add_value_button.setFixedWidth(28)
+        add_value_button.setToolTip("افزودنِ مقدار به همین ویژگی")
+        add_value_button.clicked.connect(self._add_item_attribute_value)
+        value_row.addWidget(add_value_button)
+        layout.addLayout(value_row)
+
+        self.variant_values_list = QTableWidget(0, 2)
+        self.variant_values_list.setHorizontalHeaderLabels(["انتخاب", "مقدار"])
+        self.variant_values_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.variant_values_list.verticalHeader().setVisible(False)
+        self.variant_values_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.variant_values_list.setMaximumHeight(140)
+        self.variant_values_list.itemChanged.connect(self._on_variant_value_checked)
+        layout.addWidget(self.variant_values_list)
+
+        generate_button = QPushButton("⚙️")
+        generate_button.setObjectName("iconButton")
+        generate_button.setToolTip("تولیدِ متغیرها از ترکیبِ انتخاب‌شده")
+        generate_button.clicked.connect(self._generate_variants)
+        layout.addWidget(generate_button)
+
+        layout.addWidget(QLabel("متغیرهایِ ساخته‌شده برایِ این کالا"))
+        self.variants_table = QTableWidget(0, 4)
+        self.variants_table.setHorizontalHeaderLabels(["کد", "نام", "ویژگی‌ها", "بارکد"])
+        self.variants_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.variants_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.variants_table.verticalHeader().setVisible(False)
+        self.variants_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.variants_table.setMinimumHeight(140)
+        layout.addWidget(self.variants_table, stretch=1)
+
+        variants_action_row = QHBoxLayout()
+        print_selected_button = QPushButton("🖨️")
+        print_selected_button.setObjectName("iconButton")
+        print_selected_button.setToolTip("پرینتِ بارکدِ انتخاب‌شده")
+        print_selected_button.clicked.connect(self._print_selected_variant_barcode)
+        variants_action_row.addWidget(print_selected_button)
+        print_all_button = QPushButton("📇")
+        print_all_button.setObjectName("iconButton")
+        print_all_button.setToolTip("پرینتِ بارکدِ همه‌یِ متغیرها")
+        print_all_button.clicked.connect(self._print_all_variant_barcodes)
+        variants_action_row.addWidget(print_all_button)
+        remove_variant_button = QPushButton("🗑️")
+        remove_variant_button.setObjectName("dangerIconButton")
+        remove_variant_button.setToolTip("حذفِ متغیرِ انتخاب‌شده")
+        remove_variant_button.clicked.connect(self._remove_selected_variant)
+        variants_action_row.addWidget(remove_variant_button)
+        layout.addLayout(variants_action_row)
+
+        self.variants_status_label = QLabel("")
+        self.variants_status_label.setObjectName("statusError")
+        self.variants_status_label.setWordWrap(True)
+        layout.addWidget(self.variants_status_label)
+
+        return tab
+
+    def _reload_item_attributes(self) -> None:
+        if self._company_id is None:
+            return
+        current = self.variant_attribute_combo.currentData()
+        self.variant_attribute_combo.blockSignals(True)
+        self.variant_attribute_combo.clear()
+        for attribute in variants_service.list_item_attributes(self._company_id, active_only=True):
+            self.variant_attribute_combo.addItem(attribute.name, attribute.attribute_id)
+        self.variant_attribute_combo.blockSignals(False)
+        if current is not None:
+            self.variant_attribute_combo.setCurrentIndex(max(0, self.variant_attribute_combo.findData(current)))
+        self._load_attribute_values_list()
+
+    def _add_item_attribute(self) -> None:
+        if self._company_id is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ویژگیِ تازه")
+        form = QVBoxLayout(dialog)
+        code_field = QLineEdit()
+        code_field.setPlaceholderText("کد (مثلاً SIZE)")
+        form.addWidget(code_field)
+        name_field = QLineEdit()
+        name_field.setPlaceholderText("نام (مثلاً سایز)")
+        form.addWidget(name_field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            attribute_id = variants_service.create_item_attribute(
+                self._company_id, code_field.text(), name_field.text()
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._reload_item_attributes()
+        self.variant_attribute_combo.setCurrentIndex(max(0, self.variant_attribute_combo.findData(attribute_id)))
+
+    def _load_attribute_values_list(self) -> None:
+        attribute_id = self.variant_attribute_combo.currentData()
+        self.variant_values_list.blockSignals(True)
+        self.variant_values_list.setRowCount(0)
+        if attribute_id is not None:
+            selected_values = self._variant_selection.get(attribute_id, set())
+            values = variants_service.list_item_attribute_values(attribute_id)
+            self.variant_values_list.setRowCount(len(values))
+            for row_index, value_row in enumerate(values):
+                checkbox_item = QTableWidgetItem()
+                checkbox_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                checkbox_item.setCheckState(Qt.Checked if value_row.value_id in selected_values else Qt.Unchecked)
+                checkbox_item.setData(Qt.UserRole, value_row.value_id)
+                self.variant_values_list.setItem(row_index, 0, checkbox_item)
+                self.variant_values_list.setItem(row_index, 1, QTableWidgetItem(value_row.value))
+        self.variant_values_list.blockSignals(False)
+
+    def _on_variant_value_checked(self, item: QTableWidgetItem) -> None:
+        if item.column() != 0:
+            return
+        attribute_id = self.variant_attribute_combo.currentData()
+        value_id = item.data(Qt.UserRole)
+        if attribute_id is None or value_id is None:
+            return
+        selected = self._variant_selection.setdefault(attribute_id, set())
+        if item.checkState() == Qt.Checked:
+            selected.add(value_id)
+        else:
+            selected.discard(value_id)
+
+    def _add_item_attribute_value(self) -> None:
+        attribute_id = self.variant_attribute_combo.currentData()
+        if attribute_id is None:
+            self.variants_status_label.setText("ابتدا یک ویژگی انتخاب یا اضافه کنید.")
+            return
+        value_text = self.variant_value_field.text().strip()
+        if not value_text:
+            return
+        try:
+            variants_service.add_item_attribute_value(attribute_id, value_text, value_text)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("")
+        self.variant_value_field.clear()
+        self._load_attribute_values_list()
+
+    def _make_own_barcode(self) -> None:
+        if self._item_id is None or self._company_id is None:
+            self.variants_status_label.setText("ابتدا کالا را ذخیره کنید.")
+            return
+        try:
+            barcode = variants_service.ensure_item_barcode(self._company_id, self._item_id)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.own_barcode_label.setText(barcode)
+        self.barcode_field.setText(barcode)
+        self.variants_status_label.setText("")
+
+    def _print_own_barcode(self) -> None:
+        barcode = self.own_barcode_label.text().strip()
+        if not barcode or not barcode.isdigit():
+            self.variants_status_label.setText("ابتدا بارکدِ کالا را بسازید.")
+            return
+        title = f"{self.latin_name_field.text().strip() or ''}".strip() or "کالا"
+        print_barcode_labels(self, [(title, "", barcode)])
+
+    def _generate_variants(self) -> None:
+        if self._item_id is None or self._company_id is None:
+            self.variants_status_label.setText("ابتدا کالا را ذخیره کنید.")
+            return
+        selection = {aid: sorted(vals) for aid, vals in self._variant_selection.items() if vals}
+        try:
+            created_ids = variants_service.generate_item_variants(self._company_id, self._item_id, selection)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText(
+            f"{len(created_ids)} متغیرِ تازه ساخته شد." if created_ids else "همه‌یِ ترکیب‌ها از قبل موجود بودند."
+        )
+        self._refresh_variants_table()
+
+    def _refresh_variants_table(self) -> None:
+        self.variants_table.setRowCount(0)
+        if self._item_id is None or self._company_id is None:
+            return
+        rows = variants_service.list_item_variants(self._company_id, self._item_id)
+        self.variants_table.setRowCount(len(rows))
+        for row_index, r in enumerate(rows):
+            values = [r.code, r.name or "", r.attribute_labels, r.barcode or ""]
+            for col_index, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                cell.setData(Qt.UserRole, r.variant_item_id)
+                self.variants_table.setItem(row_index, col_index, cell)
+
+    def _print_selected_variant_barcode(self) -> None:
+        selected = self.variants_table.selectedItems()
+        if not selected:
+            self.variants_status_label.setText("یک متغیر از جدول انتخاب کنید.")
+            return
+        row = selected[0].row()
+        name = self.variants_table.item(row, 1).text()
+        attrs = self.variants_table.item(row, 2).text()
+        barcode = self.variants_table.item(row, 3).text()
+        if not barcode:
+            self.variants_status_label.setText("این متغیر هنوز بارکد ندارد.")
+            return
+        print_barcode_labels(self, [(name, attrs, barcode)])
+
+    def _print_all_variant_barcodes(self) -> None:
+        if self._item_id is None or self._company_id is None:
+            return
+        rows = variants_service.list_item_variants(self._company_id, self._item_id)
+        labels = [(r.name or r.code, r.attribute_labels, r.barcode) for r in rows if r.barcode]
+        if not labels:
+            self.variants_status_label.setText("هیچ متغیرِ بارکددار‌ی برایِ چاپ وجود ندارد.")
+            return
+        print_barcode_labels(self, labels)
+
+    def _remove_selected_variant(self) -> None:
+        selected = self.variants_table.selectedItems()
+        if not selected or self._company_id is None:
+            return
+        variant_item_id = selected[0].data(Qt.UserRole)
+        try:
+            catalog_service.delete_item(variant_item_id, self._company_id)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("")
+        self._refresh_variants_table()
 
     # --- تبِ فروشِ تکمیلی -------------------------------------------------------
     def _build_sales_extra_tab(self) -> QWidget:
@@ -856,6 +1135,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.item_code_supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
 
         self._rebuild_related_item_combo()
+        self._reload_item_attributes()
 
         self._apply_visibility()
 
@@ -906,6 +1186,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.barcode_field.setText(it.barcode or "")
         self.qr_code_field.setText(it.qr_code_data or "")
         self.sku_field.setText(it.sku or "")
+        self.own_barcode_label.setText(it.barcode or "(بدونِ بارکد)")
 
         self.purchase_lead_time_field.setText(str(it.purchase_lead_time_days) if it.purchase_lead_time_days is not None else "")
         self.purchase_min_order_field.setText(str(it.purchase_min_order_qty) if it.purchase_min_order_qty is not None else "")
@@ -966,6 +1247,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._refresh_item_codes_table()
         self._refresh_related_table()
         self._refresh_bom_lines()
+        self._refresh_variants_table()
 
     def reset(self) -> None:
         self._item_id = None
@@ -993,6 +1275,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.barcode_field.clear()
         self.qr_code_field.clear()
         self.sku_field.clear()
+        self.own_barcode_label.setText("(بدونِ بارکد)")
+        self.variants_table.setRowCount(0)
+        self._variant_selection = {}
+        self._load_attribute_values_list()
 
         self.purchase_lead_time_field.clear()
         self.purchase_min_order_field.clear()
