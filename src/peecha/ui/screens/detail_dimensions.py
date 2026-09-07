@@ -63,7 +63,17 @@ from peecha.services import payroll as payroll_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, PersianDigitLineEdit, build_action_footer
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    LayoutEditMixin,
+    JalaliDateEdit,
+    PersianDigitLineEdit,
+    build_action_footer,
+    build_page_header,
+    build_section_layout,
+)
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها.
@@ -375,9 +385,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
 
         panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(10)
+        layout = build_section_layout(panel)
 
         self.account_form_title = QLabel("حسابِ تفصیلیِ جدید")
         self.account_form_title.setObjectName("pageTitle")
@@ -529,22 +537,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # طبقِ درخواستِ صریح: کمبویِ گروه باید همیشه (حتی پیش از انتخابِ
         # هیچ گروهی) فعال بماند تا اصلاً بشود گروه را انتخاب کرد -- پس
         # این هدر بیرونِ wrapperِ غیرِفعال‌شدنی قرار می‌گیرد، نه داخلش.
-        header = QWidget()
-        header.setObjectName("card")
-        header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(14, 10, 14, 10)
-        header_layout.setSpacing(8)
-
-        header_title = QLabel("تعریفِ حساب‌هایِ تفصیلی")
-        header_title.setObjectName("pageTitle")
-        header_layout.addWidget(header_title)
-
-        header_hint = QLabel(
-            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود."
+        header = build_page_header(
+            "تعریفِ حساب‌هایِ تفصیلی",
+            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود.",
         )
-        header_hint.setObjectName("sectionHint")
-        header_hint.setWordWrap(True)
-        header_layout.addWidget(header_hint)
+        header_layout = header.layout()
 
         group_row = QHBoxLayout()
         group_row.addWidget(QLabel("گروه"))
@@ -571,9 +568,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     # کاتالوگ + زوم + عکسِ اصلی، همه در یک تبِ جدا از فیلدهایِ اصلی) -----
     def _build_files_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(10)
+        layout = build_section_layout(tab)
 
         upload_row = QHBoxLayout()
         upload_photo_button = QPushButton("📷 آپلودِ عکس")

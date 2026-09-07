@@ -53,6 +53,56 @@ from peecha.ui import theme
 
 _FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
 
+# ---------------------------------------------------------------------
+# استانداردِ چیدمانِ صفحه‌ها -- طبقِ درخواستِ صریح («طراحیِ فرم‌ها یک
+# رویهٔ خاص داشته باشه»). بررسیِ کدِ موجود نشان داد ده‌ها مقدارِ
+# پراکنده‌یِ margin/spacing در سراسرِ صفحه‌ها دستی نوشته شده بود (بعضی
+# فرم‌ها ۴px حاشیه داشتند، بعضی ۲۴px، بدونِ هیچ قاعده‌ای) -- همین
+# پراکندگی دلیلِ اصلیِ «بعضی فرم‌ها فضایِ خالیِ زیاد دارند، بعضی فشرده‌اند»
+# است. این چند مقدار از این پس تنها منبعِ حقیقتِ فاصله‌گذاریِ صفحه‌هاست؛
+# مقدارها از رویِ رایج‌ترین الگویِ ازپیش‌موجود انتخاب شده‌اند (نه
+# اختراعِ عددهایِ تازه) تا کمترین اصطکاک را با ظاهرِ فعلی داشته باشد.
+PAGE_MARGINS = (20, 14, 20, 14)
+SECTION_MARGINS = (14, 10, 14, 10)
+SECTION_SPACING = 10
+
+
+def build_page_layout(widget: QWidget) -> QVBoxLayout:
+    """چیدمانِ سطحِ‌بالایِ یک صفحه‌یِ کامل (ثبت‌شده در shell_window) --
+    حاشیه/فاصلهٔ استانداردِ بیرونی. جایگزینِ نوشتنِ دستیِ
+    setContentsMargins/setSpacing با عددهایِ دلخواه در هر صفحه."""
+    layout = QVBoxLayout(widget)
+    layout.setContentsMargins(*PAGE_MARGINS)
+    layout.setSpacing(SECTION_SPACING)
+    return layout
+
+
+def build_section_layout(widget: QWidget) -> QVBoxLayout:
+    """چیدمانِ یک بخش/تب/کارتِ داخلِ صفحه -- حاشیه/فاصلهٔ استانداردِ
+    داخلی. اکثرِ محتوایِ تب‌ها/کارت‌ها باید از همین به‌جایِ margin/spacingِ
+    دستیِ خودشان استفاده کنند."""
+    layout = QVBoxLayout(widget)
+    layout.setContentsMargins(*SECTION_MARGINS)
+    layout.setSpacing(SECTION_SPACING)
+    return layout
+
+
+def build_page_header(title_text: str, hint_text: str | None = None) -> QWidget:
+    """کارتِ استانداردِ عنوان (+ راهنمایِ اختیاری) بالایِ هر صفحه -- الگویی
+    که تقریباً هر صفحه (با فاصله‌گذاریِ کمی متفاوت) خودش دوباره می‌نوشت."""
+    card = QWidget()
+    card.setObjectName("card")
+    layout = build_section_layout(card)
+    title = QLabel(title_text)
+    title.setObjectName("pageTitle")
+    layout.addWidget(title)
+    if hint_text:
+        hint = QLabel(hint_text)
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+    return card
+
 
 def field_help_is_enabled() -> bool:
     """وضعیتِ سراسریِ روشن/خاموشِ کادرِ راهنمایِ فیلدها — مستقل از اینکه

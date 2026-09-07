@@ -45,7 +45,7 @@ from peecha.services import inventory_locations as locations_service
 from peecha.services import item_variants as variants_service
 from peecha.services import supplier_price_import as spi_service
 from peecha.ui.barcode_print import print_barcode_labels
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_section_layout
 
 _SUPPLIER_CODE_TYPE_LABELS = {"CODE": "کد", "NAME": "نام"}
 
@@ -132,9 +132,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ اطلاعاتِ پایه (بدونِ کد/نام/فعال — این‌ها در فرمِ میزبان‌اند) ------
     def _build_basic_info_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.latin_name_field = QLineEdit()
         self.short_name_field = QLineEdit()
@@ -186,9 +184,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ فروش/خرید و ردیابی ------------------------------------------
     def _build_sales_tracking_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.is_sellable_checkbox = QCheckBox("قابلِ‌فروش")
         self.is_sellable_checkbox.setChecked(True)
@@ -220,9 +216,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ گروه‌بندی و شناسه -----------------------------------------------
     def _build_grouping_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.category_combo = QComboBox()
         category_row = self._make_combo_with_add_row("دسته‌بندی", self.category_combo, self._quick_add_category)
@@ -276,9 +270,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ خرید -------------------------------------------------------------
     def _build_purchasing_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.purchase_lead_time_field = QLineEdit()
         self.purchase_min_order_field = QLineEdit()
@@ -369,9 +361,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         هر ویژگی، تولیدِ ترکیبی‌ِ متغیرها برایِ این کالا، بارکدِ مجزا برایِ
         خودِ کالا و بارکدِ ترکیبی برایِ هر متغیر + پرینت."""
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
         self._variant_selection: dict[int, set[int]] = {}
 
         layout.addWidget(QLabel("بارکدِ کالایِ اصلی"))
@@ -832,9 +822,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ فروشِ تکمیلی -------------------------------------------------------
     def _build_sales_extra_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.max_discount_field = QLineEdit()
         self.sales_commission_field = QLineEdit()
@@ -857,9 +845,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ تولید (BOM) — فقط برایِ FINISHED_GOOD --------------------------
     def _build_production_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.bom_status_label = QLabel("ابتدا کالا را ذخیره کنید.")
         layout.addWidget(self.bom_status_label)
@@ -903,9 +889,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ فروشگاهِ اینترنتی --------------------------------------------------
     def _build_ecommerce_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.seo_title_field = QLineEdit()
         self.seo_slug_field = QLineEdit()
@@ -930,9 +914,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ POS ---------------------------------------------------------------
     def _build_pos_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.pos_shortcut_field = QLineEdit()
         # طبقِ درخواستِ صریح («رنگِ دکمه با پالتِ رنگی انتخاب بشه»): فیلدِ
@@ -977,9 +959,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ حمل‌ونقل ------------------------------------------------------------
     def _build_shipping_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.length_field = QLineEdit()
         self.width_field = QLineEdit()
@@ -1002,9 +982,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ کنترلِ کیفیت -----------------------------------------------------
     def _build_qc_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.requires_qc_checkbox = QCheckBox("نیازمندِ کنترلِ کیفیت")
         self.qc_standard_field = QLineEdit()
@@ -1026,9 +1004,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
     # --- تبِ دارایی — فقط برایِ ASSET ------------------------------------------
     def _build_asset_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(4, 8, 4, 4)
-        layout.setSpacing(8)
+        layout = build_section_layout(tab)
 
         self.asset_tag_field = QLineEdit()
         self.depreciation_group_field = QLineEdit()
