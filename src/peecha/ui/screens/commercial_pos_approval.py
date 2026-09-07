@@ -4,8 +4,12 @@
 یا بدونِ پرداخت برایِ نسیه) واقعاً ثبت می‌شود.
 
 طبقِ تصمیمِ صریح («ادغام فقط رویِ سندِ حسابداری باشد، نه خودِ فاکتور»):
-وقتی چند فاکتورِ هم‌طرفِ‌حساب با هم انتخاب و نقد/کارت‌خوان پرداخت شوند،
-فقط یک سندِ حسابداریِ واحد برایِ مجموع ساخته می‌شود (سوییچِ «ادغام»)."""
+وقتی چند فاکتورِ هم‌طرفِ‌حساب با هم انتخاب شوند و تیکِ «ادغام» فعال
+باشد، فقط یک سندِ حسابداریِ واحد برایِ مجموع ساخته می‌شود -- چه فاکتور
+از پیش پلنِ تسویهٔ چندروشیِ خودش را داشته باشد (از دیالوگِ «نحوهٔ
+تسویه»/اصلاحِ سند)، چه فقط روشِ نقد/کارت‌خوانِ سرپرست را بگیرد؛ خودِ
+فاکتورها دست‌نخورده و جدا می‌مانند، هرکدام فقط یک ردیفِ تسویه به همان
+یک سندِ حسابداری می‌گیرد."""
 
 from __future__ import annotations
 
@@ -197,8 +201,7 @@ class CommercialPosApprovalScreen(QWidget):
         # «نحوهٔ تسویه» (نه دو دکمهٔ نقدی/نسیه) استفاده کرده، از پیش یک
         # نقشهٔ تسویهٔ چندروشی دارند -- این‌ها دیگر از منویِ تک‌روشیِ
         # سرپرست (نقد/کارت/کیف‌پول/...) پیروی نمی‌کنند، بلکه دقیقاً همان
-        # ترکیبِ ازپیش‌تعیین‌شده ثبت می‌شود؛ پس هم از بررسیِ ادغام و هم از
-        # منطقِ متدِ تکی زیر جدا و پیشاپیش کنار گذاشته می‌شوند.
+        # ترکیبِ ازپیش‌تعیین‌شده ثبت می‌شود.
         with_plan = []
         without_plan = []
         for doc in selected:
@@ -208,13 +211,50 @@ class CommercialPosApprovalScreen(QWidget):
             else:
                 without_plan.append(doc)
 
-        distinct_counterparties = {d.counterparty_detail_account_id for d in without_plan}
-        if method_code in _MERGEABLE_METHODS and self.merge_checkbox.isChecked() and len(distinct_counterparties) > 1:
-            self.status_label.setText(
-                "ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب ممکن است -- "
-                "یا ادغام را خاموش کنید، یا فقط فاکتورهایِ یک طرفِ‌حساب را انتخاب کنید."
-            )
-            return
+        # طبقِ رفعِ باگِ گزارش‌شده («وقتی ادغامِ سند تیک می‌خورد همه‌یِ
+        # اسناد باز هم جدا ثبت می‌شود»): قبلاً فقط without_planِ نقد/
+        # کارت‌خوان ادغام می‌شد -- with_plan (فاکتورهایی که از دیالوگِ
+        # «نحوهٔ تسویه»/بازکردنِ اصلاحی پلنِ تسویهٔ واقعی دارند) هرگز
+        # ادغام نمی‌شد، حتی وقتی تیکِ ادغام خورده بود. حالا هر دو گروه
+        # -- اگر طرفِ‌حسابشان یکی باشد -- با هم در یک سندِ حسابداریِ
+        # واحد ثبت می‌شوند.
+        merge_checked = self.merge_checkbox.isChecked()
+        method_mergeable = method_code in _MERGEABLE_METHODS
+        merge_plan_entries: list[tuple[int, list[tuple]]] = []
+        flat_batch_group: list = []
+        standalone_with_plan = with_plan
+        standalone_without_plan = without_plan
+
+        if merge_checked and len(with_plan) > 1:
+            # with_plan خودش وارد ادغام می‌شود -- در این حالت هر سند (چه
+            # پلن‌دار، چه سادهٔ نقد/کارت‌خوانِ بدونِ پلن) یک ردیفِ جدا در
+            # همان یک سندِ حسابداریِ مشترک می‌گیرد (روش‌ها می‌توانند با
+            # هم فرق کنند).
+            merge_plan_entries = [
+                (doc.document_id, [(ln.method_code, ln.amount, ln.note, ln.detail_account_id) for ln in plan.lines])
+                for doc, plan in with_plan
+            ]
+            standalone_with_plan = []
+            if method_mergeable:
+                merge_plan_entries.extend((doc.document_id, [(method_code, doc.total_amount)]) for doc in without_plan)
+                standalone_without_plan = []
+        elif merge_checked and method_mergeable and len(without_plan) > 1:
+            # طبقِ رفتارِ ازپیش‌موجود (بدونِ هیچ with_planِ ادغام‌شونده):
+            # یک سندِ حسابداری با یک ردیفِ واحد برایِ مجموعِ همه ساخته
+            # می‌شود -- نه یک ردیفِ جدا به‌ازایِ هر فاکتور.
+            flat_batch_group = without_plan
+            standalone_without_plan = []
+
+        merge_doc_ids = {doc_id for doc_id, _lines in merge_plan_entries} | {d.document_id for d in flat_batch_group}
+        if len(merge_doc_ids) > 1:
+            merge_docs = [doc for doc in selected if doc.document_id in merge_doc_ids]
+            if len({d.counterparty_detail_account_id for d in merge_docs}) > 1:
+                self.status_label.setText(
+                    "ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب ممکن است -- "
+                    "یا ادغام را خاموش کنید، یا فقط فاکتورهایِ یک طرفِ‌حساب را انتخاب کنید."
+                )
+                return
+
         if method_code == "GIFT_CARD" and without_plan and not self.reference_field.text().strip():
             self.status_label.setText("کدِ کارتِ‌هدیه را وارد کنید.")
             return
@@ -226,23 +266,29 @@ class CommercialPosApprovalScreen(QWidget):
                 documents_service.approve_document(doc.document_id, company_id)
                 documents_service.post_document(doc.document_id, company_id, user_id)
 
-            for doc, plan in with_plan:
+            if merge_plan_entries:
+                pos_service.record_combined_settlement(
+                    company_id, user_id, merge_plan_entries, reference_no=reference,
+                )
+
+            if flat_batch_group:
+                pos_service.record_payment_and_settle_batch(
+                    company_id, user_id, [d.document_id for d in flat_batch_group], method_code,
+                    reference_no=reference,
+                )
+
+            for doc, plan in standalone_with_plan:
                 pos_service.record_mixed_payment_and_settle(
                     company_id, user_id, doc.document_id,
                     [(ln.method_code, ln.amount, ln.note, ln.detail_account_id) for ln in plan.lines],
                     reference_no=reference,
                 )
 
-            if method_code != "NONE" and without_plan:
-                if method_code in _MERGEABLE_METHODS and self.merge_checkbox.isChecked() and len(without_plan) > 1:
-                    pos_service.record_payment_and_settle_batch(
-                        company_id, user_id, [d.document_id for d in without_plan], method_code, reference_no=reference,
+            if method_code != "NONE" and standalone_without_plan:
+                for doc in standalone_without_plan:
+                    pos_service.record_payment_and_settle(
+                        company_id, user_id, doc.document_id, method_code, doc.total_amount, reference_no=reference,
                     )
-                else:
-                    for doc in without_plan:
-                        pos_service.record_payment_and_settle(
-                            company_id, user_id, doc.document_id, method_code, doc.total_amount, reference_no=reference,
-                        )
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return

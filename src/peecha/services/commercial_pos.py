@@ -465,35 +465,36 @@ def record_payment_and_settle(
     )[0]
 
 
-def record_mixed_payment_and_settle(
-    company_id: int, user_id: int, document_id: int,
-    method_lines: list[tuple], reference_no: str | None = None,
+def record_combined_settlement(
+    company_id: int, user_id: int, document_plans: list[tuple[int, list[tuple]]],
+    reference_no: str | None = None,
 ) -> int | None:
-    """طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
-    روش‌ها را نمی‌تونه ثبت کنه»): نسخهٔ چندروشیِ record_payment_and_settle
-    -- برایِ فروشی که صندوق‌دار از دیالوگِ «نحوهٔ تسویه» (کدهایِ روشِ
-    هم‌الگو با treasury.METHOD_CODES: CASH/BANK/DISCOUNT/GOODS_COUPON/
-    VOUCHER، نه واژگانِ CARD/WALLET/GIFT_CARDِ منویِ تکی‌روشِ سرپرست)
-    استفاده کرده. برخلافِ نسخهٔ تک‌روشی، همه‌یِ ردیف‌ها در یک سندِ
-    حسابداریِ واحد (create_treasury_voucher با چند MethodLine) ثبت
-    می‌شوند -- دقیقاً هم‌الگو با فرمِ فاکتورِ عمومی.
+    """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («وقتی ادغامِ سند تیک می‌خورد همه‌یِ
+    اسناد باز هم جدا ثبت می‌شود»): تعمیمِ record_mixed_payment_and_settle
+    به چند سند -- برایِ همه‌یِ سندهایِ ورودی (چه پلنِ تسویهٔ واقعیِ خودشان
+    را داشته باشند، چه فقط یک ردیفِ ساده باشد) یک سندِ حسابداریِ
+    خزانه‌داریِ واحد ساخته می‌شود؛ هرکدام فقط یک ردیفِ تسویه به همان یک
+    سندِ حسابداری می‌گیرد (ریزِ هر فاکتور از طریقِ فیلترِ journal_entry_id
+    هنوز قابلِ‌مشاهده است). همه‌یِ اسناد باید یک طرفِ‌حساب داشته باشند.
 
-    هر ردیفِ method_lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code,
-    amount[, note[, detail_account_id]]) -- طبقِ درخواستِ صریح (تفصیلیِ
-    انتخاب‌شده/پیش‌فرضِ همان روش هم به سندِ حسابداری منتقل شود). اگر
-    تفصیلی صریحاً داده نشده باشد، پیش‌فرضِ همان روش (از تنظیماتِ
-    pos_settlement_method_defaults) استفاده می‌شود؛ مرکزِ هزینه/پروژهٔ
-    پیش‌فرضِ همان تنظیمات هم -- اگر معینِ نگاشته‌شده نیازشان داشته باشد --
-    مستقیم به همان ردیف اضافه می‌شود."""
-    if not method_lines:
+    document_plans: [(document_id, method_lines), ...] -- method_lines
+    دقیقاً هم‌فرمتِ record_mixed_payment_and_settle: هر ردیف ۲ تا ۴ عضو
+    دارد: (method_code, amount[, note[, detail_account_id]])."""
+    if not document_plans:
         return None
     with new_session() as session:
-        doc = session.get(CommercialDocument, document_id)
-        if doc is None or doc.company_id != company_id:
-            raise ValueError("سند نامعتبر است.")
-        customer_id = doc.counterparty_detail_account_id
-        document_date = doc.document_date
-        document_no = doc.document_no
+        docs = {}
+        for document_id, _lines in document_plans:
+            doc = session.get(CommercialDocument, document_id)
+            if doc is None or doc.company_id != company_id:
+                raise ValueError("سند نامعتبر است.")
+            docs[document_id] = doc
+        if len({d.counterparty_detail_account_id for d in docs.values()}) > 1:
+            raise ValueError("ادغامِ سندِ حسابداری فقط برایِ فاکتورهایِ یک طرفِ‌حساب مجاز است.")
+        first_doc = next(iter(docs.values()))
+        customer_id = first_doc.counterparty_detail_account_id
+        document_date = first_doc.document_date
+        document_numbers = [d.document_no for d in docs.values()]
 
     person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     customer_group_id = next(
@@ -517,30 +518,37 @@ def record_mixed_payment_and_settle(
         company_id, dimensions_service.PROJECT_CODE
     )
 
-    total_amount = decimal.Decimal("0")
     voucher_lines: list[treasury_service.MethodLine] = []
-    for entry in method_lines:
-        method_code, amount = entry[0], entry[1]
-        note = entry[2] if len(entry) > 2 else None
-        detail_account_id = entry[3] if len(entry) > 3 else None
-        total_amount += amount
-        default = settlements_service.get_pos_settlement_method_default(company_id, method_code)
-        extra_details: dict[int, int] = {}
-        if default is not None:
-            if detail_account_id is None:
-                detail_account_id = default.detail_account_id
-            if default.cost_center_detail_account_id is not None:
-                extra_details[cost_center_type_id] = default.cost_center_detail_account_id
-            if default.project_detail_account_id is not None:
-                extra_details[project_type_id] = default.project_detail_account_id
-        voucher_lines.append(
-            treasury_service.MethodLine(
-                method=method_code, amount=amount, description=note or "",
-                detail_account_id=detail_account_id, extra_details=(extra_details or None),
+    document_totals: dict[int, decimal.Decimal] = {}
+    for document_id, method_lines in document_plans:
+        doc_total = decimal.Decimal("0")
+        for entry in method_lines:
+            method_code, amount = entry[0], entry[1]
+            note = entry[2] if len(entry) > 2 else None
+            detail_account_id = entry[3] if len(entry) > 3 else None
+            doc_total += amount
+            default = settlements_service.get_pos_settlement_method_default(company_id, method_code)
+            extra_details: dict[int, int] = {}
+            if default is not None:
+                if detail_account_id is None:
+                    detail_account_id = default.detail_account_id
+                if default.cost_center_detail_account_id is not None:
+                    extra_details[cost_center_type_id] = default.cost_center_detail_account_id
+                if default.project_detail_account_id is not None:
+                    extra_details[project_type_id] = default.project_detail_account_id
+            voucher_lines.append(
+                treasury_service.MethodLine(
+                    method=method_code, amount=amount, description=note or "",
+                    detail_account_id=detail_account_id, extra_details=(extra_details or None),
+                )
             )
-        )
+        document_totals[document_id] = doc_total
 
-    description = f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_no}"
+    total_amount = sum(document_totals.values(), decimal.Decimal("0"))
+    description = (
+        f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_numbers[0]}" if len(document_numbers) == 1
+        else f"دریافتِ صندوق (POS) -- بابتِ {numerals.to_persian_digits(str(len(document_numbers)))} فاکتورِ فروش"
+    )
     counterparty_details = _resolve_receivable_counterparty_details(
         company_id, person_dimension_type_id, customer_id, cost_center_type_id, project_type_id,
     )
@@ -549,11 +557,40 @@ def record_mixed_payment_and_settle(
         counterparty_details, document_date, description,
         voucher_lines,
     )
-    settlements_service.allocate_settlement(
-        company_id, document_id, voucher_result.journal_entry_id, datetime.date.today(), total_amount, user_id,
-        reference_no=reference_no, description=description,
+    settle_description = (
+        "تسویه‌یِ خودکارِ فروشِ حضوری (POS)" if len(document_totals) == 1
+        else "تسویه‌یِ ادغام‌شده‌یِ فروشِ حضوری (POS)"
     )
+    for document_id, amount in document_totals.items():
+        settlements_service.allocate_settlement(
+            company_id, document_id, voucher_result.journal_entry_id, datetime.date.today(), amount, user_id,
+            reference_no=reference_no, description=settle_description,
+        )
     return voucher_result.journal_entry_id
+
+
+def record_mixed_payment_and_settle(
+    company_id: int, user_id: int, document_id: int,
+    method_lines: list[tuple], reference_no: str | None = None,
+) -> int | None:
+    """طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
+    روش‌ها را نمی‌تونه ثبت کنه»): نسخهٔ چندروشیِ record_payment_and_settle
+    -- برایِ فروشی که صندوق‌دار از دیالوگِ «نحوهٔ تسویه» (کدهایِ روشِ
+    هم‌الگو با treasury.METHOD_CODES: CASH/BANK/DISCOUNT/GOODS_COUPON/
+    VOUCHER، نه واژگانِ CARD/WALLET/GIFT_CARDِ منویِ تکی‌روشِ سرپرست)
+    استفاده کرده. برخلافِ نسخهٔ تک‌روشی، همه‌یِ ردیف‌ها در یک سندِ
+    حسابداریِ واحد (create_treasury_voucher با چند MethodLine) ثبت
+    می‌شوند -- دقیقاً هم‌الگو با فرمِ فاکتورِ عمومی.
+
+    هر ردیفِ method_lines می‌تواند ۲ تا ۴ عضو داشته باشد: (method_code,
+    amount[, note[, detail_account_id]]) -- طبقِ درخواستِ صریح (تفصیلیِ
+    انتخاب‌شده/پیش‌فرضِ همان روش هم به سندِ حسابداری منتقل شود). پیاده‌سازیِ
+    واقعی در record_combined_settlement است -- این فقط پوششِ تک‌سندیِ
+    همان تابع است (تا امکانِ ادغامِ چندسندی هم -- بدونِ تکرارِ کد --
+    برایِ فرمِ تاییدِ سرپرست فراهم شود)."""
+    if not method_lines:
+        return None
+    return record_combined_settlement(company_id, user_id, [(document_id, method_lines)], reference_no)
 
 
 # ---------------------------------------------------------------------
