@@ -12,6 +12,7 @@ import datetime
 import decimal
 import os
 import tempfile
+import types
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -1050,6 +1051,7 @@ class _SettlementPlanDialog(QDialog):
         self, document_id: int, company_id: int, document_type_code: str,
         total_amount: decimal.Decimal, decimal_places: int, parent=None,
         require_manager_approval: bool = True,
+        seed_lines: list[tuple] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("نحوه‌یِ تسویه‌یِ فاکتور")
@@ -1092,6 +1094,13 @@ class _SettlementPlanDialog(QDialog):
         self._pos_mode = not require_manager_approval
         self._row_method_codes: list[str] = []
         self._row_detail_ids: list[int | None] = []
+        # طبقِ درخواستِ صریح («سندِ تک‌فروشی در حالتِ اصلاح که باز می‌شود،
+        # باید نوعِ تسویهٔ قبلی در حافظه بماند و فرمِ دریافت با همان
+        # مقادیر باز شود»): وقتی این فاکتور از یک فروشِ قبلاً‌تاییدشده
+        # بازگشایی شده (که نقشه‌اش پاک شده)، seed_lines همان نقشهٔ قبلی
+        # را (پیش از پاک‌شدن) نگه داشته -- اگر در دیتابیس نقشه‌ای نباشد،
+        # بجایِ ردیف‌هایِ خالی، همین مقادیر پیش‌فرض می‌شوند.
+        self._seed_lines = seed_lines
 
         layout = QVBoxLayout(self)
 
@@ -1323,6 +1332,16 @@ class _SettlementPlanDialog(QDialog):
         if plan is not None:
             for line in plan.lines:
                 lines_by_method.setdefault(line.method_code, []).append(line)
+        elif self._seed_lines:
+            # طبقِ درخواستِ صریح («طبقِ حافظه مقادیرِ دریافتیِ قبلی، مثلاً
+            # اگر نقدی بود در فیلدِ نقد...»): entry = (method_code,
+            # amount, note, detail_account_id) -- هم‌الگو با فرمتِ
+            # settlements_service.SettlementPlanLine.
+            for entry in self._seed_lines:
+                method_code, amount = entry[0], entry[1]
+                detail_account_id = entry[3] if len(entry) > 3 else None
+                seed_line = types.SimpleNamespace(method_code=method_code, amount=amount, detail_account_id=detail_account_id)
+                lines_by_method.setdefault(method_code, []).append(seed_line)
         method_codes = self._method_codes()
         for code in method_codes:
             bucket = lines_by_method.get(code) or []

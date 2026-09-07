@@ -39,6 +39,7 @@ from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import treasury as treasury_service
 from peecha.ui.screens.commercial_pos_menu_groups import CommercialPosMenuGroupsScreen
 from peecha.ui.widgets import wrap_scrollable
 
@@ -68,7 +69,15 @@ class CommercialPosSessionsScreen(QWidget):
         self.terminals_table.verticalHeader().setVisible(False)
         self.terminals_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.terminals_table.cellClicked.connect(self._on_terminal_selected)
-        left.addWidget(self.terminals_table, stretch=1)
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در تنظیماتِ پیش‌فرضِ تسویه ارتفاعِ
+        # فیلد کمه و محتویاتش معلوم نیست»): ریشهٔ واقعی این بود که این
+        # جدولِ کوچکِ ترمینال‌ها تنها widgetِ دارایِ stretch در این ستون
+        # بود -- یعنی تمامِ فضایِ اضافیِ عمودی را می‌بلعید و سه‌تبِ
+        # تنظیماتِ زیرش (شاملِ جدولِ پیش‌فرضِ تسویه) به حداقلِ اندازهٔ
+        # طبیعی‌اش فشرده می‌شد. حالا این جدولِ کوچک یک ارتفاعِ حداکثریِ
+        # معقول دارد و stretch به self.settings_tabs (زیر) منتقل شده.
+        self.terminals_table.setMaximumHeight(140)
+        left.addWidget(self.terminals_table)
 
         new_terminal_box = QHBoxLayout()
         self.terminal_code_field = QLineEdit()
@@ -290,6 +299,25 @@ class CommercialPosSessionsScreen(QWidget):
         for col in (1, 2, 3):
             sd_header.setSectionResizeMode(col, QHeaderView.Stretch)
         defaults_layout.addWidget(self.settlement_defaults_table, stretch=1)
+
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ
+        # حسابِ مشتری مرکزِ هزینه/پروژه می‌خواهد»): پیش‌فرضِ این دو بُعد
+        # برایِ طرفِ حسابِ دریافتنیِ مشتری (نه نقد/بانک) هم این‌جا وارد
+        # می‌شود -- دیگر نیازی نیست سرپرست هربار در لحظهٔ تاییدِ فروش این
+        # دو را دستی وارد کند (اصلاً فرمی برایِ این کار وجود ندارد).
+        receivable_title = QLabel("پیش‌فرضِ مرکزِ هزینه/پروژهٔ حسابِ دریافتنیِ مشتری")
+        receivable_title.setObjectName("sectionHint")
+        receivable_title.setWordWrap(True)
+        defaults_layout.addWidget(receivable_title)
+        receivable_box = QHBoxLayout()
+        receivable_box.addWidget(QLabel("مرکزِ هزینه"))
+        self.receivable_cost_center_combo = QComboBox()
+        receivable_box.addWidget(self.receivable_cost_center_combo, stretch=1)
+        receivable_box.addWidget(QLabel("پروژه"))
+        self.receivable_project_combo = QComboBox()
+        receivable_box.addWidget(self.receivable_project_combo, stretch=1)
+        defaults_layout.addLayout(receivable_box)
+
         save_defaults_button = QPushButton("💾")
         save_defaults_button.setObjectName("iconButton")
         save_defaults_button.setFixedWidth(44)
@@ -298,7 +326,7 @@ class CommercialPosSessionsScreen(QWidget):
         defaults_layout.addWidget(save_defaults_button)
         self.settings_tabs.addTab(defaults_tab, "پیش‌فرضِ تسویه")
 
-        left.addWidget(self.settings_tabs)
+        left.addWidget(self.settings_tabs, stretch=1)
 
         # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فرم سمتِ راستش خالیه و سمتِ چپ
         # بسیار فشرده است»): این ستون (ترمینال‌ها + سه تبِ تنظیماتِ
@@ -533,6 +561,50 @@ class CommercialPosSessionsScreen(QWidget):
 
             self._settlement_default_widgets.append((method_code, detail_combo, cc_combo, proj_combo))
 
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ
+        # حسابِ مشتری مرکزِ هزینه/پروژه می‌خواهد»): این دو کمبو، برخلافِ
+        # جدولِ بالا، به حسابِ دریافتنیِ مشتری (نه نقد/بانک) مربوط‌اند.
+        customer_group_id = next(
+            (g.person_group_id for g in dimensions_service.list_person_groups(company_id) if g.code == "CUSTOMER"),
+            None,
+        )
+        receivable_account_id = next(
+            (
+                m.account_id for m in treasury_service.list_counterparty_mappings(company_id, "RECEIPT")
+                if m.person_group_id == customer_group_id
+            ),
+            None,
+        )
+        required_dims = (
+            dimensions_service.get_required_dimensions_for_account(receivable_account_id)
+            if receivable_account_id is not None else []
+        )
+        cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
+        project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+        requires_receivable_cc = any(r.dimension_type_id == cost_center_type_id for r in required_dims)
+        requires_receivable_project = any(r.dimension_type_id == project_type_id for r in required_dims)
+
+        pos_settings_row = pos_service.get_pos_settings(company_id)
+        self.receivable_cost_center_combo.clear()
+        self.receivable_cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        for option in cc_options:
+            self.receivable_cost_center_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+        if pos_settings_row is not None and pos_settings_row.default_receivable_cost_center_detail_account_id is not None:
+            index = self.receivable_cost_center_combo.findData(pos_settings_row.default_receivable_cost_center_detail_account_id)
+            if index >= 0:
+                self.receivable_cost_center_combo.setCurrentIndex(index)
+        self.receivable_cost_center_combo.setEnabled(requires_receivable_cc)
+
+        self.receivable_project_combo.clear()
+        self.receivable_project_combo.addItem("(بدونِ پروژه)", None)
+        for option in proj_options:
+            self.receivable_project_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+        if pos_settings_row is not None and pos_settings_row.default_receivable_project_detail_account_id is not None:
+            index = self.receivable_project_combo.findData(pos_settings_row.default_receivable_project_detail_account_id)
+            if index >= 0:
+                self.receivable_project_combo.setCurrentIndex(index)
+        self.receivable_project_combo.setEnabled(requires_receivable_project)
+
     def _save_settlement_method_defaults(self) -> None:
         company_id = self._company_id()
         if company_id is None:
@@ -542,6 +614,9 @@ class CommercialPosSessionsScreen(QWidget):
                 company_id, method_code,
                 detail_combo.currentData(), cc_combo.currentData(), proj_combo.currentData(),
             )
+        pos_service.set_pos_receivable_dimension_defaults(
+            company_id, self.receivable_cost_center_combo.currentData(), self.receivable_project_combo.currentData(),
+        )
         self.status_label.setText("")
 
     def _save_settings(self) -> None:

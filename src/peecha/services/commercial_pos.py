@@ -319,6 +319,24 @@ def payments_cover_total(document_id: int) -> bool:
         return _money(sum(paid, _ZERO) + sum(plan_amounts, _ZERO)) == _money(doc.total_amount)
 
 
+def _resolve_receivable_counterparty_details(
+    company_id: int, person_dimension_type_id: int, customer_id: int, cost_center_type_id: int, project_type_id: int,
+) -> dict[int, int]:
+    """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ حسابِ
+    مشتری مرکزِ هزینه/پروژه می‌خواهد»): اگر حسابِ نگاشت‌شدهٔ دریافتِ
+    مشتری این ابعاد را الزامی کرده باشد، پیش‌فرضِ تنظیم‌شده در
+    PosSettings.default_receivable_cost_center/project به طرفِ حسابِ
+    (بستانکارِ) سندِ RECEIPT هم اضافه می‌شود."""
+    details = {person_dimension_type_id: customer_id}
+    pos_settings = get_pos_settings(company_id)
+    if pos_settings is not None:
+        if pos_settings.default_receivable_cost_center_detail_account_id is not None:
+            details[cost_center_type_id] = pos_settings.default_receivable_cost_center_detail_account_id
+        if pos_settings.default_receivable_project_detail_account_id is not None:
+            details[project_type_id] = pos_settings.default_receivable_project_detail_account_id
+    return details
+
+
 def record_payment_and_settle_batch(
     company_id: int, user_id: int, document_ids: list[int], method_code: str,
     amounts: dict[int, decimal.Decimal] | None = None, reference_no: str | None = None,
@@ -414,9 +432,12 @@ def record_payment_and_settle_batch(
                 extra_details[cost_center_type_id] = default.cost_center_detail_account_id
             if default.project_detail_account_id is not None:
                 extra_details[project_type_id] = default.project_detail_account_id
+        counterparty_details = _resolve_receivable_counterparty_details(
+            company_id, person_dimension_type_id, customer_id, cost_center_type_id, project_type_id,
+        )
         voucher_result = treasury_service.create_treasury_voucher(
             company_id, user_id, "RECEIPT", mapping_account_id,
-            {person_dimension_type_id: customer_id}, document_date, description,
+            counterparty_details, document_date, description,
             [
                 treasury_service.MethodLine(
                     method=treasury_method, amount=total_amount, detail_account_id=detail_account_id,
@@ -520,9 +541,12 @@ def record_mixed_payment_and_settle(
         )
 
     description = f"دریافتِ صندوق (POS) -- بابتِ فاکتورِ فروشِ #{document_no}"
+    counterparty_details = _resolve_receivable_counterparty_details(
+        company_id, person_dimension_type_id, customer_id, cost_center_type_id, project_type_id,
+    )
     voucher_result = treasury_service.create_treasury_voucher(
         company_id, user_id, "RECEIPT", mapping_account_id,
-        {person_dimension_type_id: customer_id}, document_date, description,
+        counterparty_details, document_date, description,
         voucher_lines,
     )
     settlements_service.allocate_settlement(
@@ -679,6 +703,29 @@ def set_pos_settings(
             row.show_customer_credit_warning = show_customer_credit_warning
             row.recent_invoices_count = recent_invoices_count
             row.fast_receipt_printing = fast_receipt_printing
+        session.commit()
+
+
+def set_pos_receivable_dimension_defaults(
+    company_id: int, cost_center_detail_account_id: int | None, project_detail_account_id: int | None,
+) -> None:
+    """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ
+    حسابِ مشتری مرکزِ هزینه/پروژه می‌خواهد»): جدا از set_pos_settings
+    (که فیلدهایِ عمومیِ بیشتری دارد) -- فقط همین دو فیلد را به‌روز
+    می‌کند، هم‌الگو با set_quick_button_layout."""
+    with new_session() as session:
+        row = session.get(PosSettings, company_id)
+        if row is None:
+            session.add(
+                PosSettings(
+                    company_id=company_id,
+                    default_receivable_cost_center_detail_account_id=cost_center_detail_account_id,
+                    default_receivable_project_detail_account_id=project_detail_account_id,
+                )
+            )
+        else:
+            row.default_receivable_cost_center_detail_account_id = cost_center_detail_account_id
+            row.default_receivable_project_detail_account_id = project_detail_account_id
         session.commit()
 
 

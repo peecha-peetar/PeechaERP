@@ -29,7 +29,9 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount, FiscalYear, JournalEntryLine
-from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation
+from peecha.db.models.commercial import (
+    CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation, PosSettings,
+)
 from peecha.db.models.inventory import Item, StockDocument
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_credit as credit_service
@@ -94,6 +96,33 @@ def _is_informal_tax_posting(company_id: int, tax_posting_mode: str | None) -> b
     if tax_posting_mode == "INFORMAL":
         return True
     return settings_service.is_feature_enabled(company_id, "INFORMAL_TAX_POSTING")
+
+
+def _pos_receivable_dims_fallback(company_id: int, pos_session_id: int | None) -> dict[int, int]:
+    """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ
+    حسابِ مشتری مرکزِ هزینه/پروژه می‌خواهد -- باید در تنظیماتِ تک‌فروشی
+    وارد بشه»): فاکتورِ تک‌فروشی (POS) هیچ فیلدِ سرِسندی برایِ مرکزِ
+    هزینه/پروژه ندارد -- اگر حسابِ دریافتنیِ نگاشت‌شده این ابعاد را
+    الزامی کرده باشد، همان پیش‌فرضِ ذخیره‌شده در تنظیماتِ POS
+    (commercial_pos.set_pos_receivable_dimension_defaults) استفاده
+    می‌شود. فقط برایِ اسنادِ POS و فقط وقتی سرِسند خودش چیزی برایِ این
+    ابعاد ندارد (اولویت با ورودیِ صریحِ کاربر است)."""
+    if pos_session_id is None:
+        return {}
+    with new_session() as session:
+        pos_settings = session.get(PosSettings, company_id)
+    if pos_settings is None:
+        return {}
+    fallback: dict[int, int] = {}
+    if pos_settings.default_receivable_cost_center_detail_account_id is not None:
+        fallback[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = (
+            pos_settings.default_receivable_cost_center_detail_account_id
+        )
+    if pos_settings.default_receivable_project_detail_account_id is not None:
+        fallback[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = (
+            pos_settings.default_receivable_project_detail_account_id
+        )
+    return fallback
 
 
 def _default_document_description(document_type_code: str, document_no: int, counterparty_id: int | None) -> str:
@@ -662,6 +691,8 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
             extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
                 warehouse_row.fields.profit_center_detail_account_id
             )
+    for dim_type_id, detail_account_id in _pos_receivable_dims_fallback(company_id, draft.pos_session_id).items():
+        extra_dims.setdefault(dim_type_id, detail_account_id)
 
     def _role_account(role_key: str) -> int:
         account_id = inv_engine_service.get_account_mapping(company_id, role_key)
@@ -1592,6 +1623,8 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
                     warehouse_row.fields.profit_center_detail_account_id
                 )
+        for dim_type_id, detail_account_id in _pos_receivable_dims_fallback(company_id, doc.pos_session_id).items():
+            extra_dims.setdefault(dim_type_id, detail_account_id)
 
         # طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه رویِ فاکتورِ خرید — مبلغ +
         # حسابِ معین و تفصیلیِ بستانکار برایِ هر ردیف، همراهِ خودِ سندِ

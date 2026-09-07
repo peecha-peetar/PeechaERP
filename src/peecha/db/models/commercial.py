@@ -334,6 +334,17 @@ class PosSettings(Base):
     # Jasper) را انتخاب می‌کند؛ خاموش‌کردنش چاپِ حرفه‌ایِ Jasper را
     # برمی‌گرداند.
     fast_receipt_printing: Mapped[bool] = mapped_column(default=True)
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ حسابِ
+    # مشتری مرکزِ هزینه/پروژه می‌خواهد»): برخلافِ pos_settlement_method_
+    # defaults (که مخصوصِ طرفِ نقد/بانکِ سندِ حسابداری‌ست)، این دو فیلد
+    # مرکزِ هزینه/پروژهٔ پیش‌فرض را برایِ طرفِ حسابِ دریافتنیِ مشتری
+    # (بستانکارِ سندِ RECEIPT) مشخص می‌کند.
+    default_receivable_cost_center_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    default_receivable_project_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
 
 
 class PosMenuGroup(Base):
