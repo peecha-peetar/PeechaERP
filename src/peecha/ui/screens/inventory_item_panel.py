@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -33,7 +34,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import session as app_session
 from peecha.services import commercial_pos as pos_service
+from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
@@ -435,7 +438,42 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.variants_table.verticalHeader().setVisible(False)
         self.variants_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.variants_table.setMinimumHeight(140)
+        self.variants_table.itemSelectionChanged.connect(self._on_variant_selection_changed)
         layout.addWidget(self.variants_table, stretch=1)
+
+        # طبقِ درخواستِ صریح («برایِ هر متغیر بتوان توضیحات و قیمتِ مجزا و
+        # عکس هم معرفی کرد»): هرکدام یک ردیفِ فشرده -- عمل رویِ متغیرِ
+        # انتخاب‌شده در جدولِ بالا.
+        layout.addWidget(QLabel("ویرایشِ متغیرِ انتخاب‌شده"))
+        notes_row = QHBoxLayout()
+        self.variant_notes_field = QLineEdit()
+        self.variant_notes_field.setPlaceholderText("توضیحاتِ این متغیر")
+        notes_row.addWidget(self.variant_notes_field, stretch=1)
+        save_notes_button = QPushButton("💾")
+        save_notes_button.setObjectName("iconButton")
+        save_notes_button.setToolTip("ذخیرهٔ توضیحاتِ این متغیر")
+        save_notes_button.clicked.connect(self._save_variant_notes)
+        notes_row.addWidget(save_notes_button)
+        layout.addLayout(notes_row)
+
+        price_row = QHBoxLayout()
+        self.variant_price_list_combo = QComboBox()
+        self.variant_price_list_combo.currentIndexChanged.connect(self._load_variant_price)
+        price_row.addWidget(self.variant_price_list_combo, stretch=1)
+        self.variant_price_field = QLineEdit()
+        self.variant_price_field.setPlaceholderText("قیمتِ فروش")
+        price_row.addWidget(self.variant_price_field, stretch=1)
+        save_price_button = QPushButton("💾")
+        save_price_button.setObjectName("iconButton")
+        save_price_button.setToolTip("ذخیرهٔ قیمتِ این متغیر در همین لیستِ قیمت")
+        save_price_button.clicked.connect(self._save_variant_price)
+        price_row.addWidget(save_price_button)
+        add_photo_button = QPushButton("🖼️")
+        add_photo_button.setObjectName("iconButton")
+        add_photo_button.setToolTip("افزودنِ عکسِ این متغیر")
+        add_photo_button.clicked.connect(self._add_variant_photo)
+        price_row.addWidget(add_photo_button)
+        layout.addLayout(price_row)
 
         variants_action_row = QHBoxLayout()
         print_selected_button = QPushButton("🖨️")
@@ -585,6 +623,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             f"{len(created_ids)} متغیرِ تازه ساخته شد." if created_ids else "همه‌یِ ترکیب‌ها از قبل موجود بودند."
         )
         self._refresh_variants_table()
+        self._sync_transactability_checkboxes()
 
     def _refresh_variants_table(self) -> None:
         self.variants_table.setRowCount(0)
@@ -625,16 +664,139 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _remove_selected_variant(self) -> None:
         selected = self.variants_table.selectedItems()
-        if not selected or self._company_id is None:
+        if not selected or self._company_id is None or self._item_id is None:
             return
         variant_item_id = selected[0].data(Qt.UserRole)
         try:
-            catalog_service.delete_item(variant_item_id, self._company_id)
+            variants_service.delete_item_variant(self._company_id, self._item_id, variant_item_id)
         except ValueError as exc:
             self.variants_status_label.setText(str(exc))
             return
         self.variants_status_label.setText("")
         self._refresh_variants_table()
+        self._sync_transactability_checkboxes()
+
+    def _sync_transactability_checkboxes(self) -> None:
+        """طبقِ تصمیمِ صریح («کالایِ اصلیِ دارایِ متغیر، غیرِقابلِ‌فروش/
+        غیرِموجودی‌محور شود»): تولید/حذفِ متغیر می‌تواند این سه پرچمِ کالایِ
+        اصلی را در دیتابیس مستقیماً عوض کند -- اگر تیک‌هایِ همین فرم
+        رفرش نشوند، دکمهٔ ذخیرهٔ فرمِ میزبان با مقدارِ باسیاتِ چک‌باکس‌ها
+        همان تغییرِ خودکار را بازنویسی می‌کند."""
+        if self._item_id is None:
+            return
+        item = catalog_service.get_item(self._item_id)
+        if item is None:
+            return
+        self.is_sellable_checkbox.setChecked(item.is_sellable)
+        self.is_purchasable_checkbox.setChecked(item.is_purchasable)
+        self.is_stock_tracked_checkbox.setChecked(item.is_stock_tracked)
+        self._apply_visibility()
+
+    def _selected_variant_item_id(self) -> int | None:
+        selected = self.variants_table.selectedItems()
+        if not selected:
+            return None
+        return self.variants_table.item(selected[0].row(), 0).data(Qt.UserRole)
+
+    def _on_variant_selection_changed(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        if variant_item_id is None:
+            self.variant_notes_field.clear()
+            self.variant_price_field.clear()
+            return
+        item = catalog_service.get_item(variant_item_id)
+        self.variant_notes_field.setText((item.notes or "") if item is not None else "")
+        self._load_variant_price()
+
+    def _save_variant_notes(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        if variant_item_id is None or self._company_id is None:
+            self.variants_status_label.setText("یک متغیر از جدول انتخاب کنید.")
+            return
+        try:
+            variants_service.set_variant_notes(
+                self._company_id, variant_item_id, self.variant_notes_field.text().strip() or None
+            )
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("توضیحاتِ متغیر ذخیره شد.")
+
+    def _reload_variant_price_lists(self) -> None:
+        if self._company_id is None:
+            return
+        current = self.variant_price_list_combo.currentData()
+        self.variant_price_list_combo.blockSignals(True)
+        self.variant_price_list_combo.clear()
+        for price_list in pricing_service.list_price_lists(self._company_id, "SALES"):
+            self.variant_price_list_combo.addItem(f"{price_list.code} — {price_list.name}", price_list.price_list_id)
+        self.variant_price_list_combo.blockSignals(False)
+        if current is not None:
+            self.variant_price_list_combo.setCurrentIndex(max(0, self.variant_price_list_combo.findData(current)))
+        self._load_variant_price()
+
+    def _load_variant_price(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        price_list_id = self.variant_price_list_combo.currentData()
+        if variant_item_id is None or price_list_id is None:
+            self.variant_price_field.clear()
+            return
+        existing = next(
+            (
+                p for p in pricing_service.list_price_list_items(price_list_id)
+                if p.item_id == variant_item_id and p.min_quantity == decimal.Decimal(1)
+            ),
+            None,
+        )
+        self.variant_price_field.setText(str(existing.unit_price) if existing is not None else "")
+
+    def _save_variant_price(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        price_list_id = self.variant_price_list_combo.currentData()
+        if variant_item_id is None or price_list_id is None:
+            self.variants_status_label.setText("یک متغیر و یک لیستِ قیمت انتخاب کنید.")
+            return
+        price = _decimal_or_none(self.variant_price_field.text())
+        if price is None:
+            self.variants_status_label.setText("قیمتِ معتبر وارد کنید.")
+            return
+        item = catalog_service.get_item(variant_item_id)
+        if item is None:
+            return
+        pricing_service.set_price_list_item(
+            price_list_id, variant_item_id, item.base_uom_id, price,
+            changed_by_user_id=app_session.current_user.user_id if app_session.current_user else None,
+        )
+        self.variants_status_label.setText("قیمتِ متغیر ذخیره شد.")
+
+    def _add_variant_photo(self) -> None:
+        variant_item_id = self._selected_variant_item_id()
+        if variant_item_id is None or self._company_id is None or self._item_id is None:
+            self.variants_status_label.setText("یک متغیر از جدول انتخاب کنید.")
+            return
+        row = next(
+            (
+                r for r in variants_service.list_item_variants(self._company_id, self._item_id)
+                if r.variant_item_id == variant_item_id
+            ),
+            None,
+        )
+        if row is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+        )
+        if not path:
+            return
+        try:
+            attachment_id = dimensions_service.attach_detail_account_file(
+                self._company_id, row.item_detail_account_id, app_session.current_user.user_id, path
+            )
+            dimensions_service.set_primary_detail_account_photo(attachment_id, self._company_id)
+        except ValueError as exc:
+            self.variants_status_label.setText(str(exc))
+            return
+        self.variants_status_label.setText("عکسِ متغیر ذخیره شد.")
 
     # --- تبِ فروشِ تکمیلی -------------------------------------------------------
     def _build_sales_extra_tab(self) -> QWidget:
@@ -1136,6 +1298,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self._rebuild_related_item_combo()
         self._reload_item_attributes()
+        self._reload_variant_price_lists()
 
         self._apply_visibility()
 
@@ -1277,6 +1440,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.sku_field.clear()
         self.own_barcode_label.setText("(بدونِ بارکد)")
         self.variants_table.setRowCount(0)
+        self.variant_notes_field.clear()
+        self.variant_price_field.clear()
         self._variant_selection = {}
         self._load_attribute_values_list()
 

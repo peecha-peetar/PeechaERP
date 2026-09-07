@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 
 from peecha.db.base import new_session
+from peecha.db.models.commercial import PriceListItem, PriceListItemPriceHistory
 from peecha.db.models.core import Company
 from peecha.db.models.inventory import (
     AssetDepreciationEntry,
@@ -629,6 +630,12 @@ def delete_item(item_id: int, company_id: int) -> None:
         session.execute(delete(StandardCost).where(StandardCost.item_id == item_id))
         session.execute(delete(ReorderPolicy).where(ReorderPolicy.item_id == item_id))
         session.execute(delete(ReorderSuggestionAcknowledgement).where(ReorderSuggestionAcknowledgement.item_id == item_id))
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده (حینِ حذفِ متغیرهایِ دارایِ قیمت):
+        # ردیف‌هایِ فهرستِ قیمت/تاریخچهٔ قیمتِ همین کالا هم فقط با خودِ
+        # همین کالا معنا دارند -- مثلِ بقیه‌یِ زیرجدول‌هایِ تعریفیِ بالا،
+        # پیش از حذفِ خودِ کالا پاک می‌شوند.
+        session.execute(delete(PriceListItemPriceHistory).where(PriceListItemPriceHistory.item_id == item_id))
+        session.execute(delete(PriceListItem).where(PriceListItem.item_id == item_id))
 
         detail_account_id = item.item_detail_account_id
         session.delete(item)

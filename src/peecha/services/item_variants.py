@@ -13,7 +13,7 @@ from __future__ import annotations
 import itertools
 from dataclasses import dataclass
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from peecha import ean13
 from peecha.db.base import new_session
@@ -166,6 +166,7 @@ def delete_item_attribute_value(value_id: int) -> None:
 @dataclass
 class ItemVariantRow:
     variant_item_id: int
+    item_detail_account_id: int
     code: str
     name: str | None
     barcode: str | None
@@ -194,7 +195,8 @@ def list_item_variants(company_id: int, parent_item_id: int) -> list[ItemVariant
                     labels.append(f"{attribute.name}: {value.value}")
             result.append(
                 ItemVariantRow(
-                    variant_item_id=variant_item_id, code=item_row.code, name=item_row.name,
+                    variant_item_id=variant_item_id, item_detail_account_id=item_row.item_detail_account_id,
+                    code=item_row.code, name=item_row.name,
                     barcode=item_row.barcode, attribute_labels="، ".join(labels),
                 )
             )
@@ -218,6 +220,51 @@ def ensure_item_barcode(company_id: int, item_id: int) -> str:
         item.barcode = barcode
         session.commit()
         return barcode
+
+
+def set_variant_notes(company_id: int, item_id: int, notes: str | None) -> None:
+    """طبقِ درخواستِ صریح («برایِ هر متغیر توضیحاتِ مجزا»): تغییرِ سریعِ
+    توضیحاتِ یک کالا/متغیر بدونِ نیاز به فرمِ کاملِ update_item."""
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None or item.company_id != company_id:
+            raise ValueError("کالا نامعتبر است.")
+        item.notes = notes
+        session.commit()
+
+
+def _sync_parent_transactability(company_id: int, parent_item_id: int) -> None:
+    """طبقِ تصمیمِ صریح («کالایِ اصلی بعدِ داشتنِ متغیر، غیرِقابلِ‌فروش/
+    غیرِموجودی‌محور شود»): به‌محضِ داشتنِ حداقل یک متغیر، خودِ کالایِ
+    اصلی دیگر مستقیماً قابلِ‌فروش/خرید/موجودی‌محور نیست -- فقط خودِ
+    متغیرهایش معامله می‌شوند (کالایِ اصلی صرفاً یک قالب/گروه می‌ماند).
+    اگر آخرین متغیر هم حذف شود، این مقادیر خودکار به حالتِ فعال
+    برمی‌گردند."""
+    with new_session() as session:
+        parent = session.get(Item, parent_item_id)
+        if parent is None or parent.company_id != company_id:
+            return
+        has_variants = (
+            session.scalar(
+                select(func.count()).select_from(Item).where(Item.variant_parent_item_id == parent_item_id)
+            )
+            or 0
+        ) > 0
+        if has_variants and (parent.is_sellable or parent.is_purchasable or parent.is_stock_tracked):
+            parent.is_sellable = False
+            parent.is_purchasable = False
+            parent.is_stock_tracked = False
+            session.commit()
+        elif not has_variants and not (parent.is_sellable or parent.is_purchasable or parent.is_stock_tracked):
+            parent.is_sellable = True
+            parent.is_purchasable = True
+            parent.is_stock_tracked = True
+            session.commit()
+
+
+def delete_item_variant(company_id: int, parent_item_id: int, variant_item_id: int) -> None:
+    catalog_service.delete_item(variant_item_id, company_id)
+    _sync_parent_transactability(company_id, parent_item_id)
 
 
 def generate_item_variants(
@@ -314,4 +361,6 @@ def generate_item_variants(
             session.commit()
         existing_combo_keys.add(combo_key)
         created_ids.append(variant_item_id)
+    if created_ids:
+        _sync_parent_transactability(company_id, parent_item_id)
     return created_ids
