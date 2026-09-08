@@ -962,9 +962,21 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): در حالتِ
         # جدولی، فیلدِ مقدار/بهایِ واحدِ مشترک اصلاً معنا ندارد (هر ردیفِ
         # جدول مقدارِ خودش را دارد و قیمت هم به‌صورتِ خودکار به‌ازایِ هر
-        # متغیر محاسبه می‌شود) -- پس پنهان می‌شوند، نه فقط غیرفعال.
+        # متغیر محاسبه می‌شود) -- پس پنهان می‌شوند، نه فقط غیرفعال. طبقِ
+        # گزارشِ صریحِ بعدی («فرم خیلی پخش و نامرتب شده») -- چون
+        # QGridLayout جایگاهِ ردیف/ستونِ فیلدهایِ پنهان را خالی نگه
+        # می‌دارد نه بازتوزیع، صرفاً پنهان‌کردنِ مقدار/قیمت باعث می‌شد
+        # تخفیف/مالیات هرکدام فقط نیمی از عرض را بگیرند و در دو ردیفِ
+        # جداگانه بیفتند؛ پس در حالتِ جدولی این دو، هرکدام کاملِ عرض
+        # (span=3) می‌شوند تا مثلِ بقیهٔ فیلدها یک ردیفِ تمیز و یکدست
+        # بسازند -- در حالتِ عادی به همان spanِ ۱ی پیش‌فرض برمی‌گردند.
+        # ردیفِ اطلاعاتِ موجودیِ تک‌کالایی هم چون در حالتِ جدولی بی‌معناست
+        # (هر متغیر موجودیِ خودش را در همان جدول دارد) پنهان می‌شود.
         self.fields_grid.set_field_visible("quantity", not bulk)
         self.fields_grid.set_field_visible("unit_price", not bulk)
+        self.fields_grid.set_field_visible("stock_info", not bulk)
+        self.fields_grid._set_span("discount", 3 if bulk else 1)
+        self.fields_grid._set_span("tax_percent", 3 if bulk else 1)
         if bulk:
             for widget in (self.discount_field, self.tax_percent_field, self.description_field):
                 widget.setEnabled(True)
