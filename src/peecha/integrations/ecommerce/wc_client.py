@@ -19,6 +19,8 @@ from dataclasses import dataclass
 import requests
 from woocommerce import API
 
+from peecha.integrations.ecommerce import retry
+
 _DEFAULT_TIMEOUT = 30
 
 
@@ -57,7 +59,7 @@ def _raise_for_status(resp, label: str) -> dict:
 
 def check_connection(wcapi: API) -> tuple[bool, str]:
     try:
-        resp = wcapi.get("system_status")
+        resp = retry.call_with_retry(wcapi.get, "system_status")
     except Exception as exc:  # noqa: BLE001 -- خطاهایِ requests/شبکه متنوع‌اند
         return False, f"اتصال به فروشگاه برقرار نشد: {exc}"
     if resp.status_code >= 400:
@@ -66,7 +68,7 @@ def check_connection(wcapi: API) -> tuple[bool, str]:
 
 
 def find_product_by_sku(wcapi: API, sku: str) -> dict | None:
-    resp = wcapi.get("products", params={"sku": sku})
+    resp = retry.call_with_retry(wcapi.get, "products", params={"sku": sku})
     if resp.status_code >= 400:
         _raise_for_status(resp, f"جست‌وجویِ محصولِ SKU={sku}")
     rows = resp.json()
@@ -82,14 +84,14 @@ def upsert_product(wcapi: API, sku: str, payload: dict) -> dict:
     body = dict(payload)
     body["sku"] = sku
     if existing:
-        resp = wcapi.put(f"products/{existing['id']}", body)
+        resp = retry.call_with_retry(wcapi.put, f"products/{existing['id']}", body)
         return _raise_for_status(resp, f"به‌روزرسانیِ محصولِ {sku}")
-    resp = wcapi.post("products", body)
+    resp = retry.call_with_retry(wcapi.post, "products", body)
     return _raise_for_status(resp, f"ایجادِ محصولِ {sku}")
 
 
 def find_category_by_name(wcapi: API, name: str, parent_external_id: int | None) -> dict | None:
-    resp = wcapi.get("products/categories", params={"search": name, "per_page": 100})
+    resp = retry.call_with_retry(wcapi.get, "products/categories", params={"search": name, "per_page": 100})
     if resp.status_code >= 400:
         _raise_for_status(resp, f"جست‌وجویِ دستهٔ «{name}»")
     rows = resp.json()
@@ -106,7 +108,7 @@ def create_category(wcapi: API, name: str, parent_external_id: int | None) -> di
     body = {"name": name}
     if parent_external_id:
         body["parent"] = int(parent_external_id)
-    resp = wcapi.post("products/categories", body)
+    resp = retry.call_with_retry(wcapi.post, "products/categories", body)
     return _raise_for_status(resp, f"ایجادِ دستهٔ «{name}»")
 
 
@@ -122,7 +124,7 @@ def fetch_new_orders(wcapi: API, *, status: str = "processing", per_page: int = 
     """سفارش‌هایِ فروشگاه با وضعیتِ مشخص (پیش‌فرض «در حالِ پردازش» --
     یعنی پرداخت‌شده) -- فیلترِ «قبلاً واردنشده» بر اساسِ لاگِ سینک در
     خودِ ERP انجام می‌شود، نه این‌جا."""
-    resp = wcapi.get("orders", params={"status": status, "per_page": per_page})
+    resp = retry.call_with_retry(wcapi.get, "orders", params={"status": status, "per_page": per_page})
     if resp.status_code >= 400:
         _raise_for_status(resp, "دریافتِ سفارش‌هایِ تازه")
     rows = resp.json()
@@ -162,7 +164,7 @@ def list_variations(wcapi: API, parent_id: int, per_page: int = 100, max_pages: 
     result: list[dict] = []
     page = 1
     while page <= max_pages:
-        resp = wcapi.get(f"products/{parent_id}/variations", params={"per_page": per_page, "page": page})
+        resp = retry.call_with_retry(wcapi.get, f"products/{parent_id}/variations", params={"per_page": per_page, "page": page})
         if resp.status_code >= 400:
             _raise_for_status(resp, f"دریافتِ واریانت‌هایِ محصولِ #{parent_id}")
         rows = resp.json()
@@ -180,9 +182,9 @@ def upsert_variation(wcapi: API, parent_id: int, sku: str, payload: dict, existi
     body = dict(payload)
     body["sku"] = sku
     if existing:
-        resp = wcapi.put(f"products/{parent_id}/variations/{existing['id']}", body)
+        resp = retry.call_with_retry(wcapi.put, f"products/{parent_id}/variations/{existing['id']}", body)
         return _raise_for_status(resp, f"به‌روزرسانیِ واریانتِ {sku}")
-    resp = wcapi.post(f"products/{parent_id}/variations", body)
+    resp = retry.call_with_retry(wcapi.post, f"products/{parent_id}/variations", body)
     return _raise_for_status(resp, f"ایجادِ واریانتِ {sku}")
 
 
@@ -196,7 +198,7 @@ def upload_media(store_url: str, wp_username: str, wp_app_password: str, file_by
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"', "Content-Type": content_type}
     try:
-        resp = requests.post(url, headers=headers, data=file_bytes, auth=(wp_username, wp_app_password), timeout=60)
+        resp = retry.call_with_retry(requests.post, url, headers=headers, data=file_bytes, auth=(wp_username, wp_app_password), timeout=60)
     except requests.RequestException as exc:
         raise StoreAPIError(f"آپلودِ تصویر -- خطایِ شبکه: {exc}") from exc
     if resp.status_code >= 400:
@@ -205,14 +207,14 @@ def upload_media(store_url: str, wp_username: str, wp_app_password: str, file_by
 
 
 def attach_product_image(wcapi: API, product_id: int, media_id: int) -> dict:
-    resp = wcapi.put(f"products/{product_id}", {"images": [{"id": media_id}]})
+    resp = retry.call_with_retry(wcapi.put, f"products/{product_id}", {"images": [{"id": media_id}]})
     return _raise_for_status(resp, f"اتصالِ تصویر به محصولِ #{product_id}")
 
 
 def fetch_customer(wcapi: API, external_customer_id: str) -> ExternalCustomerRow | None:
     if not external_customer_id or external_customer_id == "0":
         return None
-    resp = wcapi.get(f"customers/{external_customer_id}")
+    resp = retry.call_with_retry(wcapi.get, f"customers/{external_customer_id}")
     if resp.status_code == 404:
         return None
     data = _raise_for_status(resp, f"دریافتِ مشتریِ #{external_customer_id}")
