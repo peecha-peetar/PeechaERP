@@ -889,6 +889,16 @@ class MarketplaceCustomerMapping(Base):
     customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
+class MarketplaceCategoryMapping(Base):
+    __tablename__ = "marketplace_category_mappings"
+    __table_args__ = (UniqueConstraint("connection_id", "category_id"), {"schema": "comm"})
+
+    mapping_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.marketplace_connections.connection_id"))
+    category_id: Mapped[int] = mapped_column(ForeignKey("inv.item_categories.category_id"))
+    external_category_id: Mapped[str] = mapped_column(String(100))
+
+
 class MarketplaceInventoryPushLog(Base):
     __tablename__ = "marketplace_inventory_push_log"
     __table_args__ = ({"schema": "comm"},)

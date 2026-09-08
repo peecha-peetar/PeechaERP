@@ -26,6 +26,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui import theme
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "OTHER": "سایر"}
@@ -100,6 +101,33 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         disconnect_button.clicked.connect(self._disconnect)
         conn_form.addWidget(disconnect_button)
         left.addLayout(conn_form)
+
+        # طبقِ درخواستِ صریح («ماژولِ فروشِ اینترنتی» با استفاده از دیتابیسِ
+        # همینِ ERP): کلیدِ API لازم برایِ سینکِ واقعی با ووکامرس -- برایِ
+        # اتصالِ از قبل انتخاب‌شده در جدولِ سمتِ چپ. رمزنگاری در سرویس انجام
+        # می‌شود (services/ecommerce_credentials.py)، نه این‌جا.
+        left.addWidget(QLabel("کلیدِ APIِ فروشگاه (برایِ اتصالِ انتخاب‌شده)"))
+        creds_form = QHBoxLayout()
+        self.wc_key_field = QLineEdit()
+        self.wc_key_field.setPlaceholderText("Consumer Key")
+        creds_form.addWidget(self.wc_key_field)
+        self.wc_secret_field = QLineEdit()
+        self.wc_secret_field.setPlaceholderText("Consumer Secret")
+        self.wc_secret_field.setEchoMode(QLineEdit.Password)
+        creds_form.addWidget(self.wc_secret_field)
+        save_creds_button = QPushButton("🔑")
+        save_creds_button.setObjectName("iconButton")
+        save_creds_button.setFixedWidth(44)
+        save_creds_button.setToolTip("ذخیرهٔ کلیدِ API (رمزنگاری‌شده)")
+        save_creds_button.clicked.connect(self._save_credentials)
+        creds_form.addWidget(save_creds_button)
+        left.addLayout(creds_form)
+
+        sync_now_button = QPushButton("🔄  سینکِ الان (کاتالوگ + مشتریان + سفارش‌هایِ تازه)")
+        sync_now_button.setObjectName("primaryIconButton")
+        sync_now_button.setToolTip("کاتالوگ/قیمت/موجودی را به فروشگاه می‌فرستد و مشتریان/سفارش‌هایِ تازه را می‌خواند")
+        sync_now_button.clicked.connect(self._sync_now)
+        left.addWidget(sync_now_button)
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
@@ -258,6 +286,48 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
             return
         ecommerce_service.disconnect(self._selected_connection_id)
         self.refresh()
+
+    def _save_credentials(self) -> None:
+        if self._selected_connection_id is None:
+            self.status_label.setText("ابتدا یک اتصال را از فهرست انتخاب کنید.")
+            return
+        key = self.wc_key_field.text().strip()
+        secret = self.wc_secret_field.text().strip()
+        if not key or not secret:
+            self.status_label.setText("Consumer Key و Consumer Secret را وارد کنید.")
+            return
+        ecommerce_service.set_connection_credentials(
+            self._selected_connection_id, {"consumer_key": key, "consumer_secret": secret},
+        )
+        self.wc_key_field.clear()
+        self.wc_secret_field.clear()
+        theme.set_status_label(self.status_label, "کلیدِ API رمزنگاری و ذخیره شد.", ok=True)
+
+    def _sync_now(self) -> None:
+        if self._selected_connection_id is None:
+            self.status_label.setText("ابتدا یک اتصال را از فهرست انتخاب کنید.")
+            return
+        company_id = self._company_id()
+        if company_id is None or app_session.current_company is None or app_session.current_user is None:
+            return
+        try:
+            result = ecommerce_service.sync_now(
+                self._selected_connection_id, app_session.current_user.user_id, app_session.current_company.base_currency_id,
+            )
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        parts = [
+            f"کاتالوگ: {result.catalog.pushed} ارسال‌شد، {result.catalog.skipped} ردشد، {result.catalog.failed} ناموفق",
+            f"مشتریان: {result.customers.created} تازه، {result.customers.already_mapped} از قبل، {result.customers.failed} ناموفق",
+            f"سفارش‌ها: {result.orders.imported} ایمپورت‌شد، {result.orders.duplicate} تکراری، {result.orders.failed} ناموفق",
+        ]
+        all_errors = result.catalog.errors + result.customers.errors + result.orders.errors
+        if all_errors:
+            parts.append("خطاها: " + " | ".join(all_errors[:5]))
+        has_failure = result.catalog.failed or result.customers.failed or result.orders.failed
+        theme.set_status_label(self.status_label, "  —  ".join(parts), ok=not has_failure)
+        self._refresh_connection_detail()
 
     def _add_item_mapping(self) -> None:
         if self._selected_connection_id is None:
