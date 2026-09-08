@@ -49,6 +49,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import item_variants as variants_service
 from peecha.services import report_templates as report_templates_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
@@ -561,8 +562,17 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
         layout = QVBoxLayout(self)
         self._items_by_id = {it.item_id: it for it in items}
+        # طبقِ درخواستِ صریح («کالایِ اصلیِ دارایِ متغیر نباید مستقیم در
+        # سند ثبت شود؛ در جستجو فقط کالاهایِ اصلی بیایند و خودِ متغیرها
+        # نیایند؛ بعدِ انتخابِ کالایِ اصلی، متغیرش انتخاب شود»): لیستِ
+        # کمبویِ کالا فقط شاملِ کالاهایِ غیرمتغیر (variant_parent_item_id
+        # خالی) است -- خودِ ردیف‌هایِ متغیر هرگز مستقیماً در این کمبو
+        # ظاهر نمی‌شوند. اگر کالایِ انتخاب‌شده در این مجموعه دارایِ
+        # متغیر باشد، کمبویِ دومِ «متغیرِ کالا» ظاهر می‌شود و انتخابِ یکی
+        # از متغیرها الزامی است (_on_accept این را چک می‌کند).
+        self._variant_parent_ids = {it.variant_parent_item_id for it in items if it.variant_parent_item_id}
 
-        item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items]
+        item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in items if it.variant_parent_item_id is None]
         item_row_widget = QWidget()
         item_row_layout = QHBoxLayout(item_row_widget)
         item_row_layout.setContentsMargins(0, 0, 0, 0)
@@ -570,6 +580,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.item_combo = _make_searchable_combo(item_options)
         item_row_layout.addWidget(self.item_combo, stretch=1)
         add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
+
+        self.variant_combo = _make_searchable_combo([])
 
         stock_row_widget = QWidget()
         stock_row_layout = QHBoxLayout(stock_row_widget)
@@ -645,6 +657,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.warehouse_combo: _EnterComboBox | None = None
         field_specs = [
             FieldSpec("item", "کالا", item_row_widget, span=2),
+            FieldSpec("variant", "متغیرِ کالا", self.variant_combo, span=1),
             FieldSpec("stock_info", "", stock_row_widget, span=3),
             FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
             FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
@@ -671,6 +684,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         field_specs.append(FieldSpec("description", "توضیح", self.description_field, span=3))
 
         self.fields_grid = FieldGrid(field_specs)
+        self.fields_grid.set_field_visible("variant", False)
         layout.addWidget(self.fields_grid)
         self.register_field_grids("commercial_document_line", [self.fields_grid])
 
@@ -702,12 +716,18 @@ class _LineDialog(LayoutEditMixin, QDialog):
         for widget, next_widget in zip(enter_chain, enter_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
         _enter_signal(enter_chain[-1]).connect(self._on_accept)
+        # طبقِ درخواستِ صریح («انتخابِ متغیر»): کمبویِ متغیر در زنجیره‌یِ
+        # ثابتِ بالا نیست (چون معمولاً پنهان است و رویِ ویجتِ پنهان
+        # setFocus بی‌اثر است) — جداگانه وصل می‌شود تا وقتی نمایان است،
+        # Enter در آن هم مثلِ کمبویِ کالا به فیلدِ مقدار برود.
+        _enter_signal(self.variant_combo).connect(self.quantity_field.setFocus)
         self.item_combo.setFocus()
 
         self._is_new_row = initial is None
         self._price_manually_edited = False
         self.unit_price_field.textEdited.connect(self._on_price_edited_manually)
-        self.item_combo.currentIndexChanged.connect(self._on_item_changed)
+        self.item_combo.currentIndexChanged.connect(self._on_item_combo_changed)
+        self.variant_combo.currentIndexChanged.connect(self._on_variant_combo_changed)
         self.quantity_field.valueChanged.connect(self._suggest_price)
 
         # طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت»): با هر تغییرِ کالا/
@@ -717,11 +737,27 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.discount_type_combo.currentIndexChanged.connect(self._refresh_price_suggestion)
         self.quantity_field.valueChanged.connect(self._refresh_price_suggestion)
         self.item_combo.currentIndexChanged.connect(self._refresh_price_suggestion)
+        self.variant_combo.currentIndexChanged.connect(self._refresh_price_suggestion)
 
         if initial is not None:
-            index = self.item_combo.findData(initial["item_id"])
-            if index >= 0:
-                self.item_combo.setCurrentIndex(index)
+            # طبقِ درخواستِ صریح: اگر ردیفِ ازپیش‌ذخیره‌شده رویِ یک متغیرِ
+            # کالا بوده (نه خودِ کالایِ اصلی -- که دیگر اصلاً در کمبویِ
+            # کالا نیست)، اول کالایِ اصلیِ آن انتخاب می‌شود تا کمبویِ
+            # متغیر ساخته/نمایان شود، بعد خودِ متغیرِ ذخیره‌شده در آن
+            # انتخاب می‌شود.
+            initial_item = self._items_by_id.get(initial["item_id"])
+            if initial_item is not None and initial_item.variant_parent_item_id is not None:
+                parent_index = self.item_combo.findData(initial_item.variant_parent_item_id)
+                if parent_index >= 0:
+                    self.item_combo.setCurrentIndex(parent_index)
+                self._update_variant_options()
+                variant_index = self.variant_combo.findData(initial["item_id"])
+                if variant_index >= 0:
+                    self.variant_combo.setCurrentIndex(variant_index)
+            else:
+                index = self.item_combo.findData(initial["item_id"])
+                if index >= 0:
+                    self.item_combo.setCurrentIndex(index)
             self.quantity_field.setValue(float(initial["quantity"]))
             self.unit_price_field.setValue(float(initial["unit_price"]))
             # طبقِ رفعِ باگِ واقعی: اگر ردیف قبلاً با تخفیفِ درصدی ذخیره شده
@@ -740,7 +776,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
                 index = self.warehouse_combo.findData(initial.get("warehouse_id"))
                 self.warehouse_combo.setCurrentIndex(max(0, index))
         else:
-            self._on_item_changed()
+            self._on_item_combo_changed()
 
     def keyPressEvent(self, event) -> None:
         # جلوگیریِ واقعی از باگِ autoDefault (هم‌الگو با
@@ -752,12 +788,42 @@ class _LineDialog(LayoutEditMixin, QDialog):
             return
         super().keyPressEvent(event)
 
-    def _on_item_changed(self) -> None:
+    def _selected_item_id(self) -> int | None:
+        """طبقِ درخواستِ صریح («کالایِ اصلیِ دارایِ متغیر نباید مستقیم
+        ثبت شود؛ متغیرش انتخاب شود»): کالایِ *واقعیِ* این ردیف -- اگر
+        کالایِ انتخاب‌شده در کمبویِ اصلی دارایِ متغیر باشد، این همان
+        متغیرِ انتخاب‌شده در کمبویِ دوم است (یا None اگر هنوز انتخاب
+        نشده)، وگرنه همان کالایِ کمبویِ اصلی."""
+        parent_id = self.item_combo.currentData()
+        if parent_id in self._variant_parent_ids:
+            return self.variant_combo.currentData()
+        return parent_id
+
+    def _update_variant_options(self) -> None:
+        parent_id = self.item_combo.currentData()
+        if parent_id in self._variant_parent_ids:
+            variants = variants_service.list_item_variants(self._company_id, parent_id)
+            variant_options = [(v.variant_item_id, f"{v.code} — {v.attribute_labels or v.name or ''}") for v in variants]
+            _fill_options(self.variant_combo, variant_options)
+            self.fields_grid.set_field_visible("variant", True)
+            self.variant_combo.setFocus()
+        else:
+            _fill_options(self.variant_combo, [])
+            self.fields_grid.set_field_visible("variant", False)
+
+    def _on_item_combo_changed(self) -> None:
+        self._update_variant_options()
+        self._on_selection_changed()
+
+    def _on_variant_combo_changed(self) -> None:
+        self._on_selection_changed()
+
+    def _on_selection_changed(self) -> None:
         """طبقِ درخواستِ صریح: درصدِ مالیات با اولویتِ کالا -> تنظیماتِ
         کلیِ شرکت پیش‌پر می‌شود — فقط برایِ ردیفِ *تازه* (initial=None)،
         نه هنگامِ ویرایشِ ردیفِ ازپیش‌ذخیره‌شده که مقدارِ ثبت‌شده‌اش را
         نباید بازنویسی کند."""
-        item_id = self.item_combo.currentData()
+        item_id = self._selected_item_id()
         self._refresh_stock_info()
         if item_id is None:
             return
@@ -767,7 +833,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._suggest_price()
 
     def _refresh_stock_info(self) -> None:
-        item_id = self.item_combo.currentData()
+        item_id = self._selected_item_id()
         if item_id is None:
             self.stock_info_label.setText("")
             self.kardex_button.setEnabled(False)
@@ -798,7 +864,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # جدا، از طریقِ MDI) اصلاً نمی‌تواند بالا بیاید -- کاردکس این‌جا
         # به‌جایش درونِ یک دیالوگِ فرزندِ همین دیالوگ (که به‌درستی رویِ آن
         # می‌نشیند) نمایش داده می‌شود.
-        item_id = self.item_combo.currentData()
+        item_id = self._selected_item_id()
         if item_id is None:
             return
         from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
@@ -814,7 +880,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         dialog.exec()
 
     def _open_price_history(self) -> None:
-        item_id = self.item_combo.currentData()
+        item_id = self._selected_item_id()
         if item_id is None or self._counterparty_id is None:
             return
         item = self._items_by_id.get(item_id)
@@ -834,7 +900,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         داده شود — هنوز کاملاً قابلِ‌ویرایشِ دستی."""
         if not self._is_new_row or self._price_manually_edited:
             return
-        item_id = self.item_combo.currentData()
+        item_id = self._selected_item_id()
         if item_id is None or self._counterparty_id is None or self._document_type_code is None:
             return
         item = self._items_by_id.get(item_id)
@@ -873,7 +939,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         if self._document_type_code not in _SALES_TYPES:
             self.price_suggestion_label.setVisible(False)
             return
-        item_id = self.item_combo.currentData()
+        item_id = self._selected_item_id()
         unit_price = decimal.Decimal(str(self.unit_price_field.value()))
         if item_id is None or unit_price <= 0:
             self.price_suggestion_label.setVisible(False)
@@ -921,8 +987,15 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.price_suggestion_label.setVisible(True)
 
     def _on_accept(self) -> None:
-        if self.item_combo.currentData() is None:
+        parent_id = self.item_combo.currentData()
+        if parent_id is None:
             self.status_label.setText("کالا را انتخاب کنید.")
+            return
+        # طبقِ درخواستِ صریح («کالایِ اصلیِ دارایِ متغیر نباید اجازه‌یِ
+        # ثبت مستقیم بدهد»): اگر کالا خودش دارایِ متغیر است، انتخابِ یکی
+        # از متغیرها الزامی است -- بدونِ آن، ثبتِ ردیف رد می‌شود.
+        if parent_id in self._variant_parent_ids and self.variant_combo.currentData() is None:
+            self.status_label.setText("این کالا دارایِ چند متغیر است؛ لطفاً یکی از متغیرها را انتخاب کنید.")
             return
         if self.quantity_field.value() <= 0:
             self.status_label.setText("مقدار باید بزرگ‌تر از صفر باشد.")
@@ -930,7 +1003,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.accept()
 
     def result_fields(self) -> dict:
-        item_id = self.item_combo.currentData()
+        item_id = self._selected_item_id()
         item = self._items_by_id.get(item_id)
         quantity = decimal.Decimal(str(self.quantity_field.value()))
         # طبقِ درخواستِ صریح («تخفیف روی ردیف کالا فقط مبلغی است، باید
