@@ -6,6 +6,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
@@ -106,7 +107,10 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         # همینِ ERP): کلیدِ API لازم برایِ سینکِ واقعی با ووکامرس -- برایِ
         # اتصالِ از قبل انتخاب‌شده در جدولِ سمتِ چپ. رمزنگاری در سرویس انجام
         # می‌شود (services/ecommerce_credentials.py)، نه این‌جا.
-        left.addWidget(QLabel("کلیدِ APIِ فروشگاه (برایِ اتصالِ انتخاب‌شده)"))
+        self.wc_creds_group = QWidget()
+        wc_creds_group_layout = QVBoxLayout(self.wc_creds_group)
+        wc_creds_group_layout.setContentsMargins(0, 0, 0, 0)
+        wc_creds_group_layout.addWidget(QLabel("کلیدِ APIِ فروشگاه (برایِ اتصالِ انتخاب‌شده)"))
         creds_form = QHBoxLayout()
         self.wc_key_field = QLineEdit()
         self.wc_key_field.setPlaceholderText("Consumer Key")
@@ -121,14 +125,14 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         save_creds_button.setToolTip("ذخیرهٔ کلیدِ API (رمزنگاری‌شده)")
         save_creds_button.clicked.connect(self._save_credentials)
         creds_form.addWidget(save_creds_button)
-        left.addLayout(creds_form)
+        wc_creds_group_layout.addLayout(creds_form)
 
         # طبقِ درخواستِ صریح («واریانت + تصویرِ کالا»): آپلودِ عکسِ محصول از
         # طریقِ wp/v2/media نیاز به احرازِ هویتِ کاملاً جداگانه‌یِ وردپرس
         # دارد (نه کلیدِ APIِ ووکامرس) -- گذرواژهٔ‌برنامه‌ای، نه رمزِ اصلیِ
         # کاربر. اختیاری است؛ بدونش سینکِ کاتالوگ/سفارش/مشتری عادی کار می‌کند،
         # فقط تصویر منتقل نمی‌شود.
-        left.addWidget(QLabel("نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس (اختیاری -- فقط برایِ آپلودِ تصویرِ کالا)"))
+        wc_creds_group_layout.addWidget(QLabel("نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس (اختیاری -- فقط برایِ آپلودِ تصویرِ کالا)"))
         wp_creds_form = QHBoxLayout()
         self.wp_username_field = QLineEdit()
         self.wp_username_field.setPlaceholderText("نامِ‌کاربریِ وردپرس")
@@ -143,13 +147,55 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         save_wp_creds_button.setToolTip("ذخیرهٔ اطلاعاتِ وردپرس (رمزنگاری‌شده)")
         save_wp_creds_button.clicked.connect(self._save_wp_credentials)
         wp_creds_form.addWidget(save_wp_creds_button)
-        left.addLayout(wp_creds_form)
+        wc_creds_group_layout.addLayout(wp_creds_form)
+        left.addWidget(self.wc_creds_group)
+
+        # طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ»): احرازِ هویتِ وب‌سرویسِ
+        # پرستاشاپ فقط یک کلیدِ API است (نه جفتِ Consumer Key/Secretِ
+        # ووکامرس) -- با Basic Auth (کلید به‌عنوانِ نامِ‌کاربری، گذرواژهٔ
+        # خالی) به /api ارسال می‌شود.
+        self.presta_creds_group = QWidget()
+        presta_creds_group_layout = QVBoxLayout(self.presta_creds_group)
+        presta_creds_group_layout.setContentsMargins(0, 0, 0, 0)
+        presta_creds_group_layout.addWidget(QLabel("کلیدِ APIِ پرستاشاپ (برایِ اتصالِ انتخاب‌شده)"))
+        presta_creds_form = QHBoxLayout()
+        self.presta_api_key_field = QLineEdit()
+        self.presta_api_key_field.setPlaceholderText("Webservice Key")
+        self.presta_api_key_field.setEchoMode(QLineEdit.Password)
+        presta_creds_form.addWidget(self.presta_api_key_field)
+        save_presta_creds_button = QPushButton("🔑")
+        save_presta_creds_button.setObjectName("iconButton")
+        save_presta_creds_button.setFixedWidth(44)
+        save_presta_creds_button.setToolTip("ذخیرهٔ کلیدِ API (رمزنگاری‌شده)")
+        save_presta_creds_button.clicked.connect(self._save_presta_credentials)
+        presta_creds_form.addWidget(save_presta_creds_button)
+        presta_creds_group_layout.addLayout(presta_creds_form)
+        left.addWidget(self.presta_creds_group)
 
         sync_now_button = QPushButton("🔄  سینکِ الان (کاتالوگ + مشتریان + سفارش‌هایِ تازه)")
         sync_now_button.setObjectName("primaryIconButton")
         sync_now_button.setToolTip("کاتالوگ/قیمت/موجودی را به فروشگاه می‌فرستد و مشتریان/سفارش‌هایِ تازه را می‌خواند")
         sync_now_button.clicked.connect(self._sync_now)
         left.addWidget(sync_now_button)
+
+        # طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینک»): تا این‌جا فازِ ۱
+        # عمداً فقط دستی بود -- این‌جا هر اتصال می‌تواند مستقل تصمیم بگیرد
+        # که هر چند دقیقه یک‌بار (بدونِ فشردنِ دکمه) خودکار سینک شود.
+        auto_sync_form = QHBoxLayout()
+        self.auto_sync_checkbox = QCheckBox("همگام‌سازیِ خودکار (هر)")
+        auto_sync_form.addWidget(self.auto_sync_checkbox)
+        self.auto_sync_interval_field = QSpinBox()
+        self.auto_sync_interval_field.setRange(1, 1440)
+        self.auto_sync_interval_field.setValue(60)
+        self.auto_sync_interval_field.setSuffix(" دقیقه")
+        auto_sync_form.addWidget(self.auto_sync_interval_field)
+        save_auto_sync_button = QPushButton("⏱️")
+        save_auto_sync_button.setObjectName("iconButton")
+        save_auto_sync_button.setFixedWidth(44)
+        save_auto_sync_button.setToolTip("ذخیرهٔ تنظیماتِ سینکِ خودکار")
+        save_auto_sync_button.clicked.connect(self._save_auto_sync)
+        auto_sync_form.addWidget(save_auto_sync_button)
+        left.addLayout(auto_sync_form)
         outer.addLayout(left, stretch=2)
 
         right = QVBoxLayout()
@@ -263,7 +309,18 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self.customer_mappings_table.setRowCount(0)
         self.sync_log_table.setRowCount(0)
         if self._selected_connection_id is None:
+            self.auto_sync_checkbox.setChecked(False)
+            self.auto_sync_interval_field.setValue(60)
+            self.wc_creds_group.setVisible(True)
+            self.presta_creds_group.setVisible(False)
             return
+        connection = next((c for c in self._connections if c.connection_id == self._selected_connection_id), None)
+        if connection is not None:
+            self.auto_sync_checkbox.setChecked(connection.auto_sync_enabled)
+            self.auto_sync_interval_field.setValue(connection.auto_sync_interval_minutes)
+            is_presta = connection.platform_code == "PRESTASHOP"
+            self.wc_creds_group.setVisible(not is_presta)
+            self.presta_creds_group.setVisible(is_presta)
         items_by_id = {it.item_id: it for it in self._items}
         item_mappings = ecommerce_service.list_item_mappings(self._selected_connection_id)
         self.item_mappings_table.setRowCount(len(item_mappings))
@@ -340,6 +397,32 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self.wp_username_field.clear()
         self.wp_app_password_field.clear()
         theme.set_status_label(self.status_label, "اطلاعاتِ وردپرس رمزنگاری و ذخیره شد.", ok=True)
+
+    def _save_presta_credentials(self) -> None:
+        if self._selected_connection_id is None:
+            self.status_label.setText("ابتدا یک اتصال را از فهرست انتخاب کنید.")
+            return
+        api_key = self.presta_api_key_field.text().strip()
+        if not api_key:
+            self.status_label.setText("کلیدِ APIِ پرستاشاپ را وارد کنید.")
+            return
+        ecommerce_service.set_connection_credentials(self._selected_connection_id, {"api_key": api_key})
+        self.presta_api_key_field.clear()
+        theme.set_status_label(self.status_label, "کلیدِ API رمزنگاری و ذخیره شد.", ok=True)
+
+    def _save_auto_sync(self) -> None:
+        if self._selected_connection_id is None:
+            self.status_label.setText("ابتدا یک اتصال را از فهرست انتخاب کنید.")
+            return
+        try:
+            ecommerce_service.set_auto_sync(
+                self._selected_connection_id, self.auto_sync_checkbox.isChecked(), self.auto_sync_interval_field.value(),
+            )
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        theme.set_status_label(self.status_label, "تنظیماتِ سینکِ خودکار ذخیره شد.", ok=True)
+        self.refresh()
 
     def _sync_now(self) -> None:
         if self._selected_connection_id is None:

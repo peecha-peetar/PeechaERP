@@ -27,12 +27,13 @@ from peecha.services import inventory_engine as inv_engine_service
 
 _ZERO = decimal.Decimal("0")
 
-# طبقِ درخواستِ صریح («این برنامه [PeechaSync] رو با امکاناتش تحتِ ماژولِ
-# فروشِ اینترنتی به این ERP اضافه کن»): این‌جا فقط ووکامرس پیاده‌سازی
-# شده -- پرستاشاپ (که در PeechaSync خودش هم توسطِ نویسنده‌اش «هنوز رویِ
-# فروشگاهِ واقعی تست‌نشده» علامت خورده بود) عمداً به دورِ بعدی موکول شد
-# تا بدونِ آزمونِ کافی به این ERP اضافه نشود.
-_SUPPORTED_SYNC_PLATFORMS = ("WOOCOMMERCE",)
+# طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ»): این‌جا هم ووکامرس و هم
+# پرستاشاپ پشتیبانی می‌شوند. دامنه‌یِ پرستاشاپ عمداً محدودتر است --
+# فقط محصولِ ساده (بدون واریانت/تصویر) + دسته + مشتری + سفارش، دقیقاً
+# همان دامنه‌ای که ووکامرس در S1 داشت -- چون خودِ PeechaSync هم
+# پیاده‌سازیِ پرستاشاپش را «هنوز رویِ فروشگاهِ واقعی تست‌نشده» علامت
+# زده بود؛ واریانت/تصویر برایِ پرستاشاپ به فازِ بعدی موکول شده.
+_SUPPORTED_SYNC_PLATFORMS = ("WOOCOMMERCE", "PRESTASHOP")
 
 
 # ---------------------------------------------------------------------
@@ -62,6 +63,23 @@ def disconnect(connection_id: int) -> None:
         if row is None:
             raise ValueError("اتصال نامعتبر است.")
         row.sync_status = "DISCONNECTED"
+        session.commit()
+
+
+def set_auto_sync(connection_id: int, enabled: bool, interval_minutes: int) -> None:
+    """طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینک»): به‌جایِ اجباریِ فشردنِ
+    دکمهٔ «سینکِ الان»، هر اتصال می‌تواند خودش را طوری تنظیم کند که هر
+    N دقیقه یک‌بار خودکار سینک شود -- بررسیِ واقعیِ «الان وقتِ سینکه یا
+    نه» در run_due_auto_syncs انجام می‌شود، این‌جا فقط تنظیمات ذخیره
+    می‌شود."""
+    if interval_minutes < 1:
+        raise ValueError("فاصله‌یِ زمانی باید حداقل ۱ دقیقه باشد.")
+    with new_session() as session:
+        row = session.get(MarketplaceConnection, connection_id)
+        if row is None:
+            raise ValueError("اتصال نامعتبر است.")
+        row.auto_sync_enabled = enabled
+        row.auto_sync_interval_minutes = interval_minutes
         session.commit()
 
 
@@ -248,9 +266,13 @@ def _decrypt_connection_credentials(connection: MarketplaceConnection) -> dict:
 
 
 def _build_store_client(connection: MarketplaceConnection, creds: dict | None = None):
+    creds = creds if creds is not None else _decrypt_connection_credentials(connection)
+    if connection.platform_code == "PRESTASHOP":
+        from peecha.integrations.ecommerce import presta_client
+
+        return presta_client.build_prestapi(connection.store_url, creds.get("api_key", ""))
     from peecha.integrations.ecommerce import wc_client
 
-    creds = creds if creds is not None else _decrypt_connection_credentials(connection)
     return wc_client.build_wcapi(connection.store_url, creds.get("consumer_key", ""), creds.get("consumer_secret", ""))
 
 
@@ -268,10 +290,10 @@ def _channel_default_price_list(connection: MarketplaceConnection) -> int | None
         return channel.default_price_list_id if channel is not None else None
 
 
-def _resolve_category_external_id(wcapi, connection_id: int, category_id: int | None) -> int | None:
+def _resolve_category_external_id(store_client, platform_code: str, connection_id: int, category_id: int | None) -> int | None:
     if category_id is None:
         return None
-    from peecha.integrations.ecommerce import wc_client
+    client_module = _client_module_for_platform(platform_code)
 
     with new_session() as session:
         mapping = session.scalar(
@@ -287,15 +309,25 @@ def _resolve_category_external_id(wcapi, connection_id: int, category_id: int | 
             return None
         parent_category_id, name = category.parent_category_id, category.name
 
-    parent_external_id = _resolve_category_external_id(wcapi, connection_id, parent_category_id)
-    found = wc_client.find_category_by_name(wcapi, name, parent_external_id)
-    external_id = int(found["id"]) if found else int(wc_client.create_category(wcapi, name, parent_external_id)["id"])
+    parent_external_id = _resolve_category_external_id(store_client, platform_code, connection_id, parent_category_id)
+    found = client_module.find_category_by_name(store_client, name, parent_external_id)
+    external_id = int(found["id"]) if found else int(client_module.create_category(store_client, name, parent_external_id)["id"])
     with new_session() as session:
         session.add(
             MarketplaceCategoryMapping(connection_id=connection_id, category_id=category_id, external_category_id=str(external_id))
         )
         session.commit()
     return external_id
+
+
+def _client_module_for_platform(platform_code: str):
+    if platform_code == "PRESTASHOP":
+        from peecha.integrations.ecommerce import presta_client
+
+        return presta_client
+    from peecha.integrations.ecommerce import wc_client
+
+    return wc_client
 
 
 def _variant_attribute_map(item_ids: list[int]) -> dict[int, dict[str, str]]:
@@ -372,14 +404,17 @@ def _stock_qty_for(company_id: int, item_id: int, warehouse_id: int | None) -> i
 _ALWAYS_IN_STOCK_QTY = 9999
 
 
+def _effective_stock_quantity(stock_mode: str, actual_qty: int) -> int:
+    if stock_mode == "ALWAYS_IN_STOCK":
+        return _ALWAYS_IN_STOCK_QTY
+    if stock_mode == "OUT_OF_STOCK":
+        return 0
+    return actual_qty
+
+
 def _apply_stock_mode(payload: dict, stock_mode: str, actual_qty: int) -> None:
     payload["manage_stock"] = True
-    if stock_mode == "ALWAYS_IN_STOCK":
-        payload["stock_quantity"] = _ALWAYS_IN_STOCK_QTY
-    elif stock_mode == "OUT_OF_STOCK":
-        payload["stock_quantity"] = 0
-    else:
-        payload["stock_quantity"] = actual_qty
+    payload["stock_quantity"] = _effective_stock_quantity(stock_mode, actual_qty)
 
 
 def _apply_sale_price(payload: dict, company_id: int, base_price: decimal.Decimal) -> None:
@@ -398,7 +433,7 @@ def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id
     from peecha.integrations.ecommerce import wc_client
 
     stock_qty = _stock_qty_for(connection.company_id, item.item_id, connection.warehouse_id)
-    category_external_id = _resolve_category_external_id(wcapi, connection_id, item.category_id)
+    category_external_id = _resolve_category_external_id(wcapi, "WOOCOMMERCE", connection_id, item.category_id)
     payload = {
         "name": item.name or sku,
         "regular_price": _format_store_price(price),
@@ -438,7 +473,7 @@ def _push_variant_product(
     if not attribute_options:
         return 0, 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدارِ ویژگی ندارند -- سینک نشد."]
 
-    category_external_id = _resolve_category_external_id(wcapi, connection_id, item.category_id)
+    category_external_id = _resolve_category_external_id(wcapi, "WOOCOMMERCE", connection_id, item.category_id)
     parent_payload = {
         "name": item.name or sku,
         "type": "variable",
@@ -491,13 +526,29 @@ def _push_variant_product(
 
 def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
     """طبقِ گزارشِ کاربر: کالا/قیمت/موجودی/دسته/تصویرِ همینِ ERP را به
-    فروشگاه می‌فرستد -- قیمت از فهرستِ قیمتِ پیش‌فرضِ کانالِ همین اتصال
-    خوانده می‌شود. کالاهایِ دارایِ چند متغیر به‌عنوانِ یک محصولِ «متغیر»
-    (variable) با یک واریانت به‌ازایِ هر ترکیبِ ERP سینک می‌شوند."""
+    فروشگاه می‌فرستد. برایِ ووکامرس کالاهایِ دارایِ چند متغیر هم به‌عنوانِ
+    یک محصولِ «متغیر» سینک می‌شوند؛ برایِ پرستاشاپ فعلاً فقط کالایِ ساده
+    پشتیبانی می‌شود (ر.ک. توضیحِ _SUPPORTED_SYNC_PLATFORMS)."""
+    connection = _get_connection(connection_id)
+    if connection.platform_code == "PRESTASHOP":
+        result = _sync_catalog_to_presta_store(connection, connection_id)
+    else:
+        result = _sync_catalog_to_wc_store(connection, connection_id)
+
+    with new_session() as session:
+        row = session.get(MarketplaceConnection, connection_id)
+        row.last_synced_at = datetime.datetime.now()
+        session.commit()
+    return result
+
+
+def _sync_catalog_to_wc_store(connection: MarketplaceConnection, connection_id: int) -> CatalogSyncResult:
+    """قیمت از فهرستِ قیمتِ پیش‌فرضِ کانالِ همین اتصال خوانده می‌شود.
+    کالاهایِ دارایِ چند متغیر به‌عنوانِ یک محصولِ «متغیر» (variable) با
+    یک واریانت به‌ازایِ هر ترکیبِ ERP سینک می‌شوند."""
     from peecha.services import commercial_pricing as pricing_service
     from peecha.services import inventory_catalog as catalog_service
 
-    connection = _get_connection(connection_id)
     price_list_id = _channel_default_price_list(connection)
     if price_list_id is None:
         raise ValueError("کانالِ این اتصال فهرستِ قیمتِ پیش‌فرض ندارد -- در تنظیماتِ کانال یک فهرستِ قیمت مشخص کنید.")
@@ -556,10 +607,76 @@ def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
             failed += 1
             errors.append(f"{sku}: {exc}")
 
-    with new_session() as session:
-        row = session.get(MarketplaceConnection, connection_id)
-        row.last_synced_at = datetime.datetime.now()
-        session.commit()
+    return CatalogSyncResult(pushed=pushed, skipped=skipped, failed=failed, errors=errors)
+
+
+def _push_simple_product_to_presta(papi, connection: MarketplaceConnection, connection_id: int, item, sku: str, price: decimal.Decimal) -> None:
+    from peecha.integrations.ecommerce import presta_client
+
+    stock_qty = _stock_qty_for(connection.company_id, item.item_id, connection.warehouse_id)
+    category_external_id = _resolve_category_external_id(papi, "PRESTASHOP", connection_id, item.category_id)
+    fields = {"name": item.name or sku, "price": _format_store_price(price), "active": item.is_active}
+    if category_external_id:
+        fields["id_category_default"] = category_external_id
+    data = presta_client.upsert_product(papi, sku, fields)
+    presta_client.update_stock_quantity(papi, data["id"], _effective_stock_quantity(item.ecommerce_stock_mode, stock_qty))
+    map_item(connection_id, sku, item.item_id, external_price=price)
+
+
+def _sync_catalog_to_presta_store(connection: MarketplaceConnection, connection_id: int) -> CatalogSyncResult:
+    """طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ»): دامنه‌یِ این فاز عمداً
+    محدود به کالایِ ساده است (بدونِ واریانت/تصویر) -- دقیقاً همان دامنه‌ای
+    که S1 برایِ ووکامرس داشت. کالایِ دارایِ واریانت رد می‌شود (نه خطا) و
+    در پیامِ نتیجه به کاربر اطلاع داده می‌شود."""
+    from peecha.services import commercial_pricing as pricing_service
+    from peecha.services import inventory_catalog as catalog_service
+
+    price_list_id = _channel_default_price_list(connection)
+    if price_list_id is None:
+        raise ValueError("کانالِ این اتصال فهرستِ قیمتِ پیش‌فرض ندارد -- در تنظیماتِ کانال یک فهرستِ قیمت مشخص کنید.")
+
+    papi = _build_store_client(connection)
+    price_by_item: dict[int, decimal.Decimal] = {
+        row.item_id: row.unit_price for row in pricing_service.list_price_list_items(price_list_id) if row.min_quantity == 1
+    }
+
+    all_items = catalog_service.list_items(connection.company_id, active_only=True)
+    children_by_parent: dict[int, list] = {}
+    for it in all_items:
+        if it.variant_parent_item_id is not None:
+            children_by_parent.setdefault(it.variant_parent_item_id, []).append(it)
+
+    pushed = skipped = failed = 0
+    errors: list[str] = []
+    for item in all_items:
+        if item.variant_parent_item_id is not None:
+            skipped += 1
+            continue
+        children = children_by_parent.get(item.item_id, [])
+        if children:
+            skipped += 1
+            sku_label = item.sku or item.code
+            errors.append(f"{sku_label}: کالایِ دارایِ واریانت است -- پشتیبانیِ واریانت برایِ پرستاشاپ هنوز اضافه نشده (فقط ووکامرس).")
+            continue
+        if not item.is_sellable:
+            skipped += 1
+            continue
+        sku = (item.sku or item.code or "").strip()
+        if not sku:
+            skipped += 1
+            continue
+        price = price_by_item.get(item.item_id)
+        if price is None:
+            skipped += 1
+            errors.append(f"{sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
+            continue
+        try:
+            _push_simple_product_to_presta(papi, connection, connection_id, item, sku, price)
+            pushed += 1
+        except Exception as exc:  # noqa: BLE001 -- یک کالایِ خراب نباید کلِ سینک را متوقف کند
+            failed += 1
+            errors.append(f"{sku}: {exc}")
+
     return CatalogSyncResult(pushed=pushed, skipped=skipped, failed=failed, errors=errors)
 
 
@@ -574,14 +691,16 @@ class CustomerPullResult:
 def pull_new_customers(connection_id: int) -> CustomerPullResult:
     """طبقِ گزارشِ کاربر: مشتریانِ تازه‌ثبت‌شده در فروشگاه را می‌خواند --
     فقط مشتریانِ سفارش‌هایِ اخیر (نه کلِ مشتریانِ فروشگاه، که ممکن است
-    خیلی زیاد و نامرتبط باشند)."""
-    from peecha.integrations.ecommerce import wc_client
+    خیلی زیاد و نامرتبط باشند). با ووکامرس و پرستاشاپ هردو کار می‌کند
+    (client_module بر اساسِ platform_code تعیین می‌شود)."""
     from peecha.services import commercial_partners as partners_service
 
     connection = _get_connection(connection_id)
-    wcapi = _build_store_client(connection)
-    orders = wc_client.fetch_new_orders(wcapi)
+    client_module = _client_module_for_platform(connection.platform_code)
+    store_client = _build_store_client(connection)
+    orders = client_module.fetch_new_orders(store_client)
     external_ids = {o.external_customer_id for o in orders if o.external_customer_id and o.external_customer_id != "0"}
+    id_prefix = "PS" if connection.platform_code == "PRESTASHOP" else "WC"
 
     created = already_mapped = failed = 0
     errors: list[str] = []
@@ -590,14 +709,14 @@ def pull_new_customers(connection_id: int) -> CustomerPullResult:
             already_mapped += 1
             continue
         try:
-            customer = wc_client.fetch_customer(wcapi, external_customer_id)
+            customer = client_module.fetch_customer(store_client, external_customer_id)
             if customer is None:
                 failed += 1
                 errors.append(f"مشتریِ #{external_customer_id}: در فروشگاه یافت نشد.")
                 continue
             full_name = f"{customer.first_name} {customer.last_name}".strip() or customer.email or f"مشتریِ فروشگاه #{external_customer_id}"
             customer_detail_account_id = partners_service.create_customer(
-                connection.company_id, f"WC-{external_customer_id}", full_name,
+                connection.company_id, f"{id_prefix}-{external_customer_id}", full_name,
                 partners_service.CustomerProfileFields(), fast_track=True,
             )
             map_customer(connection_id, external_customer_id, customer_detail_account_id)
@@ -619,18 +738,17 @@ class OrderPullResult:
 def pull_new_orders(connection_id: int, created_by_user_id: int, currency_id: int) -> OrderPullResult:
     """طبقِ گزارشِ کاربر: سفارش‌هایِ پرداخت‌شدهٔ تازه را از فروشگاه
     می‌خواند و از طریقِ import_order (که از قبل در ERP آماده بود) به
-    سفارشِ فروش تبدیل می‌کند."""
-    from peecha.integrations.ecommerce import wc_client
-
+    سفارشِ فروش تبدیل می‌کند. با ووکامرس و پرستاشاپ هردو کار می‌کند."""
     connection = _get_connection(connection_id)
     price_list_id = _channel_default_price_list(connection)
     if price_list_id is None or connection.warehouse_id is None:
         raise ValueError("این اتصال باید هم انبار و هم فهرستِ قیمتِ پیش‌فرض (رویِ کانال) داشته باشد.")
 
-    wcapi = _build_store_client(connection)
+    client_module = _client_module_for_platform(connection.platform_code)
+    store_client = _build_store_client(connection)
     imported = duplicate = failed = 0
     errors: list[str] = []
-    for order in wc_client.fetch_new_orders(wcapi):
+    for order in client_module.fetch_new_orders(store_client):
         lines: list[ExternalOrderLine] = []
         unmapped_sku = None
         for line in order.lines:
@@ -668,13 +786,59 @@ class FullSyncResult:
 
 
 def sync_now(connection_id: int, created_by_user_id: int, currency_id: int) -> FullSyncResult:
-    """دکمهٔ «سینکِ الان» -- طبقِ تصمیمِ کاربر (فازِ ۱ فقط دستی، بدونِ
-    زمان‌بندیِ خودکار): کاتالوگ → مشتریانِ تازه → سفارش‌هایِ تازه، به
+    """دکمهٔ «سینکِ الان» -- کاتالوگ → مشتریانِ تازه → سفارش‌هایِ تازه، به
     همین ترتیب (سفارش به نگاشتِ مشتری نیاز دارد)."""
     catalog = sync_catalog_to_store(connection_id)
     customers = pull_new_customers(connection_id)
     orders = pull_new_orders(connection_id, created_by_user_id, currency_id)
     return FullSyncResult(catalog=catalog, customers=customers, orders=orders)
+
+
+def _is_auto_sync_due(connection: MarketplaceConnection, now: datetime.datetime) -> bool:
+    if not connection.auto_sync_enabled or connection.sync_status != "ACTIVE":
+        return False
+    if connection.last_synced_at is None:
+        return True
+    # طبقِ رفعِ باگِ واقعیِ کشف‌شده حینِ تست: last_synced_at از ستونِ
+    # TIMESTAMPTZ خوانده می‌شود (همیشه timezone-aware)، در حالی‌که
+    # datetime.datetime.now() به‌طورِ پیش‌فرض naive است -- تفریقِ مستقیمِ
+    # این دو در پایتون استثنا می‌دهد. هردو صریحاً به UTC-aware نگاشت
+    # می‌شوند تا مقایسه همیشه درست کار کند.
+    last_synced_at = connection.last_synced_at
+    if last_synced_at.tzinfo is None:
+        last_synced_at = last_synced_at.replace(tzinfo=datetime.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=datetime.timezone.utc)
+    elapsed_minutes = (now - last_synced_at).total_seconds() / 60
+    return elapsed_minutes >= connection.auto_sync_interval_minutes
+
+
+def list_due_auto_sync_connections(company_id: int, now: datetime.datetime | None = None) -> list[MarketplaceConnection]:
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return [c for c in list_connections(company_id) if _is_auto_sync_due(c, now)]
+
+
+@dataclass
+class AutoSyncTickResult:
+    connection_id: int
+    result: FullSyncResult | None
+    error_message: str | None
+
+
+def run_due_auto_syncs(company_id: int, created_by_user_id: int, currency_id: int, now: datetime.datetime | None = None) -> list[AutoSyncTickResult]:
+    """طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینک»): تیکِ دوره‌ایِ برنامه
+    (مثلاً یک تایمرِ Qt در سطحِ پنجرهٔ اصلی) این تابع را صدا می‌زند --
+    فقط اتصال‌هایی که auto_sync_enabled دارند و فاصله‌یِ زمانیِ تنظیم‌شده
+    از آخرین سینک گذشته، سینک می‌شوند. خطایِ یک اتصال نباید بقیه را
+    متوقف کند (هرکدام مستقل ثبت می‌شود)."""
+    results: list[AutoSyncTickResult] = []
+    for connection in list_due_auto_sync_connections(company_id, now):
+        try:
+            result = sync_now(connection.connection_id, created_by_user_id, currency_id)
+            results.append(AutoSyncTickResult(connection_id=connection.connection_id, result=result, error_message=None))
+        except Exception as exc:  # noqa: BLE001 -- شکستِ یک اتصال نباید بقیه را متوقف کند
+            results.append(AutoSyncTickResult(connection_id=connection.connection_id, result=None, error_message=str(exc)))
+    return results
 
 
 # ---------------------------------------------------------------------

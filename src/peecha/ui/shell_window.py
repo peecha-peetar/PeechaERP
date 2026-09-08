@@ -693,6 +693,16 @@ class MainWindow(QMainWindow):
         self.resize(1440, 900)
         self._clamp_geometry_to_available_screen()
 
+        # طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینکِ فروشِ اینترنتی»):
+        # هر یک دقیقه بررسی می‌کند آیا اتصالی با auto_sync_enabled به
+        # زمانِ سینکِ بعدی‌اش رسیده -- بدونِ نیاز به کلیکِ دستیِ کاربر.
+        # شکستِ یک اتصال (مثلاً قطعیِ اینترنت) نباید کلِ برنامه را متاثر
+        # کند؛ پس کاملاً بی‌صدا (بدونِ دیالوگِ خطا) اجرا می‌شود.
+        self._ecommerce_auto_sync_timer = QTimer(self)
+        self._ecommerce_auto_sync_timer.setInterval(60_000)
+        self._ecommerce_auto_sync_timer.timeout.connect(self._tick_ecommerce_auto_sync)
+        self._ecommerce_auto_sync_timer.start()
+
         self._screens: dict[str, QWidget] = {}
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
         self._mdi_subwindows: dict[str, _FramelessMdiSubWindow] = {}
@@ -791,6 +801,22 @@ class MainWindow(QMainWindow):
         if self._last_known_available_geometry is not None and available != self._last_known_available_geometry:
             self._clamp_geometry_to_available_screen()
         self._last_known_available_geometry = available
+
+    def _tick_ecommerce_auto_sync(self) -> None:
+        """پشتیبانِ تایمرِ سینکِ خودکارِ فروشِ اینترنتی (ر.ک. توضیحِ کاملِ
+        دلیلِ نیاز به این تایمر در __init__). کاملاً بی‌صدا اجرا می‌شود --
+        نه دیالوگِ خطا، نه اعلانی به کاربر -- چون این یک عملِ پس‌زمینه‌ایِ
+        دوره‌ای است، نه یک اکشنِ دستیِ کاربر."""
+        if session.current_company is None or session.current_user is None:
+            return
+        try:
+            from peecha.services import commercial_ecommerce as ecommerce_service
+
+            ecommerce_service.run_due_auto_syncs(
+                session.current_company.company_id, session.current_user.user_id, session.current_company.base_currency_id,
+            )
+        except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
+            pass
 
     def changeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
         # باگِ واقعیِ گزارش‌شده: رویِ بعضی پیکربندی‌هایِ ویندوز، maximize

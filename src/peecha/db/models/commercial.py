@@ -853,6 +853,8 @@ class MarketplaceConnection(Base):
     warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     sync_status: Mapped[str] = mapped_column(String(15), default="ACTIVE")
     last_synced_at: Mapped[datetime.datetime | None]
+    auto_sync_enabled: Mapped[bool] = mapped_column(default=False)
+    auto_sync_interval_minutes: Mapped[int] = mapped_column(default=60)
 
 
 class MarketplaceOrderSyncLog(Base):
