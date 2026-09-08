@@ -60,7 +60,7 @@ _EXTENDED_ITEM_FIELD_KEYS = (
     "default_tax_percent",
     "warranty_months", "seo_title", "seo_url_slug", "seo_meta_description", "seo_meta_keywords",
     "website_category", "website_tags", "pos_shortcut_key", "pos_button_color", "pos_requires_weight",
-    "pos_requires_serial", "pos_menu_group_id",
+    "pos_requires_serial", "pos_menu_group_id", "ecommerce_stock_mode",
 )
 
 
@@ -322,6 +322,7 @@ class ItemRow:
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
     pos_menu_group_id: int | None = None
+    ecommerce_stock_mode: str = "DATABASE"
 
 
 def _item_dimension_type_id(company_id: int) -> int:
@@ -465,6 +466,7 @@ class ItemFields:
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
     pos_menu_group_id: int | None = None
+    ecommerce_stock_mode: str = "DATABASE"
 
 
 def _validate_item_fields(fields: ItemFields) -> None:
@@ -474,6 +476,8 @@ def _validate_item_fields(fields: ItemFields) -> None:
         raise ValueError("خدمت نمی‌تواند موجودی‌محور باشد.")
     if fields.track_expiry and not fields.track_batch:
         raise ValueError("ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است.")
+    if fields.ecommerce_stock_mode not in ("DATABASE", "ALWAYS_IN_STOCK", "OUT_OF_STOCK"):
+        raise ValueError("حالتِ موجودیِ فروشِ اینترنتی نامعتبر است.")
 
 
 def create_item(

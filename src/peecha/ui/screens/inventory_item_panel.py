@@ -898,6 +898,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.website_category_field = QLineEdit()
         self.website_tags_field = QLineEdit()
 
+        # طبقِ درخواستِ صریح («حالت‌هایِ موجودی» برایِ فروشِ اینترنتی):
+        # این تنظیم فقط رویِ سینکِ فروشگاهِ اینترنتی اثر دارد -- روی
+        # موجودیِ واقعیِ خودِ ERP/دیگر اسناد هیچ تاثیری ندارد.
+        self.ecommerce_stock_mode_combo = QComboBox()
+        self.ecommerce_stock_mode_combo.addItem("بر اساسِ دیتابیس (پیش‌فرض)", "DATABASE")
+        self.ecommerce_stock_mode_combo.addItem("همیشه موجود", "ALWAYS_IN_STOCK")
+        self.ecommerce_stock_mode_combo.addItem("ناموجود (فروشِ اینترنتی متوقف)", "OUT_OF_STOCK")
+
         self.ecommerce_grid = FieldGrid([
             FieldSpec("seo_title", "عنوانِ سئو", self.seo_title_field, span=1),
             FieldSpec("seo_slug", "نامکِ آدرس (Slug)", self.seo_slug_field, span=1),
@@ -905,6 +913,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("seo_keywords", "کلیدواژه‌هایِ متا", self.seo_keywords_field, span=1),
             FieldSpec("website_category", "دستهٔ فروشگاهی", self.website_category_field, span=1),
             FieldSpec("website_tags", "برچسب‌ها", self.website_tags_field, span=1),
+            FieldSpec("ecommerce_stock_mode", "حالتِ موجودی در فروشگاهِ اینترنتی", self.ecommerce_stock_mode_combo, span=1),
         ])
         layout.addWidget(self.ecommerce_grid)
 
@@ -1373,6 +1382,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.seo_keywords_field.setText(it.seo_meta_keywords or "")
         self.website_category_field.setText(it.website_category or "")
         self.website_tags_field.setText(it.website_tags or "")
+        mode_index = self.ecommerce_stock_mode_combo.findData(it.ecommerce_stock_mode or "DATABASE")
+        self.ecommerce_stock_mode_combo.setCurrentIndex(mode_index if mode_index >= 0 else 0)
 
         self.pos_shortcut_field.setText(it.pos_shortcut_key or "")
         self.pos_color_field.setText(it.pos_button_color or "")
@@ -1467,6 +1478,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.seo_keywords_field.clear()
         self.website_category_field.clear()
         self.website_tags_field.clear()
+        self.ecommerce_stock_mode_combo.setCurrentIndex(0)
 
         self.pos_shortcut_field.clear()
         self.pos_color_field.clear()
@@ -1541,6 +1553,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             seo_meta_keywords=self.seo_keywords_field.text().strip() or None,
             website_category=self.website_category_field.text().strip() or None,
             website_tags=self.website_tags_field.text().strip() or None,
+            ecommerce_stock_mode=self.ecommerce_stock_mode_combo.currentData() or "DATABASE",
             pos_shortcut_key=self.pos_shortcut_field.text().strip() or None,
             pos_button_color=self.pos_color_field.text().strip() or None,
             pos_menu_group_id=self.pos_menu_group_combo.currentData(),

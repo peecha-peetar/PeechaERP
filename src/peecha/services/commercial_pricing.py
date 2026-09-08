@@ -351,6 +351,49 @@ def resolve_price(
     return ResolvedPrice(unit_price=base_price, source="PRICE_LIST", discount_amount=discount_amount, applied_discount_rule_id=applied_rule_id)
 
 
+def resolve_sale_price(company_id: int, base_price: decimal.Decimal, as_of_date: datetime.date | None = None) -> decimal.Decimal | None:
+    """قیمتِ «حراج» برایِ نمایشِ بیرونی (مثلاً فروشگاهِ اینترنتی) -- طبقِ
+    درخواستِ صریحِ کاربر («اگر کالا در فهرستِ تخفیف/کمپین باشد، هم
+    regular_price هم sale_price فرستاده شود»). عمداً همان قاعدهٔ
+    تخفیفِ عمومی (scope=ALL) را بررسی می‌کند که resolve_price هم در
+    فاکتور/سفارش خودکار اعمال می‌کند -- تا قیمتِ حراجِ نمایش‌داده‌شده
+    با قیمتِ واقعیِ فروش هماهنگ بماند؛ برایِ تعدادِ ۱ محاسبه می‌شود
+    (چون sale_price در ووکامرس یک عددِ ثابت است، نه پلکانی/بسته به
+    تعداد). اگر تخفیفِ فعالی نبود، None برمی‌گرداند (یعنی «حراج»
+    برایِ این کالا معنا ندارد)."""
+    as_of_date = as_of_date or datetime.date.today()
+    quantity = decimal.Decimal(1)
+    with new_session() as session:
+        best_rule = session.scalar(
+            select(DiscountRule)
+            .where(
+                DiscountRule.company_id == company_id, DiscountRule.is_active.is_(True),
+                DiscountRule.scope_type_code == "ALL", DiscountRule.valid_from <= as_of_date,
+                (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+            )
+            .order_by(DiscountRule.priority)
+        )
+        if best_rule is None:
+            return None
+        discount_amount = _ZERO
+        if best_rule.discount_type_code == "PERCENT" and best_rule.discount_value is not None:
+            discount_amount = base_price * (best_rule.discount_value / 100)
+        elif best_rule.discount_type_code == "AMOUNT" and best_rule.discount_value is not None:
+            discount_amount = best_rule.discount_value
+        elif best_rule.discount_type_code == "TIERED":
+            tier = session.scalar(
+                select(DiscountRuleTier)
+                .where(DiscountRuleTier.rule_id == best_rule.rule_id, DiscountRuleTier.min_quantity <= quantity)
+                .order_by(DiscountRuleTier.min_quantity.desc())
+            )
+            if tier is not None:
+                discount_amount = base_price * (tier.discount_value / 100)
+    if discount_amount <= _ZERO:
+        return None
+    sale_price = base_price - discount_amount
+    return sale_price if sale_price > _ZERO else None
+
+
 # ---------------------------------------------------------------------
 # فروشِ ترکیبی (CPQِ سبک)
 # ---------------------------------------------------------------------

@@ -171,6 +171,11 @@ class Item(Base):
     seo_meta_keywords: Mapped[str | None] = mapped_column(String(300))
     website_category: Mapped[str | None] = mapped_column(String(150))
     website_tags: Mapped[str | None] = mapped_column(String(300))
+    # طبقِ درخواستِ صریح («حالت‌هایِ موجودی» برایِ فروشِ اینترنتی):
+    # DATABASE (پیش‌فرض، موجودیِ واقعیِ انبار)، ALWAYS_IN_STOCK (صرفِ‌نظر
+    # از موجودیِ واقعی همیشه قابلِ‌سفارش)، OUT_OF_STOCK (فروشِ اینترنتی
+    # موقتاً متوقف، بدونِ تغییرِ موجودیِ خودِ ERP).
+    ecommerce_stock_mode: Mapped[str] = mapped_column(String(20), default="DATABASE")
     pos_shortcut_key: Mapped[str | None] = mapped_column(String(10))
     pos_button_color: Mapped[str | None] = mapped_column(String(20))
     pos_requires_weight: Mapped[bool] = mapped_column(default=False)

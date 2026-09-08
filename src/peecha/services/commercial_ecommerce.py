@@ -365,6 +365,35 @@ def _stock_qty_for(company_id: int, item_id: int, warehouse_id: int | None) -> i
     return int(max(sum((b.quantity_available for b in balances), _ZERO), _ZERO))
 
 
+# طبقِ درخواستِ صریح («حالت‌هایِ موجودی» -- تنظیمی رویِ خودِ کالا،
+# بی‌ربط به موجودیِ واقعیِ ERP): «همیشه موجود» یعنی صرفِ‌نظر از عددِ
+# واقعی همیشه قابلِ‌سفارش نشان داده شود؛ «ناموجود» یعنی فروشِ اینترنتیِ
+# این کالا موقتاً متوقف شود بدونِ لمسِ خودِ موجودیِ ERP.
+_ALWAYS_IN_STOCK_QTY = 9999
+
+
+def _apply_stock_mode(payload: dict, stock_mode: str, actual_qty: int) -> None:
+    payload["manage_stock"] = True
+    if stock_mode == "ALWAYS_IN_STOCK":
+        payload["stock_quantity"] = _ALWAYS_IN_STOCK_QTY
+    elif stock_mode == "OUT_OF_STOCK":
+        payload["stock_quantity"] = 0
+    else:
+        payload["stock_quantity"] = actual_qty
+
+
+def _apply_sale_price(payload: dict, company_id: int, base_price: decimal.Decimal) -> None:
+    """طبقِ رفعِ باگِ واقعیِ بالقوه (کشف‌شده حینِ تست): چون PUTِ ووکامرس
+    یک به‌روزرسانیِ جزئی است، اگر sale_price را وقتی تخفیف تمام شده
+    اصلاً در payload نگذاریم، مقدارِ حراجِ قدیمی رویِ فروشگاه دست‌نخورده
+    و گمراه‌کننده باقی می‌ماند. پس همیشه صراحتاً فرستاده می‌شود -- یا
+    قیمتِ حراجِ تازه، یا رشتهٔ خالی برایِ پاک‌کردنِ صریحِ حراجِ قبلی."""
+    from peecha.services import commercial_pricing as pricing_service
+
+    sale_price = pricing_service.resolve_sale_price(company_id, base_price)
+    payload["sale_price"] = _format_store_price(sale_price) if sale_price is not None else ""
+
+
 def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id: int, item, sku: str, price: decimal.Decimal, wp_creds: dict | None) -> None:
     from peecha.integrations.ecommerce import wc_client
 
@@ -373,10 +402,10 @@ def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id
     payload = {
         "name": item.name or sku,
         "regular_price": _format_store_price(price),
-        "manage_stock": True,
-        "stock_quantity": stock_qty,
         "status": "publish" if item.is_active else "draft",
     }
+    _apply_stock_mode(payload, item.ecommerce_stock_mode, stock_qty)
+    _apply_sale_price(payload, connection.company_id, price)
     if category_external_id:
         payload["categories"] = [{"id": category_external_id}]
     data = wc_client.upsert_product(wcapi, sku, payload)
@@ -447,10 +476,10 @@ def _push_variant_product(
             stock_qty = _stock_qty_for(connection.company_id, child.item_id, connection.warehouse_id)
             variation_payload = {
                 "regular_price": _format_store_price(price),
-                "manage_stock": True,
-                "stock_quantity": stock_qty,
                 "attributes": [{"name": name, "option": value} for name, value in child_attrs.items()],
             }
+            _apply_stock_mode(variation_payload, child.ecommerce_stock_mode, stock_qty)
+            _apply_sale_price(variation_payload, connection.company_id, price)
             wc_client.upsert_variation(wcapi, parent_external_id, child_sku, variation_payload, existing_variations)
             map_item(connection_id, child_sku, child.item_id, external_price=price)
             pushed += 1
