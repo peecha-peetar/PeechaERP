@@ -13,8 +13,10 @@ Basic Auth با Consumer Key/Secret روی HTTPS)."""
 
 from __future__ import annotations
 
+import mimetypes
 from dataclasses import dataclass
 
+import requests
 from woocommerce import API
 
 _DEFAULT_TIMEOUT = 30
@@ -150,6 +152,61 @@ class ExternalCustomerRow:
     first_name: str
     last_name: str
     phone: str
+
+
+def list_variations(wcapi: API, parent_id: int, per_page: int = 100, max_pages: int = 20) -> list[dict]:
+    """طبقِ رفعِ ابهامِ واقعی: مستنداتِ ووکامرس تضمین نمی‌کنند که فیلترِ
+    sku رویِ endpointِ واریانت‌ها پشتیبانی شود -- پس همه‌یِ واریانت‌هایِ
+    یک محصولِ متغیر یک‌جا خوانده می‌شوند و تطبیقِ SKU در پایتون انجام
+    می‌شود (برایِ تعدادِ معمولِ واریانت -- چند ده‌تا -- کاملاً کافی است)."""
+    result: list[dict] = []
+    page = 1
+    while page <= max_pages:
+        resp = wcapi.get(f"products/{parent_id}/variations", params={"per_page": per_page, "page": page})
+        if resp.status_code >= 400:
+            _raise_for_status(resp, f"دریافتِ واریانت‌هایِ محصولِ #{parent_id}")
+        rows = resp.json()
+        if not isinstance(rows, list) or not rows:
+            break
+        result.extend(rows)
+        if len(rows) < per_page:
+            break
+        page += 1
+    return result
+
+
+def upsert_variation(wcapi: API, parent_id: int, sku: str, payload: dict, existing_variations: list[dict]) -> dict:
+    existing = next((v for v in existing_variations if str(v.get("sku") or "") == sku), None)
+    body = dict(payload)
+    body["sku"] = sku
+    if existing:
+        resp = wcapi.put(f"products/{parent_id}/variations/{existing['id']}", body)
+        return _raise_for_status(resp, f"به‌روزرسانیِ واریانتِ {sku}")
+    resp = wcapi.post(f"products/{parent_id}/variations", body)
+    return _raise_for_status(resp, f"ایجادِ واریانتِ {sku}")
+
+
+def upload_media(store_url: str, wp_username: str, wp_app_password: str, file_bytes: bytes, filename: str) -> dict:
+    """آپلودِ تصویر به کتابخانه‌یِ رسانه‌یِ وردپرس (wp/v2/media) --
+    طبقِ کشفِ صریح حینِ بررسیِ PeechaSync: این endpoint هیچ ربطی به
+    کلیدِ APIِ ووکامرس ندارد و نیازمندِ نامِ‌کاربری + گذرواژهٔ‌برنامه‌ایِ
+    (Application Password) خودِ وردپرس است -- یک اعتبارِ کاملاً جدا."""
+    base = normalize_store_url(store_url)
+    url = f"{base}/wp-json/wp/v2/media"
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"', "Content-Type": content_type}
+    try:
+        resp = requests.post(url, headers=headers, data=file_bytes, auth=(wp_username, wp_app_password), timeout=60)
+    except requests.RequestException as exc:
+        raise StoreAPIError(f"آپلودِ تصویر -- خطایِ شبکه: {exc}") from exc
+    if resp.status_code >= 400:
+        raise StoreAPIError(f"آپلودِ تصویر -- خطایِ سایت (HTTP {resp.status_code}): {resp.text[:300]}")
+    return resp.json()
+
+
+def attach_product_image(wcapi: API, product_id: int, media_id: int) -> dict:
+    resp = wcapi.put(f"products/{product_id}", {"images": [{"id": media_id}]})
+    return _raise_for_status(resp, f"اتصالِ تصویر به محصولِ #{product_id}")
 
 
 def fetch_customer(wcapi: API, external_customer_id: str) -> ExternalCustomerRow | None:

@@ -21,7 +21,7 @@ from peecha.db.models.commercial import (
     MarketplaceItemMapping,
     MarketplaceOrderSyncLog,
 )
-from peecha.db.models.inventory import Item, ItemCategory
+from peecha.db.models.inventory import Item, ItemAttribute, ItemAttributeValue, ItemCategory, ItemVariantValue
 from peecha.services import commercial_documents as documents_service
 from peecha.services import inventory_engine as inv_engine_service
 
@@ -67,16 +67,21 @@ def disconnect(connection_id: int) -> None:
 
 def set_connection_credentials(connection_id: int, credentials: dict) -> None:
     """طبقِ درخواستِ صریح («کدامِ کاربردیِ PeechaSync را به ERP اضافه کن»):
-    کلیدِ API/رازِ اتصال (مثلاً Consumer Key/Secretِ ووکامرس) قبل از
-    ذخیره در ستونِ credentials_encrypted رمزنگاری می‌شود."""
+    کلیدِ API/رازِ اتصال (مثلاً Consumer Key/Secretِ ووکامرس، یا بعداً
+    نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس برایِ آپلودِ تصویر) قبل از
+    ذخیره در ستونِ credentials_encrypted رمزنگاری می‌شود. طبقِ رفعِ
+    باگِ واقعیِ بالقوه: مقادیرِ تازه با موجودی *ادغام* می‌شوند (نه
+    جایگزینیِ کامل) -- وگرنه ذخیره‌یِ بعدیِ فقط WP_USERNAME/APP_PASSWORD
+    (برایِ آپلودِ تصویر)، کلیدِ ووکامرسِ ذخیره‌شده‌یِ قبلی را پاک می‌کرد."""
     from peecha.services import ecommerce_credentials
 
-    encrypted = ecommerce_credentials.encrypt_credentials(credentials)
     with new_session() as session:
         row = session.get(MarketplaceConnection, connection_id)
         if row is None:
             raise ValueError("اتصال نامعتبر است.")
-        row.credentials_encrypted = encrypted
+        existing = ecommerce_credentials.decrypt_credentials(row.credentials_encrypted)
+        existing.update({key: value for key, value in credentials.items() if value})
+        row.credentials_encrypted = ecommerce_credentials.encrypt_credentials(existing)
         session.commit()
 
 
@@ -234,13 +239,18 @@ def _connection_company_id(connection_id: int) -> int:
 # کاربر («ماژولِ فروشِ اینترنتی» با استفاده از دیتابیسِ همینِ ERP، بدونِ
 # اتکا به هلو/دژاوو). فعلاً فقط ووکامرس (_SUPPORTED_SYNC_PLATFORMS).
 # ---------------------------------------------------------------------
-def _build_store_client(connection: MarketplaceConnection):
-    from peecha.integrations.ecommerce import wc_client
+def _decrypt_connection_credentials(connection: MarketplaceConnection) -> dict:
     from peecha.services import ecommerce_credentials
 
     if connection.platform_code not in _SUPPORTED_SYNC_PLATFORMS:
         raise ValueError(f"سینک برایِ پلتفرمِ «{connection.platform_code}» هنوز پیاده‌سازی نشده است.")
-    creds = ecommerce_credentials.decrypt_credentials(connection.credentials_encrypted)
+    return ecommerce_credentials.decrypt_credentials(connection.credentials_encrypted)
+
+
+def _build_store_client(connection: MarketplaceConnection, creds: dict | None = None):
+    from peecha.integrations.ecommerce import wc_client
+
+    creds = creds if creds is not None else _decrypt_connection_credentials(connection)
     return wc_client.build_wcapi(connection.store_url, creds.get("consumer_key", ""), creds.get("consumer_secret", ""))
 
 
@@ -288,6 +298,51 @@ def _resolve_category_external_id(wcapi, connection_id: int, category_id: int | 
     return external_id
 
 
+def _variant_attribute_map(item_ids: list[int]) -> dict[int, dict[str, str]]:
+    """طبقِ ویژگیِ «واریانت» -- برایِ هر متغیر، نگاشتِ نامِ ویژگی به مقدارش
+    (مثلاً {«سایز»: «M»، «رنگ»: «قرمز»}) که مستقیماً شکلِ attributeِ
+    واریانتِ ووکامرس است."""
+    if not item_ids:
+        return {}
+    with new_session() as session:
+        rows = session.execute(
+            select(ItemVariantValue.item_id, ItemAttribute.name, ItemAttributeValue.value)
+            .join(ItemAttribute, ItemAttribute.attribute_id == ItemVariantValue.attribute_id)
+            .join(ItemAttributeValue, ItemAttributeValue.value_id == ItemVariantValue.value_id)
+            .where(ItemVariantValue.item_id.in_(item_ids))
+        ).all()
+    result: dict[int, dict[str, str]] = {}
+    for item_id, attribute_name, value_name in rows:
+        result.setdefault(item_id, {})[attribute_name] = value_name
+    return result
+
+
+def _attach_photo_if_missing(wcapi, connection: MarketplaceConnection, product_id: int, item_detail_account_id: int, wp_creds: dict | None, has_images: bool) -> None:
+    """طبقِ درخواستِ صریح («واریانت + تصویرِ کالا»): فقط وقتی محصول در
+    فروشگاه هنوز هیچ تصویری ندارد آپلود می‌کند -- تا هر سینکِ بعدی
+    (که معمولاً تصویر عوض نمی‌شود) دوباره همان فایل را آپلود نکند.
+    نیازمندِ نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس است (جدا از کلیدِ
+    APIِ ووکامرس) -- اگر تنظیم نشده باشد، بی‌سروصدا رد می‌شود."""
+    if has_images or not wp_creds or not wp_creds.get("wp_username") or not wp_creds.get("wp_app_password"):
+        return
+    from pathlib import Path
+
+    from peecha.integrations.ecommerce import wc_client
+    from peecha.services import detail_dimensions as dimensions_service
+
+    photos = dimensions_service.get_primary_photos_for_accounts(connection.company_id, [item_detail_account_id])
+    photo = photos.get(item_detail_account_id)
+    if photo is None:
+        return
+    file_path = Path(photo.storage_key)
+    if not file_path.is_file():
+        return
+    media = wc_client.upload_media(
+        connection.store_url, wp_creds["wp_username"], wp_creds["wp_app_password"], file_path.read_bytes(), photo.file_name,
+    )
+    wc_client.attach_product_image(wcapi, product_id, media["id"])
+
+
 @dataclass
 class CatalogSyncResult:
     pushed: int
@@ -305,11 +360,111 @@ def _format_store_price(value: decimal.Decimal) -> str:
     return f"{value.quantize(decimal.Decimal('0.01')):f}"
 
 
-def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
-    """طبقِ گزارشِ کاربر: کالا/قیمت/موجودیِ همینِ ERP را به فروشگاه
-    می‌فرستد -- قیمت از فهرستِ قیمتِ پیش‌فرضِ کانالِ همین اتصال خوانده
-    می‌شود؛ کالاهایِ متغیر (دارایِ چند حالت) فعلاً رد می‌شوند (فازِ بعدی)."""
+def _stock_qty_for(company_id: int, item_id: int, warehouse_id: int | None) -> int:
+    balances = inv_engine_service.list_balances(company_id=company_id, item_id=item_id, warehouse_id=warehouse_id)
+    return int(max(sum((b.quantity_available for b in balances), _ZERO), _ZERO))
+
+
+def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id: int, item, sku: str, price: decimal.Decimal, wp_creds: dict | None) -> None:
     from peecha.integrations.ecommerce import wc_client
+
+    stock_qty = _stock_qty_for(connection.company_id, item.item_id, connection.warehouse_id)
+    category_external_id = _resolve_category_external_id(wcapi, connection_id, item.category_id)
+    payload = {
+        "name": item.name or sku,
+        "regular_price": _format_store_price(price),
+        "manage_stock": True,
+        "stock_quantity": stock_qty,
+        "status": "publish" if item.is_active else "draft",
+    }
+    if category_external_id:
+        payload["categories"] = [{"id": category_external_id}]
+    data = wc_client.upsert_product(wcapi, sku, payload)
+    _attach_photo_if_missing(wcapi, connection, data["id"], item.item_detail_account_id, wp_creds, bool(data.get("images")))
+    map_item(connection_id, sku, item.item_id, external_price=price)
+
+
+def _push_variant_product(
+    wcapi, connection: MarketplaceConnection, connection_id: int, item, sku: str, children: list,
+    price_by_item: dict[int, decimal.Decimal], wp_creds: dict | None,
+) -> tuple[int, int, list[str]]:
+    """طبقِ درخواستِ صریحِ کاربر («واریانت + تصویرِ کالا»): کالایِ اصلی به‌عنوانِ
+    یک محصولِ «متغیر» (type=variable) ساخته می‌شود -- با یک attributeِ محلی
+    (نه global taxonomyِ ووکامرس، که نیازمندِ فراخوانی/کشِ جداگانه‌ای بود)
+    به‌ازایِ هر ویژگیِ کالا (مثلاً «سایز»)، و هر متغیرِ ERP یک واریانتِ
+    جداگانه در ووکامرس می‌شود -- با SKU/قیمت/موجودیِ خودش."""
+    from peecha.integrations.ecommerce import wc_client
+
+    pushed = failed = 0
+    errors: list[str] = []
+    child_ids = [c.item_id for c in children]
+    attrs_by_item = _variant_attribute_map(child_ids)
+
+    attribute_options: dict[str, list[str]] = {}
+    for child in children:
+        for attribute_name, value_name in attrs_by_item.get(child.item_id, {}).items():
+            options = attribute_options.setdefault(attribute_name, [])
+            if value_name not in options:
+                options.append(value_name)
+    if not attribute_options:
+        return 0, 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدارِ ویژگی ندارند -- سینک نشد."]
+
+    category_external_id = _resolve_category_external_id(wcapi, connection_id, item.category_id)
+    parent_payload = {
+        "name": item.name or sku,
+        "type": "variable",
+        "status": "publish" if item.is_active else "draft",
+        "attributes": [{"name": name, "variation": True, "options": options} for name, options in attribute_options.items()],
+    }
+    if category_external_id:
+        parent_payload["categories"] = [{"id": category_external_id}]
+    try:
+        parent_data = wc_client.upsert_product(wcapi, sku, parent_payload)
+    except Exception as exc:  # noqa: BLE001
+        return 0, len(children) + 1, [f"{sku} (کالایِ اصلیِ متغیر): {exc}"]
+    parent_external_id = parent_data["id"]
+    _attach_photo_if_missing(wcapi, connection, parent_external_id, item.item_detail_account_id, wp_creds, bool(parent_data.get("images")))
+    map_item(connection_id, sku, item.item_id)
+
+    existing_variations = wc_client.list_variations(wcapi, parent_external_id)
+    for child in children:
+        child_sku = (child.sku or child.code or "").strip()
+        if not child_sku:
+            failed += 1
+            errors.append(f"{sku}: یکی از متغیرها SKU/کد ندارد -- رد شد.")
+            continue
+        child_attrs = attrs_by_item.get(child.item_id)
+        if not child_attrs:
+            failed += 1
+            errors.append(f"{child_sku}: مقدارِ ویژگی ندارد -- رد شد.")
+            continue
+        price = price_by_item.get(child.item_id)
+        if price is None:
+            failed += 1
+            errors.append(f"{child_sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
+            continue
+        try:
+            stock_qty = _stock_qty_for(connection.company_id, child.item_id, connection.warehouse_id)
+            variation_payload = {
+                "regular_price": _format_store_price(price),
+                "manage_stock": True,
+                "stock_quantity": stock_qty,
+                "attributes": [{"name": name, "option": value} for name, value in child_attrs.items()],
+            }
+            wc_client.upsert_variation(wcapi, parent_external_id, child_sku, variation_payload, existing_variations)
+            map_item(connection_id, child_sku, child.item_id, external_price=price)
+            pushed += 1
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            errors.append(f"{child_sku}: {exc}")
+    return pushed, failed, errors
+
+
+def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
+    """طبقِ گزارشِ کاربر: کالا/قیمت/موجودی/دسته/تصویرِ همینِ ERP را به
+    فروشگاه می‌فرستد -- قیمت از فهرستِ قیمتِ پیش‌فرضِ کانالِ همین اتصال
+    خوانده می‌شود. کالاهایِ دارایِ چند متغیر به‌عنوانِ یک محصولِ «متغیر»
+    (variable) با یک واریانت به‌ازایِ هر ترکیبِ ERP سینک می‌شوند."""
     from peecha.services import commercial_pricing as pricing_service
     from peecha.services import inventory_catalog as catalog_service
 
@@ -318,20 +473,47 @@ def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
     if price_list_id is None:
         raise ValueError("کانالِ این اتصال فهرستِ قیمتِ پیش‌فرض ندارد -- در تنظیماتِ کانال یک فهرستِ قیمت مشخص کنید.")
 
-    wcapi = _build_store_client(connection)
+    creds = _decrypt_connection_credentials(connection)
+    wp_creds = {"wp_username": creds.get("wp_username"), "wp_app_password": creds.get("wp_app_password")}
+    wcapi = _build_store_client(connection, creds)
     price_by_item: dict[int, decimal.Decimal] = {
         row.item_id: row.unit_price for row in pricing_service.list_price_list_items(price_list_id) if row.min_quantity == 1
     }
 
+    all_items = catalog_service.list_items(connection.company_id, active_only=True)
+    children_by_parent: dict[int, list] = {}
+    for it in all_items:
+        if it.variant_parent_item_id is not None:
+            children_by_parent.setdefault(it.variant_parent_item_id, []).append(it)
+
     pushed = skipped = failed = 0
     errors: list[str] = []
-    for item in catalog_service.list_items(connection.company_id, active_only=True):
-        if item.variant_parent_item_id is not None or not item.is_sellable:
+    for item in all_items:
+        if item.variant_parent_item_id is not None:
+            skipped += 1
+            continue
+        children = children_by_parent.get(item.item_id, [])
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده حینِ تست: به‌محضِ داشتنِ حداقل یک
+        # متغیر، item_variants._sync_parent_transactability خودکار
+        # is_sellable/is_purchasable/is_stock_tracked خودِ کالایِ اصلی را
+        # False می‌کند (چون فقط متغیرهایش معامله می‌شوند، نه خودش) --
+        # پس این چک فقط برایِ کالایِ سادهٔ بدونِ متغیر معتبر است؛ کالایِ
+        # اصلیِ دارایِ متغیر باید همچنان به‌عنوانِ محصولِ «متغیر» (که
+        # فروختنی بودنش دستِ خودِ واریانت‌هاست) سینک شود.
+        if not children and not item.is_sellable:
             skipped += 1
             continue
         sku = (item.sku or item.code or "").strip()
         if not sku:
             skipped += 1
+            continue
+        if children:
+            variant_pushed, variant_failed, variant_errors = _push_variant_product(
+                wcapi, connection, connection_id, item, sku, children, price_by_item, wp_creds,
+            )
+            pushed += variant_pushed
+            failed += variant_failed
+            errors.extend(variant_errors)
             continue
         price = price_by_item.get(item.item_id)
         if price is None:
@@ -339,20 +521,7 @@ def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
             errors.append(f"{sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
             continue
         try:
-            balances = inv_engine_service.list_balances(company_id=connection.company_id, item_id=item.item_id, warehouse_id=connection.warehouse_id)
-            stock_qty = max(sum((b.quantity_available for b in balances), _ZERO), _ZERO)
-            category_external_id = _resolve_category_external_id(wcapi, connection_id, item.category_id)
-            payload = {
-                "name": item.name or sku,
-                "regular_price": _format_store_price(price),
-                "manage_stock": True,
-                "stock_quantity": int(stock_qty),
-                "status": "publish" if item.is_active else "draft",
-            }
-            if category_external_id:
-                payload["categories"] = [{"id": category_external_id}]
-            wc_client.upsert_product(wcapi, sku, payload)
-            map_item(connection_id, sku, item.item_id, external_price=price)
+            _push_simple_product(wcapi, connection, connection_id, item, sku, price, wp_creds)
             pushed += 1
         except Exception as exc:  # noqa: BLE001 -- یک کالایِ خراب نباید کلِ سینک را متوقف کند
             failed += 1

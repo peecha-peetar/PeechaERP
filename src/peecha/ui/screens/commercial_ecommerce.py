@@ -123,6 +123,28 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         creds_form.addWidget(save_creds_button)
         left.addLayout(creds_form)
 
+        # طبقِ درخواستِ صریح («واریانت + تصویرِ کالا»): آپلودِ عکسِ محصول از
+        # طریقِ wp/v2/media نیاز به احرازِ هویتِ کاملاً جداگانه‌یِ وردپرس
+        # دارد (نه کلیدِ APIِ ووکامرس) -- گذرواژهٔ‌برنامه‌ای، نه رمزِ اصلیِ
+        # کاربر. اختیاری است؛ بدونش سینکِ کاتالوگ/سفارش/مشتری عادی کار می‌کند،
+        # فقط تصویر منتقل نمی‌شود.
+        left.addWidget(QLabel("نامِ‌کاربری/گذرواژهٔ‌برنامه‌ایِ وردپرس (اختیاری -- فقط برایِ آپلودِ تصویرِ کالا)"))
+        wp_creds_form = QHBoxLayout()
+        self.wp_username_field = QLineEdit()
+        self.wp_username_field.setPlaceholderText("نامِ‌کاربریِ وردپرس")
+        wp_creds_form.addWidget(self.wp_username_field)
+        self.wp_app_password_field = QLineEdit()
+        self.wp_app_password_field.setPlaceholderText("Application Password")
+        self.wp_app_password_field.setEchoMode(QLineEdit.Password)
+        wp_creds_form.addWidget(self.wp_app_password_field)
+        save_wp_creds_button = QPushButton("🖼️")
+        save_wp_creds_button.setObjectName("iconButton")
+        save_wp_creds_button.setFixedWidth(44)
+        save_wp_creds_button.setToolTip("ذخیرهٔ اطلاعاتِ وردپرس (رمزنگاری‌شده)")
+        save_wp_creds_button.clicked.connect(self._save_wp_credentials)
+        wp_creds_form.addWidget(save_wp_creds_button)
+        left.addLayout(wp_creds_form)
+
         sync_now_button = QPushButton("🔄  سینکِ الان (کاتالوگ + مشتریان + سفارش‌هایِ تازه)")
         sync_now_button.setObjectName("primaryIconButton")
         sync_now_button.setToolTip("کاتالوگ/قیمت/موجودی را به فروشگاه می‌فرستد و مشتریان/سفارش‌هایِ تازه را می‌خواند")
@@ -302,6 +324,22 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self.wc_key_field.clear()
         self.wc_secret_field.clear()
         theme.set_status_label(self.status_label, "کلیدِ API رمزنگاری و ذخیره شد.", ok=True)
+
+    def _save_wp_credentials(self) -> None:
+        if self._selected_connection_id is None:
+            self.status_label.setText("ابتدا یک اتصال را از فهرست انتخاب کنید.")
+            return
+        username = self.wp_username_field.text().strip()
+        app_password = self.wp_app_password_field.text().strip()
+        if not username or not app_password:
+            self.status_label.setText("نامِ‌کاربری و Application Passwordِ وردپرس را وارد کنید.")
+            return
+        ecommerce_service.set_connection_credentials(
+            self._selected_connection_id, {"wp_username": username, "wp_app_password": app_password},
+        )
+        self.wp_username_field.clear()
+        self.wp_app_password_field.clear()
+        theme.set_status_label(self.status_label, "اطلاعاتِ وردپرس رمزنگاری و ذخیره شد.", ok=True)
 
     def _sync_now(self) -> None:
         if self._selected_connection_id is None:
