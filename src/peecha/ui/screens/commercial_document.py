@@ -635,6 +635,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.discount_type_combo.addItem("مبلغی", "AMOUNT")
         self.discount_type_combo.addItem("درصدی", "PERCENT")
         self.discount_type_combo.setMaximumWidth(80)
+        self._lock_discount = lock_discount
         if lock_discount:
             self.discount_field.setReadOnly(True)
             self.discount_type_combo.setEnabled(False)
@@ -703,6 +704,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # پرچمِ autoDefault؛ جلوگیریِ واقعی در keyPressEvent پایین‌تر است.
         buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
         buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
+        self.ok_button = buttons.button(QDialogButtonBox.Ok)
         layout.addWidget(buttons)
 
         # طبقِ سندِ راهنما (زنجیره‌یِ کاملِ Enter، بدونِ استثنا).
@@ -818,11 +820,39 @@ class _LineDialog(LayoutEditMixin, QDialog):
     def _on_variant_combo_changed(self) -> None:
         self._on_selection_changed()
 
+    def _update_entry_state(self) -> None:
+        """طبقِ درخواستِ صریح («از ابتدا که کالای اصلی انتخاب میشه باید
+        جلوش گرفته بشه، نه بعدِ تاییدِ نهایی -- تمامِ کنترل‌ها در هنگامِ
+        ورودِ اطلاعات چک بشه»): به‌محضِ انتخابِ کالایِ اصلیِ دارایِ متغیر
+        (قبل از انتخابِ خودِ متغیر)، بلافاصله فیلدهایِ ورودِ اطلاعات و
+        دکمهٔ تایید غیرفعال و پیامِ خطا نمایش داده می‌شود -- نه اینکه
+        کاربر همه‌چیز را پر کند و فقط با زدنِ تایید متوجهِ رد شدن شود."""
+        parent_id = self.item_combo.currentData()
+        needs_variant = parent_id in self._variant_parent_ids and self.variant_combo.currentData() is None
+        entry_widgets = [
+            self.quantity_field, self.unit_price_field, self.discount_field,
+            self.tax_percent_field, self.description_field,
+        ]
+        if self.warehouse_combo is not None:
+            entry_widgets.append(self.warehouse_combo)
+        for widget in entry_widgets:
+            widget.setEnabled(not needs_variant)
+        # طبقِ رفعِ رگرسیونِ واقعی: discount_type_combo علاوه بر این حالت،
+        # یک قفلِ مستقلِ از قبل هم دارد (lock_discount -- مثلاً در فروشگاهیِ
+        # POS که تغییرِ نوعِ تخفیف اصلاً مجاز نیست)؛ نباید با بازکردنِ
+        # قفلِ متغیر، آن قفلِ دیگر را ناخواسته باز کند.
+        self.discount_type_combo.setEnabled(not needs_variant and not self._lock_discount)
+        self.ok_button.setEnabled(not needs_variant)
+        self.status_label.setText(
+            "این کالا دارایِ چند متغیر است؛ لطفاً یکی از متغیرها را انتخاب کنید." if needs_variant else ""
+        )
+
     def _on_selection_changed(self) -> None:
         """طبقِ درخواستِ صریح: درصدِ مالیات با اولویتِ کالا -> تنظیماتِ
         کلیِ شرکت پیش‌پر می‌شود — فقط برایِ ردیفِ *تازه* (initial=None)،
         نه هنگامِ ویرایشِ ردیفِ ازپیش‌ذخیره‌شده که مقدارِ ثبت‌شده‌اش را
         نباید بازنویسی کند."""
+        self._update_entry_state()
         item_id = self._selected_item_id()
         self._refresh_stock_info()
         if item_id is None:
