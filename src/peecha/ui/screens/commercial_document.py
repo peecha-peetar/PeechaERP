@@ -116,7 +116,11 @@ _CONVERTIBLE_TO_INVOICE_TYPES = (
 # طبقِ همان تفکیک: کدام از انواعِ قابلِ‌تبدیل به فاکتورِ فروش تبدیل
 # می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
 _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
-_LINE_COLUMNS = ["کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح"]
+# طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر: یک ستونِ شمارهٔ ردیف («#») در ابتدا و
+# یک ستونِ «عملیات» (ویرایش/حذفِ همان ردیف) در انتها، به‌جایِ خوشه‌یِ
+# جداگانه‌یِ دکمه‌هایِ زیرِ جدول که قبلاً روی «ردیفِ انتخاب‌شده»یِ کلی
+# عمل می‌کرد -- حالا هر دکمه دقیقاً برایِ همان ردیفی است که رویش است.
+_LINE_COLUMNS = ["#", "کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح", "عملیات"]
 _HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمعِ کل"]
 
 
@@ -1991,10 +1995,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
         self.body_layout.addWidget(self.step_stepper)
 
+        # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر (کارت‌هایِ رنگیِ آیکون‌دار): چیدمانِ
+        # این سه کارت هم‌راستا با ترتیبِ اهمیت است -- «جمعِ کل» (سبز، مهم‌ترین
+        # عدد برایِ کاربر) در سمتِ راست، «تخفیف/مالیات» (کهربایی) وسط، و
+        # «جمعِ ناخالص» (خنثی) در سمتِ چپ. چون QHBoxLayout در حالتِ راست‌به‌چپ
+        # اولین ویجتِ اضافه‌شده را در سمتِ راست می‌گذارد، ترتیبِ درجِ دیکشنری
+        # همین ترتیبِ بصری را تولید می‌کند.
         self.summary_cards = SummaryCardBar({
-            "subtotal": SummaryCard("جمعِ ناخالص", role="neutral"),
-            "discount_tax": SummaryCard("تخفیف/مالیات", role="warning"),
-            "grand_total": SummaryCard("جمعِ کل", role="success"),
+            "grand_total": SummaryCard("جمعِ کل", role="success", icon="✅"),
+            "discount_tax": SummaryCard("تخفیف/مالیات", role="warning", icon="🏷️"),
+            "subtotal": SummaryCard("جمعِ ناخالص", role="neutral", icon="📋"),
         })
         self.body_layout.addWidget(self.summary_cards)
 
@@ -2257,6 +2267,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         lines_title = QLabel("ردیف‌ها")
         lines_title.setObjectName("sectionTitle")
         status_row.addWidget(lines_title)
+        # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر («۲ ردیف» کنارِ عنوانِ جدول):
+        # یک نشان‌واره‌یِ کوچکِ خاکستری با تعدادِ ردیفِ جاری -- در
+        # _refresh_lines_table به‌روزرسانی می‌شود.
+        self.line_count_badge = QLabel("")
+        self.line_count_badge.setStyleSheet(
+            f"background-color: {theme.rgba(theme.TEXT_SECONDARY, 0.12)}; color: {theme.TEXT_SECONDARY}; "
+            "border-radius: 9px; padding: 1px 8px; font-size: 11px; font-weight: 700;"
+        )
+        status_row.addWidget(self.line_count_badge)
         add_line_button = QPushButton("➕")
         add_line_button.setObjectName("primaryIconButton")
         add_line_button.setFixedWidth(48)
@@ -2280,30 +2299,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # ارتفاعِ پیش‌فرضِ Qt برایِ ردیف‌ها فشرده است؛ این‌جا آگاهانه
         # بزرگ‌تر شده تا خواناییِ ردیف‌هایِ فاکتور بهتر شود.
         self.lines_table.verticalHeader().setDefaultSectionSize(40)
-        self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر: ستونِ «#» و «عملیات» عرضِ ثابتِ
+        # کوچک دارند، ستونِ «کالا» (که حالا اندیسِ ۱ است، نه ۰) کاملِ
+        # فضایِ باقی‌مانده را می‌گیرد.
+        self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        self.lines_table.setColumnWidth(0, 32)
+        self.lines_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        last_col = len(_LINE_COLUMNS) - 1
+        self.lines_table.horizontalHeader().setSectionResizeMode(last_col, QHeaderView.Fixed)
+        self.lines_table.setColumnWidth(last_col, 70)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
 
         self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
-
-        line_button_cluster = QWidget()
-        line_button_cluster.setLayoutDirection(Qt.LeftToRight)
-        line_buttons = QHBoxLayout(line_button_cluster)
-        line_buttons.setContentsMargins(0, 0, 0, 0)
-        edit_line_button = QPushButton("✏️")
-        edit_line_button.setObjectName("iconButton")
-        edit_line_button.setFixedWidth(44)
-        edit_line_button.setToolTip("ویرایشِ ردیف")
-        edit_line_button.clicked.connect(self._edit_line)
-        line_buttons.addWidget(edit_line_button)
-        delete_line_button = QPushButton("🗑️")
-        delete_line_button.setObjectName("dangerIconButton")
-        delete_line_button.setFixedWidth(44)
-        delete_line_button.setToolTip("حذفِ ردیف")
-        delete_line_button.clicked.connect(self._delete_line)
-        line_buttons.addWidget(delete_line_button)
-        self.body_layout.addWidget(line_button_cluster, alignment=Qt.AlignLeft)
 
         # طبقِ درخواستِ صریح («سبدِ پیشنهادی»): بعدِ افزودنِ هر ردیف، اگر
         # کالاهایی وجود دارند که همینِ مشتری معمولاً همراهِ آن خریده،
@@ -2715,6 +2724,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
             values = [
+                numerals.to_persian_digits(str(row_index + 1)),
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
                 numerals.format_money(ln.quantity, 3),
                 numerals.format_money(ln.unit_price, dp),
@@ -2730,7 +2740,50 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             for col_index, value in enumerate(values):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.UserRole, ln.line_id)
+                if col_index == 0:
+                    cell.setTextAlignment(Qt.AlignCenter)
                 self.lines_table.setItem(row_index, col_index, cell)
+            self.lines_table.setCellWidget(row_index, len(values), self._make_line_actions_widget(row_index))
+        self.line_count_badge.setText(f"{numerals.to_persian_digits(str(len(self._lines)))} ردیف")
+
+    def _make_line_actions_widget(self, row_index: int) -> QWidget:
+        # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر: دکمه‌هایِ ویرایش/حذف حالا در
+        # همان ستونِ «عملیات»یِ ردیف نشسته‌اند -- نه یک خوشه‌یِ جداگانه‌یِ
+        # زیرِ جدول که به «ردیفِ انتخاب‌شده»یِ کلی وابسته بود. طبقِ رفعِ
+        # باگِ واقعی (کشف‌شده حینِ تست): `QTableWidget.selectRow()` در
+        # چیدمانِ راست‌به‌چپ برایِ یافتنِ ستونِ لنگر به عرضِ واقعیِ
+        # viewport نیاز دارد -- زیرِ پلتفرمِ offscreen (و گاهی حتی در
+        # اجرایِ واقعی، پیش از یک چرخه‌یِ کاملِ layout) این عرض هنوز صفر
+        # است و selectRow() هیچ سلولی را انتخاب نمی‌کند، پس _selected_line()
+        # هم چیزی برنمی‌گرداند. برایِ همین این دکمه‌ها مستقیم رویِ
+        # self._lines[row_index] عمل می‌کنند -- بدونِ وابستگی به هیچ
+        # انتخابِ رویِ صفحه.
+        container = QWidget()
+        container.setLayoutDirection(Qt.LeftToRight)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(2, 0, 2, 0)
+        layout.setSpacing(2)
+        edit_button = QPushButton("✏️")
+        edit_button.setObjectName("iconButton")
+        edit_button.setFixedWidth(28)
+        edit_button.setToolTip("ویرایشِ ردیف")
+        edit_button.clicked.connect(lambda _checked=False, r=row_index: self._edit_line_at_row(r))
+        layout.addWidget(edit_button)
+        delete_button = QPushButton("🗑️")
+        delete_button.setObjectName("dangerIconButton")
+        delete_button.setFixedWidth(28)
+        delete_button.setToolTip("حذفِ ردیف")
+        delete_button.clicked.connect(lambda _checked=False, r=row_index: self._delete_line_at_row(r))
+        layout.addWidget(delete_button)
+        return container
+
+    def _edit_line_at_row(self, row_index: int) -> None:
+        if 0 <= row_index < len(self._lines):
+            self._edit_line_object(self._lines[row_index])
+
+    def _delete_line_at_row(self, row_index: int) -> None:
+        if 0 <= row_index < len(self._lines):
+            self._delete_line_object(self._lines[row_index])
 
     def _apply_status_state(self) -> None:
         self.status_badge.setText(STATUS_LABELS.get(self._status_code, self._status_code))
@@ -3231,7 +3284,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _edit_line(self, *_args) -> None:
         line = self._selected_line()
-        if line is None or self._document_id is None:
+        if line is None:
+            return
+        self._edit_line_object(line)
+
+    def _edit_line_object(self, line) -> None:
+        if self._document_id is None:
             return
         initial = {
             "item_id": line.item_id, "quantity": line.quantity, "unit_price": line.unit_price,
@@ -3258,7 +3316,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _delete_line(self) -> None:
         line = self._selected_line()
-        if line is None or self._document_id is None:
+        if line is None:
+            return
+        self._delete_line_object(line)
+
+    def _delete_line_object(self, line) -> None:
+        if self._document_id is None:
             return
         confirm = QMessageBox.question(self, "حذفِ ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:

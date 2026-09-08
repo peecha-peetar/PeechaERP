@@ -1145,7 +1145,7 @@ class SummaryCard(QFrame):
     عوض می‌شود — برایِ نمایشِ زنده‌یِ وضعیت (مثلاً مانده=۰ سبز، غیرِصفر
     قرمز) بدونِ بازسازیِ کارت."""
 
-    def __init__(self, title: str, role: str = "neutral", parent: QWidget | None = None) -> None:
+    def __init__(self, title: str, role: str = "neutral", parent: QWidget | None = None, icon: str = "") -> None:
         super().__init__(parent)
         self.setObjectName("card")
         self._role = role
@@ -1157,7 +1157,11 @@ class SummaryCard(QFrame):
         outer.setContentsMargins(10, 6, 10, 6)
         outer.setSpacing(2)
 
-        self._title_label = QLabel(title)
+        # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر (کارت‌هایِ رنگیِ آیکون‌دار در
+        # نوارِ خلاصه‌یِ فاکتور): آیکون اختیاری است -- صفحاتِ قدیمی‌تر
+        # (journal_entry.py/treasury_voucher.py) بدونِ آن صدا زده می‌شوند
+        # و دقیقاً مثلِ قبل بدونِ آیکون می‌مانند.
+        self._title_label = QLabel(f"{icon}  {title}" if icon else title)
         outer.addWidget(self._title_label)
 
         self.value_label = QLabel("۰")
