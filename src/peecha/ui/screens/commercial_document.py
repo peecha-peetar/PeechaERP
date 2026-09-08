@@ -603,8 +603,19 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.variant_table.setHorizontalHeaderLabels(["متغیر", "موجودی", "مقدار"])
         self.variant_table.verticalHeader().setVisible(False)
         self.variant_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.variant_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.variant_table.setMaximumHeight(180)
+        # طبقِ گزارشِ صریح («عرضِ لیست کمتر... جلویِ نامِ متغیر فضایِ خالی
+        # هست»): قبلاً فقط ستونِ برچسبِ متغیر Stretch بود و بقیهٔ ستون‌ها
+        # با پهنایِ پیش‌فرضِ Interactive تقریباً بی‌اندازه تنگ می‌شدند --
+        # حالا موجودی/مقدار پهنایِ ثابتِ مشخص دارند (جا برایِ فیلدِ عددی)
+        # و فقط ستونِ برچسبِ متغیر باقیِ فضا را پر می‌کند؛ چون متنِ آن هم
+        # اکنون صریحاً راست‌چین است (هم‌سو با هدر)، دیگر فضایِ خالیِ
+        # جلویِ نام دیده نمی‌شود.
+        header = self.variant_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.Fixed)
+        self.variant_table.setColumnWidth(1, 90)
+        self.variant_table.setColumnWidth(2, 110)
         self.variant_table.setVisible(False)
         self._variant_table_item_ids: list[int] = []
 
@@ -877,7 +888,13 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.variant_table.setRowCount(len(variants))
         for row, v in enumerate(variants):
             label = f"{v.code} — {v.attribute_labels or v.name or ''}"
-            self.variant_table.setItem(row, 0, QTableWidgetItem(label))
+            label_item = QTableWidgetItem(label)
+            # طبقِ گزارشِ صریح («جلویِ نامِ متغیر فضایِ خالی هست»): بدونِ
+            # این خط، تراز پیش‌فرضِ QTableWidgetItem چپ‌چین است -- در
+            # ستونی که Stretch شده و راست‌به‌چپ نمایش داده می‌شود، همین
+            # چپ‌چینی همان فضایِ خالیِ گزارش‌شده را جلویِ متن می‌سازد.
+            label_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.variant_table.setItem(row, 0, label_item)
             stock_item = QTableWidgetItem(numerals.format_money(stock_by_item.get(v.variant_item_id, decimal.Decimal(0)), 3))
             stock_item.setTextAlignment(Qt.AlignCenter)
             self.variant_table.setItem(row, 1, stock_item)
@@ -886,6 +903,16 @@ class _LineDialog(LayoutEditMixin, QDialog):
             qty_field.valueChanged.connect(self._on_selection_changed)
             self.variant_table.setCellWidget(row, 2, qty_field)
         self.status_label.setText("" if variants else "هیچ متغیری با موجودیِ مثبت برایِ این کالا یافت نشد.")
+
+        # طبقِ گزارشِ صریح («ارتفاع و تعدادِ متغیرها بیشتر دیده بشه»):
+        # ارتفاعِ جدول بسته به تعدادِ واقعیِ ردیف‌ها (تا سقفِ ۶ ردیفِ
+        # هم‌زمان، بعدِ آن اسکرول) تنظیم می‌شود -- نه یک عددِ ثابتِ کوچک
+        # که فقط یک ردیف را واقعاً نشان می‌داد.
+        row_height = self.variant_table.verticalHeader().defaultSectionSize()
+        header_height = self.variant_table.horizontalHeader().height()
+        visible_rows = max(1, min(len(variants), 6))
+        self.variant_table.setMinimumHeight(header_height + row_height * min(len(variants), 2) + 6)
+        self.variant_table.setMaximumHeight(header_height + row_height * visible_rows + 6)
 
     def _variant_table_quantity(self, row: int) -> decimal.Decimal:
         widget = self.variant_table.cellWidget(row, 2)
