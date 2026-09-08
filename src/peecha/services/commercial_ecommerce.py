@@ -27,12 +27,9 @@ from peecha.services import inventory_engine as inv_engine_service
 
 _ZERO = decimal.Decimal("0")
 
-# طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ»): این‌جا هم ووکامرس و هم
-# پرستاشاپ پشتیبانی می‌شوند. دامنه‌یِ پرستاشاپ عمداً محدودتر است --
-# فقط محصولِ ساده (بدون واریانت/تصویر) + دسته + مشتری + سفارش، دقیقاً
-# همان دامنه‌ای که ووکامرس در S1 داشت -- چون خودِ PeechaSync هم
-# پیاده‌سازیِ پرستاشاپش را «هنوز رویِ فروشگاهِ واقعی تست‌نشده» علامت
-# زده بود؛ واریانت/تصویر برایِ پرستاشاپ به فازِ بعدی موکول شده.
+# طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ» + «واریانت + تصویر برایِ
+# پرستاشاپ»): ووکامرس و پرستاشاپ هردو با کاتالوگِ ساده/واریانت‌دار،
+# قیمت/موجودی، دسته، تصویر، مشتری، و سفارش پشتیبانی می‌شوند.
 _SUPPORTED_SYNC_PLATFORMS = ("WOOCOMMERCE", "PRESTASHOP")
 
 
@@ -526,9 +523,9 @@ def _push_variant_product(
 
 def sync_catalog_to_store(connection_id: int) -> CatalogSyncResult:
     """طبقِ گزارشِ کاربر: کالا/قیمت/موجودی/دسته/تصویرِ همینِ ERP را به
-    فروشگاه می‌فرستد. برایِ ووکامرس کالاهایِ دارایِ چند متغیر هم به‌عنوانِ
-    یک محصولِ «متغیر» سینک می‌شوند؛ برایِ پرستاشاپ فعلاً فقط کالایِ ساده
-    پشتیبانی می‌شود (ر.ک. توضیحِ _SUPPORTED_SYNC_PLATFORMS)."""
+    فروشگاه می‌فرستد -- کالاهایِ دارایِ چند متغیر هم چه در ووکامرس (به‌شکلِ
+    محصولِ «متغیر») و چه در پرستاشاپ (به‌شکلِ combination) پشتیبانی
+    می‌شوند."""
     connection = _get_connection(connection_id)
     if connection.platform_code == "PRESTASHOP":
         result = _sync_catalog_to_presta_store(connection, connection_id)
@@ -610,6 +607,29 @@ def _sync_catalog_to_wc_store(connection: MarketplaceConnection, connection_id: 
     return CatalogSyncResult(pushed=pushed, skipped=skipped, failed=failed, errors=errors)
 
 
+def _attach_presta_photo_if_missing(papi, connection: MarketplaceConnection, product_id: int, item_detail_account_id: int, has_images: bool) -> None:
+    """طبقِ درخواستِ صریح («واریانت + تصویر برایِ پرستاشاپ»): برخلافِ
+    ووکامرس، آپلودِ تصویرِ پرستاشاپ به هیچ اعتبارِ جداگانه‌ای نیاز ندارد
+    (همان کلیدِ APIِ خودِ اتصال کافی است) -- پس اگر عکسِ اصلیِ کالا در
+    ERP موجود باشد، همیشه تلاش می‌شود (نه فقط وقتی کاربر چیزی جدا تنظیم
+    کرده باشد). فقط وقتی محصول هنوز هیچ تصویری ندارد آپلود می‌کند."""
+    if has_images:
+        return
+    from pathlib import Path
+
+    from peecha.integrations.ecommerce import presta_client
+    from peecha.services import detail_dimensions as dimensions_service
+
+    photos = dimensions_service.get_primary_photos_for_accounts(connection.company_id, [item_detail_account_id])
+    photo = photos.get(item_detail_account_id)
+    if photo is None:
+        return
+    file_path = Path(photo.storage_key)
+    if not file_path.is_file():
+        return
+    presta_client.upload_product_image(papi, product_id, file_path.read_bytes(), photo.file_name)
+
+
 def _push_simple_product_to_presta(papi, connection: MarketplaceConnection, connection_id: int, item, sku: str, price: decimal.Decimal) -> None:
     from peecha.integrations.ecommerce import presta_client
 
@@ -620,14 +640,90 @@ def _push_simple_product_to_presta(papi, connection: MarketplaceConnection, conn
         fields["id_category_default"] = category_external_id
     data = presta_client.upsert_product(papi, sku, fields)
     presta_client.update_stock_quantity(papi, data["id"], _effective_stock_quantity(item.ecommerce_stock_mode, stock_qty))
+    _attach_presta_photo_if_missing(papi, connection, data["id"], item.item_detail_account_id, presta_client.product_has_images(papi, data["id"]))
     map_item(connection_id, sku, item.item_id, external_price=price)
 
 
+def _push_variant_product_to_presta(
+    papi, connection: MarketplaceConnection, connection_id: int, item, sku: str, children: list,
+    price_by_item: dict[int, decimal.Decimal],
+) -> tuple[int, int, list[str]]:
+    """طبقِ درخواستِ صریح («واریانت + تصویر برایِ پرستاشاپ»): برخلافِ
+    ووکامرس، ویژگی/مقدارِ ویژگی (product_options/product_option_values)
+    در سطحِ کلِ فروشگاه ساخته می‌شوند (نه رویِ خودِ محصول) و قیمتِ رویِ
+    هر combination «افزوده» نسبت به قیمتِ پایه‌یِ محصول است -- پس قیمتِ
+    اولین متغیر به‌عنوانِ قیمتِ پایه انتخاب می‌شود و بقیه نسبت به آن
+    محاسبه می‌شوند."""
+    from peecha.integrations.ecommerce import presta_client
+
+    pushed = failed = 0
+    errors: list[str] = []
+    child_ids = [c.item_id for c in children]
+    attrs_by_item = _variant_attribute_map(child_ids)
+    priced_children = [c for c in children if attrs_by_item.get(c.item_id) and price_by_item.get(c.item_id) is not None]
+    if not priced_children:
+        return 0, len(children) + 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدارِ ویژگی/قیمتِ معتبر ندارند -- سینک نشد."]
+
+    base_price = price_by_item[priced_children[0].item_id]
+    category_external_id = _resolve_category_external_id(papi, "PRESTASHOP", connection_id, item.category_id)
+    fields = {"name": item.name or sku, "price": _format_store_price(base_price), "active": item.is_active}
+    if category_external_id:
+        fields["id_category_default"] = category_external_id
+    try:
+        parent_data = presta_client.upsert_product(papi, sku, fields)
+    except Exception as exc:  # noqa: BLE001
+        return 0, len(children) + 1, [f"{sku} (کالایِ اصلیِ متغیر): {exc}"]
+    parent_id = parent_data["id"]
+    _attach_presta_photo_if_missing(papi, connection, parent_id, item.item_detail_account_id, presta_client.product_has_images(papi, parent_id))
+    map_item(connection_id, sku, item.item_id)
+
+    group_ids: dict[str, int] = {}
+    for attribute_name in {name for attrs in attrs_by_item.values() for name in attrs}:
+        group_ids[attribute_name] = presta_client.find_or_create_attribute_group(papi, attribute_name)
+    value_ids: dict[tuple[str, str], int] = {}
+
+    existing_combinations = presta_client.list_combinations(papi, parent_id)
+    for child in children:
+        child_sku = (child.sku or child.code or "").strip()
+        if not child_sku:
+            failed += 1
+            errors.append(f"{sku}: یکی از متغیرها SKU/کد ندارد -- رد شد.")
+            continue
+        child_attrs = attrs_by_item.get(child.item_id)
+        if not child_attrs:
+            failed += 1
+            errors.append(f"{child_sku}: مقدارِ ویژگی ندارد -- رد شد.")
+            continue
+        price = price_by_item.get(child.item_id)
+        if price is None:
+            failed += 1
+            errors.append(f"{child_sku}: قیمتی در فهرستِ قیمتِ کانال یافت نشد -- سینک نشد.")
+            continue
+        try:
+            option_value_ids = []
+            for attribute_name, value_name in child_attrs.items():
+                key = (attribute_name, value_name)
+                if key not in value_ids:
+                    value_ids[key] = presta_client.find_or_create_attribute_value(papi, group_ids[attribute_name], value_name)
+                option_value_ids.append(value_ids[key])
+            price_impact = _format_store_price(price - base_price)
+            combination_data = presta_client.upsert_combination(papi, parent_id, child_sku, price_impact, option_value_ids, existing_combinations)
+            stock_qty = _stock_qty_for(connection.company_id, child.item_id, connection.warehouse_id)
+            presta_client.update_combination_stock_quantity(
+                papi, parent_id, combination_data["id"], _effective_stock_quantity(child.ecommerce_stock_mode, stock_qty),
+            )
+            map_item(connection_id, child_sku, child.item_id, external_price=price)
+            pushed += 1
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            errors.append(f"{child_sku}: {exc}")
+    return pushed, failed, errors
+
+
 def _sync_catalog_to_presta_store(connection: MarketplaceConnection, connection_id: int) -> CatalogSyncResult:
-    """طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ»): دامنه‌یِ این فاز عمداً
-    محدود به کالایِ ساده است (بدونِ واریانت/تصویر) -- دقیقاً همان دامنه‌ای
-    که S1 برایِ ووکامرس داشت. کالایِ دارایِ واریانت رد می‌شود (نه خطا) و
-    در پیامِ نتیجه به کاربر اطلاع داده می‌شود."""
+    """طبقِ درخواستِ صریح («پشتیبانیِ پرستاشاپ» + «واریانت + تصویر برایِ
+    پرستاشاپ»): کالایِ ساده و کالایِ دارایِ واریانت هردو پشتیبانی
+    می‌شوند."""
     from peecha.services import commercial_pricing as pricing_service
     from peecha.services import inventory_catalog as catalog_service
 
@@ -653,17 +749,20 @@ def _sync_catalog_to_presta_store(connection: MarketplaceConnection, connection_
             skipped += 1
             continue
         children = children_by_parent.get(item.item_id, [])
-        if children:
-            skipped += 1
-            sku_label = item.sku or item.code
-            errors.append(f"{sku_label}: کالایِ دارایِ واریانت است -- پشتیبانیِ واریانت برایِ پرستاشاپ هنوز اضافه نشده (فقط ووکامرس).")
-            continue
-        if not item.is_sellable:
+        if not children and not item.is_sellable:
             skipped += 1
             continue
         sku = (item.sku or item.code or "").strip()
         if not sku:
             skipped += 1
+            continue
+        if children:
+            variant_pushed, variant_failed, variant_errors = _push_variant_product_to_presta(
+                papi, connection, connection_id, item, sku, children, price_by_item,
+            )
+            pushed += variant_pushed
+            failed += variant_failed
+            errors.extend(variant_errors)
             continue
         price = price_by_item.get(item.item_id)
         if price is None:

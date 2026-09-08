@@ -4,10 +4,16 @@
 بررسیِ PeechaSync (که پیاده‌سازیِ پرستاشاپِ خودش را صریحاً «هنوز رویِ
 فروشگاهِ واقعی تست‌نشده» علامت زده بود): این لایه با همان انضباطِ
 wc_client.py نوشته شده -- هیچ دسترسیِ مستقیمی به دیتابیسِ ERP ندارد،
-فقط پارامترهایِ ساده می‌گیرد -- ولی دامنه‌اش عمداً محدودتر از ووکامرس
-است: فقط محصولِ ساده (بدون واریانت/کامبینیشن)، دسته، مشتری، و سفارش.
-واریانت/تصویر برایِ پرستاشاپ به فازِ بعدی موکول شده -- دقیقاً همان
-تدریجی‌بودنی که برایِ ووکامرس هم رعایت شد (S1 قبل از S2).
+فقط پارامترهایِ ساده می‌گیرد. محصولِ ساده، دسته، مشتری، سفارش (S6)، و
+حالا واریانت (کامبینیشن) + تصویر (S7) پشتیبانی می‌شوند.
+
+مدلِ واریانتِ پرستاشاپ با ووکامرس فرق دارد: به‌جایِ یک attributeِ محلیِ
+سرراست، هر ویژگی باید اول یک «گروهِ ویژگی» (product_options، مثلاً
+«سایز») و بعد هر مقدار یک «مقدارِ ویژگی» (product_option_values، مثلاً
+«S») در سطحِ کلِ فروشگاه بسازد (نه فقط رویِ یک محصول) -- سپس هر واریانتِ
+واقعیِ یک محصول (combinations) به این مقدارها ارجاع می‌دهد. قیمتِ
+رویِ combination هم «افزوده» (price impact) نسبت به قیمتِ پایه‌یِ
+محصول است، نه قیمتِ مطلق.
 
 وبِ‌سرویسِ پرستاشاپ:
 - احرازِ هویت: HTTP Basic Auth با کلیدِ API به‌عنوانِ نامِ‌کاربری و
@@ -74,6 +80,13 @@ class PrestaAPI:
         return requests.put(
             self._url(resource), data=xml_body.encode("utf-8"), auth=(self.api_key, ""),
             headers={"Content-Type": "text/xml"}, timeout=self.timeout,
+        )
+
+    def post_multipart(self, resource: str, file_bytes: bytes, filename: str):
+        """آپلودِ تصویر (images/products/{id}) طبقِ مستنداتِ پرستاشاپ
+        multipart/form-data است -- نه XML مثلِ بقیه‌یِ نوشتن‌ها."""
+        return requests.post(
+            self._url(resource), files={"image": (filename, file_bytes)}, auth=(self.api_key, ""), timeout=self.timeout,
         )
 
 
@@ -279,3 +292,180 @@ def fetch_customer(papi: PrestaAPI, external_customer_id: str) -> ExternalCustom
         last_name=str(row.get("lastname") or ""),
         phone=str(row.get("phone") or row.get("phone_mobile") or ""),
     )
+
+
+# ---------------------------------------------------------------------
+# واریانت (کامبینیشن) -- طبقِ درخواستِ صریح («واریانت + تصویر برایِ
+# پرستاشاپ»). ر.ک. توضیحِ کاملِ مدلِ combinationِ پرستاشاپ در سرِ فایل.
+# ---------------------------------------------------------------------
+def find_attribute_group_by_name(papi: PrestaAPI, name: str) -> dict | None:
+    resp = retry.call_with_retry(papi.get, "product_options", params={"filter[name]": f"%[{name}]%", "display": "full"})
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"جست‌وجویِ گروهِ ویژگیِ «{name}»")
+    data = resp.json()
+    rows = (data or {}).get("product_options") or []
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        row_name = row.get("name")
+        if isinstance(row_name, list):
+            row_name = next((v.get("value") for v in row_name if isinstance(v, dict)), "")
+        if str(row_name or "").strip() == name.strip():
+            return row
+    return None
+
+
+def create_attribute_group(papi: PrestaAPI, name: str) -> dict:
+    body = (
+        "<prestashop><product_option>"
+        + _multilang_xml("name", name)
+        + _multilang_xml("public_name", name)
+        + "<group_type>select</group_type>"
+        + "</product_option></prestashop>"
+    )
+    resp = retry.call_with_retry(papi.post, "product_options", body)
+    _raise_for_status(resp, f"ایجادِ گروهِ ویژگیِ «{name}»")
+    root = ET.fromstring(resp.text)
+    id_element = root.find("./product_option/id")
+    if id_element is None or not id_element.text:
+        raise StoreAPIError(f"ایجادِ گروهِ ویژگیِ «{name}» -- پاسخِ فروشگاه فاقدِ id بود.")
+    return {"id": int(id_element.text)}
+
+
+def find_or_create_attribute_group(papi: PrestaAPI, name: str) -> int:
+    found = find_attribute_group_by_name(papi, name)
+    return int(found["id"]) if found else int(create_attribute_group(papi, name)["id"])
+
+
+def find_attribute_value_by_name(papi: PrestaAPI, group_id: int, value: str) -> dict | None:
+    resp = retry.call_with_retry(
+        papi.get, "product_option_values", params={"filter[id_attribute_group]": str(group_id), "filter[name]": f"%[{value}]%", "display": "full"},
+    )
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"جست‌وجویِ مقدارِ ویژگیِ «{value}»")
+    data = resp.json()
+    rows = (data or {}).get("product_option_values") or []
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if int(row.get("id_attribute_group") or 0) != group_id:
+            continue
+        row_name = row.get("name")
+        if isinstance(row_name, list):
+            row_name = next((v.get("value") for v in row_name if isinstance(v, dict)), "")
+        if str(row_name or "").strip() == value.strip():
+            return row
+    return None
+
+
+def create_attribute_value(papi: PrestaAPI, group_id: int, value: str) -> dict:
+    body = (
+        "<prestashop><product_option_value>"
+        + f"<id_attribute_group>{group_id}</id_attribute_group>"
+        + _multilang_xml("name", value)
+        + "</product_option_value></prestashop>"
+    )
+    resp = retry.call_with_retry(papi.post, "product_option_values", body)
+    _raise_for_status(resp, f"ایجادِ مقدارِ ویژگیِ «{value}»")
+    root = ET.fromstring(resp.text)
+    id_element = root.find("./product_option_value/id")
+    if id_element is None or not id_element.text:
+        raise StoreAPIError(f"ایجادِ مقدارِ ویژگیِ «{value}» -- پاسخِ فروشگاه فاقدِ id بود.")
+    return {"id": int(id_element.text)}
+
+
+def find_or_create_attribute_value(papi: PrestaAPI, group_id: int, value: str) -> int:
+    found = find_attribute_value_by_name(papi, group_id, value)
+    return int(found["id"]) if found else int(create_attribute_value(papi, group_id, value)["id"])
+
+
+def list_combinations(papi: PrestaAPI, product_id: int) -> list[dict]:
+    resp = retry.call_with_retry(papi.get, "combinations", params={"filter[id_product]": str(product_id), "display": "full"})
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"دریافتِ واریانت‌هایِ محصولِ #{product_id}")
+    data = resp.json()
+    rows = (data or {}).get("combinations") or []
+    return rows if isinstance(rows, list) else []
+
+
+def _build_combination_xml(product_id: int, reference: str, price_impact: str, option_value_ids: list[int], combination_id: int | None = None) -> str:
+    parts = ["<prestashop>", "<combination>"]
+    if combination_id is not None:
+        parts.append(f"<id>{combination_id}</id>")
+    parts.append(f"<id_product>{product_id}</id_product>")
+    parts.append(f"<reference><![CDATA[{reference}]]></reference>")
+    parts.append(f"<price>{price_impact}</price>")
+    parts.append("<associations><product_option_values>")
+    for value_id in option_value_ids:
+        parts.append(f"<product_option_value><id>{value_id}</id></product_option_value>")
+    parts.append("</product_option_values></associations>")
+    parts.append("</combination>")
+    parts.append("</prestashop>")
+    return "".join(parts)
+
+
+def upsert_combination(papi: PrestaAPI, product_id: int, reference: str, price_impact: str, option_value_ids: list[int], existing_combinations: list[dict]) -> dict:
+    existing = next((c for c in existing_combinations if str(c.get("reference") or "") == reference), None)
+    if existing:
+        combination_id = int(existing["id"])
+        body = _build_combination_xml(product_id, reference, price_impact, option_value_ids, combination_id=combination_id)
+        resp = retry.call_with_retry(papi.put, f"combinations/{combination_id}", body)
+        _raise_for_status(resp, f"به‌روزرسانیِ واریانتِ {reference}")
+        return {"id": combination_id}
+    body = _build_combination_xml(product_id, reference, price_impact, option_value_ids)
+    resp = retry.call_with_retry(papi.post, "combinations", body)
+    _raise_for_status(resp, f"ایجادِ واریانتِ {reference}")
+    root = ET.fromstring(resp.text)
+    id_element = root.find("./combination/id")
+    if id_element is None or not id_element.text:
+        raise StoreAPIError(f"ایجادِ واریانتِ {reference} -- پاسخِ فروشگاه فاقدِ id بود.")
+    return {"id": int(id_element.text)}
+
+
+def find_combination_stock_available_id(papi: PrestaAPI, product_id: int, combination_id: int) -> int | None:
+    resp = retry.call_with_retry(
+        papi.get, "stock_availables", params={"filter[id_product]": str(product_id), "filter[id_product_attribute]": str(combination_id)},
+    )
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"جست‌وجویِ موجودیِ واریانتِ #{combination_id}")
+    data = resp.json()
+    rows = (data or {}).get("stock_availables") or []
+    if not isinstance(rows, list) or not rows:
+        return None
+    return int(rows[0]["id"])
+
+
+def update_combination_stock_quantity(papi: PrestaAPI, product_id: int, combination_id: int, quantity: int) -> None:
+    stock_id = find_combination_stock_available_id(papi, product_id, combination_id)
+    if stock_id is None:
+        raise StoreAPIError(f"واریانتِ #{combination_id} در فروشگاه هیچ رکوردِ موجودیِ متناظری ندارد.")
+    body = (
+        f"<prestashop><stock_available><id>{stock_id}</id><id_product>{product_id}</id_product>"
+        f"<id_product_attribute>{combination_id}</id_product_attribute><quantity>{quantity}</quantity></stock_available></prestashop>"
+    )
+    resp = retry.call_with_retry(papi.put, f"stock_availables/{stock_id}", body)
+    _raise_for_status(resp, f"به‌روزرسانیِ موجودیِ واریانتِ #{combination_id}")
+
+
+def upload_product_image(papi: PrestaAPI, product_id: int, file_bytes: bytes, filename: str) -> dict:
+    """طبقِ مستنداتِ پرستاشاپ: برخلافِ ووکامرس (که تصویر را جدا آپلود و
+    بعد به محصول متصل می‌کند)، این‌جا خودِ آپلود مستقیماً به محصول متصل
+    می‌شود -- یک مرحله‌ای."""
+    resp = retry.call_with_retry(papi.post_multipart, f"images/products/{product_id}", file_bytes, filename)
+    _raise_for_status(resp, f"آپلودِ تصویرِ محصولِ #{product_id}")
+    root = ET.fromstring(resp.text)
+    id_element = root.find("./image/id")
+    if id_element is None or not id_element.text:
+        raise StoreAPIError(f"آپلودِ تصویرِ محصولِ #{product_id} -- پاسخِ فروشگاه فاقدِ id بود.")
+    return {"id": int(id_element.text)}
+
+
+def product_has_images(papi: PrestaAPI, product_id: int) -> bool:
+    resp = retry.call_with_retry(papi.get, f"images/products/{product_id}")
+    if resp.status_code == 404:
+        return False
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"بررسیِ تصویرِ محصولِ #{product_id}")
+    data = resp.json()
+    rows = (data or {}).get("declination") or (data or {}).get("image") or []
+    return bool(rows)
