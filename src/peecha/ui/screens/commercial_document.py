@@ -101,6 +101,12 @@ STATUS_LABELS = {
 # امانیِ خروجی از نظرِ طرفِ‌حساب (مشتری/نماینده) و کانالِ فروش، هم‌الگویِ
 # اسنادِ فروش است.
 _SALES_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN", "CONSIGNMENT_OUT")
+# طبقِ درخواستِ صریح («اگر اجازهٔ موجودیِ منفی نباشد فقط متغیرهایی که
+# موجودی دارند نشان داده شوند»): این فیلترِ موجودی فقط برایِ اسنادی معنا
+# دارد که واقعاً موجودی را کم می‌کنند -- نه اسنادی که موجودی را اضافه
+# می‌کنند (خرید/برگشت از فروش/امانیِ ورودی)، چون آن‌جا نبودِ موجودیِ
+# فعلی اصلاً محدودیت نیست (دقیقاً برایِ همین دارید کالا وارد می‌کنید).
+_STOCK_OUTBOUND_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "CONSIGNMENT_OUT", "PURCHASE_RETURN")
 # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل شود»):
 # امانیِ خروجی/ورودی هم از همین مکانیزم (تبدیلِ مرحله‌ایِ مانده به فاکتورِ
 # واقعیِ فروش/خرید) استفاده می‌کنند.
@@ -560,6 +566,9 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self._main_window = main_window
         self._decimal_places = decimal_places
         self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        self._is_new_row = initial is None
+        self._default_warehouse_id = default_warehouse_id
+        self._warehouses_by_id = {w.warehouse_id: w for w in (warehouses or [])}
         layout = QVBoxLayout(self)
         self._items_by_id = {it.item_id: it for it in items}
         # طبقِ درخواستِ صریح («کالایِ اصلیِ دارایِ متغیر نباید مستقیم در
@@ -582,6 +591,29 @@ class _LineDialog(LayoutEditMixin, QDialog):
         add_quick_add_button(item_row_layout, self.item_combo, main_window, "GL_DIM", "تعریفِ کالایِ تازه")
 
         self.variant_combo = _make_searchable_combo([])
+        # طبقِ درخواستِ صریح («وقتی کالای دارایِ چند متغیر را وارد
+        # می‌کنیم، لیستِ متغیرها نمایش داده شود... جلویِ هر متغیر مقدارِ
+        # خرید/فروش را وارد کنیم»): برایِ ردیفِ *تازه* (نه ویرایشِ ردیفِ
+        # ازپیش‌ذخیره‌شده -- که همچنان تک‌متغیره است و از همان
+        # variant_combo بالا استفاده می‌کند)، به‌جایِ انتخابِ یک‌به‌یکِ
+        # متغیر از کمبو، یک جدول با تمامِ متغیرهایِ مجاز نمایش داده
+        # می‌شود و کاربر می‌تواند هم‌زمان برایِ چند متغیر مقدار وارد کند
+        # -- هرکدام یک ردیفِ جداگانه در سند می‌شود.
+        self.variant_table = QTableWidget(0, 3)
+        self.variant_table.setHorizontalHeaderLabels(["متغیر", "موجودی", "مقدار"])
+        self.variant_table.verticalHeader().setVisible(False)
+        self.variant_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.variant_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.variant_table.setMaximumHeight(180)
+        self.variant_table.setVisible(False)
+        self._variant_table_item_ids: list[int] = []
+
+        self.variant_area = QWidget()
+        variant_area_layout = QVBoxLayout(self.variant_area)
+        variant_area_layout.setContentsMargins(0, 0, 0, 0)
+        variant_area_layout.setSpacing(4)
+        variant_area_layout.addWidget(self.variant_combo)
+        variant_area_layout.addWidget(self.variant_table)
 
         stock_row_widget = QWidget()
         stock_row_layout = QHBoxLayout(stock_row_widget)
@@ -658,7 +690,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.warehouse_combo: _EnterComboBox | None = None
         field_specs = [
             FieldSpec("item", "کالا", item_row_widget, span=2),
-            FieldSpec("variant", "متغیرِ کالا", self.variant_combo, span=1),
+            FieldSpec("variant", "متغیرِ کالا", self.variant_area, span=3),
             FieldSpec("stock_info", "", stock_row_widget, span=3),
             FieldSpec("quantity", "مقدار (واحدِ پایهٔ کالا)", self.quantity_field, span=1),
             FieldSpec("unit_price", "بهایِ واحد (پیشنهادی از فهرستِ قیمت — قابلِ‌ویرایش)", self.unit_price_field, span=1),
@@ -725,7 +757,6 @@ class _LineDialog(LayoutEditMixin, QDialog):
         _enter_signal(self.variant_combo).connect(self.quantity_field.setFocus)
         self.item_combo.setFocus()
 
-        self._is_new_row = initial is None
         self._price_manually_edited = False
         self.unit_price_field.textEdited.connect(self._on_price_edited_manually)
         self.item_combo.currentIndexChanged.connect(self._on_item_combo_changed)
@@ -795,23 +826,96 @@ class _LineDialog(LayoutEditMixin, QDialog):
         ثبت شود؛ متغیرش انتخاب شود»): کالایِ *واقعیِ* این ردیف -- اگر
         کالایِ انتخاب‌شده در کمبویِ اصلی دارایِ متغیر باشد، این همان
         متغیرِ انتخاب‌شده در کمبویِ دوم است (یا None اگر هنوز انتخاب
-        نشده)، وگرنه همان کالایِ کمبویِ اصلی."""
+        نشده)، وگرنه همان کالایِ کمبویِ اصلی. در حالتِ جدولیِ چندمتغیره
+        (bulk_variant_mode) این تابع بی‌معناست -- آن‌جا هر ردیفِ جدول
+        کالایِ خودش را دارد، نه یک کالایِ واحد."""
         parent_id = self.item_combo.currentData()
         if parent_id in self._variant_parent_ids:
             return self.variant_combo.currentData()
         return parent_id
 
+    def _bulk_variant_mode(self) -> bool:
+        """طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): فقط
+        برایِ ردیفِ *تازه* (نه ویرایشِ ردیفِ ازپیش‌ذخیره‌شده -- که ذاتاً
+        تک‌کالایی است) و فقط وقتی کالایِ انتخاب‌شده خودش دارایِ متغیر
+        باشد."""
+        return self._is_new_row and self.item_combo.currentData() in self._variant_parent_ids
+
+    def _effective_warehouse_id(self) -> int | None:
+        if self.warehouse_combo is not None:
+            warehouse_id = self.warehouse_combo.currentData()
+            if warehouse_id is not None:
+                return warehouse_id
+        return self._default_warehouse_id
+
+    def _allow_negative_stock(self) -> bool:
+        warehouse = self._warehouses_by_id.get(self._effective_warehouse_id())
+        return bool(warehouse.fields.allow_negative_stock) if warehouse is not None else False
+
+    def _populate_variant_table(self, parent_id: int) -> None:
+        """طبقِ درخواستِ صریح («اگر اجازهٔ موجودیِ منفی باشد لیستِ همهٔ
+        متغیرها و اگر نباشد فقط آن‌هایی که موجودی دارند نشان داده
+        شود»): فیلترِ موجودی فقط برایِ اسنادی اعمال می‌شود که موجودی را
+        کم می‌کنند (_STOCK_OUTBOUND_TYPES) -- برایِ خرید/برگشت از خرید و
+        امانیِ ورودی، همیشه همه‌یِ متغیرها نشان داده می‌شوند."""
+        variants = variants_service.list_item_variants(self._company_id, parent_id)
+        stock_by_item: dict[int, decimal.Decimal] = {}
+        warehouse_id = self._effective_warehouse_id()
+        for v in variants:
+            rows = engine_service.get_item_stock_by_warehouse(self._company_id, v.variant_item_id)
+            if warehouse_id is not None:
+                stock_by_item[v.variant_item_id] = next(
+                    (r.quantity_on_hand for r in rows if r.warehouse_id == warehouse_id), decimal.Decimal(0),
+                )
+            else:
+                stock_by_item[v.variant_item_id] = sum((r.quantity_on_hand for r in rows), decimal.Decimal(0))
+
+        if self._document_type_code in _STOCK_OUTBOUND_TYPES and not self._allow_negative_stock():
+            variants = [v for v in variants if stock_by_item.get(v.variant_item_id, decimal.Decimal(0)) > 0]
+
+        self._variant_table_item_ids = [v.variant_item_id for v in variants]
+        self.variant_table.setRowCount(len(variants))
+        for row, v in enumerate(variants):
+            label = f"{v.code} — {v.attribute_labels or v.name or ''}"
+            self.variant_table.setItem(row, 0, QTableWidgetItem(label))
+            stock_item = QTableWidgetItem(numerals.format_money(stock_by_item.get(v.variant_item_id, decimal.Decimal(0)), 3))
+            stock_item.setTextAlignment(Qt.AlignCenter)
+            self.variant_table.setItem(row, 1, stock_item)
+            qty_field = _AmountField()
+            qty_field.setDecimals(3)
+            qty_field.valueChanged.connect(self._on_selection_changed)
+            self.variant_table.setCellWidget(row, 2, qty_field)
+        self.status_label.setText("" if variants else "هیچ متغیری با موجودیِ مثبت برایِ این کالا یافت نشد.")
+
+    def _variant_table_quantity(self, row: int) -> decimal.Decimal:
+        widget = self.variant_table.cellWidget(row, 2)
+        if widget is None:
+            return decimal.Decimal(0)
+        return decimal.Decimal(str(widget.value()))
+
     def _update_variant_options(self) -> None:
         parent_id = self.item_combo.currentData()
-        if parent_id in self._variant_parent_ids:
+        if parent_id not in self._variant_parent_ids:
+            _fill_options(self.variant_combo, [])
+            self.variant_table.setRowCount(0)
+            self.fields_grid.set_field_visible("variant", False)
+            return
+
+        if self._bulk_variant_mode():
+            self.variant_combo.setVisible(False)
+            self.variant_table.setVisible(True)
+            self._populate_variant_table(parent_id)
+            self.fields_grid.set_field_visible("variant", True)
+            self.variant_table.setFocus()
+        else:
+            self.variant_combo.setVisible(True)
+            self.variant_table.setVisible(False)
+            self.variant_table.setRowCount(0)
             variants = variants_service.list_item_variants(self._company_id, parent_id)
             variant_options = [(v.variant_item_id, f"{v.code} — {v.attribute_labels or v.name or ''}") for v in variants]
             _fill_options(self.variant_combo, variant_options)
             self.fields_grid.set_field_visible("variant", True)
             self.variant_combo.setFocus()
-        else:
-            _fill_options(self.variant_combo, [])
-            self.fields_grid.set_field_visible("variant", False)
 
     def _on_item_combo_changed(self) -> None:
         self._update_variant_options()
@@ -827,6 +931,25 @@ class _LineDialog(LayoutEditMixin, QDialog):
         (قبل از انتخابِ خودِ متغیر)، بلافاصله فیلدهایِ ورودِ اطلاعات و
         دکمهٔ تایید غیرفعال و پیامِ خطا نمایش داده می‌شود -- نه اینکه
         کاربر همه‌چیز را پر کند و فقط با زدنِ تایید متوجهِ رد شدن شود."""
+        bulk = self._bulk_variant_mode()
+        # طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): در حالتِ
+        # جدولی، فیلدِ مقدار/بهایِ واحدِ مشترک اصلاً معنا ندارد (هر ردیفِ
+        # جدول مقدارِ خودش را دارد و قیمت هم به‌صورتِ خودکار به‌ازایِ هر
+        # متغیر محاسبه می‌شود) -- پس پنهان می‌شوند، نه فقط غیرفعال.
+        self.fields_grid.set_field_visible("quantity", not bulk)
+        self.fields_grid.set_field_visible("unit_price", not bulk)
+        if bulk:
+            for widget in (self.discount_field, self.tax_percent_field, self.description_field):
+                widget.setEnabled(True)
+            if self.warehouse_combo is not None:
+                self.warehouse_combo.setEnabled(True)
+            self.discount_type_combo.setEnabled(not self._lock_discount)
+            has_any_qty = any(self._variant_table_quantity(row) > 0 for row in range(self.variant_table.rowCount()))
+            self.ok_button.setEnabled(has_any_qty)
+            if self.variant_table.rowCount() > 0:
+                self.status_label.setText("" if has_any_qty else "برایِ حداقل یک متغیر مقدار وارد کنید.")
+            return
+
         parent_id = self.item_combo.currentData()
         needs_variant = parent_id in self._variant_parent_ids and self.variant_combo.currentData() is None
         entry_widgets = [
@@ -851,10 +974,14 @@ class _LineDialog(LayoutEditMixin, QDialog):
         """طبقِ درخواستِ صریح: درصدِ مالیات با اولویتِ کالا -> تنظیماتِ
         کلیِ شرکت پیش‌پر می‌شود — فقط برایِ ردیفِ *تازه* (initial=None)،
         نه هنگامِ ویرایشِ ردیفِ ازپیش‌ذخیره‌شده که مقدارِ ثبت‌شده‌اش را
-        نباید بازنویسی کند."""
+        نباید بازنویسی کند. در حالتِ جدولیِ چندمتغیره، تک‌کالایی معنا
+        ندارد -- هر ردیفِ جدول بهایِ خودش را در result_fields_list
+        جداگانه می‌گیرد."""
         self._update_entry_state()
-        item_id = self._selected_item_id()
         self._refresh_stock_info()
+        if self._bulk_variant_mode():
+            return
+        item_id = self._selected_item_id()
         if item_id is None:
             return
         default_tax = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
@@ -966,7 +1093,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         تخمینی، حاشیهٔ سود در قیمتِ فعلی، حداکثرِ تخفیفِ مجاز (طبقِ
         حداقلِ حاشیهٔ سودِ تنظیم‌شده در تنظیماتِ بازرگانی)، و هشدارِ زنده
         اگر تخفیفِ واردشده سود را زیرِ آن حد ببرد."""
-        if self._document_type_code not in _SALES_TYPES:
+        if self._document_type_code not in _SALES_TYPES or self._bulk_variant_mode():
             self.price_suggestion_label.setVisible(False)
             return
         item_id = self._selected_item_id()
@@ -1021,6 +1148,15 @@ class _LineDialog(LayoutEditMixin, QDialog):
         if parent_id is None:
             self.status_label.setText("کالا را انتخاب کنید.")
             return
+        if self._bulk_variant_mode():
+            # طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): در
+            # حالتِ جدولی، کافی‌ست حداقل یک ردیف مقدار داشته باشد -- بقیه
+            # نادیده گرفته می‌شوند (result_fields_list خودش فیلتر می‌کند).
+            if not any(self._variant_table_quantity(row) > 0 for row in range(self.variant_table.rowCount())):
+                self.status_label.setText("برایِ حداقل یک متغیر مقدار وارد کنید.")
+                return
+            self.accept()
+            return
         # طبقِ درخواستِ صریح («کالایِ اصلیِ دارایِ متغیر نباید اجازه‌یِ
         # ثبت مستقیم بدهد»): اگر کالا خودش دارایِ متغیر است، انتخابِ یکی
         # از متغیرها الزامی است -- بدونِ آن، ثبتِ ردیف رد می‌شود.
@@ -1031,6 +1167,52 @@ class _LineDialog(LayoutEditMixin, QDialog):
             self.status_label.setText("مقدار باید بزرگ‌تر از صفر باشد.")
             return
         self.accept()
+
+    def result_fields_list(self) -> list[dict]:
+        """طبقِ درخواستِ صریح («جلویِ هر متغیر مقدارِ خرید/فروش را وارد
+        کنیم»): در حالتِ جدولیِ چندمتغیره، به‌ازایِ هر متغیرِ دارایِ
+        مقدارِ مثبت یک ردیفِ کاملاً مستقل برمی‌گردد -- بهایِ واحد و
+        درصدِ مالیات به‌صورتِ خودکار برایِ همان متغیرِ خاص محاسبه
+        می‌شوند (نه یک مقدارِ مشترک برایِ همه)؛ فقط تخفیف/توضیح/انبار
+        بینِ همه‌یِ ردیف‌هایِ تولیدشده مشترک است. برایِ حالتِ عادی (کالایِ
+        بدونِ متغیر، یا ویرایشِ یک ردیفِ ازپیش‌ذخیره‌شده)، همان یک نتیجهٔ
+        result_fields در یک لیستِ تک‌عضوی برمی‌گردد."""
+        if not self._bulk_variant_mode():
+            return [self.result_fields()]
+        is_percent_discount = self.discount_type_combo.currentData() == "PERCENT"
+        discount_value = decimal.Decimal(str(self.discount_field.value()))
+        warehouse_id = self.warehouse_combo.currentData() if self.warehouse_combo is not None else None
+        description = self.description_field.text().strip() or None
+        results = []
+        for row, item_id in enumerate(self._variant_table_item_ids):
+            quantity = self._variant_table_quantity(row)
+            if quantity <= 0:
+                continue
+            item = self._items_by_id.get(item_id)
+            unit_price = None
+            if self._counterparty_id is not None and self._document_type_code is not None and item is not None:
+                try:
+                    resolved = pricing_service.resolve_price(
+                        self._company_id, self._counterparty_id, item_id, item.base_uom_id, quantity,
+                        self._price_list_id, self._document_type_code, self._document_date,
+                    )
+                    unit_price = resolved.unit_price
+                except ValueError:
+                    unit_price = None
+            tax_percent = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
+            results.append({
+                "item_id": item_id,
+                "uom_id": item.base_uom_id if item else 0,
+                "quantity": quantity,
+                "quantity_base": quantity,
+                "unit_price": unit_price,
+                "discount_amount": decimal.Decimal(0) if is_percent_discount else discount_value,
+                "discount_percent": discount_value if is_percent_discount else decimal.Decimal(0),
+                "tax_percent": tax_percent,
+                "description": description,
+                "warehouse_id": warehouse_id,
+            })
+        return results
 
     def result_fields(self) -> dict:
         item_id = self._selected_item_id()
@@ -2734,16 +2916,42 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         if dialog.exec() != QDialog.Accepted:
             return
-        fields = dialog.result_fields()
-        try:
-            documents_service.add_line(self._document_id, self._company_id(), **fields)
-        except ValueError as exc:
-            QMessageBox.warning(self, "خطا", str(exc))
+        fields_list = dialog.result_fields_list()
+        company_id = self._company_id()
+        if len(fields_list) == 1:
+            fields = fields_list[0]
+            try:
+                documents_service.add_line(self._document_id, company_id, **fields)
+            except ValueError as exc:
+                QMessageBox.warning(self, "خطا", str(exc))
+                return
+            self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
+            self._load_document()
+            self._refresh_cross_sell_suggestion(fields.get("item_id"))
+            self._refresh_upsell_suggestion(fields.get("item_id"))
             return
-        self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
+
+        # طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): افزودنِ
+        # هم‌زمانِ چند ردیف (یکی به‌ازایِ هر متغیرِ واردشده) -- بهترین‌تلاش:
+        # خطایِ یک ردیف بقیه را متوقف نمی‌کند، در پایان جمعِ خطاها نشان
+        # داده می‌شود.
+        errors = []
+        last_item_id = None
+        for fields in fields_list:
+            try:
+                documents_service.add_line(self._document_id, company_id, **fields)
+                last_item_id = fields.get("item_id")
+                self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
+            except ValueError as exc:
+                item = next((it for it in self._items if it.item_id == fields.get("item_id")), None)
+                label = f"{item.code} — {item.name or ''}" if item else str(fields.get("item_id"))
+                errors.append(f"{label}: {exc}")
         self._load_document()
-        self._refresh_cross_sell_suggestion(fields.get("item_id"))
-        self._refresh_upsell_suggestion(fields.get("item_id"))
+        if last_item_id is not None:
+            self._refresh_cross_sell_suggestion(last_item_id)
+            self._refresh_upsell_suggestion(last_item_id)
+        if errors:
+            QMessageBox.warning(self, "خطا در برخی ردیف‌ها", "\n".join(errors))
 
     def _refresh_customer_summary(self) -> None:
         """طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند»): خلاصه‌یِ وضعیتِ همان
