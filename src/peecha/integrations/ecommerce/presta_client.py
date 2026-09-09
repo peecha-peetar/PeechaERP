@@ -125,6 +125,34 @@ def find_product_by_reference(papi: PrestaAPI, reference: str) -> dict | None:
     return rows[0]
 
 
+def list_all_products(papi: PrestaAPI, limit: int = 1000) -> list[dict]:
+    """طبقِ درخواستِ صریح («تطبیقِ کاتالوگ»): برایِ ساختنِ صفحه‌یِ تطبیقِ
+    کالایِ فروشگاه/ERP لازم است کلِ کاتالوگِ فروشگاه خوانده شود. طبقِ
+    محدودیتِ عملیِ وب‌سرویسِ پرستاشاپ، یک سقفِ منطقیِ تعدادِ ردیف (limit)
+    گرفته می‌شود -- برایِ فروشگاه‌هایِ بسیار بزرگ، صفحه‌بندیِ کامل فازِ
+    بعدی است."""
+    resp = retry.call_with_retry(papi.get, "products", params={"display": "full", "limit": str(limit)})
+    if resp.status_code >= 400:
+        _raise_for_status(resp, "دریافتِ فهرستِ محصولاتِ فروشگاه")
+    data = resp.json()
+    rows = (data or {}).get("products") or []
+    return rows if isinstance(rows, list) else []
+
+
+def localized_text(value) -> str:
+    """طبقِ مستنداتِ پرستاشاپ: فیلدِ چندزبانه (مثلِ name) بسته به تنظیماتِ
+    فروشگاه یا یک رشته‌یِ ساده است، یا فهرستی از {id, value}، یا حتی یک
+    آبجکتِ تکی -- هر سه حالت این‌جا پوشش داده می‌شود."""
+    if isinstance(value, list):
+        for entry in value:
+            if isinstance(entry, dict) and entry.get("value"):
+                return entry["value"]
+        return ""
+    if isinstance(value, dict):
+        return value.get("value") or ""
+    return value or ""
+
+
 def _multilang_xml(tag: str, value: str, language_id: int = _DEFAULT_LANGUAGE_ID) -> str:
     escaped = (value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return f'<{tag}><language id="{language_id}"><![CDATA[{escaped}]]></language></{tag}>'

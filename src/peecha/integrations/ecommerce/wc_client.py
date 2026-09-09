@@ -77,6 +77,26 @@ def find_product_by_sku(wcapi: API, sku: str) -> dict | None:
     return rows[0]
 
 
+def list_all_products(wcapi: API, per_page: int = 100, max_pages: int = 100) -> list[dict]:
+    """طبقِ درخواستِ صریح («تطبیقِ کاتالوگ»): برایِ ساختنِ صفحه‌یِ تطبیقِ
+    کالایِ فروشگاه/ERP لازم است کلِ کاتالوگِ فروشگاه (نه یک SKUِ خاص)
+    خوانده شود -- صفحه‌به‌صفحه، مشابهِ list_variations."""
+    result: list[dict] = []
+    page = 1
+    while page <= max_pages:
+        resp = retry.call_with_retry(wcapi.get, "products", params={"per_page": per_page, "page": page})
+        if resp.status_code >= 400:
+            _raise_for_status(resp, "دریافتِ فهرستِ محصولاتِ فروشگاه")
+        rows = resp.json()
+        if not isinstance(rows, list) or not rows:
+            break
+        result.extend(rows)
+        if len(rows) < per_page:
+            break
+        page += 1
+    return result
+
+
 def upsert_product(wcapi: API, sku: str, payload: dict) -> dict:
     """محصولِ SKU مشخص را اگر از قبل در فروشگاه هست به‌روزرسانی می‌کند،
     وگرنه می‌سازد. برمی‌گرداند: دیکشنریِ خامِ محصولِ ذخیره‌شده (شاملِ id)."""

@@ -38,6 +38,7 @@ _SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "نام�
 _STRATEGY_LABELS = {"MOST_STOCK": "بیشترین موجودی", "REGION_MATCH": "تطبیقِ منطقه", "LOWEST_COST": "کمترین هزینه", "FIXED_WAREHOUSE": "انبارِ ثابت"}
 _PRICING_SCOPE_LABELS = {"BRAND": "برند", "CATEGORY": "دسته"}
 _PRICING_MARKUP_LABELS = {"PERCENT": "درصد", "AMOUNT": "مبلغ"}
+_RECONCILIATION_STATUS_LABELS = {"MATCHED": "نگاشته‌شده", "STORE_ONLY": "فقط در فروشگاه", "ERP_ONLY": "فقط در ERP"}
 
 
 class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
@@ -61,6 +62,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         tabs.addTab(self._build_pricing_tab(), "استودیویِ قیمت")
         tabs.addTab(self._build_bulk_assign_tab(), "تخصیصِ گروهیِ دسته/برند")
         tabs.addTab(self._build_gallery_tab(), "گالریِ تصاویرِ فروشگاه")
+        tabs.addTab(self._build_reconciliation_tab(), "تطبیقِ کاتالوگ")
         outer.addWidget(tabs, stretch=1)
 
     def _company_id(self) -> int | None:
@@ -311,6 +313,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self._refresh_bulk_assign_combos()
         self._refresh_bulk_assign_table()
         self._refresh_gallery_connections()
+        self._refresh_reconciliation_connections()
 
     def _on_connection_selected(self, row: int, _column: int) -> None:
         self._selected_connection_id = self.connections_table.item(row, 0).data(Qt.UserRole)
@@ -891,3 +894,99 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
             return
         theme.set_status_label(self.gallery_status_label, "تصویر از فروشگاه حذف شد.", ok=True)
         self._load_product_gallery()
+
+    # --- تطبیقِ کاتالوگ (Catalog Reconciliation) ----------------------------
+    def _build_reconciliation_tab(self) -> QWidget:
+        """طبقِ درخواستِ صریحِ کاربر: کلِ کاتالوگِ فروشگاه در برابرِ کلِ
+        کاتالوگِ ERP -- کالاهایی که فقط در فروشگاه‌اند (با پیشنهادِ خودکار)،
+        کالاهایی که فقط در ERPاند، و کالاهایِ از قبل نگاشته‌شده."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.addWidget(QLabel("کلِ کاتالوگِ فروشگاه را با کالاهایِ ERP تطبیق می‌دهد -- برایِ نگاشتنِ کالاهایی که فقط در یک طرف دیده می‌شوند."))
+
+        form = QHBoxLayout()
+        self.reconciliation_connection_combo = QComboBox()
+        form.addWidget(self.reconciliation_connection_combo, stretch=1)
+        load_reconciliation_button = QPushButton("🔄  بارگذاریِ تطبیق")
+        load_reconciliation_button.setObjectName("primaryIconButton")
+        load_reconciliation_button.clicked.connect(self._load_reconciliation)
+        form.addWidget(load_reconciliation_button)
+        outer.addLayout(form)
+
+        self.reconciliation_table = QTableWidget(0, 5)
+        self.reconciliation_table.setHorizontalHeaderLabels(["وضعیت", "SKU/کد", "نام", "کالایِ ERP / SKUِ فروشگاه", ""])
+        self.reconciliation_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.reconciliation_table.verticalHeader().setVisible(False)
+        self.reconciliation_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        outer.addWidget(self.reconciliation_table, stretch=1)
+
+        self.reconciliation_status_label = QLabel("")
+        self.reconciliation_status_label.setObjectName("statusError")
+        outer.addWidget(self.reconciliation_status_label)
+        return wrap_scrollable(page)
+
+    def _refresh_reconciliation_connections(self) -> None:
+        current = self.reconciliation_connection_combo.currentData()
+        self.reconciliation_connection_combo.clear()
+        for c in self._connections:
+            self.reconciliation_connection_combo.addItem(f"{_PLATFORM_LABELS.get(c.platform_code, c.platform_code)} — {c.store_url}", c.connection_id)
+        index = self.reconciliation_connection_combo.findData(current)
+        if index >= 0:
+            self.reconciliation_connection_combo.setCurrentIndex(index)
+        self.reconciliation_table.setRowCount(0)
+
+    def _load_reconciliation(self) -> None:
+        connection_id = self.reconciliation_connection_combo.currentData()
+        if connection_id is None:
+            self.reconciliation_status_label.setText("ابتدا یک اتصال را انتخاب کنید.")
+            return
+        try:
+            entries = ecommerce_service.compute_catalog_reconciliation(connection_id)
+        except ValueError as exc:
+            self.reconciliation_status_label.setText(str(exc))
+            return
+        items_by_id = {it.item_id: it for it in self._items}
+        self.reconciliation_table.setRowCount(len(entries))
+        for row_index, entry in enumerate(entries):
+            self.reconciliation_table.setItem(row_index, 0, QTableWidgetItem(_RECONCILIATION_STATUS_LABELS.get(entry.status, entry.status)))
+            self.reconciliation_table.setItem(row_index, 1, QTableWidgetItem(entry.external_sku))
+            self.reconciliation_table.setItem(row_index, 2, QTableWidgetItem(entry.external_name))
+            if entry.status == "MATCHED":
+                mapped_item = items_by_id.get(entry.item_id)
+                label = f"{mapped_item.code} — {mapped_item.name or ''}" if mapped_item else str(entry.item_id)
+                self.reconciliation_table.setItem(row_index, 3, QTableWidgetItem(label))
+                continue
+            if entry.status == "STORE_ONLY":
+                item_combo = QComboBox()
+                item_combo.addItem("(انتخاب کنید)", None)
+                for it in self._items:
+                    item_combo.addItem(f"{it.code} — {it.name or ''}", it.item_id)
+                if entry.suggested_item_id is not None:
+                    item_combo.setCurrentIndex(max(0, item_combo.findData(entry.suggested_item_id)))
+                self.reconciliation_table.setCellWidget(row_index, 3, item_combo)
+                map_button = QPushButton("🔗")
+                map_button.setObjectName("primaryIconButton")
+                map_button.clicked.connect(
+                    lambda _checked=False, sku=entry.external_sku, combo=item_combo: self._map_reconciliation_row(connection_id, sku, combo.currentData())
+                )
+                self.reconciliation_table.setCellWidget(row_index, 4, map_button)
+                continue
+            # ERP_ONLY -- external_sku این‌جا کدِ خودِ کالایِ ERP است؛ اگر SKUِ
+            # واقعیِ فروشگاه فرق دارد، کاربر می‌تواند این‌جا اصلاحش کند.
+            sku_field = QLineEdit(entry.external_sku)
+            self.reconciliation_table.setCellWidget(row_index, 3, sku_field)
+            map_button = QPushButton("🔗")
+            map_button.setObjectName("primaryIconButton")
+            map_button.clicked.connect(
+                lambda _checked=False, item_id=entry.item_id, field=sku_field: self._map_reconciliation_row(connection_id, field.text().strip(), item_id)
+            )
+            self.reconciliation_table.setCellWidget(row_index, 4, map_button)
+        self.reconciliation_status_label.setText("")
+
+    def _map_reconciliation_row(self, connection_id: int, external_sku: str, item_id: int | None) -> None:
+        if not external_sku or item_id is None:
+            self.reconciliation_status_label.setText("هم SKU و هم کالایِ ERP باید مشخص باشند.")
+            return
+        ecommerce_service.map_item(connection_id, external_sku, item_id)
+        theme.set_status_label(self.reconciliation_status_label, f"«{external_sku}» نگاشته شد.", ok=True)
+        self._load_reconciliation()

@@ -447,6 +447,78 @@ def delete_product_image(connection_id: int, external_sku: str, image_id: int) -
     wc_client.remove_product_image(store_client, int(product["id"]), image_id)
 
 
+# ---------------------------------------------------------------------
+# تطبیقِ کاتالوگ (Catalog Reconciliation) -- طبقِ درخواستِ صریحِ کاربر
+# ---------------------------------------------------------------------
+@dataclass
+class ReconciliationEntry:
+    external_sku: str
+    external_name: str
+    status: str  # MATCHED | STORE_ONLY | ERP_ONLY
+    item_id: int | None
+    suggested_item_id: int | None = None
+
+
+def compute_catalog_reconciliation(connection_id: int) -> list[ReconciliationEntry]:
+    """طبقِ درخواستِ صریحِ کاربر («تطبیقِ کالایِ ووکامرس/پرستاشاپ و ERP...
+    مثلِ برنامه‌یِ همگام‌ساز»): برخلافِ نگاشتِ تک‌به‌تکِ موجود (فیلدِ SKU
+    در تبِ اتصالات)، این‌جا کلِ کاتالوگِ فروشگاه در برابرِ کلِ کاتالوگِ
+    ERP قرار می‌گیرد -- سه وضعیت: نگاشته‌شده، فقط‌در‌فروشگاه (با
+    پیشنهادِ خودکار اگر SKU/کدش با یک کالایِ ERP یکی باشد)، فقط‌در‌ERP."""
+    from peecha.services import inventory_catalog as catalog_service
+
+    connection = _get_connection(connection_id)
+    store_client = _build_store_client(connection)
+    existing_mappings = {m.external_sku: m.item_id for m in list_item_mappings(connection_id)}
+    items = catalog_service.list_items(connection.company_id)
+    items_by_code = {(it.sku or it.code or "").strip().lower(): it for it in items if (it.sku or it.code)}
+
+    entries: list[ReconciliationEntry] = []
+    seen_skus: set[str] = set()
+
+    if connection.platform_code == "PRESTASHOP":
+        from peecha.integrations.ecommerce import presta_client
+
+        for product in presta_client.list_all_products(store_client):
+            sku = str(product.get("reference") or "").strip()
+            if not sku:
+                continue
+            seen_skus.add(sku)
+            name = presta_client.localized_text(product.get("name"))
+            _append_reconciliation_entry(entries, existing_mappings, items_by_code, sku, name)
+    else:
+        from peecha.integrations.ecommerce import wc_client
+
+        for product in wc_client.list_all_products(store_client):
+            sku = str(product.get("sku") or "").strip()
+            if not sku:
+                continue
+            seen_skus.add(sku)
+            _append_reconciliation_entry(entries, existing_mappings, items_by_code, sku, product.get("name") or "")
+
+    mapped_item_ids = set(existing_mappings.values())
+    for it in items:
+        code = (it.sku or it.code or "").strip()
+        if not code or code in seen_skus or it.item_id in mapped_item_ids:
+            continue
+        entries.append(ReconciliationEntry(external_sku=code, external_name=it.name or "", status="ERP_ONLY", item_id=it.item_id))
+    return entries
+
+
+def _append_reconciliation_entry(entries: list, existing_mappings: dict, items_by_code: dict, sku: str, name: str) -> None:
+    mapped_item_id = existing_mappings.get(sku)
+    if mapped_item_id is not None:
+        entries.append(ReconciliationEntry(external_sku=sku, external_name=name, status="MATCHED", item_id=mapped_item_id))
+        return
+    suggested = items_by_code.get(sku.lower())
+    entries.append(
+        ReconciliationEntry(
+            external_sku=sku, external_name=name, status="STORE_ONLY", item_id=None,
+            suggested_item_id=suggested.item_id if suggested else None,
+        )
+    )
+
+
 def _variant_attribute_map(item_ids: list[int]) -> dict[int, dict[str, str]]:
     """طبقِ ویژگیِ «واریانت» -- برایِ هر متغیر، نگاشتِ نامِ ویژگی به مقدارش
     (مثلاً {«سایز»: «M»، «رنگ»: «قرمز»}) که مستقیماً شکلِ attributeِ
