@@ -900,3 +900,36 @@ class DailyKpiSnapshot(Base):
     near_expiry_value: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     critical_reorder_count: Mapped[int] = mapped_column(default=0)
     open_reservations_value: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+
+
+# =======================================================================
+# بارگیریِ خودرو (R129) -- معادلِ 136_field_sales_foundation.sql
+# =======================================================================
+class VehicleLoading(Base):
+    __tablename__ = "vehicle_loadings"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_loading_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    source_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    loading_date: Mapped[datetime.date] = mapped_column(Date)
+    status_code: Mapped[str] = mapped_column(String(15), default="DRAFT")
+    stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
+    driver_confirmed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    driver_confirmed_at: Mapped[datetime.datetime | None]
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class VehicleLoadingLine(Base):
+    __tablename__ = "vehicle_loading_lines"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_loading_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    vehicle_loading_id: Mapped[int] = mapped_column(ForeignKey("inv.vehicle_loadings.vehicle_loading_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    planned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    available_quantity_at_planning: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))

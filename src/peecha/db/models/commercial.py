@@ -587,6 +587,10 @@ class CustomerProfile(Base):
     distribution_route_detail_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("acc.detail_accounts.detail_account_id")
     )
+    # طبقِ درخواستِ صریح («فاصله از موقعیتِ مشتری» در چک‌این): مختصاتِ
+    # ثبت‌شدهٔ خودِ فروشگاه/محلِ کسبِ مشتری (R129).
+    gps_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    gps_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
     status_code: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     onboarding_source_code: Mapped[str | None] = mapped_column(String(15))
     is_tax_exempt: Mapped[bool] = mapped_column(default=False)
@@ -1467,3 +1471,92 @@ class SmartPublishSettings(Base):
     stamp_text_enabled: Mapped[bool] = mapped_column(default=False)
     stamp_text_source: Mapped[str] = mapped_column(String(20), default="item_code")
     webp_quality: Mapped[int] = mapped_column(default=80)
+
+
+# =======================================================================
+# زیرساختِ میدانیِ پخشِ سرد/گرم (R129) -- معادلِ 136_field_sales_foundation.sql
+# =======================================================================
+class VisitPlan(Base):
+    __tablename__ = "visit_plans"
+    __table_args__ = (UniqueConstraint("customer_detail_account_id", "visit_day_of_week"), {"schema": "comm"})
+
+    visit_plan_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    visit_day_of_week: Mapped[int] = mapped_column(SmallInteger)
+    sequence_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+    assigned_visitor_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CustomerVisit(Base):
+    __tablename__ = "customer_visits"
+    __table_args__ = ({"schema": "comm"},)
+
+    customer_visit_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    visit_plan_id: Mapped[int | None] = mapped_column(ForeignKey("comm.visit_plans.visit_plan_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    visitor_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="IN_PROGRESS")
+    skip_reason: Mapped[str | None] = mapped_column(String(200))
+    checked_in_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    checked_out_at: Mapped[datetime.datetime | None]
+    check_in_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    check_in_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    distance_from_customer_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class DeliveryConfirmation(Base):
+    __tablename__ = "delivery_confirmations"
+    __table_args__ = (UniqueConstraint("document_id"), {"schema": "comm"})
+
+    delivery_confirmation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    customer_visit_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.customer_visits.customer_visit_id"))
+    confirmed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    confirmed_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    received_by_name: Mapped[str | None] = mapped_column(String(150))
+    signature_storage_key: Mapped[str | None] = mapped_column(String(300))
+    photo_storage_key: Mapped[str | None] = mapped_column(String(300))
+    gps_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    gps_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class DeliveryConfirmationLine(Base):
+    __tablename__ = "delivery_confirmation_lines"
+    __table_args__ = ({"schema": "comm"},)
+
+    delivery_confirmation_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    delivery_confirmation_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("comm.delivery_confirmations.delivery_confirmation_id")
+    )
+    document_line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
+    delivered_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    shortage_reason: Mapped[str | None] = mapped_column(String(200))
+
+
+class PromotionRule(Base):
+    __tablename__ = "promotion_rules"
+    __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "comm"})
+
+    promotion_rule_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    promotion_type_code: Mapped[str] = mapped_column(String(20))
+    channel_type_code: Mapped[str | None] = mapped_column(String(15))
+    applies_to_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    buy_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    get_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    get_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    threshold_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    discount_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    valid_from: Mapped[datetime.date | None]
+    valid_to: Mapped[datetime.date | None]
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

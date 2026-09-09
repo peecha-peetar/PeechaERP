@@ -201,6 +201,7 @@ _CUSTOMER_DETAIL_FIELD_KEYS = ("economic_code", "national_id", "phone", "mobile"
 _CUSTOMER_PROFILE_FIELD_KEYS = (
     "customer_group_id", "default_price_list_id", "default_channel_code", "payment_term_days",
     "credit_limit_amount", "is_tax_exempt", "distribution_route_detail_account_id",
+    "gps_latitude", "gps_longitude",
 )
 
 
