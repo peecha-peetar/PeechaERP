@@ -82,6 +82,9 @@ class PrestaAPI:
             headers={"Content-Type": "text/xml"}, timeout=self.timeout,
         )
 
+    def delete(self, resource: str):
+        return requests.delete(self._url(resource), auth=(self.api_key, ""), timeout=self.timeout)
+
     def post_multipart(self, resource: str, file_bytes: bytes, filename: str):
         """آپلودِ تصویر (images/products/{id}) طبقِ مستنداتِ پرستاشاپ
         multipart/form-data است -- نه XML مثلِ بقیه‌یِ نوشتن‌ها."""
@@ -402,6 +405,15 @@ def _build_combination_xml(product_id: int, reference: str, price_impact: str, o
     parts.append("</combination>")
     parts.append("</prestashop>")
     return "".join(parts)
+
+
+def delete_combination(papi: PrestaAPI, combination_id: int) -> None:
+    """طبقِ رفعِ باگِ واقعیِ ساختاری («تبدیلِ کالایِ واریانت‌دار به سادهٔ در
+    ERP»): بدونِ حذفِ صریحِ combinationِ باقی‌مانده، فروشگاه همچنان
+    انتخابگرِ واریانت را نشان می‌دهد در حالی‌که در ERP این کالا دیگر
+    واریانت ندارد."""
+    resp = retry.call_with_retry(papi.delete, f"combinations/{combination_id}")
+    _raise_for_status(resp, f"حذفِ واریانتِ #{combination_id}")
 
 
 def upsert_combination(papi: PrestaAPI, product_id: int, reference: str, price_impact: str, option_value_ids: list[int], existing_combinations: list[dict]) -> dict:

@@ -177,6 +177,17 @@ def list_variations(wcapi: API, parent_id: int, per_page: int = 100, max_pages: 
     return result
 
 
+def delete_variation(wcapi: API, parent_id: int, variation_id: int) -> None:
+    """طبقِ رفعِ باگِ واقعیِ ساختاری («تبدیلِ کالایِ واریانت‌دار به سادهٔ در
+    ERP»): وقتی محصولی که قبلاً «متغیر» بوده در سینکِ بعدی دیگر هیچ
+    فرزندی ندارد، واریانت‌هایِ باقی‌مانده در فروشگاه یتیم می‌شوند و
+    ووکامرس (چون هنوز type=variable است) قیمتِ خودِ محصول را نادیده
+    می‌گیرد -- پس باید صریحاً حذف شوند (force=true چون ووکامرس واریانت‌ها
+    را در زباله‌دان نگه نمی‌دارد)."""
+    resp = retry.call_with_retry(wcapi.delete, f"products/{parent_id}/variations/{variation_id}", params={"force": True})
+    _raise_for_status(resp, f"حذفِ واریانتِ #{variation_id}")
+
+
 def upsert_variation(wcapi: API, parent_id: int, sku: str, payload: dict, existing_variations: list[dict]) -> dict:
     existing = next((v for v in existing_variations if str(v.get("sku") or "") == sku), None)
     body = dict(payload)

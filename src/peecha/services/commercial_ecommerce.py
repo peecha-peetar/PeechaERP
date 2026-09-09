@@ -505,6 +505,7 @@ def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id
     price = apply_pricing_markup(connection_id, item, price)
     payload = {
         "name": item.name or sku,
+        "type": "simple",
         "regular_price": _format_store_price(price),
         "status": "publish" if item.is_active else "draft",
     }
@@ -513,8 +514,21 @@ def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id
     if category_external_id:
         payload["categories"] = [{"id": category_external_id}]
     data = wc_client.upsert_product(wcapi, sku, payload)
+    _delete_orphaned_variations(wcapi, data["id"])
     _attach_photo_if_missing(wcapi, connection, data["id"], item.item_detail_account_id, wp_creds, bool(data.get("images")))
     map_item(connection_id, sku, item.item_id, external_price=price)
+
+
+def _delete_orphaned_variations(wcapi, parent_id: int) -> None:
+    """طبقِ رفعِ باگِ واقعیِ ساختاری: اگر این کالا در سینکِ قبلی «متغیر»
+    بوده و حالا در ERP دیگر هیچ متغیری ندارد، این‌جا به‌عنوانِ محصولِ
+    ساده سینک می‌شود -- ولی بدونِ این پاک‌سازی، واریانت‌هایِ قدیمیِ
+    فروشگاه یتیم می‌مانند و ووکامرس (به‌خاطرِ وجودِ همین واریانت‌ها)
+    قیمتِ سطحِ محصول را نادیده می‌گیرد."""
+    from peecha.integrations.ecommerce import wc_client
+
+    for variation in wc_client.list_variations(wcapi, parent_id):
+        wc_client.delete_variation(wcapi, parent_id, variation["id"])
 
 
 def _push_variant_product(
@@ -713,6 +727,8 @@ def _push_simple_product_to_presta(papi, connection: MarketplaceConnection, conn
     if category_external_id:
         fields["id_category_default"] = category_external_id
     data = presta_client.upsert_product(papi, sku, fields)
+    for combination in presta_client.list_combinations(papi, data["id"]):
+        presta_client.delete_combination(papi, combination["id"])
     presta_client.update_stock_quantity(papi, data["id"], _effective_stock_quantity(item.ecommerce_stock_mode, stock_qty))
     _attach_presta_photo_if_missing(papi, connection, data["id"], item.item_detail_account_id, presta_client.product_has_images(papi, data["id"]))
     map_item(connection_id, sku, item.item_id, external_price=price)
