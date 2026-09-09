@@ -122,6 +122,24 @@ def cancel_post(post_id: int) -> None:
         session.commit()
 
 
+def _record_connection_health(connection_id: int, error_message: str | None) -> None:
+    """طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): هم‌الگو با
+    commercial_ecommerce._record_connection_health -- شکستِ پیاپیِ
+    ارسالِ پستِ خودکار قبل از این کاملاً بی‌صدا بود."""
+    with new_session() as session:
+        row = session.get(SocialConnection, connection_id)
+        if row is None:
+            return
+        row.last_checked_at = datetime.datetime.now(datetime.timezone.utc)
+        if error_message is None:
+            row.consecutive_failure_count = 0
+            row.last_error_message = None
+        else:
+            row.consecutive_failure_count += 1
+            row.last_error_message = error_message
+        session.commit()
+
+
 def send_post_now(post_id: int) -> None:
     """طبقِ رفعِ باگِ واقعیِ بالقوه (هم‌الگو با انضباطِ سینکِ فروشِ
     اینترنتی): وضعیت همیشه صریحاً به SENT یا FAILED به‌روزرسانی می‌شود --
@@ -136,12 +154,14 @@ def send_post_now(post_id: int) -> None:
     try:
         send_message_now(connection_id, text)
     except Exception as exc:  # noqa: BLE001 -- شکستِ ارسال نباید استثنایِ خام بالا برود
+        _record_connection_health(connection_id, str(exc))
         with new_session() as session:
             row = session.get(ContentCalendarPost, post_id)
             row.status_code = "FAILED"
             row.error_message = str(exc)
             session.commit()
         raise
+    _record_connection_health(connection_id, None)
     with new_session() as session:
         row = session.get(ContentCalendarPost, post_id)
         row.status_code = "SENT"

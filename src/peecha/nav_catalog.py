@@ -127,6 +127,9 @@ NAV_ITEMS = [
             # طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («مرکزِ رسانه»): کتابخانه‌یِ
             # مشترکِ عکس/فایلِ شرکت برایِ استفاده‌یِ دوباره در محتوا.
             {"code": "SALES_MEDIA_CENTER", "label": "مرکزِ رسانه", "screen": "media_center"},
+            # طبقِ ادامه‌یِ اولویت‌بندی (بخشِ عملیاتی -- «نگهبانِ اتصال»):
+            # نمایِ سلامتِ اتصال‌هایِ فروشگاهی/تلگرام/بله.
+            {"code": "SALES_CONNECTIVITY_GUARD", "label": "نگهبانِ اتصال", "screen": "connectivity_guard"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
@@ -347,6 +350,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("SALES_CONTENT_CALENDAR", "📅"),
         ("SALES_CMS_CONTENT", "📰"),
         ("SALES_MEDIA_CENTER", "🖼️"),
+        ("SALES_CONNECTIVITY_GUARD", "🛡️"),
         ("SALES_AFTERSALES", "🎧"),
     ],
     "PURCH": [

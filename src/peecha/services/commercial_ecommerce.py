@@ -1249,6 +1249,26 @@ class AutoSyncTickResult:
     error_message: str | None
 
 
+def _record_connection_health(connection_id: int, error_message: str | None) -> None:
+    """طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): قبل از این، شکستِ
+    تیکِ خودکارِ سینک کاملاً بی‌صدا رد می‌شد -- نه در دیتابیس اثری
+    می‌گذاشت، نه به کاربر نشان داده می‌شد. حالا هر تیک (موفق یا ناموفق)
+    این‌جا ثبت می‌شود؛ شکستِ پیاپی صفحه‌یِ «نگهبانِ اتصال» را قرمز
+    می‌کند، موفقیت شمارنده را صفر می‌کند."""
+    with new_session() as session:
+        row = session.get(MarketplaceConnection, connection_id)
+        if row is None:
+            return
+        row.last_checked_at = datetime.datetime.now(datetime.timezone.utc)
+        if error_message is None:
+            row.consecutive_failure_count = 0
+            row.last_error_message = None
+        else:
+            row.consecutive_failure_count += 1
+            row.last_error_message = error_message
+        session.commit()
+
+
 def run_due_auto_syncs(company_id: int, created_by_user_id: int, currency_id: int, now: datetime.datetime | None = None) -> list[AutoSyncTickResult]:
     """طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینک»): تیکِ دوره‌ایِ برنامه
     (مثلاً یک تایمرِ Qt در سطحِ پنجرهٔ اصلی) این تابع را صدا می‌زند --
@@ -1259,8 +1279,10 @@ def run_due_auto_syncs(company_id: int, created_by_user_id: int, currency_id: in
     for connection in list_due_auto_sync_connections(company_id, now):
         try:
             result = sync_now(connection.connection_id, created_by_user_id, currency_id)
+            _record_connection_health(connection.connection_id, None)
             results.append(AutoSyncTickResult(connection_id=connection.connection_id, result=result, error_message=None))
         except Exception as exc:  # noqa: BLE001 -- شکستِ یک اتصال نباید بقیه را متوقف کند
+            _record_connection_health(connection.connection_id, str(exc))
             results.append(AutoSyncTickResult(connection_id=connection.connection_id, result=None, error_message=str(exc)))
     return results
 

@@ -1422,6 +1422,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_social import CommercialSocialScreen
         from peecha.ui.screens.commercial_cms import CommercialCmsScreen
         from peecha.ui.screens.media_center import MediaCenterScreen
+        from peecha.ui.screens.connectivity_guard import ConnectivityGuardScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
         from peecha.ui.screens.commercial_pos_approval import CommercialPosApprovalScreen
@@ -1542,6 +1543,7 @@ class MainWindow(QMainWindow):
         self.register_screen("commercial_social", CommercialSocialScreen())
         self.register_screen("commercial_cms", CommercialCmsScreen())
         self.register_screen("media_center", MediaCenterScreen())
+        self.register_screen("connectivity_guard", ConnectivityGuardScreen())
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
         self.register_screen("commercial_pos_approval", CommercialPosApprovalScreen())

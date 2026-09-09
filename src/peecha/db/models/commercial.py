@@ -855,6 +855,11 @@ class MarketplaceConnection(Base):
     last_synced_at: Mapped[datetime.datetime | None]
     auto_sync_enabled: Mapped[bool] = mapped_column(default=False)
     auto_sync_interval_minutes: Mapped[int] = mapped_column(default=60)
+    # طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): تیکِ اتوسینک شکست‌هایِ
+    # پیاپی را این‌جا ثبت می‌کند تا صفحه‌یِ نگهبان بتواند نشانشان دهد.
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
 
 
 class EcommercePricingRule(Base):
@@ -1323,6 +1328,10 @@ class SocialConnection(Base):
     chat_id: Mapped[str] = mapped_column(String(100))
     bot_token_encrypted: Mapped[bytes | None]
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): هم‌الگو با MarketplaceConnection.
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
 
 
 class ContentCalendarPost(Base):
