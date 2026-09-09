@@ -90,6 +90,17 @@ def upsert_product(wcapi: API, sku: str, payload: dict) -> dict:
     return _raise_for_status(resp, f"ایجادِ محصولِ {sku}")
 
 
+def remove_product_image(wcapi: API, product_id: int, image_id: int) -> dict:
+    """طبقِ درخواستِ صریح (پورتِ «مدیرِ تصاویرِ سایت»ِ PeechaSync): فقط
+    همان عکس از گالریِ محصول حذف می‌شود (نه از کتابخانه‌یِ رسانه‌یِ
+    وردپرس) -- چون ممکن است همان فایل جایِ دیگری هم استفاده شده باشد."""
+    resp = retry.call_with_retry(wcapi.get, f"products/{product_id}")
+    product = _raise_for_status(resp, f"دریافتِ محصولِ #{product_id}")
+    remaining = [{"id": img["id"]} for img in (product.get("images") or []) if int(img["id"]) != image_id]
+    resp = retry.call_with_retry(wcapi.put, f"products/{product_id}", {"images": remaining})
+    return _raise_for_status(resp, f"حذفِ تصویرِ #{image_id} از محصولِ #{product_id}")
+
+
 def find_category_by_name(wcapi: API, name: str, parent_external_id: int | None) -> dict | None:
     resp = retry.call_with_retry(wcapi.get, "products/categories", params={"search": name, "per_page": 100})
     if resp.status_code >= 400:

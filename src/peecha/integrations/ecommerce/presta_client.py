@@ -536,3 +536,25 @@ def product_has_images(papi: PrestaAPI, product_id: int) -> bool:
     data = resp.json()
     rows = (data or {}).get("declination") or (data or {}).get("image") or []
     return bool(rows)
+
+
+def list_product_image_ids(papi: PrestaAPI, product_id: int) -> list[int]:
+    """طبقِ درخواستِ صریح (پورتِ «مدیرِ تصاویرِ سایت»ِ PeechaSync): برایِ
+    نمایشِ فهرستِ تصاویرِ واقعیِ یک محصول در فروشگاه (نه فقط بررسیِ
+    بودن/نبودن). پاسخِ این endpoint یا یک آبجکتِ تکی یا فهرستی از
+    آبجکت‌هاست -- هردو حالت پوشش داده می‌شود."""
+    resp = retry.call_with_retry(papi.get, f"images/products/{product_id}")
+    if resp.status_code == 404:
+        return []
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"دریافتِ تصاویرِ محصولِ #{product_id}")
+    data = resp.json()
+    rows = (data or {}).get("image") or (data or {}).get("declination") or []
+    if isinstance(rows, dict):
+        rows = [rows]
+    return [int(row["id"]) for row in rows if isinstance(row, dict) and "id" in row]
+
+
+def delete_product_image(papi: PrestaAPI, product_id: int, image_id: int) -> None:
+    resp = retry.call_with_retry(papi.delete, f"images/products/{product_id}/{image_id}")
+    _raise_for_status(resp, f"حذفِ تصویرِ #{image_id} از محصولِ #{product_id}")

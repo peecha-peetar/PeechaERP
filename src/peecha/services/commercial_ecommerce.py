@@ -398,6 +398,55 @@ def _client_module_for_platform(platform_code: str):
     return wc_client
 
 
+@dataclass
+class ProductImageInfo:
+    image_id: int
+    url: str | None
+
+
+def list_product_images(connection_id: int, external_sku: str) -> list[ProductImageInfo]:
+    """طبقِ درخواستِ صریح (پورتِ «مدیرِ تصاویرِ سایت»ِ PeechaSync): فهرستِ
+    واقعیِ عکس‌هایِ یک محصول در فروشگاه -- برایِ اینکه کاربر بدونِ ورود
+    به پنلِ فروشگاه بتواند یک عکسِ خاص را حذف کند."""
+    connection = _get_connection(connection_id)
+    store_client = _build_store_client(connection)
+    if connection.platform_code == "PRESTASHOP":
+        from peecha.integrations.ecommerce import presta_client
+
+        product = presta_client.find_product_by_reference(store_client, external_sku)
+        if product is None:
+            raise ValueError("محصول در فروشگاه یافت نشد.")
+        return [
+            ProductImageInfo(image_id=image_id, url=None)
+            for image_id in presta_client.list_product_image_ids(store_client, int(product["id"]))
+        ]
+    from peecha.integrations.ecommerce import wc_client
+
+    product = wc_client.find_product_by_sku(store_client, external_sku)
+    if product is None:
+        raise ValueError("محصول در فروشگاه یافت نشد.")
+    return [ProductImageInfo(image_id=int(img["id"]), url=img.get("src")) for img in (product.get("images") or [])]
+
+
+def delete_product_image(connection_id: int, external_sku: str, image_id: int) -> None:
+    connection = _get_connection(connection_id)
+    store_client = _build_store_client(connection)
+    if connection.platform_code == "PRESTASHOP":
+        from peecha.integrations.ecommerce import presta_client
+
+        product = presta_client.find_product_by_reference(store_client, external_sku)
+        if product is None:
+            raise ValueError("محصول در فروشگاه یافت نشد.")
+        presta_client.delete_product_image(store_client, int(product["id"]), image_id)
+        return
+    from peecha.integrations.ecommerce import wc_client
+
+    product = wc_client.find_product_by_sku(store_client, external_sku)
+    if product is None:
+        raise ValueError("محصول در فروشگاه یافت نشد.")
+    wc_client.remove_product_image(store_client, int(product["id"]), image_id)
+
+
 def _variant_attribute_map(item_ids: list[int]) -> dict[int, dict[str, str]]:
     """طبقِ ویژگیِ «واریانت» -- برایِ هر متغیر، نگاشتِ نامِ ویژگی به مقدارش
     (مثلاً {«سایز»: «M»، «رنگ»: «قرمز»}) که مستقیماً شکلِ attributeِ

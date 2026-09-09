@@ -60,6 +60,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         tabs.addTab(self._build_routing_tab(), "مسیریابیِ سفارش")
         tabs.addTab(self._build_pricing_tab(), "استودیویِ قیمت")
         tabs.addTab(self._build_bulk_assign_tab(), "تخصیصِ گروهیِ دسته/برند")
+        tabs.addTab(self._build_gallery_tab(), "گالریِ تصاویرِ فروشگاه")
         outer.addWidget(tabs, stretch=1)
 
     def _company_id(self) -> int | None:
@@ -309,6 +310,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self._refresh_pricing_connections()
         self._refresh_bulk_assign_combos()
         self._refresh_bulk_assign_table()
+        self._refresh_gallery_connections()
 
     def _on_connection_selected(self, row: int, _column: int) -> None:
         self._selected_connection_id = self.connections_table.item(row, 0).data(Qt.UserRole)
@@ -798,3 +800,94 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         )
         theme.set_status_label(self.bulk_assign_status_label, f"{count} کالا به‌روزرسانی شد.", ok=True)
         self.refresh()
+
+    # --- گالریِ تصاویرِ فروشگاه ---------------------------------------------
+    def _build_gallery_tab(self) -> QWidget:
+        """طبقِ درخواستِ صریح (پورتِ «مدیرِ تصاویرِ سایت»ِ PeechaSync): سینکِ
+        کاتالوگ فقط وقتی محصول هیچ تصویری ندارد یکی آپلود می‌کند -- این‌جا
+        کاربر می‌تواند بدونِ ورود به پنلِ فروشگاه، تصاویرِ واقعیِ یک
+        محصول را ببیند و یک تصویرِ خاص را حذف کند."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+
+        form = QHBoxLayout()
+        self.gallery_connection_combo = QComboBox()
+        self.gallery_connection_combo.currentIndexChanged.connect(lambda _index: self._refresh_gallery_skus())
+        form.addWidget(self.gallery_connection_combo, stretch=1)
+        self.gallery_sku_combo = QComboBox()
+        form.addWidget(self.gallery_sku_combo, stretch=1)
+        load_gallery_button = QPushButton("🔄")
+        load_gallery_button.setObjectName("iconButton")
+        load_gallery_button.setFixedWidth(44)
+        load_gallery_button.setToolTip("بارگذاریِ تصاویرِ این محصول از فروشگاه")
+        load_gallery_button.clicked.connect(self._load_product_gallery)
+        form.addWidget(load_gallery_button)
+        outer.addLayout(form)
+
+        self.gallery_table = QTableWidget(0, 3)
+        self.gallery_table.setHorizontalHeaderLabels(["شناسه", "آدرس", ""])
+        self.gallery_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.gallery_table.verticalHeader().setVisible(False)
+        self.gallery_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        outer.addWidget(self.gallery_table, stretch=1)
+
+        self.gallery_status_label = QLabel("")
+        self.gallery_status_label.setObjectName("statusError")
+        outer.addWidget(self.gallery_status_label)
+        return wrap_scrollable(page)
+
+    def _refresh_gallery_connections(self) -> None:
+        current = self.gallery_connection_combo.currentData()
+        self.gallery_connection_combo.clear()
+        for c in self._connections:
+            self.gallery_connection_combo.addItem(f"{_PLATFORM_LABELS.get(c.platform_code, c.platform_code)} — {c.store_url}", c.connection_id)
+        index = self.gallery_connection_combo.findData(current)
+        if index >= 0:
+            self.gallery_connection_combo.setCurrentIndex(index)
+        self._refresh_gallery_skus()
+
+    def _refresh_gallery_skus(self) -> None:
+        connection_id = self.gallery_connection_combo.currentData()
+        self.gallery_sku_combo.clear()
+        self.gallery_table.setRowCount(0)
+        if connection_id is None:
+            return
+        items_by_id = {it.item_id: it for it in self._items}
+        for m in ecommerce_service.list_item_mappings(connection_id):
+            item = items_by_id.get(m.item_id)
+            label = f"{m.external_sku} — {item.name}" if item else m.external_sku
+            self.gallery_sku_combo.addItem(label, m.external_sku)
+
+    def _load_product_gallery(self) -> None:
+        connection_id = self.gallery_connection_combo.currentData()
+        external_sku = self.gallery_sku_combo.currentData()
+        if connection_id is None or external_sku is None:
+            self.gallery_status_label.setText("ابتدا اتصال و SKU را انتخاب کنید.")
+            return
+        try:
+            images = ecommerce_service.list_product_images(connection_id, external_sku)
+        except ValueError as exc:
+            self.gallery_status_label.setText(str(exc))
+            return
+        self.gallery_table.setRowCount(len(images))
+        for row_index, img in enumerate(images):
+            self.gallery_table.setItem(row_index, 0, QTableWidgetItem(str(img.image_id)))
+            self.gallery_table.setItem(row_index, 1, QTableWidgetItem(img.url or ""))
+            delete_button = QPushButton("🗑️")
+            delete_button.setObjectName("dangerIconButton")
+            delete_button.clicked.connect(lambda _checked=False, image_id=img.image_id: self._delete_gallery_image(image_id))
+            self.gallery_table.setCellWidget(row_index, 2, delete_button)
+        self.gallery_status_label.setText("")
+
+    def _delete_gallery_image(self, image_id: int) -> None:
+        connection_id = self.gallery_connection_combo.currentData()
+        external_sku = self.gallery_sku_combo.currentData()
+        if connection_id is None or external_sku is None:
+            return
+        try:
+            ecommerce_service.delete_product_image(connection_id, external_sku, image_id)
+        except ValueError as exc:
+            self.gallery_status_label.setText(str(exc))
+            return
+        theme.set_status_label(self.gallery_status_label, "تصویر از فروشگاه حذف شد.", ok=True)
+        self._load_product_gallery()
