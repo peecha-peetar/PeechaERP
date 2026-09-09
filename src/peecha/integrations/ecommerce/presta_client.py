@@ -160,8 +160,9 @@ def _multilang_xml(tag: str, value: str, language_id: int = _DEFAULT_LANGUAGE_ID
 
 def _build_product_xml(reference: str, fields: dict, product_id: int | None = None) -> str:
     """``fields`` می‌تواند شامل: name, price (رشته/عدد، بدونِ مالیات),
-    active (0/1), id_category_default (اختیاری) باشد. طبقِ مستنداتِ
-    وب‌سرویسِ پرستاشاپ، name یک فیلدِ چندزبانه است."""
+    active (0/1), id_category_default (اختیاری)، و طبقِ درخواستِ صریح
+    («قسمتِ سئو») link_rewrite/meta_title/meta_description/meta_keywords
+    باشد. طبقِ مستنداتِ وب‌سرویسِ پرستاشاپ، همه‌یِ این فیلدها چندزبانه‌اند."""
     parts = ["<prestashop>", "<product>"]
     if product_id is not None:
         parts.append(f"<id>{product_id}</id>")
@@ -174,6 +175,14 @@ def _build_product_xml(reference: str, fields: dict, product_id: int | None = No
         parts.append(f"<active>{1 if fields['active'] else 0}</active>")
     if fields.get("id_category_default"):
         parts.append(f"<id_category_default>{int(fields['id_category_default'])}</id_category_default>")
+    if fields.get("link_rewrite"):
+        parts.append(_multilang_xml("link_rewrite", str(fields["link_rewrite"])))
+    if fields.get("meta_title"):
+        parts.append(_multilang_xml("meta_title", str(fields["meta_title"])))
+    if fields.get("meta_description"):
+        parts.append(_multilang_xml("meta_description", str(fields["meta_description"])))
+    if fields.get("meta_keywords"):
+        parts.append(_multilang_xml("meta_keywords", str(fields["meta_keywords"])))
     parts.append("</product>")
     parts.append("</prestashop>")
     return "".join(parts)

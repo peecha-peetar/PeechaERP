@@ -618,6 +618,44 @@ def _apply_sale_price(payload: dict, company_id: int, base_price: decimal.Decima
     payload["sale_price"] = _format_store_price(sale_price) if sale_price is not None else ""
 
 
+def _apply_wc_seo(payload: dict, item) -> None:
+    """طبقِ درخواستِ صریحِ کاربر («قسمتِ سئو»): فیلدهایِ سئویِ خودِ کالا
+    (که در فرمِ کالا از قبل وجود داشتند) این‌جا به فروشگاه فرستاده
+    می‌شوند -- نامکِ آدرس با فیلدِ بومیِ slug، و عنوان/توضیحات/کلیدواژه
+    با meta_data (هم کلیدهایِ Yoast، هم Rank Math، چون معلوم نیست
+    کدام‌یک رویِ فروشگاه نصب است -- افزونه‌یِ نصب‌نشده کلیدِ خودش را
+    نادیده می‌گیرد)."""
+    if item.seo_url_slug:
+        payload["slug"] = item.seo_url_slug
+    meta_data = []
+    if item.seo_title:
+        meta_data.append({"key": "_yoast_wpseo_title", "value": item.seo_title})
+        meta_data.append({"key": "rank_math_title", "value": item.seo_title})
+    if item.seo_meta_description:
+        meta_data.append({"key": "_yoast_wpseo_metadesc", "value": item.seo_meta_description})
+        meta_data.append({"key": "rank_math_description", "value": item.seo_meta_description})
+    if item.seo_meta_keywords:
+        meta_data.append({"key": "_yoast_wpseo_focuskw", "value": item.seo_meta_keywords})
+    if meta_data:
+        payload["meta_data"] = meta_data
+
+
+def _presta_seo_fields(item) -> dict:
+    """معادلِ _apply_wc_seo برایِ پرستاشاپ -- این‌جا نیازی به حدس‌زدنِ
+    افزونه نیست، چون link_rewrite/meta_title/meta_description/
+    meta_keywords فیلدهایِ بومیِ خودِ محصول‌اند."""
+    fields = {}
+    if item.seo_url_slug:
+        fields["link_rewrite"] = item.seo_url_slug
+    if item.seo_title:
+        fields["meta_title"] = item.seo_title
+    if item.seo_meta_description:
+        fields["meta_description"] = item.seo_meta_description
+    if item.seo_meta_keywords:
+        fields["meta_keywords"] = item.seo_meta_keywords
+    return fields
+
+
 def _apply_presta_sale_price(papi, product_id: int, company_id: int, base_price: decimal.Decimal, product_attribute_id: int = 0) -> None:
     """طبقِ تکمیلِ توازیِ پرستاشاپ با ووکامرس -- S3 قیمتِ حراج را فقط برایِ
     ووکامرس اضافه کرده بود. پرستاشاپ به‌جایِ فیلدِ ساده‌یِ sale_price، از
@@ -647,6 +685,7 @@ def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id
     }
     _apply_stock_mode(payload, item.ecommerce_stock_mode, stock_qty)
     _apply_sale_price(payload, connection.company_id, price)
+    _apply_wc_seo(payload, item)
     if category_external_id:
         payload["categories"] = [{"id": category_external_id}]
     data = wc_client.upsert_product(wcapi, sku, payload)
@@ -699,6 +738,7 @@ def _push_variant_product(
         "status": "publish" if item.is_active else "draft",
         "attributes": [{"name": name, "variation": True, "options": options} for name, options in attribute_options.items()],
     }
+    _apply_wc_seo(parent_payload, item)
     if category_external_id:
         parent_payload["categories"] = [{"id": category_external_id}]
     try:
@@ -860,6 +900,7 @@ def _push_simple_product_to_presta(papi, connection: MarketplaceConnection, conn
     category_external_id = _resolve_category_external_id(papi, "PRESTASHOP", connection_id, item.category_id)
     price = apply_pricing_markup(connection_id, item, price)
     fields = {"name": item.name or sku, "price": _format_store_price(price), "active": item.is_active}
+    fields.update(_presta_seo_fields(item))
     if category_external_id:
         fields["id_category_default"] = category_external_id
     data = presta_client.upsert_product(papi, sku, fields)
@@ -894,6 +935,7 @@ def _push_variant_product_to_presta(
     base_price = apply_pricing_markup(connection_id, item, price_by_item[priced_children[0].item_id])
     category_external_id = _resolve_category_external_id(papi, "PRESTASHOP", connection_id, item.category_id)
     fields = {"name": item.name or sku, "price": _format_store_price(base_price), "active": item.is_active}
+    fields.update(_presta_seo_fields(item))
     if category_external_id:
         fields["id_category_default"] = category_external_id
     try:
