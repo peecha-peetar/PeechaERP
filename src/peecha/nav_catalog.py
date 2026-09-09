@@ -250,6 +250,11 @@ NAV_ITEMS = [
                 "label": "فروش",
                 "children": [
                     {
+                        "code": "REPORTS_SALES_BY_ITEM",
+                        "label": "گزارشِ فروش",
+                        "screen": "report_sales",
+                    },
+                    {
                         "code": "REPORTS_CUSTOMER_PROFIT",
                         "label": "سودِ واقعیِ مشتریان",
                         "screen": "report_customer_profit",
@@ -381,6 +386,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("REPORTS_ANOMALIES", "⚠️"),
         ("REPORTS_COST_CENTER", "🏗️"),
         ("REPORTS_ITEM_LEDGER", "📋"),
+        ("REPORTS_SALES_BY_ITEM", "🛍️"),
         ("REPORTS_CUSTOMER_PROFIT", "💹"),
         ("REPORTS_SALES_FORECAST", "🔮"),
     ],

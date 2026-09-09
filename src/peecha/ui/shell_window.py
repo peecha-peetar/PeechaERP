@@ -1442,6 +1442,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_cost_center_breakdown import CostCenterBreakdownScreen
         from peecha.ui.screens.report_custom_statement import CustomStatementScreen
         from peecha.ui.screens.report_customer_profit import CustomerProfitScreen
+        from peecha.ui.screens.report_sales import SalesReportScreen
         from peecha.ui.screens.report_equity_changes import EquityChangesScreen
         from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen
         from peecha.ui.screens.report_income_statement import IncomeStatementScreen
@@ -1603,6 +1604,7 @@ class MainWindow(QMainWindow):
         self.register_screen("report_period_comparison", PeriodComparisonScreen())
         self.register_screen("report_item_ledger", ItemLedgerScreen())
         self.register_screen("report_anomalies", AnomaliesScreen())
+        self.register_screen("report_sales", SalesReportScreen())
         self.register_screen("report_customer_profit", CustomerProfitScreen())
         self.register_screen("report_sales_forecast", SalesForecastScreen())
 

@@ -1915,6 +1915,64 @@ def compute_customer_profit(
 
 
 @dataclass
+class SalesReportRow:
+    item_id: int
+    item_name: str
+    quantity_sold: decimal.Decimal
+    invoice_count: int
+    net_revenue: decimal.Decimal
+
+
+def compute_sales_report_by_item(
+    company_id: int, date_from: datetime.date, date_to: datetime.date,
+) -> list[SalesReportRow]:
+    """طبقِ ادامه‌یِ اولویت‌بندی («گزارشِ فروش»): برخلافِ سودِ واقعیِ
+    مشتری (که مشتری-محور است)، این گزارش کالا-محور است -- تعدادِ فروخته‌
+    شده، تعدادِ فاکتور، و فروشِ خالص (بدونِ مالیات) به‌ازایِ هر کالا در
+    بازه‌یِ تاریخِ داده‌شده."""
+    with new_session() as session:
+        stmt = (
+            select(
+                CommercialDocumentLine.item_id,
+                func.coalesce(func.sum(CommercialDocumentLine.quantity_base), 0),
+                func.count(func.distinct(CommercialDocumentLine.document_id)),
+                func.coalesce(
+                    func.sum(CommercialDocumentLine.quantity * CommercialDocumentLine.unit_price - CommercialDocumentLine.discount_amount), 0,
+                ),
+            )
+            .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocument.document_date >= date_from,
+                CommercialDocument.document_date <= date_to,
+            )
+            .group_by(CommercialDocumentLine.item_id)
+        )
+        item_totals = {row[0]: (row[1], row[2], row[3]) for row in session.execute(stmt)}
+        item_detail_account_by_id = {
+            item_id: detail_account_id
+            for item_id, detail_account_id in session.execute(
+                select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(item_totals.keys()))
+            )
+        }
+
+    rows = [
+        SalesReportRow(
+            item_id=item_id,
+            item_name=dimensions_service.get_detail_account_label(item_detail_account_by_id.get(item_id)),
+            quantity_sold=quantity_sold,
+            invoice_count=invoice_count,
+            net_revenue=net_revenue,
+        )
+        for item_id, (quantity_sold, invoice_count, net_revenue) in item_totals.items()
+    ]
+    rows.sort(key=lambda r: r.net_revenue, reverse=True)
+    return rows
+
+
+@dataclass
 class SalesTrendResult:
     period_labels: list[str]
     amounts: list[decimal.Decimal]
