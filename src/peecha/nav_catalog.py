@@ -121,6 +121,9 @@ NAV_ITEMS = [
             # طبقِ درخواستِ صریح («پستِ خودکار در تلگرام و بله» + «تقویمِ
             # محتوایی»): مدیریتِ اتصالِ بات و زمان‌بندیِ پست‌ها.
             {"code": "SALES_CONTENT_CALENDAR", "label": "تقویمِ محتوا و پستِ خودکار", "screen": "commercial_social"},
+            # طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): مدیریتِ اتصالِ
+            # وردپرس و انتشار/به‌روزرسانیِ مقالات.
+            {"code": "SALES_CMS_CONTENT", "label": "سینکِ محتوا با CMS", "screen": "commercial_cms"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
@@ -334,6 +337,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("SALES_POS_APPROVAL", "🧾"),
         ("SALES_ECOMMERCE", "🌐"),
         ("SALES_CONTENT_CALENDAR", "📅"),
+        ("SALES_CMS_CONTENT", "📰"),
         ("SALES_AFTERSALES", "🎧"),
     ],
     "PURCH": [

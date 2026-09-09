@@ -1357,3 +1357,43 @@ class AiContentSettings(Base):
 
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     api_key_encrypted: Mapped[bytes | None]
+
+
+class CmsConnection(Base):
+    """طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): اتصال به وردپرس از
+    طریقِ WP REST APIِ استاندارد (Application Password) -- هم‌الگو با
+    اتصالِ فروشگاهی/بات."""
+
+    __tablename__ = "cms_connections"
+    __table_args__ = (CheckConstraint("platform_code IN ('WORDPRESS')"), {"schema": "comm"})
+
+    connection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    platform_code: Mapped[str] = mapped_column(String(10))
+    display_name: Mapped[str] = mapped_column(String(100))
+    site_url: Mapped[str] = mapped_column(String(300))
+    username: Mapped[str] = mapped_column(String(100))
+    app_password_encrypted: Mapped[bytes | None]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class CmsArticle(Base):
+    """طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): external_post_id پس
+    از اولین انتشار پر می‌شود تا سینک‌هایِ بعدی همان پستِ وردپرس را
+    به‌روزرسانی کنند، نه اینکه هر بار پستِ تازه بسازند."""
+
+    __tablename__ = "cms_articles"
+    __table_args__ = (CheckConstraint("status_code IN ('DRAFT', 'PUBLISHED', 'FAILED')"), {"schema": "comm"})
+
+    article_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.cms_connections.connection_id"))
+    title: Mapped[str] = mapped_column(String(300))
+    body_html: Mapped[str] = mapped_column(Text)
+    status_code: Mapped[str] = mapped_column(String(15), default="DRAFT")
+    external_post_id: Mapped[str | None] = mapped_column(String(50))
+    external_url: Mapped[str | None] = mapped_column(String(500))
+    published_at: Mapped[datetime.datetime | None]
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
