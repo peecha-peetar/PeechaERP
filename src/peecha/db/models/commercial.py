@@ -62,7 +62,7 @@ class Channel(Base):
     channel_code: Mapped[str] = mapped_column(String(20), primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
-    channel_type_code: Mapped[str] = mapped_column(String(15))  # POS|WHOLESALE|ONLINE|AGENT|MARKETPLACE
+    channel_type_code: Mapped[str] = mapped_column(String(15))  # POS|WHOLESALE|ONLINE|AGENT|MARKETPLACE|VAN_SALES|PRE_SALES
     default_price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
     default_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     is_active: Mapped[bool] = mapped_column(default=True)
@@ -581,6 +581,11 @@ class CustomerProfile(Base):
     default_channel_code: Mapped[str | None] = mapped_column(String(20))
     default_sales_rep_detail_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("comm.sales_representatives.rep_detail_account_id")
+    )
+    # طبقِ درخواستِ صریح («ماژولِ پخشِ سرد/گرم»): مسیرِ توزیعِ این مشتری --
+    # برگِ نوع‌بُعدِ تخصصیِ DISTRIBUTION_ROUTE (detail_dimensions.py).
+    distribution_route_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
     )
     status_code: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     onboarding_source_code: Mapped[str | None] = mapped_column(String(15))

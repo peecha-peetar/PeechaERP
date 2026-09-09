@@ -445,7 +445,7 @@ class _NumberingSequencesTab(LayoutEditMixin, QWidget):
 class _ChannelsTab(QWidget):
     _CHANNEL_TYPES = {
         "POS": "فروشگاهِ حضوری", "WHOLESALE": "عمده‌فروشی", "ONLINE": "اینترنتی", "AGENT": "نمایندگی",
-        "MARKETPLACE": "بازارگاهِ آنلاین",
+        "MARKETPLACE": "بازارگاهِ آنلاین", "PRE_SALES": "پخشِ سرد (پیش‌فروش)", "VAN_SALES": "پخشِ گرم (فروشِ خودرویی)",
     }
 
     def __init__(self) -> None:

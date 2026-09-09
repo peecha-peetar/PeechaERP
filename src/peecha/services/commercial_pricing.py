@@ -42,7 +42,7 @@ def create_channel(
     company_id: int, channel_code: str, name: str, channel_type_code: str,
     default_price_list_id: int | None = None, default_warehouse_id: int | None = None,
 ) -> str:
-    if channel_type_code not in ("POS", "WHOLESALE", "ONLINE", "AGENT", "MARKETPLACE"):
+    if channel_type_code not in ("POS", "WHOLESALE", "ONLINE", "AGENT", "MARKETPLACE", "VAN_SALES", "PRE_SALES"):
         raise ValueError("نوعِ کانال نامعتبر است.")
     with new_session() as session:
         row = Channel(

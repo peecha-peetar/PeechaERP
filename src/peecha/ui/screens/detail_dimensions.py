@@ -122,6 +122,7 @@ _PERSON_FIELD_LABELS = {
     "payment_term_days": "مهلتِ پرداخت (روز)",
     "credit_limit_amount": "سقفِ اعتبار (بازرگانی)",
     "is_tax_exempt": "معافِ مالیاتی",
+    "distribution_route_detail_account_id": "مسیرِ توزیع",
 }
 
 # طبقِ یکپارچه‌سازیِ «تعریفِ کارمند فقط از طریقِ تفصیلی»: این کمبوها
@@ -143,6 +144,12 @@ _PERSON_COMBO_LOADERS = {
     ],
     (dimensions_service.CUSTOMER_GROUP_CODE, "default_channel_code"): lambda company_id: [
         (ch.channel_code, f"{ch.channel_code} — {ch.name}") for ch in pricing_service.list_channels(company_id)
+    ],
+    (dimensions_service.CUSTOMER_GROUP_CODE, "distribution_route_detail_account_id"): lambda company_id: [
+        (r.detail_account_id, f"{r.code} — {r.name or ''}")
+        for r in dimensions_service.list_leaf_detail_accounts(
+            company_id, dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE)
+        )
     ],
     (dimensions_service.SUPPLIER_GROUP_CODE, "supplier_group_id"): lambda company_id: [
         (g.group_id, g.name) for g in partners_service.list_supplier_groups(company_id)
@@ -174,7 +181,7 @@ _PERSON_GROUP_META = {
             ("economic_code", "text"), ("national_id", "text"), ("phone", "text"), ("mobile", "text"),
             ("address", "text"), ("customer_group_id", "combo"), ("default_price_list_id", "combo"),
             ("default_channel_code", "combo"), ("payment_term_days", "decimal"), ("credit_limit_amount", "decimal"),
-            ("is_tax_exempt", "bool"), ("notes", "text"),
+            ("is_tax_exempt", "bool"), ("distribution_route_detail_account_id", "combo"), ("notes", "text"),
         ),
         "list_fn": partners_service.list_customer_detail_accounts,
         "create_fn": partners_service.create_customer_detail_account,

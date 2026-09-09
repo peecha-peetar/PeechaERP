@@ -1485,6 +1485,13 @@ PROJECT_CODE = "PROJECT"
 # افزودنش هم‌زمان هم seedِ خودکار و هم ظاهرشدن در group_combo/detail_dimensions.py
 # را رایگان می‌دهد (بدونِ کدِ UI اضافه، دقیقاً مثلِ COST_CENTER/PROJECT).
 PROFIT_CENTER_CODE = "PROFIT_CENTER"
+# طبقِ درخواستِ صریح («ماژولِ پخشِ سرد/گرم» -- مدیریتِ مسیر/منطقه):
+# سلسله‌مراتبِ استان>شهر>منطقه>مسیر -- برخلافِ بقیه‌یِ نوع‌بُعدهایِ تخصصی
+# (که تخت/یک‌سطحی‌اند)، این یکی چندسطحی ساخته می‌شود. سقفِ ۴ سطح همان
+# MAX_DETAIL_LEVELِ سراسریِ سیستم (و همان محدودیتِ CHECKِ دیتابیس) است —
+# نه یک محدودیتِ اختصاصیِ همین نوع‌بُعد.
+DISTRIBUTION_ROUTE_CODE = "DISTRIBUTION_ROUTE"
+_DISTRIBUTION_ROUTE_MAX_LEVEL = MAX_DETAIL_LEVEL
 
 SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
     INVENTORY_ITEM_CODE: "کالا",
@@ -1495,6 +1502,7 @@ SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
     COST_CENTER_CODE: "مرکز هزینه",
     PROJECT_CODE: "پروژه",
     PROFIT_CENTER_CODE: "مرکز سود",
+    DISTRIBUTION_ROUTE_CODE: "مسیرِ توزیع",
 }
 
 
@@ -1517,7 +1525,8 @@ def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
             # چندسطح دسته‌بندی در تنظیمات) قابلِ‌تعریف باشند — نگاه کنید به
             # 080_inventory_item_default_level.sql و 082_specialized_dimension_default_level.sql.
             dimension_type = DetailDimensionType(
-                company_id=company_id, code=code, is_active=True, max_level_no=1
+                company_id=company_id, code=code, is_active=True,
+                max_level_no=_DISTRIBUTION_ROUTE_MAX_LEVEL if code == DISTRIBUTION_ROUTE_CODE else 1,
             )
             session.add(dimension_type)
             session.flush()

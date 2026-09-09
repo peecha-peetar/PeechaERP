@@ -14,7 +14,10 @@ from peecha.services import currencies as currencies_service
 from peecha.ui.screens.reports_common import ReportScreenBase
 
 _ZERO = decimal.Decimal("0")
-_CHANNEL_TYPE_LABELS = {"POS": "حضوری", "WHOLESALE": "عمده", "ONLINE": "اینترنتی", "AGENT": "نماینده", "MARKETPLACE": "مارکت‌پلیس"}
+_CHANNEL_TYPE_LABELS = {
+    "POS": "حضوری", "WHOLESALE": "عمده", "ONLINE": "اینترنتی", "AGENT": "نماینده", "MARKETPLACE": "مارکت‌پلیس",
+    "PRE_SALES": "پخشِ سرد", "VAN_SALES": "پخشِ گرم",
+}
 
 
 class SalesReportByChannelScreen(ReportScreenBase):

@@ -1420,6 +1420,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
         from peecha.ui.screens.sales_assistant import SalesAssistantScreen
         from peecha.ui.screens.commercial_online_sales_hub import CommercialOnlineSalesHubScreen
+        from peecha.ui.screens.commercial_distribution_hub import CommercialDistributionHubScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
         from peecha.ui.screens.commercial_pos_approval import CommercialPosApprovalScreen
@@ -1530,6 +1531,9 @@ class MainWindow(QMainWindow):
         # داخلی می‌سازد) -- تنظیماتِ کلیِ اتصال/فهرستِ قیمت همچنان در تبِ
         # «تنظیماتِ فروشِ اینترنتی» زیرِ سیستم‌سِتینگزِ بازرگانی می‌ماند.
         self.register_screen("commercial_online_sales_hub", CommercialOnlineSalesHubScreen(self))
+        # طبقِ درخواستِ صریحِ کاربر («پخشِ سرد+گرم، منوها شلوغ نشه»): هر دو
+        # زیرِ یک آیتم/فرمِ تب‌دار، هم‌الگو با فروشِ اینترنتی بالا.
+        self.register_screen("commercial_distribution_hub", CommercialDistributionHubScreen(self))
         self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
         self.register_screen("sales_assistant", SalesAssistantScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())

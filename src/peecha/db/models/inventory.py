@@ -436,6 +436,14 @@ class Warehouse(Base):
     )
     # توضیحات
     notes: Mapped[str | None] = mapped_column(Text)
+    # طبقِ درخواستِ صریح («خودرو به‌عنوانِ انبارِ سیار» -- ماژولِ پخشِ گرم):
+    # این فیلدها فقط برایِ warehouse_type_code == "VEHICLE" پر می‌شوند.
+    vehicle_plate_number: Mapped[str | None] = mapped_column(String(30))
+    vehicle_driver_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    vehicle_capacity_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
+    vehicle_capacity_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
 
 
 class BinLocation(Base):

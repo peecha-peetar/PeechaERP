@@ -120,6 +120,13 @@ NAV_ITEMS = [
             # مسیریابیِ کلی همچنان در تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
             # «تنظیمات سیستم ‹ مدیریتِ بازرگانی» می‌ماند.
             {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی", "screen": "commercial_online_sales_hub"},
+            # طبقِ درخواستِ صریحِ کاربر («۳ ماژول: پخشِ سرد با سفارش‌گیری،
+            # پخشِ گرم، سفارشِ موبایل») و محدودیتِ صریحِ همان کاربر («منوها
+            # شلوغ نشه»): دو ماژولِ ERP-محور (پخشِ سرد/گرم) زیرِ یک آیتمِ
+            # واحدِ تب‌دار -- هم‌الگو با فروشِ اینترنتی بالا. ماژولِ سومِ
+            # کاربر (اپِ سفارشِ موبایل) نیازمندِ یک تصمیمِ معماریِ جداگانه
+            # (API/Offline-Sync) است و در همین دور اضافه نشده.
+            {"code": "SALES_DISTRIBUTION", "label": "پخشِ کالا (سرد/گرم)", "screen": "commercial_distribution_hub"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
@@ -345,6 +352,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("SALES_POS_SALE", "🛒"),
         ("SALES_POS_APPROVAL", "🧾"),
         ("SALES_ECOMMERCE", "🌐"),
+        ("SALES_DISTRIBUTION", "🚚"),
         ("SALES_AFTERSALES", "🎧"),
     ],
     "PURCH": [

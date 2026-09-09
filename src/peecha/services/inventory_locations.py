@@ -94,6 +94,12 @@ class WarehouseFields:
     profit_center_detail_account_id: int | None = None
     # توضیحات
     notes: str | None = None
+    # طبقِ درخواستِ صریح («خودرو به‌عنوانِ انبارِ سیار» -- ماژولِ پخشِ گرم):
+    # فقط برایِ warehouse_type_code == "VEHICLE" پر می‌شوند.
+    vehicle_plate_number: str | None = None
+    vehicle_driver_detail_account_id: int | None = None
+    vehicle_capacity_weight_kg: decimal.Decimal | None = None
+    vehicle_capacity_volume_m3: decimal.Decimal | None = None
 
 
 @dataclass
@@ -137,6 +143,13 @@ def get_default_warehouse(company_id: int) -> WarehouseRow | None:
         if r.is_default:
             return r
     return rows[0] if rows else None
+
+
+def list_vehicles(company_id: int, active_only: bool = False) -> list[WarehouseRow]:
+    """طبقِ درخواستِ صریح («خودرو به‌عنوانِ انبارِ سیار» -- ماژولِ پخشِ
+    گرم): انبارهایِ نوعِ VEHICLE این شرکت -- برایِ کمبویِ انتخابِ خودرو
+    در فرمِ فروشِ خودرویی."""
+    return [w for w in list_warehouses(company_id, active_only) if w.fields.warehouse_type_code == "VEHICLE"]
 
 
 def _validate_warehouse(fields: WarehouseFields) -> None:
