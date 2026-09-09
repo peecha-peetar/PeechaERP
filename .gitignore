@@ -22,6 +22,10 @@ venv/
 # OS
 .DS_Store
 
+# اپِ موبایل (mobile/, R132) -- Node/RN
+mobile/node_modules/
+mobile/coverage/
+
 # فونت‌ها: از نسخه‌یِ R109 به بعد Vazirmatn (متن‌بازِ واقعی) عمداً commit
 # شده -- طبق assets/fonts/README.md فقط فونت‌هایِ دیگر (مثلِ IRANSansِ
 # احتمالیِ آینده) باید دستی دانلود و اینجا اضافه شوند.

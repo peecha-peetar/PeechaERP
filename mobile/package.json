@@ -1,0 +1,25 @@
+{
+  "name": "peecha-field-sales",
+  "version": "0.1.0",
+  "private": true,
+  "description": "اپِ موبایلِ پخشِ سرد/گرم -- کلاینتِ React Native برایِ peecha_api (R132). طبقِ تصمیمِ کاربر: بدونِ Flutter، آفلاین-اول، رویِ همان حساب‌کاربریِ ERP.",
+  "scripts": {
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-native": "0.75.4"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@babel/preset-env": "^7.25.0",
+    "@react-native/babel-preset": "0.75.4",
+    "@types/jest": "^29.5.0",
+    "@types/react": "^18.3.0",
+    "jest": "^29.7.0",
+    "react-test-renderer": "18.3.1",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.5.0"
+  }
+}
