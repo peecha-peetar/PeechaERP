@@ -1345,3 +1345,15 @@ class ContentCalendarPost(Base):
     sent_at: Mapped[datetime.datetime | None]
     error_message: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class AiContentSettings(Base):
+    """طبقِ درخواستِ صریح («تولیدِ محتوایِ خودکار با هوش مصنوعی»): کلیدِ
+    APIِ Geminiِ هر شرکت -- هم‌الگو با اعتبارِ رمزنگاری‌شده‌یِ اتصال‌هایِ
+    فروشگاه/بات."""
+
+    __tablename__ = "ai_content_settings"
+    __table_args__ = {"schema": "comm"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    api_key_encrypted: Mapped[bytes | None]

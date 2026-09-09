@@ -97,7 +97,36 @@ class CommercialSocialScreen(LayoutEditMixin, QWidget):
         self.social_status_label = QLabel("")
         self.social_status_label.setObjectName("statusError")
         outer.addWidget(self.social_status_label)
+
+        # طبقِ درخواستِ صریح («تولیدِ محتوایِ خودکار با هوش مصنوعی»): کلیدِ
+        # APIِ Gemini یک‌بار این‌جا ذخیره می‌شود؛ تبِ تقویمِ محتوا از همین
+        # کلید برایِ تولیدِ متنِ پست استفاده می‌کند.
+        ai_form = QHBoxLayout()
+        ai_form.addWidget(QLabel("کلیدِ APIِ Gemini (برایِ تولیدِ خودکارِ متنِ پست):"))
+        self.ai_api_key_field = QLineEdit()
+        self.ai_api_key_field.setPlaceholderText("کلیدِ API")
+        self.ai_api_key_field.setEchoMode(QLineEdit.Password)
+        ai_form.addWidget(self.ai_api_key_field, stretch=1)
+        save_ai_key_button = QPushButton("🔑")
+        save_ai_key_button.setObjectName("iconButton")
+        save_ai_key_button.setFixedWidth(44)
+        save_ai_key_button.setToolTip("ذخیرهٔ کلیدِ API (رمزنگاری‌شده)")
+        save_ai_key_button.clicked.connect(self._save_ai_api_key)
+        ai_form.addWidget(save_ai_key_button)
+        outer.addLayout(ai_form)
         return wrap_scrollable(page)
+
+    def _save_ai_api_key(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            social_service.set_ai_api_key(company_id, self.ai_api_key_field.text())
+        except ValueError as exc:
+            self.social_status_label.setText(str(exc))
+            return
+        self.ai_api_key_field.clear()
+        theme.set_status_label(self.social_status_label, "کلیدِ API رمزنگاری و ذخیره شد.", ok=True)
 
     def refresh(self) -> None:
         company_id = self._company_id()
@@ -180,9 +209,17 @@ class CommercialSocialScreen(LayoutEditMixin, QWidget):
         form.addWidget(add_post_button)
         outer.addLayout(form)
 
+        title_row = QHBoxLayout()
         self.post_title_field = QLineEdit()
-        self.post_title_field.setPlaceholderText("عنوانِ پست (اختیاری)")
-        outer.addWidget(self.post_title_field)
+        self.post_title_field.setPlaceholderText("عنوانِ پست (هم برایِ نمایش، هم موضوعِ تولیدِ خودکار)")
+        title_row.addWidget(self.post_title_field, stretch=1)
+        generate_ai_button = QPushButton("✨")
+        generate_ai_button.setObjectName("iconButton")
+        generate_ai_button.setFixedWidth(44)
+        generate_ai_button.setToolTip("تولیدِ متنِ پست با هوش مصنوعی از رویِ عنوان")
+        generate_ai_button.clicked.connect(self._generate_ai_text)
+        title_row.addWidget(generate_ai_button)
+        outer.addLayout(title_row)
         self.post_body_field = QPlainTextEdit()
         self.post_body_field.setPlaceholderText("متنِ پست")
         self.post_body_field.setFixedHeight(80)
@@ -233,6 +270,21 @@ class CommercialSocialScreen(LayoutEditMixin, QWidget):
         self.post_body_field.clear()
         self.calendar_status_label.setText("")
         self._refresh_calendar()
+
+    def _generate_ai_text(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            generated_text = social_service.generate_post_text(company_id, self.post_title_field.text())
+        except ValueError as exc:
+            self.calendar_status_label.setText(str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 -- خطایِ شبکه/Gemini
+            self.calendar_status_label.setText(str(exc))
+            return
+        self.post_body_field.setPlainText(generated_text)
+        theme.set_status_label(self.calendar_status_label, "متنِ پست با هوش مصنوعی تولید شد -- قبل از افزودن ویرایش کنید.", ok=True)
 
     def _send_post_now(self, post_id: int) -> None:
         try:

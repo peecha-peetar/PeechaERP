@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from peecha.db.base import new_session
-from peecha.db.models.commercial import ContentCalendarPost, SocialConnection
+from peecha.db.models.commercial import AiContentSettings, ContentCalendarPost, SocialConnection
 
 _SUPPORTED_PLATFORMS = ("TELEGRAM", "BALE")
 
@@ -179,3 +179,47 @@ def run_due_posts(company_id: int, now: datetime.datetime | None = None) -> list
         except Exception as exc:  # noqa: BLE001 -- شکستِ یک پست نباید بقیه را متوقف کند
             results.append(PostSendResult(post_id=post.post_id, error_message=str(exc)))
     return results
+
+
+# ---------------------------------------------------------------------
+# تولیدِ محتوایِ خودکار با هوش مصنوعی (Gemini) -- طبقِ درخواستِ صریحِ کاربر
+# ---------------------------------------------------------------------
+def set_ai_api_key(company_id: int, api_key: str) -> None:
+    if not api_key.strip():
+        raise ValueError("کلیدِ API نمی‌تواند خالی باشد.")
+    from peecha.services import ecommerce_credentials
+
+    with new_session() as session:
+        row = session.get(AiContentSettings, company_id)
+        if row is None:
+            row = AiContentSettings(company_id=company_id)
+            session.add(row)
+        row.api_key_encrypted = ecommerce_credentials.encrypt_credentials({"api_key": api_key.strip()})
+        session.commit()
+
+
+def has_ai_api_key(company_id: int) -> bool:
+    with new_session() as session:
+        row = session.get(AiContentSettings, company_id)
+        return row is not None and bool(row.api_key_encrypted)
+
+
+def generate_post_text(company_id: int, topic: str) -> str:
+    """طبقِ درخواستِ صریح («تولیدِ محتوایِ خودکار با هوش مصنوعی»): از رویِ
+    یک موضوعِ کوتاه (مثلاً عنوانِ پست)، متنِ کاملِ پست را با Gemini
+    می‌سازد -- کاربر می‌تواند نتیجه را قبل از ارسال ویرایش کند."""
+    if not topic.strip():
+        raise ValueError("برایِ تولیدِ خودکار، ابتدا موضوع/عنوانِ پست را وارد کنید.")
+    from peecha.integrations.ai import gemini_client
+    from peecha.services import ecommerce_credentials
+
+    with new_session() as session:
+        row = session.get(AiContentSettings, company_id)
+    if row is None or not row.api_key_encrypted:
+        raise ValueError("ابتدا کلیدِ APIِ Gemini را در تنظیمات وارد کنید.")
+    api_key = ecommerce_credentials.decrypt_credentials(row.api_key_encrypted).get("api_key", "")
+    prompt = (
+        f"یک متنِ کوتاه، جذاب، و تبلیغاتی به زبانِ فارسی برایِ پستِ شبکه‌هایِ اجتماعی "
+        f"(تلگرام/بله) درباره‌یِ «{topic.strip()}» بنویس. حداکثر سه جمله، بدونِ هشتگ."
+    )
+    return gemini_client.generate_text(api_key, prompt)
