@@ -1766,13 +1766,17 @@ def _status_code_map(session, applies_to: str) -> dict[int, str]:
     )
 
 
-def list_received_checks(company_id: int, status_codes: list[str] | None = None) -> list[ReceivedCheckRow]:
+def list_received_checks(
+    company_id: int, status_codes: list[str] | None = None, counterparty_detail_account_id: int | None = None,
+) -> list[ReceivedCheckRow]:
     with new_session() as session:
         codes = _status_code_map(session, "RECEIVED")
         query = select(ReceivedCheck).where(ReceivedCheck.company_id == company_id)
         if status_codes is not None:
             status_ids = [sid for sid, code in codes.items() if code in status_codes]
             query = query.where(ReceivedCheck.status_id.in_(status_ids))
+        if counterparty_detail_account_id is not None:
+            query = query.where(ReceivedCheck.counterparty_detail_account_id == counterparty_detail_account_id)
         rows = session.scalars(query.order_by(ReceivedCheck.due_date)).all()
         location_detail_ids = {r.current_location_detail_account_id for r in rows if r.current_location_detail_account_id}
         location_labels: dict[int, str] = {}
@@ -1800,13 +1804,17 @@ def list_received_checks(company_id: int, status_codes: list[str] | None = None)
         ]
 
 
-def list_issued_checks(company_id: int, status_codes: list[str] | None = None) -> list[IssuedCheckRow]:
+def list_issued_checks(
+    company_id: int, status_codes: list[str] | None = None, counterparty_detail_account_id: int | None = None,
+) -> list[IssuedCheckRow]:
     with new_session() as session:
         codes = _status_code_map(session, "ISSUED")
         query = select(IssuedCheck).where(IssuedCheck.company_id == company_id)
         if status_codes is not None:
             status_ids = [sid for sid, code in codes.items() if code in status_codes]
             query = query.where(IssuedCheck.status_id.in_(status_ids))
+        if counterparty_detail_account_id is not None:
+            query = query.where(IssuedCheck.counterparty_detail_account_id == counterparty_detail_account_id)
         rows = session.scalars(query.order_by(IssuedCheck.due_date)).all()
         bank_detail_ids = {r.bank_account_detail_id for r in rows}
         labels: dict[int, str] = {}

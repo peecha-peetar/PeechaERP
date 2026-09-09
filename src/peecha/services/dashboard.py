@@ -260,10 +260,13 @@ def commercial_summary(company_id: int | None, document_type_code: str) -> Comme
 
 
 def commercial_amount_per_month(
-    company_id: int | None, document_type_code: str, months: int = 6
+    company_id: int | None, document_type_code: str, months: int = 6, counterparty_detail_account_id: int | None = None,
 ) -> tuple[list[str], list[decimal.Decimal]]:
     """معادلِ journal_entries_per_month، برایِ جمعِ مبلغِ فاکتورهایِ
-    ثبتِ‌نهایی‌شده‌یِ یک نوعِ سند (فروش/خرید) در N ماهِ اخیر."""
+    ثبتِ‌نهایی‌شده‌یِ یک نوعِ سند (فروش/خرید) در N ماهِ اخیر. طبقِ
+    نیازِ داشبوردِ معلقِ مشتری (customer_dashboard.py)، فیلترِ اختیاریِ
+    counterparty_detail_account_id هم اضافه شد تا همین تابع برایِ روندِ
+    فروشِ *یک* مشتریِ خاص هم بدونِ تکرارِ کوئری قابلِ‌استفاده باشد."""
     today = datetime.date.today()
     year, month = today.year, today.month
     ym_buckets: list[tuple[int, int]] = []
@@ -278,14 +281,17 @@ def commercial_amount_per_month(
     counts_by_ym: dict[tuple[int, int], decimal.Decimal] = {}
     if company_id is not None:
         with new_session() as db_session:
-            stmt = select(
-                func.date_trunc("month", CommercialDocument.document_date).label("bucket"),
-                func.coalesce(func.sum(CommercialDocument.total_amount), 0),
-            ).where(
+            conditions = [
                 CommercialDocument.company_id == company_id,
                 CommercialDocument.document_type_code == document_type_code,
                 CommercialDocument.status_code == "POSTED",
-            ).group_by("bucket")
+            ]
+            if counterparty_detail_account_id is not None:
+                conditions.append(CommercialDocument.counterparty_detail_account_id == counterparty_detail_account_id)
+            stmt = select(
+                func.date_trunc("month", CommercialDocument.document_date).label("bucket"),
+                func.coalesce(func.sum(CommercialDocument.total_amount), 0),
+            ).where(*conditions).group_by("bucket")
             rows = db_session.execute(stmt).all()
         counts_by_ym = {(row.bucket.year, row.bucket.month): row[1] for row in rows}
 

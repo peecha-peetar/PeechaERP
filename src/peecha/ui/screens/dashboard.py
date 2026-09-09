@@ -49,7 +49,7 @@ def _company_id() -> int | None:
 # دیگر متدِ خودِ DashboardScreen نیستند تا هر تب هم بتواند مستقلاً از
 # آن‌ها استفاده کند.
 # ---------------------------------------------------------------------
-def _build_chart_card(title_text: str) -> tuple[QWidget, QChartView]:
+def build_chart_card(title_text: str) -> tuple[QWidget, QChartView]:
     """کارتِ شیشه‌ایِ خودمان دورِ نمودار — تیتر با تایپوگرافیِ یکدستِ
     برنامه (نه تیترِ بومیِ QChart)، و QChartView بدونِ بردر/پس‌زمینه‌یِ
     خودش تا کاملاً درونِ همین کارت شناور به‌نظر برسد."""
@@ -92,7 +92,7 @@ def _style_axis(axis) -> None:
     axis.setLabelsFont(label_font)
 
 
-def _render_bar_chart(
+def render_bar_chart(
     chart_view: QChartView, labels: list[str], values: list[int | decimal.Decimal], series_name: str = "مقدار",
 ) -> None:
     chart = _themed_chart()
@@ -124,7 +124,7 @@ def _render_bar_chart(
     chart_view.setChart(chart)
 
 
-def _render_donut_chart(chart_view: QChartView, breakdown: list[tuple[str, int | decimal.Decimal]]) -> None:
+def render_donut_chart(chart_view: QChartView, breakdown: list[tuple[str, int | decimal.Decimal]]) -> None:
     chart = _themed_chart()
     chart.legend().setVisible(True)
 
@@ -285,9 +285,9 @@ class _AccountingTab(QWidget):
         charts_layout.setSpacing(16)
         charts_layout.setColumnStretch(0, 1)
         charts_layout.setColumnStretch(1, 1)
-        entries_card, self.entries_chart_view = _build_chart_card("تعدادِ اسناد در ۶ ماهِ اخیر")
+        entries_card, self.entries_chart_view = build_chart_card("تعدادِ اسناد در ۶ ماهِ اخیر")
         charts_layout.addWidget(entries_card, 0, 0)
-        status_card, self.status_chart_view = _build_chart_card("وضعیتِ اسنادِ حسابداری")
+        status_card, self.status_chart_view = build_chart_card("وضعیتِ اسنادِ حسابداری")
         charts_layout.addWidget(status_card, 0, 1)
         outer.addLayout(charts_layout, stretch=1)
 
@@ -302,10 +302,10 @@ class _AccountingTab(QWidget):
         self.card_open_years.set_value(dashboard_service.open_fiscal_years_count(company_id))
 
         labels, values = dashboard_service.journal_entries_per_month(company_id)
-        _render_bar_chart(self.entries_chart_view, labels, values, "تعدادِ اسناد")
+        render_bar_chart(self.entries_chart_view, labels, values, "تعدادِ اسناد")
 
         by_status = dashboard_service.journal_entries_by_status(company_id)
-        _render_donut_chart(self.status_chart_view, by_status)
+        render_donut_chart(self.status_chart_view, by_status)
 
 
 class _TreasuryTab(QWidget):
@@ -326,7 +326,7 @@ class _TreasuryTab(QWidget):
             self.card_received_checks, self.card_issued_checks, self.card_overdue_count, self.card_overdue_amount,
         ])
 
-        chart_card, self.checks_chart_view = _build_chart_card("مبلغِ چک‌هایِ درجریان (دریافتی/پرداختی)")
+        chart_card, self.checks_chart_view = build_chart_card("مبلغِ چک‌هایِ درجریان (دریافتی/پرداختی)")
         outer.addWidget(chart_card, stretch=1)
 
     def refresh(self) -> None:
@@ -342,7 +342,7 @@ class _TreasuryTab(QWidget):
         self.card_overdue_count.set_value(summary.overdue_installments_count)
         self.card_overdue_amount.set_value(numerals.format_company_amount(summary.overdue_installments_amount))
 
-        _render_bar_chart(
+        render_bar_chart(
             self.checks_chart_view, ["دریافتیِ درجریان", "پرداختیِ درجریان"],
             [summary.pending_received_checks_amount, summary.pending_issued_checks_amount], "مبلغ",
         )
@@ -364,7 +364,7 @@ class _InventoryTab(QWidget):
         self.card_negative = _KpiCard("ردیف‌هایِ موجودیِ منفی", "⚠️", theme.DANGER)
         _kpi_row(outer, [self.card_value, self.card_items, self.card_warehouses, self.card_negative])
 
-        chart_card, self.value_chart_view = _build_chart_card("ارزشِ موجودی به تفکیکِ انبار")
+        chart_card, self.value_chart_view = build_chart_card("ارزشِ موجودی به تفکیکِ انبار")
         outer.addWidget(chart_card, stretch=1)
 
     def refresh(self) -> None:
@@ -381,7 +381,7 @@ class _InventoryTab(QWidget):
         self.card_negative.set_value(summary.negative_balance_count)
 
         by_warehouse = dashboard_service.inventory_value_by_warehouse(company_id)
-        _render_donut_chart(self.value_chart_view, by_warehouse)
+        render_donut_chart(self.value_chart_view, by_warehouse)
 
 
 class _CommercialTab(QWidget):
@@ -424,9 +424,9 @@ class _CommercialTab(QWidget):
         charts_layout.setSpacing(16)
         charts_layout.setColumnStretch(0, 1)
         charts_layout.setColumnStretch(1, 1)
-        trend_card, self.trend_chart_view = _build_chart_card("روندِ ۶ ماهِ اخیر")
+        trend_card, self.trend_chart_view = build_chart_card("روندِ ۶ ماهِ اخیر")
         charts_layout.addWidget(trend_card, 0, 0)
-        top_card, self.top_chart_view = _build_chart_card(party_title)
+        top_card, self.top_chart_view = build_chart_card(party_title)
         charts_layout.addWidget(top_card, 0, 1)
         outer.addLayout(charts_layout, stretch=1)
 
@@ -442,10 +442,10 @@ class _CommercialTab(QWidget):
         self.card_unsettled_amount.set_value(numerals.format_company_amount(summary.unsettled_amount))
 
         labels, values = dashboard_service.commercial_amount_per_month(company_id, self._document_type_code)
-        _render_bar_chart(self.trend_chart_view, labels, values, "مبلغ")
+        render_bar_chart(self.trend_chart_view, labels, values, "مبلغ")
 
         top = dashboard_service.top_counterparties(company_id, self._document_type_code)
-        _render_donut_chart(self.top_chart_view, top)
+        render_donut_chart(self.top_chart_view, top)
 
         if self._is_sales:
             self.card_forecast.refresh_theme(theme.CHART_PURPLE)
