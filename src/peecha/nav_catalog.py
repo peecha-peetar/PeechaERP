@@ -129,7 +129,7 @@ NAV_ITEMS = [
             {"code": "SALES_MEDIA_CENTER", "label": "مرکزِ رسانه", "screen": "media_center"},
             # طبقِ ادامه‌یِ اولویت‌بندی (بخشِ عملیاتی -- «نگهبانِ اتصال»):
             # نمایِ سلامتِ اتصال‌هایِ فروشگاهی/تلگرام/بله.
-            {"code": "SALES_CONNECTIVITY_GUARD", "label": "نگهبانِ اتصال", "screen": "connectivity_guard"},
+            {"code": "SALES_CONNECTIVITY_GUARD", "label": "نگهبانِ اتصال و سلامتِ سایت", "screen": "connectivity_guard"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },

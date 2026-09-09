@@ -73,7 +73,9 @@ def test_connection(connection_id: int) -> tuple[bool, str]:
 
     connection = _get_connection(connection_id)
     bot_token = _decrypt_bot_token(connection)
-    return telegram_client.check_connection(connection.platform_code, bot_token)
+    ok, message = telegram_client.check_connection(connection.platform_code, bot_token)
+    _record_connection_health(connection_id, None if ok else message)
+    return ok, message
 
 
 def send_message_now(connection_id: int, text: str) -> None:

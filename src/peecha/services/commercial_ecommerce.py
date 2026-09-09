@@ -64,6 +64,22 @@ def disconnect(connection_id: int) -> None:
         session.commit()
 
 
+def test_connection(connection_id: int) -> tuple[bool, str]:
+    """طبقِ ادامه‌یِ اولویت‌بندی («بررسیِ سلامتِ سایت»): برخلافِ
+    اتصال‌هایِ تلگرام/بله/وردپرس (که از ابتدا دکمه‌یِ آزمایش داشتند)،
+    این قابلیت برایِ ووکامرس/پرستاشاپ در لایه‌یِ کلاینت (wc_client/
+    presta_client.check_connection) از قبل نوشته شده بود ولی هیچ‌جا
+    صدا زده نمی‌شد -- این‌جا وصل می‌شود."""
+    connection = _get_connection(connection_id)
+    if connection.platform_code == "TOROB":
+        return False, "ترب اتصالِ زنده ندارد -- فقط فایلِ فیدِ XML تولید می‌شود."
+    client_module = _client_module_for_platform(connection.platform_code)
+    store_client = _build_store_client(connection)
+    ok, message = client_module.check_connection(store_client)
+    _record_connection_health(connection_id, None if ok else message)
+    return ok, message
+
+
 def set_auto_sync(connection_id: int, enabled: bool, interval_minutes: int) -> None:
     """طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینک»): به‌جایِ اجباریِ فشردنِ
     دکمهٔ «سینکِ الان»، هر اتصال می‌تواند خودش را طوری تنظیم کند که هر

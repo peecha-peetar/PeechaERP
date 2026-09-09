@@ -113,6 +113,16 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         disconnect_button.setToolTip("قطعِ اتصالِ انتخاب‌شده")
         disconnect_button.clicked.connect(self._disconnect)
         conn_form.addWidget(disconnect_button)
+        # طبقِ ادامه‌یِ اولویت‌بندی («بررسیِ سلامتِ سایت»): wc_client/
+        # presta_client.check_connection از قبل نوشته شده بودند ولی
+        # هیچ‌جا صدا زده نمی‌شدند -- برخلافِ تلگرام/بله/وردپرس که از
+        # ابتدا دکمه‌یِ آزمایش داشتند.
+        test_connection_button = QPushButton("🔎")
+        test_connection_button.setObjectName("iconButton")
+        test_connection_button.setFixedWidth(44)
+        test_connection_button.setToolTip("آزمایشِ اتصالِ انتخاب‌شده")
+        test_connection_button.clicked.connect(self._test_connection)
+        conn_form.addWidget(test_connection_button)
         left.addLayout(conn_form)
 
         # طبقِ درخواستِ صریح («ماژولِ فروشِ اینترنتی» با استفاده از دیتابیسِ
@@ -383,6 +393,17 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
             return
         ecommerce_service.disconnect(self._selected_connection_id)
         self.refresh()
+
+    def _test_connection(self) -> None:
+        if self._selected_connection_id is None:
+            self.status_label.setText("ابتدا یک اتصال را از فهرست انتخاب کنید.")
+            return
+        try:
+            ok, message = ecommerce_service.test_connection(self._selected_connection_id)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        theme.set_status_label(self.status_label, message, ok=ok)
 
     def _save_credentials(self) -> None:
         if self._selected_connection_id is None:

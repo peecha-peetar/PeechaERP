@@ -1384,6 +1384,11 @@ class CmsConnection(Base):
     username: Mapped[str] = mapped_column(String(100))
     app_password_encrypted: Mapped[bytes | None]
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # طبقِ ادامه‌یِ اولویت‌بندی («بررسیِ سلامتِ سایت»): هم‌الگو با
+    # MarketplaceConnection/SocialConnection.
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
 
 
 class CmsArticle(Base):

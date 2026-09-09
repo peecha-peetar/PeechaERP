@@ -67,12 +67,31 @@ def _decrypt_app_password(connection: CmsConnection) -> str:
     return app_password
 
 
+def _record_connection_health(connection_id: int, error_message: str | None) -> None:
+    """طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»/«بررسیِ سلامتِ سایت»):
+    هم‌الگو با commercial_ecommerce/commercial_social._record_connection_health."""
+    with new_session() as session:
+        row = session.get(CmsConnection, connection_id)
+        if row is None:
+            return
+        row.last_checked_at = datetime.datetime.now(datetime.timezone.utc)
+        if error_message is None:
+            row.consecutive_failure_count = 0
+            row.last_error_message = None
+        else:
+            row.consecutive_failure_count += 1
+            row.last_error_message = error_message
+        session.commit()
+
+
 def test_connection(connection_id: int) -> tuple[bool, str]:
     from peecha.integrations.cms import wordpress_client
 
     connection = _get_connection(connection_id)
     app_password = _decrypt_app_password(connection)
-    return wordpress_client.check_connection(connection.site_url, connection.username, app_password)
+    ok, message = wordpress_client.check_connection(connection.site_url, connection.username, app_password)
+    _record_connection_health(connection_id, None if ok else message)
+    return ok, message
 
 
 def create_article(company_id: int, connection_id: int, title: str, body_html: str) -> int:
@@ -117,6 +136,7 @@ def publish_article(article_id: int) -> None:
         else:
             data = wordpress_client.create_post(connection.site_url, connection.username, app_password, title, body_html)
     except Exception as exc:  # noqa: BLE001 -- شکستِ انتشار نباید استثنایِ خام بالا برود
+        _record_connection_health(connection_id, str(exc))
         with new_session() as session:
             row = session.get(CmsArticle, article_id)
             row.status_code = "FAILED"
@@ -125,6 +145,7 @@ def publish_article(article_id: int) -> None:
             session.commit()
         raise
 
+    _record_connection_health(connection_id, None)
     with new_session() as session:
         row = session.get(CmsArticle, article_id)
         row.status_code = "PUBLISHED"
