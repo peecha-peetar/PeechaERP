@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
 
 from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
 from peecha.ui.screens.customer_visits import CustomerVisitsScreen
+from peecha.ui.screens.field_sales_dashboard import FieldSalesDashboardScreen
 from peecha.ui.screens.promotion_rules import PromotionRulesScreen
 from peecha.ui.screens.vehicle_loading import VehicleLoadingScreen
 from peecha.ui.screens.visit_plans import VisitPlansScreen
@@ -51,6 +52,10 @@ class CommercialDistributionHubScreen(QWidget):
         self.tabs.addTab(self.customer_visits_tab, "ویزیت‌ها")
         self.promotion_rules_tab = PromotionRulesScreen()
         self.tabs.addTab(self.promotion_rules_tab, "پروموشن‌ها")
+        # طبقِ نقشه‌راهِ تاییدشده (R134، آخرین فازِ این ماژول): داشبوردِ
+        # سرپرست -- پوششِ ویزیت/عملکردِ فروش/رسیدِ تحویل/کسریِ بارگیری.
+        self.dashboard_tab = FieldSalesDashboardScreen()
+        self.tabs.addTab(self.dashboard_tab, "داشبوردِ سرپرست")
         self.tabs.currentChanged.connect(self._refresh_tab_at)
         outer.addWidget(self.tabs, stretch=1)
 

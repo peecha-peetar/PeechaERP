@@ -102,13 +102,20 @@ def get_vehicle_loading(vehicle_loading_id: int, company_id: int) -> VehicleLoad
         )
 
 
-def list_vehicle_loadings(company_id: int, vehicle_warehouse_id: int | None = None, status_code: str | None = None) -> list[VehicleLoadingRow]:
+def list_vehicle_loadings(
+    company_id: int, vehicle_warehouse_id: int | None = None, status_code: str | None = None,
+    date_from: datetime.date | None = None, date_to: datetime.date | None = None,
+) -> list[VehicleLoadingRow]:
     with new_session() as session:
         stmt = select(VehicleLoading.vehicle_loading_id).where(VehicleLoading.company_id == company_id)
         if vehicle_warehouse_id is not None:
             stmt = stmt.where(VehicleLoading.vehicle_warehouse_id == vehicle_warehouse_id)
         if status_code is not None:
             stmt = stmt.where(VehicleLoading.status_code == status_code)
+        if date_from is not None:
+            stmt = stmt.where(VehicleLoading.loading_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(VehicleLoading.loading_date <= date_to)
         stmt = stmt.order_by(VehicleLoading.loading_date.desc())
         ids = session.scalars(stmt).all()
     return [get_vehicle_loading(loading_id, company_id) for loading_id in ids]

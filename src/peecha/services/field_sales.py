@@ -183,8 +183,11 @@ def skip_visit(customer_visit_id: int, company_id: int, skip_reason: str) -> Non
 
 def list_customer_visits(
     company_id: int, visitor_user_id: int | None = None, customer_detail_account_id: int | None = None,
-    status_code: str | None = None,
+    status_code: str | None = None, date_from: datetime.date | None = None, date_to: datetime.date | None = None,
 ) -> list[CustomerVisitRow]:
+    """date_from/date_to (طبقِ R134، برایِ داشبوردِ سرپرست) رویِ
+    checked_in_at فیلتر می‌کنند -- شاملِ کلِ آن روز (بدونِ نیاز به دانستنِ
+    ساعتِ دقیق)."""
     with new_session() as session:
         stmt = select(CustomerVisit).where(CustomerVisit.company_id == company_id)
         if visitor_user_id is not None:
@@ -193,6 +196,10 @@ def list_customer_visits(
             stmt = stmt.where(CustomerVisit.customer_detail_account_id == customer_detail_account_id)
         if status_code is not None:
             stmt = stmt.where(CustomerVisit.status_code == status_code)
+        if date_from is not None:
+            stmt = stmt.where(CustomerVisit.checked_in_at >= datetime.datetime.combine(date_from, datetime.time.min))
+        if date_to is not None:
+            stmt = stmt.where(CustomerVisit.checked_in_at <= datetime.datetime.combine(date_to, datetime.time.max))
         stmt = stmt.order_by(CustomerVisit.checked_in_at.desc())
         rows = session.scalars(stmt).all()
         return [
