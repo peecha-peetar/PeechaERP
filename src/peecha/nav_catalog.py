@@ -118,6 +118,9 @@ NAV_ITEMS = [
             # اتصالات/نگاشت/مسیریابی به تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
             # «تنظیمات سیستم ‹ مدیریتِ بازرگانی» منتقل شده.
             {"code": "SALES_ECOMMERCE", "label": "سفارش‌هایِ فروشِ اینترنتی", "screen": "commercial_documents_list_online_sales"},
+            # طبقِ درخواستِ صریح («پستِ خودکار در تلگرام و بله» + «تقویمِ
+            # محتوایی»): مدیریتِ اتصالِ بات و زمان‌بندیِ پست‌ها.
+            {"code": "SALES_CONTENT_CALENDAR", "label": "تقویمِ محتوا و پستِ خودکار", "screen": "commercial_social"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
@@ -330,6 +333,7 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("SALES_POS_SALE", "🛒"),
         ("SALES_POS_APPROVAL", "🧾"),
         ("SALES_ECOMMERCE", "🌐"),
+        ("SALES_CONTENT_CALENDAR", "📅"),
         ("SALES_AFTERSALES", "🎧"),
     ],
     "PURCH": [

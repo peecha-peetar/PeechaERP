@@ -1306,3 +1306,42 @@ class PosInvoiceAuditLog(Base):
     performed_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     performed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     note: Mapped[str | None] = mapped_column(String(300))
+
+
+class SocialConnection(Base):
+    """طبقِ درخواستِ صریح («پستِ خودکار در تلگرام و بله»): تلگرام و بله
+    (tapi.bale.ai) هردو دقیقاً همان Bot APIِ استاندارد را پیاده می‌کنند --
+    یک جدولِ اتصالِ مشترک با platform_code کافی است."""
+
+    __tablename__ = "social_connections"
+    __table_args__ = (CheckConstraint("platform_code IN ('TELEGRAM', 'BALE')"), {"schema": "comm"})
+
+    connection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    platform_code: Mapped[str] = mapped_column(String(10))
+    display_name: Mapped[str] = mapped_column(String(100))
+    chat_id: Mapped[str] = mapped_column(String(100))
+    bot_token_encrypted: Mapped[bytes | None]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ContentCalendarPost(Base):
+    """طبقِ درخواستِ صریح («تقویمِ محتوایی»): هر پست به یک اتصالِ مشخص
+    زمان‌بندی می‌شود؛ run_due_posts (تیکِ هر یک‌دقیقه‌ایِ شل، هم‌الگو با
+    اتوسینکِ فروشِ اینترنتی) پست‌هایِ سررسیده را خودکار ارسال می‌کند."""
+
+    __tablename__ = "content_calendar_posts"
+    __table_args__ = (
+        CheckConstraint("status_code IN ('SCHEDULED', 'SENT', 'FAILED', 'CANCELED')"), {"schema": "comm"},
+    )
+
+    post_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.social_connections.connection_id"))
+    title: Mapped[str | None] = mapped_column(String(200))
+    body_text: Mapped[str] = mapped_column(Text)
+    scheduled_at: Mapped[datetime.datetime]
+    status_code: Mapped[str] = mapped_column(String(15), default="SCHEDULED")
+    sent_at: Mapped[datetime.datetime | None]
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

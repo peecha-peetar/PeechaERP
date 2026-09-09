@@ -703,6 +703,14 @@ class MainWindow(QMainWindow):
         self._ecommerce_auto_sync_timer.timeout.connect(self._tick_ecommerce_auto_sync)
         self._ecommerce_auto_sync_timer.start()
 
+        # طبقِ درخواستِ صریح («تقویمِ محتوایی» + «پستِ خودکار در تلگرام/بله»):
+        # همان الگویِ تیکِ دوره‌ایِ سینکِ فروشِ اینترنتی -- پست‌هایِ سررسیده
+        # بدونِ نیاز به کلیکِ دستیِ کاربر ارسال می‌شوند.
+        self._content_calendar_timer = QTimer(self)
+        self._content_calendar_timer.setInterval(60_000)
+        self._content_calendar_timer.timeout.connect(self._tick_content_calendar)
+        self._content_calendar_timer.start()
+
         self._screens: dict[str, QWidget] = {}
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
         self._mdi_subwindows: dict[str, _FramelessMdiSubWindow] = {}
@@ -815,6 +823,18 @@ class MainWindow(QMainWindow):
             ecommerce_service.run_due_auto_syncs(
                 session.current_company.company_id, session.current_user.user_id, session.current_company.base_currency_id,
             )
+        except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
+            pass
+
+    def _tick_content_calendar(self) -> None:
+        """پشتیبانِ تایمرِ تقویمِ محتوا -- کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
+        با _tick_ecommerce_auto_sync."""
+        if session.current_company is None:
+            return
+        try:
+            from peecha.services import commercial_social as social_service
+
+            social_service.run_due_posts(session.current_company.company_id)
         except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
             pass
 
@@ -1399,6 +1419,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_document import CommercialDocumentScreen
         from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
         from peecha.ui.screens.sales_assistant import SalesAssistantScreen
+        from peecha.ui.screens.commercial_social import CommercialSocialScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
         from peecha.ui.screens.commercial_pos_approval import CommercialPosApprovalScreen
@@ -1515,6 +1536,7 @@ class MainWindow(QMainWindow):
         )
         self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
         self.register_screen("sales_assistant", SalesAssistantScreen(self))
+        self.register_screen("commercial_social", CommercialSocialScreen())
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
         self.register_screen("commercial_pos_approval", CommercialPosApprovalScreen())
