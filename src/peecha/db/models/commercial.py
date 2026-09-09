@@ -857,6 +857,18 @@ class MarketplaceConnection(Base):
     auto_sync_interval_minutes: Mapped[int] = mapped_column(default=60)
 
 
+class EcommercePricingRule(Base):
+    __tablename__ = "ecommerce_pricing_rules"
+    __table_args__ = (UniqueConstraint("connection_id", "scope_type_code", "scope_id"), {"schema": "comm"})
+
+    rule_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.marketplace_connections.connection_id"))
+    scope_type_code: Mapped[str] = mapped_column(String(10))  # CATEGORY|BRAND
+    scope_id: Mapped[int] = mapped_column(BigInteger)
+    markup_type_code: Mapped[str] = mapped_column(String(10))  # PERCENT|AMOUNT
+    markup_value: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+
+
 class MarketplaceOrderSyncLog(Base):
     __tablename__ = "marketplace_order_sync_log"
     __table_args__ = (UniqueConstraint("connection_id", "external_order_id"), {"schema": "comm"})

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
     Channel,
+    EcommercePricingRule,
     FulfillmentRoutingRule,
     MarketplaceCategoryMapping,
     MarketplaceConnection,
@@ -250,6 +251,76 @@ def _connection_company_id(connection_id: int) -> int:
 
 
 # ---------------------------------------------------------------------
+# استودیویِ قیمت -- قاعده‌یِ افزایشِ قیمت بر اساسِ دسته/برندِ *فروشگاه*
+# (طبقِ درخواستِ صریح: پورتِ «Price List Studio»ِ PeechaSync)
+# ---------------------------------------------------------------------
+def list_pricing_rules(connection_id: int) -> list[EcommercePricingRule]:
+    with new_session() as session:
+        return list(session.scalars(select(EcommercePricingRule).where(EcommercePricingRule.connection_id == connection_id)))
+
+
+def create_pricing_rule(connection_id: int, scope_type_code: str, scope_id: int, markup_type_code: str, markup_value: decimal.Decimal) -> int:
+    if scope_type_code not in ("CATEGORY", "BRAND"):
+        raise ValueError("نوعِ محدوده‌یِ نامعتبر است.")
+    if markup_type_code not in ("PERCENT", "AMOUNT"):
+        raise ValueError("نوعِ افزایشِ نامعتبر است.")
+    with new_session() as session:
+        row = session.scalar(
+            select(EcommercePricingRule).where(
+                EcommercePricingRule.connection_id == connection_id,
+                EcommercePricingRule.scope_type_code == scope_type_code,
+                EcommercePricingRule.scope_id == scope_id,
+            )
+        )
+        if row is None:
+            row = EcommercePricingRule(connection_id=connection_id, scope_type_code=scope_type_code, scope_id=scope_id)
+            session.add(row)
+        row.markup_type_code = markup_type_code
+        row.markup_value = markup_value
+        session.commit()
+        return row.rule_id
+
+
+def delete_pricing_rule(rule_id: int) -> None:
+    with new_session() as session:
+        row = session.get(EcommercePricingRule, rule_id)
+        if row is None:
+            raise ValueError("قاعده‌یِ نامعتبر است.")
+        session.delete(row)
+        session.commit()
+
+
+def apply_pricing_markup(connection_id: int, item, base_price: decimal.Decimal) -> decimal.Decimal:
+    """طبقِ اولویتِ اعلام‌شده: برند > دسته -- اگر کالایی هم برند و هم
+    دسته‌یِ دارایِ قاعده داشته باشد، فقط قاعده‌یِ برند اعمال می‌شود."""
+    with new_session() as session:
+        rule = None
+        if item.brand_id is not None:
+            rule = session.scalar(
+                select(EcommercePricingRule).where(
+                    EcommercePricingRule.connection_id == connection_id,
+                    EcommercePricingRule.scope_type_code == "BRAND",
+                    EcommercePricingRule.scope_id == item.brand_id,
+                )
+            )
+        if rule is None and item.category_id is not None:
+            rule = session.scalar(
+                select(EcommercePricingRule).where(
+                    EcommercePricingRule.connection_id == connection_id,
+                    EcommercePricingRule.scope_type_code == "CATEGORY",
+                    EcommercePricingRule.scope_id == item.category_id,
+                )
+            )
+        if rule is None:
+            return base_price
+        markup_type_code, markup_value = rule.markup_type_code, rule.markup_value
+
+    if markup_type_code == "PERCENT":
+        return base_price + (base_price * markup_value / decimal.Decimal("100"))
+    return base_price + markup_value
+
+
+# ---------------------------------------------------------------------
 # سینکِ کاتالوگ/سفارش/مشتری با فروشگاهِ اینترنتی -- طبقِ درخواستِ صریحِ
 # کاربر («ماژولِ فروشِ اینترنتی» با استفاده از دیتابیسِ همینِ ERP، بدونِ
 # اتکا به هلو/دژاوو). فعلاً فقط ووکامرس (_SUPPORTED_SYNC_PLATFORMS).
@@ -431,6 +502,7 @@ def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id
 
     stock_qty = _stock_qty_for(connection.company_id, item.item_id, connection.warehouse_id)
     category_external_id = _resolve_category_external_id(wcapi, "WOOCOMMERCE", connection_id, item.category_id)
+    price = apply_pricing_markup(connection_id, item, price)
     payload = {
         "name": item.name or sku,
         "regular_price": _format_store_price(price),
@@ -506,6 +578,7 @@ def _push_variant_product(
             continue
         try:
             stock_qty = _stock_qty_for(connection.company_id, child.item_id, connection.warehouse_id)
+            price = apply_pricing_markup(connection_id, item, price)
             variation_payload = {
                 "regular_price": _format_store_price(price),
                 "attributes": [{"name": name, "option": value} for name, value in child_attrs.items()],
@@ -635,6 +708,7 @@ def _push_simple_product_to_presta(papi, connection: MarketplaceConnection, conn
 
     stock_qty = _stock_qty_for(connection.company_id, item.item_id, connection.warehouse_id)
     category_external_id = _resolve_category_external_id(papi, "PRESTASHOP", connection_id, item.category_id)
+    price = apply_pricing_markup(connection_id, item, price)
     fields = {"name": item.name or sku, "price": _format_store_price(price), "active": item.is_active}
     if category_external_id:
         fields["id_category_default"] = category_external_id
@@ -664,7 +738,7 @@ def _push_variant_product_to_presta(
     if not priced_children:
         return 0, len(children) + 1, [f"{sku}: این کالا متغیر دارد ولی هیچ‌کدام مقدارِ ویژگی/قیمتِ معتبر ندارند -- سینک نشد."]
 
-    base_price = price_by_item[priced_children[0].item_id]
+    base_price = apply_pricing_markup(connection_id, item, price_by_item[priced_children[0].item_id])
     category_external_id = _resolve_category_external_id(papi, "PRESTASHOP", connection_id, item.category_id)
     fields = {"name": item.name or sku, "price": _format_store_price(base_price), "active": item.is_active}
     if category_external_id:
@@ -706,6 +780,7 @@ def _push_variant_product_to_presta(
                 if key not in value_ids:
                     value_ids[key] = presta_client.find_or_create_attribute_value(papi, group_ids[attribute_name], value_name)
                 option_value_ids.append(value_ids[key])
+            price = apply_pricing_markup(connection_id, item, price)
             price_impact = _format_store_price(price - base_price)
             combination_data = presta_client.upsert_combination(papi, parent_id, child_sku, price_impact, option_value_ids, existing_combinations)
             stock_qty = _stock_qty_for(connection.company_id, child.item_id, connection.warehouse_id)

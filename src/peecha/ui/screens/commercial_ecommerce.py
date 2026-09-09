@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import decimal
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -33,6 +36,8 @@ from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scroll
 _PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "OTHER": "سایر"}
 _SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
 _STRATEGY_LABELS = {"MOST_STOCK": "بیشترین موجودی", "REGION_MATCH": "تطبیقِ منطقه", "LOWEST_COST": "کمترین هزینه", "FIXED_WAREHOUSE": "انبارِ ثابت"}
+_PRICING_SCOPE_LABELS = {"BRAND": "برند", "CATEGORY": "دسته"}
+_PRICING_MARKUP_LABELS = {"PERCENT": "درصد", "AMOUNT": "مبلغ"}
 
 
 class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
@@ -53,6 +58,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         tabs = QTabWidget()
         tabs.addTab(self._build_connections_tab(), "اتصالات و نگاشت‌ها")
         tabs.addTab(self._build_routing_tab(), "مسیریابیِ سفارش")
+        tabs.addTab(self._build_pricing_tab(), "استودیویِ قیمت")
         outer.addWidget(tabs, stretch=1)
 
     def _company_id(self) -> int | None:
@@ -299,6 +305,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
 
         self._refresh_connection_detail()
         self._refresh_routing_rules()
+        self._refresh_pricing_connections()
 
     def _on_connection_selected(self, row: int, _column: int) -> None:
         self._selected_connection_id = self.connections_table.item(row, 0).data(Qt.UserRole)
@@ -548,3 +555,120 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
             return
         self.routing_status_label.setText("")
         self._refresh_routing_rules()
+
+    # --- استودیویِ قیمت (Price List Studio) -------------------------------
+    def _build_pricing_tab(self) -> QWidget:
+        """طبقِ درخواستِ صریح (پورتِ «Price List Studio»ِ PeechaSync): تعریفِ
+        درصد/مبلغِ افزوده به‌ازایِ دسته یا برندِ *فروشگاه* -- بدونِ نیاز به
+        دستکاریِ تک‌تکِ ردیف‌هایِ فهرستِ قیمت. اولویت: برند > دسته."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.addWidget(QLabel("قاعده‌ای برایِ یک اتصال تعریف کنید تا موقعِ سینکِ کاتالوگ، قیمتِ کالاهایِ آن دسته/برند خودکار افزایش یابد (اولویت: برند > دسته)."))
+
+        self.pricing_connection_combo = QComboBox()
+        self.pricing_connection_combo.currentIndexChanged.connect(lambda _index: self._refresh_pricing_rules())
+        outer.addWidget(self.pricing_connection_combo)
+
+        self.pricing_rules_table = QTableWidget(0, 3)
+        self.pricing_rules_table.setHorizontalHeaderLabels(["محدوده", "افزایش", ""])
+        self.pricing_rules_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pricing_rules_table.verticalHeader().setVisible(False)
+        self.pricing_rules_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        outer.addWidget(self.pricing_rules_table, stretch=1)
+
+        form = QHBoxLayout()
+        self.pricing_scope_type_combo = QComboBox()
+        for code, label in _PRICING_SCOPE_LABELS.items():
+            self.pricing_scope_type_combo.addItem(label, code)
+        self.pricing_scope_type_combo.currentIndexChanged.connect(lambda _index: self._refresh_pricing_scope_combo())
+        form.addWidget(self.pricing_scope_type_combo)
+        self.pricing_scope_combo = QComboBox()
+        form.addWidget(self.pricing_scope_combo, stretch=1)
+        self.pricing_markup_type_combo = QComboBox()
+        for code, label in _PRICING_MARKUP_LABELS.items():
+            self.pricing_markup_type_combo.addItem(label, code)
+        form.addWidget(self.pricing_markup_type_combo)
+        self.pricing_markup_value_field = QDoubleSpinBox()
+        self.pricing_markup_value_field.setRange(0, 1_000_000_000)
+        self.pricing_markup_value_field.setDecimals(2)
+        form.addWidget(self.pricing_markup_value_field)
+        add_pricing_rule_button = QPushButton("💲")
+        add_pricing_rule_button.setObjectName("primaryIconButton")
+        add_pricing_rule_button.setFixedWidth(48)
+        add_pricing_rule_button.setToolTip("قاعدهٔ تازه")
+        add_pricing_rule_button.clicked.connect(self._add_pricing_rule)
+        form.addWidget(add_pricing_rule_button)
+        outer.addLayout(form)
+
+        self.pricing_status_label = QLabel("")
+        self.pricing_status_label.setObjectName("statusError")
+        outer.addWidget(self.pricing_status_label)
+        return wrap_scrollable(page)
+
+    def _refresh_pricing_scope_combo(self) -> None:
+        company_id = self._company_id()
+        self.pricing_scope_combo.clear()
+        if company_id is None:
+            return
+        if self.pricing_scope_type_combo.currentData() == "BRAND":
+            for b in catalog_service.list_brands(company_id, active_only=True):
+                self.pricing_scope_combo.addItem(f"{b.code} — {b.name}", b.brand_id)
+        else:
+            for c in catalog_service.list_categories(company_id, active_only=True):
+                self.pricing_scope_combo.addItem(f"{c.code} — {c.name}", c.category_id)
+
+    def _refresh_pricing_connections(self) -> None:
+        current = self.pricing_connection_combo.currentData()
+        self.pricing_connection_combo.clear()
+        for c in self._connections:
+            self.pricing_connection_combo.addItem(f"{_PLATFORM_LABELS.get(c.platform_code, c.platform_code)} — {c.store_url}", c.connection_id)
+        index = self.pricing_connection_combo.findData(current)
+        if index >= 0:
+            self.pricing_connection_combo.setCurrentIndex(index)
+        self._refresh_pricing_scope_combo()
+        self._refresh_pricing_rules()
+
+    def _refresh_pricing_rules(self) -> None:
+        connection_id = self.pricing_connection_combo.currentData()
+        self.pricing_rules_table.setRowCount(0)
+        if connection_id is None:
+            return
+        company_id = self._company_id()
+        brands_by_id = {b.brand_id: b for b in catalog_service.list_brands(company_id)} if company_id else {}
+        categories_by_id = {c.category_id: c for c in catalog_service.list_categories(company_id)} if company_id else {}
+        rules = ecommerce_service.list_pricing_rules(connection_id)
+        self.pricing_rules_table.setRowCount(len(rules))
+        for row_index, r in enumerate(rules):
+            if r.scope_type_code == "BRAND":
+                scope = brands_by_id.get(r.scope_id)
+            else:
+                scope = categories_by_id.get(r.scope_id)
+            scope_label = f"{_PRICING_SCOPE_LABELS.get(r.scope_type_code, r.scope_type_code)}: {scope.name if scope else r.scope_id}"
+            markup_label = f"{r.markup_value:g}{'٪' if r.markup_type_code == 'PERCENT' else ''}"
+            self.pricing_rules_table.setItem(row_index, 0, QTableWidgetItem(scope_label))
+            self.pricing_rules_table.setItem(row_index, 1, QTableWidgetItem(markup_label))
+            delete_button = QPushButton("🗑️")
+            delete_button.setObjectName("dangerIconButton")
+            delete_button.clicked.connect(lambda _checked=False, rule_id=r.rule_id: self._delete_pricing_rule(rule_id))
+            self.pricing_rules_table.setCellWidget(row_index, 2, delete_button)
+
+    def _add_pricing_rule(self) -> None:
+        connection_id = self.pricing_connection_combo.currentData()
+        scope_id = self.pricing_scope_combo.currentData()
+        if connection_id is None or scope_id is None:
+            self.pricing_status_label.setText("ابتدا اتصال و دسته/برند را انتخاب کنید.")
+            return
+        try:
+            ecommerce_service.create_pricing_rule(
+                connection_id, self.pricing_scope_type_combo.currentData(), scope_id,
+                self.pricing_markup_type_combo.currentData(), decimal.Decimal(str(self.pricing_markup_value_field.value())),
+            )
+        except ValueError as exc:
+            self.pricing_status_label.setText(str(exc))
+            return
+        self.pricing_status_label.setText("")
+        self._refresh_pricing_rules()
+
+    def _delete_pricing_rule(self, rule_id: int) -> None:
+        ecommerce_service.delete_pricing_rule(rule_id)
+        self._refresh_pricing_rules()
