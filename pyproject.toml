@@ -17,6 +17,7 @@ dependencies = [
     "requests>=2.31",         # ارتباطِ HTTP با فروشگاهِ اینترنتی (ماژولِ فروشِ اینترنتی)
     "WooCommerce>=3.0.0",     # کلاینتِ رسمیِ REST APIِ ووکامرس (مجوزِ MIT)
     "cryptography>=41.0",     # رمزنگاریِ کلیدِ API/رازِ اتصالِ فروشگاه‌هایِ اینترنتی
+    "Pillow>=10.0",           # پردازشِ تصویر (واترمارک/حکِ متن/WebP) برایِ Smart Publish
 ]
 
 [project.optional-dependencies]

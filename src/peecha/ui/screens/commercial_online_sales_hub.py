@@ -14,6 +14,9 @@ from peecha.ui.screens.commercial_reviews import CommercialReviewsScreen
 from peecha.ui.screens.commercial_social import CommercialSocialScreen
 from peecha.ui.screens.connectivity_guard import ConnectivityGuardScreen
 from peecha.ui.screens.media_center import MediaCenterScreen
+from peecha.ui.screens.online_marketing import OnlineMarketingScreen
+from peecha.ui.screens.online_store_advisor import OnlineStoreAdvisorScreen
+from peecha.ui.screens.smart_publish_settings import SmartPublishSettingsScreen
 
 
 class CommercialOnlineSalesHubScreen(QWidget):
@@ -45,6 +48,12 @@ class CommercialOnlineSalesHubScreen(QWidget):
         self.tabs.addTab(self.coupons_tab, "کوپن/کدِ تخفیف")
         self.reviews_tab = CommercialReviewsScreen()
         self.tabs.addTab(self.reviews_tab, "نظراتِ مشتریان")
+        self.advisor_tab = OnlineStoreAdvisorScreen()
+        self.tabs.addTab(self.advisor_tab, "دستیارِ فروشگاه")
+        self.marketing_tab = OnlineMarketingScreen()
+        self.tabs.addTab(self.marketing_tab, "بازاریابی")
+        self.smart_publish_tab = SmartPublishSettingsScreen()
+        self.tabs.addTab(self.smart_publish_tab, "Smart Publish")
         self.tabs.currentChanged.connect(self._refresh_tab_at)
         outer.addWidget(self.tabs, stretch=1)
 

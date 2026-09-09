@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
@@ -22,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session as app_session
 from peecha.services import media_center as media_service
+from peecha.services import smart_publish as smart_publish_service
 from peecha.services.detail_dimensions import is_image_extension
 from peecha.ui.widgets import LayoutEditMixin
 
@@ -119,6 +123,11 @@ class MediaCenterScreen(LayoutEditMixin, QWidget):
             open_button = QPushButton("🔗 بازکردن")
             open_button.clicked.connect(lambda _checked=False, a=attachment: self._open_file(a))
             row.addWidget(open_button)
+        else:
+            process_button = QPushButton("✨ پردازشِ هوشمند")
+            process_button.setToolTip("اعمالِ واترمارک/حکِ متن/WebP طبقِ تنظیماتِ Smart Publish -- یک نسخهٔ تازه می‌سازد")
+            process_button.clicked.connect(lambda _checked=False, a=attachment: self._process_smart_publish(a))
+            row.addWidget(process_button)
 
         remove_button = QPushButton("🚫 حذف")
         remove_button.clicked.connect(lambda _checked=False, a=attachment: self._remove_media(a.attachment_id))
@@ -162,6 +171,27 @@ class MediaCenterScreen(LayoutEditMixin, QWidget):
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
+        self.refresh()
+
+    def _process_smart_publish(self, attachment) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            processed_bytes = smart_publish_service.process_image_file(company_id, attachment.storage_key)
+        except Exception as exc:  # noqa: BLE001 -- خطاهایِ Pillow/فایل متنوع‌اند
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        with tempfile.NamedTemporaryFile(suffix=".webp", delete=False) as tmp_file:
+            tmp_file.write(processed_bytes)
+            tmp_path = tmp_file.name
+        try:
+            media_service.upload_media(company_id, app_session.current_user.user_id, tmp_path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
         self.refresh()
 
     def _remove_media(self, attachment_id: int) -> None:

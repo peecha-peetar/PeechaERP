@@ -1440,3 +1440,25 @@ class OnlineCoupon(Base):
     last_synced_at: Mapped[datetime.datetime | None]
     is_active: Mapped[bool] = mapped_column(default=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class SmartPublishSettings(Base):
+    """طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync -- Smart
+    Publish»): تنظیماتِ پردازشِ خودکارِ تصویرِ محصول -- یک ردیف به‌ازایِ
+    هر شرکت، هم‌الگو با AiContentSettings."""
+
+    __tablename__ = "smart_publish_settings"
+    __table_args__ = (
+        CheckConstraint("watermark_position IN ('bottom-right', 'bottom-left', 'top-right', 'top-left', 'center')"),
+        CheckConstraint("stamp_text_source IN ('item_code', 'item_name')"),
+        {"schema": "comm"},
+    )
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    watermark_storage_key: Mapped[str | None] = mapped_column(String(500))
+    watermark_opacity: Mapped[decimal.Decimal] = mapped_column(Numeric(4, 3), default=decimal.Decimal("0.5"))
+    watermark_scale: Mapped[decimal.Decimal] = mapped_column(Numeric(4, 3), default=decimal.Decimal("0.2"))
+    watermark_position: Mapped[str] = mapped_column(String(20), default="bottom-right")
+    stamp_text_enabled: Mapped[bool] = mapped_column(default=False)
+    stamp_text_source: Mapped[str] = mapped_column(String(20), default="item_code")
+    webp_quality: Mapped[int] = mapped_column(default=80)
