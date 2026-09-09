@@ -434,6 +434,61 @@ def upsert_combination(papi: PrestaAPI, product_id: int, reference: str, price_i
     return {"id": int(id_element.text)}
 
 
+def find_specific_price(papi: PrestaAPI, product_id: int, product_attribute_id: int = 0) -> dict | None:
+    resp = retry.call_with_retry(
+        papi.get, "specific_prices",
+        params={"filter[id_product]": str(product_id), "filter[id_product_attribute]": str(product_attribute_id), "display": "full"},
+    )
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"جست‌وجویِ قیمتِ‌ویژه‌یِ محصولِ #{product_id}")
+    data = resp.json()
+    rows = (data or {}).get("specific_prices") or []
+    return rows[0] if isinstance(rows, list) and rows else None
+
+
+def _build_specific_price_xml(product_id: int, price: str, product_attribute_id: int, specific_price_id: int | None = None) -> str:
+    parts = ["<prestashop>", "<specific_price>"]
+    if specific_price_id is not None:
+        parts.append(f"<id>{specific_price_id}</id>")
+    parts.append(
+        "<id_shop_group>0</id_shop_group><id_shop>0</id_shop><id_cart>0</id_cart>"
+        f"<id_product>{product_id}</id_product><id_product_attribute>{product_attribute_id}</id_product_attribute>"
+        "<id_currency>0</id_currency><id_country>0</id_country><id_group>0</id_group><id_customer>0</id_customer>"
+        f"<price>{price}</price><from_quantity>1</from_quantity>"
+        "<reduction>0</reduction><reduction_tax>1</reduction_tax><reduction_type>amount</reduction_type>"
+        "<from>0000-00-00 00:00:00</from><to>0000-00-00 00:00:00</to>"
+    )
+    parts.append("</specific_price></prestashop>")
+    return "".join(parts)
+
+
+def set_specific_price(papi: PrestaAPI, product_id: int, price: str, product_attribute_id: int = 0) -> None:
+    """طبقِ رفعِ نبودِ توازیِ واقعی (S3 فقط قیمتِ حراج را برایِ ووکامرس اضافه
+    کرده بود): برخلافِ ووکامرس که یک فیلدِ ساده‌یِ sale_price دارد، پرستاشاپ
+    قیمتِ حراج را با یک رکوردِ جداگانه‌یِ specific_price پیاده می‌کند -- این‌جا
+    از فیلدِ ``price`` (بازنویسیِ کاملِ قیمتِ نهایی، دقیقاً معادلِ
+    sale_priceِ ووکامرس) استفاده می‌شود، نه محاسبه‌یِ درصد/مبلغِ تخفیف."""
+    existing = find_specific_price(papi, product_id, product_attribute_id)
+    if existing:
+        body = _build_specific_price_xml(product_id, price, product_attribute_id, specific_price_id=int(existing["id"]))
+        resp = retry.call_with_retry(papi.put, f"specific_prices/{existing['id']}", body)
+        _raise_for_status(resp, f"به‌روزرسانیِ قیمتِ‌ویژه‌یِ محصولِ #{product_id}")
+        return
+    body = _build_specific_price_xml(product_id, price, product_attribute_id)
+    resp = retry.call_with_retry(papi.post, "specific_prices", body)
+    _raise_for_status(resp, f"ایجادِ قیمتِ‌ویژه‌یِ محصولِ #{product_id}")
+
+
+def clear_specific_price(papi: PrestaAPI, product_id: int, product_attribute_id: int = 0) -> None:
+    """طبقِ رفعِ باگِ واقعیِ مشابهِ ووکامرس (S3): اگر تخفیف تمام شده باشد،
+    قیمتِ‌ویژه‌یِ قدیمی باید صریحاً حذف شود -- وگرنه در فروشگاه دست‌نخورده
+    و گمراه‌کننده باقی می‌ماند."""
+    existing = find_specific_price(papi, product_id, product_attribute_id)
+    if existing:
+        resp = retry.call_with_retry(papi.delete, f"specific_prices/{existing['id']}")
+        _raise_for_status(resp, f"حذفِ قیمتِ‌ویژه‌یِ محصولِ #{product_id}")
+
+
 def find_combination_stock_available_id(papi: PrestaAPI, product_id: int, combination_id: int) -> int | None:
     resp = retry.call_with_retry(
         papi.get, "stock_availables", params={"filter[id_product]": str(product_id), "filter[id_product_attribute]": str(combination_id)},

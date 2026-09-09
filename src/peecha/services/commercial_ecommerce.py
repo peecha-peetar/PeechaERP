@@ -497,6 +497,21 @@ def _apply_sale_price(payload: dict, company_id: int, base_price: decimal.Decima
     payload["sale_price"] = _format_store_price(sale_price) if sale_price is not None else ""
 
 
+def _apply_presta_sale_price(papi, product_id: int, company_id: int, base_price: decimal.Decimal, product_attribute_id: int = 0) -> None:
+    """طبقِ تکمیلِ توازیِ پرستاشاپ با ووکامرس -- S3 قیمتِ حراج را فقط برایِ
+    ووکامرس اضافه کرده بود. پرستاشاپ به‌جایِ فیلدِ ساده‌یِ sale_price، از
+    رکوردِ specific_price استفاده می‌کند -- همیشه صراحتاً ست/پاک می‌شود
+    (همان انضباطِ _apply_sale_price)."""
+    from peecha.integrations.ecommerce import presta_client
+    from peecha.services import commercial_pricing as pricing_service
+
+    sale_price = pricing_service.resolve_sale_price(company_id, base_price)
+    if sale_price is not None:
+        presta_client.set_specific_price(papi, product_id, _format_store_price(sale_price), product_attribute_id)
+    else:
+        presta_client.clear_specific_price(papi, product_id, product_attribute_id)
+
+
 def _push_simple_product(wcapi, connection: MarketplaceConnection, connection_id: int, item, sku: str, price: decimal.Decimal, wp_creds: dict | None) -> None:
     from peecha.integrations.ecommerce import wc_client
 
@@ -729,6 +744,7 @@ def _push_simple_product_to_presta(papi, connection: MarketplaceConnection, conn
     data = presta_client.upsert_product(papi, sku, fields)
     for combination in presta_client.list_combinations(papi, data["id"]):
         presta_client.delete_combination(papi, combination["id"])
+    _apply_presta_sale_price(papi, data["id"], connection.company_id, price)
     presta_client.update_stock_quantity(papi, data["id"], _effective_stock_quantity(item.ecommerce_stock_mode, stock_qty))
     _attach_presta_photo_if_missing(papi, connection, data["id"], item.item_detail_account_id, presta_client.product_has_images(papi, data["id"]))
     map_item(connection_id, sku, item.item_id, external_price=price)
@@ -799,6 +815,7 @@ def _push_variant_product_to_presta(
             price = apply_pricing_markup(connection_id, item, price)
             price_impact = _format_store_price(price - base_price)
             combination_data = presta_client.upsert_combination(papi, parent_id, child_sku, price_impact, option_value_ids, existing_combinations)
+            _apply_presta_sale_price(papi, parent_id, connection.company_id, price, product_attribute_id=combination_data["id"])
             stock_qty = _stock_qty_for(connection.company_id, child.item_id, connection.warehouse_id)
             presta_client.update_combination_stock_quantity(
                 papi, parent_id, combination_data["id"], _effective_stock_quantity(child.ecommerce_stock_mode, stock_qty),
