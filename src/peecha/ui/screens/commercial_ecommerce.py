@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -33,7 +34,7 @@ from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
 
-_PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "OTHER": "سایر"}
+_PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
 _SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
 _STRATEGY_LABELS = {"MOST_STOCK": "بیشترین موجودی", "REGION_MATCH": "تطبیقِ منطقه", "LOWEST_COST": "کمترین هزینه", "FIXED_WAREHOUSE": "انبارِ ثابت"}
 _PRICING_SCOPE_LABELS = {"BRAND": "برند", "CATEGORY": "دسته"}
@@ -63,6 +64,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         tabs.addTab(self._build_bulk_assign_tab(), "تخصیصِ گروهیِ دسته/برند")
         tabs.addTab(self._build_gallery_tab(), "گالریِ تصاویرِ فروشگاه")
         tabs.addTab(self._build_reconciliation_tab(), "تطبیقِ کاتالوگ")
+        tabs.addTab(self._build_torob_tab(), "فیدِ ترب")
         outer.addWidget(tabs, stretch=1)
 
     def _company_id(self) -> int | None:
@@ -314,6 +316,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self._refresh_bulk_assign_table()
         self._refresh_gallery_connections()
         self._refresh_reconciliation_connections()
+        self._refresh_torob_connections()
 
     def _on_connection_selected(self, row: int, _column: int) -> None:
         self._selected_connection_id = self.connections_table.item(row, 0).data(Qt.UserRole)
@@ -990,3 +993,58 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         ecommerce_service.map_item(connection_id, external_sku, item_id)
         theme.set_status_label(self.reconciliation_status_label, f"«{external_sku}» نگاشته شد.", ok=True)
         self._load_reconciliation()
+
+    # --- فیدِ ترب -----------------------------------------------------------
+    def _build_torob_tab(self) -> QWidget:
+        """طبقِ ادامه‌یِ اولویت‌بندی («مقایسه‌یِ قیمت با ترب»): ترب برخلافِ
+        ووکامرس/پرستاشاپ APIِ Push ندارد -- کاربر فقط یک فایلِ XML طبقِ
+        فرمتِ فیدِ ترب می‌سازد و رویِ سرورِ خودش قرار می‌دهد تا کراولرِ
+        ترب آن را بخواند."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+
+        info_label = QLabel("اتصالی از نوعِ «ترب» با آدرسِ پایه‌یِ صفحاتِ محصول ایجاد کنید، سپس فایلِ XML را تولید و رویِ فروشگاهِ خودتان بارگذاری کنید تا ترب آن را بخواند.")
+        info_label.setWordWrap(True)
+        outer.addWidget(info_label)
+
+        form = QHBoxLayout()
+        self.torob_connection_combo = QComboBox()
+        form.addWidget(self.torob_connection_combo, stretch=1)
+        generate_button = QPushButton("📤 تولید و ذخیره‌یِ فایلِ XML")
+        generate_button.setObjectName("primaryIconButton")
+        generate_button.clicked.connect(self._generate_torob_feed)
+        form.addWidget(generate_button)
+        outer.addLayout(form)
+
+        self.torob_status_label = QLabel("")
+        self.torob_status_label.setObjectName("statusError")
+        outer.addWidget(self.torob_status_label)
+        outer.addStretch(1)
+        return wrap_scrollable(page)
+
+    def _refresh_torob_connections(self) -> None:
+        current = self.torob_connection_combo.currentData()
+        self.torob_connection_combo.clear()
+        for c in self._connections:
+            if c.platform_code == "TOROB":
+                self.torob_connection_combo.addItem(c.store_url, c.connection_id)
+        index = self.torob_connection_combo.findData(current)
+        if index >= 0:
+            self.torob_connection_combo.setCurrentIndex(index)
+
+    def _generate_torob_feed(self) -> None:
+        connection_id = self.torob_connection_combo.currentData()
+        if connection_id is None:
+            self.torob_status_label.setText("ابتدا یک اتصالِ «ترب» ایجاد کنید (در تبِ «اتصالات و نگاشت‌ها»).")
+            return
+        try:
+            feed_xml = ecommerce_service.generate_torob_feed_xml(connection_id)
+        except ValueError as exc:
+            self.torob_status_label.setText(str(exc))
+            return
+        path, _filter = QFileDialog.getSaveFileName(self, "ذخیره‌یِ فایلِ فیدِ ترب", "torob-feed.xml", "XML (*.xml)")
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(feed_xml)
+        theme.set_status_label(self.torob_status_label, f"فایلِ فید در «{path}» ذخیره شد.", ok=True)

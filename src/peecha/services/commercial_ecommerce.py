@@ -43,7 +43,7 @@ def list_connections(company_id: int) -> list[MarketplaceConnection]:
 
 
 def create_connection(company_id: int, platform_code: str, store_url: str, channel_code: str, warehouse_id: int | None = None) -> int:
-    if platform_code not in ("WOOCOMMERCE", "PRESTASHOP", "OTHER"):
+    if platform_code not in ("WOOCOMMERCE", "PRESTASHOP", "TOROB", "OTHER"):
         raise ValueError("پلتفرمِ نامعتبر است.")
     with new_session() as session:
         channel = session.get(Channel, (channel_code, company_id))
@@ -604,6 +604,60 @@ def _effective_stock_quantity(stock_mode: str, actual_qty: int) -> int:
 def _apply_stock_mode(payload: dict, stock_mode: str, actual_qty: int) -> None:
     payload["manage_stock"] = True
     payload["stock_quantity"] = _effective_stock_quantity(stock_mode, actual_qty)
+
+
+# ---------------------------------------------------------------------
+# فیدِ ترب (Torob)
+# ---------------------------------------------------------------------
+def generate_torob_feed_xml(connection_id: int) -> str:
+    """طبقِ ادامه‌یِ اولویت‌بندی («مقایسه‌یِ قیمت با ترب»): ترب برخلافِ
+    ووکامرس/پرستاشاپ APIِ Push ندارد -- یک فایلِ XML طبقِ فرمتِ استانداردِ
+    فیدِ محصولاتِ ترب می‌سازد که خودِ فروشگاه میزبانی می‌کند و کراولرِ
+    ترب دوره‌ای آن را می‌خواند. store_url این‌جا آدرسِ پایه‌یِ صفحاتِ
+    محصول است (مثلاً «https://shop.example.com/product»)؛ آدرسِ هر
+    محصول از پیوندِ سئویِ خودِ کالا (seo_url_slug، اگر باشد) یا کد/SKU
+    ساخته می‌شود. فقط کالاهایِ سادهٔ فروختنیِ دارایِ قیمت شامل می‌شوند --
+    مثلِ بقیه‌یِ سینک‌ها، کالاهایِ متغیر (parent/child) پشتیبانی نمی‌شوند."""
+    import xml.etree.ElementTree as ET
+
+    from peecha.services import commercial_pricing as pricing_service
+    from peecha.services import inventory_catalog as catalog_service
+
+    connection = _get_connection(connection_id)
+    if connection.platform_code != "TOROB":
+        raise ValueError("این اتصال از نوعِ ترب نیست.")
+    price_list_id = _channel_default_price_list(connection)
+    if price_list_id is None:
+        raise ValueError("کانالِ این اتصال فهرستِ قیمتِ پیش‌فرض ندارد -- در تنظیماتِ کانال یک فهرستِ قیمت مشخص کنید.")
+
+    price_by_item = {
+        row.item_id: row.unit_price for row in pricing_service.list_price_list_items(price_list_id) if row.min_quantity == 1
+    }
+    base_url = connection.store_url.rstrip("/")
+
+    root = ET.Element("products")
+    for item in catalog_service.list_items(connection.company_id, active_only=True):
+        if item.variant_parent_item_id is not None or not item.is_sellable:
+            continue
+        price = price_by_item.get(item.item_id)
+        if price is None:
+            continue
+        page_slug = (item.seo_url_slug or item.sku or item.code or "").strip()
+        if not page_slug:
+            continue
+        stock_qty = _stock_qty_for(connection.company_id, item.item_id, connection.warehouse_id)
+        effective_qty = _effective_stock_quantity(item.ecommerce_stock_mode, stock_qty)
+
+        product = ET.SubElement(root, "product")
+        ET.SubElement(product, "page_unique_id").text = item.sku or item.code
+        ET.SubElement(product, "page_url").text = f"{base_url}/{page_slug}"
+        ET.SubElement(product, "title").text = item.seo_title or item.name or item.code
+        ET.SubElement(product, "price").text = str(int(price))
+        ET.SubElement(product, "availability").text = "instock" if effective_qty > 0 else "out of stock"
+        if item.website_category:
+            ET.SubElement(product, "category_name").text = item.website_category
+
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
 
 
 def _apply_sale_price(payload: dict, company_id: int, base_price: decimal.Decimal) -> None:
