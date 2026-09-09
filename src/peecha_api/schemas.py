@@ -74,6 +74,12 @@ class DeliveryConfirmationLineRequest(BaseModel):
     shortage_reason: str | None = None
 
 
+class PriceResolveResponse(BaseModel):
+    unit_price: decimal.Decimal
+    source: str  # CONTRACT | PRICE_LIST
+    discount_amount: decimal.Decimal
+
+
 class DeliveryConfirmationRequest(BaseModel):
     document_id: int
     customer_visit_id: int | None = None

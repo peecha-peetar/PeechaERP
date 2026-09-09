@@ -82,16 +82,24 @@ export function App({ locationProvider = new NullLocationProvider(), captureProv
 
   return (
     <SafeAreaView style={styles.flex}>
-      {/* warehouseId/currencyId/channelCode فعلاً ثابت‌اند -- در R133 باید
-          از تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull هنوز
-          برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند. */}
+      {/* warehouseId/currencyId/channelCode فعلاً ثابت‌اند -- در فازِ بعدی
+          باید از تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
+          هنوز برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند.
+          customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
+          document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
+          وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
+          syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
       <OrderScreen
         customer={route.customer}
         items={items}
         channelCode="VAN_SALES"
         warehouseId={1}
         currencyId={1}
+        customerVisitId={null}
+        apiClient={services.apiClient}
         offlineQueue={services.offlineQueue}
+        captureProvider={captureProvider}
+        locationProvider={locationProvider}
         onSubmitted={() => setRoute({ name: "VISIT_LIST" })}
       />
     </SafeAreaView>

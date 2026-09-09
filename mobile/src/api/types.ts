@@ -74,6 +74,7 @@ export interface OrderCreateRequest {
 
 export interface OrderCreateResponse {
   document_id: number;
+  line_ids: number[];
 }
 
 export interface DeliveryLineInput {
@@ -96,4 +97,18 @@ export interface DeliveryConfirmationRequest {
 
 export interface DeliveryConfirmationResponse {
   delivery_confirmation_id: number;
+}
+
+export interface PriceResolveRequest {
+  counterpartyDetailAccountId: number;
+  itemId: number;
+  uomId: number;
+  quantity: string;
+  documentTypeCode: "SALES_ORDER" | "SALES_INVOICE";
+}
+
+export interface PriceResolveResponse {
+  unit_price: string;
+  source: "CONTRACT" | "PRICE_LIST";
+  discount_amount: string;
 }

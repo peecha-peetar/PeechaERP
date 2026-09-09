@@ -5,6 +5,8 @@ import {
   LoginResponse,
   OrderCreateRequest,
   OrderCreateResponse,
+  PriceResolveRequest,
+  PriceResolveResponse,
   PullResponse,
   StartVisitRequest,
   StartVisitResponse,
@@ -33,10 +35,11 @@ export class ApiClient {
 
   private async request<T>(
     path: string,
-    options: { method?: string; body?: unknown; auth?: boolean } = {},
+    options: { method?: string; body?: unknown; auth?: boolean; idempotencyKey?: string } = {},
   ): Promise<T> {
-    const { method = "GET", body, auth = true } = options;
+    const { method = "GET", body, auth = true, idempotencyKey } = options;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
     if (auth) {
       const token = await this.tokenStore.getAccessToken();
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -106,8 +109,8 @@ export class ApiClient {
     return this.request<PullResponse>("/sync/pull");
   }
 
-  async startVisit(payload: StartVisitRequest): Promise<StartVisitResponse> {
-    return this.request<StartVisitResponse>("/visits/start", { method: "POST", body: payload });
+  async startVisit(payload: StartVisitRequest, idempotencyKey?: string): Promise<StartVisitResponse> {
+    return this.request<StartVisitResponse>("/visits/start", { method: "POST", body: payload, idempotencyKey });
   }
 
   async completeVisit(customerVisitId: number, notes?: string): Promise<void> {
@@ -121,14 +124,32 @@ export class ApiClient {
     });
   }
 
-  async createOrder(payload: OrderCreateRequest): Promise<OrderCreateResponse> {
-    return this.request<OrderCreateResponse>("/orders", { method: "POST", body: payload });
+  async createOrder(payload: OrderCreateRequest, idempotencyKey?: string): Promise<OrderCreateResponse> {
+    return this.request<OrderCreateResponse>("/orders", { method: "POST", body: payload, idempotencyKey });
   }
 
-  async createDeliveryConfirmation(payload: DeliveryConfirmationRequest): Promise<DeliveryConfirmationResponse> {
+  async createDeliveryConfirmation(
+    payload: DeliveryConfirmationRequest,
+    idempotencyKey?: string,
+  ): Promise<DeliveryConfirmationResponse> {
     return this.request<DeliveryConfirmationResponse>("/delivery-confirmations", {
       method: "POST",
       body: payload,
+      idempotencyKey,
     });
+  }
+
+  /** طبقِ R133: قیمتِ معتبر را از همان زنجیره‌یِ resolve_price می‌گیرد --
+   * فقط وقتی آنلاین هستیم صدا زده می‌شود؛ در آفلاین صفحه‌یِ سفارش باید
+   * به ورودیِ دستیِ قیمت برگردد (این متد اصلاً صدا زده نمی‌شود). */
+  async resolvePrice(params: PriceResolveRequest): Promise<PriceResolveResponse> {
+    const query = new URLSearchParams({
+      counterparty_detail_account_id: String(params.counterpartyDetailAccountId),
+      item_id: String(params.itemId),
+      uom_id: String(params.uomId),
+      quantity: params.quantity,
+      document_type_code: params.documentTypeCode,
+    });
+    return this.request<PriceResolveResponse>(`/pricing/resolve?${query.toString()}`);
   }
 }

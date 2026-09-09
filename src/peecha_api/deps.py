@@ -26,3 +26,9 @@ def get_current_context(authorization: str | None = Header(default=None)) -> Aut
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکنِ دسترسی نامعتبر یا منقضی‌شده است.")
     user_id, company_id = decoded
     return AuthContext(user_id=user_id, company_id=company_id)
+
+
+def get_idempotency_key(idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> str | None:
+    """طبقِ R133: کلاینتِ موبایل این هدر را برایِ هر اقدامِ صف‌آفلاین
+    می‌فرستد؛ اختیاری است (None برایِ کلاینت‌هایِ قدیمی‌تر/بدونِ صف)."""
+    return idempotency_key

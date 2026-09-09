@@ -9,7 +9,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services import field_sales as field_sales_service
-from peecha_api.deps import AuthContext, get_current_context
+from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
+from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.schemas import VisitCompleteRequest, VisitSkipRequest, VisitStartRequest
 
 router = APIRouter(prefix="/visits", tags=["visits"])
@@ -22,12 +23,24 @@ def _ensure_own_visit(ctx: AuthContext, customer_visit_id: int) -> None:
 
 
 @router.post("/start")
-def start_visit(payload: VisitStartRequest, ctx: AuthContext = Depends(get_current_context)) -> dict:
-    customer_visit_id = field_sales_service.start_visit(
-        ctx.company_id, payload.customer_detail_account_id, ctx.user_id, payload.visit_plan_id,
-        payload.check_in_latitude, payload.check_in_longitude,
-    )
-    return {"customer_visit_id": customer_visit_id}
+def start_visit(
+    payload: VisitStartRequest,
+    ctx: AuthContext = Depends(get_current_context),
+    idempotency_key: str | None = Depends(get_idempotency_key),
+) -> dict:
+    def _do() -> int:
+        return field_sales_service.start_visit(
+            ctx.company_id, payload.customer_detail_account_id, ctx.user_id, payload.visit_plan_id,
+            payload.check_in_latitude, payload.check_in_longitude,
+        )
+
+    try:
+        return run_idempotent(
+            idempotency_key, "POST /visits/start", ctx.user_id, ctx.company_id,
+            status.HTTP_200_OK, _do, lambda customer_visit_id: {"customer_visit_id": customer_visit_id},
+        )
+    except IdempotentReplay as replay:
+        return replay.body
 
 
 @router.post("/{customer_visit_id}/complete", status_code=status.HTTP_204_NO_CONTENT)
