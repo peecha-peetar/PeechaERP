@@ -30,7 +30,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount, FiscalYear, JournalEntryLine
 from peecha.db.models.commercial import (
-    CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation, PosSettings,
+    Channel, CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation, PosSettings,
 )
 from peecha.db.models.inventory import Item, StockDocument
 from peecha.services import commercial_contracts as contracts_service
@@ -922,7 +922,7 @@ def get_document(document_id: int, company_id: int) -> tuple[CommercialDocument,
 def list_documents(
     company_id: int, document_type_code: str | None = None, status_code: str | None = None,
     counterparty_detail_account_id: int | None = None, limit: int | None = None,
-    pos_session_id: int | None = None,
+    pos_session_id: int | None = None, channel_type_code: str | None = None,
 ) -> list[CommercialDocument]:
     with new_session() as session:
         stmt = select(CommercialDocument).where(CommercialDocument.company_id == company_id)
@@ -934,6 +934,13 @@ def list_documents(
             stmt = stmt.where(CommercialDocument.counterparty_detail_account_id == counterparty_detail_account_id)
         if pos_session_id is not None:
             stmt = stmt.where(CommercialDocument.pos_session_id == pos_session_id)
+        if channel_type_code:
+            # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط سفارش‌هایِ
+            # فروشِ مشتری بیاید»): سندی که channel_code ندارد اصلاً کانالِ
+            # اینترنتی محسوب نمی‌شود -- پس join به‌جایِ outerjoin.
+            stmt = stmt.join(
+                Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id)
+            ).where(Channel.channel_type_code == channel_type_code)
         stmt = stmt.order_by(CommercialDocument.document_id.desc())
         if limit is not None:
             stmt = stmt.limit(limit)

@@ -1402,7 +1402,6 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
         from peecha.ui.screens.commercial_pos_approval import CommercialPosApprovalScreen
-        from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
         from peecha.ui.screens.commercial_aftersales import CommercialAftersalesScreen
         from peecha.ui.screens.commercial_purchasing_extras import CommercialPurchasingExtrasScreen
         from peecha.ui.screens.order_tracking import OrderTrackingScreen
@@ -1502,12 +1501,23 @@ class MainWindow(QMainWindow):
                 self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_IN")
             ),
         )
+        # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط سفارش‌هایِ فروشِ
+        # مشتری بیاید»): این منو دیگر صفحهٔ اتصالات/تنظیمات نیست -- فقط
+        # فهرستِ سفارش‌هایِ فروشی که از کانالِ اینترنتی آمده‌اند را نشان
+        # می‌دهد؛ خودِ تنظیمات به تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
+        # سیستم‌سِتینگزِ بازرگانی منتقل شده (system_settings.py).
+        self.register_screen(
+            "commercial_documents_list_online_sales",
+            CommercialDocumentsListScreen(
+                self, type_filter_codes=("SALES_ORDER",), channel_type_code="ONLINE",
+                title_override="سفارش‌هایِ فروشِ اینترنتی",
+            ),
+        )
         self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
         self.register_screen("sales_assistant", SalesAssistantScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
         self.register_screen("commercial_pos_approval", CommercialPosApprovalScreen())
-        self.register_screen("commercial_ecommerce", CommercialEcommerceScreen())
         self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
         self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())
         self.register_screen("order_tracking", OrderTrackingScreen(self))

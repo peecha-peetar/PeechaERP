@@ -112,7 +112,12 @@ NAV_ITEMS = [
             {"code": "SALES_PRICING", "label": "فهرستِ قیمت و تخفیف", "screen": "commercial_pricing"},
             {"code": "SALES_POS_SALE", "label": "فروشِ حضوری (POS)", "screen": "commercial_pos_sale"},
             {"code": "SALES_POS_APPROVAL", "label": "تاییدِ سرپرست -- فروشِ حضوری", "screen": "commercial_pos_approval"},
-            {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی و Omnichannel", "screen": "commercial_ecommerce"},
+            # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط سفارش‌هایِ
+            # فروشِ مشتری بیاید»): این منو دیگر صفحهٔ اتصالات/تنظیمات
+            # نیست -- فقط فهرستِ سفارش‌هایِ فروشِ آمده از کانالِ اینترنتی.
+            # اتصالات/نگاشت/مسیریابی به تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
+            # «تنظیمات سیستم ‹ مدیریتِ بازرگانی» منتقل شده.
+            {"code": "SALES_ECOMMERCE", "label": "سفارش‌هایِ فروشِ اینترنتی", "screen": "commercial_documents_list_online_sales"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },

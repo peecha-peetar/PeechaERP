@@ -55,10 +55,18 @@ _TYPE_TO_NAV_CODE = {
 
 
 class CommercialDocumentsListScreen(QWidget):
-    def __init__(self, main_window, type_filter_codes: tuple[str, ...] | None = None) -> None:
+    def __init__(
+        self, main_window, type_filter_codes: tuple[str, ...] | None = None,
+        channel_type_code: str | None = None, title_override: str | None = None,
+    ) -> None:
         super().__init__()
         self._main_window = main_window
         self._type_filter_codes = type_filter_codes
+        # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط سفارش‌هایِ فروشِ
+        # مشتری بیاید»): وقتی این مقدار تنظیم شده باشد (مثلاً "ONLINE")،
+        # فهرست فقط سندهایی را نشان می‌دهد که کانالشان از همان نوع است --
+        # ثابت است، فیلترِ قابلِ‌تغییر توسطِ کاربر نیست.
+        self._channel_type_code = channel_type_code
         self._rows: list = []
         self._parties_by_id: dict[int, str] = {}
 
@@ -66,7 +74,10 @@ class CommercialDocumentsListScreen(QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("اسنادِ فروش" if type_filter_codes and type_filter_codes[0].startswith("SALES") else "اسنادِ خرید" if type_filter_codes else "اسنادِ بازرگانی")
+        title = QLabel(
+            title_override
+            or ("اسنادِ فروش" if type_filter_codes and type_filter_codes[0].startswith("SALES") else "اسنادِ خرید" if type_filter_codes else "اسنادِ بازرگانی")
+        )
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -103,12 +114,16 @@ class CommercialDocumentsListScreen(QWidget):
         layout.addLayout(filters)
 
         new_buttons = QHBoxLayout()
-        for code in visible_types:
-            button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
-            button.setObjectName("primaryButton")
-            button.setToolTip(f"سندِ {DOC_TYPE_TITLES[code]}یِ تازه")
-            button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
-            new_buttons.addWidget(button)
+        if channel_type_code is None:
+            # طبقِ همان درخواست: این فهرست وقتی مخصوصِ یک کانالِ خاص است
+            # (مثلاً سفارش‌هایِ فروشِ اینترنتی) صرفاً نمایشی است -- سفارشِ
+            # اینترنتی از طریقِ سینک می‌آید، نه دکمهٔ «تازه» در همین‌جا.
+            for code in visible_types:
+                button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
+                button.setObjectName("primaryButton")
+                button.setToolTip(f"سندِ {DOC_TYPE_TITLES[code]}یِ تازه")
+                button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
+                new_buttons.addWidget(button)
         layout.addLayout(new_buttons)
 
         self.table = QTableWidget(0, len(_COLUMNS))
@@ -143,10 +158,18 @@ class CommercialDocumentsListScreen(QWidget):
         if type_code is None and self._type_filter_codes is not None:
             self._rows = []
             for code in self._type_filter_codes:
-                self._rows.extend(documents_service.list_documents(company_id, document_type_code=code, status_code=self.status_filter.currentData()))
+                self._rows.extend(
+                    documents_service.list_documents(
+                        company_id, document_type_code=code, status_code=self.status_filter.currentData(),
+                        channel_type_code=self._channel_type_code,
+                    )
+                )
             self._rows.sort(key=lambda d: d.document_id, reverse=True)
         else:
-            self._rows = documents_service.list_documents(company_id, document_type_code=type_code, status_code=self.status_filter.currentData())
+            self._rows = documents_service.list_documents(
+                company_id, document_type_code=type_code, status_code=self.status_filter.currentData(),
+                channel_type_code=self._channel_type_code,
+            )
 
         source = self.source_filter.currentData()
         if source == "POS":

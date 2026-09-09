@@ -18,6 +18,7 @@ from peecha.ui.screens.commercial_settings import (
     _PricingPolicyTab,
     _SettlementAlarmTab,
 )
+from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
 from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
@@ -304,6 +305,12 @@ class SystemSettingsScreen(QWidget):
                 ("کانال‌ها", _CommercialChannelsTab()),
                 ("هشدارِ موعدِ تسویه", _SettlementAlarmTab()),
                 ("حاشیهٔ سود و پیشنهادِ قیمت", _PricingPolicyTab()),
+                # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط
+                # سفارش‌هایِ فروشِ مشتری بیاید، و تنظیمات به تبِ تنظیماتِ
+                # فروشِ اینترنتی برود»): اتصالات/نگاشتِ کالا-مشتری/سینکِ
+                # خودکار/مسیریابیِ سفارش -- همان صفحه‌ای که قبلاً خودش یک
+                # آیتمِ مستقلِ ناوبری بود، حالا این‌جاست.
+                ("تنظیماتِ فروشِ اینترنتی", CommercialEcommerceScreen()),
             ]
         )
 
