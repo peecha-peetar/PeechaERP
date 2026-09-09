@@ -112,24 +112,14 @@ NAV_ITEMS = [
             {"code": "SALES_PRICING", "label": "فهرستِ قیمت و تخفیف", "screen": "commercial_pricing"},
             {"code": "SALES_POS_SALE", "label": "فروشِ حضوری (POS)", "screen": "commercial_pos_sale"},
             {"code": "SALES_POS_APPROVAL", "label": "تاییدِ سرپرست -- فروشِ حضوری", "screen": "commercial_pos_approval"},
-            # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط سفارش‌هایِ
-            # فروشِ مشتری بیاید»): این منو دیگر صفحهٔ اتصالات/تنظیمات
-            # نیست -- فقط فهرستِ سفارش‌هایِ فروشِ آمده از کانالِ اینترنتی.
-            # اتصالات/نگاشت/مسیریابی به تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
-            # «تنظیمات سیستم ‹ مدیریتِ بازرگانی» منتقل شده.
-            {"code": "SALES_ECOMMERCE", "label": "سفارش‌هایِ فروشِ اینترنتی", "screen": "commercial_documents_list_online_sales"},
-            # طبقِ درخواستِ صریح («پستِ خودکار در تلگرام و بله» + «تقویمِ
-            # محتوایی»): مدیریتِ اتصالِ بات و زمان‌بندیِ پست‌ها.
-            {"code": "SALES_CONTENT_CALENDAR", "label": "تقویمِ محتوا و پستِ خودکار", "screen": "commercial_social"},
-            # طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): مدیریتِ اتصالِ
-            # وردپرس و انتشار/به‌روزرسانیِ مقالات.
-            {"code": "SALES_CMS_CONTENT", "label": "سینکِ محتوا با CMS", "screen": "commercial_cms"},
-            # طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («مرکزِ رسانه»): کتابخانه‌یِ
-            # مشترکِ عکس/فایلِ شرکت برایِ استفاده‌یِ دوباره در محتوا.
-            {"code": "SALES_MEDIA_CENTER", "label": "مرکزِ رسانه", "screen": "media_center"},
-            # طبقِ ادامه‌یِ اولویت‌بندی (بخشِ عملیاتی -- «نگهبانِ اتصال»):
-            # نمایِ سلامتِ اتصال‌هایِ فروشگاهی/تلگرام/بله.
-            {"code": "SALES_CONNECTIVITY_GUARD", "label": "نگهبانِ اتصال و سلامتِ سایت", "screen": "connectivity_guard"},
+            # طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده، فقط فروشِ
+            # اینترنتی باید آنجا باشد»): سفارش‌ها + تقویمِ محتوا/پستِ
+            # خودکار + سینکِ CMS + مرکزِ رسانه + نگهبانِ اتصال، همگی زیرِ
+            # همین یک آیتم، در یک فرمِ تب‌دار (commercial_online_sales_hub)
+            # -- نه پنج آیتمِ جداگانه در منویِ اصلی. اتصالات/نگاشت/
+            # مسیریابیِ کلی همچنان در تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
+            # «تنظیمات سیستم ‹ مدیریتِ بازرگانی» می‌ماند.
+            {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی", "screen": "commercial_online_sales_hub"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
@@ -267,6 +257,14 @@ NAV_ITEMS = [
                         "label": "پیش‌بینیِ فروش",
                         "screen": "report_sales_forecast",
                     },
+                    # طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync
+                    # -- گزارشِ فروشِ اینترنتی بر اساسِ کانال»): سهمِ هر
+                    # کانال (POS/عمده/اینترنتی/نماینده/مارکت‌پلیس) از فروش.
+                    {
+                        "code": "REPORTS_SALES_BY_CHANNEL",
+                        "label": "گزارشِ فروش بر اساسِ کانال",
+                        "screen": "report_sales_by_channel",
+                    },
                 ],
             },
         ],
@@ -347,10 +345,6 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("SALES_POS_SALE", "🛒"),
         ("SALES_POS_APPROVAL", "🧾"),
         ("SALES_ECOMMERCE", "🌐"),
-        ("SALES_CONTENT_CALENDAR", "📅"),
-        ("SALES_CMS_CONTENT", "📰"),
-        ("SALES_MEDIA_CENTER", "🖼️"),
-        ("SALES_CONNECTIVITY_GUARD", "🛡️"),
         ("SALES_AFTERSALES", "🎧"),
     ],
     "PURCH": [
@@ -415,6 +409,15 @@ SETTINGS_SUB_FORMS = [
     ("workflow_designer", "طراحیِ گردشِ کار"),
     ("audit_log", "امنیت (رخدادنگار)"),
     ("payroll_settings", "تنظیماتِ حقوق و دستمزد"),
+]
+
+# طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده»): مرکزِ رسانه دیگر
+# آیتمِ مستقلِ NAV_ITEMS نیست -- یکی از تب‌هایِ commercial_online_sales_hub
+# است، ولی همچنان فرم‌کدِ خودش (media_center) را برایِ ذخیره‌یِ فایل/
+# تعیینِ دسترسی نگه می‌دارد -- پس این‌جا (زیرِ ماژولِ SALES، نه SETTINGS)
+# به‌صورتِ دستی به فهرستِ فرم‌ها اضافه می‌شود.
+_EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
+    ("media_center", "SALES", "مرکزِ رسانه"),
 ]
 
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط
@@ -487,4 +490,6 @@ def build_form_catalog() -> list[tuple[str, str, str]]:
             catalog.append((item["screen"], module_code, item["label"]))
     for code, label in SETTINGS_SUB_FORMS:
         catalog.append((code, "SETTINGS", label))
+    for code, module_code, label in _EMBEDDED_HUB_SUB_FORMS:
+        catalog.append((code, module_code, label))
     return catalog

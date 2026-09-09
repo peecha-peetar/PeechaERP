@@ -1419,10 +1419,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_document import CommercialDocumentScreen
         from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
         from peecha.ui.screens.sales_assistant import SalesAssistantScreen
-        from peecha.ui.screens.commercial_social import CommercialSocialScreen
-        from peecha.ui.screens.commercial_cms import CommercialCmsScreen
-        from peecha.ui.screens.media_center import MediaCenterScreen
-        from peecha.ui.screens.connectivity_guard import ConnectivityGuardScreen
+        from peecha.ui.screens.commercial_online_sales_hub import CommercialOnlineSalesHubScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
         from peecha.ui.screens.commercial_pos_approval import CommercialPosApprovalScreen
@@ -1444,6 +1441,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_custom_statement import CustomStatementScreen
         from peecha.ui.screens.report_customer_profit import CustomerProfitScreen
         from peecha.ui.screens.report_sales import SalesReportScreen
+        from peecha.ui.screens.report_sales_by_channel import SalesReportByChannelScreen
         from peecha.ui.screens.report_equity_changes import EquityChangesScreen
         from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen
         from peecha.ui.screens.report_income_statement import IncomeStatementScreen
@@ -1526,24 +1524,14 @@ class MainWindow(QMainWindow):
                 self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_IN")
             ),
         )
-        # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط سفارش‌هایِ فروشِ
-        # مشتری بیاید»): این منو دیگر صفحهٔ اتصالات/تنظیمات نیست -- فقط
-        # فهرستِ سفارش‌هایِ فروشی که از کانالِ اینترنتی آمده‌اند را نشان
-        # می‌دهد؛ خودِ تنظیمات به تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
-        # سیستم‌سِتینگزِ بازرگانی منتقل شده (system_settings.py).
-        self.register_screen(
-            "commercial_documents_list_online_sales",
-            CommercialDocumentsListScreen(
-                self, type_filter_codes=("SALES_ORDER",), channel_type_code="ONLINE",
-                title_override="سفارش‌هایِ فروشِ اینترنتی",
-            ),
-        )
+        # طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده، فقط فروشِ
+        # اینترنتی باید آنجا باشد»): سفارش‌ها + تقویمِ محتوا/CMS/رسانه/
+        # نگهبانِ اتصال همگی زیرِ یک صفحه‌یِ تب‌دار (خودِ کلاس این‌ها را
+        # داخلی می‌سازد) -- تنظیماتِ کلیِ اتصال/فهرستِ قیمت همچنان در تبِ
+        # «تنظیماتِ فروشِ اینترنتی» زیرِ سیستم‌سِتینگزِ بازرگانی می‌ماند.
+        self.register_screen("commercial_online_sales_hub", CommercialOnlineSalesHubScreen(self))
         self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
         self.register_screen("sales_assistant", SalesAssistantScreen(self))
-        self.register_screen("commercial_social", CommercialSocialScreen())
-        self.register_screen("commercial_cms", CommercialCmsScreen())
-        self.register_screen("media_center", MediaCenterScreen())
-        self.register_screen("connectivity_guard", ConnectivityGuardScreen())
         self.register_screen("commercial_pricing", CommercialPricingScreen())
         self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
         self.register_screen("commercial_pos_approval", CommercialPosApprovalScreen())
@@ -1607,6 +1595,7 @@ class MainWindow(QMainWindow):
         self.register_screen("report_item_ledger", ItemLedgerScreen())
         self.register_screen("report_anomalies", AnomaliesScreen())
         self.register_screen("report_sales", SalesReportScreen())
+        self.register_screen("report_sales_by_channel", SalesReportByChannelScreen())
         self.register_screen("report_customer_profit", CustomerProfitScreen())
         self.register_screen("report_sales_forecast", SalesForecastScreen())
 

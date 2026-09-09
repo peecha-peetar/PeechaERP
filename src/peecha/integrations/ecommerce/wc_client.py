@@ -268,3 +268,75 @@ def fetch_customer(wcapi: API, external_customer_id: str) -> ExternalCustomerRow
         last_name=str(data.get("last_name") or ""),
         phone=str(billing.get("phone") or ""),
     )
+
+
+def find_coupon_by_code(wcapi: API, code: str) -> dict | None:
+    resp = retry.call_with_retry(wcapi.get, "coupons", params={"code": code})
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"جست‌وجویِ کوپنِ «{code}»")
+    rows = resp.json()
+    if not isinstance(rows, list) or not rows:
+        return None
+    return rows[0]
+
+
+def upsert_coupon(wcapi: API, code: str, payload: dict) -> dict:
+    """کوپنِ کدِ مشخص را اگر از قبل در فروشگاه هست به‌روزرسانی می‌کند،
+    وگرنه می‌سازد -- هم‌الگو با upsert_product."""
+    existing = find_coupon_by_code(wcapi, code)
+    body = dict(payload)
+    body["code"] = code
+    if existing:
+        resp = retry.call_with_retry(wcapi.put, f"coupons/{existing['id']}", body)
+        return _raise_for_status(resp, f"به‌روزرسانیِ کوپنِ «{code}»")
+    resp = retry.call_with_retry(wcapi.post, "coupons", body)
+    return _raise_for_status(resp, f"ایجادِ کوپنِ «{code}»")
+
+
+def delete_coupon(wcapi: API, external_coupon_id: str) -> None:
+    resp = retry.call_with_retry(wcapi.delete, f"coupons/{external_coupon_id}", params={"force": True})
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"حذفِ کوپنِ #{external_coupon_id}")
+
+
+@dataclass
+class ExternalReviewRow:
+    external_review_id: str
+    external_product_id: str
+    product_name: str
+    reviewer: str
+    review: str
+    rating: int
+    status: str
+
+
+def list_product_reviews(wcapi: API, *, status: str = "any", per_page: int = 50) -> list[ExternalReviewRow]:
+    resp = retry.call_with_retry(wcapi.get, "products/reviews", params={"status": status, "per_page": per_page})
+    if resp.status_code >= 400:
+        _raise_for_status(resp, "دریافتِ نظراتِ مشتریان")
+    rows = resp.json()
+    if not isinstance(rows, list):
+        return []
+    return [
+        ExternalReviewRow(
+            external_review_id=str(row.get("id")),
+            external_product_id=str(row.get("product_id") or ""),
+            product_name=str(row.get("product_name") or ""),
+            reviewer=str(row.get("reviewer") or ""),
+            review=str(row.get("review") or ""),
+            rating=int(row.get("rating") or 0),
+            status=str(row.get("status") or ""),
+        )
+        for row in rows
+    ]
+
+
+def set_review_status(wcapi: API, external_review_id: str, status: str) -> dict:
+    resp = retry.call_with_retry(wcapi.put, f"products/reviews/{external_review_id}", {"status": status})
+    return _raise_for_status(resp, f"به‌روزرسانیِ وضعیتِ نظرِ #{external_review_id}")
+
+
+def delete_review(wcapi: API, external_review_id: str) -> None:
+    resp = retry.call_with_retry(wcapi.delete, f"products/reviews/{external_review_id}", params={"force": True})
+    if resp.status_code >= 400:
+        _raise_for_status(resp, f"حذفِ نظرِ #{external_review_id}")

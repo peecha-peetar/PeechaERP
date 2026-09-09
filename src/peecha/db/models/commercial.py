@@ -1410,4 +1410,33 @@ class CmsArticle(Base):
     published_at: Mapped[datetime.datetime | None]
     error_message: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class OnlineCoupon(Base):
+    """طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync -- کوپن/
+    کدِ تخفیفِ فروشگاهی»): کوپن در ERP تعریف می‌شود و به فروشگاه پوش
+    می‌شود -- external_coupon_id پس از اولین سینک پر می‌شود."""
+
+    __tablename__ = "online_coupons"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "code"),
+        CheckConstraint("discount_type_code IN ('PERCENT', 'FIXED_CART', 'FIXED_PRODUCT')"),
+        CheckConstraint("sync_status IN ('PENDING', 'SYNCED', 'FAILED')"),
+        {"schema": "comm"},
+    )
+
+    coupon_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.marketplace_connections.connection_id"))
+    code: Mapped[str] = mapped_column(String(50))
+    discount_type_code: Mapped[str] = mapped_column(String(15))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    valid_from: Mapped[datetime.date | None]
+    valid_until: Mapped[datetime.date | None]
+    usage_limit: Mapped[int | None]
+    external_coupon_id: Mapped[str | None] = mapped_column(String(50))
+    sync_status: Mapped[str] = mapped_column(String(15), default="PENDING")
+    last_sync_error: Mapped[str | None] = mapped_column(String(500))
+    last_synced_at: Mapped[datetime.datetime | None]
+    is_active: Mapped[bool] = mapped_column(default=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

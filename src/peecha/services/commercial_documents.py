@@ -1973,6 +1973,68 @@ def compute_sales_report_by_item(
 
 
 @dataclass
+class ChannelSalesReportRow:
+    channel_code: str | None
+    channel_name: str
+    channel_type_code: str | None
+    invoice_count: int
+    quantity_sold: decimal.Decimal
+    net_revenue: decimal.Decimal
+
+
+def compute_sales_report_by_channel(
+    company_id: int, date_from: datetime.date, date_to: datetime.date,
+) -> list[ChannelSalesReportRow]:
+    """طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync -- گزارشِ
+    فروشِ اینترنتی بر اساسِ کانال»): هم‌الگو با compute_sales_report_by_item،
+    فقط به‌جایِ گروه‌بندی بر اساسِ کالا، بر اساسِ کانالِ سند (POS/عمده/
+    اینترنتی/نماینده/مارکت‌پلیس) گروه‌بندی می‌کند -- تا معلوم شود چند
+    درصدِ فروش از کدام کانال آمده، نه فقط «فروشِ اینترنتی» به‌تنهایی."""
+    with new_session() as session:
+        stmt = (
+            select(
+                CommercialDocument.channel_code,
+                func.count(func.distinct(CommercialDocument.document_id)),
+                func.coalesce(func.sum(CommercialDocumentLine.quantity_base), 0),
+                func.coalesce(
+                    func.sum(CommercialDocumentLine.quantity * CommercialDocumentLine.unit_price - CommercialDocumentLine.discount_amount), 0,
+                ),
+            )
+            .join(CommercialDocumentLine, CommercialDocumentLine.document_id == CommercialDocument.document_id)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocument.document_date >= date_from,
+                CommercialDocument.document_date <= date_to,
+            )
+            .group_by(CommercialDocument.channel_code)
+        )
+        channel_totals = {row[0]: (row[1], row[2], row[3]) for row in session.execute(stmt)}
+        channel_codes = [c for c in channel_totals if c is not None]
+        channels_by_code = {
+            c.channel_code: c
+            for c in session.scalars(
+                select(Channel).where(Channel.company_id == company_id, Channel.channel_code.in_(channel_codes))
+            )
+        }
+
+    rows = [
+        ChannelSalesReportRow(
+            channel_code=channel_code,
+            channel_name=channels_by_code[channel_code].name if channel_code in channels_by_code else "(بدونِ کانال)",
+            channel_type_code=channels_by_code[channel_code].channel_type_code if channel_code in channels_by_code else None,
+            invoice_count=invoice_count,
+            quantity_sold=quantity_sold,
+            net_revenue=net_revenue,
+        )
+        for channel_code, (invoice_count, quantity_sold, net_revenue) in channel_totals.items()
+    ]
+    rows.sort(key=lambda r: r.net_revenue, reverse=True)
+    return rows
+
+
+@dataclass
 class SalesTrendResult:
     period_labels: list[str]
     amounts: list[decimal.Decimal]

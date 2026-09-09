@@ -21,6 +21,7 @@ from peecha.db.models.commercial import (
     MarketplaceInventoryPushLog,
     MarketplaceItemMapping,
     MarketplaceOrderSyncLog,
+    OnlineCoupon,
 )
 from peecha.db.models.inventory import Item, ItemAttribute, ItemAttributeValue, ItemCategory, ItemVariantValue
 from peecha.services import commercial_documents as documents_service
@@ -141,6 +142,45 @@ def resolve_item(connection_id: int, external_sku: str) -> int | None:
 def list_item_mappings(connection_id: int) -> list[MarketplaceItemMapping]:
     with new_session() as session:
         return list(session.scalars(select(MarketplaceItemMapping).where(MarketplaceItemMapping.connection_id == connection_id)))
+
+
+def list_item_mappings_for_item(item_id: int) -> list[MarketplaceItemMapping]:
+    """طبقِ بازخوردِ صریحِ کاربر («نگاشتِ SKU باید در فرمِ تعریفِ کالا
+    باشد»): برخلافِ list_item_mappings (بر اساسِ یک اتصال)، این تابع
+    همه‌یِ نگاشت‌هایِ یک کالایِ خاص را در همه‌یِ اتصال‌ها برمی‌گرداند --
+    برایِ نمایش در تبِ «فروشگاهیِ اینترنتی»ِ فرمِ کالا."""
+    with new_session() as session:
+        return list(session.scalars(select(MarketplaceItemMapping).where(MarketplaceItemMapping.item_id == item_id)))
+
+
+def unmap_item(connection_id: int, item_id: int) -> None:
+    with new_session() as session:
+        row = session.scalar(select(MarketplaceItemMapping).where(MarketplaceItemMapping.connection_id == connection_id, MarketplaceItemMapping.item_id == item_id))
+        if row is not None:
+            session.delete(row)
+            session.commit()
+
+
+def search_external_product(connection_id: int, external_sku: str) -> str | None:
+    """طبقِ بازخوردِ صریحِ کاربر («نگاشتِ SKU در فرمِ تعریفِ کالا، با
+    دکمه‌یِ اتصال/جست‌وجو»): پیش از نگاشت، وجودِ واقعیِ آن SKU در
+    فروشگاه را بررسی می‌کند و نامِ محصول را برمی‌گرداند -- تا کاربر
+    کورکورانه یک SKUِ اشتباه را ثبت نکند."""
+    connection = _get_connection(connection_id)
+    if connection.platform_code == "TOROB":
+        raise ValueError("ترب اتصالِ زنده ندارد -- جست‌وجویِ محصول ممکن نیست.")
+    store_client = _build_store_client(connection)
+    if connection.platform_code == "PRESTASHOP":
+        from peecha.integrations.ecommerce import presta_client
+
+        product = presta_client.find_product_by_reference(store_client, external_sku)
+        if product is None:
+            return None
+        return presta_client.localized_text(product.get("name"))
+    from peecha.integrations.ecommerce import wc_client
+
+    product = wc_client.find_product_by_sku(store_client, external_sku)
+    return product.get("name") if product else None
 
 
 def map_customer(connection_id: int, external_customer_id: str, customer_detail_account_id: int) -> None:
@@ -1354,3 +1394,148 @@ def resolve_fulfillment_warehouse(company_id: int, item_id: int, channel_code: s
         if candidates:
             return max(candidates, key=candidates.get)
     return rule.fallback_warehouse_id
+
+
+# ---------------------------------------------------------------------
+# کوپن/کدِ تخفیفِ فروشگاهی -- طبقِ بازخوردِ صریحِ کاربر («امکاناتِ
+# حیاتیِ PeechaSync -- کوپن/کدِ تخفیفِ فروشگاهی»)
+# ---------------------------------------------------------------------
+_COUPON_DISCOUNT_TYPES = ("PERCENT", "FIXED_CART", "FIXED_PRODUCT")
+_COUPON_WC_DISCOUNT_TYPE = {"PERCENT": "percent", "FIXED_CART": "fixed_cart", "FIXED_PRODUCT": "fixed_product"}
+
+
+def _require_woocommerce(connection: MarketplaceConnection) -> None:
+    """طبقِ محدودیتِ صریحِ همین دور: کوپن/نظراتِ مشتری فقط برایِ
+    ووکامرس پیاده شده -- پرستاشاپ endpointِ بومیِ سرراستی برایِ این‌ها
+    ندارد (cart_rules/بدونِ سیستمِ نظرِ محصولِ استاندارد)."""
+    if connection.platform_code != "WOOCOMMERCE":
+        raise ValueError("این قابلیت فقط برایِ اتصالِ ووکامرس در دسترس است.")
+
+
+def create_coupon(
+    company_id: int, connection_id: int, code: str, discount_type_code: str, amount: decimal.Decimal,
+    valid_from: datetime.date | None = None, valid_until: datetime.date | None = None, usage_limit: int | None = None,
+) -> int:
+    if discount_type_code not in _COUPON_DISCOUNT_TYPES:
+        raise ValueError("نوعِ تخفیف نامعتبر است.")
+    _require_woocommerce(_get_connection(connection_id))
+    with new_session() as session:
+        row = OnlineCoupon(
+            company_id=company_id, connection_id=connection_id, code=code, discount_type_code=discount_type_code,
+            amount=amount, valid_from=valid_from, valid_until=valid_until, usage_limit=usage_limit,
+        )
+        session.add(row)
+        session.commit()
+        return row.coupon_id
+
+
+def list_coupons(company_id: int) -> list[OnlineCoupon]:
+    with new_session() as session:
+        return list(session.scalars(select(OnlineCoupon).where(OnlineCoupon.company_id == company_id)))
+
+
+def deactivate_coupon(coupon_id: int) -> None:
+    with new_session() as session:
+        row = session.get(OnlineCoupon, coupon_id)
+        if row is None:
+            raise ValueError("کوپن نامعتبر است.")
+        row.is_active = False
+        session.commit()
+
+
+def delete_coupon(coupon_id: int) -> None:
+    from peecha.integrations.ecommerce import wc_client
+
+    with new_session() as session:
+        row = session.get(OnlineCoupon, coupon_id)
+        if row is None:
+            return
+        connection_id, external_coupon_id = row.connection_id, row.external_coupon_id
+        session.delete(row)
+        session.commit()
+    if external_coupon_id:
+        store_client = _build_store_client(_get_connection(connection_id))
+        wc_client.delete_coupon(store_client, external_coupon_id)
+
+
+def sync_coupon(coupon_id: int) -> None:
+    """طبقِ الگویِ upsert_product: کوپن را به فروشگاه پوش می‌کند --
+    اولین‌بار می‌سازد، دفعاتِ بعد همان کوپنِ ساخته‌شده را به‌روزرسانی
+    می‌کند (external_coupon_id راهنمایِ این تشخیص است)."""
+    from peecha.integrations.ecommerce import wc_client
+
+    with new_session() as session:
+        coupon = session.get(OnlineCoupon, coupon_id)
+        if coupon is None:
+            raise ValueError("کوپن نامعتبر است.")
+        connection_id, code = coupon.connection_id, coupon.code
+        payload = {
+            "discount_type": _COUPON_WC_DISCOUNT_TYPE[coupon.discount_type_code],
+            "amount": str(coupon.amount),
+        }
+        if coupon.valid_until is not None:
+            payload["date_expires"] = coupon.valid_until.isoformat()
+        if coupon.usage_limit is not None:
+            payload["usage_limit"] = coupon.usage_limit
+
+    connection = _get_connection(connection_id)
+    _require_woocommerce(connection)
+    store_client = _build_store_client(connection)
+    try:
+        result = wc_client.upsert_coupon(store_client, code, payload)
+    except Exception as exc:  # noqa: BLE001 -- خطاهایِ StoreAPIError/شبکه متنوع‌اند
+        with new_session() as session:
+            row = session.get(OnlineCoupon, coupon_id)
+            if row is not None:
+                row.sync_status = "FAILED"
+                row.last_sync_error = str(exc)
+                session.commit()
+        raise
+
+    with new_session() as session:
+        row = session.get(OnlineCoupon, coupon_id)
+        if row is not None:
+            row.external_coupon_id = str(result.get("id"))
+            row.sync_status = "SYNCED"
+            row.last_sync_error = None
+            row.last_synced_at = datetime.datetime.now(datetime.timezone.utc)
+            session.commit()
+
+
+# ---------------------------------------------------------------------
+# مدیریتِ نظرات/امتیازِ مشتریان -- طبقِ بازخوردِ صریحِ کاربر
+# ---------------------------------------------------------------------
+def list_reviews(connection_id: int, status: str = "any"):
+    from peecha.integrations.ecommerce import wc_client
+
+    connection = _get_connection(connection_id)
+    _require_woocommerce(connection)
+    store_client = _build_store_client(connection)
+    return wc_client.list_product_reviews(store_client, status=status)
+
+
+def approve_review(connection_id: int, external_review_id: str) -> None:
+    from peecha.integrations.ecommerce import wc_client
+
+    connection = _get_connection(connection_id)
+    _require_woocommerce(connection)
+    store_client = _build_store_client(connection)
+    wc_client.set_review_status(store_client, external_review_id, "approved")
+
+
+def reject_review(connection_id: int, external_review_id: str) -> None:
+    from peecha.integrations.ecommerce import wc_client
+
+    connection = _get_connection(connection_id)
+    _require_woocommerce(connection)
+    store_client = _build_store_client(connection)
+    wc_client.set_review_status(store_client, external_review_id, "hold")
+
+
+def delete_review(connection_id: int, external_review_id: str) -> None:
+    from peecha.integrations.ecommerce import wc_client
+
+    connection = _get_connection(connection_id)
+    _require_woocommerce(connection)
+    store_client = _build_store_client(connection)
+    wc_client.delete_review(store_client, external_review_id)

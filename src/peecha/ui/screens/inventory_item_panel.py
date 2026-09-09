@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import session as app_session
+from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -45,6 +46,7 @@ from peecha.services import inventory_locations as locations_service
 from peecha.services import item_variants as variants_service
 from peecha.services import supplier_price_import as spi_service
 from peecha.ui.barcode_print import print_barcode_labels
+from peecha.ui import theme
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_section_layout
 
 _SUPPLIER_CODE_TYPE_LABELS = {"CODE": "کد", "NAME": "نام"}
@@ -59,6 +61,7 @@ _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حج
 _RELATION_LABELS = {"SUBSTITUTE": "جایگزین", "COMPLEMENTARY": "مکمل"}
 _DEPRECIATION_LABELS = {"STRAIGHT_LINE": "خطِ‌مستقیم", "DECLINING_BALANCE": "نزولی"}
 _CONSUMER_FACING_KINDS = ("GOOD", "FINISHED_GOOD", "BUNDLE", "KIT")
+_ECOMMERCE_PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
 
 
 def _decimal_or_none(text: str) -> decimal.Decimal | None:
@@ -917,8 +920,71 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         ])
         layout.addWidget(self.ecommerce_grid)
 
+        # طبقِ بازخوردِ صریحِ کاربر («تطبیقِ کد/SKU بینِ سایت و ERP بهتر
+        # است در فرمِ تعریفِ کالا انجام شود»): به‌ازایِ هر اتصالِ فعالِ
+        # فروشگاهی، یک ردیف با SKUِ سایت و دکمه‌یِ اتصال/جست‌وجو.
+        ecommerce_mapping_label = QLabel("نگاشتِ کالا در فروشگاه‌هایِ اینترنتی")
+        layout.addWidget(ecommerce_mapping_label)
+        self.ecommerce_mapping_container = QWidget()
+        self.ecommerce_mapping_layout = QVBoxLayout(self.ecommerce_mapping_container)
+        self.ecommerce_mapping_layout.setContentsMargins(0, 0, 0, 0)
+        self.ecommerce_mapping_layout.setSpacing(6)
+        layout.addWidget(self.ecommerce_mapping_container)
+        self.ecommerce_mapping_status_label = QLabel("")
+        self.ecommerce_mapping_status_label.setObjectName("statusError")
+        layout.addWidget(self.ecommerce_mapping_status_label)
+
         layout.addStretch(1)
         return tab
+
+    def _clear_ecommerce_mapping_rows(self) -> None:
+        while self.ecommerce_mapping_layout.count():
+            item = self.ecommerce_mapping_layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+
+    def _refresh_ecommerce_mappings(self) -> None:
+        self._clear_ecommerce_mapping_rows()
+        self.ecommerce_mapping_status_label.setText("")
+        if self._item_id is None or self._company_id is None:
+            self.ecommerce_mapping_layout.addWidget(QLabel("ابتدا کالا را ذخیره کنید، سپس نگاشتِ فروشگاهی را انجام دهید."))
+            return
+        connections = [c for c in ecommerce_service.list_connections(self._company_id) if c.sync_status == "ACTIVE"]
+        if not connections:
+            self.ecommerce_mapping_layout.addWidget(QLabel("هیچ اتصالِ فروشگاهیِ فعالی وجود ندارد."))
+            return
+        mappings_by_connection = {m.connection_id: m for m in ecommerce_service.list_item_mappings_for_item(self._item_id)}
+        for connection in connections:
+            row_widget = QWidget()
+            row = QHBoxLayout(row_widget)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(QLabel(f"{_ECOMMERCE_PLATFORM_LABELS.get(connection.platform_code, connection.platform_code)} — {connection.store_url}"), stretch=1)
+            sku_field = QLineEdit()
+            existing = mappings_by_connection.get(connection.connection_id)
+            if existing is not None:
+                sku_field.setText(existing.external_sku)
+            sku_field.setPlaceholderText("SKU/کدِ سایت")
+            row.addWidget(sku_field, stretch=1)
+            connect_button = QPushButton("🔗 اتصال/جست‌وجو")
+            connect_button.clicked.connect(lambda _checked=False, cid=connection.connection_id, field=sku_field: self._connect_ecommerce_mapping(cid, field))
+            row.addWidget(connect_button)
+            self.ecommerce_mapping_layout.addWidget(row_widget)
+
+    def _connect_ecommerce_mapping(self, connection_id: int, field: QLineEdit) -> None:
+        sku = field.text().strip()
+        if not sku:
+            self.ecommerce_mapping_status_label.setText("ابتدا SKU/کدِ سایت را وارد کنید.")
+            return
+        try:
+            product_name = ecommerce_service.search_external_product(connection_id, sku)
+        except Exception as exc:  # noqa: BLE001 -- خطایِ شبکه/اعتبار
+            self.ecommerce_mapping_status_label.setText(str(exc))
+            return
+        if product_name is None:
+            self.ecommerce_mapping_status_label.setText(f"محصولی با SKU «{sku}» در فروشگاه پیدا نشد.")
+            return
+        ecommerce_service.map_item(connection_id, sku, self._item_id)
+        theme.set_status_label(self.ecommerce_mapping_status_label, f"به «{product_name}» نگاشته شد.", ok=True)
 
     # --- تبِ POS ---------------------------------------------------------------
     def _build_pos_tab(self) -> QWidget:
@@ -1429,6 +1495,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._refresh_related_table()
         self._refresh_bom_lines()
         self._refresh_variants_table()
+        self._refresh_ecommerce_mappings()
 
     def reset(self) -> None:
         self._item_id = None
@@ -1511,6 +1578,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.related_table.setRowCount(0)
         self.bom_lines_table.setRowCount(0)
         self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
+        self._refresh_ecommerce_mappings()
         self._apply_visibility()
 
     def lifecycle_status_code(self) -> str:
