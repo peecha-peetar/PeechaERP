@@ -2879,6 +2879,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._document_id = document_id
         self.refresh()
 
+    def prefill_for_new(
+        self, counterparty_detail_account_id: int, channel_code: str | None = None, description: str | None = None,
+    ) -> None:
+        """طبقِ نیازِ صفحه‌یِ فروشِ تلفنی: بازکردنِ فرمِ سندِ تازه با
+        مشتری/کانال/توضیحِ از پیش‌انتخاب‌شده -- هم‌الگو با
+        prefill_for_invoice در treasury_voucher.py."""
+        self._reset_form()
+        index = self.counterparty_combo.findData(counterparty_detail_account_id)
+        if index >= 0:
+            self.counterparty_combo.setCurrentIndex(index)
+        if channel_code is not None:
+            index = self.channel_combo.findData(channel_code)
+            if index >= 0:
+                self.channel_combo.setCurrentIndex(index)
+        if description:
+            self.description_field.setText(description)
+
     def _header_fields(self) -> documents_service.DocumentHeaderFields | None:
         counterparty_id = self.counterparty_combo.currentData()
         if counterparty_id is None:

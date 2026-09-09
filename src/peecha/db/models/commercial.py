@@ -1560,3 +1560,19 @@ class PromotionRule(Base):
     valid_to: Mapped[datetime.date | None]
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CustomerSalesNote(Base):
+    """صفحه‌یِ فروشِ تلفنی -- برخلافِ acc.customer_details.notes (یک
+    فیلدِ تکیِ قابلِ‌بازنویسی)، این یک لاگِ تاریخ‌دار است تا یادداشتِ
+    تماس‌هایِ قبلی از دست نرود."""
+
+    __tablename__ = "customer_sales_notes"
+    __table_args__ = ({"schema": "comm"},)
+
+    note_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    note_text: Mapped[str] = mapped_column(String(1000))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
