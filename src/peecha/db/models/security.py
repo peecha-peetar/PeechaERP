@@ -185,6 +185,24 @@ class RoleFieldPermission(Base):
     valid_from: Mapped[datetime.datetime]
 
 
+class DeviceToken(Base):
+    """R131 -- لایهٔ API برایِ اپِ موبایلِ پخشِ سرد/گرم: توکنِ رفرشِ
+    مخصوصِ هر دستگاه، رویِ همان حسابِ کاربریِ ERP (نه سیستمِ کاربریِ جدا).
+    مدیر می‌تواند از همین جدول توکنِ یک دستگاهِ گم‌شده را باطل کند."""
+
+    __tablename__ = "device_tokens"
+    __table_args__ = {"schema": "sec"}
+
+    device_token_id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    device_name: Mapped[str | None] = mapped_column(String(150))
+    refresh_token_hash: Mapped[bytes]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    last_used_at: Mapped[datetime.datetime | None]
+    revoked_at: Mapped[datetime.datetime | None]
+
+
 # --- جدول‌های تاریخچه (Core Table؛ فقط خواندنی از دید اپلیکیشن) ---------
 
 user_roles_history = Table(

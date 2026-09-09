@@ -397,11 +397,18 @@ def require_approved_settlement_plan(document_id: int, company_id: int) -> Settl
 
 
 def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, user_id: int) -> None:
-    """میان‌بُرِ برنامه‌نویسی/تستی -- برایِ جاهایی (مثلاً ابزارهایِ داخلی
-    یا فراخوانی‌هایِ خودکار) که واقعاً به ترکیبِ تسویه اهمیتی نمی‌دهند و
-    فقط می‌خواهند مسیرِ استانداردِ ثبتِ نهایی را طیّ کنند: کلِ مبلغِ فاکتور
-    را یک‌جا «نقدی» ثبت و بلافاصله (با همین کاربر) تاییدِ مدیر می‌کند.
-    گذرگاهِ واقعیِ کاربرِ نهایی همچنان دکمه‌یِ «نحوه‌یِ تسویه» در UI است."""
+    """میان‌بُرِ برنامه‌نویسی -- برایِ ابزارهایِ داخلی/فراخوانی‌هایِ خودکار
+    و بخصوص برایِ اپِ پخشِ گرم (ون‌سیلز): کلِ مبلغِ فاکتور را یک‌جا «نقدی»
+    ثبت و بلافاصله تاییدمی‌کند. گذرگاهِ واقعیِ کاربرِ دسکتاپ همچنان دکمه‌یِ
+    «نحوه‌یِ تسویه» + تاییدِ مدیر (approve_settlement_plan) است.
+
+    این تابع عمداً از گیتِ is_manager عبور می‌کند و خودش تاییدمی‌کند --
+    چون در پخشِ گرم، مبلغِ نقد همان‌لحظه توسطِ خودِ ویزیتور از مشتری در
+    محل دریافت می‌شود و هیچ مدیری حضورِ فیزیکی برایِ زدنِ دکمه‌یِ تاییدِ
+    مدیر ندارد؛ اجباری‌کردنِ آن تاییدِ دستی، عملاً کلِ گردشِ کارِ فروشِ
+    نقدیِ فی‌المجلس را غیرِممکن می‌کند. کنترلِ صحتِ این تراکنش (به‌جایِ
+    امضایِ مدیر) از طریقِ رسیدِ تحویل تامین می‌شود (delivery_confirmation:
+    امضا/عکس/مختصاتِ GPS/زمان -- در peecha_api.routers.delivery)."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -409,7 +416,19 @@ def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, us
         total_amount = doc.total_amount
     lines = [("CASH", total_amount, None)] if total_amount > _ZERO else []
     save_settlement_plan(document_id, company_id, user_id, lines)
-    approve_settlement_plan(document_id, company_id, user_id)
+    with new_session() as session:
+        plan = session.scalar(
+            select(CommercialDocumentSettlementPlan).where(
+                CommercialDocumentSettlementPlan.document_id == document_id,
+                CommercialDocumentSettlementPlan.company_id == company_id,
+            )
+        )
+        if plan is None:
+            raise ValueError("ابتدا نحوه‌یِ تسویه را ذخیره کنید.")
+        plan.status_code = "APPROVED"
+        plan.approved_by_user_id = user_id
+        plan.approved_at = datetime.datetime.now()
+        session.commit()
 
 
 def compute_due_date(

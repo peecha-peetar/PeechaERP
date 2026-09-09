@@ -18,12 +18,16 @@ dependencies = [
     "WooCommerce>=3.0.0",     # کلاینتِ رسمیِ REST APIِ ووکامرس (مجوزِ MIT)
     "cryptography>=41.0",     # رمزنگاریِ کلیدِ API/رازِ اتصالِ فروشگاه‌هایِ اینترنتی
     "Pillow>=10.0",           # پردازشِ تصویر (واترمارک/حکِ متن/WebP) برایِ Smart Publish
+    "fastapi>=0.110",         # لایهٔ API برایِ اپِ موبایلِ پخشِ سرد/گرم (R131)
+    "uvicorn>=0.29",          # سرورِ ASGI برایِ اجرایِ peecha_api
+    "PyJWT>=2.8",             # امضا/بررسیِ توکنِ دسترسیِ کوتاه‌مدتِ API
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    "httpx>=0.27",            # کلاینتِ HTTPِ لازم برایِ fastapi.testclient در تست‌هایِ peecha_api
 ]
 
 [build-system]
