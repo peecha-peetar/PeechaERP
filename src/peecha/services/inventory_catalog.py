@@ -524,6 +524,27 @@ def create_item(
         return item.item_id
 
 
+def bulk_set_brand_category(company_id: int, item_ids: list[int], *, set_brand: bool = False, brand_id: int | None = None, set_category: bool = False, category_id: int | None = None) -> int:
+    """طبقِ درخواستِ صریح (پورتِ «Category & Brand Studio»ِ PeechaSync): تخصیصِ
+    گروهیِ دسته/برند به چند کالا در یک اقدام -- به‌جایِ بازکردنِ تک‌تکِ
+    فرمِ کالا. set_brand/set_category جدا از خودِ برند/دسته است تا کاربر
+    بتواند فقط یکی از این دو را تغییر دهد و «بدونِ برند»/«بدونِ دسته»
+    (یعنی None) هم یک انتخابِ معتبر باشد."""
+    if not set_brand and not set_category:
+        return 0
+    with new_session() as session:
+        items = session.scalars(
+            select(Item).where(Item.company_id == company_id, Item.item_id.in_(item_ids))
+        ).all()
+        for item in items:
+            if set_brand:
+                item.brand_id = brand_id
+            if set_category:
+                item.category_id = category_id
+        session.commit()
+        return len(items)
+
+
 def update_item(
     item_id: int, company_id: int, code: str, name: str, is_active: bool, lifecycle_status_code: str, fields: ItemFields
 ) -> None:

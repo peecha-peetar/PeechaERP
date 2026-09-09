@@ -59,6 +59,7 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         tabs.addTab(self._build_connections_tab(), "اتصالات و نگاشت‌ها")
         tabs.addTab(self._build_routing_tab(), "مسیریابیِ سفارش")
         tabs.addTab(self._build_pricing_tab(), "استودیویِ قیمت")
+        tabs.addTab(self._build_bulk_assign_tab(), "تخصیصِ گروهیِ دسته/برند")
         outer.addWidget(tabs, stretch=1)
 
     def _company_id(self) -> int | None:
@@ -306,6 +307,8 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         self._refresh_connection_detail()
         self._refresh_routing_rules()
         self._refresh_pricing_connections()
+        self._refresh_bulk_assign_combos()
+        self._refresh_bulk_assign_table()
 
     def _on_connection_selected(self, row: int, _column: int) -> None:
         self._selected_connection_id = self.connections_table.item(row, 0).data(Qt.UserRole)
@@ -672,3 +675,126 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
     def _delete_pricing_rule(self, rule_id: int) -> None:
         ecommerce_service.delete_pricing_rule(rule_id)
         self._refresh_pricing_rules()
+
+    # --- تخصیصِ گروهیِ دسته/برند (Category & Brand Studio) ------------------
+    def _build_bulk_assign_tab(self) -> QWidget:
+        """طبقِ درخواستِ صریح (پورتِ «Category & Brand Studio»ِ PeechaSync):
+        به‌جایِ بازکردنِ تک‌تکِ فرمِ کالا، چند کالا را انتخاب و دسته/برندشان
+        را یک‌جا تنظیم کنید -- مثلاً پیش از تعریفِ قاعده‌یِ استودیویِ قیمت."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.addWidget(QLabel("کالاها را از فهرست انتخاب کنید، سپس برند و/یا دسته‌یِ موردِنظر را تنظیم و اعمال کنید."))
+
+        self.bulk_search_field = QLineEdit()
+        self.bulk_search_field.setPlaceholderText("جست‌وجو بر اساسِ کد یا نامِ کالا")
+        self.bulk_search_field.textChanged.connect(lambda _text: self._refresh_bulk_assign_table())
+        outer.addWidget(self.bulk_search_field)
+
+        self.bulk_items_table = QTableWidget(0, 4)
+        self.bulk_items_table.setHorizontalHeaderLabels(["انتخاب", "کد", "نام", "برند / دسته‌یِ فعلی"])
+        self.bulk_items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.bulk_items_table.verticalHeader().setVisible(False)
+        self.bulk_items_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        outer.addWidget(self.bulk_items_table, stretch=1)
+
+        select_all_button = QPushButton("انتخابِ همه‌یِ نمایش‌داده‌شده")
+        select_all_button.clicked.connect(lambda: self._set_all_bulk_rows_checked(True))
+        clear_selection_button = QPushButton("پاک‌کردنِ انتخاب")
+        clear_selection_button.clicked.connect(lambda: self._set_all_bulk_rows_checked(False))
+        select_row = QHBoxLayout()
+        select_row.addWidget(select_all_button)
+        select_row.addWidget(clear_selection_button)
+        outer.addLayout(select_row)
+
+        form = QHBoxLayout()
+        self.bulk_set_brand_checkbox = QCheckBox("تنظیمِ برند به:")
+        form.addWidget(self.bulk_set_brand_checkbox)
+        self.bulk_brand_combo = QComboBox()
+        form.addWidget(self.bulk_brand_combo, stretch=1)
+        self.bulk_set_category_checkbox = QCheckBox("تنظیمِ دسته به:")
+        form.addWidget(self.bulk_set_category_checkbox)
+        self.bulk_category_combo = QComboBox()
+        form.addWidget(self.bulk_category_combo, stretch=1)
+        apply_bulk_button = QPushButton("✅")
+        apply_bulk_button.setObjectName("primaryIconButton")
+        apply_bulk_button.setFixedWidth(48)
+        apply_bulk_button.setToolTip("اعمال رویِ کالاهایِ انتخاب‌شده")
+        apply_bulk_button.clicked.connect(self._apply_bulk_assign)
+        form.addWidget(apply_bulk_button)
+        outer.addLayout(form)
+
+        self.bulk_assign_status_label = QLabel("")
+        self.bulk_assign_status_label.setObjectName("statusError")
+        outer.addWidget(self.bulk_assign_status_label)
+        return wrap_scrollable(page)
+
+    def _refresh_bulk_assign_table(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        brands_by_id = {b.brand_id: b for b in catalog_service.list_brands(company_id)}
+        categories_by_id = {c.category_id: c for c in catalog_service.list_categories(company_id)}
+        search = self.bulk_search_field.text().strip().lower()
+        previously_checked = {
+            self.bulk_items_table.item(row, 0).data(Qt.UserRole)
+            for row in range(self.bulk_items_table.rowCount())
+            if self.bulk_items_table.item(row, 0) is not None and self.bulk_items_table.item(row, 0).checkState() == Qt.Checked
+        }
+        filtered = [
+            it for it in self._items
+            if not search or search in (it.code or "").lower() or search in (it.name or "").lower()
+        ]
+        self.bulk_items_table.setRowCount(len(filtered))
+        for row_index, it in enumerate(filtered):
+            checkbox_item = QTableWidgetItem()
+            checkbox_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            checkbox_item.setCheckState(Qt.Checked if it.item_id in previously_checked else Qt.Unchecked)
+            checkbox_item.setData(Qt.UserRole, it.item_id)
+            self.bulk_items_table.setItem(row_index, 0, checkbox_item)
+            self.bulk_items_table.setItem(row_index, 1, QTableWidgetItem(it.code))
+            self.bulk_items_table.setItem(row_index, 2, QTableWidgetItem(it.name or ""))
+            brand = brands_by_id.get(it.brand_id)
+            category = categories_by_id.get(it.category_id)
+            current = f"{brand.name if brand else '(بدونِ برند)'} / {category.name if category else '(بدونِ دسته)'}"
+            self.bulk_items_table.setItem(row_index, 3, QTableWidgetItem(current))
+
+    def _set_all_bulk_rows_checked(self, checked: bool) -> None:
+        for row in range(self.bulk_items_table.rowCount()):
+            item = self.bulk_items_table.item(row, 0)
+            if item is not None:
+                item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+
+    def _refresh_bulk_assign_combos(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        self.bulk_brand_combo.clear()
+        self.bulk_brand_combo.addItem("(بدونِ برند)", None)
+        for b in catalog_service.list_brands(company_id, active_only=True):
+            self.bulk_brand_combo.addItem(f"{b.code} — {b.name}", b.brand_id)
+        self.bulk_category_combo.clear()
+        self.bulk_category_combo.addItem("(بدونِ دسته)", None)
+        for c in catalog_service.list_categories(company_id, active_only=True):
+            self.bulk_category_combo.addItem(f"{c.code} — {c.name}", c.category_id)
+
+    def _apply_bulk_assign(self) -> None:
+        company_id = self._company_id()
+        set_brand = self.bulk_set_brand_checkbox.isChecked()
+        set_category = self.bulk_set_category_checkbox.isChecked()
+        if company_id is None or (not set_brand and not set_category):
+            self.bulk_assign_status_label.setText("حداقل یکی از «تنظیمِ برند»/«تنظیمِ دسته» را فعال کنید.")
+            return
+        item_ids = [
+            self.bulk_items_table.item(row, 0).data(Qt.UserRole)
+            for row in range(self.bulk_items_table.rowCount())
+            if self.bulk_items_table.item(row, 0).checkState() == Qt.Checked
+        ]
+        if not item_ids:
+            self.bulk_assign_status_label.setText("هیچ کالایی انتخاب نشده است.")
+            return
+        count = catalog_service.bulk_set_brand_category(
+            company_id, item_ids, set_brand=set_brand, brand_id=self.bulk_brand_combo.currentData(),
+            set_category=set_category, category_id=self.bulk_category_combo.currentData(),
+        )
+        theme.set_status_label(self.bulk_assign_status_label, f"{count} کالا به‌روزرسانی شد.", ok=True)
+        self.refresh()
