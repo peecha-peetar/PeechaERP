@@ -2348,12 +2348,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             "border-radius: 9px; padding: 1px 8px; font-size: 11px; font-weight: 700;"
         )
         status_row.addWidget(self.line_count_badge)
-        add_line_button = QPushButton("➕")
-        add_line_button.setObjectName("primaryIconButton")
-        add_line_button.setFixedWidth(48)
-        add_line_button.setToolTip("افزودنِ ردیف")
-        add_line_button.clicked.connect(self._add_line)
-        status_row.addWidget(add_line_button)
+        # طبقِ گزارشِ صریحِ کاربر («لازم نیست اون علامتِ افزودنِ ردیف در
+        # هدر باشه و فضا اشغال کنه»): از R145/R147 دیگر یک ردیفِ ورودیِ
+        # همیشه‌حاضر در انتهایِ خودِ جدول هست که با زنجیره‌یِ Enter کاملاً
+        # قابلِ‌استفاده است -- این دکمه دیگر لازم نیست. خودِ تابعِ
+        # _add_line (بازکردنِ دیالوگِ قدیمی) هنوز به‌عنوانِ fallback در
+        # _focus_entry_row_item نگه داشته می‌شود.
         self.status_badge = QLabel("")
         self.status_badge.setObjectName("statusBadge")
         status_row.addWidget(self.status_badge)
@@ -2387,6 +2387,25 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # (📇/🕘) کنارِ ویرایش/حذفِ قدیمی اضافه شد -- پس این ستون هم
         # عریض‌تر شده تا هر چهار دکمه جا شوند.
         self.lines_table.setColumnWidth(last_col, 130)
+        # طبقِ گزارشِ صریحِ کاربر («اندازه‌یِ فیلدها تناسب نداره، مثلاً
+        # فیلدِ توضیحِ کالا کمه»): قبلاً فقط ستونِ «#»/«کالا»/«عملیات»
+        # عرضِ صریح داشتند -- بقیه (مقدار تا توضیح) با عرضِ خودکارِ Qt
+        # (که فقط بر اساسِ عرضِ متنِ سرستون حساب می‌شود، نه محتوایِ
+        # واقعی) بیش‌ازحد باریک می‌ماندند؛ مشخصاً «توضیح» با همان یک
+        # کلمه‌یِ کوتاهِ سرستون تقریباً غیرِقابلِ‌استفاده بود. حالا هرکدام
+        # عرضِ صریح و متناسب با محتوایِ واقعیِ خودش می‌گیرند.
+        _line_column_widths = {
+            2: 80,   # مقدار
+            3: 100,  # بهایِ واحد
+            4: 130,  # تخفیف (کمبویِ نوع + فیلدِ مبلغ/درصد)
+            5: 70,   # درصدِ مالیات
+            6: 90,   # مالیات
+            7: 110,  # جمعِ ردیف
+            8: 170,  # توضیح
+        }
+        for column_index, width in _line_column_widths.items():
+            self.lines_table.horizontalHeader().setSectionResizeMode(column_index, QHeaderView.Interactive)
+            self.lines_table.setColumnWidth(column_index, width)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
@@ -3226,6 +3245,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._load_document()
         self._refresh_cross_sell_suggestion(item_id)
         self._refresh_upsell_suggestion(item_id)
+        # طبقِ گزارشِ صریحِ کاربر («در پایانِ سطر، سطرِ بعدی را ایجاد
+        # کند»): بعدِ ثبتِ موفقِ یک ردیف، فوکوس بلافاصله به کمبویِ کالایِ
+        # همان ردیفِ ورودیِ تازه‌ساخته‌شده (که _load_document بالا از نو
+        # ساخته) برمی‌گردد -- کاربر بدونِ برداشتنِ دست از صفحه‌کلید
+        # می‌تواند بلافاصله ردیفِ بعدی را هم وارد کند.
+        self._focus_entry_row_item()
 
     def _make_line_actions_widget(self, row_index: int) -> QWidget:
         # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر: دکمه‌هایِ ویرایش/حذف حالا در
