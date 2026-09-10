@@ -113,6 +113,7 @@ _STOCK_OUTBOUND_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "CONS
 _CONVERTIBLE_TO_INVOICE_TYPES = (
     "SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA", "CONSIGNMENT_OUT", "CONSIGNMENT_IN",
 )
+_POST_BUTTON_DEFAULT_TOOLTIP = "۴) ثبتِ نهایی — قطعی و برگشت‌ناپذیر؛ سندِ انبار/حسابداریِ واقعی همین‌جا ساخته می‌شود"
 # طبقِ همان تفکیک: کدام از انواعِ قابلِ‌تبدیل به فاکتورِ فروش تبدیل
 # می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
 _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
@@ -2394,7 +2395,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.post_button = QPushButton("🔒")
         self.post_button.setObjectName("primaryIconButton")
         self.post_button.setFixedWidth(48)
-        self.post_button.setToolTip("۴) ثبتِ نهایی — قطعی و برگشت‌ناپذیر؛ سندِ انبار/حسابداریِ واقعی همین‌جا ساخته می‌شود")
+        self.post_button.setToolTip(_POST_BUTTON_DEFAULT_TOOLTIP)
         self.post_button.clicked.connect(self._post)
         self.footer_layout.addWidget(self.post_button)
 
@@ -2819,8 +2820,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 self.settlement_plan_button.setStyleSheet("font-weight: bold; color: #b91c1c;")
             else:
                 self.settlement_plan_button.setStyleSheet("color: #15803d;")
+            # طبقِ گزارشِ صریحِ کاربر («دکمهٔ ثبتِ نهایی غیرفعاله، چرا؟»):
+            # هم‌الگو با correct_button -- دلیلِ دقیقِ غیرفعال‌بودن را در
+            # Tooltip نشان می‌دهیم، نه فقط خاکستری‌کردنِ بی‌توضیح.
+            if not has_approved_plan and (is_confirmed or is_approved):
+                if self._settlement_plan is None:
+                    reason = "ابتدا از دکمهٔ 🧾 «نحوه‌یِ تسویه» نحوهٔ پرداخت را مشخص کنید."
+                else:
+                    reason = "نحوه‌یِ تسویه ذخیره شده ولی هنوز توسطِ مدیر تاییدنشده است -- از دکمهٔ 🧾 آن را تایید کنید."
+                self.post_button.setToolTip(f"۴) ثبتِ نهایی -- غیرِفعال است، چون: {reason}")
+            else:
+                self.post_button.setToolTip(_POST_BUTTON_DEFAULT_TOOLTIP)
         else:
             self.post_button.setEnabled(is_confirmed or is_approved)
+            self.post_button.setToolTip(_POST_BUTTON_DEFAULT_TOOLTIP)
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
