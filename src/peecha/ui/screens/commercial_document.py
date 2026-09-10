@@ -562,7 +562,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
         lock_price: bool = False, lock_discount: bool = False,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ردیفِ سند")
+        self.setWindowTitle("ردیفِ فاکتور")
         self.setMinimumWidth(380)
         self._company_id = company_id
         self._counterparty_id = counterparty_id
@@ -622,7 +622,11 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # مبلغیِ هر ردیف (_AmountField) خیلی کوچک است -- همان عددِ ۴۰
         # که در lines_table (پایین‌تر در همین فایل) هم استفاده شده،
         # این‌جا هم به‌کار می‌رود.
-        self.variant_table.verticalHeader().setDefaultSectionSize(40)
+        # طبقِ گزارشِ صریحِ کاربر (تکرارِ همین گزارش): ۴۰ پیکسل هنوز کافی
+        # نبود -- با فونتِ فعلی، اعدادِ فارسیِ گروه‌بندی‌شده‌یِ داخلِ
+        # _AmountField (که خودش padding دارد) در آن ارتفاع نصفه/بریده
+        # دیده می‌شدند؛ ۴۶ پیکسل فضایِ کافی برایِ نمایشِ کاملِ رقم‌ها می‌دهد.
+        self.variant_table.verticalHeader().setDefaultSectionSize(46)
         self.variant_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         # طبقِ گزارشِ صریح («عرضِ لیست کمتر... جلویِ نامِ متغیر فضایِ خالی
         # هست»): قبلاً فقط ستونِ برچسبِ متغیر Stretch بود و بقیهٔ ستون‌ها
@@ -636,9 +640,12 @@ class _LineDialog(LayoutEditMixin, QDialog):
         header.setSectionResizeMode(1, QHeaderView.Fixed)
         header.setSectionResizeMode(2, QHeaderView.Fixed)
         header.setSectionResizeMode(3, QHeaderView.Fixed)
-        self.variant_table.setColumnWidth(1, 90)
-        self.variant_table.setColumnWidth(2, 120)
-        self.variant_table.setColumnWidth(3, 110)
+        # طبقِ گزارشِ صریحِ کاربر («اعداد و ارقام مشخص نیست»): پهنایِ قبلی
+        # برایِ سه‌رقمی‌شدنِ گروه‌بندیِ اعدادِ فارسی (مثلاً «۱۲۰٬۰۰۰») کافی
+        # نبود و رقم‌ها بریده/جمع می‌شدند.
+        self.variant_table.setColumnWidth(1, 100)
+        self.variant_table.setColumnWidth(2, 130)
+        self.variant_table.setColumnWidth(3, 120)
         self.variant_table.setVisible(False)
         self._variant_table_item_ids: list[int] = []
 
@@ -789,6 +796,13 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # setFocus بی‌اثر است) — جداگانه وصل می‌شود تا وقتی نمایان است،
         # Enter در آن هم مثلِ کمبویِ کالا به فیلدِ مقدار برود.
         _enter_signal(self.variant_combo).connect(self.quantity_field.setFocus)
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فوکوس در حالتِ جدولیِ چندمتغیره
+        # بلاتکلیف است»): زنجیره‌یِ بالا (کالا -> مقدار) وقتی معنا دارد
+        # که فیلدِ مقدار واقعاً نمایان باشد؛ در حالتِ جدولیِ چندمتغیره آن
+        # فیلد پنهان است و setFocus رویِ آن بی‌اثر می‌ماند. این اتصالِ
+        # اضافه (نه جایگزین -- بعدِ همان اتصال بالا اجرا می‌شود) وقتی
+        # جدول نمایان است، فوکوس را به اولین ردیفِ آن هدایت می‌کند.
+        _enter_signal(self.item_combo).connect(self._focus_first_variant_row)
         self.item_combo.setFocus()
 
         self._price_manually_edited = False
@@ -875,6 +889,13 @@ class _LineDialog(LayoutEditMixin, QDialog):
         باشد."""
         return self._is_new_row and self.item_combo.currentData() in self._variant_parent_ids
 
+    def _focus_first_variant_row(self) -> None:
+        if not self._bulk_variant_mode() or self.variant_table.rowCount() == 0:
+            return
+        widget = self.variant_table.cellWidget(0, 2)
+        if widget is not None:
+            widget.setFocus()
+
     def _effective_warehouse_id(self) -> int | None:
         if self.warehouse_combo is not None:
             warehouse_id = self.warehouse_combo.currentData()
@@ -909,6 +930,8 @@ class _LineDialog(LayoutEditMixin, QDialog):
 
         self._variant_table_item_ids = [v.variant_item_id for v in variants]
         self.variant_table.setRowCount(len(variants))
+        row_price_fields: list = []
+        row_qty_fields: list = []
         for row, v in enumerate(variants):
             label = f"{v.code} — {v.attribute_labels or v.name or ''}"
             label_item = QTableWidgetItem(label)
@@ -945,7 +968,24 @@ class _LineDialog(LayoutEditMixin, QDialog):
             qty_field.setDecimals(3)
             qty_field.valueChanged.connect(self._on_selection_changed)
             self.variant_table.setCellWidget(row, 3, qty_field)
+            row_price_fields.append(price_field)
+            row_qty_fields.append(qty_field)
         self.status_label.setText("" if variants else "هیچ متغیری با موجودیِ مثبت برایِ این کالا یافت نشد.")
+
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فوکوس در حالتِ جدولیِ
+        # چندمتغیره بلاتکلیف است -- تمامِ فیلدها حتی ردیفِ متغیرها باید
+        # با اینتر پیموده شوند»): زنجیره‌یِ Enterِ ثابتِ خودِ دیالوگ
+        # (بالاتر در __init__) فقط فیلدهایِ تک‌کالاییِ همیشه‌حاضر را
+        # می‌شناسد -- ردیف‌هایِ همین جدول که هر بار از نو ساخته می‌شوند
+        # باید همین‌جا زنجیره‌یِ خودشان را بگیرند: بهایِ واحد -> مقدار
+        # (همان ردیف)، مقدار -> بهایِ واحدِ ردیفِ بعدی، و مقدارِ آخرین
+        # ردیف به اولین فیلدِ بعدِ جدول (تخفیف) می‌رود.
+        for row in range(len(variants)):
+            _enter_signal(row_price_fields[row]).connect(row_qty_fields[row].setFocus)
+            if row + 1 < len(variants):
+                _enter_signal(row_qty_fields[row]).connect(row_price_fields[row + 1].setFocus)
+            else:
+                _enter_signal(row_qty_fields[row]).connect(self.discount_field.setFocus)
 
         # طبقِ گزارشِ صریح («ارتفاع و تعدادِ متغیرها بیشتر دیده بشه»):
         # ارتفاعِ جدول بسته به تعدادِ واقعیِ ردیف‌ها (تا سقفِ ۶ ردیفِ
@@ -2380,32 +2420,31 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فضایِ باقی‌مانده را می‌گیرد.
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.lines_table.setColumnWidth(0, 32)
-        self.lines_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         last_col = len(_LINE_COLUMNS) - 1
         self.lines_table.horizontalHeader().setSectionResizeMode(last_col, QHeaderView.Fixed)
         # طبقِ موردِ ۳ («کاردکس/قیمتِ قبلی در همان ردیف»): دو دکمهٔ تازه
         # (📇/🕘) کنارِ ویرایش/حذفِ قدیمی اضافه شد -- پس این ستون هم
         # عریض‌تر شده تا هر چهار دکمه جا شوند.
         self.lines_table.setColumnWidth(last_col, 130)
-        # طبقِ گزارشِ صریحِ کاربر («اندازه‌یِ فیلدها تناسب نداره، مثلاً
-        # فیلدِ توضیحِ کالا کمه»): قبلاً فقط ستونِ «#»/«کالا»/«عملیات»
-        # عرضِ صریح داشتند -- بقیه (مقدار تا توضیح) با عرضِ خودکارِ Qt
-        # (که فقط بر اساسِ عرضِ متنِ سرستون حساب می‌شود، نه محتوایِ
-        # واقعی) بیش‌ازحد باریک می‌ماندند؛ مشخصاً «توضیح» با همان یک
-        # کلمه‌یِ کوتاهِ سرستون تقریباً غیرِقابلِ‌استفاده بود. حالا هرکدام
-        # عرضِ صریح و متناسب با محتوایِ واقعیِ خودش می‌گیرند.
+        # طبقِ گزارشِ صریحِ کاربر («اندازه‌یِ فیلدِ کالا در ردیفِ فاکتور
+        # کمتر بشه و اندازه‌یِ بهایِ واحد و توضیح بیشتر بشه»): «کالا»
+        # دیگر Stretch نیست (کمبویِ جست‌وجوگر است، نیازی به نمایشِ کاملِ
+        # نامِ کالا در همان عرض ندارد)، «توضیح» به‌جایش Stretch شده تا
+        # فضایِ باقی‌ماندهٔ پنجره را بگیرد و با محتوایِ متنیِ متغیرش
+        # هم‌خوان‌تر باشد.
         _line_column_widths = {
+            1: 200,  # کالا
             2: 80,   # مقدار
-            3: 100,  # بهایِ واحد
+            3: 130,  # بهایِ واحد
             4: 130,  # تخفیف (کمبویِ نوع + فیلدِ مبلغ/درصد)
             5: 70,   # درصدِ مالیات
             6: 90,   # مالیات
             7: 110,  # جمعِ ردیف
-            8: 170,  # توضیح
         }
         for column_index, width in _line_column_widths.items():
             self.lines_table.horizontalHeader().setSectionResizeMode(column_index, QHeaderView.Interactive)
             self.lines_table.setColumnWidth(column_index, width)
+        self.lines_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
@@ -2709,7 +2748,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cost_center_combo.clear()
         self.cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
         for opt in cost_center_options:
-            self.cost_center_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
+            # طبقِ درخواستِ صریح («فیلد برایِ نمایشِ کد و اسم کافی نیست --
+            # فقط اسم کافی است»): برخلافِ فهرستِ قیمت که از قبل فقط نام
+            # نشان می‌داد، این‌جا هنوز کد هم اضافه می‌شد و با عرضِ محدودِ
+            # فیلدِ هدر بریده می‌شد.
+            self.cost_center_combo.addItem(opt.name or opt.code, opt.detail_account_id)
         if current_cc is not None:
             index = self.cost_center_combo.findData(current_cc)
             if index >= 0:
@@ -2723,7 +2766,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.project_combo.clear()
         self.project_combo.addItem("(بدونِ پروژه)", None)
         for opt in project_options:
-            self.project_combo.addItem(f"{opt.code} — {opt.name or ''}", opt.detail_account_id)
+            self.project_combo.addItem(opt.name or opt.code, opt.detail_account_id)
         if current_project is not None:
             index = self.project_combo.findData(current_project)
             if index >= 0:
@@ -3495,6 +3538,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def edit_document(self, document_id: int) -> None:
         self._document_id = document_id
         self.refresh()
+
+    def open_as_new(self) -> None:
+        """طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سفارشِ خریدِ جدید کالای سفارشِ
+        قبلی را نگه می‌دارد»/«بعدِ تایید یا تصویب، صفحه خالی می‌ماند»):
+        این صفحه یک نمونه‌یِ تکی و کش‌شده است -- شِلِ اصلی برایِ هر نوعِ
+        سند فقط یک‌بار آن را می‌سازد، پس با هربار بازکردن دوباره‌اش از
+        منویِ سادهٔ ساید‌بار (که هیچ callbackِ then‌ای -- برخلافِ ویرایشِ
+        صریحِ یک سندِ مشخص از فهرستِ اسناد -- به آن نمی‌دهد)، بدونِ این
+        ریست صرفاً هرچه آخرین‌بار رویِ صفحه بوده دوباره نشان داده می‌شد:
+        چه سندِ قدیمیِ کاملاً نامرتبط (پس ردیفِ ورودی هم کالای همان سندِ
+        قدیمی را نگه می‌داشت) و چه هیچ‌ سندی هرگز رویِ آن بار نشده باشد
+        (پس کاملاً خالی می‌ماند). shell_window.open_screen این متد را
+        خودکار صدا می‌زند وقتی هیچ then ای داده نشده باشد."""
+        self._reset_form()
 
     def prefill_for_new(
         self, counterparty_detail_account_id: int, channel_code: str | None = None, description: str | None = None,

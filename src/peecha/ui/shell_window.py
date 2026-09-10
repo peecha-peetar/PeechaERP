@@ -1699,7 +1699,17 @@ class MainWindow(QMainWindow):
         sub_window.raise_()
         self.mdi_area.setActiveSubWindow(sub_window)
 
-        if hasattr(screen, "refresh"):
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سفارشِ خریدِ جدید همچنان سندِ
+        # قبلی را نشان می‌دهد»): این صفحات (مثلِ CommercialDocumentScreen)
+        # نمونه‌یِ تکی/کش‌شده‌اند -- وقتی هیچ then‌ای داده نشده (یعنی
+        # بازکردنِ سادهٔ منویِ ساید‌بار، نه ویرایشِ صریحِ یک سندِ مشخص از
+        # فهرستِ اسناد که همیشه then=edit_document خودش را می‌دهد)، صفحه
+        # باید به‌جایِ نمایشِ آخرین سندی که رویش بوده، به‌طورِ صریح ریست
+        # شود. تشخیص با duck-typing رویِ open_as_new (فقط همین صفحات آن
+        # را تعریف کرده‌اند) تا رفتارِ بقیه‌یِ صفحات دست‌نخورده بماند.
+        if then is None and hasattr(screen, "open_as_new"):
+            screen.open_as_new()
+        elif hasattr(screen, "refresh"):
             screen.refresh()
         if then is not None:
             then(screen)
