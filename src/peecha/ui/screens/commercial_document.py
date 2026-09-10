@@ -1498,6 +1498,19 @@ class _SettlementPlanDialog(QDialog):
         self.save_button.setAutoDefault(False)
         self.save_button.clicked.connect(self._save)
         buttons_row.addWidget(self.save_button)
+        # طبقِ گزارشِ صریحِ کاربر («در فاکتورها اگر نسیه باشد نحوه تسویه
+        # در ابتدا مشخص نیست»): «نسیه» در این فرم ردیفِ روش نیست -- فقط
+        # مانده‌یِ خودکارِ پوشش‌داده‌نشده است (SettlementPlan.remaining_on_
+        # credit) -- پس برایِ فاکتورِ کاملاً نسیه، کاربر باید حدس بزند که
+        # خالی‌گذاشتنِ همه‌یِ ردیف‌ها + زدنِ 💾 یعنی «کلِ فاکتور نسیه است».
+        # این دکمه همان کار را با یک کلیکِ صریح انجام می‌دهد -- همه‌یِ
+        # مبالغِ واردشده را صفر می‌کند و ذخیره می‌کند، تا از همان لحظه‌یِ
+        # بازکردنِ دیالوگ روشن باشد که نسیه هم یک گزینه‌یِ مستقیم است.
+        self.full_credit_button = QPushButton("🔖 ثبتِ کامل به‌عنوانِ نسیه")
+        self.full_credit_button.setToolTip("هیچ دریافتی الان انجام نمی‌شود -- کلِ مبلغِ فاکتور به‌عنوانِ نسیه ثبت می‌شود.")
+        self.full_credit_button.setAutoDefault(False)
+        self.full_credit_button.clicked.connect(self._save_as_full_credit)
+        buttons_row.addWidget(self.full_credit_button)
         self.approve_button = QPushButton("👍 تاییدِ مدیر")
         self.approve_button.setToolTip("فقط برایِ کاربرِ با نقشِ ادمین/سوپروایزر/مدیر فعال است.")
         self.approve_button.setAutoDefault(False)
@@ -1703,7 +1716,10 @@ class _SettlementPlanDialog(QDialog):
         if plan is None:
             self.approve_button.setEnabled(False)
             if self._require_manager_approval:
-                self.status_banner.setText("هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است.")
+                self.status_banner.setText(
+                    "هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است. اگر بخشی نقد/بانکی دریافت شده، مبلغش را جلویِ همان روش "
+                    "وارد کنید و 💾 بزنید؛ اگر کاملاً نسیه است، مبلغی وارد نکنید و «🔖 ثبتِ کامل به‌عنوانِ نسیه» را بزنید."
+                )
         else:
             self._apply_plan_status(plan)
         if self.table.rowCount() > 0:
@@ -1747,6 +1763,17 @@ class _SettlementPlanDialog(QDialog):
             # تاییدِ نهایی -- دیگر نیازی به پیامِ تاییدیه و بستنِ دستی
             # نیست.
             self.accept()
+
+    def _save_as_full_credit(self) -> None:
+        """طبقِ گزارشِ صریحِ کاربر: مسیرِ یک‌کلیکی برایِ فاکتورِ کاملاً
+        نسیه -- همه‌یِ ردیف‌ها صفر می‌شوند (یعنی هیچ روشی انتخاب نشده) و
+        بلافاصله ذخیره می‌شود؛ خودِ save_settlement_plan با فهرستِ خالی
+        از قبل پشتیبانی می‌کند (نسیه = مانده‌یِ خودکار، نه یک ردیفِ روش)."""
+        for row_index in range(self.table.rowCount()):
+            amount_field = self.table.cellWidget(row_index, 1)
+            if amount_field is not None:
+                amount_field.setValue(0)
+        self._save()
 
     def _approve(self) -> None:
         try:
