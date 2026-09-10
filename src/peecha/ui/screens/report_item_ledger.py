@@ -183,6 +183,12 @@ class ItemLedgerScreen(QWidget):
         )
 
         rows = engine_service.list_item_ledger(company_id, item_id, warehouse_id, date_from, date_to)
+        # طبقِ درخواستِ صریح («کالاهایِ اصلی هم کاردکس داشته باشند --
+        # مجموعِ متغیرها در ردیفِ کاردکس ثبت بشه»): برایِ روشن‌بودنِ همین
+        # نکته برایِ کاربر، تعدادِ متغیرهایِ این کالا هم این‌جا محاسبه
+        # می‌شود -- اگر بیش از صفر بود، کاردکسِ زیر همان کاردکسِ ترکیبیِ
+        # مجموعِ همه‌یِ متغیرهاست، نه فقط خودِ این ردیف.
+        variant_count = sum(1 for it in items_by_id.values() if it.variant_parent_item_id == item_id)
         return {
             "item": item,
             "qty_decimals": qty_decimals,
@@ -192,6 +198,7 @@ class ItemLedgerScreen(QWidget):
             "warehouse_id": warehouse_id,
             "date_from": date_from,
             "date_to": date_to,
+            "variant_count": variant_count,
         }
 
     def _refresh_table(self) -> None:
@@ -229,7 +236,16 @@ class ItemLedgerScreen(QWidget):
                     cell.setTextAlignment(Qt.AlignCenter)
                 self.table.setItem(row_index, col_index, cell)
         self.table.resizeRowsToContents()
-        self.status_label.setText("" if rows else "برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
+        if not rows:
+            self.status_label.setText("برایِ این کالا (با این فیلترها) هیچ حرکتی ثبت نشده است.")
+        elif context["variant_count"] > 0:
+            self.status_label.setText(
+                f"این کالا {numerals.to_persian_digits(str(context['variant_count']))} متغیر دارد -- "
+                "هر ردیفِ بالا مجموعِ مقدار/مبلغِ متغیرهایِ همان سند است. "
+                "برایِ کاردکسِ مستقلِ یک متغیرِ خاص، خودِ همان متغیر را از کمبویِ کالا انتخاب کنید."
+            )
+        else:
+            self.status_label.setText("")
 
     def _print_professional(self) -> None:
         """طبقِ درخواستِ صریحِ کاربر («بخشِ گزارشات را حرفه‌ای کنیم»):

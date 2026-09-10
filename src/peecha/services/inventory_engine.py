@@ -313,12 +313,30 @@ def list_item_ledger(
     برایِ حرکاتِ خروجی‌ای پر می‌شود که از یک فاکتورِ فروش آمده باشند --
     از طریقِ لینکِ comm.commercial_document_lines.stock_document_line_id
     که در post کردنِ فاکتور ذخیره شده (متمایز از unit_cost که همان
-    بهایِ تمام‌شده/COGSِ داخلی است، نه قیمتِ فروش به مشتری)."""
+    بهایِ تمام‌شده/COGSِ داخلی است، نه قیمتِ فروش به مشتری).
+
+    طبقِ درخواستِ صریحِ بعدی («کالاهایِ اصلی هم کاردکس داشته باشند --
+    اگر متغیر دارند، مجموعِ مقدار/مبلغِ متغیرها در ردیفِ کاردکسِ کالا
+    ثبت بشه»): خودِ کالایِ اصلیِ دارایِ متغیر هرگز مستقیماً معامله
+    نمی‌شود (فقط متغیرهایش)، پس وقتی این تابع برایِ چنین کالایی صدا
+    زده شود، حرکاتِ همه‌یِ متغیرهایش هم واکشی می‌شود و ردیف‌هایی که به
+    یک سندِ انبارِ واحد (و جهت/انبارِ یکسان) تعلق دارند -- مثلاً یک
+    فاکتورِ خرید با چند ردیفِ متغیرِ رنگِ مختلف -- در یک ردیفِ ترکیبیِ
+    واحد با مقدار/مبلغِ مجموع ادغام می‌شوند. برایِ یک کالایِ عادی، یا
+    وقتی مستقیماً خودِ یک متغیرِ خاص صدا زده شود، این گروه‌بندی هیچ
+    اثری ندارد -- هر خط هم‌چنان دقیقاً یک ردیفِ مستقل می‌ماند (متغیرها
+    کاردکسِ کاملاً مستقلِ خودشان را هم حفظ می‌کنند)."""
     with new_session() as session:
+        variant_item_ids = session.scalars(
+            select(Item.item_id).where(Item.variant_parent_item_id == item_id)
+        ).all()
+        item_ids = [item_id, *variant_item_ids] if variant_item_ids else [item_id]
+
         query = (
             select(
                 StockLedger.movement_date, StockDocument.document_type_code, StockDocument.document_no,
-                Warehouse.name, StockLedger.movement_direction, StockLedger.quantity_base, StockLedger.unit_cost,
+                StockDocument.stock_document_id, Warehouse.name, StockLedger.movement_direction,
+                StockLedger.quantity_base, StockLedger.unit_cost,
                 StockLedger.ledger_id, StockDocument.counterparty_detail_account_id, StockDocumentLine.tax_amount,
                 CommercialDocumentLine.unit_price, CommercialDocumentLine.discount_amount,
                 CommercialDocument.document_type_code,
@@ -328,7 +346,7 @@ def list_item_ledger(
             .join(Warehouse, Warehouse.warehouse_id == StockLedger.warehouse_id)
             .outerjoin(CommercialDocumentLine, CommercialDocumentLine.stock_document_line_id == StockDocumentLine.line_id)
             .outerjoin(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
-            .where(StockLedger.company_id == company_id, StockLedger.item_id == item_id)
+            .where(StockLedger.company_id == company_id, StockLedger.item_id.in_(item_ids))
         )
         if warehouse_id is not None:
             query = query.where(StockLedger.warehouse_id == warehouse_id)
@@ -337,12 +355,15 @@ def list_item_ledger(
         query = query.order_by(StockLedger.movement_date, StockLedger.ledger_id)
         rows = session.execute(query).all()
 
-    result: list[ItemLedgerRow] = []
-    balance = _ZERO
-    value_balance = _ZERO
+    # طبقِ توضیحِ بالا: ردیف‌هایِ خام (هرکدام یک خطِ سندِ یک متغیرِ خاص)
+    # بر اساسِ (سندِ انبار، جهت، انبار) گروه‌بندی می‌شوند -- برایِ کالایِ
+    # بدونِ متغیر یا فراخوانیِ مستقیمِ یک متغیر، هر گروه دقیقاً یک عضو
+    # دارد، پس نتیجه با قبل یکسان می‌ماند.
+    groups: dict[tuple, dict] = {}
+    order: list[tuple] = []
     for (
-        movement_date, doc_type, doc_no, warehouse_name, direction, quantity, unit_cost, _ledger_id,
-        counterparty_id, tax_amount, comm_unit_price, comm_discount_amount, comm_doc_type,
+        movement_date, doc_type, doc_no, stock_document_id, warehouse_name, direction, quantity, unit_cost,
+        _ledger_id, counterparty_id, tax_amount, comm_unit_price, comm_discount_amount, comm_doc_type,
     ) in rows:
         # طبقِ رفعِ باگِ واقعی («بهایِ تمام‌شده باید با احتسابِ مالياتِ
         # فاکتور ثبت شود -- فی ۱۰۰ با ۱۰٪ مالیات باید ۱۱۰ نشان بدهد»):
@@ -355,23 +376,61 @@ def list_item_ledger(
         if unit_cost is not None and tax_amount and quantity:
             landed_unit_cost = _money(unit_cost + (tax_amount / quantity))
         line_value = _money(quantity * landed_unit_cost) if landed_unit_cost is not None else _ZERO
+
+        sale_unit_price_line = None
+        if direction == "OUT" and comm_doc_type == "SALES_INVOICE" and comm_unit_price is not None and quantity:
+            sale_unit_price_line = _money(comm_unit_price - ((comm_discount_amount or _ZERO) / quantity))
+
+        key = (stock_document_id, direction, warehouse_name)
+        group = groups.get(key)
+        if group is None:
+            group = {
+                "movement_date": movement_date, "doc_type": doc_type, "doc_no": doc_no,
+                "warehouse_name": warehouse_name, "direction": direction, "counterparty_id": counterparty_id,
+                "quantity": _ZERO, "value": _ZERO, "sale_value": _ZERO, "sale_qty": _ZERO, "line_count": 0,
+                "single_unit_cost": landed_unit_cost, "single_sale_unit_price": sale_unit_price_line,
+            }
+            groups[key] = group
+            order.append(key)
+        group["quantity"] += quantity
+        group["value"] += line_value
+        group["line_count"] += 1
+        if sale_unit_price_line is not None:
+            group["sale_value"] += sale_unit_price_line * quantity
+            group["sale_qty"] += quantity
+
+    result: list[ItemLedgerRow] = []
+    balance = _ZERO
+    value_balance = _ZERO
+    for key in order:
+        g = groups[key]
+        quantity = g["quantity"]
+        direction = g["direction"]
+        line_value = g["value"]
+        # طبقِ دقتِ محاسباتی: برایِ حالتِ معمولِ یک‌خطی (بدونِ متغیر یا
+        # خودِ یک متغیرِ خاص)، بهایِ واحد/قیمتِ فروشِ همان مقدارِ محاسبه‌شده‌یِ
+        # اصلی (بدونِ گردِ کردنِ دوباره‌یِ حاصلِ تقسیم) باقی می‌ماند --
+        # فقط وقتی واقعاً چند متغیر در یک سند ادغام شده‌اند، میانگینِ
+        # موزون (مبلغ/مقدار) محاسبه می‌شود.
+        if g["line_count"] == 1:
+            landed_unit_cost = g["single_unit_cost"]
+            sale_unit_price = g["single_sale_unit_price"]
+        else:
+            landed_unit_cost = _money(line_value / quantity) if quantity else None
+            sale_unit_price = _money(g["sale_value"] / g["sale_qty"]) if g["sale_qty"] else None
         signed_qty = quantity if direction == "IN" else -quantity
         signed_value = line_value if direction == "IN" else -line_value
         balance += signed_qty
         value_balance += signed_value
 
-        sale_unit_price = None
-        if direction == "OUT" and comm_doc_type == "SALES_INVOICE" and comm_unit_price is not None and quantity:
-            sale_unit_price = _money(comm_unit_price - ((comm_discount_amount or _ZERO) / quantity))
-
-        if date_from is not None and movement_date < date_from:
+        if date_from is not None and g["movement_date"] < date_from:
             continue
         result.append(
             ItemLedgerRow(
-                movement_date, doc_type, doc_no, warehouse_name,
+                g["movement_date"], g["doc_type"], g["doc_no"], g["warehouse_name"],
                 quantity if direction == "IN" else _ZERO, quantity if direction == "OUT" else _ZERO,
                 landed_unit_cost, line_value if direction == "IN" else _ZERO, line_value if direction == "OUT" else _ZERO,
-                balance, value_balance, sale_unit_price, counterparty_id,
+                balance, value_balance, sale_unit_price, g["counterparty_id"],
             )
         )
     return result
