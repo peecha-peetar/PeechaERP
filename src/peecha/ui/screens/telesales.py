@@ -117,6 +117,13 @@ class Customer360Dialog(QDialog):
         self._cheques_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         outer.addWidget(self._cheques_table)
 
+        # طبقِ درخواستِ صریح («مکالماتِ هر مشتری در پروفایلش ذخیره
+        # بشه»): سوابقِ تماس‌هایِ Originateشده از همین داشبورد (R138).
+        outer.addWidget(QLabel("سوابقِ تماس:"))
+        self._calls_list = QListWidget()
+        self._calls_list.setMaximumHeight(120)
+        outer.addWidget(self._calls_list)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)
         buttons.accepted.connect(self.close)
@@ -169,6 +176,17 @@ class Customer360Dialog(QDialog):
             for col_index, value in enumerate(values_row):
                 self._cheques_table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
 
+        self._reload_call_history()
+
+    def _reload_call_history(self) -> None:
+        self._calls_list.clear()
+        for call in telesales_service.list_customer_calls(self._company_id, self._customer_id):
+            outcome = "موفق" if call.was_successful else "ناموفق"
+            text = f"{numerals.format_jalali_datetime(call.started_at)} -- {call.phone_number} ({outcome})"
+            if call.note:
+                text += f" -- {call.note}"
+            self._calls_list.addItem(QListWidgetItem(text))
+
     def _call(self, phone_number: str) -> None:
         # طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال یا وویپ... با
         # کلیک کردن روی اون تماس گرفت»): اول تلاش برایِ Originateِ واقعی
@@ -190,7 +208,9 @@ class Customer360Dialog(QDialog):
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.finished.connect(lambda success, message, n=phone_number: self._on_call_finished(success, message, n))
+        worker.finished.connect(
+            lambda success, message, n=phone_number, uid=user.user_id: self._on_call_finished(success, message, n, uid)
+        )
         worker.finished.connect(thread.quit)
         # طبقِ توضیحِ بالا، deleteLaterِ صریح رویِ worker عمداً صدا زده
         # نمی‌شود -- threadِ آن دیگر در حالِ اجرا نیست تا رویدادِ حذفِ
@@ -203,9 +223,14 @@ class Customer360Dialog(QDialog):
         self._pending_calls.append((thread, worker))
         thread.start()
 
-    def _on_call_finished(self, success: bool, message: str, phone_number: str) -> None:
+    def _on_call_finished(self, success: bool, message: str, phone_number: str, agent_user_id: int) -> None:
         voip_settings_service.record_connection_result(self._company_id, success, None if success else message)
+        # طبقِ درخواستِ صریح («مکالماتِ هر مشتری در پروفایلش ذخیره
+        # بشه»): هر تلاشِ Originate -- موفق یا ناموفق -- در پروفایلِ
+        # همین مشتری ثبت می‌شود.
+        telesales_service.record_customer_call(self._company_id, self._customer_id, agent_user_id, phone_number, success, message)
         self._call_status_label.setText(message)
+        self._reload_call_history()
         if not success:
             self._open_tel_fallback(phone_number)
 

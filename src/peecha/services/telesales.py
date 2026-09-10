@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from peecha.db.base import new_session
-from peecha.db.models.commercial import CustomerSalesNote
+from peecha.db.models.commercial import CustomerCallLog, CustomerSalesNote
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
 
@@ -85,3 +85,49 @@ def list_customer_notes(company_id: int, customer_detail_account_id: int, limit:
 def get_latest_customer_note(company_id: int, customer_detail_account_id: int) -> CustomerNoteRow | None:
     notes = list_customer_notes(company_id, customer_detail_account_id, limit=1)
     return notes[0] if notes else None
+
+
+@dataclass
+class CustomerCallLogRow:
+    call_log_id: int
+    agent_user_id: int
+    phone_number: str
+    started_at: datetime.datetime
+    was_successful: bool
+    note: str | None
+
+
+def record_customer_call(
+    company_id: int, customer_detail_account_id: int, agent_user_id: int, phone_number: str,
+    was_successful: bool, note: str | None = None,
+) -> int:
+    """طبقِ درخواستِ صریح («مکالماتِ هر مشتری در پروفایلش ذخیره بشه»):
+    این‌جا فقط تماس‌هایِ خودمان (Originateِ AMیِ R137، از customer_dashboard
+    کلیک می‌شود) ثبت می‌شود -- بدونِ توجه به این‌که تماس واقعاً وصل شده
+    یا فقط درخواستِ Originate پذیرفته شده (was_successful دقیقاً همان
+    OriginateResult.success است)."""
+    with new_session() as session:
+        row = CustomerCallLog(
+            company_id=company_id, customer_detail_account_id=customer_detail_account_id,
+            agent_user_id=agent_user_id, phone_number=phone_number, was_successful=was_successful, note=note,
+        )
+        session.add(row)
+        session.commit()
+        return row.call_log_id
+
+
+def list_customer_calls(company_id: int, customer_detail_account_id: int, limit: int = 20) -> list[CustomerCallLogRow]:
+    with new_session() as session:
+        rows = session.scalars(
+            select(CustomerCallLog)
+            .where(
+                CustomerCallLog.company_id == company_id,
+                CustomerCallLog.customer_detail_account_id == customer_detail_account_id,
+            )
+            .order_by(CustomerCallLog.started_at.desc())
+            .limit(limit)
+        ).all()
+        return [
+            CustomerCallLogRow(r.call_log_id, r.agent_user_id, r.phone_number, r.started_at, r.was_successful, r.note)
+            for r in rows
+        ]

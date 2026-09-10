@@ -1600,3 +1600,21 @@ class CustomerSalesNote(Base):
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     note_text: Mapped[str] = mapped_column(String(1000))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CustomerCallLog(Base):
+    """طبقِ درخواستِ صریح («مکالماتِ هر مشتری در پروفایلش ذخیره بشه») --
+    این‌جا فقط تماس‌هایِ خودمان (Originateِ AMIِ R137) ثبت می‌شود؛
+    تماسِ ورودی/CDR فازِ بعدی است (نیازِ اتصالِ MySQLِ جداگانه دارد)."""
+
+    __tablename__ = "customer_call_logs"
+    __table_args__ = ({"schema": "comm"},)
+
+    call_log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    agent_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    phone_number: Mapped[str] = mapped_column(String(30))
+    started_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    was_successful: Mapped[bool] = mapped_column(Boolean)
+    note: Mapped[str | None] = mapped_column(String(500))
