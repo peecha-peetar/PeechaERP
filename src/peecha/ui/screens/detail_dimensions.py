@@ -1005,13 +1005,23 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         """نمایش/مخفی‌کردنِ پنلِ اختصاصیِ کالا — فقط وقتی گروهِ انتخاب‌شده
         INVENTORY_ITEM باشد و سطحِ درحالِ‌ساخت/ویرایش، سطحِ‌آخر باشد
         (دقیقاً هم‌شرطِ is_leaf_level در _render_person_fields/_render_extra_fields)."""
+        # طبقِ رفعِ باگِ احتمالی: قفلِ زیر فقط باید هنگامِ *ویرایشِ* واقعیِ
+        # یک متغیرِ ازپیش‌موجود اعمال شود -- نه هنگامِ «کپی از» یک متغیر
+        # به‌عنوانِ نمونه برایِ ساختنِ یک رکوردِ کاملاً تازه (که در آن حالت
+        # self._editing_account_id هنوز None است).
+        is_variant = (
+            self._editing_account_id is not None
+            and item_row is not None
+            and item_row.variant_parent_item_id is not None
+        )
+        self._apply_variant_lock(is_variant)
         if not self._is_inventory_item_group():
             self.item_detail_panel.setVisible(False)
             self.item_level_hint_label.setVisible(False)
             return
         is_leaf_level = self._current_level_no() >= self._current_max_level_no
         self.item_detail_panel.setVisible(is_leaf_level)
-        self.item_level_hint_label.setVisible(not is_leaf_level)
+        self.item_level_hint_label.setVisible(not is_leaf_level or is_variant)
         if not is_leaf_level:
             self.item_level_hint_label.setText(
                 f"این یک سطحِ دسته‌بندی است، نه خودِ کالا (سطحِ فعلی: {self._current_level_no()} از "
@@ -1024,6 +1034,35 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if company_id is not None:
             self.item_detail_panel.refresh(company_id)
         self.item_detail_panel.load(item_row)
+        if is_variant:
+            # طبقِ درخواستِ صریح («فقط کالایِ اصلی امکانِ ویرایش را داشته
+            # باشد، متغیرها همه از کالایِ اصلی ارث ببرند»): این ردیف خودش
+            # یک متغیر است -- ویرایشِ مستقیمِ فیلدهایِ عمومیِ آن از همین‌جا
+            # ممنوع می‌شود (هم چون منطقاً همه‌چیز باید از کالایِ اصلی ارث
+            # برود، هم چون همین مسیر پیش‌تر باعثِ یتیم‌شدنِ متغیر از کالایِ
+            # اصلی‌اش و کرشِ گزارش‌شده می‌شد) -- توضیحات/قیمت/عکسِ مخصوصِ
+            # همین متغیر هم‌چنان از تبِ «ویژگی‌ها و متغیرها»یِ خودِ کالایِ
+            # اصلی قابلِ‌ویرایش است.
+            self.item_level_hint_label.setText(
+                "این یک «متغیر» است، نه خودِ کالایِ اصلی — همه‌یِ ویژگی‌هایِ این‌جا از کالایِ اصلی به ارث "
+                "می‌رسند و مستقیماً قابلِ‌ویرایش نیستند. برایِ تغییرِ توضیحات/قیمت/عکسِ همین متغیر یا حذفِ آن، "
+                "به تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی مراجعه کنید."
+            )
+
+    def _apply_variant_lock(self, is_variant: bool) -> None:
+        """قفل‌کردنِ فرمِ عمومیِ حسابِ تفصیلی وقتی رکوردِ درحالِ‌ویرایش خودش
+        یک «متغیر» است -- طبقِ توضیحِ _render_item_panel."""
+        self.account_code_field.setEnabled(not is_variant)
+        self.account_name_field.setEnabled(not is_variant)
+        self.account_active_checkbox.setEnabled(not is_variant)
+        self.item_detail_panel.setEnabled(not is_variant)
+        self.save_button.setEnabled(not is_variant)
+        if is_variant:
+            self.delete_button.setEnabled(False)
+            self.delete_button.setToolTip("حذفِ متغیر فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی ممکن است.")
+        else:
+            self.delete_button.setEnabled(True)
+            self.delete_button.setToolTip("حذف")
 
     def _dimension_type_id(self) -> int | None:
         """dimension_type_idِ فعلی — برایِ گروه‌هایِ اشخاص، همیشه نوع‌بُعدِ
@@ -1611,6 +1650,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         company_id = self._company_id()
         if company_id is None or self._selected is None:
             return
+        if self._is_inventory_item_group() and self._editing_account_id is not None:
+            existing = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
+            if existing is not None and existing.variant_parent_item_id is not None:
+                self.account_status_label.setText(
+                    "این یک متغیر است؛ فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی قابلِ‌ویرایش است."
+                )
+                return
         code = self.account_code_field.text().strip()
         if not code:
             self.account_status_label.setText("کد را وارد کنید.")
@@ -1676,6 +1722,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
+        if self._is_inventory_item_group():
+            existing = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
+            if existing is not None and existing.variant_parent_item_id is not None:
+                self.account_status_label.setText(
+                    "این یک متغیر است؛ فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی قابلِ‌حذف است."
+                )
+                return
         confirm = QMessageBox.question(
             self, "حذف", "این حساب حذف شود؟ این کار قابلِ بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
         )

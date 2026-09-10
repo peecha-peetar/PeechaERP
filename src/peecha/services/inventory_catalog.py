@@ -570,11 +570,19 @@ def update_item(
         if has_open_balance and item.costing_method_code != fields.costing_method_code:
             raise ValueError("این کالا در انباری موجودی دارد؛ روشِ قیمت‌گذاری فقط با موجودیِ صفر قابلِ‌تغییر است.")
 
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده («ویرایشِ متغیرها کرش می‌کند» +
+        # «متغیرها ویژگیِ کالایِ اصلی را نمی‌گیرند»): variant_parent_item_id
+        # هرگز نباید از رویِ فرم بازنویسی شود -- خودِ فرمِ عمومیِ کالا
+        # (collect_fields) اصلاً این فیلد را نمی‌شناسد و همیشه None
+        # می‌فرستد، پس نوشتنِ کورکورانه‌یِ آن این‌جا هر بار که یک متغیر
+        # (حتیّ بدونِ تغییرِ واقعی) از طریقِ همین فرمِ عمومی ذخیره شود، آن
+        # را از کالایِ اصلی‌اش یتیم می‌کرد -- این پیوند فقط توسطِ
+        # item_variants.generate_item_variants (در create_item) تعیین
+        # می‌شود و بعد از آن دیگر از این مسیر تغییر نمی‌کند.
         item.item_kind_code = fields.item_kind_code
         item.base_uom_id = fields.base_uom_id
         item.brand_id = fields.brand_id
         item.manufacturer_id = fields.manufacturer_id
-        item.variant_parent_item_id = fields.variant_parent_item_id
         item.costing_method_code = fields.costing_method_code
         item.lifecycle_status_code = lifecycle_status_code
         item.is_sellable = fields.is_sellable
@@ -592,6 +600,31 @@ def update_item(
             setattr(item, key, value)
         item.updated_at = datetime.datetime.now(datetime.timezone.utc)
         detail_account_id = item.item_detail_account_id
+
+        # طبقِ درخواستِ صریح («وقتی کالایِ اصلی موجودی‌محور باشه باید
+        # واریانت‌ها هم همون ویژگی‌هایِ کالایِ اصلی را بگیرد» + «متغیرها
+        # همه از کالایِ اصلی ارث ببرند»): این همگام‌سازی فقط یک‌بارِ
+        # هنگامِ تولیدِ اولیه‌یِ متغیرها کافی نیست -- هر بار که خودِ کالایِ
+        # اصلی (نه یک متغیر) ذخیره می‌شود، این فیلدهایِ ساختاری/ردیابی به
+        # همه‌یِ متغیرهایِ موجودش هم اعمال می‌شود. فیلدهایِ
+        # is_sellable/is_purchasable/is_stock_tracked عمداً این‌جا نیستند:
+        # کالایِ اصلیِ دارایِ متغیر خودش همیشه غیرِقابلِ‌معامله می‌شود
+        # (طبقِ _sync_parent_transactability در item_variants.py) پس مقدارِ
+        # فعلیِ آن فیلدها رویِ خودِ فرم معنایِ «الگو» ندارد و نباید به
+        # متغیرهایی که از قبل درست تنظیم شده‌اند سرایت کند.
+        if item.variant_parent_item_id is None:
+            variants = session.scalars(select(Item).where(Item.variant_parent_item_id == item_id)).all()
+            for variant in variants:
+                variant.item_kind_code = fields.item_kind_code
+                variant.base_uom_id = fields.base_uom_id
+                variant.brand_id = fields.brand_id
+                variant.manufacturer_id = fields.manufacturer_id
+                variant.costing_method_code = fields.costing_method_code
+                variant.track_serial = fields.track_serial
+                variant.track_batch = fields.track_batch
+                variant.track_expiry = fields.track_expiry
+                variant.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
         session.commit()
 
     dimensions_service.update_detail_account(detail_account_id, company_id, code, is_active, name)
