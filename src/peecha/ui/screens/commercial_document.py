@@ -2375,7 +2375,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         last_col = len(_LINE_COLUMNS) - 1
         self.lines_table.horizontalHeader().setSectionResizeMode(last_col, QHeaderView.Fixed)
-        self.lines_table.setColumnWidth(last_col, 70)
+        # طبقِ موردِ ۳ («کاردکس/قیمتِ قبلی در همان ردیف»): دو دکمهٔ تازه
+        # (📇/🕘) کنارِ ویرایش/حذفِ قدیمی اضافه شد -- پس این ستون هم
+        # عریض‌تر شده تا هر چهار دکمه جا شوند.
+        self.lines_table.setColumnWidth(last_col, 130)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
@@ -2858,6 +2861,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             cell.setData(Qt.UserRole, ln.line_id)
             if col_index == 0:
                 cell.setTextAlignment(Qt.AlignCenter)
+            elif col_index == 1:
+                # طبقِ موردِ ۳ («اطلاعاتِ کالا شاملِ کاردکس و قیمت‌هایِ
+                # قبلی و موجودی در همان ردیف قابلِ‌مشاهده باشه»): موجودی
+                # و آخرین قیمت‌ها به‌عنوانِ Tooltip رویِ نامِ کالا -- بدونِ
+                # هیچ کلیکی، با نگه‌داشتنِ ماوس دیده می‌شود.
+                cell.setToolTip(self._item_info_tooltip_text(ln.item_id))
             self.lines_table.setItem(row_index, col_index, cell)
         self.lines_table.setCellWidget(row_index, len(values), self._make_line_actions_widget(row_index))
 
@@ -2891,6 +2900,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setItem(row_index, 0, idx_cell)
         item_cell = QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(ln.item_id))
         item_cell.setData(Qt.UserRole, ln.line_id)
+        item_cell.setToolTip(self._item_info_tooltip_text(ln.item_id))
         self.lines_table.setItem(row_index, 1, item_cell)
 
         qty_field = _AmountField()
@@ -3022,14 +3032,40 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         description_field.setPlaceholderText("توضیح (اختیاری)")
         self.lines_table.setCellWidget(row_index, 8, description_field)
 
+        actions_container = QWidget()
+        actions_layout = QHBoxLayout(actions_container)
+        actions_layout.setContentsMargins(2, 0, 2, 0)
+        actions_layout.setSpacing(2)
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(28)
         add_button.setToolTip("افزودنِ این ردیف به سند")
-        self.lines_table.setCellWidget(row_index, 9, add_button)
+        actions_layout.addWidget(add_button)
+        # طبقِ موردِ ۳: پیش از افزودن هم بتوان موجودی/کاردکس/قیمتِ قبلیِ
+        # کالایِ انتخاب‌شده را دید -- تا انتخابِ کالا مشخص نشده غیرفعال‌اند.
+        info_kardex_button = QPushButton("📇")
+        info_kardex_button.setObjectName("iconButton")
+        info_kardex_button.setFixedWidth(28)
+        info_kardex_button.setToolTip("کاردکسِ کالایِ انتخاب‌شده")
+        info_kardex_button.setEnabled(False)
+        info_kardex_button.clicked.connect(
+            lambda _checked=False, c=item_combo: self._open_item_kardex(c.currentData()) if c.currentData() is not None else None
+        )
+        actions_layout.addWidget(info_kardex_button)
+        info_price_button = QPushButton("🕘")
+        info_price_button.setObjectName("iconButton")
+        info_price_button.setFixedWidth(28)
+        info_price_button.setToolTip("قیمت‌هایِ قبلیِ کالایِ انتخاب‌شده")
+        info_price_button.setEnabled(False)
+        info_price_button.clicked.connect(
+            lambda _checked=False, c=item_combo: self._open_item_price_history(c.currentData()) if c.currentData() is not None else None
+        )
+        actions_layout.addWidget(info_price_button)
+        self.lines_table.setCellWidget(row_index, 9, actions_container)
 
         self._entry_row_widgets = {
             "item_combo": item_combo, "qty": qty_field, "price": price_field,
+            "info_kardex_button": info_kardex_button, "info_price_button": info_price_button,
             "discount": discount_field, "discount_type": discount_type_combo,
             "tax": tax_field, "description": description_field,
         }
@@ -3058,6 +3094,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         item = next((it for it in self._items if it.item_id == item_id), None)
         if item is None:
             return
+        # طبقِ موردِ ۳: به‌محضِ انتخابِ کالا در همین ردیفِ ورودی، دکمه‌هایِ
+        # کاردکس/قیمتِ قبلی فعال می‌شوند و موجودی/آخرین قیمت به‌عنوانِ
+        # Tooltipِ کمبویِ کالا نمایش داده می‌شود -- پیش از ثبتِ ردیف.
+        widgets["info_kardex_button"].setEnabled(True)
+        widgets["info_price_button"].setEnabled(True)
+        widgets["item_combo"].setToolTip(self._item_info_tooltip_text(item_id))
         company_id = self._company_id()
         if company_id is None:
             return
@@ -3194,7 +3236,87 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         delete_button.setToolTip("حذفِ ردیف")
         delete_button.clicked.connect(lambda _checked=False, r=row_index: self._delete_line_at_row(r))
         layout.addWidget(delete_button)
+        # طبقِ موردِ ۳ («کاردکس و قیمت‌هایِ قبلی و موجودی در همان ردیف
+        # قابلِ‌مشاهده باشه»): دو دکمهٔ سریع، مستقیم رویِ کالایِ همین
+        # ردیف -- بدونِ نیاز به بازکردنِ فرمِ ردیف/دیالوگِ افزودن.
+        kardex_button = QPushButton("📇")
+        kardex_button.setObjectName("iconButton")
+        kardex_button.setFixedWidth(28)
+        kardex_button.setToolTip("کاردکسِ این کالا")
+        kardex_button.clicked.connect(
+            lambda _checked=False, r=row_index: self._open_item_kardex(self._lines[r].item_id) if 0 <= r < len(self._lines) else None
+        )
+        layout.addWidget(kardex_button)
+        price_history_button = QPushButton("🕘")
+        price_history_button.setObjectName("iconButton")
+        price_history_button.setFixedWidth(28)
+        price_history_button.setToolTip("قیمت‌هایِ قبلیِ این کالا به همین طرفِ‌حساب")
+        price_history_button.clicked.connect(
+            lambda _checked=False, r=row_index: self._open_item_price_history(self._lines[r].item_id) if 0 <= r < len(self._lines) else None
+        )
+        layout.addWidget(price_history_button)
         return container
+
+    def _item_info_tooltip_text(self, item_id: int) -> str:
+        """طبقِ موردِ ۳ («اطلاعاتِ کالا شاملِ کاردکس و قیمت‌هایِ قبلی و
+        موجودی در همان ردیف قابلِ‌مشاهده باشه»): موجودیِ کل/به‌ازایِ هر
+        انبار + آخرین قیمت‌هایِ همین کالا به همین طرفِ‌حساب -- بدونِ هیچ
+        کلیکی، فقط با نگه‌داشتنِ ماوس رویِ نامِ کالا دیده می‌شود."""
+        company_id = self._company_id()
+        if company_id is None:
+            return ""
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        uom_decimals = 2
+        if item is not None:
+            uom_row = next((u for u in catalog_service.list_uoms(company_id) if u.uom_id == item.base_uom_id), None)
+            if uom_row is not None:
+                uom_decimals = uom_row.decimal_places
+        rows = engine_service.get_item_stock_by_warehouse(company_id, item_id)
+        nonzero = [r for r in rows if r.quantity_on_hand]
+        if not nonzero:
+            stock_line = "موجودی: صفر"
+        else:
+            total = sum((r.quantity_on_hand for r in nonzero), decimal.Decimal(0))
+            per_warehouse = " | ".join(
+                f"{r.warehouse_name}: {numerals.format_money(r.quantity_on_hand, uom_decimals)}" for r in nonzero
+            )
+            stock_line = f"موجودیِ کل: {numerals.format_money(total, uom_decimals)} ({per_warehouse})"
+        lines = [stock_line]
+        counterparty_id = self.counterparty_combo.currentData()
+        if counterparty_id is not None:
+            history = documents_service.list_item_price_history(company_id, item_id, counterparty_id)[:3]
+            if history:
+                dp = self._decimal_places
+                price_parts = [
+                    f"{numerals.format_jalali_date(row.document_date)}: {numerals.format_money(row.unit_price, dp)}"
+                    for row in history
+                ]
+                lines.append("آخرین قیمت‌ها: " + " | ".join(price_parts))
+        return "\n".join(lines)
+
+    def _open_item_kardex(self, item_id: int) -> None:
+        from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.resize(900, 560)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        ledger_screen = ItemLedgerScreen()
+        dialog_layout.addWidget(ledger_screen)
+        ledger_screen.show_ledger_for_item(item_id)
+        dialog.exec()
+
+    def _open_item_price_history(self, item_id: int) -> None:
+        company_id = self._company_id()
+        counterparty_id = self.counterparty_combo.currentData()
+        if company_id is None or counterparty_id is None:
+            QMessageBox.information(self, "قیمت‌هایِ قبلی", "برایِ دیدنِ قیمت‌هایِ قبلی، ابتدا طرفِ‌حساب را انتخاب کنید.")
+            return
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        item_label = f"{item.code} — {item.name or ''}" if item else str(item_id)
+        dialog = _ItemPriceHistoryDialog(self, company_id, item_id, counterparty_id, item_label)
+        dialog.exec()
 
     def _edit_line_at_row(self, row_index: int) -> None:
         if 0 <= row_index < len(self._lines):
