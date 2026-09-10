@@ -711,6 +711,15 @@ class MainWindow(QMainWindow):
         self._content_calendar_timer.timeout.connect(self._tick_content_calendar)
         self._content_calendar_timer.start()
 
+        # طبقِ درخواستِ صریح («یک تب برایِ بازاریابی و ارسالِ پیامکِ
+        # زمان‌بندی‌شده»، R139): همان الگویِ تیکِ دوره‌ایِ بالا -- کمپینِ
+        # سررسیده بدونِ نیاز به کلیکِ دستیِ کاربر ارسال می‌شود (فقط تا
+        # وقتی برنامه باز است).
+        self._sms_campaign_timer = QTimer(self)
+        self._sms_campaign_timer.setInterval(60_000)
+        self._sms_campaign_timer.timeout.connect(self._tick_sms_campaigns)
+        self._sms_campaign_timer.start()
+
         self._screens: dict[str, QWidget] = {}
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
         self._mdi_subwindows: dict[str, _FramelessMdiSubWindow] = {}
@@ -835,6 +844,18 @@ class MainWindow(QMainWindow):
             from peecha.services import commercial_social as social_service
 
             social_service.run_due_posts(session.current_company.company_id)
+        except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
+            pass
+
+    def _tick_sms_campaigns(self) -> None:
+        """پشتیبانِ تایمرِ کمپینِ پیامک -- کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
+        با _tick_ecommerce_auto_sync/_tick_content_calendar."""
+        if session.current_company is None:
+            return
+        try:
+            from peecha.services import sms_marketing as sms_marketing_service
+
+            sms_marketing_service.run_due_campaigns(session.current_company.company_id)
         except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
             pass
 

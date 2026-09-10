@@ -16,6 +16,7 @@ from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListS
 from peecha.ui.screens.customer_visits import CustomerVisitsScreen
 from peecha.ui.screens.field_sales_dashboard import FieldSalesDashboardScreen
 from peecha.ui.screens.promotion_rules import PromotionRulesScreen
+from peecha.ui.screens.sms_marketing import SmsMarketingScreen
 from peecha.ui.screens.telesales import TelesalesScreen
 from peecha.ui.screens.vehicle_loading import VehicleLoadingScreen
 from peecha.ui.screens.visit_plans import VisitPlansScreen
@@ -63,6 +64,10 @@ class CommercialDistributionHubScreen(QWidget):
         # سرپرست -- پوششِ ویزیت/عملکردِ فروش/رسیدِ تحویل/کسریِ بارگیری.
         self.dashboard_tab = FieldSalesDashboardScreen()
         self.tabs.addTab(self.dashboard_tab, "داشبوردِ سرپرست")
+        # طبقِ درخواستِ صریح («یک تب برایِ بازاریابی و ارسالِ پیامکِ
+        # زمان‌بندی‌شده»، R139).
+        self.marketing_tab = SmsMarketingScreen()
+        self.tabs.addTab(self.marketing_tab, "بازاریابی")
         self.tabs.currentChanged.connect(self._refresh_tab_at)
         outer.addWidget(self.tabs, stretch=1)
 

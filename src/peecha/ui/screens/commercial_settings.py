@@ -24,6 +24,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settings as settings_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import sms_gateway as sms_gateway_service
 from peecha.services import voip_settings as voip_settings_service
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
@@ -415,6 +416,74 @@ class _VoipSettingsTab(QWidget):
             company_id, host, port, self.context_field.text(), self.channel_prefix_field.text(),
             self.username_field.text().strip(), self.secret_field.text(), self.is_active_checkbox.isChecked(),
         )
+        self.status_label.setText("ذخیره شد.")
+
+
+class _SmsGatewaySettingsTab(QWidget):
+    """طبقِ درخواستِ صریحِ کاربر («ارسالِ پیامکِ زمان‌بندی‌شده»): چون
+    ارائه‌دهنده مشخص نبود، یک الگویِ URLِ عمومی با {phone}/{text}
+    ذخیره می‌شود -- هم‌الگو با _VoipSettingsTab."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("درگاهِ پیامک")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "الگویِ آدرسِ ارسالِ پیامکِ ارائه‌دهنده -- هرگونه کلیدِ API/نامِ‌کاربری/رمز را مستقیماً در همین آدرس بگذارید. "
+            "جایگزین‌هایِ {phone} و {text} در لحظهٔ ارسال با شماره و متنِ پیامک پر می‌شوند."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.template_field = QLineEdit()
+        self.template_field.setPlaceholderText("https://example.com/send?user=U&pass=P&to={phone}&text={text}")
+        self.method_combo = QComboBox()
+        self.method_combo.addItem("GET", "GET")
+        self.method_combo.addItem("POST", "POST")
+        self.is_active_checkbox = QCheckBox("این درگاه فعال باشد")
+
+        self.grid = FieldGrid([
+            FieldSpec("sms_template", "الگویِ آدرس", self.template_field, span=3),
+            FieldSpec("sms_method", "روشِ HTTP", self.method_combo, span=1),
+            FieldSpec("sms_is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.grid)
+
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        layout.addWidget(save_button)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        gateway = sms_gateway_service.get_sms_gateway(company_id)
+        self.template_field.setText(gateway.request_template if gateway else "")
+        index = self.method_combo.findData(gateway.http_method if gateway else "GET")
+        self.method_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.is_active_checkbox.setChecked(bool(gateway.is_active) if gateway else True)
+        self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        template = self.template_field.text().strip()
+        if not template:
+            self.status_label.setText("الگویِ آدرس را وارد کنید.")
+            return
+        sms_gateway_service.set_sms_gateway(company_id, template, self.method_combo.currentData(), self.is_active_checkbox.isChecked())
         self.status_label.setText("ذخیره شد.")
 
 

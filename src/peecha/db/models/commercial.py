@@ -1367,6 +1367,57 @@ class VoipConnection(Base):
     last_checked_at: Mapped[datetime.datetime | None]
 
 
+class SmsGatewaySettings(Base):
+    """طبقِ درخواستِ صریح («ارسالِ پیامکِ زمان‌بندی‌شده»): چون ارائه‌دهنده
+    مشخص نبود و APIِ دقیقش پیدا نشد، به‌جایِ سخت‌کدکردن، کلِ الگویِ URL
+    (با {phone}/{text}) رمزنگاری‌شده ذخیره می‌شود -- هم‌الگو با
+    VoipConnection (یک ردیفِ یکتا به‌ازایِ هر شرکت)."""
+
+    __tablename__ = "sms_gateway_settings"
+    __table_args__ = (UniqueConstraint("company_id"), {"schema": "comm"})
+
+    setting_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    request_template_encrypted: Mapped[bytes | None]
+    http_method: Mapped[str] = mapped_column(String(10), default="GET")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class SmsCampaign(Base):
+    """طبقِ درخواستِ صریح («یک تب برایِ بازاریابی و ارسالِ پیامکِ
+    زمان‌بندی‌شده»)."""
+
+    __tablename__ = "sms_campaigns"
+    __table_args__ = ({"schema": "comm"},)
+
+    campaign_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(150))
+    message_text: Mapped[str] = mapped_column(String(500))
+    scheduled_at: Mapped[datetime.datetime]
+    status_code: Mapped[str] = mapped_column(String(15), default="PENDING")
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    sent_at: Mapped[datetime.datetime | None]
+
+
+class SmsCampaignRecipient(Base):
+    """طبقِ تصمیمِ طراحیِ MVP: گیرندگان در لحظهٔ ساختِ کمپین، از فهرستِ
+    مشتریانِ اختصاص‌یافته به کاربرِ سازنده (telesales.list_assigned_customers،
+    R135) عکس‌برداری می‌شوند."""
+
+    __tablename__ = "sms_campaign_recipients"
+    __table_args__ = ({"schema": "comm"},)
+
+    recipient_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.sms_campaigns.campaign_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    phone_number: Mapped[str] = mapped_column(String(30))
+    status_code: Mapped[str] = mapped_column(String(15), default="PENDING")
+    sent_at: Mapped[datetime.datetime | None]
+    error_message: Mapped[str | None] = mapped_column(String(500))
+
+
 class ContentCalendarPost(Base):
     """طبقِ درخواستِ صریح («تقویمِ محتوایی»): هر پست به یک اتصالِ مشخص
     زمان‌بندی می‌شود؛ run_due_posts (تیکِ هر یک‌دقیقه‌ایِ شل، هم‌الگو با
