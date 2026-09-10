@@ -54,6 +54,10 @@ class UserCompany(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال»): داخلیِ این کاربر
+    # در سانترالِ همین شرکت -- چون سانترال (و درنتیجه شماره‌یِ داخلی)
+    # می‌تواند بینِ شرکت‌ها فرق کند، نه رویِ خودِ sec.users.
+    voip_extension: Mapped[str | None] = mapped_column(String(20))
 
 
 class Module(Base):

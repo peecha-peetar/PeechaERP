@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -33,9 +33,29 @@ from peecha.services import companies as companies_service
 from peecha.services import customer_dashboard as customer_dashboard_service
 from peecha.services import telesales as telesales_service
 from peecha.services import treasury as treasury_service
+from peecha.services import users as users_service
+from peecha.services import voip_ami
+from peecha.services import voip_settings as voip_settings_service
 from peecha.ui.screens.dashboard import build_chart_card, render_bar_chart, render_donut_chart
 
 _COLUMNS = ["کد", "نام", "ماندهٔ حساب", "آخرین یادداشت", "اقدامات"]
+
+
+class _OriginateWorker(QObject):
+    """اجرایِ originate_call در یک QThreadِ جدا -- طبقِ اصلِ «اتصال به
+    سیستمِ بیرونی نباید UI را قفل کند» (سوکتِ AMI می‌تواند تا چند ثانیه
+    طول بکشد یا timeout بخورد)."""
+
+    finished = Signal(bool, str)
+
+    def __init__(self, host: str, port: int, ami_username: str, ami_secret: str, dial_context: str,
+                 channel_tech_prefix: str, agent_extension: str, customer_phone_number: str) -> None:
+        super().__init__()
+        self._args = (host, port, ami_username, ami_secret, dial_context, channel_tech_prefix, agent_extension, customer_phone_number)
+
+    def run(self) -> None:
+        result = voip_ami.originate_call(*self._args)
+        self.finished.emit(result.success, result.message)
 
 
 class Customer360Dialog(QDialog):
@@ -58,6 +78,29 @@ class Customer360Dialog(QDialog):
 
         self._header_layout = QGridLayout()
         outer.addLayout(self._header_layout)
+
+        self._call_status_label = QLabel("")
+        self._call_status_label.setObjectName("sectionHint")
+        self._call_status_label.setWordWrap(True)
+        outer.addWidget(self._call_status_label)
+
+        # طبقِ رفعِ دو باگِ واقعیِ کشف‌شده در تست:
+        # ۱) «QThread: Destroyed while thread is still running» -- اگر
+        #    رفرنسِ threadِ تماسِ قبلی با یک ویژگیِ تکی جایگزین شود، درست
+        #    همان لحظه‌ای که worker.finished شلیک شده ولی خودِ QThread
+        #    هنوز کاملاً exit نکرده (quit فقط درخواستِ خروج است، نه
+        #    تضمینِ فوری)، رفرنسِ پایتونی از دست می‌رود و GC آن را
+        #    درحینِ اجرا نابود می‌کند.
+        # ۲) اگر worker فقط یک متغیرِ محلیِ تابعِ _call باشد (بدونِ نگه‌
+        #    داشتنِ رفرنس)، به‌محضِ خروج از _call ممکن است پایتون آن را
+        #    GC کند -- و چون PySide مالکیتِ آبجکتِ ++C را به رفرنسِ
+        #    پایتونی گره می‌زند (نه فقط به کانکشن‌هایِ سیگنال/اسلات)،
+        #    QThreadِ پس‌زمینه با یک workerِ حذف‌شده کار می‌کند و رفتارش
+        #    غیرِقابلِ‌پیش‌بینی می‌شود.
+        # برایِ همین، هر جفتِ (thread, worker) با هم تا لحظه‌یِ شلیکِ
+        # signalِ finishedِ *خودِ QThread* (که یعنی واقعاً کاملاً متوقف
+        # شده) در این فهرست نگه داشته می‌شوند.
+        self._pending_calls: list[tuple[QThread, "_OriginateWorker"]] = []
 
         charts_row = QHBoxLayout()
         month_card, self._month_chart_view = build_chart_card("فروشِ ماهانه")
@@ -126,12 +169,48 @@ class Customer360Dialog(QDialog):
             for col_index, value in enumerate(values_row):
                 self._cheques_table.setItem(row_index, col_index, QTableWidgetItem(str(value)))
 
+    def _call(self, phone_number: str) -> None:
+        # طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال یا وویپ... با
+        # کلیک کردن روی اون تماس گرفت»): اول تلاش برایِ Originateِ واقعی
+        # از طریقِ AMI (اگر سانترال تنظیم شده و کاربرِ جاری داخلی دارد)؛
+        # در غیرِ این صورت (یا هرگونه شکست) fallback به tel: عمومی که
+        # با هر سافت‌فونِ نصب‌شده روی سیستم (از جمله متصل به ایزابل) کار
+        # می‌کند.
+        conn = voip_settings_service.get_voip_connection(self._company_id) if self._company_id else None
+        user = app_session.current_user
+        extension = users_service.get_voip_extension(user.user_id, self._company_id) if user else None
+        if conn is None or not conn.is_active or not extension:
+            self._open_tel_fallback(phone_number)
+            return
+        self._call_status_label.setText("درحالِ برقراریِ تماس از طریقِ سانترال...")
+        worker = _OriginateWorker(
+            conn.host, conn.port, conn.ami_username, conn.ami_secret, conn.dial_context,
+            conn.channel_tech_prefix, extension, phone_number,
+        )
+        thread = QThread()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(lambda success, message, n=phone_number: self._on_call_finished(success, message, n))
+        worker.finished.connect(thread.quit)
+        # طبقِ توضیحِ بالا، deleteLaterِ صریح رویِ worker عمداً صدا زده
+        # نمی‌شود -- threadِ آن دیگر در حالِ اجرا نیست تا رویدادِ حذفِ
+        # به‌تعویق‌افتاده را پردازش کند؛ به‌جایش، حذفِ این جفت از فهرست
+        # (که تنها رفرنسِ پایتونیِ نگه‌دارنده است) به GCِ معمولی اجازه
+        # می‌دهد آبجکت را جمع کند -- در این لحظه، چون threadش واقعاً
+        # متوقف شده، این کار امن است.
+        thread.finished.connect(lambda pair=(thread, worker): self._pending_calls.remove(pair) if pair in self._pending_calls else None)
+        thread.finished.connect(thread.deleteLater)
+        self._pending_calls.append((thread, worker))
+        thread.start()
+
+    def _on_call_finished(self, success: bool, message: str, phone_number: str) -> None:
+        voip_settings_service.record_connection_result(self._company_id, success, None if success else message)
+        self._call_status_label.setText(message)
+        if not success:
+            self._open_tel_fallback(phone_number)
+
     @staticmethod
-    def _call(phone_number: str) -> None:
-        # طبقِ درخواستِ صریح («کلیک کردن روی اون تماس گرفت»): fallback
-        # عمومیِ tel: که رویِ ویندوز به‌طورِ پیش‌فرض توسطِ اپ‌هایِ VoIP
-        # نصب‌شده (مثلاً سافت‌فون‌هایِ متصل به سانترالِ Issabel) هندل
-        # می‌شود -- بدونِ نیاز به اتصالِ مستقیمِ AMI از همین‌جا.
+    def _open_tel_fallback(phone_number: str) -> None:
         QDesktopServices.openUrl(QUrl(f"tel:{phone_number}"))
 
     @staticmethod

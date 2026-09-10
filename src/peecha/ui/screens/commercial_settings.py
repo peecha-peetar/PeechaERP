@@ -24,6 +24,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settings as settings_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import voip_settings as voip_settings_service
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
 # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
@@ -322,6 +323,97 @@ class _PricingPolicyTab(QWidget):
         margin = self.min_margin_spin.value()
         pricing_service.set_pricing_policy(
             company_id, decimal.Decimal(margin) if margin > 0 else None, self.requires_approval_checkbox.isChecked()
+        )
+        self.status_label.setText("ذخیره شد.")
+
+
+class _VoipSettingsTab(QWidget):
+    """طبقِ درخواستِ صریحِ کاربر («وصل بشه به سیستمِ سانترال یا وویپ»):
+    اتصالِ AMIِ آستریسک/ایزابل برایِ Click-to-Call از داشبوردِ معلقِ
+    مشتری (telesales.py، R136/R137). هم‌الگو با _PricingPolicyTab --
+    یک ردیفِ تنظیماتِ یکتا به‌ازایِ هر شرکت."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("سانترال / وویپ (AMI)")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "اطلاعاتِ اتصال به سرورِ AMIِ آستریسک/ایزابل -- برایِ برقراریِ خودکارِ تماس با کلیک رویِ شماره‌یِ مشتری در فروشِ تلفنی."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.host_field = QLineEdit()
+        self.port_field = QLineEdit()
+        self.port_field.setPlaceholderText("5038")
+        self.context_field = QLineEdit()
+        self.context_field.setPlaceholderText("from-internal")
+        self.channel_prefix_field = QLineEdit()
+        self.channel_prefix_field.setPlaceholderText("PJSIP")
+        self.username_field = QLineEdit()
+        self.secret_field = QLineEdit()
+        self.secret_field.setEchoMode(QLineEdit.Password)
+        self.is_active_checkbox = QCheckBox("این اتصال فعال باشد")
+
+        self.grid = FieldGrid([
+            FieldSpec("voip_host", "آدرسِ سرور", self.host_field, span=2),
+            FieldSpec("voip_port", "پورت", self.port_field, span=1),
+            FieldSpec("voip_context", "کانتکستِ دایل‌پلن", self.context_field, span=1),
+            FieldSpec("voip_channel_prefix", "پیشوندِ کانال", self.channel_prefix_field, span=1),
+            FieldSpec("voip_username", "نامِ‌کاربریِ AMI", self.username_field, span=1),
+            FieldSpec("voip_secret", "رمزِ AMI", self.secret_field, span=1),
+            FieldSpec("voip_is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.grid)
+
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        layout.addWidget(save_button)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        conn = voip_settings_service.get_voip_connection(company_id)
+        self.host_field.setText(conn.host if conn else "")
+        self.port_field.setText(str(conn.port) if conn else "")
+        self.context_field.setText(conn.dial_context if conn else "")
+        self.channel_prefix_field.setText(conn.channel_tech_prefix if conn else "")
+        self.username_field.setText(conn.ami_username if conn else "")
+        self.secret_field.setText(conn.ami_secret if conn else "")
+        self.is_active_checkbox.setChecked(bool(conn.is_active) if conn else True)
+        if conn and conn.consecutive_failure_count > 0:
+            self.status_label.setText(f"آخرین خطا: {conn.last_error_message or ''}")
+        else:
+            self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        host = self.host_field.text().strip()
+        if not host:
+            self.status_label.setText("آدرسِ سرور را وارد کنید.")
+            return
+        try:
+            port = int(self.port_field.text().strip() or "5038")
+        except ValueError:
+            self.status_label.setText("پورت باید عدد باشد.")
+            return
+        voip_settings_service.set_voip_connection(
+            company_id, host, port, self.context_field.text(), self.channel_prefix_field.text(),
+            self.username_field.text().strip(), self.secret_field.text(), self.is_active_checkbox.isChecked(),
         )
         self.status_label.setText("ذخیره شد.")
 

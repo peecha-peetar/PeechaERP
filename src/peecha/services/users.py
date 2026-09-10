@@ -141,6 +141,14 @@ def update_user(
             user.password_salt = password_salt
             user.must_change_password = True
 
+        # طبقِ رفعِ حفره‌یِ کشف‌شده: این حلقه همه‌یِ ردیف‌هایِ UserCompany را
+        # حذف و دوباره می‌سازد -- بدونِ این نگه‌داری، هر ویرایشِ ساده‌یِ
+        # کاربر (مثلاً تغییرِ نام) بی‌سروصدا داخلیِ سانترالِ ثبت‌شده
+        # (voip_extension، R137) را هم پاک می‌کرد.
+        existing_extensions = {
+            uc.company_id: uc.voip_extension
+            for uc in session.scalars(select(UserCompany).where(UserCompany.user_id == user_id)).all()
+        }
         session.execute(UserCompany.__table__.delete().where(UserCompany.user_id == user_id))
         for company_id in company_ids:
             session.add(
@@ -148,12 +156,28 @@ def update_user(
                     user_id=user_id,
                     company_id=company_id,
                     is_default=(company_id == default_company_id),
+                    voip_extension=existing_extensions.get(company_id),
                 )
             )
         session.commit()
         session.refresh(user)
         session.expunge(user)
         return user
+
+
+def get_voip_extension(user_id: int, company_id: int) -> str | None:
+    with new_session() as session:
+        uc = session.get(UserCompany, (user_id, company_id))
+        return uc.voip_extension if uc else None
+
+
+def set_voip_extension(user_id: int, company_id: int, extension: str | None) -> None:
+    with new_session() as session:
+        uc = session.get(UserCompany, (user_id, company_id))
+        if uc is None:
+            raise ValueError("این کاربر به این شرکت دسترسی ندارد.")
+        uc.voip_extension = extension.strip() if extension and extension.strip() else None
+        session.commit()
 
 
 def list_companies_for_picker() -> list[tuple[int, str]]:

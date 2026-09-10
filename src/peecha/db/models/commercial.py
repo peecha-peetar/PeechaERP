@@ -1343,6 +1343,30 @@ class SocialConnection(Base):
     last_checked_at: Mapped[datetime.datetime | None]
 
 
+class VoipConnection(Base):
+    """طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال یا وویپ»): تنظیماتِ
+    اتصالِ AMIِ آستریسک/ایزابل -- برخلافِ SocialConnection که چندگانگی
+    (چند بات) معنا دارد، هر شرکت معمولاً فقط یک سانترال دارد، پس
+    company_id یکتا است (هم‌الگو با PricingPolicy)."""
+
+    __tablename__ = "voip_connections"
+    __table_args__ = (UniqueConstraint("company_id"), {"schema": "comm"})
+
+    connection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    host: Mapped[str] = mapped_column(String(200))
+    # INT، نه SMALLINT: پورتِ TCP می‌تواند تا ۶۵۵۳۵ باشد -- بیشتر از
+    # سقفِ SMALLINTِ علامت‌دار (۳۲۷۶۷).
+    port: Mapped[int] = mapped_column(default=5038)
+    dial_context: Mapped[str] = mapped_column(String(50), default="from-internal")
+    channel_tech_prefix: Mapped[str] = mapped_column(String(20), default="PJSIP")
+    credentials_encrypted: Mapped[bytes | None]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
+
+
 class ContentCalendarPost(Base):
     """طبقِ درخواستِ صریح («تقویمِ محتوایی»): هر پست به یک اتصالِ مشخص
     زمان‌بندی می‌شود؛ run_due_posts (تیکِ هر یک‌دقیقه‌ایِ شل، هم‌الگو با

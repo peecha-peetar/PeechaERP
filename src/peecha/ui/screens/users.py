@@ -165,7 +165,20 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("pos_customer", "مشتریِ پیش‌فرض", self.pos_default_customer_combo, span=1),
         ])
         layout.addWidget(self.pos_grid)
-        self.register_field_grids("users", [self.basic_grid, self.pos_grid])
+
+        # طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال»): داخلیِ این
+        # کاربر در سانترال -- هم‌الگو با تنظیماتِ POS بالا (برایِ شرکتِ
+        # فعلاً انتخاب‌شده ذخیره می‌شود، چون سانترال هم شرکت‌محور است).
+        voip_title = QLabel("سانترال/وویپ — برایِ شرکتِ فعلی")
+        voip_title.setObjectName("sectionTitle")
+        layout.addWidget(voip_title)
+        self.voip_extension_field = QLineEdit()
+        self.voip_extension_field.setPlaceholderText("مثلاً 1001")
+        self.voip_grid = FieldGrid([
+            FieldSpec("voip_extension", "داخلیِ سانترال", self.voip_extension_field, span=1),
+        ])
+        layout.addWidget(self.voip_grid)
+        self.register_field_grids("users", [self.basic_grid, self.pos_grid, self.voip_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -283,6 +296,10 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             index = combo.findData(value)
             combo.setCurrentIndex(index if index >= 0 else 0)
 
+        extension = users_service.get_voip_extension(user.user_id, current_company_id) if current_company_id is not None else None
+        self.voip_extension_field.setText(extension or "")
+        self.voip_grid.setEnabled(current_company_id is not None and current_company_id in user.company_ids)
+
     def _reset_form(self) -> None:
         self._editing_id = None
         self.form_title.setText("کاربرِ جدید")
@@ -298,6 +315,8 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.pos_default_terminal_combo.setCurrentIndex(0)
         self.pos_default_price_list_combo.setCurrentIndex(0)
         self.pos_default_customer_combo.setCurrentIndex(0)
+        self.voip_extension_field.clear()
+        self.voip_grid.setEnabled(False)
         self._rebuild_company_widgets(set())
         self.table.clearSelection()
 
@@ -366,5 +385,7 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 saved_user_id, current_company_id, self.pos_default_terminal_combo.currentData(),
                 self.pos_default_price_list_combo.currentData(), self.pos_default_customer_combo.currentData(),
             )
+            if current_company_id in company_ids:
+                users_service.set_voip_extension(saved_user_id, current_company_id, self.voip_extension_field.text())
 
         self.refresh()

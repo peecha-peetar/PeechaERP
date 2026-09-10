@@ -17,6 +17,7 @@ from peecha.ui.screens.commercial_settings import (
     _NumberingSequencesTab,
     _PricingPolicyTab,
     _SettlementAlarmTab,
+    _VoipSettingsTab,
 )
 from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
 from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
@@ -305,6 +306,7 @@ class SystemSettingsScreen(QWidget):
                 ("کانال‌ها", _CommercialChannelsTab()),
                 ("هشدارِ موعدِ تسویه", _SettlementAlarmTab()),
                 ("حاشیهٔ سود و پیشنهادِ قیمت", _PricingPolicyTab()),
+                ("سانترال / وویپ", _VoipSettingsTab()),
                 # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط
                 # سفارش‌هایِ فروشِ مشتری بیاید، و تنظیمات به تبِ تنظیماتِ
                 # فروشِ اینترنتی برود»): اتصالات/نگاشتِ کالا-مشتری/سینکِ
