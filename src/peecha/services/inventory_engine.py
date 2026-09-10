@@ -556,6 +556,22 @@ def post_stock_document(
 
         item_ids = {ln.item_id for ln in lines}
         items_by_id = {it.item_id: it for it in session.scalars(select(Item).where(Item.item_id.in_(item_ids)))}
+        # طبقِ درخواستِ صریحِ کاربر («بله، مثلِ کاردکس تجمیع شود»): سندِ
+        # حسابداریِ متغیرها هم‌الگو با تجمیعِ کاردکسِ R151 باید زیرِ بُعدِ
+        # کالایِ *اصلی* نوشته شود، نه یک ردیفِ جداگانه برایِ هر متغیر --
+        # وگرنه وقتی متغیر خودش تفصیلیِ اختصاصی ندارد، هر متغیر یک سطرِ
+        # جداگانه در دفترِ روزنامه می‌سازد.
+        variant_parent_ids = {it.variant_parent_item_id for it in items_by_id.values() if it.variant_parent_item_id is not None}
+        parent_detail_account_by_item_id: dict[int, int | None] = (
+            dict(session.execute(select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(variant_parent_ids))).all())
+            if variant_parent_ids else {}
+        )
+
+        def je_dimension_account_id(item: Item) -> int | None:
+            if item.variant_parent_item_id is not None:
+                return parent_detail_account_by_item_id.get(item.variant_parent_item_id, item.item_detail_account_id)
+            return item.item_detail_account_id
+
         item_codes = dict(
             session.execute(
                 select(Item.item_id, DetailAccount.code)
@@ -715,6 +731,7 @@ def post_stock_document(
                 raise ValueError(f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» در وضعیتِ فعال نیست و قابلِ‌ثبت در سند نیست.")
             if not item.is_stock_tracked:
                 raise ValueError("این کالا موجودی‌محور نیست.")
+            je_item_detail_account_id = je_dimension_account_id(item)
 
             if doc_type in ("RECEIPT", "RETURN_IN"):
                 warehouse_id = doc.destination_warehouse_id
@@ -777,7 +794,7 @@ def post_stock_document(
 
                 inventory_amount = _money(ledger_unit_cost * line.quantity_base)
                 payable_amount = _money(actual_cost * line.quantity_base)
-                add_debit("INVENTORY_ASSET", inventory_amount, item.item_detail_account_id)
+                add_debit("INVENTORY_ASSET", inventory_amount, je_item_detail_account_id)
                 # طبقِ همان تسهیمِ هزینه‌هایِ جانبی: این سهم نباید بستانکاریِ
                 # حساب‌هایِ پرداختنیِ تامین‌کننده (payable_amount) را عوض
                 # کند -- پس در محاسبهٔ مغایرتِ بهایِ استاندارد (که فقط
@@ -787,9 +804,9 @@ def post_stock_document(
                 variance = payable_amount - inventory_amount + landed_cost_amount
                 if doc_type == "RECEIPT" and variance != 0:
                     if variance > 0:
-                        add_debit("INVENTORY_COST_VARIANCE", variance, item.item_detail_account_id)
+                        add_debit("INVENTORY_COST_VARIANCE", variance, je_item_detail_account_id)
                     else:
-                        add_credit("INVENTORY_COST_VARIANCE", -variance, item.item_detail_account_id)
+                        add_credit("INVENTORY_COST_VARIANCE", -variance, je_item_detail_account_id)
                 # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید محاسبه
                 # می‌شود ولی سندش ثبت نمی‌شود»): مالياتِ همین ردیف (اگر از
                 # یک فاکتورِ خرید آمده باشد) بدهکارِ «مالياتِ خرید-قابلِ
@@ -804,16 +821,16 @@ def post_stock_document(
                 tax_amount = line.tax_amount or _ZERO
                 if tax_amount:
                     if is_informal_tax:
-                        add_debit("INVENTORY_ASSET", tax_amount, item.item_detail_account_id)
+                        add_debit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
                     else:
                         tax_role = "PURCHASE_TAX_RECEIVABLE" if doc_type == "RECEIPT" else "SALES_TAX_PAYABLE"
-                        add_debit(tax_role, tax_amount, item.item_detail_account_id)
+                        add_debit(tax_role, tax_amount, je_item_detail_account_id)
                 credit_amount = payable_amount + tax_amount
                 credit_role = "SUPPLIER_PAYABLE" if doc_type == "RECEIPT" else "CUSTOMER_RECEIVABLE"
                 if doc.counterparty_detail_account_id is not None:
-                    add_credit(credit_role, credit_amount, item.item_detail_account_id)
+                    add_credit(credit_role, credit_amount, je_item_detail_account_id)
                 else:
-                    add_credit("INVENTORY_ADJUSTMENT_GAIN", credit_amount, item.item_detail_account_id)
+                    add_credit("INVENTORY_ADJUSTMENT_GAIN", credit_amount, je_item_detail_account_id)
 
             elif doc_type in ("ISSUE", "RETURN_OUT"):
                 warehouse_id = doc.source_warehouse_id
@@ -827,9 +844,9 @@ def post_stock_document(
                         movement_date=movement_date,
                     )
                     total_amount += _money(seg_cost * seg_qty)
-                add_credit("INVENTORY_ASSET", total_amount, item.item_detail_account_id)
+                add_credit("INVENTORY_ASSET", total_amount, je_item_detail_account_id)
                 if doc_type == "ISSUE":
-                    add_debit("COGS", total_amount, item.item_detail_account_id)
+                    add_debit("COGS", total_amount, je_item_detail_account_id)
                 else:
                     # طبقِ دو نوعِ ثبتِ رسمی/غیررسمی برایِ برگشت به تامین‌کننده:
                     # رسمی مالياتِ ردیف را جداگانه بستانکارِ «مالياتِ
@@ -840,14 +857,14 @@ def post_stock_document(
                     tax_amount = line.tax_amount or _ZERO
                     if tax_amount:
                         if is_informal_tax:
-                            add_credit("INVENTORY_ASSET", tax_amount, item.item_detail_account_id)
+                            add_credit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
                         else:
-                            add_credit("PURCHASE_TAX_RECEIVABLE", tax_amount, item.item_detail_account_id)
+                            add_credit("PURCHASE_TAX_RECEIVABLE", tax_amount, je_item_detail_account_id)
                     debit_amount = total_amount + tax_amount
                     if doc.counterparty_detail_account_id is not None:
-                        add_debit("SUPPLIER_PAYABLE", debit_amount, item.item_detail_account_id)
+                        add_debit("SUPPLIER_PAYABLE", debit_amount, je_item_detail_account_id)
                     else:
-                        add_debit("INVENTORY_ADJUSTMENT_LOSS", debit_amount, item.item_detail_account_id)
+                        add_debit("INVENTORY_ADJUSTMENT_LOSS", debit_amount, je_item_detail_account_id)
 
             elif doc_type == "TRANSFER":
                 source_wh, dest_wh = doc.source_warehouse_id, doc.destination_warehouse_id
@@ -891,8 +908,8 @@ def post_stock_document(
                             movement_date=movement_date,
                         )
                         total_amount += _money(seg_cost * seg_qty)
-                    add_credit("INVENTORY_ASSET", total_amount, item.item_detail_account_id)
-                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount, item.item_detail_account_id)
+                    add_credit("INVENTORY_ASSET", total_amount, je_item_detail_account_id)
+                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount, je_item_detail_account_id)
                 if doc.destination_warehouse_id is not None:
                     warehouse_id = doc.destination_warehouse_id
                     bin_id = resolve_bin(warehouse_id, line.bin_location_id)
@@ -938,8 +955,8 @@ def post_stock_document(
                             )
                         )
                     amount = _money(unit_cost * line.quantity_base)
-                    add_debit("INVENTORY_ASSET", amount, item.item_detail_account_id)
-                    add_credit("INVENTORY_ADJUSTMENT_GAIN", amount, item.item_detail_account_id)
+                    add_debit("INVENTORY_ASSET", amount, je_item_detail_account_id)
+                    add_credit("INVENTORY_ADJUSTMENT_GAIN", amount, je_item_detail_account_id)
 
             elif doc_type == "CONSIGNMENT_IN":
                 # طبقِ اصلِ فاکتورِ امانیِ ورودی: کالا در این لحظه هنوز مالِ

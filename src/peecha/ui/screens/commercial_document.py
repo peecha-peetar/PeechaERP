@@ -115,6 +115,12 @@ _CONVERTIBLE_TO_INVOICE_TYPES = (
     "SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA", "CONSIGNMENT_OUT", "CONSIGNMENT_IN",
 )
 _POST_BUTTON_DEFAULT_TOOLTIP = "۴) ثبتِ نهایی — قطعی و برگشت‌ناپذیر؛ سندِ انبار/حسابداریِ واقعی همین‌جا ساخته می‌شود"
+# طبقِ درخواستِ صریحِ کاربر («مراحلِ تاییدِ فاکتورِ خرید هم در دو مرحله
+# باشه: تاییدِ کاربر و تاییدِ مدیر؛ برایِ پیش‌فاکتورِ خرید هم همین کارو
+# بکن»): برایِ این دو نوعِ سند، ثبتِ نهایی دیگر با CONFIRMED به‌تنهایی
+# ممکن نیست -- باید حتماً از مرحلهٔ تصویبِ مدیر (APPROVED) هم عبور کند
+# (سفارش/فروش/امانی طبقِ صراحتِ کاربر دست‌نخورده می‌مانند).
+_TWO_STAGE_APPROVAL_TYPES = ("PURCHASE_INVOICE", "PURCHASE_PROFORMA")
 # طبقِ همان تفکیک: کدام از انواعِ قابلِ‌تبدیل به فاکتورِ فروش تبدیل
 # می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
 _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
@@ -1020,9 +1026,22 @@ class _LineDialog(LayoutEditMixin, QDialog):
         if self._bulk_variant_mode():
             self.variant_combo.setVisible(False)
             self.variant_table.setVisible(True)
+            # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («عرضِ ستون‌ها خیلی کمه، باید
+            # دستی جابه‌جا کنیم تا اسمِ متغیر معلوم بشه»): عرضِ پایه‌یِ
+            # کلِ دیالوگ (۳۸۰) برایِ حالتِ تک‌کالایی کافی است، اما وقتی
+            # ستون‌هایِ ثابتِ جدول (موجودی+قیمت+مقدار = ۳۵۰) از آن کم
+            # می‌شد، عملاً چیزی برایِ ستونِ Stretchِ نامِ متغیر باقی
+            # نمی‌ماند. این‌جا فقط در حالتِ جدولی دیالوگ عریض‌تر می‌شود.
+            self.setMinimumWidth(620)
             self._populate_variant_table(parent_id)
             self.fields_grid.set_field_visible("variant", True)
-            self.variant_table.setFocus()
+            # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فوکوس روی هیچ فیلدی
+            # نداره»): setFocus رویِ خودِ QTableWidget فقط به جدول
+            # فوکوس می‌دهد، نه به هیچ‌کدام از فیلدهایِ واقعاً قابلِ‌ویرایشِ
+            # داخلِ سلول‌ها (که ویجت‌هایِ جداگانه‌اند) -- پس نه کِرسر
+            # دیده می‌شد نه Enter اثری داشت. حالا مستقیماً به فیلدِ
+            # قیمتِ اولین ردیف فوکوس می‌رود.
+            self._focus_first_variant_row()
         else:
             self.variant_combo.setVisible(True)
             self.variant_table.setVisible(False)
@@ -2535,15 +2554,23 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.approve_button = QPushButton("👍")
         self.approve_button.setObjectName("iconButton")
         self.approve_button.setFixedWidth(44)
-        self.approve_button.setToolTip("۳) تصویبِ سند — تاییدِ مدیریتیِ اضافه پیش از ثبتِ نهایی (اختیاری، پیش از ثبتِ نهایی انجام می‌شود)")
+        if self.document_type_code in _TWO_STAGE_APPROVAL_TYPES:
+            self.approve_button.setToolTip(
+                "۳) تصویبِ سند — تاییدِ مدیریتی؛ برایِ این نوعِ سند اجباری است و پیش از آن ثبتِ نهایی ممکن نیست "
+                "(فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است)"
+            )
+        else:
+            self.approve_button.setToolTip("۳) تصویبِ سند — تاییدِ مدیریتیِ اضافه پیش از ثبتِ نهایی (اختیاری، پیش از ثبتِ نهایی انجام می‌شود)")
         self.approve_button.clicked.connect(self._approve)
-        # طبقِ همان گزارش («دکمه‌هایِ ثبتِ فراوان»): این دکمه برایِ فاکتورِ
-        # خرید/فروش هیچ اثرِ واقعی‌ای ندارد -- approve_document فقط
-        # قفلِ اعتباریِ SALES_ORDER را بررسی می‌کند (که برایِ فاکتور هرگز
-        # ساخته نمی‌شود) و ثبتِ نهایی هم بدونش (فقط با CONFIRMED) کار
-        # می‌کند؛ تنها نتیجه‌اش برایِ فاکتور، افزودنِ یک کلیکِ بی‌فایده به
-        # گردشِ کار بود.
-        self.approve_button.setVisible(not self._is_invoice)
+        # طبقِ گزارشِ صریحِ کاربر («مراحلِ تاییدِ فاکتورِ خرید هم در دو
+        # مرحله باشه: تاییدِ کاربر و تاییدِ مدیر»): برایِ فاکتورِ خرید/
+        # پیش‌فاکتورِ خرید، این دکمه دیگر بی‌اثر نیست -- ثبتِ نهایی حالا
+        # منوط به تصویبِ همین دکمه است (نگاه کن: _TWO_STAGE_APPROVAL_TYPES،
+        # post_document در commercial_documents.py). برایِ بقیه‌یِ انواعِ
+        # فاکتور (فروش) طبقِ همان تصمیمِ قبلی («دکمه‌هایِ ثبتِ فراوان»)
+        # همچنان پنهان می‌ماند، چون approve_document برایِ آن‌ها هیچ اثرِ
+        # واقعی‌ای ندارد.
+        self.approve_button.setVisible(not self._is_invoice or self.document_type_code in _TWO_STAGE_APPROVAL_TYPES)
         self.footer_layout.addWidget(self.approve_button)
 
         self.post_button = QPushButton("🔒")
@@ -3448,7 +3475,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # یک دکمه، اگر نقشه‌ای موجود باشد، هم تاییدِ آن (فقط برایِ
             # مدیر -- همان اعتبارسنجیِ approve_settlement_plan) و هم
             # ثبتِ نهایی را با هم انجام می‌دهد (پیاده‌سازی در _post()).
-            self.post_button.setEnabled((is_confirmed or is_approved) and has_plan)
+            requires_doc_approval = self.document_type_code in _TWO_STAGE_APPROVAL_TYPES
+            self.post_button.setEnabled((is_approved if requires_doc_approval else (is_confirmed or is_approved)) and has_plan)
             if self._settlement_plan is None:
                 self.settlement_plan_button.setStyleSheet("font-weight: bold; color: #b45309;")
             elif not self._settlement_plan.is_approved:
@@ -3462,6 +3490,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 self.post_button.setToolTip(
                     "۴) ثبتِ نهایی -- غیرِفعال است، چون: نحوه‌یِ تسویه هنوز مشخص نشده -- "
                     "از دکمهٔ 🧾 «نحوه‌یِ تسویه» آن را مشخص کنید."
+                )
+            elif requires_doc_approval and is_confirmed and not is_approved:
+                # طبقِ گزارشِ صریحِ کاربر («مراحلِ تاییدِ فاکتورِ خرید دو
+                # مرحله باشه»): این‌جا برخلافِ حالتِ عمومیِ فاکتورِ فروش،
+                # صرفاً تاییدِ نحوه‌یِ تسویه کافی نیست -- خودِ سند هم باید
+                # جداگانه با دکمهٔ 👍 توسطِ مدیر تصویب شود.
+                self.post_button.setToolTip(
+                    "۴) ثبتِ نهایی -- غیرِفعال است، چون: این سند هنوز تصویبِ مدیر را نگرفته -- "
+                    "ابتدا دکمهٔ 👍 «تصویبِ سند» را بزنید."
                 )
             elif has_plan and not has_approved_plan:
                 self.post_button.setToolTip(
@@ -3477,10 +3514,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # گرفته می‌شود -- آن‌جا هم دلیلِ دقیقِ خطا نشان داده می‌شود)،
             # ولی Tooltip از همین‌جا روشن می‌کند که ثبتِ نهایی فقط برایِ
             # مدیر ممکن است.
-            self.post_button.setEnabled(is_confirmed or is_approved)
-            self.post_button.setToolTip(
-                f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبتِ نهایی فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است.)"
-            )
+            # طبقِ گزارشِ صریحِ کاربر («برایِ پیش‌فاکتورِ خرید هم همین کارو
+            # بکن»): برخلافِ سفارش (که دست‌نخورده می‌ماند)، پیش‌فاکتورِ
+            # خرید هم اکنون به تصویبِ جداگانه‌یِ مدیر (نه فقط CONFIRMED) نیاز دارد.
+            requires_doc_approval = self.document_type_code in _TWO_STAGE_APPROVAL_TYPES
+            self.post_button.setEnabled(is_approved if requires_doc_approval else (is_confirmed or is_approved))
+            if requires_doc_approval and is_confirmed and not is_approved:
+                self.post_button.setToolTip(
+                    f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ابتدا باید توسطِ مدیر تصویب شود -- دکمهٔ 👍 «تصویبِ سند».)"
+                )
+            else:
+                self.post_button.setToolTip(
+                    f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبتِ نهایی فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است.)"
+                )
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
@@ -4085,8 +4131,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _approve(self) -> None:
         if self._document_id is None:
             return
+        company_id = self._company_id()
+        # طبقِ گزارشِ صریحِ کاربر («تاییدِ کاربر و تاییدِ مدیر»): برایِ
+        # فاکتورِ خرید/پیش‌فاکتورِ خرید، این مرحله واقعاً بایدتاییدِ
+        # *مدیر* باشد -- نه صرفاً یک کلیکِ دیگرِ همان کاربر.
+        if self.document_type_code in _TWO_STAGE_APPROVAL_TYPES:
+            user = app_session.current_user
+            if company_id is not None and user is not None and not roles_service.is_manager(user.user_id, company_id):
+                QMessageBox.warning(
+                    self, "تصویبِ سند",
+                    "تصویبِ سند فقط برایِ مدیر (نقشِ ادمین/سوپروایزر/مدیر) ممکن است.",
+                )
+                return
         try:
-            documents_service.approve_document(self._document_id, self._company_id())
+            documents_service.approve_document(self._document_id, company_id)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در تصویبِ سند", str(exc))

@@ -138,9 +138,13 @@ def get_warehouse(warehouse_id: int, company_id: int) -> WarehouseRow | None:
 
 
 def get_default_warehouse(company_id: int) -> WarehouseRow | None:
+    # طبقِ رفعِ باگِ واقعیِ کشف‌شده: is_default رویِ خودِ WarehouseRow
+    # نیست -- داخلِ WarehouseFields (r.fields.is_default) است؛ نسخه‌یِ
+    # قبلی همیشه با AttributeError شکست می‌خورد، پس این تابع در عمل
+    # هرگز کار نکرده بود.
     rows = list_warehouses(company_id, active_only=True)
     for r in rows:
-        if r.is_default:
+        if r.fields.is_default:
             return r
     return rows[0] if rows else None
 

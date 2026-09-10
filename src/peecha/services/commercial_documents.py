@@ -480,6 +480,16 @@ def convert_to_invoice(
         invoice_warehouse_id = (
             source.consignment_warehouse_id if source.document_type_code == "CONSIGNMENT_OUT" else source.warehouse_id
         )
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده: اگر سفارشِ مبدا هیچ‌وقت انباری
+        # نداشته (کاربر در هدرِ سفارش انتخاب نکرده بود)، فاکتورِ حاصل
+        # هم با انبارِ خالی می‌ماند و بعداً در ثبتِ‌نهایی با خطایِ «انبار
+        # الزامی است» رد می‌شد -- درحالی‌که یک انبارِ پیش‌فرض در تنظیماتِ
+        # انبار مشخص شده بود و باید همان پیشنهاد می‌شد (کاربر هنوز
+        # می‌تواند رویِ هدرِ فاکتور آن را عوض کند).
+        if invoice_warehouse_id is None:
+            default_warehouse = locations_service.get_default_warehouse(company_id)
+            if default_warehouse is not None:
+                invoice_warehouse_id = default_warehouse.warehouse_id
         header_fields = DocumentHeaderFields(
             counterparty_detail_account_id=source.counterparty_detail_account_id, currency_id=source.currency_id,
             warehouse_id=invoice_warehouse_id, channel_code=source.channel_code, price_list_id=source.price_list_id,
@@ -1620,6 +1630,13 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             raise ValueError("این سند قبلاً ثبتِ نهایی شده است.")
         if doc.status_code not in ("CONFIRMED", "APPROVED"):
             raise ValueError("فقط سندِ تاییدشده قابلِ‌ثبتِ‌نهایی است.")
+        # طبقِ درخواستِ صریحِ کاربر («مراحلِ تاییدِ فاکتورِ خرید هم در دو
+        # مرحله باشه: تاییدِ کاربر و تاییدِ مدیر» -- و تعمیمِ صریحِ خودش
+        # به پیش‌فاکتورِ خرید هم): برایِ این دو نوعِ سند، دیگر کافی نیست
+        # که سند فقط CONFIRMED باشد -- باید حتماً از مرحلهٔ تصویبِ مدیر
+        # (APPROVED) هم عبور کرده باشد.
+        if doc.document_type_code in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA") and doc.status_code != "APPROVED":
+            raise ValueError("این سند ابتدا باید توسطِ مدیر تصویب شود -- تاییدِ کاربر به‌تنهایی برایِ ثبتِ نهایی کافی نیست.")
 
         document_type_code = doc.document_type_code
 
