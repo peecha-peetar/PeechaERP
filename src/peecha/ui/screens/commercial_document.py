@@ -605,8 +605,16 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # متغیر از کمبو، یک جدول با تمامِ متغیرهایِ مجاز نمایش داده
         # می‌شود و کاربر می‌تواند هم‌زمان برایِ چند متغیر مقدار وارد کند
         # -- هرکدام یک ردیفِ جداگانه در سند می‌شود.
-        self.variant_table = QTableWidget(0, 3)
-        self.variant_table.setHorizontalHeaderLabels(["متغیر", "موجودی", "مقدار"])
+        # طبقِ گزارشِ صریحِ کاربر («برایِ کالایِ متغیر فیلدِ قیمت ندارد»):
+        # این جدول تا این‌جا هیچ ستونِ قیمتی نداشت -- بهایِ هر متغیر
+        # کاملاً خودکار (و در سکوت) در result_fields_list محاسبه
+        # می‌شد؛ اگر هیچ قیمتی (نه قرارداد، نه فهرستِ قیمت) پیدا
+        # نمی‌شد، آن ردیف بی‌هیچ راهِ جبرانی با خطا رد می‌شد. حالا ستونِ
+        # «قیمت» اضافه شده -- هر ردیف در _populate_variant_table با
+        # resolve_price پیش‌پر می‌شود (اگر پیدا نشود، صفر و کاملاً
+        # قابلِ‌ویرایشِ دستی می‌ماند).
+        self.variant_table = QTableWidget(0, 4)
+        self.variant_table.setHorizontalHeaderLabels(["متغیر", "موجودی", "قیمت", "مقدار"])
         self.variant_table.verticalHeader().setVisible(False)
         # طبقِ گزارشِ صریحِ کاربر («ردیف‌هایِ متغیر ارتفاعِ کمی دارند و
         # اصلاً معلوم نیستند»): بدونِ این خط، ارتفاعِ پیش‌فرضِ Qt برایِ
@@ -627,8 +635,10 @@ class _LineDialog(LayoutEditMixin, QDialog):
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.Fixed)
         header.setSectionResizeMode(2, QHeaderView.Fixed)
+        header.setSectionResizeMode(3, QHeaderView.Fixed)
         self.variant_table.setColumnWidth(1, 90)
-        self.variant_table.setColumnWidth(2, 110)
+        self.variant_table.setColumnWidth(2, 120)
+        self.variant_table.setColumnWidth(3, 110)
         self.variant_table.setVisible(False)
         self._variant_table_item_ids: list[int] = []
 
@@ -911,10 +921,30 @@ class _LineDialog(LayoutEditMixin, QDialog):
             stock_item = QTableWidgetItem(numerals.format_money(stock_by_item.get(v.variant_item_id, decimal.Decimal(0)), 3))
             stock_item.setTextAlignment(Qt.AlignCenter)
             self.variant_table.setItem(row, 1, stock_item)
+            # طبقِ گزارشِ صریحِ کاربر («برایِ کالایِ متغیر فیلدِ قیمت
+            # ندارد»): پیش‌فرض از همان resolve_price (اول قراردادِ
+            # فعال، بعد فهرستِ قیمت) خوانده می‌شود؛ اگر هیچ‌کدام پیدا
+            # نشود، صفر می‌ماند و کاربر خودش دستی وارد می‌کند -- دیگر
+            # هیچ ردیفی صرفاً به‌خاطرِ نبودِ قیمتِ ازپیش‌تعریف‌شده رد
+            # نمی‌شود (result_fields_list همین مقدارِ فیلد را عیناً
+            # می‌خواند، نه اینکه دوباره resolve_price را صدا بزند).
+            price_field = _AmountField()
+            price_field.setDecimals(self._decimal_places)
+            variant_item = self._items_by_id.get(v.variant_item_id)
+            if self._counterparty_id is not None and self._document_type_code is not None and variant_item is not None:
+                try:
+                    resolved = pricing_service.resolve_price(
+                        self._company_id, self._counterparty_id, v.variant_item_id, variant_item.base_uom_id,
+                        decimal.Decimal(1), self._price_list_id, self._document_type_code, self._document_date,
+                    )
+                    price_field.setValue(float(resolved.unit_price))
+                except ValueError:
+                    pass
+            self.variant_table.setCellWidget(row, 2, price_field)
             qty_field = _AmountField()
             qty_field.setDecimals(3)
             qty_field.valueChanged.connect(self._on_selection_changed)
-            self.variant_table.setCellWidget(row, 2, qty_field)
+            self.variant_table.setCellWidget(row, 3, qty_field)
         self.status_label.setText("" if variants else "هیچ متغیری با موجودیِ مثبت برایِ این کالا یافت نشد.")
 
         # طبقِ گزارشِ صریح («ارتفاع و تعدادِ متغیرها بیشتر دیده بشه»):
@@ -928,6 +958,12 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.variant_table.setMaximumHeight(header_height + row_height * visible_rows + 6)
 
     def _variant_table_quantity(self, row: int) -> decimal.Decimal:
+        widget = self.variant_table.cellWidget(row, 3)
+        if widget is None:
+            return decimal.Decimal(0)
+        return decimal.Decimal(str(widget.value()))
+
+    def _variant_table_price(self, row: int) -> decimal.Decimal:
         widget = self.variant_table.cellWidget(row, 2)
         if widget is None:
             return decimal.Decimal(0)
@@ -1135,7 +1171,15 @@ class _LineDialog(LayoutEditMixin, QDialog):
                 self._price_list_id, self._document_type_code, self._document_date,
             )
         except ValueError:
+            # طبقِ گزارشِ صریحِ کاربر («کالایی که قیمت ندارد ثبت
+            # نمی‌شود»): قبلاً این خطا کاملاً در سکوت رد می‌شد -- کاربر
+            # تا لحظه‌یِ ثبتِ نهاییِ ردیف (با پیامِ سرویس، بعدِ زدنِ
+            # افزودن) متوجه نمی‌شد که باید خودش قیمت را وارد کند. حالا
+            # همین‌جا -- از همان لحظه که کالا انتخاب می‌شود -- روشن
+            # می‌گوید که باید دستی وارد شود.
+            self.status_label.setText("قیمتی از قراردادِ فعال یا فهرستِ قیمت یافت نشد -- قیمت را دستی وارد کنید.")
             return
+        self.status_label.setText("")
         self.unit_price_field.setValue(float(resolved.unit_price))
         if resolved.discount_amount and self.discount_field.value() == 0:
             self.discount_field.setValue(float(resolved.discount_amount))
@@ -1254,16 +1298,15 @@ class _LineDialog(LayoutEditMixin, QDialog):
             if quantity <= 0:
                 continue
             item = self._items_by_id.get(item_id)
-            unit_price = None
-            if self._counterparty_id is not None and self._document_type_code is not None and item is not None:
-                try:
-                    resolved = pricing_service.resolve_price(
-                        self._company_id, self._counterparty_id, item_id, item.base_uom_id, quantity,
-                        self._price_list_id, self._document_type_code, self._document_date,
-                    )
-                    unit_price = resolved.unit_price
-                except ValueError:
-                    unit_price = None
+            # طبقِ گزارشِ صریحِ کاربر («برایِ کالایِ متغیر فیلدِ قیمت
+            # ندارد»): دیگر این‌جا دوباره resolve_price صدا زده
+            # نمی‌شود -- همان مقدارِ فیلدِ قیمتِ همین ردیف (که در
+            # _populate_variant_table پیش‌پر شده و کاملاً قابلِ‌ویرایشِ
+            # دستی است) عیناً گرفته می‌شود؛ اگر صفر باشد (نه پیش‌فرضی
+            # پیدا شده نه دستی واردشده)، None می‌ماند تا همان خطایِ
+            # روشنِ add_line («قیمتی تعریف نشده») نمایش داده شود.
+            row_price = self._variant_table_price(row)
+            unit_price = row_price if row_price > 0 else None
             tax_percent = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
             results.append({
                 "item_id": item_id,
