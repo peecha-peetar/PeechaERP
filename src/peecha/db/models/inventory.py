@@ -253,6 +253,23 @@ class ItemVariantValue(Base):
     value_id: Mapped[int] = mapped_column(ForeignKey("inv.item_attribute_values.value_id"))
 
 
+class ItemVariant(Base):
+    """طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی نشوند، در
+    یک جدولِ مستقل با کدبندیِ متفاوت ذخیره شوند»): هویتِ واقعیِ یک
+    متغیر (کدِ مستقل، ارتباط با کالایِ اصلی) این‌جاست -- ردیفِ inv.items/
+    acc.detail_accounts خودِ متغیر همچنان به‌صورتِ فنی در پس‌زمینه وجود
+    دارد (برایِ threadingِ بُعدِ حسابداری) ولی دیگر هرگز مستقیماً در
+    UIِ تفصیلی‌ها نمایش داده نمی‌شود."""
+
+    __tablename__ = "item_variants"
+    __table_args__ = (UniqueConstraint("parent_item_id", "variant_code"), {"schema": "inv"})
+
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"), primary_key=True)
+    parent_item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    variant_code: Mapped[str] = mapped_column(String(40))
+    display_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+
+
 class RelatedItem(Base):
     __tablename__ = "related_items"
     __table_args__ = (

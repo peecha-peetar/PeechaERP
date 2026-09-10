@@ -32,6 +32,7 @@ import datetime
 
 from peecha import numerals, session
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import inventory_catalog as catalog_service
 from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin
 
@@ -133,6 +134,18 @@ class DetailAccountsListScreen(FieldHelpMixin, QWidget):
     def refresh(self) -> None:
         company_id = session.current_company.company_id if session.current_company else None
         self._entries = dimensions_service.list_all_detail_accounts(company_id) if company_id is not None else []
+        if company_id is not None:
+            # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی
+            # نشوند»): این فهرست همه‌یِ تفصیلی‌هایِ همه‌یِ گروه‌ها را با هم
+            # نشان می‌دهد -- تفصیلیِ فنیِ زیرینِ هر متغیر هم این‌جا استثنا
+            # نیست.
+            variant_detail_ids = {
+                r.item_detail_account_id
+                for r in catalog_service.list_items(company_id)
+                if r.variant_parent_item_id is not None
+            }
+            if variant_detail_ids:
+                self._entries = [e for e in self._entries if e.detail_account_id not in variant_detail_ids]
         self._apply_filter()
 
     # --- خروجیِ اکسل/چاپ (طبقِ درخواستِ صریح: بکاپ/انتقالِ تفصیلی‌ها به

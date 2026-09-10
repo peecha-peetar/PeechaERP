@@ -33,6 +33,7 @@ from peecha.db.models.inventory import (
     ItemMedia,
     ItemSupplier,
     ItemUomConversion,
+    ItemVariant,
     ItemVariantValue,
     Manufacturer,
     ReorderPolicy,
@@ -337,6 +338,12 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
     with new_session() as session:
         items = session.scalars(select(Item).where(Item.company_id == company_id)).all()
         uom_codes = {u.uom_id: u.code for u in session.scalars(select(Uom))}
+        # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی نشوند، در
+        # یک جدولِ مستقل با کدبندیِ متفاوت ذخیره شوند»): کدِ نمایشیِ یک
+        # متغیر دیگر همان کدِ تفصیلیِ فنیِ زیرینش نیست -- از inv.item_
+        # variants می‌آید. برایِ کالاهایِ عادی/اصلی (که در این جدول ردیفی
+        # ندارند) دقیقاً مثلِ قبل از رویِ خودِ تفصیلی خوانده می‌شود.
+        variant_codes = {v.item_id: v.variant_code for v in session.scalars(select(ItemVariant))}
         result: list[ItemRow] = []
         for it in items:
             detail = detail_rows.get(it.item_detail_account_id)
@@ -348,7 +355,7 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
                 ItemRow(
                     item_id=it.item_id,
                     item_detail_account_id=it.item_detail_account_id,
-                    code=detail.code,
+                    code=variant_codes.get(it.item_id, detail.code),
                     name=detail.name,
                     is_active=detail.is_active,
                     item_kind_code=it.item_kind_code,

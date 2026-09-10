@@ -17,7 +17,7 @@ from sqlalchemy import delete, func, select
 
 from peecha import ean13
 from peecha.db.base import new_session
-from peecha.db.models.inventory import Item, ItemAttribute, ItemAttributeValue, ItemVariantValue
+from peecha.db.models.inventory import Item, ItemAttribute, ItemAttributeValue, ItemVariant, ItemVariantValue
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 
@@ -382,6 +382,20 @@ def generate_item_variants(
         ]
         variant_sequence = max(used_sequences, default=0)
 
+        # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی نشوند، در
+        # یک جدولِ مستقل با کدبندیِ متفاوت ذخیره شوند»): کدِ نمایشیِ هر
+        # متغیر دیگر از suggest_next_code (که کدبندیِ تفصیلی‌هاست) نمی‌آید --
+        # از رویِ کدِ کالای اصلی + شمارهٔ ترتیبیِ مستقل (در همان الگویِ
+        # used_sequences بالا برایِ بارکد) ساخته می‌شود.
+        variant_code_prefix = f"{parent_detail.code}-"
+        used_code_sequences = []
+        for row in session.scalars(select(ItemVariant).where(ItemVariant.parent_item_id == parent_item_id)):
+            if row.variant_code.startswith(variant_code_prefix):
+                suffix = row.variant_code[len(variant_code_prefix):]
+                if suffix.isdigit():
+                    used_code_sequences.append(int(suffix))
+        variant_code_sequence = max(used_code_sequences, default=0)
+
     value_lists = [attribute_value_ids[aid] for aid in attribute_ids_sorted]
     created_ids: list[int] = []
     for combo in itertools.product(*value_lists):
@@ -389,9 +403,14 @@ def generate_item_variants(
         if combo_key in existing_combo_keys:
             continue
         variant_sequence += 1
+        variant_code_sequence += 1
         value_labels = [values_by_id[value_id].value for value_id in combo if value_id in values_by_id]
         variant_name = f"{parent_detail.name} ({' / '.join(value_labels)})" if parent_detail.name else None
-        variant_code = dimensions_service.suggest_next_code(
+        variant_code = f"{variant_code_prefix}{variant_code_sequence}"
+        # کدِ تفصیلیِ فنیِ زیرین (که دیگر جایی به کاربر نمایش داده نمی‌شود)
+        # همچنان باید یکتا باشد -- از همان مکانیزمِ قبلیِ کدبندیِ تفصیلی‌ها
+        # ساخته می‌شود، فقط دیگر به‌عنوانِ «کدِ متغیر» استفاده نمی‌شود.
+        technical_detail_code = dimensions_service.suggest_next_code(
             company_id, dimension_type_id, parent_detail.level_no, parent_detail.person_group_id or 0
         )
         variant_fields = catalog_service.ItemFields(
@@ -403,12 +422,13 @@ def generate_item_variants(
             track_batch=parent.track_batch, track_expiry=parent.track_expiry,
         )
         variant_item_id = catalog_service.create_item(
-            company_id, variant_code, variant_name or parent_detail.code, variant_fields,
+            company_id, technical_detail_code, variant_name or parent_detail.code, variant_fields,
             parent_detail_account_id=parent_detail.parent_detail_account_id,
         )
         with new_session() as session:
             for attribute_id, value_id in zip(attribute_ids_sorted, combo):
                 session.add(ItemVariantValue(item_id=variant_item_id, attribute_id=attribute_id, value_id=value_id))
+            session.add(ItemVariant(item_id=variant_item_id, parent_item_id=parent_item_id, variant_code=variant_code))
             item_row = session.get(Item, variant_item_id)
             item_row.barcode = ean13.generate_variant_barcode(parent_item_id, variant_sequence)
             session.commit()

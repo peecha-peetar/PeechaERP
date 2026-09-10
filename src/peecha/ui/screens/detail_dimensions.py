@@ -1088,19 +1088,30 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         dimension_type_id = self._dimension_type_id()
         person_group_id = self._person_group_id()
 
+        self._item_rows_by_detail_id = (
+            {r.item_detail_account_id: r for r in catalog_service.list_items(company_id)}
+            if self._is_inventory_item_group() else {}
+        )
+
         if self._is_person():
             rows = self._person_meta()["list_fn"](company_id)
             self._person_rows_by_id = {r["detail_account_id"]: r for r in rows}
             self._accounts_by_id = {}
         else:
             rows = dimensions_service.list_detail_accounts(company_id, dimension_type_id)
+            if self._is_inventory_item_group():
+                # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی
+                # نشوند»): ردیفِ تفصیلیِ فنیِ زیرینِ یک متغیر (که فقط برایِ
+                # threadingِ بُعدِ حسابداری در پس‌زمینه نگه داشته می‌شود --
+                # جدولِ inv.item_variants نمایندهٔ واقعیِ آن است) دیگر
+                # هرگز در این درخت/فهرست/کمبوهایِ همین صفحه ظاهر نمی‌شود.
+                rows = [
+                    r for r in rows
+                    if (item_row := self._item_rows_by_detail_id.get(r.detail_account_id)) is None
+                    or item_row.variant_parent_item_id is None
+                ]
             self._accounts_by_id = {r.detail_account_id: r for r in rows}
             self._person_rows_by_id = {}
-
-        self._item_rows_by_detail_id = (
-            {r.item_detail_account_id: r for r in catalog_service.list_items(company_id)}
-            if self._is_inventory_item_group() else {}
-        )
 
         max_level_no = dimensions_service.get_group_max_level_no(dimension_type_id, person_group_id)
         self._current_max_level_no = max_level_no
