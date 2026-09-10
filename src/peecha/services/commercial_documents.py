@@ -1163,6 +1163,55 @@ def add_line(
         return line.line_id
 
 
+def update_line(
+    line_id: int, document_id: int, company_id: int, quantity: decimal.Decimal, unit_price: decimal.Decimal,
+    discount_amount: decimal.Decimal = _ZERO, discount_percent: decimal.Decimal = _ZERO,
+    tax_percent: decimal.Decimal = _ZERO,
+) -> None:
+    """طبقِ درخواستِ صریحِ کاربر («در همان ردیف تعداد و قیمت و تخفیف و
+    مالیات را وارد کرد»): برایِ ویرایشِ زنده/درجایِ یک ردیفِ ازپیش‌ذخیره‌شده
+    مستقیماً در جدول -- برخلافِ الگویِ قدیمیِ حذف+افزودنِ دوباره (که
+    line_no را همیشه به آخرِ سند می‌انداخت، چون add_line همیشه
+    line_no=max+1 می‌دهد؛ برایِ ویرایشِ زنده که با هر خروج از هر فیلد
+    فوراً commit می‌شود، این جابه‌جاییِ ردیف بسیار مزاحم/گیج‌کننده
+    می‌بود)، این تابع فقط مقادیرِ عددیِ همین ردیف را درجا به‌روزرسانی
+    می‌کند -- ترتیبِ ردیف‌ها دست‌نخورده می‌ماند."""
+    if quantity <= 0:
+        raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    with new_session() as session:
+        _get_editable_document(session, document_id, company_id)
+        line = session.get(CommercialDocumentLine, line_id)
+        if line is None or line.document_id != document_id:
+            raise ValueError("ردیف نامعتبر است.")
+        # طبقِ صحتِ ردگیریِ تبدیل‌شدنِ سفارش به فاکتور/رسیدِ انبار: کاهشِ
+        # مقدار به کمتر از مقدارِ قبلاً دریافت‌شده/فاکتورشده، آن ردگیری
+        # را به یک عددِ منفیِ بی‌معنا می‌رساند -- هم‌الگو با بررسیِ
+        # source_line_id در delete_line بالاتر.
+        if line.invoiced_quantity_total and quantity < line.invoiced_quantity_total:
+            raise ValueError(
+                f"مقدارِ این ردیف نمی‌تواند کمتر از مقدارِ قبلاً فاکتورشده ({line.invoiced_quantity_total}) باشد."
+            )
+        if line.received_quantity_total and quantity < line.received_quantity_total:
+            raise ValueError(
+                f"مقدارِ این ردیف نمی‌تواند کمتر از مقدارِ قبلاً دریافت‌شده ({line.received_quantity_total}) باشد."
+            )
+        gross_amount = quantity * unit_price
+        if discount_percent:
+            discount_amount = _money(gross_amount * (discount_percent / 100))
+        net_amount = gross_amount - discount_amount
+        tax_amount = _money(net_amount * (tax_percent / 100)) if tax_percent and net_amount > 0 else _ZERO
+        line.quantity = quantity
+        line.quantity_base = quantity
+        line.unit_price = unit_price
+        line.discount_amount = discount_amount
+        line.discount_percent = discount_percent
+        line.tax_percent = tax_percent
+        line.tax_amount = tax_amount
+        session.flush()
+        _recompute_header_totals(session, document_id)
+        session.commit()
+
+
 def delete_line(line_id: int, document_id: int, company_id: int) -> None:
     with new_session() as session:
         _get_editable_document(session, document_id, company_id)

@@ -2804,33 +2804,366 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # واحدِ پولی): قبلاً این جدول با str() خامِ Decimal پر می‌شد —
         # نه گروه‌بندیِ سه‌رقمی، نه ارقامِ فارسی، نه تعدادِ اعشارِ درستِ
         # واحدِ پول.
+        #
+        # طبقِ گزارشِ صریحِ کاربر («در همان ردیف تعداد و قیمت و تخفیف و
+        # مالیات را وارد کرد و نیازی به فرمِ ردیفِ کالا وجود نداشته
+        # باشه»): وقتی سند قابلِ‌ویرایش است، ستون‌هایِ مقدار/بهایِ واحد/
+        # تخفیف/درصدِ مالیات دیگر متنِ صرفاً‌نمایشی نیستند -- فیلدهایِ
+        # واقعاً قابلِ‌ویرایش‌اند (تغییرشان با خروج از فیلد بی‌درنگ ذخیره
+        # می‌شود) و یک ردیفِ آخرِ همیشه‌حاضر برایِ افزودنِ ردیفِ تازه (بدونِ
+        # دیالوگ، فقط برایِ کالاهایِ ساده -- کالایِ دارایِ متغیر همچنان
+        # دیالوگِ جدولیِ چندمتغیره را باز می‌کند، چون ماهیتاً یک‌به‌چند
+        # است) اضافه می‌شود.
         dp = self._decimal_places
         items_by_id = {it.item_id: it for it in self._items}
-        self.lines_table.setRowCount(len(self._lines))
+        editable = self._lines_are_editable()
+        self.lines_table.setRowCount(len(self._lines) + (1 if editable else 0))
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
-            values = [
-                numerals.to_persian_digits(str(row_index + 1)),
-                f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
-                numerals.format_money(ln.quantity, 3),
-                numerals.format_money(ln.unit_price, dp),
-                (
-                    f"{numerals.format_money(ln.discount_amount, dp)} ({numerals.format_money(ln.discount_percent, 2)}٪)"
-                    if ln.discount_percent else numerals.format_money(ln.discount_amount, dp)
-                ),
-                numerals.format_money(ln.tax_percent, 2),
-                numerals.format_money(ln.tax_amount, dp),
-                numerals.format_money(ln.line_total, dp),
-                ln.description or "",
-            ]
-            for col_index, value in enumerate(values):
-                cell = QTableWidgetItem(value)
-                cell.setData(Qt.UserRole, ln.line_id)
-                if col_index == 0:
-                    cell.setTextAlignment(Qt.AlignCenter)
-                self.lines_table.setItem(row_index, col_index, cell)
-            self.lines_table.setCellWidget(row_index, len(values), self._make_line_actions_widget(row_index))
+            if editable:
+                self._render_editable_line_row(row_index, ln, item, dp)
+            else:
+                self._render_readonly_line_row(row_index, ln, item, dp)
+        if editable:
+            self._render_entry_row(len(self._lines), dp)
         self.line_count_badge.setText(f"{numerals.to_persian_digits(str(len(self._lines)))} ردیف")
+
+    def _lines_are_editable(self) -> bool:
+        # هم‌الگو با شرطِ ویرایش‌پذیریِ فیلدهایِ هدر در _apply_status_state.
+        is_draft = self._status_code == "DRAFT"
+        is_confirmed = self._status_code == "CONFIRMED"
+        is_approved = self._status_code == "APPROVED"
+        is_order_type = self.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
+        return is_draft or (is_order_type and (is_confirmed or is_approved))
+
+    def _render_readonly_line_row(self, row_index: int, ln, item, dp: int) -> None:
+        for col in (2, 3, 4, 5):
+            self.lines_table.removeCellWidget(row_index, col)
+        values = [
+            numerals.to_persian_digits(str(row_index + 1)),
+            f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
+            numerals.format_money(ln.quantity, 3),
+            numerals.format_money(ln.unit_price, dp),
+            (
+                f"{numerals.format_money(ln.discount_amount, dp)} ({numerals.format_money(ln.discount_percent, 2)}٪)"
+                if ln.discount_percent else numerals.format_money(ln.discount_amount, dp)
+            ),
+            numerals.format_money(ln.tax_percent, 2),
+            numerals.format_money(ln.tax_amount, dp),
+            numerals.format_money(ln.line_total, dp),
+            ln.description or "",
+        ]
+        for col_index, value in enumerate(values):
+            cell = QTableWidgetItem(value)
+            cell.setData(Qt.UserRole, ln.line_id)
+            if col_index == 0:
+                cell.setTextAlignment(Qt.AlignCenter)
+            self.lines_table.setItem(row_index, col_index, cell)
+        self.lines_table.setCellWidget(row_index, len(values), self._make_line_actions_widget(row_index))
+
+    def _make_inline_discount_widget(self, dp: int, discount_amount: decimal.Decimal, discount_percent: decimal.Decimal) -> QWidget:
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(2, 0, 2, 0)
+        layout.setSpacing(2)
+        field = _AmountField()
+        field.setObjectName("inlineDiscountField")
+        field.setDecimals(dp)
+        type_combo = _EnterComboBox()
+        type_combo.setObjectName("inlineDiscountType")
+        type_combo.addItem("مبلغی", "AMOUNT")
+        type_combo.addItem("درصدی", "PERCENT")
+        type_combo.setMaximumWidth(58)
+        if discount_percent:
+            type_combo.setCurrentIndex(type_combo.findData("PERCENT"))
+            field.setValue(float(discount_percent))
+        else:
+            type_combo.setCurrentIndex(type_combo.findData("AMOUNT"))
+            field.setValue(float(discount_amount))
+        layout.addWidget(field, stretch=1)
+        layout.addWidget(type_combo)
+        return container
+
+    def _render_editable_line_row(self, row_index: int, ln, item, dp: int) -> None:
+        idx_cell = QTableWidgetItem(numerals.to_persian_digits(str(row_index + 1)))
+        idx_cell.setTextAlignment(Qt.AlignCenter)
+        idx_cell.setData(Qt.UserRole, ln.line_id)
+        self.lines_table.setItem(row_index, 0, idx_cell)
+        item_cell = QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(ln.item_id))
+        item_cell.setData(Qt.UserRole, ln.line_id)
+        self.lines_table.setItem(row_index, 1, item_cell)
+
+        qty_field = _AmountField()
+        qty_field.setDecimals(3)
+        qty_field.setValue(float(ln.quantity))
+        qty_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
+        self.lines_table.setCellWidget(row_index, 2, qty_field)
+
+        price_field = _AmountField()
+        price_field.setDecimals(dp)
+        price_field.setValue(float(ln.unit_price))
+        price_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
+        self.lines_table.setCellWidget(row_index, 3, price_field)
+
+        discount_container = self._make_inline_discount_widget(dp, ln.discount_amount, ln.discount_percent)
+        discount_field = discount_container.findChild(_AmountField, "inlineDiscountField")
+        discount_type_combo = discount_container.findChild(_EnterComboBox, "inlineDiscountType")
+        discount_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده حینِ تست: عوض‌کردنِ نوعِ تخفیف
+        # (مبلغی/درصدی) نباید بلافاصله همان عددِ قدیمی را زیرِ تفسیرِ
+        # تازه ذخیره کند -- مثلاً «۱۰۰۰ تومان» که به «درصدی» تغییر کند،
+        # به‌جایِ رد شدن با خطایِ سرریزِ عددی، خودش را ۱۰۰۰٪ ذخیره
+        # می‌کرد. پس با هر تغییرِ نوع، فیلد صفر می‌شود -- کاربر خودش
+        # عددِ تازه را در واحدِ جدید وارد می‌کند.
+        discount_type_combo.currentIndexChanged.connect(
+            lambda _i=0, f=discount_field, r=row_index: self._on_inline_discount_type_changed(r, f)
+        )
+        self.lines_table.setCellWidget(row_index, 4, discount_container)
+
+        tax_field = _AmountField()
+        tax_field.setDecimals(2)
+        tax_field.setValue(float(ln.tax_percent))
+        tax_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
+        self.lines_table.setCellWidget(row_index, 5, tax_field)
+
+        self.lines_table.setItem(row_index, 6, QTableWidgetItem(numerals.format_money(ln.tax_amount, dp)))
+        self.lines_table.setItem(row_index, 7, QTableWidgetItem(numerals.format_money(ln.line_total, dp)))
+        self.lines_table.setItem(row_index, 8, QTableWidgetItem(ln.description or ""))
+        self.lines_table.setCellWidget(row_index, 9, self._make_line_actions_widget(row_index))
+
+    def _on_inline_discount_type_changed(self, row_index: int, discount_field) -> None:
+        discount_field.setValue(0)
+        self._commit_inline_line_edit(row_index)
+
+    def _commit_inline_line_edit(self, row_index: int) -> None:
+        if not (0 <= row_index < len(self._lines)):
+            return
+        line = self._lines[row_index]
+        qty_widget = self.lines_table.cellWidget(row_index, 2)
+        price_widget = self.lines_table.cellWidget(row_index, 3)
+        discount_container = self.lines_table.cellWidget(row_index, 4)
+        tax_widget = self.lines_table.cellWidget(row_index, 5)
+        if qty_widget is None or price_widget is None or discount_container is None or tax_widget is None:
+            return
+        discount_field = discount_container.findChild(_AmountField, "inlineDiscountField")
+        discount_type_combo = discount_container.findChild(_EnterComboBox, "inlineDiscountType")
+        quantity = decimal.Decimal(str(qty_widget.value()))
+        unit_price = decimal.Decimal(str(price_widget.value()))
+        discount_value = decimal.Decimal(str(discount_field.value())) if discount_field is not None else decimal.Decimal(0)
+        is_percent_discount = discount_type_combo.currentData() == "PERCENT" if discount_type_combo is not None else False
+        tax_percent = decimal.Decimal(str(tax_widget.value()))
+        company_id = self._company_id()
+        if self._document_id is None or company_id is None:
+            return
+        current_discount_percent = line.discount_percent or decimal.Decimal(0)
+        current_discount_amount = line.discount_amount or decimal.Decimal(0)
+        unchanged = (
+            quantity == line.quantity and unit_price == line.unit_price and tax_percent == line.tax_percent
+            and (
+                (is_percent_discount and discount_value == current_discount_percent)
+                or (not is_percent_discount and current_discount_percent == 0 and discount_value == current_discount_amount)
+            )
+        )
+        if unchanged:
+            return
+        if quantity <= 0:
+            QMessageBox.warning(self, "خطا", "مقدار باید بزرگ‌تر از صفر باشد.")
+            self._load_document()
+            return
+        try:
+            documents_service.update_line(
+                line.line_id, self._document_id, company_id, quantity=quantity, unit_price=unit_price,
+                discount_amount=decimal.Decimal(0) if is_percent_discount else discount_value,
+                discount_percent=discount_value if is_percent_discount else decimal.Decimal(0),
+                tax_percent=tax_percent,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+        self._load_document()
+
+    def _render_entry_row(self, row_index: int, dp: int) -> None:
+        idx_cell = QTableWidgetItem("+")
+        idx_cell.setTextAlignment(Qt.AlignCenter)
+        self.lines_table.setItem(row_index, 0, idx_cell)
+
+        item_options = [
+            (it.item_id, f"{it.code} — {it.name or ''}") for it in self._items if it.variant_parent_item_id is None
+        ]
+        item_combo = _make_searchable_combo(item_options)
+        item_combo.setCurrentIndex(-1)
+        item_combo.lineEdit().clear()
+        self.lines_table.setCellWidget(row_index, 1, item_combo)
+
+        qty_field = _AmountField()
+        qty_field.setDecimals(3)
+        self.lines_table.setCellWidget(row_index, 2, qty_field)
+
+        price_field = _AmountField()
+        price_field.setDecimals(dp)
+        self.lines_table.setCellWidget(row_index, 3, price_field)
+
+        discount_container = self._make_inline_discount_widget(dp, decimal.Decimal(0), decimal.Decimal(0))
+        discount_field = discount_container.findChild(_AmountField, "inlineDiscountField")
+        discount_type_combo = discount_container.findChild(_EnterComboBox, "inlineDiscountType")
+        # هم‌الگو با _on_inline_discount_type_changed: عوض‌کردنِ نوعِ
+        # تخفیف، عددِ واردشده در واحدِ قبلی را پاک می‌کند -- تا کاربر با
+        # دیدنِ همان عددِ قدیمی زیرِ واحدِ تازه گمراه نشود.
+        discount_type_combo.currentIndexChanged.connect(lambda _i=0, f=discount_field: f.setValue(0))
+        self.lines_table.setCellWidget(row_index, 4, discount_container)
+
+        tax_field = _AmountField()
+        tax_field.setDecimals(2)
+        self.lines_table.setCellWidget(row_index, 5, tax_field)
+
+        self.lines_table.setItem(row_index, 6, QTableWidgetItem(""))
+        self.lines_table.setItem(row_index, 7, QTableWidgetItem(""))
+
+        description_field = QLineEdit()
+        description_field.setPlaceholderText("توضیح (اختیاری)")
+        self.lines_table.setCellWidget(row_index, 8, description_field)
+
+        add_button = QPushButton("➕")
+        add_button.setObjectName("primaryIconButton")
+        add_button.setFixedWidth(28)
+        add_button.setToolTip("افزودنِ این ردیف به سند")
+        self.lines_table.setCellWidget(row_index, 9, add_button)
+
+        self._entry_row_widgets = {
+            "item_combo": item_combo, "qty": qty_field, "price": price_field,
+            "discount": discount_field, "discount_type": discount_type_combo,
+            "tax": tax_field, "description": description_field,
+        }
+        item_combo.currentIndexChanged.connect(self._on_entry_row_item_changed)
+        add_button.clicked.connect(self._commit_entry_row)
+        enter_chain = [item_combo, qty_field, price_field, discount_field, discount_type_combo, tax_field, description_field]
+        for widget, next_widget in zip(enter_chain, enter_chain[1:]):
+            _enter_signal(widget).connect(next_widget.setFocus)
+        _enter_signal(description_field).connect(self._commit_entry_row)
+
+    def _on_entry_row_item_changed(self) -> None:
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if not widgets:
+            return
+        item_id = widgets["item_combo"].currentData()
+        if item_id is None:
+            return
+        variant_parent_ids = {it.variant_parent_item_id for it in self._items if it.variant_parent_item_id}
+        if item_id in variant_parent_ids:
+            # طبقِ ماهیتِ ذاتاً یک‌به‌چندِ کالایِ متغیر (چند ردیفِ هم‌زمان،
+            # یکی به‌ازایِ هر متغیر) -- این حالت در همان یک ردیفِ ورودی
+            # جا نمی‌شود؛ همان دیالوگِ جدولیِ چندمتغیره (بدونِ هیچ تغییری)
+            # باز می‌شود.
+            self._open_line_dialog_for_item(item_id)
+            return
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        if item is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        default_tax = catalog_service.resolve_default_tax_percent(company_id, item_id)
+        widgets["tax"].setValue(float(default_tax))
+        counterparty_id = self.counterparty_combo.currentData()
+        if counterparty_id is None:
+            return
+        try:
+            resolved = pricing_service.resolve_price(
+                company_id, counterparty_id, item_id, item.base_uom_id, decimal.Decimal(1),
+                self.price_list_combo.currentData(), self.document_type_code, self.date_field.date(),
+            )
+        except ValueError:
+            self.status_label.setText("قیمتی از قراردادِ فعال یا فهرستِ قیمت یافت نشد -- قیمت را دستی وارد کنید.")
+            return
+        self.status_label.setText("")
+        widgets["price"].setValue(float(resolved.unit_price))
+        if resolved.discount_amount:
+            widgets["discount"].setValue(float(resolved.discount_amount))
+
+    def _open_line_dialog_for_item(self, item_id: int) -> None:
+        if not self._ensure_saved():
+            self._load_document()
+            return
+        dialog = _LineDialog(
+            self, self._items, self._company_id(), self._main_window, self._decimal_places,
+            counterparty_id=self.counterparty_combo.currentData(), price_list_id=self.price_list_combo.currentData(),
+            document_type_code=self.document_type_code, document_date=self.date_field.date(),
+            warehouses=self._warehouses, default_warehouse_id=self.warehouse_combo.currentData(),
+            per_line_warehouse_enabled=self._per_line_warehouse_enabled,
+        )
+        index = dialog.item_combo.findData(item_id)
+        if index >= 0:
+            dialog.item_combo.setCurrentIndex(index)
+        if dialog.exec() != QDialog.Accepted:
+            self._load_document()
+            return
+        self._commit_line_dialog_result(dialog)
+
+    def _commit_line_dialog_result(self, dialog: "_LineDialog") -> None:
+        fields_list = dialog.result_fields_list()
+        company_id = self._company_id()
+        errors = []
+        last_item_id = None
+        for fields in fields_list:
+            try:
+                documents_service.add_line(self._document_id, company_id, **fields)
+                last_item_id = fields.get("item_id")
+                self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
+            except ValueError as exc:
+                item = next((it for it in self._items if it.item_id == fields.get("item_id")), None)
+                label = f"{item.code} — {item.name or ''}" if item else str(fields.get("item_id"))
+                errors.append(f"{label}: {exc}")
+        self._load_document()
+        if last_item_id is not None:
+            self._refresh_cross_sell_suggestion(last_item_id)
+            self._refresh_upsell_suggestion(last_item_id)
+        if errors:
+            QMessageBox.warning(self, "خطا در برخی ردیف‌ها", "\n".join(errors))
+
+    def _commit_entry_row(self) -> None:
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if not widgets:
+            return
+        item_id = widgets["item_combo"].currentData()
+        if item_id is None:
+            self.status_label.setText("کالا را انتخاب کنید.")
+            return
+        if widgets["qty"].value() <= 0:
+            self.status_label.setText("مقدار باید بزرگ‌تر از صفر باشد.")
+            return
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        if item is None:
+            return
+        # طبقِ رفعِ باگِ واقعی: اگر سند هنوز ذخیره نشده، _ensure_saved زیرِ
+        # پوست _load_document (بازسازیِ کاملِ lines_table، از جمله همینِ
+        # ردیفِ ورودی) را صدا می‌زند -- پس همه‌یِ مقادیر باید *پیش* از آن
+        # از رویِ ویجت‌ها خوانده و به Python/Decimalِ خام تبدیل شوند،
+        # وگرنه بعدِ بازسازی به شیءِ Qtِ ازبین‌رفته دسترسی پیدا می‌کردیم.
+        quantity = decimal.Decimal(str(widgets["qty"].value()))
+        unit_price = decimal.Decimal(str(widgets["price"].value())) if widgets["price"].value() > 0 else None
+        is_percent_discount = widgets["discount_type"].currentData() == "PERCENT"
+        discount_value = decimal.Decimal(str(widgets["discount"].value()))
+        tax_percent = decimal.Decimal(str(widgets["tax"].value()))
+        description = widgets["description"].text().strip() or None
+        if not self._ensure_saved():
+            return
+        try:
+            documents_service.add_line(
+                self._document_id, self._company_id(), item_id=item_id, uom_id=item.base_uom_id,
+                quantity=quantity, quantity_base=quantity, unit_price=unit_price,
+                discount_amount=decimal.Decimal(0) if is_percent_discount else discount_value,
+                discount_percent=discount_value if is_percent_discount else decimal.Decimal(0),
+                tax_percent=tax_percent, description=description,
+                warehouse_id=self.warehouse_combo.currentData() if self.warehouse_combo is not None else None,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._warn_if_consignment_cost_mixing(
+            item_id, self.warehouse_combo.currentData() if self.warehouse_combo is not None else None
+        )
+        self._load_document()
+        self._refresh_cross_sell_suggestion(item_id)
+        self._refresh_upsell_suggestion(item_id)
 
     def _make_line_actions_widget(self, row_index: int) -> QWidget:
         # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر: دکمه‌هایِ ویرایش/حذف حالا در
