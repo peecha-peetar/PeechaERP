@@ -32,6 +32,7 @@ from peecha.db.models.inventory import (
     ItemCategory,
     ItemMedia,
     ItemSupplier,
+    ItemSupplierCode,
     ItemUomConversion,
     ItemVariant,
     ItemVariantValue,
@@ -688,6 +689,14 @@ def delete_item(item_id: int, company_id: int) -> None:
         session.execute(delete(ItemUomConversion).where(ItemUomConversion.item_id == item_id))
         session.execute(delete(ItemVariantValue).where(ItemVariantValue.item_id == item_id))
         session.execute(delete(ItemSupplier).where(ItemSupplier.item_id == item_id))
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده («کالای بدونِ هیچ گردشی حذف نمی‌شود
+        # و پیامی هم نشان داده نمی‌شود»): این کالا شکست می‌خورد چون
+        # inv.item_supplier_codes (کدها/نام‌هایِ تامین‌کننده‌یِ R62) هم
+        # فقط با خودِ همین کالا معنا دارد اما این‌جا پاک نمی‌شد -- نقضِ
+        # کلیدِ خارجی به‌صورتِ یک IntegrityErrorِ خام بالا می‌آمد که هیچ‌جا
+        # به ValueErrorِ قابلِ‌نمایش تبدیل نمی‌شد، پس UI هیچ پیامی نشان
+        # نمی‌داد (فقط trace رویِ کنسول).
+        session.execute(delete(ItemSupplierCode).where(ItemSupplierCode.item_id == item_id))
         session.execute(delete(ItemMedia).where(ItemMedia.item_id == item_id))
         session.execute(
             delete(RelatedItem).where((RelatedItem.item_id == item_id) | (RelatedItem.related_item_id == item_id))

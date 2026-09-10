@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import traceback
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QDesktopServices, QIcon, QPixmap
@@ -1454,7 +1455,18 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         detail_account_id = item.data(0, Qt.UserRole)
         if detail_account_id is None:
             return
-        self.edit_detail_account(detail_account_id)
+        try:
+            self.edit_detail_account(detail_account_id)
+        except Exception:
+            # طبقِ رفعِ باگِ گزارش‌شده («کلیک رویِ یک ردیفِ دیالوگِ جستجو
+            # کرش می‌کند»): این متد از یک اسلاتِ Qt (itemClicked) صدا زده
+            # می‌شود -- یک استثنایِ پیش‌بینی‌نشده این‌جا هرگز نباید بی‌صدا
+            # کرش کند یا بلعیده شود؛ ردش رویِ کنسول چاپ و پیامی به کاربر
+            # نشان داده می‌شود.
+            traceback.print_exc()
+            self.account_status_label.setText(
+                "بارگذاریِ این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
+            )
 
     def edit_detail_account(self, detail_account_id: int) -> None:
         if self._is_person():
@@ -1759,6 +1771,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.account_status_label.setText(str(exc))
             return
+        except Exception:
+            # طبقِ رفعِ باگِ واقعیِ کشف‌شده («حذف نمی‌شود و هیچ پیامی هم
+            # نشان داده نمی‌شود»): اگر سرویس به هر دلیلِ پیش‌بینی‌نشده‌ای
+            # (مثلاً نقضِ کلیدِ خارجیِ یک زیرجدولِ فراموش‌شده) یک استثنایِ
+            # غیرِ ValueError پرتاب کند، این استثنا در یک اسلاتِ Qt هیچ‌گاه
+            # نباید بی‌صدا بلعیده شود -- حداقل یک پیامِ عمومی به کاربر
+            # نشان داده می‌شود تا بداند حذف انجام نشده.
+            self.account_status_label.setText(
+                "حذف با خطا مواجه شد؛ احتمالاً این حساب در جایِ دیگری استفاده شده است."
+            )
+            return
 
         selected = self._selected
         self._cancel_account_edit()
@@ -1771,7 +1794,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         index = _find_combo_index(self.group_combo, combo_data)
         if index >= 0:
             self.group_combo.setCurrentIndex(index)
-        self.edit_detail_account(detail_account_id)
+        try:
+            self.edit_detail_account(detail_account_id)
+        except Exception:
+            # طبقِ رفعِ باگِ گزارش‌شده («کرش می‌کند»): این متد از مسیرِ
+            # ناوبریِ فهرستِ واحدِ تفصیلی‌ها (جستجو -> کلیکِ ردیف) صدا زده
+            # می‌شود -- همان گاردِ _on_account_item_clicked این‌جا هم لازم
+            # است تا یک استثنایِ پیش‌بینی‌نشده کلِ برنامه را کرش نکند.
+            traceback.print_exc()
+            self.account_status_label.setText(
+                "بارگذاریِ این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
+            )
 
     def select_type_for_new_entry(self, combo_data: tuple[str, int | str]) -> None:
         """برایِ دکمه‌ی «تفصیلیِ جدید» در فهرستِ واحد — همان گروه را انتخاب
