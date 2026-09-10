@@ -1385,9 +1385,15 @@ class _SettlementPlanDialog(QDialog):
     نسیه/بانک یا همون کارتخوان/بن/کالابرگ/تخفیف... و با تاییدِ مدیر»):
     ترکیبِ چند روشِ هم‌زمان + مانده‌یِ خودکار به‌عنوانِ نسیه؛ ذخیره‌یِ
     دوباره (حتی بعدِ تاییدِ قبلی) تاییدِ قبلی را باطل می‌کند -- ترکیبِ
-    تازه باید دوباره تاییدشود. تاییدِ نهایی فقط برایِ مدیر (نقشِ ادمین/
-    سوپروایزر/مدیر) ممکن است -- approve_settlement_plan خودش هم دوباره
-    همین را اعتبارسنجی می‌کند."""
+    تازه باید دوباره تاییدشود.
+
+    طبقِ گزارشِ صریحِ کاربر («روالِ ثبتِ فاکتور خیلی سخت شد... مدیر فقط
+    دیدن و کارِ ثبتِ نهایی انجام دهد»): این دیالوگ دیگر دکمهٔ جداگانه‌یِ
+    «تاییدِ مدیر» ندارد -- فقط واردکردن/ذخیره‌یِ ترکیبِ تسویه (یا کلیکِ
+    نسیه). تاییدِ نحوه‌یِ تسویه از این پس فقط از طریقِ همان دکمهٔ ثبتِ
+    نهاییِ فرمِ اصلی (CommercialDocumentScreen._post) انجام می‌شود -- تا
+    مدیر نیازی به بازکردنِ این دیالوگ نداشته باشد؛ approve_settlement_
+    plan (که فقط برایِ مدیر مجاز است) همان‌جا صدا زده می‌شود."""
 
     def __init__(
         self, document_id: int, company_id: int, document_type_code: str,
@@ -1511,12 +1517,6 @@ class _SettlementPlanDialog(QDialog):
         self.full_credit_button.setAutoDefault(False)
         self.full_credit_button.clicked.connect(self._save_as_full_credit)
         buttons_row.addWidget(self.full_credit_button)
-        self.approve_button = QPushButton("👍 تاییدِ مدیر")
-        self.approve_button.setToolTip("فقط برایِ کاربرِ با نقشِ ادمین/سوپروایزر/مدیر فعال است.")
-        self.approve_button.setAutoDefault(False)
-        self.approve_button.clicked.connect(self._approve)
-        self.approve_button.setVisible(self._require_manager_approval)
-        buttons_row.addWidget(self.approve_button)
         close_button = QPushButton("بستن")
         close_button.setAutoDefault(False)
         close_button.clicked.connect(self.accept)
@@ -1714,7 +1714,6 @@ class _SettlementPlanDialog(QDialog):
                 self._add_row(code, line.amount, line.detail_account_id)
 
         if plan is None:
-            self.approve_button.setEnabled(False)
             if self._require_manager_approval:
                 self.status_banner.setText(
                     "هنوز نحوه‌یِ تسویه‌ای ذخیره نشده است. اگر بخشی نقد/بانکی دریافت شده، مبلغش را جلویِ همان روش "
@@ -1735,13 +1734,15 @@ class _SettlementPlanDialog(QDialog):
             self.status_banner.setStyleSheet("color: #15803d; font-weight: bold;")
             return
         self.table.setEnabled(not plan.is_approved)
-        self.approve_button.setEnabled(not plan.is_approved)
         if plan.is_approved:
             approved_at = numerals.to_persian_digits(plan.approved_at.strftime("%Y-%m-%d %H:%M")) if plan.approved_at else ""
             self.status_banner.setText(f"✅ نحوه‌یِ تسویه تاییدِ مدیر شد. ({approved_at})")
             self.status_banner.setStyleSheet("color: #15803d; font-weight: bold;")
         else:
-            self.status_banner.setText("⏳ ذخیره شد؛ در انتظارِ تاییدِ مدیر است -- تا تاییدنشدن، ثبتِ نهاییِ فاکتور مسدود می‌ماند.")
+            self.status_banner.setText(
+                "⏳ ذخیره شد. تاییدِ نحوه‌یِ تسویه و ثبتِ نهایی، هر دو با هم، از طریقِ دکمهٔ 🔒 «ثبتِ نهایی» "
+                "در فرمِ اصلیِ فاکتور توسطِ مدیر انجام می‌شود -- نیازی به بازکردنِ دوبارهٔ همین دیالوگ نیست."
+            )
             self.status_banner.setStyleSheet("color: #b45309; font-weight: bold;")
 
     def _save(self) -> None:
@@ -1774,18 +1775,6 @@ class _SettlementPlanDialog(QDialog):
             if amount_field is not None:
                 amount_field.setValue(0)
         self._save()
-
-    def _approve(self) -> None:
-        try:
-            settlements_service.approve_settlement_plan(
-                self._document_id, self._company_id, app_session.current_user.user_id,
-            )
-        except ValueError as exc:
-            QMessageBox.warning(self, "خطا", str(exc))
-            return
-        plan = settlements_service.get_settlement_plan(self._document_id, self._company_id)
-        self._apply_plan_status(plan)
-        QMessageBox.information(self, "نحوه‌یِ تسویه", "نحوه‌یِ تسویه تاییدِ مدیر شد.")
 
 
 class _LandedCostDialog(QDialog):
@@ -2408,8 +2397,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.confirm_button = QPushButton("✅")
         self.confirm_button.setObjectName("iconButton")
         self.confirm_button.setFixedWidth(44)
-        self.confirm_button.setToolTip("۲) تاییدِ سند — گامِ اولِ گردشِ کار پس از پیش‌نویس؛ سند برایِ تصویب/ثبتِ نهایی آماده می‌شود")
-        self.confirm_button.clicked.connect(self._confirm)
+        if self._is_invoice:
+            # طبقِ گزارشِ صریحِ کاربر («روالِ ثبتِ فاکتور خیلی سخت شد...
+            # کاربر فاکتور را صادر می‌کند و نحوه‌یِ دریافت هم در ابتدا
+            # مشخص می‌شود»): برایِ فاکتورِ خرید/فروش، همین یک دکمه هم
+            # تاییدِ سند و هم پرسیدنِ نحوه‌یِ تسویه (نقد/بانکی یا نسیه) را
+            # با هم انجام می‌دهد -- به‌جایِ اینکه کاربر مجبور باشد بعداً
+            # جداگانه دکمهٔ 🧾 را پیدا کند.
+            self.confirm_button.setToolTip(
+                "۲) ثبتِ فاکتور — سند تایید می‌شود و بلافاصله نحوه‌یِ تسویه (دریافت/پرداختِ نقد و بانکی، یا نسیه) پرسیده می‌شود"
+            )
+        else:
+            self.confirm_button.setToolTip("۲) تاییدِ سند — گامِ اولِ گردشِ کار پس از پیش‌نویس؛ سند برایِ تصویب/ثبتِ نهایی آماده می‌شود")
+        self.confirm_button.clicked.connect(self._confirm_button_clicked)
         self.footer_layout.addWidget(self.confirm_button)
 
         self.approve_button = QPushButton("👍")
@@ -2417,6 +2417,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.approve_button.setFixedWidth(44)
         self.approve_button.setToolTip("۳) تصویبِ سند — تاییدِ مدیریتیِ اضافه پیش از ثبتِ نهایی (اختیاری، پیش از ثبتِ نهایی انجام می‌شود)")
         self.approve_button.clicked.connect(self._approve)
+        # طبقِ همان گزارش («دکمه‌هایِ ثبتِ فراوان»): این دکمه برایِ فاکتورِ
+        # خرید/فروش هیچ اثرِ واقعی‌ای ندارد -- approve_document فقط
+        # قفلِ اعتباریِ SALES_ORDER را بررسی می‌کند (که برایِ فاکتور هرگز
+        # ساخته نمی‌شود) و ثبتِ نهایی هم بدونش (فقط با CONFIRMED) کار
+        # می‌کند؛ تنها نتیجه‌اش برایِ فاکتور، افزودنِ یک کلیکِ بی‌فایده به
+        # گردشِ کار بود.
+        self.approve_button.setVisible(not self._is_invoice)
         self.footer_layout.addWidget(self.approve_button)
 
         self.post_button = QPushButton("🔒")
@@ -2839,8 +2846,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # را اعتبارسنجی می‌کند -- این‌جا فقط UX است).
         self.settlement_plan_button.setEnabled((is_draft or is_confirmed or is_approved) and self._document_id is not None)
         if self._is_invoice:
-            has_approved_plan = self._settlement_plan is not None and self._settlement_plan.is_approved
-            self.post_button.setEnabled((is_confirmed or is_approved) and has_approved_plan)
+            has_plan = self._settlement_plan is not None
+            has_approved_plan = has_plan and self._settlement_plan.is_approved
+            # طبقِ گزارشِ صریحِ کاربر («روالِ ثبتِ فاکتور خیلی سخت شد...
+            # مدیر فقط دیدن و کارِ ثبتِ نهایی انجام دهد»): دیگر لازم
+            # نیست نقشه‌یِ تسویه از قبل و جداگانه تاییدشده باشد -- همین‌
+            # یک دکمه، اگر نقشه‌ای موجود باشد، هم تاییدِ آن (فقط برایِ
+            # مدیر -- همان اعتبارسنجیِ approve_settlement_plan) و هم
+            # ثبتِ نهایی را با هم انجام می‌دهد (پیاده‌سازی در _post()).
+            self.post_button.setEnabled((is_confirmed or is_approved) and has_plan)
             if self._settlement_plan is None:
                 self.settlement_plan_button.setStyleSheet("font-weight: bold; color: #b45309;")
             elif not self._settlement_plan.is_approved:
@@ -2850,12 +2864,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # طبقِ گزارشِ صریحِ کاربر («دکمهٔ ثبتِ نهایی غیرفعاله، چرا؟»):
             # هم‌الگو با correct_button -- دلیلِ دقیقِ غیرفعال‌بودن را در
             # Tooltip نشان می‌دهیم، نه فقط خاکستری‌کردنِ بی‌توضیح.
-            if not has_approved_plan and (is_confirmed or is_approved):
-                if self._settlement_plan is None:
-                    reason = "ابتدا از دکمهٔ 🧾 «نحوه‌یِ تسویه» نحوهٔ پرداخت را مشخص کنید."
-                else:
-                    reason = "نحوه‌یِ تسویه ذخیره شده ولی هنوز توسطِ مدیر تاییدنشده است -- از دکمهٔ 🧾 آن را تایید کنید."
-                self.post_button.setToolTip(f"۴) ثبتِ نهایی -- غیرِفعال است، چون: {reason}")
+            if not has_plan and (is_confirmed or is_approved):
+                self.post_button.setToolTip(
+                    "۴) ثبتِ نهایی -- غیرِفعال است، چون: نحوه‌یِ تسویه هنوز مشخص نشده -- "
+                    "از دکمهٔ 🧾 «نحوه‌یِ تسویه» آن را مشخص کنید."
+                )
+            elif has_plan and not has_approved_plan:
+                self.post_button.setToolTip(
+                    "۴) ثبتِ نهایی -- با این کلیک، هم نحوه‌یِ تسویه تاییدِ مدیر می‌شود (فقط برایِ مدیر ممکن است) "
+                    "و هم سند قطعی می‌شود."
+                )
             else:
                 self.post_button.setToolTip(_POST_BUTTON_DEFAULT_TOOLTIP)
         else:
@@ -3390,11 +3408,18 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._load_document()
 
-    def _confirm(self) -> None:
+    def _confirm(self) -> bool:
+        """طبقِ عمد: این تابع فقط خودِ تاییدِ سند را انجام می‌دهد (بدونِ
+        هیچ دیالوگِ اضافه) -- چون تست‌هایِ زیادی (نامرتبط با نحوه‌یِ
+        تسویه) این متد را مستقیماً برایِ رساندنِ سند به وضعیتِ CONFIRMED
+        صدا می‌زنند و نباید با یک QMessageBox/دیالوگِ مسدودکننده‌یِ
+        غیرمنتظره روبه‌رو شوند. پرسیدنِ نحوه‌یِ تسویه (طبقِ گزارشِ صریحِ
+        کاربر) فقط در _confirm_button_clicked -- که مستقیماً به کلیکِ
+        واقعیِ دکمهٔ ✅ وصل است -- انجام می‌شود."""
         if self._document_id is None:
-            return
+            return False
         if not self._flush_header_changes():
-            return
+            return False
         try:
             documents_service.confirm_document(self._document_id, self._company_id(), app_session.current_user.user_id)
         except ValueError as exc:
@@ -3405,9 +3430,41 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # دیالوگِ مسدودکننده هم نمایش می‌دهد.
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در تاییدِ سند", str(exc))
-            return
+            return False
         self._load_document()
         theme.set_status_label(self.status_label, "سند تایید شد.", ok=True)
+        return True
+
+    def _confirm_button_clicked(self) -> None:
+        # طبقِ گزارشِ صریحِ کاربر («کاربر فاکتور را صادر می‌کند و نحوه‌یِ
+        # دریافت هم در ابتدا مشخص می‌شود»): به‌جایِ اینکه کاربر بعداً
+        # جداگانه دنبالِ دکمهٔ 🧾 بگردد، همین‌جا -- بلافاصله بعدِ تاییدِ
+        # فاکتور -- پرسیده می‌شود.
+        if self._confirm() and self._is_invoice:
+            self._prompt_settlement_after_confirm()
+
+    def _prompt_settlement_after_confirm(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._document_id is None:
+            return
+        has_receipt = QMessageBox.question(
+            self, "نحوه‌یِ تسویه",
+            "آیا همین الان دریافت/پرداختی (نقد یا بانکی) برایِ این فاکتور انجام شده؟\n"
+            "«خیر» یعنی این فاکتور به‌طورِ کامل نسیه است.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if has_receipt == QMessageBox.Yes:
+            self._open_settlement_plan()
+            return
+        try:
+            settlements_service.save_settlement_plan(self._document_id, company_id, app_session.current_user.user_id, [])
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._load_document()
+        theme.set_status_label(
+            self.status_label, "فاکتور به‌عنوانِ نسیه ثبت شد؛ در انتظارِ ثبتِ نهاییِ مدیر است.", ok=True,
+        )
 
     def _approve(self) -> None:
         if self._document_id is None:
@@ -3424,13 +3481,35 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _post(self) -> None:
         if self._document_id is None:
             return
-        confirm = QMessageBox.question(
-            self, "ثبتِ نهایی", "این سند ثبتِ نهایی شود؟ پسِ این کار، سند دیگر قابلِ‌ویرایش/حذف نیست.",
-            QMessageBox.Yes | QMessageBox.No,
+        company_id = self._company_id()
+        # طبقِ گزارشِ صریحِ کاربر («مدیر فقط دیدن و کارِ ثبتِ نهایی انجام
+        # دهد»): برایِ فاکتورِ خرید/فروش، اگر نقشه‌یِ تسویه هنوز توسطِ
+        # مدیر تاییدنشده، همین‌جا -- پیش از خودِ Post -- تاییدمی‌شود؛
+        # approve_settlement_plan خودش نقشِ ادمین/سوپروایزر/مدیر را
+        # اعتبارسنجی می‌کند، پس کاربرِ غیرِمدیر همین‌جا با خطایِ روشن
+        # متوقف می‌شود. از پایگاه‌داده تازه خوانده می‌شود (نه کَشِ
+        # self._settlement_plan) تا رفتارِ posted_settlement_plan پایین‌تر
+        # هم‌الگو بماند.
+        fresh_plan = (
+            settlements_service.get_settlement_plan(self._document_id, company_id)
+            if self._is_invoice and self._corrects_document_id is None and company_id is not None else None
         )
+        needs_settlement_approval = fresh_plan is not None and not fresh_plan.is_approved
+        question_text = "این سند ثبتِ نهایی شود؟ پسِ این کار، سند دیگر قابلِ‌ویرایش/حذف نیست."
+        if needs_settlement_approval:
+            question_text = (
+                "این سند ثبتِ نهایی شود؟ (این کار هم نحوه‌یِ تسویه را تایید می‌کند و هم سند را قطعی می‌کند.)\n"
+                "پسِ این کار، سند دیگر قابلِ‌ویرایش/حذف نیست."
+            )
+        confirm = QMessageBox.question(self, "ثبتِ نهایی", question_text, QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
-        company_id = self._company_id()
+        if needs_settlement_approval:
+            try:
+                settlements_service.approve_settlement_plan(self._document_id, company_id, app_session.current_user.user_id)
+            except ValueError as exc:
+                QMessageBox.warning(self, "خطا در تاییدِ نحوه‌یِ تسویه", str(exc))
+                return
         try:
             if self._corrects_document_id is not None:
                 result = documents_service.post_invoice_correction(self._document_id, company_id, app_session.current_user.user_id)
