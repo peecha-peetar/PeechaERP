@@ -51,6 +51,7 @@ from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import item_variants as variants_service
 from peecha.services import report_templates as report_templates_service
+from peecha.services import roles as roles_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
 from peecha.ui import theme
@@ -607,6 +608,13 @@ class _LineDialog(LayoutEditMixin, QDialog):
         self.variant_table = QTableWidget(0, 3)
         self.variant_table.setHorizontalHeaderLabels(["متغیر", "موجودی", "مقدار"])
         self.variant_table.verticalHeader().setVisible(False)
+        # طبقِ گزارشِ صریحِ کاربر («ردیف‌هایِ متغیر ارتفاعِ کمی دارند و
+        # اصلاً معلوم نیستند»): بدونِ این خط، ارتفاعِ پیش‌فرضِ Qt برایِ
+        # ردیف‌هایِ جدول (حدودِ ۲۰-۲۴ پیکسل) برایِ نمایشِ کاملِ فیلدِ
+        # مبلغیِ هر ردیف (_AmountField) خیلی کوچک است -- همان عددِ ۴۰
+        # که در lines_table (پایین‌تر در همین فایل) هم استفاده شده،
+        # این‌جا هم به‌کار می‌رود.
+        self.variant_table.verticalHeader().setDefaultSectionSize(40)
         self.variant_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         # طبقِ گزارشِ صریح («عرضِ لیست کمتر... جلویِ نامِ متغیر فضایِ خالی
         # هست»): قبلاً فقط ستونِ برچسبِ متغیر Stretch بود و بقیهٔ ستون‌ها
@@ -2877,8 +2885,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             else:
                 self.post_button.setToolTip(_POST_BUTTON_DEFAULT_TOOLTIP)
         else:
+            # طبقِ گزارشِ صریحِ کاربر («سفارش هم دو مرحله‌ای باشه: تاییدِ
+            # کاربر و ثبتِ نهاییِ مدیر؛ همه‌یِ فرم‌ها به همین شکل»): دکمه
+            # همچنان بعدِ تاییدِ سند فعال است (تصمیمِ نهایی در _post()
+            # گرفته می‌شود -- آن‌جا هم دلیلِ دقیقِ خطا نشان داده می‌شود)،
+            # ولی Tooltip از همین‌جا روشن می‌کند که ثبتِ نهایی فقط برایِ
+            # مدیر ممکن است.
             self.post_button.setEnabled(is_confirmed or is_approved)
-            self.post_button.setToolTip(_POST_BUTTON_DEFAULT_TOOLTIP)
+            self.post_button.setToolTip(
+                f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبتِ نهایی فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است.)"
+            )
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
@@ -3482,6 +3498,20 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self._document_id is None:
             return
         company_id = self._company_id()
+        # طبقِ گزارشِ صریحِ کاربر («سفارش هم دو مرحله‌ای باشه، تاییدِ
+        # کاربر و ثبتِ نهاییِ مدیر؛ همه‌یِ فرم‌هایِ خرید و فروش به همین
+        # شکل باشه»): این چک برایِ *همه‌یِ* انواعِ سندی که همین یک فرمِ
+        # مشترک (این کلاس) نمایش می‌دهد اعمال می‌شود -- سفارش/پیش‌فاکتور/
+        # امانی، نه فقط فاکتور. (فروشِ صندوق/POS و ثبتِ سفارشِ موبایلِ
+        # ون‌سیلز از این فرم عبور نمی‌کنند -- گذرگاهِ کاملاً جداگانه‌یِ
+        # خودشان را دارند و عمداً دست‌نخورده می‌مانند.)
+        user = app_session.current_user
+        if company_id is not None and user is not None and not roles_service.is_manager(user.user_id, company_id):
+            QMessageBox.warning(
+                self, "ثبتِ نهایی",
+                "ثبتِ نهایی فقط برایِ مدیر (نقشِ ادمین/سوپروایزر/مدیر) ممکن است -- این سند تاییدشده و آماده‌یِ ثبتِ نهایی است.",
+            )
+            return
         # طبقِ گزارشِ صریحِ کاربر («مدیر فقط دیدن و کارِ ثبتِ نهایی انجام
         # دهد»): برایِ فاکتورِ خرید/فروش، اگر نقشه‌یِ تسویه هنوز توسطِ
         # مدیر تاییدنشده، همین‌جا -- پیش از خودِ Post -- تاییدمی‌شود؛

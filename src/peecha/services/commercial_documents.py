@@ -1089,6 +1089,42 @@ def add_line(
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
         doc = _get_editable_document(session, document_id, company_id)
+        # طبقِ گزارشِ صریحِ کاربر («در ثبتِ سفارشات آپشنی داشته باشه که
+        # بتونیم کالای عدم موجودی را ثبت کنیم یا نتوانیم»): این آپشن
+        # همان تنظیمِ ازپیش‌موجودِ هر انبار (allow_negative_stock) است --
+        # که سندهایِ واقعاً موجودی‌کاهنده (فاکتور/رسیدِ انبار) از قبل
+        # رعایتش می‌کنند، ولی سفارش/پیش‌فاکتور چون هرگز به inventory_
+        # engine نمی‌رسند (Postشان فقط قفل‌کردنِ سند است، بدونِ اثرِ
+        # انبار)، تا الان هیچ‌وقت این تنظیم را چک نمی‌کردند -- یعنی
+        # همیشه امکانِ ثبتِ کالایِ بدونِ موجودی وجود داشت. حالا همان
+        # انبارِ مؤثرِ همین ردیف (warehouse_id ردیف یا، اگر خالی بود،
+        # انبارِ پیش‌فرضِ سرِسند) چک می‌شود.
+        if doc.document_type_code in ("SALES_ORDER", "SALES_PROFORMA"):
+            effective_warehouse_id = warehouse_id or doc.warehouse_id
+            if effective_warehouse_id is not None:
+                warehouse = locations_service.get_warehouse(effective_warehouse_id, company_id)
+                if warehouse is not None and not warehouse.fields.allow_negative_stock:
+                    on_hand = next(
+                        (r.quantity_on_hand for r in inv_engine_service.get_item_stock_by_warehouse(company_id, item_id)
+                         if r.warehouse_id == effective_warehouse_id),
+                        decimal.Decimal(0),
+                    )
+                    existing_lines = session.scalars(
+                        select(CommercialDocumentLine).where(
+                            CommercialDocumentLine.document_id == document_id,
+                            CommercialDocumentLine.item_id == item_id,
+                        )
+                    ).all()
+                    existing_qty = sum(
+                        (ln.quantity_base for ln in existing_lines if (ln.warehouse_id or doc.warehouse_id) == effective_warehouse_id),
+                        decimal.Decimal(0),
+                    )
+                    if existing_qty + quantity_base > on_hand:
+                        raise ValueError(
+                            f"موجودیِ این کالا در انبارِ انتخاب‌شده کافی نیست "
+                            f"(موجود: {on_hand}، قبلاً در همین سند: {existing_qty}، درخواستی: {quantity_base}) -- "
+                            "طبقِ تنظیمِ این انبار، ثبتِ سفارش/پیش‌فاکتورِ بیش از موجودی مجاز نیست."
+                        )
         if unit_price is None:
             resolved = pricing_service.resolve_price(
                 company_id, doc.counterparty_detail_account_id, item_id, uom_id, quantity, doc.price_list_id,
