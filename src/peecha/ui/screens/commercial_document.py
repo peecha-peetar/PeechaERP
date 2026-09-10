@@ -2312,10 +2312,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             header_chain.append(self.tax_posting_mode_combo)
         for widget, next_widget in zip(header_chain, header_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
-        # طبقِ درخواستِ صریح («بعدِ اینترِ فیلدِ آخرِ هدر خودکار برود به
-        # اولین ردیف»): زنجیره‌یِ Enterِ هدر حالا مستقیم به افزودنِ اولین
-        # ردیف می‌رسد، به‌جایِ متوقف‌شدن روی توضیح.
-        _enter_signal(header_chain[-1]).connect(self._add_line)
+        # طبقِ گزارشِ صریحِ کاربر («بعد از اینکه هدر را تکمیل می‌کنیم، باز
+        # فرمِ ردیفِ کالا باز می‌شه؛ انتظار اینه که مستقیم روی ردیفِ کالا
+        # و نامِ کالا بیاد و اونجا جستجویِ کالا انجام بشه»): از R145 دیگر
+        # نیازی به بازکردنِ دیالوگِ ردیف نیست -- یک ردیفِ ورودیِ
+        # همیشه‌حاضر در انتهایِ lines_table وجود دارد؛ پس Enterِ فیلدِ
+        # آخرِ هدر باید مستقیم فوکوس را به کمبویِ کالایِ همان ردیف ببرد
+        # (نه اینکه دیالوگِ قدیمی را باز کند).
+        _enter_signal(header_chain[-1]).connect(self._focus_entry_row_item)
         if self._is_invoice:
             self.counterparty_combo.currentIndexChanged.connect(self._recompute_due_date)
         if self._supports_cross_sell:
@@ -2363,10 +2367,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
-        # طبقِ درخواستِ صریح («فضایِ ردیف‌ها بیشتر بشه در فرمِ فاکتور»):
-        # ارتفاعِ پیش‌فرضِ Qt برایِ ردیف‌ها فشرده است؛ این‌جا آگاهانه
-        # بزرگ‌تر شده تا خواناییِ ردیف‌هایِ فاکتور بهتر شود.
-        self.lines_table.verticalHeader().setDefaultSectionSize(40)
+        # طبقِ گزارشِ صریحِ کاربر («همچنان ردیفِ فاکتور خیلی ارتفاعِ کمی
+        # داره»): ارتفاعِ پیش‌فرضِ Qt برایِ ردیف‌ها فشرده است؛ این‌جا
+        # آگاهانه بزرگ‌تر شده تا خواناییِ ردیف‌هایِ فاکتور بهتر شود. طبقِ
+        # R145/R146 که چند ویجتِ تعاملیِ تازه (فیلدهایِ قابلِ‌ویرایش، کمبویِ
+        # نوعِ تخفیف، و ۴ دکمهٔ ستونِ عملیات) به هر ردیف اضافه کردند،
+        # عددِ قبلی (۴۰) دیگر برایِ این‌همه ویجتِ فشرده در یک ردیف کافی
+        # نبود -- به ۴۸ افزایش یافت.
+        self.lines_table.verticalHeader().setDefaultSectionSize(48)
         # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر: ستونِ «#» و «عملیات» عرضِ ثابتِ
         # کوچک دارند، ستونِ «کالا» (که حالا اندیسِ ۱ است، نه ۰) کاملِ
         # فضایِ باقی‌مانده را می‌گیرد.
@@ -3160,6 +3168,18 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._refresh_upsell_suggestion(last_item_id)
         if errors:
             QMessageBox.warning(self, "خطا در برخی ردیف‌ها", "\n".join(errors))
+
+    def _focus_entry_row_item(self) -> None:
+        # طبقِ گزارشِ صریحِ کاربر: به‌جایِ بازکردنِ دیالوگِ ردیف، مستقیم
+        # فوکوس به کمبویِ کالایِ ردیفِ ورودیِ همیشه‌حاضر می‌رود -- کاربر
+        # بی‌درنگ می‌تواند جستجویِ کالا را همان‌جا شروع کند. اگر به هر
+        # دلیلی (مثلاً سند دیگر قابلِ‌ویرایش نیست) این ردیف وجود نداشت،
+        # به رفتارِ قدیمی (بازکردنِ دیالوگ) بازمی‌گردیم -- بی‌اثر نماندن.
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if widgets is not None:
+            widgets["item_combo"].setFocus()
+        else:
+            self._add_line()
 
     def _commit_entry_row(self) -> None:
         widgets = getattr(self, "_entry_row_widgets", None)
