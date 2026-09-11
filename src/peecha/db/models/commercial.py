@@ -62,7 +62,7 @@ class Channel(Base):
     channel_code: Mapped[str] = mapped_column(String(20), primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
-    channel_type_code: Mapped[str] = mapped_column(String(15))  # POS|WHOLESALE|ONLINE|AGENT|MARKETPLACE
+    channel_type_code: Mapped[str] = mapped_column(String(15))  # POS|WHOLESALE|ONLINE|AGENT|MARKETPLACE|VAN_SALES|PRE_SALES
     default_price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
     default_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     is_active: Mapped[bool] = mapped_column(default=True)
@@ -81,6 +81,52 @@ class PriceListItem(Base):
     uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
     min_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     unit_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+
+
+class PriceListItemPriceHistory(Base):
+    """طبقِ درخواستِ صریح («لاگِ قیمت‌ها را نگه دار تا سابقه حفظ شود و
+    اگر اشتباهی شد بشه قیمتو برگردوند»): هر تغییرِ unit_price در
+    PriceListItem (چه دستی، چه از وارداتِ قیمتِ تامین‌کننده) این‌جا یک
+    ردیف ثبت می‌کند -- old_price=NULL یعنی این اولین‌بار است که این
+    ترکیب (کالا/واحد/حداقلِ‌مقدار) در این فهرستِ قیمت مقدار گرفته."""
+
+    __tablename__ = "price_list_item_price_history"
+    __table_args__ = {"schema": "comm"}
+
+    history_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    price_list_id: Mapped[int] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    min_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    old_price: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    new_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    source_code: Mapped[str] = mapped_column(String(30), default="MANUAL")
+    note: Mapped[str | None] = mapped_column(String(255))
+    changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    changed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class SupplierPriceImportTemplate(Base):
+    """طبقِ درخواستِ صریح («این تطبیق را برایِ دفعاتِ بعد ذخیره کن»):
+    تنظیماتِ ستون‌بندیِ فایلِ قیمتِ هر تامین‌کننده (اکسل/PDF) -- کدامین
+    ستون کد است، کدامین قیمت، و چند ردیفِ اول (هدر/عنوان) نادیده گرفته
+    شود -- تا واردکردنِ دفعاتِ بعدیِ همان تامین‌کننده نیازِ تطبیقِ دستی
+    نداشته باشد."""
+
+    __tablename__ = "supplier_price_import_templates"
+    __table_args__ = (
+        UniqueConstraint("company_id", "supplier_detail_account_id"),
+        {"schema": "comm"},
+    )
+
+    template_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    supplier_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    code_column_index: Mapped[int | None] = mapped_column(SmallInteger)
+    price_column_index: Mapped[int] = mapped_column(SmallInteger)
+    header_row_index: Mapped[int] = mapped_column(SmallInteger, default=0)
+    sheet_name: Mapped[str | None] = mapped_column(String(100))
+    name_column_index: Mapped[int | None] = mapped_column(SmallInteger)
 
 
 class DiscountRule(Base):
@@ -256,6 +302,110 @@ class PosSettings(Base):
         ForeignKey("acc.detail_accounts.detail_account_id")
     )
     cash_variance_threshold_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    # طبقِ بازخوردِ صریح («اندازه/جهتِ کلیدهایِ فوری قابلِ‌تنظیم باشد»):
+    # اندازه‌یِ دکمه‌هایِ گریدِ دسترسیِ‌سریعِ کالا در صفحه‌یِ فروشِ حضوری.
+    quick_button_width: Mapped[int] = mapped_column(default=110)
+    quick_button_height: Mapped[int] = mapped_column(default=64)
+    quick_button_font_size: Mapped[int] = mapped_column(default=10)
+    quick_grid_columns: Mapped[int] = mapped_column(default=6)
+    # طبقِ بازبینیِ عکس‌هایِ تنظیماتِ نرم‌افزارِ مرجع: موارد واقعاً
+    # قابلِ‌اجرا و مرتبط با دامنهٔ فعلی -- نه هر چیزی که در آن عکس‌ها بود.
+    allow_price_override: Mapped[bool] = mapped_column(default=True)
+    allow_discount_override: Mapped[bool] = mapped_column(default=True)
+    quick_access_enabled: Mapped[bool] = mapped_column(default=True)
+    scan_beep_enabled: Mapped[bool] = mapped_column(default=True)
+    receipt_header_text: Mapped[str | None] = mapped_column(String(200))
+    receipt_footer_text: Mapped[str | None] = mapped_column(String(200))
+    # طبقِ درخواستِ صریح («کلیدهایِ فوری از سمتِ راست/چپ، عمودی/افقی در
+    # لوکیشن‌هایِ مختلفِ صفحه»): جایگاه (LEFT/RIGHT) و جهتِ چیدمانِ
+    # داخلیِ دکمه‌ها (HORIZONTAL/VERTICAL) اکنون قابلِ‌تنظیم است.
+    quick_access_position: Mapped[str] = mapped_column(String(10), default="LEFT")
+    quick_access_orientation: Mapped[str] = mapped_column(String(10), default="HORIZONTAL")
+    # طبقِ درخواستِ صریح: نمایش/عدمِ‌نمایشِ بخش‌هایِ فاکتورِ تک‌فروشی +
+    # تعدادِ فاکتورهایِ اخیر که در پنلِ کنارِ کلیدهایِ فوری نشان داده شود.
+    show_price_list_field: Mapped[bool] = mapped_column(default=True)
+    show_tax_discount_breakdown: Mapped[bool] = mapped_column(default=True)
+    show_customer_credit_warning: Mapped[bool] = mapped_column(default=True)
+    recent_invoices_count: Mapped[int] = mapped_column(default=10)
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («دکمهٔ تسویه با پرینت خیلی طول
+    # می‌کشد»): چاپِ حرفه‌ایِ Jasper هر بار یک JVMِ تازه بالا می‌آورد
+    # (چند ثانیه) -- برایِ فیشِ صندوق که در هر فروش استفاده می‌شود، این
+    # سویچ به‌طورِ پیش‌فرض همان مسیرِ سریعِ HTML/QTextDocument (بدونِ
+    # Jasper) را انتخاب می‌کند؛ خاموش‌کردنش چاپِ حرفه‌ایِ Jasper را
+    # برمی‌گرداند.
+    fast_receipt_printing: Mapped[bool] = mapped_column(default=True)
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ حسابِ
+    # مشتری مرکزِ هزینه/پروژه می‌خواهد»): برخلافِ pos_settlement_method_
+    # defaults (که مخصوصِ طرفِ نقد/بانکِ سندِ حسابداری‌ست)، این دو فیلد
+    # مرکزِ هزینه/پروژهٔ پیش‌فرض را برایِ طرفِ حسابِ دریافتنیِ مشتری
+    # (بستانکارِ سندِ RECEIPT) مشخص می‌کند.
+    default_receivable_cost_center_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    default_receivable_project_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    # طبقِ درخواستِ صریح («ترازوی آفلاین با بارکدِ وزنی -- آیتم/وزنی‌یا
+    # تعدادی/کدِ کالا/وزن، هر بخش با تعدادِ رقمِ قابلِ‌تنظیم»): بارکدِ
+    # چاپ‌شده‌یِ ترازو (بدونِ نیازِ به هیچ ارتباطِ زنده‌یِ سخت‌افزاری) با
+    # یک اسکنرِ معمولی خوانده و همین‌جا رمزگشایی می‌شود.
+    weight_barcode_enabled: Mapped[bool] = mapped_column(default=False)
+    weight_barcode_prefix: Mapped[str] = mapped_column(String(10), default="20")
+    weight_barcode_item_code_digits: Mapped[int] = mapped_column(default=5)
+    weight_barcode_weight_digits: Mapped[int] = mapped_column(default=4)
+    weight_barcode_weight_decimals: Mapped[int] = mapped_column(default=3)
+    # طبقِ توافقِ صریح («فعلاً فقط چارچوبِ اولیه/تنظیماتی برایِ ترازویِ
+    # آنلاین، تا پروتکلِ واقعیِ دستگاه بعداً مشخص/پیاده‌سازی شود»): این
+    # ستون‌ها هنوز به هیچ کدِ ارتباطیِ واقعی وصل نیستند.
+    scale_online_enabled: Mapped[bool] = mapped_column(default=False)
+    scale_connection_type: Mapped[str] = mapped_column(String(20), default="NONE")
+    scale_address: Mapped[str | None] = mapped_column(String(200))
+    scale_batch_barcode_prefix: Mapped[str] = mapped_column(String(10), default="21")
+
+
+class PosMenuGroup(Base):
+    """گروه‌بندیِ کاملاً مستقلِ POS برایِ چیدمانِ تب‌هایِ دسترسیِ‌سریع --
+    معادلِ 113_pos_menu_groups.sql. طبقِ درخواستِ صریح («دسته‌بندیِ
+    مخصوصِ POS، جدا از دسته‌بندیِ عمومیِ انبار»)، این هیچ ربطی به
+    inv.item_categories (سلسله‌مراتبِ کاردکس/گزارش) ندارد."""
+
+    __tablename__ = "pos_menu_groups"
+    __table_args__ = ({"schema": "comm"},)
+
+    group_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(100))
+    display_order: Mapped[int] = mapped_column(default=0)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
+    # مختلف»): پرینترِ مقصدِ این گروه -- نامِ پرینترِ سیستم (از
+    # QPrinterInfo.availablePrinterNames)؛ None یعنی از پرینترِ
+    # پیش‌فرض/دیالوگِ معمولیِ چاپ استفاده شود.
+    target_printer_name: Mapped[str | None] = mapped_column(String(200))
+
+
+class PosCashierSettings(Base):
+    """تنظیماتِ صندوق‌داریِ هر (کاربر، شرکت) -- معادلِ
+    112_pos_cashier_settings.sql. ترمینال/فهرستِ‌قیمت/مشتری هرکدام به یک
+    شرکتِ مشخص تعلق دارند، پس این تنظیمات هم به‌ازایِ شرکت جداست."""
+
+    __tablename__ = "pos_cashier_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    default_terminal_id: Mapped[int | None] = mapped_column(ForeignKey("comm.pos_terminals.terminal_id"))
+    default_price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
+    default_customer_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    # طبقِ درخواستِ صریح («جابه‌جاییِ دستیِ کلیدهایِ فوری با ماوس + عرضِ
+    # قابلِ‌تنظیم، به‌ازایِ هر کاربر»): ترتیبِ کالاها (فهرستِ item_id با
+    # کاما جدا شده) و بازنویسیِ اندازه‌یِ دکمه -- اگر None باشند، از
+    # تنظیماتِ سراسریِ PosSettings استفاده می‌شود.
+    quick_button_order: Mapped[str | None] = mapped_column(Text)
+    quick_button_width_override: Mapped[int | None]
+    quick_button_height_override: Mapped[int | None]
 
 
 # =======================================================================
@@ -279,20 +429,36 @@ class CommercialDocument(Base):
     channel_code: Mapped[str | None] = mapped_column(String(20))
     counterparty_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    # طبقِ درخواستِ صریح («فاکتورِ امانی، هردو جهت»): فقط برایِ
+    # CONSIGNMENT_OUT پر می‌شود -- انبارِ مقصد/محلِ‌نگه‌داریِ کالایِ امانی
+    # نزدِ طرفِ‌حساب (warehouse_id همان انبارِ مبدا/اصلیِ شرکت می‌ماند).
+    consignment_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
     source_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
     linked_exchange_document_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("comm.commercial_documents.document_id")
     )
     pos_session_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.pos_sessions.session_id"))
+    # طبقِ رفعِ شکافِ کشف‌شده: کاریرِ POS فقط confirm می‌کند و نوعِ پرداختِ
+    # موردنظرش (نقدی/نسیه) را یادداشت می‌کند؛ ثبتِ واقعیِ پرداخت/سندِ
+    # حسابداری با تاییدِ سرپرست، جداگانه (در زمانِ approve/post) انجام می‌شود.
+    pos_intended_payment_type: Mapped[str | None] = mapped_column(String(10))
     currency_id: Mapped[int] = mapped_column(ForeignKey("core.currencies.currency_id"))
     exchange_rate: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     requested_delivery_date: Mapped[datetime.date | None] = mapped_column(Date)
+    # طبقِ درخواستِ صریح («موعدِ تسویه را بر اساسِ تعاریفِ طرفِ‌حساب نمایش
+    # بدهد و بتوان ویرایشش کرد»): در لحظه‌یِ ساخت از رویِ payment_term_days
+    # طرفِ‌حساب محاسبه می‌شود، ولی دستی هم قابلِ‌تغییر است.
+    due_date: Mapped[datetime.date | None] = mapped_column(Date)
     sales_rep_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     reference_no: Mapped[str | None] = mapped_column(String(50))
     description: Mapped[str | None] = mapped_column(Text)
+    # طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): NULL یعنی از
+    # پیش‌فرضِ سراسریِ شرکت (Feature Toggleِ INFORMAL_TAX_POSTING) پیروی
+    # کن؛ OFFICIAL/INFORMAL یعنی override رویِ همین سند.
+    tax_posting_mode: Mapped[str | None] = mapped_column(String(10))
     subtotal_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     discount_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     tax_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -302,6 +468,16 @@ class CommercialDocument(Base):
     )
     stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
     journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    # طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند، بدونِ
+    # backdate»): این فاکتور به‌جایِ ویرایشِ فاکتورِ قدیمی، رفرنسِ صریح به
+    # آن دارد (corrects_document_id) و فاکتورِ قدیمی هم رفرنسِ برعکس به
+    # این یکی دارد (corrected_by_document_id) -- هردو self-FK.
+    corrects_document_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("comm.commercial_documents.document_id")
+    )
+    corrected_by_document_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("comm.commercial_documents.document_id")
+    )
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     posted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
@@ -329,6 +505,10 @@ class CommercialDocumentLine(Base):
     )
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("inv.batches.batch_id"))
     serial_id: Mapped[int | None] = mapped_column(ForeignKey("inv.serial_numbers.serial_id"))
+    # طبقِ درخواستِ صریح («کالایِ ردیف بتواند انبارِ مستقل از هدر داشته
+    # باشد») — Toggleِ اختیاریِ PER_LINE_WAREHOUSE. خالی یعنی از انبارِ
+    # هدر استفاده شود (رفتارِ قدیم، بدونِ تغییر).
+    warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     source_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
     stock_document_line_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("inv.stock_document_lines.line_id")
@@ -336,6 +516,11 @@ class CommercialDocumentLine(Base):
     reservation_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_reservations.reservation_id"))
     received_quantity_total: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
     invoiced_quantity_total: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
+    # طبقِ درخواستِ صریح («فاکتورِ امانی، هردو جهت»): فقط برایِ ردیفِ
+    # CONSIGNMENT_OUT/CONSIGNMENT_IN معنا دارد -- مقدارِ بازگردانده‌شده
+    # (کالایِ فروخته‌نشده/مصرف‌نشده)، مکمّلِ source_line_id (که مقدارِ
+    # تسویه‌شده را نشان می‌دهد) برایِ محاسبه‌یِ مانده‌یِ واقعی.
+    returned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
     bundle_parent_line_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("comm.commercial_document_lines.line_id")
     )
@@ -413,6 +598,15 @@ class CustomerProfile(Base):
     default_sales_rep_detail_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("comm.sales_representatives.rep_detail_account_id")
     )
+    # طبقِ درخواستِ صریح («ماژولِ پخشِ سرد/گرم»): مسیرِ توزیعِ این مشتری --
+    # برگِ نوع‌بُعدِ تخصصیِ DISTRIBUTION_ROUTE (detail_dimensions.py).
+    distribution_route_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    # طبقِ درخواستِ صریح («فاصله از موقعیتِ مشتری» در چک‌این): مختصاتِ
+    # ثبت‌شدهٔ خودِ فروشگاه/محلِ کسبِ مشتری (R129).
+    gps_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    gps_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
     status_code: Mapped[str] = mapped_column(String(20), default="ACTIVE")
     onboarding_source_code: Mapped[str | None] = mapped_column(String(15))
     is_tax_exempt: Mapped[bool] = mapped_column(default=False)
@@ -610,10 +804,24 @@ class InstallmentPlan(Base):
     __table_args__ = ({"schema": "comm"},)
 
     plan_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    # طبقِ موردِ ۵ («روشِ اقساط منوط به فاکتور نباشد»): document_id دیگر
+    # الزامی نیست -- NULL یعنی طرحِ اقساطِ آزاد، که در آن صورت سه فیلدِ
+    # زیر (company_id/counterparty_detail_account_id/direction) جایگزینِ
+    # همان اطلاعاتی می‌شوند که پیش‌تر از رویِ سند استنتاج می‌شد.
+    document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("core.companies.company_id"))
+    counterparty_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    direction: Mapped[str | None] = mapped_column(String(10))  # RECEIPT | PAYMENT -- فقط برایِ طرحِ بدونِ فاکتور
     number_of_installments: Mapped[int] = mapped_column(SmallInteger)
     first_due_date: Mapped[datetime.date] = mapped_column(Date)
     status_code: Mapped[str] = mapped_column(String(15), default="ACTIVE")
+    # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط و هزینه‌هایِ متفرقه»): اصلِ مبلغ
+    # (بدونِ بهره/هزینه) + پارامترهایِ محاسبه‌یِ مبلغِ نهایی + فاصله‌یِ
+    # سررسیدِ قابلِ‌تنظیم (پیش‌فرض ۳۰ روز، رفتارِ قبلی).
+    principal_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    interest_rate_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(6, 3), default=decimal.Decimal("0"))
+    misc_fee_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal("0"))
+    due_interval_days: Mapped[int] = mapped_column(SmallInteger, default=30)
 
 
 class InstallmentLine(Base):
@@ -625,8 +833,30 @@ class InstallmentLine(Base):
     installment_no: Mapped[int] = mapped_column(SmallInteger)
     due_date: Mapped[datetime.date] = mapped_column(Date)
     amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    # طبقِ موردِ ۶: سهمِ این قسط از بهره/هزینه‌یِ متفرقه (زیرمجموعه‌یِ
+    # amount، نه جدا از آن) -- برایِ تفکیکِ اصل/بهره در گزارش‌گیری.
+    interest_fee_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal("0"))
     status_code: Mapped[str] = mapped_column(String(15), default="PENDING")
     paid_journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+
+
+class InstallmentCollection(Base):
+    """طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): هر رویدادِ
+    وصول (کامل یا جزئی) رویِ یک قسط، جداگانه این‌جا ثبت می‌شود -- مجموعِ
+    amount این ردیف‌ها برایِ یک line_id همان مبلغِ وصول‌شده‌یِ آن قسط
+    است. هم‌الگو با InvoiceSettlement برایِ فاکتورها."""
+
+    __tablename__ = "installment_collections"
+    __table_args__ = ({"schema": "comm"},)
+
+    collection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.installment_lines.line_id"))
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    collection_date: Mapped[datetime.date] = mapped_column(Date)
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    description: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 # =======================================================================
@@ -648,6 +878,25 @@ class MarketplaceConnection(Base):
     warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     sync_status: Mapped[str] = mapped_column(String(15), default="ACTIVE")
     last_synced_at: Mapped[datetime.datetime | None]
+    auto_sync_enabled: Mapped[bool] = mapped_column(default=False)
+    auto_sync_interval_minutes: Mapped[int] = mapped_column(default=60)
+    # طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): تیکِ اتوسینک شکست‌هایِ
+    # پیاپی را این‌جا ثبت می‌کند تا صفحه‌یِ نگهبان بتواند نشانشان دهد.
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
+
+
+class EcommercePricingRule(Base):
+    __tablename__ = "ecommerce_pricing_rules"
+    __table_args__ = (UniqueConstraint("connection_id", "scope_type_code", "scope_id"), {"schema": "comm"})
+
+    rule_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.marketplace_connections.connection_id"))
+    scope_type_code: Mapped[str] = mapped_column(String(10))  # CATEGORY|BRAND
+    scope_id: Mapped[int] = mapped_column(BigInteger)
+    markup_type_code: Mapped[str] = mapped_column(String(10))  # PERCENT|AMOUNT
+    markup_value: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
 
 
 class MarketplaceOrderSyncLog(Base):
@@ -682,6 +931,16 @@ class MarketplaceCustomerMapping(Base):
     connection_id: Mapped[int] = mapped_column(ForeignKey("comm.marketplace_connections.connection_id"))
     external_customer_id: Mapped[str] = mapped_column(String(100))
     customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
+class MarketplaceCategoryMapping(Base):
+    __tablename__ = "marketplace_category_mappings"
+    __table_args__ = (UniqueConstraint("connection_id", "category_id"), {"schema": "comm"})
+
+    mapping_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.marketplace_connections.connection_id"))
+    category_id: Mapped[int] = mapped_column(ForeignKey("inv.item_categories.category_id"))
+    external_category_id: Mapped[str] = mapped_column(String(100))
 
 
 class MarketplaceInventoryPushLog(Base):
@@ -791,10 +1050,18 @@ class LandedCostAllocation(Base):
     purchase_invoice_document_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("comm.commercial_documents.document_id")
     )
-    cost_type_code: Mapped[str] = mapped_column(String(15))  # FREIGHT|CUSTOMS|INSURANCE|HANDLING|OTHER
+    cost_type_code: Mapped[str | None] = mapped_column(String(15))  # FREIGHT|CUSTOMS|INSURANCE|HANDLING|OTHER
     amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
-    allocation_method_code: Mapped[str] = mapped_column(String(15))  # BY_VALUE|BY_QUANTITY|BY_WEIGHT
+    allocation_method_code: Mapped[str | None] = mapped_column(String(15))  # BY_VALUE|BY_QUANTITY|BY_WEIGHT
     notes: Mapped[str | None] = mapped_column(String(500))
+    # طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه، حسابِ معین و تفصیلیِ
+    # بستانکار را بتوانیم وارد کنیم»): حسابِ آزادانه‌ای که با ثبتِ نهاییِ
+    # فاکتورِ خرید بستانکار می‌شود (مثلاً یک تفصیلیِ گروهِ «سفارشاتِ در
+    # راه») -- نه یک نقشِ ثابت.
+    credit_account_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("acc.chart_of_accounts.account_id"))
+    credit_detail_account_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("acc.detail_accounts.detail_account_id")
+    )
 
 
 class VendorRebateAgreement(Base):
@@ -868,6 +1135,11 @@ class CommercialAccountMapping(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     mapping_key: Mapped[str] = mapped_column(String(30), primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    # طبقِ درخواستِ صریح («برایِ فاکتورِ فروش هم تفصیلیِ ثابت برایِ
+    # مالیات، مثلِ فاکتورِ خرید»): تفصیلیِ ثابتِ ازپیش‌تخصیص‌یافته برایِ
+    # این حسابِ نقش‌محور -- دقیقاً هم‌الگو با
+    # inv.account_mappings.detail_account_id.
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
 class CommercialFeatureDefinition(Base):
@@ -917,3 +1189,499 @@ class DocumentNumberingSequence(Base):
     prefix: Mapped[str] = mapped_column(String(10), default="")
     next_number: Mapped[int] = mapped_column(BigInteger, default=1)
     reset_policy_code: Mapped[str] = mapped_column(String(10), default="YEARLY")
+
+
+# =======================================================================
+# تسویه‌یِ فاکتور — معادلِ 094_invoice_settlements.sql /
+# 095_settlement_alarm_settings.sql
+# =======================================================================
+class InvoiceSettlement(Base):
+    __tablename__ = "invoice_settlements"
+    __table_args__ = ({"schema": "comm"},)
+
+    settlement_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    invoice_document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    settlement_date: Mapped[datetime.date] = mapped_column(Date)
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    reference_no: Mapped[str | None] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class SettlementAlarmSettings(Base):
+    __tablename__ = "settlement_alarm_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    is_enabled: Mapped[bool] = mapped_column(default=False)
+    alarm_days_before: Mapped[int] = mapped_column(SmallInteger, default=2)
+
+
+# طبقِ درخواستِ صریح («دکمه‌یِ نحوهٔ تسویه در فرمِ فاکتور»): نقشه‌یِ
+# ترکیبیِ تسویه (چند روش هم‌زمان + مانده به‌عنوانِ نسیه) که پیش از ثبتِ
+# نهایی با فاکتور نگهداری و نیازِ تاییدِ مدیر دارد — معادلِ
+# 116_settlement_plans.sql
+class CommercialDocumentSettlementPlan(Base):
+    __tablename__ = "commercial_document_settlement_plans"
+    __table_args__ = ({"schema": "comm"},)
+
+    plan_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"), unique=True)
+    status_code: Mapped[str] = mapped_column(String(20), default="PENDING_APPROVAL")
+    total_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    approved_at: Mapped[datetime.datetime | None]
+
+
+class CommercialDocumentSettlementPlanLine(Base):
+    __tablename__ = "commercial_document_settlement_plan_lines"
+    __table_args__ = ({"schema": "comm"},)
+
+    line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_settlement_plans.plan_id"))
+    method_code: Mapped[str] = mapped_column(String(30))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    note: Mapped[str | None] = mapped_column(String(200))
+    display_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
+class PosSettlementMethodDefault(Base):
+    """پیش‌فرضِ تفصیلی (+ مرکزِ هزینه/پروژه) به‌ازایِ هر روشِ دریافت/پرداختِ
+    فرمِ «نحوهٔ تسویه»یِ تک‌فروشی -- تا در لحظهٔ فروش دوباره پرسیده نشود."""
+
+    __tablename__ = "pos_settlement_method_defaults"
+    __table_args__ = (UniqueConstraint("company_id", "method_code"), {"schema": "comm"})
+
+    default_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    method_code: Mapped[str] = mapped_column(String(30))
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+
+
+# =======================================================================
+# مدیریتِ سفارشات — معادلِ 103_order_management.sql
+# =======================================================================
+class OrderTrackingSetting(Base):
+    """تنظیمِ یک‌بارهٔ هر شرکت: کدام گروهِ تفصیلی «سفارشاتِ در راه» است."""
+
+    __tablename__ = "order_tracking_settings"
+    __table_args__ = ({"schema": "comm"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    dimension_type_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_dimension_types.dimension_type_id"))
+    # طبقِ درخواستِ صریح («امکانِ دیدنِ عکس برایِ همه‌یِ کاربرانِ شبکه»):
+    # اگر تنظیم شود، ضمیمه‌ها این‌جا (مثلاً یک مسیرِ شبکه‌ایِ اشتراکی)
+    # ذخیره می‌شوند، نه در پوشهٔ محلیِ تنظیماتِ همان کامپیوتر.
+    attachments_dir: Mapped[str | None] = mapped_column(String(500))
+
+
+class OrderTracking(Base):
+    """یک سفارش -- دقیقاً یک تفصیلیِ همان گروهِ تعیین‌شده در
+    OrderTrackingSetting را دنبال می‌کند. پرداخت‌هایِ خودِ سفارش این‌جا
+    ذخیره نمی‌شوند -- با پرس‌وجویِ acc.journal_entry_line_details بر
+    اساسِ همین detail_account_id به‌دست می‌آیند (طبقِ اصلِ «هرچه از
+    داده‌هایِ حسابداریِ موجود مشتق می‌شود، دوباره ذخیره نشود»)."""
+
+    __tablename__ = "order_trackings"
+    __table_args__ = ({"schema": "comm"},)
+
+    order_tracking_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"), unique=True)
+    description: Mapped[str | None] = mapped_column(String(500))
+    status_code: Mapped[str] = mapped_column(String(15), default="OPEN")  # OPEN | CLOSED
+    opened_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    opened_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    closed_at: Mapped[datetime.datetime | None]
+
+
+class OrderPaymentTitle(Base):
+    """طبقِ درخواستِ صریح («عنوانِ پرداخت» در فرمِ افزودنِ پرداختِ سفارش):
+    فهرستِ قابلِ‌گسترشِ عنوان‌هایی مثلِ «هزینه‌یِ ترخیص»/«بهایِ اولیه‌یِ
+    کالا» که کاربر با دکمه‌یِ + همان‌جا اضافه می‌کند -- معادلِ
+    104_order_payment_titles.sql."""
+
+    __tablename__ = "order_payment_titles"
+    __table_args__ = (UniqueConstraint("company_id", "label"), {"schema": "comm"})
+
+    payment_title_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    label: Mapped[str] = mapped_column(String(200))
+
+
+class PosInvoiceAuditLog(Base):
+    """طبقِ درخواستِ صریح («فاکتورهایِ صادرشده تا قبل از ثبتِ سند توسطِ
+    صندوق‌دار هم بتونه حذف و اصلاح کنه و در هنگامِ بستنِ شیفت، فاکتورهایِ
+    اصلاح‌شده و حذف‌شده به سرپرست گزارش بشه»): معادلِ 117_pos_invoice_
+    audit.sql."""
+
+    __tablename__ = "pos_invoice_audit_log"
+    __table_args__ = ({"schema": "comm"},)
+
+    audit_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    pos_session_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.pos_sessions.session_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    action_code: Mapped[str] = mapped_column(String(20))
+    performed_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    performed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    note: Mapped[str | None] = mapped_column(String(300))
+
+
+class SocialConnection(Base):
+    """طبقِ درخواستِ صریح («پستِ خودکار در تلگرام و بله»): تلگرام و بله
+    (tapi.bale.ai) هردو دقیقاً همان Bot APIِ استاندارد را پیاده می‌کنند --
+    یک جدولِ اتصالِ مشترک با platform_code کافی است."""
+
+    __tablename__ = "social_connections"
+    __table_args__ = (CheckConstraint("platform_code IN ('TELEGRAM', 'BALE')"), {"schema": "comm"})
+
+    connection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    platform_code: Mapped[str] = mapped_column(String(10))
+    display_name: Mapped[str] = mapped_column(String(100))
+    chat_id: Mapped[str] = mapped_column(String(100))
+    bot_token_encrypted: Mapped[bytes | None]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # طبقِ ادامه‌یِ اولویت‌بندی («نگهبانِ اتصال»): هم‌الگو با MarketplaceConnection.
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
+
+
+class VoipConnection(Base):
+    """طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال یا وویپ»): تنظیماتِ
+    اتصالِ AMIِ آستریسک/ایزابل -- برخلافِ SocialConnection که چندگانگی
+    (چند بات) معنا دارد، هر شرکت معمولاً فقط یک سانترال دارد، پس
+    company_id یکتا است (هم‌الگو با PricingPolicy)."""
+
+    __tablename__ = "voip_connections"
+    __table_args__ = (UniqueConstraint("company_id"), {"schema": "comm"})
+
+    connection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    host: Mapped[str] = mapped_column(String(200))
+    # INT، نه SMALLINT: پورتِ TCP می‌تواند تا ۶۵۵۳۵ باشد -- بیشتر از
+    # سقفِ SMALLINTِ علامت‌دار (۳۲۷۶۷).
+    port: Mapped[int] = mapped_column(default=5038)
+    dial_context: Mapped[str] = mapped_column(String(50), default="from-internal")
+    channel_tech_prefix: Mapped[str] = mapped_column(String(20), default="PJSIP")
+    credentials_encrypted: Mapped[bytes | None]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
+
+
+class SmsGatewaySettings(Base):
+    """طبقِ درخواستِ صریح («ارسالِ پیامکِ زمان‌بندی‌شده»): چون ارائه‌دهنده
+    مشخص نبود و APIِ دقیقش پیدا نشد، به‌جایِ سخت‌کدکردن، کلِ الگویِ URL
+    (با {phone}/{text}) رمزنگاری‌شده ذخیره می‌شود -- هم‌الگو با
+    VoipConnection (یک ردیفِ یکتا به‌ازایِ هر شرکت)."""
+
+    __tablename__ = "sms_gateway_settings"
+    __table_args__ = (UniqueConstraint("company_id"), {"schema": "comm"})
+
+    setting_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    request_template_encrypted: Mapped[bytes | None]
+    http_method: Mapped[str] = mapped_column(String(10), default="GET")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class SmsCampaign(Base):
+    """طبقِ درخواستِ صریح («یک تب برایِ بازاریابی و ارسالِ پیامکِ
+    زمان‌بندی‌شده»)."""
+
+    __tablename__ = "sms_campaigns"
+    __table_args__ = ({"schema": "comm"},)
+
+    campaign_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(150))
+    message_text: Mapped[str] = mapped_column(String(500))
+    scheduled_at: Mapped[datetime.datetime]
+    status_code: Mapped[str] = mapped_column(String(15), default="PENDING")
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    sent_at: Mapped[datetime.datetime | None]
+
+
+class SmsCampaignRecipient(Base):
+    """طبقِ تصمیمِ طراحیِ MVP: گیرندگان در لحظهٔ ساختِ کمپین، از فهرستِ
+    مشتریانِ اختصاص‌یافته به کاربرِ سازنده (telesales.list_assigned_customers،
+    R135) عکس‌برداری می‌شوند."""
+
+    __tablename__ = "sms_campaign_recipients"
+    __table_args__ = ({"schema": "comm"},)
+
+    recipient_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.sms_campaigns.campaign_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    phone_number: Mapped[str] = mapped_column(String(30))
+    status_code: Mapped[str] = mapped_column(String(15), default="PENDING")
+    sent_at: Mapped[datetime.datetime | None]
+    error_message: Mapped[str | None] = mapped_column(String(500))
+
+
+class ContentCalendarPost(Base):
+    """طبقِ درخواستِ صریح («تقویمِ محتوایی»): هر پست به یک اتصالِ مشخص
+    زمان‌بندی می‌شود؛ run_due_posts (تیکِ هر یک‌دقیقه‌ایِ شل، هم‌الگو با
+    اتوسینکِ فروشِ اینترنتی) پست‌هایِ سررسیده را خودکار ارسال می‌کند."""
+
+    __tablename__ = "content_calendar_posts"
+    __table_args__ = (
+        CheckConstraint("status_code IN ('SCHEDULED', 'SENT', 'FAILED', 'CANCELED')"), {"schema": "comm"},
+    )
+
+    post_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.social_connections.connection_id"))
+    title: Mapped[str | None] = mapped_column(String(200))
+    body_text: Mapped[str] = mapped_column(Text)
+    scheduled_at: Mapped[datetime.datetime]
+    status_code: Mapped[str] = mapped_column(String(15), default="SCHEDULED")
+    sent_at: Mapped[datetime.datetime | None]
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class AiContentSettings(Base):
+    """طبقِ درخواستِ صریح («تولیدِ محتوایِ خودکار با هوش مصنوعی»): کلیدِ
+    APIِ Geminiِ هر شرکت -- هم‌الگو با اعتبارِ رمزنگاری‌شده‌یِ اتصال‌هایِ
+    فروشگاه/بات."""
+
+    __tablename__ = "ai_content_settings"
+    __table_args__ = {"schema": "comm"}
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    api_key_encrypted: Mapped[bytes | None]
+
+
+class CmsConnection(Base):
+    """طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): اتصال به وردپرس از
+    طریقِ WP REST APIِ استاندارد (Application Password) -- هم‌الگو با
+    اتصالِ فروشگاهی/بات."""
+
+    __tablename__ = "cms_connections"
+    __table_args__ = (CheckConstraint("platform_code IN ('WORDPRESS')"), {"schema": "comm"})
+
+    connection_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    platform_code: Mapped[str] = mapped_column(String(10))
+    display_name: Mapped[str] = mapped_column(String(100))
+    site_url: Mapped[str] = mapped_column(String(300))
+    username: Mapped[str] = mapped_column(String(100))
+    app_password_encrypted: Mapped[bytes | None]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # طبقِ ادامه‌یِ اولویت‌بندی («بررسیِ سلامتِ سایت»): هم‌الگو با
+    # MarketplaceConnection/SocialConnection.
+    consecutive_failure_count: Mapped[int] = mapped_column(default=0)
+    last_error_message: Mapped[str | None] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime.datetime | None]
+
+
+class CmsArticle(Base):
+    """طبقِ ادامه‌یِ اولویتِ بخشِ محتوا («سینکِ CMS»): external_post_id پس
+    از اولین انتشار پر می‌شود تا سینک‌هایِ بعدی همان پستِ وردپرس را
+    به‌روزرسانی کنند، نه اینکه هر بار پستِ تازه بسازند."""
+
+    __tablename__ = "cms_articles"
+    __table_args__ = (CheckConstraint("status_code IN ('DRAFT', 'PUBLISHED', 'FAILED')"), {"schema": "comm"})
+
+    article_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.cms_connections.connection_id"))
+    title: Mapped[str] = mapped_column(String(300))
+    body_html: Mapped[str] = mapped_column(Text)
+    status_code: Mapped[str] = mapped_column(String(15), default="DRAFT")
+    external_post_id: Mapped[str | None] = mapped_column(String(50))
+    external_url: Mapped[str | None] = mapped_column(String(500))
+    published_at: Mapped[datetime.datetime | None]
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class OnlineCoupon(Base):
+    """طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync -- کوپن/
+    کدِ تخفیفِ فروشگاهی»): کوپن در ERP تعریف می‌شود و به فروشگاه پوش
+    می‌شود -- external_coupon_id پس از اولین سینک پر می‌شود."""
+
+    __tablename__ = "online_coupons"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "code"),
+        CheckConstraint("discount_type_code IN ('PERCENT', 'FIXED_CART', 'FIXED_PRODUCT')"),
+        CheckConstraint("sync_status IN ('PENDING', 'SYNCED', 'FAILED')"),
+        {"schema": "comm"},
+    )
+
+    coupon_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    connection_id: Mapped[int] = mapped_column(ForeignKey("comm.marketplace_connections.connection_id"))
+    code: Mapped[str] = mapped_column(String(50))
+    discount_type_code: Mapped[str] = mapped_column(String(15))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    valid_from: Mapped[datetime.date | None]
+    valid_until: Mapped[datetime.date | None]
+    usage_limit: Mapped[int | None]
+    external_coupon_id: Mapped[str | None] = mapped_column(String(50))
+    sync_status: Mapped[str] = mapped_column(String(15), default="PENDING")
+    last_sync_error: Mapped[str | None] = mapped_column(String(500))
+    last_synced_at: Mapped[datetime.datetime | None]
+    is_active: Mapped[bool] = mapped_column(default=True)
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class SmartPublishSettings(Base):
+    """طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync -- Smart
+    Publish»): تنظیماتِ پردازشِ خودکارِ تصویرِ محصول -- یک ردیف به‌ازایِ
+    هر شرکت، هم‌الگو با AiContentSettings."""
+
+    __tablename__ = "smart_publish_settings"
+    __table_args__ = (
+        CheckConstraint("watermark_position IN ('bottom-right', 'bottom-left', 'top-right', 'top-left', 'center')"),
+        CheckConstraint("stamp_text_source IN ('item_code', 'item_name')"),
+        {"schema": "comm"},
+    )
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    watermark_storage_key: Mapped[str | None] = mapped_column(String(500))
+    watermark_opacity: Mapped[decimal.Decimal] = mapped_column(Numeric(4, 3), default=decimal.Decimal("0.5"))
+    watermark_scale: Mapped[decimal.Decimal] = mapped_column(Numeric(4, 3), default=decimal.Decimal("0.2"))
+    watermark_position: Mapped[str] = mapped_column(String(20), default="bottom-right")
+    stamp_text_enabled: Mapped[bool] = mapped_column(default=False)
+    stamp_text_source: Mapped[str] = mapped_column(String(20), default="item_code")
+    webp_quality: Mapped[int] = mapped_column(default=80)
+
+
+# =======================================================================
+# زیرساختِ میدانیِ پخشِ سرد/گرم (R129) -- معادلِ 136_field_sales_foundation.sql
+# =======================================================================
+class VisitPlan(Base):
+    __tablename__ = "visit_plans"
+    __table_args__ = (UniqueConstraint("customer_detail_account_id", "visit_day_of_week"), {"schema": "comm"})
+
+    visit_plan_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    visit_day_of_week: Mapped[int] = mapped_column(SmallInteger)
+    sequence_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+    assigned_visitor_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CustomerVisit(Base):
+    __tablename__ = "customer_visits"
+    __table_args__ = ({"schema": "comm"},)
+
+    customer_visit_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    visit_plan_id: Mapped[int | None] = mapped_column(ForeignKey("comm.visit_plans.visit_plan_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    visitor_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="IN_PROGRESS")
+    skip_reason: Mapped[str | None] = mapped_column(String(200))
+    checked_in_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    checked_out_at: Mapped[datetime.datetime | None]
+    check_in_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    check_in_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    distance_from_customer_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class DeliveryConfirmation(Base):
+    __tablename__ = "delivery_confirmations"
+    __table_args__ = (UniqueConstraint("document_id"), {"schema": "comm"})
+
+    delivery_confirmation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    customer_visit_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.customer_visits.customer_visit_id"))
+    confirmed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    confirmed_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    received_by_name: Mapped[str | None] = mapped_column(String(150))
+    signature_storage_key: Mapped[str | None] = mapped_column(String(300))
+    photo_storage_key: Mapped[str | None] = mapped_column(String(300))
+    gps_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    gps_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class DeliveryConfirmationLine(Base):
+    __tablename__ = "delivery_confirmation_lines"
+    __table_args__ = ({"schema": "comm"},)
+
+    delivery_confirmation_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    delivery_confirmation_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("comm.delivery_confirmations.delivery_confirmation_id")
+    )
+    document_line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
+    delivered_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    shortage_reason: Mapped[str | None] = mapped_column(String(200))
+
+
+class PromotionRule(Base):
+    __tablename__ = "promotion_rules"
+    __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "comm"})
+
+    promotion_rule_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    promotion_type_code: Mapped[str] = mapped_column(String(20))
+    channel_type_code: Mapped[str | None] = mapped_column(String(15))
+    applies_to_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    buy_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    get_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    get_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    threshold_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    discount_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    valid_from: Mapped[datetime.date | None]
+    valid_to: Mapped[datetime.date | None]
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CustomerSalesNote(Base):
+    """صفحه‌یِ فروشِ تلفنی -- برخلافِ acc.customer_details.notes (یک
+    فیلدِ تکیِ قابلِ‌بازنویسی)، این یک لاگِ تاریخ‌دار است تا یادداشتِ
+    تماس‌هایِ قبلی از دست نرود."""
+
+    __tablename__ = "customer_sales_notes"
+    __table_args__ = ({"schema": "comm"},)
+
+    note_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    note_text: Mapped[str] = mapped_column(String(1000))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CustomerCallLog(Base):
+    """طبقِ درخواستِ صریح («مکالماتِ هر مشتری در پروفایلش ذخیره بشه») --
+    این‌جا فقط تماس‌هایِ خودمان (Originateِ AMIِ R137) ثبت می‌شود؛
+    تماسِ ورودی/CDR فازِ بعدی است (نیازِ اتصالِ MySQLِ جداگانه دارد)."""
+
+    __tablename__ = "customer_call_logs"
+    __table_args__ = ({"schema": "comm"},)
+
+    call_log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    agent_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    phone_number: Mapped[str] = mapped_column(String(30))
+    started_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    was_successful: Mapped[bool] = mapped_column(Boolean)
+    note: Mapped[str | None] = mapped_column(String(500))

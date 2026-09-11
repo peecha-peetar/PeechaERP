@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import decimal
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -11,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -19,7 +22,21 @@ from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settings as settings_service
+from peecha.services import commercial_settlements as settlements_service
+from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import sms_gateway as sms_gateway_service
+from peecha.services import voip_settings as voip_settings_service
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
+
+# طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
+# برایِ انتخابش نیست» -- هم‌الگو با inventory_settings._AccountMappingsTab):
+# این بُعدها یا از سرِسند (مرکزِ هزینه/پروژه)، یا از انبارِ سند (مرکزِ
+# سود)، یا از خودِ ردیف (کالا -- طبقِ _build_role_je_lines خودکار
+# تفکیک می‌شود) تامین می‌شوند؛ هر نوع‌بُعدِ دیگری باقی می‌ماند.
+_AUTO_SUPPLIED_DIMENSION_CODES = (
+    dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE,
+    dimensions_service.PROFIT_CENTER_CODE, dimensions_service.INVENTORY_ITEM_CODE,
+)
 
 
 def _company_id() -> int | None:
@@ -30,6 +47,12 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._combos: dict[str, QComboBox] = {}
+        # طبقِ رفعِ باگِ واقعی («برایِ فاکتورِ فروش هم تفصیلیِ ثابت برایِ
+        # مالیات، مثلِ فاکتورِ خرید»): کنارِ هر معینِ نقش‌محور، یک کمبویِ
+        # «تفصیلیِ ثابت» -- فقط وقتی آن معین واقعاً یک بُعدِ تفصیلیِ دیگر
+        # را الزامی کرده باشد، فعال/پرشده نمایش داده می‌شود.
+        self._detail_combos: dict[str, QComboBox] = {}
+        self._detail_required: dict[str, bool] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
@@ -38,13 +61,24 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         layout.addWidget(title)
         layout.addWidget(QLabel("حساب‌هایِ دریافتنیِ مشتریان/پرداختنیِ تامین‌کنندگان از تنظیماتِ انبار می‌آیند و این‌جا تکرار نمی‌شوند."))
 
-        for key in settings_service.MAPPING_LABELS:
+        mapping_fields = []
+        for key, label in settings_service.MAPPING_LABELS.items():
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
             combo = QComboBox()
-            combo.setMinimumWidth(280)
+            combo.setMinimumWidth(220)
+            row_layout.addWidget(combo, stretch=2)
+            detail_combo = QComboBox()
+            detail_combo.setMinimumWidth(160)
+            detail_combo.setEnabled(False)
+            row_layout.addWidget(detail_combo, stretch=1)
+            combo.currentIndexChanged.connect(lambda _index, k=key: self._on_account_changed(k))
             self._combos[key] = combo
-        self.mappings_grid = FieldGrid(
-            [FieldSpec(key, label, self._combos[key], span=2) for key, label in settings_service.MAPPING_LABELS.items()]
-        )
+            self._detail_combos[key] = detail_combo
+            mapping_fields.append(FieldSpec(key, label, row_widget, span=3))
+        self.mappings_grid = FieldGrid(mapping_fields, columns=3)
         layout.addWidget(self.mappings_grid)
         self.register_field_grids("commercial_settings_account_mappings", [self.mappings_grid])
 
@@ -60,20 +94,61 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
         layout.addWidget(save_button, alignment=Qt.AlignLeft)
         layout.addStretch(1)
 
+    def _on_account_changed(self, key: str, preselect_detail_id: int | None = None) -> None:
+        detail_combo = self._detail_combos[key]
+        account_id = self._combos[key].currentData()
+        company_id = _company_id()
+        detail_combo.blockSignals(True)
+        detail_combo.clear()
+        if account_id is None or company_id is None:
+            detail_combo.setEnabled(False)
+            self._detail_required[key] = False
+            detail_combo.blockSignals(False)
+            return
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        other_dims = [d for d in required if d.code not in _AUTO_SUPPLIED_DIMENSION_CODES]
+        options = []
+        for dim in other_dims:
+            label_prefix = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code)
+            for d in dim.detail_accounts:
+                options.append((d.detail_account_id, f"{label_prefix}: {d.full_code} — {d.name or ''}"))
+        required_groups = dimensions_service.get_required_person_groups_for_account(account_id)
+        if required_groups:
+            group_ids = {g.person_group_id for g in required_groups}
+            persons = [p for p in dimensions_service.list_active_persons(company_id) if p.person_group_id in group_ids]
+            group_names = {g.person_group_id: g.name for g in required_groups}
+            for p in persons:
+                prefix = group_names.get(p.person_group_id, "")
+                options.append((p.detail_account_id, f"{prefix}: {p.full_code} — {p.name or ''}"))
+        self._detail_required[key] = bool(options)
+        if not options:
+            detail_combo.setEnabled(False)
+            detail_combo.blockSignals(False)
+            return
+        detail_combo.addItem("(تعیین‌نشده — الزامی)", None)
+        for detail_id, label in options:
+            detail_combo.addItem(label, detail_id)
+        if preselect_detail_id is not None:
+            detail_combo.setCurrentIndex(max(0, detail_combo.findData(preselect_detail_id)))
+        detail_combo.setEnabled(True)
+        detail_combo.blockSignals(False)
+
     def refresh(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
         accounts = [(a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable]
-        current_by_key = {row.mapping_key: row.account_id for row in settings_service.list_account_mappings(company_id)}
+        current_by_key = {row.mapping_key: (row.account_id, row.detail_account_id) for row in settings_service.list_account_mappings(company_id)}
         for key, combo in self._combos.items():
+            account_id, detail_account_id = current_by_key.get(key, (None, None))
             combo.blockSignals(True)
             combo.clear()
             combo.addItem("(تعیین‌نشده)", None)
-            for account_id, label in accounts:
-                combo.addItem(label, account_id)
-            combo.setCurrentIndex(max(0, combo.findData(current_by_key.get(key))))
+            for acc_id, label in accounts:
+                combo.addItem(label, acc_id)
+            combo.setCurrentIndex(max(0, combo.findData(account_id)))
             combo.blockSignals(False)
+            self._on_account_changed(key, preselect_detail_id=detail_account_id)
         self.status_label.setText("")
 
     def _save(self) -> None:
@@ -82,8 +157,13 @@ class _AccountMappingsTab(LayoutEditMixin, QWidget):
             return
         for key, combo in self._combos.items():
             account_id = combo.currentData()
-            if account_id is not None:
-                settings_service.set_account_mapping(company_id, key, account_id)
+            if account_id is None:
+                continue
+            if self._detail_required.get(key) and self._detail_combos[key].currentData() is None:
+                self.status_label.setObjectName("statusError")
+                self.status_label.setText(f"حسابِ «{settings_service.MAPPING_LABELS[key]}» یک تفصیلیِ ثابت هم لازم دارد.")
+                return
+            settings_service.set_account_mapping(company_id, key, account_id, self._detail_combos[key].currentData())
         self.status_label.setObjectName("statusSuccess")
         self.status_label.setText("ذخیره شد.")
 
@@ -183,6 +263,282 @@ class _IndustryProfileTab(QWidget):
         self.status_label.setText("نمایه اعمال شد.")
 
 
+class _PricingPolicyTab(QWidget):
+    """طبقِ درخواستِ صریح («موتورِ پیشنهادِ قیمت... حاشیهٔ سود... تخفیفِ
+    مجاز»): سقفِ حداقلِ حاشیهٔ سودِ مجاز -- این تنظیم و لایهٔ سرویسش
+    (commercial_pricing.get/set_pricing_policy) از قبل ساخته شده بود ولی
+    به هیچ فرمی وصل نبود؛ همین‌جا وصل می‌شود تا دیالوگِ ردیفِ سند بتواند
+    آن را بخواند."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("حاشیهٔ سود و پیشنهادِ قیمت")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "این حداقل، مبنایِ «حداکثرِ تخفیفِ مجاز» و هشدارِ افتِ سود در دیالوگِ افزودنِ ردیفِ فاکتورِ فروش قرار می‌گیرد."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        margin_row = QHBoxLayout()
+        margin_row.addWidget(QLabel("حداقلِ حاشیهٔ سودِ مجاز (٪)"))
+        self.min_margin_spin = QSpinBox()
+        self.min_margin_spin.setRange(0, 95)
+        self.min_margin_spin.setSpecialValueText("بدونِ محدودیت")
+        self.min_margin_spin.valueChanged.connect(self._save)
+        margin_row.addWidget(self.min_margin_spin)
+        margin_row.addStretch(1)
+        layout.addLayout(margin_row)
+
+        self.requires_approval_checkbox = QCheckBox("عبور از این حداقل نیازمندِ تاییدِ مدیر باشد")
+        self.requires_approval_checkbox.toggled.connect(self._save)
+        layout.addWidget(self.requires_approval_checkbox)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        policy = pricing_service.get_pricing_policy(company_id)
+        self.min_margin_spin.blockSignals(True)
+        self.requires_approval_checkbox.blockSignals(True)
+        self.min_margin_spin.setValue(int(policy.min_margin_percent_default) if policy and policy.min_margin_percent_default is not None else 0)
+        self.requires_approval_checkbox.setChecked(bool(policy and policy.below_margin_requires_approval))
+        self.min_margin_spin.blockSignals(False)
+        self.requires_approval_checkbox.blockSignals(False)
+        self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        margin = self.min_margin_spin.value()
+        pricing_service.set_pricing_policy(
+            company_id, decimal.Decimal(margin) if margin > 0 else None, self.requires_approval_checkbox.isChecked()
+        )
+        self.status_label.setText("ذخیره شد.")
+
+
+class _VoipSettingsTab(QWidget):
+    """طبقِ درخواستِ صریحِ کاربر («وصل بشه به سیستمِ سانترال یا وویپ»):
+    اتصالِ AMIِ آستریسک/ایزابل برایِ Click-to-Call از داشبوردِ معلقِ
+    مشتری (telesales.py، R136/R137). هم‌الگو با _PricingPolicyTab --
+    یک ردیفِ تنظیماتِ یکتا به‌ازایِ هر شرکت."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("سانترال / وویپ (AMI)")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "اطلاعاتِ اتصال به سرورِ AMIِ آستریسک/ایزابل -- برایِ برقراریِ خودکارِ تماس با کلیک رویِ شماره‌یِ مشتری در فروشِ تلفنی."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.host_field = QLineEdit()
+        self.port_field = QLineEdit()
+        self.port_field.setPlaceholderText("5038")
+        self.context_field = QLineEdit()
+        self.context_field.setPlaceholderText("from-internal")
+        self.channel_prefix_field = QLineEdit()
+        self.channel_prefix_field.setPlaceholderText("PJSIP")
+        self.username_field = QLineEdit()
+        self.secret_field = QLineEdit()
+        self.secret_field.setEchoMode(QLineEdit.Password)
+        self.is_active_checkbox = QCheckBox("این اتصال فعال باشد")
+
+        self.grid = FieldGrid([
+            FieldSpec("voip_host", "آدرسِ سرور", self.host_field, span=2),
+            FieldSpec("voip_port", "پورت", self.port_field, span=1),
+            FieldSpec("voip_context", "کانتکستِ دایل‌پلن", self.context_field, span=1),
+            FieldSpec("voip_channel_prefix", "پیشوندِ کانال", self.channel_prefix_field, span=1),
+            FieldSpec("voip_username", "نامِ‌کاربریِ AMI", self.username_field, span=1),
+            FieldSpec("voip_secret", "رمزِ AMI", self.secret_field, span=1),
+            FieldSpec("voip_is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.grid)
+
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        layout.addWidget(save_button)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        conn = voip_settings_service.get_voip_connection(company_id)
+        self.host_field.setText(conn.host if conn else "")
+        self.port_field.setText(str(conn.port) if conn else "")
+        self.context_field.setText(conn.dial_context if conn else "")
+        self.channel_prefix_field.setText(conn.channel_tech_prefix if conn else "")
+        self.username_field.setText(conn.ami_username if conn else "")
+        self.secret_field.setText(conn.ami_secret if conn else "")
+        self.is_active_checkbox.setChecked(bool(conn.is_active) if conn else True)
+        if conn and conn.consecutive_failure_count > 0:
+            self.status_label.setText(f"آخرین خطا: {conn.last_error_message or ''}")
+        else:
+            self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        host = self.host_field.text().strip()
+        if not host:
+            self.status_label.setText("آدرسِ سرور را وارد کنید.")
+            return
+        try:
+            port = int(self.port_field.text().strip() or "5038")
+        except ValueError:
+            self.status_label.setText("پورت باید عدد باشد.")
+            return
+        voip_settings_service.set_voip_connection(
+            company_id, host, port, self.context_field.text(), self.channel_prefix_field.text(),
+            self.username_field.text().strip(), self.secret_field.text(), self.is_active_checkbox.isChecked(),
+        )
+        self.status_label.setText("ذخیره شد.")
+
+
+class _SmsGatewaySettingsTab(QWidget):
+    """طبقِ درخواستِ صریحِ کاربر («ارسالِ پیامکِ زمان‌بندی‌شده»): چون
+    ارائه‌دهنده مشخص نبود، یک الگویِ URLِ عمومی با {phone}/{text}
+    ذخیره می‌شود -- هم‌الگو با _VoipSettingsTab."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("درگاهِ پیامک")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "الگویِ آدرسِ ارسالِ پیامکِ ارائه‌دهنده -- هرگونه کلیدِ API/نامِ‌کاربری/رمز را مستقیماً در همین آدرس بگذارید. "
+            "جایگزین‌هایِ {phone} و {text} در لحظهٔ ارسال با شماره و متنِ پیامک پر می‌شوند."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.template_field = QLineEdit()
+        self.template_field.setPlaceholderText("https://example.com/send?user=U&pass=P&to={phone}&text={text}")
+        self.method_combo = QComboBox()
+        self.method_combo.addItem("GET", "GET")
+        self.method_combo.addItem("POST", "POST")
+        self.is_active_checkbox = QCheckBox("این درگاه فعال باشد")
+
+        self.grid = FieldGrid([
+            FieldSpec("sms_template", "الگویِ آدرس", self.template_field, span=3),
+            FieldSpec("sms_method", "روشِ HTTP", self.method_combo, span=1),
+            FieldSpec("sms_is_active", "", self.is_active_checkbox, span=1),
+        ])
+        layout.addWidget(self.grid)
+
+        save_button = QPushButton("ذخیره")
+        save_button.setObjectName("primaryButton")
+        save_button.clicked.connect(self._save)
+        layout.addWidget(save_button)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        gateway = sms_gateway_service.get_sms_gateway(company_id)
+        self.template_field.setText(gateway.request_template if gateway else "")
+        index = self.method_combo.findData(gateway.http_method if gateway else "GET")
+        self.method_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.is_active_checkbox.setChecked(bool(gateway.is_active) if gateway else True)
+        self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        template = self.template_field.text().strip()
+        if not template:
+            self.status_label.setText("الگویِ آدرس را وارد کنید.")
+            return
+        sms_gateway_service.set_sms_gateway(company_id, template, self.method_combo.currentData(), self.is_active_checkbox.isChecked())
+        self.status_label.setText("ذخیره شد.")
+
+
+class _SettlementAlarmTab(QWidget):
+    """طبقِ درخواستِ صریح («در تنظیمات آپشنی باشد که تعداد مثلاً ۲ روز
+    مانده به موعدِ تسویه برنامه آلارم بدهد»)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("هشدارِ موعدِ تسویه")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+
+        self.enabled_checkbox = QCheckBox("نمایشِ هشدار برایِ فاکتورهایِ نزدیک به موعدِ تسویه/معوقه")
+        self.enabled_checkbox.toggled.connect(self._save)
+        layout.addWidget(self.enabled_checkbox)
+
+        days_row = QHBoxLayout()
+        days_row.addWidget(QLabel("چند روز مانده به موعد هشدار داده شود"))
+        self.days_spin = QSpinBox()
+        self.days_spin.setRange(0, 90)
+        self.days_spin.valueChanged.connect(self._save)
+        days_row.addWidget(self.days_spin)
+        days_row.addStretch(1)
+        layout.addLayout(days_row)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusSuccess")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        settings = settlements_service.get_alarm_settings(company_id)
+        self.enabled_checkbox.blockSignals(True)
+        self.days_spin.blockSignals(True)
+        self.enabled_checkbox.setChecked(settings.is_enabled)
+        self.days_spin.setValue(settings.alarm_days_before)
+        self.enabled_checkbox.blockSignals(False)
+        self.days_spin.blockSignals(False)
+        self.status_label.setText("")
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        settlements_service.set_alarm_settings(company_id, self.enabled_checkbox.isChecked(), self.days_spin.value())
+        self.status_label.setText("ذخیره شد.")
+
+
 class _NumberingSequencesTab(LayoutEditMixin, QWidget):
     _RESET_LABELS = {"YEARLY": "سالانه", "NEVER": "هرگز"}
 
@@ -250,7 +606,7 @@ class _NumberingSequencesTab(LayoutEditMixin, QWidget):
 class _ChannelsTab(QWidget):
     _CHANNEL_TYPES = {
         "POS": "فروشگاهِ حضوری", "WHOLESALE": "عمده‌فروشی", "ONLINE": "اینترنتی", "AGENT": "نمایندگی",
-        "MARKETPLACE": "بازارگاهِ آنلاین",
+        "MARKETPLACE": "بازارگاهِ آنلاین", "PRE_SALES": "پخشِ سرد (پیش‌فروش)", "VAN_SALES": "پخشِ گرم (فروشِ خودرویی)",
     }
 
     def __init__(self) -> None:

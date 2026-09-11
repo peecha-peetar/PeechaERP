@@ -42,6 +42,18 @@ NAV_ITEMS = [
             {"code": "TREASURY_RECEIPT", "label": "سندِ دریافت", "screen": "treasury_voucher_receipt"},
             {"code": "TREASURY_PAYMENT", "label": "سندِ پرداخت", "screen": "treasury_voucher_payment"},
             {"code": "TREASURY_LIST", "label": "اسنادِ خزانه‌داری", "screen": "treasury_vouchers_list"},
+            # طبقِ درخواستِ صریح («هر دریافت و پرداخت رفرنسِ فاکتور را
+            # داشته باشد و مدیریتِ تسویه‌یِ فاکتورها را ایجاد کن»): تخصیصِ
+            # (بخشی از) یک سندِ دریافت/پرداختِ ثبت‌شده به یک یا چند فاکتورِ
+            # بازِ فروش/خرید.
+            # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
+            # هم باشه»): یک آیتمِ مشترک قبلاً هردو را با هم نشان می‌داد.
+            {"code": "TREASURY_SETTLEMENT_SALES", "label": "تسویه‌یِ فاکتورهایِ فروش", "screen": "commercial_invoice_settlement_sales"},
+            {"code": "TREASURY_SETTLEMENT_PURCHASE", "label": "تسویه‌یِ فاکتورهایِ خرید", "screen": "commercial_invoice_settlement_purchase"},
+            # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): دیدِ کلیِ
+            # همه‌یِ اقساطِ برنامه‌ریزی‌شده -- خودِ دریافت/پرداخت از فرمِ
+            # بالا (دکمه‌یِ 🔗) انجام می‌شود.
+            {"code": "TREASURY_INSTALLMENTS", "label": "مدیریتِ اقساط", "screen": "installments_list"},
             # طبقِ ساختارِ واقعیِ تنخواه‌گردان: هر تنخواه‌دار (تفصیلیِ سطحِ
             # آخرِ گروهِ «تنخواه») چند تنخواهِ باز با شماره‌یِ خودکارِ
             # مستقل می‌تواند داشته باشد.
@@ -72,24 +84,59 @@ NAV_ITEMS = [
             {"code": "INV_RECEIPT", "label": "رسید", "screen": "inventory_document_receipt"},
             {"code": "INV_ISSUE", "label": "حواله", "screen": "inventory_document_issue"},
             {"code": "INV_TRANSFER", "label": "انتقال", "screen": "inventory_document_transfer"},
-            {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in"},
-            {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out"},
+            # طبقِ تشخیصِ صریح («سندِ برگشت از فروش/به تامین‌کننده چه فرقی
+            # با نسخه‌یِ انبار دارد؟»): این دو کد صرفاً برایِ حلِ کدیِ
+            # مسیرِ «مشاهده/ویرایشِ» یک سندِ RETURN_IN/RETURN_OUت که خودِ
+            # سندِ تجاریِ SALES_RETURN/PURCHASE_RETURN بعدِ ثبتِ‌نهایی
+            # به‌صورتِ خودکار می‌سازد (نگاه کن: inventory_documents_list.py،
+            # commercial_documents.py::_STOCK_DOCUMENT_TYPE_BY_COMMERCIAL)
+            # زنده نگه داشته می‌شوند -- دیگر در ساید‌بار نمایش داده
+            # نمی‌شوند (hidden_from_sidebar) چون ساختنِ دستیِ این سند از
+            # این مسیر، مسیرِ صحیح و کاملِ تجاری (قیمت/مالیات/تسویه) را
+            # دور می‌زند و ریسکِ ثبتِ دوباره/نادرستِ حسابداری دارد.
+            {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in", "hidden_from_sidebar": True},
+            {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out", "hidden_from_sidebar": True},
             {"code": "INV_ADJUSTMENT", "label": "اصلاحِ موجودی", "screen": "inventory_document_adjustment"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): دیدِ کلیِ
+            # مانده‌یِ همه‌یِ اسنادِ امانیِ بازِ خروجی/ورودی + بازگردانیِ
+            # کالایِ فروخته‌نشده/مصرف‌نشده (تسویه‌یِ واقعی از طریقِ همان
+            # دکمه‌یِ «تبدیل به فاکتور» در خودِ فرمِ سند انجام می‌شود).
+            {"code": "INV_CONSIGNMENT_TRACKING", "label": "پیگیریِ امانی", "screen": "commercial_consignment_tracking"},
         ],
     },
     {
         "code": "SALES",
         "label": "فروش و بازاریابی",
         "children": [
+            # طبقِ درخواستِ صریح («دستیارِ فروش داخلِ ERP»): فهرستِ رتبه‌بندی‌
+            # شده‌یِ مهم‌ترین اقداماتِ امروز (ریسکِ ریزش/فروشِ مکمل/رشدِ مشتری).
+            {"code": "SALES_ASSISTANT", "label": "دستیارِ فروش", "screen": "sales_assistant"},
             {"code": "SALES_ORDER", "label": "سفارشِ فروش", "screen": "commercial_document_sales_order"},
             {"code": "SALES_PROFORMA", "label": "پیش‌فاکتورِ فروش", "screen": "commercial_document_sales_proforma"},
             {"code": "SALES_INVOICE", "label": "فاکتورِ فروش", "screen": "commercial_document_sales_invoice"},
             {"code": "SALES_RETURN", "label": "برگشت از فروش", "screen": "commercial_document_sales_return"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ
+            # خروجی از نظرِ طرفِ‌حساب هم‌الگویِ فروش است.
+            {"code": "SALES_CONSIGNMENT_OUT", "label": "امانیِ خروجی", "screen": "commercial_document_consignment_out"},
             {"code": "SALES_DOCUMENTS_LIST", "label": "اسنادِ فروش", "screen": "commercial_documents_list_sales"},
             {"code": "SALES_PRICING", "label": "فهرستِ قیمت و تخفیف", "screen": "commercial_pricing"},
-            {"code": "SALES_POS_SESSIONS", "label": "ترمینال‌ها و جلسه‌هایِ صندوق", "screen": "commercial_pos_sessions"},
             {"code": "SALES_POS_SALE", "label": "فروشِ حضوری (POS)", "screen": "commercial_pos_sale"},
-            {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی و Omnichannel", "screen": "commercial_ecommerce"},
+            {"code": "SALES_POS_APPROVAL", "label": "تاییدِ سرپرست -- فروشِ حضوری", "screen": "commercial_pos_approval"},
+            # طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده، فقط فروشِ
+            # اینترنتی باید آنجا باشد»): سفارش‌ها + تقویمِ محتوا/پستِ
+            # خودکار + سینکِ CMS + مرکزِ رسانه + نگهبانِ اتصال، همگی زیرِ
+            # همین یک آیتم، در یک فرمِ تب‌دار (commercial_online_sales_hub)
+            # -- نه پنج آیتمِ جداگانه در منویِ اصلی. اتصالات/نگاشت/
+            # مسیریابیِ کلی همچنان در تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
+            # «تنظیمات سیستم ‹ مدیریتِ بازرگانی» می‌ماند.
+            {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی", "screen": "commercial_online_sales_hub"},
+            # طبقِ درخواستِ صریحِ کاربر («۳ ماژول: پخشِ سرد با سفارش‌گیری،
+            # پخشِ گرم، سفارشِ موبایل») و محدودیتِ صریحِ همان کاربر («منوها
+            # شلوغ نشه»): دو ماژولِ ERP-محور (پخشِ سرد/گرم) زیرِ یک آیتمِ
+            # واحدِ تب‌دار -- هم‌الگو با فروشِ اینترنتی بالا. ماژولِ سومِ
+            # کاربر (اپِ سفارشِ موبایل) نیازمندِ یک تصمیمِ معماریِ جداگانه
+            # (API/Offline-Sync) است و در همین دور اضافه نشده.
+            {"code": "SALES_DISTRIBUTION", "label": "پخشِ کالا (سرد/گرم)", "screen": "commercial_distribution_hub"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
@@ -101,8 +148,15 @@ NAV_ITEMS = [
             {"code": "PURCH_PROFORMA", "label": "پیش‌فاکتورِ خرید", "screen": "commercial_document_purchase_proforma"},
             {"code": "PURCH_INVOICE", "label": "فاکتورِ خرید", "screen": "commercial_document_purchase_invoice"},
             {"code": "PURCH_RETURN", "label": "برگشت به تامین‌کننده", "screen": "commercial_document_purchase_return"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ
+            # ورودی از نظرِ طرفِ‌حساب هم‌الگویِ خرید است.
+            {"code": "PURCH_CONSIGNMENT_IN", "label": "امانیِ ورودی", "screen": "commercial_document_consignment_in"},
             {"code": "PURCH_DOCUMENTS_LIST", "label": "اسنادِ خرید", "screen": "commercial_documents_list_purchase"},
-            {"code": "PURCH_EXTRAS", "label": "بهایِ تمام‌شدهٔ وارداتی و ریبیت", "screen": "commercial_purchasing_extras"},
+            {"code": "PURCH_EXTRAS", "label": "ریبیتِ تامین‌کننده", "screen": "commercial_purchasing_extras"},
+            # طبقِ درخواستِ صریح («زیرماژولِ مدیریتِ سفارشات»): پیگیریِ
+            # پرداخت‌هایِ سفارشاتِ در راه (ترخیص/بهایِ اولیهٔ کالا و...) با
+            # همان فرمِ دریافت/پرداختِ خزانه‌داری.
+            {"code": "PURCH_ORDER_TRACKING", "label": "مدیریتِ سفارشات", "screen": "order_tracking"},
         ],
     },
     {
@@ -194,6 +248,42 @@ NAV_ITEMS = [
                     },
                 ],
             },
+            {
+                "code": "REPORTS_INV",
+                "label": "انبار",
+                "children": [
+                    {"code": "REPORTS_ITEM_LEDGER", "label": "کاردکسِ کالا", "screen": "report_item_ledger"},
+                ],
+            },
+            {
+                "code": "REPORTS_SALES",
+                "label": "فروش",
+                "children": [
+                    {
+                        "code": "REPORTS_SALES_BY_ITEM",
+                        "label": "گزارشِ فروش",
+                        "screen": "report_sales",
+                    },
+                    {
+                        "code": "REPORTS_CUSTOMER_PROFIT",
+                        "label": "سودِ واقعیِ مشتریان",
+                        "screen": "report_customer_profit",
+                    },
+                    {
+                        "code": "REPORTS_SALES_FORECAST",
+                        "label": "پیش‌بینیِ فروش",
+                        "screen": "report_sales_forecast",
+                    },
+                    # طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync
+                    # -- گزارشِ فروشِ اینترنتی بر اساسِ کانال»): سهمِ هر
+                    # کانال (POS/عمده/اینترنتی/نماینده/مارکت‌پلیس) از فروش.
+                    {
+                        "code": "REPORTS_SALES_BY_CHANNEL",
+                        "label": "گزارشِ فروش بر اساسِ کانال",
+                        "screen": "report_sales_by_channel",
+                    },
+                ],
+            },
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ
@@ -203,6 +293,10 @@ NAV_ITEMS = [
     # بک‌آپ/بازیابی — چون کاری/عملیاتی است (فایل‌دیالوگ، نه فرمِ ذخیره‌ای)،
     # به‌جایِ تبی درونِ system_settings، آیتمِ مستقلِ خودش را دارد.
     {"code": "SYSTEM_BACKUP", "label": "پشتیبان‌گیری و بازیابی", "screen": "system_backup"},
+    # ابزارِ فنی/محدود (نه ویژگیِ عمومی) — طبقِ درخواستِ صریح: خام‌کردنِ
+    # اطلاعاتِ شرکتِ جاری برایِ تست/راه‌اندازیِ اولیه، بدونِ تاثیر بر
+    # ساختارِ برنامه یا سایرِ شرکت‌ها.
+    {"code": "SYSTEM_DATA_RESET", "label": "خام‌کردنِ اطلاعات (فنی)", "screen": "system_data_reset"},
 ]
 
 # طبقِ درخواستِ صریح («ریبونِ بالا مرتبط با ماژولی باشد که در ساید‌بار
@@ -230,6 +324,9 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("TREASURY_RECEIPT", "💵"),
         ("TREASURY_PAYMENT", "💸"),
         ("TREASURY_LIST", "📚"),
+        ("TREASURY_SETTLEMENT_SALES", "🔗"),
+        ("TREASURY_SETTLEMENT_PURCHASE", "🔁"),
+        ("TREASURY_INSTALLMENTS", "📆"),
         ("TREASURY_PETTY_CASH", "👛"),
         ("TREASURY_PETTY_CASH_LIST", "🧾"),
         ("TREASURY_CHECKS_RECEIVED", "📥"),
@@ -252,22 +349,27 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("INV_RETURN_IN", "↩️"),
         ("INV_RETURN_OUT", "↪️"),
         ("INV_ADJUSTMENT", "🛠️"),
+        ("INV_CONSIGNMENT_TRACKING", "🤝"),
     ],
     "SALES": [
+        ("SALES_ASSISTANT", "🧠"),
         ("SALES_ORDER", "📝"),
         ("SALES_INVOICE", "🧾"),
         ("SALES_RETURN", "↩️"),
+        ("SALES_CONSIGNMENT_OUT", "🤝"),
         ("SALES_DOCUMENTS_LIST", "📚"),
         ("SALES_PRICING", "🏷️"),
-        ("SALES_POS_SESSIONS", "🖥️"),
         ("SALES_POS_SALE", "🛒"),
+        ("SALES_POS_APPROVAL", "🧾"),
         ("SALES_ECOMMERCE", "🌐"),
+        ("SALES_DISTRIBUTION", "🚚"),
         ("SALES_AFTERSALES", "🎧"),
     ],
     "PURCH": [
         ("PURCH_ORDER", "📝"),
         ("PURCH_INVOICE", "🧾"),
         ("PURCH_RETURN", "↪️"),
+        ("PURCH_CONSIGNMENT_IN", "🤝"),
         ("PURCH_DOCUMENTS_LIST", "📚"),
         ("PURCH_EXTRAS", "🚢"),
     ],
@@ -299,6 +401,10 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("REPORTS_PERIOD_COMPARISON", "🔀"),
         ("REPORTS_ANOMALIES", "⚠️"),
         ("REPORTS_COST_CENTER", "🏗️"),
+        ("REPORTS_ITEM_LEDGER", "📋"),
+        ("REPORTS_SALES_BY_ITEM", "🛍️"),
+        ("REPORTS_CUSTOMER_PROFIT", "💹"),
+        ("REPORTS_SALES_FORECAST", "🔮"),
     ],
     "SETTINGS": [],
 }
@@ -323,9 +429,22 @@ SETTINGS_SUB_FORMS = [
     ("payroll_settings", "تنظیماتِ حقوق و دستمزد"),
 ]
 
+# طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده»): مرکزِ رسانه دیگر
+# آیتمِ مستقلِ NAV_ITEMS نیست -- یکی از تب‌هایِ commercial_online_sales_hub
+# است، ولی همچنان فرم‌کدِ خودش (media_center) را برایِ ذخیره‌یِ فایل/
+# تعیینِ دسترسی نگه می‌دارد -- پس این‌جا (زیرِ ماژولِ SALES، نه SETTINGS)
+# به‌صورتِ دستی به فهرستِ فرم‌ها اضافه می‌شود.
+_EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
+    ("media_center", "SALES", "مرکزِ رسانه"),
+]
+
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط
 # «داشبورد» با این قاعده مچ نمی‌شود (کدِ خودش با کدِ ماژولش یکی نیست).
-_TOP_LEVEL_MODULE_CODE_OVERRIDE = {"dashboard": "DASH", "SYSTEM_BACKUP": "SETTINGS"}
+_TOP_LEVEL_MODULE_CODE_OVERRIDE = {
+    "dashboard": "DASH",
+    "SYSTEM_BACKUP": "SETTINGS",
+    "SYSTEM_DATA_RESET": "SETTINGS",
+}
 
 
 def flatten_nav_items() -> list[dict]:
@@ -343,6 +462,27 @@ def flatten_nav_items() -> list[dict]:
 
     _walk(NAV_ITEMS)
     return flat
+
+
+def flatten_nav_items_with_breadcrumb() -> list[tuple[str, str, str]]:
+    """مشابهِ flatten_nav_items، ولی به‌ازایِ هر آیتمِ برگ، مسیرِ کاملِ
+    منو (breadcrumb) را هم برمی‌گرداند -- طبقِ نیازِ جستجویِ سراسری
+    (کادرِ ازپیش‌موجودِ ولی تا امروز بی‌اتصالِ «جستجو در سیستم» در
+    نوارِ بالایی): وقتی چند آیتمِ برگ در زیرمنوهایِ مختلف برچسبِ یکسان
+    دارند (مثلاً «نگاشتِ حساب‌ها» هم زیرِ انبار هم زیرِ بازرگانی است)،
+    این مسیر برایِ نمایشِ متمایز و ناوبریِ درست لازم است."""
+    result: list[tuple[str, str, str]] = []
+
+    def _walk(items: list[dict], path: list[str]) -> None:
+        for item in items:
+            if item.get("children"):
+                _walk(item["children"], path + [item["label"]])
+            elif item.get("screen"):
+                breadcrumb = " › ".join(path + [item["label"]]) if path else item["label"]
+                result.append((item["code"], item["label"], breadcrumb))
+
+    _walk(NAV_ITEMS, [])
+    return result
 
 
 def build_form_catalog() -> list[tuple[str, str, str]]:
@@ -368,4 +508,6 @@ def build_form_catalog() -> list[tuple[str, str, str]]:
             catalog.append((item["screen"], module_code, item["label"]))
     for code, label in SETTINGS_SUB_FORMS:
         catalog.append((code, "SETTINGS", label))
+    for code, module_code, label in _EMBEDDED_HUB_SUB_FORMS:
+        catalog.append((code, module_code, label))
     return catalog

@@ -21,6 +21,7 @@ from peecha.db.models.commercial import (
     DiscountRuleTier,
     PriceList,
     PriceListItem,
+    PriceListItemPriceHistory,
     PricingPolicy,
     Promotion,
 )
@@ -41,7 +42,7 @@ def create_channel(
     company_id: int, channel_code: str, name: str, channel_type_code: str,
     default_price_list_id: int | None = None, default_warehouse_id: int | None = None,
 ) -> str:
-    if channel_type_code not in ("POS", "WHOLESALE", "ONLINE", "AGENT", "MARKETPLACE"):
+    if channel_type_code not in ("POS", "WHOLESALE", "ONLINE", "AGENT", "MARKETPLACE", "VAN_SALES", "PRE_SALES"):
         raise ValueError("نوعِ کانال نامعتبر است.")
     with new_session() as session:
         row = Channel(
@@ -80,7 +81,14 @@ def create_price_list(
         return row.price_list_id
 
 
-def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_price: decimal.Decimal, min_quantity: decimal.Decimal = decimal.Decimal(1)) -> int:
+def set_price_list_item(
+    price_list_id: int, item_id: int, uom_id: int, unit_price: decimal.Decimal,
+    min_quantity: decimal.Decimal = decimal.Decimal(1), *, changed_by_user_id: int | None = None,
+    source_code: str = "MANUAL", note: str | None = None,
+) -> int:
+    """طبقِ درخواستِ صریح («لاگِ قیمت‌ها را نگه دار تا سابقه حفظ شود»):
+    هر تغییرِ واقعیِ قیمت (نه فراخوانیِ بی‌اثر با همان مقدارِ قبلی) یک
+    ردیف در PriceListItemPriceHistory ثبت می‌کند."""
     with new_session() as session:
         row = session.scalar(
             select(PriceListItem).where(
@@ -88,6 +96,7 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
                 PriceListItem.uom_id == uom_id, PriceListItem.min_quantity == min_quantity,
             )
         )
+        old_price = row.unit_price if row is not None else None
         if row is None:
             row = PriceListItem(
                 price_list_id=price_list_id, item_id=item_id, uom_id=uom_id, min_quantity=min_quantity,
@@ -96,6 +105,12 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
             session.add(row)
         else:
             row.unit_price = unit_price
+        if old_price is None or old_price != unit_price:
+            session.add(PriceListItemPriceHistory(
+                price_list_id=price_list_id, item_id=item_id, uom_id=uom_id, min_quantity=min_quantity,
+                old_price=old_price, new_price=unit_price, source_code=source_code, note=note,
+                changed_by_user_id=changed_by_user_id,
+            ))
         session.commit()
         return row.price_list_item_id
 
@@ -103,6 +118,68 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
 def list_price_list_items(price_list_id: int) -> list[PriceListItem]:
     with new_session() as session:
         return list(session.scalars(select(PriceListItem).where(PriceListItem.price_list_id == price_list_id)))
+
+
+# ---------------------------------------------------------------------
+# تاریخچهٔ قیمت -- طبقِ درخواستِ صریح («لاگِ قیمت‌ها ... اگر اشتباهی شد
+# بشه قیمتو برگردوند»)
+# ---------------------------------------------------------------------
+@dataclass
+class PriceHistoryRow:
+    history_id: int
+    price_list_id: int
+    item_id: int
+    uom_id: int
+    min_quantity: decimal.Decimal
+    old_price: decimal.Decimal | None
+    new_price: decimal.Decimal
+    source_code: str
+    note: str | None
+    changed_by_user_id: int | None
+    changed_at: datetime.datetime
+
+
+def list_price_history(price_list_id: int, item_id: int | None = None) -> list[PriceHistoryRow]:
+    with new_session() as session:
+        stmt = select(PriceListItemPriceHistory).where(PriceListItemPriceHistory.price_list_id == price_list_id)
+        if item_id is not None:
+            stmt = stmt.where(PriceListItemPriceHistory.item_id == item_id)
+        stmt = stmt.order_by(PriceListItemPriceHistory.changed_at.desc(), PriceListItemPriceHistory.history_id.desc())
+        return [
+            PriceHistoryRow(
+                r.history_id, r.price_list_id, r.item_id, r.uom_id, r.min_quantity, r.old_price, r.new_price,
+                r.source_code, r.note, r.changed_by_user_id, r.changed_at,
+            )
+            for r in session.scalars(stmt).all()
+        ]
+
+
+def revert_price_history(history_id: int, changed_by_user_id: int | None = None) -> None:
+    """قیمت را دقیقاً به old_priceِ همین ردیفِ تاریخچه برمی‌گرداند --
+    خودِ برگشت هم یک ردیفِ تازه (source_code='REVERT') ثبت می‌کند تا
+    لاگ همیشه append-only بماند و چیزی حذف/بازنویسی نشود."""
+    with new_session() as session:
+        hist = session.get(PriceListItemPriceHistory, history_id)
+        if hist is None:
+            raise ValueError("این ردیفِ تاریخچه یافت نشد.")
+        if hist.old_price is None:
+            raise ValueError("این ردیف اولین قیمتِ ثبت‌شده بوده؛ چیزی برایِ برگشت وجود ندارد.")
+        row = session.scalar(
+            select(PriceListItem).where(
+                PriceListItem.price_list_id == hist.price_list_id, PriceListItem.item_id == hist.item_id,
+                PriceListItem.uom_id == hist.uom_id, PriceListItem.min_quantity == hist.min_quantity,
+            )
+        )
+        if row is None:
+            raise ValueError("ردیفِ قیمتِ مربوطه دیگر در فهرستِ قیمت وجود ندارد.")
+        current_price = row.unit_price
+        row.unit_price = hist.old_price
+        session.add(PriceListItemPriceHistory(
+            price_list_id=hist.price_list_id, item_id=hist.item_id, uom_id=hist.uom_id, min_quantity=hist.min_quantity,
+            old_price=current_price, new_price=hist.old_price, source_code="REVERT",
+            note=f"بازگشت به قیمتِ ردیفِ تاریخچهٔ #{history_id}", changed_by_user_id=changed_by_user_id,
+        ))
+        session.commit()
 
 
 def _lookup_tiered_price(session, price_list_id: int, item_id: int, uom_id: int, quantity: decimal.Decimal) -> decimal.Decimal | None:
@@ -272,6 +349,49 @@ def resolve_price(
             applied_rule_id = best_rule.rule_id
 
     return ResolvedPrice(unit_price=base_price, source="PRICE_LIST", discount_amount=discount_amount, applied_discount_rule_id=applied_rule_id)
+
+
+def resolve_sale_price(company_id: int, base_price: decimal.Decimal, as_of_date: datetime.date | None = None) -> decimal.Decimal | None:
+    """قیمتِ «حراج» برایِ نمایشِ بیرونی (مثلاً فروشگاهِ اینترنتی) -- طبقِ
+    درخواستِ صریحِ کاربر («اگر کالا در فهرستِ تخفیف/کمپین باشد، هم
+    regular_price هم sale_price فرستاده شود»). عمداً همان قاعدهٔ
+    تخفیفِ عمومی (scope=ALL) را بررسی می‌کند که resolve_price هم در
+    فاکتور/سفارش خودکار اعمال می‌کند -- تا قیمتِ حراجِ نمایش‌داده‌شده
+    با قیمتِ واقعیِ فروش هماهنگ بماند؛ برایِ تعدادِ ۱ محاسبه می‌شود
+    (چون sale_price در ووکامرس یک عددِ ثابت است، نه پلکانی/بسته به
+    تعداد). اگر تخفیفِ فعالی نبود، None برمی‌گرداند (یعنی «حراج»
+    برایِ این کالا معنا ندارد)."""
+    as_of_date = as_of_date or datetime.date.today()
+    quantity = decimal.Decimal(1)
+    with new_session() as session:
+        best_rule = session.scalar(
+            select(DiscountRule)
+            .where(
+                DiscountRule.company_id == company_id, DiscountRule.is_active.is_(True),
+                DiscountRule.scope_type_code == "ALL", DiscountRule.valid_from <= as_of_date,
+                (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+            )
+            .order_by(DiscountRule.priority)
+        )
+        if best_rule is None:
+            return None
+        discount_amount = _ZERO
+        if best_rule.discount_type_code == "PERCENT" and best_rule.discount_value is not None:
+            discount_amount = base_price * (best_rule.discount_value / 100)
+        elif best_rule.discount_type_code == "AMOUNT" and best_rule.discount_value is not None:
+            discount_amount = best_rule.discount_value
+        elif best_rule.discount_type_code == "TIERED":
+            tier = session.scalar(
+                select(DiscountRuleTier)
+                .where(DiscountRuleTier.rule_id == best_rule.rule_id, DiscountRuleTier.min_quantity <= quantity)
+                .order_by(DiscountRuleTier.min_quantity.desc())
+            )
+            if tier is not None:
+                discount_amount = base_price * (tier.discount_value / 100)
+    if discount_amount <= _ZERO:
+        return None
+    sale_price = base_price - discount_amount
+    return sale_price if sale_price > _ZERO else None
 
 
 # ---------------------------------------------------------------------

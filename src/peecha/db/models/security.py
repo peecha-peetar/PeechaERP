@@ -24,6 +24,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from peecha.db.base import Base
@@ -53,6 +54,10 @@ class UserCompany(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # طبقِ درخواستِ صریح («وصل بشه به سیستمِ سانترال»): داخلیِ این کاربر
+    # در سانترالِ همین شرکت -- چون سانترال (و درنتیجه شماره‌یِ داخلی)
+    # می‌تواند بینِ شرکت‌ها فرق کند، نه رویِ خودِ sec.users.
+    voip_extension: Mapped[str | None] = mapped_column(String(20))
 
 
 class Module(Base):
@@ -183,6 +188,43 @@ class RoleFieldPermission(Base):
     field_id: Mapped[int] = mapped_column(ForeignKey("sec.form_fields.field_id"), primary_key=True)
     permission_level: Mapped[int] = mapped_column(SmallInteger)
     valid_from: Mapped[datetime.datetime]
+
+
+class DeviceToken(Base):
+    """R131 -- لایهٔ API برایِ اپِ موبایلِ پخشِ سرد/گرم: توکنِ رفرشِ
+    مخصوصِ هر دستگاه، رویِ همان حسابِ کاربریِ ERP (نه سیستمِ کاربریِ جدا).
+    مدیر می‌تواند از همین جدول توکنِ یک دستگاهِ گم‌شده را باطل کند."""
+
+    __tablename__ = "device_tokens"
+    __table_args__ = {"schema": "sec"}
+
+    device_token_id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    device_name: Mapped[str | None] = mapped_column(String(150))
+    refresh_token_hash: Mapped[bytes]
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    last_used_at: Mapped[datetime.datetime | None]
+    revoked_at: Mapped[datetime.datetime | None]
+
+
+class ApiIdempotencyKey(Base):
+    """R133 -- رفعِ محدودیتِ شناخته‌شده‌یِ R132: پاسخِ اولین اجرایِ موفقِ
+    هر اقدامِ صف‌آفلاینِ موبایل را ذخیره می‌کند تا تلاشِ دوباره‌یِ کلاینت
+    (با همان idempotency_key، بعدِ قطعیِ شبکه) باعثِ ساختِ رکوردِ تکراری
+    (فاکتور/ویزیت) نشود -- هم‌الگو با جدولِ device_tokens (رویِ همان
+    کاربرِ ERP، بدونِ سیستمِ جدا)."""
+
+    __tablename__ = "api_idempotency_keys"
+    __table_args__ = {"schema": "sec"}
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    idempotency_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    endpoint: Mapped[str] = mapped_column(String(100))
+    response_status: Mapped[int] = mapped_column(SmallInteger)
+    response_body: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
 
 # --- جدول‌های تاریخچه (Core Table؛ فقط خواندنی از دید اپلیکیشن) ---------

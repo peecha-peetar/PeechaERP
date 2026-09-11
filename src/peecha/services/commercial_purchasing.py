@@ -11,7 +11,6 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount
 from peecha.db.models.commercial import (
     CommercialDocument,
-    CommercialDocumentLine,
     LandedCostAllocation,
     VendorRebateAccrual,
     VendorRebateAgreement,
@@ -28,20 +27,31 @@ def _money(value: decimal.Decimal) -> decimal.Decimal:
 
 
 # ---------------------------------------------------------------------
-# بهایِ تمام‌شدهٔ وارداتی
+# هزینه‌هایِ جانبیِ خرید (تسهیمِ ترخیص/گمرک/هزینه‌هایِ ارزیِ دیگر)
 # ---------------------------------------------------------------------
-def add_landed_cost_allocation(purchase_invoice_document_id: int, cost_type_code: str, amount: decimal.Decimal, allocation_method_code: str, notes: str | None = None) -> int:
-    if cost_type_code not in ("FREIGHT", "CUSTOMS", "INSURANCE", "HANDLING", "OTHER"):
-        raise ValueError("نوعِ هزینه نامعتبر است.")
-    if allocation_method_code not in ("BY_VALUE", "BY_QUANTITY", "BY_WEIGHT"):
-        raise ValueError("روشِ تسهیم نامعتبر است.")
+# طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه رویِ فاکتورِ خرید — مبلغ + حسابِ
+# معین و تفصیلیِ بستانکار برایِ هر ردیف»): برخلافِ نسخهٔ قبلی (که فقط یک
+# دسته‌بندیِ ثابت داشت و هیچ اثرِ حسابداری‌ای تولید نمی‌کرد)، هر ردیفِ
+# هزینه حالا یک حسابِ آزادانه دارد که با Postِ فاکتور بستانکار می‌شود —
+# تسهیمِ خودِ هزینه‌ها رویِ ردیف‌هایِ فاکتور (متناسب با ارزش) و ساختِ
+# ردیف‌هایِ اعتباریِ سندِ حسابداری، هردو درونِ commercial_documents.
+# post_document انجام می‌شود (همراهِ خودِ سندِ فاکتور، طبقِ تصمیمِ صریح).
+def add_landed_cost_line(
+    purchase_invoice_document_id: int, amount: decimal.Decimal, credit_account_id: int,
+    credit_detail_account_id: int | None = None, notes: str | None = None,
+) -> int:
+    if amount <= 0:
+        raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
         doc = session.get(CommercialDocument, purchase_invoice_document_id)
         if doc is None or doc.document_type_code != "PURCHASE_INVOICE":
             raise ValueError("فقط رویِ فاکتورِ خرید قابلِ‌ثبت است.")
         if doc.status_code != "DRAFT":
-            raise ValueError("پسِ Post، هزینهٔ تمام‌شدهٔ وارداتی فقط از طریقِ اصلاحیه قابلِ‌تغییر است.")
-        row = LandedCostAllocation(purchase_invoice_document_id=purchase_invoice_document_id, cost_type_code=cost_type_code, amount=amount, allocation_method_code=allocation_method_code, notes=notes)
+            raise ValueError("پسِ Post، هزینه‌هایِ جانبیِ خرید فقط از طریقِ اصلاحیه قابلِ‌تغییر است.")
+        row = LandedCostAllocation(
+            purchase_invoice_document_id=purchase_invoice_document_id, amount=amount,
+            credit_account_id=credit_account_id, credit_detail_account_id=credit_detail_account_id, notes=notes,
+        )
         session.add(row)
         session.commit()
         return row.allocation_id
@@ -52,37 +62,17 @@ def list_landed_cost_allocations(purchase_invoice_document_id: int) -> list[Land
         return list(session.scalars(select(LandedCostAllocation).where(LandedCostAllocation.purchase_invoice_document_id == purchase_invoice_document_id)))
 
 
-def apply_landed_costs(purchase_invoice_document_id: int, company_id: int) -> None:
-    """تناسبیِ هر هزینه بینِ ردیف‌هایِ فاکتور توزیع و مستقیماً به
-    unit_price هر ردیف اضافه می‌شود — پیش از Confirm/Post فراخوانی شود
-    تا بهایِ واحدِ ورودی به موتورِ هزینه‌یابیِ انبار شاملِ این سهم باشد
-    (مرحلهٔ ۴، بخشِ ۲)."""
+def delete_landed_cost_line(allocation_id: int, company_id: int) -> None:
     with new_session() as session:
-        doc = session.get(CommercialDocument, purchase_invoice_document_id)
-        if doc is None or doc.company_id != company_id or doc.document_type_code != "PURCHASE_INVOICE":
+        row = session.get(LandedCostAllocation, allocation_id)
+        if row is None:
+            raise ValueError("ردیف نامعتبر است.")
+        doc = session.get(CommercialDocument, row.purchase_invoice_document_id)
+        if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code != "DRAFT":
-            raise ValueError("فقط سندِ پیش‌نویس قابلِ‌اعمالِ هزینهٔ تمام‌شده است.")
-        allocations = session.scalars(select(LandedCostAllocation).where(LandedCostAllocation.purchase_invoice_document_id == purchase_invoice_document_id)).all()
-        if not allocations:
-            return
-        lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == purchase_invoice_document_id)).all()
-        if not lines:
-            raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
-        total_value = sum((ln.quantity * ln.unit_price for ln in lines), _ZERO)
-        total_qty = sum((ln.quantity for ln in lines), _ZERO)
-
-        for allocation in allocations:
-            for line in lines:
-                if allocation.allocation_method_code == "BY_VALUE" and total_value > 0:
-                    share = (line.quantity * line.unit_price) / total_value
-                elif allocation.allocation_method_code in ("BY_QUANTITY", "BY_WEIGHT") and total_qty > 0:
-                    # BY_WEIGHT بدونِ وزنِ کالا در این نسخه به BY_QUANTITY تنزل می‌کند.
-                    share = line.quantity / total_qty
-                else:
-                    share = _ZERO
-                extra_per_unit = _money(allocation.amount * share / line.quantity) if line.quantity else _ZERO
-                line.unit_price = line.unit_price + extra_per_unit
+            raise ValueError("پسِ Post، هزینه‌هایِ جانبیِ خرید فقط از طریقِ اصلاحیه قابلِ‌تغییر است.")
+        session.delete(row)
         session.commit()
 
 

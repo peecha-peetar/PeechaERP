@@ -177,6 +177,20 @@ def set_customer_status(customer_detail_account_id: int, status_code: str) -> No
         session.commit()
 
 
+def set_customer_credit_limit(customer_detail_account_id: int, credit_limit_amount) -> None:
+    """طبقِ درخواستِ صریح («دستیارِ فروش» -- پیشنهادِ افزایشِ سقفِ اعتبار
+    برایِ مشتریِ روبه‌رشد): تغییرِ سریعِ یک فیلد، بدونِ نیاز به فرمِ کاملِ
+    update_customer_detail_account."""
+    if credit_limit_amount is None or credit_limit_amount < 0:
+        raise ValueError("سقفِ اعتبار نامعتبر است.")
+    with new_session() as session:
+        profile = session.get(CustomerProfile, customer_detail_account_id)
+        if profile is None:
+            raise ValueError("مشتری نامعتبر است.")
+        profile.credit_limit_amount = credit_limit_amount
+        session.commit()
+
+
 # ---------------------------------------------------------------------
 # یکپارچه‌سازی با فرمِ واحدِ تفصیلی (مشتری) — همان الگویِ
 # hr_service.*_personnel_detail_account: فیلدهایِ CustomerDetailِ قدیمی
@@ -186,7 +200,8 @@ def set_customer_status(customer_detail_account_id: int, status_code: str) -> No
 _CUSTOMER_DETAIL_FIELD_KEYS = ("economic_code", "national_id", "phone", "mobile", "address", "notes")
 _CUSTOMER_PROFILE_FIELD_KEYS = (
     "customer_group_id", "default_price_list_id", "default_channel_code", "payment_term_days",
-    "credit_limit_amount", "is_tax_exempt",
+    "credit_limit_amount", "is_tax_exempt", "distribution_route_detail_account_id",
+    "gps_latitude", "gps_longitude",
 )
 
 

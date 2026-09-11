@@ -13,6 +13,8 @@ from __future__ import annotations
 import datetime
 import decimal
 
+from PySide6.QtWidgets import QMessageBox
+
 from peecha import numerals, session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import currencies as currencies_service
@@ -25,6 +27,7 @@ class BalanceSheetScreen(ReportScreenBase):
         super().__init__("ترازنامه (تا «تا تاریخ»)")
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
+        self.enable_jasper_report("BALANCE_SHEET")
         self._currency_decimal_places = 0
 
     def code_range_account_level(self) -> int | None:
@@ -100,3 +103,22 @@ class BalanceSheetScreen(ReportScreenBase):
         balance_note = "متوازن" if total_right == total_left else "نامتوازن!"
         footer = ["", f"جمعِ راست: {self._fmt(total_right)}", "", "", f"جمعِ چپ: {self._fmt(total_left)}", balance_note]
         return headers, table_rows, footer
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        if not self._rows:
+            QMessageBox.information(self, "گزارش", "داده‌ای برایِ چاپ وجود ندارد.")
+            return None
+
+        field_names = ["right_code", "right_name", "right_amount_display", "left_code", "left_name", "left_amount_display"]
+        print_rows = [dict(zip(field_names, row)) for row in self._rows]
+        company = session.current_company
+        footer = self._footer or ["", "", "", "", "", ""]
+        params = {
+            "companyName": company.display_name if company else "",
+            "dateLabel": f"تا تاریخِ {numerals.format_jalali_date(self.date_to.date())}",
+            "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+            "totalRightLine": footer[1],
+            "totalLeftLine": footer[4],
+            "balanceNote": footer[5],
+        }
+        return print_rows, params

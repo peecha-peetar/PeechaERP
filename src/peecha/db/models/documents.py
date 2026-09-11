@@ -31,3 +31,7 @@ class Attachment(Base):
     is_deleted: Mapped[bool] = mapped_column(default=False)
     deleted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     deleted_at: Mapped[datetime.datetime | None]
+    # طبقِ درخواستِ صریح («یکعکس بعنوان عکس اصلی نمایش داده بشه»): از میانِ
+    # چند عکسِ فعالِ یک رکورد (source_record_id)، دقیقاً یکی می‌تواند
+    # عکسِ اصلی باشد -- برایِ بندانگشتیِ کنارِ نام و پیش‌فرضِ زومِ اول.
+    is_primary: Mapped[bool] = mapped_column(default=False)

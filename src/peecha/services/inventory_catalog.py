@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 
 from peecha.db.base import new_session
+from peecha.db.models.commercial import PriceListItem, PriceListItemPriceHistory
 from peecha.db.models.core import Company
 from peecha.db.models.inventory import (
     AssetDepreciationEntry,
@@ -31,7 +32,9 @@ from peecha.db.models.inventory import (
     ItemCategory,
     ItemMedia,
     ItemSupplier,
+    ItemSupplierCode,
     ItemUomConversion,
+    ItemVariant,
     ItemVariantValue,
     Manufacturer,
     ReorderPolicy,
@@ -59,7 +62,7 @@ _EXTENDED_ITEM_FIELD_KEYS = (
     "default_tax_percent",
     "warranty_months", "seo_title", "seo_url_slug", "seo_meta_description", "seo_meta_keywords",
     "website_category", "website_tags", "pos_shortcut_key", "pos_button_color", "pos_requires_weight",
-    "pos_requires_serial",
+    "pos_requires_serial", "pos_menu_group_id", "ecommerce_stock_mode",
 )
 
 
@@ -320,6 +323,8 @@ class ItemRow:
     pos_button_color: str | None = None
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
+    pos_menu_group_id: int | None = None
+    ecommerce_stock_mode: str = "DATABASE"
 
 
 def _item_dimension_type_id(company_id: int) -> int:
@@ -334,6 +339,12 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
     with new_session() as session:
         items = session.scalars(select(Item).where(Item.company_id == company_id)).all()
         uom_codes = {u.uom_id: u.code for u in session.scalars(select(Uom))}
+        # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی نشوند، در
+        # یک جدولِ مستقل با کدبندیِ متفاوت ذخیره شوند»): کدِ نمایشیِ یک
+        # متغیر دیگر همان کدِ تفصیلیِ فنیِ زیرینش نیست -- از inv.item_
+        # variants می‌آید. برایِ کالاهایِ عادی/اصلی (که در این جدول ردیفی
+        # ندارند) دقیقاً مثلِ قبل از رویِ خودِ تفصیلی خوانده می‌شود.
+        variant_codes = {v.item_id: v.variant_code for v in session.scalars(select(ItemVariant))}
         result: list[ItemRow] = []
         for it in items:
             detail = detail_rows.get(it.item_detail_account_id)
@@ -345,7 +356,7 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
                 ItemRow(
                     item_id=it.item_id,
                     item_detail_account_id=it.item_detail_account_id,
-                    code=detail.code,
+                    code=variant_codes.get(it.item_id, detail.code),
                     name=detail.name,
                     is_active=detail.is_active,
                     item_kind_code=it.item_kind_code,
@@ -462,6 +473,8 @@ class ItemFields:
     pos_button_color: str | None = None
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
+    pos_menu_group_id: int | None = None
+    ecommerce_stock_mode: str = "DATABASE"
 
 
 def _validate_item_fields(fields: ItemFields) -> None:
@@ -471,6 +484,8 @@ def _validate_item_fields(fields: ItemFields) -> None:
         raise ValueError("خدمت نمی‌تواند موجودی‌محور باشد.")
     if fields.track_expiry and not fields.track_batch:
         raise ValueError("ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است.")
+    if fields.ecommerce_stock_mode not in ("DATABASE", "ALWAYS_IN_STOCK", "OUT_OF_STOCK"):
+        raise ValueError("حالتِ موجودیِ فروشِ اینترنتی نامعتبر است.")
 
 
 def create_item(
@@ -517,6 +532,27 @@ def create_item(
         return item.item_id
 
 
+def bulk_set_brand_category(company_id: int, item_ids: list[int], *, set_brand: bool = False, brand_id: int | None = None, set_category: bool = False, category_id: int | None = None) -> int:
+    """طبقِ درخواستِ صریح (پورتِ «Category & Brand Studio»ِ PeechaSync): تخصیصِ
+    گروهیِ دسته/برند به چند کالا در یک اقدام -- به‌جایِ بازکردنِ تک‌تکِ
+    فرمِ کالا. set_brand/set_category جدا از خودِ برند/دسته است تا کاربر
+    بتواند فقط یکی از این دو را تغییر دهد و «بدونِ برند»/«بدونِ دسته»
+    (یعنی None) هم یک انتخابِ معتبر باشد."""
+    if not set_brand and not set_category:
+        return 0
+    with new_session() as session:
+        items = session.scalars(
+            select(Item).where(Item.company_id == company_id, Item.item_id.in_(item_ids))
+        ).all()
+        for item in items:
+            if set_brand:
+                item.brand_id = brand_id
+            if set_category:
+                item.category_id = category_id
+        session.commit()
+        return len(items)
+
+
 def update_item(
     item_id: int, company_id: int, code: str, name: str, is_active: bool, lifecycle_status_code: str, fields: ItemFields
 ) -> None:
@@ -542,11 +578,19 @@ def update_item(
         if has_open_balance and item.costing_method_code != fields.costing_method_code:
             raise ValueError("این کالا در انباری موجودی دارد؛ روشِ قیمت‌گذاری فقط با موجودیِ صفر قابلِ‌تغییر است.")
 
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده («ویرایشِ متغیرها کرش می‌کند» +
+        # «متغیرها ویژگیِ کالایِ اصلی را نمی‌گیرند»): variant_parent_item_id
+        # هرگز نباید از رویِ فرم بازنویسی شود -- خودِ فرمِ عمومیِ کالا
+        # (collect_fields) اصلاً این فیلد را نمی‌شناسد و همیشه None
+        # می‌فرستد، پس نوشتنِ کورکورانه‌یِ آن این‌جا هر بار که یک متغیر
+        # (حتیّ بدونِ تغییرِ واقعی) از طریقِ همین فرمِ عمومی ذخیره شود، آن
+        # را از کالایِ اصلی‌اش یتیم می‌کرد -- این پیوند فقط توسطِ
+        # item_variants.generate_item_variants (در create_item) تعیین
+        # می‌شود و بعد از آن دیگر از این مسیر تغییر نمی‌کند.
         item.item_kind_code = fields.item_kind_code
         item.base_uom_id = fields.base_uom_id
         item.brand_id = fields.brand_id
         item.manufacturer_id = fields.manufacturer_id
-        item.variant_parent_item_id = fields.variant_parent_item_id
         item.costing_method_code = fields.costing_method_code
         item.lifecycle_status_code = lifecycle_status_code
         item.is_sellable = fields.is_sellable
@@ -564,6 +608,31 @@ def update_item(
             setattr(item, key, value)
         item.updated_at = datetime.datetime.now(datetime.timezone.utc)
         detail_account_id = item.item_detail_account_id
+
+        # طبقِ درخواستِ صریح («وقتی کالایِ اصلی موجودی‌محور باشه باید
+        # واریانت‌ها هم همون ویژگی‌هایِ کالایِ اصلی را بگیرد» + «متغیرها
+        # همه از کالایِ اصلی ارث ببرند»): این همگام‌سازی فقط یک‌بارِ
+        # هنگامِ تولیدِ اولیه‌یِ متغیرها کافی نیست -- هر بار که خودِ کالایِ
+        # اصلی (نه یک متغیر) ذخیره می‌شود، این فیلدهایِ ساختاری/ردیابی به
+        # همه‌یِ متغیرهایِ موجودش هم اعمال می‌شود. فیلدهایِ
+        # is_sellable/is_purchasable/is_stock_tracked عمداً این‌جا نیستند:
+        # کالایِ اصلیِ دارایِ متغیر خودش همیشه غیرِقابلِ‌معامله می‌شود
+        # (طبقِ _sync_parent_transactability در item_variants.py) پس مقدارِ
+        # فعلیِ آن فیلدها رویِ خودِ فرم معنایِ «الگو» ندارد و نباید به
+        # متغیرهایی که از قبل درست تنظیم شده‌اند سرایت کند.
+        if item.variant_parent_item_id is None:
+            variants = session.scalars(select(Item).where(Item.variant_parent_item_id == item_id)).all()
+            for variant in variants:
+                variant.item_kind_code = fields.item_kind_code
+                variant.base_uom_id = fields.base_uom_id
+                variant.brand_id = fields.brand_id
+                variant.manufacturer_id = fields.manufacturer_id
+                variant.costing_method_code = fields.costing_method_code
+                variant.track_serial = fields.track_serial
+                variant.track_batch = fields.track_batch
+                variant.track_expiry = fields.track_expiry
+                variant.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
         session.commit()
 
     dimensions_service.update_detail_account(detail_account_id, company_id, code, is_active, name)
@@ -620,6 +689,14 @@ def delete_item(item_id: int, company_id: int) -> None:
         session.execute(delete(ItemUomConversion).where(ItemUomConversion.item_id == item_id))
         session.execute(delete(ItemVariantValue).where(ItemVariantValue.item_id == item_id))
         session.execute(delete(ItemSupplier).where(ItemSupplier.item_id == item_id))
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده («کالای بدونِ هیچ گردشی حذف نمی‌شود
+        # و پیامی هم نشان داده نمی‌شود»): این کالا شکست می‌خورد چون
+        # inv.item_supplier_codes (کدها/نام‌هایِ تامین‌کننده‌یِ R62) هم
+        # فقط با خودِ همین کالا معنا دارد اما این‌جا پاک نمی‌شد -- نقضِ
+        # کلیدِ خارجی به‌صورتِ یک IntegrityErrorِ خام بالا می‌آمد که هیچ‌جا
+        # به ValueErrorِ قابلِ‌نمایش تبدیل نمی‌شد، پس UI هیچ پیامی نشان
+        # نمی‌داد (فقط trace رویِ کنسول).
+        session.execute(delete(ItemSupplierCode).where(ItemSupplierCode.item_id == item_id))
         session.execute(delete(ItemMedia).where(ItemMedia.item_id == item_id))
         session.execute(
             delete(RelatedItem).where((RelatedItem.item_id == item_id) | (RelatedItem.related_item_id == item_id))
@@ -627,6 +704,12 @@ def delete_item(item_id: int, company_id: int) -> None:
         session.execute(delete(StandardCost).where(StandardCost.item_id == item_id))
         session.execute(delete(ReorderPolicy).where(ReorderPolicy.item_id == item_id))
         session.execute(delete(ReorderSuggestionAcknowledgement).where(ReorderSuggestionAcknowledgement.item_id == item_id))
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده (حینِ حذفِ متغیرهایِ دارایِ قیمت):
+        # ردیف‌هایِ فهرستِ قیمت/تاریخچهٔ قیمتِ همین کالا هم فقط با خودِ
+        # همین کالا معنا دارند -- مثلِ بقیه‌یِ زیرجدول‌هایِ تعریفیِ بالا،
+        # پیش از حذفِ خودِ کالا پاک می‌شوند.
+        session.execute(delete(PriceListItemPriceHistory).where(PriceListItemPriceHistory.item_id == item_id))
+        session.execute(delete(PriceListItem).where(PriceListItem.item_id == item_id))
 
         detail_account_id = item.item_detail_account_id
         session.delete(item)

@@ -22,6 +22,17 @@ venv/
 # OS
 .DS_Store
 
-# فونت‌ها (باینری؛ طبق assets/fonts/README.md دانلود شوند)
-assets/fonts/*.ttf
+# اپِ موبایل (mobile/, R132) -- Node/RN
+mobile/node_modules/
+mobile/coverage/
+
+# فونت‌ها: از نسخه‌یِ R109 به بعد Vazirmatn (متن‌بازِ واقعی) عمداً commit
+# شده -- طبق assets/fonts/README.md فقط فونت‌هایِ دیگر (مثلِ IRANSansِ
+# احتمالیِ آینده) باید دستی دانلود و اینجا اضافه شوند.
+assets/fonts/IRANSans-*.ttf
 assets/fonts/*.otf
+
+# Jasper report runner (Java) -- طبق tools/jasper-runner/README.md ساخته شود
+tools/jasper-runner/target/
+tools/jasper-runner/dependency-reduced-pom.xml
+tools/jasper-runner/src/main/resources/fonts/*.ttf

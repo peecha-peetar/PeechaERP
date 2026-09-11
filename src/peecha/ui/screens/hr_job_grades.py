@@ -146,8 +146,8 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for row_index, g in enumerate(self._rows):
             values = [
                 "بله" if g.is_active else "خیر",
-                numerals.format_amount(g.max_base_salary) if g.max_base_salary is not None else "—",
-                numerals.format_amount(g.min_base_salary) if g.min_base_salary is not None else "—",
+                numerals.format_company_amount(g.max_base_salary) if g.max_base_salary is not None else "—",
+                numerals.format_company_amount(g.min_base_salary) if g.min_base_salary is not None else "—",
                 numerals.to_persian_digits(str(g.grade_level)),
                 g.title,
                 g.code,

@@ -75,7 +75,15 @@ class InventoryDocumentsListScreen(QWidget):
         layout.addLayout(filters)
 
         new_buttons = QHBoxLayout()
+        # طبقِ تصمیمِ صریح («برگشت از فروش/به تامین‌کننده از منویِ انبار
+        # حذف شود»): ساختنِ دستیِ سندِ RETURN_IN/RETURN_OUT از این‌جا هم
+        # دیگر پیشنهاد نمی‌شود -- مسیرِ درست، سندِ تجاریِ SALES_RETURN/
+        # PURCHASE_RETURN است که خودش این سند را می‌سازد. ردیف‌هایِ
+        # ازقبل‌موجود (خودکار ساخته‌شده) همچنان در این لیست دیده و
+        # ویرایش/مشاهده می‌شوند.
         for code, label in DOC_TYPE_TITLES.items():
+            if code in ("RETURN_IN", "RETURN_OUT"):
+                continue
             button = QPushButton(f"➕ {label}")
             button.setObjectName("primaryButton")
             button.setToolTip(f"سندِ {label}یِ تازه")
@@ -125,6 +133,7 @@ class InventoryDocumentsListScreen(QWidget):
                 item.setData(Qt.UserRole, d.stock_document_id)
                 self.table.setItem(row_index, col_index, item)
             self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d))
+        self.table.resizeColumnToContents(len(_COLUMNS) - 1)
         self.table.resizeRowsToContents()
 
     def _build_row_actions(self, d: documents_service.StockDocumentRow) -> QWidget:

@@ -14,11 +14,61 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import FiscalYear
-from peecha.db.models.inventory import DocumentReasonCode, Item, StockDocument, StockDocumentLine
+from peecha.db.models.inventory import (
+    CompanyCostingSettings,
+    CostingMethod,
+    DocumentReasonCode,
+    Item,
+    StockDocument,
+    StockDocumentLine,
+    StockLedger,
+)
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_engine as engine_service
+from peecha.services import journal_entries as je_service
 
-DOCUMENT_TYPE_CODES = ("RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT")
+DOCUMENT_TYPE_CODES = (
+    "RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT",
+    # طبقِ درخواستِ صریح («فاکتورِ امانی، هردو جهت»): این دو نوع فقط از
+    # services/commercial_documents.py (سندِ CONSIGNMENT_IN) و
+    # services/commercial_consignment.py (بازگشتِ امانیِ ورودی) ساخته
+    # می‌شوند -- هیچ‌جایِ UIِ عمومیِ اسنادِ انبار مستقیماً این دو را
+    # نمی‌سازد، پس نیازی به فرمِ اختصاصی ندارند.
+    "CONSIGNMENT_IN", "CONSIGN_RETURN",
+)
 _REASON_REQUIRED_TYPES = ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT")
+
+# طبقِ گزارشِ صریح («در فرمِ رسیدِ اصلاح جایی برایِ ورودِ مرکزِ هزینه
+# نیست، مثلِ فرم‌هایِ فروش/خرید نیست»): نگاشتِ نوعِ سند -> کلیدهایِ
+# نقش‌محورِ حسابی که ممکن است در inventory_engine.post_stock_document
+# برایِ آن نوعِ سند به‌کار روند — برایِ تشخیصِ اینکه آیا مرکزِ هزینه/پروژه
+# رویِ سرِسند *الزامی* است یا نه (هم‌الگو با
+# commercial_documents._HEADER_DIMENSION_ROLE_KEYS).
+_HEADER_DIMENSION_ROLE_KEYS: dict[str, tuple[str, ...]] = {
+    "RECEIPT": ("INVENTORY_ASSET", "INVENTORY_COST_VARIANCE", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_GAIN"),
+    "ISSUE": ("INVENTORY_ASSET", "COGS", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_LOSS"),
+    "RETURN_IN": ("INVENTORY_ASSET", "CUSTOMER_RECEIVABLE", "INVENTORY_ADJUSTMENT_GAIN"),
+    "RETURN_OUT": ("INVENTORY_ASSET", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_LOSS"),
+    "ADJUSTMENT": ("INVENTORY_ASSET", "INVENTORY_ADJUSTMENT_GAIN", "INVENTORY_ADJUSTMENT_LOSS"),
+    "TRANSFER": (),
+}
+
+
+def get_header_dimension_requirement(company_id: int, document_type_code: str, dimension_code: str) -> tuple[bool, list]:
+    """(آیا الزامی است, فهرستِ حساب‌هایِ تفصیلیِ سطحِ آخرِ آن گروه) —
+    هم‌الگو با commercial_documents.get_header_dimension_requirement."""
+    dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimension_code)
+    options = dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)
+    is_required = False
+    for key in _HEADER_DIMENSION_ROLE_KEYS.get(document_type_code, ()):
+        account_id = engine_service.get_account_mapping(company_id, key)
+        if account_id is None:
+            continue
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        if any(r.dimension_type_id == dim_type_id for r in required):
+            is_required = True
+            break
+    return is_required, options
 
 
 # ---------------------------------------------------------------------
@@ -101,6 +151,7 @@ class StockDocumentLineRow:
     batch_id: int | None
     unit_cost: decimal.Decimal | None
     line_total_cost: decimal.Decimal | None
+    tax_amount: decimal.Decimal
     quality_status_code: str
     reason_code_id: int | None
     source_line_id: int | None
@@ -140,8 +191,8 @@ def get_stock_document(stock_document_id: int, company_id: int) -> tuple[StockDo
         line_rows = [
             StockDocumentLineRow(
                 ln.line_id, ln.line_no, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.bin_location_id,
-                ln.destination_bin_location_id, ln.batch_id, ln.unit_cost, ln.line_total_cost, ln.quality_status_code,
-                ln.reason_code_id, ln.source_line_id, ln.description,
+                ln.destination_bin_location_id, ln.batch_id, ln.unit_cost, ln.line_total_cost, ln.tax_amount,
+                ln.quality_status_code, ln.reason_code_id, ln.source_line_id, ln.description,
             )
             for ln in lines
         ]
@@ -154,6 +205,8 @@ WAREHOUSE_REQUIREMENTS = {
     "ISSUE": {"destination": False, "source": True},
     "RETURN_OUT": {"destination": False, "source": True},
     "TRANSFER": {"destination": True, "source": True},
+    "CONSIGNMENT_IN": {"destination": True, "source": False},
+    "CONSIGN_RETURN": {"destination": False, "source": True},
 }
 
 
@@ -379,6 +432,17 @@ class LineFields:
     destination_bin_location_id: int | None = None
     batch_id: int | None = None
     unit_cost: decimal.Decimal | None = None
+    # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید هیچ‌وقت به سندِ
+    # حسابداری نمی‌رسد»): وقتی این ردیف از یک سندِ بازرگانی (فاکتورِ
+    # خرید) می‌آید، مالياتِ همان ردیف جداگانه این‌جا هم منتقل می‌شود —
+    # نه بخشی از unit_cost (که ارزشِ خودِ موجودی است).
+    tax_amount: decimal.Decimal | None = None
+    # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ اقلامِ
+    # فاکتور»): سهمِ همین ردیف از هزینه‌هایِ جانبیِ فاکتورِ خرید -- مثلِ
+    # tax_amount، جداگانه از unit_cost منتقل می‌شود (خودِ engine_service
+    # آن را به بهایِ لجر اضافه می‌کند، بدونِ اینکه وارد بستانکاریِ
+    # پرداختنیِ تامین‌کنندهٔ کالا شود).
+    landed_cost_amount: decimal.Decimal | None = None
     reason_code_id: int | None = None
     source_line_id: int | None = None
     description: str | None = None
@@ -402,7 +466,9 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
             stock_document_id=stock_document_id, line_no=next_no, item_id=fields.item_id, uom_id=fields.uom_id,
             quantity=fields.quantity, quantity_base=fields.quantity_base, bin_location_id=fields.bin_location_id,
             destination_bin_location_id=fields.destination_bin_location_id, batch_id=fields.batch_id,
-            unit_cost=fields.unit_cost, reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
+            unit_cost=fields.unit_cost, tax_amount=(fields.tax_amount or decimal.Decimal(0)),
+            landed_cost_amount=(fields.landed_cost_amount or decimal.Decimal(0)),
+            reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
             description=(fields.description or None),
         )
         if doc.document_type_code == "RECEIPT":
@@ -428,6 +494,8 @@ def update_line(line_id: int, stock_document_id: int, company_id: int, fields: L
         line.destination_bin_location_id = fields.destination_bin_location_id
         line.batch_id = fields.batch_id
         line.unit_cost = fields.unit_cost
+        line.tax_amount = fields.tax_amount or decimal.Decimal(0)
+        line.landed_cost_amount = fields.landed_cost_amount or decimal.Decimal(0)
         line.reason_code_id = fields.reason_code_id
         line.source_line_id = fields.source_line_id
         line.description = fields.description or None
@@ -513,5 +581,18 @@ def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
         session.commit()
 
 
-def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_id: int) -> engine_service.PostResult:
-    return engine_service.post_stock_document(stock_document_id, company_id, posted_by_user_id)
+def post_stock_document(
+    stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
+    extra_je_lines: list[je_service.LineInput] | None = None,
+) -> engine_service.PostResult:
+    return engine_service.post_stock_document(
+        stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines,
+    )
+
+
+def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> engine_service.PostResult:
+    """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ ثبت‌شده باید عیناً برگشت بخورد،
+    نه اینکه سندِ اصلی با تاریخِ عقب‌دار دست‌کاری شود») -- پیاده‌سازیِ کاملش
+    در inventory_engine.py است (تنها نقطه‌یِ نوشتنِ stock_ledger/
+    stock_balance)؛ این‌جا فقط delegate می‌کند، هم‌الگو با post_stock_document."""
+    return engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)

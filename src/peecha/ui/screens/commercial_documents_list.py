@@ -29,6 +29,7 @@ from peecha.ui.screens.commercial_document import (
     DOC_TYPE_TITLES,
     STATUS_LABELS,
     _CONVERTIBLE_TO_INVOICE_TYPES,
+    _CONVERTS_TO_SALES_INVOICE,
     _ConvertToInvoiceDialog,
 )
 
@@ -48,14 +49,24 @@ _TYPE_TO_NAV_CODE = {
     "PURCHASE_PROFORMA": "PURCH_PROFORMA",
     "PURCHASE_INVOICE": "PURCH_INVOICE",
     "PURCHASE_RETURN": "PURCH_RETURN",
+    "CONSIGNMENT_OUT": "SALES_CONSIGNMENT_OUT",
+    "CONSIGNMENT_IN": "PURCH_CONSIGNMENT_IN",
 }
 
 
 class CommercialDocumentsListScreen(QWidget):
-    def __init__(self, main_window, type_filter_codes: tuple[str, ...] | None = None) -> None:
+    def __init__(
+        self, main_window, type_filter_codes: tuple[str, ...] | None = None,
+        channel_type_code: str | None = None, title_override: str | None = None,
+    ) -> None:
         super().__init__()
         self._main_window = main_window
         self._type_filter_codes = type_filter_codes
+        # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط سفارش‌هایِ فروشِ
+        # مشتری بیاید»): وقتی این مقدار تنظیم شده باشد (مثلاً "ONLINE")،
+        # فهرست فقط سندهایی را نشان می‌دهد که کانالشان از همان نوع است --
+        # ثابت است، فیلترِ قابلِ‌تغییر توسطِ کاربر نیست.
+        self._channel_type_code = channel_type_code
         self._rows: list = []
         self._parties_by_id: dict[int, str] = {}
 
@@ -63,7 +74,10 @@ class CommercialDocumentsListScreen(QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
 
-        title = QLabel("اسنادِ فروش" if type_filter_codes and type_filter_codes[0].startswith("SALES") else "اسنادِ خرید" if type_filter_codes else "اسنادِ بازرگانی")
+        title = QLabel(
+            title_override
+            or ("اسنادِ فروش" if type_filter_codes and type_filter_codes[0].startswith("SALES") else "اسنادِ خرید" if type_filter_codes else "اسنادِ بازرگانی")
+        )
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
@@ -85,16 +99,31 @@ class CommercialDocumentsListScreen(QWidget):
             self.status_filter.addItem(label, code)
         self.status_filter.currentIndexChanged.connect(self.refresh)
         filters.addWidget(self.status_filter)
+
+        # طبقِ درخواستِ صریح («چون تعدادِ فاکتورهایِ تک‌فروشی زیاده باید
+        # فیلتری رویِ اسنادِ فروش باشه»): فیلترِ منبعِ سند -- عمومی/
+        # تک‌فروشی (POS) -- بر اساسِ pos_session_id.
+        filters.addWidget(QLabel("منبع"))
+        self.source_filter = QComboBox()
+        self.source_filter.addItem("(همه)", None)
+        self.source_filter.addItem("عمومی", "GENERAL")
+        self.source_filter.addItem("تک‌فروشی (POS)", "POS")
+        self.source_filter.currentIndexChanged.connect(self.refresh)
+        filters.addWidget(self.source_filter)
         filters.addStretch(1)
         layout.addLayout(filters)
 
         new_buttons = QHBoxLayout()
-        for code in visible_types:
-            button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
-            button.setObjectName("primaryButton")
-            button.setToolTip(f"سندِ {DOC_TYPE_TITLES[code]}یِ تازه")
-            button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
-            new_buttons.addWidget(button)
+        if channel_type_code is None:
+            # طبقِ همان درخواست: این فهرست وقتی مخصوصِ یک کانالِ خاص است
+            # (مثلاً سفارش‌هایِ فروشِ اینترنتی) صرفاً نمایشی است -- سفارشِ
+            # اینترنتی از طریقِ سینک می‌آید، نه دکمهٔ «تازه» در همین‌جا.
+            for code in visible_types:
+                button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
+                button.setObjectName("primaryButton")
+                button.setToolTip(f"سندِ {DOC_TYPE_TITLES[code]}یِ تازه")
+                button.clicked.connect(lambda _checked=False, c=code: self._open_new(c))
+                new_buttons.addWidget(button)
         layout.addLayout(new_buttons)
 
         self.table = QTableWidget(0, len(_COLUMNS))
@@ -129,21 +158,38 @@ class CommercialDocumentsListScreen(QWidget):
         if type_code is None and self._type_filter_codes is not None:
             self._rows = []
             for code in self._type_filter_codes:
-                self._rows.extend(documents_service.list_documents(company_id, document_type_code=code, status_code=self.status_filter.currentData()))
+                self._rows.extend(
+                    documents_service.list_documents(
+                        company_id, document_type_code=code, status_code=self.status_filter.currentData(),
+                        channel_type_code=self._channel_type_code,
+                    )
+                )
             self._rows.sort(key=lambda d: d.document_id, reverse=True)
         else:
-            self._rows = documents_service.list_documents(company_id, document_type_code=type_code, status_code=self.status_filter.currentData())
+            self._rows = documents_service.list_documents(
+                company_id, document_type_code=type_code, status_code=self.status_filter.currentData(),
+                channel_type_code=self._channel_type_code,
+            )
+
+        source = self.source_filter.currentData()
+        if source == "POS":
+            self._rows = [d for d in self._rows if d.pos_session_id is not None]
+        elif source == "GENERAL":
+            self._rows = [d for d in self._rows if d.pos_session_id is None]
 
         self.table.setRowCount(len(self._rows))
         for row_index, d in enumerate(self._rows):
             fulfillment = self._fulfillment_summary(d, company_id)
+            type_label = DOC_TYPE_TITLES.get(d.document_type_code, d.document_type_code)
+            if d.pos_session_id is not None:
+                type_label += " (تک‌فروشی)"
             values = [
                 str(row_index + 1),
-                DOC_TYPE_TITLES.get(d.document_type_code, d.document_type_code),
+                type_label,
                 numerals.to_persian_digits(str(d.document_no)),
                 numerals.format_jalali_date(d.document_date),
                 self._parties_by_id.get(d.counterparty_detail_account_id, "—"),
-                numerals.format_amount(d.total_amount),
+                numerals.format_company_amount(d.total_amount),
                 STATUS_LABELS.get(d.status_code, d.status_code),
                 d.reference_no or "—",
                 self._fulfillment_text(fulfillment),
@@ -153,6 +199,12 @@ class CommercialDocumentsListScreen(QWidget):
                 item.setData(Qt.UserRole, d.document_id)
                 self.table.setItem(row_index, col_index, item)
             self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d, fulfillment))
+        # طبقِ رفعِ باگِ واقعیِ هم‌پوشانیِ دکمه‌ها: در این نسخه‌یِ Qt،
+        # ResizeToContents فقط یک‌بار (بر مبنایِ متنِ هدر) اندازه‌گیری
+        # می‌شود و بعدِ setCellWidget دوباره محاسبه نمی‌شود -- باید صریحاً
+        # این ستون را با اندازه‌یِ واقعیِ ویجت‌هایِ داخلش (که بسته به
+        # سه‌دکمه‌ای/دودکمه‌ای بودنِ سند فرق می‌کند) دوباره اندازه‌گیری کرد.
+        self.table.resizeColumnToContents(len(_COLUMNS) - 1)
         self.table.resizeRowsToContents()
 
     def _fulfillment_summary(self, d, company_id: int) -> tuple[decimal.Decimal, decimal.Decimal] | None:
@@ -182,7 +234,16 @@ class CommercialDocumentsListScreen(QWidget):
         # برخلافِ فاکتور/برگشت، بعدِ تاییدشدن هم قابلِ‌ویرایش می‌مانند
         # (services/commercial_documents.py:_get_editable_document).
         is_order_type = d.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
-        is_editable = d.status_code == "DRAFT" or (is_order_type and d.status_code in ("CONFIRMED", "APPROVED"))
+        # طبقِ R100: فاکتورِ فروشِ تک‌فروشی هم -- تا پیش از تاییدِ سرپرست
+        # (CONFIRMED) -- قابلِ‌اصلاح است (از فرمِ تک‌فروشیِ خودش، طبقِ
+        # _open_existing بالا).
+        is_pos_pre_approval = (
+            d.document_type_code == "SALES_INVOICE" and d.pos_session_id is not None and d.status_code == "CONFIRMED"
+        )
+        is_editable = (
+            d.status_code == "DRAFT" or (is_order_type and d.status_code in ("CONFIRMED", "APPROVED"))
+            or is_pos_pre_approval
+        )
         # طبقِ رفعِ باگِ واقعی («علامتهایِ حذف و ویرایش و تبدیل در ردیف
         # معلوم نیست»): ✏️/🗑️/🧾 ایموجی‌هایِ نسبتاً تازه‌اند (یونیکدِ ۹ به
         # بعد) و روی فونت/سیستمِ کاربر بدونِ گلیفِ رنگی به‌صورتِ جعبه‌یِ
@@ -199,7 +260,7 @@ class CommercialDocumentsListScreen(QWidget):
         delete_button = QPushButton("✕")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedSize(44, 32)
-        if d.status_code != "POSTED":
+        if d.status_code not in ("POSTED", "CORRECTED"):
             # طبقِ services/commercial_documents.py:delete_document —
             # DRAFT/CONFIRMED/APPROVED/CANCELLED هرگز اثری در انبار یا
             # حسابداری نگذاشته‌اند، پس حذفِ مستقیم همیشه بی‌خطر است.
@@ -207,7 +268,11 @@ class CommercialDocumentsListScreen(QWidget):
             delete_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._delete_document(doc_id))
         else:
             delete_button.setEnabled(False)
-            delete_button.setToolTip("این سند ثبتِ‌نهایی شده و در انبار/حسابداری اثر دارد — حذفِ مستقیم ممکن نیست.")
+            delete_button.setToolTip(
+                "این سند اصلاح شده و تاریخچه‌اش باید دست‌نخورده بماند — حذفِ مستقیم ممکن نیست."
+                if d.status_code == "CORRECTED" else
+                "این سند ثبتِ‌نهایی شده و در انبار/حسابداری اثر دارد — حذفِ مستقیم ممکن نیست."
+            )
         actions_layout.addWidget(delete_button)
 
         # طبقِ درخواستِ صریح («تبدیل باید همین‌جا در صفحه‌یِ اسناد انجام
@@ -238,6 +303,21 @@ class CommercialDocumentsListScreen(QWidget):
         doc = next((d for d in self._rows if d.document_id == document_id), None)
         if doc is None:
             return
+        # طبقِ درخواستِ صریح («اصلاحِ فاکتورِ تک‌فروشی جدا از اصلاحِ
+        # فاکتور باشه... اگر فاکتور تک‌فروشی اصلاح بشه در همان فرمِ
+        # تک‌فروشی باز بشه»): فاکتورِ فروشِ تک‌فروشی (pos_session_id
+        # دارد) که هنوز پیش‌از‌تاییدِ‌سرپرست است (DRAFT/CONFIRMED -- طبقِ
+        # R100، همان بازه‌ای که اصلاً قابلِ‌اصلاح است)، در فرمِ تک‌فروشیِ
+        # خودش باز می‌شود -- نه فرمِ عمومیِ فاکتور. برایِ فاکتورِ
+        # POSTEDِ تک‌فروشی (مسیرِ جداگانه‌یِ «اصلاحِ فاکتورِ ثبت‌نهایی‌شده»)
+        # همچنان همان فرمِ عمومی باز می‌شود -- طبقِ تصمیمِ صریح، این دو
+        # مسیر قاطی نمی‌شوند.
+        if (
+            doc.document_type_code == "SALES_INVOICE" and doc.pos_session_id is not None
+            and doc.status_code in ("DRAFT", "CONFIRMED")
+        ):
+            self._main_window.open_screen("SALES_POS_SALE", then=lambda screen: screen.open_document_for_edit(document_id))
+            return
         nav_code = _TYPE_TO_NAV_CODE[doc.document_type_code]
         self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
 
@@ -260,8 +340,8 @@ class CommercialDocumentsListScreen(QWidget):
         dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id)
         if dialog.exec() != QDialog.Accepted:
             return
-        is_sales = doc.document_type_code.startswith("SALES")
-        target_title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
+        converts_to_sales = doc.document_type_code in _CONVERTS_TO_SALES_INVOICE
+        target_title = "فاکتورِ فروش" if converts_to_sales else "فاکتورِ خرید"
         try:
             new_document_id = documents_service.convert_to_invoice(
                 document_id, company_id, app_session.current_user.user_id, datetime.date.today(),

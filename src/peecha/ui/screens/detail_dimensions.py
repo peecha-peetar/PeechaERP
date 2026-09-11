@@ -22,15 +22,19 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import traceback
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QBrush, QColor, QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
+    QDialog,
     QDoubleSpinBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -42,6 +46,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -56,9 +61,20 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import hr as hr_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import payroll as payroll_service
+from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.inventory_item_panel import ItemDetailPanel, _KIND_LABELS, _LIFECYCLE_LABELS
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, PersianDigitLineEdit, build_action_footer
+from peecha.ui.widgets import (
+    FieldGrid,
+    FieldHelpMixin,
+    FieldSpec,
+    LayoutEditMixin,
+    JalaliDateEdit,
+    PersianDigitLineEdit,
+    build_action_footer,
+    build_page_header,
+    build_section_layout,
+)
 
 # طبقِ درخواستِ صریح («کد باید اولین ستون از سمتِ راست باشد، در همه‌ی
 # فرم‌هایِ این‌شکلی») — هم‌الگو با ترتیبِ ستون‌هایِ کدینگِ حساب‌ها.
@@ -107,6 +123,7 @@ _PERSON_FIELD_LABELS = {
     "payment_term_days": "مهلتِ پرداخت (روز)",
     "credit_limit_amount": "سقفِ اعتبار (بازرگانی)",
     "is_tax_exempt": "معافِ مالیاتی",
+    "distribution_route_detail_account_id": "مسیرِ توزیع",
 }
 
 # طبقِ یکپارچه‌سازیِ «تعریفِ کارمند فقط از طریقِ تفصیلی»: این کمبوها
@@ -128,6 +145,12 @@ _PERSON_COMBO_LOADERS = {
     ],
     (dimensions_service.CUSTOMER_GROUP_CODE, "default_channel_code"): lambda company_id: [
         (ch.channel_code, f"{ch.channel_code} — {ch.name}") for ch in pricing_service.list_channels(company_id)
+    ],
+    (dimensions_service.CUSTOMER_GROUP_CODE, "distribution_route_detail_account_id"): lambda company_id: [
+        (r.detail_account_id, f"{r.code} — {r.name or ''}")
+        for r in dimensions_service.list_leaf_detail_accounts(
+            company_id, dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE)
+        )
     ],
     (dimensions_service.SUPPLIER_GROUP_CODE, "supplier_group_id"): lambda company_id: [
         (g.group_id, g.name) for g in partners_service.list_supplier_groups(company_id)
@@ -159,7 +182,7 @@ _PERSON_GROUP_META = {
             ("economic_code", "text"), ("national_id", "text"), ("phone", "text"), ("mobile", "text"),
             ("address", "text"), ("customer_group_id", "combo"), ("default_price_list_id", "combo"),
             ("default_channel_code", "combo"), ("payment_term_days", "decimal"), ("credit_limit_amount", "decimal"),
-            ("is_tax_exempt", "bool"), ("notes", "text"),
+            ("is_tax_exempt", "bool"), ("distribution_route_detail_account_id", "combo"), ("notes", "text"),
         ),
         "list_fn": partners_service.list_customer_detail_accounts,
         "create_fn": partners_service.create_customer_detail_account,
@@ -231,6 +254,39 @@ def _make_field_widget(kind: str) -> QWidget:
     return PersianDigitLineEdit()
 
 
+class _ClickableLabel(QLabel):
+    """طبقِ درخواستِ صریح («با کلیک روی عکسهای آپلود شده زوم هم بشه»):
+    QLabelِ معمولی سیگنالِ کلیک ندارد -- این زیرکلاسِ ساده همان را اضافه
+    می‌کند."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (نامِ متدِ Qt)
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class _PhotoZoomDialog(QDialog):
+    """طبقِ درخواستِ صریح («تمام صفحه ببینیم»): نمایِ بزرگِ یک عکس، تا
+    حدِ ۸۰٪ اندازه‌یِ صفحه‌نمایش (بدونِ خرابیِ نسبت)."""
+
+    def __init__(self, pixmap: QPixmap, title: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        layout = QVBoxLayout(self)
+        label = QLabel()
+        label.setAlignment(Qt.AlignCenter)
+        screen = QApplication.primaryScreen()
+        if screen is not None and not pixmap.isNull():
+            max_size = screen.availableSize() * 0.8
+            if pixmap.width() > max_size.width() or pixmap.height() > max_size.height():
+                pixmap = pixmap.scaled(
+                    max_size.width(), max_size.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+        label.setPixmap(pixmap)
+        layout.addWidget(label)
+
+
 class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -259,8 +315,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
-        outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_account_panel(), stretch=2)
+        # طبقِ درخواستِ صریحِ کاربر («لیستِ تفصیلی حذف بشه و فقط ورودِ
+        # تفصیلیِ جدید باشه، تا تبِ تعریفِ تفصیلی (مثلاً فرمِ کالا) فضایِ
+        # بهتری داشته باشد»): فهرستِ همیشه-نمایانِ حساب‌ها (که قبلاً یک
+        # ستونِ کاملِ کنارِ فرم بود) کاملاً حذف شد؛ کلِ عرضِ صفحه به فرمِ
+        # ورودِ اطلاعات می‌رسد. انتخابِ گروه به‌تنهایی فرم را برایِ ثبتِ
+        # رکوردِ *تازه* آماده می‌کند (طبقِ منطقِ ازپیش‌موجودِ _select)؛
+        # برایِ بازکردنِ یک حسابِ *موجود* جهتِ ویرایش، دکمهٔ 🔍 یک دیالوگِ
+        # جداگانه (حاویِ همان درختِ قبلی) باز می‌کند -- پس امکانِ ویرایش
+        # از بین نرفته، فقط دیگر همیشه فضا اشغال نمی‌کند.
+        outer.addWidget(self._build_account_panel(), stretch=1)
+        self._account_picker_dialog = self._build_account_picker_dialog()
 
         self.set_field_help([
             (
@@ -289,29 +354,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             ),
         ])
 
-    # --- ستونِ چپ: انتخابِ گروه + فهرستِ حساب‌ها -----------------------------
-    def _build_list_panel(self) -> QWidget:
-        panel = QWidget()
-        panel.setObjectName("card")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(10)
-
-        title = QLabel("تعریفِ حساب‌هایِ تفصیلی")
-        title.setObjectName("pageTitle")
-        layout.addWidget(title)
-
-        hint = QLabel(
-            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود."
-        )
-        hint.setObjectName("sectionHint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-
-        layout.addWidget(QLabel("گروه"))
-        self.group_combo = QComboBox()
-        self.group_combo.currentIndexChanged.connect(self._on_group_changed)
-        layout.addWidget(self.group_combo)
+    # --- دیالوگِ انتخابِ حسابِ تفصیلیِ *موجود* (برایِ ویرایش) -----------------
+    def _build_account_picker_dialog(self) -> QDialog:
+        """طبقِ رفعِ باگِ گزارش‌شده («لیستِ تفصیلی حذف بشه»): درختِ حساب‌ها
+        دیگر همیشه رویِ صفحه نیست -- فقط با زدنِ دکمهٔ 🔍 (کنارِ کمبویِ
+        گروه در فرمِ اصلی) به‌صورتِ یک دیالوگِ جدا باز می‌شود؛ کلیک رویِ
+        هر ردیف هم مثلِ قبل رکورد را در فرم بارگذاری می‌کند و هم خودش
+        دیالوگ را می‌بندد."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("بازکردنِ حسابِ تفصیلیِ موجود")
+        dialog.resize(680, 560)
+        layout = QVBoxLayout(dialog)
 
         self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
         self.show_all_levels_checkbox.toggled.connect(lambda _checked: self._rebuild_accounts_tree())
@@ -321,9 +374,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.accounts_table.setColumnCount(len(_COLUMNS))
         self.accounts_table.setHeaderLabels(_COLUMNS)
         self.accounts_table.itemClicked.connect(self._on_account_item_clicked)
+        self.accounts_table.itemClicked.connect(lambda *_args: dialog.accept())
         layout.addWidget(self.accounts_table, stretch=1)
 
-        return panel
+        return dialog
+
+    def _open_account_picker(self) -> None:
+        if self._selected is None:
+            self.account_status_label.setText("ابتدا یک گروه انتخاب کنید.")
+            return
+        self._rebuild_accounts_tree()
+        self._account_picker_dialog.exec()
 
     # --- ستونِ راست: فرمِ حسابِ تفصیلی ---------------------------------------
     def _build_account_panel(self) -> QWidget:
@@ -332,30 +393,55 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
 
         panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(10)
+        layout = build_section_layout(panel)
 
         self.account_form_title = QLabel("حسابِ تفصیلیِ جدید")
         self.account_form_title.setObjectName("pageTitle")
         layout.addWidget(self.account_form_title)
 
+        # طبقِ درخواستِ صریح («بشه از تفضیلی‌هایِ دیگر کپی کرد و تفصیلیِ
+        # جدید ایجاد نمود»): وقتی در حالِ ساختنِ رکوردِ تازه هستیم، انتخابِ
+        # یک حسابِ تفصیلیِ موجود از همین گروه، تمامِ فیلدهایش (بجز کد --
+        # که باید یکتا بماند) را در فرم پر می‌کند؛ فقط یک محرکِ یک‌باره
+        # است، بعدِ کپی خودش به حالتِ اولیه برمی‌گردد.
+        # طبقِ درخواستِ صریحِ کاربر («این فضاهایِ هدرِ کالا می‌تونه در یک
+        # ردیف هم باشه و نیاز به ردیف‌هایِ اضافی نیست»): «کپی از» هم یک
+        # فیلدِ دیگرِ همینِ FieldGrid است (نه یک ردیفِ جداگانه‌یِ بالاتر)
+        # تا کپی‌از/والد/کد/نام/فعال هرچه‌بیشتر در یک ردیف جا شوند؛ چون
+        # خودش از قبل یک QLabelِ داخلی («کپی از:») دارد، با label=""
+        # اضافه می‌شود تا برچسبِ تکراری ساخته نشود.
+        copy_from_row = QHBoxLayout()
+        copy_from_row.setContentsMargins(0, 0, 0, 0)
+        copy_from_row.addWidget(QLabel("کپی از:"))
+        self.copy_from_combo = QComboBox()
+        self.copy_from_combo.addItem("— انتخابِ نمونه برایِ کپی —", None)
+        self.copy_from_combo.currentIndexChanged.connect(self._on_copy_from_changed)
+        copy_from_row.addWidget(self.copy_from_combo, stretch=1)
+        self.copy_from_widget = QWidget()
+        self.copy_from_widget.setLayout(copy_from_row)
+
         self.parent_combo = QComboBox()
         self.parent_combo.currentIndexChanged.connect(self._on_parent_combo_changed)
 
         self.account_code_field = QLineEdit()
+        self.account_code_field.setMaximumWidth(90)
 
         self.account_name_field = QLineEdit()
 
         self.account_active_checkbox = QCheckBox("فعال")
         self.account_active_checkbox.setChecked(True)
 
+        # ستون‌بندی=۸ تا هر پنج فیلد (کپی‌از/والد/کد/نام/فعال) در یک
+        # ردیفِ واحد جا شوند؛ نسبتِ عرضِ فیلدها (والد/نامِ پهن‌تر از
+        # کد/فعالِ کوتاه) همانِ نسبتِ قبلی حفظ شده، فقط با ستونِ اضافه
+        # برایِ «کپی از».
         self.account_basic_grid = FieldGrid([
+            FieldSpec("copy_from", "", self.copy_from_widget, span=2),
             FieldSpec("parent", "والد", self.parent_combo, span=2),
             FieldSpec("code", "کد", self.account_code_field, span=1),
             FieldSpec("name", "نام", self.account_name_field, span=2),
             FieldSpec("active", "", self.account_active_checkbox, span=1),
-        ])
+        ], columns=8)
         layout.addWidget(self.account_basic_grid)
         self.register_field_grids("detail_dimensions", [self.account_basic_grid])
 
@@ -371,6 +457,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.partner_status_label = QLabel("")
         self.partner_status_label.setVisible(False)
         layout.addWidget(self.partner_status_label)
+        # طبقِ درخواستِ صریح («رتبه‌بندیِ هوشمندِ مشتریان... Customer
+        # Score») و تصمیمِ طراحیِ توافق‌شده (نمایش به‌صورتِ یک بَج در همینِ
+        # فرمِ موجود، نه یک داشبوردِ جداگانه) -- فقط برایِ مشتری (نه
+        # تامین‌کننده) و فقط رویِ رکوردِ از قبل ذخیره‌شده.
+        self.customer_score_label = QLabel("")
+        self.customer_score_label.setVisible(False)
+        layout.addWidget(self.customer_score_label)
         self.person_fields_grid = QGridLayout()
         person_fields_widget = QWidget()
         person_fields_widget.setLayout(self.person_fields_grid)
@@ -413,7 +506,15 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         wrapper_layout = QVBoxLayout(wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
         wrapper_layout.setSpacing(0)
-        wrapper_layout.addWidget(scroll, stretch=1)
+
+        # طبقِ درخواستِ صریح («یک تب درست بشه که عکسها و کاتالوگ و
+        # فایلها در آنجا مدیریت بشه»): تبِ دوم فقط وقتی گروهِ انتخاب‌شده
+        # امکانِ آپلودِ عکس را روشن کرده باشد نمایان می‌شود (_refresh_files_tab).
+        self.account_tabs = QTabWidget()
+        self.account_tabs.addTab(scroll, "اطلاعات")
+        self.files_tab = self._build_files_tab()
+        self.account_tabs.addTab(self.files_tab, "عکس‌ها و فایل‌ها")
+        wrapper_layout.addWidget(self.account_tabs, stretch=1)
 
         self.save_button = QPushButton("💾")
         self.save_button.setObjectName("primaryIconButton")
@@ -451,7 +552,220 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.account_panel = wrapper
         wrapper.setEnabled(False)
-        return wrapper
+
+        # طبقِ درخواستِ صریح: کمبویِ گروه باید همیشه (حتی پیش از انتخابِ
+        # هیچ گروهی) فعال بماند تا اصلاً بشود گروه را انتخاب کرد -- پس
+        # این هدر بیرونِ wrapperِ غیرِفعال‌شدنی قرار می‌گیرد، نه داخلش.
+        header = build_page_header(
+            "تعریفِ حساب‌هایِ تفصیلی",
+            "ساختِ گروهِ تازه و تنظیمِ تعدادِ رقم/بازه/فیلدِ اختصاصی در «پیکربندیِ گروه‌هایِ تفصیلی» انجام می‌شود.",
+        )
+        header_layout = header.layout()
+
+        group_row = QHBoxLayout()
+        group_row.addWidget(QLabel("گروه"))
+        self.group_combo = QComboBox()
+        self.group_combo.currentIndexChanged.connect(self._on_group_changed)
+        group_row.addWidget(self.group_combo, stretch=1)
+        open_picker_button = QPushButton("🔍")
+        open_picker_button.setObjectName("iconButton")
+        open_picker_button.setFixedWidth(44)
+        open_picker_button.setToolTip("بازکردنِ حسابِ تفصیلیِ موجود برایِ ویرایش")
+        open_picker_button.clicked.connect(self._open_account_picker)
+        group_row.addWidget(open_picker_button)
+        header_layout.addLayout(group_row)
+
+        combined = QWidget()
+        combined_layout = QVBoxLayout(combined)
+        combined_layout.setContentsMargins(0, 0, 0, 0)
+        combined_layout.setSpacing(12)
+        combined_layout.addWidget(header)
+        combined_layout.addWidget(wrapper, stretch=1)
+        return combined
+
+    # --- تبِ «عکس‌ها و فایل‌ها» (طبقِ درخواستِ صریح: چند عکس + فایلِ
+    # کاتالوگ + زوم + عکسِ اصلی، همه در یک تبِ جدا از فیلدهایِ اصلی) -----
+    def _build_files_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = build_section_layout(tab)
+
+        upload_row = QHBoxLayout()
+        upload_photo_button = QPushButton("📷 آپلودِ عکس")
+        upload_photo_button.clicked.connect(self._upload_photo)
+        upload_row.addWidget(upload_photo_button)
+        upload_file_button = QPushButton("📎 الصاقِ فایل (کاتالوگ و ...)")
+        upload_file_button.clicked.connect(self._upload_file)
+        upload_row.addWidget(upload_file_button)
+        upload_row.addStretch(1)
+        self.files_upload_row_widget = QWidget()
+        self.files_upload_row_widget.setLayout(upload_row)
+        layout.addWidget(self.files_upload_row_widget)
+
+        self.files_gallery_container = QWidget()
+        self.files_gallery_layout = QVBoxLayout(self.files_gallery_container)
+        self.files_gallery_layout.setContentsMargins(0, 0, 0, 0)
+        self.files_gallery_layout.setSpacing(6)
+        self.files_gallery_layout.addStretch(1)
+
+        gallery_scroll = QScrollArea()
+        gallery_scroll.setWidgetResizable(True)
+        gallery_scroll.setFrameShape(QFrame.NoFrame)
+        gallery_scroll.setWidget(self.files_gallery_container)
+        layout.addWidget(gallery_scroll, stretch=1)
+
+        self.files_empty_label = QLabel("هنوز عکس یا فایلی برایِ این حساب ثبت نشده.")
+        self.files_empty_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.files_empty_label)
+
+        return tab
+
+    def _build_file_row(self, attachment) -> QWidget:
+        row_widget = QWidget()
+        row = QHBoxLayout(row_widget)
+        row.setContentsMargins(4, 4, 4, 4)
+
+        is_image = dimensions_service.is_image_extension(attachment.file_extension)
+        if is_image:
+            thumb = _ClickableLabel()
+            thumb.setFixedSize(56, 56)
+            thumb.setAlignment(Qt.AlignCenter)
+            thumb.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px;")
+            pixmap = QPixmap(attachment.storage_key)
+            if not pixmap.isNull():
+                thumb.setPixmap(pixmap.scaled(56, 56, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            thumb.setCursor(Qt.PointingHandCursor)
+            thumb.setToolTip("برایِ نمایِ بزرگ کلیک کنید")
+            thumb.clicked.connect(lambda a=attachment: self._zoom_photo(a))
+            row.addWidget(thumb)
+        else:
+            file_label = QLabel("📄")
+            file_label.setFixedSize(56, 56)
+            file_label.setAlignment(Qt.AlignCenter)
+            file_label.setStyleSheet("border: 1px solid palette(mid); border-radius: 4px; font-size: 22px;")
+            row.addWidget(file_label)
+
+        name_text = attachment.file_name + ("  ⭐ عکسِ اصلی" if attachment.is_primary else "")
+        name_label = QLabel(name_text)
+        row.addWidget(name_label, stretch=1)
+
+        if is_image and not attachment.is_primary:
+            primary_button = QPushButton("⭐ عکسِ اصلی")
+            primary_button.clicked.connect(lambda _checked=False, a=attachment: self._set_primary_photo(a.attachment_id))
+            row.addWidget(primary_button)
+        if not is_image:
+            open_button = QPushButton("🔗 بازکردن")
+            open_button.clicked.connect(lambda _checked=False, a=attachment: self._open_file(a))
+            row.addWidget(open_button)
+
+        remove_button = QPushButton("🚫 حذف")
+        remove_button.clicked.connect(lambda _checked=False, a=attachment: self._remove_attachment(a.attachment_id))
+        row.addWidget(remove_button)
+
+        return row_widget
+
+    def _refresh_files_tab(self) -> None:
+        while self.files_gallery_layout.count() > 1:
+            item = self.files_gallery_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if self._selected is None:
+            self.account_tabs.setTabVisible(self.account_tabs.indexOf(self.files_tab), False)
+            return
+
+        photo_enabled = dimensions_service.get_group_photo_enabled(self._dimension_type_id(), self._person_group_id())
+        tab_index = self.account_tabs.indexOf(self.files_tab)
+        self.account_tabs.setTabVisible(tab_index, photo_enabled)
+        if not photo_enabled:
+            return
+
+        # عکس/فایل به detail_account_id متصل می‌شود، نه به فرمِ هنوز-
+        # ذخیره‌نشده -- پس برایِ رکوردِ تازه، فقط پیامِ راهنما نشان داده می‌شود.
+        can_show = self._editing_account_id is not None
+        self.files_upload_row_widget.setVisible(can_show)
+        if not can_show:
+            self.files_empty_label.setVisible(True)
+            self.files_empty_label.setText("برایِ آپلودِ عکس/فایل، اول این حساب را ذخیره کنید.")
+            return
+
+        company_id = self._company_id()
+        files = dimensions_service.list_detail_account_files(company_id, self._editing_account_id) if company_id else []
+        self.files_empty_label.setVisible(not files)
+        self.files_empty_label.setText("هنوز عکس یا فایلی برایِ این حساب ثبت نشده.")
+        for attachment in files:
+            self.files_gallery_layout.insertWidget(self.files_gallery_layout.count() - 1, self._build_file_row(attachment))
+
+    def _zoom_photo(self, attachment) -> None:
+        pixmap = QPixmap(attachment.storage_key)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "خطا", "بارگذاریِ عکس ممکن نشد.")
+            return
+        dialog = _PhotoZoomDialog(pixmap, attachment.file_name, self)
+        dialog.exec()
+
+    def _open_file(self, attachment) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(attachment.storage_key))
+
+    def _upload_photo(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "انتخابِ عکس", "", "تصاویر (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+        )
+        if not path:
+            return
+        try:
+            dimensions_service.attach_detail_account_file(
+                company_id, self._editing_account_id, session.current_user.user_id, path
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
+
+    def _upload_file(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        path, _filter = QFileDialog.getOpenFileName(self, "انتخابِ فایل", "", "همه‌ی فایل‌ها (*)")
+        if not path:
+            return
+        try:
+            dimensions_service.attach_detail_account_file(
+                company_id, self._editing_account_id, session.current_user.user_id, path
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
+
+    def _set_primary_photo(self, attachment_id: int) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            dimensions_service.set_primary_detail_account_photo(attachment_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
+
+    def _remove_attachment(self, attachment_id: int) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            dimensions_service.delete_detail_account_file(attachment_id, company_id, session.current_user.user_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_files_tab()
 
     # --- حکمِ حقوق (فقط برایِ گروهِ پرسنل، رویِ کارمندِ ازپیش‌ذخیره‌شده) -----
     def _build_pay_components_section(self) -> QWidget:
@@ -562,7 +876,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for row_index, c in enumerate(self._pay_components):
             values = [
                 f"{c.pay_item_code} — {c.pay_item_name}",
-                numerals.format_amount(c.amount) if c.amount is not None else "—",
+                numerals.format_company_amount(c.amount) if c.amount is not None else "—",
                 numerals.to_persian_digits(c.effective_from.isoformat()),
                 numerals.to_persian_digits(c.effective_to.isoformat()) if c.effective_to else "—",
             ]
@@ -692,13 +1006,23 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         """نمایش/مخفی‌کردنِ پنلِ اختصاصیِ کالا — فقط وقتی گروهِ انتخاب‌شده
         INVENTORY_ITEM باشد و سطحِ درحالِ‌ساخت/ویرایش، سطحِ‌آخر باشد
         (دقیقاً هم‌شرطِ is_leaf_level در _render_person_fields/_render_extra_fields)."""
+        # طبقِ رفعِ باگِ احتمالی: قفلِ زیر فقط باید هنگامِ *ویرایشِ* واقعیِ
+        # یک متغیرِ ازپیش‌موجود اعمال شود -- نه هنگامِ «کپی از» یک متغیر
+        # به‌عنوانِ نمونه برایِ ساختنِ یک رکوردِ کاملاً تازه (که در آن حالت
+        # self._editing_account_id هنوز None است).
+        is_variant = (
+            self._editing_account_id is not None
+            and item_row is not None
+            and item_row.variant_parent_item_id is not None
+        )
+        self._apply_variant_lock(is_variant)
         if not self._is_inventory_item_group():
             self.item_detail_panel.setVisible(False)
             self.item_level_hint_label.setVisible(False)
             return
         is_leaf_level = self._current_level_no() >= self._current_max_level_no
         self.item_detail_panel.setVisible(is_leaf_level)
-        self.item_level_hint_label.setVisible(not is_leaf_level)
+        self.item_level_hint_label.setVisible(not is_leaf_level or is_variant)
         if not is_leaf_level:
             self.item_level_hint_label.setText(
                 f"این یک سطحِ دسته‌بندی است، نه خودِ کالا (سطحِ فعلی: {self._current_level_no()} از "
@@ -711,6 +1035,35 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if company_id is not None:
             self.item_detail_panel.refresh(company_id)
         self.item_detail_panel.load(item_row)
+        if is_variant:
+            # طبقِ درخواستِ صریح («فقط کالایِ اصلی امکانِ ویرایش را داشته
+            # باشد، متغیرها همه از کالایِ اصلی ارث ببرند»): این ردیف خودش
+            # یک متغیر است -- ویرایشِ مستقیمِ فیلدهایِ عمومیِ آن از همین‌جا
+            # ممنوع می‌شود (هم چون منطقاً همه‌چیز باید از کالایِ اصلی ارث
+            # برود، هم چون همین مسیر پیش‌تر باعثِ یتیم‌شدنِ متغیر از کالایِ
+            # اصلی‌اش و کرشِ گزارش‌شده می‌شد) -- توضیحات/قیمت/عکسِ مخصوصِ
+            # همین متغیر هم‌چنان از تبِ «ویژگی‌ها و متغیرها»یِ خودِ کالایِ
+            # اصلی قابلِ‌ویرایش است.
+            self.item_level_hint_label.setText(
+                "این یک «متغیر» است، نه خودِ کالایِ اصلی — همه‌یِ ویژگی‌هایِ این‌جا از کالایِ اصلی به ارث "
+                "می‌رسند و مستقیماً قابلِ‌ویرایش نیستند. برایِ تغییرِ توضیحات/قیمت/عکسِ همین متغیر یا حذفِ آن، "
+                "به تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی مراجعه کنید."
+            )
+
+    def _apply_variant_lock(self, is_variant: bool) -> None:
+        """قفل‌کردنِ فرمِ عمومیِ حسابِ تفصیلی وقتی رکوردِ درحالِ‌ویرایش خودش
+        یک «متغیر» است -- طبقِ توضیحِ _render_item_panel."""
+        self.account_code_field.setEnabled(not is_variant)
+        self.account_name_field.setEnabled(not is_variant)
+        self.account_active_checkbox.setEnabled(not is_variant)
+        self.item_detail_panel.setEnabled(not is_variant)
+        self.save_button.setEnabled(not is_variant)
+        if is_variant:
+            self.delete_button.setEnabled(False)
+            self.delete_button.setToolTip("حذفِ متغیر فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی ممکن است.")
+        else:
+            self.delete_button.setEnabled(True)
+            self.delete_button.setToolTip("حذف")
 
     def _dimension_type_id(self) -> int | None:
         """dimension_type_idِ فعلی — برایِ گروه‌هایِ اشخاص، همیشه نوع‌بُعدِ
@@ -736,19 +1089,30 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         dimension_type_id = self._dimension_type_id()
         person_group_id = self._person_group_id()
 
+        self._item_rows_by_detail_id = (
+            {r.item_detail_account_id: r for r in catalog_service.list_items(company_id)}
+            if self._is_inventory_item_group() else {}
+        )
+
         if self._is_person():
             rows = self._person_meta()["list_fn"](company_id)
             self._person_rows_by_id = {r["detail_account_id"]: r for r in rows}
             self._accounts_by_id = {}
         else:
             rows = dimensions_service.list_detail_accounts(company_id, dimension_type_id)
+            if self._is_inventory_item_group():
+                # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی
+                # نشوند»): ردیفِ تفصیلیِ فنیِ زیرینِ یک متغیر (که فقط برایِ
+                # threadingِ بُعدِ حسابداری در پس‌زمینه نگه داشته می‌شود --
+                # جدولِ inv.item_variants نمایندهٔ واقعیِ آن است) دیگر
+                # هرگز در این درخت/فهرست/کمبوهایِ همین صفحه ظاهر نمی‌شود.
+                rows = [
+                    r for r in rows
+                    if (item_row := self._item_rows_by_detail_id.get(r.detail_account_id)) is None
+                    or item_row.variant_parent_item_id is None
+                ]
             self._accounts_by_id = {r.detail_account_id: r for r in rows}
             self._person_rows_by_id = {}
-
-        self._item_rows_by_detail_id = (
-            {r.item_detail_account_id: r for r in catalog_service.list_items(company_id)}
-            if self._is_inventory_item_group() else {}
-        )
 
         max_level_no = dimensions_service.get_group_max_level_no(dimension_type_id, person_group_id)
         self._current_max_level_no = max_level_no
@@ -765,6 +1129,22 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 if r.level_no < max_level_no and r.detail_account_id != self._editing_account_id:
                     self.parent_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
         self.parent_combo.blockSignals(False)
+
+        # طبقِ درخواستِ صریح («کپی از تفصیلی‌هایِ دیگر»): همه‌یِ حساب‌هایِ
+        # همین گروه (در هر سطحی) به‌عنوانِ نمونه‌یِ کپی در دسترس‌اند.
+        self.copy_from_combo.blockSignals(True)
+        self.copy_from_combo.clear()
+        self.copy_from_combo.addItem("— انتخابِ نمونه برایِ کپی —", None)
+        if self._is_person():
+            for r in rows:
+                if r["detail_account_id"] != self._editing_account_id:
+                    self.copy_from_combo.addItem(f"{r['full_code']} — {r['name'] or ''}", r["detail_account_id"])
+        else:
+            for r in rows:
+                if r.detail_account_id != self._editing_account_id:
+                    self.copy_from_combo.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
+        self.copy_from_combo.blockSignals(False)
+        self.copy_from_widget.setVisible(self._editing_account_id is None)
 
         self._rebuild_accounts_tree()
         self._render_person_fields()
@@ -798,7 +1178,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     r["detail_account_id"], r["parent_detail_account_id"], r["full_code"], r["name"],
                     r["level_no"], r["is_active"],
                     r.get("org_unit_name") or "—", r.get("position_name") or "—",
-                    numerals.format_amount(r["base_salary"]) if r.get("base_salary") is not None else "—",
+                    numerals.format_company_amount(r["base_salary"]) if r.get("base_salary") is not None else "—",
                     _EMPLOYEE_STATUS_LABELS.get(r.get("employee_status"), "—"),
                 )
                 for r in self._person_rows_by_id.values()
@@ -822,6 +1202,19 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 for r in self._accounts_by_id.values()
             ]
 
+        # طبقِ درخواستِ صریح («بندانگشتی کنارِ نام»): عکسِ اصلیِ هر حساب
+        # (اگر گروه این امکان را روشن کرده و آن حساب عکسِ اصلی دارد) به‌
+        # صورتِ آیکونِ کوچک کنارِ ستونِ «نام» نشان داده می‌شود — یک واکشیِ
+        # دسته‌ای، نه یک کوئریِ جدا به‌ازایِ هر ردیف.
+        photo_enabled = dimensions_service.get_group_photo_enabled(self._dimension_type_id(), self._person_group_id())
+        primary_photos: dict[int, object] = {}
+        if photo_enabled:
+            company_id = self._company_id()
+            if company_id is not None:
+                primary_photos = dimensions_service.get_primary_photos_for_accounts(
+                    company_id, [row[0] for row in rows]
+                )
+
         def make_item(row: tuple) -> QTreeWidgetItem:
             detail_account_id, _parent_id, full_code, name, level_no, is_active = row[:6]
             values = [full_code, name or "—", str(level_no), "فعال" if is_active else "غیرفعال"]
@@ -832,6 +1225,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             if color:
                 for col in range(len(columns)):
                     item.setForeground(col, QBrush(QColor(color)))
+            photo = primary_photos.get(detail_account_id)
+            if photo is not None:
+                pixmap = QPixmap(photo.storage_key)
+                if not pixmap.isNull():
+                    item.setIcon(1, QIcon(pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
             return item
 
         if self.show_all_levels_checkbox.isChecked():
@@ -1057,7 +1455,18 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         detail_account_id = item.data(0, Qt.UserRole)
         if detail_account_id is None:
             return
-        self.edit_detail_account(detail_account_id)
+        try:
+            self.edit_detail_account(detail_account_id)
+        except Exception:
+            # طبقِ رفعِ باگِ گزارش‌شده («کلیک رویِ یک ردیفِ دیالوگِ جستجو
+            # کرش می‌کند»): این متد از یک اسلاتِ Qt (itemClicked) صدا زده
+            # می‌شود -- یک استثنایِ پیش‌بینی‌نشده این‌جا هرگز نباید بی‌صدا
+            # کرش کند یا بلعیده شود؛ ردش رویِ کنسول چاپ و پیامی به کاربر
+            # نشان داده می‌شود.
+            traceback.print_exc()
+            self.account_status_label.setText(
+                "بارگذاریِ این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
+            )
 
     def edit_detail_account(self, detail_account_id: int) -> None:
         if self._is_person():
@@ -1081,6 +1490,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.terminate_employee_button.setVisible(is_employee and row.get("employee_status") != "TERMINATED")
             self._refresh_pay_components_section(row.get("employee_id") if is_employee else None)
             self._update_partner_status_display(row)
+            self._refresh_files_tab()
             return
 
         account = self._accounts_by_id.get(detail_account_id)
@@ -1106,6 +1516,57 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.delete_button.setVisible(True)
         self.terminate_employee_button.setVisible(False)
         self._refresh_pay_components_section(None)
+        self._refresh_files_tab()
+
+    def _on_copy_from_changed(self) -> None:
+        source_id = self.copy_from_combo.currentData()
+        if source_id is None:
+            return
+        self._apply_copy_from(source_id)
+        # طبقِ طراحی: این کمبو فقط یک محرکِ یک‌باره است، نه یک انتخابِ
+        # پایدار -- بعدِ اعمالِ کپی به حالتِ «— انتخابِ نمونه... —» برمی‌گردد
+        # تا کاربر بتواند دوباره از نمونه‌یِ دیگری هم کپی کند.
+        self.copy_from_combo.blockSignals(True)
+        self.copy_from_combo.setCurrentIndex(0)
+        self.copy_from_combo.blockSignals(False)
+
+    def _apply_copy_from(self, source_id: int) -> None:
+        """طبقِ درخواستِ صریح («بشه از تفصیلی‌هایِ دیگر کپی کرد»): تمامِ
+        فیلدهایِ یک حسابِ تفصیلیِ موجود -- بجز کد، که باید یکتا بماند و
+        دوباره پیشنهاد می‌شود -- در فرمِ «حسابِ تفصیلیِ جدید» از پیش پر
+        می‌شود. فقط وقتی معنا دارد که در حالِ ساختنِ رکوردِ تازه باشیم
+        (نه ویرایشِ یک رکوردِ موجود) -- copy_from_widget هم دقیقاً به
+        همین شرط پنهان/نمایان می‌شود."""
+        if self._editing_account_id is not None:
+            return
+        if self._is_person():
+            row = self._person_rows_by_id.get(source_id)
+            if row is None:
+                return
+            self.account_name_field.setText(row["name"] or "")
+            self.account_active_checkbox.setChecked(row["is_active"])
+            parent_id = row.get("parent_detail_account_id")
+            index = self.parent_combo.findData(parent_id) if parent_id is not None else 0
+            self.parent_combo.setCurrentIndex(index if index >= 0 else 0)
+            self._render_person_fields(row)
+            self._render_extra_fields(row.get("custom_fields"))
+        else:
+            account = self._accounts_by_id.get(source_id)
+            if account is None:
+                return
+            self.account_name_field.setText(account.name or "")
+            self.account_active_checkbox.setChecked(account.is_active)
+            if account.parent_detail_account_id is not None:
+                index = self.parent_combo.findData(account.parent_detail_account_id)
+                self.parent_combo.setCurrentIndex(index if index >= 0 else 0)
+            else:
+                self.parent_combo.setCurrentIndex(0)
+            self._render_extra_fields(account.extra_fields)
+            item_row = None
+            if self._is_inventory_item_group():
+                item_row = self._item_rows_by_detail_id.get(source_id)
+            self._render_item_panel(item_row)
+        self._suggest_code_for_current_parent()
 
     def _update_partner_status_display(self, row: dict) -> None:
         group_code = self._selected[1] if self._selected else None
@@ -1114,10 +1575,26 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if status_code is None:
             self.partner_status_label.setVisible(False)
             self.approve_partner_button.setVisible(False)
+        else:
+            self.partner_status_label.setText(f"وضعیتِ اعتباری: {_PARTNER_STATUS_LABELS.get(status_code, status_code)}")
+            self.partner_status_label.setVisible(True)
+            self.approve_partner_button.setVisible(status_code == "PENDING_APPROVAL")
+
+        company_id = self._company_id()
+        is_customer = group_code == dimensions_service.CUSTOMER_GROUP_CODE
+        detail_account_id = row.get("detail_account_id")
+        score_row = (
+            assistant_service.get_customer_score(company_id, detail_account_id)
+            if is_customer and company_id is not None and detail_account_id is not None
+            else None
+        )
+        if score_row is None:
+            self.customer_score_label.setVisible(False)
             return
-        self.partner_status_label.setText(f"وضعیتِ اعتباری: {_PARTNER_STATUS_LABELS.get(status_code, status_code)}")
-        self.partner_status_label.setVisible(True)
-        self.approve_partner_button.setVisible(status_code == "PENDING_APPROVAL")
+        self.customer_score_label.setText(
+            f"امتیازِ مشتری: {score_row.emoji} {score_row.score} ({score_row.tier_label})"
+        )
+        self.customer_score_label.setVisible(True)
 
     def _approve_partner(self) -> None:
         if self._editing_account_id is None or self._selected is None:
@@ -1146,6 +1623,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def _cancel_account_edit(self) -> None:
         self._editing_account_id = None
         self.account_form_title.setText("حسابِ تفصیلیِ جدید")
+        self.copy_from_widget.setVisible(True)
+        self.copy_from_combo.blockSignals(True)
+        self.copy_from_combo.setCurrentIndex(0)
+        self.copy_from_combo.blockSignals(False)
         self.account_status_label.setText("")
         self.account_code_field.clear()
         self.account_name_field.clear()
@@ -1163,6 +1644,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.terminate_employee_button.setVisible(False)
         self.partner_status_label.setVisible(False)
         self.approve_partner_button.setVisible(False)
+        self.customer_score_label.setVisible(False)
+        self._refresh_files_tab()
 
     def _terminate_employee(self) -> None:
         if self._editing_account_id is None:
@@ -1190,6 +1673,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         company_id = self._company_id()
         if company_id is None or self._selected is None:
             return
+        if self._is_inventory_item_group() and self._editing_account_id is not None:
+            existing = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
+            if existing is not None and existing.variant_parent_item_id is not None:
+                self.account_status_label.setText(
+                    "این یک متغیر است؛ فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی قابلِ‌ویرایش است."
+                )
+                return
         code = self.account_code_field.text().strip()
         if not code:
             self.account_status_label.setText("کد را وارد کنید.")
@@ -1255,6 +1745,13 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         company_id = self._company_id()
         if company_id is None:
             return
+        if self._is_inventory_item_group():
+            existing = catalog_service.get_item_row_by_detail_account_id(company_id, self._editing_account_id)
+            if existing is not None and existing.variant_parent_item_id is not None:
+                self.account_status_label.setText(
+                    "این یک متغیر است؛ فقط از تبِ «ویژگی‌ها و متغیرها»یِ کالایِ اصلی قابلِ‌حذف است."
+                )
+                return
         confirm = QMessageBox.question(
             self, "حذف", "این حساب حذف شود؟ این کار قابلِ بازگشت نیست.", QMessageBox.Yes | QMessageBox.No
         )
@@ -1274,6 +1771,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.account_status_label.setText(str(exc))
             return
+        except Exception:
+            # طبقِ رفعِ باگِ واقعیِ کشف‌شده («حذف نمی‌شود و هیچ پیامی هم
+            # نشان داده نمی‌شود»): اگر سرویس به هر دلیلِ پیش‌بینی‌نشده‌ای
+            # (مثلاً نقضِ کلیدِ خارجیِ یک زیرجدولِ فراموش‌شده) یک استثنایِ
+            # غیرِ ValueError پرتاب کند، این استثنا در یک اسلاتِ Qt هیچ‌گاه
+            # نباید بی‌صدا بلعیده شود -- حداقل یک پیامِ عمومی به کاربر
+            # نشان داده می‌شود تا بداند حذف انجام نشده.
+            self.account_status_label.setText(
+                "حذف با خطا مواجه شد؛ احتمالاً این حساب در جایِ دیگری استفاده شده است."
+            )
+            return
 
         selected = self._selected
         self._cancel_account_edit()
@@ -1286,7 +1794,17 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         index = _find_combo_index(self.group_combo, combo_data)
         if index >= 0:
             self.group_combo.setCurrentIndex(index)
-        self.edit_detail_account(detail_account_id)
+        try:
+            self.edit_detail_account(detail_account_id)
+        except Exception:
+            # طبقِ رفعِ باگِ گزارش‌شده («کرش می‌کند»): این متد از مسیرِ
+            # ناوبریِ فهرستِ واحدِ تفصیلی‌ها (جستجو -> کلیکِ ردیف) صدا زده
+            # می‌شود -- همان گاردِ _on_account_item_clicked این‌جا هم لازم
+            # است تا یک استثنایِ پیش‌بینی‌نشده کلِ برنامه را کرش نکند.
+            traceback.print_exc()
+            self.account_status_label.setText(
+                "بارگذاریِ این حساب با خطا مواجه شد؛ لطفاً دوباره تلاش کنید."
+            )
 
     def select_type_for_new_entry(self, combo_data: tuple[str, int | str]) -> None:
         """برایِ دکمه‌ی «تفصیلیِ جدید» در فهرستِ واحد — همان گروه را انتخاب

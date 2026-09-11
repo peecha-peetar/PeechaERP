@@ -35,10 +35,20 @@ from peecha.db.models.treasury import (
     ReceivedCheck,
     TreasuryAccountMapping,
 )
+from peecha.db.models.commercial import CommercialDocument
 from peecha.services import audit as audit_service
 from peecha.services import chart_of_accounts as coa_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import installments as installments_service
 from peecha.services import journal_entries as je_service
+
+_MONEY_Q = decimal.Decimal("0.01")
+
+
+def _money(value: decimal.Decimal) -> decimal.Decimal:
+    return value.quantize(_MONEY_Q, rounding=decimal.ROUND_HALF_UP)
+
 
 MAPPING_KEYS = [
     "RECEIPT_CASH",
@@ -48,12 +58,16 @@ MAPPING_KEYS = [
     "RECEIPT_NETTING",
     "RECEIPT_GOODS_COUPON",
     "RECEIPT_VOUCHER",
+    "RECEIPT_INSTALLMENT",
+    "RECEIPT_INSTALLMENT_INTEREST",
     "PAYMENT_CASH",
     "PAYMENT_BANK",
     "PAYMENT_CHECK",
     "PAYMENT_DISCOUNT",
     "PAYMENT_CHECK_DISBURSEMENT",
     "PAYMENT_NETTING",
+    "PAYMENT_INSTALLMENT",
+    "PAYMENT_INSTALLMENT_INTEREST",
     # طبقِ درخواستِ صریح: «برایِ هرِ مرحله یک ردیفِ جداگانه در تنظیمات باشه»
     # — این‌ها مستقل از کلیدهایِ فرمِ دریافت/پرداختِ بالا، مخصوصِ مراحلِ
     # چرخه‌یِ عمرِ چک‌اند (حتی اگر عملاً به همان حساب اشاره کنند).
@@ -74,12 +88,25 @@ MAPPING_LABELS: dict[str, str] = {
     "RECEIPT_NETTING": "تهاترِ دریافت",
     "RECEIPT_GOODS_COUPON": "کالابرگِ دریافتی",
     "RECEIPT_VOUCHER": "بنِ دریافتی",
+    # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): این حساب، سهمی از
+    # طلب/بدهیِ همان طرفِ‌حساب را که قرار است طیِ چند قسط دریافت/پرداخت
+    # شود نگه می‌دارد -- معمولاً یک زیرحسابِ اختصاصیِ «دریافتنی/پرداختنیِ
+    # اقساطی» (تا از AR/APِ عادی جدا و قابلِ‌ردیابی بماند).
+    "RECEIPT_INSTALLMENT": "دریافتنیِ اقساطی",
+    # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط و هزینه‌هایِ متفرقه»): سهمِ بهره/
+    # هزینه‌یِ متفرقه‌یِ اقساط (مازاد بر اصلِ مبلغ) در همان سندِ ساختِ طرحِ
+    # اقساط، مستقیماً به‌عنوانِ درآمد شناسایی می‌شود.
+    "RECEIPT_INSTALLMENT_INTEREST": "درآمدِ بهره/کارمزدِ اقساط",
     "PAYMENT_CASH": "پرداختِ نقدی",
     "PAYMENT_BANK": "پرداختِ بانکی",
     "PAYMENT_CHECK": "چک‌هایِ پرداختنی",
     "PAYMENT_DISCOUNT": "تخفیفاتِ نقدیِ دریافت‌شده",
     "PAYMENT_CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
     "PAYMENT_NETTING": "تهاترِ پرداخت",
+    "PAYMENT_INSTALLMENT": "پرداختنیِ اقساطی",
+    # طبقِ همان موردِ ۶، سمتِ پرداخت: سهمِ بهره/هزینه‌یِ متفرقه به‌عنوانِ
+    # هزینه شناسایی می‌شود (حسابِ هزینه‌یِ انتخابی).
+    "PAYMENT_INSTALLMENT_INTEREST": "هزینه‌یِ بهره/کارمزدِ اقساط",
     "CHECK_RECEIVED_FUND_TRANSFER": "انتقالِ چکِ دریافتی بینِ صندوق‌ها",
     "CHECK_RECEIVED_CASH_COLLECT": "وصولِ نقدیِ چکِ دریافتیِ نزدِ صندوق",
     "CHECK_RECEIVED_BANK_DEPOSIT": "واگذاریِ چکِ دریافتیِ نزدِ صندوق به بانک",
@@ -98,7 +125,7 @@ MAPPING_LABELS: dict[str, str] = {
     "PETTY_CASH_ADVANCE": "پیش‌پرداختِ تنخواه‌گردان",
 }
 
-METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER")
+METHOD_CODES = ("CASH", "BANK", "CHECK", "DISCOUNT", "NETTING", "CHECK_DISBURSEMENT", "GOODS_COUPON", "VOUCHER", "INSTALLMENT")
 
 # --- تاریخچه‌یِ چرخه‌یِ عمرِ چک -----------------------------------------------
 # طبقِ درخواستِ صریح: «چک‌ها باید در هر مرحله ثبت بشه و بتوان گزارش گرفت» —
@@ -1224,6 +1251,37 @@ class MethodLine:
     # یک معین تنظیم شده باشد، همیشه None می‌ماند و رفتار دقیقاً مثلِ قبل
     # از رویِ mapping_key به‌تنهایی resolve می‌شود.
     account_id_override: int | None = None
+    # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): فقط برایِ
+    # method == "INSTALLMENT" -- کدام فاکتورِ ثبت‌شده (همانِ طرفِ‌حسابِ
+    # سند) قرار است طیِ چند قسط دریافت/پرداخت شود، به همراهِ تعدادِ اقساط
+    # و تاریخِ سررسیدِ اولین قسط (بقیه هرکدام ۳۰ روز بعدِ قبلی).
+    installment_document_id: int | None = None
+    installment_count: int | None = None
+    installment_first_due_date: datetime.date | None = None
+    # طبقِ موردِ ۵ («روشِ اقساط منوط به فاکتور نباشد»): installment_document_id
+    # حالا اختیاری است -- اگر None باشد، طرحِ اقساط بدونِ فاکتور و رویِ
+    # مبلغِ آزادِ همین ردیف (ml.amount به‌عنوانِ اصلِ مبلغ) ساخته می‌شود،
+    # با استفاده از company_id/طرفِ‌حسابِ شخصِ همین سند.
+    # طبقِ موردِ ۶ («درصدِ بهره/هزینه‌یِ متفرقه + فاصله‌یِ سررسیدِ آزاد»):
+    # این سه فیلد اختیاری‌اند (پیش‌فرض بدونِ بهره/هزینه، فاصله‌یِ ۳۰روزه --
+    # دقیقاً رفتارِ قبلی) و فقط برایِ method == "INSTALLMENT" معنا دارند.
+    installment_interest_rate_percent: decimal.Decimal | None = None
+    installment_misc_fee_amount: decimal.Decimal | None = None
+    installment_due_interval_days: int | None = None
+    # طبقِ همان درخواست: برایِ هر روشِ دیگر (نقد/بانک/چک/...)، اگر این
+    # ردیف در واقع وصولِ یکی از همان اقساطِ ازپیش‌برنامه‌ریزی‌شده باشد،
+    # با تنظیمِ همین فیلد، آن قسط PAID علامت می‌خورد و خودکار به‌عنوانِ
+    # یک تسویه (comm.invoice_settlements) رویِ فاکتورِ اصلیِ همان طرح هم
+    # ثبت می‌شود -- هم‌افزایی با سیستمِ تسویه‌یِ فاکتورها.
+    collect_installment_line_id: int | None = None
+    # طبقِ درخواستِ صریح («اگر تفصیلی‌ها مراکزِ هزینه و پروژه داشتند...
+    # پیش‌فرض تنظیم شود»): برایِ فرمِ نحوهٔ تسویهٔ تک‌فروشی -- مرکزِ هزینه/
+    # پروژهٔ پیش‌فرضِ همین روش (از تنظیماتِ POS)، به‌عنوانِ {dimension_type_id:
+    # detail_account_id} مستقیم به ردیفِ همین روش اضافه می‌شود (نه به همهٔ
+    # سند، مثلِ shared_details -- چون این پیش‌فرض فقط مالِ همین یک روش
+    # است). سایرِ استفاده‌هایِ create_treasury_voucher این را None می‌گذارند
+    # و رفتارشان بدونِ تغییر می‌ماند.
+    extra_details: dict[int, int] | None = None
 
 
 def create_treasury_voucher(
@@ -1266,6 +1324,20 @@ def create_treasury_voucher(
             raise ValueError("روشِ ردیف نامعتبر است.")
         if ml.amount <= 0:
             raise ValueError("مبلغِ هر ردیف باید مثبت باشد.")
+        if ml.method == "INSTALLMENT":
+            # طبقِ موردِ ۵: installment_document_id دیگر الزامی نیست --
+            # نبودنش یعنی طرحِ اقساطِ آزاد (بدونِ فاکتور)، که در ادامه
+            # (پس از تعیینِ counterparty_person_detail_id) اعتبارسنجی می‌شود.
+            if ml.installment_count is None or ml.installment_first_due_date is None:
+                raise ValueError("برایِ روشِ اقساط، تعدادِ اقساط و تاریخِ سررسیدِ اولین قسط را مشخص کنید.")
+            if ml.installment_count < 2:
+                raise ValueError("تعدادِ اقساط باید حداقل ۲ باشد.")
+            if ml.installment_interest_rate_percent is not None and ml.installment_interest_rate_percent < 0:
+                raise ValueError("درصدِ بهرهٔ اقساط نمی‌تواند منفی باشد.")
+            if ml.installment_misc_fee_amount is not None and ml.installment_misc_fee_amount < 0:
+                raise ValueError("هزینهٔ متفرقهٔ اقساط نمی‌تواند منفی باشد.")
+            if ml.installment_due_interval_days is not None and ml.installment_due_interval_days < 1:
+                raise ValueError("فاصلهٔ سررسیدِ اقساط باید حداقل ۱ روز باشد.")
 
     total = sum((ml.amount for ml in method_lines), decimal.Decimal(0))
 
@@ -1342,6 +1414,58 @@ def create_treasury_voucher(
                 if current_code not in ("IN_HAND", "DEPOSITED"):
                     raise ValueError(f"چکِ شماره‌ی {check.check_no} دیگر قابلِ خرج‌کردن نیست.")
 
+        # اعتبارسنجیِ روشِ اقساط (INSTALLMENT) -- اگر فاکتور انتخاب شده،
+        # باید متعلق به همین شرکت، ثبتِ‌نهایی‌شده، از نوعِ فروش/خرید، و
+        # هم‌طرفِ‌حسابِ همین سند باشد؛ اگر فاکتور انتخاب نشده (طرحِ اقساطِ
+        # آزاد -- موردِ ۵)، طرحِ اقساط به تفصیلیِ شخصِ همین سند
+        # (counterparty_person_detail_id) وصل می‌شود -- برایِ همین، سند
+        # باید دارایِ تفصیلیِ شخص باشد.
+        for ml in method_lines:
+            if ml.method != "INSTALLMENT":
+                continue
+            if ml.installment_document_id is None:
+                if counterparty_person_detail_id is None:
+                    raise ValueError("برایِ طرحِ اقساطِ بدونِ فاکتور، طرفِ‌حسابِ سند باید دارایِ تفصیلیِ شخص باشد.")
+                continue
+            doc = session.get(CommercialDocument, ml.installment_document_id)
+            if doc is None or doc.company_id != company_id:
+                raise ValueError("فاکتورِ انتخاب‌شده برایِ اقساط نامعتبر است.")
+            if doc.document_type_code not in ("SALES_INVOICE", "PURCHASE_INVOICE"):
+                raise ValueError("اقساط فقط برایِ فاکتورِ فروش/خرید ممکن است.")
+            if doc.status_code != "POSTED":
+                raise ValueError("فقط فاکتورِ ثبتِ‌نهایی‌شده قابلِ‌تقسیط است.")
+            if doc.counterparty_detail_account_id != counterparty_account_id:
+                raise ValueError("طرفِ‌حسابِ فاکتورِ انتخاب‌شده با طرفِ‌حسابِ این سند یکی نیست.")
+
+        # اعتبارسنجیِ وصولِ قسط (هر روشِ دیگری که collect_installment_line_id
+        # داشته باشد) -- قسط باید معتبر، متعلق به همین شرکت، و هنوز
+        # پرداخت‌نشده باشد.
+        for ml in method_lines:
+            if ml.collect_installment_line_id is None:
+                continue
+            line = installments_service.get_installment_line(ml.collect_installment_line_id)
+            if line is None:
+                raise ValueError("قسطِ انتخاب‌شده نامعتبر است.")
+            if line.status_code == "PAID":
+                raise ValueError("این قسط قبلاً به‌طورِ کامل دریافت/پرداخت شده است.")
+            # طبقِ درخواستِ صریح («ممکنه بخشی از اقساط وصول بشه»): مبلغِ
+            # این ردیف نباید از ماندهٔ واقعیِ قسط (کل منهایِ وصولی‌هایِ
+            # قبلی) بیشتر باشد -- این بررسی باید همین‌جا، پیش از ساختِ
+            # سند، انجام شود (نه بعداً در record_installment_collection)
+            # تا خطا هرگز یک سندِ ازقبل‌ثبت‌شده و بدونِ تخصیص برجای نگذارد.
+            remaining = installments_service.get_installment_remaining_amount(ml.collect_installment_line_id)
+            if ml.amount > remaining:
+                raise ValueError(f"مبلغِ این ردیف از ماندهٔ قسطِ انتخاب‌شده ({remaining}) بیشتر است.")
+            plan = installments_service.get_installment_plan(line.plan_id)
+            if plan is None:
+                raise ValueError("طرحِ اقساطِ مربوط به این قسط یافت نشد.")
+            if plan.document_id is not None:
+                plan_doc = session.get(CommercialDocument, plan.document_id)
+                if plan_doc is None or plan_doc.company_id != company_id:
+                    raise ValueError("قسطِ انتخاب‌شده متعلق به این شرکت نیست.")
+            elif plan.company_id != company_id:
+                raise ValueError("قسطِ انتخاب‌شده متعلق به این شرکت نیست.")
+
         # طبقِ همین دلیل، commit این تخصیص‌ها پیش از ساختِ خودِ سند انجام
         # می‌شود (create_journal_entry خودش new_session جداگانه باز می‌کند)
         # — در صورتِ خطایِ بعدی، شماره‌یِ چک مصرف‌شده باقی می‌ماند، دقیقاً
@@ -1367,6 +1491,8 @@ def create_treasury_voucher(
             mapping_key = f"{direction}_{ml.method}"
             account_id = ml.account_id_override or _get_mapped_account_id(session, company_id, mapping_key)
             details: dict[int, int] = dict(shared_details)
+            if ml.extra_details:
+                details.update(ml.extra_details)
             if counterparty_person_group_id is not None:
                 required_person_group_ids = {
                     g.person_group_id for g in dimensions_service.get_required_person_groups_for_account(account_id)
@@ -1381,8 +1507,20 @@ def create_treasury_voucher(
                 person_dimension_type_id = dimension_type_by_detail_id.get(ml.person_detail_account_id)
                 if person_dimension_type_id is not None:
                     details[person_dimension_type_id] = ml.person_detail_account_id
-            line_debit = ml.amount if direction == "RECEIPT" else decimal.Decimal(0)
-            line_credit = ml.amount if direction == "PAYMENT" else decimal.Decimal(0)
+            # طبقِ موردِ ۶: برایِ روشِ اقساط، اگر درصدِ بهره/هزینه‌یِ متفرقه
+            # تنظیم شده باشد، مبلغِ این ردیف (که رویِ حسابِ دریافتنی/
+            # پرداختنیِ اقساطی می‌رود) بزرگ‌تر از اصلِ مبلغ می‌شود -- چون
+            # آن حساب باید کلِ مبلغِ نهاییِ قابلِ‌وصول/پرداخت را نگه دارد --
+            # و سهمِ بهره/هزینه به‌صورتِ یک ردیفِ جداگانه، همین‌جا (در همان
+            # سندِ ساختِ طرح) به‌عنوانِ درآمد/هزینه شناسایی می‌شود.
+            installment_interest_fee = decimal.Decimal(0)
+            if ml.method == "INSTALLMENT":
+                rate = ml.installment_interest_rate_percent or decimal.Decimal(0)
+                fee = ml.installment_misc_fee_amount or decimal.Decimal(0)
+                installment_interest_fee = _money(ml.amount * rate / decimal.Decimal(100)) + fee
+            method_amount = ml.amount + installment_interest_fee
+            line_debit = method_amount if direction == "RECEIPT" else decimal.Decimal(0)
+            line_credit = method_amount if direction == "PAYMENT" else decimal.Decimal(0)
             lines.append(
                 je_service.LineInput(
                     account_id=account_id,
@@ -1394,6 +1532,21 @@ def create_treasury_voucher(
                     exchange_rate=exchange_rate,
                 )
             )
+            if installment_interest_fee > 0:
+                interest_account_id = _get_mapped_account_id(session, company_id, f"{direction}_INSTALLMENT_INTEREST")
+                interest_debit = decimal.Decimal(0) if direction == "RECEIPT" else installment_interest_fee
+                interest_credit = installment_interest_fee if direction == "RECEIPT" else decimal.Decimal(0)
+                lines.append(
+                    je_service.LineInput(
+                        account_id=interest_account_id,
+                        description=ml.description or description,
+                        debit=interest_debit,
+                        credit=interest_credit,
+                        details=dict(shared_details),
+                        currency_id=currency_id,
+                        exchange_rate=exchange_rate,
+                    )
+                )
 
     result = je_service.create_journal_entry(
         company_id,
@@ -1533,6 +1686,38 @@ def create_treasury_voucher(
                     )
         session.commit()
 
+    # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): بعدِ ثبتِ موفقِ
+    # خودِ سند -- تا خطایِ احتمالیِ بالاتر هرگز یک طرحِ اقساطِ یتیم/بی‌سند
+    # نسازد -- ردیفِ INSTALLMENT طرحِ اقساط را می‌سازد، و هر ردیفی که
+    # collect_installment_line_id داشته باشد آن قسط را PAID می‌کند و
+    # خودکار به‌عنوانِ تسویه‌یِ همان فاکتور هم ثبت می‌شود.
+    for ml in method_lines:
+        if ml.method == "INSTALLMENT":
+            installments_service.create_installment_plan(
+                ml.installment_document_id, ml.installment_count, ml.installment_first_due_date, ml.amount,
+                company_id=company_id if ml.installment_document_id is None else None,
+                counterparty_detail_account_id=counterparty_person_detail_id if ml.installment_document_id is None else None,
+                direction=direction if ml.installment_document_id is None else None,
+                interest_rate_percent=ml.installment_interest_rate_percent or decimal.Decimal(0),
+                misc_fee_amount=ml.installment_misc_fee_amount or decimal.Decimal(0),
+                due_interval_days=ml.installment_due_interval_days or 30,
+            )
+        if ml.collect_installment_line_id is not None:
+            installments_service.record_installment_collection(
+                ml.collect_installment_line_id, ml.amount, result.journal_entry_id, document_date, created_by_user_id,
+                description=ml.description or description,
+            )
+            line = installments_service.get_installment_line(ml.collect_installment_line_id)
+            plan = installments_service.get_installment_plan(line.plan_id)
+            # طبقِ موردِ ۵: طرحِ اقساطِ بدونِ فاکتور، سندی برایِ تخصیصِ
+            # تسویه ندارد -- allocate_settlement فقط برایِ طرحِ متصل‌به‌فاکتور
+            # فراخوانی می‌شود.
+            if plan.document_id is not None:
+                settlements_service.allocate_settlement(
+                    company_id, plan.document_id, result.journal_entry_id, document_date, ml.amount, created_by_user_id,
+                    description=f"وصولِ قسطِ #{line.installment_no}",
+                )
+
     return result
 
 
@@ -1581,13 +1766,17 @@ def _status_code_map(session, applies_to: str) -> dict[int, str]:
     )
 
 
-def list_received_checks(company_id: int, status_codes: list[str] | None = None) -> list[ReceivedCheckRow]:
+def list_received_checks(
+    company_id: int, status_codes: list[str] | None = None, counterparty_detail_account_id: int | None = None,
+) -> list[ReceivedCheckRow]:
     with new_session() as session:
         codes = _status_code_map(session, "RECEIVED")
         query = select(ReceivedCheck).where(ReceivedCheck.company_id == company_id)
         if status_codes is not None:
             status_ids = [sid for sid, code in codes.items() if code in status_codes]
             query = query.where(ReceivedCheck.status_id.in_(status_ids))
+        if counterparty_detail_account_id is not None:
+            query = query.where(ReceivedCheck.counterparty_detail_account_id == counterparty_detail_account_id)
         rows = session.scalars(query.order_by(ReceivedCheck.due_date)).all()
         location_detail_ids = {r.current_location_detail_account_id for r in rows if r.current_location_detail_account_id}
         location_labels: dict[int, str] = {}
@@ -1615,13 +1804,17 @@ def list_received_checks(company_id: int, status_codes: list[str] | None = None)
         ]
 
 
-def list_issued_checks(company_id: int, status_codes: list[str] | None = None) -> list[IssuedCheckRow]:
+def list_issued_checks(
+    company_id: int, status_codes: list[str] | None = None, counterparty_detail_account_id: int | None = None,
+) -> list[IssuedCheckRow]:
     with new_session() as session:
         codes = _status_code_map(session, "ISSUED")
         query = select(IssuedCheck).where(IssuedCheck.company_id == company_id)
         if status_codes is not None:
             status_ids = [sid for sid, code in codes.items() if code in status_codes]
             query = query.where(IssuedCheck.status_id.in_(status_ids))
+        if counterparty_detail_account_id is not None:
+            query = query.where(IssuedCheck.counterparty_detail_account_id == counterparty_detail_account_id)
         rows = session.scalars(query.order_by(IssuedCheck.due_date)).all()
         bank_detail_ids = {r.bank_account_detail_id for r in rows}
         labels: dict[int, str] = {}

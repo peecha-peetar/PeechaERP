@@ -1,0 +1,24 @@
+{
+  "rows": [
+    {
+      "date_display": "۱۴۰۳/۰۱/۰۱",
+      "document_no_display": "",
+      "description": "ماندهٔ اولِ دوره",
+      "debit_display": "",
+      "credit_display": "",
+      "balance_display": "۰",
+      "fc_amount_display": "",
+      "fc_currency_display": ""
+    },
+    {
+      "date_display": "۱۴۰۳/۰۱/۱۵",
+      "document_no_display": "۱",
+      "description": "سندِ آزمایشی",
+      "debit_display": "۵۰,۰۰۰",
+      "credit_display": "",
+      "balance_display": "۵۰,۰۰۰",
+      "fc_amount_display": "",
+      "fc_currency_display": ""
+    }
+  ]
+}

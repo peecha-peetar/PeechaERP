@@ -1,0 +1,24 @@
+{
+  "rows": [
+    {
+      "account_code": "1-11-101",
+      "account_name": "صندوق",
+      "opening_debit_display": "۰",
+      "opening_credit_display": "۰",
+      "period_debit_display": "۵۰,۰۰۰",
+      "period_credit_display": "۰",
+      "closing_debit_display": "۵۰,۰۰۰",
+      "closing_credit_display": "۰"
+    },
+    {
+      "account_code": "4-41-411",
+      "account_name": "درآمدِ فروش",
+      "opening_debit_display": "۰",
+      "opening_credit_display": "۰",
+      "period_debit_display": "۰",
+      "period_credit_display": "۵۰,۰۰۰",
+      "closing_debit_display": "۰",
+      "closing_credit_display": "۵۰,۰۰۰"
+    }
+  ]
+}

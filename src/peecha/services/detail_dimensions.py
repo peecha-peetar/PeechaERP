@@ -8,12 +8,18 @@
 
 from __future__ import annotations
 
+import datetime
+import hashlib
+import shutil
+import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
+from peecha.config import SETTINGS_DIR
 from peecha.db.base import new_session
 from peecha.db.models.accounting import (
     AccountDetailDimension,
@@ -30,7 +36,10 @@ from peecha.db.models.accounting import (
     PersonnelDetail,
     SupplierDetail,
 )
+from peecha.db.models.documents import Attachment
+from peecha.db.models.security import Form
 from peecha.db.models.treasury import CounterpartyAccountMapping
+from peecha.services import roles as roles_service
 
 # نوع‌بُعدِ سیستمی/رزروشده‌ی «تفصیلیِ اشخاص» — بر خلافِ نوع‌بُعدهایی مثلِ
 # مرکزِ هزینه/پروژه که کاربر خودش می‌سازد، این یکی برای هر شرکت خودکار
@@ -56,6 +65,19 @@ MAX_DETAIL_LEVEL = 4
 # FK (چون این سرویس نباید به services.treasury وابسته شود). «account_type»
 # هم یک کمبویِ ثابتِ جاری/پس‌انداز است (نه متنِ آزاد).
 _VALID_FIELD_KINDS = ("text", "decimal", "date", "boolean", "bank", "account_type")
+
+
+def get_detail_account_label(detail_account_id: int | None) -> str:
+    """برچسبِ «کد — نام»یِ یک حسابِ تفصیلی -- برایِ جاهایی (مثلِ چاپِ
+    فاکتور) که فقط شناسه در دسترس است، نه کاملِ فهرستِ مشتریان/تامین‌
+    کنندگان."""
+    if detail_account_id is None:
+        return ""
+    with new_session() as session:
+        row = session.get(DetailAccount, detail_account_id)
+        if row is None:
+            return ""
+        return f"{row.code} — {row.name or ''}"
 
 
 @dataclass
@@ -163,6 +185,206 @@ def get_group_color(dimension_type_id: int, person_group_id: int = 0) -> str | N
             return group.color if group is not None else None
         dimension_type = session.get(DetailDimensionType, dimension_type_id)
         return dimension_type.color if dimension_type is not None else None
+
+
+# ---------------------------------------------------------------------
+# امکانِ آپلودِ عکس به‌ازایِ گروه (طبقِ درخواستِ صریح: «برایِ گروه‌هایی که
+# تیک می‌زنیم عکس آپلود کرد») + خودِ عکسِ هر حسابِ تفصیلی
+# ---------------------------------------------------------------------
+def set_dimension_type_photo_enabled(dimension_type_id: int, company_id: int, enabled: bool) -> None:
+    with new_session() as session:
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        if dimension_type is None or dimension_type.company_id != company_id:
+            raise ValueError("گروهِ تفصیلی نامعتبر است.")
+        dimension_type.photo_enabled = enabled
+        session.commit()
+
+
+def set_person_group_photo_enabled(person_group_id: int, company_id: int, enabled: bool) -> None:
+    with new_session() as session:
+        group = session.get(PersonGroup, person_group_id)
+        if group is None or group.company_id != company_id:
+            raise ValueError("گروه نامعتبر است.")
+        group.photo_enabled = enabled
+        session.commit()
+
+
+def get_group_photo_enabled(dimension_type_id: int, person_group_id: int = 0) -> bool:
+    with new_session() as session:
+        if person_group_id:
+            group = session.get(PersonGroup, person_group_id)
+            return bool(group.photo_enabled) if group is not None else False
+        dimension_type = session.get(DetailDimensionType, dimension_type_id)
+        return bool(dimension_type.photo_enabled) if dimension_type is not None else False
+
+
+# طبقِ همان الگویِ order_tracking.attach_file: فقط مسیرِ فایل در
+# دیتابیس می‌رود (نه خودِ فایل)؛ چون این فرم (GL_DIM/detail_dimensions)
+# از قبل در فهرستِ فرم‌ها (sec.forms، از nav_catalog) ثبت است، نیازی به
+# کدِ فرمِ تازه نیست.
+_PHOTO_FORM_CODE = "detail_dimensions"
+_PHOTOS_DIR = SETTINGS_DIR / "attachments"
+
+
+def _get_photo_form_id(session) -> int:
+    roles_service.ensure_catalog()
+    form = session.scalar(select(Form).where(Form.code == _PHOTO_FORM_CODE))
+    if form is None:
+        raise ValueError("فرمِ «تعریفِ تفصیلی» هنوز در فهرستِ فرم‌ها ثبت نشده است.")
+    return form.form_id
+
+
+# طبقِ درخواستِ صریح («چند تا عکس هم بتونیم بزاریم... فایل الصاق کنیم
+# مثل فایل کاتالوگ»): هر حسابِ تفصیلی می‌تواند چند فایل داشته باشد؛
+# پسوندهایِ زیر «عکس» محسوب می‌شوند (بندانگشتی/زوم/عکسِ اصلی)، بقیه صرفاً
+# «فایل» (کاتالوگ/سند و ...، فقط قابلِ بازکردن).
+_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "bmp", "gif"}
+
+
+def is_image_extension(extension: str) -> bool:
+    return extension.lower().lstrip(".") in _IMAGE_EXTENSIONS
+
+
+def attach_detail_account_file(company_id: int, detail_account_id: int, user_id: int, file_path: str) -> int:
+    """افزودنِ یک عکس/فایلِ تازه به حسابِ تفصیلی (بدونِ حذفِ فایل‌هایِ
+    قبلی -- بر خلافِ set_detail_account_photوِ قدیمی). اگر این فایل عکس
+    باشد و هنوز هیچ عکسِ فعالی برایِ این حساب ثبت نشده، خودکار «عکسِ
+    اصلی» می‌شود."""
+    source = Path(file_path)
+    if not source.is_file():
+        raise ValueError("فایل یافت نشد.")
+    try:
+        _PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"پوشهٔ ضمائم («{_PHOTOS_DIR}») در دسترس نیست: {exc}") from exc
+    content = source.read_bytes()
+    digest = hashlib.sha256(content).digest()
+    extension = source.suffix.lstrip(".")
+    storage_name = f"{uuid.uuid4().hex}.{extension}" if extension else uuid.uuid4().hex
+    destination = _PHOTOS_DIR / storage_name
+    shutil.copyfile(source, destination)
+    is_image = is_image_extension(extension)
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        is_primary = False
+        if is_image:
+            has_primary = session.scalar(
+                select(func.count())
+                .select_from(Attachment)
+                .where(
+                    Attachment.form_id == form_id,
+                    Attachment.source_record_id == detail_account_id,
+                    Attachment.is_deleted.is_(False),
+                    Attachment.is_primary.is_(True),
+                )
+            )
+            is_primary = not has_primary
+        new_row = Attachment(
+            company_id=company_id, form_id=form_id, source_record_id=detail_account_id,
+            file_name=source.name, file_extension=extension, file_size_bytes=len(content),
+            storage_key=str(destination), content_sha256=digest, uploaded_by_user_id=user_id,
+            is_primary=is_primary,
+        )
+        session.add(new_row)
+        session.commit()
+        return new_row.attachment_id
+
+
+def list_detail_account_files(company_id: int, detail_account_id: int) -> list[Attachment]:
+    """فهرستِ همه‌یِ عکس‌ها و فایل‌هایِ فعالِ این حساب -- عکسِ اصلی (اگر
+    باشد) اول، سپس بقیه به‌ترتیبِ زمانِ آپلود."""
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        rows = session.scalars(
+            select(Attachment)
+            .where(
+                Attachment.company_id == company_id, Attachment.form_id == form_id,
+                Attachment.source_record_id == detail_account_id, Attachment.is_deleted.is_(False),
+            )
+            .order_by(Attachment.is_primary.desc(), Attachment.uploaded_at)
+        ).all()
+        session.expunge_all()
+        return list(rows)
+
+
+def delete_detail_account_file(attachment_id: int, company_id: int, user_id: int) -> None:
+    """حذفِ نرمِ یک عکس/فایل -- اگر عکسِ حذف‌شده «اصلی» بود، قدیمی‌ترینِ
+    عکسِ باقی‌مانده (اگر باشد) خودکار جایگزینش می‌شود."""
+    with new_session() as session:
+        row = session.get(Attachment, attachment_id)
+        if row is None or row.company_id != company_id or row.is_deleted:
+            raise ValueError("فایل یافت نشد.")
+        was_primary = row.is_primary
+        detail_account_id = row.source_record_id
+        row.is_deleted = True
+        row.deleted_by_user_id = user_id
+        row.deleted_at = datetime.datetime.now()
+        row.is_primary = False
+        if was_primary:
+            next_photo = session.scalar(
+                select(Attachment)
+                .where(
+                    Attachment.form_id == row.form_id,
+                    Attachment.source_record_id == detail_account_id,
+                    Attachment.is_deleted.is_(False),
+                    Attachment.attachment_id != attachment_id,
+                )
+                .order_by(Attachment.uploaded_at)
+            )
+            if next_photo is not None and is_image_extension(next_photo.file_extension):
+                next_photo.is_primary = True
+        session.commit()
+
+
+def set_primary_detail_account_photo(attachment_id: int, company_id: int) -> None:
+    with new_session() as session:
+        row = session.get(Attachment, attachment_id)
+        if row is None or row.company_id != company_id or row.is_deleted:
+            raise ValueError("فایل یافت نشد.")
+        if not is_image_extension(row.file_extension):
+            raise ValueError("فقط عکس می‌تواند «عکسِ اصلی» باشد.")
+        siblings = session.scalars(
+            select(Attachment).where(
+                Attachment.form_id == row.form_id,
+                Attachment.source_record_id == row.source_record_id,
+                Attachment.is_deleted.is_(False),
+                Attachment.attachment_id != attachment_id,
+            )
+        ).all()
+        for sibling in siblings:
+            sibling.is_primary = False
+        row.is_primary = True
+        session.commit()
+
+
+def get_primary_detail_account_photo(company_id: int, detail_account_id: int) -> Attachment | None:
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        return session.scalar(
+            select(Attachment).where(
+                Attachment.company_id == company_id, Attachment.form_id == form_id,
+                Attachment.source_record_id == detail_account_id, Attachment.is_deleted.is_(False),
+                Attachment.is_primary.is_(True),
+            )
+        )
+
+
+def get_primary_photos_for_accounts(company_id: int, detail_account_ids: list[int]) -> dict[int, Attachment]:
+    """واکشیِ دسته‌ای -- برایِ گذاشتنِ بندانگشتی کنارِ نام در فهرستِ درختیِ
+    حساب‌هایِ تفصیلی، بدونِ یک کوئریِ جدا به‌ازایِ هر ردیف."""
+    if not detail_account_ids:
+        return {}
+    with new_session() as session:
+        form_id = _get_photo_form_id(session)
+        rows = session.scalars(
+            select(Attachment).where(
+                Attachment.company_id == company_id, Attachment.form_id == form_id,
+                Attachment.source_record_id.in_(detail_account_ids), Attachment.is_deleted.is_(False),
+                Attachment.is_primary.is_(True),
+            )
+        ).all()
+        session.expunge_all()
+        return {row.source_record_id: row for row in rows}
 
 
 def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:
@@ -1263,6 +1485,13 @@ PROJECT_CODE = "PROJECT"
 # افزودنش هم‌زمان هم seedِ خودکار و هم ظاهرشدن در group_combo/detail_dimensions.py
 # را رایگان می‌دهد (بدونِ کدِ UI اضافه، دقیقاً مثلِ COST_CENTER/PROJECT).
 PROFIT_CENTER_CODE = "PROFIT_CENTER"
+# طبقِ درخواستِ صریح («ماژولِ پخشِ سرد/گرم» -- مدیریتِ مسیر/منطقه):
+# سلسله‌مراتبِ استان>شهر>منطقه>مسیر -- برخلافِ بقیه‌یِ نوع‌بُعدهایِ تخصصی
+# (که تخت/یک‌سطحی‌اند)، این یکی چندسطحی ساخته می‌شود. سقفِ ۴ سطح همان
+# MAX_DETAIL_LEVELِ سراسریِ سیستم (و همان محدودیتِ CHECKِ دیتابیس) است —
+# نه یک محدودیتِ اختصاصیِ همین نوع‌بُعد.
+DISTRIBUTION_ROUTE_CODE = "DISTRIBUTION_ROUTE"
+_DISTRIBUTION_ROUTE_MAX_LEVEL = MAX_DETAIL_LEVEL
 
 SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
     INVENTORY_ITEM_CODE: "کالا",
@@ -1273,6 +1502,7 @@ SPECIALIZED_DIMENSION_LABELS: dict[str, str] = {
     COST_CENTER_CODE: "مرکز هزینه",
     PROJECT_CODE: "پروژه",
     PROFIT_CENTER_CODE: "مرکز سود",
+    DISTRIBUTION_ROUTE_CODE: "مسیرِ توزیع",
 }
 
 
@@ -1295,7 +1525,8 @@ def ensure_specialized_dimensions(session, company_id: int) -> dict[str, int]:
             # چندسطح دسته‌بندی در تنظیمات) قابلِ‌تعریف باشند — نگاه کنید به
             # 080_inventory_item_default_level.sql و 082_specialized_dimension_default_level.sql.
             dimension_type = DetailDimensionType(
-                company_id=company_id, code=code, is_active=True, max_level_no=1
+                company_id=company_id, code=code, is_active=True,
+                max_level_no=_DISTRIBUTION_ROUTE_MAX_LEVEL if code == DISTRIBUTION_ROUTE_CODE else 1,
             )
             session.add(dimension_type)
             session.flush()

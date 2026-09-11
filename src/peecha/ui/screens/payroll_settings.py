@@ -370,9 +370,9 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, w in enumerate(self._rows):
             values = [
-                numerals.format_amount(w.hourly_amount) if w.hourly_amount is not None else "—",
-                numerals.format_amount(w.daily_amount) if w.daily_amount is not None else "—",
-                numerals.format_amount(w.monthly_amount),
+                numerals.format_company_amount(w.hourly_amount) if w.hourly_amount is not None else "—",
+                numerals.format_company_amount(w.daily_amount) if w.daily_amount is not None else "—",
+                numerals.format_company_amount(w.monthly_amount),
                 numerals.to_persian_digits(w.effective_to.isoformat()) if w.effective_to else "—",
                 numerals.to_persian_digits(w.effective_from.isoformat()),
             ]
@@ -1295,8 +1295,8 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         if brackets:
             parts = []
             for b in brackets:
-                to_text = numerals.format_amount(b.to_annual_amount) if b.to_annual_amount is not None else "∞"
-                parts.append(f"{numerals.format_amount(b.from_annual_amount)} تا {to_text}: {numerals.to_persian_digits(str(b.rate * 100))}٪")
+                to_text = numerals.format_company_amount(b.to_annual_amount) if b.to_annual_amount is not None else "∞"
+                parts.append(f"{numerals.format_company_amount(b.from_annual_amount)} تا {to_text}: {numerals.to_persian_digits(str(b.rate * 100))}٪")
             self.current_brackets_label.setText("پلکان‌هایِ فعلی — " + " | ".join(parts))
             for b in brackets:
                 self._add_bracket_row(str(b.from_annual_amount), str(b.to_annual_amount) if b.to_annual_amount is not None else "", str(b.rate * 100))

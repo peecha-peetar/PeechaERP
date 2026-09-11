@@ -37,8 +37,11 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session
+from peecha.services import commercial_documents as documents_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import installments as installments_service
 from peecha.services import treasury as treasury_service
 from peecha.ui import theme
 from peecha.ui.main import get_font_family
@@ -65,9 +68,34 @@ _METHOD_LABELS = {
     "VOUCHER": "بن",
     "NETTING": "تهاتر",
     "CHECK_DISBURSEMENT": "پرداخت با چکِ دریافتی (خرجِ چک)",
+    "INSTALLMENT": "اقساط",
 }
-_RECEIPT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING"]
-_PAYMENT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "CHECK_DISBURSEMENT", "NETTING"]
+_RECEIPT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "GOODS_COUPON", "VOUCHER", "NETTING", "INSTALLMENT"]
+_PAYMENT_METHOD_CODES = ["CASH", "BANK", "CHECK", "DISCOUNT", "CHECK_DISBURSEMENT", "NETTING", "INSTALLMENT"]
+# طبقِ درخواستِ صریح («در فرمِ دریافت/پرداخت هم دکمه‌ای باشد که به
+# فاکتورهایِ تسویه‌نشده لینک باشد»): مسیرِ معکوسِ همان چیزی که در
+# commercial_settlement.py ساخته شد.
+_INVOICE_TYPE_BY_DIRECTION = {"RECEIPT": "SALES_INVOICE", "PAYMENT": "PURCHASE_INVOICE"}
+_LINK_INVOICE_COLUMNS = ["نوع", "شماره", "موعدِ تسویه", "جمعِ کل", "مانده", "مبلغِ تسویه"]
+
+
+def _describe_invoice_settlement(direction: str, entries_info: list[tuple], counterparty_label: str) -> str:
+    """طبقِ درخواستِ صریح («وقتی مقدارِ تسویه برایِ یک فاکتورِ خاص وارد
+    می‌شود، شرحِ پیش‌فرضِ هدر را سیستم ایجاد کند -- مثلاً "پرداخت بابتِ
+    تسویه‌یِ قسمتی از فاکتورِ شماره‌یِ .... «نامِ طرفِ‌حساب»"»).
+    entries_info: فهرستی از (document_no, remaining_amount, entered_amount)."""
+    noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
+    is_partial = any(entered < remaining for _no, remaining, entered in entries_info)
+    numbers = "، ".join(f"#{numerals.to_persian_digits(str(no))}" for no, _r, _e in entries_info)
+    body = f"فاکتورِ شماره‌یِ {numbers}" if len(entries_info) == 1 else f"فاکتورهایِ شماره‌یِ {numbers}"
+    extent = "قسمتی از " if is_partial else ""
+    # طبقِ باگِ واقعیِ کشف‌شده با تستِ زنده: گزینه‌هایِ کمبویِ طرفِ‌حساب
+    # همیشه به‌شکلِ «کد — نام» ساخته می‌شوند؛ بدونِ این جداکردن، شرحِ
+    # خودکار به‌جایِ «... — مشتریِ آزمایشی»، «... — 1 — مشتریِ آزمایشی»
+    # می‌شد.
+    name_only = counterparty_label.rsplit(" — ", 1)[-1].strip() if counterparty_label else ""
+    suffix = f" — {name_only}" if name_only else ""
+    return f"{noun} بابتِ تسویه‌یِ {extent}{body}{suffix}"
 # طبقِ درخواستِ صریح: تهاتر هم مثلِ نقد/بانک/تخفیف/کالابرگ/بن، تفصیلیِ
 # احتمالیِ خودش را (از رویِ نگاشتِ تنظیمات) نشان می‌دهد — پس دیگر همیشه از
 # دیالوگِ جزئیات معاف نیست؛ اگر برایِ آن معینی تفصیلی/بُعدِ الزامی نداشت،
@@ -404,6 +432,7 @@ class _MethodDetailsDialog(QDialog):
         covered_dimension_type_ids: set[int] | None = None,
         header_person_group_id: int | None = None,
         decimal_places: int = 0,
+        counterparty_detail_account_id: int | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"جزئیاتِ ردیفِ {_METHOD_LABELS.get(method, method)}")
@@ -419,6 +448,12 @@ class _MethodDetailsDialog(QDialog):
         self.person_detail_combo: QComboBox | None = None
         self.preset_person_detail_id: int | None = None
         self.preset_person_detail_label: str = ""
+        self.installment_document_combo: QComboBox | None = None
+        self.installment_count_field: _AmountField | None = None
+        self.installment_first_due_field: JalaliDateEdit | None = None
+        self.installment_interest_rate_field: _AmountField | None = None
+        self.installment_misc_fee_field: _AmountField | None = None
+        self.installment_due_interval_field: _AmountField | None = None
         self._detail_names: dict[int, str] = {}
         self._person_detail_names: dict[int, str] = {}
         # طبقِ آیتمِ ۹: اگر چند معین برایِ این mapping_key تنظیم شده باشد،
@@ -442,6 +477,71 @@ class _MethodDetailsDialog(QDialog):
                     if index >= 0:
                         self.detail_combo.setCurrentIndex(index)
                 layout.addRow(label or "تفصیلی", self.detail_combo)
+        if method == "INSTALLMENT":
+            # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): فقط
+            # فاکتورهایِ ثبت‌شده‌یِ همان طرفِ‌حساب (و همان جهت -- فروش
+            # برایِ دریافت، خرید برایِ پرداخت) که هنوز کاملاً تسویه
+            # نشده‌اند قابلِ‌انتخاب‌اند.
+            invoice_type = "SALES_INVOICE" if direction == "RECEIPT" else "PURCHASE_INVOICE"
+            unsettled = settlements_service.list_unsettled_invoices(company_id, document_type_code=invoice_type)
+            # طبقِ موردِ ۵ («روشِ اقساط منوط به فاکتور نباشد»): گزینه‌یِ اول
+            # همیشه «بدونِ فاکتور» است -- یعنی مبلغِ همین ردیف (آزاد، بدونِ
+            # اتصال به هیچ فاکتوری) طیِ چند قسط دریافت/پرداخت می‌شود.
+            options = [(None, "(بدونِ فاکتور -- مبلغِ آزادِ همین ردیف)")]
+            for status in unsettled:
+                try:
+                    doc, _lines = documents_service.get_document(status.document_id, company_id)
+                except ValueError:
+                    continue
+                if counterparty_detail_account_id is not None and doc.counterparty_detail_account_id != counterparty_detail_account_id:
+                    continue
+                label = f"فاکتورِ #{numerals.to_persian_digits(str(doc.document_no))} — مانده: {numerals.format_money(status.remaining_amount, decimal_places)}"
+                options.append((status.document_id, label))
+            self.installment_document_combo = _make_searchable_combo(options)
+            if current.get("installment_document_id") is not None:
+                index = self.installment_document_combo.findData(current["installment_document_id"])
+                if index >= 0:
+                    self.installment_document_combo.setCurrentIndex(index)
+            layout.addRow("فاکتورِ موردِنظر", self.installment_document_combo)
+
+            self.installment_count_field = _AmountField()
+            self.installment_count_field.setDecimals(0)
+            self.installment_count_field.setValue(current.get("installment_count") or 3)
+            layout.addRow("تعدادِ اقساط", self.installment_count_field)
+
+            self.installment_first_due_field = JalaliDateEdit()
+            self.installment_first_due_field.setDate(
+                current.get("installment_first_due_date") or (datetime.date.today() + datetime.timedelta(days=30))
+            )
+            layout.addRow("سررسیدِ اولین قسط", self.installment_first_due_field)
+
+            # طبقِ موردِ ۶ («درصدِ بهرهٔ اقساط، هزینه‌هایِ متفرقه، و فاصله‌یِ
+            # سررسیدِ آزاد»): پیش‌فرض‌ها دقیقاً معادلِ رفتارِ قبلی‌اند (بدونِ
+            # بهره/هزینه، فاصله‌یِ ۳۰روزه) -- این فیلدها کاملاً اختیاری‌اند.
+            self.installment_interest_rate_field = _AmountField()
+            self.installment_interest_rate_field.setDecimals(3)
+            self.installment_interest_rate_field.setValue(float(current.get("installment_interest_rate_percent") or 0))
+            layout.addRow("درصدِ بهره (٪)", self.installment_interest_rate_field)
+
+            self.installment_misc_fee_field = _AmountField()
+            self.installment_misc_fee_field.setDecimals(self._decimal_places)
+            self.installment_misc_fee_field.setValue(float(current.get("installment_misc_fee_amount") or 0))
+            layout.addRow("هزینهٔ متفرقه", self.installment_misc_fee_field)
+
+            self.installment_due_interval_field = _AmountField()
+            self.installment_due_interval_field.setDecimals(0)
+            self.installment_due_interval_field.setValue(float(current.get("installment_due_interval_days") or 30))
+            layout.addRow("فاصلهٔ سررسید (روز)", self.installment_due_interval_field)
+
+            # طبقِ درخواستِ صریح («بتوان با اینتر پیمایش کرد»): هم‌الگو با
+            # بقیه‌یِ فرم‌ها -- هر فیلد Enterِ خودش را به فوکوسِ فیلدِ بعدی
+            # وصل می‌کند و فیلدِ آخر فرم را تایید می‌کند.
+            self.installment_document_combo.lineEdit().returnPressed.connect(self.installment_count_field.setFocus)
+            self.installment_count_field.returnPressed.connect(self.installment_first_due_field.setFocus)
+            self.installment_first_due_field.returnPressed.connect(self.installment_interest_rate_field.setFocus)
+            self.installment_interest_rate_field.returnPressed.connect(self.installment_misc_fee_field.setFocus)
+            self.installment_misc_fee_field.returnPressed.connect(self.installment_due_interval_field.setFocus)
+            self.installment_due_interval_field.returnPressed.connect(self.accept)
         if method == "VOUCHER":
             self.voucher_serial_field = PersianDigitLineEdit(current.get("voucher_serial") or "")
             layout.addRow("سریالِ بن", self.voucher_serial_field)
@@ -656,6 +756,13 @@ class _MethodDetailsDialog(QDialog):
             data["person_detail_account_label"] = self._person_detail_names.get(
                 data["person_detail_account_id"], self.person_detail_combo.currentText()
             )
+        if self.installment_document_combo is not None:
+            data["installment_document_id"] = self.installment_document_combo.currentData()
+            data["installment_count"] = int(self.installment_count_field.value())
+            data["installment_first_due_date"] = self.installment_first_due_field.date()
+            data["installment_interest_rate_percent"] = decimal.Decimal(str(self.installment_interest_rate_field.value()))
+            data["installment_misc_fee_amount"] = decimal.Decimal(str(self.installment_misc_fee_field.value()))
+            data["installment_due_interval_days"] = int(self.installment_due_interval_field.value())
         return data
 
 
@@ -1197,6 +1304,9 @@ class _MethodRow:
     def __init__(self, screen: "TreasuryVoucherScreen") -> None:
         self._screen = screen
         self.details: dict = {}
+        # طبقِ درخواستِ صریح: اگر این ردیف (با هر روشی -- معمولاً نقد/
+        # بانک/چک) درواقع وصولِ یکی از اقساطِ ازپیش‌برنامه‌ریزی‌شده باشد.
+        self.collect_installment_line_id: int | None = None
 
         self.method_combo = _EnterComboBox()
         method_codes = list(_RECEIPT_METHOD_CODES if screen.direction == "RECEIPT" else _PAYMENT_METHOD_CODES)
@@ -1248,6 +1358,16 @@ class _MethodRow:
         self.details_button.setFixedWidth(44)
         self.details_button.setToolTip("جزئیاتِ این ردیف")
         self.details_button.clicked.connect(self._open_details)
+
+        # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): وصولِ یک قسطِ
+        # ازپیش‌برنامه‌ریزی‌شده -- مستقل از روشِ انتخاب‌شده (نقد/بانک/چک) --
+        # از همین دکمه انتخاب می‌شود؛ اگر قسطی برایِ همین طرفِ‌حساب در
+        # انتظار نباشد، دکمه غیرفعال می‌ماند.
+        self.installment_link_button = QPushButton("🔗")
+        self.installment_link_button.setObjectName("iconButton")
+        self.installment_link_button.setFixedWidth(44)
+        self.installment_link_button.setToolTip("اتصال به یک قسطِ درانتظار (این ردیف وصولِ کدام قسط است؟)")
+        self.installment_link_button.clicked.connect(self._open_installment_link)
 
         self.remove_button = QPushButton("✕")
         # طبقِ گزارشِ صریح: با dangerButtonِ همیشه‌شفاف، دکمه‌یِ حذفِ ردیف
@@ -1378,6 +1498,7 @@ class _MethodRow:
             covered_dimension_type_ids=self._screen._covered_dimension_type_ids(),
             header_person_group_id=self._screen._counterparty_person_group_id(),
             decimal_places=self._screen.currency_decimal_places,
+            counterparty_detail_account_id=self._screen.account_combo.currentData(),
         )
         if dialog.exec() == QDialog.Accepted:
             self.details = dialog.result_data()
@@ -1388,6 +1509,57 @@ class _MethodRow:
             else:
                 self._regenerate_description()
                 self.amount_field.setFocus()
+
+    def _open_installment_link(self) -> None:
+        """طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): این ردیف را
+        به یکی از اقساطِ درانتظارِ همان طرفِ‌حسابِ سند وصل می‌کند -- با
+        تاییدِ سند، آن قسط PAID می‌شود و خودکار به‌عنوانِ یک تسویه رویِ
+        فاکتورِ اصلیِ همان طرح هم ثبت می‌شود."""
+        company_id = self._screen.company_id
+        counterparty_id = self._screen.account_combo.currentData()
+        if company_id is None or counterparty_id is None:
+            theme.set_status_label(self._screen.status_label, "ابتدا طرفِ‌حساب را انتخاب کنید.", ok=False)
+            return
+        pending = installments_service.list_installments(
+            company_id, status_codes=["PENDING", "OVERDUE"], counterparty_detail_account_id=counterparty_id,
+        )
+        if not pending:
+            theme.set_status_label(self._screen.status_label, "قسطِ درانتظاری برایِ این طرفِ‌حساب یافت نشد.", ok=False)
+            return
+        dialog = QDialog(self._screen)
+        dialog.setWindowTitle("اتصال به قسط")
+        form = QFormLayout(dialog)
+        combo = _make_searchable_combo(
+            [(None, "(بدونِ اتصال)")]
+            + [
+                (
+                    line.line_id,
+                    f"فاکتور #{numerals.to_persian_digits(str(line.document_id))} — قسطِ #{numerals.to_persian_digits(str(line.installment_no))} — "
+                    f"{numerals.format_money(line.amount, self._screen.currency_decimal_places)} — سررسید {numerals.format_jalali_date(line.due_date)}",
+                )
+                for line in pending
+            ]
+        )
+        if self.collect_installment_line_id is not None:
+            index = combo.findData(self.collect_installment_line_id)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+        form.addRow("قسط", combo)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("تایید")
+        buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() == QDialog.Accepted:
+            self.collect_installment_line_id = combo.currentData()
+            if self.collect_installment_line_id is not None:
+                selected = next(line for line in pending if line.line_id == self.collect_installment_line_id)
+                if self.amount_field.value() == 0:
+                    self.amount_field.setValue(float(selected.amount))
+                self.installment_link_button.setStyleSheet("font-weight: bold;")
+            else:
+                self.installment_link_button.setStyleSheet("")
 
     def _regenerate_description(self) -> None:
         """طبقِ درخواستِ صریح: شرحِ هر ردیف خودکار از رویِ قالبِ همان روش
@@ -1476,12 +1648,110 @@ class _MethodRow:
             kwargs["received_check_ids"] = self.details.get("received_check_ids")
             kwargs["received_check_id"] = self.details.get("received_check_id")
             kwargs["person_detail_account_id"] = self.details.get("person_detail_account_id")
+        elif method == "INSTALLMENT":
+            kwargs["installment_document_id"] = self.details.get("installment_document_id")
+            kwargs["installment_count"] = self.details.get("installment_count")
+            kwargs["installment_first_due_date"] = self.details.get("installment_first_due_date")
+            kwargs["installment_interest_rate_percent"] = self.details.get("installment_interest_rate_percent")
+            kwargs["installment_misc_fee_amount"] = self.details.get("installment_misc_fee_amount")
+            kwargs["installment_due_interval_days"] = self.details.get("installment_due_interval_days")
+        # طبقِ درخواستِ صریح: هر ردیفی (نه فقط اقساط) می‌تواند وصولِ یک
+        # قسطِ ازپیش‌برنامه‌ریزی‌شده باشد -- با دکمه‌یِ «🔗» انتخاب می‌شود.
+        kwargs["collect_installment_line_id"] = self.collect_installment_line_id
         return treasury_service.MethodLine(**kwargs)
+
+
+class _LinkInvoicesDialog(LayoutEditMixin, QDialog):
+    """طبقِ درخواستِ صریح («در فرمِ دریافت/پرداخت هم دکمه‌ای باشد که به
+    فاکتورهایِ تسویه‌نشده لینک باشد و بتوان مبلغِ تسویه را برایِ
+    فاکتورهایِ همان شخص وارد کرد»): مسیرِ معکوسِ همان چیزی که در
+    commercial_settlement.py ساخته شد — این‌جا خودِ فرمِ دریافت/پرداخت
+    فهرستِ فاکتورهایِ بازِ طرفِ‌حسابِ انتخاب‌شده را نشان می‌دهد."""
+
+    def __init__(self, parent: QWidget, statuses: list, docs_by_id: dict, direction: str) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("لینک به فاکتورهایِ بازِ این طرفِ‌حساب")
+        self.setMinimumWidth(560)
+        self._statuses = statuses
+        self._qty_fields: dict[int, _AmountField] = {}
+        invoice_title = "فاکتورِ فروش" if direction == "RECEIPT" else "فاکتورِ خرید"
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("مبلغِ تسویه‌یِ هرکدام از فاکتورهایِ بازِ این طرفِ‌حساب را مشخص کنید (پیش‌فرض: صفر)."))
+
+        table = QTableWidget(len(statuses), len(_LINK_INVOICE_COLUMNS))
+        table.setHorizontalHeaderLabels(_LINK_INVOICE_COLUMNS)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for row_index, status in enumerate(statuses):
+            doc = docs_by_id[status.document_id]
+            values = [
+                invoice_title,
+                numerals.to_persian_digits(str(doc.document_no)),
+                numerals.format_jalali_date(status.due_date) if status.due_date else "—",
+                numerals.format_company_amount(status.total_amount),
+                numerals.format_company_amount(status.remaining_amount),
+            ]
+            for col_index, value in enumerate(values):
+                table.setItem(row_index, col_index, QTableWidgetItem(value))
+            qty_field = _AmountField()
+            qty_field.setValue(0)
+            self._qty_fields[status.document_id] = qty_field
+            table.setCellWidget(row_index, len(_LINK_INVOICE_COLUMNS) - 1, qty_field)
+        table.resizeRowsToContents()
+        layout.addWidget(table)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("تایید")
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        # هم‌الگو با _ConvertToInvoiceDialog در commercial_document.py --
+        # جلوگیری از باگِ autoDefaultِ QDialogButtonBox.
+        buttons.button(QDialogButtonBox.Ok).setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
+        layout.addWidget(buttons)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _on_accept(self) -> None:
+        entries = {doc_id: decimal.Decimal(str(field.value())) for doc_id, field in self._qty_fields.items() if field.value() > 0}
+        if not entries:
+            self.status_label.setText("حداقل برایِ یک فاکتور مبلغی وارد کنید.")
+            return
+        for status in self._statuses:
+            amount = entries.get(status.document_id)
+            if amount is not None and amount > status.remaining_amount:
+                self.status_label.setText("مبلغِ واردشده برایِ یک فاکتور از مانده‌اش بیشتر است.")
+                return
+        self.accept()
+
+    def result_entries(self) -> dict[int, decimal.Decimal]:
+        return {doc_id: decimal.Decimal(str(field.value())) for doc_id, field in self._qty_fields.items() if field.value() > 0}
 
 
 class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
     def __init__(self, direction: str, main_window=None) -> None:
         super().__init__()
+        # طبقِ گزارشِ صریح («ردیف‌هایِ فرمِ دریافت اصلاً معلوم نیست و
+        # ارتفاعش کمه»): این صفحه تا امروز هیچ حداقلِ‌ارتفاعی نداشت -- اگر
+        # زیرپنجره‌اش (که اندازه‌اش با QSettings بینِ اجراها نگه داشته
+        # می‌شود؛ رجوع به _restore_or_size_subwindow در shell_window.py)
+        # از دفعاتِ قبل کوچک مانده باشد (مثلاً از وقتی این فرم ردیف‌هایِ
+        # کمتری داشت)، QScrollAreaِ FormScreenBase بدونِ هیچ نشانه‌یِ
+        # واضحی (فریم ندارد) فقط اسکرول لازم می‌کند و جدولِ ردیف‌ها عملاً
+        # از دیدِ کاربر بیرون می‌ماند. حالا Qt خودش زیرپنجره را کوچک‌تر
+        # از این حد نمی‌گذارد.
+        self.setMinimumSize(860, 620)
         self.direction = direction  # "RECEIPT" یا "PAYMENT"
         # طبقِ آیتمِ ۹: برایِ بازکردنِ گزارشِ معینِ طرفِ‌حساب از همین فرم لازم
         # است — هم‌الگو با JournalEntriesListScreen (شکلِ شناخته‌شده‌یِ
@@ -1510,6 +1780,14 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # قالبِ متنِ خودکارِ شرحِ هر روش — در refresh() از تنظیمات بارگذاری
         # می‌شود (به‌جایِ کوئریِ جداگانه به‌ازایِ هر کلیدزنیِ مبلغ).
         self._description_templates: dict[str, str] = {}
+        # طبقِ درخواستِ صریح («از همان فرمِ تسویه‌یِ فاکتورها، دکمه‌یِ تسویه
+        # فرمِ دریافت/پرداخت را باز کند و رفرنس بدهد» + «مبلغِ دریافتی برایِ
+        # چند فاکتورِ هم‌زمان وارد شود»): وقتی این فرم از طریقِ
+        # commercial_settlement.py برایِ تسویه‌یِ یک یا چند فاکتورِ مشخص
+        # باز می‌شود، فهرستِ (شناسه‌یِ فاکتور، مبلغِ همان فاکتور) این‌جا
+        # نگه داشته می‌شود تا بعدِ ثبتِ موفقِ سند، خودکار به‌عنوانِ تسویه‌یِ
+        # همه‌یِ آن فاکتورها (هرکدام با مبلغِ خودش) هم ثبت شود.
+        self._settle_invoices: list[tuple[int, decimal.Decimal]] = []
 
         noun = "دریافت" if direction == "RECEIPT" else "پرداخت"
         row_methods_hint = (
@@ -1579,6 +1857,15 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.ledger_button.setMaximumWidth(28)
         self.ledger_button.clicked.connect(self._open_counterparty_ledger)
         account_row.addWidget(self.ledger_button)
+        # طبقِ درخواستِ صریح («در فرمِ دریافت/پرداخت هم دکمه‌ای باشد که
+        # به فاکتورهایِ تسویه‌نشده لینک باشد و بتوان مبلغِ تسویه را برایِ
+        # فاکتورهایِ همان شخص وارد کرد»).
+        self.link_invoices_button = QPushButton("🔗")
+        self.link_invoices_button.setObjectName("iconButton")
+        self.link_invoices_button.setToolTip("لینک به فاکتورهایِ بازِ این طرفِ‌حساب — واردکردنِ مبلغِ تسویه برایِ هرکدام")
+        self.link_invoices_button.setMaximumWidth(28)
+        self.link_invoices_button.clicked.connect(self._open_link_invoices_dialog)
+        account_row.addWidget(self.link_invoices_button)
         header_layout.addLayout(account_row, 1, 1)
 
         # طبقِ درخواستِ صریح: مرکزِ هزینه/پروژه (اگر رویِ حسابِ طرف‌حساب
@@ -1691,20 +1978,23 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         rows_header.addWidget(add_row_button)
         table_card_layout.addLayout(rows_header)
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["روش", "مبلغ", "شرح", "جزئیات", ""])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["روش", "مبلغ", "شرح", "جزئیات", "اقساط", ""])
         self.table.verticalHeader().setVisible(False)
         # طبقِ گزارشِ صریح («ارتفاعِ فیلدها کوچک/فشرده است»): Qt ارتفاعِ
         # ردیفِ جدول را با موردهایِ متنیِ ساده به‌درستی حساب می‌کند، ولی با
         # ویجت‌هایِ setCellWidget (کمبو/فیلدِ مبلغ با padding خودشان) نه —
         # دقیقاً هم‌الگو با جدولِ ردیف‌هایِ journal_entry.py.
         self.table.verticalHeader().setDefaultSectionSize(52)
-        self.table.setMinimumHeight(160)
+        # طبقِ همان گزارشِ صریح: ۱۶۰px فقط کمی بیشتر از ارتفاعِ سرستون +
+        # یک‌ونیم ردیف بود -- عملاً هیچ ردیفی به‌طورِ کامل دیده نمی‌شد.
+        self.table.setMinimumHeight(220)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.setColumnWidth(0, 110)
         self.table.setColumnWidth(1, 150)
         self.table.setColumnWidth(3, 100)
-        self.table.setColumnWidth(4, 36)
+        self.table.setColumnWidth(4, 60)
+        self.table.setColumnWidth(5, 36)
         table_card_layout.addWidget(self.table, stretch=1)
 
         layout.addWidget(table_card, stretch=1)
@@ -1910,6 +2200,57 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             then=lambda screen: screen.show_ledger_for_detail(detail_account_id, label),
         )
 
+    def _open_link_invoices_dialog(self) -> None:
+        """طبقِ درخواستِ صریح: فهرستِ فاکتورهایِ بازِ همین طرفِ‌حساب (بر
+        اساسِ جهتِ سند -- دریافت یعنی فاکتورِ فروش، پرداخت یعنی فاکتورِ
+        خرید) را نشان می‌دهد؛ بعدِ تاییدِ کاربر، مبلغ‌هایِ واردشده در
+        self._settle_invoices نگه داشته می‌شوند تا _save() خودکار آن‌ها
+        را تسویه کند -- دقیقاً همان مکانیزمِ prefill_for_invoice، فقط از
+        همین‌جا (نه از فرمِ تسویه) شروع می‌شود."""
+        detail_account_id = self.account_combo.currentData()
+        if self.company_id is None or detail_account_id is None:
+            theme.set_status_label(self.status_label, "ابتدا طرفِ‌حساب را انتخاب کنید.", ok=False)
+            return
+        invoice_type = _INVOICE_TYPE_BY_DIRECTION[self.direction]
+        statuses = settlements_service.list_unsettled_invoices(self.company_id, invoice_type)
+        docs_by_id = {}
+        matching = []
+        for status in statuses:
+            try:
+                doc, _lines = documents_service.get_document(status.document_id, self.company_id)
+            except ValueError:
+                continue
+            if doc is not None and doc.counterparty_detail_account_id == detail_account_id:
+                docs_by_id[status.document_id] = doc
+                matching.append(status)
+        if not matching:
+            QMessageBox.information(self, "فاکتورهایِ باز", "این طرفِ‌حساب فاکتورِ بازِ تسویه‌نشده‌ای ندارد.")
+            return
+        dialog = _LinkInvoicesDialog(self, matching, docs_by_id, self.direction)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        entries = dialog.result_entries()
+        if not entries:
+            return
+        self._settle_invoices = list(entries.items())
+        total = sum(entries.values(), decimal.Decimal(0))
+        self.total_amount_field.setValue(float(total))
+        if not self.description_field.text().strip():
+            remaining_by_id = {status.document_id: status.remaining_amount for status in matching}
+            entries_info = [
+                (docs_by_id[doc_id].document_no, remaining_by_id[doc_id], amount) for doc_id, amount in entries.items()
+            ]
+            self.description_field.setText(
+                _describe_invoice_settlement(self.direction, entries_info, self._counterparty_label())
+            )
+        self._update_rows_summary()
+        theme.set_status_label(
+            self.status_label,
+            f"{numerals.to_persian_digits(str(len(entries)))} فاکتور لینک شد — جمعِ مبلغ "
+            f"({numerals.format_money(total, self.currency_decimal_places)}) در بالایِ فرم پر شد.",
+            ok=True,
+        )
+
     def _quick_add_counterparty(self) -> None:
         """طبقِ توضیحِ کاربر: منظور از این دکمه‌یِ میان‌بر، بازکردنِ خودِ
         فرمِ «تعریفِ تفصیلی» (GL_DIM) بود — نه یک دیالوگِ سبکِ جداگانه.
@@ -2046,7 +2387,8 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         self.table.setCellWidget(row_index, 1, row.amount_cell)
         self.table.setCellWidget(row_index, 2, row.description_field)
         self.table.setCellWidget(row_index, 3, row.details_button)
-        self.table.setCellWidget(row_index, 4, row.remove_button)
+        self.table.setCellWidget(row_index, 4, row.installment_link_button)
+        self.table.setCellWidget(row_index, 5, row.remove_button)
         self._method_rows.append(row)
         self._update_rows_summary()
         return row
@@ -2151,20 +2493,99 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         if base_index >= 0:
             self.currency_combo.setCurrentIndex(base_index)
         self.status_label.setText("")
+        self._settle_invoices = []
         self._update_rows_summary()
 
-    def prefill_for_invoice(self, counterparty_id: int | None, amount: decimal.Decimal, description: str) -> None:
+    def prefill_for_invoice(
+        self, counterparty_id: int | None, amount: decimal.Decimal, description: str,
+        settle_invoices: list[tuple[int, decimal.Decimal]] | None = None,
+        currency_id: int | None = None, exchange_rate: decimal.Decimal | None = None,
+        method_lines: list[tuple[str, decimal.Decimal, str | None]] | None = None,
+    ) -> None:
         """طبقِ درخواستِ صریح: بعدِ ثبتِ نهاییِ فاکتورِ فروش/خرید، همین فرم
         (دریافت/پرداخت) با طرفِ‌حساب و مبلغِ همان فاکتور باز شود — کاربر
         فقط روشِ پرداخت (نقد/بانک/چک) را انتخاب و مبلغ را تایید می‌کند
-        (یا با اسپیس در فیلدِ ردیف، مبلغِ بالای فرم را کپی می‌کند)."""
+        (یا با اسپیس در فیلدِ ردیف، مبلغِ بالای فرم را کپی می‌کند).
+
+        اگر settle_invoices داده شود (طبقِ درخواستِ صریح: بازکردنِ همین فرم
+        مستقیماً از «مدیریتِ تسویه‌یِ فاکتورها» -- حتی برایِ چند فاکتورِ
+        هم‌زمانِ یک طرفِ‌حساب)، بعدِ ثبتِ موفقِ همین سند، خودکار به‌عنوانِ
+        تسویه‌یِ همه‌یِ آن فاکتورها (هرکدام با مبلغِ خودش از همین فهرست،
+        نه لزوماً amountِ سرِ فرم) هم ثبت می‌شود -- دیگر نیازی به دوباره
+        رفتن به فرمِ تسویه و انتخابِ دستیِ آن‌ها نیست.
+
+        currency_id/exchange_rate: طبقِ درخواستِ صریح («مدیریتِ سفارشات» --
+        پرداخت‌هایِ ارزی)؛ اگر currency_id همان ارزِ پایه نباشد، ارزِ سند و
+        نرخِ روزِ داده‌شده از پیش ست می‌شوند (کاربر فقط روشِ پرداخت را
+        انتخاب می‌کند، دیگر نیازی به بازتنظیمِ ارز/نرخ نیست).
+
+        method_lines: طبقِ درخواستِ صریح («دکمه‌یِ نحوهٔ تسویه در فرمِ
+        فاکتور» -- ترکیبِ نقد/بانک/بن/کالابرگ/تخفیفِ ازپیش‌تاییدشده): اگر
+        داده شود، به‌جایِ یک ردیفِ خالی، دقیقاً همان ردیف‌هایِ روش (با
+        مبلغِ خودشان) از پیش ساخته می‌شوند -- کاربر/مدیر فقط بازبینی و
+        ثبت می‌کند، دیگر نیازی به واردکردنِ دوباره‌یِ چیزی که پیش‌تر در
+        فرمِ فاکتور تعیین و تاییدشده نیست."""
         self._reset_form()
         if counterparty_id is not None:
             index = self.account_combo.findData(counterparty_id)
             if index >= 0:
                 self.account_combo.setCurrentIndex(index)
+        if currency_id is not None and currency_id != self._base_currency_id:
+            currency_index = self.currency_combo.findData(currency_id)
+            if currency_index >= 0:
+                self.currency_combo.setCurrentIndex(currency_index)
+                if exchange_rate is not None:
+                    self.header_exchange_rate = exchange_rate
+                    self.rate_field.setText(numerals.format_amount(exchange_rate))
         self.total_amount_field.setValue(float(amount))
         self.description_field.setText(description)
+        self._settle_invoices = list(settle_invoices) if settle_invoices else []
+        if method_lines:
+            for index, (method_code, line_amount, note) in enumerate(method_lines):
+                row = self._method_rows[0] if index == 0 else self._add_row()
+                method_index = row.method_combo.findData(method_code)
+                if method_index >= 0:
+                    row.method_combo.setCurrentIndex(method_index)
+                row.amount_field.setValue(float(line_amount))
+                if note:
+                    row.description_field.setText(note)
+        self._update_rows_summary()
+
+    def prefill_for_installment_collection(
+        self, line_id: int, counterparty_id: int | None, amount: decimal.Decimal, description: str,
+    ) -> None:
+        """طبقِ درخواستِ صریح («وصولِ اقساط بتونه مستقل هم کار بکنه»):
+        بازکردنِ همین فرم مستقیماً از دکمه‌یِ «وصول» در صفحه‌یِ مدیریتِ
+        اقساط -- بدونِ نیازِ به بازکردنِ دستیِ فرم و جستجویِ قسط از
+        دکمه‌یِ 🔗 (که خودش هم‌چنان برایِ حالتِ عمومی/مستقل کار می‌کند).
+        قسط از پیش روی همان ردیفِ اول متصل می‌شود و مبلغ (که می‌تواند
+        کمتر از ماندهٔ کلِ قسط -- یعنی یک وصولِ جزئی -- باشد) هم از پیش
+        پر می‌شود؛ کاربر فقط باید روشِ واقعیِ دریافت/پرداخت (نقد/بانک/
+        چک/...) را انتخاب کند."""
+        self.prefill_for_installment_collections([(line_id, amount)], counterparty_id, description)
+
+    def prefill_for_installment_collections(
+        self, lines: list[tuple[int, decimal.Decimal]], counterparty_id: int | None, description: str,
+    ) -> None:
+        """طبقِ درخواستِ صریح («هم‌زمان جمعِ دو یا چند قسط هم دریافت
+        بشه»): نسخهٔ عمومی‌ترِ بالا -- هر تاپلِ (line_id, amount) یک
+        ردیفِ روشِ مجزا می‌سازد (همه از پیش به همان قسطِ خودشان متصل)،
+        همه زیرِ یک سندِ واحد؛ مبلغِ سرِ فرم هم مجموعِ همه‌شان می‌شود.
+        کاربر فقط روشِ واقعیِ هر ردیف را انتخاب می‌کند (لزوماً یکسان
+        نیست -- مثلاً یکی نقد و دیگری بانک)."""
+        self._reset_form()
+        if counterparty_id is not None:
+            index = self.account_combo.findData(counterparty_id)
+            if index >= 0:
+                self.account_combo.setCurrentIndex(index)
+        total = sum((amount for _line_id, amount in lines), decimal.Decimal(0))
+        self.total_amount_field.setValue(float(total))
+        self.description_field.setText(description)
+        for index, (line_id, amount) in enumerate(lines):
+            row = self._method_rows[0] if index == 0 else self._add_row()
+            row.amount_field.setValue(float(amount))
+            row.collect_installment_line_id = line_id
+            row.installment_link_button.setStyleSheet("font-weight: bold;")
         self._update_rows_summary()
 
     def _compose_description(self) -> str:
@@ -2266,13 +2687,35 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         receipt_counterparty_label = self._counterparty_label()
         receipt_date_text = self.date_field.text()
         receipt_manual_description = self.description_field.text().strip()
+        # طبقِ درخواستِ صریح («از فرمِ تسویه‌یِ فاکتورها بازشود و رفرنس
+        # بدهد» + «مبلغِ دریافتی برایِ چند فاکتورِ هم‌زمان»): پیش از reset
+        # (که این فهرست را هم پاک می‌کند) نگه داشته می‌شود -- اگر از
+        # commercial_settlement.py برایِ همین منظور باز شده باشد، بعدِ
+        # ثبتِ موفقِ سند، خودکار تسویه‌یِ همه‌یِ آن فاکتورها (هرکدام با
+        # مبلغِ خودش) هم ثبت می‌شود.
+        settle_invoices = self._settle_invoices
+        settlement_errors: list[str] = []
+        for invoice_document_id, invoice_amount in settle_invoices:
+            try:
+                settlements_service.allocate_settlement(
+                    self.company_id, invoice_document_id, result.journal_entry_id,
+                    self.date_field.date(), invoice_amount, session.current_user.user_id,
+                    description=self._compose_description(),
+                )
+            except ValueError as exc:
+                settlement_errors.append(f"#{invoice_document_id}: {exc}")
 
         self._reset_form()
-        theme.set_status_label(
-            self.status_label,
-            f"سند با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد.",
-            ok=True,
-        )
+        success_message = f"سند با شماره‌ی موقتِ {numerals.to_persian_digits(str(result.temporary_no))} ثبت شد."
+        if settle_invoices:
+            if not settlement_errors:
+                success_message += (
+                    " تسویه‌یِ فاکتورِ مربوطه هم ثبت شد." if len(settle_invoices) == 1
+                    else f" تسویه‌یِ هر {len(settle_invoices)} فاکتور هم ثبت شد."
+                )
+            else:
+                success_message += f" (هشدار: سند ثبت شد، اما این تسویه‌ها وصل نشدند -- {'؛ '.join(settlement_errors)})"
+        theme.set_status_label(self.status_label, success_message, ok=(not settlement_errors))
         _prompt_and_print_receipt(
             self,
             self.direction,
@@ -2366,9 +2809,16 @@ def _build_receipt_html(
     """
 
 
-def _print_receipt_document(parent: QWidget, html: str) -> None:
+def _print_receipt_document(parent: QWidget, html: str, printer_name: str | None = None) -> None:
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     printer.setPageMargins(QMarginsF(10, 10, 10, 10), QPageLayout.Unit.Millimeter)
+    # طبقِ درخواستِ صریح («ارسالِ هم‌زمانِ چند فاکتور به چند پرینترِ
+    # مختلف»): اگر پرینترِ مشخصی (طبقِ گروهِ POSِ اقلامِ همین فاکتور)
+    # داده شده باشد، همان از قبل رویِ QPrinter تنظیم می‌شود -- کاربر در
+    # همان دیالوگِ پیش‌نمایشِ همیشگی فقط تاییدِ نهاییِ چاپ را می‌زند،
+    # دیگر لازم نیست خودش هر بار پرینتر را از فهرست انتخاب کند.
+    if printer_name:
+        printer.setPrinterName(printer_name)
     doc = QTextDocument()
     doc.setHtml(html)
     preview = QPrintPreviewDialog(printer, parent)

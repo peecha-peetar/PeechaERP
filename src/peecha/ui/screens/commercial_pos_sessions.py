@@ -1,5 +1,13 @@
-"""ترمینال‌ها و جلسه‌هایِ صندوق (مرحلهٔ ۷) — بازکردن/بستنِ جلسه، آزادسازیِ
-مغایرت، و تنظیماتِ صندوق (مشتریِ متفرقه/آستانهٔ مغایرت)."""
+"""ترمینال‌ها و شیفت‌هایِ صندوق (مرحلهٔ ۷) — بازکردن/بستنِ شیفت، آزادسازیِ
+مغایرت، و تنظیماتِ فاکتورِ صندوق (تک‌فروشی). طبقِ درخواستِ صریح
+(«اصطلاحِ جلسه گنگ است»)، برچسبِ نمایشی «شیفت» است -- شناسه‌هایِ داخلیِ
+کد (session_id, PosSession) بدونِ تغییر مانده‌اند.
+
+طبقِ بازخوردِ صریحِ کاربر («منویِ تازه اضافه نکن -- همه‌یِ تنظیماتِ
+تک‌فروشی باید همین‌جا، در تب‌هایِ مختلف بیاید»)، هیچ نویِ جداگانه‌ای
+برایِ تنظیماتِ POS در ناوبری وجود ندارد -- گروه‌هایِ POS و اندازهٔ
+کلیدهایِ فوری هم به‌عنوانِ تب در همین صفحه (بخشِ «تنظیماتِ تک‌فروشی»)
+جا گرفته‌اند، نه یک صفحه/منویِ مستقل."""
 
 from __future__ import annotations
 
@@ -8,6 +16,7 @@ import decimal
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QHBoxLayout,
@@ -16,6 +25,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -23,9 +34,13 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import treasury as treasury_service
+from peecha.ui.screens.commercial_pos_menu_groups import CommercialPosMenuGroupsScreen
 from peecha.ui.widgets import wrap_scrollable
 
 _SESSION_STATUS_LABELS = {"OPEN": "باز", "CLOSED": "بسته"}
@@ -54,7 +69,15 @@ class CommercialPosSessionsScreen(QWidget):
         self.terminals_table.verticalHeader().setVisible(False)
         self.terminals_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.terminals_table.cellClicked.connect(self._on_terminal_selected)
-        left.addWidget(self.terminals_table, stretch=1)
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در تنظیماتِ پیش‌فرضِ تسویه ارتفاعِ
+        # فیلد کمه و محتویاتش معلوم نیست»): ریشهٔ واقعی این بود که این
+        # جدولِ کوچکِ ترمینال‌ها تنها widgetِ دارایِ stretch در این ستون
+        # بود -- یعنی تمامِ فضایِ اضافیِ عمودی را می‌بلعید و سه‌تبِ
+        # تنظیماتِ زیرش (شاملِ جدولِ پیش‌فرضِ تسویه) به حداقلِ اندازهٔ
+        # طبیعی‌اش فشرده می‌شد. حالا این جدولِ کوچک یک ارتفاعِ حداکثریِ
+        # معقول دارد و stretch به self.settings_tabs (زیر) منتقل شده.
+        self.terminals_table.setMaximumHeight(140)
+        left.addWidget(self.terminals_table)
 
         new_terminal_box = QHBoxLayout()
         self.terminal_code_field = QLineEdit()
@@ -73,9 +96,14 @@ class CommercialPosSessionsScreen(QWidget):
         new_terminal_box.addWidget(add_terminal_button)
         left.addLayout(new_terminal_box)
 
-        settings_title = QLabel("تنظیماتِ صندوق")
+        settings_title = QLabel("تنظیماتِ فاکتورِ صندوق (تک‌فروشی)")
         settings_title.setObjectName("sectionTitle")
         left.addWidget(settings_title)
+
+        self.settings_tabs = QTabWidget()
+
+        general_tab = QWidget()
+        general_layout = QVBoxLayout(general_tab)
         settings_box = QHBoxLayout()
         settings_box.addWidget(QLabel("مشتریِ متفرقهٔ پیش‌فرض"))
         self.guest_customer_combo = QComboBox()
@@ -91,8 +119,302 @@ class CommercialPosSessionsScreen(QWidget):
         save_settings_button.setToolTip("ذخیره")
         save_settings_button.clicked.connect(self._save_settings)
         settings_box.addWidget(save_settings_button)
-        left.addLayout(settings_box)
-        outer.addLayout(left, stretch=2)
+        general_layout.addLayout(settings_box)
+        general_layout.addStretch(1)
+        self.settings_tabs.addTab(general_tab, "عمومی")
+
+        retail_tab = QWidget()
+        retail_layout = QVBoxLayout(retail_tab)
+        quick_settings_title = QLabel("اندازه/جهتِ کلیدهایِ فوریِ صفحه‌یِ فروش (سراسریِ شرکت -- نه به‌ازایِ هر کاربر)")
+        quick_settings_title.setObjectName("sectionHint")
+        quick_settings_title.setWordWrap(True)
+        retail_layout.addWidget(quick_settings_title)
+        quick_settings_box = QHBoxLayout()
+        quick_settings_box.addWidget(QLabel("عرض"))
+        self.quick_button_width_field = QSpinBox()
+        self.quick_button_width_field.setRange(60, 400)
+        quick_settings_box.addWidget(self.quick_button_width_field)
+        quick_settings_box.addWidget(QLabel("ارتفاع"))
+        self.quick_button_height_field = QSpinBox()
+        self.quick_button_height_field.setRange(40, 300)
+        quick_settings_box.addWidget(self.quick_button_height_field)
+        quick_settings_box.addWidget(QLabel("اندازهٔ فونت"))
+        self.quick_button_font_size_field = QSpinBox()
+        self.quick_button_font_size_field.setRange(6, 32)
+        quick_settings_box.addWidget(self.quick_button_font_size_field)
+        quick_settings_box.addWidget(QLabel("تعدادِ ستون"))
+        self.quick_grid_columns_field = QSpinBox()
+        self.quick_grid_columns_field.setRange(2, 12)
+        quick_settings_box.addWidget(self.quick_grid_columns_field)
+        save_quick_settings_button = QPushButton("💾")
+        save_quick_settings_button.setObjectName("iconButton")
+        save_quick_settings_button.setFixedWidth(44)
+        save_quick_settings_button.setToolTip("ذخیره")
+        save_quick_settings_button.clicked.connect(self._save_settings)
+        quick_settings_box.addWidget(save_quick_settings_button)
+        retail_layout.addLayout(quick_settings_box)
+
+        # طبقِ درخواستِ صریح («دلیلی نداره اندازهٔ عرض/ارتفاعِ کلیدِ فوری در
+        # خودِ فرمِ فاکتور باشه -- باید به تنظیمات منتقل بشه»): برخلافِ
+        # کنترل‌هایِ بالا (سراسریِ شرکت)، این دو فقط رویِ حسابِ کاربرِ
+        # جاری اثر می‌گذارد (PosCashierSettings.quick_button_*_override) --
+        # قبلاً این دو اسپین‌باکس مستقیماً در commercial_pos_sale.py بود.
+        my_size_title = QLabel("اندازهٔ کلیدهایِ فوریِ من (فقط برایِ حسابِ جاری -- بازنویسیِ اندازهٔ سراسریِ بالا)")
+        my_size_title.setObjectName("sectionHint")
+        my_size_title.setWordWrap(True)
+        retail_layout.addWidget(my_size_title)
+        my_size_box = QHBoxLayout()
+        my_size_box.addWidget(QLabel("عرض"))
+        self.my_quick_button_width_field = QSpinBox()
+        self.my_quick_button_width_field.setRange(0, 400)
+        self.my_quick_button_width_field.setSpecialValueText("پیش‌فرض")
+        my_size_box.addWidget(self.my_quick_button_width_field)
+        my_size_box.addWidget(QLabel("ارتفاع"))
+        self.my_quick_button_height_field = QSpinBox()
+        self.my_quick_button_height_field.setRange(0, 300)
+        self.my_quick_button_height_field.setSpecialValueText("پیش‌فرض")
+        my_size_box.addWidget(self.my_quick_button_height_field)
+        save_my_size_button = QPushButton("💾")
+        save_my_size_button.setObjectName("iconButton")
+        save_my_size_button.setFixedWidth(44)
+        save_my_size_button.setToolTip("ذخیره (فقط برایِ من)")
+        save_my_size_button.clicked.connect(self._save_my_quick_button_size)
+        my_size_box.addWidget(save_my_size_button)
+        my_size_box.addStretch(1)
+        retail_layout.addLayout(my_size_box)
+
+        # طبقِ درخواستِ صریح («کلیدهایِ فوری از سمتِ راست/چپ، عمودی/افقی
+        # در لوکیشن‌هایِ مختلفِ صفحه و ترازبندی‌هایِ مختلف قرار بگیرد»).
+        layout_settings_box = QHBoxLayout()
+        layout_settings_box.addWidget(QLabel("جایگاهِ منویِ دسترسیِ‌سریع"))
+        self.quick_access_position_combo = QComboBox()
+        self.quick_access_position_combo.addItem("چپِ صفحه", "LEFT")
+        self.quick_access_position_combo.addItem("راستِ صفحه", "RIGHT")
+        layout_settings_box.addWidget(self.quick_access_position_combo)
+        layout_settings_box.addWidget(QLabel("جهتِ چیدمانِ کلیدها"))
+        self.quick_access_orientation_combo = QComboBox()
+        self.quick_access_orientation_combo.addItem("افقی", "HORIZONTAL")
+        self.quick_access_orientation_combo.addItem("عمودی", "VERTICAL")
+        layout_settings_box.addWidget(self.quick_access_orientation_combo)
+        save_layout_settings_button = QPushButton("💾")
+        save_layout_settings_button.setObjectName("iconButton")
+        save_layout_settings_button.setFixedWidth(44)
+        save_layout_settings_button.setToolTip("ذخیره")
+        save_layout_settings_button.clicked.connect(self._save_settings)
+        layout_settings_box.addWidget(save_layout_settings_button)
+        layout_settings_box.addStretch(1)
+        retail_layout.addLayout(layout_settings_box)
+
+        # طبقِ بازبینیِ عکس‌هایِ تنظیماتِ نرم‌افزارِ مرجع (تنظیماتِ
+        # عمومیِ فاکتور/تنظیماتِ تک‌فروشی) -- فقط مواردِ واقعاً قابلِ‌اجرا
+        # و مرتبط با دامنهٔ فعلی، طبقِ لیست/پیشنهادِ ارائه‌شده به کاربر.
+        toggles_box = QHBoxLayout()
+        self.allow_price_override_checkbox = QCheckBox("اجازهٔ تغییرِ قیمت توسط کاربر")
+        toggles_box.addWidget(self.allow_price_override_checkbox)
+        self.allow_discount_override_checkbox = QCheckBox("اجازهٔ تغییرِ تخفیف توسط کاربر")
+        toggles_box.addWidget(self.allow_discount_override_checkbox)
+        self.quick_access_enabled_checkbox = QCheckBox("نمایشِ منویِ دسترسیِ‌سریع")
+        toggles_box.addWidget(self.quick_access_enabled_checkbox)
+        self.scan_beep_enabled_checkbox = QCheckBox("بوقِ تاییدِ اسکن/افزودن")
+        toggles_box.addWidget(self.scan_beep_enabled_checkbox)
+        toggles_box.addStretch(1)
+        retail_layout.addLayout(toggles_box)
+
+        # طبقِ درخواستِ صریح («جایی باشه که بتوان نمایش یا عدمِ نمایشِ
+        # بخش‌هایِ فاکتورِ تک‌فروشی را انتخاب کرد»).
+        visibility_box = QHBoxLayout()
+        self.show_price_list_field_checkbox = QCheckBox("نمایشِ فیلدِ «فهرستِ قیمت»")
+        visibility_box.addWidget(self.show_price_list_field_checkbox)
+        self.show_tax_discount_breakdown_checkbox = QCheckBox("نمایشِ ریزِ تخفیف/مالیات در فوتر")
+        visibility_box.addWidget(self.show_tax_discount_breakdown_checkbox)
+        self.show_customer_credit_warning_checkbox = QCheckBox("نمایشِ هشدارِ سقفِ اعتبار")
+        visibility_box.addWidget(self.show_customer_credit_warning_checkbox)
+        visibility_box.addWidget(QLabel("تعدادِ فاکتورهایِ اخیر"))
+        self.recent_invoices_count_field = QSpinBox()
+        self.recent_invoices_count_field.setRange(1, 100)
+        visibility_box.addWidget(self.recent_invoices_count_field)
+        visibility_box.addStretch(1)
+        retail_layout.addLayout(visibility_box)
+
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («دکمهٔ تسویه با پرینت خیلی طول
+        # می‌کشد»): چاپِ حرفه‌ایِ Jasper هر بار یک JVMِ تازه بالا می‌آورد.
+        print_box = QHBoxLayout()
+        self.fast_receipt_printing_checkbox = QCheckBox("چاپِ سریعِ فیش (بدونِ Jasper -- توصیه‌شده برایِ صندوق)")
+        print_box.addWidget(self.fast_receipt_printing_checkbox)
+        print_box.addStretch(1)
+        retail_layout.addLayout(print_box)
+
+        receipt_box = QHBoxLayout()
+        receipt_box.addWidget(QLabel("سرتیترِ فیش"))
+        self.receipt_header_field = QLineEdit()
+        self.receipt_header_field.setPlaceholderText("مثلاً: با تشکر از خریدِ شما")
+        receipt_box.addWidget(self.receipt_header_field, stretch=1)
+        receipt_box.addWidget(QLabel("توضیحاتِ انتهایِ فیش"))
+        self.receipt_footer_field = QLineEdit()
+        receipt_box.addWidget(self.receipt_footer_field, stretch=1)
+        save_toggles_button = QPushButton("💾")
+        save_toggles_button.setObjectName("iconButton")
+        save_toggles_button.setFixedWidth(44)
+        save_toggles_button.setToolTip("ذخیره")
+        save_toggles_button.clicked.connect(self._save_settings)
+        receipt_box.addWidget(save_toggles_button)
+        retail_layout.addLayout(receipt_box)
+
+        self.menu_groups_panel = CommercialPosMenuGroupsScreen()
+        retail_layout.addWidget(self.menu_groups_panel, stretch=1)
+        self.settings_tabs.addTab(retail_tab, "تک‌فروشی")
+
+        # طبقِ درخواستِ صریح («اگر تفصیلیِ پیش‌فرضِ روش‌هایِ دریافتِ
+        # تفصیلی داشتند از تنظیمات بخواند... اگر مراکزِ هزینه و پروژه
+        # داشتند در همان تنظیمات انجام شود»): پیش‌فرضِ تفصیلی/مرکزِ
+        # هزینه/پروژهٔ هر روشِ دریافتِ فرمِ نحوهٔ تسویه‌یِ تک‌فروشی --
+        # هربار در تنظیمات ذخیره شود، دیگر در فرمِ فروش پرسیده نمی‌شود
+        # (ولی صندوق‌دار همچنان می‌تواند همان‌جا عوضش کند).
+        self._settlement_default_widgets: list[tuple[str, QComboBox, QComboBox, QComboBox]] = []
+        defaults_tab = QWidget()
+        defaults_layout = QVBoxLayout(defaults_tab)
+        defaults_hint = QLabel(
+            "برایِ هر روشِ دریافتِ فرمِ «نحوهٔ تسویه»یِ تک‌فروشی، تفصیلیِ "
+            "پیش‌فرض را این‌جا مشخص کنید -- صندوق‌دار دیگر هر بار در لحظهٔ "
+            "فروش پرسیده نمی‌شود (ولی همان‌جا هم می‌تواند عوضش کند). "
+            "مرکزِ هزینه/پروژه هم فقط وقتی فعال است که معینِ همان روش "
+            "این ابعاد را الزامی کرده باشد."
+        )
+        defaults_hint.setObjectName("sectionHint")
+        defaults_hint.setWordWrap(True)
+        defaults_layout.addWidget(defaults_hint)
+        self.settlement_defaults_table = QTableWidget(0, 4)
+        self.settlement_defaults_table.setHorizontalHeaderLabels(["روش", "تفصیلیِ پیش‌فرض", "مرکزِ هزینه", "پروژه"])
+        self.settlement_defaults_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.settlement_defaults_table.verticalHeader().setVisible(False)
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («ارتفاعِ فیلدها خیلی کمه»):
+        # ارتفاعِ پیش‌فرضِ ردیف (بر مبنایِ فقط متنِ سلولِ اول) برایِ جا
+        # دادنِ سه QComboBoxِ کاملِ سلول‌هایِ دیگر کافی نبود -- هم‌الگو با
+        # رفعِ همین باگ در commercial_documents_list.py.
+        self.settlement_defaults_table.verticalHeader().setMinimumSectionSize(40)
+        self.settlement_defaults_table.verticalHeader().setDefaultSectionSize(40)
+        sd_header = self.settlement_defaults_table.horizontalHeader()
+        sd_header.setSectionResizeMode(0, QHeaderView.Interactive)
+        self.settlement_defaults_table.setColumnWidth(0, 160)
+        for col in (1, 2, 3):
+            sd_header.setSectionResizeMode(col, QHeaderView.Stretch)
+        defaults_layout.addWidget(self.settlement_defaults_table, stretch=1)
+
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ
+        # حسابِ مشتری مرکزِ هزینه/پروژه می‌خواهد»): پیش‌فرضِ این دو بُعد
+        # برایِ طرفِ حسابِ دریافتنیِ مشتری (نه نقد/بانک) هم این‌جا وارد
+        # می‌شود -- دیگر نیازی نیست سرپرست هربار در لحظهٔ تاییدِ فروش این
+        # دو را دستی وارد کند (اصلاً فرمی برایِ این کار وجود ندارد).
+        receivable_title = QLabel("پیش‌فرضِ مرکزِ هزینه/پروژهٔ حسابِ دریافتنیِ مشتری")
+        receivable_title.setObjectName("sectionHint")
+        receivable_title.setWordWrap(True)
+        defaults_layout.addWidget(receivable_title)
+        receivable_box = QHBoxLayout()
+        receivable_box.addWidget(QLabel("مرکزِ هزینه"))
+        self.receivable_cost_center_combo = QComboBox()
+        receivable_box.addWidget(self.receivable_cost_center_combo, stretch=1)
+        receivable_box.addWidget(QLabel("پروژه"))
+        self.receivable_project_combo = QComboBox()
+        receivable_box.addWidget(self.receivable_project_combo, stretch=1)
+        defaults_layout.addLayout(receivable_box)
+
+        save_defaults_button = QPushButton("💾")
+        save_defaults_button.setObjectName("iconButton")
+        save_defaults_button.setFixedWidth(44)
+        save_defaults_button.setToolTip("ذخیره")
+        save_defaults_button.clicked.connect(self._save_settlement_method_defaults)
+        defaults_layout.addWidget(save_defaults_button)
+        self.settings_tabs.addTab(defaults_tab, "پیش‌فرضِ تسویه")
+
+        # طبقِ درخواستِ صریحِ کاربر («ترازوی آفلاین با بارکدِ وزنی برایِ
+        # فروشِ حضوری طراحی شود -- ترتیبِ ارقام و تعدادِ آن‌ها قابلِ‌
+        # تنظیم باشد؛ + چارچوبِ اولیه برایِ ترازویِ آنلاین»).
+        scale_tab = QWidget()
+        scale_layout = QVBoxLayout(scale_tab)
+
+        weight_barcode_hint = QLabel(
+            "بارکدِ چاپ‌شده‌یِ ترازو (بدونِ نیاز به هیچ اتصالِ زنده‌ای، فقط با یک اسکنرِ معمولی) "
+            "از سه بخش تشکیل شده: پیشوندِ نوع، کدِ کالا، و وزن -- تعدادِ ارقامِ هر بخش این‌جا قابلِ‌تنظیم است."
+        )
+        weight_barcode_hint.setObjectName("sectionHint")
+        weight_barcode_hint.setWordWrap(True)
+        scale_layout.addWidget(weight_barcode_hint)
+
+        self.weight_barcode_enabled_checkbox = QCheckBox("فعال‌بودنِ خواندنِ بارکدِ وزنی در فروشِ حضوری")
+        scale_layout.addWidget(self.weight_barcode_enabled_checkbox)
+
+        weight_barcode_box = QHBoxLayout()
+        weight_barcode_box.addWidget(QLabel("پیشوند"))
+        self.weight_barcode_prefix_field = QLineEdit()
+        self.weight_barcode_prefix_field.setMaximumWidth(70)
+        self.weight_barcode_prefix_field.setPlaceholderText("مثلاً ۲۰")
+        weight_barcode_box.addWidget(self.weight_barcode_prefix_field)
+        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ کدِ کالا"))
+        self.weight_barcode_item_code_digits_field = QSpinBox()
+        self.weight_barcode_item_code_digits_field.setRange(1, 12)
+        weight_barcode_box.addWidget(self.weight_barcode_item_code_digits_field)
+        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ وزن"))
+        self.weight_barcode_weight_digits_field = QSpinBox()
+        self.weight_barcode_weight_digits_field.setRange(1, 12)
+        weight_barcode_box.addWidget(self.weight_barcode_weight_digits_field)
+        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ اعشارِ وزن"))
+        self.weight_barcode_weight_decimals_field = QSpinBox()
+        self.weight_barcode_weight_decimals_field.setRange(0, 8)
+        weight_barcode_box.addWidget(self.weight_barcode_weight_decimals_field)
+        save_weight_barcode_button = QPushButton("💾")
+        save_weight_barcode_button.setObjectName("iconButton")
+        save_weight_barcode_button.setFixedWidth(44)
+        save_weight_barcode_button.setToolTip("ذخیره")
+        save_weight_barcode_button.clicked.connect(self._save_weight_barcode_settings)
+        weight_barcode_box.addWidget(save_weight_barcode_button)
+        weight_barcode_box.addStretch(1)
+        scale_layout.addLayout(weight_barcode_box)
+
+        scale_online_hint = QLabel(
+            "ترازویِ آنلاین (خواندنِ خودکارِ همه‌یِ اقلامِ ذخیره‌شده در حافظه‌یِ ترازو با یک بارکد/RFIDِ کلی): "
+            "فعلاً فقط چارچوبِ تنظیماتی آماده است -- تا مشخص‌شدنِ پروتکلِ دقیقِ ارتباطیِ مدلِ دستگاهِ شما، "
+            "خودِ خواندنِ زنده هنوز پیاده‌سازی نشده."
+        )
+        scale_online_hint.setObjectName("sectionHint")
+        scale_online_hint.setWordWrap(True)
+        scale_layout.addWidget(scale_online_hint)
+
+        self.scale_online_enabled_checkbox = QCheckBox("فعال‌بودنِ ترازویِ آنلاین")
+        scale_layout.addWidget(self.scale_online_enabled_checkbox)
+
+        scale_online_box = QHBoxLayout()
+        scale_online_box.addWidget(QLabel("نوعِ اتصال"))
+        self.scale_connection_type_combo = QComboBox()
+        self.scale_connection_type_combo.addItem("(هنوز مشخص نشده)", "NONE")
+        self.scale_connection_type_combo.addItem("سریال / RS232", "SERIAL")
+        self.scale_connection_type_combo.addItem("شبکه / TCP", "TCP")
+        scale_online_box.addWidget(self.scale_connection_type_combo)
+        scale_online_box.addWidget(QLabel("آدرس (پورتِ COM یا host:port)"))
+        self.scale_address_field = QLineEdit()
+        scale_online_box.addWidget(self.scale_address_field, stretch=1)
+        scale_online_box.addWidget(QLabel("پیشوندِ بارکدِ دسته"))
+        self.scale_batch_barcode_prefix_field = QLineEdit()
+        self.scale_batch_barcode_prefix_field.setMaximumWidth(70)
+        scale_online_box.addWidget(self.scale_batch_barcode_prefix_field)
+        save_scale_button = QPushButton("💾")
+        save_scale_button.setObjectName("iconButton")
+        save_scale_button.setFixedWidth(44)
+        save_scale_button.setToolTip("ذخیره")
+        save_scale_button.clicked.connect(self._save_scale_connection_settings)
+        scale_online_box.addWidget(save_scale_button)
+        scale_layout.addLayout(scale_online_box)
+        scale_layout.addStretch(1)
+        self.settings_tabs.addTab(scale_tab, "ترازو و بارکدِ وزنی")
+
+        left.addWidget(self.settings_tabs, stretch=1)
+
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فرم سمتِ راستش خالیه و سمتِ چپ
+        # بسیار فشرده است»): این ستون (ترمینال‌ها + سه تبِ تنظیماتِ
+        # پرمحتوا) چگالیِ محتوایِ بیشتری از ستونِ کناریِ شیفت/صندوق دارد --
+        # قبلاً stretchِ کمتری می‌گرفت (۲ در برابرِ ۳) که باعث می‌شد
+        # فیلدهایِ این ستون در عرضِ کم فشرده شوند و ستونِ شیفت با وجودِ
+        # محتوایِ اسپارس‌تر، فضایِ خالیِ بیشتری بگیرد.
+        outer.addLayout(left, stretch=3)
 
         right = QVBoxLayout()
         self.session_title = QLabel("یک ترمینال از فهرست انتخاب کنید")
@@ -111,7 +433,7 @@ class CommercialPosSessionsScreen(QWidget):
         self.open_session_button = QPushButton("📂")
         self.open_session_button.setObjectName("primaryIconButton")
         self.open_session_button.setFixedWidth(48)
-        self.open_session_button.setToolTip("بازکردنِ جلسه")
+        self.open_session_button.setToolTip("بازکردنِ شیفت")
         self.open_session_button.clicked.connect(self._open_session)
         open_box.addWidget(self.open_session_button)
         right.addLayout(open_box)
@@ -125,7 +447,7 @@ class CommercialPosSessionsScreen(QWidget):
         self.close_session_button = QPushButton("🔒")
         self.close_session_button.setObjectName("dangerIconButton")
         self.close_session_button.setFixedWidth(44)
-        self.close_session_button.setToolTip("بستنِ جلسه")
+        self.close_session_button.setToolTip("بستنِ شیفت")
         self.close_session_button.clicked.connect(self._close_session)
         close_box.addWidget(self.close_session_button)
         right.addLayout(close_box)
@@ -142,7 +464,7 @@ class CommercialPosSessionsScreen(QWidget):
         override_box.addWidget(self.override_button)
         right.addLayout(override_box)
 
-        history_title = QLabel("تاریخچهٔ جلسه‌ها")
+        history_title = QLabel("تاریخچهٔ شیفت‌ها")
         history_title.setObjectName("sectionTitle")
         right.addWidget(history_title)
         self.sessions_table = QTableWidget(0, 6)
@@ -155,7 +477,7 @@ class CommercialPosSessionsScreen(QWidget):
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         right.addWidget(self.status_label)
-        outer.addLayout(right, stretch=3)
+        outer.addLayout(right, stretch=2)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -191,17 +513,263 @@ class CommercialPosSessionsScreen(QWidget):
             index = self.guest_customer_combo.findData(settings.default_guest_customer_detail_account_id)
             self.guest_customer_combo.setCurrentIndex(index if index >= 0 else 0)
             self.threshold_field.setValue(float(settings.cash_variance_threshold_amount))
-        elif current_guest is not None:
-            index = self.guest_customer_combo.findData(current_guest)
-            self.guest_customer_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.quick_button_width_field.setValue(settings.quick_button_width)
+            self.quick_button_height_field.setValue(settings.quick_button_height)
+            self.quick_button_font_size_field.setValue(settings.quick_button_font_size)
+            self.quick_grid_columns_field.setValue(settings.quick_grid_columns)
+            self.allow_price_override_checkbox.setChecked(settings.allow_price_override)
+            self.allow_discount_override_checkbox.setChecked(settings.allow_discount_override)
+            self.quick_access_enabled_checkbox.setChecked(settings.quick_access_enabled)
+            self.scan_beep_enabled_checkbox.setChecked(settings.scan_beep_enabled)
+            self.receipt_header_field.setText(settings.receipt_header_text or "")
+            self.receipt_footer_field.setText(settings.receipt_footer_text or "")
+            index = self.quick_access_position_combo.findData(settings.quick_access_position)
+            self.quick_access_position_combo.setCurrentIndex(index if index >= 0 else 0)
+            index = self.quick_access_orientation_combo.findData(settings.quick_access_orientation)
+            self.quick_access_orientation_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.show_price_list_field_checkbox.setChecked(settings.show_price_list_field)
+            self.show_tax_discount_breakdown_checkbox.setChecked(settings.show_tax_discount_breakdown)
+            self.show_customer_credit_warning_checkbox.setChecked(settings.show_customer_credit_warning)
+            self.recent_invoices_count_field.setValue(settings.recent_invoices_count)
+            self.fast_receipt_printing_checkbox.setChecked(settings.fast_receipt_printing)
+            self.weight_barcode_enabled_checkbox.setChecked(settings.weight_barcode_enabled)
+            self.weight_barcode_prefix_field.setText(settings.weight_barcode_prefix)
+            self.weight_barcode_item_code_digits_field.setValue(settings.weight_barcode_item_code_digits)
+            self.weight_barcode_weight_digits_field.setValue(settings.weight_barcode_weight_digits)
+            self.weight_barcode_weight_decimals_field.setValue(settings.weight_barcode_weight_decimals)
+            self.scale_online_enabled_checkbox.setChecked(settings.scale_online_enabled)
+            index = self.scale_connection_type_combo.findData(settings.scale_connection_type)
+            self.scale_connection_type_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.scale_address_field.setText(settings.scale_address or "")
+            self.scale_batch_barcode_prefix_field.setText(settings.scale_batch_barcode_prefix)
+        else:
+            if current_guest is not None:
+                index = self.guest_customer_combo.findData(current_guest)
+                self.guest_customer_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.quick_button_width_field.setValue(110)
+            self.quick_button_height_field.setValue(64)
+            self.quick_button_font_size_field.setValue(10)
+            self.quick_grid_columns_field.setValue(6)
+            self.allow_price_override_checkbox.setChecked(True)
+            self.allow_discount_override_checkbox.setChecked(True)
+            self.quick_access_enabled_checkbox.setChecked(True)
+            self.scan_beep_enabled_checkbox.setChecked(True)
+            self.receipt_header_field.clear()
+            self.receipt_footer_field.clear()
+            self.quick_access_position_combo.setCurrentIndex(0)
+            self.quick_access_orientation_combo.setCurrentIndex(0)
+            self.show_price_list_field_checkbox.setChecked(True)
+            self.show_tax_discount_breakdown_checkbox.setChecked(True)
+            self.show_customer_credit_warning_checkbox.setChecked(True)
+            self.recent_invoices_count_field.setValue(10)
+            self.fast_receipt_printing_checkbox.setChecked(True)
+            self.weight_barcode_enabled_checkbox.setChecked(False)
+            self.weight_barcode_prefix_field.setText("20")
+            self.weight_barcode_item_code_digits_field.setValue(5)
+            self.weight_barcode_weight_digits_field.setValue(4)
+            self.weight_barcode_weight_decimals_field.setValue(3)
+            self.scale_online_enabled_checkbox.setChecked(False)
+            self.scale_connection_type_combo.setCurrentIndex(0)
+            self.scale_address_field.clear()
+            self.scale_batch_barcode_prefix_field.setText("21")
 
+        cashier_settings = (
+            pos_service.get_cashier_settings(app_session.current_user.user_id, company_id)
+            if app_session.current_user else None
+        )
+        self.my_quick_button_width_field.setValue(
+            cashier_settings.quick_button_width_override or 0 if cashier_settings else 0
+        )
+        self.my_quick_button_height_field.setValue(
+            cashier_settings.quick_button_height_override or 0 if cashier_settings else 0
+        )
+
+        self.menu_groups_panel.refresh()
+        self._load_settlement_defaults(company_id)
         self._refresh_session_panel()
+
+    def _save_my_quick_button_size(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or not app_session.current_user:
+            return
+        user_id = app_session.current_user.user_id
+        existing = pos_service.get_cashier_settings(user_id, company_id)
+        order_text = existing.quick_button_order if existing else None
+        width_override = self.my_quick_button_width_field.value() or None
+        height_override = self.my_quick_button_height_field.value() or None
+        pos_service.set_quick_button_layout(user_id, company_id, order_text, width_override, height_override)
+        self.status_label.setText("")
+
+    def _save_weight_barcode_settings(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        prefix = self.weight_barcode_prefix_field.text().strip()
+        if self.weight_barcode_enabled_checkbox.isChecked() and not prefix:
+            self.status_label.setText("پیشوندِ بارکدِ وزنی نمی‌تواند خالی باشد.")
+            return
+        pos_service.set_weight_barcode_settings(
+            company_id, self.weight_barcode_enabled_checkbox.isChecked(), prefix,
+            self.weight_barcode_item_code_digits_field.value(), self.weight_barcode_weight_digits_field.value(),
+            self.weight_barcode_weight_decimals_field.value(),
+        )
+        self.status_label.setText("")
+
+    def _save_scale_connection_settings(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        pos_service.set_scale_connection_settings(
+            company_id, self.scale_online_enabled_checkbox.isChecked(),
+            self.scale_connection_type_combo.currentData(), self.scale_address_field.text().strip() or None,
+            self.scale_batch_barcode_prefix_field.text().strip() or "21",
+        )
+        self.status_label.setText("")
+
+    def _load_settlement_defaults(self, company_id: int) -> None:
+        method_codes = settlements_service.settlement_plan_method_codes("SALES_INVOICE", company_id)
+        defaults = settlements_service.list_pos_settlement_method_defaults(company_id)
+        _cc_required, cc_options = documents_service.get_header_dimension_requirement(
+            company_id, "SALES_INVOICE", dimensions_service.COST_CENTER_CODE
+        )
+        _proj_required, proj_options = documents_service.get_header_dimension_requirement(
+            company_id, "SALES_INVOICE", dimensions_service.PROJECT_CODE
+        )
+        self.settlement_defaults_table.setRowCount(len(method_codes))
+        self._settlement_default_widgets = []
+        for row_index, method_code in enumerate(method_codes):
+            default = defaults.get(method_code)
+
+            method_label = QLabel(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(method_code, method_code))
+            method_label.setAlignment(Qt.AlignCenter)
+            self.settlement_defaults_table.setCellWidget(row_index, 0, method_label)
+
+            account_id, detail_options = settlements_service.resolve_method_detail_options(
+                company_id, "RECEIPT", method_code
+            )
+            detail_combo = QComboBox()
+            detail_combo.addItem("(بدونِ پیش‌فرض)", None)
+            for option in detail_options:
+                detail_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+            if default is not None and default.detail_account_id is not None:
+                index = detail_combo.findData(default.detail_account_id)
+                if index >= 0:
+                    detail_combo.setCurrentIndex(index)
+            detail_combo.setEnabled(account_id is not None and bool(detail_options))
+            self.settlement_defaults_table.setCellWidget(row_index, 1, detail_combo)
+
+            requires_cost_center, requires_project = settlements_service.method_requires_cost_center_or_project(
+                company_id, "RECEIPT", method_code
+            )
+
+            cc_combo = QComboBox()
+            cc_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+            for option in cc_options:
+                cc_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+            if default is not None and default.cost_center_detail_account_id is not None:
+                index = cc_combo.findData(default.cost_center_detail_account_id)
+                if index >= 0:
+                    cc_combo.setCurrentIndex(index)
+            cc_combo.setEnabled(requires_cost_center)
+            self.settlement_defaults_table.setCellWidget(row_index, 2, cc_combo)
+
+            proj_combo = QComboBox()
+            proj_combo.addItem("(بدونِ پروژه)", None)
+            for option in proj_options:
+                proj_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+            if default is not None and default.project_detail_account_id is not None:
+                index = proj_combo.findData(default.project_detail_account_id)
+                if index >= 0:
+                    proj_combo.setCurrentIndex(index)
+            proj_combo.setEnabled(requires_project)
+            self.settlement_defaults_table.setCellWidget(row_index, 3, proj_combo)
+
+            self._settlement_default_widgets.append((method_code, detail_combo, cc_combo, proj_combo))
+
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («در فرمِ تاییدِ سرپرست، برایِ
+        # حسابِ مشتری مرکزِ هزینه/پروژه می‌خواهد»): این دو کمبو، برخلافِ
+        # جدولِ بالا، به حسابِ دریافتنیِ مشتری (نه نقد/بانک) مربوط‌اند.
+        customer_group_id = next(
+            (g.person_group_id for g in dimensions_service.list_person_groups(company_id) if g.code == "CUSTOMER"),
+            None,
+        )
+        receivable_account_id = next(
+            (
+                m.account_id for m in treasury_service.list_counterparty_mappings(company_id, "RECEIPT")
+                if m.person_group_id == customer_group_id
+            ),
+            None,
+        )
+        required_dims = (
+            dimensions_service.get_required_dimensions_for_account(receivable_account_id)
+            if receivable_account_id is not None else []
+        )
+        cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
+        project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+        requires_receivable_cc = any(r.dimension_type_id == cost_center_type_id for r in required_dims)
+        requires_receivable_project = any(r.dimension_type_id == project_type_id for r in required_dims)
+
+        pos_settings_row = pos_service.get_pos_settings(company_id)
+        self.receivable_cost_center_combo.clear()
+        self.receivable_cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        for option in cc_options:
+            self.receivable_cost_center_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+        if pos_settings_row is not None and pos_settings_row.default_receivable_cost_center_detail_account_id is not None:
+            index = self.receivable_cost_center_combo.findData(pos_settings_row.default_receivable_cost_center_detail_account_id)
+            if index >= 0:
+                self.receivable_cost_center_combo.setCurrentIndex(index)
+        self.receivable_cost_center_combo.setEnabled(requires_receivable_cc)
+
+        self.receivable_project_combo.clear()
+        self.receivable_project_combo.addItem("(بدونِ پروژه)", None)
+        for option in proj_options:
+            self.receivable_project_combo.addItem(f"{option.code} — {option.name or ''}", option.detail_account_id)
+        if pos_settings_row is not None and pos_settings_row.default_receivable_project_detail_account_id is not None:
+            index = self.receivable_project_combo.findData(pos_settings_row.default_receivable_project_detail_account_id)
+            if index >= 0:
+                self.receivable_project_combo.setCurrentIndex(index)
+        self.receivable_project_combo.setEnabled(requires_receivable_project)
+
+    def _save_settlement_method_defaults(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        for method_code, detail_combo, cc_combo, proj_combo in self._settlement_default_widgets:
+            settlements_service.set_pos_settlement_method_default(
+                company_id, method_code,
+                detail_combo.currentData(), cc_combo.currentData(), proj_combo.currentData(),
+            )
+        pos_service.set_pos_receivable_dimension_defaults(
+            company_id, self.receivable_cost_center_combo.currentData(), self.receivable_project_combo.currentData(),
+        )
+        self.status_label.setText("")
 
     def _save_settings(self) -> None:
         company_id = self._company_id()
         if company_id is None:
             return
-        pos_service.set_pos_settings(company_id, self.guest_customer_combo.currentData(), decimal.Decimal(str(self.threshold_field.value())))
+        pos_service.set_pos_settings(
+            company_id,
+            self.guest_customer_combo.currentData(),
+            decimal.Decimal(str(self.threshold_field.value())),
+            quick_button_width=self.quick_button_width_field.value(),
+            quick_button_height=self.quick_button_height_field.value(),
+            quick_button_font_size=self.quick_button_font_size_field.value(),
+            quick_grid_columns=self.quick_grid_columns_field.value(),
+            allow_price_override=self.allow_price_override_checkbox.isChecked(),
+            allow_discount_override=self.allow_discount_override_checkbox.isChecked(),
+            quick_access_enabled=self.quick_access_enabled_checkbox.isChecked(),
+            scan_beep_enabled=self.scan_beep_enabled_checkbox.isChecked(),
+            receipt_header_text=self.receipt_header_field.text().strip() or None,
+            receipt_footer_text=self.receipt_footer_field.text().strip() or None,
+            quick_access_position=self.quick_access_position_combo.currentData(),
+            quick_access_orientation=self.quick_access_orientation_combo.currentData(),
+            show_price_list_field=self.show_price_list_field_checkbox.isChecked(),
+            show_tax_discount_breakdown=self.show_tax_discount_breakdown_checkbox.isChecked(),
+            show_customer_credit_warning=self.show_customer_credit_warning_checkbox.isChecked(),
+            recent_invoices_count=self.recent_invoices_count_field.value(),
+            fast_receipt_printing=self.fast_receipt_printing_checkbox.isChecked(),
+        )
         self.status_label.setText("")
 
     def _add_terminal(self) -> None:
@@ -231,7 +799,7 @@ class CommercialPosSessionsScreen(QWidget):
                 widget.setEnabled(False)
             return
         terminal = next((t for t in self._terminals if t.terminal_id == self._selected_terminal_id), None)
-        self.session_title.setText(f"جلسه‌هایِ ترمینالِ «{terminal.name}»" if terminal else "")
+        self.session_title.setText(f"شیفت‌هایِ ترمینالِ «{terminal.name}»" if terminal else "")
         open_session = pos_service.get_open_session(self._selected_terminal_id)
         sessions = pos_service.list_sessions(self._selected_terminal_id)
 
@@ -243,11 +811,11 @@ class CommercialPosSessionsScreen(QWidget):
         )
 
         if open_session is not None:
-            self.session_status_label.setText(f"جلسهٔ باز — شناسه: {numerals.to_persian_digits(str(open_session.session_id))}")
+            self.session_status_label.setText(f"شیفتِ باز — شناسه: {numerals.to_persian_digits(str(open_session.session_id))}")
         elif has_unresolved_variance:
-            self.session_status_label.setText("جلسهٔ قبلی مغایرتِ آزادنشده دارد — ابتدا آزادسازی کنید.")
+            self.session_status_label.setText("شیفتِ قبلی مغایرتِ آزادنشده دارد — ابتدا آزادسازی کنید.")
         else:
-            self.session_status_label.setText("جلسه‌یِ بازی وجود ندارد.")
+            self.session_status_label.setText("شیفتِ بازی وجود ندارد.")
 
         self.open_session_button.setEnabled(open_session is None and not has_unresolved_variance)
         self.close_session_button.setEnabled(open_session is not None)
@@ -260,9 +828,9 @@ class CommercialPosSessionsScreen(QWidget):
             values = [
                 numerals.to_persian_digits(str(s.session_id)),
                 _SESSION_STATUS_LABELS.get(s.status_code, s.status_code),
-                numerals.format_amount(s.opening_cash_amount),
-                numerals.format_amount(s.closing_cash_amount) if s.closing_cash_amount is not None else "—",
-                numerals.format_amount(s.variance_amount) if s.variance_amount is not None else "—",
+                numerals.format_company_amount(s.opening_cash_amount),
+                numerals.format_company_amount(s.closing_cash_amount) if s.closing_cash_amount is not None else "—",
+                numerals.format_company_amount(s.variance_amount) if s.variance_amount is not None else "—",
                 "بله" if s.variance_override_by_user_id is not None else ("—" if s.variance_amount is None else "خیر"),
             ]
             for col_index, value in enumerate(values):
@@ -282,15 +850,30 @@ class CommercialPosSessionsScreen(QWidget):
     def _close_session(self) -> None:
         if getattr(self, "_open_session_id", None) is None:
             return
-        confirm = QMessageBox.question(self, "بستنِ جلسه", "این جلسه بسته شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, "بستنِ شیفت", "این شیفت بسته شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
+        session_id = self._open_session_id
         try:
-            pos_service.close_session(self._open_session_id, app_session.current_user.user_id, decimal.Decimal(str(self.closing_cash_field.value())))
+            pos_service.close_session(session_id, app_session.current_user.user_id, decimal.Decimal(str(self.closing_cash_field.value())))
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
         self.status_label.setText("")
+        # طبقِ درخواستِ صریح («در هنگامِ بستنِ فاکتورهایِ اصلاح‌شده و
+        # حذف‌شده به سرپرست را گزارش بده»).
+        audit_entries = pos_service.list_session_audit_log(session_id)
+        if audit_entries:
+            action_labels = {"REOPENED": "بازگشایی/اصلاح‌شده", "DELETED": "حذف‌شده"}
+            lines = [
+                f"سند #{e.document_id} — {action_labels.get(e.action_code, e.action_code)} — "
+                f"{numerals.to_persian_digits(e.performed_at.strftime('%Y-%m-%d %H:%M'))}"
+                for e in audit_entries
+            ]
+            QMessageBox.information(
+                self, "گزارشِ اصلاح/حذفِ فاکتورهایِ این شیفت",
+                "فاکتورهایِ زیر توسطِ صندوق‌دار، پیش از تاییدِ سرپرست، اصلاح یا حذف شده‌اند:\n\n" + "\n".join(lines),
+            )
         self.refresh()
 
     def _override_variance(self) -> None:

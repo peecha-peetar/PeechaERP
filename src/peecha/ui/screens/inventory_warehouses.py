@@ -250,24 +250,42 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
 
+        self.vehicle_plate_field = QLineEdit()
+        self.vehicle_driver_combo = QComboBox()
+        self.vehicle_capacity_weight_field = QDoubleSpinBox()
+        self.vehicle_capacity_weight_field.setRange(0, 999_999)
+        self.vehicle_capacity_weight_field.setDecimals(3)
+        self.vehicle_capacity_volume_field = QDoubleSpinBox()
+        self.vehicle_capacity_volume_field.setRange(0, 999_999)
+        self.vehicle_capacity_volume_field.setDecimals(3)
+
         self.basic_grid = FieldGrid([
             FieldSpec("code", "کد", self.code_field, span=1),
             FieldSpec("name", "نام", self.name_field, span=2),
             FieldSpec("english_name", "نامِ انگلیسی", self.english_name_field, span=2),
             FieldSpec("type", "نوعِ انبار", self.type_combo, span=1),
             FieldSpec("project", "پروژه", self.project_combo, span=3),
+            FieldSpec("vehicle_plate", "پلاکِ خودرو", self.vehicle_plate_field, span=1),
+            FieldSpec("vehicle_driver", "راننده", self.vehicle_driver_combo, span=1),
+            FieldSpec("vehicle_capacity_weight", "ظرفیتِ وزنی (کیلوگرم)", self.vehicle_capacity_weight_field, span=1),
+            FieldSpec("vehicle_capacity_volume", "ظرفیتِ حجمی (مترمکعب)", self.vehicle_capacity_volume_field, span=1),
             FieldSpec("org_unit", "واحدِ سازمانی", self.org_unit_combo, span=1),
             FieldSpec("cost_center", "مرکزِ هزینه", self.cost_center_combo, span=1),
             FieldSpec("is_default", "", self.is_default_checkbox, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
         ])
-        # طبقِ درخواستِ صریح: پروژه فقط برایِ نوعِ PROJECT دیده شود. تکیه‌کردن
-        # به سیگنالِ currentIndexChanged کافی نیست — اگر ایندکسِ اولیه‌یِ
-        # کمبو از قبل ۰ (GENERAL) باشد، ست‌کردنِ دوباره‌یِ همان ایندکس هیچ
-        # سیگنالی صادر نمی‌کند و این ردیف با حالتِ پیش‌فرضِ QWidget (نمایان)
-        # می‌ماند؛ برایِ همین این‌جا صریحاً پنهانش می‌کنیم، هم‌الگو با
-        # temp_range در تبِ عملیاتی.
+        # طبقِ درخواستِ صریح: پروژه فقط برایِ نوعِ PROJECT و فیلدهایِ خودرو
+        # فقط برایِ نوعِ VEHICLE دیده شوند. تکیه‌کردن به سیگنالِ
+        # currentIndexChanged کافی نیست — اگر ایندکسِ اولیه‌یِ کمبو از قبل ۰
+        # (GENERAL) باشد، ست‌کردنِ دوباره‌یِ همان ایندکس هیچ سیگنالی صادر
+        # نمی‌کند و این ردیف‌ها با حالتِ پیش‌فرضِ QWidget (نمایان) می‌مانند؛
+        # برایِ همین این‌جا صریحاً پنهانشان می‌کنیم، هم‌الگو با temp_range
+        # در تبِ عملیاتی.
         self.basic_grid.set_field_visible("project", False)
+        self.basic_grid.set_field_visible("vehicle_plate", False)
+        self.basic_grid.set_field_visible("vehicle_driver", False)
+        self.basic_grid.set_field_visible("vehicle_capacity_weight", False)
+        self.basic_grid.set_field_visible("vehicle_capacity_volume", False)
         layout.addWidget(self.basic_grid)
         layout.addStretch(1)
         return panel
@@ -703,7 +721,13 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     # رفتار
     # ------------------------------------------------------------------
     def _on_type_changed(self) -> None:
-        self.basic_grid.set_field_visible("project", self.type_combo.currentData() == "PROJECT")
+        is_project = self.type_combo.currentData() == "PROJECT"
+        is_vehicle = self.type_combo.currentData() == "VEHICLE"
+        self.basic_grid.set_field_visible("project", is_project)
+        self.basic_grid.set_field_visible("vehicle_plate", is_vehicle)
+        self.basic_grid.set_field_visible("vehicle_driver", is_vehicle)
+        self.basic_grid.set_field_visible("vehicle_capacity_weight", is_vehicle)
+        self.basic_grid.set_field_visible("vehicle_capacity_volume", is_vehicle)
 
     def _on_temp_toggled(self, checked: bool) -> None:
         self.operational_grid.set_field_visible("temp_range", checked)
@@ -765,6 +789,11 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.manager_combo.addItem(u.full_name, u.user_id)
             self.access_user_combo.addItem(u.full_name, u.user_id)
 
+        self.vehicle_driver_combo.clear()
+        self.vehicle_driver_combo.addItem("(بدون)", None)
+        for p in dimensions_service.list_personnel(company_id):
+            self.vehicle_driver_combo.addItem(f"{p['code']} — {p['name'] or ''}", p["detail_account_id"])
+
         accounts = [(a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable]
         for combo in self._mapping_combos.values():
             combo.clear()
@@ -821,6 +850,10 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         _set_combo(self.type_combo, f.warehouse_type_code)
         self._on_type_changed()  # setCurrentIndex بی‌تغییر سیگنال نمی‌دهد؛ صریح فراخوانی می‌شود
         _set_combo(self.project_combo, f.project_detail_account_id)
+        self.vehicle_plate_field.setText(f.vehicle_plate_number or "")
+        _set_combo(self.vehicle_driver_combo, f.vehicle_driver_detail_account_id)
+        self.vehicle_capacity_weight_field.setValue(float(f.vehicle_capacity_weight_kg or 0))
+        self.vehicle_capacity_volume_field.setValue(float(f.vehicle_capacity_volume_m3 or 0))
         _set_combo(self.org_unit_combo, f.org_unit_id)
         _set_combo(self.cost_center_combo, f.cost_center_detail_account_id)
         self.is_default_checkbox.setChecked(f.is_default)
@@ -916,6 +949,10 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.type_combo.setCurrentIndex(0)
         self._on_type_changed()  # setCurrentIndex بی‌تغییر سیگنال نمی‌دهد؛ صریح فراخوانی می‌شود
         self.project_combo.setCurrentIndex(0)
+        self.vehicle_plate_field.clear()
+        self.vehicle_driver_combo.setCurrentIndex(0)
+        self.vehicle_capacity_weight_field.setValue(0)
+        self.vehicle_capacity_volume_field.setValue(0)
         self.org_unit_combo.setCurrentIndex(0)
         self.cost_center_combo.setCurrentIndex(0)
         self.is_default_checkbox.setChecked(False)
@@ -990,6 +1027,22 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         return locations_service.WarehouseFields(
             warehouse_type_code=warehouse_type_code,
             project_detail_account_id=self.project_combo.currentData() if warehouse_type_code == "PROJECT" else None,
+            vehicle_plate_number=(
+                self.vehicle_plate_field.text().strip() or None if warehouse_type_code == "VEHICLE" else None
+            ),
+            vehicle_driver_detail_account_id=(
+                self.vehicle_driver_combo.currentData() if warehouse_type_code == "VEHICLE" else None
+            ),
+            vehicle_capacity_weight_kg=(
+                decimal.Decimal(str(self.vehicle_capacity_weight_field.value()))
+                if warehouse_type_code == "VEHICLE" and self.vehicle_capacity_weight_field.value()
+                else None
+            ),
+            vehicle_capacity_volume_m3=(
+                decimal.Decimal(str(self.vehicle_capacity_volume_field.value()))
+                if warehouse_type_code == "VEHICLE" and self.vehicle_capacity_volume_field.value()
+                else None
+            ),
             allow_negative_stock=self.allow_negative_checkbox.isChecked(),
             is_temperature_controlled=temp_controlled,
             min_temp_c=decimal.Decimal(str(self.min_temp_field.value())) if temp_controlled else None,

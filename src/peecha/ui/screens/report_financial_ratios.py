@@ -10,6 +10,7 @@ import decimal
 
 from PySide6.QtWidgets import QLabel
 
+from peecha import numerals
 from peecha.services import reports as reports_service
 from peecha.ui.screens.reports_common import ReportScreenBase
 
@@ -38,10 +39,10 @@ class FinancialRatiosScreen(ReportScreenBase):
             if r.value is None:
                 value_text = "—"
             elif r.kind == "PERCENTAGE":
-                value_text = f"{r.value * decimal.Decimal(100):,.1f}٪"
+                value_text = numerals.to_persian_digits(f"{r.value * decimal.Decimal(100):,.1f}") + "٪"
             elif r.kind == "CURRENCY":
-                value_text = f"{r.value:,.0f}"
+                value_text = numerals.format_company_amount(r.value)
             else:  # RATIO
-                value_text = f"{r.value:,.2f}"
+                value_text = numerals.to_persian_digits(f"{r.value:,.2f}")
             rows.append([r.label, value_text])
         return headers, rows, None

@@ -6,6 +6,8 @@ from __future__ import annotations
 import datetime
 import decimal
 
+from PySide6.QtWidgets import QMessageBox
+
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
 from peecha.services import reports as reports_service
@@ -19,6 +21,7 @@ class IncomeStatementScreen(ReportScreenBase):
         super().__init__("صورتِ سود و زیان")
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
+        self.enable_jasper_report("INCOME_STATEMENT")
         self._currency_decimal_places = 0
 
     def code_range_account_level(self) -> int | None:
@@ -69,3 +72,25 @@ class IncomeStatementScreen(ReportScreenBase):
         rows.append(["", "جمعِ هزینه‌ها", "", self._fmt(result.total_expense), ""])
         footer = ["", "سودِ (زیانِ) خالص", "", self._fmt(result.net_income), ""]
         return headers, rows, footer
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        if not self._rows:
+            QMessageBox.information(self, "گزارش", "داده‌ای برایِ چاپ وجود ندارد.")
+            return None
+
+        field_names = ["account_code", "account_name", "category_label", "current_amount_display", "previous_amount_display"]
+        print_rows = [dict(zip(field_names, row)) for row in self._rows]
+        company = session.current_company
+        date_range_label = (
+            f"از {numerals.format_jalali_date(self.date_from.date())} "
+            f"تا {numerals.format_jalali_date(self.date_to.date())}"
+        )
+        footer = self._footer or ["", "", "", ""]
+        params = {
+            "companyName": company.display_name if company else "",
+            "dateRangeLabel": date_range_label,
+            "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+            "netIncomeLabel": footer[1],
+            "netIncomeDisplay": footer[3],
+        }
+        return print_rows, params
