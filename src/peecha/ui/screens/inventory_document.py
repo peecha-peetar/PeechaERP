@@ -67,7 +67,7 @@ DOC_TYPE_TITLES = {
     "CONSIGN_RETURN": "برگشتِ امانی",
 }
 STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تاییدشده", "POSTED": "ثبتِ‌نهایی‌شده", "CANCELLED": "لغوشده"}
-_LINE_COLUMNS = ["کالا", "مقدار", "مکان", "مکانِ مقصد", "بهایِ واحد", "بهایِ کل", "دلیل", "توضیح"]
+_LINE_COLUMNS = ["کالا", "مقدار", "مکان", "مکانِ مقصد", "بهایِ واحد", "بهایِ کل", "دلیل", "توضیح", "عملیات"]
 
 
 def _enter_signal(widget: QWidget):
@@ -725,21 +725,16 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         header_card_layout.addLayout(header_row2)
         self.body_layout.addWidget(header_card)
 
-        # طبقِ رفعِ باگِ واقعی («هدر هنوز فضایِ زیادی اشغال کرده»): عنوانِ
-        # بخشِ «ردیف‌ها» و دکمهٔ افزودن قبلاً دو ردیفِ کاملِ جدا بودند،
-        # بدونِ نیازِ واقعی — حالا کنارِ هم، یک ردیف.
+        # طبقِ گزارشِ صریحِ کاربر («فرمِ سندِ انبار هم مثلِ فرمِ خرید/فروش
+        # یک ردیفِ ورودیِ همیشه‌حاضر داشته باشد»): دکمهٔ ➕ که یک دیالوگِ
+        # جداگانه باز می‌کرد حذف شده -- افزودنِ ردیف حالا از طریقِ همان
+        # ردیفِ آخرِ همیشه‌حاضرِ جدول انجام می‌شود (نگاه کن: _render_entry_row).
         lines_header_row = QHBoxLayout()
         lines_header_row.setContentsMargins(0, 0, 0, 0)
         lines_header_row.setSpacing(8)
         lines_title = QLabel("ردیف‌ها")
         lines_title.setObjectName("sectionTitle")
         lines_header_row.addWidget(lines_title)
-        add_line_button = QPushButton("➕")
-        add_line_button.setObjectName("primaryIconButton")
-        add_line_button.setFixedWidth(48)
-        add_line_button.setToolTip("افزودنِ ردیف")
-        add_line_button.clicked.connect(self._add_line)
-        lines_header_row.addWidget(add_line_button)
         lines_header_row.addStretch(1)
         self.body_layout.addLayout(lines_header_row)
 
@@ -749,9 +744,13 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        last_col = len(_LINE_COLUMNS) - 1
+        self.lines_table.horizontalHeader().setSectionResizeMode(last_col, QHeaderView.Fixed)
+        self.lines_table.setColumnWidth(last_col, 100)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
+        self._entry_row_widgets: dict | None = None
 
         self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
 
@@ -900,12 +899,23 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         for widget, next_widget in zip(chain, chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
-        _enter_signal(chain[-1]).connect(self._add_line)
+        _enter_signal(chain[-1]).connect(self._focus_entry_row_item)
+
+    def _focus_entry_row_item(self) -> None:
+        # طبقِ همان الگویِ commercial_document.py: به‌جایِ بازکردنِ
+        # دیالوگِ ردیف، مستقیم فوکوس به کمبویِ کالایِ ردیفِ ورودیِ
+        # همیشه‌حاضر می‌رود.
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if widgets is not None:
+            widgets["item_combo"].setFocus()
 
     def _on_warehouse_changed(self) -> None:
-        # طبقِ گزارشِ صریح: عوضِ‌شدنِ انبار ردیف‌هایِ ثبت‌شده را بی‌معنا
-        # می‌کند — فقط برایِ سندِ پیش‌نویسِ هنوز بدونِ ردیف مجاز است.
-        pass
+        # طبقِ گزارشِ صریحِ کاربر («ردیفِ ورودیِ همیشه‌حاضر»): فهرستِ
+        # مکان‌هایِ ردیفِ ورودی به انبارِ انتخاب‌شده در هدر وابسته است --
+        # با عوضِ‌شدنِ انبار، همان ردیف باید با فهرستِ تازه بازسازی شود
+        # (فقط تا وقتی هنوز هیچ ردیفی ثبت نشده -- سند پیش‌نویس است).
+        if getattr(self, "_entry_row_widgets", None) is not None:
+            self._refresh_lines_table()
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -1051,7 +1061,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 for r in documents_service.list_reason_codes(company_id, applies_to, active_only=False):
                     reasons_by_id[r.reason_code_id] = r.name
 
-        self.lines_table.setRowCount(len(self._lines))
+        editable = self._lines_are_editable()
+        self.lines_table.setRowCount(len(self._lines) + (1 if editable else 0))
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
             qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
@@ -1064,11 +1075,228 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 numerals.format_money(ln.line_total_cost, self._unit_cost_decimal_places) if ln.line_total_cost is not None else "",
                 reasons_by_id.get(ln.reason_code_id, ""),
                 ln.description or "",
+                "",
             ]
             for col_index, value in enumerate(values):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.UserRole, ln.line_id)
                 self.lines_table.setItem(row_index, col_index, cell)
+        # طبقِ گزارشِ صریحِ کاربر («فرمِ سندِ انبار هم یک ردیفِ ورودیِ
+        # همیشه‌حاضر داشته باشد، مثلِ فرمِ خرید/فروش»): آخرین ردیفِ جدول،
+        # وقتی سند هنوز پیش‌نویس است، همیشه یک ردیفِ خامِ قابلِ‌ورود است --
+        # به‌جایِ دیالوگِ جداگانه‌یِ ➕ که قبلاً این کار را می‌کرد.
+        if editable:
+            self._render_entry_row(len(self._lines))
+        else:
+            self._entry_row_widgets = None
+
+    def _lines_are_editable(self) -> bool:
+        return self._status_code == "DRAFT"
+
+    def _render_entry_row(self, row_index: int) -> None:
+        doc_type = self.document_type_code
+        source_wh_id, destination_wh_id = self._current_warehouse_ids()
+        line_wh_id = self._primary_line_warehouse_id(source_wh_id, destination_wh_id)
+        source_bins = locations_service.list_bin_locations(line_wh_id, active_only=True) if line_wh_id else []
+        show_destination_bin = doc_type == "TRANSFER"
+        destination_bins = (
+            locations_service.list_bin_locations(destination_wh_id, active_only=True)
+            if show_destination_bin and destination_wh_id else []
+        )
+        company_id = self._company_id()
+        show_reason = doc_type in ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT")
+        reasons: list[documents_service.ReasonCodeRow] = []
+        if company_id is not None and show_reason:
+            reasons = documents_service.list_reason_codes(company_id, doc_type)
+        show_unit_cost = doc_type in ("RECEIPT", "RETURN_IN", "ADJUSTMENT")
+
+        item_options = [(it.item_id, f"{it.code} — {it.name or ''}") for it in self._items]
+        item_combo = _make_searchable_combo(item_options)
+        item_combo.setCurrentIndex(-1)
+        item_combo.lineEdit().clear()
+        self.lines_table.setCellWidget(row_index, 0, item_combo)
+
+        qty_field = _AmountField()
+        qty_field.setDecimals(6)
+        self.lines_table.setCellWidget(row_index, 1, qty_field)
+
+        bin_combo = _EnterComboBox()
+        bin_combo.addItem("(پیش‌فرضِ انبار)", None)
+        for b in source_bins:
+            bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
+        self.lines_table.setCellWidget(row_index, 2, bin_combo)
+
+        destination_bin_combo = _EnterComboBox()
+        destination_bin_combo.addItem("(پیش‌فرضِ انبار)", None)
+        for b in destination_bins:
+            destination_bin_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
+        if show_destination_bin:
+            self.lines_table.setCellWidget(row_index, 3, destination_bin_combo)
+        else:
+            self.lines_table.setItem(row_index, 3, QTableWidgetItem(""))
+
+        unit_cost_field = _AmountField()
+        unit_cost_field.setDecimals(self._unit_cost_decimal_places)
+        if show_unit_cost:
+            self.lines_table.setCellWidget(row_index, 4, unit_cost_field)
+        else:
+            self.lines_table.setItem(row_index, 4, QTableWidgetItem(""))
+
+        # ستونِ «بهایِ کل» صرفاً خروجیِ محاسبه‌شده‌یِ ردیف‌هایِ ثبت‌شده است --
+        # برایِ ردیفِ ورودی معنا ندارد.
+        self.lines_table.setItem(row_index, 5, QTableWidgetItem(""))
+
+        reason_combo = _EnterComboBox()
+        reason_combo.addItem("(انتخاب کنید)", None)
+        for r in reasons:
+            reason_combo.addItem(r.name, r.reason_code_id)
+        if show_reason:
+            self.lines_table.setCellWidget(row_index, 6, reason_combo)
+        else:
+            self.lines_table.setItem(row_index, 6, QTableWidgetItem(""))
+
+        description_field = QLineEdit()
+        description_field.setPlaceholderText("توضیح (اختیاری)")
+        self.lines_table.setCellWidget(row_index, 7, description_field)
+
+        actions_container = QWidget()
+        actions_layout = QHBoxLayout(actions_container)
+        actions_layout.setContentsMargins(2, 0, 2, 0)
+        actions_layout.setSpacing(2)
+        add_button = QPushButton("➕")
+        add_button.setObjectName("primaryIconButton")
+        add_button.setFixedWidth(28)
+        add_button.setToolTip("افزودنِ این ردیف به سند")
+        actions_layout.addWidget(add_button)
+        info_kardex_button = QPushButton("📇")
+        info_kardex_button.setObjectName("iconButton")
+        info_kardex_button.setFixedWidth(28)
+        info_kardex_button.setToolTip("کاردکسِ کالایِ انتخاب‌شده")
+        info_kardex_button.setEnabled(False)
+        actions_layout.addWidget(info_kardex_button)
+        info_price_button = QPushButton("🕘")
+        info_price_button.setObjectName("iconButton")
+        info_price_button.setFixedWidth(28)
+        info_price_button.setToolTip("بهایِ قبلیِ کالایِ انتخاب‌شده")
+        info_price_button.setEnabled(False)
+        actions_layout.addWidget(info_price_button)
+        self.lines_table.setCellWidget(row_index, 8, actions_container)
+
+        self._entry_row_widgets = {
+            "item_combo": item_combo, "qty": qty_field, "bin": bin_combo,
+            "destination_bin": destination_bin_combo if show_destination_bin else None,
+            "unit_cost": unit_cost_field if show_unit_cost else None,
+            "reason": reason_combo if show_reason else None,
+            "description": description_field,
+            "info_kardex_button": info_kardex_button, "info_price_button": info_price_button,
+        }
+
+        add_button.clicked.connect(self._commit_entry_row)
+        info_kardex_button.clicked.connect(lambda _checked=False, c=item_combo: self._open_entry_item_kardex(c.currentData()))
+        info_price_button.clicked.connect(lambda _checked=False, c=item_combo: self._open_entry_item_price_history(c.currentData()))
+        item_combo.currentIndexChanged.connect(self._on_entry_row_item_changed)
+
+        enter_chain: list[QWidget] = [item_combo, qty_field, bin_combo]
+        if show_destination_bin:
+            enter_chain.append(destination_bin_combo)
+        if show_unit_cost:
+            enter_chain.append(unit_cost_field)
+        if show_reason:
+            enter_chain.append(reason_combo)
+        enter_chain.append(description_field)
+        for widget, next_widget in zip(enter_chain, enter_chain[1:]):
+            _enter_signal(widget).connect(next_widget.setFocus)
+        _enter_signal(description_field).connect(self._commit_entry_row)
+
+    def _on_entry_row_item_changed(self) -> None:
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if not widgets:
+            return
+        item_id = widgets["item_combo"].currentData()
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 6
+        widgets["qty"].setDecimals(decimals)
+        has_item = item_id is not None
+        widgets["info_kardex_button"].setEnabled(has_item)
+        counterparty_id = self.counterparty_combo.currentData() if self.counterparty_box.isVisible() else None
+        widgets["info_price_button"].setEnabled(has_item and counterparty_id is not None)
+
+    def _open_entry_item_kardex(self, item_id: int | None) -> None:
+        if item_id is None:
+            return
+        from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("کاردکسِ کالا")
+        dialog.resize(900, 560)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setContentsMargins(0, 0, 0, 0)
+        ledger_screen = ItemLedgerScreen()
+        dialog_layout.addWidget(ledger_screen)
+        ledger_screen.show_ledger_for_item(item_id)
+        dialog.exec()
+
+    def _open_entry_item_price_history(self, item_id: int | None) -> None:
+        company_id = self._company_id()
+        counterparty_id = self.counterparty_combo.currentData() if self.counterparty_box.isVisible() else None
+        if item_id is None or company_id is None or counterparty_id is None:
+            return
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        item_label = f"{item.code} — {item.name or ''}" if item else str(item_id)
+        qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
+        dialog = _ItemCostHistoryDialog(
+            self, company_id, item_id, counterparty_id, item_label, self._unit_cost_decimal_places, qty_decimals,
+        )
+        dialog.exec()
+
+    def _commit_entry_row(self) -> None:
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if not widgets:
+            return
+        item_id = widgets["item_combo"].currentData()
+        if item_id is None:
+            self.status_label.setText("کالا را انتخاب کنید.")
+            return
+        if widgets["qty"].value() <= 0:
+            self.status_label.setText("مقدار باید بزرگ‌تر از صفر باشد.")
+            return
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        if item is None:
+            return
+        reason_widget = widgets.get("reason")
+        if reason_widget is not None and reason_widget.currentData() is None:
+            self.status_label.setText("انتخابِ دلیل الزامی است.")
+            return
+        source_wh_id, destination_wh_id = self._current_warehouse_ids()
+        line_wh_id = self._primary_line_warehouse_id(source_wh_id, destination_wh_id)
+        if line_wh_id is None:
+            self.status_label.setText("ابتدا انبار را انتخاب کنید.")
+            return
+        quantity = decimal.Decimal(str(widgets["qty"].value()))
+        unit_cost_widget = widgets.get("unit_cost")
+        unit_cost = (
+            decimal.Decimal(str(unit_cost_widget.value()))
+            if unit_cost_widget is not None and unit_cost_widget.value() > 0 else None
+        )
+        destination_bin_widget = widgets.get("destination_bin")
+        fields = documents_service.LineFields(
+            item_id=item_id, uom_id=item.base_uom_id, quantity=quantity, quantity_base=quantity,
+            bin_location_id=widgets["bin"].currentData(),
+            destination_bin_location_id=destination_bin_widget.currentData() if destination_bin_widget is not None else None,
+            unit_cost=unit_cost,
+            reason_code_id=reason_widget.currentData() if reason_widget is not None else None,
+            description=widgets["description"].text().strip() or None,
+        )
+        if not self._ensure_saved():
+            return
+        company_id = self._company_id()
+        try:
+            documents_service.add_line(self._document_id, company_id, fields)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.status_label.setText("")
+        self._load_document()
 
     def _apply_status_state(self) -> None:
         self.status_badge.setText(STATUS_LABELS.get(self._status_code, self._status_code))
@@ -1174,41 +1402,6 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self.document_type_code == "TRANSFER":
             return source_wh_id
         return source_wh_id if source_wh_id is not None else destination_wh_id
-
-    def _add_line(self) -> None:
-        if not self._ensure_saved():
-            return
-        source_wh_id, destination_wh_id = self._current_warehouse_ids()
-        line_wh_id = self._primary_line_warehouse_id(source_wh_id, destination_wh_id)
-        if line_wh_id is None:
-            self.status_label.setText("ابتدا انبار را انتخاب کنید.")
-            return
-        source_bins = locations_service.list_bin_locations(line_wh_id, active_only=True)
-        destination_bins = locations_service.list_bin_locations(destination_wh_id, active_only=True) if self.document_type_code == "TRANSFER" and destination_wh_id else []
-        company_id = self._company_id()
-        reasons: list[documents_service.ReasonCodeRow] = []
-        if self.document_type_code in ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT"):
-            reasons = documents_service.list_reason_codes(company_id, self.document_type_code)
-        # طبقِ درخواستِ صریح («ادامهٔ ثبتِ رسید»): بعدِ ثبتِ موفقِ هر ردیف،
-        # بلافاصله دیالوگِ تازه‌ای برایِ ردیفِ بعدی باز می‌شود — تا کاربر
-        # با زنجیره‌یِ Enterِ داخلِ دیالوگ بتواند پشتِ‌سرِهم ردیف واردکند،
-        # بدونِ نیازِ به کلیکِ دوباره‌یِ «افزودنِ ردیف». فقط با لغوِ دیالوگ
-        # (Escape/Cancel) این چرخه متوقف می‌شود.
-        while True:
-            dialog = _LineDialog(
-                self, self.document_type_code, self._items, source_bins, destination_bins, reasons,
-                uom_decimal_places=self._uom_decimal_places, unit_cost_decimal_places=self._unit_cost_decimal_places,
-                main_window=self._main_window,
-                counterparty_id=self.counterparty_combo.currentData() if self.counterparty_box.isVisible() else None,
-            )
-            if dialog.exec() != QDialog.Accepted:
-                break
-            try:
-                documents_service.add_line(self._document_id, company_id, dialog.result_fields())
-            except ValueError as exc:
-                QMessageBox.warning(self, "خطا", str(exc))
-                break
-            self._load_document()
 
     def _selected_line(self) -> documents_service.StockDocumentLineRow | None:
         selected = self.lines_table.selectedItems()

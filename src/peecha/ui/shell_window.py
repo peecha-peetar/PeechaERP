@@ -1329,6 +1329,20 @@ class MainWindow(QMainWindow):
             title_bar.style().unpolish(title_bar)
             title_bar.style().polish(title_bar)
         self._update_chrome_visibility()
+        # طبقِ گزارشِ صریحِ کاربر («فرمِ اسناد خرید و فروش بعدِ هر تغییر
+        # رفرش نمی‌شود -- باید باز و بسته شود»): علتِ واقعی این بود که
+        # هم‌الگو با همان باگِ قبلاً کشف‌شده در _focus_subwindow (منویِ
+        # «پنجره‌های باز»)، فعال‌شدنِ یک زیرپنجره‌یِ *ازقبل‌بازِ* از طریقِ
+        # کلیکِ مستقیمِ خودِ MDI (نه ساید‌بار، نه آن منو) هرگز از این
+        # هندلر عبور نمی‌کرد -- یعنی مثلاً اگر کاربر لیستِ اسناد را بازِ
+        # نگه دارد، از فرمِ دیگری (مثلاً خزانه‌داری) یک فاکتور را تسویه
+        # کند، و بعد مستقیماً رویِ همان پنجره‌یِ لیستِ (هنوز رویِ صفحه
+        # قابلِ‌کلیک) کلیک کند، وضعیت/رقم‌هایِ آن هنوز کهنه می‌ماند.
+        if active_sub_window is not None:
+            screen_name = getattr(active_sub_window, "_screen_name", None)
+            screen = self._screens.get(screen_name) if screen_name else None
+            if screen is not None and hasattr(screen, "refresh"):
+                screen.refresh()
 
     def _update_chrome_visibility(self, *_args) -> None:
         """طبقِ گزارشِ صریح («فرم‌ها وقتی تمام‌صفحه می‌شن، فقط تویِ یک

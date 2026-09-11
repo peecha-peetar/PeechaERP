@@ -14,9 +14,10 @@ import os
 import tempfile
 import types
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSettings
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -504,6 +505,155 @@ class _CounterpartyHistoryDialog(QDialog):
         # پرینتِ فاکتور را نشان بده»)، پیش‌نمایشِ چاپیِ کاملِ سند باز می‌شود.
         doc = self._documents[row]
         _show_invoice_print(self, self._company_id, doc.document_id, self._counterparty_label)
+
+
+_RETURN_INVOICE_PICKER_COLUMNS = ["شماره", "تاریخ", "مبلغِ کل", "وضعیت"]
+
+
+class _ReturnInvoicePickerDialog(QDialog):
+    """طبقِ گزارشِ صریحِ کاربر («در فرمِ برگشت، بعدِ انتخابِ طرفِ‌حساب
+    لیستی از فاکتورهایِ قبلی نمایش بده»): مرحلهٔ اول از دو مرحله --
+    فقط فاکتورهایِ ثبتِ‌نهایی‌شده (POSTED) همین طرفِ‌حساب و همین جهت
+    (خرید/فروش) نمایش داده می‌شوند."""
+
+    def __init__(self, parent: QWidget, company_id: int, counterparty_id: int, counterparty_label: str, invoice_type_code: str) -> None:
+        super().__init__(parent)
+        self._company_id = company_id
+        self.setWindowTitle(f"انتخابِ فاکتور برایِ برگشت — «{counterparty_label}»")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(380)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("فاکتورِ موردِنظر را انتخاب کنید (دابل‌کلیک یا دکمهٔ «انتخاب»):"))
+
+        self.table = QTableWidget(0, len(_RETURN_INVOICE_PICKER_COLUMNS))
+        self.table.setHorizontalHeaderLabels(_RETURN_INVOICE_PICKER_COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.cellDoubleClicked.connect(lambda *_args: self._accept_selected())
+        layout.addWidget(self.table, stretch=1)
+
+        self._invoices = documents_service.list_documents(
+            company_id, document_type_code=invoice_type_code, status_code="POSTED",
+            counterparty_detail_account_id=counterparty_id,
+        )
+        decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+        self.table.setRowCount(len(self._invoices))
+        for row_index, doc in enumerate(self._invoices):
+            total = doc.subtotal_amount - doc.discount_amount + doc.tax_amount
+            values = [
+                numerals.to_persian_digits(str(doc.document_no)),
+                numerals.format_jalali_date(doc.document_date),
+                numerals.format_money(total, decimal_places),
+                STATUS_LABELS.get(doc.status_code, doc.status_code),
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, doc.document_id)
+                self.table.setItem(row_index, col_index, item)
+        self.table.resizeRowsToContents()
+        if not self._invoices:
+            layout.addWidget(QLabel("هیچ فاکتورِ ثبتِ‌نهایی‌شده‌ای برایِ این طرفِ‌حساب یافت نشد."))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("انتخاب")
+        buttons.accepted.connect(self._accept_selected)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.selected_document_id: int | None = None
+
+    def _accept_selected(self) -> None:
+        row_index = self.table.currentRow()
+        if row_index < 0 or row_index >= len(self._invoices):
+            QMessageBox.information(self, "انتخابِ فاکتور", "یک فاکتور را انتخاب کنید.")
+            return
+        self.selected_document_id = self._invoices[row_index].document_id
+        self.accept()
+
+
+class _ReturnLinesPickerDialog(QDialog):
+    """مرحلهٔ دوم: از رویِ اقلامِ فاکتورِ انتخاب‌شده (مرحلهٔ اول)، کاربر
+    اقلام/مقدارها را برایِ افزودن به سندِ برگشتِ جاری انتخاب می‌کند --
+    طبقِ همان مقدارِ قابلِ‌برگشتِ واقعی (منهایِ آنچه قبلاً برگشت داده
+    شده، هم‌الگو با get_line_fulfillment که برایِ تبدیلِ سفارش به فاکتور
+    هم استفاده می‌شود)."""
+
+    def __init__(self, parent: QWidget, company_id: int, source_document_id: int, decimal_places: int) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("انتخابِ اقلامِ برگشتی")
+        self.setMinimumWidth(640)
+        self.setMinimumHeight(360)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("ردیف‌هایی را که باید برگشت بخورند علامت بزنید و مقدارِ برگشتی را در صورتِ نیاز تغییر دهید:"))
+
+        _doc, lines = documents_service.get_document(source_document_id, company_id)
+        fulfillment_by_line = {f.line_id: f for f in documents_service.get_line_fulfillment(source_document_id, company_id)}
+        items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id, active_only=False)}
+
+        self.table = QTableWidget(len(lines), 5)
+        self.table.setHorizontalHeaderLabels(["", "کالا", "مقدارِ فاکتور", "قبلاً برگشتی", "مقدارِ برگشتی"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+
+        self._rows: list[tuple] = []
+        for row_index, ln in enumerate(lines):
+            fulfillment = fulfillment_by_line.get(ln.line_id)
+            already_returned = fulfillment.invoiced_quantity if fulfillment is not None else decimal.Decimal(0)
+            returnable = fulfillment.remaining_quantity if fulfillment is not None else ln.quantity
+            item = items_by_id.get(ln.item_id)
+
+            checkbox = QCheckBox()
+            self.table.setCellWidget(row_index, 0, checkbox)
+            self.table.setItem(row_index, 1, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(ln.item_id)))
+            self.table.setItem(row_index, 2, QTableWidgetItem(numerals.to_persian_digits(str(ln.quantity))))
+            self.table.setItem(row_index, 3, QTableWidgetItem(numerals.to_persian_digits(str(already_returned))))
+
+            qty_field = _AmountField()
+            qty_field.setDecimals(3)
+            # طبقِ محدودیتِ خودِ _AmountField (بدونِ setMaximum -- برخلافِ
+            # QDoubleSpinBox): سقفِ واقعی همین‌جا در _accept بررسی می‌شود.
+            qty_field.setValue(float(returnable) if returnable > 0 else 0.0)
+            qty_field.setEnabled(False)
+            checkbox.setEnabled(returnable > 0)
+            checkbox.toggled.connect(lambda checked, f=qty_field: f.setEnabled(checked))
+            self.table.setCellWidget(row_index, 4, qty_field)
+            self._rows.append((ln, item, checkbox, qty_field, returnable))
+        self.table.resizeRowsToContents()
+        layout.addWidget(self.table, stretch=1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("افزودنِ ردیف‌هایِ انتخاب‌شده")
+        buttons.accepted.connect(self._accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.result_lines: list[dict] = []
+
+    def _accept(self) -> None:
+        result = []
+        for ln, item, checkbox, qty_field, returnable in self._rows:
+            if not checkbox.isChecked():
+                continue
+            qty = decimal.Decimal(str(qty_field.value()))
+            if qty <= 0:
+                continue
+            if qty > returnable:
+                label = item.code if item is not None else str(ln.item_id)
+                QMessageBox.warning(self, "خطا", f"مقدارِ برگشتیِ «{label}» از مقدارِ قابلِ‌برگشت بیشتر است.")
+                return
+            result.append({
+                "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": qty, "quantity_base": qty,
+                "unit_price": ln.unit_price, "source_line_id": ln.line_id, "warehouse_id": ln.warehouse_id,
+                "description": ln.description,
+            })
+        if not result:
+            QMessageBox.information(self, "انتخابِ اقلام", "حداقل یک ردیف را علامت بزنید.")
+            return
+        self.result_lines = result
+        self.accept()
 
 
 _PRICE_HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "بهایِ واحد"]
@@ -2451,19 +2601,31 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # نامِ کالا در همان عرض ندارد)، «توضیح» به‌جایش Stretch شده تا
         # فضایِ باقی‌ماندهٔ پنجره را بگیرد و با محتوایِ متنیِ متغیرش
         # هم‌خوان‌تر باشد.
+        # طبقِ گزارشِ صریحِ کاربر («نوعِ تخفیف متنش پیدا نیست و عرضش کمه --
+        # از توضیحات کم کن به کالا و نوع تخفیف و فی اضافه کن»): کالا/
+        # بهایِ واحد/تخفیف کمی عریض‌تر شده‌اند؛ چون «توضیح» (ستونِ ۸)
+        # Stretch است، این افزایش خودکار از فضایِ همان ستون کم می‌کند --
+        # نیازی به کوچک‌کردنِ دستیِ آن نیست.
         _line_column_widths = {
-            1: 200,  # کالا
+            1: 220,  # کالا
             2: 80,   # مقدار
-            3: 130,  # بهایِ واحد
-            4: 130,  # تخفیف (کمبویِ نوع + فیلدِ مبلغ/درصد)
+            3: 140,  # بهایِ واحد (فی)
+            4: 165,  # تخفیف (کمبویِ نوع + فیلدِ مبلغ/درصد)
             5: 70,   # درصدِ مالیات
             6: 90,   # مالیات
             7: 110,  # جمعِ ردیف
         }
+        settings = QSettings("Peecha", "PeechaERP")
         for column_index, width in _line_column_widths.items():
             self.lines_table.horizontalHeader().setSectionResizeMode(column_index, QHeaderView.Interactive)
-            self.lines_table.setColumnWidth(column_index, width)
+            # طبقِ همان گزارش («اگر عرضی را تغییر دادیم ذخیره بشه
+            # اندازه‌هاش»): اگر کاربر قبلاً این ستون را دستی تغییرِ‌اندازه
+            # داده، همان مقدار (مشترک بینِ همه‌یِ فرم‌هایِ خرید/فروش) به‌جایِ
+            # پیش‌فرض به‌کار می‌رود.
+            saved_width = settings.value(f"linesTable/column_{column_index}/width", None, type=int)
+            self.lines_table.setColumnWidth(column_index, saved_width if saved_width else width)
         self.lines_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
+        self.lines_table.horizontalHeader().sectionResized.connect(self._on_lines_table_column_resized)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
@@ -2638,6 +2800,18 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.history_button.clicked.connect(self._open_counterparty_history)
         self.footer_layout.addWidget(self.history_button)
 
+        # طبقِ گزارشِ صریحِ کاربر («در فرمِ برگشت، بعدِ انتخابِ طرفِ‌حساب
+        # لیستی از فاکتورهایِ قبلی نمایش بده و بتوان اقلام/قیمت‌ها را از
+        # آن انتخاب و در فاکتورِ برگشتی لحاظ کرد»): فقط برایِ همین دو نوعِ
+        # سند نمایش داده می‌شود.
+        self.pick_from_invoice_button = QPushButton("🧾↩")
+        self.pick_from_invoice_button.setObjectName("iconButton")
+        self.pick_from_invoice_button.setFixedWidth(48)
+        self.pick_from_invoice_button.setToolTip("انتخابِ اقلام از یکی از فاکتورهایِ قبلیِ همین طرفِ‌حساب")
+        self.pick_from_invoice_button.clicked.connect(self._pick_lines_from_invoice)
+        self.pick_from_invoice_button.setVisible(document_type_code in ("SALES_RETURN", "PURCHASE_RETURN"))
+        self.footer_layout.addWidget(self.pick_from_invoice_button)
+
         self.report_button = QPushButton("📄")
         self.report_button.setObjectName("iconButton")
         self.report_button.setFixedWidth(44)
@@ -2669,6 +2843,42 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             default_document_type_code=default_type,
         )
         dialog.exec()
+
+    def _pick_lines_from_invoice(self) -> None:
+        company_id = self._company_id()
+        counterparty_id = self.counterparty_combo.currentData()
+        if company_id is None or counterparty_id is None:
+            QMessageBox.information(self, "انتخاب از فاکتور", "ابتدا یک طرفِ‌حساب انتخاب کنید.")
+            return
+        invoice_type_code = "SALES_INVOICE" if self.document_type_code == "SALES_RETURN" else "PURCHASE_INVOICE"
+        picker = _ReturnInvoicePickerDialog(
+            self, company_id, counterparty_id, self.counterparty_combo.currentText(), invoice_type_code,
+        )
+        if picker.exec() != QDialog.Accepted or picker.selected_document_id is None:
+            return
+        lines_dialog = _ReturnLinesPickerDialog(self, company_id, picker.selected_document_id, self._decimal_places)
+        if lines_dialog.exec() != QDialog.Accepted:
+            return
+        # طبقِ همان الگویِ رفعِ باگِ «هر باز/بستِ فرم یک پیش‌نویسِ خالی
+        # می‌سازد»: سند فقط بعدِ تاییدِ واقعیِ انتخاب (نه پیش از آن) ذخیره
+        # می‌شود.
+        if not self._ensure_saved():
+            return
+        errors = []
+        last_item_id = None
+        for fields in lines_dialog.result_lines:
+            try:
+                documents_service.add_line(self._document_id, company_id, **fields)
+                last_item_id = fields.get("item_id")
+            except ValueError as exc:
+                item = next((it for it in self._items if it.item_id == fields.get("item_id")), None)
+                label = f"{item.code} — {item.name or ''}" if item else str(fields.get("item_id"))
+                errors.append(f"{label}: {exc}")
+        self._load_document()
+        if last_item_id is not None and not errors:
+            theme.set_status_label(self.status_label, "ردیف‌هایِ انتخاب‌شده از فاکتور به سندِ برگشت اضافه شدند.", ok=True)
+        if errors:
+            QMessageBox.warning(self, "خطا در برخی ردیف‌ها", "\n".join(errors))
 
     def _run_invoice_report(self) -> None:
         company_id = self._company_id()
@@ -2899,6 +3109,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         )
         self._apply_status_state()
 
+    def _on_lines_table_column_resized(self, logical_index: int, old_size: int, new_size: int) -> None:
+        # طبقِ گزارشِ صریحِ کاربر («اگر عرضی را تغییر دادیم ذخیره بشه
+        # اندازه‌هاش»): فقط ستون‌هایِ قابلِ‌تغییرِ‌اندازه‌یِ دستی (نه #،
+        # نه عملیات که Fixedاند، نه توضیح که Stretch است) ذخیره می‌شوند --
+        # کلید مشترک بینِ همه‌یِ فرم‌هایِ خرید/فروش است تا طبقِ همان
+        # درخواستِ یکسان‌سازیِ ظاهر، یک تنظیم برایِ همه اعمال شود.
+        if logical_index in (0, len(_LINE_COLUMNS) - 1, 8):
+            return
+        QSettings("Peecha", "PeechaERP").setValue(f"linesTable/column_{logical_index}/width", new_size)
+
     def _refresh_lines_table(self) -> None:
         # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۳ — نمایشِ مبلغ‌ها طبقِ تنظیماتِ
         # واحدِ پولی): قبلاً این جدول با str() خامِ Decimal پر می‌شد —
@@ -2979,7 +3199,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         type_combo.setObjectName("inlineDiscountType")
         type_combo.addItem("مبلغی", "AMOUNT")
         type_combo.addItem("درصدی", "PERCENT")
-        type_combo.setMaximumWidth(58)
+        # طبقِ گزارشِ صریحِ کاربر («نوعِ تخفیف متنش پیدا نیست»): سقفِ
+        # قبلی (۵۸) برایِ نمایشِ کاملِ متنِ «مبلغی»/«درصدی» کافی نبود --
+        # حالا هم‌الگو با عرضِ تازه‌یِ خودِ ستون (نگاه کن: _line_column_widths)
+        # کمی بیشتر است.
+        type_combo.setMaximumWidth(74)
         if discount_percent:
             type_combo.setCurrentIndex(type_combo.findData("PERCENT"))
             field.setValue(float(discount_percent))
@@ -3168,10 +3392,31 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         }
         item_combo.currentIndexChanged.connect(self._on_entry_row_item_changed)
         add_button.clicked.connect(self._commit_entry_row)
-        enter_chain = [item_combo, qty_field, price_field, discount_field, discount_type_combo, tax_field, description_field]
+        # طبقِ گزارشِ صریحِ کاربر («با اسکرول رویِ فیلدِ کالا، به‌محضِ
+        # رسیدن به یک کالای متغیردار فوری فرمِ ردیف باز می‌شود، در حالی
+        # که ممکن است انتخابِ من نباشد و بخواهم از رویش رد شوم»):
+        # کمبویِ کالا دیگر عضوِ زنجیره‌یِ خودکارِ Enter نیست -- تغییرِ صرفِ
+        # currentIndex (با اسکرول یا پیمایشِ کیبورد) دیگر هیچ دیالوگی باز
+        # نمی‌کند؛ فقط زدنِ صریحِ Enter (بعد از دیدنِ انتخابِ نهایی) تصمیم
+        # می‌گیرد که دیالوگِ متغیرها باز شود یا فوکوس به ردیف ادامه یابد.
+        _enter_signal(item_combo).connect(self._on_entry_row_item_enter)
+        enter_chain = [qty_field, price_field, discount_field, discount_type_combo, tax_field, description_field]
         for widget, next_widget in zip(enter_chain, enter_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
         _enter_signal(description_field).connect(self._commit_entry_row)
+
+    def _on_entry_row_item_enter(self) -> None:
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if not widgets:
+            return
+        item_id = widgets["item_combo"].currentData()
+        if item_id is None:
+            return
+        variant_parent_ids = {it.variant_parent_item_id for it in self._items if it.variant_parent_item_id}
+        if item_id in variant_parent_ids:
+            self._open_line_dialog_for_item(item_id)
+            return
+        widgets["qty"].setFocus()
 
     def _on_entry_row_item_changed(self) -> None:
         widgets = getattr(self, "_entry_row_widgets", None)
@@ -3182,11 +3427,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         variant_parent_ids = {it.variant_parent_item_id for it in self._items if it.variant_parent_item_id}
         if item_id in variant_parent_ids:
-            # طبقِ ماهیتِ ذاتاً یک‌به‌چندِ کالایِ متغیر (چند ردیفِ هم‌زمان،
-            # یکی به‌ازایِ هر متغیر) -- این حالت در همان یک ردیفِ ورودی
-            # جا نمی‌شود؛ همان دیالوگِ جدولیِ چندمتغیره (بدونِ هیچ تغییری)
-            # باز می‌شود.
-            self._open_line_dialog_for_item(item_id)
+            # طبقِ همان گزارش: صرفِ تغییرِ currentIndex (اسکرول/پیمایش)
+            # دیگر دیالوگ را باز نمی‌کند -- بازکردنِ دیالوگ فقط با Enterِ
+            # صریح (بالا) انجام می‌شود.
             return
         item = next((it for it in self._items if it.item_id == item_id), None)
         if item is None:
@@ -3218,10 +3461,22 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if resolved.discount_amount:
             widgets["discount"].setValue(float(resolved.discount_amount))
 
-    def _open_line_dialog_for_item(self, item_id: int) -> None:
-        if not self._ensure_saved():
-            self._load_document()
+    def _reset_entry_row_item_selection(self) -> None:
+        """طبقِ رفعِ باگِ واقعی («هر باز/بستِ فرم یک پیش‌نویسِ خالی
+        می‌سازد»): وقتی کاربر دیالوگِ ردیف را لغو می‌کند یا سند هنوز
+        ذخیره‌پذیر نیست، دیگر نیازی به ری‌لودِ کاملِ سند از پایگاه‌داده
+        نیست (که برایِ سندِ هنوز-ذخیره‌نشده اصلاً ممکن هم نبود) -- فقط
+        کمبویِ کالایِ ردیفِ ورودی به‌صورتِ محلی خالی می‌شود."""
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if widgets is None:
             return
+        item_combo = widgets["item_combo"]
+        item_combo.blockSignals(True)
+        item_combo.setCurrentIndex(-1)
+        item_combo.lineEdit().clear()
+        item_combo.blockSignals(False)
+
+    def _open_line_dialog_for_item(self, item_id: int) -> None:
         dialog = _LineDialog(
             self, self._items, self._company_id(), self._main_window, self._decimal_places,
             counterparty_id=self.counterparty_combo.currentData(), price_list_id=self.price_list_combo.currentData(),
@@ -3233,7 +3488,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if index >= 0:
             dialog.item_combo.setCurrentIndex(index)
         if dialog.exec() != QDialog.Accepted:
-            self._load_document()
+            self._reset_entry_row_item_selection()
+            return
+        # طبقِ همان رفعِ باگ: سند فقط *بعدِ* تاییدِ واقعیِ دیالوگ (یعنی
+        # وقتی قرار است چیزی واقعاً به آن اضافه شود) به‌عنوانِ پیش‌نویس
+        # ذخیره می‌شود -- نه صرفاً برایِ بازکردنِ دیالوگ.
+        if not self._ensure_saved():
+            self._reset_entry_row_item_selection()
             return
         self._commit_line_dialog_result(dialog)
 
@@ -3528,6 +3789,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                     f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبتِ نهایی فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است.)"
                 )
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
+        self.pick_from_invoice_button.setEnabled(self._lines_are_editable())
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
         self.convert_button.setEnabled(is_confirmed or is_approved or is_posted)
@@ -3747,8 +4009,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             )
 
     def _add_line(self) -> None:
-        if not self._ensure_saved():
-            return
         dialog = _LineDialog(
             self, self._items, self._company_id(), self._main_window, self._decimal_places,
             counterparty_id=self.counterparty_combo.currentData(), price_list_id=self.price_list_combo.currentData(),
@@ -3757,6 +4017,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             per_line_warehouse_enabled=self._per_line_warehouse_enabled,
         )
         if dialog.exec() != QDialog.Accepted:
+            return
+        # طبقِ رفعِ باگِ واقعی («هر باز/بستِ فرم یک پیش‌نویسِ خالی
+        # می‌سازد»): سند فقط *بعدِ* تاییدِ واقعیِ دیالوگ ذخیره می‌شود.
+        if not self._ensure_saved():
             return
         fields_list = dialog.result_fields_list()
         company_id = self._company_id()
