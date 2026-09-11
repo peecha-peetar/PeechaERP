@@ -84,8 +84,18 @@ NAV_ITEMS = [
             {"code": "INV_RECEIPT", "label": "رسید", "screen": "inventory_document_receipt"},
             {"code": "INV_ISSUE", "label": "حواله", "screen": "inventory_document_issue"},
             {"code": "INV_TRANSFER", "label": "انتقال", "screen": "inventory_document_transfer"},
-            {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in"},
-            {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out"},
+            # طبقِ تشخیصِ صریح («سندِ برگشت از فروش/به تامین‌کننده چه فرقی
+            # با نسخه‌یِ انبار دارد؟»): این دو کد صرفاً برایِ حلِ کدیِ
+            # مسیرِ «مشاهده/ویرایشِ» یک سندِ RETURN_IN/RETURN_OUت که خودِ
+            # سندِ تجاریِ SALES_RETURN/PURCHASE_RETURN بعدِ ثبتِ‌نهایی
+            # به‌صورتِ خودکار می‌سازد (نگاه کن: inventory_documents_list.py،
+            # commercial_documents.py::_STOCK_DOCUMENT_TYPE_BY_COMMERCIAL)
+            # زنده نگه داشته می‌شوند -- دیگر در ساید‌بار نمایش داده
+            # نمی‌شوند (hidden_from_sidebar) چون ساختنِ دستیِ این سند از
+            # این مسیر، مسیرِ صحیح و کاملِ تجاری (قیمت/مالیات/تسویه) را
+            # دور می‌زند و ریسکِ ثبتِ دوباره/نادرستِ حسابداری دارد.
+            {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in", "hidden_from_sidebar": True},
+            {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out", "hidden_from_sidebar": True},
             {"code": "INV_ADJUSTMENT", "label": "اصلاحِ موجودی", "screen": "inventory_document_adjustment"},
             # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): دیدِ کلیِ
             # مانده‌یِ همه‌یِ اسنادِ امانیِ بازِ خروجی/ورودی + بازگردانیِ

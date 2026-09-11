@@ -743,6 +743,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
+        self.lines_table.verticalHeader().setDefaultSectionSize(48)
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         last_col = len(_LINE_COLUMNS) - 1
         self.lines_table.horizontalHeader().setSectionResizeMode(last_col, QHeaderView.Fixed)

@@ -263,6 +263,13 @@ class _SidebarGroup(QWidget):
 
     def _populate_body(self, item: dict, layout: QVBoxLayout, on_leaf_click, depth: int) -> None:
         for child in item.get("children", []):
+            # طبقِ تصمیمِ صریح («برگشت از فروش/به تامین‌کننده از منویِ
+            # انبار حذف شود، چون سندِ تجاریِ SALES_RETURN/PURCHASE_RETURN
+            # خودش این را می‌سازد»): این کدها همچنان در nav_catalog.py
+            # ثبت می‌مانند (تا open_screen برایِ مشاهده/ویرایشِ سندِ
+            # ازقبل‌ساخته‌شده هنوز کار کند)، فقط از رندرِ ساید‌بار حذف می‌شوند.
+            if child.get("hidden_from_sidebar"):
+                continue
             if child.get("children"):
                 sub_title = QLabel(child["label"])
                 sub_title.setObjectName("sidebarSubGroupTitle")

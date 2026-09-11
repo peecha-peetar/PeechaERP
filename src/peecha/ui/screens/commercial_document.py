@@ -3531,6 +3531,91 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         else:
             self._add_line()
 
+    def _maybe_offer_cross_warehouse_transfer(
+        self, item, quantity: decimal.Decimal, warehouse_id: int | None,
+    ) -> bool:
+        """طبقِ درخواستِ صریحِ کاربر («اگر کالایی در یک انبار وجود نداشت
+        ولی در انبارهایِ دیگر بود، در فاکتورِ فروش پیشنهاد بده و در
+        صورتِ تایید یک حواله‌یِ انتقال صادر کند»): این بررسی فقط برایِ
+        اسنادی که موجودی را کم می‌کنند (_STOCK_OUTBOUND_TYPES) و
+        کالایِ موجودی‌محور (is_stock_tracked) با انبارِ مشخص انجام
+        می‌شود. اگر موجودیِ انبارِ فعلی کافی نبود ولی انبارِ دیگری
+        موجودی داشت، از کاربر می‌پرسد و در صورتِ تایید، خودش یک سندِ
+        TRANSFER می‌سازد و مستقیماً تا POSTED پیش می‌برد. بازگشتِ False
+        فقط وقتی است که کاربر تاییدِ انتقال را داد ولی خودِ ساختِ حواله
+        شکست خورد -- در آن حالت افزودنِ ردیفِ فاکتور هم متوقف می‌شود تا
+        کاربر با یک فاکتورِ ناقص/گمراه‌کننده روبه‌رو نشود؛ در هر حالتِ
+        دیگر (موجودی کافی بود، جایِ دیگری هم موجودی نبود، یا کاربر
+        انتقال را نپذیرفت) True برمی‌گردد و ادامه‌یِ افزودنِ ردیف طبقِ
+        رفتارِ قبلی پیش می‌رود."""
+        if warehouse_id is None or self.document_type_code not in _STOCK_OUTBOUND_TYPES:
+            return True
+        if not getattr(item, "is_stock_tracked", True):
+            return True
+        company_id = self._company_id()
+        if company_id is None:
+            return True
+        rows = engine_service.get_item_stock_by_warehouse(company_id, item.item_id)
+        current_stock = next((r.quantity_on_hand for r in rows if r.warehouse_id == warehouse_id), decimal.Decimal(0))
+        if current_stock >= quantity:
+            return True
+        other_rows = sorted(
+            (r for r in rows if r.warehouse_id != warehouse_id and r.quantity_on_hand > 0),
+            key=lambda r: r.quantity_on_hand, reverse=True,
+        )
+        if not other_rows:
+            return True
+        best = other_rows[0]
+        transfer_qty = min(quantity - current_stock, best.quantity_on_hand)
+        current_wh = next((w for w in self._warehouses if w.warehouse_id == warehouse_id), None)
+        current_wh_name = current_wh.name if current_wh is not None else ""
+        confirm = QMessageBox.question(
+            self, "کمبودِ موجودی",
+            (
+                f"موجودیِ «{item.name or item.code}» در انبارِ «{current_wh_name}» "
+                f"{numerals.format_money(current_stock, 3)} است (نیاز: {numerals.format_money(quantity, 3)}).\n"
+                f"در انبارِ «{best.warehouse_name}»، {numerals.format_money(best.quantity_on_hand, 3)} موجودی هست.\n\n"
+                f"یک حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, 3)} عددی از «{best.warehouse_name}» "
+                f"به «{current_wh_name}» صادر و ثبتِ‌نهایی شود؟"
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return True
+        try:
+            self._create_and_post_transfer(item.item_id, item.base_uom_id, transfer_qty, best.warehouse_id, warehouse_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در صدورِ حواله‌یِ انتقال", str(exc))
+            return False
+        # طبقِ باگِ واقعیِ کشف‌شده: پیامِ موفقیت اگر همین‌جا رویِ
+        # status_label نشسته می‌شد، بلافاصله توسطِ پیامِ ذخیره‌سازیِ
+        # _ensure_saved/_load_document (که بلافاصله بعد از این تابع در
+        # _commit_entry_row صدا زده می‌شوند) بازنویسی و گم می‌شد -- پس
+        # فقط این‌جا در یک متغیرِ نمونه یادداشت می‌شود تا _commit_entry_row
+        # پس از اتمامِ کاملِ ذخیره‌سازی/بازسازیِ جدول، آن را واقعاً نشان دهد.
+        self._pending_transfer_notice = (
+            f"حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, 3)} عددی از «{best.warehouse_name}» ثبت شد."
+        )
+        return True
+
+    def _create_and_post_transfer(
+        self, item_id: int, uom_id: int, quantity: decimal.Decimal, source_warehouse_id: int, destination_warehouse_id: int,
+    ) -> None:
+        company_id = self._company_id()
+        user_id = app_session.current_user.user_id
+        transfer_id = inv_documents_service.create_stock_document(
+            company_id, user_id, "TRANSFER", self.date_field.date(),
+            inv_documents_service.DocumentHeaderFields(
+                source_warehouse_id=source_warehouse_id, destination_warehouse_id=destination_warehouse_id,
+                description="حواله‌یِ خودکارِ رفعِ کمبودِ موجودی برایِ سندِ فروش",
+            ),
+        )
+        inv_documents_service.add_line(transfer_id, company_id, inv_documents_service.LineFields(
+            item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity,
+        ))
+        inv_documents_service.confirm_stock_document(transfer_id, company_id)
+        inv_documents_service.post_stock_document(transfer_id, company_id, user_id)
+
     def _commit_entry_row(self) -> None:
         widgets = getattr(self, "_entry_row_widgets", None)
         if not widgets:
@@ -3556,6 +3641,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         discount_value = decimal.Decimal(str(widgets["discount"].value()))
         tax_percent = decimal.Decimal(str(widgets["tax"].value()))
         description = widgets["description"].text().strip() or None
+        warehouse_id = self.warehouse_combo.currentData() if self.warehouse_combo is not None else None
+        self._pending_transfer_notice = None
+        if not self._maybe_offer_cross_warehouse_transfer(item, quantity, warehouse_id):
+            return
         if not self._ensure_saved():
             return
         try:
@@ -3565,15 +3654,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 discount_amount=decimal.Decimal(0) if is_percent_discount else discount_value,
                 discount_percent=discount_value if is_percent_discount else decimal.Decimal(0),
                 tax_percent=tax_percent, description=description,
-                warehouse_id=self.warehouse_combo.currentData() if self.warehouse_combo is not None else None,
+                warehouse_id=warehouse_id,
             )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
-        self._warn_if_consignment_cost_mixing(
-            item_id, self.warehouse_combo.currentData() if self.warehouse_combo is not None else None
-        )
+        self._warn_if_consignment_cost_mixing(item_id, warehouse_id)
         self._load_document()
+        if self._pending_transfer_notice:
+            theme.set_status_label(self.status_label, self._pending_transfer_notice, ok=True)
+            self._pending_transfer_notice = None
         self._refresh_cross_sell_suggestion(item_id)
         self._refresh_upsell_suggestion(item_id)
         # طبقِ گزارشِ صریحِ کاربر («در پایانِ سطر، سطرِ بعدی را ایجاد
