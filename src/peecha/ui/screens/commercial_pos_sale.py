@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtCore import Qt, QMimeData
+from PySide6.QtCore import Qt, QMimeData, QSettings
 from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -44,12 +45,90 @@ from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import item_variants as variants_service
+from peecha.services import pos_scale as scale_service
 from peecha.ui.screens.commercial_document import STATUS_LABELS, _LineDialog, _SettlementPlanDialog, _show_invoice_print
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import wrap_scrollable
 
 _DEFAULT_QUICK_BUTTON_COLOR = "#4A90D9"
 _POS_PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه", "MIXED": "ترکیبی"}
+
+
+class _PosVariantPickerDialog(QDialog):
+    """طبقِ رفعِ باگِ گزارش‌شده («وقتی کالایِ متغیردار انتخاب می‌شود،
+    متغیرها پیشنهاد داده نمی‌شوند و هنگامِ ثبتِ فاکتور چیزی برایِ ثبت
+    نیست»): تا پیش از این، افزودنِ یک کالایِ دارایِ متغیر به سبدِ فروشِ
+    حضوری فقط پیامِ خطایِ «این کالا دارایِ چند متغیر است» را نشان
+    می‌داد -- بدونِ هیچ راهی برایِ واقعاً انتخابِ یک متغیر. این دیالوگِ
+    سبک هم لیستِ مستقیمِ متغیرها (کلیک/دوبار‌کلیک) و هم اسکنِ بارکد/کدِ
+    خودِ متغیر را پشتیبانی می‌کند."""
+
+    def __init__(self, parent, company_id: int, parent_item: "catalog_service.ItemRow") -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"انتخابِ متغیر — {parent_item.name or parent_item.code}")
+        self.setMinimumWidth(380)
+        self.selected_item_id: int | None = None
+        self._variants = variants_service.list_item_variants(company_id, parent_item.item_id)
+
+        layout = QVBoxLayout(self)
+
+        scan_row = QHBoxLayout()
+        scan_row.addWidget(QLabel("بارکد/کدِ متغیر:"))
+        self.scan_field = QLineEdit()
+        self.scan_field.setPlaceholderText("بارکدِ متغیر را اسکن کنید یا کدش را تایپ کنید...")
+        self.scan_field.returnPressed.connect(self._on_scan)
+        scan_row.addWidget(self.scan_field, stretch=1)
+        layout.addLayout(scan_row)
+
+        self.list_widget = QListWidget()
+        for v in self._variants:
+            label = f"{v.code} — {v.attribute_labels or v.name or ''}"
+            list_item = QListWidgetItem(label)
+            list_item.setData(Qt.UserRole, v.variant_item_id)
+            self.list_widget.addItem(list_item)
+        self.list_widget.itemDoubleClicked.connect(self._on_pick)
+        if self.list_widget.count():
+            self.list_widget.setCurrentRow(0)
+        layout.addWidget(self.list_widget, stretch=1)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel_button = QPushButton("انصراف")
+        cancel_button.clicked.connect(self.reject)
+        buttons.addWidget(cancel_button)
+        ok_button = QPushButton("انتخاب")
+        ok_button.setObjectName("primaryButton")
+        ok_button.clicked.connect(self._on_ok)
+        buttons.addWidget(ok_button)
+        layout.addLayout(buttons)
+
+        self.scan_field.setFocus()
+
+    def _on_scan(self) -> None:
+        needle = self.scan_field.text().strip().lower()
+        if not needle:
+            return
+        match = next(
+            (v for v in self._variants if (v.barcode or "").strip().lower() == needle or v.code.strip().lower() == needle),
+            None,
+        )
+        if match is not None:
+            self.selected_item_id = match.variant_item_id
+            self.accept()
+        else:
+            self.scan_field.selectAll()
+
+    def _on_pick(self, list_item: QListWidgetItem) -> None:
+        self.selected_item_id = list_item.data(Qt.UserRole)
+        self.accept()
+
+    def _on_ok(self) -> None:
+        current = self.list_widget.currentItem()
+        if current is None:
+            return
+        self.selected_item_id = current.data(Qt.UserRole)
+        self.accept()
 
 
 class _QuickAccessButton(QPushButton):
@@ -140,9 +219,16 @@ class CommercialPosSaleScreen(QWidget):
         # همیشه در پایینِ ستونِ اصلی نیست -- می‌تواند به‌عنوانِ یک ستونِ
         # مستقل، در سمتِ چپ یا راستِ کلِ محتوا جا بگیرد؛ محلِ دقیقش با
         # self._apply_quick_access_position(...) در refresh() تعیین می‌شود.
-        self._content_row = QHBoxLayout()
-        self._content_row.setSpacing(14)
-        page_row.addLayout(self._content_row, stretch=1)
+        # طبقِ درخواستِ صریح («عرضِ قسمتِ کلیدِ فوریِ کالاها توسطِ کاربر
+        # قابلِ‌تنظیم باشد و کم‌وزیاد شود»): این ردیف قبلاً یک QHBoxLayout
+        # با نسبتِ ثابتِ ۲:۱ بود -- بدونِ هیچ دستگیره‌یِ تغییرِ اندازه.
+        # حالا یک QSplitter است؛ اندازه‌یِ کشیده‌شده به‌ازایِ هر کاربر در
+        # QSettings ذخیره/بازیابی می‌شود (هم‌الگو با عرضِ ستون‌هایِ جدول
+        # در سایرِ فرم‌ها).
+        self._content_splitter = QSplitter(Qt.Horizontal)
+        self._content_splitter.setHandleWidth(8)
+        self._content_splitter.splitterMoved.connect(self._on_content_splitter_moved)
+        page_row.addWidget(self._content_splitter, stretch=1)
 
         self._outer_widget = QWidget()
         outer = QVBoxLayout(self._outer_widget)
@@ -331,19 +417,50 @@ class CommercialPosSaleScreen(QWidget):
         root.addWidget(wrap_scrollable(page))
 
     def _apply_quick_access_position(self, position: str) -> None:
-        if position == self._quick_access_position and self._content_row.count() == 2:
+        if position == self._quick_access_position and self._content_splitter.count() == 2:
             return
         self._quick_access_position = position
-        while self._content_row.count():
-            self._content_row.takeAt(0)
-        # طبقِ چیدمانِ RTLِ برنامه (main.py): اولین آیتمی که به یک
-        # QHBoxLayout اضافه می‌شود، در سمتِ راست می‌نشیند.
+        # QSplitter.count() هرگز صفر نمی‌شود مگر ویجت‌ها را صریحاً از آن
+        # جدا کنیم -- خودِ ویجت‌ها باقی می‌مانند، فقط ترتیب/مالکیتِ داخلِ
+        # اسپیلیتر عوض می‌شود.
+        self._outer_widget.setParent(None)
+        self._quick_access_wrapper.setParent(None)
+        # طبقِ چیدمانِ RTLِ برنامه (main.py): اولین ویجتی که به اسپیلیتر
+        # اضافه می‌شود، در سمتِ راست می‌نشیند.
         if position == "RIGHT":
-            self._content_row.addWidget(self._quick_access_wrapper, stretch=1)
-            self._content_row.addWidget(self._outer_widget, stretch=2)
+            self._content_splitter.addWidget(self._quick_access_wrapper)
+            self._content_splitter.addWidget(self._outer_widget)
         else:
-            self._content_row.addWidget(self._outer_widget, stretch=2)
-            self._content_row.addWidget(self._quick_access_wrapper, stretch=1)
+            self._content_splitter.addWidget(self._outer_widget)
+            self._content_splitter.addWidget(self._quick_access_wrapper)
+        self._restore_content_splitter_sizes()
+
+    def _content_splitter_settings_key(self) -> str:
+        return f"posSale/contentSplitter/{self._quick_access_position}"
+
+    def _restore_content_splitter_sizes(self) -> None:
+        saved = QSettings("Peecha", "PeechaERP").value(self._content_splitter_settings_key(), None)
+        sizes = None
+        if saved:
+            try:
+                sizes = [int(x) for x in str(saved).split(",")]
+            except ValueError:
+                sizes = None
+        if sizes and len(sizes) == 2:
+            self._content_splitter.setSizes(sizes)
+        else:
+            # طبقِ نسبتِ پیش‌فرضِ قبلی (۲:۱) پیش از تبدیل به اسپیلیتر.
+            index_outer = self._content_splitter.indexOf(self._outer_widget)
+            index_quick = self._content_splitter.indexOf(self._quick_access_wrapper)
+            self._content_splitter.setStretchFactor(index_outer, 2)
+            self._content_splitter.setStretchFactor(index_quick, 1)
+
+    def _on_content_splitter_moved(self, _pos: int, _index: int) -> None:
+        # طبقِ درخواستِ صریح («عرضِ قسمتِ کلیدِ فوری توسطِ کاربر قابلِ‌
+        # تنظیم باشد»): اندازه‌یِ کشیده‌شده همین‌جا ذخیره می‌شود تا در
+        # بازِ بعدیِ همین فرم (برایِ همین کاربر/سیستم) دوباره اعمال شود.
+        sizes = ",".join(str(s) for s in self._content_splitter.sizes())
+        QSettings("Peecha", "PeechaERP").setValue(self._content_splitter_settings_key(), sizes)
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -364,6 +481,11 @@ class CommercialPosSaleScreen(QWidget):
         self._quick_button_order = [int(x) for x in order_text.split(",") if x.strip().isdigit()] if order_text else []
 
         self._items = catalog_service.list_items(company_id, active_only=True)
+        # طبقِ رفعِ باگِ گزارش‌شده («وقتی کالایِ متغیردار انتخاب می‌شود،
+        # متغیرها پیشنهاد داده نمی‌شوند و چیزی برایِ ثبت نیست»): این
+        # مجموعه در _add_item_to_cart برایِ تشخیصِ «این کالا خودش
+        # متغیر دارد» استفاده می‌شود -- هم‌الگو با commercial_document.py.
+        self._variant_parent_ids = {it.variant_parent_item_id for it in self._items if it.variant_parent_item_id}
         self._rebuild_quick_access()
         self._refresh_recent_invoices()
         self._scan_label_to_item_id = {
@@ -694,8 +816,30 @@ class CommercialPosSaleScreen(QWidget):
             self.status_label.setText(f"کالایی با «{query}» یافت نشد.")
         return None
 
+    def _try_add_weight_barcode(self, query: str) -> bool:
+        """طبقِ درخواستِ صریح («ترازوی آفلاین با بارکدِ وزنی برایِ فروشِ
+        حضوری»): اگر رشته‌یِ اسکن‌شده دقیقاً با فرمتِ پیکربندی‌شده
+        (پیشوند+کدِ کالا+وزن) مطابقت داشت، خودِ کالا از رویِ کدِ
+        رمزگشایی‌شده پیدا و با همان وزنِ رمزگشایی‌شده (نه ۱ عدد) به سبد
+        اضافه می‌شود؛ بازگشتِ True یعنی این اسکن به‌عنوانِ بارکدِ وزنی
+        مدیریت شد (چه موفق چه با خطا) -- ادامه‌یِ جستجویِ عادی لازم نیست."""
+        parsed = scale_service.parse_weight_barcode(self._pos_settings, query)
+        if parsed is None:
+            return False
+        needle = parsed.item_code.strip().lower()
+        item = next((it for it in self._items if it.code.strip().lower() == needle), None)
+        if item is None:
+            self.status_label.setText(f"کالایی با کدِ «{parsed.item_code}» (رمزگشایی‌شده از بارکدِ وزنی) یافت نشد.")
+            return True
+        self.scan_field.clear()
+        self._add_item_to_cart(item, parsed.weight)
+        self.scan_field.setFocus()
+        return True
+
     def _scan_or_search(self) -> None:
         query = self.scan_field.text().strip()
+        if self._try_add_weight_barcode(query):
+            return
         item = self._resolve_scanned_item(query)
         if item is None:
             # طبقِ درخواستِ صریح: به‌جایِ فقط پیامِ خطا برایِ چندتایی،
@@ -929,6 +1073,23 @@ class CommercialPosSaleScreen(QWidget):
         if self._is_confirmed:
             self.status_label.setText("این فروش قبلاً تایید شده — برایِ فروشِ تازه، «فروشِ تازه» را بزنید.")
             return False
+        # طبقِ رفعِ باگِ گزارش‌شده («کالایِ متغیردار پیشنهاد داده
+        # نمی‌شود، چیزی برایِ ثبت نیست»): پیش از حتی ساختنِ پیش‌نویسِ
+        # سند، اگر همین کالا خودش متغیر دارد، دیالوگِ انتخابِ متغیر باز
+        # می‌شود -- با انتخابِ کاربر (یا اسکنِ بارکدِ خودِ متغیر)، همین
+        # تابع دوباره برایِ خودِ متغیرِ انتخاب‌شده صدا زده می‌شود.
+        if item.item_id in self._variant_parent_ids:
+            company_id_for_picker = self._company_id()
+            if company_id_for_picker is None:
+                return False
+            picker = _PosVariantPickerDialog(self, company_id_for_picker, item)
+            if picker.exec() != QDialog.Accepted or picker.selected_item_id is None:
+                return False
+            variant_item = next((it for it in self._items if it.item_id == picker.selected_item_id), None)
+            if variant_item is None:
+                self.status_label.setText("متغیرِ انتخاب‌شده معتبر نیست.")
+                return False
+            return self._add_item_to_cart(variant_item, quantity, unit_price)
         if not self._ensure_document():
             return False
         company_id = self._company_id()

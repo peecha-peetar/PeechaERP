@@ -326,6 +326,86 @@ class CommercialPosSessionsScreen(QWidget):
         defaults_layout.addWidget(save_defaults_button)
         self.settings_tabs.addTab(defaults_tab, "پیش‌فرضِ تسویه")
 
+        # طبقِ درخواستِ صریحِ کاربر («ترازوی آفلاین با بارکدِ وزنی برایِ
+        # فروشِ حضوری طراحی شود -- ترتیبِ ارقام و تعدادِ آن‌ها قابلِ‌
+        # تنظیم باشد؛ + چارچوبِ اولیه برایِ ترازویِ آنلاین»).
+        scale_tab = QWidget()
+        scale_layout = QVBoxLayout(scale_tab)
+
+        weight_barcode_hint = QLabel(
+            "بارکدِ چاپ‌شده‌یِ ترازو (بدونِ نیاز به هیچ اتصالِ زنده‌ای، فقط با یک اسکنرِ معمولی) "
+            "از سه بخش تشکیل شده: پیشوندِ نوع، کدِ کالا، و وزن -- تعدادِ ارقامِ هر بخش این‌جا قابلِ‌تنظیم است."
+        )
+        weight_barcode_hint.setObjectName("sectionHint")
+        weight_barcode_hint.setWordWrap(True)
+        scale_layout.addWidget(weight_barcode_hint)
+
+        self.weight_barcode_enabled_checkbox = QCheckBox("فعال‌بودنِ خواندنِ بارکدِ وزنی در فروشِ حضوری")
+        scale_layout.addWidget(self.weight_barcode_enabled_checkbox)
+
+        weight_barcode_box = QHBoxLayout()
+        weight_barcode_box.addWidget(QLabel("پیشوند"))
+        self.weight_barcode_prefix_field = QLineEdit()
+        self.weight_barcode_prefix_field.setMaximumWidth(70)
+        self.weight_barcode_prefix_field.setPlaceholderText("مثلاً ۲۰")
+        weight_barcode_box.addWidget(self.weight_barcode_prefix_field)
+        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ کدِ کالا"))
+        self.weight_barcode_item_code_digits_field = QSpinBox()
+        self.weight_barcode_item_code_digits_field.setRange(1, 12)
+        weight_barcode_box.addWidget(self.weight_barcode_item_code_digits_field)
+        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ وزن"))
+        self.weight_barcode_weight_digits_field = QSpinBox()
+        self.weight_barcode_weight_digits_field.setRange(1, 12)
+        weight_barcode_box.addWidget(self.weight_barcode_weight_digits_field)
+        weight_barcode_box.addWidget(QLabel("تعدادِ رقمِ اعشارِ وزن"))
+        self.weight_barcode_weight_decimals_field = QSpinBox()
+        self.weight_barcode_weight_decimals_field.setRange(0, 8)
+        weight_barcode_box.addWidget(self.weight_barcode_weight_decimals_field)
+        save_weight_barcode_button = QPushButton("💾")
+        save_weight_barcode_button.setObjectName("iconButton")
+        save_weight_barcode_button.setFixedWidth(44)
+        save_weight_barcode_button.setToolTip("ذخیره")
+        save_weight_barcode_button.clicked.connect(self._save_weight_barcode_settings)
+        weight_barcode_box.addWidget(save_weight_barcode_button)
+        weight_barcode_box.addStretch(1)
+        scale_layout.addLayout(weight_barcode_box)
+
+        scale_online_hint = QLabel(
+            "ترازویِ آنلاین (خواندنِ خودکارِ همه‌یِ اقلامِ ذخیره‌شده در حافظه‌یِ ترازو با یک بارکد/RFIDِ کلی): "
+            "فعلاً فقط چارچوبِ تنظیماتی آماده است -- تا مشخص‌شدنِ پروتکلِ دقیقِ ارتباطیِ مدلِ دستگاهِ شما، "
+            "خودِ خواندنِ زنده هنوز پیاده‌سازی نشده."
+        )
+        scale_online_hint.setObjectName("sectionHint")
+        scale_online_hint.setWordWrap(True)
+        scale_layout.addWidget(scale_online_hint)
+
+        self.scale_online_enabled_checkbox = QCheckBox("فعال‌بودنِ ترازویِ آنلاین")
+        scale_layout.addWidget(self.scale_online_enabled_checkbox)
+
+        scale_online_box = QHBoxLayout()
+        scale_online_box.addWidget(QLabel("نوعِ اتصال"))
+        self.scale_connection_type_combo = QComboBox()
+        self.scale_connection_type_combo.addItem("(هنوز مشخص نشده)", "NONE")
+        self.scale_connection_type_combo.addItem("سریال / RS232", "SERIAL")
+        self.scale_connection_type_combo.addItem("شبکه / TCP", "TCP")
+        scale_online_box.addWidget(self.scale_connection_type_combo)
+        scale_online_box.addWidget(QLabel("آدرس (پورتِ COM یا host:port)"))
+        self.scale_address_field = QLineEdit()
+        scale_online_box.addWidget(self.scale_address_field, stretch=1)
+        scale_online_box.addWidget(QLabel("پیشوندِ بارکدِ دسته"))
+        self.scale_batch_barcode_prefix_field = QLineEdit()
+        self.scale_batch_barcode_prefix_field.setMaximumWidth(70)
+        scale_online_box.addWidget(self.scale_batch_barcode_prefix_field)
+        save_scale_button = QPushButton("💾")
+        save_scale_button.setObjectName("iconButton")
+        save_scale_button.setFixedWidth(44)
+        save_scale_button.setToolTip("ذخیره")
+        save_scale_button.clicked.connect(self._save_scale_connection_settings)
+        scale_online_box.addWidget(save_scale_button)
+        scale_layout.addLayout(scale_online_box)
+        scale_layout.addStretch(1)
+        self.settings_tabs.addTab(scale_tab, "ترازو و بارکدِ وزنی")
+
         left.addWidget(self.settings_tabs, stretch=1)
 
         # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فرم سمتِ راستش خالیه و سمتِ چپ
@@ -452,6 +532,16 @@ class CommercialPosSessionsScreen(QWidget):
             self.show_customer_credit_warning_checkbox.setChecked(settings.show_customer_credit_warning)
             self.recent_invoices_count_field.setValue(settings.recent_invoices_count)
             self.fast_receipt_printing_checkbox.setChecked(settings.fast_receipt_printing)
+            self.weight_barcode_enabled_checkbox.setChecked(settings.weight_barcode_enabled)
+            self.weight_barcode_prefix_field.setText(settings.weight_barcode_prefix)
+            self.weight_barcode_item_code_digits_field.setValue(settings.weight_barcode_item_code_digits)
+            self.weight_barcode_weight_digits_field.setValue(settings.weight_barcode_weight_digits)
+            self.weight_barcode_weight_decimals_field.setValue(settings.weight_barcode_weight_decimals)
+            self.scale_online_enabled_checkbox.setChecked(settings.scale_online_enabled)
+            index = self.scale_connection_type_combo.findData(settings.scale_connection_type)
+            self.scale_connection_type_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.scale_address_field.setText(settings.scale_address or "")
+            self.scale_batch_barcode_prefix_field.setText(settings.scale_batch_barcode_prefix)
         else:
             if current_guest is not None:
                 index = self.guest_customer_combo.findData(current_guest)
@@ -473,6 +563,15 @@ class CommercialPosSessionsScreen(QWidget):
             self.show_customer_credit_warning_checkbox.setChecked(True)
             self.recent_invoices_count_field.setValue(10)
             self.fast_receipt_printing_checkbox.setChecked(True)
+            self.weight_barcode_enabled_checkbox.setChecked(False)
+            self.weight_barcode_prefix_field.setText("20")
+            self.weight_barcode_item_code_digits_field.setValue(5)
+            self.weight_barcode_weight_digits_field.setValue(4)
+            self.weight_barcode_weight_decimals_field.setValue(3)
+            self.scale_online_enabled_checkbox.setChecked(False)
+            self.scale_connection_type_combo.setCurrentIndex(0)
+            self.scale_address_field.clear()
+            self.scale_batch_barcode_prefix_field.setText("21")
 
         cashier_settings = (
             pos_service.get_cashier_settings(app_session.current_user.user_id, company_id)
@@ -499,6 +598,32 @@ class CommercialPosSessionsScreen(QWidget):
         width_override = self.my_quick_button_width_field.value() or None
         height_override = self.my_quick_button_height_field.value() or None
         pos_service.set_quick_button_layout(user_id, company_id, order_text, width_override, height_override)
+        self.status_label.setText("")
+
+    def _save_weight_barcode_settings(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        prefix = self.weight_barcode_prefix_field.text().strip()
+        if self.weight_barcode_enabled_checkbox.isChecked() and not prefix:
+            self.status_label.setText("پیشوندِ بارکدِ وزنی نمی‌تواند خالی باشد.")
+            return
+        pos_service.set_weight_barcode_settings(
+            company_id, self.weight_barcode_enabled_checkbox.isChecked(), prefix,
+            self.weight_barcode_item_code_digits_field.value(), self.weight_barcode_weight_digits_field.value(),
+            self.weight_barcode_weight_decimals_field.value(),
+        )
+        self.status_label.setText("")
+
+    def _save_scale_connection_settings(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        pos_service.set_scale_connection_settings(
+            company_id, self.scale_online_enabled_checkbox.isChecked(),
+            self.scale_connection_type_combo.currentData(), self.scale_address_field.text().strip() or None,
+            self.scale_batch_barcode_prefix_field.text().strip() or "21",
+        )
         self.status_label.setText("")
 
     def _load_settlement_defaults(self, company_id: int) -> None:

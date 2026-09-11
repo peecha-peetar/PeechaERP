@@ -345,6 +345,22 @@ class PosSettings(Base):
     default_receivable_project_detail_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("acc.detail_accounts.detail_account_id")
     )
+    # طبقِ درخواستِ صریح («ترازوی آفلاین با بارکدِ وزنی -- آیتم/وزنی‌یا
+    # تعدادی/کدِ کالا/وزن، هر بخش با تعدادِ رقمِ قابلِ‌تنظیم»): بارکدِ
+    # چاپ‌شده‌یِ ترازو (بدونِ نیازِ به هیچ ارتباطِ زنده‌یِ سخت‌افزاری) با
+    # یک اسکنرِ معمولی خوانده و همین‌جا رمزگشایی می‌شود.
+    weight_barcode_enabled: Mapped[bool] = mapped_column(default=False)
+    weight_barcode_prefix: Mapped[str] = mapped_column(String(10), default="20")
+    weight_barcode_item_code_digits: Mapped[int] = mapped_column(default=5)
+    weight_barcode_weight_digits: Mapped[int] = mapped_column(default=4)
+    weight_barcode_weight_decimals: Mapped[int] = mapped_column(default=3)
+    # طبقِ توافقِ صریح («فعلاً فقط چارچوبِ اولیه/تنظیماتی برایِ ترازویِ
+    # آنلاین، تا پروتکلِ واقعیِ دستگاه بعداً مشخص/پیاده‌سازی شود»): این
+    # ستون‌ها هنوز به هیچ کدِ ارتباطیِ واقعی وصل نیستند.
+    scale_online_enabled: Mapped[bool] = mapped_column(default=False)
+    scale_connection_type: Mapped[str] = mapped_column(String(20), default="NONE")
+    scale_address: Mapped[str | None] = mapped_column(String(200))
+    scale_batch_barcode_prefix: Mapped[str] = mapped_column(String(10), default="21")
 
 
 class PosMenuGroup(Base):

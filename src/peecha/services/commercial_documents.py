@@ -1313,6 +1313,26 @@ def confirm_document(document_id: int, company_id: int, confirmed_by_user_id: in
         lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id)).all()
         if not lines:
             raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سندِ بن‌بست»): قبلاً هیچ‌جا
+        # پیش از ثبتِ‌نهایی بررسی نمی‌شد که سندهایِ فروش/خرید/برگشت
+        # (که به‌صورتِ خودکار یک سندِ انبار می‌سازند) واقعاً یک انبار
+        # دارند یا نه — کاربر بدونِ هیچ پیامی تایید می‌کرد، و فقط در
+        # لحظه‌یِ ثبتِ‌نهایی (وقتی دیگر فیلدِ انبار قابلِ‌ویرایش نیست)
+        # با خطایِ «انبارِ مبدا/مقصد الزامی است» رد می‌شد — سند برایِ
+        # همیشه در وضعیتِ تاییدشده گیر می‌کرد. حالا همین‌جا، پیش از
+        # تایید: اگر هدر انبار ندارد، اول انبارِ پیش‌فرضِ شرکت (تنظیماتِ
+        # انبار) به‌کار می‌رود؛ اگر آن هم تنظیم نشده، همین‌جا با پیامی
+        # روشن رد می‌شود تا کاربر بتواند همین حالا (وقتی هنوز پیش‌نویس
+        # و کاملاً قابلِ‌ویرایش است) انبار را انتخاب کند.
+        if doc.document_type_code in _STOCK_DOC_TYPE_BY_TYPE and doc.warehouse_id is None:
+            default_warehouse = locations_service.get_default_warehouse(company_id)
+            if default_warehouse is not None:
+                doc.warehouse_id = default_warehouse.warehouse_id
+            else:
+                raise ValueError(
+                    "انبار مشخص نشده و انبارِ پیش‌فرضِ شرکت هم در تنظیماتِ انبار تعیین نشده — "
+                    "لطفاً یک انبار انتخاب کنید یا انبارِ پیش‌فرض را در تنظیماتِ انبار مشخص کنید."
+                )
         doc.status_code = "CONFIRMED"
         document_type_code = doc.document_type_code
         counterparty_id = doc.counterparty_detail_account_id
@@ -1340,6 +1360,30 @@ def approve_document(document_id: int, company_id: int) -> None:
         if open_hold is not None:
             raise ValueError("این سند قفلِ اعتباریِ بازِ حل‌نشده دارد — ابتدا آزادسازی کنید.")
         doc.status_code = "APPROVED"
+        session.commit()
+
+
+def revert_to_draft(document_id: int, company_id: int) -> None:
+    """طبقِ رفعِ کلاسِ باگِ گزارش‌شده («سندِ بن‌بست -- نه ادیت می‌شه، نه
+    حذف، نه ثبتِ‌نهایی»): تا پیش از این، تنها راهِ خروج از یک سندِ
+    CONFIRMED که به هر دلیلی (مثلاً همان کمبودِ انبار) دیگر قابلِ‌ثبتِ‌
+    نهایی نبود، لغوِ کاملِ آن بود. حالا سندِ CONFIRMED (که هنوز تصویب/
+    ثبتِ‌نهایی نشده) می‌تواند به DRAFT برگردد -- هم‌الگو با inventory_
+    documents.revert_to_draft برایِ اسنادِ انبار -- تا هدر (ازجمله
+    انبار) دوباره کاملاً قابلِ‌ویرایش شود."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.status_code != "CONFIRMED":
+            raise ValueError("فقط سندِ تاییدشده (که هنوز تصویب/ثبتِ‌نهایی نشده) قابلِ‌بازگشت به پیش‌نویس است.")
+        # اگر تاییدِ این سند یک قفلِ اعتباری ساخته بود (مثلاً سفارشی که
+        # از سقفِ اعتبار عبور کرده)، با بازگشت به پیش‌نویس آن قفل دیگر
+        # معنا ندارد -- وگرنه برایِ همیشه بازِ حل‌نشده می‌ماند.
+        session.query(CreditHold).filter(
+            CreditHold.related_document_id == document_id, CreditHold.released_at.is_(None)
+        ).delete()
+        doc.status_code = "DRAFT"
         session.commit()
 
 
@@ -1639,6 +1683,18 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
             raise ValueError("این سند ابتدا باید توسطِ مدیر تصویب شود -- تاییدِ کاربر به‌تنهایی برایِ ثبتِ نهایی کافی نیست.")
 
         document_type_code = doc.document_type_code
+
+        # طبقِ رفعِ باگِ واقعیِ «سندِ بن‌بست»: این بررسی حالا زودتر، در
+        # confirm_document، انجام می‌شود -- این‌جا فقط دفاعِ اضافه برایِ
+        # سندهایِ CONFIRMED/APPROVEDِ ازقبل‌موجودی است که پیش از افزودنِ
+        # همان بررسی ساخته شده‌اند و ممکن است هنوز بدونِ انبار مانده
+        # باشند؛ بدونِ آن، این سندها برایِ همیشه در همین حلقه‌یِ ثبتِ‌
+        # نهایی/شکست گیر می‌کردند.
+        if document_type_code in _STOCK_DOC_TYPE_BY_TYPE and doc.warehouse_id is None:
+            default_warehouse = locations_service.get_default_warehouse(company_id)
+            if default_warehouse is not None:
+                doc.warehouse_id = default_warehouse.warehouse_id
+                session.commit()
 
         # طبقِ درخواستِ صریح («یک دکمه در فرمِ فاکتور... با تاییدِ مدیر
         # نسبت به نحوه‌یِ تسویه، فاکتور سند بخوره و تسویه بشه»): این

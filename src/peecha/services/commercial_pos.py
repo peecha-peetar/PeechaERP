@@ -743,6 +743,55 @@ def set_pos_settings(
         session.commit()
 
 
+def set_weight_barcode_settings(
+    company_id: int, enabled: bool, prefix: str, item_code_digits: int, weight_digits: int, weight_decimals: int,
+) -> None:
+    """طبقِ درخواستِ صریح («ترازوی آفلاین با بارکدِ وزنی -- تنظیماتِ
+    تعدادِ ارقامِ هر بخش توسطِ کاربر»): جدا از set_pos_settings، هم‌الگو
+    با set_pos_receivable_dimension_defaults."""
+    with new_session() as session:
+        row = session.get(PosSettings, company_id)
+        if row is None:
+            session.add(
+                PosSettings(
+                    company_id=company_id, weight_barcode_enabled=enabled, weight_barcode_prefix=prefix,
+                    weight_barcode_item_code_digits=item_code_digits, weight_barcode_weight_digits=weight_digits,
+                    weight_barcode_weight_decimals=weight_decimals,
+                )
+            )
+        else:
+            row.weight_barcode_enabled = enabled
+            row.weight_barcode_prefix = prefix
+            row.weight_barcode_item_code_digits = item_code_digits
+            row.weight_barcode_weight_digits = weight_digits
+            row.weight_barcode_weight_decimals = weight_decimals
+        session.commit()
+
+
+def set_scale_connection_settings(
+    company_id: int, online_enabled: bool, connection_type: str, address: str | None, batch_barcode_prefix: str,
+) -> None:
+    """طبقِ توافقِ صریح («فعلاً فقط چارچوبِ اولیه/تنظیماتی برایِ ترازویِ
+    آنلاین»): این تابع فقط تنظیمات را ذخیره می‌کند -- خودِ ارتباطِ
+    واقعی با دستگاه (سریال/TCP) هنوز پیاده‌سازی نشده (نگاه کن:
+    pos_scale.py -- ScaleNotConfiguredError)."""
+    with new_session() as session:
+        row = session.get(PosSettings, company_id)
+        if row is None:
+            session.add(
+                PosSettings(
+                    company_id=company_id, scale_online_enabled=online_enabled, scale_connection_type=connection_type,
+                    scale_address=address, scale_batch_barcode_prefix=batch_barcode_prefix,
+                )
+            )
+        else:
+            row.scale_online_enabled = online_enabled
+            row.scale_connection_type = connection_type
+            row.scale_address = address
+            row.scale_batch_barcode_prefix = batch_barcode_prefix
+        session.commit()
+
+
 def set_pos_receivable_dimension_defaults(
     company_id: int, cost_center_detail_account_id: int | None, project_detail_account_id: int | None,
 ) -> None:

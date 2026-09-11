@@ -2749,6 +2749,18 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.cancel_button.clicked.connect(self._cancel)
         self.footer_layout.addWidget(self.cancel_button)
 
+        # طبقِ رفعِ باگِ گزارش‌شده («سندِ بن‌بست -- نه ادیت می‌شه، نه حذف،
+        # نه ثبتِ‌نهایی»): تا پیش از این، تنها راهِ خروج از یک سندِ
+        # تاییدشده‌یِ گیرکرده (مثلاً به‌خاطرِ نبودِ انبار) لغوِ کاملِ آن
+        # بود. این دکمه سند را به پیش‌نویس برمی‌گرداند تا هدر (ازجمله
+        # انبار) دوباره کاملاً قابلِ‌ویرایش شود.
+        self.revert_button = QPushButton("↩️")
+        self.revert_button.setObjectName("iconButton")
+        self.revert_button.setFixedWidth(44)
+        self.revert_button.setToolTip("بازگشت به پیش‌نویس — سندِ تاییدشده دوباره کاملاً قابلِ‌ویرایش می‌شود (فقط پیش از تصویب/ثبتِ نهایی ممکن است)")
+        self.revert_button.clicked.connect(self._revert_to_draft)
+        self.footer_layout.addWidget(self.revert_button)
+
         # طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند»):
         # فقط برایِ فاکتورِ خرید/فروش نمایش داده می‌شود؛ فعال‌بودنش هم به
         # وضعیتِ POSTED هم به مجازبودنِ کاربر (نقشِ مدیر + تنظیمِ روشنِ
@@ -3879,6 +3891,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                     f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبتِ نهایی فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است.)"
                 )
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
+        self.revert_button.setEnabled(is_confirmed)
         self.pick_from_invoice_button.setEnabled(self._lines_are_editable())
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
         is_posted = self._status_code == "POSTED"
@@ -4642,6 +4655,25 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
         self._reset_form()
         theme.set_status_label(self.status_label, "سند لغو شد.", ok=True)
+
+    def _revert_to_draft(self) -> None:
+        if self._document_id is None:
+            return
+        confirm = QMessageBox.question(
+            self, "بازگشت به پیش‌نویس",
+            "این سندِ تاییدشده به پیش‌نویس برگردد؟ (هدر دوباره کاملاً قابلِ‌ویرایش می‌شود، ولی باید دوباره تایید شود.)",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        try:
+            documents_service.revert_to_draft(self._document_id, self._company_id())
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            QMessageBox.warning(self, "خطا در بازگشت به پیش‌نویس", str(exc))
+            return
+        self._load_document()
+        theme.set_status_label(self.status_label, "سند به پیش‌نویس بازگشت -- اکنون قابلِ‌ویرایش است.", ok=True)
 
     def _open_settlement_plan(self) -> None:
         if self._document_id is None:
