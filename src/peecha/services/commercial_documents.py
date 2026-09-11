@@ -32,7 +32,7 @@ from peecha.db.models.accounting import DetailAccount, FiscalYear, JournalEntryL
 from peecha.db.models.commercial import (
     Channel, CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation, PosSettings,
 )
-from peecha.db.models.inventory import Item, StockDocument
+from peecha.db.models.inventory import Item, StockDocument, Warehouse
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_credit as credit_service
 from peecha.services import commercial_pricing as pricing_service
@@ -1385,6 +1385,92 @@ def revert_to_draft(document_id: int, company_id: int) -> None:
         ).delete()
         doc.status_code = "DRAFT"
         session.commit()
+
+
+@dataclass
+class StockShortage:
+    item_id: int
+    item_label: str
+    warehouse_id: int
+    warehouse_label: str
+    shortage_qty: decimal.Decimal
+    base_uom_id: int
+
+
+def get_stock_shortages(document_id: int, company_id: int) -> list[StockShortage]:
+    """طبقِ درخواستِ صریح («وقتی هنگامِ تاییدِ سرپرست انبار موجودی ندارد،
+    اتوماتیک انتقالِ انبار صادر کند»): پیش از فراخوانیِ post_document
+    (بدونِ تلاشِ واقعی برایِ ثبتِ سندِ انبار، فقط خواندنِ موجودیِ فعلی)
+    کمبودِ هر ردیف را برمی‌گرداند تا فراخوان بتواند به‌جایِ شکستِ گنگِ
+    post_document در ادامه، پیش از آن یک سندِ انتقالِ جبرانی صادر کند."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        stock_document_type = _STOCK_DOC_TYPE_BY_TYPE.get(doc.document_type_code)
+        if stock_document_type not in ("ISSUE", "RETURN_OUT"):
+            return []
+        lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id)).all()
+        shortages: list[StockShortage] = []
+        for ln in lines:
+            effective_warehouse_id = ln.warehouse_id or doc.warehouse_id
+            if effective_warehouse_id is None:
+                continue
+            item = session.get(Item, ln.item_id)
+            if item is None or not item.is_stock_tracked:
+                continue
+            available = locations_service.get_available_quantity(ln.item_id, effective_warehouse_id)
+            if available >= ln.quantity_base:
+                continue
+            warehouse = session.get(Warehouse, effective_warehouse_id)
+            shortages.append(StockShortage(
+                item_id=ln.item_id, item_label=dimensions_service.get_detail_account_label(item.item_detail_account_id),
+                warehouse_id=effective_warehouse_id,
+                warehouse_label=warehouse.name if warehouse is not None else "?",
+                shortage_qty=ln.quantity_base - available, base_uom_id=item.base_uom_id,
+            ))
+        return shortages
+
+
+def create_compensating_transfer(company_id: int, user_id: int, shortage: StockShortage) -> int | None:
+    """برایِ یک ردیفِ کم‌موجود (خروجیِ get_stock_shortages)، اگر انبارِ
+    دیگری از همین شرکت موجودیِ کافی داشته باشد، یک سندِ TRANSFER
+    (تاییدشده، هنوز ثبتِ‌نهایی‌نشده) از آن انبار به انبارِ کم‌موجود
+    می‌سازد و شناسه‌اش را برمی‌گرداند -- ثبتِ‌نهاییِ واقعی (که موجودی را
+    واقعاً جابه‌جا می‌کند) با انباردار است. اگر هیچ انبارِ دیگری موجودیِ
+    کافی نداشت، هیچ سندی ساخته نمی‌شود و None برمی‌گردد."""
+    candidates = [
+        w for w in locations_service.list_warehouses(company_id, active_only=True)
+        if w.warehouse_id != shortage.warehouse_id
+    ]
+    best_warehouse_id = None
+    best_available = decimal.Decimal("0")
+    for warehouse in candidates:
+        available = locations_service.get_available_quantity(shortage.item_id, warehouse.warehouse_id)
+        if available > best_available:
+            best_available = available
+            best_warehouse_id = warehouse.warehouse_id
+    if best_warehouse_id is None or best_available < shortage.shortage_qty:
+        return None
+    header = inv_documents_service.DocumentHeaderFields(
+        source_warehouse_id=best_warehouse_id, destination_warehouse_id=shortage.warehouse_id,
+        description=(
+            f"انتقالِ خودکارِ جبرانِ کمبودِ موجودیِ «{shortage.item_label}» "
+            f"در انبارِ «{shortage.warehouse_label}» (طیِ تاییدِ سرپرستِ فروشِ حضوری)."
+        ),
+    )
+    transfer_doc_id = inv_documents_service.create_stock_document(
+        company_id, user_id, "TRANSFER", datetime.date.today(), header,
+    )
+    inv_documents_service.add_line(
+        transfer_doc_id, company_id,
+        inv_documents_service.LineFields(
+            item_id=shortage.item_id, uom_id=shortage.base_uom_id,
+            quantity=shortage.shortage_qty, quantity_base=shortage.shortage_qty,
+        ),
+    )
+    inv_documents_service.confirm_stock_document(transfer_doc_id, company_id)
+    return transfer_doc_id
 
 
 def cancel_document(document_id: int, company_id: int) -> None:

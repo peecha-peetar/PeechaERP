@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 
 from peecha.db.base import new_session
-from peecha.db.models.inventory import BinLocation, StockDocument, StockLedger, Warehouse, WarehouseUserAccess
+from peecha.db.models.inventory import BinLocation, StockBalance, StockDocument, StockLedger, Warehouse, WarehouseUserAccess
 
 DEFAULT_BIN_CODE = "GENERAL"
 DEFAULT_BIN_NAME = "مکانِ پیش‌فرض"
@@ -147,6 +147,20 @@ def get_default_warehouse(company_id: int) -> WarehouseRow | None:
         if r.fields.is_default:
             return r
     return rows[0] if rows else None
+
+
+def get_available_quantity(item_id: int, warehouse_id: int) -> decimal.Decimal:
+    """موجودیِ فعلیِ یک کالا در یک انبار (مجموعِ همه‌یِ مکان‌ها/بچ‌ها) —
+    فقط برایِ بررسیِ ازپیش/مشورتی (مثلاً «آیا برایِ صدورِ فاکتور کافی
+    است؟») است، نه جایگزینِ قفلِ ردیفیِ واقعیِ inventory_engine.py هنگامِ
+    ثبتِ‌نهایی؛ پس با شرایطِ رقابتی (race) می‌تواند کمی قدیمی باشد."""
+    with new_session() as session:
+        total = session.scalar(
+            select(func.sum(StockBalance.quantity_on_hand)).where(
+                StockBalance.item_id == item_id, StockBalance.warehouse_id == warehouse_id
+            )
+        )
+        return total or decimal.Decimal("0")
 
 
 def list_vehicles(company_id: int, active_only: bool = False) -> list[WarehouseRow]:

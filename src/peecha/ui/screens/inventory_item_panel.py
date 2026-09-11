@@ -258,16 +258,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.related_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.related_table.verticalHeader().setVisible(False)
         self.related_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.related_table.setMaximumHeight(120)
-        layout.addWidget(self.related_table)
+        self.related_table.setMinimumHeight(120)
+        layout.addWidget(self.related_table, stretch=1)
         remove_related_button = QPushButton("🗑️")
         remove_related_button.setObjectName("dangerIconButton")
         remove_related_button.setFixedWidth(44)
         remove_related_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
         remove_related_button.clicked.connect(self._remove_related_item)
         layout.addWidget(remove_related_button)
-
-        layout.addStretch(1)
         return tab
 
     # --- تبِ خرید -------------------------------------------------------------
@@ -303,8 +301,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.supplier_table.verticalHeader().setVisible(False)
         self.supplier_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.supplier_table.setMinimumHeight(160)
-        self.supplier_table.setMaximumHeight(220)
-        layout.addWidget(self.supplier_table)
+        layout.addWidget(self.supplier_table, stretch=1)
         remove_supplier_button = QPushButton("🗑️")
         remove_supplier_button.setObjectName("dangerIconButton")
         remove_supplier_button.setFixedWidth(44)
@@ -344,18 +341,15 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.item_codes_table.verticalHeader().setVisible(False)
         self.item_codes_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.item_codes_table.setMinimumHeight(180)
-        self.item_codes_table.setMaximumHeight(260)
         self.item_codes_table.setToolTip("برایِ ویرایش، رویِ ردیف دوبار کلیک کنید.")
         self.item_codes_table.cellDoubleClicked.connect(self._edit_item_supplier_code)
-        layout.addWidget(self.item_codes_table)
+        layout.addWidget(self.item_codes_table, stretch=1)
         remove_code_button = QPushButton("🗑️")
         remove_code_button.setObjectName("dangerIconButton")
         remove_code_button.setFixedWidth(44)
         remove_code_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
         remove_code_button.clicked.connect(self._remove_item_supplier_code)
         layout.addWidget(remove_code_button)
-
-        layout.addStretch(1)
         return tab
 
     # --- تبِ ویژگی‌ها و متغیرها --------------------------------------------------
@@ -966,6 +960,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             sku_field.setPlaceholderText("SKU/کدِ سایت")
             row.addWidget(sku_field, stretch=1)
             connect_button = QPushButton("🔗 اتصال/جست‌وجو")
+            connect_button.setObjectName("flatButton")
             connect_button.clicked.connect(lambda _checked=False, cid=connection.connection_id, field=sku_field: self._connect_ecommerce_mapping(cid, field))
             row.addWidget(connect_button)
             self.ecommerce_mapping_layout.addWidget(row_widget)

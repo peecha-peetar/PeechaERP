@@ -36,6 +36,7 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.ui import theme
 from peecha.ui.widgets import wrap_scrollable
 
 _PAYMENT_OPTIONS = [
@@ -195,6 +196,40 @@ class CommercialPosApprovalScreen(QWidget):
             return
         method_code = self.method_combo.currentData()
         company_id = self._company_id()
+        user_id = app_session.current_user.user_id
+
+        # طبقِ درخواستِ صریح («وقتی هنگامِ تاییدِ سرپرست انبار موجودی
+        # ندارد، اتوماتیک انتقالِ انبار صادر کند تا انباردار تاییدش
+        # کند»): پیش از هرگونه approve/post، هر فاکتورِ انتخاب‌شده از
+        # نظرِ کمبودِ موجودی بررسی می‌شود. فاکتورِ کم‌موجود این‌جا approve/
+        # post نمی‌شود (تا در post_document با شکستِ گنگ بن‌بست نشود) --
+        # فقط سندِ انتقالِ جبرانی (اگر انبارِ دیگری موجودیِ کافی داشت)
+        # صادر می‌شود و فاکتور همچنان CONFIRMED می‌ماند تا بعد از تاییدِ
+        # انباردار، سرپرست دوباره همین دکمه را برایِ آن بزند.
+        shortage_messages: list[str] = []
+        ready_for_approval = []
+        for doc in selected:
+            shortages = documents_service.get_stock_shortages(doc.document_id, company_id)
+            if not shortages:
+                ready_for_approval.append(doc)
+                continue
+            doc_label = doc.document_no or doc.document_id
+            for shortage in shortages:
+                transfer_doc_id = documents_service.create_compensating_transfer(company_id, user_id, shortage)
+                if transfer_doc_id is not None:
+                    shortage_messages.append(
+                        f"فاکتور #{doc_label}: کمبودِ «{shortage.item_label}» در انبارِ «{shortage.warehouse_label}» -- "
+                        f"سندِ انتقالِ انبار #{transfer_doc_id} صادر شد؛ پس از تاییدِ انباردار، دوباره تایید کنید."
+                    )
+                else:
+                    shortage_messages.append(
+                        f"فاکتور #{doc_label}: کمبودِ «{shortage.item_label}» در انبارِ «{shortage.warehouse_label}» -- "
+                        "هیچ انبارِ دیگری هم موجودیِ کافی ندارد؛ ابتدا موجودی را (رسید/تعدیل) تامین کنید."
+                    )
+        selected = ready_for_approval
+        if not selected:
+            theme.set_status_label(self.status_label, " | ".join(shortage_messages), ok=False)
+            return
 
         # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
         # روش‌ها را نمی‌تونه ثبت کنه»): فاکتورهایی که صندوق‌دار از دیالوگِ
@@ -259,7 +294,6 @@ class CommercialPosApprovalScreen(QWidget):
             self.status_label.setText("کدِ کارتِ‌هدیه را وارد کنید.")
             return
 
-        user_id = app_session.current_user.user_id
         reference = self.reference_field.text().strip() or None
         try:
             for doc in selected:
@@ -292,6 +326,9 @@ class CommercialPosApprovalScreen(QWidget):
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
-        self.status_label.setText("")
+        if shortage_messages:
+            theme.set_status_label(self.status_label, " | ".join(shortage_messages), ok=False)
+        else:
+            self.status_label.setText("")
         self.reference_field.clear()
         self.refresh()
