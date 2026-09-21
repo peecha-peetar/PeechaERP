@@ -50,7 +50,7 @@ from peecha.services import item_variants as variants_service
 from peecha.services import pos_scale as scale_service
 from peecha.ui.screens.commercial_document import STATUS_LABELS, _LineDialog, _SettlementPlanDialog, _show_invoice_print
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 _DEFAULT_QUICK_BUTTON_COLOR = "#4A90D9"
 _POS_PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه", "MIXED": "ترکیبی"}
@@ -177,7 +177,7 @@ class _QuickAccessButton(QPushButton):
         event.acceptProposedAction()
 
 
-class CommercialPosSaleScreen(QWidget):
+class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window=None) -> None:
         super().__init__()
         self._main_window = main_window
@@ -421,6 +421,17 @@ class CommercialPosSaleScreen(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(wrap_scrollable(page))
+
+        self.set_field_help([
+            (self.terminal_combo, "ترمینالِ صندوقی که این فروش رویش ثبت می‌شود -- انبارِ پیش‌فرضِ همین ترمینال، انبارِ خودِ فاکتور هم می‌شود."),
+            (self.customer_combo, "مشتریِ این فاکتور. برایِ فروشِ نقدیِ ناشناس هم مشتریِ عمومیِ پیش‌فرض را انتخاب کنید."),
+            (self.price_list_combo, "فهرستِ قیمتی که بهایِ پیشنهادیِ هر کالا از رویِ آن خوانده می‌شود -- خالی یعنی فهرستِ پیش‌فرضِ شرکت."),
+            (
+                self.tax_exempt_checkbox,
+                "با روشن‌کردنش، مالیاتِ همه‌یِ ردیف‌هایِ همین فاکتور -- ازپیش‌ثبت‌شده و تازه -- بلافاصله صفر می‌شود؛ خاموش‌کردنش خودش مالیاتِ قبلی را برنمی‌گرداند.",
+            ),
+            (self.scan_field, "بارکد را با دستگاه اسکن کنید یا کد/نامِ کالا را تایپ و Enter بزنید -- با یک اسکنِ دیگرِ همان کالا، فقط تعدادِ همان ردیف زیاد می‌شود."),
+        ])
 
     def _apply_quick_access_position(self, position: str) -> None:
         if position == self._quick_access_position and self._content_splitter.count() == 2:

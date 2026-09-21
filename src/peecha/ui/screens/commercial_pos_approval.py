@@ -45,7 +45,7 @@ from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui import theme
-from peecha.ui.widgets import wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه...»): فروشِ ثبت‌شده
 # با دیالوگِ «نحوهٔ تسویه» (چندروشی: نقد/بانک/تخفیف/کالابرگ/بن) برچسبِ
@@ -54,7 +54,7 @@ from peecha.ui.widgets import wrap_scrollable
 _PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه", "MIXED": "ترکیبی"}
 
 
-class CommercialPosApprovalScreen(QWidget):
+class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._documents: list = []
@@ -125,6 +125,14 @@ class CommercialPosApprovalScreen(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(wrap_scrollable(page))
+
+        self.set_field_help([
+            (self.reference_field, "اختیاری -- مثلاً شمارهٔ پیگیریِ بانک؛ رویِ همه‌یِ فاکتورهایِ تسویه‌شده در همین دسته اعمال می‌شود."),
+            (
+                self.merge_checkbox,
+                "وقتی روشن است و چند فاکتورِ هم‌طرفِ‌حساب انتخاب شده باشند، فقط یک سندِ حسابداریِ واحد برایِ مجموع ساخته می‌شود -- خودِ فاکتورها جدا می‌مانند.",
+            ),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
