@@ -639,6 +639,12 @@ def update_item(
                 variant.track_serial = fields.track_serial
                 variant.track_batch = fields.track_batch
                 variant.track_expiry = fields.track_expiry
+                # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («درصدِ مالیاتِ کالایِ مادر
+                # برایِ متغیرها محاسبه نمی‌شود»): default_tax_percent هم باید
+                # مثلِ فیلدهایِ ساختاریِ بالا، هر بار ویرایشِ کالایِ اصلی، به
+                # همه‌یِ متغیرهایش سرایت کند -- وگرنه تغییرِ بعدیِ مالیات رویِ
+                # کالایِ مادر، برایِ متغیرهایِ ازپیش‌ساخته‌شده اثر نمی‌کند.
+                variant.default_tax_percent = fields.default_tax_percent
                 variant.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
         session.commit()

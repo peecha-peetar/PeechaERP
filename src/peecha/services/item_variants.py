@@ -420,6 +420,12 @@ def generate_item_variants(
             is_sellable=parent.is_sellable, is_purchasable=parent.is_purchasable,
             is_stock_tracked=parent.is_stock_tracked, track_serial=parent.track_serial,
             track_batch=parent.track_batch, track_expiry=parent.track_expiry,
+            # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («درصدِ مالیاتِ کالایِ مادر برایِ
+            # متغیرها محاسبه نمی‌شود»): متغیرها ردیفِ inv.items کاملاً
+            # مستقلی هستند، پس بدونِ این خط، default_tax_percent‌شان خالی
+            # می‌ماند و resolve_default_tax_percent (وقتی شرکت/انبار هم
+            # مالیاتِ خاصی تنظیم نکرده باشند) به صفر سقوط می‌کند.
+            default_tax_percent=parent.default_tax_percent,
         )
         variant_item_id = catalog_service.create_item(
             company_id, technical_detail_code, variant_name or parent_detail.code, variant_fields,
