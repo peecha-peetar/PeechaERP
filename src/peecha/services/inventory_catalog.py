@@ -45,6 +45,7 @@ from peecha.db.models.inventory import (
     StockDocumentLine,
     StockReservation,
     Uom,
+    Warehouse,
 )
 from peecha.services import detail_dimensions as dimensions_service
 
@@ -406,17 +407,24 @@ def get_item_row_by_detail_account_id(company_id: int, item_detail_account_id: i
     )
 
 
-def resolve_default_tax_percent(company_id: int, item_id: int) -> decimal.Decimal:
-    """طبقِ درخواستِ صریح: درصدِ مالیاتِ پیش‌فرضِ ردیفِ سند با اولویت خوانده
-    می‌شود — اول خودِ کالا (Item.default_tax_percent)، اگر خالی بود
-    تنظیماتِ کلیِ شرکت (Company.default_tax_percent)، در نهایت صفر."""
+def resolve_default_tax_percent(company_id: int, item_id: int, warehouse_id: int | None = None) -> decimal.Decimal:
+    """طبقِ درخواستِ صریحِ کاربر («سیاستِ محاسبهٔ مالیات: اگر رویِ تنظیماتِ
+    شرکت بود برایِ همه لحاظ کند، اگر شرکت تنظیم نداشت رویِ انبار، و اگر
+    انبار نداشت رویِ کالا نگاه کند»): اولویت -- اول تنظیماتِ کلیِ شرکت
+    (Company.default_tax_percent)، اگر خالی بود انبار (Warehouse.
+    default_tax_percent)، اگر آن هم خالی بود خودِ کالا (Item.
+    default_tax_percent)، در نهایت صفر."""
     with new_session() as session:
-        item = session.get(Item, item_id)
-        if item is not None and item.default_tax_percent is not None:
-            return item.default_tax_percent
         company = session.get(Company, company_id)
         if company is not None and company.default_tax_percent is not None:
             return company.default_tax_percent
+        if warehouse_id is not None:
+            warehouse = session.get(Warehouse, warehouse_id)
+            if warehouse is not None and warehouse.default_tax_percent is not None:
+                return warehouse.default_tax_percent
+        item = session.get(Item, item_id)
+        if item is not None and item.default_tax_percent is not None:
+            return item.default_tax_percent
         return decimal.Decimal(0)
 
 

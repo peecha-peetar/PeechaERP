@@ -451,6 +451,10 @@ class Warehouse(Base):
     profit_center_detail_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("acc.detail_accounts.detail_account_id")
     )
+    # طبقِ درخواستِ صریح («سیاستِ مالیات: شرکت -> انبار -> کالا»): اگر
+    # تنظیماتِ کلیِ شرکت (Company.default_tax_percent) خالی باشد، این
+    # مقدار پیش از سراغِ‌رفتن به Item.default_tax_percent بررسی می‌شود.
+    default_tax_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     # توضیحات
     notes: Mapped[str | None] = mapped_column(Text)
     # طبقِ درخواستِ صریح («خودرو به‌عنوانِ انبارِ سیار» -- ماژولِ پخشِ گرم):

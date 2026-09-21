@@ -67,6 +67,16 @@ def _set_combo(combo: QComboBox, value) -> None:
     combo.setCurrentIndex(max(0, combo.findData(value)))
 
 
+def _decimal_or_none(text: str) -> decimal.Decimal | None:
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        return decimal.Decimal(text)
+    except decimal.InvalidOperation:
+        return None
+
+
 class _BinLocationDialog(QDialog):
     def __init__(self, parent: QWidget, existing_bins: list[locations_service.BinLocationRow]) -> None:
         super().__init__(parent)
@@ -399,12 +409,21 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for code, label in _WITHDRAWAL_POLICY_LABELS.items():
             self.withdrawal_policy_combo.addItem(label, code)
 
+        # طبقِ درخواستِ صریح («سیاستِ مالیات: شرکت -> انبار -> کالا»): اگر
+        # تنظیماتِ کلیِ شرکت خالی باشد، پیش از سراغِ‌رفتن به مالیاتِ خودِ
+        # کالا، این مقدار بررسی می‌شود.
+        self.default_tax_percent_field = QLineEdit()
+
         self.stock_control_grid = FieldGrid([
             FieldSpec("costing_method", "روشِ قیمت‌گذاری", self.costing_method_combo, span=1),
             FieldSpec("min_qty", "حداقلِ موجودی (پیش‌فرض)", self.min_qty_field, span=1),
             FieldSpec("max_qty", "حداکثرِ موجودی (پیش‌فرض)", self.max_qty_field, span=1),
             FieldSpec("reorder_point", "نقطهٔ‌سفارش (پیش‌فرض)", self.reorder_point_field, span=1),
-            FieldSpec("withdrawal_policy", "سیاستِ برداشت", self.withdrawal_policy_combo, span=2),
+            FieldSpec("withdrawal_policy", "سیاستِ برداشت", self.withdrawal_policy_combo, span=1),
+            FieldSpec(
+                "default_tax_percent", "درصدِ مالیاتِ پیش‌فرض (خالی = سراغِ مالیاتِ کالا)",
+                self.default_tax_percent_field, span=1,
+            ),
         ])
         layout.addWidget(self.stock_control_grid)
         layout.addStretch(1)
@@ -890,6 +909,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_qty_field.setValue(float(f.default_max_qty or 0))
         self.reorder_point_field.setValue(float(f.default_reorder_point_qty or 0))
         _set_combo(self.withdrawal_policy_combo, f.withdrawal_policy_code)
+        self.default_tax_percent_field.setText(str(f.default_tax_percent) if f.default_tax_percent is not None else "")
 
         # کیفیت
         self.requires_qc_checkbox.setChecked(f.requires_qc)
@@ -986,6 +1006,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_qty_field.setValue(0)
         self.reorder_point_field.setValue(0)
         self.withdrawal_policy_combo.setCurrentIndex(0)
+        self.default_tax_percent_field.clear()
 
         self.requires_qc_checkbox.setChecked(False)
         self.requires_quarantine_checkbox.setChecked(False)
@@ -1075,6 +1096,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 decimal.Decimal(str(self.reorder_point_field.value())) if self.reorder_point_field.value() else None
             ),
             withdrawal_policy_code=self.withdrawal_policy_combo.currentData(),
+            default_tax_percent=_decimal_or_none(self.default_tax_percent_field.text()),
             requires_qc=self.requires_qc_checkbox.isChecked(),
             requires_quarantine=self.requires_quarantine_checkbox.isChecked(),
             default_quarantine_warehouse_id=self.quarantine_warehouse_combo.currentData(),

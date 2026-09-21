@@ -328,6 +328,8 @@ class DocumentHeaderFields:
     # پیش‌فرضِ سراسریِ شرکت پیروی کن؛ "OFFICIAL"/"INFORMAL" یعنی override
     # رویِ همین سند.
     tax_posting_mode: str | None = None
+    # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»).
+    tax_exempt: bool = False
 
 
 def create_document(
@@ -367,7 +369,7 @@ def create_document(
             cost_center_detail_account_id=fields.cost_center_detail_account_id,
             project_detail_account_id=fields.project_detail_account_id,
             reference_no=(fields.reference_no or None), description=(fields.description or None),
-            tax_posting_mode=fields.tax_posting_mode,
+            tax_posting_mode=fields.tax_posting_mode, tax_exempt=fields.tax_exempt,
             created_by_user_id=created_by_user_id,
         )
         session.add(doc)
@@ -918,6 +920,28 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
         session.commit()
 
 
+def set_tax_exempt(document_id: int, company_id: int, tax_exempt: bool) -> None:
+    """طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): روشن‌کردنِ
+    این پرچم بلافاصله مالیاتِ همه‌یِ ردیف‌هایِ ازپیش‌ثبت‌شده را هم صفر
+    می‌کند (نه فقط ردیف‌هایِ بعدی) -- چون «کنسل‌کردنِ مالیاتِ فاکتور»
+    یعنی کلِ فاکتور، نه فقط ردیف‌هایِ آینده‌اش. خاموش‌کردن، خودش مالیاتِ
+    قبلی را بازنمی‌گرداند (چون آن مقدار دیگر نگه‌داری نشده) -- کاربر
+    باید مالیاتِ لازم را دوباره رویِ ردیف‌ها وارد کند."""
+    with new_session() as session:
+        doc = _get_editable_document(session, document_id, company_id)
+        doc.tax_exempt = tax_exempt
+        if tax_exempt:
+            lines = session.scalars(
+                select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id)
+            ).all()
+            for line in lines:
+                line.tax_percent = _ZERO
+                line.tax_amount = _ZERO
+            session.flush()
+            _recompute_header_totals(session, document_id)
+        session.commit()
+
+
 def get_document(document_id: int, company_id: int) -> tuple[CommercialDocument, list[CommercialDocumentLine]]:
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
@@ -1099,6 +1123,11 @@ def add_line(
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
         doc = _get_editable_document(session, document_id, company_id)
+        # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): وقتی
+        # سند معاف از مالیات علامت‌گذاری شده، هیچ ردیفِ تازه‌ای -- صرفِ‌نظر
+        # از درصدِ رسیده از پارامتر/سیاستِ اولویتی -- نباید مالیات بگیرد.
+        if doc.tax_exempt:
+            tax_percent = _ZERO
         # طبقِ درخواستِ صریح («کالایِ اصلیِ دارایِ متغیر نباید مستقیم در
         # سند ثبت شود»، خرید و فروش هردو): این چک قبلاً فقط در UIِ
         # commercial_document.py (کمبویِ کالا/دیالوگِ ردیف) رعایت
@@ -1204,7 +1233,9 @@ def update_line(
     if quantity <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
     with new_session() as session:
-        _get_editable_document(session, document_id, company_id)
+        doc = _get_editable_document(session, document_id, company_id)
+        if doc.tax_exempt:
+            tax_percent = _ZERO
         line = session.get(CommercialDocumentLine, line_id)
         if line is None or line.document_id != document_id:
             raise ValueError("ردیف نامعتبر است.")

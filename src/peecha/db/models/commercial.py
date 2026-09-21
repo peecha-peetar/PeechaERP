@@ -459,6 +459,10 @@ class CommercialDocument(Base):
     # پیش‌فرضِ سراسریِ شرکت (Feature Toggleِ INFORMAL_TAX_POSTING) پیروی
     # کن؛ OFFICIAL/INFORMAL یعنی override رویِ همین سند.
     tax_posting_mode: Mapped[str | None] = mapped_column(String(10))
+    # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): وقتی
+    # True است، سند از سیاستِ اولویتیِ شرکت/انبار/کالا معاف است -- همه‌یِ
+    # ردیف‌ها با مالیاتِ صفر ثبت/محاسبه می‌شوند.
+    tax_exempt: Mapped[bool] = mapped_column(default=False)
     subtotal_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     discount_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     tax_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)

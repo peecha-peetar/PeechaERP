@@ -1294,7 +1294,9 @@ class _LineDialog(LayoutEditMixin, QDialog):
         item_id = self._selected_item_id()
         if item_id is None:
             return
-        default_tax = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
+        default_tax = catalog_service.resolve_default_tax_percent(
+            self._company_id, item_id, self._effective_warehouse_id()
+        )
         self.tax_percent_field.setValue(float(default_tax))
         self._price_manually_edited = False
         self._suggest_price()
@@ -1516,7 +1518,9 @@ class _LineDialog(LayoutEditMixin, QDialog):
             # روشنِ add_line («قیمتی تعریف نشده») نمایش داده شود.
             row_price = self._variant_table_price(row)
             unit_price = row_price if row_price > 0 else None
-            tax_percent = catalog_service.resolve_default_tax_percent(self._company_id, item_id)
+            tax_percent = catalog_service.resolve_default_tax_percent(
+                self._company_id, item_id, warehouse_id or self._default_warehouse_id
+            )
             results.append({
                 "item_id": item_id,
                 "uom_id": item.base_uom_id if item else 0,
@@ -2461,6 +2465,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         row2_grid.addWidget(self.tax_posting_mode_box, 0, 7, 2, 1)
         self.tax_posting_mode_box.setVisible(self._supports_tax_posting_mode)
 
+        # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): برایِ
+        # سندِ ازپیش‌ذخیره‌شده، تغییرِ این تیک بلافاصله (بدونِ نیازِ ذخیرهٔ
+        # هدر) اعمال می‌شود -- چون باید مالیاتِ ردیف‌هایِ ازپیش‌ثبت‌شده را
+        # هم صفر کند؛ برایِ سندِ تازه (هنوز ذخیره‌نشده)، فقط در _header_
+        # fields() لحاظ می‌شود.
+        self.tax_exempt_checkbox = QCheckBox("معافیتِ مالیاتی")
+        self.tax_exempt_checkbox.toggled.connect(self._on_tax_exempt_toggled)
+        row2_grid.addWidget(self.tax_exempt_checkbox, 0, 8, 2, 1)
+
         row2_grid.setColumnStretch(0, 1)
         row2_grid.setColumnStretch(1, 1)
         row2_grid.setColumnStretch(2, 2)
@@ -3076,6 +3089,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
         self.tax_posting_mode_combo.setCurrentIndex(max(0, self.tax_posting_mode_combo.findData(doc.tax_posting_mode)))
+        self.tax_exempt_checkbox.blockSignals(True)
+        self.tax_exempt_checkbox.setChecked(doc.tax_exempt)
+        self.tax_exempt_checkbox.blockSignals(False)
         # طبقِ رفعِ باگِ واقعی («سندِ بهایِ تمام‌شده/موجودی انجام نمی‌شود»
         # — درواقع انجام می‌شد، فقط دیده نمی‌شد): برایِ SALES_INVOICE دو
         # سندِ حسابداریِ کاملاً جدا ساخته می‌شود (طبقِ اصلِ همین فایل، بالایِ
@@ -3455,7 +3471,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         if company_id is None:
             return
-        default_tax = catalog_service.resolve_default_tax_percent(company_id, item_id)
+        default_tax = catalog_service.resolve_default_tax_percent(
+            company_id, item_id, self.warehouse_combo.currentData()
+        )
         widgets["tax"].setValue(float(default_tax))
         counterparty_id = self.counterparty_combo.currentData()
         if counterparty_id is None:
@@ -3937,6 +3955,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.reference_field.clear()
         self.description_field.clear()
         self.tax_posting_mode_combo.setCurrentIndex(0)
+        self.tax_exempt_checkbox.blockSignals(True)
+        self.tax_exempt_checkbox.setChecked(False)
+        self.tax_exempt_checkbox.blockSignals(False)
         for key in ("subtotal", "discount_tax", "grand_total"):
             self.summary_cards.set_value(key, "۰")
         self._refresh_lines_table()
@@ -4018,6 +4039,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             reference_no=self.reference_field.text().strip() or None,
             description=self.description_field.text().strip() or None,
             tax_posting_mode=self.tax_posting_mode_combo.currentData() if self._supports_tax_posting_mode else None,
+            tax_exempt=self.tax_exempt_checkbox.isChecked(),
         )
 
     def _save_header(self) -> None:
@@ -4055,6 +4077,25 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self._document_id is None:
             self._save_header()
         return self._document_id is not None
+
+    def _on_tax_exempt_toggled(self, checked: bool) -> None:
+        # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): سندِ
+        # هنوز ذخیره‌نشده ردیفی ندارد که مالیاتش را صفر کند -- فقط در
+        # _header_fields() لحاظ می‌شود و با ذخیره‌یِ هدر به سرور می‌رسد.
+        if self._document_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            documents_service.set_tax_exempt(self._document_id, company_id, checked)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            self.tax_exempt_checkbox.blockSignals(True)
+            self.tax_exempt_checkbox.setChecked(not checked)
+            self.tax_exempt_checkbox.blockSignals(False)
+            return
+        self._load_document()
 
     def _flush_header_changes(self) -> bool:
         """طبقِ گزارشِ صریح («نوعِ ثبت را عوض می‌کنم ولی اثر نمی‌کند»):

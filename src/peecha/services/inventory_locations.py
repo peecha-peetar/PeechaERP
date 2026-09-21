@@ -92,6 +92,7 @@ class WarehouseFields:
     scrap_warehouse_id: int | None = None
     # مالی
     profit_center_detail_account_id: int | None = None
+    default_tax_percent: decimal.Decimal | None = None
     # توضیحات
     notes: str | None = None
     # طبقِ درخواستِ صریح («خودرو به‌عنوانِ انبارِ سیار» -- ماژولِ پخشِ گرم):

@@ -16,6 +16,7 @@ from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
     QCompleter,
     QDialog,
@@ -184,6 +185,7 @@ class CommercialPosSaleScreen(QWidget):
         self._document_id: int | None = None
         self._lines: list = []
         self._is_confirmed = False
+        self._current_warehouse_id: int | None = None
         self._cashier_settings: pos_service.PosCashierSettings | None = None
         self._quick_button_settings: tuple[int, int, int, int] = (110, 64, 10, 6)
         self._pos_settings: pos_service.PosSettings | None = None
@@ -261,6 +263,10 @@ class CommercialPosSaleScreen(QWidget):
         header_row.addWidget(QLabel("فهرستِ قیمت"))
         self.price_list_combo = QComboBox()
         header_row.addWidget(self.price_list_combo, stretch=1)
+        # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»).
+        self.tax_exempt_checkbox = QCheckBox("معافیتِ مالیاتی")
+        self.tax_exempt_checkbox.toggled.connect(self._on_tax_exempt_toggled)
+        header_row.addWidget(self.tax_exempt_checkbox)
         outer.addWidget(self.header_widget)
 
         self.summary_label = QLabel("")
@@ -864,7 +870,12 @@ class CommercialPosSaleScreen(QWidget):
         self._document_id = None
         self._lines = []
         self._is_confirmed = False
+        self._current_warehouse_id = None
         self._remembered_settlement = None
+        self.tax_exempt_checkbox.blockSignals(True)
+        self.tax_exempt_checkbox.setChecked(False)
+        self.tax_exempt_checkbox.blockSignals(False)
+        self.tax_exempt_checkbox.setEnabled(True)
         self._refresh_lines_table()
         self.subtotal_label.setText("جمعِ اقلام: ۰")
         self.discount_label.setText("تخفیف: ۰")
@@ -1053,19 +1064,43 @@ class CommercialPosSaleScreen(QWidget):
             return False
         terminal_id = self.terminal_combo.currentData()
         terminal = next((t for t in pos_service.list_terminals(company_id) if t.terminal_id == terminal_id), None)
+        warehouse_id = terminal.warehouse_id if terminal else None
         try:
             self._document_id = documents_service.create_document(
                 company_id, app_session.current_user.user_id, "SALES_INVOICE", datetime.date.today(),
                 documents_service.DocumentHeaderFields(
                     counterparty_detail_account_id=customer_id, currency_id=app_session.current_company.base_currency_id,
-                    warehouse_id=terminal.warehouse_id if terminal else None,
+                    warehouse_id=warehouse_id,
                     price_list_id=self.price_list_combo.currentData(), pos_session_id=session_id,
                 ),
             )
+            self._current_warehouse_id = warehouse_id
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return False
         return True
+
+    def _on_tax_exempt_toggled(self, checked: bool) -> None:
+        # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): اگر
+        # هنوز هیچ سندی ساخته نشده (کاربر پیش از افزودنِ اولین کالا این
+        # تیک را زده)، ابتدا سندِ پیش‌نویس ساخته می‌شود.
+        if self._is_confirmed:
+            return
+        if not self._ensure_document():
+            self.tax_exempt_checkbox.blockSignals(True)
+            self.tax_exempt_checkbox.setChecked(not checked)
+            self.tax_exempt_checkbox.blockSignals(False)
+            return
+        company_id = self._company_id()
+        try:
+            documents_service.set_tax_exempt(self._document_id, company_id, checked)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            self.tax_exempt_checkbox.blockSignals(True)
+            self.tax_exempt_checkbox.setChecked(not checked)
+            self.tax_exempt_checkbox.blockSignals(False)
+            return
+        self._load_document()
 
     def _add_item_to_cart(
         self, item: catalog_service.ItemRow, quantity: decimal.Decimal, unit_price: decimal.Decimal | None = None,
@@ -1118,7 +1153,9 @@ class CommercialPosSaleScreen(QWidget):
                 # واردِ فرمِ ردیف می‌شد اعمال می‌شد.
                 documents_service.add_line(
                     self._document_id, company_id, item.item_id, item.base_uom_id, quantity, quantity, unit_price=unit_price,
-                    tax_percent=catalog_service.resolve_default_tax_percent(company_id, item.item_id),
+                    tax_percent=catalog_service.resolve_default_tax_percent(
+                        company_id, item.item_id, self._current_warehouse_id
+                    ),
                 )
         except ValueError as exc:
             self.status_label.setText(str(exc))
@@ -1135,6 +1172,11 @@ class CommercialPosSaleScreen(QWidget):
         doc, lines = documents_service.get_document(self._document_id, self._company_id())
         self._lines = lines
         self._is_confirmed = doc.status_code != "DRAFT"
+        self._current_warehouse_id = doc.warehouse_id
+        self.tax_exempt_checkbox.blockSignals(True)
+        self.tax_exempt_checkbox.setChecked(doc.tax_exempt)
+        self.tax_exempt_checkbox.blockSignals(False)
+        self.tax_exempt_checkbox.setEnabled(not self._is_confirmed)
         self._refresh_lines_table()
         self.subtotal_label.setText(f"جمعِ اقلام: {numerals.format_company_amount(doc.subtotal_amount)}")
         self.discount_label.setText(f"تخفیف: {numerals.format_company_amount(doc.discount_amount)}")
