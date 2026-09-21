@@ -23,13 +23,13 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import commercial_cms as cms_service
 from peecha.ui import theme
-from peecha.ui.widgets import LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, LayoutEditMixin, wrap_scrollable
 
 _PLATFORM_LABELS = {"WORDPRESS": "وردپرس"}
 _ARTICLE_STATUS_LABELS = {"DRAFT": "پیش‌نویس", "PUBLISHED": "منتشرشده", "FAILED": "ناموفق"}
 
 
-class CommercialCmsScreen(LayoutEditMixin, QWidget):
+class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._connections: list = []
@@ -46,6 +46,17 @@ class CommercialCmsScreen(LayoutEditMixin, QWidget):
         tabs.addTab(self._build_connections_tab(), "اتصالاتِ وردپرس")
         tabs.addTab(self._build_articles_tab(), "مقالات")
         outer.addWidget(tabs, stretch=1)
+
+        self.set_field_help([
+            (self.cms_platform_combo, "سامانهٔ مدیریتِ محتوایی که به آن وصل می‌شوید."),
+            (self.cms_name_field, "نامِ نمایشیِ این اتصال، فقط برایِ تشخیصِ خودتان."),
+            (self.cms_site_url_field, "آدرسِ کاملِ سایتِ وردپرس."),
+            (self.cms_username_field, "نامِ‌کاربریِ وردپرس."),
+            (self.cms_app_password_field, "Application Passwordِ وردپرس (نه رمزِ اصلیِ ورود)."),
+            (self.article_connection_combo, "اتصالی که این مقاله رویِ آن منتشر می‌شود."),
+            (self.article_title_field, "عنوانِ مقاله."),
+            (self.article_body_field, "متنِ کاملِ مقاله -- می‌تواند شاملِ HTML باشد."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

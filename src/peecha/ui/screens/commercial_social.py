@@ -25,13 +25,13 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import commercial_social as social_service
 from peecha.ui import theme
-from peecha.ui.widgets import JalaliDateEdit, LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin, wrap_scrollable
 
 _PLATFORM_LABELS = {"TELEGRAM": "تلگرام", "BALE": "بله"}
 _POST_STATUS_LABELS = {"SCHEDULED": "زمان‌بندی‌شده", "SENT": "ارسال‌شده", "FAILED": "ناموفق", "CANCELED": "لغوشده"}
 
 
-class CommercialSocialScreen(LayoutEditMixin, QWidget):
+class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._connections: list = []
@@ -48,6 +48,19 @@ class CommercialSocialScreen(LayoutEditMixin, QWidget):
         tabs.addTab(self._build_connections_tab(), "اتصالاتِ تلگرام/بله")
         tabs.addTab(self._build_calendar_tab(), "تقویمِ محتوا")
         outer.addWidget(tabs, stretch=1)
+
+        self.set_field_help([
+            (self.social_platform_combo, "پیام‌رسانی که به آن وصل می‌شوید."),
+            (self.social_name_field, "نامِ نمایشیِ این اتصال، فقط برایِ تشخیصِ خودتان."),
+            (self.social_chat_id_field, "شناسهٔ کانال/چتی که پست‌ها در آن ارسال می‌شوند."),
+            (self.social_token_field, "توکنِ باتِ تلگرام/بله -- رمزنگاری‌شده ذخیره می‌شود."),
+            (self.ai_api_key_field, "کلیدِ APIِ Gemini -- برایِ تولیدِ خودکارِ متنِ پست از رویِ عنوان."),
+            (self.post_connection_combo, "اتصالی که این پست در آن منتشر می‌شود."),
+            (self.post_date_field, "تاریخِ زمان‌بندی‌شده برایِ ارسالِ پست."),
+            (self.post_time_field, "ساعتِ زمان‌بندی‌شده برایِ ارسالِ پست."),
+            (self.post_title_field, "عنوانِ پست -- هم برایِ نمایش، هم به‌عنوانِ موضوعِ تولیدِ خودکار."),
+            (self.post_body_field, "متنِ کاملِ پست -- می‌توانید با دکمهٔ ✨ از رویِ عنوان خودکار تولید کنید."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

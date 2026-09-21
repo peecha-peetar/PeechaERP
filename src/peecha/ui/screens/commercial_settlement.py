@@ -56,7 +56,7 @@ from peecha.ui.screens.treasury_voucher import _describe_invoice_settlement
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
 from peecha.ui.screens.treasury_voucher import _EnterComboBox
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _VOUCHER_NAV_CODE_BY_INVOICE_TYPE = {"SALES_INVOICE": "TREASURY_RECEIPT", "PURCHASE_INVOICE": "TREASURY_PAYMENT"}
 _INVOICE_EDIT_NAV_CODE_BY_TYPE = {"SALES_INVOICE": "SALES_INVOICE", "PURCHASE_INVOICE": "PURCH_INVOICE"}
@@ -67,7 +67,7 @@ _INVOICE_COLUMNS = ["شماره", "طرفِ‌حساب", "موعدِ تسویه"
 _SETTLEMENT_COLUMNS = ["تاریخ", "مبلغ", "سندِ حسابداری", "شمارهٔ مرجع", "توضیح", "عملیات"]
 
 
-class InvoiceSettlementScreen(QWidget):
+class InvoiceSettlementScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window, invoice_type: str) -> None:
         super().__init__()
         self._main_window = main_window
@@ -238,6 +238,22 @@ class InvoiceSettlementScreen(QWidget):
         self.settlement_table.verticalHeader().setVisible(False)
         self.settlement_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         layout.addWidget(self.settlement_table, stretch=1)
+
+        self.set_field_help([
+            (self.counterparty_filter_combo, "فقط فاکتورهایِ همین طرفِ‌حساب نشان داده شوند."),
+            (self.item_filter_combo, "فقط فاکتورهایی که شاملِ همین کالا هستند نشان داده شوند."),
+            (self.date_filter_checkbox, "فیلترِ بازه‌یِ تاریخِ سند را فعال/غیرِفعال می‌کند."),
+            (self.date_from_field, "ابتدایِ بازه‌یِ تاریخِ سند."),
+            (self.date_to_field, "انتهایِ بازه‌یِ تاریخِ سند."),
+            (self.due_status_filter_combo, "فقط فاکتورهایِ معوقه یا نزدیک‌به‌سررسید نشان داده شوند."),
+            (
+                self.voucher_combo,
+                "برایِ صدورِ سندِ تازه (پیشنهادی)، همین گزینه را نگه دارید؛ اگر سندی از قبل ثبت شده، آن را انتخاب کنید تا فقط رفرنس داده شود.",
+            ),
+            (self.settlement_date_field, "تاریخِ ثبتِ این تسویه."),
+            (self.reference_field, "شماره/مرجعِ دلخواه برایِ این تسویه -- اختیاری."),
+            (self.description_field, "توضیحِ این تسویه."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

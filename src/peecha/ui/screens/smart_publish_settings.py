@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import smart_publish as smart_publish_service
 from peecha.ui import theme
-from peecha.ui.widgets import LayoutEditMixin
+from peecha.ui.widgets import FieldHelpMixin, LayoutEditMixin
 
 _POSITION_LABELS = {
     "bottom-right": "پایین راست", "bottom-left": "پایین چپ",
@@ -34,7 +34,7 @@ _POSITION_LABELS = {
 _SOURCE_LABELS = {"item_code": "کدِ کالا", "item_name": "نامِ کالا"}
 
 
-class SmartPublishSettingsScreen(LayoutEditMixin, QWidget):
+class SmartPublishSettingsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         outer = QVBoxLayout(self)
@@ -110,6 +110,15 @@ class SmartPublishSettingsScreen(LayoutEditMixin, QWidget):
         self.status_label.setObjectName("statusError")
         outer.addWidget(self.status_label)
         outer.addStretch(1)
+
+        self.set_field_help([
+            (self.opacity_field, "شفافیتِ واترمارک -- ۰ یعنی نامرئی، ۱ یعنی کاملاً کدر."),
+            (self.scale_field, "اندازهٔ واترمارک نسبت به عرضِ خودِ عکس."),
+            (self.position_combo, "گوشه/جایگاهی از عکس که واترمارک رویش قرار می‌گیرد."),
+            (self.stamp_checkbox, "کد یا نامِ کالا به‌صورتِ متن رویِ خودِ عکس حک شود."),
+            (self.stamp_source_combo, "کدامین اطلاعاتِ کالا (کد یا نام) رویِ عکس حک شود."),
+            (self.quality_field, "کیفیتِ فشرده‌سازیِ خروجیِ WebP -- عددِ بالاتر یعنی کیفیتِ بهتر و حجمِ بزرگ‌تر."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

@@ -27,13 +27,13 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session as app_session
 from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.ui import theme
-from peecha.ui.widgets import JalaliDateEdit, LayoutEditMixin
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "FIXED_CART": "مبلغِ ثابت (کل سبد)", "FIXED_PRODUCT": "مبلغِ ثابت (هر کالا)"}
 _SYNC_STATUS_LABELS = {"PENDING": "سینک‌نشده", "SYNCED": "سینک‌شده", "FAILED": "ناموفق"}
 
 
-class CommercialCouponsScreen(LayoutEditMixin, QWidget):
+class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._connections: list = []
@@ -94,6 +94,15 @@ class CommercialCouponsScreen(LayoutEditMixin, QWidget):
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         outer.addWidget(self.status_label)
+
+        self.set_field_help([
+            (self.connection_combo, "اتصالِ ووکامرسی که این کوپن رویش سینک می‌شود."),
+            (self.code_field, "کدی که مشتری هنگامِ خرید وارد می‌کند."),
+            (self.discount_type_combo, "نحوهٔ اعمالِ تخفیف -- درصدی، مبلغِ ثابت رویِ کلِ سبد، یا مبلغِ ثابت رویِ هر کالا."),
+            (self.amount_field, "مقدارِ تخفیف -- طبقِ نوعِ انتخاب‌شده، درصد یا مبلغ."),
+            (self.valid_until_field, "تاریخِ پایانِ اعتبارِ کوپن."),
+            (self.no_expiry_checkbox, "این کوپن هیچ‌وقت منقضی نمی‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
