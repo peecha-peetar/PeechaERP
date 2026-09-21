@@ -83,6 +83,12 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 "ارزهایِ غیرِفعال دیگر در فهرستِ «ارزِ پایه» هنگامِ ساختنِ شرکتِ تازه نشان داده نمی‌شوند. "
                 "شرکت‌هایی که از قبل با این ارز کار می‌کنند مشکلی پیدا نمی‌کنند.",
             ),
+            (self.enable_for_company_checkbox, "دریافتِ خودکارِ نرخِ روزِ این ارز برایِ شرکتِ جاری فعال است."),
+            (self.rate_value_field, "نرخِ دستیِ این ارز به ارزِ پایه، برایِ تاریخِ کنارش -- وقتی دریافتِ خودکار فعال نیست به‌کار می‌رود."),
+            (self.rate_source_combo, "منبعی که نرخِ روزِ خودکار از آن خوانده می‌شود."),
+            (self.navasan_api_key_field, "کلیدِ API حسابِ شما در navasan.tech."),
+            (self.navasan_rate_type_combo, "نوعِ نرخی که از navasan.tech خوانده می‌شود (مثلاً دلارِ بازارِ آزاد)."),
+            (self.navasan_custom_item_field, "کلیدِ دقیقِ آیتمِ سفارشی در navasan.tech -- فقط اگر نوعِ نرخِ موردنظر در فهرستِ بالا نبود."),
         ])
 
     def _build_list_panel(self) -> QWidget:

@@ -480,6 +480,17 @@ class OrderTrackingScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setObjectName("statusError")
         self.body_layout.addWidget(self.status_label)
 
+        self.set_field_help([
+            (self.dimension_combo, "گروهِ تفصیلی‌ای که هر «سفارش» یک عضوِ آن است -- یک‌بار تنظیم می‌شود."),
+            (
+                self.attachments_dir_field,
+                "مسیرِ یک پوشهٔ اشتراکیِ شبکه برایِ ضمیمه‌ها -- خالی یعنی هر کاربر فقط ضمیمه‌هایِ ذخیره‌شده رویِ کامپیوترِ خودش را می‌بیند.",
+            ),
+            (self.order_combo, "سفارشی که می‌خواهید پرداخت‌ها/ضمیمه‌هایش را ببینید یا مدیریت کنید."),
+            (self.new_detail_combo, "تفصیلیِ سطحِ آخرِ گروهِ سفارش که پیگیری‌اش تازه شروع می‌شود."),
+            (self.new_description_field, "شرحِ اختیاریِ این سفارشِ تازه."),
+        ])
+
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
 

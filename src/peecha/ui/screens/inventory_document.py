@@ -846,7 +846,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._apply_type_visibility()
         self.set_field_help([
             (self.date_field, "تاریخِ سند — پایهٔ تعیینِ سالِ مالی و ترتیبِ حرکاتِ موجودی."),
+            (self.source_wh_combo, "انباری که موجودی از آن کم می‌شود (حواله/انتقال) یا مبنایِ کمبود/مازادِ اصلاح است."),
+            (self.destination_wh_combo, "انباری که موجودی به آن اضافه می‌شود (رسید/انتقال)."),
+            (self.adjustment_direction_combo, "این سندِ اصلاح موجودی را افزایش می‌دهد (مازاد) یا کاهش می‌دهد (کسری)."),
+            (self.counterparty_combo, "طرفِ‌حسابِ این سند (مثلاً تامین‌کننده برایِ رسید، مشتری برایِ برگشت)."),
             (self.reference_field, "مثلاً شمارهٔ فاکتورِ خرید یا سندِ اصلیِ برگشت."),
+            (self.cost_center_combo, "مرکزِ هزینه‌ای که این سندِ انبار به آن نسبت داده می‌شود -- فقط اگر معینِ نقش‌محورِ این نوعِ سند الزامی‌اش کرده باشد."),
+            (self.project_combo, "پروژه‌ای که این سندِ انبار به آن مربوط است -- فقط اگر معینِ نقش‌محورِ این نوعِ سند الزامی‌اش کرده باشد."),
+            (self.description_field, "توضیحِ آزادِ داخلی دربارهٔ این سند."),
         ])
 
     def _apply_type_visibility(self) -> None:
