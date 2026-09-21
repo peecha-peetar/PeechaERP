@@ -1416,13 +1416,21 @@ def get_stock_shortages(document_id: int, company_id: int) -> list[StockShortage
             effective_warehouse_id = ln.warehouse_id or doc.warehouse_id
             if effective_warehouse_id is None:
                 continue
+            warehouse = session.get(Warehouse, effective_warehouse_id)
+            # طبقِ درخواستِ صریح («وقتی امکانِ فروشِ منفی در انبار تیک
+            # خورده باشه، سیستم باید اجازه بدهد تاییدِ سرپرست انجام
+            # شود»): وقتی خودِ انبار صراحتاً موجودیِ منفی را مجاز کرده،
+            # این اصلاً یک «کمبود» نیست -- post_document بدونِ نیاز به
+            # هیچ سندِ انتقالی موفق می‌شود؛ پس نباید سرِ راهِ تاییدِ
+            # سرپرست را با انتقالِ غیرِلازم بگیریم.
+            if warehouse is not None and warehouse.allow_negative_stock:
+                continue
             item = session.get(Item, ln.item_id)
             if item is None or not item.is_stock_tracked:
                 continue
             available = locations_service.get_available_quantity(ln.item_id, effective_warehouse_id)
             if available >= ln.quantity_base:
                 continue
-            warehouse = session.get(Warehouse, effective_warehouse_id)
             shortages.append(StockShortage(
                 item_id=ln.item_id, item_label=dimensions_service.get_detail_account_label(item.item_detail_account_id),
                 warehouse_id=effective_warehouse_id,
