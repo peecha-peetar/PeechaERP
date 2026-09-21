@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
+from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.ui.screens.commercial_document import (
@@ -35,6 +36,18 @@ from peecha.ui.screens.commercial_document import (
 from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "وضعیتِ تبدیل", "عملیات"]
+
+# طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سفارشات و فاکتورهایِ تاییدشده در
+# پخشِ سرد نمایش داده نمی‌شود»): علتِ ریشه‌ای این بود که این فهرست وقتی
+# channel_type_code دارد (پخشِ سرد/گرم)، دکمه‌یِ «➕ سندِ تازه» را -- طبقِ
+# منطقِ درست‌ولی‌فقط‌برایِ‌ONLINEِ زیر -- اصلاً نشان نمی‌داد، چون آن منطق
+# فرض کرده بود هر لیستِ کانال‌محور مثلِ فروشِ اینترنتی «فقط نمایشی» است
+# (سفارش از طریقِ سینکِ خودکار می‌آید). برخلافِ ONLINE، کانال‌هایِ
+# PRE_SALES/VAN_SALES هیچ سینکِ خودکاری ندارند -- کاربر باید سفارش/فاکتور
+# را دستی بسازد؛ بدونِ این دکمه، تنها راهِ رسیدنِ یک سند به این تب،
+# ساختنش از فرمِ عمومیِ «سفارشِ فروش» و به‌یادداشتنِ دستیِ انتخابِ همان
+# کانال از کمبویِ «کانالِ فروش» بود -- که عملاً هیچ‌وقت یادآوری نمی‌شد.
+_SYNC_ONLY_CHANNEL_TYPES = {"ONLINE"}
 
 # طبقِ رفعِ باگِ واقعی: این‌جا باید کدهایِ ناوبریِ nav_catalog.py (همان‌ها
 # که MainWindow.open_screen ازشان می‌خواند) باشد، نه نامِ داخلیِ ویجتِ
@@ -115,10 +128,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         layout.addLayout(filters)
 
         new_buttons = QHBoxLayout()
-        if channel_type_code is None:
-            # طبقِ همان درخواست: این فهرست وقتی مخصوصِ یک کانالِ خاص است
-            # (مثلاً سفارش‌هایِ فروشِ اینترنتی) صرفاً نمایشی است -- سفارشِ
-            # اینترنتی از طریقِ سینک می‌آید، نه دکمهٔ «تازه» در همین‌جا.
+        if channel_type_code not in _SYNC_ONLY_CHANNEL_TYPES:
             for code in visible_types:
                 button = QPushButton(f"➕ {DOC_TYPE_TITLES[code]}")
                 button.setObjectName("primaryButton")
@@ -302,9 +312,39 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         actions_layout.addStretch(1)
         return actions
 
+    def _default_channel_code(self) -> str | None:
+        if self._channel_type_code is None:
+            return None
+        company_id = self._company_id()
+        if company_id is None:
+            return None
+        matching = [
+            ch for ch in pricing_service.list_channels(company_id) if ch.channel_type_code == self._channel_type_code
+        ]
+        return matching[0].channel_code if matching else None
+
     def _open_new(self, document_type_code: str) -> None:
         nav_code = _TYPE_TO_NAV_CODE[document_type_code]
-        self._main_window.open_screen(nav_code, then=lambda screen: screen._reset_form())
+        channel_code = self._default_channel_code()
+        if self._channel_type_code is not None and channel_code is None:
+            # طبقِ رفعِ باگِ واقعی: بدونِ این هشدار، سندِ تازه بدونِ کانال
+            # ساخته می‌شد و دوباره در همین تب هرگز ظاهر نمی‌شد -- بدونِ
+            # اینکه کاربر متوجهٔ علتش بشود.
+            QMessageBox.warning(
+                self, "کانال تعریف نشده است",
+                "برایِ این تب هنوز هیچ «کانالِ فروش»یی از همین نوع تعریف نشده -- سندِ تازه بدونِ کانال ساخته می‌شود "
+                "و در این فهرست نمایش داده نخواهد شد. ابتدا از «تنظیماتِ سیستم ‹ مدیریتِ بازرگانی ‹ کانال‌هایِ فروش» "
+                "یک کانال از همین نوع تعریف کنید.",
+            )
+
+        def _prepare(screen) -> None:
+            screen._reset_form()
+            if channel_code is not None:
+                index = screen.channel_combo.findData(channel_code)
+                if index >= 0:
+                    screen.channel_combo.setCurrentIndex(index)
+
+        self._main_window.open_screen(nav_code, then=_prepare)
 
     def _open_existing(self, document_id: int) -> None:
         doc = next((d for d in self._rows if d.document_id == document_id), None)
