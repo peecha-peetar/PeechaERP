@@ -22,6 +22,7 @@ from peecha import numerals, session as app_session
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES, STATUS_LABELS
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "انبارِ مبدا", "انبارِ مقصد", "وضعیت", "شمارهٔ مرجع", "عملیات"]
 
@@ -40,7 +41,7 @@ _TYPE_TO_NAV_CODE = {
 }
 
 
-class InventoryDocumentsListScreen(QWidget):
+class InventoryDocumentsListScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
         self._main_window = main_window
@@ -104,6 +105,11 @@ class InventoryDocumentsListScreen(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(len(_COLUMNS) - 1, QHeaderView.ResizeToContents)
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
+
+        self.set_field_help([
+            (self.type_filter, "فقط اسنادِ همین نوع نشان داده شوند."),
+            (self.status_filter, "فقط اسنادِ همین وضعیت نشان داده شوند."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

@@ -34,13 +34,13 @@ from peecha.services import installments as installments_service
 from peecha.ui import theme
 from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _STATUS_LABELS = {"PENDING": "درانتظار", "OVERDUE": "معوقه", "PAID": "دریافت/پرداخت‌شده"}
 _COLUMNS = ["نوع", "شماره‌یِ فاکتور", "طرفِ‌حساب", "قسط", "سررسید", "مبلغِ کل", "وصول‌شده", "مانده", "وضعیت", "وصول"]
 
 
-class InstallmentsListScreen(QWidget):
+class InstallmentsListScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
         self._main_window = main_window
@@ -121,6 +121,14 @@ class InstallmentsListScreen(QWidget):
         batch_row.addWidget(batch_collect_button)
         batch_row.addStretch(1)
         layout.addLayout(batch_row)
+
+        self.set_field_help([
+            (self.status_filter, "فقط اقساطِ همین وضعیت نشان داده شوند."),
+            (self.counterparty_filter_combo, "فقط اقساطِ همین طرفِ‌حساب نشان داده شوند."),
+            (self.date_filter_checkbox, "فیلترِ بازه‌یِ سررسید را فعال/غیرِفعال می‌کند."),
+            (self.date_from_field, "ابتدایِ بازه‌یِ سررسید."),
+            (self.date_to_field, "انتهایِ بازه‌یِ سررسید."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

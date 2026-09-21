@@ -26,13 +26,13 @@ from peecha import session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "مشتری", "روز", "ترتیب", "ویزیتور"]
 _DAY_LABELS = ("دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه")
 
 
-class VisitPlansScreen(QWidget):
+class VisitPlansScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[field_sales_service.VisitPlanRow] = []
@@ -131,6 +131,14 @@ class VisitPlansScreen(QWidget):
         self.delete_button.setVisible(False)
 
         layout.addWidget(build_action_footer([save_button, cancel_button, self.delete_button]))
+
+        self.set_field_help([
+            (self.customer_combo, "مشتری‌ای که این برنامهٔ مراجعه برایِ اوست -- بعدِ ذخیره قابلِ‌تغییر نیست."),
+            (self.day_combo, "روزِ هفته‌ای که ویزیتور باید به این مشتری سر بزند -- بعدِ ذخیره قابلِ‌تغییر نیست."),
+            (self.sequence_field, "ترتیبِ توقف نزدِ این مشتری در مسیرِ همان روز -- عددِ کوچک‌تر زودتر ویزیت می‌شود."),
+            (self.visitor_combo, "کاربری که مسئولِ ویزیتِ این مشتری در این روز است."),
+            (self.is_active_checkbox, "برنامه‌هایِ غیرِفعال دیگر در مسیرِ روزانهٔ ویزیتور نمایش داده نمی‌شوند."),
+        ])
         return wrap_scrollable(panel)
 
     def _company_id(self) -> int | None:

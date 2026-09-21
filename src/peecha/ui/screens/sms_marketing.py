@@ -26,14 +26,14 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import sms_marketing as sms_marketing_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, JalaliDateEdit
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit
 
 _COLUMNS = ["نام", "زمانِ ارسال", "وضعیت", "گیرندگان", "ارسال‌شده", "ناموفق"]
 
 _STATUS_LABELS = {"PENDING": "درِ صف", "SENT": "ارسال‌شده", "FAILED": "ناموفق"}
 
 
-class SmsMarketingScreen(QWidget):
+class SmsMarketingScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         outer = QVBoxLayout(self)
@@ -89,6 +89,13 @@ class SmsMarketingScreen(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         outer.addWidget(self.table, stretch=1)
+
+        self.set_field_help([
+            (self.name_field, "نامِ این کمپینِ پیامکی، فقط برایِ تشخیصِ خودتان."),
+            (self.date_field, "تاریخِ ارسالِ کمپین."),
+            (self.time_field, "ساعتِ ارسالِ کمپین -- ارسال فقط تا وقتی برنامه باز است انجام می‌شود."),
+            (self.message_field, "متنِ پیامکی که برایِ همه‌یِ گیرندگان ارسال می‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

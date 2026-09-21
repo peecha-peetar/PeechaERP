@@ -21,12 +21,13 @@ from peecha import session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
 from peecha.services import users as users_service
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["وضعیت", "مشتری", "ویزیتور", "ساعتِ ورود", "ساعتِ خروج", "فاصله (متر)", "دلیلِ رد/یادداشت"]
 _STATUS_LABELS = {"IN_PROGRESS": "درحالِ‌انجام", "COMPLETED": "انجام‌شده", "SKIPPED": "رد‌شده"}
 
 
-class CustomerVisitsScreen(QWidget):
+class CustomerVisitsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         outer = QVBoxLayout(self)
@@ -62,6 +63,11 @@ class CustomerVisitsScreen(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         outer.addWidget(self.table, stretch=1)
+
+        self.set_field_help([
+            (self.visitor_combo, "فقط ویزیت‌هایِ همین ویزیتور نشان داده شوند."),
+            (self.status_combo, "فقط ویزیت‌هایِ همین وضعیت نشان داده شوند."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

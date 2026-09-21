@@ -28,7 +28,7 @@ from peecha import session as app_session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import vehicle_loading as vehicle_loading_service
-from peecha.ui.widgets import JalaliDateEdit, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _LIST_COLUMNS = ["تاریخ", "خودرو", "انبارِ مبدا", "وضعیت"]
 _LINE_COLUMNS = ["کالا", "واحد", "مقدارِ برنامه‌ریزی‌شده", "موجودیِ لحظهٔ برنامه‌ریزی", "کسری"]
@@ -40,7 +40,7 @@ def _fmt_qty(value: decimal.Decimal) -> str:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
-class VehicleLoadingScreen(QWidget):
+class VehicleLoadingScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._loadings: list[vehicle_loading_service.VehicleLoadingRow] = []
@@ -153,6 +153,14 @@ class VehicleLoadingScreen(QWidget):
         cancel_button.clicked.connect(self._reset_form)
 
         layout.addWidget(build_action_footer([self.create_button, self.confirm_button, cancel_button]))
+
+        self.set_field_help([
+            (self.vehicle_combo, "خودرویی که این بارگیری برایش انجام می‌شود -- بعدِ ثبت قابلِ‌تغییر نیست."),
+            (self.source_warehouse_combo, "انباری که کالا از آن برایِ بارگیری برداشته می‌شود."),
+            (self.date_field, "تاریخِ بارگیری."),
+            (self.item_combo, "کالایی که به این بارگیری اضافه می‌شود."),
+            (self.quantity_field, "مقدارِ برنامه‌ریزی‌شده برایِ همین کالا."),
+        ])
         return wrap_scrollable(panel)
 
     def _company_id(self) -> int | None:

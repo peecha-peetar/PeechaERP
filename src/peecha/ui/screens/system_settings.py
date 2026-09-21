@@ -54,9 +54,10 @@ from peecha.ui.screens.treasury_banks import TreasuryBanksScreen
 from peecha.ui.screens.treasury_counterparty_settings import TreasuryCounterpartySettingsScreen
 from peecha.ui.screens.users import UsersScreen
 from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
+from peecha.ui.widgets import FieldHelpMixin
 
 
-class SystemSettingsScreen(QWidget):
+class SystemSettingsScreen(FieldHelpMixin, QWidget):
     # طبقِ رفعِ باگِ صریح («بازکردنِ تنظیماتِ حسابداری/ماژول‌ها ۱۰ تا ۱۵
     # ثانیه طول می‌کشد»): این صفحه یک singletonِ سنگین است که ~۴۰ زیرصفحه‌یِ
     # مستقل (کدینگ/خزانه‌داری/عمومی/کاربران/حقوق‌ودستمزد/انبار/بازرگانی و...)
@@ -132,6 +133,10 @@ class SystemSettingsScreen(QWidget):
         self.settings_search.setCurrentIndex(-1)
         self.settings_search.activated.connect(self._on_search_activated)
         self.settings_search.lineEdit().returnPressed.connect(self._on_search_return)
+
+        self.set_field_help([
+            (self.settings_search, "بخشی از تنظیمات را تایپ کنید (مثلاً «بانک‌ها») تا مستقیم به همان تب/زیرتب بروید."),
+        ])
 
     def _add_outer_tab(self, label: str, built: tuple[QWidget, "callable"]) -> None:
         widget, refresher = built

@@ -22,12 +22,12 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.ui import theme
-from peecha.ui.widgets import LayoutEditMixin
+from peecha.ui.widgets import FieldHelpMixin, LayoutEditMixin
 
 _STATUS_LABELS = {"approved": "تاییدشده", "hold": "درانتظارِ تایید", "spam": "اسپم", "trash": "زباله‌دان"}
 
 
-class CommercialReviewsScreen(LayoutEditMixin, QWidget):
+class CommercialReviewsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._connections: list = []
@@ -59,6 +59,10 @@ class CommercialReviewsScreen(LayoutEditMixin, QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         outer.addWidget(self.table, stretch=1)
+
+        self.set_field_help([
+            (self.connection_combo, "اتصالِ ووکامرسی که نظراتش را می‌خواهید ببینید/مدیریت کنید."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

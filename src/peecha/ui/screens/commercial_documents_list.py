@@ -32,6 +32,7 @@ from peecha.ui.screens.commercial_document import (
     _CONVERTS_TO_SALES_INVOICE,
     _ConvertToInvoiceDialog,
 )
+from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "وضعیتِ تبدیل", "عملیات"]
 
@@ -54,7 +55,7 @@ _TYPE_TO_NAV_CODE = {
 }
 
 
-class CommercialDocumentsListScreen(QWidget):
+class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
     def __init__(
         self, main_window, type_filter_codes: tuple[str, ...] | None = None,
         channel_type_code: str | None = None, title_override: str | None = None,
@@ -140,6 +141,12 @@ class CommercialDocumentsListScreen(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(len(_COLUMNS) - 1, QHeaderView.ResizeToContents)
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
+
+        self.set_field_help([
+            (self.type_filter, "فقط اسنادِ همین نوع نشان داده شوند."),
+            (self.status_filter, "فقط اسنادِ همین وضعیت نشان داده شوند."),
+            (self.source_filter, "فقط اسنادِ ثبت‌شده از فرمِ عمومی یا فقط فروشِ حضوری (POS) نشان داده شوند."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
