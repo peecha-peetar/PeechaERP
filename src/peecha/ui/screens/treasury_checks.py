@@ -358,6 +358,9 @@ class ReceivedChecksScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self.status_label)
 
         self.set_field_help([
+            (self.date_basis_combo, "چک‌ها بر اساسِ کدام تاریخ فیلتر شوند -- سررسید یا تاریخِ دریافت/صدور."),
+            (self.date_filter_enabled, "فیلترِ بازه‌یِ تاریخِ بالا را فعال/غیرِفعال می‌کند."),
+            (self.counterparty_filter_field, "جست‌وجو در نامِ صادرکننده/گیرندهٔ چک."),
             (
                 self.table,
                 "بالا مرحله‌یِ موردِنظر را انتخاب کنید — فهرست به چک‌هایِ واجدِ شرایطِ همان مرحله به‌روز می‌شود؛ "
@@ -674,6 +677,9 @@ class IssuedChecksScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self.status_label)
 
         self.set_field_help([
+            (self.date_basis_combo, "چک‌ها بر اساسِ کدام تاریخ فیلتر شوند -- سررسید یا تاریخِ دریافت/صدور."),
+            (self.date_filter_enabled, "فیلترِ بازه‌یِ تاریخِ بالا را فعال/غیرِفعال می‌کند."),
+            (self.counterparty_filter_field, "جست‌وجو در نامِ صادرکننده/گیرندهٔ چک."),
             (
                 self.table,
                 "بالا مرحله‌یِ موردِنظر را انتخاب کنید — فهرست به چک‌هایِ واجدِ شرایطِ همان مرحله به‌روز می‌شود؛ "

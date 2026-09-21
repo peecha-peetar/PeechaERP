@@ -65,8 +65,12 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self._build_installments_panel(), stretch=3)
 
         self.set_field_help([
+            (self.employee_combo, "کارمندی که این وام/مساعده برایِ او ثبت می‌شود."),
+            (self.loan_type_combo, "وام معمولاً چندقسطی است؛ مساعده معمولاً یک‌جا یا تک‌قسطی کسر می‌شود."),
             (self.principal_field, "مبلغِ اصلِ وام/مساعده."),
             (self.fee_rate_field, "نرخِ کارمزد به‌صورتِ اعشاری (مثلاً ۰٫۰۵ برایِ ۵٪) — می‌تواند صفر باشد."),
+            (self.start_period_combo, "اولین دورهٔ حقوقی‌ای که قسطِ این وام از حقوقِ کارمند کسر می‌شود."),
+            (self.funding_source_field, "منبعِ تامینِ مالیِ این وام -- اختیاری، صرفاً اطلاعاتی."),
         ])
 
     def _build_form_panel(self) -> QWidget:

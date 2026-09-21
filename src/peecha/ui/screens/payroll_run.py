@@ -68,6 +68,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (self.year_field, "سالِ شمسیِ دوره."),
             (self.month_field, "ماهِ شمسیِ دوره (۱ تا ۱۲)."),
+            (self.bank_combo, "بانکی که فایلِ واریزِ دسته‌جمعیِ حقوق برایِ آن تولید می‌شود."),
         ])
 
     def _build_periods_panel(self) -> QWidget:

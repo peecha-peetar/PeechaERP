@@ -80,6 +80,9 @@ class HrAttendanceEntriesScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self._build_records_panel(), stretch=3)
 
         self.set_field_help([
+            (self.employee_combo, "کارمندی که این رکوردِ حضوروغیاب برایِ او ثبت می‌شود."),
+            (self.template_combo, "الگویِ ذخیره‌شده‌ای که تناظرِ ستون‌هایِ فایلِ دستگاهِ حضوروغیابِ شما را می‌داند."),
+            (self.employee_filter_combo, "فقط رکوردهایِ همین کارمند را نشان بده -- خالی یعنی همه‌یِ کارمندان."),
             (
                 self.hours_field_hint,
                 "یا ساعتِ ورود و خروج را وارد کنید، یا مستقیماً مجموعِ ساعتِ کارکردِ آن روز را.",

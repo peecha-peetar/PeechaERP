@@ -55,6 +55,7 @@ class JobGradesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.level_field, "عددِ ترتیبِ رده — رده‌هایِ بالاتر عددِ بزرگ‌تر دارند."),
             (self.min_salary_field, "کفِ پیشنهادیِ حقوقِ پایه برایِ این رده — فقط هشدارِ کنترلی، نه محدودیتِ سخت."),
             (self.max_salary_field, "سقفِ پیشنهادیِ حقوقِ پایه برایِ این رده."),
+            (self.is_active_checkbox, "رده‌هایِ غیرِفعال دیگر در فهرستِ انتخابِ ردهٔ شغلی برایِ سمت/کارمندِ تازه نشان داده نمی‌شوند."),
         ])
         self.register_field_grids("hr_job_grades", [self.form_grid])
 

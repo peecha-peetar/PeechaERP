@@ -77,6 +77,10 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 self.default_company_combo,
                 "شرکتی که هنگامِ ورود به سیستم به‌طورِ پیش‌فرض برایِ این کاربر انتخاب می‌شود.",
             ),
+            (self.pos_default_terminal_combo, "ترمینالِ صندوقی که در فروشِ حضوری برایِ این کاربر پیش‌فرض انتخاب می‌شود."),
+            (self.pos_default_price_list_combo, "فهرستِ قیمتی که در فروشِ حضوری برایِ این کاربر پیش‌فرض انتخاب می‌شود."),
+            (self.pos_default_customer_combo, "مشتری‌ای که در فروشِ حضوری برایِ این کاربر پیش‌فرض انتخاب می‌شود."),
+            (self.voip_extension_field, "شماره‌یِ داخلیِ این کاربر در سیستمِ سانترال/وویپ -- برایِ تماسِ مستقیم از داخلِ برنامه."),
         ])
 
     def _build_list_panel(self) -> QWidget:

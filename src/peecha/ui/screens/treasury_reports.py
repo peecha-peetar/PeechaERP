@@ -63,6 +63,7 @@ class TreasuryChecksDueScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.table, stretch=1)
 
         self.set_field_help([
+            (self.days_spin, "چک‌هایِ نزدیک به سررسید تا چند روزِ آینده نشان داده شوند -- چک‌هایِ سررسیدگذشته صرفِ‌نظر از این عدد همیشه نشان داده می‌شوند."),
             (
                 self.table,
                 "چک‌هایِ دریافتی (نزدِ صندوق/واگذارشده به بانک) و چک‌هایِ پرداختی (صادر/نزدِ گیرنده) که هنوز وصول نشده‌اند، "

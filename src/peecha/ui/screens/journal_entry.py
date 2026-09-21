@@ -1072,6 +1072,7 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
                 self.header_rate_field,
                 "نرخِ تبدیلِ ۱ واحدِ ارزِ سند به ارزِ پایه‌یِ شرکت. یا دستی وارد کنید یا با دکمه‌یِ «خودکار» از اینترنت بگیرید.",
             ),
+            (self.print_after_save_checkbox, "بلافاصله بعدِ ثبتِ سند، پیش‌نمایشِ چاپ باز می‌شود."),
         ])
 
         self._update_footer_for_mode()

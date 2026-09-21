@@ -141,6 +141,10 @@ class SystemDataResetScreen(FieldHelpMixin, QWidget):
 
         outer.addWidget(wrap_scrollable_with_footer(panel, []))
 
+        self.set_field_help([
+            (self.status_text, "پیام/خطایِ آخرین عملیاتِ خام‌کردن این‌جا نشان داده می‌شود -- هیچ فیلدی برایِ ورود نیست."),
+        ])
+
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
 
