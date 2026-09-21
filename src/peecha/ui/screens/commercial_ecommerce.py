@@ -32,7 +32,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
 _SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
@@ -42,7 +42,7 @@ _PRICING_MARKUP_LABELS = {"PERCENT": "درصد", "AMOUNT": "مبلغ"}
 _RECONCILIATION_STATUS_LABELS = {"MATCHED": "نگاشته‌شده", "STORE_ONLY": "فقط در فروشگاه", "ERP_ONLY": "فقط در ERP"}
 
 
-class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
+class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._connections: list = []
@@ -66,6 +66,42 @@ class CommercialEcommerceScreen(LayoutEditMixin, QWidget):
         tabs.addTab(self._build_reconciliation_tab(), "تطبیقِ کاتالوگ")
         tabs.addTab(self._build_torob_tab(), "فیدِ ترب")
         outer.addWidget(tabs, stretch=1)
+
+        self.set_field_help([
+            (self.platform_combo, "پلتفرمِ فروشگاهِ اینترنتی‌ای که می‌خواهید وصل کنید."),
+            (self.store_url_field, "آدرسِ اینترنتیِ فروشگاه."),
+            (self.channel_combo, "کانالِ فروشِ داخلی که سفارش‌ها/فروش‌هایِ این اتصال به آن نسبت داده می‌شوند."),
+            (self.warehouse_combo, "انباری که موجودیِ این فروشگاه از آن محاسبه/کسر می‌شود."),
+            (self.wc_key_field, "Consumer Key حاصل از تنظیماتِ REST APIِ ووکامرس."),
+            (self.wc_secret_field, "Consumer Secret حاصل از تنظیماتِ REST APIِ ووکامرس -- رمزنگاری‌شده ذخیره می‌شود."),
+            (self.wp_username_field, "نامِ‌کاربریِ وردپرس -- فقط برایِ آپلودِ خودکارِ تصویرِ کالا لازم است."),
+            (self.wp_app_password_field, "Application Passwordِ وردپرس (نه رمزِ اصلیِ ورود) -- برایِ آپلودِ تصویر."),
+            (self.presta_api_key_field, "Webservice Key حاصل از تنظیماتِ وب‌سرویسِ پرستاشاپ."),
+            (self.auto_sync_checkbox, "این اتصال بدونِ فشردنِ دکمه، به‌طورِ خودکار و دوره‌ای سینک شود."),
+            (self.auto_sync_interval_field, "هر چند دقیقه یک‌بار سینکِ خودکار انجام شود."),
+            (self.sku_field, "کدِ محصول (SKU) در سمتِ فروشگاه."),
+            (self.map_item_combo, "کالایِ داخلیِ ERP که این SKU باید به آن نگاشته شود."),
+            (self.external_customer_field, "شناسهٔ مشتری در سمتِ فروشگاه."),
+            (self.map_customer_combo, "مشتریِ داخلیِ ERP که این شناسهٔ خارجی باید به آن نگاشته شود."),
+            (self.routing_channel_combo, "این قاعده فقط برایِ سفارش‌هایِ همین کانال اعمال شود -- خالی یعنی همه‌یِ کانال‌ها."),
+            (self.routing_strategy_combo, "روشِ انتخابِ انبارِ تحویل‌دهنده برایِ سفارش‌هایِ منطبق با این قاعده."),
+            (self.routing_fallback_combo, "انباری که وقتی استراتژیِ بالا نتواند انبارِ بهتری پیدا کند، استفاده می‌شود."),
+            (self.routing_priority_field, "اولویتِ اجرایِ این قاعده در برابرِ قاعده‌هایِ دیگر -- عددِ کوچک‌تر زودتر بررسی می‌شود."),
+            (self.pricing_connection_combo, "اتصالی که این قاعده‌هایِ قیمت برایش اعمال می‌شوند."),
+            (self.pricing_scope_type_combo, "قاعده رویِ یک برند اعمال شود یا یک دسته -- اگر هردو برایِ یک کالا صدق کند، برند اولویت دارد."),
+            (self.pricing_scope_combo, "برند یا دستهٔ موردِنظرِ این قاعده."),
+            (self.pricing_markup_type_combo, "افزایشِ قیمت به‌صورتِ درصد باشد یا مبلغِ ثابت."),
+            (self.pricing_markup_value_field, "مقدارِ افزایش -- طبقِ نوعِ انتخاب‌شده، درصد یا مبلغ."),
+            (self.bulk_search_field, "جست‌وجو در کد یا نامِ کالا برایِ فیلترکردنِ فهرستِ زیر."),
+            (self.bulk_set_brand_checkbox, "با اعمال، برندِ کالاهایِ تیک‌خورده به مقدارِ کنارش تغییر می‌کند."),
+            (self.bulk_brand_combo, "برندی که به کالاهایِ انتخاب‌شده اختصاص می‌یابد."),
+            (self.bulk_set_category_checkbox, "با اعمال، دستهٔ کالاهایِ تیک‌خورده به مقدارِ کنارش تغییر می‌کند."),
+            (self.bulk_category_combo, "دسته‌ای که به کالاهایِ انتخاب‌شده اختصاص می‌یابد."),
+            (self.gallery_connection_combo, "اتصالی که می‌خواهید تصاویرِ محصولاتش را ببینید."),
+            (self.gallery_sku_combo, "محصولی که تصاویرش نمایش داده شود."),
+            (self.reconciliation_connection_combo, "اتصالی که کاتالوگش با ERP تطبیق داده می‌شود."),
+            (self.torob_connection_combo, "اتصالِ نوعِ «ترب» که فایلِ فیدش تولید می‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

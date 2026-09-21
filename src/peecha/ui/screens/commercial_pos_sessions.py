@@ -41,12 +41,12 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.commercial_pos_menu_groups import CommercialPosMenuGroupsScreen
-from peecha.ui.widgets import wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 _SESSION_STATUS_LABELS = {"OPEN": "باز", "CLOSED": "بسته"}
 
 
-class CommercialPosSessionsScreen(QWidget):
+class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._terminals: list = []
@@ -482,6 +482,47 @@ class CommercialPosSessionsScreen(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(wrap_scrollable(page))
+
+        self.set_field_help([
+            (self.terminal_code_field, "کدِ یکتایِ ترمینالِ صندوقِ تازه."),
+            (self.terminal_name_field, "نامِ نمایشیِ ترمینالِ صندوقِ تازه."),
+            (self.terminal_warehouse_combo, "انباری که موجودیِ فروش‌هایِ این ترمینال از آن کم می‌شود."),
+            (self.guest_customer_combo, "مشتری‌ای که برایِ فروشِ نقدیِ بدونِ مشخصاتِ خریدار پیش‌فرض انتخاب می‌شود."),
+            (self.threshold_field, "بیشترین مغایرتِ صندوق (بینِ نقدِ شمارش‌شده و محاسبه‌شده) که بدونِ نیاز به دلیلِ صریح پذیرفته می‌شود."),
+            (self.quick_button_width_field, "عرضِ دکمه‌هایِ کلیدِ فوری در صفحه‌یِ فروشِ حضوری -- سراسریِ شرکت."),
+            (self.quick_button_height_field, "ارتفاعِ دکمه‌هایِ کلیدِ فوری -- سراسریِ شرکت."),
+            (self.quick_button_font_size_field, "اندازهٔ فونتِ متنِ دکمه‌هایِ کلیدِ فوری."),
+            (self.quick_grid_columns_field, "تعدادِ ستون‌هایِ چیدمانِ کلیدهایِ فوری."),
+            (self.my_quick_button_width_field, "عرضِ کلیدهایِ فوری فقط برایِ حسابِ کاربریِ شما -- «پیش‌فرض» یعنی از تنظیمِ سراسریِ بالا پیروی کند."),
+            (self.my_quick_button_height_field, "ارتفاعِ کلیدهایِ فوری فقط برایِ حسابِ کاربریِ شما."),
+            (self.quick_access_position_combo, "کلیدهایِ فوری در کدام سمتِ صفحه‌یِ فروش نمایش داده شوند."),
+            (self.quick_access_orientation_combo, "کلیدهایِ فوری به‌صورتِ افقی یا عمودی چیده شوند."),
+            (self.allow_price_override_checkbox, "کاربرِ فروشنده می‌تواند در لحظهٔ فروش، قیمتِ پیشنهادی را دستی تغییر دهد."),
+            (self.allow_discount_override_checkbox, "کاربرِ فروشنده می‌تواند در لحظهٔ فروش، تخفیف اعمال کند."),
+            (self.quick_access_enabled_checkbox, "منویِ کلیدهایِ فوری در صفحه‌یِ فروشِ حضوری نمایش داده شود."),
+            (self.scan_beep_enabled_checkbox, "با هر اسکن/افزودنِ موفق، یک بوقِ کوتاه پخش شود."),
+            (self.show_price_list_field_checkbox, "فیلدِ انتخابِ فهرستِ قیمت در فرمِ فروشِ حضوری نمایش داده شود."),
+            (self.show_tax_discount_breakdown_checkbox, "ریزِ تخفیف/مالیات در فوترِ فاکتورِ حضوری نمایش داده شود."),
+            (self.show_customer_credit_warning_checkbox, "اگر مشتری از سقفِ اعتبارش عبور کرده، هشدار نشان داده شود."),
+            (self.recent_invoices_count_field, "چند فاکتورِ اخیر در پنلِ کنارِ صفحه‌یِ فروش نمایش داده شود."),
+            (self.fast_receipt_printing_checkbox, "چاپِ فیش بدونِ موتورِ Jasper (سریع‌تر) -- برایِ صندوق توصیه می‌شود."),
+            (self.receipt_header_field, "متنِ سرتیترِ چاپ‌شده بالایِ فیشِ فروش."),
+            (self.receipt_footer_field, "متنِ توضیحاتِ چاپ‌شده انتهایِ فیشِ فروش."),
+            (self.weight_barcode_enabled_checkbox, "بارکدِ وزنیِ چاپ‌شده‌یِ ترازو با اسکنرِ معمولی خوانده و مقدارِ ردیف خودکار محاسبه شود."),
+            (self.weight_barcode_prefix_field, "چند رقمِ اولِ بارکدِ وزنی که نشان می‌دهد این بارکد وزنی است."),
+            (self.weight_barcode_item_code_digits_field, "تعدادِ رقمِ بخشِ کدِ کالا در بارکدِ وزنی."),
+            (self.weight_barcode_weight_digits_field, "تعدادِ رقمِ بخشِ وزن در بارکدِ وزنی."),
+            (self.weight_barcode_weight_decimals_field, "تعدادِ رقمِ اعشاریِ وزن در بارکدِ وزنی."),
+            (self.scale_online_enabled_checkbox, "اتصالِ زندهٔ ترازویِ آنلاین فعال باشد -- هنوز فقط چارچوبِ تنظیماتی است."),
+            (self.scale_connection_type_combo, "نوعِ اتصالِ ترازویِ آنلاین (سریال یا شبکه)."),
+            (self.scale_address_field, "آدرسِ اتصال -- پورتِ COM برایِ سریال، یا host:port برایِ شبکه."),
+            (self.scale_batch_barcode_prefix_field, "پیشوندِ بارکدِ دسته‌ایِ ترازویِ آنلاین."),
+            (self.receivable_cost_center_combo, "مرکزِ هزینه‌ای که پیش‌فرضِ حسابِ دریافتنیِ مشتری در تاییدِ سرپرست از آن استفاده می‌کند."),
+            (self.receivable_project_combo, "پروژه‌ای که پیش‌فرضِ حسابِ دریافتنیِ مشتری در تاییدِ سرپرست از آن استفاده می‌کند."),
+            (self.opening_cash_field, "وجهِ نقدی که در ابتدایِ شیفت داخلِ صندوق شمرده و ثبت می‌شود."),
+            (self.closing_cash_field, "وجهِ نقدی که در پایانِ شیفت واقعاً داخلِ صندوق شمرده شده -- با محاسبه‌شده مقایسه و مغایرت مشخص می‌شود."),
+            (self.override_reason_field, "دلیلِ پذیرفتنِ مغایرتِ صندوقِ شیفتِ قبلی، بدونِ رفعِ کاملِ آن."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

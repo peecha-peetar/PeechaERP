@@ -51,7 +51,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import supplier_price_import as spi_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import JalaliDateEdit, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "AMOUNT": "مبلغِ ثابت", "TIERED": "پلکانی"}
 _PREVIEW_FIXED_COLUMNS = ["ردیف", "کدِ تامین‌کننده", "نامِ تامین‌کننده", "کالایِ شناسایی‌شده", "قیمتِ تامین‌کننده"]
@@ -59,7 +59,7 @@ _HISTORY_SOURCE_LABELS = {"MANUAL": "دستی", "SUPPLIER_IMPORT": "واردات
 _RAW_GRID_PREVIEW_ROWS = 30
 
 
-class CommercialPricingScreen(QWidget):
+class CommercialPricingScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._price_lists: list = []
@@ -96,6 +96,35 @@ class CommercialPricingScreen(QWidget):
         self.tabs.addTab(self._build_discount_rules_tab(), "قواعدِ تخفیف")
         self.tabs.addTab(self._build_supplier_import_tab(), "واردکردنِ لیستِ قیمتِ تامین‌کننده")
         layout.addWidget(self.tabs, stretch=1)
+
+        self.set_field_help([
+            (self.pl_code_field, "کدِ یکتایِ فهرستِ قیمتِ تازه."),
+            (self.pl_name_field, "نامِ نمایشیِ فهرستِ قیمتِ تازه."),
+            (self.pl_type_combo, "این فهرست برایِ فروش استفاده می‌شود یا خرید."),
+            (self.pl_item_combo, "کالایی که می‌خواهید قیمتش را در فهرستِ انتخاب‌شده ثبت کنید."),
+            (self.pl_min_qty_field, "حداقلِ مقداری که این قیمت از آن به بعد اعمال می‌شود -- برایِ قیمت‌گذاریِ پلکانیِ برحسبِ مقدار."),
+            (self.pl_unit_price_field, "بهایِ واحدِ این کالا در همین فهرستِ قیمت، از همین مقدارِ حداقل به بعد."),
+            (self.rule_code_field, "کدِ یکتایِ قاعدهٔ تخفیفِ تازه."),
+            (self.rule_name_field, "نامِ نمایشیِ قاعدهٔ تخفیف."),
+            (self.rule_type_combo, "نحوهٔ محاسبهٔ تخفیف -- درصدی، مبلغِ ثابت، یا پلکانی (بر اساسِ مقدار)."),
+            (self.rule_value_field, "مقدارِ تخفیف -- فقط برایِ نوعِ درصدی/مبلغِ ثابت (پلکانی از پله‌هایِ زیر می‌خواند)."),
+            (self.rule_priority_field, "اولویتِ اجرایِ این قاعده در برابرِ قاعده‌هایِ دیگر -- عددِ کوچک‌تر زودتر اجرا می‌شود."),
+            (self.rule_stackable_checkbox, "این تخفیف می‌تواند هم‌زمان با تخفیف‌هایِ دیگر جمع شود؛ خاموش یعنی فقط تنها اعمال شود."),
+            (self.tier_min_qty_field, "حداقلِ مقداری که این پلهٔ تخفیف از آن به بعد اعمال می‌شود."),
+            (self.tier_discount_field, "درصدِ تخفیفِ همین پله."),
+            (self.spi_supplier_combo, "تامین‌کننده‌ای که این فایلِ لیستِ قیمت متعلق به اوست."),
+            (self.spi_sheet_combo, "شیتِ اکسلی که باید خوانده شود -- فقط وقتی فایل چند شیت دارد نمایش داده می‌شود."),
+            (self.spi_ocr_checkbox, "این فایل با تشخیصِ نوریِ کاراکتر (OCR) خوانده شود -- برایِ عکس/PDFِ اسکن‌شده."),
+            (self.spi_ocr_lang_combo, "زبانِ متنِ فایل برایِ دقتِ بهترِ OCR."),
+            (self.spi_header_row_spin, "چند سطرِ اولِ فایل، سربرگ هستند و باید از دادهٔ واقعی رد شوند."),
+            (self.spi_save_template_checkbox, "این ستون‌بندی برایِ همین تامین‌کننده ذخیره شود تا دفعاتِ بعد دوباره پرسیده نشود."),
+            (self.spi_step_kind_combo, "نوعِ ستونِ افزایشیِ تازه -- درصدی یا مبلغِ ثابت."),
+            (self.spi_step_value_field, "مقدارِ این ستونِ افزایشی -- عددِ منفی یعنی کاهش."),
+            (self.spi_step_label_field, "عنوانِ این ستونِ افزایشی در پیش‌نمایش -- اختیاری."),
+            (self.spi_filter_category_combo, "فقط کالاهایِ همین دسته در نتیجهٔ پایین نمایش داده شوند."),
+            (self.spi_filter_brand_combo, "فقط کالاهایِ همین برند در نتیجهٔ پایین نمایش داده شوند."),
+            (self.spi_target_price_list_combo, "فهرستِ قیمتِ فروشی که قیمت‌هایِ نهاییِ تطبیق‌یافته در آن ثبت می‌شوند."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

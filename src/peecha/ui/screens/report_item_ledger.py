@@ -32,7 +32,7 @@ from peecha.services import report_templates as templates_service
 from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.screens.report_template_settings import pick_report_template
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 # طبقِ درخواستِ صریح («در کاردکسِ کالا نامِ طرفِ‌حساب هم نمایش داده شود» +
 # «کاردکسِ ریالی بهایِ ورودی/خروجی داشته باشد و برایِ فاکتورهایِ فروش
@@ -45,7 +45,7 @@ _COLUMNS = [
 ]
 
 
-class ItemLedgerScreen(QWidget):
+class ItemLedgerScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
@@ -109,6 +109,13 @@ class ItemLedgerScreen(QWidget):
 
         self.date_from_field.editingFinished.connect(self._on_filters_changed)
         self.date_to_field.editingFinished.connect(self._on_filters_changed)
+
+        self.set_field_help([
+            (self.item_combo, "کالایی که می‌خواهید گردشِ کاملِ ورود/خروج/موجودی‌اش را ببینید."),
+            (self.warehouse_combo, "فقط گردشِ همین انبار نشان داده شود -- خالی یعنی همه‌یِ انبارها."),
+            (self.date_filter_checkbox, "فیلترِ بازه‌یِ تاریخِ زیر را فعال/غیرِفعال می‌کند -- خاموش یعنی کلِ تاریخچه."),
+            (self.print_professional_button, "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به کاردکس."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
