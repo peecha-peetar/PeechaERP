@@ -1,15 +1,24 @@
 """تاییدِ سرپرست برایِ فروش‌هایِ حضوری (POS، مرحلهٔ ۸) — فاکتورهایی که
 کاریر فقط confirm کرده‌اند (پرداختِ واقعی/سندِ حسابداری هنوز ثبت نشده)
-اینجا approve+post می‌شوند و پرداخت (نقدی/کارت‌خوان/کیفِ‌پول/کارتِ‌هدیه،
-یا بدونِ پرداخت برایِ نسیه) واقعاً ثبت می‌شود.
+اینجا approve+post می‌شوند و پرداخت واقعاً ثبت می‌شود.
+
+طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فروشِ نقدیِ تسویه‌شده، در تاییدِ
+سرپرست نسیه در نظر گرفته می‌شود») و درخواستِ صریحِ همراهش («هر فاکتور
+طبقِ خودش تسویه بشه، نه یک روشِ واحد برایِ کلِ دسته»): این صفحه دیگر
+یک کمبویِ سراسریِ «روشِ پرداخت» ندارد که رویِ همه‌یِ فاکتورهایِ
+بدونِ‌نقشه اعمال شود -- چنین کمبویی پیش‌فرضش «بدونِ پرداخت (نسیه)» بود
+و اگر سرپرست فراموش می‌کرد آن را عوض کند، حتی فروشِ نقدیِ واقعی هم
+نسیه ثبت می‌شد. حالا هر فاکتورِ بدونِ‌نقشه دقیقاً طبقِ چیزی که خودِ
+صندوق‌دار در فروشِ حضوری زده (pos_intended_payment_type: نقدی یا
+نسیه) خودکار تسویه می‌شود -- بدونِ نیاز به هیچ انتخابِ دستی.
 
 طبقِ تصمیمِ صریح («ادغام فقط رویِ سندِ حسابداری باشد، نه خودِ فاکتور»):
 وقتی چند فاکتورِ هم‌طرفِ‌حساب با هم انتخاب شوند و تیکِ «ادغام» فعال
 باشد، فقط یک سندِ حسابداریِ واحد برایِ مجموع ساخته می‌شود -- چه فاکتور
 از پیش پلنِ تسویهٔ چندروشیِ خودش را داشته باشد (از دیالوگِ «نحوهٔ
-تسویه»/اصلاحِ سند)، چه فقط روشِ نقد/کارت‌خوانِ سرپرست را بگیرد؛ خودِ
-فاکتورها دست‌نخورده و جدا می‌مانند، هرکدام فقط یک ردیفِ تسویه به همان
-یک سندِ حسابداری می‌گیرد."""
+تسویه»/اصلاحِ سند)، چه فقط نقدیِ ساده باشد؛ خودِ فاکتورها دست‌نخورده و
+جدا می‌مانند، هرکدام فقط یک ردیفِ تسویه به همان یک سندِ حسابداری
+می‌گیرد."""
 
 from __future__ import annotations
 
@@ -19,7 +28,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
-    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -39,19 +47,11 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui import theme
 from peecha.ui.widgets import wrap_scrollable
 
-_PAYMENT_OPTIONS = [
-    ("NONE", "بدونِ پرداخت (نسیه)"),
-    ("CASH", "نقد"),
-    ("CARD", "کارت‌خوان"),
-    ("WALLET", "کیفِ‌پول"),
-    ("GIFT_CARD", "کارتِ‌هدیه"),
-]
 # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه...»): فروشِ ثبت‌شده
 # با دیالوگِ «نحوهٔ تسویه» (چندروشی: نقد/بانک/تخفیف/کالابرگ/بن) برچسبِ
 # «ترکیبی» می‌گیرد؛ نیازی به انتخابِ روش در همین منویِ سرپرست ندارد
 # (پایین‌تر، پیشِ خواندنِ نقشهٔ تسویه‌یِ خودِ سند تشخیص داده می‌شود).
 _PAYMENT_TYPE_LABELS = {"CASH": "نقدی", "CREDIT": "نسیه", "MIXED": "ترکیبی"}
-_MERGEABLE_METHODS = ("CASH", "CARD")
 
 
 class CommercialPosApprovalScreen(QWidget):
@@ -99,13 +99,9 @@ class CommercialPosApprovalScreen(QWidget):
         outer.addWidget(self.table, stretch=1)
 
         action_row = QHBoxLayout()
-        action_row.addWidget(QLabel("روشِ پرداخت"))
-        self.method_combo = QComboBox()
-        for code, label in _PAYMENT_OPTIONS:
-            self.method_combo.addItem(label, code)
-        action_row.addWidget(self.method_combo)
-        action_row.addWidget(QLabel("مرجع/کدِ کارتِ‌هدیه"))
+        action_row.addWidget(QLabel("مرجع/توضیح"))
         self.reference_field = QLineEdit()
+        self.reference_field.setToolTip("اختیاری -- مثلاً شمارهٔ پیگیریِ بانک؛ رویِ همه‌یِ فاکتورهایِ تسویه‌شده در همین دسته اعمال می‌شود.")
         action_row.addWidget(self.reference_field, stretch=1)
         self.merge_checkbox = QCheckBox("ادغامِ سندِ حسابداری (یک سند برایِ همه‌یِ انتخاب‌شده‌ها)")
         self.merge_checkbox.setChecked(True)
@@ -194,7 +190,6 @@ class CommercialPosApprovalScreen(QWidget):
         if not selected:
             self.status_label.setText("حداقل یک فاکتور انتخاب کنید.")
             return
-        method_code = self.method_combo.currentData()
         company_id = self._company_id()
         user_id = app_session.current_user.user_id
 
@@ -231,12 +226,9 @@ class CommercialPosApprovalScreen(QWidget):
             theme.set_status_label(self.status_label, " | ".join(shortage_messages), ok=False)
             return
 
-        # طبقِ درخواستِ صریح («صندوق‌دار فقط نقد می‌تونه بزنه، بانکی/سایرِ
-        # روش‌ها را نمی‌تونه ثبت کنه»): فاکتورهایی که صندوق‌دار از دیالوگِ
-        # «نحوهٔ تسویه» (نه دو دکمهٔ نقدی/نسیه) استفاده کرده، از پیش یک
-        # نقشهٔ تسویهٔ چندروشی دارند -- این‌ها دیگر از منویِ تک‌روشیِ
-        # سرپرست (نقد/کارت/کیف‌پول/...) پیروی نمی‌کنند، بلکه دقیقاً همان
-        # ترکیبِ ازپیش‌تعیین‌شده ثبت می‌شود.
+        # فاکتورهایی که صندوق‌دار از دیالوگِ «نحوهٔ تسویه» (نه دو دکمهٔ
+        # نقدی/نسیه) استفاده کرده، از پیش یک نقشهٔ تسویهٔ چندروشی
+        # دارند -- دقیقاً همان ترکیبِ ازپیش‌تعیین‌شده ثبت می‌شود.
         with_plan = []
         without_plan = []
         for doc in selected:
@@ -246,39 +238,45 @@ class CommercialPosApprovalScreen(QWidget):
             else:
                 without_plan.append(doc)
 
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («فروشِ نقدیِ تسویه‌شده در تاییدِ
+        # سرپرست نسیه در نظر گرفته می‌شود») + درخواستِ صریح («هر فاکتور
+        # طبقِ خودش تسویه بشه»): دیگر هیچ روشِ واحدِ دستی‌انتخاب‌شده‌ای
+        # رویِ این فاکتورها اعمال نمی‌شود -- هرکدام دقیقاً طبقِ همان
+        # چیزی که خودِ صندوق‌دار در فروشِ حضوری زده (pos_intended_
+        # payment_type) گروه‌بندی می‌شود: نقدی خودکار تسویه می‌شود،
+        # نسیه (یا نامشخص/قدیمی) بدونِ هیچ تسویه‌ای فقط approve/post
+        # می‌شود -- که دقیقاً همان انتخابِ عمدیِ صندوق‌دار است.
+        cash_docs = [d for d in without_plan if d.pos_intended_payment_type == "CASH"]
+        credit_docs = [d for d in without_plan if d.pos_intended_payment_type != "CASH"]
+
         # طبقِ رفعِ باگِ گزارش‌شده («وقتی ادغامِ سند تیک می‌خورد همه‌یِ
-        # اسناد باز هم جدا ثبت می‌شود»): قبلاً فقط without_planِ نقد/
-        # کارت‌خوان ادغام می‌شد -- with_plan (فاکتورهایی که از دیالوگِ
-        # «نحوهٔ تسویه»/بازکردنِ اصلاحی پلنِ تسویهٔ واقعی دارند) هرگز
-        # ادغام نمی‌شد، حتی وقتی تیکِ ادغام خورده بود. حالا هر دو گروه
-        # -- اگر طرفِ‌حسابشان یکی باشد -- با هم در یک سندِ حسابداریِ
-        # واحد ثبت می‌شوند.
+        # اسناد باز هم جدا ثبت می‌شود»): with_plan (فاکتورهایی که از
+        # دیالوگِ «نحوهٔ تسویه»/بازکردنِ اصلاحی پلنِ تسویهٔ واقعی دارند)
+        # و cash_docsِ ساده -- اگر طرفِ‌حسابشان یکی باشد -- با هم در یک
+        # سندِ حسابداریِ واحد ثبت می‌شوند.
         merge_checked = self.merge_checkbox.isChecked()
-        method_mergeable = method_code in _MERGEABLE_METHODS
         merge_plan_entries: list[tuple[int, list[tuple]]] = []
         flat_batch_group: list = []
         standalone_with_plan = with_plan
-        standalone_without_plan = without_plan
+        standalone_cash_docs = cash_docs
 
         if merge_checked and len(with_plan) > 1:
             # with_plan خودش وارد ادغام می‌شود -- در این حالت هر سند (چه
-            # پلن‌دار، چه سادهٔ نقد/کارت‌خوانِ بدونِ پلن) یک ردیفِ جدا در
-            # همان یک سندِ حسابداریِ مشترک می‌گیرد (روش‌ها می‌توانند با
-            # هم فرق کنند).
+            # پلن‌دار، چه نقدیِ سادهٔ بدونِ پلن) یک ردیفِ جدا در همان یک
+            # سندِ حسابداریِ مشترک می‌گیرد.
             merge_plan_entries = [
                 (doc.document_id, [(ln.method_code, ln.amount, ln.note, ln.detail_account_id) for ln in plan.lines])
                 for doc, plan in with_plan
             ]
             standalone_with_plan = []
-            if method_mergeable:
-                merge_plan_entries.extend((doc.document_id, [(method_code, doc.total_amount)]) for doc in without_plan)
-                standalone_without_plan = []
-        elif merge_checked and method_mergeable and len(without_plan) > 1:
+            merge_plan_entries.extend((doc.document_id, [("CASH", doc.total_amount)]) for doc in cash_docs)
+            standalone_cash_docs = []
+        elif merge_checked and len(cash_docs) > 1:
             # طبقِ رفتارِ ازپیش‌موجود (بدونِ هیچ with_planِ ادغام‌شونده):
             # یک سندِ حسابداری با یک ردیفِ واحد برایِ مجموعِ همه ساخته
             # می‌شود -- نه یک ردیفِ جدا به‌ازایِ هر فاکتور.
-            flat_batch_group = without_plan
-            standalone_without_plan = []
+            flat_batch_group = cash_docs
+            standalone_cash_docs = []
 
         merge_doc_ids = {doc_id for doc_id, _lines in merge_plan_entries} | {d.document_id for d in flat_batch_group}
         if len(merge_doc_ids) > 1:
@@ -289,10 +287,6 @@ class CommercialPosApprovalScreen(QWidget):
                     "یا ادغام را خاموش کنید، یا فقط فاکتورهایِ یک طرفِ‌حساب را انتخاب کنید."
                 )
                 return
-
-        if method_code == "GIFT_CARD" and without_plan and not self.reference_field.text().strip():
-            self.status_label.setText("کدِ کارتِ‌هدیه را وارد کنید.")
-            return
 
         reference = self.reference_field.text().strip() or None
         try:
@@ -307,7 +301,7 @@ class CommercialPosApprovalScreen(QWidget):
 
             if flat_batch_group:
                 pos_service.record_payment_and_settle_batch(
-                    company_id, user_id, [d.document_id for d in flat_batch_group], method_code,
+                    company_id, user_id, [d.document_id for d in flat_batch_group], "CASH",
                     reference_no=reference,
                 )
 
@@ -318,11 +312,14 @@ class CommercialPosApprovalScreen(QWidget):
                     reference_no=reference,
                 )
 
-            if method_code != "NONE" and standalone_without_plan:
-                for doc in standalone_without_plan:
-                    pos_service.record_payment_and_settle(
-                        company_id, user_id, doc.document_id, method_code, doc.total_amount, reference_no=reference,
-                    )
+            for doc in standalone_cash_docs:
+                pos_service.record_payment_and_settle(
+                    company_id, user_id, doc.document_id, "CASH", doc.total_amount, reference_no=reference,
+                )
+
+            # credit_docs عمداً بدونِ هیچ فراخوانِ تسویه می‌مانند (approve/
+            # post شان از قبل، در حلقهٔ بالا رویِ selected، انجام شده) --
+            # دقیقاً همان نسیه‌یِ عمدیِ صندوق‌دار.
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
