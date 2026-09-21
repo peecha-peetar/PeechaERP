@@ -31,10 +31,10 @@ from PySide6.QtWidgets import (
 
 from peecha import session as app_session
 from peecha.services import commercial_pos as pos_service
-from peecha.ui.widgets import wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
 
 
-class CommercialPosMenuGroupsScreen(QWidget):
+class CommercialPosMenuGroupsScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._groups: list = []
@@ -116,6 +116,13 @@ class CommercialPosMenuGroupsScreen(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(wrap_scrollable(page))
+
+        self.set_field_help([
+            (self.name_field, "نامِ این تبِ دسترسیِ‌سریع در صفحه‌یِ فروشِ حضوری."),
+            (self.order_field, "ترتیبِ نمایشِ این تب در میانِ تب‌هایِ دیگر -- عددِ کوچک‌تر زودتر می‌آید."),
+            (self.active_checkbox, "گروه‌هایِ غیرِفعال دیگر در صفحه‌یِ فروشِ حضوری نمایش داده نمی‌شوند."),
+            (self.target_printer_combo, "فاکتورهایِ صادرشده با کالاهایِ این گروه، به همین پرینتر ارسال می‌شوند -- «پیش‌فرض» یعنی پرینترِ عمومیِ صندوق."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
