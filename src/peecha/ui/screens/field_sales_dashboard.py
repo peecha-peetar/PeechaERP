@@ -27,14 +27,14 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import field_sales_dashboard as dashboard_service
 from peecha.ui import theme
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 
 def _amount_item(value) -> QTableWidgetItem:
     return QTableWidgetItem(f"{value:,.0f}")
 
 
-class FieldSalesDashboardScreen(QWidget):
+class FieldSalesDashboardScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         outer = QVBoxLayout(self)
@@ -84,6 +84,12 @@ class FieldSalesDashboardScreen(QWidget):
             "کسریِ بارگیریِ خودرو", ["خودرو", "تاریخِ بارگیری", "تعدادِ اقلامِ کسری", "جمعِ مقدارِ کسری"],
         )
         self._sections_layout.addStretch(1)
+
+        self.set_field_help([
+            (self.coverage_date, "روزی که پوششِ ویزیتش نمایش داده می‌شود."),
+            (self.date_from, "ابتدایِ بازه برایِ عملکردِ فروش/تحویل/بارگیری."),
+            (self.date_to, "انتهایِ بازه برایِ عملکردِ فروش/تحویل/بارگیری."),
+        ])
 
     def _add_section(self, title_text: str, columns: list[str]) -> QTableWidget:
         section_title = QLabel(title_text)

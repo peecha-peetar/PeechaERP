@@ -27,13 +27,13 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.ui.screens.commercial_document import DOC_TYPE_TITLES
 from peecha.ui.screens.journal_entry import _AmountField
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit
 
 _DOCUMENT_COLUMNS = ["نوع", "شماره", "طرفِ‌حساب", "تاریخ"]
 _LINE_COLUMNS = ["کالا", "مقدار", "تسویه‌شده", "بازگشتی", "مانده", "مقدارِ بازگشت"]
 
 
-class ConsignmentTrackingScreen(QWidget):
+class ConsignmentTrackingScreen(FieldHelpMixin, QWidget):
     def __init__(self, main_window) -> None:
         super().__init__()
         self._main_window = main_window
@@ -87,6 +87,10 @@ class ConsignmentTrackingScreen(QWidget):
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
+
+        self.set_field_help([
+            (self.return_date_field, "تاریخی که کالایِ بازگشتی/مصرف‌نشده در سیستم ثبت می‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

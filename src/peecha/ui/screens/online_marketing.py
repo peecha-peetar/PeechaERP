@@ -23,10 +23,10 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import online_marketing as marketing_service
-from peecha.ui.widgets import JalaliDateEdit, LayoutEditMixin
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin
 
 
-class OnlineMarketingScreen(LayoutEditMixin, QWidget):
+class OnlineMarketingScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         outer = QVBoxLayout(self)
@@ -66,6 +66,11 @@ class OnlineMarketingScreen(LayoutEditMixin, QWidget):
         self.occasions_list = QListWidget()
         self.occasions_list.setMaximumHeight(90)
         outer.addWidget(self.occasions_list)
+
+        self.set_field_help([
+            (self.date_from_field, "ابتدایِ بازه‌یِ محاسبهٔ فروش/موجودی."),
+            (self.date_to_field, "انتهایِ بازه‌یِ محاسبهٔ فروش/موجودی."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
