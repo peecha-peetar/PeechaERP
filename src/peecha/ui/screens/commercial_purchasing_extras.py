@@ -31,13 +31,13 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصدِ ثابت", "VOLUME_TIER": "پلکانیِ حجمی"}
 _ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحالِ تجمیع", "SETTLED": "تسویه‌شده"}
 
 
-class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
+class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._suppliers: list[dict] = []
@@ -54,6 +54,20 @@ class CommercialPurchasingExtrasScreen(LayoutEditMixin, QWidget):
         outer.addWidget(title)
 
         outer.addWidget(self._build_rebate_tab(), stretch=1)
+
+        self.set_field_help([
+            (self.rebate_supplier_combo, "تامین‌کننده‌ای که این قراردادِ ریبیت با اوست."),
+            (self.rebate_item_combo, "این قرارداد فقط رویِ یک کالایِ خاص اعمال شود -- خالی یعنی رویِ همه‌یِ خریدها از این تامین‌کننده."),
+            (self.rebate_basis_combo, "نحوهٔ محاسبهٔ ریبیت -- درصدِ ثابت، یا پلکانیِ بر اساسِ حجمِ خرید."),
+            (self.rebate_valid_from_field, "تاریخِ شروعِ اعتبارِ این قرارداد."),
+            (self.tier_min_field, "حداقلِ مبلغِ خریدِ دوره که این پله از آن به بعد اعمال می‌شود."),
+            (self.tier_percent_field, "درصدِ ریبیتِ همین پله."),
+            (self.rebate_invoice_combo, "فاکتورِ خریدِ ثبتِ‌نهایی‌شده‌ای که تعهدِ ریبیتش محاسبه می‌شود."),
+            (self.rebate_period_from_field, "ابتدایِ دورهٔ محاسبهٔ ریبیت."),
+            (self.rebate_period_to_field, "انتهایِ دورهٔ محاسبهٔ ریبیت."),
+            (self.rebate_receivable_combo, "حسابِ طلبِ ریبیت که در سندِ تسویه بدهکار می‌شود."),
+            (self.purchase_discount_combo, "حسابِ تخفیفِ خرید که در سندِ تسویه بستانکار می‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None

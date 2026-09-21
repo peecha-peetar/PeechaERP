@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import promotions as promotions_service
-from peecha.ui.widgets import JalaliDateEdit, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "کد", "نام", "نوع"]
 _TYPE_LABELS = {"BUY_X_GET_Y": "بخر و ببر", "THRESHOLD_DISCOUNT": "تخفیفِ پلکانی"}
@@ -39,7 +39,7 @@ _CHANNEL_LABELS = {
 }
 
 
-class PromotionRulesScreen(QWidget):
+class PromotionRulesScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[promotions_service.PromotionRuleRow] = []
@@ -187,6 +187,22 @@ class PromotionRulesScreen(QWidget):
         self.delete_button.setVisible(False)
 
         layout.addWidget(build_action_footer([save_button, cancel_button, self.delete_button]))
+
+        self.set_field_help([
+            (self.code_field, "کدِ یکتایِ این پروموشن -- بعدِ ذخیره قابلِ‌ویرایش نیست."),
+            (self.name_field, "نامِ نمایشیِ پروموشن."),
+            (self.type_combo, "نوعِ پروموشن -- بخر-ببر (کالایِ هدیه) یا تخفیفِ پلکانی (بر اساسِ سقفِ مبلغِ سند)."),
+            (self.channel_combo, "این پروموشن فقط برایِ همین کانالِ فروش اعمال شود -- خالی یعنی همه‌یِ کانال‌ها."),
+            (self.applies_item_combo, "کالایی که خریدنش شرطِ فعال‌شدنِ این پروموشن است."),
+            (self.buy_quantity_field, "حداقلِ تعدادی که از کالایِ بالا باید خریداری شود."),
+            (self.get_quantity_field, "تعدادِ کالایِ هدیه‌ای که به‌ازایِ رسیدن به تعدادِ خرید داده می‌شود."),
+            (self.get_item_combo, "کالایِ هدیه -- خالی یعنی همان کالایِ خریداری‌شده رایگان داده می‌شود."),
+            (self.threshold_amount_field, "حداقلِ مبلغِ سند که تخفیفِ پلکانی از آن به بعد اعمال می‌شود."),
+            (self.discount_percent_field, "درصدِ تخفیفی که به سندهایِ بالایِ سقفِ مبلغ اعمال می‌شود."),
+            (self.valid_from_field, "تاریخِ شروعِ اعتبارِ این پروموشن."),
+            (self.valid_to_field, "تاریخِ پایانِ اعتبارِ این پروموشن."),
+            (self.is_active_checkbox, "پروموشن‌هایِ غیرِفعال دیگر در محاسبهٔ فاکتور اعمال نمی‌شوند."),
+        ])
         return wrap_scrollable(panel)
 
     def _on_type_changed(self) -> None:
