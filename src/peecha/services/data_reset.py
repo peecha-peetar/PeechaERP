@@ -13,13 +13,16 @@
 جدول‌هایِ سراسری (مثلِ inv.feature_definitions/comm.industry_profiles که
 تعریف‌هایِ مشترکِ بینِ همه‌یِ شرکت‌ها هستند) دست نمی‌زنند.
 
-محدودیتِ آگاهانه: ماژول‌هایِ کمتر-رایجِ باقی‌مانده (POS/باشگاهِ مشتریان/
-بازارهایِ آنلاین/شمارشِ چرخه‌ای/BOM/صورت‌حسابِ اشتراکی/گردشِ کار) این‌جا
-پوشش داده نمی‌شوند -- گارانتی/RMA/تیکتِ خدمات و هزینه‌یِ تمام‌شدهٔ وارداتی/
-تعهدِ ریبیتِ تامین‌کننده طبقِ رفعِ باگِ واقعی (که این محدودیت را عملاً
-مسدودکننده می‌کرد) اضافه شدند. اگر داده‌ای در ماژول‌هایِ باقی‌مانده به همین
-اسناد وابسته باشد، عملیات با خطایِ صریحِ دیتابیس (نه خرابیِ خاموش) متوقف
-می‌شود و هیچ‌چیز حذف نمی‌شود (تراکنشِ واحد، همه‌یا-هیچ)."""
+محدودیتِ آگاهانه: ماژول‌هایِ واقعاً کمتر-رایجِ باقی‌مانده (باشگاهِ
+مشتریان/بازارهایِ آنلاین/شمارشِ چرخه‌ای/BOM/صورت‌حسابِ اشتراکی/گردشِ کار)
+این‌جا پوشش داده نمی‌شوند -- گارانتی/RMA/تیکتِ خدمات و هزینه‌یِ تمام‌شدهٔ
+وارداتی/تعهدِ ریبیتِ تامین‌کننده/پرداختِ فروشِ حضوری (pos_payments)/
+حمل‌ونقل/تاییدِ تحویل طبقِ رفعِ باگِ واقعی (که این محدودیت را عملاً
+مسدودکننده می‌کرد -- POS اصلاً یک ماژولِ کمتر-رایج نیست، یکی از
+پرکاربردترین راهِ ثبتِ فروش در همین برنامه است) اضافه شدند. اگر داده‌ای
+در ماژول‌هایِ واقعاً باقی‌مانده به همین اسناد وابسته باشد، عملیات با
+خطایِ صریحِ دیتابیس (نه خرابیِ خاموش) متوقف می‌شود و هیچ‌چیز حذف
+نمی‌شود (تراکنشِ واحد، همه‌یا-هیچ)."""
 
 from __future__ import annotations
 
@@ -111,6 +114,24 @@ _DOCUMENT_DELETE_STATEMENTS = [
     # طبقِ همان الگو -- گزارشِ اصلاح/حذفِ فاکتورهایِ صندوق (دکمه‌یِ
     # «نمایشِ رزروها» + گزارشِ بستنِ شیفت) هم به document_id اشاره می‌کند.
     "DELETE FROM comm.pos_invoice_audit_log WHERE company_id = :company_id",
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («خام‌کردنِ اطلاعات با پیامِ نقضِ
+    # pos_payments_document_id_fkey متوقف می‌شود»): پرداختِ فروشِ حضوری
+    # (comm.pos_payments) برخلافِ فرضِ اولیهٔ این ابزار (که POS را جزوِ
+    # «ماژول‌هایِ کمتر-رایجِ پوشش‌نداده» می‌دانست) در عمل خودِ سندِ فروش
+    # را نگه می‌دارد -- برایِ هر شرکتی که حتی یک فروشِ حضوریِ نقدی داشته،
+    # کلِ عملیاتِ خام‌کردنِ اسناد را متوقف می‌کرد. جدولِ company_id
+    # مستقیم ندارد، پس از رویِ خودِ سند join می‌شود.
+    "DELETE FROM comm.pos_payments WHERE document_id IN "
+    "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
+    # طبقِ همان کشفِ باگ -- حمل‌ونقل (Shipment) و تاییدِ تحویل
+    # (DeliveryConfirmation) هم دقیقاً همین مشکل را دارند: هردو
+    # مستقیماً به سندِ فروش وصل‌اند، نه یکی از ماژول‌هایِ واقعاً
+    # کمتر-رایجِ مستثنی‌شده -- پس همین‌جا (پیش از خودِ سند) پاک می‌شوند.
+    "DELETE FROM comm.delivery_confirmation_lines WHERE delivery_confirmation_id IN "
+    "(SELECT delivery_confirmation_id FROM comm.delivery_confirmations WHERE company_id = :company_id)",
+    "DELETE FROM comm.delivery_confirmations WHERE company_id = :company_id",
+    "DELETE FROM comm.shipments WHERE document_id IN "
+    "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     "DELETE FROM comm.commercial_document_lines WHERE document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     "DELETE FROM comm.commercial_documents WHERE company_id = :company_id",
