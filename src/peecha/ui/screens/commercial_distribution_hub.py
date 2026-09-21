@@ -14,7 +14,9 @@ from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
 
 from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
 from peecha.ui.screens.customer_visits import CustomerVisitsScreen
+from peecha.ui.screens.distribution_team import DistributionTeamScreen
 from peecha.ui.screens.field_sales_dashboard import FieldSalesDashboardScreen
+from peecha.ui.screens.pre_sales_fulfillment import PreSalesFulfillmentScreen
 from peecha.ui.screens.promotion_rules import PromotionRulesScreen
 from peecha.ui.screens.sms_marketing import SmsMarketingScreen
 from peecha.ui.screens.telesales import TelesalesScreen
@@ -39,6 +41,13 @@ class CommercialDistributionHubScreen(QWidget):
             title_override="اسنادِ پخشِ سرد (سفارش‌گیری)",
         )
         self.tabs.addTab(self.pre_sales_tab, "پخشِ سرد (سفارش‌گیری)")
+        # طبقِ درخواستِ صریحِ کاربر (روالِ کاملِ پخشِ سرد): سفارشِ تصویب‌شده
+        # قبل از تبدیل به فاکتور باید تاییدِ انبار و (اگر لازم بود) توزین
+        # بگیرد -- این دو تب همان روال را پیاده می‌کنند.
+        self.fulfillment_tab = PreSalesFulfillmentScreen()
+        self.tabs.addTab(self.fulfillment_tab, "تاییدِ انبار و توزین")
+        self.distribution_team_tab = DistributionTeamScreen()
+        self.tabs.addTab(self.distribution_team_tab, "تیمِ پخش")
         self.van_sales_tab = CommercialDocumentsListScreen(
             main_window, type_filter_codes=("SALES_ORDER", "SALES_INVOICE"), channel_type_code="VAN_SALES",
             title_override="اسنادِ پخشِ گرم (فروشِ خودرویی)",

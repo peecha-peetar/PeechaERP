@@ -486,6 +486,15 @@ class CommercialDocument(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     posted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     posted_at: Mapped[datetime.datetime | None]
+    # طبقِ درخواستِ صریح («روالِ پخشِ سرد: سفارشِ تصویب‌شده باید برود انبار
+    # و توزین، بعد تبدیل به فاکتور»): این دو گیت فقط برایِ سفارش‌هایِ
+    # کانالِ PRE_SALES در سرویس (commercial_documents.convert_to_invoice)
+    # بررسی می‌شوند -- برایِ بقیه‌یِ انواعِ سند/کانال‌ها همیشه نادیده
+    # گرفته می‌شوند.
+    warehouse_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    warehouse_approved_at: Mapped[datetime.datetime | None]
+    weighing_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    weighing_approved_at: Mapped[datetime.datetime | None]
 
 
 class CommercialDocumentLine(Base):
@@ -1633,6 +1642,38 @@ class DeliveryConfirmationLine(Base):
     document_line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
     delivered_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     shortage_reason: Mapped[str | None] = mapped_column(String(200))
+
+
+# طبقِ درخواستِ صریح («فرمِ تیمِ پخش: فاکتورهایِ تاییدشده بعدِ توزین توسطِ
+# واحدِ پخش به خودرو و راننده الصاق شوند، با ریزِ اقلام و جمعِ هر کالا»):
+# هر تیم یک خودرو (inv.warehouses با warehouse_type_code='VEHICLE' -- که
+# از پیش پلاک/راننده رویِ خودش را دارد) + تاریخ است؛ فاکتورهایِ
+# ثبت‌نهایی‌شده به آن الصاق می‌شوند.
+class DistributionRun(Base):
+    __tablename__ = "distribution_runs"
+    __table_args__ = ({"schema": "comm"},)
+
+    distribution_run_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    run_date: Mapped[datetime.date] = mapped_column(Date)
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="DRAFT")  # DRAFT|CONFIRMED|CANCELLED
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    confirmed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    confirmed_at: Mapped[datetime.datetime | None]
+
+
+class DistributionRunDocument(Base):
+    __tablename__ = "distribution_run_documents"
+    __table_args__ = ({"schema": "comm"},)
+
+    distribution_run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("comm.distribution_runs.distribution_run_id"), primary_key=True
+    )
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"), primary_key=True)
+    added_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class PromotionRule(Base):

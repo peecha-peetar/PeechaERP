@@ -446,6 +446,14 @@ def convert_to_invoice(
             raise ValueError("این نوعِ سند قابلِ‌تبدیل به فاکتور نیست.")
         if source.status_code in ("DRAFT", "CANCELLED"):
             raise ValueError("فقط سندِ تاییدشده/تصویب‌شده/ثبت‌شده قابلِ‌تبدیل به فاکتور است.")
+        # طبقِ درخواستِ صریح («روالِ پخشِ سرد: سفارشِ تصویب‌شده باید اول
+        # انبار و توزین را طی کند، بعد تبدیل به فاکتور شود»): این گیت
+        # فقط برایِ سفارش‌هایِ کانالِ PRE_SALES بررسی می‌شود.
+        if _is_pre_sales_order(session, source):
+            if source.warehouse_approved_at is None:
+                raise ValueError("این سفارش هنوز تاییدِ انبار نگرفته -- ابتدا از تبِ «تاییدِ انبار و توزین» تایید کنید.")
+            if document_requires_weighing(document_id, company_id) and source.weighing_approved_at is None:
+                raise ValueError("این سفارش کالایِ توزینی دارد و هنوز توزین/تایید نشده -- ابتدا از تبِ «تاییدِ انبار و توزین» تایید کنید.")
         source_lines = session.scalars(
             select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id).order_by(CommercialDocumentLine.line_no)
         ).all()
@@ -1392,6 +1400,113 @@ def approve_document(document_id: int, company_id: int) -> None:
             raise ValueError("این سند قفلِ اعتباریِ بازِ حل‌نشده دارد — ابتدا آزادسازی کنید.")
         doc.status_code = "APPROVED"
         session.commit()
+
+
+# ---------------------------------------------------------------------
+# روالِ پخشِ سرد — طبقِ درخواستِ صریحِ کاربر: سفارشِ تصویب‌شده باید قبل از
+# تبدیل به فاکتور، هم‌زمان از تاییدِ انبار و (اگر کالایِ توزینی داشت)
+# تاییدِ توزین عبور کند. این دو گیت فقط برایِ سفارش‌هایِ کانالِ PRE_SALES
+# بررسی می‌شوند -- برایِ بقیه‌یِ کانال‌ها/انواعِ سند بدونِ اثر.
+# ---------------------------------------------------------------------
+def _is_pre_sales_order(session, doc: CommercialDocument) -> bool:
+    if doc.document_type_code != "SALES_ORDER" or doc.channel_code is None:
+        return False
+    channel = session.get(Channel, (doc.channel_code, doc.company_id))
+    return channel is not None and channel.channel_type_code == "PRE_SALES"
+
+
+def document_requires_weighing(document_id: int, company_id: int) -> bool:
+    """طبقِ درخواستِ صریح («توزین اگر داشته باشه»): یعنی حداقل یک ردیفِ
+    سند، کالایی با pos_requires_weight=true (کالایِ وزنی/ترازویی -- همان
+    فیلدِ ازپیش‌موجودِ فروشِ حضوری) دارد."""
+    with new_session() as session:
+        return bool(
+            session.scalar(
+                select(func.count()).select_from(CommercialDocumentLine)
+                .join(Item, Item.item_id == CommercialDocumentLine.item_id)
+                .where(CommercialDocumentLine.document_id == document_id, Item.pos_requires_weight.is_(True))
+            )
+        )
+
+
+def list_pre_sales_pending_warehouse_approval(company_id: int) -> list[CommercialDocument]:
+    with new_session() as session:
+        stmt = (
+            select(CommercialDocument)
+            .join(Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id))
+            .where(
+                CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
+                CommercialDocument.status_code == "APPROVED", Channel.channel_type_code == "PRE_SALES",
+                CommercialDocument.warehouse_approved_at.is_(None),
+            )
+            .order_by(CommercialDocument.document_id)
+        )
+        return list(session.scalars(stmt))
+
+
+def list_pre_sales_pending_weighing_approval(company_id: int) -> list[CommercialDocument]:
+    with new_session() as session:
+        stmt = (
+            select(CommercialDocument)
+            .join(Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id))
+            .where(
+                CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
+                CommercialDocument.status_code == "APPROVED", Channel.channel_type_code == "PRE_SALES",
+                CommercialDocument.warehouse_approved_at.is_not(None),
+                CommercialDocument.weighing_approved_at.is_(None),
+            )
+            .order_by(CommercialDocument.document_id)
+        )
+        return [doc for doc in session.scalars(stmt) if document_requires_weighing(doc.document_id, company_id)]
+
+
+def approve_warehouse(document_id: int, company_id: int, approved_by_user_id: int) -> None:
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if not _is_pre_sales_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if doc.status_code != "APPROVED":
+            raise ValueError("فقط سفارشِ تصویب‌شده قابلِ‌تاییدِ انبار است.")
+        if doc.warehouse_approved_at is not None:
+            raise ValueError("این سفارش قبلاً از سویِ انبار تایید شده است.")
+        doc.warehouse_approved_by_user_id = approved_by_user_id
+        doc.warehouse_approved_at = datetime.datetime.now()
+        session.commit()
+
+
+def approve_weighing(document_id: int, company_id: int, approved_by_user_id: int) -> None:
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if not _is_pre_sales_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if doc.warehouse_approved_at is None:
+            raise ValueError("این سفارش هنوز از سویِ انبار تایید نشده است.")
+        if doc.weighing_approved_at is not None:
+            raise ValueError("این سفارش قبلاً توزین/تایید شده است.")
+        doc.weighing_approved_by_user_id = approved_by_user_id
+        doc.weighing_approved_at = datetime.datetime.now()
+        session.commit()
+
+
+def describe_pre_sales_fulfillment_status(document_id: int, company_id: int) -> str | None:
+    """طبقِ نیازِ نمایشِ وضعیت در فهرستِ اسناد/دکمه‌یِ «تبدیل به فاکتور» --
+    اگر سند پخشِ سرد نباشد، None (یعنی این گیت اصلاً برایش معنا ندارد)."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or not _is_pre_sales_order(session, doc):
+            return None
+    requires_weighing = document_requires_weighing(document_id, company_id)
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc.warehouse_approved_at is None:
+            return "در انتظارِ تاییدِ انبار"
+        if requires_weighing and doc.weighing_approved_at is None:
+            return "در انتظارِ توزین"
+        return "آمادهٔ تبدیل به فاکتور"
 
 
 def revert_to_draft(document_id: int, company_id: int) -> None:
