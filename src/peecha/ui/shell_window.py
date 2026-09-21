@@ -1462,6 +1462,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
         from peecha.ui.screens.sales_assistant import SalesAssistantScreen
         from peecha.ui.screens.commercial_online_sales_hub import CommercialOnlineSalesHubScreen
+        from peecha.ui.screens.cold_distribution import ColdDistributionScreen
         from peecha.ui.screens.commercial_distribution_hub import CommercialDistributionHubScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
@@ -1576,6 +1577,10 @@ class MainWindow(QMainWindow):
         # طبقِ درخواستِ صریحِ کاربر («پخشِ سرد+گرم، منوها شلوغ نشه»): هر دو
         # زیرِ یک آیتم/فرمِ تب‌دار، هم‌الگو با فروشِ اینترنتی بالا.
         self.register_screen("commercial_distribution_hub", CommercialDistributionHubScreen(self))
+        # طبقِ درخواستِ صریحِ کاربر («قسمتِ پخشِ سرد جدا باید باشه، فرمِ جدا
+        # براش درست کن»): آیتمِ ناوبریِ مستقل، جدا از پخشِ گرم/زیرساختِ
+        # میدانیِ بالا.
+        self.register_screen("cold_distribution", ColdDistributionScreen(self))
         self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
         self.register_screen("sales_assistant", SalesAssistantScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())

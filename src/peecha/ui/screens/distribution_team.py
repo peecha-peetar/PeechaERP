@@ -28,6 +28,7 @@ from peecha import numerals, session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import distribution_runs as distribution_service
 from peecha.services import inventory_locations as locations_service
+from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _LIST_COLUMNS = ["تاریخ", "خودرو", "وضعیت"]
@@ -43,8 +44,9 @@ def _fmt_qty(value) -> str:
 
 
 class DistributionTeamScreen(FieldHelpMixin, QWidget):
-    def __init__(self) -> None:
+    def __init__(self, main_window=None) -> None:
         super().__init__()
+        self._main_window = main_window
         self._runs: list[distribution_service.DistributionRunRow] = []
         self._current_run: distribution_service.DistributionRunRow | None = None
         self._eligible: list[distribution_service.EligibleInvoiceRow] = []
@@ -105,6 +107,25 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         header_row.addWidget(self.create_button)
         layout.addLayout(header_row)
 
+        # طبقِ سوالِ صریحِ کاربر («خودرو و الصاقِ راننده به خودرو الان کجا
+        # باید انجام بشه؟»): تعریفِ خودروهایِ تازه و پلاک/رانندهٔ هرکدام از
+        # طریقِ فرمِ عمومیِ «انبارها» (با نوعِ انبار = «خودرو») انجام
+        # می‌شود -- این‌جا فقط از میانِ خودروهایِ ازپیش‌تعریف‌شده انتخاب
+        # می‌کنید.
+        vehicle_hint_row = QHBoxLayout()
+        vehicle_hint = QLabel(
+            "برایِ تعریفِ خودروی تازه یا تغییرِ پلاک/راننده‌اش، به «انبارها» بروید و یک انبار با نوعِ «خودرو» بسازید/ویرایش کنید."
+        )
+        vehicle_hint.setObjectName("sectionHint")
+        vehicle_hint.setWordWrap(True)
+        vehicle_hint_row.addWidget(vehicle_hint, stretch=1)
+        if self._main_window is not None:
+            manage_vehicles_button = QPushButton("🏬 مدیریتِ خودروها (انبارها)")
+            manage_vehicles_button.setObjectName("flatButton")
+            manage_vehicles_button.clicked.connect(self._open_warehouses)
+            vehicle_hint_row.addWidget(manage_vehicles_button)
+        layout.addLayout(vehicle_hint_row)
+
         layout.addWidget(QLabel("فاکتورهایِ واجدِ شرایط (پخشِ سردِ ثبت‌نهایی‌شده و هنوز الصاق‌نشده)"))
         self.eligible_table = QTableWidget(0, len(_ELIGIBLE_COLUMNS))
         self.eligible_table.setHorizontalHeaderLabels(_ELIGIBLE_COLUMNS)
@@ -113,7 +134,13 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.eligible_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         layout.addWidget(self.eligible_table, stretch=1)
 
-        layout.addWidget(QLabel("فاکتورهایِ همین تیم"))
+        attached_title_row = QHBoxLayout()
+        attached_title_row.addWidget(QLabel("فاکتورهایِ همین تیم"), stretch=1)
+        self.print_invoices_button = QPushButton("🖨 چاپِ لیستِ فاکتورها")
+        self.print_invoices_button.setObjectName("flatButton")
+        self.print_invoices_button.clicked.connect(self._print_invoice_list)
+        attached_title_row.addWidget(self.print_invoices_button)
+        layout.addLayout(attached_title_row)
         self.attached_table = QTableWidget(0, len(_ATTACHED_COLUMNS))
         self.attached_table.setHorizontalHeaderLabels(_ATTACHED_COLUMNS)
         self.attached_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -121,7 +148,13 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.attached_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         layout.addWidget(self.attached_table, stretch=1)
 
-        layout.addWidget(QLabel("جمعِ کالاها در کلِ تیم -- همین جدول به راننده تحویل داده می‌شود"))
+        summary_title_row = QHBoxLayout()
+        summary_title_row.addWidget(QLabel("جمعِ کالاها در کلِ تیم -- همین جدول به راننده تحویل داده می‌شود"), stretch=1)
+        self.print_summary_button = QPushButton("🖨 چاپِ گزارشِ کالاها (برایِ راننده)")
+        self.print_summary_button.setObjectName("flatButton")
+        self.print_summary_button.clicked.connect(self._print_item_summary)
+        summary_title_row.addWidget(self.print_summary_button)
+        layout.addLayout(summary_title_row)
         self.summary_table = QTableWidget(0, len(_SUMMARY_COLUMNS))
         self.summary_table.setHorizontalHeaderLabels(_SUMMARY_COLUMNS)
         self.summary_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -155,6 +188,8 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             (self.date_field, "تاریخِ این تیمِ پخش."),
             (self.eligible_table, "فاکتورهایِ فروشِ پخشِ سردِ ثبت‌نهایی‌شده که هنوز به هیچ تیمی الصاق نشده‌اند."),
             (self.attached_table, "فاکتورهایِ الصاق‌شده به همین تیم."),
+            (self.print_invoices_button, "چاپِ فهرستِ فاکتورهایِ الصاق‌شده به این خودرو -- برایِ رسیدِ خروج/بایگانی."),
+            (self.print_summary_button, "چاپِ جمعِ هر کالا در کلِ فاکتورهایِ این تیم -- برایِ تحویلِ فیزیکیِ بار به راننده."),
         ])
         return wrap_scrollable(panel)
 
@@ -213,6 +248,9 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self._fill_eligible_table()
         self._fill_attached_table(editable=is_draft)
         self._fill_summary_table(run)
+        has_invoices = bool(run.invoices)
+        self.print_invoices_button.setEnabled(has_invoices)
+        self.print_summary_button.setEnabled(has_invoices)
 
         if is_draft:
             self.info_label.setText("این تیم هنوز تحویل‌داده‌نشده -- می‌توانید فاکتور اضافه/حذف کنید.")
@@ -276,6 +314,8 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.eligible_table.setRowCount(0)
         self.attached_table.setRowCount(0)
         self.summary_table.setRowCount(0)
+        self.print_invoices_button.setEnabled(False)
+        self.print_summary_button.setEnabled(False)
         self.runs_table.clearSelection()
 
     def _create_run(self) -> None:
@@ -332,6 +372,38 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             self.status_label.setText(str(exc))
             return
         self.refresh()
+
+    def _open_warehouses(self) -> None:
+        if self._main_window is not None:
+            self._main_window.open_screen("inventory_warehouses")
+
+    def _print_invoice_list(self) -> None:
+        if self._current_run is None or not self._current_run.invoices:
+            return
+        headers = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل"]
+        rows = [
+            [
+                numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
+                _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
+            ]
+            for inv in self._current_run.invoices
+        ]
+        title = f"لیستِ فاکتورهایِ الصاق‌شده -- {self._current_run.vehicle_warehouse_label}"
+        report_export.print_report(self, title, headers, rows, **self._export_kwargs())
+
+    def _print_item_summary(self) -> None:
+        if self._current_run is None or not self._current_run.item_summary:
+            return
+        headers = ["کالا", "واحد", "جمعِ مقدار"]
+        rows = [[f"{s.item_code} — {s.item_name or ''}", s.uom_code, _fmt_qty(s.total_quantity)] for s in self._current_run.item_summary]
+        title = f"گزارشِ کالاهایِ تیمِ پخش -- تحویل به راننده -- {self._current_run.vehicle_warehouse_label}"
+        report_export.print_report(self, title, headers, rows, **self._export_kwargs())
+
+    def _export_kwargs(self) -> dict:
+        return {
+            "company_name": app_session.current_company.display_name if app_session.current_company else "",
+            "report_date": numerals.format_jalali_date(self._current_run.run_date) if self._current_run else "",
+        }
 
 
 def _dimensions_label(detail_account_id: int) -> str:

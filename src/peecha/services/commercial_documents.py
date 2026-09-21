@@ -1403,11 +1403,18 @@ def approve_document(document_id: int, company_id: int) -> None:
 
 
 # ---------------------------------------------------------------------
-# روالِ پخشِ سرد — طبقِ درخواستِ صریحِ کاربر: سفارشِ تصویب‌شده باید قبل از
-# تبدیل به فاکتور، هم‌زمان از تاییدِ انبار و (اگر کالایِ توزینی داشت)
-# تاییدِ توزین عبور کند. این دو گیت فقط برایِ سفارش‌هایِ کانالِ PRE_SALES
-# بررسی می‌شوند -- برایِ بقیه‌یِ کانال‌ها/انواعِ سند بدونِ اثر.
+# روالِ پخشِ سرد — طبقِ درخواستِ صریحِ کاربر: سفارش (از همان لحظه‌یِ
+# ثبتِ‌نهایی/تاییدِ کاربر -- CONFIRMED؛ تصویبِ مدیرِ APPROVED هم اگر
+# جداگانه انجام شود پذیرفته می‌شود، ولی اجباری نیست) باید قبل از تبدیل
+# به فاکتور، هم‌زمان از تاییدِ انبار و (اگر کالایِ توزینی داشت) تاییدِ
+# توزین عبور کند. طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سفارشات را در قسمتِ
+# توزین/تاییدِ انبار نمی‌آورد»): این گیت قبلاً فقط سفارشِ APPROVED را
+# می‌پذیرفت -- درحالی‌که در روالِ واقعیِ کاربر، سفارش‌هایِ پخشِ سرد اغلب
+# بعدِ تاییدِ کاربر (CONFIRMED) مستقیماً به انبار می‌روند، بدونِ کلیکِ
+# جداگانه‌یِ «تصویبِ مدیر». این دو گیت فقط برایِ سفارش‌هایِ کانالِ
+# PRE_SALES بررسی می‌شوند -- برایِ بقیه‌یِ کانال‌ها/انواعِ سند بدونِ اثر.
 # ---------------------------------------------------------------------
+_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES = ("CONFIRMED", "APPROVED")
 def _is_pre_sales_order(session, doc: CommercialDocument) -> bool:
     if doc.document_type_code != "SALES_ORDER" or doc.channel_code is None:
         return False
@@ -1436,7 +1443,8 @@ def list_pre_sales_pending_warehouse_approval(company_id: int) -> list[Commercia
             .join(Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id))
             .where(
                 CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
-                CommercialDocument.status_code == "APPROVED", Channel.channel_type_code == "PRE_SALES",
+                CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
+                Channel.channel_type_code == "PRE_SALES",
                 CommercialDocument.warehouse_approved_at.is_(None),
             )
             .order_by(CommercialDocument.document_id)
@@ -1451,7 +1459,8 @@ def list_pre_sales_pending_weighing_approval(company_id: int) -> list[Commercial
             .join(Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id))
             .where(
                 CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
-                CommercialDocument.status_code == "APPROVED", Channel.channel_type_code == "PRE_SALES",
+                CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
+                Channel.channel_type_code == "PRE_SALES",
                 CommercialDocument.warehouse_approved_at.is_not(None),
                 CommercialDocument.weighing_approved_at.is_(None),
             )
@@ -1467,8 +1476,8 @@ def approve_warehouse(document_id: int, company_id: int, approved_by_user_id: in
             raise ValueError("سند نامعتبر است.")
         if not _is_pre_sales_order(session, doc):
             raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
-        if doc.status_code != "APPROVED":
-            raise ValueError("فقط سفارشِ تصویب‌شده قابلِ‌تاییدِ انبار است.")
+        if doc.status_code not in _PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES:
+            raise ValueError("فقط سفارشِ تاییدشده/تصویب‌شده قابلِ‌تاییدِ انبار است.")
         if doc.warehouse_approved_at is not None:
             raise ValueError("این سفارش قبلاً از سویِ انبار تایید شده است.")
         doc.warehouse_approved_by_user_id = approved_by_user_id

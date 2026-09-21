@@ -1,12 +1,18 @@
 """پخشِ کالا -- طبقِ درخواستِ صریحِ کاربر («۳ ماژول: پخشِ سرد با
 سفارش‌گیری، پخشِ گرم، سفارشِ موبایل») ولی هم‌زمان طبقِ محدودیتِ صریحِ
 همان کاربر («منوها شلوغ نشه، تنظیمات هم جدا باشه»): همهٔ ماژول‌هایِ
-ERP-محور (اسنادِ سرد/گرم، برنامهٔ مراجعه، بارگیریِ خودرو، ویزیت‌ها،
+ERP-محور (اسنادِ گرم، برنامهٔ مراجعه، بارگیریِ خودرو، ویزیت‌ها،
 پروموشن‌ها) زیرِ یک آیتمِ ناوبریِ واحد با تب، هم‌الگو با
 commercial_online_sales_hub.py -- به‌جایِ چند آیتمِ جداگانه در منویِ
 اصلی. ماژولِ سومِ کاربر (اپِ سفارشِ موبایل) نیازمندِ یک تصمیمِ
 معماریِ جداگانه (API/Offline-Sync) است و به‌مرور در R131/R132 اضافه
-می‌شود."""
+می‌شود.
+
+طبقِ درخواستِ صریحِ بعدیِ کاربر («قسمتِ پخشِ سرد جدا باید باشه، فرمِ جدا
+براش درست کن»): روالِ کاملِ پخشِ سرد (سفارش/تاییدِ انبار و توزین/تیمِ
+پخش) از این‌جا بیرون رفت و آیتمِ ناوبریِ مستقلِ خودش را گرفت
+(cold_distribution.py) -- این فرم فقط پخشِ گرم و زیرساختِ میدانیِ
+مشترک را نگه می‌دارد."""
 
 from __future__ import annotations
 
@@ -14,9 +20,7 @@ from PySide6.QtWidgets import QLabel, QTabWidget, QVBoxLayout, QWidget
 
 from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
 from peecha.ui.screens.customer_visits import CustomerVisitsScreen
-from peecha.ui.screens.distribution_team import DistributionTeamScreen
 from peecha.ui.screens.field_sales_dashboard import FieldSalesDashboardScreen
-from peecha.ui.screens.pre_sales_fulfillment import PreSalesFulfillmentScreen
 from peecha.ui.screens.promotion_rules import PromotionRulesScreen
 from peecha.ui.screens.sms_marketing import SmsMarketingScreen
 from peecha.ui.screens.telesales import TelesalesScreen
@@ -36,27 +40,17 @@ class CommercialDistributionHubScreen(QWidget):
         outer.addWidget(title)
 
         self.tabs = QTabWidget()
-        self.pre_sales_tab = CommercialDocumentsListScreen(
-            main_window, type_filter_codes=("SALES_ORDER", "SALES_INVOICE"), channel_type_code="PRE_SALES",
-            title_override="اسنادِ پخشِ سرد (سفارش‌گیری)",
-        )
-        self.tabs.addTab(self.pre_sales_tab, "پخشِ سرد (سفارش‌گیری)")
-        # طبقِ درخواستِ صریحِ کاربر (روالِ کاملِ پخشِ سرد): سفارشِ تصویب‌شده
-        # قبل از تبدیل به فاکتور باید تاییدِ انبار و (اگر لازم بود) توزین
-        # بگیرد -- این دو تب همان روال را پیاده می‌کنند.
-        self.fulfillment_tab = PreSalesFulfillmentScreen()
-        self.tabs.addTab(self.fulfillment_tab, "تاییدِ انبار و توزین")
-        self.distribution_team_tab = DistributionTeamScreen()
-        self.tabs.addTab(self.distribution_team_tab, "تیمِ پخش")
         self.van_sales_tab = CommercialDocumentsListScreen(
             main_window, type_filter_codes=("SALES_ORDER", "SALES_INVOICE"), channel_type_code="VAN_SALES",
             title_override="اسنادِ پخشِ گرم (فروشِ خودرویی)",
         )
         self.tabs.addTab(self.van_sales_tab, "پخشِ گرم (فروشِ خودرویی)")
         # طبقِ درخواستِ صریحِ کاربر: پخشِ سرد از سه مسیر سفارش می‌گیرد --
-        # عمده (تبِ بالا)، موبایلی (R131/R132)، و این‌جا تلفنی؛ فهرستِ
-        # مشتریانِ ویزیتورِ واردشده (مقیم یا تلفنی، فرقی ندارد) با
-        # امکانِ یادداشت/معین‌حساب/ثبتِ سفارش از همین‌جا.
+        # عمده (حالا در آیتمِ مستقلِ «پخشِ سرد»، تبِ «سفارش‌ها»)، موبایلی
+        # (R131/R132)، و این‌جا تلفنی؛ فهرستِ مشتریانِ ویزیتورِ واردشده
+        # (مقیم یا تلفنی، فرقی ندارد) با امکانِ یادداشت/معین‌حساب/ثبتِ
+        # سفارش از همین‌جا -- سفارشِ ثبت‌شده هم مثلِ بقیه، از آیتمِ
+        # «پخشِ سرد» پیگیری/تایید/تبدیل می‌شود.
         self.tele_sales_tab = TelesalesScreen(main_window)
         self.tabs.addTab(self.tele_sales_tab, "فروشِ تلفنی")
         # طبقِ نقشه‌راهِ تاییدشده (R130): مدیریتِ زیرساختِ میدانیِ ساخته‌شده
