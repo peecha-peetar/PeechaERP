@@ -462,7 +462,12 @@ def convert_to_invoice(
 
         line_snapshots = []
         for ln in source_lines:
-            remaining = ln.quantity - _invoiced_quantity(session, ln.line_id)
+            # طبقِ درخواستِ صریحِ کاربر (روالِ پخشِ سرد): اگر انباردار
+            # مقدارِ واقعیِ تحویلی/توزین‌شده را ثبت کرده باشد (که ممکن
+            # است با مقدارِ سفارش‌داده‌شده فرق کند)، فاکتور باید از رویِ
+            # همان مقدار ساخته شود، نه مقدارِ اصلیِ سفارش.
+            base_quantity = ln.warehouse_delivered_quantity if ln.warehouse_delivered_quantity is not None else ln.quantity
+            remaining = base_quantity - _invoiced_quantity(session, ln.line_id)
             if line_quantities is None:
                 qty_this_time = remaining
             else:
@@ -1516,6 +1521,124 @@ def describe_pre_sales_fulfillment_status(document_id: int, company_id: int) -> 
         if requires_weighing and doc.weighing_approved_at is None:
             return "در انتظارِ توزین"
         return "آمادهٔ تبدیل به فاکتور"
+
+
+def _has_any_invoiced_quantity(session, document_id: int) -> bool:
+    """طبقِ همان الگویِ _invoiced_quantity: ستونِ CommercialDocumentLine.
+    invoiced_quantity_total هرگز در جایی از کد به‌روزرسانی نمی‌شود (همیشه
+    صفرِ پیش‌فرض می‌ماند) -- پس «آیا این سفارش قبلاً تبدیل شده؟» باید
+    مثلِ خودِ تبدیل، با پیداکردنِ ردیف‌هایِ فاکتورِ غیرِلغوشده‌ای که
+    source_line_id‌شان به ردیف‌هایِ همین سفارش اشاره می‌کند، محاسبه شود."""
+    line_ids = list(session.scalars(select(CommercialDocumentLine.line_id).where(CommercialDocumentLine.document_id == document_id)))
+    if not line_ids:
+        return False
+    return bool(
+        session.scalar(
+            select(func.count()).select_from(CommercialDocumentLine)
+            .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+            .where(CommercialDocumentLine.source_line_id.in_(line_ids), CommercialDocument.status_code != "CANCELLED")
+        )
+    )
+
+
+def document_has_been_converted(document_id: int, company_id: int) -> bool:
+    """طبقِ درخواستِ صریح («امکانِ بازگشت و ادیتِ مجدد برایِ انباردار تا
+    تاییدِ نهایی [=تبدیل به فاکتور] فعال شود»): همین تابع مرزِ «تاییدِ
+    نهایی» را مشخص می‌کند -- به‌محضِ این‌که حتیّ یک ردیف از این سفارش به
+    فاکتور تبدیل شده باشد، دیگر مقدارِ تحویلی/تاییدِ انبار/توزین
+    قابلِ‌بازگشت یا ویرایش نیستند (چون فاکتورِ صادرشده از رویِ همان
+    مقدارها ساخته شده و برگرداندنشان سند را با فاکتور ناهم‌خوان می‌کند)."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        return _has_any_invoiced_quantity(session, document_id)
+
+
+def set_warehouse_delivered_quantities(
+    document_id: int, company_id: int, quantities: dict[int, decimal.Decimal],
+) -> None:
+    """طبقِ درخواستِ صریحِ کاربر («انباردار سفارش را باز کند، مقدارِ
+    تحویلی را وارد/ادیت کند -- وزنی و تعدادی»): مقدارِ واقعیِ تحویلی/
+    توزین‌شده‌یِ هر ردیف را ثبت می‌کند؛ این مقدار (اگر ثبت شود) بعداً به‌
+    جایِ مقدارِ سفارش، مبنایِ پیش‌فرضِ تبدیل به فاکتور می‌شود
+    (convert_to_invoice). قابلِ‌ویرایش تا وقتی سفارش هنوز به هیچ
+    فاکتوری تبدیل نشده -- صرفِ‌نظر از این‌که تاییدِ انبار/توزین قبلاً
+    زده شده یا نه (همان چیزی که «بازگشت و ادیتِ مجدد» را ممکن می‌کند)."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if not _is_pre_sales_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if _has_any_invoiced_quantity(session, document_id):
+            raise ValueError("این سفارش قبلاً (به‌طورِ کامل/جزئی) به فاکتور تبدیل شده -- مقدارِ تحویلی دیگر قابلِ‌ویرایش نیست.")
+        lines_by_id = {
+            ln.line_id: ln
+            for ln in session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id))
+        }
+        for line_id, qty in quantities.items():
+            line = lines_by_id.get(line_id)
+            if line is None:
+                raise ValueError("ردیفِ نامعتبر.")
+            if qty < 0:
+                raise ValueError("مقدارِ تحویلی نمی‌تواند منفی باشد.")
+            line.warehouse_delivered_quantity = qty
+        session.commit()
+
+
+def revert_warehouse_approval(document_id: int, company_id: int) -> None:
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if not _is_pre_sales_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if doc.warehouse_approved_at is None:
+            raise ValueError("این سفارش هنوز تاییدِ انبار نگرفته است.")
+        if doc.weighing_approved_at is not None:
+            raise ValueError("ابتدا تاییدِ توزین را برگردانید.")
+        if _has_any_invoiced_quantity(session, document_id):
+            raise ValueError("این سفارش قبلاً به فاکتور تبدیل شده -- دیگر قابلِ‌بازگشت نیست.")
+        doc.warehouse_approved_by_user_id = None
+        doc.warehouse_approved_at = None
+        session.commit()
+
+
+def revert_weighing_approval(document_id: int, company_id: int) -> None:
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if not _is_pre_sales_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if doc.weighing_approved_at is None:
+            raise ValueError("این سفارش هنوز توزین/تایید نشده است.")
+        if _has_any_invoiced_quantity(session, document_id):
+            raise ValueError("این سفارش قبلاً به فاکتور تبدیل شده -- دیگر قابلِ‌بازگشت نیست.")
+        doc.weighing_approved_by_user_id = None
+        doc.weighing_approved_at = None
+        session.commit()
+
+
+def list_pre_sales_fulfillment_queue(company_id: int) -> list[CommercialDocument]:
+    """همه‌یِ سفارش‌هایِ پخشِ سردِ CONFIRMED/APPROVED که هنوز به هیچ
+    فاکتوری (حتی جزئی) تبدیل نشده‌اند -- صرفِ‌نظر از مرحله‌یِ فعلیِ
+    تاییدِ انبار/توزین؛ یک فهرستِ واحد برایِ صفحه‌یِ «تاییدِ انبار و
+    توزین» که هم موردهایِ در انتظار و هم موردهایِ ازپیش‌تاییدشده (برایِ
+    امکانِ بازگشت/ویرایشِ مجدد) را نشان می‌دهد."""
+    with new_session() as session:
+        stmt = (
+            select(CommercialDocument)
+            .join(Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id))
+            .where(
+                CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
+                CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
+                Channel.channel_type_code == "PRE_SALES",
+            )
+            .order_by(CommercialDocument.document_id)
+        )
+        return [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
 
 
 def revert_to_draft(document_id: int, company_id: int) -> None:

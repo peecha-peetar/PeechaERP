@@ -540,6 +540,12 @@ class CommercialDocumentLine(Base):
     promotion_id: Mapped[int | None] = mapped_column(ForeignKey("comm.promotions.promotion_id"))
     coupon_id: Mapped[int | None] = mapped_column(ForeignKey("comm.coupons.coupon_id"))
     description: Mapped[str | None] = mapped_column(String(500))
+    # طبقِ درخواستِ صریحِ کاربر (روالِ پخشِ سرد): مقدارِ واقعیِ تحویلی/
+    # توزین‌شده که انباردار هنگامِ بازکردنِ سفارش وارد/ادیت می‌کند --
+    # می‌تواند با quantity (مقدارِ سفارش‌داده‌شده) فرق کند (کسری/تفاوتِ
+    # وزن)؛ خالی یعنی هنوز واردنشده -- رفتارِ پیش‌فرض همچنان از quantity
+    # پیروی می‌کند.
+    warehouse_delivered_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
 
 
 # =======================================================================
