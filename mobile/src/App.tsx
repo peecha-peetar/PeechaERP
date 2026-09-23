@@ -136,6 +136,7 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
       <SafeAreaView style={styles.flex}>
         <LoginScreen
           apiClient={services.apiClient}
+          kvStore={services.kvStore}
           onLoggedIn={async (loginData) => {
             setUserFullName(loginData.full_name);
             await services.syncEngine.pull();

@@ -25,6 +25,8 @@ venv/
 # اپِ موبایل (mobile/, R132) -- Node/RN
 mobile/node_modules/
 mobile/coverage/
+# پوشه‌یِ کشِ محلیِ Expo CLI (توکن/تنظیماتِ دستگاه) -- طبقِ R187، به‌ازایِ هر دستگاه/دِوِلاپر فرق می‌کند
+mobile/.expo/
 
 # فونت‌ها: از نسخه‌یِ R109 به بعد Vazirmatn (متن‌بازِ واقعی) عمداً commit
 # شده -- طبق assets/fonts/README.md فقط فونت‌هایِ دیگر (مثلِ IRANSansِ

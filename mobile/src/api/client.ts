@@ -37,10 +37,21 @@ export class ApiError extends Error {
  * پرتاب می‌شود تا لایه‌یِ UI کاربر را به صفحه‌یِ ورود برگرداند. */
 export class ApiClient {
   constructor(
-    private readonly baseUrl: string,
+    private baseUrl: string,
     private readonly tokenStore: TokenStore,
     private readonly fetcher: Fetcher = fetch,
   ) {}
+
+  /** طبقِ نیازِ واقعیِ اجرا رویِ دستگاهِ فیزیکی: هر مشتری آدرسِ سرورِ
+   * peecha_apiِ خودش را دارد (شبکه‌یِ محلی/دامنه‌یِ اختصاصی) -- این آدرس
+   * از صفحه‌یِ ورود قابلِ‌تغییر است، نه فقط یک مقدارِ ثابتِ زمانِ بیلد. */
+  setBaseUrl(baseUrl: string): void {
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+  }
+
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
 
   private async request<T>(
     path: string,

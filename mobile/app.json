@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "پیچا -- پخش سرد/گرم",
+    "slug": "peecha-field-sales",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["assets/fonts/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ir.peecha.fieldsales"
+    },
+    "android": {
+      "package": "ir.peecha.fieldsales",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

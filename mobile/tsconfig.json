@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["jest", "react-native", "node"]
   },
-  "include": ["src", "__tests__"]
+  "include": ["src", "__tests__", "index.ts"]
 }
