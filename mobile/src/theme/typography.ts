@@ -1,12 +1,19 @@
 import { TextStyle } from "react-native";
 
-/** تایپوگرافیِ فارسی/RTL -- طبقِ محدودیتِ شناخته‌شده: در این سندباکس
- * فونتِ فارسیِ اختصاصی (مثلِ Vazirmatn/IRANSans) قابلِ‌باندل‌کردن نیست
- * (نیازمندِ فایلِ فونت + لینکِ نیتیو)؛ فعلاً فونتِ سیستم با
- * writingDirection: "rtl" استفاده می‌شود -- افزودنِ فونتِ اختصاصی فقط
- * نیازمندِ تغییرِ fontFamily در همین یک فایل است، نه در صفحه‌ها. */
+/** تایپوگرافیِ فارسی/RTL -- طبقِ درخواستِ صریحِ کاربر، فونتِ Vazirmatn
+ * (assets/fonts/*.ttf، از پکیجِ npm رسمیِ vazirmatn، مجوزِ SIL OFL).
+ *
+ * طبقِ محدودیتِ شناخته‌شده‌یِ فونت‌هایِ استاتیکِ سفارشی در React Native:
+ * روی اندروید، fontWeight رویِ یک fontFamilyِ سفارشی سینتز نمی‌شود (فقط
+ * برایِ فونتِ سیستم کار می‌کند) -- روشِ درست این است که هر وزن، خودش یک
+ * fontFamilyِ جداگانه باشد (Vazirmatn-Regular/SemiBold/Bold) و fontWeight
+ * اصلاً ست نشود. کپیِ واقعیِ فایل‌هایِ فونت به پروژه‌یِ نیتیو هنوز نیازمندِ
+ * یک‌بار اجرایِ `npx react-native-asset` رویِ ماشینِ دارایِ Android
+ * SDK/Xcode است (react-native.config.js همین الان آماده است). */
 
-export const fontFamily = undefined; // TODO(UI-8): فونتِ فارسیِ اختصاصی
+const VAZIRMATN_REGULAR = "Vazirmatn-Regular";
+const VAZIRMATN_SEMIBOLD = "Vazirmatn-SemiBold";
+const VAZIRMATN_BOLD = "Vazirmatn-Bold";
 
 interface TextVariant extends TextStyle {}
 
@@ -14,16 +21,16 @@ export const typography: Record<
   "h1" | "h2" | "h3" | "body" | "bodyBold" | "caption" | "captionBold" | "button" | "numeric",
   TextVariant
 > = {
-  h1: { fontFamily, fontSize: 24, fontWeight: "700", writingDirection: "rtl", textAlign: "right" },
-  h2: { fontFamily, fontSize: 20, fontWeight: "700", writingDirection: "rtl", textAlign: "right" },
-  h3: { fontFamily, fontSize: 17, fontWeight: "600", writingDirection: "rtl", textAlign: "right" },
-  body: { fontFamily, fontSize: 15, fontWeight: "400", writingDirection: "rtl", textAlign: "right" },
-  bodyBold: { fontFamily, fontSize: 15, fontWeight: "700", writingDirection: "rtl", textAlign: "right" },
-  caption: { fontFamily, fontSize: 12, fontWeight: "400", writingDirection: "rtl", textAlign: "right" },
-  captionBold: { fontFamily, fontSize: 12, fontWeight: "700", writingDirection: "rtl", textAlign: "right" },
-  button: { fontFamily, fontSize: 15, fontWeight: "700", writingDirection: "rtl", textAlign: "center" },
+  h1: { fontFamily: VAZIRMATN_BOLD, fontSize: 24, writingDirection: "rtl", textAlign: "right" },
+  h2: { fontFamily: VAZIRMATN_BOLD, fontSize: 20, writingDirection: "rtl", textAlign: "right" },
+  h3: { fontFamily: VAZIRMATN_SEMIBOLD, fontSize: 17, writingDirection: "rtl", textAlign: "right" },
+  body: { fontFamily: VAZIRMATN_REGULAR, fontSize: 15, writingDirection: "rtl", textAlign: "right" },
+  bodyBold: { fontFamily: VAZIRMATN_BOLD, fontSize: 15, writingDirection: "rtl", textAlign: "right" },
+  caption: { fontFamily: VAZIRMATN_REGULAR, fontSize: 12, writingDirection: "rtl", textAlign: "right" },
+  captionBold: { fontFamily: VAZIRMATN_BOLD, fontSize: 12, writingDirection: "rtl", textAlign: "right" },
+  button: { fontFamily: VAZIRMATN_BOLD, fontSize: 15, writingDirection: "rtl", textAlign: "center" },
   // اعدادِ پول/تعداد همیشه LTR بمانند بهتر است (مبلغ/شماره‌یِ چند رقمی
   // در RTL به‌هم‌ریخته نمایش داده می‌شود) -- طبقِ رفتارِ استانداردِ
   // اپ‌هایِ فارسی/عربی برایِ اعداد.
-  numeric: { fontFamily, fontSize: 15, fontWeight: "700", writingDirection: "ltr", textAlign: "left" },
+  numeric: { fontFamily: VAZIRMATN_BOLD, fontSize: 15, writingDirection: "ltr", textAlign: "left" },
 };
