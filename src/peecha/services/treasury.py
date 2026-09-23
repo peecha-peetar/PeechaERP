@@ -1175,6 +1175,40 @@ def list_counterparty_mappings(company_id: int, direction: str | None = None) ->
     return result
 
 
+def resolve_counterparty_for_detail_account(
+    company_id: int, direction: str, detail_account_id: int
+) -> tuple[int, dict[int, int]]:
+    """هم‌الگو با ساختِ _counterparty_index در UIِ فرمِ دریافت/پرداخت:
+    برایِ یک تفصیلیِ مشخص (مثلاً مشتری)، معینِ نگاشته‌شده (بر اساسِ
+    گروهِ اشخاص یا نوع‌بُعد) را پیدا می‌کند -- طبقِ همان اولویت: اگر هم
+    نگاشتِ گروهِ اشخاص و هم نگاشتِ سطحِ نوع‌بُعد برایِ همین تفصیلی وجود
+    داشته باشد، نگاشتِ نوع‌بُعد غالب است. برایِ استفادهٔ APIِ موبایل
+    (R134: /payments) که مستقیم شناسهٔ تفصیلیِ مشتری را دارد، نه یک UI
+    برایِ انتخابِ دستی."""
+    with new_session() as session:
+        detail = session.get(DetailAccount, detail_account_id)
+        if detail is None or detail.company_id != company_id:
+            raise ValueError("تفصیلیِ طرفِ‌حساب نامعتبر است.")
+        dimension_type_id = detail.dimension_type_id
+        person_group_id = detail.person_group_id
+
+    mappings = list_counterparty_mappings(company_id, direction)
+    person_mapping_by_group = {m.person_group_id: m.account_id for m in mappings if m.person_group_id is not None}
+    dim_mapping_by_type = {m.dimension_type_id: m.account_id for m in mappings if m.dimension_type_id is not None}
+
+    account_id: int | None = None
+    resolved_dimension_type_id = dimension_type_id
+    if person_group_id is not None and person_group_id in person_mapping_by_group:
+        account_id = person_mapping_by_group[person_group_id]
+    if dimension_type_id in dim_mapping_by_type:
+        account_id = dim_mapping_by_type[dimension_type_id]
+    if account_id is None:
+        raise ValueError("برایِ این طرفِ‌حساب، نگاشتِ حساب در تنظیماتِ خزانه‌داری تعریف نشده است.")
+
+    counterparty_details = {resolved_dimension_type_id: detail_account_id}
+    return account_id, counterparty_details
+
+
 def create_counterparty_mapping(
     company_id: int,
     direction: str,

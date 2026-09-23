@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from peecha_api.routers import auth, delivery, orders, pricing, sync, visits
+from peecha_api.routers import auth, customers, delivery, orders, payments, pricing, sync, visits
 
-app = FastAPI(title="Peecha Field Sales API", version="R133")
+app = FastAPI(title="Peecha Field Sales API", version="R179")
 
 app.include_router(auth.router)
 app.include_router(sync.router)
@@ -19,6 +19,8 @@ app.include_router(visits.router)
 app.include_router(orders.router)
 app.include_router(delivery.router)
 app.include_router(pricing.router)
+app.include_router(payments.router)
+app.include_router(customers.router)
 
 
 @app.get("/health")

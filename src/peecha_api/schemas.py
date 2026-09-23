@@ -80,6 +80,40 @@ class PriceResolveResponse(BaseModel):
     discount_amount: decimal.Decimal
 
 
+class PaymentMethodLineRequest(BaseModel):
+    method: str  # "CASH" | "BANK" | "CHECK"
+    amount: decimal.Decimal
+    description: str = ""
+    detail_account_id: int | None = None  # صندوق/حسابِ بانکیِ مشخص، اگر بیش از یکی نگاشته شده
+    check_no: str | None = None
+    check_bank_name: str | None = None
+    check_due_date: datetime.date | None = None
+    check_party_name: str | None = None
+
+
+class PaymentCreateRequest(BaseModel):
+    customer_detail_account_id: int
+    document_date: datetime.date | None = None
+    description: str = ""
+    customer_visit_id: int | None = None
+    method_lines: list[PaymentMethodLineRequest]
+
+
+class CustomerCreateRequest(BaseModel):
+    code: str
+    name: str
+    customer_group_id: int | None = None
+    default_price_list_id: int | None = None
+    payment_term_days: int = 0
+    credit_limit_amount: decimal.Decimal = decimal.Decimal(0)
+    default_channel_code: str | None = None
+    distribution_route_detail_account_id: int | None = None
+    address: str | None = None
+    phone: str | None = None
+    gps_latitude: decimal.Decimal | None = None
+    gps_longitude: decimal.Decimal | None = None
+
+
 class DeliveryConfirmationRequest(BaseModel):
     document_id: int
     customer_visit_id: int | None = None

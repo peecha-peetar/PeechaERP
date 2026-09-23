@@ -96,16 +96,24 @@ class CustomerProfileFields:
     default_sales_rep_detail_account_id: int | None = None
     onboarding_source_code: str | None = None
     is_tax_exempt: bool = False
+    distribution_route_detail_account_id: int | None = None
+    gps_latitude: "decimal.Decimal | None" = None
+    gps_longitude: "decimal.Decimal | None" = None
 
 
 def create_customer(
     company_id: int, code: str, name: str, fields: CustomerProfileFields | None = None,
-    fast_track: bool = False, submitted_by_user_id: int | None = None,
+    fast_track: bool = False, submitted_by_user_id: int | None = None, **extra_fields,
 ) -> int:
     """fast_track=True (مرحلهٔ ۳، پیشنهادِ معمار): مشتریِ کم‌ریسک بدونِ
-    گذر از PENDING_APPROVAL مستقیم ACTIVE می‌شود."""
+    گذر از PENDING_APPROVAL مستقیم ACTIVE می‌شود.
+
+    extra_fields (R134، برایِ APIِ موبایل): فیلدهایِ خودِ customer_details
+    (مثلِ phone/address) -- مستقیم به dimensions_service.create_customer
+    منتقل می‌شود، اختیاری و عطف‌به‌ماسبق‌سازگار (فراخوانی‌هایِ قبلی بدونِ
+    این فیلدها دست‌نخورده می‌مانند)."""
     fields = fields or CustomerProfileFields()
-    detail_account_id = dimensions_service.create_customer(company_id, code, name)
+    detail_account_id = dimensions_service.create_customer(company_id, code, name, **extra_fields)
     with new_session() as session:
         status = "ACTIVE" if fast_track else "PENDING_APPROVAL"
         session.add(
@@ -117,6 +125,8 @@ def create_customer(
                 default_sales_rep_detail_account_id=fields.default_sales_rep_detail_account_id,
                 status_code=status, onboarding_source_code=fields.onboarding_source_code,
                 is_tax_exempt=fields.is_tax_exempt,
+                distribution_route_detail_account_id=fields.distribution_route_detail_account_id,
+                gps_latitude=fields.gps_latitude, gps_longitude=fields.gps_longitude,
                 submitted_by_user_id=submitted_by_user_id, submitted_at=datetime.datetime.now(),
             )
         )
