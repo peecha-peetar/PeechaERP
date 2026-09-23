@@ -22,11 +22,12 @@ from peecha_api.routers import (
     pricing,
     products,
     routes,
+    smart_sales,
     sync,
     visits,
 )
 
-app = FastAPI(title="Peecha Field Sales API", version="R183")
+app = FastAPI(title="Peecha Field Sales API", version="R184")
 
 app.include_router(auth.router)
 app.include_router(sync.router)
@@ -42,6 +43,7 @@ app.include_router(inventory.router)
 app.include_router(approvals.router)
 app.include_router(notifications.router)
 app.include_router(dashboard.router)
+app.include_router(smart_sales.router)
 
 
 @app.get("/health")
