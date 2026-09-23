@@ -1005,6 +1005,49 @@ def summarize_documents_for_user_on_date(
         return DocumentSummary(document_count=count, total_amount=total or decimal.Decimal(0))
 
 
+def summarize_documents_for_company(
+    company_id: int, date_from: datetime.date, date_to: datetime.date, document_type_codes: tuple[str, ...],
+    created_by_user_id: int | None = None,
+) -> DocumentSummary:
+    """هم‌الگو با summarize_documents_for_user_on_date ولی برایِ بازهٔ
+    تاریخ (نه یک روز) و بدونِ الزامِ فیلترِ کاربر -- برایِ داشبوردِ
+    مدیریتی (Phase 7): «فروشِ ماه» (created_by_user_id=None، همهٔ
+    شرکت) یا «عملکردِ فلان ویزیتور» (created_by_user_id مشخص)."""
+    with new_session() as session:
+        stmt = select(func.count(), func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
+            CommercialDocument.company_id == company_id,
+            CommercialDocument.document_date >= date_from,
+            CommercialDocument.document_date <= date_to,
+            CommercialDocument.document_type_code.in_(document_type_codes),
+            CommercialDocument.status_code != "CANCELLED",
+        )
+        if created_by_user_id is not None:
+            stmt = stmt.where(CommercialDocument.created_by_user_id == created_by_user_id)
+        count, total = session.execute(stmt).one()
+        return DocumentSummary(document_count=count, total_amount=total or decimal.Decimal(0))
+
+
+def list_document_creators(
+    company_id: int, date_from: datetime.date, date_to: datetime.date, document_type_codes: tuple[str, ...],
+) -> list[int]:
+    """شناسه‌یِ کاربرانی که در این بازه حداقل یک سندِ فروش ثبت کرده‌اند --
+    برایِ ساختِ فهرستِ «عملکردِ ویزیتورها» (Phase 7) بدونِ نیازِ حدسِ
+    از قبلِ کدامین کاربر ویزیتور است."""
+    with new_session() as session:
+        rows = session.scalars(
+            select(CommercialDocument.created_by_user_id)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_date >= date_from,
+                CommercialDocument.document_date <= date_to,
+                CommercialDocument.document_type_code.in_(document_type_codes),
+                CommercialDocument.status_code != "CANCELLED",
+            )
+            .distinct()
+        ).all()
+        return list(rows)
+
+
 @dataclass
 class TopProductRow:
     item_id: int

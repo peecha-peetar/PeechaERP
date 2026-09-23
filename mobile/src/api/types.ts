@@ -213,3 +213,29 @@ export interface NotificationRow {
   is_read: boolean;
   created_at: string | null;
 }
+
+export interface VisitorPerformanceRow {
+  user_id: number;
+  full_name: string;
+  visit_count: number;
+  visit_completed_count: number;
+  order_count: number;
+  sales_amount: string;
+  collection_amount: string;
+}
+
+export interface ManagerDashboardResponse {
+  date_from: string;
+  date_to: string;
+  sales_amount: string;
+  order_count: number;
+  average_order_value: string;
+  collection_amount: string;
+  collection_rate: string;
+  visit_count: number;
+  visit_completed_count: number;
+  visit_to_order_conversion: string;
+  new_customer_count: number;
+  customers_without_purchase_count: number;
+  by_visitor: VisitorPerformanceRow[];
+}

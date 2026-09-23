@@ -5,6 +5,7 @@ import {
   DeliveryConfirmationRequest,
   DeliveryConfirmationResponse,
   LoginResponse,
+  ManagerDashboardResponse,
   NotificationRow,
   OrderCreateRequest,
   OrderCreateResponse,
@@ -138,6 +139,15 @@ export class ApiClient {
 
   async markNotificationRead(notificationId: number): Promise<void> {
     await this.request<void>(`/notifications/${notificationId}/read`, { method: "POST" });
+  }
+
+  async getManagerDashboard(params?: { dateFrom?: string; dateTo?: string; visitorUserId?: number }): Promise<ManagerDashboardResponse> {
+    const query = new URLSearchParams();
+    if (params?.dateFrom) query.set("date_from", params.dateFrom);
+    if (params?.dateTo) query.set("date_to", params.dateTo);
+    if (params?.visitorUserId) query.set("visitor_user_id", String(params.visitorUserId));
+    const qs = query.toString();
+    return this.request<ManagerDashboardResponse>(`/manager/dashboard${qs ? `?${qs}` : ""}`);
   }
 
   async startVisit(payload: StartVisitRequest, idempotencyKey?: string): Promise<StartVisitResponse> {

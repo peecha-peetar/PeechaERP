@@ -10,6 +10,7 @@ import { CustomersScreen } from "./screens/CustomersScreen";
 import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
+import { ManagerDashboardScreen } from "./screens/ManagerDashboardScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { OrderScreen } from "./screens/OrderScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
@@ -48,7 +49,8 @@ type Route =
   | { name: "CUSTOMER_DETAIL"; detailAccountId: number }
   | { name: "COLLECT_PAYMENT"; customer: CustomerRow }
   | { name: "NOTIFICATIONS" }
-  | { name: "SETTINGS" };
+  | { name: "SETTINGS" }
+  | { name: "MANAGER_DASHBOARD" };
 
 interface Props {
   locationProvider?: LocationProvider;
@@ -230,7 +232,16 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
           userFullName={userFullName}
           onLoggedOut={() => setRoute({ name: "LOGIN" })}
           onBack={() => setRoute({ name: "MAIN", tab: "HOME" })}
+          onOpenManagerDashboard={() => setRoute({ name: "MANAGER_DASHBOARD" })}
         />
+      </SafeAreaView>
+    );
+  }
+
+  if (route.name === "MANAGER_DASHBOARD") {
+    return (
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+        <ManagerDashboardScreen apiClient={services.apiClient} onBack={() => setRoute({ name: "MAIN", tab: "HOME" })} />
       </SafeAreaView>
     );
   }

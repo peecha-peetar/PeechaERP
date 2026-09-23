@@ -9,12 +9,18 @@ interface Props {
   userFullName: string;
   onLoggedOut: () => void;
   onBack: () => void;
+  onOpenManagerDashboard: () => void;
 }
 
 /** طبقِ اصلِ صریح («Dark/Light Theme»): سوییچِ دستیِ تم + خروجِ حساب --
  * حداقلیِ لازم برایِ UI-7؛ تنظیماتِ بیشتر (مثلِ اعلان‌هایِ Push) در
- * فازهایِ بعدی که خودِ آن قابلیت‌ها ساخته شوند اضافه می‌شود. */
-export function SettingsScreen({ apiClient, userFullName, onLoggedOut, onBack }: Props) {
+ * فازهایِ بعدی که خودِ آن قابلیت‌ها ساخته شوند اضافه می‌شود.
+ *
+ * دکمه‌یِ داشبوردِ مدیریت همیشه نشان داده می‌شود (اپِ موبایل نمی‌داند
+ * کاربرِ فعلی مدیر است یا نه -- سرور خودش با ۴۰۳ تصمیم می‌گیرد، همان
+ * الگویِ RBACِ لایه‌یِ API؛ ManagerDashboardScreen آن خطا را با پیامِ
+ * روشن نشان می‌دهد، نه Crash). */
+export function SettingsScreen({ apiClient, userFullName, onLoggedOut, onBack, onOpenManagerDashboard }: Props) {
   const { colors, spacing, typography, mode } = useTheme();
   const { toggleMode } = useThemeControls();
 
@@ -38,6 +44,8 @@ export function SettingsScreen({ apiClient, userFullName, onLoggedOut, onBack }:
           <Button label={mode === "dark" ? "فعال ✓" : "غیرِفعال"} variant="secondary" fullWidth={false} onPress={toggleMode} />
         </View>
       </Card>
+
+      <Button label="📊 داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
 
       <Button label="خروج از حساب" variant="danger" onPress={logout} />
     </View>

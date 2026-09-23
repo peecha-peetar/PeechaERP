@@ -8,11 +8,12 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
     CommercialContract,
+    CommercialDocument,
     CommissionRule,
     CustomerGroup,
     CustomerProfile,
@@ -185,6 +186,43 @@ def set_customer_status(customer_detail_account_id: int, status_code: str) -> No
             raise ValueError("مشتری نامعتبر است.")
         profile.status_code = status_code
         session.commit()
+
+
+def count_new_customers(company_id: int, date_from: datetime.date, date_to: datetime.date) -> int:
+    """طبقِ داشبوردِ مدیریتی (Phase 7): «مشتریِ جدید» یعنی ثبت‌شده
+    (submitted_at، همان کدی که با ثبتِ مشتری از موبایل/دسکتاپ پر
+    می‌شود) در بازهٔ درخواستی -- صرفِ نظر از این‌که هنوز تاییدشده باشد
+    یا نه."""
+    with new_session() as session:
+        return session.scalar(
+            select(func.count()).where(
+                CustomerProfile.company_id == company_id,
+                func.date(CustomerProfile.submitted_at) >= date_from,
+                func.date(CustomerProfile.submitted_at) <= date_to,
+            )
+        ) or 0
+
+
+def count_customers_without_purchase(company_id: int) -> int:
+    """طبقِ داشبوردِ مدیریتی: مشتریانِ فعالی که هرگز فاکتورِ POSTED
+    نداشته‌اند -- سرنخِ فروشِ ازدست‌رفته."""
+    with new_session() as session:
+        has_invoice_subquery = (
+            select(CommercialDocument.document_id)
+            .where(
+                CommercialDocument.counterparty_detail_account_id == CustomerProfile.customer_detail_account_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+            )
+            .exists()
+        )
+        return session.scalar(
+            select(func.count()).where(
+                CustomerProfile.company_id == company_id,
+                CustomerProfile.status_code == "ACTIVE",
+                ~has_invoice_subquery,
+            )
+        ) or 0
 
 
 def set_customer_credit_limit(customer_detail_account_id: int, credit_limit_amount) -> None:

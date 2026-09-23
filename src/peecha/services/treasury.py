@@ -1266,6 +1266,31 @@ def sum_voucher_amount_for_user_on_date(
         return total or decimal.Decimal(0)
 
 
+def sum_voucher_amount_for_company(
+    company_id: int, date_from: datetime.date, date_to: datetime.date, direction: str,
+    created_by_user_id: int | None = None,
+) -> decimal.Decimal:
+    """هم‌الگو با sum_voucher_amount_for_user_on_date ولی برایِ بازهٔ
+    تاریخ و بدونِ الزامِ فیلترِ کاربر -- برایِ داشبوردِ مدیریتی (Phase 7):
+    «وصولِ این ماه» یا «وصولِ فلان ویزیتور در این بازه»."""
+    with new_session() as session:
+        stmt = (
+            select(func.coalesce(func.sum(JournalEntryLine.debit_amount_fc), 0))
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .join(JournalEntryType, JournalEntryType.entry_type_id == JournalEntry.entry_type_id)
+            .where(
+                JournalEntry.company_id == company_id,
+                JournalEntry.document_date >= date_from,
+                JournalEntry.document_date <= date_to,
+                JournalEntryType.code == direction,
+            )
+        )
+        if created_by_user_id is not None:
+            stmt = stmt.where(JournalEntry.created_by_user_id == created_by_user_id)
+        total = session.scalar(stmt)
+        return total or decimal.Decimal(0)
+
+
 # --- سندِ چندروشیِ دریافت/پرداخت ---------------------------------------------
 
 
