@@ -283,3 +283,34 @@ def is_manager(user_id: int, company_id: int) -> bool:
             .where(UserRole.user_id == user_id, UserRole.company_id == company_id)
         ).all()
         return any(code.strip().upper() in _MANAGER_ROLE_CODES for code in codes)
+
+
+def user_has_permission(user_id: int, company_id: int, form_code: str, action_code: str) -> bool:
+    """طبقِ کشفِ حسابرسی: جدول‌هایِ sec.role_form_permissions از قبل کاملاً
+    تعریف می‌شوند (تبِ «نقش‌ها»/roles.py) ولی تا این تابع هیچ‌جایِ برنامه
+    (نه دسکتاپ، نه API) واقعاً enforce نمی‌شدند -- این تابع همان تعریفِ
+    موجود را فعال می‌کند، بدونِ هیچ جدول/مفهومِ تازه. مدیرِ کلِ سیستم
+    (is_super_admin) طبقِ همان قاعده‌یِ is_manager همیشه مجاز است."""
+    with new_session() as session:
+        user = session.get(User, user_id)
+        if user is not None and user.is_super_admin:
+            return True
+        form_id = session.scalar(select(Form.form_id).where(Form.code == form_code))
+        if form_id is None:
+            return False
+        role_ids = session.scalars(
+            select(UserRole.role_id).where(UserRole.user_id == user_id, UserRole.company_id == company_id)
+        ).all()
+        if not role_ids:
+            return False
+        allowed = session.scalar(
+            select(RoleFormPermission.role_id)
+            .join(PermissionAction, PermissionAction.action_id == RoleFormPermission.action_id)
+            .where(
+                RoleFormPermission.role_id.in_(role_ids),
+                RoleFormPermission.form_id == form_id,
+                RoleFormPermission.is_allowed.is_(True),
+                PermissionAction.code == action_code,
+            )
+        )
+        return allowed is not None

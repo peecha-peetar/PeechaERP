@@ -227,6 +227,25 @@ class ApiIdempotencyKey(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
 
 
+class Notification(Base):
+    """Field Sales (Phase 1) -- اعلانِ ساده‌یِ متعلق به یک کاربر (نه موتورِ
+    کارتابل/گردشِ‌کار wf.* که برایِ تاییدِ چندمرحله‌ایِ اسناد است)."""
+
+    __tablename__ = "notifications"
+    __table_args__ = {"schema": "sec"}
+
+    notification_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    type_code: Mapped[str] = mapped_column(String(30))
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str | None]
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    entity_id: Mapped[int | None]
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
 # --- جدول‌های تاریخچه (Core Table؛ فقط خواندنی از دید اپلیکیشن) ---------
 
 user_roles_history = Table(

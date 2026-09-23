@@ -13,13 +13,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_settlements as settlements_service
+from peecha.services import roles as roles_service
+from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
+from peecha_api.permissions import FORM_COLD_DISTRIBUTION, FORM_HOT_DISTRIBUTION
 from peecha_api.schemas import OrderCreateRequest
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
-_ALLOWED_TYPES = ("SALES_ORDER", "SALES_INVOICE")
+# طبقِ nav_catalog.py: پخشِ سرد (سفارش‌گیریِ SALES_ORDER) و پخشِ گرم
+# (فاکتورِ آنیِ SALES_INVOICE) دو فرمِ RBACِ جداگانه‌یِ از قبل تعریف‌شده
+# دارند -- هرکدام طبقِ نوعِ سندِ درخواستی چک می‌شوند.
+_FORM_BY_TYPE = {"SALES_ORDER": FORM_COLD_DISTRIBUTION, "SALES_INVOICE": FORM_HOT_DISTRIBUTION}
 
 
 @router.post("")
@@ -28,10 +34,13 @@ def create_order(
     ctx: AuthContext = Depends(get_current_context),
     idempotency_key: str | None = Depends(get_idempotency_key),
 ) -> dict:
-    if payload.document_type_code not in _ALLOWED_TYPES:
+    if payload.document_type_code not in _FORM_BY_TYPE:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="نوعِ سند برایِ اپِ موبایل فقط سفارش یا فاکتورِ فروش می‌تواند باشد.")
     if not payload.lines:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="حداقل یک ردیف لازم است.")
+    form_code = _FORM_BY_TYPE[payload.document_type_code]
+    if not roles_service.user_has_permission(ctx.user_id, ctx.company_id, form_code, "CREATE"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"دسترسیِ ثبتِ {form_code} وجود ندارد.")
 
     try:
         return run_idempotent(
@@ -74,4 +83,8 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
         # موقت تمامِ مبلغ نقدی فرض و خودکار تاییدمی‌شود.
         settlements_service.auto_approve_full_cash_settlement_plan(document_id, ctx.company_id, ctx.user_id)
         documents_service.post_document(document_id, ctx.company_id, ctx.user_id)
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CommercialDocument", document_id, "CREATE",
+        {"source": "mobile", "document_type_code": payload.document_type_code, "line_count": len(line_ids)},
+    )
     return document_id, line_ids

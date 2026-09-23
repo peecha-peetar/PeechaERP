@@ -8,12 +8,15 @@ services/treasury.create_treasury_voucher موجود سوار می‌شود (ب�
 from __future__ import annotations
 
 import datetime
+import decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services import treasury as treasury_service
-from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
+from peecha_api import audit_log
+from peecha_api.deps import AuthContext, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
+from peecha_api.permissions import FORM_TREASURY_RECEIPT, require_permission
 from peecha_api.schemas import PaymentCreateRequest
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -24,7 +27,7 @@ _ALLOWED_METHODS = ("CASH", "BANK", "CHECK")
 @router.post("")
 def create_payment(
     payload: PaymentCreateRequest,
-    ctx: AuthContext = Depends(get_current_context),
+    ctx: AuthContext = Depends(require_permission(FORM_TREASURY_RECEIPT, "CREATE")),
     idempotency_key: str | None = Depends(get_idempotency_key),
 ) -> dict:
     if not payload.method_lines:
@@ -71,7 +74,13 @@ def _create_payment(payload: PaymentCreateRequest, ctx: AuthContext):
         # customer_visit_id ندارد (یک مهاجرتِ جداگانه‌یِ آینده لازم دارد)
         # -- فعلاً فقط در توضیحاتِ سند ثبت می‌شود تا ردِ بازدید گم نشود.
         description = f"{description} — بازدید #{payload.customer_visit_id}"
-    return treasury_service.create_treasury_voucher(
+    result = treasury_service.create_treasury_voucher(
         ctx.company_id, ctx.user_id, "RECEIPT", account_id, counterparty_details,
         payload.document_date or datetime.date.today(), description, method_lines,
     )
+    total_amount = sum((line.amount for line in payload.method_lines), decimal.Decimal(0))
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "JournalEntry", result.journal_entry_id, "CREATE",
+        {"source": "mobile_collection", "customer_detail_account_id": payload.customer_detail_account_id, "amount": str(total_amount)},
+    )
+    return result
