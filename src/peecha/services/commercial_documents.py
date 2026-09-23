@@ -330,6 +330,9 @@ class DocumentHeaderFields:
     tax_posting_mode: str | None = None
     # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»).
     tax_exempt: bool = False
+    # طبقِ درخواستِ صریح («نوعِ تسویه در سفارش/فاکتورِ پخشِ سرد مشخص
+    # بشه»): برچسبِ نمایشیِ سبک -- جدا از نقشه‌یِ کاملِ تسویه‌یِ فاکتور.
+    settlement_type_code: str | None = None
 
 
 def create_document(
@@ -370,6 +373,7 @@ def create_document(
             project_detail_account_id=fields.project_detail_account_id,
             reference_no=(fields.reference_no or None), description=(fields.description or None),
             tax_posting_mode=fields.tax_posting_mode, tax_exempt=fields.tax_exempt,
+            settlement_type_code=fields.settlement_type_code,
             created_by_user_id=created_by_user_id,
         )
         session.add(doc)
@@ -383,6 +387,12 @@ class LineFulfillment:
     item_id: int
     uom_id: int
     quantity: decimal.Decimal
+    # طبقِ درخواستِ صریح («کالایی سفارشِ اولیه ۹ عدد بوده ولی انبار ۸ عدد
+    # تحویلی صادر می‌کند -- در تبدیل باید مقدارِ سفارش به ۸ تغییرِ
+    # خودکار کند و تعدادِ اولیه را هم نشان بدهد»): None یعنی انباردار
+    # هنوز مقدارِ تحویلی جداگانه‌ای ثبت نکرده -- quantity (مقدارِ اصلیِ
+    # سفارش) همچنان مبنا می‌ماند.
+    delivered_quantity: decimal.Decimal | None
     invoiced_quantity: decimal.Decimal
     remaining_quantity: decimal.Decimal
 
@@ -412,9 +422,11 @@ def get_line_fulfillment(document_id: int, company_id: int) -> list[LineFulfillm
         result = []
         for ln in lines:
             invoiced = _invoiced_quantity(session, ln.line_id)
+            base_quantity = ln.warehouse_delivered_quantity if ln.warehouse_delivered_quantity is not None else ln.quantity
             result.append(LineFulfillment(
                 line_id=ln.line_id, item_id=ln.item_id, uom_id=ln.uom_id, quantity=ln.quantity,
-                invoiced_quantity=invoiced, remaining_quantity=ln.quantity - invoiced,
+                delivered_quantity=ln.warehouse_delivered_quantity,
+                invoiced_quantity=invoiced, remaining_quantity=base_quantity - invoiced,
             ))
         return result
 
@@ -513,6 +525,7 @@ def convert_to_invoice(
             cost_center_detail_account_id=source.cost_center_detail_account_id,
             project_detail_account_id=source.project_detail_account_id,
             reference_no=source.reference_no, description=source.description,
+            settlement_type_code=source.settlement_type_code,
         )
 
     new_document_id = create_document(company_id, created_by_user_id, target_type, document_date, header_fields)
@@ -930,6 +943,7 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
         doc.reference_no = fields.reference_no or None
         doc.description = fields.description or None
         doc.tax_posting_mode = fields.tax_posting_mode
+        doc.settlement_type_code = fields.settlement_type_code
         session.commit()
 
 

@@ -495,6 +495,11 @@ class CommercialDocument(Base):
     warehouse_approved_at: Mapped[datetime.datetime | None]
     weighing_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     weighing_approved_at: Mapped[datetime.datetime | None]
+    # طبقِ درخواستِ صریح («نوعِ تسویه در سفارش/فاکتورِ پخشِ سرد مشخص
+    # بشه»): برچسبِ سبکِ نمایشی -- کدهایِ ثابتِ CASH/BANK/CHECK/... یا
+    # CUSTOM_<id> (هم‌الگو با commercial_settlements.SETTLEMENT_PLAN_
+    # METHOD_LABELS)؛ جدا از نقشه‌یِ کاملِ تسویه‌یِ حسابداریِ فاکتور.
+    settlement_type_code: Mapped[str | None] = mapped_column(String(20))
 
 
 class CommercialDocumentLine(Base):

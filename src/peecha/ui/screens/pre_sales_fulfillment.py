@@ -18,6 +18,7 @@ import decimal
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -233,6 +234,19 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
+        # طبقِ درخواستِ صریح («فیلترِ تاییدِ انبار رویِ همین تب هم باشد»).
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("وضعیت"))
+        self.status_filter = QComboBox()
+        self.status_filter.addItem("(همه)", None)
+        self.status_filter.addItem("در انتظارِ تاییدِ انبار", "در انتظارِ تاییدِ انبار")
+        self.status_filter.addItem("در انتظارِ توزین", "در انتظارِ توزین")
+        self.status_filter.addItem("آمادهٔ تبدیل به فاکتور", "آمادهٔ تبدیل به فاکتور")
+        self.status_filter.currentIndexChanged.connect(self.refresh)
+        filter_row.addWidget(self.status_filter)
+        filter_row.addStretch(1)
+        layout.addLayout(filter_row)
+
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -247,6 +261,7 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
         layout.addWidget(self.status_label)
 
         self.set_field_help([
+            (self.status_filter, "فقط سفارش‌هایی که در همین مرحله هستند نشان داده شوند."),
             (self.table, "سفارش‌هایِ پخشِ سردِ تصویب‌شده‌ای که هنوز به فاکتور تبدیل نشده‌اند -- با «بازکردن»، مقدارِ تحویلی و تاییدِ انبار/توزین انجام می‌شود."),
         ])
 
@@ -259,6 +274,13 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
             return
         self.status_label.setText("")
         self._queue = documents_service.list_pre_sales_fulfillment_queue(company_id)
+        statuses = {
+            doc.document_id: documents_service.describe_pre_sales_fulfillment_status(doc.document_id, company_id) or ""
+            for doc in self._queue
+        }
+        status_filter = self.status_filter.currentData()
+        if status_filter is not None:
+            self._queue = [doc for doc in self._queue if statuses.get(doc.document_id) == status_filter]
         self.table.setRowCount(len(self._queue))
         for row_index, doc in enumerate(self._queue):
             values = [
@@ -266,7 +288,7 @@ class PreSalesFulfillmentScreen(FieldHelpMixin, QWidget):
                 numerals.format_jalali_date(doc.document_date),
                 dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id),
                 numerals.format_money(doc.total_amount, 0),
-                documents_service.describe_pre_sales_fulfillment_status(doc.document_id, company_id) or "",
+                statuses.get(doc.document_id, ""),
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(value))

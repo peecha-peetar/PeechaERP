@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.services import commercial_partners as partners_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import distribution_runs as distribution_service
 from peecha.services import inventory_locations as locations_service
@@ -32,10 +34,16 @@ from peecha.ui import report_export
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _LIST_COLUMNS = ["تاریخ", "خودرو", "وضعیت"]
-_ELIGIBLE_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "عملیات"]
-_ATTACHED_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "عملیات"]
+_ELIGIBLE_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "نوعِ تسویه", "عملیات"]
+_ATTACHED_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "نوعِ تسویه", "عملیات"]
 _SUMMARY_COLUMNS = ["کالا", "واحد", "جمعِ مقدار"]
 _STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تحویل‌شده به راننده", "CANCELLED": "لغوشده"}
+
+
+def _settlement_type_label(code: str | None) -> str:
+    if code is None:
+        return "—"
+    return settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(code, code)
 
 
 def _fmt_qty(value) -> str:
@@ -126,7 +134,28 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             vehicle_hint_row.addWidget(manage_vehicles_button)
         layout.addLayout(vehicle_hint_row)
 
-        layout.addWidget(QLabel("فاکتورهایِ واجدِ شرایط (پخشِ سردِ ثبت‌نهایی‌شده و هنوز الصاق‌نشده)"))
+        eligible_title_row = QHBoxLayout()
+        eligible_title_row.addWidget(QLabel("فاکتورهایِ واجدِ شرایط (پخشِ سردِ ثبت‌نهایی‌شده و هنوز الصاق‌نشده)"), stretch=1)
+        layout.addLayout(eligible_title_row)
+
+        # طبقِ درخواستِ صریح («فیلترِ منطقه‌بندی و مسیر و گروهِ مشتریان
+        # رویِ تبِ تیمِ پخش باشد تا بتوان فاکتورها را فیلتر و به خودرو
+        # تخصیص داد»): این دو فیلتر فقط رویِ همین جدولِ «واجدِ شرایط»
+        # اثر می‌گذارند.
+        eligible_filter_row = QHBoxLayout()
+        eligible_filter_row.addWidget(QLabel("گروهِ مشتریان"))
+        self.customer_group_filter = QComboBox()
+        self.customer_group_filter.addItem("(همه)", None)
+        eligible_filter_row.addWidget(self.customer_group_filter)
+        eligible_filter_row.addWidget(QLabel("منطقه/مسیرِ توزیع"))
+        self.route_filter = QComboBox()
+        self.route_filter.addItem("(همه)", None)
+        eligible_filter_row.addWidget(self.route_filter)
+        self.customer_group_filter.currentIndexChanged.connect(self._refresh_eligible)
+        self.route_filter.currentIndexChanged.connect(self._refresh_eligible)
+        eligible_filter_row.addStretch(1)
+        layout.addLayout(eligible_filter_row)
+
         self.eligible_table = QTableWidget(0, len(_ELIGIBLE_COLUMNS))
         self.eligible_table.setHorizontalHeaderLabels(_ELIGIBLE_COLUMNS)
         self.eligible_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -186,6 +215,8 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (self.vehicle_combo, "خودرویی که فاکتورهایِ این تیم به آن الصاق می‌شوند -- پلاک/راننده از تعریفِ خودِ انبارِ خودرو می‌آید."),
             (self.date_field, "تاریخِ این تیمِ پخش."),
+            (self.customer_group_filter, "فقط فاکتورهایِ مشتریانِ همین گروه در فهرستِ «واجدِ شرایط» نشان داده شوند."),
+            (self.route_filter, "فقط فاکتورهایِ مشتریانِ همین منطقه/مسیرِ توزیع (و زیرمسیرهایش) نشان داده شوند."),
             (self.eligible_table, "فاکتورهایِ فروشِ پخشِ سردِ ثبت‌نهایی‌شده که هنوز به هیچ تیمی الصاق نشده‌اند."),
             (self.attached_table, "فاکتورهایِ الصاق‌شده به همین تیم."),
             (self.print_invoices_button, "چاپِ فهرستِ فاکتورهایِ الصاق‌شده به این خودرو -- برایِ رسیدِ خروج/بایگانی."),
@@ -204,6 +235,27 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         for v in locations_service.list_vehicles(company_id, active_only=True):
             plate = f" — پلاک {v.fields.vehicle_plate_number}" if v.fields.vehicle_plate_number else ""
             self.vehicle_combo.addItem(f"{v.code} — {v.name}{plate}", v.warehouse_id)
+
+        current_group = self.customer_group_filter.currentData()
+        self.customer_group_filter.blockSignals(True)
+        self.customer_group_filter.clear()
+        self.customer_group_filter.addItem("(همه)", None)
+        for g in partners_service.list_customer_groups(company_id):
+            self.customer_group_filter.addItem(f"{g.code} — {g.name}", g.group_id)
+        if current_group is not None:
+            self.customer_group_filter.setCurrentIndex(max(0, self.customer_group_filter.findData(current_group)))
+        self.customer_group_filter.blockSignals(False)
+
+        current_route = self.route_filter.currentData()
+        self.route_filter.blockSignals(True)
+        self.route_filter.clear()
+        self.route_filter.addItem("(همه)", None)
+        route_dimension_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE)
+        for r in dimensions_service.list_detail_accounts(company_id, route_dimension_id):
+            self.route_filter.addItem(f"{r.full_code} — {r.name or ''}", r.detail_account_id)
+        if current_route is not None:
+            self.route_filter.setCurrentIndex(max(0, self.route_filter.findData(current_route)))
+        self.route_filter.blockSignals(False)
 
         self._runs = distribution_service.list_distribution_runs(company_id)
         self.runs_table.setRowCount(len(self._runs))
@@ -244,8 +296,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.create_button.setVisible(False)
 
         is_draft = run.status_code == "DRAFT"
-        self._eligible = distribution_service.list_eligible_invoices(company_id) if is_draft else []
-        self._fill_eligible_table()
+        self._refresh_eligible()
         self._fill_attached_table(editable=is_draft)
         self._fill_summary_table(run)
         has_invoices = bool(run.invoices)
@@ -261,12 +312,24 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             )
             self.confirm_button.setVisible(False)
 
+    def _refresh_eligible(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self._current_run is None or self._current_run.status_code != "DRAFT":
+            self._eligible = []
+        else:
+            self._eligible = distribution_service.list_eligible_invoices(
+                company_id, customer_group_id=self.customer_group_filter.currentData(),
+                route_detail_account_id=self.route_filter.currentData(),
+            )
+        self._fill_eligible_table()
+
     def _fill_eligible_table(self) -> None:
         self.eligible_table.setRowCount(len(self._eligible))
         for row_index, inv in enumerate(self._eligible):
             values = [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
                 _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
+                _settlement_type_label(inv.settlement_type_code),
             ]
             for col_index, value in enumerate(values):
                 self.eligible_table.setItem(row_index, col_index, QTableWidgetItem(value))
@@ -281,6 +344,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             values = [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
                 _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
+                _settlement_type_label(inv.settlement_type_code),
             ]
             for col_index, value in enumerate(values):
                 self.attached_table.setItem(row_index, col_index, QTableWidgetItem(value))
@@ -380,11 +444,16 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
     def _print_invoice_list(self) -> None:
         if self._current_run is None or not self._current_run.invoices:
             return
-        headers = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل"]
+        # طبقِ درخواستِ صریح: ستونِ «نوعِ تسویه» (موردانتظار، از رویِ خودِ
+        # سند) + سه ستونِ خالیِ «نقد/چک/واریزی» که راننده هنگامِ تحویلِ
+        # واقعیِ بار، دستی رویِ کاغذ علامت می‌زند (وضعیتِ واقعیِ وصول،
+        # نه لزوماً همان نوعِ موردانتظار).
+        headers = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "نوعِ تسویه", "نقد", "چک", "واریزی"]
         rows = [
             [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
                 _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
+                _settlement_type_label(inv.settlement_type_code), "", "", "",
             ]
             for inv in self._current_run.invoices
         ]

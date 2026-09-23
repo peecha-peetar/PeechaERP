@@ -16,8 +16,11 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 
 from peecha.db.base import new_session
-from peecha.db.models.commercial import Channel, CommercialDocument, CommercialDocumentLine, DistributionRun, DistributionRunDocument
+from peecha.db.models.commercial import (
+    Channel, CommercialDocument, CommercialDocumentLine, CustomerProfile, DistributionRun, DistributionRunDocument,
+)
 from peecha.db.models.inventory import Warehouse
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 
 
@@ -28,11 +31,38 @@ class EligibleInvoiceRow:
     document_date: datetime.date
     counterparty_detail_account_id: int
     total_amount: decimal.Decimal
+    settlement_type_code: str | None = None
 
 
-def list_eligible_invoices(company_id: int) -> list[EligibleInvoiceRow]:
+def _route_and_descendant_ids(company_id: int, route_detail_account_id: int) -> set[int]:
+    """طبقِ درخواستِ صریح («فیلترِ منطقه‌بندی و مسیر رویِ تیمِ پخش»):
+    مسیرِ توزیع یک بُعدِ سلسله‌مراتبی است (منطقه > زیرمنطقه > مسیر) --
+    انتخابِ یک گره باید همه‌یِ زیرگره‌هایش را هم شاملِ فیلتر کند."""
+    dimension_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE)
+    all_rows = dimensions_service.list_detail_accounts(company_id, dimension_type_id)
+    children_by_parent: dict[int | None, list[int]] = {}
+    for r in all_rows:
+        children_by_parent.setdefault(r.parent_detail_account_id, []).append(r.detail_account_id)
+    result: set[int] = set()
+    stack = [route_detail_account_id]
+    while stack:
+        current = stack.pop()
+        if current in result:
+            continue
+        result.add(current)
+        stack.extend(children_by_parent.get(current, []))
+    return result
+
+
+def list_eligible_invoices(
+    company_id: int, customer_group_id: int | None = None, route_detail_account_id: int | None = None,
+) -> list[EligibleInvoiceRow]:
     """فاکتورهایِ فروشِ ثبت‌نهایی‌شده‌یِ کانالِ پخشِ سرد که هنوز به هیچ
-    تیمِ فعالی (DRAFT/CONFIRMED) الصاق نشده‌اند."""
+    تیمِ فعالی (DRAFT/CONFIRMED) الصاق نشده‌اند -- طبقِ درخواستِ صریح،
+    قابلِ‌فیلتر بر اساسِ گروهِ مشتریان و مسیر/منطقه‌یِ توزیعِ مشتری
+    (comm.customer_profiles) تا بتوان فاکتورهایِ یک منطقه را یک‌جا به
+    یک خودرو تخصیص داد."""
+    route_ids = _route_and_descendant_ids(company_id, route_detail_account_id) if route_detail_account_id is not None else None
     with new_session() as session:
         already_attached = set(
             session.scalars(
@@ -48,11 +78,22 @@ def list_eligible_invoices(company_id: int) -> list[EligibleInvoiceRow]:
                 CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_INVOICE",
                 CommercialDocument.status_code == "POSTED", Channel.channel_type_code == "PRE_SALES",
             )
-            .order_by(CommercialDocument.document_id)
         )
+        if customer_group_id is not None or route_ids is not None:
+            stmt = stmt.join(
+                CustomerProfile, CustomerProfile.customer_detail_account_id == CommercialDocument.counterparty_detail_account_id,
+            )
+            if customer_group_id is not None:
+                stmt = stmt.where(CustomerProfile.customer_group_id == customer_group_id)
+            if route_ids is not None:
+                stmt = stmt.where(CustomerProfile.distribution_route_detail_account_id.in_(route_ids))
+        stmt = stmt.order_by(CommercialDocument.document_id)
         rows = session.scalars(stmt).all()
         return [
-            EligibleInvoiceRow(d.document_id, d.document_no, d.document_date, d.counterparty_detail_account_id, d.total_amount)
+            EligibleInvoiceRow(
+                d.document_id, d.document_no, d.document_date, d.counterparty_detail_account_id, d.total_amount,
+                d.settlement_type_code,
+            )
             for d in rows
             if d.document_id not in already_attached
         ]
@@ -65,6 +106,7 @@ class DistributionRunInvoiceRow:
     document_date: datetime.date
     counterparty_detail_account_id: int
     total_amount: decimal.Decimal
+    settlement_type_code: str | None = None
 
 
 @dataclass
@@ -167,7 +209,10 @@ def get_distribution_run(distribution_run_id: int, company_id: int) -> Distribut
         if document_ids:
             docs = session.scalars(select(CommercialDocument).where(CommercialDocument.document_id.in_(document_ids))).all()
             invoices = [
-                DistributionRunInvoiceRow(d.document_id, d.document_no, d.document_date, d.counterparty_detail_account_id, d.total_amount)
+                DistributionRunInvoiceRow(
+                    d.document_id, d.document_no, d.document_date, d.counterparty_detail_account_id, d.total_amount,
+                    d.settlement_type_code,
+                )
                 for d in sorted(docs, key=lambda d: d.document_id)
             ]
 

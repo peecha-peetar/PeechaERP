@@ -1576,17 +1576,21 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
     می‌دهد کاربر برایِ همین‌بار مقدارِ کمتری (تبدیلِ مرحله‌ای) وارد کند —
     پیش‌فرضِ هر ردیف، کلِ مانده‌اش است."""
 
-    _COLUMNS = ["کالا", "سفارش‌شده", "فاکتورشده", "مانده", "مقدارِ این‌بار"]
+    _COLUMNS = ["کالا", "سفارشِ اولیه", "تحویلیِ انبار", "فاکتورشده", "مانده", "مقدارِ این‌بار"]
 
     def __init__(self, parent: QWidget, fulfillment: list, items_by_id: dict) -> None:
         super().__init__(parent)
         self.setWindowTitle("تبدیل به فاکتور")
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(600)
         self._fulfillment = [f for f in fulfillment if f.remaining_quantity > 0]
         self._qty_fields: dict[int, _AmountField] = {}
 
         layout = QVBoxLayout(self)
-        info = QLabel("مقدارِ این‌بار برایِ هر ردیف را مشخص کنید (پیش‌فرض: کلِ مانده).")
+        info = QLabel(
+            "مقدارِ این‌بار برایِ هر ردیف را مشخص کنید -- پیش‌فرض، مقدارِ تحویلیِ ثبت‌شده توسطِ انبار است "
+            "(اگر ثبت نشده باشد، همان مقدارِ سفارشِ اولیه)."
+        )
+        info.setWordWrap(True)
         layout.addWidget(info)
 
         table = QTableWidget(len(self._fulfillment), len(self._COLUMNS))
@@ -1598,13 +1602,17 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
             item = items_by_id.get(f.item_id)
             table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(f.item_id)))
             table.setItem(row_index, 1, QTableWidgetItem(numerals.format_money(f.quantity, 3)))
-            table.setItem(row_index, 2, QTableWidgetItem(numerals.format_money(f.invoiced_quantity, 3)))
-            table.setItem(row_index, 3, QTableWidgetItem(numerals.format_money(f.remaining_quantity, 3)))
+            table.setItem(
+                row_index, 2,
+                QTableWidgetItem(numerals.format_money(f.delivered_quantity, 3) if f.delivered_quantity is not None else "—"),
+            )
+            table.setItem(row_index, 3, QTableWidgetItem(numerals.format_money(f.invoiced_quantity, 3)))
+            table.setItem(row_index, 4, QTableWidgetItem(numerals.format_money(f.remaining_quantity, 3)))
             qty_field = _AmountField()
             qty_field.setDecimals(3)
             qty_field.setValue(float(f.remaining_quantity))
             self._qty_fields[f.line_id] = qty_field
-            table.setCellWidget(row_index, 4, qty_field)
+            table.setCellWidget(row_index, 5, qty_field)
         table.resizeRowsToContents()
         layout.addWidget(table)
 
@@ -2474,6 +2482,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.tax_exempt_checkbox.toggled.connect(self._on_tax_exempt_toggled)
         row2_grid.addWidget(self.tax_exempt_checkbox, 0, 8, 2, 1)
 
+        # طبقِ درخواستِ صریح («در سفارشات و فاکتور فروشی که کانالِ پخشِ
+        # سرد دارند، نوعِ تسویه باید مشخص بشه»): برچسبِ سبکِ نمایشی --
+        # همان کدها/برچسب‌هایِ نقشه‌یِ تسویه‌یِ فاکتور (نقد/بانکی/چک/... یا
+        # هرکدام از انواعِ سفارشیِ تعریف‌شده در «انواعِ سندِ دریافت/پرداخت»
+        # زیرِ تنظیماتِ خزانه‌داری) -- جدا از نقشه‌یِ کاملِ تسویه‌یِ حسابداری.
+        self.settlement_type_box = QWidget()
+        settlement_type_layout = QVBoxLayout(self.settlement_type_box)
+        settlement_type_layout.setContentsMargins(0, 0, 0, 0)
+        settlement_type_layout.setSpacing(3)
+        settlement_type_layout.addWidget(QLabel("نوعِ تسویه"))
+        self.settlement_type_combo = _EnterComboBox()
+        settlement_type_layout.addWidget(self.settlement_type_combo)
+        row2_grid.addWidget(self.settlement_type_box, 0, 9, 2, 1)
+        self.settlement_type_box.setVisible(self._is_sales)
+
         row2_grid.setColumnStretch(0, 1)
         row2_grid.setColumnStretch(1, 1)
         row2_grid.setColumnStretch(2, 2)
@@ -2532,6 +2555,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             header_chain.append(self.consignment_warehouse_combo)
         if not self.tax_posting_mode_box.isHidden():
             header_chain.append(self.tax_posting_mode_combo)
+        if not self.settlement_type_box.isHidden():
+            header_chain.append(self.settlement_type_combo)
         for widget, next_widget in zip(header_chain, header_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
         # طبقِ گزارشِ صریحِ کاربر («بعد از اینکه هدر را تکمیل می‌کنیم، باز
@@ -2856,6 +2881,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             (self.reference_field, "شماره/مرجعِ دلخواه برایِ ردیابی (مثلاً شماره‌یِ سفارشِ مشتری) -- در هیچ محاسبه‌ای اثر ندارد."),
             (self.price_list_combo, "اگر برایِ ردیفی بهایِ واحد وارد نشود، از همین فهرستِ قیمت (یا قراردادِ فعالِ طرفِ‌حساب) محاسبه می‌شود."),
             (self.channel_combo, "کانالِ فروش (مثلاً فروشگاهِ اینترنتیِ خاص) که این سند از آن آمده -- برایِ گزارشِ فروش بر اساسِ کانال."),
+            (self.settlement_type_combo, "نوعِ تسویه‌یِ موردانتظار (نقد/بانکی/چک/...) -- یک برچسبِ نمایشی، جدا از نقشه‌یِ کاملِ تسویه‌یِ فاکتور؛ با تبدیلِ سفارش به فاکتور هم منتقل می‌شود."),
             (self.cost_center_combo, "مرکزِ هزینه/درآمدی که این سند به آن نسبت داده می‌شود."),
             (self.project_combo, "پروژه‌ای که این سند به آن مربوط است."),
             (
@@ -2993,6 +3019,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 self.channel_combo.addItem(f"{ch.channel_code} — {ch.name}", ch.channel_code)
             if current_channel is not None:
                 self.channel_combo.setCurrentIndex(max(0, self.channel_combo.findData(current_channel)))
+            current_settlement_type = self.settlement_type_combo.currentData()
+            self.settlement_type_combo.clear()
+            self.settlement_type_combo.addItem("(نامشخص)", None)
+            for code in settlements_service.settlement_plan_method_codes("SALES_INVOICE", company_id):
+                self.settlement_type_combo.addItem(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(code, code), code)
+            if current_settlement_type is not None:
+                self.settlement_type_combo.setCurrentIndex(max(0, self.settlement_type_combo.findData(current_settlement_type)))
         else:
             counterparty_options = [(c["detail_account_id"], f"{c['code']} — {c['name'] or ''}") for c in dimensions_service.list_suppliers(company_id)]
             price_lists = pricing_service.list_price_lists(company_id, "PURCHASE")
@@ -3092,6 +3125,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.price_list_combo.setCurrentIndex(max(0, self.price_list_combo.findData(doc.price_list_id)))
         if self._is_sales and doc.channel_code is not None:
             self.channel_combo.setCurrentIndex(max(0, self.channel_combo.findData(doc.channel_code)))
+        if self._is_sales and doc.settlement_type_code is not None:
+            self.settlement_type_combo.setCurrentIndex(max(0, self.settlement_type_combo.findData(doc.settlement_type_code)))
         if doc.cost_center_detail_account_id is not None:
             self.cost_center_combo.setCurrentIndex(max(0, self.cost_center_combo.findData(doc.cost_center_detail_account_id)))
         if doc.project_detail_account_id is not None:
@@ -3966,6 +4001,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.consignment_warehouse_combo.setCurrentIndex(0)
         self.price_list_combo.setCurrentIndex(0)
         self.channel_combo.setCurrentIndex(0)
+        self.settlement_type_combo.setCurrentIndex(0)
         self.cost_center_combo.setCurrentIndex(0)
         self.project_combo.setCurrentIndex(0)
         self.reference_field.clear()
@@ -4056,6 +4092,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             description=self.description_field.text().strip() or None,
             tax_posting_mode=self.tax_posting_mode_combo.currentData() if self._supports_tax_posting_mode else None,
             tax_exempt=self.tax_exempt_checkbox.isChecked(),
+            settlement_type_code=self.settlement_type_combo.currentData() if self._is_sales else None,
         )
 
     def _save_header(self) -> None:

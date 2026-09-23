@@ -124,6 +124,19 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         self.source_filter.addItem("تک‌فروشی (POS)", "POS")
         self.source_filter.currentIndexChanged.connect(self.refresh)
         filters.addWidget(self.source_filter)
+
+        # طبقِ درخواستِ صریح («فیلترِ تاییدِ انبار رویِ تبِ سفارش‌ها هم
+        # باشد»): فقط برایِ تبِ پخشِ سرد نمایش داده می‌شود -- برایِ بقیه‌یِ
+        # کانال‌ها/فهرست‌هایِ عمومی، این گیت اصلاً معنا ندارد.
+        self.warehouse_status_filter = QComboBox()
+        if channel_type_code == "PRE_SALES":
+            filters.addWidget(QLabel("وضعیتِ انبار/توزین"))
+            self.warehouse_status_filter.addItem("(همه)", None)
+            self.warehouse_status_filter.addItem("در انتظارِ تاییدِ انبار", "در انتظارِ تاییدِ انبار")
+            self.warehouse_status_filter.addItem("در انتظارِ توزین", "در انتظارِ توزین")
+            self.warehouse_status_filter.addItem("آمادهٔ تبدیل به فاکتور", "آمادهٔ تبدیل به فاکتور")
+            self.warehouse_status_filter.currentIndexChanged.connect(self.refresh)
+            filters.addWidget(self.warehouse_status_filter)
         filters.addStretch(1)
         layout.addLayout(filters)
 
@@ -156,6 +169,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             (self.type_filter, "فقط اسنادِ همین نوع نشان داده شوند."),
             (self.status_filter, "فقط اسنادِ همین وضعیت نشان داده شوند."),
             (self.source_filter, "فقط اسنادِ ثبت‌شده از فرمِ عمومی یا فقط فروشِ حضوری (POS) نشان داده شوند."),
+            (self.warehouse_status_filter, "فقط سفارش‌هایی که در همین مرحله از تاییدِ انبار/توزین هستند نشان داده شوند."),
         ])
 
     def _company_id(self) -> int | None:
@@ -194,9 +208,18 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         elif source == "GENERAL":
             self._rows = [d for d in self._rows if d.pos_session_id is None]
 
+        pre_sales_statuses = {
+            d.document_id: documents_service.describe_pre_sales_fulfillment_status(d.document_id, company_id)
+            for d in self._rows
+        }
+        warehouse_status = self.warehouse_status_filter.currentData() if self._channel_type_code == "PRE_SALES" else None
+        if warehouse_status is not None:
+            self._rows = [d for d in self._rows if pre_sales_statuses.get(d.document_id) == warehouse_status]
+
         self.table.setRowCount(len(self._rows))
         for row_index, d in enumerate(self._rows):
             fulfillment = self._fulfillment_summary(d, company_id)
+            pre_sales_status = pre_sales_statuses.get(d.document_id)
             type_label = DOC_TYPE_TITLES.get(d.document_type_code, d.document_type_code)
             if d.pos_session_id is not None:
                 type_label += " (تک‌فروشی)"
@@ -209,13 +232,13 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
                 numerals.format_company_amount(d.total_amount),
                 STATUS_LABELS.get(d.status_code, d.status_code),
                 d.reference_no or "—",
-                self._fulfillment_text(fulfillment),
+                pre_sales_status or self._fulfillment_text(fulfillment),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, d.document_id)
                 self.table.setItem(row_index, col_index, item)
-            self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d, fulfillment))
+            self.table.setCellWidget(row_index, len(_COLUMNS) - 1, self._build_row_actions(d, fulfillment, pre_sales_status))
         # طبقِ رفعِ باگِ واقعیِ هم‌پوشانیِ دکمه‌ها: در این نسخه‌یِ Qt،
         # ResizeToContents فقط یک‌بار (بر مبنایِ متنِ هدر) اندازه‌گیری
         # می‌شود و بعدِ setCellWidget دوباره محاسبه نمی‌شود -- باید صریحاً
@@ -241,7 +264,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             return "کامل"
         return f"جزئی ({numerals.format_money(invoiced, 3)} از {numerals.format_money(ordered, 3)})"
 
-    def _build_row_actions(self, d, fulfillment=None) -> QWidget:
+    def _build_row_actions(self, d, fulfillment=None, pre_sales_status: str | None = None) -> QWidget:
         actions = QWidget()
         actions_layout = QHBoxLayout(actions)
         actions_layout.setContentsMargins(4, 4, 4, 4)
@@ -305,6 +328,14 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             elif fulfillment[1] >= fulfillment[0]:
                 convert_button.setEnabled(False)
                 convert_button.setToolTip("کل این سند قبلاً به فاکتور تبدیل شده است.")
+            elif pre_sales_status is not None and pre_sales_status != "آمادهٔ تبدیل به فاکتور":
+                # طبقِ درخواستِ صریح («وقتی انبار تایید کرد، در لیستِ
+                # سفارش‌ها معلوم کند که آمادهٔ تبدیل است و عملیاتِ تبدیل
+                # برایش فعال شود»): پیش از این، دکمه همیشه فعال بود و
+                # فقط در لحظه‌یِ کلیک با خطا رد می‌شد -- حالا از همین‌جا
+                # غیرِفعال است، با دلیلِ روشن.
+                convert_button.setEnabled(False)
+                convert_button.setToolTip(f"{pre_sales_status} -- ابتدا از تبِ «تاییدِ انبار و توزین» تایید کنید.")
             else:
                 convert_button.setToolTip("تبدیل به فاکتور")
                 convert_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._convert_document(doc_id))
