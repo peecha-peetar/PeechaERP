@@ -26,7 +26,7 @@ from peecha_api.routers import (
     visits,
 )
 
-app = FastAPI(title="Peecha Field Sales API", version="R182")
+app = FastAPI(title="Peecha Field Sales API", version="R183")
 
 app.include_router(auth.router)
 app.include_router(sync.router)

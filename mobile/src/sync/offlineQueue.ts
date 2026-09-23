@@ -2,6 +2,7 @@ import { KeyValueStore } from "../storage/keyValueStore";
 import {
   DeliveryConfirmationRequest,
   OrderCreateRequest,
+  PaymentCreateRequest,
   StartVisitRequest,
 } from "../api/types";
 import { generateIdempotencyKey } from "./idempotency";
@@ -31,11 +32,27 @@ export type VanSaleDeliveryPayload = {
 
 export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "START_VISIT"; payload: StartVisitRequest }
-  | { idempotencyKey: string; createdAt: string; type: "COMPLETE_VISIT"; payload: { customerVisitId: number; notes?: string } }
-  | { idempotencyKey: string; createdAt: string; type: "SKIP_VISIT"; payload: { customerVisitId: number; skipReason: string } }
+  | {
+      idempotencyKey: string;
+      createdAt: string;
+      type: "COMPLETE_VISIT";
+      // customerVisitId مستقیم: وقتی شناسه از قبل معلوم است (مثلاً فراخوانیِ
+      // برنامه‌ای/تست). startActionKey: رفعِ باگِ واقعی -- وقتی صفحه‌یِ
+      // ویزیت این را صف می‌کند، شناسهٔ واقعی هنوز معلوم نیست (فقط بعدِ
+      // Syncِ موفقِ START_VISIT مشخص می‌شود)؛ SyncEngine از رویِ
+      // VisitCorrelationStore آن را resolve می‌کند.
+      payload: { customerVisitId?: number; startActionKey?: string; notes?: string };
+    }
+  | {
+      idempotencyKey: string;
+      createdAt: string;
+      type: "SKIP_VISIT";
+      payload: { customerVisitId?: number; startActionKey?: string; skipReason: string };
+    }
   | { idempotencyKey: string; createdAt: string; type: "CREATE_ORDER"; payload: OrderCreateRequest }
   | { idempotencyKey: string; createdAt: string; type: "CREATE_DELIVERY_CONFIRMATION"; payload: DeliveryConfirmationRequest }
-  | { idempotencyKey: string; createdAt: string; type: "CREATE_VAN_SALE_DELIVERY"; payload: VanSaleDeliveryPayload };
+  | { idempotencyKey: string; createdAt: string; type: "CREATE_VAN_SALE_DELIVERY"; payload: VanSaleDeliveryPayload }
+  | { idempotencyKey: string; createdAt: string; type: "CREATE_PAYMENT"; payload: PaymentCreateRequest };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">
@@ -43,7 +60,8 @@ export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "SKIP_VISIT" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CREATE_ORDER" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CREATE_DELIVERY_CONFIRMATION" }>, "idempotencyKey" | "createdAt">
-  | Omit<Extract<PendingAction, { type: "CREATE_VAN_SALE_DELIVERY" }>, "idempotencyKey" | "createdAt">;
+  | Omit<Extract<PendingAction, { type: "CREATE_VAN_SALE_DELIVERY" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "CREATE_PAYMENT" }>, "idempotencyKey" | "createdAt">;
 
 /** صفِ اقدام‌هایِ آفلاین -- الگویِ pull-latest + push-queue طبقِ سندِ
  * معماری: هر اقدامِ کاربر (شروع/تکمیل/ردِ ویزیت، ثبتِ سفارش، تاییدِ

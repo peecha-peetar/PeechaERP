@@ -1,10 +1,14 @@
 import { TokenStore } from "../storage/tokenStore";
 import {
+  CustomerDetailResponse,
+  CustomerListRow,
   DeliveryConfirmationRequest,
   DeliveryConfirmationResponse,
   LoginResponse,
   OrderCreateRequest,
   OrderCreateResponse,
+  PaymentCreateRequest,
+  PaymentCreateResponse,
   PriceResolveRequest,
   PriceResolveResponse,
   PullResponse,
@@ -112,6 +116,19 @@ export class ApiClient {
 
   async getTodaySummary(): Promise<TodaySummaryResponse> {
     return this.request<TodaySummaryResponse>("/dashboard/today");
+  }
+
+  async listCustomers(query?: string): Promise<CustomerListRow[]> {
+    const q = query ? `?q=${encodeURIComponent(query)}` : "";
+    return this.request<CustomerListRow[]>(`/customers${q}`);
+  }
+
+  async getCustomerDetail(detailAccountId: number): Promise<CustomerDetailResponse> {
+    return this.request<CustomerDetailResponse>(`/customers/${detailAccountId}`);
+  }
+
+  async createPayment(payload: PaymentCreateRequest, idempotencyKey?: string): Promise<PaymentCreateResponse> {
+    return this.request<PaymentCreateResponse>("/payments", { method: "POST", body: payload, idempotencyKey });
   }
 
   async startVisit(payload: StartVisitRequest, idempotencyKey?: string): Promise<StartVisitResponse> {

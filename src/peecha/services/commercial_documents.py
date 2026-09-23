@@ -1005,6 +1005,57 @@ def summarize_documents_for_user_on_date(
         return DocumentSummary(document_count=count, total_amount=total or decimal.Decimal(0))
 
 
+@dataclass
+class TopProductRow:
+    item_id: int
+    total_quantity: decimal.Decimal
+    total_amount: decimal.Decimal
+
+
+@dataclass
+class CustomerPurchaseSummary:
+    last_purchase_date: datetime.date | None
+    top_products: list[TopProductRow]
+
+
+def summarize_customer_purchases(
+    company_id: int, customer_detail_account_id: int, top_n: int = 5,
+) -> CustomerPurchaseSummary:
+    """آخرین تاریخِ خرید + پرفروش‌ترین کالاهایِ یک مشتری -- برایِ صفحه‌یِ
+    جزئیاتِ مشتریِ اپِ موبایل (Phase 2/UI-2). فقط فاکتورهایِ POSTED
+    (لغوشده/پیش‌نویس معیارِ خریدِ واقعی نیستند)."""
+    with new_session() as session:
+        last_purchase_date = session.scalar(
+            select(func.max(CommercialDocument.document_date)).where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.counterparty_detail_account_id == customer_detail_account_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+            )
+        )
+        top_rows = session.execute(
+            select(
+                CommercialDocumentLine.item_id,
+                func.sum(CommercialDocumentLine.quantity_base),
+                func.sum(CommercialDocumentLine.line_total),
+            )
+            .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.counterparty_detail_account_id == customer_detail_account_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+            )
+            .group_by(CommercialDocumentLine.item_id)
+            .order_by(func.sum(CommercialDocumentLine.quantity_base).desc())
+            .limit(top_n)
+        ).all()
+        return CustomerPurchaseSummary(
+            last_purchase_date=last_purchase_date,
+            top_products=[TopProductRow(item_id=r[0], total_quantity=r[1], total_amount=r[2]) for r in top_rows],
+        )
+
+
 def list_documents(
     company_id: int, document_type_code: str | None = None, status_code: str | None = None,
     counterparty_detail_account_id: int | None = None, limit: int | None = None,

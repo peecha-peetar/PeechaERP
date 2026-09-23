@@ -4,6 +4,9 @@ import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, NullCaptureProvider } from "./capture";
 import { LocationProvider, NullLocationProvider } from "./location";
 import { BottomNav, BottomNavKey, EmptyState, ToastProvider } from "./components";
+import { CollectionScreen } from "./screens/CollectionScreen";
+import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
+import { CustomersScreen } from "./screens/CustomersScreen";
 import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -32,7 +35,9 @@ type Route =
   | { name: "LOGIN" }
   | { name: "MAIN"; tab: BottomNavKey }
   | { name: "VISIT_DETAIL"; customer: CustomerRow; visitPlan: VisitPlanRow }
-  | { name: "ORDER"; customer: CustomerRow };
+  | { name: "ORDER"; customer: CustomerRow }
+  | { name: "CUSTOMER_DETAIL"; detailAccountId: number }
+  | { name: "COLLECT_PAYMENT"; customer: CustomerRow };
 
 interface Props {
   locationProvider?: LocationProvider;
@@ -120,6 +125,34 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
     );
   }
 
+  if (route.name === "CUSTOMER_DETAIL") {
+    return (
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+        <CustomerDetailScreen
+          apiClient={services.apiClient}
+          localCache={services.localCache}
+          detailAccountId={route.detailAccountId}
+          onBack={() => setRoute({ name: "MAIN", tab: "CUSTOMERS" })}
+          onStartVisit={(customer, visitPlan) => setRoute({ name: "VISIT_DETAIL", customer, visitPlan })}
+          onCreateOrder={(customer) => setRoute({ name: "ORDER", customer })}
+          onCreateCollection={(customer) => setRoute({ name: "COLLECT_PAYMENT", customer })}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (route.name === "COLLECT_PAYMENT") {
+    return (
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+        <CollectionScreen
+          customer={route.customer}
+          offlineQueue={services.offlineQueue}
+          onDone={() => setRoute({ name: "CUSTOMER_DETAIL", detailAccountId: route.customer.detail_account_id })}
+        />
+      </SafeAreaView>
+    );
+  }
+
   const activeTab = route.tab;
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
@@ -129,6 +162,7 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
           services={services}
           userFullName={userFullName}
           onOpenVisit={(customer, visitPlan) => setRoute({ name: "VISIT_DETAIL", customer, visitPlan })}
+          onOpenCustomer={(detailAccountId) => setRoute({ name: "CUSTOMER_DETAIL", detailAccountId })}
         />
       </View>
       <BottomNav active={activeTab} onChange={(tab) => setRoute({ name: "MAIN", tab })} />
@@ -141,9 +175,10 @@ interface MainTabContentProps {
   services: ReturnType<typeof createServices>;
   userFullName: string;
   onOpenVisit: (customer: CustomerRow, visitPlan: VisitPlanRow) => void;
+  onOpenCustomer: (detailAccountId: number) => void;
 }
 
-function MainTabContent({ tab, services, userFullName, onOpenVisit }: MainTabContentProps) {
+function MainTabContent({ tab, services, userFullName, onOpenVisit, onOpenCustomer }: MainTabContentProps) {
   switch (tab) {
     case "HOME":
       return (
@@ -159,7 +194,7 @@ function MainTabContent({ tab, services, userFullName, onOpenVisit }: MainTabCon
         <VisitListScreen syncEngine={services.syncEngine} localCache={services.localCache} onOpenVisit={onOpenVisit} />
       );
     case "CUSTOMERS":
-      return <ComingSoon icon="👥" title="مشتریان" />;
+      return <CustomersScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />;
     case "ORDER":
       return <ComingSoon icon="🛒" title="سفارش‌ها" />;
     case "COLLECTION":

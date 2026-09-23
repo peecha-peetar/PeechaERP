@@ -135,3 +135,70 @@ export interface TodaySummaryResponse {
   next_visit: NextVisitSummary | null;
   today_route: TodayRouteEntry[];
 }
+
+export interface CustomerListRow {
+  detail_account_id: number;
+  code: string;
+  name: string;
+  phone: string | null;
+}
+
+export interface CustomerTopProduct {
+  item_id: number;
+  item_name: string | null;
+  total_quantity: string;
+  total_amount: string;
+}
+
+export interface CustomerRecentDocument {
+  document_id: number;
+  document_type_code: "SALES_ORDER" | "SALES_INVOICE";
+  document_no: number;
+  document_date: string;
+  status_code: string;
+  total_amount: string;
+}
+
+export interface CustomerDetailResponse {
+  detail_account_id: number;
+  code: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  status_code: string | null;
+  customer_group_id: number | null;
+  credit_limit_amount: string | null;
+  payment_term_days: number | null;
+  gps_latitude: string | null;
+  gps_longitude: string | null;
+  balance_amount: string;
+  balance_nature: "بدهکار" | "بستانکار";
+  last_purchase_date: string | null;
+  top_products: CustomerTopProduct[];
+  recent_documents: CustomerRecentDocument[];
+}
+
+export type PaymentMethod = "CASH" | "BANK" | "CHECK";
+
+export interface PaymentMethodLineInput {
+  method: PaymentMethod;
+  amount: string;
+  description?: string;
+  check_no?: string | null;
+  check_bank_name?: string | null;
+  check_due_date?: string | null;
+  check_party_name?: string | null;
+}
+
+export interface PaymentCreateRequest {
+  customer_detail_account_id: number;
+  document_date?: string | null;
+  description?: string;
+  customer_visit_id?: number | null;
+  method_lines: PaymentMethodLineInput[];
+}
+
+export interface PaymentCreateResponse {
+  journal_entry_id: number;
+  temporary_no: number;
+}

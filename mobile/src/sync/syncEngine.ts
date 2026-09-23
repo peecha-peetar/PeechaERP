@@ -1,6 +1,8 @@
 import { ApiClient, ApiError } from "../api/client";
+import { InMemoryKeyValueStore } from "../storage/keyValueStore";
 import { LocalCache } from "../storage/localCache";
 import { OfflineQueue, PendingAction } from "./offlineQueue";
+import { VisitCorrelationStore } from "./visitCorrelation";
 
 export interface PushResult {
   succeeded: string[];
@@ -25,6 +27,11 @@ export class SyncEngine {
     private readonly api: ApiClient,
     private readonly queue: OfflineQueue,
     private readonly cache: LocalCache,
+    // پیش‌فرض فقط برایِ تست‌هایِ موجودی که این وابستگی را نمی‌شناسند
+    // (سناریوهایشان customerVisitId مستقیم می‌دهند، نه startActionKey) --
+    // در اپِ واقعی، services.ts همیشه نمونه‌یِ مشترکِ رویِ همان kvStore
+    // را می‌دهد (وگرنه نگاشت با هر بارِ ساختِ SyncEngine گم می‌شود).
+    private readonly visitCorrelation: VisitCorrelationStore = new VisitCorrelationStore(new InMemoryKeyValueStore()),
   ) {}
 
   async pull(): Promise<void> {
@@ -63,25 +70,50 @@ export class SyncEngine {
 
   private async sendOne(action: PendingAction): Promise<void> {
     switch (action.type) {
-      case "START_VISIT":
-        await this.api.startVisit(action.payload, action.idempotencyKey);
+      case "START_VISIT": {
+        const result = await this.api.startVisit(action.payload, action.idempotencyKey);
+        // طبقِ رفعِ باگِ واقعی: COMPLETE_VISIT/SKIP_VISIT بعدیِ همین
+        // ویزیت (که با startActionKey صف شده باشند) این‌جا resolve
+        // می‌شوند -- نگاشت ماندگار است، حتی بعدِ حذفِ این اقدام از صف.
+        await this.visitCorrelation.resolve(action.idempotencyKey, result.customer_visit_id);
         return;
-      case "COMPLETE_VISIT":
-        await this.api.completeVisit(action.payload.customerVisitId, action.payload.notes);
+      }
+      case "COMPLETE_VISIT": {
+        const customerVisitId = await this.resolveCustomerVisitId(action.payload);
+        await this.api.completeVisit(customerVisitId, action.payload.notes);
         return;
-      case "SKIP_VISIT":
-        await this.api.skipVisit(action.payload.customerVisitId, action.payload.skipReason);
+      }
+      case "SKIP_VISIT": {
+        const customerVisitId = await this.resolveCustomerVisitId(action.payload);
+        await this.api.skipVisit(customerVisitId, action.payload.skipReason);
         return;
+      }
       case "CREATE_ORDER":
         await this.api.createOrder(action.payload, action.idempotencyKey);
         return;
       case "CREATE_DELIVERY_CONFIRMATION":
         await this.api.createDeliveryConfirmation(action.payload, action.idempotencyKey);
         return;
+      case "CREATE_PAYMENT":
+        await this.api.createPayment(action.payload, action.idempotencyKey);
+        return;
       case "CREATE_VAN_SALE_DELIVERY":
         await this.sendVanSaleDelivery(action);
         return;
     }
+  }
+
+  private async resolveCustomerVisitId(payload: { customerVisitId?: number; startActionKey?: string }): Promise<number> {
+    if (payload.customerVisitId !== undefined) return payload.customerVisitId;
+    if (payload.startActionKey) {
+      const resolved = await this.visitCorrelation.get(payload.startActionKey);
+      if (resolved !== null) return resolved;
+    }
+    // طبقِ الگویِ خطایِ ۴xx در pushQueue: این اقدام دیگر هیچ‌وقت با
+    // تلاشِ دوباره حل نمی‌شود (شروعِ ویزیتِ مرتبط یا هنوز Sync نشده یا
+    // خودش قطعاً شکست خورده) -- پس به‌جایِ توقفِ کلِ صف، به‌عنوانِ
+    // failedButKept ثبت و از صف حذف می‌شود.
+    throw new ApiError(400, "شروعِ ویزیتِ مرتبط هنوز همگام‌سازی نشده است.");
   }
 
   private async sendVanSaleDelivery(action: Extract<PendingAction, { type: "CREATE_VAN_SALE_DELIVERY" }>): Promise<void> {

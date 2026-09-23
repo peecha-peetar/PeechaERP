@@ -10,6 +10,8 @@ export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 
 const STATUS_TONE_MAP: Record<string, StatusTone> = {
   PENDING: "neutral",
+  NOT_STARTED: "neutral",
+  IN_PROGRESS: "info",
   SYNCING: "info",
   SYNCED: "success",
   FAILED: "danger",
@@ -25,6 +27,7 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   APPROVED: "success",
   POSTED: "success",
   CANCELLED: "danger",
+  DONE: "success",
 };
 
 export function statusTone(statusCode: string): StatusTone {

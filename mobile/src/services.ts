@@ -5,6 +5,7 @@ import { LocalCache } from "./storage/localCache";
 import { TokenStore } from "./storage/tokenStore";
 import { OfflineQueue } from "./sync/offlineQueue";
 import { SyncEngine } from "./sync/syncEngine";
+import { VisitCorrelationStore } from "./sync/visitCorrelation";
 
 /** ساختِ همه‌یِ سرویس‌هایِ لایه‌یِ منطق در یک‌جا -- در اپِ واقعی،
  * kvStore با AsyncStorageAdapter (پیاده‌سازیِ KeyValueStore رویِ
@@ -17,7 +18,11 @@ export function createServices(kvStore: KeyValueStore = new InMemoryKeyValueStor
   const apiClient = new ApiClient(API_BASE_URL, tokenStore);
   const offlineQueue = new OfflineQueue(kvStore);
   const localCache = new LocalCache(kvStore);
-  const syncEngine = new SyncEngine(apiClient, offlineQueue, localCache);
+  // طبقِ رفعِ باگِ واقعی (customer_visit_idِ COMPLETE/SKIP_VISIT): باید
+  // رویِ همان kvStoreِ اشتراکی باشد، نه یک نمونهٔ جدا -- وگرنه نگاشت با
+  // هر بارِ ساختِ SyncEngine از دست می‌رود.
+  const visitCorrelation = new VisitCorrelationStore(kvStore);
+  const syncEngine = new SyncEngine(apiClient, offlineQueue, localCache, visitCorrelation);
   return { tokenStore, apiClient, offlineQueue, localCache, syncEngine };
 }
 
