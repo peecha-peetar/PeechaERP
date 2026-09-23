@@ -202,3 +202,14 @@ export interface PaymentCreateResponse {
   journal_entry_id: number;
   temporary_no: number;
 }
+
+export interface NotificationRow {
+  notification_id: number;
+  type_code: string;
+  title: string;
+  body: string | null;
+  entity_type: string | null;
+  entity_id: number | null;
+  is_read: boolean;
+  created_at: string | null;
+}

@@ -1,9 +1,11 @@
-import React, { useState } from "react";
-import { Button, FlatList, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { FlatList, Text, View } from "react-native";
 import { ApiClient } from "../api/client";
 import { CustomerRow, ItemRow, OrderLineInput } from "../api/types";
 import { CaptureProvider } from "../capture";
 import { LocationProvider } from "../location";
+import { Button, Card, EmptyState, Input, SearchBar } from "../components";
+import { useTheme } from "../theme/ThemeProvider";
 import { OfflineQueue } from "../sync/offlineQueue";
 
 interface Props {
@@ -30,17 +32,29 @@ interface Props {
  *
  * قیمت وقتی آنلاین هستیم از /pricing/resolve (همان زنجیره‌یِ واقعیِ
  * resolve_price) گرفته می‌شود؛ اگر آفلاین/ناموفق بود، ویزیتور دستی
- * وارد می‌کند (Fallbackِ طراحی‌شده از R132). */
+ * وارد می‌کند (Fallbackِ طراحی‌شده از R132) -- طبقِ همین دلیل، این‌جا
+ * (UI-4) فقط پوسته‌یِ بصری با Design System عوض شده، خودِ منطقِ
+ * قیمت‌گذاری/ثبت دست‌نخورده مانده. */
 export function OrderScreen({
   customer, items, channelCode, warehouseId, currencyId, customerVisitId,
   apiClient, offlineQueue, captureProvider, locationProvider, onSubmitted,
 }: Props) {
+  const { colors, spacing, typography } = useTheme();
+  const [search, setSearch] = useState("");
   const [lines, setLines] = useState<Record<number, { quantity: string; unitPrice: string }>>({});
   const [documentTypeCode, setDocumentTypeCode] = useState<"SALES_ORDER" | "SALES_INVOICE">(
     channelCode === "VAN_SALES" ? "SALES_INVOICE" : "SALES_ORDER",
   );
   const [receivedByName, setReceivedByName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return items;
+    const needle = search.trim().toLowerCase();
+    return items.filter((it) => it.name.toLowerCase().includes(needle) || it.code.toLowerCase().includes(needle));
+  }, [items, search]);
+
+  const lineCount = Object.values(lines).filter((l) => Number(l.quantity) > 0).length;
 
   const setLine = (itemId: number, field: "quantity" | "unitPrice", value: string) => {
     setLines((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] ?? { quantity: "", unitPrice: "" }), [field]: value } }));
@@ -117,54 +131,56 @@ export function OrderScreen({
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>سفارشِ {customer.name}</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.md }}>
+      <Text style={[typography.h2, { color: colors.textPrimary }]}>سفارشِ {customer.name}</Text>
+      <SearchBar value={search} onChangeText={setSearch} placeholder="جستجویِ کالا..." />
+
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={(item) => String(item.item_id)}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <TextInput
-              style={styles.smallInput}
-              placeholder="تعداد"
-              keyboardType="numeric"
-              value={lines[item.item_id]?.quantity ?? ""}
-              onChangeText={(v) => setLine(item.item_id, "quantity", v)}
-              onEndEditing={(e) => lookupPrice(item.item_id, item.base_uom_id, e.nativeEvent.text)}
-            />
-            <TextInput
-              style={styles.smallInput}
-              placeholder="قیمت"
-              keyboardType="numeric"
-              value={lines[item.item_id]?.unitPrice ?? ""}
-              onChangeText={(v) => setLine(item.item_id, "unitPrice", v)}
-            />
-          </View>
-        )}
+        contentContainerStyle={{ gap: spacing.sm }}
+        renderItem={({ item }) => {
+          const line = lines[item.item_id];
+          return (
+            <Card style={{ padding: spacing.md }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                <Text style={[typography.bodyBold, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Input
+                  value={line?.quantity ?? ""}
+                  onChangeText={(v) => setLine(item.item_id, "quantity", v)}
+                  onEndEditing={(e) => lookupPrice(item.item_id, item.base_uom_id, e.nativeEvent.text)}
+                  keyboardType="numeric"
+                  placeholder="تعداد"
+                  numeric
+                  style={{ width: 70 }}
+                />
+                <Input
+                  value={line?.unitPrice ?? ""}
+                  onChangeText={(v) => setLine(item.item_id, "unitPrice", v)}
+                  keyboardType="numeric"
+                  placeholder="قیمت"
+                  numeric
+                  style={{ width: 100 }}
+                />
+              </View>
+            </Card>
+          );
+        }}
+        ListEmptyComponent={<EmptyState icon="🔍" title="کالایی پیدا نشد" />}
       />
+
       {documentTypeCode === "SALES_INVOICE" ? (
-        <TextInput
-          style={styles.input}
-          placeholder="نامِ تحویل‌گیرنده (برایِ رسیدِ تحویل)"
-          value={receivedByName}
-          onChangeText={setReceivedByName}
-        />
+        <Input label="نامِ تحویل‌گیرنده (برایِ رسیدِ تحویل)" value={receivedByName} onChangeText={setReceivedByName} />
       ) : null}
+
       <Button
-        title={submitting ? "در حالِ ثبت..." : documentTypeCode === "SALES_INVOICE" ? "ثبت، پست و تاییدِ تحویل" : "ثبتِ سفارش"}
+        label={submitting ? "در حالِ ثبت..." : documentTypeCode === "SALES_INVOICE" ? `ثبت، پست و تاییدِ تحویل (${lineCount} قلم)` : `ثبتِ سفارش (${lineCount} قلم)`}
         onPress={submit}
-        disabled={submitting}
+        loading={submitting}
+        disabled={submitting || lineCount === 0}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  title: { fontSize: 18, marginBottom: 12, textAlign: "right", writingDirection: "rtl" },
-  row: { flexDirection: "row-reverse", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderColor: "#eee" },
-  itemName: { flex: 1, textAlign: "right", writingDirection: "rtl" },
-  smallInput: { width: 70, borderWidth: 1, borderColor: "#ccc", borderRadius: 6, padding: 6, marginStart: 6, textAlign: "center" },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, padding: 10, marginVertical: 8, textAlign: "right", writingDirection: "rtl" },
-});

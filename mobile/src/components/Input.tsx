@@ -1,19 +1,23 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, TextInputProps, View } from "react-native";
+import { StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface InputProps extends Omit<TextInputProps, "style"> {
   label?: string;
   error?: string;
   numeric?: boolean;
+  /** رویِ ظرفِ بیرونی اعمال می‌شود (مثلاً width برایِ فیلدهایِ کوچکِ
+   * کنارِهم در یک ردیف) -- نه رویِ خودِ TextInput، تا استایلِ داخلیِ
+   * ثابت (رنگ/ارتفاع/حاشیه) از بیرون بازنویسی نشود. */
+  style?: ViewStyle;
 }
 
-export function Input({ label, error, numeric, ...rest }: InputProps) {
+export function Input({ label, error, numeric, style, ...rest }: InputProps) {
   const { colors, spacing, radius, typography } = useTheme();
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={{ marginBottom: spacing.md }}>
+    <View style={[{ marginBottom: spacing.md }, style]}>
       {label ? <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>{label}</Text> : null}
       <TextInput
         {...rest}

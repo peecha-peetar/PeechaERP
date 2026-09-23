@@ -5,6 +5,7 @@ import {
   DeliveryConfirmationRequest,
   DeliveryConfirmationResponse,
   LoginResponse,
+  NotificationRow,
   OrderCreateRequest,
   OrderCreateResponse,
   PaymentCreateRequest,
@@ -129,6 +130,14 @@ export class ApiClient {
 
   async createPayment(payload: PaymentCreateRequest, idempotencyKey?: string): Promise<PaymentCreateResponse> {
     return this.request<PaymentCreateResponse>("/payments", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async listNotifications(unreadOnly = false): Promise<NotificationRow[]> {
+    return this.request<NotificationRow[]>(`/notifications${unreadOnly ? "?unread_only=true" : ""}`);
+  }
+
+  async markNotificationRead(notificationId: number): Promise<void> {
+    await this.request<void>(`/notifications/${notificationId}/read`, { method: "POST" });
   }
 
   async startVisit(payload: StartVisitRequest, idempotencyKey?: string): Promise<StartVisitResponse> {

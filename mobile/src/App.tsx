@@ -3,18 +3,27 @@ import { SafeAreaView, StyleSheet, View } from "react-native";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, NullCaptureProvider } from "./capture";
 import { LocationProvider, NullLocationProvider } from "./location";
-import { BottomNav, BottomNavKey, EmptyState, ToastProvider } from "./components";
+import { AppBar, BottomNav, BottomNavKey, EmptyState, SyncStatus, ToastProvider } from "./components";
 import { CollectionScreen } from "./screens/CollectionScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
 import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
+import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { OrderScreen } from "./screens/OrderScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
 import { createServices } from "./services";
 import { applyRtlLayout, ThemeProvider, useTheme } from "./theme";
+
+// طبقِ اصلِ صریح («Sync Status به کاربر نمایش داده شود» + «عملیاتِ
+// موفق بعدِ اتصال خودکار Sync شوند»، Phase 6): بازه‌یِ تلاشِ خودکارِ
+// ارسالِ صفِ آفلاین -- فقط ارسالِ صف (سبک)، نه pullِ کامل (طبقِ اصلِ
+// «اطلاعاتِ غیرِضروری دوباره دانلود نشوند»؛ pull فقط با کنشِ صریحِ
+// کاربر -- ورود/pull-to-refresh -- انجام می‌شود).
+const AUTO_SYNC_INTERVAL_MS = 20_000;
 
 // طبقِ اصلِ صریح («RTL فارسی صحیح باشد»): پیش از رندرِ هر UIای، یک‌بار
 // در همان بارگذاریِ ماژول (نه داخلِ کامپوننت -- تغییرش نیازمندِ Reloadِ
@@ -37,7 +46,9 @@ type Route =
   | { name: "VISIT_DETAIL"; customer: CustomerRow; visitPlan: VisitPlanRow }
   | { name: "ORDER"; customer: CustomerRow }
   | { name: "CUSTOMER_DETAIL"; detailAccountId: number }
-  | { name: "COLLECT_PAYMENT"; customer: CustomerRow };
+  | { name: "COLLECT_PAYMENT"; customer: CustomerRow }
+  | { name: "NOTIFICATIONS" }
+  | { name: "SETTINGS" };
 
 interface Props {
   locationProvider?: LocationProvider;
@@ -60,12 +71,62 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
   const [route, setRoute] = useState<Route>({ name: "LOGIN" });
   const [items, setItems] = useState<ItemRow[]>([]);
   const [userFullName, setUserFullName] = useState("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("IDLE");
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
       if (cached) setItems(cached.items);
     });
   }, [services]);
+
+  const loggedIn = route.name !== "LOGIN";
+  useEffect(() => {
+    if (!loggedIn) return;
+    let cancelled = false;
+
+    const refreshUnread = async () => {
+      try {
+        const notifs = await services.apiClient.listNotifications(true);
+        if (!cancelled) setUnreadCount(notifs.length);
+      } catch {
+        // شکستِ شبکه در به‌روزرسانیِ شمارشِ اعلان‌ها بی‌اهمیت است -- دفعه‌یِ بعد دوباره امتحان می‌شود
+      }
+    };
+
+    const tick = async () => {
+      const pending = await services.offlineQueue.size();
+      if (pending === 0) {
+        if (!cancelled) setSyncStatus("SYNCED");
+      } else {
+        if (!cancelled) setSyncStatus("SYNCING");
+        // طبقِ رفتارِ واقعیِ pushQueue: برایِ خطایِ شبکه (نه ۴xx) پرتاب
+        // نمی‌کند -- فقط پردازشِ صف را متوقف می‌کند (succeeded/failedButKept
+        // هردو خالی می‌مانند ولی صف هنوز پر است) -- این‌جا دقیقاً همان
+        // حالت به‌عنوانِ «آفلاین» تشخیص داده می‌شود، نه استثنا.
+        const result = await services.syncEngine.pushQueue();
+        const remaining = await services.offlineQueue.size();
+        if (cancelled) return;
+        if (remaining === 0) {
+          setSyncStatus("SYNCED");
+        } else if (result.succeeded.length === 0 && result.failedButKept.length === 0) {
+          setSyncStatus("OFFLINE");
+        } else if (result.failedButKept.length > 0) {
+          setSyncStatus("ERROR");
+        } else {
+          setSyncStatus("SYNCING");
+        }
+      }
+      await refreshUnread();
+    };
+
+    tick();
+    const interval = setInterval(tick, AUTO_SYNC_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [loggedIn, services]);
 
   if (route.name === "LOGIN") {
     return (
@@ -153,9 +214,37 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
     );
   }
 
+  if (route.name === "NOTIFICATIONS") {
+    return (
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+        <NotificationsScreen apiClient={services.apiClient} onBack={() => setRoute({ name: "MAIN", tab: "HOME" })} />
+      </SafeAreaView>
+    );
+  }
+
+  if (route.name === "SETTINGS") {
+    return (
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+        <SettingsScreen
+          apiClient={services.apiClient}
+          userFullName={userFullName}
+          onLoggedOut={() => setRoute({ name: "LOGIN" })}
+          onBack={() => setRoute({ name: "MAIN", tab: "HOME" })}
+        />
+      </SafeAreaView>
+    );
+  }
+
   const activeTab = route.tab;
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+      <AppBar
+        userFullName={userFullName}
+        syncStatus={syncStatus}
+        unreadNotificationCount={unreadCount}
+        onPressNotifications={() => setRoute({ name: "NOTIFICATIONS" })}
+        onPressProfile={() => setRoute({ name: "SETTINGS" })}
+      />
       <View style={styles.flex}>
         <MainTabContent
           tab={activeTab}

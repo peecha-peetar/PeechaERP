@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
 import { CustomerRow, TodaySummaryResponse, VisitPlanRow } from "../api/types";
-import { AppBar, Card, EmptyState, ErrorState, SkeletonList, VisitCard, VisitCardState } from "../components";
+import { Card, EmptyState, ErrorState, SkeletonList, VisitCard, VisitCardState } from "../components";
 import { formatAmount } from "../format";
 import { useTheme } from "../theme/ThemeProvider";
 import { LocalCache } from "../storage/localCache";
@@ -12,7 +12,6 @@ interface Props {
   localCache: LocalCache;
   userFullName: string;
   onOpenVisit: (customer: CustomerRow, visitPlan: VisitPlanRow) => void;
-  onPressNotifications?: () => void;
 }
 
 /** صفحه‌یِ خانه -- طبقِ اصلِ صریحِ کاربر («در ۳ ثانیه اطلاعاتِ مهم را
@@ -20,7 +19,7 @@ interface Props {
  * درخواستِ تکی (/dashboard/today). برایِ بازکردنِ ویزیت، مشتری/برنامه‌یِ
  * کاملشان از کشِ محلیِ pull (که از قبل رویِ دستگاه هست) resolve می‌شود --
  * نه یک درخواستِ شبکه‌یِ دیگر. */
-export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, onPressNotifications }: Props) {
+export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [summary, setSummary] = useState<TodaySummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +60,6 @@ export function HomeScreen({ apiClient, localCache, userFullName, onOpenVisit, o
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <AppBar userFullName={userFullName} syncStatus="SYNCED" onPressNotifications={onPressNotifications} />
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
