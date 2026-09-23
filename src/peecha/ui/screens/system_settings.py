@@ -12,6 +12,7 @@ from peecha.ui.screens.audit_log import AuditLogScreen
 from peecha.ui.screens.commercial_settings import (
     _AccountMappingsTab as _CommercialAccountMappingsTab,
     _ChannelsTab as _CommercialChannelsTab,
+    _DistributionSettlementTypesTab,
     _FeatureToggleTab,
     _IndustryProfileTab,
     _NumberingSequencesTab,
@@ -310,6 +311,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
                 ("نمایهٔ صنعتی", _IndustryProfileTab()),
                 ("شماره‌گذاریِ اسناد", _NumberingSequencesTab()),
                 ("کانال‌ها", _CommercialChannelsTab()),
+                ("انواعِ تسویهٔ پخش", _DistributionSettlementTypesTab()),
                 ("هشدارِ موعدِ تسویه", _SettlementAlarmTab()),
                 ("حاشیهٔ سود و پیشنهادِ قیمت", _PricingPolicyTab()),
                 ("سانترال / وویپ", _VoipSettingsTab()),

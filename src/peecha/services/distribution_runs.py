@@ -14,6 +14,7 @@ import decimal
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
@@ -22,6 +23,19 @@ from peecha.db.models.commercial import (
 from peecha.db.models.inventory import Warehouse
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+
+
+def list_order_visitors(company_id: int) -> list[tuple[int, str]]:
+    """طبقِ درخواستِ صریح («ویزیتور هم به فیلترهایِ تیمِ پخش اضافه
+    بشه»): هم‌الگو با field_sales_dashboard._visitor_names -- «ویزیتور»
+    در این پروژه یعنی همان کاربری که سفارش را ثبت کرده (created_by_
+    user_id)، نه فیلدِ کم‌استفاده‌یِ sales_rep_detail_account_id."""
+    from peecha.services import users as users_service
+
+    return sorted(
+        ((u.user_id, u.full_name) for u in users_service.list_users() if company_id in u.company_ids),
+        key=lambda item: item[1],
+    )
 
 
 @dataclass
@@ -56,12 +70,15 @@ def _route_and_descendant_ids(company_id: int, route_detail_account_id: int) -> 
 
 def list_eligible_invoices(
     company_id: int, customer_group_id: int | None = None, route_detail_account_id: int | None = None,
+    visitor_user_id: int | None = None,
 ) -> list[EligibleInvoiceRow]:
     """فاکتورهایِ فروشِ ثبت‌نهایی‌شده‌یِ کانالِ پخشِ سرد که هنوز به هیچ
     تیمِ فعالی (DRAFT/CONFIRMED) الصاق نشده‌اند -- طبقِ درخواستِ صریح،
-    قابلِ‌فیلتر بر اساسِ گروهِ مشتریان و مسیر/منطقه‌یِ توزیعِ مشتری
-    (comm.customer_profiles) تا بتوان فاکتورهایِ یک منطقه را یک‌جا به
-    یک خودرو تخصیص داد."""
+    قابلِ‌فیلتر بر اساسِ گروهِ مشتریان، مسیر/منطقه‌یِ توزیعِ مشتری
+    (comm.customer_profiles)، و ویزیتوری که سفارشِ مبدا را ثبت کرده
+    (از رویِ source_document_id، چون فاکتور را معمولاً شخصِ دیگری --
+    انبار/دفتر -- می‌سازد، نه خودِ ویزیتور) تا بتوان فاکتورهایِ یک
+    منطقه/ویزیتور را یک‌جا به یک خودرو تخصیص داد."""
     route_ids = _route_and_descendant_ids(company_id, route_detail_account_id) if route_detail_account_id is not None else None
     with new_session() as session:
         already_attached = set(
@@ -87,6 +104,10 @@ def list_eligible_invoices(
                 stmt = stmt.where(CustomerProfile.customer_group_id == customer_group_id)
             if route_ids is not None:
                 stmt = stmt.where(CustomerProfile.distribution_route_detail_account_id.in_(route_ids))
+        if visitor_user_id is not None:
+            source_order = aliased(CommercialDocument)
+            stmt = stmt.join(source_order, source_order.document_id == CommercialDocument.source_document_id)
+            stmt = stmt.where(source_order.created_by_user_id == visitor_user_id)
         stmt = stmt.order_by(CommercialDocument.document_id)
         rows = session.scalars(stmt).all()
         return [

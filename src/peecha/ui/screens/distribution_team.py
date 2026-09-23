@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import commercial_partners as partners_service
-from peecha.services import commercial_settlements as settlements_service
+from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import distribution_runs as distribution_service
 from peecha.services import inventory_locations as locations_service
@@ -38,12 +38,6 @@ _ELIGIBLE_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمع�
 _ATTACHED_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "نوعِ تسویه", "عملیات"]
 _SUMMARY_COLUMNS = ["کالا", "واحد", "جمعِ مقدار"]
 _STATUS_LABELS = {"DRAFT": "پیش‌نویس", "CONFIRMED": "تحویل‌شده به راننده", "CANCELLED": "لغوشده"}
-
-
-def _settlement_type_label(code: str | None) -> str:
-    if code is None:
-        return "—"
-    return settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(code, code)
 
 
 def _fmt_qty(value) -> str:
@@ -58,6 +52,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self._runs: list[distribution_service.DistributionRunRow] = []
         self._current_run: distribution_service.DistributionRunRow | None = None
         self._eligible: list[distribution_service.EligibleInvoiceRow] = []
+        self._settlement_type_labels: dict[str, str] = {}
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
@@ -151,8 +146,16 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         self.route_filter = QComboBox()
         self.route_filter.addItem("(همه)", None)
         eligible_filter_row.addWidget(self.route_filter)
+        # طبقِ درخواستِ صریحِ بعدیِ کاربر («ویزیتور هم به فیلترها اضافه
+        # بشه»): ویزیتورِ ثبت‌کننده‌یِ سفارشِ مبدا (نه فاکتور -- چون
+        # فاکتور را معمولاً شخصِ دیگری می‌سازد).
+        eligible_filter_row.addWidget(QLabel("ویزیتور"))
+        self.visitor_filter = QComboBox()
+        self.visitor_filter.addItem("(همه)", None)
+        eligible_filter_row.addWidget(self.visitor_filter)
         self.customer_group_filter.currentIndexChanged.connect(self._refresh_eligible)
         self.route_filter.currentIndexChanged.connect(self._refresh_eligible)
+        self.visitor_filter.currentIndexChanged.connect(self._refresh_eligible)
         eligible_filter_row.addStretch(1)
         layout.addLayout(eligible_filter_row)
 
@@ -217,6 +220,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             (self.date_field, "تاریخِ این تیمِ پخش."),
             (self.customer_group_filter, "فقط فاکتورهایِ مشتریانِ همین گروه در فهرستِ «واجدِ شرایط» نشان داده شوند."),
             (self.route_filter, "فقط فاکتورهایِ مشتریانِ همین منطقه/مسیرِ توزیع (و زیرمسیرهایش) نشان داده شوند."),
+            (self.visitor_filter, "فقط فاکتورهایی که سفارشِ مبدایشان توسطِ همین ویزیتور ثبت شده نشان داده شوند."),
             (self.eligible_table, "فاکتورهایِ فروشِ پخشِ سردِ ثبت‌نهایی‌شده که هنوز به هیچ تیمی الصاق نشده‌اند."),
             (self.attached_table, "فاکتورهایِ الصاق‌شده به همین تیم."),
             (self.print_invoices_button, "چاپِ فهرستِ فاکتورهایِ الصاق‌شده به این خودرو -- برایِ رسیدِ خروج/بایگانی."),
@@ -256,6 +260,20 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         if current_route is not None:
             self.route_filter.setCurrentIndex(max(0, self.route_filter.findData(current_route)))
         self.route_filter.blockSignals(False)
+
+        current_visitor = self.visitor_filter.currentData()
+        self.visitor_filter.blockSignals(True)
+        self.visitor_filter.clear()
+        self.visitor_filter.addItem("(همه)", None)
+        for user_id, full_name in distribution_service.list_order_visitors(company_id):
+            self.visitor_filter.addItem(full_name, user_id)
+        if current_visitor is not None:
+            self.visitor_filter.setCurrentIndex(max(0, self.visitor_filter.findData(current_visitor)))
+        self.visitor_filter.blockSignals(False)
+
+        self._settlement_type_labels = {
+            t.code: t.name for t in pricing_service.list_distribution_settlement_types(company_id)
+        }
 
         self._runs = distribution_service.list_distribution_runs(company_id)
         self.runs_table.setRowCount(len(self._runs))
@@ -320,8 +338,14 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             self._eligible = distribution_service.list_eligible_invoices(
                 company_id, customer_group_id=self.customer_group_filter.currentData(),
                 route_detail_account_id=self.route_filter.currentData(),
+                visitor_user_id=self.visitor_filter.currentData(),
             )
         self._fill_eligible_table()
+
+    def _settlement_type_label(self, code: str | None) -> str:
+        if code is None:
+            return "—"
+        return self._settlement_type_labels.get(code, code)
 
     def _fill_eligible_table(self) -> None:
         self.eligible_table.setRowCount(len(self._eligible))
@@ -329,7 +353,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             values = [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
                 _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
-                _settlement_type_label(inv.settlement_type_code),
+                self._settlement_type_label(inv.settlement_type_code),
             ]
             for col_index, value in enumerate(values):
                 self.eligible_table.setItem(row_index, col_index, QTableWidgetItem(value))
@@ -344,7 +368,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             values = [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
                 _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
-                _settlement_type_label(inv.settlement_type_code),
+                self._settlement_type_label(inv.settlement_type_code),
             ]
             for col_index, value in enumerate(values):
                 self.attached_table.setItem(row_index, col_index, QTableWidgetItem(value))
@@ -453,7 +477,7 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
             [
                 numerals.to_persian_digits(str(inv.document_no)), numerals.format_jalali_date(inv.document_date),
                 _dimensions_label(inv.counterparty_detail_account_id), numerals.format_money(inv.total_amount, 0),
-                _settlement_type_label(inv.settlement_type_code), "", "", "",
+                self._settlement_type_label(inv.settlement_type_code), "", "", "",
             ]
             for inv in self._current_run.invoices
         ]

@@ -132,6 +132,15 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM comm.delivery_confirmations WHERE company_id = :company_id",
     "DELETE FROM comm.shipments WHERE document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده (پخشِ سرد -- تیمِ پخش): الصاقِ
+    # فاکتور به تیمِ پخش (comm.distribution_run_documents) هم مستقیماً
+    # به سندِ فروش وصل است -- دقیقاً همان الگویِ pos_payments/shipments/
+    # delivery_confirmations بالا؛ باید پیش از خودِ سند پاک شود. خودِ
+    # تیمِ پخش (comm.distribution_runs) هم شرکت‌محور است.
+    "DELETE FROM comm.distribution_run_documents WHERE document_id IN "
+    "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id) "
+    "OR distribution_run_id IN (SELECT distribution_run_id FROM comm.distribution_runs WHERE company_id = :company_id)",
+    "DELETE FROM comm.distribution_runs WHERE company_id = :company_id",
     "DELETE FROM comm.commercial_document_lines WHERE document_id IN "
     "(SELECT document_id FROM comm.commercial_documents WHERE company_id = :company_id)",
     "DELETE FROM comm.commercial_documents WHERE company_id = :company_id",
@@ -215,6 +224,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "(SELECT price_list_id FROM comm.price_lists WHERE company_id = :company_id)",
     "DELETE FROM comm.price_lists WHERE company_id = :company_id",
     "DELETE FROM comm.channels WHERE company_id = :company_id",
+    "DELETE FROM comm.distribution_settlement_types WHERE company_id = :company_id",
     "DELETE FROM comm.discount_rule_tiers WHERE rule_id IN "
     "(SELECT rule_id FROM comm.discount_rules WHERE company_id = :company_id)",
     "DELETE FROM comm.discount_rules WHERE company_id = :company_id",

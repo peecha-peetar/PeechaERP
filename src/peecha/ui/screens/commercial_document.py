@@ -2491,7 +2491,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         settlement_type_layout = QVBoxLayout(self.settlement_type_box)
         settlement_type_layout.setContentsMargins(0, 0, 0, 0)
         settlement_type_layout.setSpacing(3)
-        settlement_type_layout.addWidget(QLabel("نوعِ تسویه"))
+        settlement_type_layout.addWidget(QLabel("نوعِ تسویهٔ پخش"))
         self.settlement_type_combo = _EnterComboBox()
         settlement_type_layout.addWidget(self.settlement_type_combo)
         row2_grid.addWidget(self.settlement_type_box, 0, 9, 2, 1)
@@ -2881,7 +2881,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             (self.reference_field, "شماره/مرجعِ دلخواه برایِ ردیابی (مثلاً شماره‌یِ سفارشِ مشتری) -- در هیچ محاسبه‌ای اثر ندارد."),
             (self.price_list_combo, "اگر برایِ ردیفی بهایِ واحد وارد نشود، از همین فهرستِ قیمت (یا قراردادِ فعالِ طرفِ‌حساب) محاسبه می‌شود."),
             (self.channel_combo, "کانالِ فروش (مثلاً فروشگاهِ اینترنتیِ خاص) که این سند از آن آمده -- برایِ گزارشِ فروش بر اساسِ کانال."),
-            (self.settlement_type_combo, "نوعِ تسویه‌یِ موردانتظار (نقد/بانکی/چک/...) -- یک برچسبِ نمایشی، جدا از نقشه‌یِ کاملِ تسویه‌یِ فاکتور؛ با تبدیلِ سفارش به فاکتور هم منتقل می‌شود."),
+            (self.settlement_type_combo, "نوعِ تسویه‌یِ پخش (نقدیِ پایِ بار/چک/یک‌هفته‌ای/...) -- کاملاً جدا از روشِ دریافت/پرداختِ خزانه‌داری؛ در «تنظیماتِ سیستم ‹ مدیریتِ بازرگانی ‹ انواعِ تسویهٔ پخش» تعریف می‌شود. با تبدیلِ سفارش به فاکتور هم منتقل می‌شود."),
             (self.cost_center_combo, "مرکزِ هزینه/درآمدی که این سند به آن نسبت داده می‌شود."),
             (self.project_combo, "پروژه‌ای که این سند به آن مربوط است."),
             (
@@ -3022,8 +3022,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             current_settlement_type = self.settlement_type_combo.currentData()
             self.settlement_type_combo.clear()
             self.settlement_type_combo.addItem("(نامشخص)", None)
-            for code in settlements_service.settlement_plan_method_codes("SALES_INVOICE", company_id):
-                self.settlement_type_combo.addItem(settlements_service.SETTLEMENT_PLAN_METHOD_LABELS.get(code, code), code)
+            for settlement_type in pricing_service.list_distribution_settlement_types(company_id, active_only=True):
+                self.settlement_type_combo.addItem(settlement_type.name, settlement_type.code)
             if current_settlement_type is not None:
                 self.settlement_type_combo.setCurrentIndex(max(0, self.settlement_type_combo.findData(current_settlement_type)))
         else:

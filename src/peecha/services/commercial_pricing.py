@@ -9,7 +9,7 @@ import datetime
 import decimal
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
@@ -19,6 +19,7 @@ from peecha.db.models.commercial import (
     Coupon,
     DiscountRule,
     DiscountRuleTier,
+    DistributionSettlementType,
     PriceList,
     PriceListItem,
     PriceListItemPriceHistory,
@@ -52,6 +53,77 @@ def create_channel(
         session.add(row)
         session.commit()
         return row.channel_code
+
+
+# ---------------------------------------------------------------------
+# نوعِ تسویهٔ پخش -- طبقِ اصلاحِ صریحِ کاربر: کاملاً مفهومی جدا از نوعِ
+# تسویه/روشِ دریافتِ خزانه‌داری («تسویهٔ نقدیِ پایِ بار»، «تسویهٔ چک»،
+# «رسید»، «تسویهٔ یک‌هفته‌ای»، «تسویهٔ پایِ بار» -- و هر نوعِ سفارشیِ
+# دیگری که کاربر اضافه کند).
+# ---------------------------------------------------------------------
+_DEFAULT_DISTRIBUTION_SETTLEMENT_TYPES = (
+    ("CASH_ON_TRUCK", "تسویهٔ نقدیِ پایِ بار"),
+    ("CHECK", "تسویهٔ چک"),
+    ("RECEIPT", "رسید"),
+    ("WEEKLY", "تسویهٔ یک‌هفته‌ای"),
+    ("ON_TRUCK", "تسویهٔ پایِ بار"),
+)
+
+
+def ensure_default_distribution_settlement_types(company_id: int) -> None:
+    """طبقِ همان الگویِ get-or-create در سراسرِ این پروژه (مثلِ
+    ensure_person_groups/ensure_specialized_dimensions): اولین‌باری که
+    این فهرست برایِ یک شرکت خوانده می‌شود، اگر هنوز چیزی تعریف نشده،
+    این چند نوعِ پیش‌فرض (طبقِ نمونه‌هایِ خودِ کاربر) ساخته می‌شوند --
+    کاملاً قابلِ‌ویرایش/افزودنِ بیشتر پس از آن."""
+    with new_session() as session:
+        existing = session.scalar(
+            select(func.count()).select_from(DistributionSettlementType).where(DistributionSettlementType.company_id == company_id)
+        )
+        if existing:
+            return
+        for code, name in _DEFAULT_DISTRIBUTION_SETTLEMENT_TYPES:
+            session.add(DistributionSettlementType(company_id=company_id, code=code, name=name))
+        session.commit()
+
+
+def list_distribution_settlement_types(company_id: int, active_only: bool = False) -> list[DistributionSettlementType]:
+    ensure_default_distribution_settlement_types(company_id)
+    with new_session() as session:
+        query = select(DistributionSettlementType).where(DistributionSettlementType.company_id == company_id)
+        if active_only:
+            query = query.where(DistributionSettlementType.is_active.is_(True))
+        rows = session.scalars(query.order_by(DistributionSettlementType.code)).all()
+        for row in rows:
+            session.expunge(row)
+        return list(rows)
+
+
+def create_distribution_settlement_type(company_id: int, code: str, name: str) -> str:
+    code = code.strip().upper()
+    name = name.strip()
+    if not code or not name:
+        raise ValueError("کد و نام نمی‌توانند خالی باشند.")
+    with new_session() as session:
+        if session.get(DistributionSettlementType, (code, company_id)) is not None:
+            raise ValueError(f"نوعِ تسویه‌ای با کدِ «{code}» از قبل وجود دارد.")
+        row = DistributionSettlementType(code=code, company_id=company_id, name=name)
+        session.add(row)
+        session.commit()
+        return row.code
+
+
+def update_distribution_settlement_type(company_id: int, code: str, name: str, is_active: bool) -> None:
+    name = name.strip()
+    if not name:
+        raise ValueError("نام نمی‌تواند خالی باشد.")
+    with new_session() as session:
+        row = session.get(DistributionSettlementType, (code, company_id))
+        if row is None:
+            raise ValueError("نوعِ تسویه نامعتبر است.")
+        row.name = name
+        row.is_active = is_active
+        session.commit()
 
 
 # ---------------------------------------------------------------------

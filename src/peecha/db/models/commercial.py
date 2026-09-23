@@ -68,6 +68,20 @@ class Channel(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
 
 
+# طبقِ اصلاحِ صریحِ کاربر: «نوعِ تسویه»یِ پخشِ سرد (نقدیِ پایِ بار/چک/
+# رسید/یک‌هفته‌ای/پایِ بار/...) کاملاً مفهومی جدا از نوعِ تسویه/روشِ
+# دریافتِ خزانه‌داری است -- یک فهرستِ سبکِ قابلِ‌تعریفِ کاربر، هم‌الگو
+# با Channel بالا (کلیدِ طبیعیِ code + company_id).
+class DistributionSettlementType(Base):
+    __tablename__ = "distribution_settlement_types"
+    __table_args__ = ({"schema": "comm"},)
+
+    code: Mapped[str] = mapped_column(String(20), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
 class PriceListItem(Base):
     __tablename__ = "price_list_items"
     __table_args__ = (

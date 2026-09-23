@@ -676,3 +676,79 @@ class _ChannelsTab(QWidget):
         self.name_field.clear()
         self.status_label.setText("")
         self.refresh()
+
+
+class _DistributionSettlementTypesTab(QWidget):
+    """طبقِ اصلاحِ صریحِ کاربر: «نوعِ تسویه»یِ پخشِ سرد (تسویهٔ نقدیِ پایِ
+    بار/چک/رسید/یک‌هفته‌ای/پایِ بار/...) کاملاً مفهومی جدا از نوعِ
+    تسویه/روشِ دریافتِ خزانه‌داری است -- این تب همان‌جایی است که این
+    فهرست تعریف می‌شود (چند نمونهٔ پیش‌فرض از قبل ساخته شده، قابلِ‌
+    افزودنِ بیشتر)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("انواعِ تسویهٔ پخش")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "این فهرست مخصوصِ نحوهٔ وصولِ فاکتورهایِ پخشِ سرد است (مثلاً «تسویهٔ نقدیِ پایِ بار» یا «تسویهٔ یک‌هفته‌ای») -- "
+            "کاملاً جدا از روش‌هایِ دریافت/پرداختِ خزانه‌داری."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        form = QHBoxLayout()
+        self.code_field = QLineEdit()
+        self.code_field.setPlaceholderText("کد (مثلاً WEEKLY)")
+        form.addWidget(self.code_field)
+        self.name_field = QLineEdit()
+        self.name_field.setPlaceholderText("نام (مثلاً تسویهٔ یک‌هفته‌ای)")
+        form.addWidget(self.name_field)
+        add_button = QPushButton("➕")
+        add_button.setObjectName("primaryIconButton")
+        add_button.setFixedWidth(48)
+        add_button.setToolTip("افزودن")
+        add_button.clicked.connect(self._add)
+        form.addWidget(add_button)
+        layout.addLayout(form)
+
+        self.list_label = QLabel("")
+        self.list_label.setWordWrap(True)
+        layout.addWidget(self.list_label)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        types = pricing_service.list_distribution_settlement_types(company_id)
+        self.list_label.setText(
+            "\n".join(f"{t.code} — {t.name}" + ("" if t.is_active else " (غیرِفعال)") for t in types)
+            or "هنوز نوعِ تسویه‌ای تعریف نشده است."
+        )
+        self.status_label.setText("")
+
+    def _add(self) -> None:
+        company_id = _company_id()
+        code = self.code_field.text().strip().upper()
+        name = self.name_field.text().strip()
+        if company_id is None or not code or not name:
+            self.status_label.setText("کد و نام را وارد کنید.")
+            return
+        try:
+            pricing_service.create_distribution_settlement_type(company_id, code, name)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.code_field.clear()
+        self.name_field.clear()
+        self.status_label.setText("")
+        self.refresh()
