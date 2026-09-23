@@ -980,6 +980,31 @@ def get_document(document_id: int, company_id: int) -> tuple[CommercialDocument,
         return doc, list(lines)
 
 
+@dataclass
+class DocumentSummary:
+    document_count: int
+    total_amount: decimal.Decimal
+
+
+def summarize_documents_for_user_on_date(
+    company_id: int, created_by_user_id: int, document_date: datetime.date, document_type_codes: tuple[str, ...],
+) -> DocumentSummary:
+    """جمعِ تعداد/مبلغِ اسنادِ ثبت‌شده‌یِ یک کاربر در یک روز -- برایِ
+    داشبوردِ خانه‌یِ اپِ موبایل («سفارشِ امروز»/«فروشِ امروز»، R135).
+    اسنادِ لغوشده جزوِ فروشِ واقعی نیستند."""
+    with new_session() as session:
+        count, total = session.execute(
+            select(func.count(), func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.created_by_user_id == created_by_user_id,
+                CommercialDocument.document_date == document_date,
+                CommercialDocument.document_type_code.in_(document_type_codes),
+                CommercialDocument.status_code != "CANCELLED",
+            )
+        ).one()
+        return DocumentSummary(document_count=count, total_amount=total or decimal.Decimal(0))
+
+
 def list_documents(
     company_id: int, document_type_code: str | None = None, status_code: str | None = None,
     counterparty_detail_account_id: int | None = None, limit: int | None = None,

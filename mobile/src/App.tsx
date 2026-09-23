@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { SafeAreaView, StyleSheet } from "react-native";
+import { SafeAreaView, StyleSheet, View } from "react-native";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, NullCaptureProvider } from "./capture";
 import { LocationProvider, NullLocationProvider } from "./location";
+import { BottomNav, BottomNavKey, EmptyState, ToastProvider } from "./components";
 import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
+import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { OrderScreen } from "./screens/OrderScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
 import { createServices } from "./services";
-import { ToastProvider } from "./components";
-import { applyRtlLayout, ThemeProvider } from "./theme";
+import { applyRtlLayout, ThemeProvider, useTheme } from "./theme";
 
 // طبقِ اصلِ صریح («RTL فارسی صحیح باشد»): پیش از رندرِ هر UIای، یک‌بار
 // در همان بارگذاریِ ماژول (نه داخلِ کامپوننت -- تغییرش نیازمندِ Reloadِ
@@ -22,10 +23,14 @@ applyRtlLayout();
  * react-native-safe-area-context) اضافه نشود که در سندباکسِ بدونِ
  * Android SDK/Xcode قابلِ‌ساخت/تست نیستند. اگر پروژه به‌سمتِ بیلدِ
  * واقعیِ اپ رفت، این بخش با react-navigation جایگزین می‌شود -- منطقِ
- * صفحه‌ها (services.ts, sync/*, api/*) بدونِ تغییر باقی می‌ماند. */
+ * صفحه‌ها (services.ts, sync/*, api/*) بدونِ تغییر باقی می‌ماند.
+ *
+ * UI-1: بعدِ ورود، اپ همیشه رویِ یکی از ۵ تبِ BottomNav است (MAIN)؛
+ * بازکردنِ یک ویزیت/سفارش همان یک‌روتِ تمام‌صفحه‌یِ قبلی را جایگزین
+ * می‌کند (نه یک Stack) و با بستن، به همان تبِ MAIN برمی‌گردد. */
 type Route =
   | { name: "LOGIN" }
-  | { name: "VISIT_LIST" }
+  | { name: "MAIN"; tab: BottomNavKey }
   | { name: "VISIT_DETAIL"; customer: CustomerRow; visitPlan: VisitPlanRow }
   | { name: "ORDER"; customer: CustomerRow };
 
@@ -45,9 +50,11 @@ export function App(props: Props) {
 }
 
 function AppContent({ locationProvider = new NullLocationProvider(), captureProvider = new NullCaptureProvider() }: Props) {
+  const { colors } = useTheme();
   const [services] = useState(() => createServices());
   const [route, setRoute] = useState<Route>({ name: "LOGIN" });
   const [items, setItems] = useState<ItemRow[]>([]);
+  const [userFullName, setUserFullName] = useState("");
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
@@ -60,24 +67,13 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
       <SafeAreaView style={styles.flex}>
         <LoginScreen
           apiClient={services.apiClient}
-          onLoggedIn={async () => {
+          onLoggedIn={async (loginData) => {
+            setUserFullName(loginData.full_name);
             await services.syncEngine.pull();
             const cached = await services.localCache.getPullResponse();
             setItems(cached?.items ?? []);
-            setRoute({ name: "VISIT_LIST" });
+            setRoute({ name: "MAIN", tab: "HOME" });
           }}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  if (route.name === "VISIT_LIST") {
-    return (
-      <SafeAreaView style={styles.flex}>
-        <VisitListScreen
-          syncEngine={services.syncEngine}
-          localCache={services.localCache}
-          onOpenVisit={(customer, visitPlan) => setRoute({ name: "VISIT_DETAIL", customer, visitPlan })}
         />
       </SafeAreaView>
     );
@@ -85,7 +81,7 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
 
   if (route.name === "VISIT_DETAIL") {
     return (
-      <SafeAreaView style={styles.flex}>
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
         <VisitDetailScreen
           customer={route.customer}
           visitPlan={route.visitPlan}
@@ -97,29 +93,85 @@ function AppContent({ locationProvider = new NullLocationProvider(), captureProv
     );
   }
 
+  if (route.name === "ORDER") {
+    return (
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+        {/* warehouseId/currencyId/channelCode فعلاً ثابت‌اند -- در فازِ بعدی
+            باید از تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
+            هنوز برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند.
+            customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
+            document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
+            وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
+            syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
+        <OrderScreen
+          customer={route.customer}
+          items={items}
+          channelCode="VAN_SALES"
+          warehouseId={1}
+          currencyId={1}
+          customerVisitId={null}
+          apiClient={services.apiClient}
+          offlineQueue={services.offlineQueue}
+          captureProvider={captureProvider}
+          locationProvider={locationProvider}
+          onSubmitted={() => setRoute({ name: "MAIN", tab: "VISITS" })}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  const activeTab = route.tab;
   return (
-    <SafeAreaView style={styles.flex}>
-      {/* warehouseId/currencyId/channelCode فعلاً ثابت‌اند -- در فازِ بعدی
-          باید از تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
-          هنوز برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند.
-          customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
-          document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
-          وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
-          syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
-      <OrderScreen
-        customer={route.customer}
-        items={items}
-        channelCode="VAN_SALES"
-        warehouseId={1}
-        currencyId={1}
-        customerVisitId={null}
-        apiClient={services.apiClient}
-        offlineQueue={services.offlineQueue}
-        captureProvider={captureProvider}
-        locationProvider={locationProvider}
-        onSubmitted={() => setRoute({ name: "VISIT_LIST" })}
-      />
+    <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+      <View style={styles.flex}>
+        <MainTabContent
+          tab={activeTab}
+          services={services}
+          userFullName={userFullName}
+          onOpenVisit={(customer, visitPlan) => setRoute({ name: "VISIT_DETAIL", customer, visitPlan })}
+        />
+      </View>
+      <BottomNav active={activeTab} onChange={(tab) => setRoute({ name: "MAIN", tab })} />
     </SafeAreaView>
+  );
+}
+
+interface MainTabContentProps {
+  tab: BottomNavKey;
+  services: ReturnType<typeof createServices>;
+  userFullName: string;
+  onOpenVisit: (customer: CustomerRow, visitPlan: VisitPlanRow) => void;
+}
+
+function MainTabContent({ tab, services, userFullName, onOpenVisit }: MainTabContentProps) {
+  switch (tab) {
+    case "HOME":
+      return (
+        <HomeScreen
+          apiClient={services.apiClient}
+          localCache={services.localCache}
+          userFullName={userFullName}
+          onOpenVisit={onOpenVisit}
+        />
+      );
+    case "VISITS":
+      return (
+        <VisitListScreen syncEngine={services.syncEngine} localCache={services.localCache} onOpenVisit={onOpenVisit} />
+      );
+    case "CUSTOMERS":
+      return <ComingSoon icon="👥" title="مشتریان" />;
+    case "ORDER":
+      return <ComingSoon icon="🛒" title="سفارش‌ها" />;
+    case "COLLECTION":
+      return <ComingSoon icon="💰" title="وصول" />;
+    default:
+      return null;
+  }
+}
+
+function ComingSoon({ icon, title }: { icon: string; title: string }) {
+  return (
+    <EmptyState icon={icon} title={title} description="این بخش در فازِ بعدیِ توسعه (UI-2 تا UI-5) اضافه می‌شود." />
   );
 }
 

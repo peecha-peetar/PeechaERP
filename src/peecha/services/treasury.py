@@ -21,6 +21,7 @@ from peecha.db.models.accounting import (
     JournalEntryLine,
     JournalEntryLineDetail,
     JournalEntryStatus,
+    JournalEntryType,
 )
 from peecha.db.models.core import Company, Currency
 from peecha.db.models.treasury import (
@@ -1240,6 +1241,29 @@ def delete_counterparty_mapping(mapping_id: int, company_id: int) -> None:
             raise ValueError("ردیف نامعتبر است.")
         session.delete(row)
         session.commit()
+
+
+def sum_voucher_amount_for_user_on_date(
+    company_id: int, created_by_user_id: int, document_date: datetime.date, direction: str,
+) -> decimal.Decimal:
+    """جمعِ مبلغِ سندهایِ دریافت/پرداختِ یک کاربر در یک تاریخ -- برایِ
+    داشبوردِ خانه‌یِ اپِ موبایل («وصولِ امروز»، R135). طبقِ ساختارِ
+    create_treasury_voucher: جمعِ همه‌یِ ردیف‌هایِ بدهکار = جمعِ همه‌یِ
+    ردیف‌هایِ بستانکارِ همان سند (تراز)، پس همین یکی، نه ۲برابرِ مبلغِ
+    واقعی، مبلغِ کلِ سند را می‌دهد."""
+    with new_session() as session:
+        total = session.scalar(
+            select(func.coalesce(func.sum(JournalEntryLine.debit_amount_fc), 0))
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .join(JournalEntryType, JournalEntryType.entry_type_id == JournalEntry.entry_type_id)
+            .where(
+                JournalEntry.company_id == company_id,
+                JournalEntry.created_by_user_id == created_by_user_id,
+                JournalEntry.document_date == document_date,
+                JournalEntryType.code == direction,
+            )
+        )
+        return total or decimal.Decimal(0)
 
 
 # --- سندِ چندروشیِ دریافت/پرداخت ---------------------------------------------

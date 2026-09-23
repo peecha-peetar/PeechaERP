@@ -13,6 +13,7 @@ from peecha_api.routers import (
     approvals,
     auth,
     customers,
+    dashboard,
     delivery,
     inventory,
     notifications,
@@ -25,7 +26,7 @@ from peecha_api.routers import (
     visits,
 )
 
-app = FastAPI(title="Peecha Field Sales API", version="R180")
+app = FastAPI(title="Peecha Field Sales API", version="R182")
 
 app.include_router(auth.router)
 app.include_router(sync.router)
@@ -40,6 +41,7 @@ app.include_router(products.router)
 app.include_router(inventory.router)
 app.include_router(approvals.router)
 app.include_router(notifications.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")

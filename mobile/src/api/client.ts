@@ -10,6 +10,7 @@ import {
   PullResponse,
   StartVisitRequest,
   StartVisitResponse,
+  TodaySummaryResponse,
 } from "./types";
 
 export type Fetcher = typeof fetch;
@@ -107,6 +108,10 @@ export class ApiClient {
 
   async pullSync(): Promise<PullResponse> {
     return this.request<PullResponse>("/sync/pull");
+  }
+
+  async getTodaySummary(): Promise<TodaySummaryResponse> {
+    return this.request<TodaySummaryResponse>("/dashboard/today");
   }
 
   async startVisit(payload: StartVisitRequest, idempotencyKey?: string): Promise<StartVisitResponse> {

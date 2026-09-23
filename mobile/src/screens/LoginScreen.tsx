@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { ActivityIndicator, Button, StyleSheet, Text, TextInput, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
+import { LoginResponse } from "../api/types";
 
 interface Props {
   apiClient: ApiClient;
-  onLoggedIn: () => void;
+  onLoggedIn: (data: LoginResponse) => void;
 }
 
 /** صفحه‌یِ ورود -- با همان کاربرِ ERP وارد می‌شود (طبقِ تصمیمِ کاربر:
@@ -19,8 +20,8 @@ export function LoginScreen({ apiClient, onLoggedIn }: Props) {
     setError(null);
     setLoading(true);
     try {
-      await apiClient.login(username.trim(), password);
-      onLoggedIn();
+      const data = await apiClient.login(username.trim(), password);
+      onLoggedIn(data);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "اتصال به سرور برقرار نشد.");
     } finally {

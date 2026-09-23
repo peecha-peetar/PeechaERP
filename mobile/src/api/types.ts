@@ -112,3 +112,26 @@ export interface PriceResolveResponse {
   source: "CONTRACT" | "PRICE_LIST";
   discount_amount: string;
 }
+
+export interface NextVisitSummary {
+  customer_detail_account_id: number;
+  customer_name: string;
+  visit_plan_id: number;
+}
+
+export interface TodayRouteEntry {
+  visit_plan_id: number;
+  customer_detail_account_id: number;
+  customer_name: string;
+  state: "DONE" | "CURRENT" | "UPCOMING" | "SKIPPED";
+}
+
+export interface TodaySummaryResponse {
+  visit_count: number;
+  visit_completed_count: number;
+  order_count: number;
+  sales_amount: string;
+  collection_amount: string;
+  next_visit: NextVisitSummary | null;
+  today_route: TodayRouteEntry[];
+}
