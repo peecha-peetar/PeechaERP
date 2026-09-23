@@ -1023,6 +1023,90 @@ def get_counterparty_balance(company_id: int, detail_account_id: int) -> tuple[d
     return abs(net), nature
 
 
+def get_counterparty_balances_bulk(
+    company_id: int, detail_account_ids: list[int]
+) -> dict[int, tuple[decimal.Decimal, str]]:
+    """هم‌الگو با get_counterparty_balance ولی برایِ چند طرفِ‌حساب در یک
+    Query -- برایِ فهرستِ بدهکارانِ اپِ موبایل (Phase 5) که در حلقهٔ
+    N+1 برایِ صدها مشتری کند می‌شد."""
+    if not detail_account_ids:
+        return {}
+    with new_session() as session:
+        rows = session.execute(
+            select(
+                JournalEntryLineDetail.detail_account_id,
+                func.coalesce(func.sum(JournalEntryLine.debit_amount_base), 0),
+                func.coalesce(func.sum(JournalEntryLine.credit_amount_base), 0),
+            )
+            .join(JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id)
+            .join(JournalEntry, JournalEntry.journal_entry_id == JournalEntryLine.journal_entry_id)
+            .join(JournalEntryStatus, JournalEntryStatus.status_id == JournalEntry.status_id)
+            .where(
+                JournalEntry.company_id == company_id,
+                JournalEntryLineDetail.detail_account_id.in_(detail_account_ids),
+                JournalEntryStatus.code != "DRAFT",
+            )
+            .group_by(JournalEntryLineDetail.detail_account_id)
+        ).all()
+    result: dict[int, tuple[decimal.Decimal, str]] = {}
+    for detail_account_id, debit, credit in rows:
+        net = decimal.Decimal(debit) - decimal.Decimal(credit)
+        result[detail_account_id] = (abs(net), "بدهکار" if net >= 0 else "بستانکار")
+    return result
+
+
+@dataclass
+class ReceiptVoucherRow:
+    journal_entry_id: int
+    counterparty_detail_account_id: int | None
+    amount: decimal.Decimal
+    description: str | None
+    document_date: datetime.date
+
+
+def list_vouchers_for_user_on_date(
+    company_id: int, created_by_user_id: int, document_date: datetime.date, direction: str,
+) -> list[ReceiptVoucherRow]:
+    """فهرستِ تک‌تکِ سندهایِ دریافت/پرداختِ یک کاربر در یک روز (نه فقط
+    جمعِ کل مثلِ sum_voucher_amount_for_user_on_date) -- برایِ «وصولِ
+    امروزِ من» در اپِ موبایل (Phase 5)."""
+    with new_session() as session:
+        entries = session.scalars(
+            select(JournalEntry)
+            .join(JournalEntryType, JournalEntryType.entry_type_id == JournalEntry.entry_type_id)
+            .where(
+                JournalEntry.company_id == company_id,
+                JournalEntry.created_by_user_id == created_by_user_id,
+                JournalEntry.document_date == document_date,
+                JournalEntryType.code == direction,
+            )
+            .order_by(JournalEntry.journal_entry_id.desc())
+        ).all()
+        rows: list[ReceiptVoucherRow] = []
+        for entry in entries:
+            total = session.scalar(
+                select(func.coalesce(func.sum(JournalEntryLine.debit_amount_fc), 0)).where(
+                    JournalEntryLine.journal_entry_id == entry.journal_entry_id
+                )
+            ) or decimal.Decimal(0)
+            counterparty_id = session.scalar(
+                select(JournalEntryLineDetail.detail_account_id)
+                .join(JournalEntryLine, JournalEntryLine.line_id == JournalEntryLineDetail.line_id)
+                .where(
+                    JournalEntryLine.journal_entry_id == entry.journal_entry_id,
+                    JournalEntryLine.credit_amount_fc > 0 if direction == "RECEIPT" else JournalEntryLine.debit_amount_fc > 0,
+                )
+                .limit(1)
+            )
+            rows.append(
+                ReceiptVoucherRow(
+                    journal_entry_id=entry.journal_entry_id, counterparty_detail_account_id=counterparty_id,
+                    amount=total, description=entry.description, document_date=entry.document_date,
+                )
+            )
+        return rows
+
+
 # --- دسته‌چک -----------------------------------------------------------------
 
 

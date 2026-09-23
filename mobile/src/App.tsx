@@ -4,6 +4,7 @@ import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, NullCaptureProvider } from "./capture";
 import { LocationProvider, NullLocationProvider } from "./location";
 import { AppBar, BottomNav, BottomNavKey, EmptyState, SyncStatus, ToastProvider } from "./components";
+import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
@@ -298,7 +299,7 @@ function MainTabContent({ tab, services, userFullName, onOpenVisit, onOpenCustom
     case "ORDER":
       return <ComingSoon icon="🛒" title="سفارش‌ها" />;
     case "COLLECTION":
-      return <ComingSoon icon="💰" title="وصول" />;
+      return <CollectionListScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />;
     default:
       return null;
   }

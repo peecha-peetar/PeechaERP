@@ -2,11 +2,13 @@ import { TokenStore } from "../storage/tokenStore";
 import {
   CustomerDetailResponse,
   CustomerListRow,
+  DebtorRow,
   DeliveryConfirmationRequest,
   DeliveryConfirmationResponse,
   LoginResponse,
   ManagerDashboardResponse,
   NotificationRow,
+  TodayCollectionRow,
   OrderCreateRequest,
   OrderCreateResponse,
   PaymentCreateRequest,
@@ -148,6 +150,14 @@ export class ApiClient {
     if (params?.visitorUserId) query.set("visitor_user_id", String(params.visitorUserId));
     const qs = query.toString();
     return this.request<ManagerDashboardResponse>(`/manager/dashboard${qs ? `?${qs}` : ""}`);
+  }
+
+  async listDebtors(): Promise<DebtorRow[]> {
+    return this.request<DebtorRow[]>("/collection/debtors");
+  }
+
+  async listTodayCollections(): Promise<TodayCollectionRow[]> {
+    return this.request<TodayCollectionRow[]>("/collection/today");
   }
 
   async startVisit(payload: StartVisitRequest, idempotencyKey?: string): Promise<StartVisitResponse> {

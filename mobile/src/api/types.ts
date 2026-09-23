@@ -239,3 +239,17 @@ export interface ManagerDashboardResponse {
   customers_without_purchase_count: number;
   by_visitor: VisitorPerformanceRow[];
 }
+
+export interface DebtorRow {
+  detail_account_id: number;
+  code: string;
+  name: string;
+  balance_amount: string;
+}
+
+export interface TodayCollectionRow {
+  journal_entry_id: number;
+  customer_name: string | null;
+  amount: string;
+  description: string | null;
+}
