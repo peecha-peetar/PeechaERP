@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { SafeAreaView, StyleSheet, View } from "react-native";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
-import { CaptureProvider, NullCaptureProvider } from "./capture";
-import { LocationProvider, NullLocationProvider } from "./location";
+import { CaptureProvider, ExpoCaptureProvider } from "./capture";
+import { ExpoLocationProvider, LocationProvider } from "./location";
 import { AppBar, BottomNav, BottomNavKey, EmptyState, SyncStatus, ToastProvider } from "./components";
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
@@ -68,7 +68,7 @@ export function App(props: Props) {
   );
 }
 
-function AppContent({ locationProvider = new NullLocationProvider(), captureProvider = new NullCaptureProvider() }: Props) {
+function AppContent({ locationProvider = new ExpoLocationProvider(), captureProvider = new ExpoCaptureProvider() }: Props) {
   const { colors } = useTheme();
   const [services] = useState(() => createServices());
   const [route, setRoute] = useState<Route>({ name: "LOGIN" });

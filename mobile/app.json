@@ -22,6 +22,20 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "پیچا برای ثبتِ محلِ ویزیت و تحویل به دسترسیِ موقعیتِ مکانی نیاز دارد."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "پیچا برای ثبتِ عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد."
+        }
+      ]
+    ]
   }
 }
