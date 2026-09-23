@@ -9,6 +9,13 @@ import { OrderScreen } from "./screens/OrderScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
 import { createServices } from "./services";
+import { ToastProvider } from "./components";
+import { applyRtlLayout, ThemeProvider } from "./theme";
+
+// طبقِ اصلِ صریح («RTL فارسی صحیح باشد»): پیش از رندرِ هر UIای، یک‌بار
+// در همان بارگذاریِ ماژول (نه داخلِ کامپوننت -- تغییرش نیازمندِ Reloadِ
+// نیتیو است، نه رندرِ دوباره).
+applyRtlLayout();
 
 /** ناوبریِ حداقلی و دستی (بدونِ react-navigation) -- عمداً، تا در این
  * فازِ اسکلت‌سازی وابستگیِ نیتیوِ اضافه (react-native-screens و
@@ -27,7 +34,17 @@ interface Props {
   captureProvider?: CaptureProvider;
 }
 
-export function App({ locationProvider = new NullLocationProvider(), captureProvider = new NullCaptureProvider() }: Props) {
+export function App(props: Props) {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+        <AppContent {...props} />
+      </ToastProvider>
+    </ThemeProvider>
+  );
+}
+
+function AppContent({ locationProvider = new NullLocationProvider(), captureProvider = new NullCaptureProvider() }: Props) {
   const [services] = useState(() => createServices());
   const [route, setRoute] = useState<Route>({ name: "LOGIN" });
   const [items, setItems] = useState<ItemRow[]>([]);
