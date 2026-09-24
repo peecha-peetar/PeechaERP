@@ -1,4 +1,13 @@
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+
+/** طبقِ باگِ واقعیِ کشف‌شده رویِ دستگاهِ فیزیکی («Row too big to fit into
+ * CursorWindow»): عکسِ خامِ دوربین در رزولوشنِ کاملِ گوشی (چند مگابایتِ
+ * base64) از سقفِ اندازهٔ هر ردیفِ AsyncStorageِ اندروید (~۲مگابایت) رد
+ * می‌شود. `quality` در launchCameraAsync فقط فشرده‌سازیِ JPEG است، نه
+ * تغییرِ ابعاد -- پس عکس بعداً با expo-image-manipulator تا عرضِ ۱۲۸۰
+ * پیکسل resize و دوباره فشرده می‌شود. */
+const MAX_PHOTO_WIDTH_PX = 1280;
 
 /** انتزاعِ گرفتنِ امضا/عکسِ رسیدِ تحویل. خروجی طبقِ قراردادِ
  * peecha_api.routers.delivery همیشه رشته‌یِ base64ِ خامِ فایل (بدونِ
@@ -41,12 +50,18 @@ export class ExpoCaptureProvider implements CaptureProvider {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) return null;
       const result = await ImagePicker.launchCameraAsync({
-        base64: true,
         quality: 0.6,
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: "images",
       });
       if (result.canceled) return null;
-      return result.assets[0]?.base64 ?? null;
+      const uri = result.assets[0]?.uri;
+      if (!uri) return null;
+      const resized = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: MAX_PHOTO_WIDTH_PX } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      return resized.base64 ?? null;
     } catch {
       return null;
     }

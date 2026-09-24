@@ -284,6 +284,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
             <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
               <SettingsScreen
                 apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
                 userFullName={userFullName}
                 onLoggedOut={() => setLoggedIn(false)}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}

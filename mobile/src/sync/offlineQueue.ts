@@ -115,4 +115,14 @@ export class OfflineQueue {
   async size(): Promise<number> {
     return (await this.readAll()).length;
   }
+
+  /** طبقِ باگِ واقعیِ کشف‌شده رویِ دستگاهِ فیزیکی: اگر یک آیتمِ صف قبلاً
+   * (پیش از رفعِ باگِ اندازهٔ عکس) خیلی بزرگ ذخیره شده باشد، حتی خودِ
+   * kv.getItem هم شکست می‌خورد ("Row too big to fit into CursorWindow")
+   * -- یعنی readAll غیرِقابل‌استفاده می‌شود و صف برایِ همیشه قفل
+   * می‌ماند. این متد بدونِ نیاز به خواندن/parseِ مقدارِ فعلی، مستقیم
+   * کلیدِ صف را حذف می‌کند -- تنها راهِ بازیابی از چنین حالتی. */
+  async clear(): Promise<void> {
+    await this.kv.removeItem(QUEUE_KEY);
+  }
 }
