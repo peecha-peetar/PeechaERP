@@ -12,7 +12,10 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services import commercial_documents as documents_service
+from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
+from peecha.services import currencies as currencies_service
+from peecha.services import inventory_locations as locations_service
 from peecha.services import roles as roles_service
 from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
@@ -55,6 +58,19 @@ def create_order(
 
 
 def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, list[int]]:
+    # طبقِ باگِ واقعیِ کشف‌شده رویِ گوشیِ فیزیکیِ کاربر (R196، R198): مقادیرِ
+    # warehouse_id/channel_code/currency_id که برایِ این شرکتِ خاص معتبر
+    # نباشند، بدونِ این چک مستقیم به یک ForeignKeyViolationِ خامِ
+    # SQLAlchemy می‌رسیدند (خطایِ ۵۰۰ِ بی‌پیام) -- که در SyncEngineِ
+    # موبایل (فقط ۴xx حذف‌شدنی از صف است) کلِ صفِ آفلاین را برایِ همیشه
+    # قفل می‌کرد، چون این اقدام هیچ‌وقت با تلاشِ دوباره موفق نمی‌شود.
+    if locations_service.get_warehouse(payload.warehouse_id, ctx.company_id) is None:
+        raise ValueError("انبارِ انتخاب‌شده برایِ این شرکت معتبر نیست.")
+    if not any(ch.channel_code == payload.channel_code for ch in pricing_service.list_channels(ctx.company_id)):
+        raise ValueError("کانالِ فروشِ انتخاب‌شده برایِ این شرکت معتبر نیست.")
+    if not any(c.currency_id == payload.currency_id for c in currencies_service.list_all_currencies()):
+        raise ValueError("ارزِ انتخاب‌شده معتبر نیست.")
+
     document_id = documents_service.create_document(
         ctx.company_id, ctx.user_id, payload.document_type_code, datetime.date.today(),
         documents_service.DocumentHeaderFields(
