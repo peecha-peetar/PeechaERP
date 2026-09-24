@@ -61,6 +61,13 @@ export interface ChannelRow {
   channel_type_code: string;
 }
 
+export interface WarehouseRow {
+  warehouse_id: number;
+  code: string;
+  name: string;
+  is_default: boolean;
+}
+
 export interface OrderLineInput {
   item_id: number;
   uom_id: number;

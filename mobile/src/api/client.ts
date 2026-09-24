@@ -21,6 +21,7 @@ import {
   StartVisitRequest,
   StartVisitResponse,
   TodaySummaryResponse,
+  WarehouseRow,
 } from "./types";
 
 export type Fetcher = typeof fetch;
@@ -233,5 +234,12 @@ export class ApiClient {
   async listChannels(channelTypeCode?: string): Promise<ChannelRow[]> {
     const q = channelTypeCode ? `?channel_type_code=${encodeURIComponent(channelTypeCode)}` : "";
     return this.request<ChannelRow[]>(`/pricing/channels${q}`);
+  }
+
+  /** طبقِ باگِ واقعیِ دومِ کشف‌شده (R198، هم‌الگو با R196): سفارش قبلاً
+   * warehouse_id=1 را هاردکد می‌فرستاد که در بسیاری از شرکت‌ها اصلاً
+   * وجود ندارد (شکستِ کلیدِ خارجی رویِ گوشیِ فیزیکیِ کاربر تایید شد). */
+  async listWarehouses(): Promise<WarehouseRow[]> {
+    return this.request<WarehouseRow[]>("/inventory/warehouses");
   }
 }

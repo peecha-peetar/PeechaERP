@@ -106,6 +106,9 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   // null یعنی «بارگذاری شد ولی هیچ کانالِ VAN_SALES‌ای در این شرکت
   // تعریف نشده».
   const [vanSalesChannelCode, setVanSalesChannelCode] = useState<string | null | undefined>(undefined);
+  // طبقِ باگِ واقعیِ دومِ کشف‌شده (R198، هم‌الگو با بالا): warehouse_id=1
+  // در بسیاری از شرکت‌ها اصلاً وجود ندارد.
+  const [defaultWarehouseId, setDefaultWarehouseId] = useState<number | null | undefined>(undefined);
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
@@ -119,6 +122,13 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
       .listChannels("VAN_SALES")
       .then((channels) => setVanSalesChannelCode(channels[0]?.channel_code ?? null))
       .catch(() => setVanSalesChannelCode(null));
+    services.apiClient
+      .listWarehouses()
+      .then((warehouses) => {
+        const chosen = warehouses.find((w) => w.is_default) ?? warehouses[0];
+        setDefaultWarehouseId(chosen?.warehouse_id ?? null);
+      })
+      .catch(() => setDefaultWarehouseId(null));
   }, [loggedIn, services]);
 
   useEffect(() => {
@@ -233,24 +243,33 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         <RootStack.Screen name="OrderForm">
           {({ route, navigation }) => (
             <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-              {/* warehouseId/currencyId فعلاً ثابت‌اند -- در فازِ بعدی باید از
-                  تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
-                  هنوز برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند.
-                  channelCode برخلافِ این دو دیگر هاردکد نیست (باگِ واقعیِ
-                  R196: قبلاً «VAN_SALES» -- که یک نوعِ کانال است، نه یک
-                  channel_codeِ واقعی -- مستقیم فرستاده می‌شد و سند به‌خاطرِ
-                  شکستِ کلیدِ خارجی اصلاً ساخته نمی‌شد).
+              {/* currencyId فعلاً ثابت است -- در فازِ بعدی باید از تنظیماتِ
+                  مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull هنوز
+                  برنمی‌گردد) خوانده شود، نه این‌جا هاردکد شود. اگر این هم
+                  مثلِ channelCode/warehouseId (R196/R198) برایِ یک شرکتِ
+                  خاص نامعتبر باشد، همان الگو (اندپوینتِ واقعی + guard)
+                  باید برایِ آن هم تکرار شود.
+                  channelCode/warehouseId دیگر هاردکد نیستند (باگ‌هایِ
+                  واقعیِ R196/R198: قبلاً «VAN_SALES» و «۱» مستقیم
+                  فرستاده می‌شدند و سند به‌خاطرِ شکستِ کلیدِ خارجی اصلاً
+                  ساخته نمی‌شد -- هردو رویِ گوشیِ فیزیکیِ کاربر تایید شد).
                   customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
                   document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
                   وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
                   syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
-              {vanSalesChannelCode === undefined ? (
-                <InlineSpinner label="در حالِ بررسیِ کانالِ فروش..." />
+              {vanSalesChannelCode === undefined || defaultWarehouseId === undefined ? (
+                <InlineSpinner label="در حالِ بررسیِ تنظیماتِ سفارش..." />
               ) : vanSalesChannelCode === null ? (
                 <EmptyState
                   icon="⚠️"
                   title="کانالِ فروشِ ویزیت تعریف نشده"
                   description="مدیر باید ابتدا از دسکتاپ، در تنظیماتِ کانال‌هایِ فروش، یک کانال از نوعِ «پخشِ گرم/VAN_SALES» بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                />
+              ) : defaultWarehouseId === null ? (
+                <EmptyState
+                  icon="⚠️"
+                  title="هیچ انباری تعریف نشده"
+                  description="مدیر باید ابتدا از دسکتاپ، حداقل یک انبار (ترجیحاً به‌عنوانِ پیش‌فرض) بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
                 />
               ) : (
                 <OrderScreen
@@ -258,7 +277,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   items={items}
                   channelTypeCode="VAN_SALES"
                   channelCode={vanSalesChannelCode}
-                  warehouseId={1}
+                  warehouseId={defaultWarehouseId}
                   currencyId={1}
                   customerVisitId={null}
                   apiClient={services.apiClient}
