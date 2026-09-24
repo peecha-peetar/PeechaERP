@@ -55,6 +55,12 @@ export interface StartVisitResponse {
   customer_visit_id: number;
 }
 
+export interface ChannelRow {
+  channel_code: string;
+  name: string;
+  channel_type_code: string;
+}
+
 export interface OrderLineInput {
   item_id: number;
   uom_id: number;

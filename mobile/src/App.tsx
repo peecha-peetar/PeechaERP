@@ -8,7 +8,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, ExpoCaptureProvider } from "./capture";
 import { ExpoLocationProvider, LocationProvider } from "./location";
-import { AppBar, BottomNav, BottomNavKey, SyncStatus, ToastProvider } from "./components";
+import { AppBar, BottomNav, BottomNavKey, EmptyState, InlineSpinner, SyncStatus, ToastProvider } from "./components";
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
@@ -101,12 +101,25 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   const [userFullName, setUserFullName] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("IDLE");
   const [unreadCount, setUnreadCount] = useState(0);
+  // طبقِ باگِ واقعیِ کشف‌شده (R196): سفارش نباید یک channel_codeِ
+  // هاردکدشده/نامعتبر بفرستد -- undefined یعنی «هنوز بارگذاری‌نشده»،
+  // null یعنی «بارگذاری شد ولی هیچ کانالِ VAN_SALES‌ای در این شرکت
+  // تعریف نشده».
+  const [vanSalesChannelCode, setVanSalesChannelCode] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
       if (cached) setItems(cached.items);
     });
   }, [services]);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    services.apiClient
+      .listChannels("VAN_SALES")
+      .then((channels) => setVanSalesChannelCode(channels[0]?.channel_code ?? null))
+      .catch(() => setVanSalesChannelCode(null));
+  }, [loggedIn, services]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -214,26 +227,41 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         <RootStack.Screen name="OrderForm">
           {({ route, navigation }) => (
             <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-              {/* warehouseId/currencyId/channelCode فعلاً ثابت‌اند -- در فازِ بعدی
-                  باید از تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
+              {/* warehouseId/currencyId فعلاً ثابت‌اند -- در فازِ بعدی باید از
+                  تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
                   هنوز برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند.
+                  channelCode برخلافِ این دو دیگر هاردکد نیست (باگِ واقعیِ
+                  R196: قبلاً «VAN_SALES» -- که یک نوعِ کانال است، نه یک
+                  channel_codeِ واقعی -- مستقیم فرستاده می‌شد و سند به‌خاطرِ
+                  شکستِ کلیدِ خارجی اصلاً ساخته نمی‌شد).
                   customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
                   document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
                   وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
                   syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
-              <OrderScreen
-                customer={route.params.customer}
-                items={items}
-                channelCode="VAN_SALES"
-                warehouseId={1}
-                currencyId={1}
-                customerVisitId={null}
-                apiClient={services.apiClient}
-                offlineQueue={services.offlineQueue}
-                captureProvider={resolvedCaptureProvider}
-                locationProvider={locationProvider}
-                onSubmitted={() => navigation.navigate("Main", { screen: "VISITS" })}
-              />
+              {vanSalesChannelCode === undefined ? (
+                <InlineSpinner label="در حالِ بررسیِ کانالِ فروش..." />
+              ) : vanSalesChannelCode === null ? (
+                <EmptyState
+                  icon="⚠️"
+                  title="کانالِ فروشِ ویزیت تعریف نشده"
+                  description="مدیر باید ابتدا از دسکتاپ، در تنظیماتِ کانال‌هایِ فروش، یک کانال از نوعِ «پخشِ گرم/VAN_SALES» بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                />
+              ) : (
+                <OrderScreen
+                  customer={route.params.customer}
+                  items={items}
+                  channelTypeCode="VAN_SALES"
+                  channelCode={vanSalesChannelCode}
+                  warehouseId={1}
+                  currencyId={1}
+                  customerVisitId={null}
+                  apiClient={services.apiClient}
+                  offlineQueue={services.offlineQueue}
+                  captureProvider={resolvedCaptureProvider}
+                  locationProvider={locationProvider}
+                  onSubmitted={() => navigation.navigate("Main", { screen: "VISITS" })}
+                />
+              )}
             </SafeAreaView>
           )}
         </RootStack.Screen>

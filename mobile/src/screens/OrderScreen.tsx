@@ -11,7 +11,14 @@ import { OfflineQueue } from "../sync/offlineQueue";
 interface Props {
   customer: CustomerRow;
   items: ItemRow[];
-  channelCode: "PRE_SALES" | "VAN_SALES";
+  /** نوعِ کانال -- فقط برایِ تصمیمِ پیش‌فرضِ سفارش/فاکتور استفاده
+   * می‌شود (نه چیزی که مستقیم به سرور فرستاده شود). */
+  channelTypeCode: "PRE_SALES" | "VAN_SALES";
+  /** طبقِ باگِ واقعیِ کشف‌شده (R196): channel_codeِ واقعیِ تعریف‌شده در
+   * comm.channelsِ همین شرکت (مثلِ «VAN-1») -- channelTypeCode
+   * («VAN_SALES») خودش یک channel_codeِ معتبر نیست و اگر مستقیم
+   * فرستاده شود، سند به‌خاطرِ شکستِ کلیدِ خارجی اصلاً ساخته نمی‌شود. */
+  channelCode: string;
   warehouseId: number;
   currencyId: number;
   customerVisitId: number | null;
@@ -36,14 +43,14 @@ interface Props {
  * (UI-4) فقط پوسته‌یِ بصری با Design System عوض شده، خودِ منطقِ
  * قیمت‌گذاری/ثبت دست‌نخورده مانده. */
 export function OrderScreen({
-  customer, items, channelCode, warehouseId, currencyId, customerVisitId,
+  customer, items, channelTypeCode, channelCode, warehouseId, currencyId, customerVisitId,
   apiClient, offlineQueue, captureProvider, locationProvider, onSubmitted,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [search, setSearch] = useState("");
   const [lines, setLines] = useState<Record<number, { quantity: string; unitPrice: string }>>({});
   const [documentTypeCode, setDocumentTypeCode] = useState<"SALES_ORDER" | "SALES_INVOICE">(
-    channelCode === "VAN_SALES" ? "SALES_INVOICE" : "SALES_ORDER",
+    channelTypeCode === "VAN_SALES" ? "SALES_INVOICE" : "SALES_ORDER",
   );
   const [receivedByName, setReceivedByName] = useState("");
   const [submitting, setSubmitting] = useState(false);

@@ -44,3 +44,23 @@ def resolve_price(
     return PriceResolveResponse(
         unit_price=resolved.unit_price, source=resolved.source, discount_amount=resolved.discount_amount,
     )
+
+
+@router.get("/channels")
+def list_channels(
+    channel_type_code: str | None = Query(None),
+    ctx: AuthContext = Depends(get_current_context),
+) -> list[dict]:
+    """طبقِ باگِ واقعیِ کشف‌شده (R196): اپِ موبایل قبلاً مقدارِ channel_type_code
+    («VAN_SALES») را به‌جایِ یک channel_codeِ واقعی مستقیم به سرور
+    می‌فرستاد -- چون comm.channels.channel_code یک ستونِ جداست (مثلِ
+    «VAN-1»)، نه همان کدِ نوع، این باعثِ شکستِ محدودیتِ کلیدِ خارجی
+    می‌شد و سند اصلاً ساخته نمی‌شد. این اندپوینت کدهایِ واقعیِ کانالِ
+    تعریف‌شده در همین شرکت را برمی‌گرداند تا موبایل یکی را انتخاب کند."""
+    channels = pricing_service.list_channels(ctx.company_id)
+    if channel_type_code is not None:
+        channels = [c for c in channels if c.channel_type_code == channel_type_code]
+    return [
+        {"channel_code": c.channel_code, "name": c.name, "channel_type_code": c.channel_type_code}
+        for c in channels
+    ]

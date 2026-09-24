@@ -1,5 +1,6 @@
 import { TokenStore } from "../storage/tokenStore";
 import {
+  ChannelRow,
   CustomerDetailResponse,
   CustomerListRow,
   DebtorRow,
@@ -224,5 +225,13 @@ export class ApiClient {
       document_type_code: params.documentTypeCode,
     });
     return this.request<PriceResolveResponse>(`/pricing/resolve?${query.toString()}`);
+  }
+
+  /** طبقِ باگِ واقعیِ کشف‌شده (R196): سفارش نباید مستقیم channel_type_code
+   * («VAN_SALES») را به‌جایِ یک channel_codeِ واقعیِ تعریف‌شده در همین
+   * شرکت بفرستد -- comm.channels.channel_code یک کلیدِ خارجیِ جداست. */
+  async listChannels(channelTypeCode?: string): Promise<ChannelRow[]> {
+    const q = channelTypeCode ? `?channel_type_code=${encodeURIComponent(channelTypeCode)}` : "";
+    return this.request<ChannelRow[]>(`/pricing/channels${q}`);
   }
 }
