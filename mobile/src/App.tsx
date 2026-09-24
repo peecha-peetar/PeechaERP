@@ -3,8 +3,8 @@ import { NavigationContainer, NavigatorScreenParams, useNavigation } from "@reac
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator, NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useEffect, useMemo, useState } from "react";
-import { SafeAreaView, StyleSheet } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { StyleSheet } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, ExpoCaptureProvider } from "./capture";
 import { ExpoLocationProvider, LocationProvider } from "./location";
