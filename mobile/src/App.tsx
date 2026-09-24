@@ -147,6 +147,12 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         const result = await services.syncEngine.pushQueue();
         const remaining = await services.offlineQueue.size();
         if (cancelled) return;
+        // طبقِ نیازِ واقعیِ کشف‌شده: قبلاً پیامِ دقیقِ خطا (result.failedButKept[].reason)
+        // فقط همین‌جا در حافظه ساخته می‌شد و بلافاصله دور ریخته می‌شد --
+        // کاربر برایِ فهمیدنِ چرایی مجبور بود لاگِ سرور را دستی بخواند.
+        if (result.failedButKept.length > 0) {
+          services.syncErrorLog.record(result.failedButKept);
+        }
         if (remaining === 0) {
           setSyncStatus("SYNCED");
         } else if (result.succeeded.length === 0 && result.failedButKept.length === 0) {
@@ -313,6 +319,8 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
               <SettingsScreen
                 apiClient={services.apiClient}
                 offlineQueue={services.offlineQueue}
+                syncEngine={services.syncEngine}
+                syncErrorLog={services.syncErrorLog}
                 userFullName={userFullName}
                 onLoggedOut={() => setLoggedIn(false)}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}

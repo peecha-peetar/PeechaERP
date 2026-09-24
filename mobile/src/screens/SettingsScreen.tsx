@@ -1,13 +1,18 @@
-import React from "react";
-import { Alert, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { Alert, ScrollView, Text, View } from "react-native";
 import { ApiClient } from "../api/client";
 import { Button, Card } from "../components";
+import { formatJalaliDateTime } from "../jalali";
 import { OfflineQueue } from "../sync/offlineQueue";
+import { SyncEngine } from "../sync/syncEngine";
+import { SyncErrorEntry, SyncErrorLog } from "../sync/syncErrorLog";
 import { useTheme, useThemeControls } from "../theme";
 
 interface Props {
   apiClient: ApiClient;
   offlineQueue: OfflineQueue;
+  syncEngine: SyncEngine;
+  syncErrorLog: SyncErrorLog;
   userFullName: string;
   onLoggedOut: () => void;
   onBack: () => void;
@@ -27,13 +32,46 @@ interface Props {
  * فیزیکی: یک عکسِ خیلی‌بزرگ در صف باعثِ شکستِ دائمیِ خواندنِ کلِ صف
  * می‌شود -- "Row too big to fit into CursorWindow") تنها راهِ بازیابیِ
  * کاربر از چنین حالتی است، بدونِ نیاز به پاک‌کردنِ کاملِ دیتایِ اپ. */
-export function SettingsScreen({ apiClient, offlineQueue, userFullName, onLoggedOut, onBack, onOpenManagerDashboard }: Props) {
+export function SettingsScreen({
+  apiClient, offlineQueue, syncEngine, syncErrorLog, userFullName, onLoggedOut, onBack, onOpenManagerDashboard,
+}: Props) {
   const { colors, spacing, typography, mode } = useTheme();
   const { toggleMode } = useThemeControls();
+  const [pendingCount, setPendingCount] = useState(0);
+  const [errors, setErrors] = useState<SyncErrorEntry[]>([]);
+  const [syncing, setSyncing] = useState(false);
+
+  const refreshSyncInfo = useCallback(async () => {
+    setPendingCount(await offlineQueue.size());
+    setErrors(await syncErrorLog.list());
+  }, [offlineQueue, syncErrorLog]);
+
+  useEffect(() => {
+    refreshSyncInfo();
+  }, [refreshSyncInfo]);
 
   const logout = async () => {
     await apiClient.logout();
     onLoggedOut();
+  };
+
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      await syncEngine.pull();
+      const result = await syncEngine.pushQueue();
+      if (result.failedButKept.length > 0) {
+        await syncErrorLog.record(result.failedButKept);
+      }
+    } finally {
+      setSyncing(false);
+      await refreshSyncInfo();
+    }
+  };
+
+  const clearErrorLog = async () => {
+    await syncErrorLog.clear();
+    await refreshSyncInfo();
   };
 
   const clearOfflineQueue = () => {
@@ -48,6 +86,7 @@ export function SettingsScreen({ apiClient, offlineQueue, userFullName, onLogged
           onPress: async () => {
             await offlineQueue.clear();
             Alert.alert("انجام شد", "صفِ آفلاین پاک شد.");
+            await refreshSyncInfo();
           },
         },
       ],
@@ -55,7 +94,7 @@ export function SettingsScreen({ apiClient, offlineQueue, userFullName, onLogged
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.lg }}>
+    <ScrollView contentContainerStyle={{ backgroundColor: colors.background, padding: spacing.lg, gap: spacing.lg }}>
       <Button label="← بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
       <Text style={[typography.h2, { color: colors.textPrimary }]}>تنظیمات</Text>
 
@@ -70,11 +109,44 @@ export function SettingsScreen({ apiClient, offlineQueue, userFullName, onLogged
         </View>
       </Card>
 
+      <Card>
+        <Text style={[typography.bodyBold, { color: colors.textPrimary, marginBottom: spacing.sm }]}>وضعیتِ همگام‌سازی</Text>
+        <Text style={[typography.body, { color: colors.textSecondary }]}>
+          {pendingCount === 0 ? "همه‌چیز همگام است." : `${pendingCount} عملیاتِ درحالِ‌انتظار`}
+        </Text>
+        <View style={{ marginTop: spacing.sm }}>
+          <Button
+            label={syncing ? "در حالِ همگام‌سازی..." : "🔄 همگام‌سازیِ دستی"}
+            variant="secondary"
+            onPress={syncNow}
+            disabled={syncing}
+          />
+        </View>
+      </Card>
+
+      {errors.length > 0 ? (
+        <Card>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm }}>
+            <Text style={[typography.bodyBold, { color: colors.danger }]}>آخرین خطاهایِ همگام‌سازی</Text>
+            <Button label="پاکسازی" variant="ghost" fullWidth={false} onPress={clearErrorLog} />
+          </View>
+          {errors.map((e, index) => (
+            <View
+              key={`${e.idempotencyKey}-${index}`}
+              style={{ paddingVertical: spacing.xs, borderTopWidth: index === 0 ? 0 : 1, borderTopColor: colors.border }}
+            >
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{formatJalaliDateTime(e.occurredAt)}</Text>
+              <Text style={[typography.body, { color: colors.textPrimary, marginTop: 2 }]}>{e.reason}</Text>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+
       <Button label="📊 داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
 
       <Button label="🧹 پاکسازیِ صفِ آفلاین (اضطراری)" variant="secondary" onPress={clearOfflineQueue} />
 
       <Button label="خروج از حساب" variant="danger" onPress={logout} />
-    </View>
+    </ScrollView>
   );
 }

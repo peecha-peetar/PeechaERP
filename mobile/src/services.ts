@@ -6,6 +6,7 @@ import { LocalCache } from "./storage/localCache";
 import { TokenStore } from "./storage/tokenStore";
 import { OfflineQueue } from "./sync/offlineQueue";
 import { SyncEngine } from "./sync/syncEngine";
+import { SyncErrorLog } from "./sync/syncErrorLog";
 import { VisitCorrelationStore } from "./sync/visitCorrelation";
 
 /** ساختِ همه‌یِ سرویس‌هایِ لایه‌یِ منطق در یک‌جا -- زیرِ Expo Go،
@@ -23,7 +24,8 @@ export function createServices(kvStore: KeyValueStore = new AsyncStorageKeyValue
   // هر بارِ ساختِ SyncEngine از دست می‌رود.
   const visitCorrelation = new VisitCorrelationStore(kvStore);
   const syncEngine = new SyncEngine(apiClient, offlineQueue, localCache, visitCorrelation);
-  return { kvStore, tokenStore, apiClient, offlineQueue, localCache, syncEngine };
+  const syncErrorLog = new SyncErrorLog(kvStore);
+  return { kvStore, tokenStore, apiClient, offlineQueue, localCache, syncEngine, syncErrorLog };
 }
 
 export type Services = ReturnType<typeof createServices>;
