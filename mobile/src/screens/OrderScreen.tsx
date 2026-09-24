@@ -100,8 +100,14 @@ export function OrderScreen({
     setSubmitting(true);
     try {
       if (documentTypeCode === "SALES_INVOICE") {
-        const [signature, photo, position] = await Promise.all([
-          captureProvider.captureSignature(),
+        // طبقِ باگِ واقعیِ کشف‌شده در R191: امضا حالا (بر خلافِ قبل) یک
+        // Modalِ واقعیِ درون‌اپ باز می‌کند -- اگر هم‌زمان با دوربین (که
+        // کلِ اپ را موقتاً به یک اکتیویتیِ نیتیوِ جدا می‌برد) در یک
+        // Promise.all اجرا شود، هردو رابطِ کاربری روی هم می‌آیند. پس
+        // امضا باید اول و تنها اجرا شود؛ عکس/GPS بعد از بستنِ آن Modal
+        // (بدونِ تداخلِ UI با هم) با هم اجرا می‌شوند.
+        const signature = await captureProvider.captureSignature();
+        const [photo, position] = await Promise.all([
           captureProvider.capturePhoto(),
           locationProvider.getCurrentPosition(),
         ]);

@@ -35,8 +35,11 @@ export function DeliveryConfirmScreen({
   const submit = async () => {
     setSubmitting(true);
     try {
-      const [signature, photo, position] = await Promise.all([
-        captureProvider.captureSignature(),
+      // طبقِ باگِ واقعیِ کشف‌شده در R191: امضا یک Modalِ درون‌اپ باز
+      // می‌کند و دوربین کلِ اپ را موقتاً به یک اکتیویتیِ نیتیوِ جدا
+      // می‌برد -- هم‌زمانی‌شان در Promise.all باعثِ تداخلِ UI می‌شود.
+      const signature = await captureProvider.captureSignature();
+      const [photo, position] = await Promise.all([
         captureProvider.capturePhoto(),
         locationProvider.getCurrentPosition(),
       ]);
