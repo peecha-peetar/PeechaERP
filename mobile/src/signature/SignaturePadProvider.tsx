@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import { Modal, Text, View } from "react-native";
-import SignatureCanvas from "react-native-signature-canvas";
+import SignatureCanvas, { SignatureViewRef } from "react-native-signature-canvas";
 import { Button } from "../components";
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -31,6 +31,7 @@ export function SignaturePadProvider({ children }: { children: React.ReactNode }
   const { colors, spacing, typography } = useTheme();
   const [visible, setVisible] = useState(false);
   const resolverRef = useRef<Resolver | null>(null);
+  const canvasRef = useRef<SignatureViewRef>(null);
 
   const finish = useCallback((value: string | null) => {
     setVisible(false);
@@ -59,16 +60,32 @@ export function SignaturePadProvider({ children }: { children: React.ReactNode }
             <Text style={[typography.h3, { color: colors.textPrimary }]}>امضایِ تحویل‌گیرنده</Text>
             <Button label="انصراف" variant="ghost" fullWidth={false} onPress={() => finish(null)} />
           </View>
+          {/* طبقِ گزارشِ واقعیِ کاربر («بعد از امضا جایی برایِ تایید نبود»):
+              دکمه‌هایِ داخلیِ خودِ کتابخانه (که درونِ WebView رندر
+              می‌شوند) گاهی رویِ گوشی‌هایِ واقعی دیده/لمس نمی‌شوند --
+              پس این‌جا دکمه‌هایِ خودمان (کاملاً بیرونِ WebView، تضمیناً
+              قابلِ‌دیدن) اضافه شد و از طریقِ ref صدا زده می‌شوند. */}
           <View style={{ flex: 1 }}>
             <SignatureCanvas
+              ref={canvasRef}
               onOK={(dataUrl: string) => finish(stripDataUrlPrefix(dataUrl))}
               onEmpty={() => finish(null)}
               descriptionText="این‌جا امضا کنید"
-              clearText="پاک‌کردن"
-              confirmText="تاییدِ امضا"
               penColor="#111827"
               backgroundColor="#ffffff"
+              webStyle=".m-signature-pad--footer { display: none; margin: 0; }"
             />
+          </View>
+          <View style={{ flexDirection: "row", gap: spacing.sm, padding: spacing.lg }}>
+            <Button
+              label="پاک‌کردن"
+              variant="secondary"
+              fullWidth={false}
+              onPress={() => canvasRef.current?.clearSignature()}
+            />
+            <View style={{ flex: 1 }}>
+              <Button label="تاییدِ امضا" onPress={() => canvasRef.current?.readSignature()} />
+            </View>
           </View>
         </View>
       </Modal>
