@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { ManagerDashboardResponse } from "../api/types";
+import { ManagerDashboardResponse, RouteRow } from "../api/types";
 import { Button, Card, ErrorState, SkeletonList } from "../components";
 import { formatAmount } from "../format";
+import { formatJalaliDate } from "../jalali";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface Props {
@@ -30,16 +31,23 @@ const PRESETS: { code: RangePreset; label: string }[] = [
 
 /** طبقِ Phase 7 (Manager Dashboard + KPI) -- فقط برایِ کاربرِ مدیر
  * (سرور با ۴۰۳ رد می‌کند اگر نباشد؛ این صفحه آن خطا را به‌جایِ Crash
- * با ErrorState نشان می‌دهد). محدودیتِ شناخته‌شده: فیلترِ منطقه/مسیر و
- * تقویمِ جلالی هنوز پیاده نشده -- بازه‌ها با تقویمِ میلادیِ ساده
- * محاسبه می‌شوند. */
+ * با ErrorState نشان می‌دهد). طبقِ R189: فیلترِ منطقه/مسیر اضافه شد و
+ * بازهٔ انتخاب‌شده با تاریخِ شمسی نمایش داده می‌شود -- محدودیتِ
+ * باقی‌مانده: بازه‌یِ سفارشی (غیر از سه پیش‌فرضِ ثابت) هنوز نیازمندِ
+ * یک تقویمِ جلالیِ تعاملی است که هنوز ساخته نشده. */
 export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [preset, setPreset] = useState<RangePreset>("TODAY");
+  const [routes, setRoutes] = useState<RouteRow[]>([]);
+  const [routeId, setRouteId] = useState<number | null>(null);
   const [data, setData] = useState<ManagerDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
+
+  useEffect(() => {
+    apiClient.listRoutes().then(setRoutes).catch(() => setRoutes([]));
+  }, [apiClient]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,7 +55,9 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
     setForbidden(false);
     try {
       const { dateFrom, dateTo } = rangeFor(preset);
-      const result = await apiClient.getManagerDashboard({ dateFrom, dateTo });
+      const result = await apiClient.getManagerDashboard({
+        dateFrom, dateTo, routeDetailAccountId: routeId ?? undefined,
+      });
       setData(result);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
@@ -58,7 +68,7 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [apiClient, preset]);
+  }, [apiClient, preset, routeId]);
 
   useEffect(() => {
     load();
@@ -69,11 +79,31 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
       <Button label="← بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
       <Text style={[typography.h2, { color: colors.textPrimary }]}>داشبوردِ مدیریت</Text>
 
-      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+      <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
         {PRESETS.map((p) => (
           <Button key={p.code} label={p.label} variant={preset === p.code ? "primary" : "secondary"} fullWidth={false} onPress={() => setPreset(p.code)} />
         ))}
       </View>
+      {data ? (
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>
+          بازه: {formatJalaliDate(data.date_from)} تا {formatJalaliDate(data.date_to)}
+        </Text>
+      ) : null}
+
+      {routes.length > 0 ? (
+        <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
+          <Button label="همه‌یِ مسیرها" variant={routeId === null ? "primary" : "secondary"} fullWidth={false} onPress={() => setRouteId(null)} />
+          {routes.map((r) => (
+            <Button
+              key={r.detail_account_id}
+              label={r.name ?? r.code}
+              variant={routeId === r.detail_account_id ? "primary" : "secondary"}
+              fullWidth={false}
+              onPress={() => setRouteId(r.detail_account_id)}
+            />
+          ))}
+        </View>
+      ) : null}
 
       {forbidden ? (
         <ErrorState title="دسترسی ندارید" description="این گزارش فقط برایِ مدیر در دسترس است." />

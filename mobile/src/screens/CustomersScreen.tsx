@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
 import { CustomerListRow } from "../api/types";
 import { CustomerCard, EmptyState, ErrorState, SearchBar, SkeletonList } from "../components";
@@ -8,13 +8,19 @@ import { useTheme } from "../theme/ThemeProvider";
 interface Props {
   apiClient: ApiClient;
   onOpenCustomer: (detailAccountId: number) => void;
+  /** طبقِ استفاده‌یِ دوباره از همین صفحه برایِ تبِ «سفارش» (App.tsx):
+   * تبِ سفارش هم دقیقاً همین جستجو/فهرست را می‌خواهد (چون شروعِ سفارش
+   * از دکمه‌یِ «ثبتِ سفارش» در CustomerDetailScreen انجام می‌شود، نه
+   * فرمِ جداگانه‌ای این‌جا) -- فقط عنوان فرق دارد تا با تبِ «مشتریان»
+   * اشتباه گرفته نشود. */
+  title?: string;
 }
 
 /** طبقِ اصلِ صریح («Search مشتری سریع و قابلِ‌استفاده باشد»): فیلترِ
  * سمتِ سرور با یک تاخیرِ کوتاه (debounce) تا هر کاراکتر یک درخواستِ
  * جداگانه نسازد. */
-export function CustomersScreen({ apiClient, onOpenCustomer }: Props) {
-  const { colors, spacing } = useTheme();
+export function CustomersScreen({ apiClient, onOpenCustomer, title }: Props) {
+  const { colors, spacing, typography } = useTheme();
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState<CustomerListRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +48,7 @@ export function CustomersScreen({ apiClient, onOpenCustomer }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.md }}>
+      {title ? <Text style={[typography.h2, { color: colors.textPrimary }]}>{title}</Text> : null}
       <SearchBar value={query} onChangeText={setQuery} placeholder="جستجویِ مشتری با نام یا کد..." />
       {loading ? (
         <SkeletonList count={5} />

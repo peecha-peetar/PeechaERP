@@ -18,6 +18,7 @@
     "expo-image-picker": "~57.0.19",
     "expo-location": "~57.0.19",
     "expo-status-bar": "~57.0.1",
+    "jalaali-js": "2.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "vazirmatn": "33.0.3"

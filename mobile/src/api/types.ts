@@ -240,6 +240,12 @@ export interface ManagerDashboardResponse {
   by_visitor: VisitorPerformanceRow[];
 }
 
+export interface RouteRow {
+  detail_account_id: number;
+  code: string;
+  name: string | null;
+}
+
 export interface DebtorRow {
   detail_account_id: number;
   code: string;

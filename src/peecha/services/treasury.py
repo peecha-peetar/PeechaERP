@@ -36,7 +36,7 @@ from peecha.db.models.treasury import (
     ReceivedCheck,
     TreasuryAccountMapping,
 )
-from peecha.db.models.commercial import CommercialDocument
+from peecha.db.models.commercial import CommercialDocument, CustomerProfile
 from peecha.services import audit as audit_service
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_settlements as settlements_service
@@ -1352,11 +1352,14 @@ def sum_voucher_amount_for_user_on_date(
 
 def sum_voucher_amount_for_company(
     company_id: int, date_from: datetime.date, date_to: datetime.date, direction: str,
-    created_by_user_id: int | None = None,
+    created_by_user_id: int | None = None, route_detail_account_id: int | None = None,
 ) -> decimal.Decimal:
     """هم‌الگو با sum_voucher_amount_for_user_on_date ولی برایِ بازهٔ
     تاریخ و بدونِ الزامِ فیلترِ کاربر -- برایِ داشبوردِ مدیریتی (Phase 7):
-    «وصولِ این ماه» یا «وصولِ فلان ویزیتور در این بازه»."""
+    «وصولِ این ماه» یا «وصولِ فلان ویزیتور در این بازه». route_detail_account_id
+    (طبقِ R189) با یک زیرکوئریِ جداگانه رویِ journal_entry_id اعمال
+    می‌شود (نه joinِ مستقیم روی خطِ جمع‌زده‌شده) تا خطِ نقد/بانکِ سند که
+    خودش تفصیلیِ مسیر ندارد، ردیفِ جمع را چندبرابر نکند."""
     with new_session() as session:
         stmt = (
             select(func.coalesce(func.sum(JournalEntryLine.debit_amount_fc), 0))
@@ -1371,6 +1374,14 @@ def sum_voucher_amount_for_company(
         )
         if created_by_user_id is not None:
             stmt = stmt.where(JournalEntry.created_by_user_id == created_by_user_id)
+        if route_detail_account_id is not None:
+            matching_entry_ids = (
+                select(JournalEntryLine.journal_entry_id)
+                .join(JournalEntryLineDetail, JournalEntryLineDetail.line_id == JournalEntryLine.line_id)
+                .join(CustomerProfile, CustomerProfile.customer_detail_account_id == JournalEntryLineDetail.detail_account_id)
+                .where(CustomerProfile.distribution_route_detail_account_id == route_detail_account_id)
+            )
+            stmt = stmt.where(JournalEntry.journal_entry_id.in_(matching_entry_ids))
         total = session.scalar(stmt)
         return total or decimal.Decimal(0)
 

@@ -30,7 +30,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount, FiscalYear, JournalEntryLine
 from peecha.db.models.commercial import (
-    Channel, CommercialDocument, CommercialDocumentLine, CreditHold, LandedCostAllocation, PosSettings,
+    Channel, CommercialDocument, CommercialDocumentLine, CreditHold, CustomerProfile, LandedCostAllocation, PosSettings,
 )
 from peecha.db.models.inventory import Item, StockDocument, Warehouse
 from peecha.services import commercial_contracts as contracts_service
@@ -1007,12 +1007,15 @@ def summarize_documents_for_user_on_date(
 
 def summarize_documents_for_company(
     company_id: int, date_from: datetime.date, date_to: datetime.date, document_type_codes: tuple[str, ...],
-    created_by_user_id: int | None = None,
+    created_by_user_id: int | None = None, route_detail_account_id: int | None = None,
 ) -> DocumentSummary:
     """هم‌الگو با summarize_documents_for_user_on_date ولی برایِ بازهٔ
     تاریخ (نه یک روز) و بدونِ الزامِ فیلترِ کاربر -- برایِ داشبوردِ
     مدیریتی (Phase 7): «فروشِ ماه» (created_by_user_id=None، همهٔ
-    شرکت) یا «عملکردِ فلان ویزیتور» (created_by_user_id مشخص)."""
+    شرکت) یا «عملکردِ فلان ویزیتور» (created_by_user_id مشخص).
+    route_detail_account_id (طبقِ R189) با joinِ
+    CustomerProfile.distribution_route_detail_account_id رویِ
+    counterparty_detail_account_idِ سند اعمال می‌شود."""
     with new_session() as session:
         stmt = select(func.count(), func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
             CommercialDocument.company_id == company_id,
@@ -1023,6 +1026,10 @@ def summarize_documents_for_company(
         )
         if created_by_user_id is not None:
             stmt = stmt.where(CommercialDocument.created_by_user_id == created_by_user_id)
+        if route_detail_account_id is not None:
+            stmt = stmt.join(
+                CustomerProfile, CustomerProfile.customer_detail_account_id == CommercialDocument.counterparty_detail_account_id,
+            ).where(CustomerProfile.distribution_route_detail_account_id == route_detail_account_id)
         count, total = session.execute(stmt).one()
         return DocumentSummary(document_count=count, total_amount=total or decimal.Decimal(0))
 

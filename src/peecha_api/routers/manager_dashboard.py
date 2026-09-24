@@ -3,10 +3,9 @@
 رویِ همان توابعِ تجمیعیِ سرویس‌هایِ موجود (field_sales/commercial_documents/
 treasury/commercial_partners) -- بدونِ منطقِ حسابداری/گزارش‌گیریِ تازه.
 
-محدودیتِ شناخته‌شده: فیلترِ منطقه/مسیر (route_detail_account_id) در این
-نسخه پیاده نشده -- نیازمندِ join به CustomerProfile.distribution_route_detail_account_id
-برایِ هر سه منبع (ویزیت/سفارش/وصول) که کارِ جداگانه‌یِ آینده است؛ فعلاً
-فقط فیلترِ بازه‌یِ تاریخ + ویزیتور پیاده شده."""
+طبقِ R189: فیلترِ منطقه/مسیر (route_detail_account_id) اضافه شد -- هر
+سه منبع (ویزیت/سفارش/وصول) با joinِ CustomerProfile.distribution_route_detail_account_id
+فیلتر می‌شوند (پیاده‌سازیِ واقعی در field_sales/commercial_documents/treasury)."""
 
 from __future__ import annotations
 
@@ -16,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_partners as partners_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
 from peecha.services import roles as roles_service
 from peecha.services import treasury as treasury_service
@@ -32,11 +32,24 @@ def _require_manager(ctx: AuthContext) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="این گزارش فقط برایِ مدیر در دسترس است.")
 
 
+@router.get("/routes")
+def list_routes(ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
+    """فهرستِ مسیرهایِ توزیعِ تعریف‌شده -- برایِ پرکردنِ فیلترِ منطقه/مسیرِ
+    داشبورد در اپِ موبایل."""
+    _require_manager(ctx)
+    dimension_type_id = dimensions_service.get_specialized_dimension_type_id(
+        ctx.company_id, dimensions_service.DISTRIBUTION_ROUTE_CODE,
+    )
+    routes = dimensions_service.list_leaf_detail_accounts(ctx.company_id, dimension_type_id)
+    return [{"detail_account_id": r.detail_account_id, "code": r.code, "name": r.name} for r in routes]
+
+
 @router.get("")
 def get_dashboard(
     date_from: datetime.date | None = None,
     date_to: datetime.date | None = None,
     visitor_user_id: int | None = None,
+    route_detail_account_id: int | None = None,
     ctx: AuthContext = Depends(get_current_context),
 ) -> dict:
     _require_manager(ctx)
@@ -48,14 +61,17 @@ def get_dashboard(
 
     visits = field_sales_service.list_customer_visits(
         ctx.company_id, visitor_user_id=visitor_user_id, date_from=date_from, date_to=date_to,
+        route_detail_account_id=route_detail_account_id,
     )
     completed_visits = sum(1 for v in visits if v.status_code == "COMPLETED")
 
     order_summary = documents_service.summarize_documents_for_company(
         ctx.company_id, date_from, date_to, _ORDER_TYPE_CODES, created_by_user_id=visitor_user_id,
+        route_detail_account_id=route_detail_account_id,
     )
     collection_amount = treasury_service.sum_voucher_amount_for_company(
         ctx.company_id, date_from, date_to, "RECEIPT", created_by_user_id=visitor_user_id,
+        route_detail_account_id=route_detail_account_id,
     )
     average_order_value = (
         order_summary.total_amount / order_summary.document_count if order_summary.document_count else 0
@@ -77,9 +93,11 @@ def get_dashboard(
             user_visits = [v for v in visits if v.visitor_user_id == uid]
             user_order_summary = documents_service.summarize_documents_for_company(
                 ctx.company_id, date_from, date_to, _ORDER_TYPE_CODES, created_by_user_id=uid,
+                route_detail_account_id=route_detail_account_id,
             )
             user_collection = treasury_service.sum_voucher_amount_for_company(
                 ctx.company_id, date_from, date_to, "RECEIPT", created_by_user_id=uid,
+                route_detail_account_id=route_detail_account_id,
             )
             by_visitor.append(
                 {

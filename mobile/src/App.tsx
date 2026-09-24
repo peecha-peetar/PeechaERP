@@ -3,7 +3,7 @@ import { SafeAreaView, StyleSheet, View } from "react-native";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, ExpoCaptureProvider } from "./capture";
 import { ExpoLocationProvider, LocationProvider } from "./location";
-import { AppBar, BottomNav, BottomNavKey, EmptyState, SyncStatus, ToastProvider } from "./components";
+import { AppBar, BottomNav, BottomNavKey, SyncStatus, ToastProvider } from "./components";
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
@@ -296,20 +296,20 @@ function MainTabContent({ tab, services, userFullName, onOpenVisit, onOpenCustom
         <VisitListScreen syncEngine={services.syncEngine} localCache={services.localCache} onOpenVisit={onOpenVisit} />
       );
     case "CUSTOMERS":
-      return <CustomersScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />;
+      return <CustomersScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} title="مشتریان" />;
     case "ORDER":
-      return <ComingSoon icon="🛒" title="سفارش‌ها" />;
+      return (
+        <CustomersScreen
+          apiClient={services.apiClient}
+          onOpenCustomer={onOpenCustomer}
+          title="سفارشِ جدید — انتخابِ مشتری"
+        />
+      );
     case "COLLECTION":
       return <CollectionListScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />;
     default:
       return null;
   }
-}
-
-function ComingSoon({ icon, title }: { icon: string; title: string }) {
-  return (
-    <EmptyState icon={icon} title={title} description="این بخش در فازِ بعدیِ توسعه (UI-2 تا UI-5) اضافه می‌شود." />
-  );
 }
 
 const styles = StyleSheet.create({ flex: { flex: 1 } });

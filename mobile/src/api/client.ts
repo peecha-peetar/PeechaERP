@@ -16,6 +16,7 @@ import {
   PriceResolveRequest,
   PriceResolveResponse,
   PullResponse,
+  RouteRow,
   StartVisitRequest,
   StartVisitResponse,
   TodaySummaryResponse,
@@ -154,13 +155,23 @@ export class ApiClient {
     await this.request<void>(`/notifications/${notificationId}/read`, { method: "POST" });
   }
 
-  async getManagerDashboard(params?: { dateFrom?: string; dateTo?: string; visitorUserId?: number }): Promise<ManagerDashboardResponse> {
+  async getManagerDashboard(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    visitorUserId?: number;
+    routeDetailAccountId?: number;
+  }): Promise<ManagerDashboardResponse> {
     const query = new URLSearchParams();
     if (params?.dateFrom) query.set("date_from", params.dateFrom);
     if (params?.dateTo) query.set("date_to", params.dateTo);
     if (params?.visitorUserId) query.set("visitor_user_id", String(params.visitorUserId));
+    if (params?.routeDetailAccountId) query.set("route_detail_account_id", String(params.routeDetailAccountId));
     const qs = query.toString();
     return this.request<ManagerDashboardResponse>(`/manager/dashboard${qs ? `?${qs}` : ""}`);
+  }
+
+  async listRoutes(): Promise<RouteRow[]> {
+    return this.request<RouteRow[]>("/manager/dashboard/routes");
   }
 
   async listDebtors(): Promise<DebtorRow[]> {

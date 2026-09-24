@@ -3,6 +3,7 @@ import { FlatList, RefreshControl, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
 import { NotificationRow } from "../api/types";
 import { Button, Card, EmptyState, ErrorState, SkeletonList } from "../components";
+import { formatJalaliDateTime } from "../jalali";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface Props {
@@ -74,6 +75,11 @@ export function NotificationsScreen({ apiClient, onBack }: Props) {
                 <View style={{ flex: 1 }}>
                   <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>{item.title}</Text>
                   {item.body ? <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>{item.body}</Text> : null}
+                  {item.created_at ? (
+                    <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                      {formatJalaliDateTime(item.created_at)}
+                    </Text>
+                  ) : null}
                 </View>
                 {!item.is_read ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary }} /> : null}
               </View>

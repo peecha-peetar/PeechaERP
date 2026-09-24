@@ -4,6 +4,7 @@ import { ApiClient, ApiError } from "../api/client";
 import { CustomerDetailResponse, CustomerRow, VisitPlanRow } from "../api/types";
 import { formatAmount } from "../format";
 import { Button, Card, ErrorState, SkeletonList, StatusBadge } from "../components";
+import { formatJalaliDate } from "../jalali";
 import { LocalCache } from "../storage/localCache";
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -136,7 +137,7 @@ export function CustomerDetailScreen({
         ) : null}
         {detail.last_purchase_date ? (
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
-            آخرین خرید: {detail.last_purchase_date}
+            آخرین خرید: {formatJalaliDate(detail.last_purchase_date)}
           </Text>
         ) : null}
       </Card>
@@ -198,7 +199,7 @@ export function CustomerDetailScreen({
                 }}
               >
                 <Text style={[typography.body, { color: colors.textPrimary }]}>
-                  #{d.document_no} · {d.document_date}
+                  #{d.document_no} · {formatJalaliDate(d.document_date)}
                 </Text>
                 <Text style={[typography.numeric, { color: colors.textPrimary }]}>{formatAmount(d.total_amount)}</Text>
               </View>
