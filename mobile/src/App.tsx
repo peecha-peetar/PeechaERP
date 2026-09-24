@@ -1,10 +1,13 @@
 import NetInfo from "@react-native-community/netinfo";
+import { NavigationContainer, NavigatorScreenParams, useNavigation } from "@react-navigation/native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeStackNavigator, NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useEffect, useMemo, useState } from "react";
-import { SafeAreaView, StyleSheet, View } from "react-native";
+import { SafeAreaView, StyleSheet } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, ExpoCaptureProvider } from "./capture";
 import { ExpoLocationProvider, LocationProvider } from "./location";
-import { SignaturePadProvider, useSignaturePad } from "./signature/SignaturePadProvider";
 import { AppBar, BottomNav, BottomNavKey, SyncStatus, ToastProvider } from "./components";
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
@@ -20,6 +23,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
 import { createServices } from "./services";
+import { SignaturePadProvider, useSignaturePad } from "./signature/SignaturePadProvider";
 import { applyRtlLayout, ThemeProvider, useTheme } from "./theme";
 
 // طبقِ اصلِ صریح («Sync Status به کاربر نمایش داده شود» + «عملیاتِ
@@ -34,26 +38,36 @@ const AUTO_SYNC_INTERVAL_MS = 20_000;
 // نیتیو است، نه رندرِ دوباره).
 applyRtlLayout();
 
-/** ناوبریِ حداقلی و دستی (بدونِ react-navigation) -- عمداً، تا در این
- * فازِ اسکلت‌سازی وابستگیِ نیتیوِ اضافه (react-native-screens و
- * react-native-safe-area-context) اضافه نشود که در سندباکسِ بدونِ
- * Android SDK/Xcode قابلِ‌ساخت/تست نیستند. اگر پروژه به‌سمتِ بیلدِ
- * واقعیِ اپ رفت، این بخش با react-navigation جایگزین می‌شود -- منطقِ
- * صفحه‌ها (services.ts, sync/*, api/*) بدونِ تغییر باقی می‌ماند.
+/** طبقِ R192: جایگزینیِ ناوبریِ دستیِ فازِ اسکلت‌سازی با react-navigation
+ * واقعی -- حالا که اپ زیرِ Expo Go اجرا می‌شود (R187)، دیگر محدودیتِ
+ * «نبودِ Android SDK/Xcode برایِ تستِ react-native-screens» وجود ندارد.
+ * تبِ فعال با هک‌بردنِ اندروید حالا واقعاً کار می‌کند (قبلاً بدونِ
+ * Stackِ واقعی، دکمه‌یِ برگشتِ سخت‌افزاری اثری نداشت).
  *
- * UI-1: بعدِ ورود، اپ همیشه رویِ یکی از ۵ تبِ BottomNav است (MAIN)؛
- * بازکردنِ یک ویزیت/سفارش همان یک‌روتِ تمام‌صفحه‌یِ قبلی را جایگزین
- * می‌کند (نه یک Stack) و با بستن، به همان تبِ MAIN برمی‌گردد. */
-type Route =
-  | { name: "LOGIN" }
-  | { name: "MAIN"; tab: BottomNavKey }
-  | { name: "VISIT_DETAIL"; customer: CustomerRow; visitPlan: VisitPlanRow }
-  | { name: "ORDER"; customer: CustomerRow }
-  | { name: "CUSTOMER_DETAIL"; detailAccountId: number }
-  | { name: "COLLECT_PAYMENT"; customer: CustomerRow }
-  | { name: "NOTIFICATIONS" }
-  | { name: "SETTINGS" }
-  | { name: "MANAGER_DASHBOARD" };
+ * BottomNav خودش بدونِ تغییر ماند -- فقط به‌جایِ روتینگِ دستی، به‌عنوانِ
+ * tabBarِ سفارشیِ MainTab.Navigator استفاده می‌شود (طبقِ همان طراحیِ
+ * بصریِ قبلی، بدونِ نوارِ پیش‌فرضِ react-navigation). */
+export type MainTabParamList = {
+  HOME: undefined;
+  VISITS: undefined;
+  CUSTOMERS: undefined;
+  ORDER: undefined;
+  COLLECTION: undefined;
+};
+
+export type RootStackParamList = {
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
+  VisitDetail: { customer: CustomerRow; visitPlan: VisitPlanRow };
+  OrderForm: { customer: CustomerRow };
+  CustomerDetail: { detailAccountId: number };
+  CollectPayment: { customer: CustomerRow };
+  Notifications: undefined;
+  Settings: undefined;
+  ManagerDashboard: undefined;
+};
+
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const MainTab = createBottomTabNavigator<MainTabParamList>();
 
 interface Props {
   locationProvider?: LocationProvider;
@@ -63,11 +77,13 @@ interface Props {
 export function App(props: Props) {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <SignaturePadProvider>
-          <AppContent {...props} />
-        </SignaturePadProvider>
-      </ToastProvider>
+      <SafeAreaProvider>
+        <ToastProvider>
+          <SignaturePadProvider>
+            <AppContent {...props} />
+          </SignaturePadProvider>
+        </ToastProvider>
+      </SafeAreaProvider>
     </ThemeProvider>
   );
 }
@@ -80,7 +96,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     [captureProvider, requestSignature],
   );
   const [services] = useState(() => createServices());
-  const [route, setRoute] = useState<Route>({ name: "LOGIN" });
+  const [loggedIn, setLoggedIn] = useState(false);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [userFullName, setUserFullName] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("IDLE");
@@ -92,7 +108,6 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     });
   }, [services]);
 
-  const loggedIn = route.name !== "LOGIN";
   useEffect(() => {
     if (!loggedIn) return;
     let cancelled = false;
@@ -155,7 +170,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     };
   }, [loggedIn, services]);
 
-  if (route.name === "LOGIN") {
+  if (!loggedIn) {
     return (
       <SafeAreaView style={styles.flex}>
         <LoginScreen
@@ -166,174 +181,197 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
             await services.syncEngine.pull();
             const cached = await services.localCache.getPullResponse();
             setItems(cached?.items ?? []);
-            setRoute({ name: "MAIN", tab: "HOME" });
+            setLoggedIn(true);
           }}
         />
       </SafeAreaView>
     );
   }
 
-  if (route.name === "VISIT_DETAIL") {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <VisitDetailScreen
-          customer={route.customer}
-          visitPlan={route.visitPlan}
-          offlineQueue={services.offlineQueue}
-          locationProvider={locationProvider}
-          onDone={() => setRoute({ name: "ORDER", customer: route.customer })}
-        />
-      </SafeAreaView>
-    );
-  }
+  return (
+    <NavigationContainer>
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Screen name="Main">
+          {() => (
+            <MainScreen services={services} userFullName={userFullName} syncStatus={syncStatus} unreadCount={unreadCount} />
+          )}
+        </RootStack.Screen>
 
-  if (route.name === "ORDER") {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        {/* warehouseId/currencyId/channelCode فعلاً ثابت‌اند -- در فازِ بعدی
-            باید از تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
-            هنوز برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند.
-            customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
-            document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
-            وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
-            syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
-        <OrderScreen
-          customer={route.customer}
-          items={items}
-          channelCode="VAN_SALES"
-          warehouseId={1}
-          currencyId={1}
-          customerVisitId={null}
-          apiClient={services.apiClient}
-          offlineQueue={services.offlineQueue}
-          captureProvider={resolvedCaptureProvider}
-          locationProvider={locationProvider}
-          onSubmitted={() => setRoute({ name: "MAIN", tab: "VISITS" })}
-        />
-      </SafeAreaView>
-    );
-  }
+        <RootStack.Screen name="VisitDetail">
+          {({ route, navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <VisitDetailScreen
+                customer={route.params.customer}
+                visitPlan={route.params.visitPlan}
+                offlineQueue={services.offlineQueue}
+                locationProvider={locationProvider}
+                onDone={() => navigation.navigate("OrderForm", { customer: route.params.customer })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
 
-  if (route.name === "CUSTOMER_DETAIL") {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <CustomerDetailScreen
-          apiClient={services.apiClient}
-          localCache={services.localCache}
-          detailAccountId={route.detailAccountId}
-          onBack={() => setRoute({ name: "MAIN", tab: "CUSTOMERS" })}
-          onStartVisit={(customer, visitPlan) => setRoute({ name: "VISIT_DETAIL", customer, visitPlan })}
-          onCreateOrder={(customer) => setRoute({ name: "ORDER", customer })}
-          onCreateCollection={(customer) => setRoute({ name: "COLLECT_PAYMENT", customer })}
-        />
-      </SafeAreaView>
-    );
-  }
+        <RootStack.Screen name="OrderForm">
+          {({ route, navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              {/* warehouseId/currencyId/channelCode فعلاً ثابت‌اند -- در فازِ بعدی
+                  باید از تنظیماتِ مسیرِ اختصاص‌یافته به ویزیتور (که در /sync/pull
+                  هنوز برنمی‌گردد) خوانده شوند، نه این‌جا هاردکد شوند.
+                  customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
+                  document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
+                  وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
+                  syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
+              <OrderScreen
+                customer={route.params.customer}
+                items={items}
+                channelCode="VAN_SALES"
+                warehouseId={1}
+                currencyId={1}
+                customerVisitId={null}
+                apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
+                captureProvider={resolvedCaptureProvider}
+                locationProvider={locationProvider}
+                onSubmitted={() => navigation.navigate("Main", { screen: "VISITS" })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
 
-  if (route.name === "COLLECT_PAYMENT") {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <CollectionScreen
-          customer={route.customer}
-          offlineQueue={services.offlineQueue}
-          onDone={() => setRoute({ name: "CUSTOMER_DETAIL", detailAccountId: route.customer.detail_account_id })}
-        />
-      </SafeAreaView>
-    );
-  }
+        <RootStack.Screen name="CustomerDetail">
+          {({ route, navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <CustomerDetailScreen
+                apiClient={services.apiClient}
+                localCache={services.localCache}
+                detailAccountId={route.params.detailAccountId}
+                onBack={() => navigation.navigate("Main", { screen: "CUSTOMERS" })}
+                onStartVisit={(customer, visitPlan) => navigation.navigate("VisitDetail", { customer, visitPlan })}
+                onCreateOrder={(customer) => navigation.navigate("OrderForm", { customer })}
+                onCreateCollection={(customer) => navigation.navigate("CollectPayment", { customer })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
 
-  if (route.name === "NOTIFICATIONS") {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <NotificationsScreen apiClient={services.apiClient} onBack={() => setRoute({ name: "MAIN", tab: "HOME" })} />
-      </SafeAreaView>
-    );
-  }
+        <RootStack.Screen name="CollectPayment">
+          {({ route, navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <CollectionScreen
+                customer={route.params.customer}
+                offlineQueue={services.offlineQueue}
+                onDone={() =>
+                  navigation.navigate("CustomerDetail", { detailAccountId: route.params.customer.detail_account_id })
+                }
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
 
-  if (route.name === "SETTINGS") {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <SettingsScreen
-          apiClient={services.apiClient}
-          userFullName={userFullName}
-          onLoggedOut={() => setRoute({ name: "LOGIN" })}
-          onBack={() => setRoute({ name: "MAIN", tab: "HOME" })}
-          onOpenManagerDashboard={() => setRoute({ name: "MANAGER_DASHBOARD" })}
-        />
-      </SafeAreaView>
-    );
-  }
+        <RootStack.Screen name="Notifications">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <NotificationsScreen
+                apiClient={services.apiClient}
+                onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
 
-  if (route.name === "MANAGER_DASHBOARD") {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <ManagerDashboardScreen apiClient={services.apiClient} onBack={() => setRoute({ name: "MAIN", tab: "HOME" })} />
-      </SafeAreaView>
-    );
-  }
+        <RootStack.Screen name="Settings">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <SettingsScreen
+                apiClient={services.apiClient}
+                userFullName={userFullName}
+                onLoggedOut={() => setLoggedIn(false)}
+                onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+                onOpenManagerDashboard={() => navigation.navigate("ManagerDashboard")}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
 
-  const activeTab = route.tab;
+        <RootStack.Screen name="ManagerDashboard">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <ManagerDashboardScreen
+                apiClient={services.apiClient}
+                onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+      </RootStack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+interface MainScreenProps {
+  services: ReturnType<typeof createServices>;
+  userFullName: string;
+  syncStatus: SyncStatus;
+  unreadCount: number;
+}
+
+function MainScreen({ services, userFullName, syncStatus, unreadCount }: MainScreenProps) {
+  const { colors } = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const onOpenVisit = (customer: CustomerRow, visitPlan: VisitPlanRow) =>
+    navigation.navigate("VisitDetail", { customer, visitPlan });
+  const onOpenCustomer = (detailAccountId: number) => navigation.navigate("CustomerDetail", { detailAccountId });
+
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
       <AppBar
         userFullName={userFullName}
         syncStatus={syncStatus}
         unreadNotificationCount={unreadCount}
-        onPressNotifications={() => setRoute({ name: "NOTIFICATIONS" })}
-        onPressProfile={() => setRoute({ name: "SETTINGS" })}
+        onPressNotifications={() => navigation.navigate("Notifications")}
+        onPressProfile={() => navigation.navigate("Settings")}
       />
-      <View style={styles.flex}>
-        <MainTabContent
-          tab={activeTab}
-          services={services}
-          userFullName={userFullName}
-          onOpenVisit={(customer, visitPlan) => setRoute({ name: "VISIT_DETAIL", customer, visitPlan })}
-          onOpenCustomer={(detailAccountId) => setRoute({ name: "CUSTOMER_DETAIL", detailAccountId })}
-        />
-      </View>
-      <BottomNav active={activeTab} onChange={(tab) => setRoute({ name: "MAIN", tab })} />
+      <MainTab.Navigator
+        screenOptions={{ headerShown: false }}
+        tabBar={(tabBarProps) => (
+          <BottomNav
+            active={tabBarProps.state.routeNames[tabBarProps.state.index] as BottomNavKey}
+            onChange={(key) => tabBarProps.navigation.navigate(key)}
+          />
+        )}
+      >
+        <MainTab.Screen name="HOME">
+          {() => (
+            <HomeScreen
+              apiClient={services.apiClient}
+              localCache={services.localCache}
+              userFullName={userFullName}
+              onOpenVisit={onOpenVisit}
+            />
+          )}
+        </MainTab.Screen>
+        <MainTab.Screen name="VISITS">
+          {() => <VisitListScreen syncEngine={services.syncEngine} localCache={services.localCache} onOpenVisit={onOpenVisit} />}
+        </MainTab.Screen>
+        <MainTab.Screen name="CUSTOMERS">
+          {() => <CustomersScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} title="مشتریان" />}
+        </MainTab.Screen>
+        <MainTab.Screen name="ORDER">
+          {() => (
+            <CustomersScreen
+              apiClient={services.apiClient}
+              onOpenCustomer={onOpenCustomer}
+              title="سفارشِ جدید — انتخابِ مشتری"
+            />
+          )}
+        </MainTab.Screen>
+        <MainTab.Screen name="COLLECTION">
+          {() => <CollectionListScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />}
+        </MainTab.Screen>
+      </MainTab.Navigator>
     </SafeAreaView>
   );
-}
-
-interface MainTabContentProps {
-  tab: BottomNavKey;
-  services: ReturnType<typeof createServices>;
-  userFullName: string;
-  onOpenVisit: (customer: CustomerRow, visitPlan: VisitPlanRow) => void;
-  onOpenCustomer: (detailAccountId: number) => void;
-}
-
-function MainTabContent({ tab, services, userFullName, onOpenVisit, onOpenCustomer }: MainTabContentProps) {
-  switch (tab) {
-    case "HOME":
-      return (
-        <HomeScreen
-          apiClient={services.apiClient}
-          localCache={services.localCache}
-          userFullName={userFullName}
-          onOpenVisit={onOpenVisit}
-        />
-      );
-    case "VISITS":
-      return (
-        <VisitListScreen syncEngine={services.syncEngine} localCache={services.localCache} onOpenVisit={onOpenVisit} />
-      );
-    case "CUSTOMERS":
-      return <CustomersScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} title="مشتریان" />;
-    case "ORDER":
-      return (
-        <CustomersScreen
-          apiClient={services.apiClient}
-          onOpenCustomer={onOpenCustomer}
-          title="سفارشِ جدید — انتخابِ مشتری"
-        />
-      );
-    case "COLLECTION":
-      return <CollectionListScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />;
-    default:
-      return null;
-  }
 }
 
 const styles = StyleSheet.create({ flex: { flex: 1 } });
