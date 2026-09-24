@@ -1,3 +1,4 @@
+import NetInfo from "@react-native-community/netinfo";
 import React, { useEffect, useState } from "react";
 import { SafeAreaView, StyleSheet, View } from "react-native";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
@@ -125,9 +126,24 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
 
     tick();
     const interval = setInterval(tick, AUTO_SYNC_INTERVAL_MS);
+    // طبقِ اصلِ صریح («Sync Status به کاربر نمایش داده شود»): بدونِ
+    // NetInfo، قطعیِ اتصال فقط بعدِ شکستِ یک تلاشِ واقعیِ ارسال (تا
+    // AUTO_SYNC_INTERVAL_MS/۲۰ثانیه بعد) کشف می‌شد؛ این‌جا هم خودِ
+    // قطعی فوری نشان داده می‌شود (بدونِ نیاز به صفِ غیرِخالی) و هم
+    // برگشتِ اتصال بی‌درنگ یک تلاشِ ارسالِ تازه را شروع می‌کند (نه صبر
+    // تا تیکِ بعدی).
+    const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
+      if (cancelled) return;
+      if (state.isConnected === false) {
+        setSyncStatus((prev) => (prev === "SYNCED" ? prev : "OFFLINE"));
+      } else if (state.isConnected === true) {
+        tick();
+      }
+    });
     return () => {
       cancelled = true;
       clearInterval(interval);
+      unsubscribeNetInfo();
     };
   }, [loggedIn, services]);
 

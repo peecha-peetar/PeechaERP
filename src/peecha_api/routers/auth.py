@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
 from peecha.db.base import new_session
@@ -12,6 +12,7 @@ from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
 from peecha.services import auth as auth_service
 from peecha_api import security
+from peecha_api.rate_limit import enforce_login_rate_limit
 from peecha_api.schemas import (
     AccessTokenResponse,
     LoginRequest,
@@ -38,7 +39,8 @@ def _resolve_company_for_user(user_id: int) -> tuple[int, str]:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest) -> TokenResponse:
+def login(payload: LoginRequest, request: Request) -> TokenResponse:
+    enforce_login_rate_limit(request, payload.username)
     user = auth_service.authenticate(payload.username, payload.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="نامِ‌کاربری یا رمزِ عبور نادرست است.")
