@@ -1,9 +1,10 @@
 import NetInfo from "@react-native-community/netinfo";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { SafeAreaView, StyleSheet, View } from "react-native";
 import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, ExpoCaptureProvider } from "./capture";
 import { ExpoLocationProvider, LocationProvider } from "./location";
+import { SignaturePadProvider, useSignaturePad } from "./signature/SignaturePadProvider";
 import { AppBar, BottomNav, BottomNavKey, SyncStatus, ToastProvider } from "./components";
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
@@ -63,14 +64,21 @@ export function App(props: Props) {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <AppContent {...props} />
+        <SignaturePadProvider>
+          <AppContent {...props} />
+        </SignaturePadProvider>
       </ToastProvider>
     </ThemeProvider>
   );
 }
 
-function AppContent({ locationProvider = new ExpoLocationProvider(), captureProvider = new ExpoCaptureProvider() }: Props) {
+function AppContent({ locationProvider = new ExpoLocationProvider(), captureProvider }: Props) {
   const { colors } = useTheme();
+  const { requestSignature } = useSignaturePad();
+  const resolvedCaptureProvider = useMemo(
+    () => captureProvider ?? new ExpoCaptureProvider(requestSignature),
+    [captureProvider, requestSignature],
+  );
   const [services] = useState(() => createServices());
   const [route, setRoute] = useState<Route>({ name: "LOGIN" });
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -198,7 +206,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
           customerVisitId={null}
           apiClient={services.apiClient}
           offlineQueue={services.offlineQueue}
-          captureProvider={captureProvider}
+          captureProvider={resolvedCaptureProvider}
           locationProvider={locationProvider}
           onSubmitted={() => setRoute({ name: "MAIN", tab: "VISITS" })}
         />

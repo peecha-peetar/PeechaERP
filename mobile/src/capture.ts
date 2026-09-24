@@ -22,15 +22,18 @@ export class NullCaptureProvider implements CaptureProvider {
  * کاملِ دوربینِ نیتیو را نشان می‌دهد و با Promise برمی‌گردد -- دقیقاً
  * هم‌راستا با همین اینترفیس، بدونِ نیاز به هیچ کامپوننتِ React جداگانه.
  *
- * امضا (captureSignature) هنوز پیاده نشده: بر خلافِ دوربین (که رابطِ
- * تمام‌صفحه‌یِ خودش را دارد)، یک signature-pad نیازمندِ یک کانواسِ
- * لمسیِ دائمی در درختِ کامپوننت است، نه یک تابعِ Promise-based ساده --
- * یعنی همین معماریِ CaptureProvider (کلاسِ ساده بدونِ دسترسی به React)
- * برایِ آن کافی نیست؛ نیازمندِ یک بازطراحیِ جداست (مثلاً یک Context/Ref
- * که یک Modal را از بیرونِ کامپوننت باز کند). */
+ * امضا (captureSignature) برخلافِ دوربین رابطِ تمام‌صفحه‌یِ نیتیوِ خودش
+ * را ندارد -- نیازمندِ یک کانواسِ لمسیِ دائمی در درختِ کامپوننت است، نه
+ * یک تابعِ Promise-based ساده. راه‌حل (R191): requestSignature از
+ * SignaturePadProvider (signature/SignaturePadProvider.tsx) از بیرون
+ * تزریق می‌شود -- همان پُلِ لازم بینِ این کلاسِ سادهٔ غیرِReact و یک
+ * Modal/کانواسِ واقعی. */
 export class ExpoCaptureProvider implements CaptureProvider {
+  constructor(private readonly requestSignature?: () => Promise<string | null>) {}
+
   async captureSignature(): Promise<string | null> {
-    return null;
+    if (!this.requestSignature) return null;
+    return this.requestSignature();
   }
 
   async capturePhoto(): Promise<string | null> {

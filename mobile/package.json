@@ -22,6 +22,8 @@
     "jalaali-js": "2.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-signature-canvas": "5.1.1",
+    "react-native-webview": "14.0.1",
     "vazirmatn": "33.0.3"
   },
   "devDependencies": {
