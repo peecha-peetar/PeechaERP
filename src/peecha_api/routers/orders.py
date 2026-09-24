@@ -76,6 +76,8 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
         documents_service.DocumentHeaderFields(
             counterparty_detail_account_id=payload.counterparty_detail_account_id,
             currency_id=payload.currency_id, warehouse_id=payload.warehouse_id, channel_code=payload.channel_code,
+            cost_center_detail_account_id=payload.cost_center_detail_account_id,
+            project_detail_account_id=payload.project_detail_account_id,
         ),
     )
     # line_ids دقیقاً هم‌ترتیب با payload.lines برگردانده می‌شود -- طبقِ

@@ -66,6 +66,11 @@ class OrderCreateRequest(BaseModel):
     currency_id: int
     lines: list[OrderLineRequest]
     post_immediately: bool = False  # فقط برایِ SALES_INVOICEِ پخشِ گرم
+    # طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه تعیین
+    # شود»): موبایل این‌ها را از پیش‌فرضِ کانال (GET /pricing/channels)
+    # می‌خواند و بدونِ نمایشِ انتخاب‌گر به ویزیتور، همین‌جا می‌فرستد.
+    cost_center_detail_account_id: int | None = None
+    project_detail_account_id: int | None = None
 
 
 class DeliveryConfirmationLineRequest(BaseModel):

@@ -61,6 +61,14 @@ def list_channels(
     if channel_type_code is not None:
         channels = [c for c in channels if c.channel_type_code == channel_type_code]
     return [
-        {"channel_code": c.channel_code, "name": c.name, "channel_type_code": c.channel_type_code}
+        {
+            "channel_code": c.channel_code, "name": c.name, "channel_type_code": c.channel_type_code,
+            # طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه
+            # تعیین شود»): پیش‌فرضِ ثابتِ همین کانال -- اگر تنظیم شده
+            # باشد، اپِ موبایل بدونِ نمایشِ هیچ انتخاب‌گری، همین‌ها را در
+            # هر سفارش می‌فرستد.
+            "default_cost_center_detail_account_id": c.default_cost_center_detail_account_id,
+            "default_project_detail_account_id": c.default_project_detail_account_id,
+        }
         for c in channels
     ]

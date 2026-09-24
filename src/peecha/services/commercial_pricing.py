@@ -55,6 +55,23 @@ def create_channel(
         return row.channel_code
 
 
+def set_channel_mobile_defaults(
+    company_id: int, channel_code: str,
+    cost_center_detail_account_id: int | None, project_detail_account_id: int | None,
+) -> None:
+    """طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه تعیین
+    شود»): این دو مقدار پیش‌فرضِ ثابتِ همین کانال‌اند -- سفارش‌هایِ
+    ثبت‌شده از موبایل (بدونِ گزینه‌یِ انتخابِ دستی برایِ ویزیتور) هر بار
+    همین‌ها را در سرِسند می‌فرستند."""
+    with new_session() as session:
+        row = session.get(Channel, (channel_code, company_id))
+        if row is None:
+            raise ValueError("کانال یافت نشد.")
+        row.default_cost_center_detail_account_id = cost_center_detail_account_id
+        row.default_project_detail_account_id = project_detail_account_id
+        session.commit()
+
+
 # ---------------------------------------------------------------------
 # نوعِ تسویهٔ پخش -- طبقِ اصلاحِ صریحِ کاربر: کاملاً مفهومی جدا از نوعِ
 # تسویه/روشِ دریافتِ خزانه‌داری («تسویهٔ نقدیِ پایِ بار»، «تسویهٔ چک»،

@@ -21,6 +21,12 @@ interface Props {
   channelCode: string;
   warehouseId: number;
   currencyId: number;
+  /** طبقِ درخواستِ صریحِ کاربر («در تنظیماتِ موبایل مرکزِ هزینه/پروژه
+   * تعیین شود»): پیش‌فرضِ ثابتِ کانال (از GET /pricing/channels) --
+   * ویزیتور چیزی انتخاب نمی‌کند، فقط همین مقدار (اگر تنظیم شده باشد)
+   * در سرِسند فرستاده می‌شود. */
+  costCenterDetailAccountId: number | null;
+  projectDetailAccountId: number | null;
   customerVisitId: number | null;
   apiClient: ApiClient;
   offlineQueue: OfflineQueue;
@@ -43,7 +49,8 @@ interface Props {
  * (UI-4) فقط پوسته‌یِ بصری با Design System عوض شده، خودِ منطقِ
  * قیمت‌گذاری/ثبت دست‌نخورده مانده. */
 export function OrderScreen({
-  customer, items, channelTypeCode, channelCode, warehouseId, currencyId, customerVisitId,
+  customer, items, channelTypeCode, channelCode, warehouseId, currencyId,
+  costCenterDetailAccountId, projectDetailAccountId, customerVisitId,
   apiClient, offlineQueue, captureProvider, locationProvider, onSubmitted,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
@@ -102,6 +109,8 @@ export function OrderScreen({
       currency_id: currencyId,
       lines: orderLines,
       post_immediately: documentTypeCode === "SALES_INVOICE",
+      cost_center_detail_account_id: costCenterDetailAccountId,
+      project_detail_account_id: projectDetailAccountId,
     };
 
     setSubmitting(true);

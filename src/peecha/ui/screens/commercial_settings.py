@@ -641,6 +641,27 @@ class _ChannelsTab(QWidget):
         self.list_label.setWordWrap(True)
         layout.addWidget(self.list_label)
 
+        # طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه تعیین
+        # شود»): سفارش‌هایِ ثبت‌شده از موبایل (پخشِ گرم) اگر به حسابی با
+        # مرکزِ هزینه/پروژهٔ الزامی پست شوند، بدونِ این پیش‌فرض با خطایِ
+        # حسابداری رد می‌شوند (چون ویزیتور در محل چیزی انتخاب نمی‌کند).
+        defaults_title = QLabel("پیش‌فرضِ سفارشِ موبایل برایِ یک کانال")
+        defaults_title.setObjectName("sectionHint")
+        layout.addWidget(defaults_title)
+
+        defaults_form = QHBoxLayout()
+        self.defaults_channel_combo = QComboBox()
+        self.defaults_channel_combo.currentIndexChanged.connect(self._load_channel_defaults)
+        defaults_form.addWidget(self.defaults_channel_combo)
+        self.defaults_cost_center_combo = QComboBox()
+        defaults_form.addWidget(self.defaults_cost_center_combo)
+        self.defaults_project_combo = QComboBox()
+        defaults_form.addWidget(self.defaults_project_combo)
+        save_defaults_button = QPushButton("ذخیره")
+        save_defaults_button.clicked.connect(self._save_channel_defaults)
+        defaults_form.addWidget(save_defaults_button)
+        layout.addLayout(defaults_form)
+
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
@@ -656,6 +677,57 @@ class _ChannelsTab(QWidget):
             or "هنوز کانالی تعریف نشده است."
         )
         self.status_label.setText("")
+
+        current_channel = self.defaults_channel_combo.currentData()
+        self.defaults_channel_combo.blockSignals(True)
+        self.defaults_channel_combo.clear()
+        for ch in channels:
+            self.defaults_channel_combo.addItem(f"{ch.channel_code} — {ch.name}", ch.channel_code)
+        if current_channel is not None:
+            index = self.defaults_channel_combo.findData(current_channel)
+            if index >= 0:
+                self.defaults_channel_combo.setCurrentIndex(index)
+        self.defaults_channel_combo.blockSignals(False)
+
+        cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
+        project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+        cost_center_options = dimensions_service.list_leaf_detail_accounts(company_id, cost_center_type_id)
+        project_options = dimensions_service.list_leaf_detail_accounts(company_id, project_type_id)
+        self.defaults_cost_center_combo.clear()
+        self.defaults_cost_center_combo.addItem("(بدونِ مرکزِ هزینه)", None)
+        for opt in cost_center_options:
+            self.defaults_cost_center_combo.addItem(opt.name or opt.code, opt.detail_account_id)
+        self.defaults_project_combo.clear()
+        self.defaults_project_combo.addItem("(بدونِ پروژه)", None)
+        for opt in project_options:
+            self.defaults_project_combo.addItem(opt.name or opt.code, opt.detail_account_id)
+
+        self._load_channel_defaults()
+
+    def _load_channel_defaults(self) -> None:
+        company_id = _company_id()
+        channel_code = self.defaults_channel_combo.currentData()
+        if company_id is None or channel_code is None:
+            return
+        channel = next((c for c in pricing_service.list_channels(company_id) if c.channel_code == channel_code), None)
+        if channel is None:
+            return
+        cc_index = self.defaults_cost_center_combo.findData(channel.default_cost_center_detail_account_id)
+        self.defaults_cost_center_combo.setCurrentIndex(max(0, cc_index))
+        project_index = self.defaults_project_combo.findData(channel.default_project_detail_account_id)
+        self.defaults_project_combo.setCurrentIndex(max(0, project_index))
+
+    def _save_channel_defaults(self) -> None:
+        company_id = _company_id()
+        channel_code = self.defaults_channel_combo.currentData()
+        if company_id is None or channel_code is None:
+            self.status_label.setText("ابتدا یک کانال انتخاب کنید.")
+            return
+        pricing_service.set_channel_mobile_defaults(
+            company_id, channel_code,
+            self.defaults_cost_center_combo.currentData(), self.defaults_project_combo.currentData(),
+        )
+        self.status_label.setText("پیش‌فرضِ موبایلِ این کانال ذخیره شد.")
 
     def _add(self) -> None:
         company_id = _company_id()

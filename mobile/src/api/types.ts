@@ -59,6 +59,8 @@ export interface ChannelRow {
   channel_code: string;
   name: string;
   channel_type_code: string;
+  default_cost_center_detail_account_id: number | null;
+  default_project_detail_account_id: number | null;
 }
 
 export interface WarehouseRow {
@@ -83,6 +85,8 @@ export interface OrderCreateRequest {
   channel_code: string;
   post_immediately: boolean;
   lines: OrderLineInput[];
+  cost_center_detail_account_id?: number | null;
+  project_detail_account_id?: number | null;
 }
 
 export interface OrderCreateResponse {

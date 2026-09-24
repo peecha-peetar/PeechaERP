@@ -109,6 +109,11 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   // طبقِ باگِ واقعیِ دومِ کشف‌شده (R198، هم‌الگو با بالا): warehouse_id=1
   // در بسیاری از شرکت‌ها اصلاً وجود ندارد.
   const [defaultWarehouseId, setDefaultWarehouseId] = useState<number | null | undefined>(undefined);
+  // طبقِ درخواستِ صریحِ کاربر («در تنظیماتِ موبایل مرکزِ هزینه/پروژه
+  // تعیین شود»): پیش‌فرضِ ثابتِ همان کانالِ VAN_SALES -- null یعنی
+  // تنظیم نشده (بدونِ مرکزِ هزینه/پروژه فرستاده می‌شود، هم‌مثلِ قبل).
+  const [vanSalesCostCenterId, setVanSalesCostCenterId] = useState<number | null | undefined>(undefined);
+  const [vanSalesProjectId, setVanSalesProjectId] = useState<number | null | undefined>(undefined);
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
@@ -120,8 +125,17 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     if (!loggedIn) return;
     services.apiClient
       .listChannels("VAN_SALES")
-      .then((channels) => setVanSalesChannelCode(channels[0]?.channel_code ?? null))
-      .catch(() => setVanSalesChannelCode(null));
+      .then((channels) => {
+        const channel = channels[0];
+        setVanSalesChannelCode(channel?.channel_code ?? null);
+        setVanSalesCostCenterId(channel?.default_cost_center_detail_account_id ?? null);
+        setVanSalesProjectId(channel?.default_project_detail_account_id ?? null);
+      })
+      .catch(() => {
+        setVanSalesChannelCode(null);
+        setVanSalesCostCenterId(null);
+        setVanSalesProjectId(null);
+      });
     services.apiClient
       .listWarehouses()
       .then((warehouses) => {
@@ -279,6 +293,8 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   channelCode={vanSalesChannelCode}
                   warehouseId={defaultWarehouseId}
                   currencyId={1}
+                  costCenterDetailAccountId={vanSalesCostCenterId ?? null}
+                  projectDetailAccountId={vanSalesProjectId ?? null}
                   customerVisitId={null}
                   apiClient={services.apiClient}
                   offlineQueue={services.offlineQueue}

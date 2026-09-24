@@ -65,6 +65,11 @@ class Channel(Base):
     channel_type_code: Mapped[str] = mapped_column(String(15))  # POS|WHOLESALE|ONLINE|AGENT|MARKETPLACE|VAN_SALES|PRE_SALES
     default_price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
     default_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    # طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه تعیین
+    # شود»): پیش‌فرضِ ثابتِ این کانال برایِ سفارش‌هایِ ثبت‌شده از موبایل --
+    # وقتی حسابِ نقش‌محورِ سند این دو بُعد را الزامی کرده باشد.
+    default_cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    default_project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     is_active: Mapped[bool] = mapped_column(default=True)
 
 
