@@ -29,7 +29,7 @@ from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import FORM_CUSTOMER_MANAGEMENT, require_permission
-from peecha_api.schemas import CustomerCreateRequest, CustomerRejectRequest
+from peecha_api.schemas import CustomerCreateRequest, CustomerRejectRequest, PartyAddressRequest
 
 _TEMP_UPLOAD_DIR = SETTINGS_DIR / "mobile_uploads_tmp"
 
@@ -49,6 +49,26 @@ def list_customers(q: str | None = None, ctx: AuthContext = Depends(get_current_
     return [
         {"detail_account_id": c["detail_account_id"], "code": c["code"], "name": c["name"], "phone": c.get("phone")}
         for c in customers
+    ]
+
+
+@router.get("/duplicate-check")
+def duplicate_check(
+    name: str | None = None, mobile: str | None = None, phone: str | None = None,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "CREATE")),
+) -> list[dict]:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۱۶): پیش از ثبتِ
+    نهاییِ فرمِ «مشتریِ جدید»یِ موبایل صدا زده می‌شود -- فقط وقتی آنلاین
+    است (خودِ اقدامِ ثبت هم‌چنان آفلاین کار می‌کند، این فقط یک هشدارِ
+    اختیاریِ پیش از ارسال است)."""
+    matches = partners_service.find_duplicate_customers(ctx.company_id, name=name, mobile=mobile, phone=phone)
+    return [
+        {
+            "detail_account_id": m["detail_account_id"], "code": m["code"], "name": m["name"],
+            "mobile": m.get("mobile"), "phone": m.get("phone"), "address": m.get("address"),
+            "match_reasons": m["match_reasons"],
+        }
+        for m in matches
     ]
 
 
@@ -112,6 +132,8 @@ def get_customer_detail(
         "mobile": customer.get("mobile"),
         "address": customer.get("address"),
         "notes": customer.get("notes"),
+        "customer_type_code": customer.get("customer_type_code"),
+        "customer_class": customer.get("customer_class"),
         "status_code": profile.status_code if profile else None,
         "customer_group_id": profile.customer_group_id if profile else None,
         "credit_limit_amount": str(profile.credit_limit_amount) if profile else None,
@@ -198,6 +220,10 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[
         extra_fields["address"] = payload.address
     if payload.notes:
         extra_fields["notes"] = payload.notes
+    if payload.customer_type_code:
+        extra_fields["customer_type_code"] = payload.customer_type_code
+    if payload.customer_class:
+        extra_fields["customer_class"] = payload.customer_class
     try:
         detail_account_id = partners_service.create_customer(
             ctx.company_id, code, payload.name, fields=fields,
@@ -262,3 +288,91 @@ def reject_customer(
         {"source": "mobile", "action": "reject", "reason": payload.reason},
     )
     return {"detail_account_id": detail_account_id, "status_code": "INACTIVE"}
+
+
+def _ensure_customer_in_company(detail_account_id: int, company_id: int) -> None:
+    customers_by_id = {c["detail_account_id"]: c for c in dimensions_service.list_customers(company_id)}
+    if detail_account_id not in customers_by_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="مشتری یافت نشد.")
+
+
+def _address_to_dict(a) -> dict:
+    return {
+        "address_id": a.address_id, "address_type_code": a.address_type_code, "line1": a.line1, "city": a.city,
+        "province": a.province, "postal_code": a.postal_code, "is_default": a.is_default,
+        "gps_latitude": str(a.gps_latitude) if a.gps_latitude is not None else None,
+        "gps_longitude": str(a.gps_longitude) if a.gps_longitude is not None else None,
+        "geofence_radius_meters": a.geofence_radius_meters,
+    }
+
+
+@router.get("/{detail_account_id}/addresses")
+def list_customer_addresses(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۲ -- چندآدرسیِ
+    واقعی + GeoFence): برخلافِ فیلدِ تکیِ address/gps_latitude رویِ خودِ
+    مشتری (که هم‌چنان برایِ سازگاریِ عقب‌رو باقی می‌ماند)، این‌جا آدرسِ
+    چندگانه با نوع (دفتر/فروشگاه/انبار/تحویل/صورتحساب/مرجوعی) و
+    GPS/شعاعِ GeoFendِ مستقلِ هر آدرس برمی‌گردد."""
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    return [_address_to_dict(a) for a in partners_service.list_party_addresses(detail_account_id)]
+
+
+@router.post("/{detail_account_id}/addresses")
+def create_customer_address(
+    detail_account_id: int, payload: PartyAddressRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        address_id = partners_service.add_party_address(
+            detail_account_id, payload.address_type_code, payload.line1, city=payload.city,
+            province=payload.province, postal_code=payload.postal_code, is_default=payload.is_default,
+            gps_latitude=payload.gps_latitude, gps_longitude=payload.gps_longitude,
+            geofence_radius_meters=payload.geofence_radius_meters,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "PartyAddress", address_id, "CREATE",
+        {"source": "mobile", "customer_detail_account_id": detail_account_id, "address_type_code": payload.address_type_code},
+    )
+    return {"address_id": address_id}
+
+
+@router.put("/{detail_account_id}/addresses/{address_id}")
+def update_customer_address(
+    detail_account_id: int, address_id: int, payload: PartyAddressRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        partners_service.update_party_address(
+            address_id, detail_account_id, payload.address_type_code, payload.line1, city=payload.city,
+            province=payload.province, postal_code=payload.postal_code, is_default=payload.is_default,
+            gps_latitude=payload.gps_latitude, gps_longitude=payload.gps_longitude,
+            geofence_radius_meters=payload.geofence_radius_meters,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "PartyAddress", address_id, "UPDATE",
+        {"source": "mobile", "customer_detail_account_id": detail_account_id},
+    )
+    return {"address_id": address_id}
+
+
+@router.delete("/{detail_account_id}/addresses/{address_id}")
+def delete_customer_address(
+    detail_account_id: int, address_id: int,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        partners_service.delete_party_address(address_id, detail_account_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "PartyAddress", address_id, "DELETE",
+        {"source": "mobile", "customer_detail_account_id": detail_account_id},
+    )
+    return {"address_id": address_id}

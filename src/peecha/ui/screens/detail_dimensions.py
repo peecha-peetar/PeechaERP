@@ -90,6 +90,15 @@ _ITEM_EXTRA_COLUMNS = ["نوع", "واحدِ پایه", "وضعیتِ چرخهٔ
 # طبقِ گزارشِ صریح («نوعِ حساب جاری/پس‌انداز») — گزینه‌هایِ ثابتِ کیندِ
 # «account_type»یِ فیلدهایِ اختصاصی (فقط برایِ BANK_ACCOUNT کاربرد دارد).
 _ACCOUNT_TYPE_OPTIONS = ["جاری", "پس‌انداز"]
+# طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۱): گزینه‌هایِ ثابتِ
+# فیلدهایِ هویتیِ تکمیلی -- کمبویِ کدنویسی‌شده (نه از DB)، هم‌الگو با
+# _ACCOUNT_TYPE_OPTIONS بالا.
+_CUSTOMER_TYPE_OPTIONS = [
+    ("INDIVIDUAL", "شخص"), ("COMPANY", "شرکت"), ("STORE", "فروشگاه"), ("ORGANIZATION", "سازمان"),
+    ("WHOLESALER", "عمده‌فروش"), ("RETAILER", "خرده‌فروش"), ("AGENT", "نماینده"), ("ONLINE", "مشتریِ آنلاین"),
+]
+_PERSON_TYPE_OPTIONS = [("NATURAL", "حقیقی"), ("LEGAL", "حقوقی")]
+_CUSTOMER_CLASS_OPTIONS = [("A", "A"), ("B", "B"), ("C", "C"), ("D", "D")]
 _EMPLOYEE_STATUS_LABELS = {"ACTIVE": "فعال", "ON_LEAVE": "مرخصی", "TERMINATED": "پایان‌یافته"}
 # طبقِ یکپارچه‌سازیِ مشتری/تامین‌کننده در فرمِ تفصیلی (مرحلهٔ بازرگانی):
 # وضعیتِ گردشِ کارِ تاییدِ اعتباری (comm.customer_profiles/supplier_profiles.status_code).
@@ -123,6 +132,10 @@ _PERSON_FIELD_LABELS = {
     "credit_limit_amount": "سقفِ اعتبار (بازرگانی)",
     "is_tax_exempt": "معافِ مالیاتی",
     "distribution_route_detail_account_id": "مسیرِ توزیع",
+    "customer_type_code": "نوعِ مشتری",
+    "person_type_code": "نوعِ شخصیت",
+    "customer_class": "طبقه‌یِ مشتری",
+    "geographic_region": "منطقه‌یِ جغرافیایی",
 }
 
 # طبقِ یکپارچه‌سازیِ «تعریفِ کارمند فقط از طریقِ تفصیلی»: این کمبوها
@@ -157,6 +170,9 @@ _PERSON_COMBO_LOADERS = {
     (dimensions_service.SUPPLIER_GROUP_CODE, "default_price_list_id"): lambda company_id: [
         (pl.price_list_id, f"{pl.code} — {pl.name}") for pl in pricing_service.list_price_lists(company_id, "PURCHASE")
     ],
+    "customer_type_code": lambda company_id: _CUSTOMER_TYPE_OPTIONS,
+    "person_type_code": lambda company_id: _PERSON_TYPE_OPTIONS,
+    "customer_class": lambda company_id: _CUSTOMER_CLASS_OPTIONS,
 }
 
 # طبقِ گزارشِ صریح («وقتی گروهِ پرسنل چند سطح دارد، فقط آخرین سطح باید
@@ -178,6 +194,8 @@ _PERSON_GROUP_META = {
     # را می‌سازند/به‌روزرسانی می‌کنند.
     dimensions_service.CUSTOMER_GROUP_CODE: {
         "field_specs": (
+            ("customer_type_code", "combo"), ("person_type_code", "combo"), ("customer_class", "combo"),
+            ("geographic_region", "text"),
             ("economic_code", "text"), ("national_id", "text"), ("phone", "text"), ("mobile", "text"),
             ("address", "text"), ("customer_group_id", "combo"), ("default_price_list_id", "combo"),
             ("default_channel_code", "combo"), ("payment_term_days", "decimal"), ("credit_limit_amount", "decimal"),

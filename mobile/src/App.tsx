@@ -11,6 +11,7 @@ import { ExpoLocationProvider, LocationProvider } from "./location";
 import { AppBar, BottomNav, BottomNavKey, EmptyState, InlineSpinner, SyncStatus, ToastProvider } from "./components";
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
+import { CustomerAddressesScreen } from "./screens/CustomerAddressesScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
 import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
@@ -66,6 +67,7 @@ export type RootStackParamList = {
   VisitDetail: { customer: CustomerRow; visitPlan: VisitPlanRow };
   OrderForm: { customer: CustomerRow };
   CustomerDetail: { detailAccountId: number };
+  CustomerAddresses: { detailAccountId: number };
   NewCustomer: undefined;
   CollectPayment: { customer: CustomerRow };
   Notifications: undefined;
@@ -468,6 +470,20 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 vanSales={selectedMode === "VAN_SALES"}
                 salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
                 isManager={isManager}
+                onOpenAddresses={() => navigation.navigate("CustomerAddresses", { detailAccountId: route.params.detailAccountId })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="CustomerAddresses">
+          {({ route, navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <CustomerAddressesScreen
+                apiClient={services.apiClient}
+                locationProvider={locationProvider}
+                detailAccountId={route.params.detailAccountId}
+                onBack={() => navigation.navigate("CustomerDetail", { detailAccountId: route.params.detailAccountId })}
               />
             </SafeAreaView>
           )}
@@ -482,6 +498,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 locationProvider={locationProvider}
                 captureProvider={resolvedCaptureProvider}
                 onDone={() => navigation.navigate("Main", { screen: "CUSTOMERS" })}
+                onOpenCustomer={(detailAccountId) => navigation.navigate("CustomerDetail", { detailAccountId })}
               />
             </SafeAreaView>
           )}

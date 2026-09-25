@@ -288,6 +288,8 @@ export interface CustomerDetailResponse {
   mobile: string | null;
   address: string | null;
   notes: string | null;
+  customer_type_code: string | null;
+  customer_class: string | null;
   status_code: string | null;
   customer_group_id: number | null;
   credit_limit_amount: string | null;
@@ -317,6 +319,8 @@ export interface CustomerCreateRequest {
   photo_base64?: string | null;
   gps_latitude?: number | null;
   gps_longitude?: number | null;
+  customer_type_code?: string | null;
+  customer_class?: string | null;
 }
 
 export interface CustomerCreateResponse {
@@ -334,6 +338,43 @@ export interface CustomerGroupRow {
 export interface NewCustomerFormOptions {
   suggested_code: string;
   groups: CustomerGroupRow[];
+}
+
+export interface DuplicateCustomerRow {
+  detail_account_id: number;
+  code: string;
+  name: string;
+  mobile: string | null;
+  phone: string | null;
+  address: string | null;
+  match_reasons: string[];
+}
+
+/** طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۲ -- چندآدرسیِ واقعی
+ * + GeoFence). */
+export interface PartyAddressRow {
+  address_id: number;
+  address_type_code: "OFFICE" | "STORE" | "WAREHOUSE" | "DELIVERY" | "BILLING" | "RETURN";
+  line1: string;
+  city: string | null;
+  province: string | null;
+  postal_code: string | null;
+  is_default: boolean;
+  gps_latitude: string | null;
+  gps_longitude: string | null;
+  geofence_radius_meters: number | null;
+}
+
+export interface PartyAddressRequest {
+  address_type_code: string;
+  line1: string;
+  city?: string | null;
+  province?: string | null;
+  postal_code?: string | null;
+  is_default?: boolean;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
+  geofence_radius_meters?: number | null;
 }
 
 export interface CustomerApprovalResponse {

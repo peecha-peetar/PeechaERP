@@ -169,6 +169,26 @@ class CustomerCreateRequest(BaseModel):
     photo_base64: str | None = None
     gps_latitude: decimal.Decimal | None = None
     gps_longitude: decimal.Decimal | None = None
+    # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۱): فقط دو فیلدِ
+    # عملیاتاً پراستفاده‌ترین برایِ ثبتِ سریعِ موبایل (نوع/طبقه) -- نوعِ
+    # شخصیت و منطقه‌یِ جغرافیایی فعلاً فقط از دسکتاپ قابلِ‌ویرایش‌اند.
+    customer_type_code: str | None = None
+    customer_class: str | None = None
+
+
+class PartyAddressRequest(BaseModel):
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۲ -- چندآدرسیِ
+    واقعی + GeoFence)."""
+
+    address_type_code: str  # OFFICE|STORE|WAREHOUSE|DELIVERY|BILLING|RETURN
+    line1: str
+    city: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+    is_default: bool = False
+    gps_latitude: decimal.Decimal | None = None
+    gps_longitude: decimal.Decimal | None = None
+    geofence_radius_meters: int | None = None
 
 
 class CustomerRejectRequest(BaseModel):

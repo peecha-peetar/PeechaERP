@@ -264,7 +264,10 @@ def set_customer_credit_limit(customer_detail_account_id: int, credit_limit_amou
 # (اقتصادی/ملی/تماس) و فیلدهایِ CustomerProfileِ بازرگانی، هردو از یک
 # فرمِ واحد ذخیره می‌شوند.
 # ---------------------------------------------------------------------
-_CUSTOMER_DETAIL_FIELD_KEYS = ("economic_code", "national_id", "phone", "mobile", "address", "notes")
+_CUSTOMER_DETAIL_FIELD_KEYS = (
+    "economic_code", "national_id", "phone", "mobile", "address", "notes",
+    "customer_type_code", "person_type_code", "customer_class", "geographic_region",
+)
 _CUSTOMER_PROFILE_FIELD_KEYS = (
     "customer_group_id", "default_price_list_id", "default_channel_code", "payment_term_days",
     "credit_limit_amount", "is_tax_exempt", "distribution_route_detail_account_id",
@@ -279,6 +282,39 @@ def _split_customer_fields(person_fields: dict) -> tuple[dict, dict]:
     profile_fields["credit_limit_amount"] = profile_fields["credit_limit_amount"] or 0
     profile_fields["is_tax_exempt"] = bool(profile_fields["is_tax_exempt"])
     return detail_fields, profile_fields
+
+
+def find_duplicate_customers(
+    company_id: int, name: str | None = None, mobile: str | None = None, phone: str | None = None, limit: int = 5,
+) -> list[dict]:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R216، بخشِ ۱۶ -- تشخیصِ مشتریِ
+    تکراری): برایِ فرمِ ثبتِ سریعِ موبایل، پیش از ارسالِ واقعی -- موبایل/
+    تلفنِ یکسان (بعدِ نرمال‌سازیِ ارقامِ فارسی) یا نامِ مشابه (زیررشته‌ای،
+    غیرِحساس‌به‌بزرگی/کوچکی). ردِ ثبت نمی‌کند، فقط برایِ هشدار به کاربر
+    برمی‌گردد -- تصمیمِ نهایی (ادامه یا مشاهده‌یِ مشتریِ موجود) با خودِ کاربر است."""
+    from peecha import numerals
+
+    name_norm = (name or "").strip().lower()
+    mobile_norm = numerals.to_ascii_digits((mobile or "").strip())
+    phone_norm = numerals.to_ascii_digits((phone or "").strip())
+    if not name_norm and not mobile_norm and not phone_norm:
+        return []
+    matches = []
+    for row in dimensions_service.list_customers(company_id):
+        reasons = []
+        row_mobile = numerals.to_ascii_digits((row.get("mobile") or "").strip())
+        row_phone = numerals.to_ascii_digits((row.get("phone") or "").strip())
+        row_name = (row.get("name") or "").strip().lower()
+        if mobile_norm and row_mobile and row_mobile == mobile_norm:
+            reasons.append("موبایلِ یکسان")
+        if phone_norm and row_phone and row_phone == phone_norm:
+            reasons.append("تلفنِ یکسان")
+        if name_norm and row_name and (row_name == name_norm or name_norm in row_name or row_name in name_norm):
+            reasons.append("نامِ مشابه")
+        if reasons:
+            matches.append({**row, "match_reasons": reasons})
+    matches.sort(key=lambda r: len(r["match_reasons"]), reverse=True)
+    return matches[:limit]
 
 
 def list_customer_detail_accounts(company_id: int) -> list[dict]:
@@ -532,11 +568,16 @@ def list_party_addresses(party_detail_account_id: int) -> list[PartyAddress]:
         )
 
 
+_PARTY_ADDRESS_TYPES = ("OFFICE", "STORE", "WAREHOUSE", "DELIVERY", "BILLING", "RETURN")
+
+
 def add_party_address(
     party_detail_account_id: int, address_type_code: str, line1: str, city: str | None = None,
     province: str | None = None, postal_code: str | None = None, is_default: bool = False,
+    gps_latitude: "decimal.Decimal | None" = None, gps_longitude: "decimal.Decimal | None" = None,
+    geofence_radius_meters: int | None = None,
 ) -> int:
-    if address_type_code not in ("BILLING", "SHIPPING", "PICKUP"):
+    if address_type_code not in _PARTY_ADDRESS_TYPES:
         raise ValueError("نوعِ آدرس نامعتبر است.")
     with new_session() as session:
         if is_default:
@@ -548,10 +589,50 @@ def add_party_address(
         row = PartyAddress(
             party_detail_account_id=party_detail_account_id, address_type_code=address_type_code, line1=line1,
             city=city, province=province, postal_code=postal_code, is_default=is_default,
+            gps_latitude=gps_latitude, gps_longitude=gps_longitude, geofence_radius_meters=geofence_radius_meters,
         )
         session.add(row)
         session.commit()
         return row.address_id
+
+
+def update_party_address(
+    address_id: int, party_detail_account_id: int, address_type_code: str, line1: str, city: str | None = None,
+    province: str | None = None, postal_code: str | None = None, is_default: bool = False,
+    gps_latitude: "decimal.Decimal | None" = None, gps_longitude: "decimal.Decimal | None" = None,
+    geofence_radius_meters: int | None = None,
+) -> None:
+    if address_type_code not in _PARTY_ADDRESS_TYPES:
+        raise ValueError("نوعِ آدرس نامعتبر است.")
+    with new_session() as session:
+        row = session.get(PartyAddress, address_id)
+        if row is None or row.party_detail_account_id != party_detail_account_id:
+            raise ValueError("آدرس نامعتبر است.")
+        if is_default and not row.is_default:
+            session.query(PartyAddress).filter(
+                PartyAddress.party_detail_account_id == party_detail_account_id,
+                PartyAddress.address_type_code == address_type_code,
+                PartyAddress.is_default.is_(True),
+            ).update({"is_default": False})
+        row.address_type_code = address_type_code
+        row.line1 = line1
+        row.city = city
+        row.province = province
+        row.postal_code = postal_code
+        row.is_default = is_default
+        row.gps_latitude = gps_latitude
+        row.gps_longitude = gps_longitude
+        row.geofence_radius_meters = geofence_radius_meters
+        session.commit()
+
+
+def delete_party_address(address_id: int, party_detail_account_id: int) -> None:
+    with new_session() as session:
+        row = session.get(PartyAddress, address_id)
+        if row is None or row.party_detail_account_id != party_detail_account_id:
+            raise ValueError("آدرس نامعتبر است.")
+        session.delete(row)
+        session.commit()
 
 
 def list_party_contacts(party_detail_account_id: int) -> list[PartyContact]:

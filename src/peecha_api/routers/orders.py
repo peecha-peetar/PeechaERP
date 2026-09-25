@@ -191,6 +191,12 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
             ]
             settlements_service.auto_approve_settlement_plan(document_id, ctx.company_id, ctx.user_id, settlement_lines)
         documents_service.post_document(document_id, ctx.company_id, ctx.user_id)
+        # طبقِ باگِ واقعیِ کشف‌شده («سقفِ اعتبار فقط برایِ SALES_ORDER بررسی
+        # می‌شود، هرگز برایِ فاکتور»): بعدِ ثبتِ‌نهایی (نه پیش از آن -- بنگرید
+        # توضیحِ check_settlement_credit_exposure) -- کالا فیزیکاً تحویل
+        # شده، پس فروش هرگز رد نمی‌شود؛ فقط برایِ آگاهیِ مدیر هُلد می‌سازد.
+        if settlements_service.check_settlement_credit_exposure(document_id, ctx.company_id, ctx.user_id):
+            settlement_warning = "این فاکتور از سقفِ اعتبارِ مشتری عبور کرده -- برایِ بررسیِ مدیر علامت‌گذاری شد."
         # طبقِ رفعِ کمبودِ واقعی: قبلاً فقط «نقشه‌یِ» تسویه ذخیره می‌شد و هیچ
         # سندِ دریافتِ واقعی/چکی در خزانه ثبت نمی‌شد. حالا دقیقاً هم‌الگو با
         # تاییدِ سرپرستِ POS در دسکتاپ (commercial_pos_approval.py): پس از

@@ -29,6 +29,7 @@ from peecha.db.models.commercial import (
     SettlementAlarmSettings,
     SupplierProfile,
 )
+from peecha.services import commercial_credit as credit_service
 from peecha.services import roles as roles_service
 
 _ZERO = decimal.Decimal("0")
@@ -451,6 +452,46 @@ def approve_settlement_plan(document_id: int, company_id: int, approved_by_user_
         plan.approved_by_user_id = approved_by_user_id
         plan.approved_at = datetime.datetime.now()
         session.commit()
+    # طبقِ باگِ واقعیِ کشف‌شده («سقفِ اعتبار فقط برایِ SALES_ORDER بررسی
+    # می‌شود، هرگز برایِ فاکتور»): این‌جا (تاییدِ دستیِ مدیر در دسکتاپ،
+    # پیش از ثبتِ‌نهایی) هم‌الگو با SALES_ORDER عمل می‌کند -- اگر مواجهه
+    # از سقف عبور کند، CreditHold می‌سازد تا ثبتِ‌نهایی (post_document)
+    # تا آزادسازیِ آن مسدود بماند. برایِ مسیرِ خودکارِ پخشِ گرم (پایینِ
+    # همین فایل) عمداً این‌جا صدا زده نمی‌شود -- بنگرید توضیحِ
+    # check_settlement_credit_exposure.
+    check_settlement_credit_exposure(document_id, company_id, approved_by_user_id)
+
+
+def check_settlement_credit_exposure(document_id: int, company_id: int, checked_by_user_id: int) -> bool:
+    """بخشِ نسیه‌یِ همین فاکتور (remaining_on_credit) -- نه کلِ مبلغِ
+    فاکتور، چون بخشِ نقدی/کارت/چکِ همان‌لحظه اصلاً مواجهه نمی‌سازد -- در
+    برابرِ سقفِ اعتبار سنجیده می‌شود. ردِ ساده نمی‌کند، فقط CreditHold
+    می‌سازد (بازگشتِ True) تا مدیر بعداً آزادسازی کند؛ True/False فقط
+    برایِ نمایشِ هشدار به فراخوان است.
+
+    طبقِ اصلِ صریح («هرگز فروشِ واقعی را برایِ نبودِ تنظیمات/محدودیت رد
+    نکن»): در پخشِ گرم (پیش‌فاکتورِ اپِ موبایل)، این تابع عمداً *بعدِ*
+    ثبتِ‌نهاییِ فاکتور صدا زده می‌شود (peecha_api.routers.orders) -- نه
+    داخلِ auto_approve_settlement_plan پیش از post_document -- چون کالا
+    همان لحظه فیزیکاً از خودرو تحویل شده؛ مسدودکردنِ ثبتِ‌نهایی یعنی ردِ
+    یک فروشِ واقعاً انجام‌شده. هُلد همچنان ساخته می‌شود تا مدیر آگاه شود،
+    فقط این فاکتورِ خاص را دیگر مسدود نمی‌کند (چون در لحظه‌یِ ساختنِ هُلد
+    سند از قبل POSTED است)."""
+    plan = get_settlement_plan(document_id, company_id)
+    if plan is None or plan.remaining_on_credit <= _ZERO:
+        return False
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None:
+            return False
+        counterparty_id = doc.counterparty_detail_account_id
+    if not credit_service.check_credit_exposure(company_id, counterparty_id, plan.remaining_on_credit):
+        return False
+    credit_service.create_credit_hold(
+        counterparty_id, f"عبور از سقفِ اعتبار در بخشِ نسیه‌یِ فاکتور #{document_id}", checked_by_user_id,
+        related_document_id=document_id,
+    )
+    return True
 
 
 def require_approved_settlement_plan(document_id: int, company_id: int) -> SettlementPlan:

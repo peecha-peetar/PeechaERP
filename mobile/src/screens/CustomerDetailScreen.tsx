@@ -29,7 +29,14 @@ interface Props {
   /** طبقِ درخواستِ صریحِ کاربر («تاییدِ مشتری، داشبوردِ سرپرست»): دکمه‌هایِ
    * تایید/ردِ مشتریِ درانتظار فقط برایِ سرپرست نمایش داده می‌شوند. */
   isManager?: boolean;
+  /** طبقِ چندآدرسیِ واقعی + GeoFence (R216، بخشِ ۲). */
+  onOpenAddresses: () => void;
 }
+
+const CUSTOMER_TYPE_LABELS: Record<string, string> = {
+  INDIVIDUAL: "شخص", COMPANY: "شرکت", STORE: "فروشگاه", ORGANIZATION: "سازمان",
+  WHOLESALER: "عمده‌فروش", RETAILER: "خرده‌فروش", AGENT: "نماینده", ONLINE: "مشتریِ آنلاین",
+};
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "فعال",
@@ -55,6 +62,7 @@ export function CustomerDetailScreen({
   vanSales,
   salesMode,
   isManager,
+  onOpenAddresses,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
@@ -181,6 +189,16 @@ export function CustomerDetailScreen({
         {detail.mobile ? (
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>موبایل: {detail.mobile}</Text>
         ) : null}
+        {detail.customer_type_code || detail.customer_class ? (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+            {[
+              detail.customer_type_code ? CUSTOMER_TYPE_LABELS[detail.customer_type_code] ?? detail.customer_type_code : null,
+              detail.customer_class ? `طبقه‌یِ ${detail.customer_class}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+        ) : null}
         {detail.notes ? (
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>یادداشت: {detail.notes}</Text>
         ) : null}
@@ -243,6 +261,7 @@ export function CustomerDetailScreen({
         {detail.gps_latitude || detail.address ? (
           <Button label="مسیریابی" fullWidth={false} variant="ghost" onPress={navigateToCustomer} />
         ) : null}
+        <Button label="آدرس‌ها" fullWidth={false} variant="ghost" onPress={onOpenAddresses} />
       </View>
       {!collectionOnly && !vanSales && visitPlan === null ? (
         <Text style={[typography.caption, { color: colors.textSecondary }]}>این مشتری برنامه‌یِ ویزیتِ ثبت‌شده‌ای ندارد.</Text>

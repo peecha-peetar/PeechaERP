@@ -7,6 +7,7 @@ import {
   CustomerDetailResponse,
   CustomerListRow,
   DebtorRow,
+  DuplicateCustomerRow,
   DeliveryConfirmationRequest,
   DeliveryConfirmationResponse,
   LoginResponse,
@@ -14,6 +15,8 @@ import {
   MeResponse,
   NewCustomerFormOptions,
   NotificationRow,
+  PartyAddressRequest,
+  PartyAddressRow,
   TodayCollectionRow,
   OrderCreateRequest,
   OrderCreateResponse,
@@ -191,6 +194,16 @@ export class ApiClient {
     return this.request<NewCustomerFormOptions>("/customers/new-form-options");
   }
 
+  /** طبقِ تشخیصِ مشتریِ تکراری (R216) -- فقط یک هشدارِ اختیاریِ پیش از
+   * ارسال؛ خطایِ شبکه/آفلاین باید بی‌صدا نادیده گرفته شود (فراخوان‌کننده). */
+  async checkDuplicateCustomers(params: { name?: string; mobile?: string; phone?: string }): Promise<DuplicateCustomerRow[]> {
+    const query = new URLSearchParams();
+    if (params.name) query.set("name", params.name);
+    if (params.mobile) query.set("mobile", params.mobile);
+    if (params.phone) query.set("phone", params.phone);
+    return this.request<DuplicateCustomerRow[]>(`/customers/duplicate-check?${query.toString()}`);
+  }
+
   async createCustomer(payload: CustomerCreateRequest, idempotencyKey?: string): Promise<CustomerCreateResponse> {
     return this.request<CustomerCreateResponse>("/customers", { method: "POST", body: payload, idempotencyKey });
   }
@@ -204,6 +217,18 @@ export class ApiClient {
       method: "POST",
       body: { reason },
     });
+  }
+
+  async listCustomerAddresses(detailAccountId: number): Promise<PartyAddressRow[]> {
+    return this.request<PartyAddressRow[]>(`/customers/${detailAccountId}/addresses`);
+  }
+
+  async createCustomerAddress(detailAccountId: number, payload: PartyAddressRequest): Promise<{ address_id: number }> {
+    return this.request<{ address_id: number }>(`/customers/${detailAccountId}/addresses`, { method: "POST", body: payload });
+  }
+
+  async deleteCustomerAddress(detailAccountId: number, addressId: number): Promise<void> {
+    await this.request<void>(`/customers/${detailAccountId}/addresses/${addressId}`, { method: "DELETE" });
   }
 
   async listNotifications(unreadOnly = false): Promise<NotificationRow[]> {

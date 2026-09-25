@@ -699,12 +699,15 @@ class PartyAddress(Base):
 
     address_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     party_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
-    address_type_code: Mapped[str] = mapped_column(String(15))  # BILLING|SHIPPING|PICKUP
+    address_type_code: Mapped[str] = mapped_column(String(15))  # OFFICE|STORE|WAREHOUSE|DELIVERY|BILLING|RETURN
     line1: Mapped[str] = mapped_column(String(300))
     city: Mapped[str | None] = mapped_column(String(100))
     province: Mapped[str | None] = mapped_column(String(100))
     postal_code: Mapped[str | None] = mapped_column(String(20))
     is_default: Mapped[bool] = mapped_column(default=False)
+    gps_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    gps_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
+    geofence_radius_meters: Mapped[int | None]
 
 
 class PartyContact(Base):

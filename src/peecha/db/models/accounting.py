@@ -332,6 +332,10 @@ class CustomerDetail(Base):
     address: Mapped[str | None] = mapped_column(String(400))
     credit_limit: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
     notes: Mapped[str | None] = mapped_column(String(500))
+    customer_type_code: Mapped[str | None] = mapped_column(String(20))
+    person_type_code: Mapped[str | None] = mapped_column(String(10))
+    customer_class: Mapped[str | None] = mapped_column(String(1))
+    geographic_region: Mapped[str | None] = mapped_column(String(100))
 
 
 class SupplierDetail(Base):

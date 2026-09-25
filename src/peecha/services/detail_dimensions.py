@@ -1874,7 +1874,10 @@ def _delete_group_person(detail_account_id: int, company_id: int, detail_model) 
             raise ValueError("این شخص در جایِ دیگری استفاده شده و قابلِ حذف نیست.") from exc
 
 
-_CUSTOMER_FIELDS = ("economic_code", "national_id", "phone", "mobile", "address", "credit_limit", "notes")
+_CUSTOMER_FIELDS = (
+    "economic_code", "national_id", "phone", "mobile", "address", "credit_limit", "notes",
+    "customer_type_code", "person_type_code", "customer_class", "geographic_region",
+)
 _SUPPLIER_FIELDS = ("economic_code", "national_id", "phone", "mobile", "address", "bank_account_no", "notes")
 _PERSONNEL_FIELDS = (
     "national_id",
