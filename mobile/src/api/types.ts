@@ -159,6 +159,9 @@ export interface OrderLineInput {
   uom_id: number;
   quantity: string;
   unit_price: string;
+  /** طبقِ باگِ واقعیِ کشف‌شده (R210): قبلاً اصلاً فرستاده نمی‌شد -- پس
+   * تخفیفِ برگشته از GET /pricing/resolve همیشه گم می‌شد. */
+  discount_amount: string;
 }
 
 export interface OrderCreateRequest {
@@ -212,12 +215,16 @@ export interface PriceResolveRequest {
   uomId: number;
   quantity: string;
   documentTypeCode: "SALES_ORDER" | "SALES_INVOICE";
+  /** برایِ محاسبهٔ درصدِ مالیات با همان اولویتِ دسکتاپ (شرکت→انبار→کالا). */
+  warehouseId?: number | null;
 }
 
 export interface PriceResolveResponse {
   unit_price: string;
   source: "CONTRACT" | "PRICE_LIST";
   discount_amount: string;
+  /** فقط برایِ پیش‌نمایشِ محلی -- سرور هنگامِ ثبتِ سند دوباره تعیین می‌کند. */
+  tax_percent: string;
 }
 
 export interface NextVisitSummary {
@@ -383,6 +390,9 @@ export interface CatalogItem {
   default_tax_percent: string | null;
   /** null یعنی انبار مشخص نشده (موجودی نامعلوم). */
   stock_quantity: string | null;
+  /** JPEGِ کوچک‌شده‌یِ Base64 -- null یعنی این کالا عکسِ اصلی ندارد یا
+   * عکس برایِ گروهِ «کالا» در دسکتاپ فعال نیست. */
+  photo_base64: string | null;
 }
 
 export interface CatalogResponse {

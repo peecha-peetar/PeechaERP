@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
+from peecha.services import inventory_catalog as catalog_service
 from peecha.services import treasury as treasury_service
 from peecha_api.deps import AuthContext, get_current_context
 from peecha_api.schemas import PriceResolveResponse
@@ -30,6 +31,11 @@ def resolve_price(
     uom_id: int = Query(...),
     quantity: decimal.Decimal = Query(...),
     document_type_code: str = Query("SALES_INVOICE"),
+    # طبقِ باگِ واقعیِ کشف‌شده (R210): بدونِ این، پیش‌نمایشِ مالیاتِ موبایل
+    # همیشه رویِ اولویتِ «کالا» می‌ماند و اگر شرکت انبار را override کرده
+    # باشد نادیده گرفته می‌شود -- دقیقاً هم‌الگو با resolve_default_tax_percentِ
+    # دسکتاپ.
+    warehouse_id: int | None = Query(None),
     ctx: AuthContext = Depends(get_current_context),
 ) -> PriceResolveResponse:
     profile = partners_service.get_customer_profile(counterparty_detail_account_id)
@@ -43,8 +49,10 @@ def resolve_price(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    tax_percent = catalog_service.resolve_default_tax_percent(ctx.company_id, item_id, warehouse_id)
     return PriceResolveResponse(
         unit_price=resolved.unit_price, source=resolved.source, discount_amount=resolved.discount_amount,
+        tax_percent=tax_percent,
     )
 
 

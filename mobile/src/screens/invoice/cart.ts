@@ -9,6 +9,14 @@ export interface CartLine {
   unitPrice: number | null;
   /** ویزیتور قیمت را دستی عوض کرده -- دیگر با قیمتِ سیستم بازنویسی نمی‌شود. */
   manualPrice?: boolean;
+  /** طبقِ باگِ واقعیِ کشف‌شده (R210): تخفیفِ کلِ همین ردیف (به همین تعداد)
+   * از GET /pricing/resolve -- قبلاً گرفته می‌شد ولی هیچ‌جا استفاده/ارسال
+   * نمی‌شد. با قیمتِ دستیِ ویزیتور دیگر معنا ندارد و صفر می‌شود. */
+  discountAmount: number;
+  /** درصدِ مالیاتِ ارزش‌افزوده -- فقط برایِ پیش‌نمایشِ محلی؛ خودِ سرور
+   * هنگامِ ثبتِ سند با همان اولویتِ دسکتاپ (شرکت→انبار→کالا) دوباره و
+   * مستقلاً تعیین می‌کند. */
+  taxPercent: number;
 }
 
 export type Cart = Record<number, CartLine>;
@@ -17,8 +25,47 @@ export function cartLines(cart: Cart): CartLine[] {
   return Object.values(cart).filter((l) => l.quantity > 0);
 }
 
+export function lineGrossAmount(line: CartLine): number {
+  return line.quantity * (line.unitPrice ?? 0);
+}
+
+export function lineDiscountAmount(line: CartLine): number {
+  return Math.min(line.discountAmount, lineGrossAmount(line));
+}
+
+export function lineNetAmount(line: CartLine): number {
+  return lineGrossAmount(line) - lineDiscountAmount(line);
+}
+
+export function lineTaxAmount(line: CartLine): number {
+  const net = lineNetAmount(line);
+  return net > 0 && line.taxPercent > 0 ? (net * line.taxPercent) / 100 : 0;
+}
+
+/** مبلغِ نهاییِ همین ردیف (قیمت × تعداد − تخفیف + مالیات). */
+export function lineTotalAmount(line: CartLine): number {
+  return lineNetAmount(line) + lineTaxAmount(line);
+}
+
+function sumLines(cart: Cart, pick: (line: CartLine) => number): number {
+  return cartLines(cart).reduce((sum, l) => sum + pick(l), 0);
+}
+
+export function cartGrossTotal(cart: Cart): number {
+  return sumLines(cart, lineGrossAmount);
+}
+
+export function cartDiscountTotal(cart: Cart): number {
+  return sumLines(cart, lineDiscountAmount);
+}
+
+export function cartTaxTotal(cart: Cart): number {
+  return sumLines(cart, lineTaxAmount);
+}
+
+/** مبلغِ نهاییِ فاکتور (شاملِ تخفیف و مالیاتِ ارزش‌افزوده). */
 export function cartTotal(cart: Cart): number {
-  return cartLines(cart).reduce((sum, l) => sum + l.quantity * (l.unitPrice ?? 0), 0);
+  return sumLines(cart, lineTotalAmount);
 }
 
 export function missingPriceCount(cart: Cart): number {
@@ -26,9 +73,11 @@ export function missingPriceCount(cart: Cart): number {
 }
 
 /** همان ساختارِ /orders/{id}/print-data، از داده‌یِ محلی -- برایِ چاپِ
- * پیش‌نمایشِ فاکتوری که هنوز همگام‌سازی نشده (document_no خالی). مالیات
- * و تخفیفِ سمتِ سرور این‌جا معلوم نیست؛ فاکتورِ رسمی پس از همگام‌سازی
- * از خودِ سرور چاپ می‌شود. */
+ * پیش‌نمایشِ فاکتوری که هنوز همگام‌سازی نشده (document_no خالی). این
+ * پیش‌نمایش با همان تخفیف/مالياتِ گرفته‌شده از GET /pricing/resolve و
+ * default_tax_percentِ کالا محاسبه می‌شود؛ فاکتورِ رسمی هنوز پس از
+ * همگام‌سازی از خودِ سرور چاپ می‌شود (ممکن است اگر شرکت/انبار درصدِ
+ * مالياتِ دیگری override کرده باشند، اندکی فرق کند). */
 export function buildLocalPrintData(params: {
   companyName: string;
   sellerName: string;
@@ -63,13 +112,13 @@ export function buildLocalPrintData(params: {
       uom_code: l.item.base_uom_code,
       quantity: String(l.quantity),
       unit_price: String(l.unitPrice ?? 0),
-      discount_amount: "0",
-      tax_amount: "0",
-      line_total: String(l.quantity * (l.unitPrice ?? 0)),
+      discount_amount: String(lineDiscountAmount(l)),
+      tax_amount: String(lineTaxAmount(l)),
+      line_total: String(lineTotalAmount(l)),
     })),
-    gross_amount: String(total),
-    discount_amount: "0",
-    tax_amount: "0",
+    gross_amount: String(cartGrossTotal(params.cart)),
+    discount_amount: String(cartDiscountTotal(params.cart)),
+    tax_amount: String(cartTaxTotal(params.cart)),
     total_amount: String(total),
     settlement_lines: params.settlementLines.map((l) => ({
       method_code: l.method_code,

@@ -9,6 +9,7 @@ import decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
@@ -56,6 +57,16 @@ def catalog(warehouse_id: int | None = None, ctx: AuthContext = Depends(get_curr
             stock_by_item[b.item_id] = stock_by_item.get(b.item_id, decimal.Decimal(0)) + b.quantity_available
     used_categories = {it.category_id for it in items if it.category_id is not None}
     used_brands = {it.brand_id for it in items if it.brand_id is not None}
+    # طبقِ درخواستِ صریحِ کاربر («عکسِ کالاهایِ تعریف‌شده در کاتالوگِ کالا
+    # بیاد خیلی انگشتی»): همان عکسِ اصلیِ حسابِ تفصیلیِ کالا (تبِ «عکس‌ها و
+    # فایل‌ها»یِ فرمِ کالایِ دسکتاپ) -- کوچک‌شده و Base64، در همین پاسخ
+    # (بدونِ درخواستِ شبکه‌یِ جدا به‌ازایِ هر کالا و قابلِ‌کش‌شدنِ کاملِ آفلاین).
+    item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(ctx.company_id, dimensions_service.INVENTORY_ITEM_CODE)
+    photo_thumbnails: dict[int, str] = {}
+    if dimensions_service.get_group_photo_enabled(item_dim_type_id):
+        photo_thumbnails = dimensions_service.get_photo_thumbnails_for_accounts(
+            ctx.company_id, [it.item_detail_account_id for it in items]
+        )
     return {
         "items": [
             {
@@ -64,6 +75,7 @@ def catalog(warehouse_id: int | None = None, ctx: AuthContext = Depends(get_curr
                 "base_uom_id": it.base_uom_id, "base_uom_code": it.base_uom_code,
                 "default_tax_percent": str(it.default_tax_percent) if it.default_tax_percent is not None else None,
                 "stock_quantity": str(stock_by_item.get(it.item_id, decimal.Decimal(0))) if warehouse_id is not None else None,
+                "photo_base64": photo_thumbnails.get(it.item_detail_account_id),
             }
             for it in items
         ],

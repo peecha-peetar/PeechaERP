@@ -30,7 +30,7 @@ const ORDER = {
   warehouse_id: 1,
   channel_code: "VAN_SALES",
   currency_id: 1,
-  lines: [{ item_id: 10, uom_id: 1, quantity: "3", unit_price: "1000" }],
+  lines: [{ item_id: 10, uom_id: 1, quantity: "3", unit_price: "1000", discount_amount: "0" }],
   post_immediately: true,
 };
 

@@ -68,6 +68,7 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
           uom_id: item!.base_uom_id,
           quantity: l.quantity,
           unit_price: l.unitPrice || "0",
+          discount_amount: "0",
         };
       });
     if (orderLines.length === 0) return;

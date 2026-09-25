@@ -59,6 +59,12 @@ class OrderLineRequest(BaseModel):
     uom_id: int
     quantity: decimal.Decimal
     unit_price: decimal.Decimal
+    # طبقِ باگِ واقعیِ کشف‌شده (R210): موبایل discount_amountِ برگشته از
+    # GET /pricing/resolve را می‌گرفت ولی هیچ‌جا نمی‌فرستاد -- پس فاکتورِ
+    # پخشِ گرم همیشه بدونِ تخفیف ثبت می‌شد. مالیات این‌جا نیست چون طبقِ
+    # همان سیاستِ دسکتاپ سرور خودش (resolve_default_tax_percent) تعیین
+    # می‌کند، نه کلاینت.
+    discount_amount: decimal.Decimal = decimal.Decimal(0)
 
 
 class ReceivedCheckRequest(BaseModel):
@@ -118,6 +124,10 @@ class PriceResolveResponse(BaseModel):
     unit_price: decimal.Decimal
     source: str  # CONTRACT | PRICE_LIST
     discount_amount: decimal.Decimal
+    # طبقِ باگِ واقعیِ کشف‌شده (R210): فقط برایِ پیش‌نمایشِ مبلغِ نهاییِ
+    # موبایل پیش از ثبت -- خودِ سرور هنگامِ ثبتِ سند دوباره و مستقلاً
+    # (resolve_default_tax_percent) محاسبه می‌کند.
+    tax_percent: decimal.Decimal
 
 
 class PaymentMethodLineRequest(BaseModel):

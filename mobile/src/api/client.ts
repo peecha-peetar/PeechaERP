@@ -259,6 +259,9 @@ export class ApiClient {
       quantity: params.quantity,
       document_type_code: params.documentTypeCode,
     });
+    if (params.warehouseId !== null && params.warehouseId !== undefined) {
+      query.set("warehouse_id", String(params.warehouseId));
+    }
     return this.request<PriceResolveResponse>(`/pricing/resolve?${query.toString()}`);
   }
 

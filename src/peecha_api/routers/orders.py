@@ -151,10 +151,19 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
     # document_line_id هر ردیف نیاز دارد که فقط بعدِ همین ثبت مشخص می‌شود.
     line_ids: list[int] = []
     for line in payload.lines:
+        # طبقِ باگِ واقعیِ کشف‌شده (R210): این حلقه قبلاً نه تخفیف و نه
+        # مالیات را به add_line می‌داد -- پس فاکتورهایِ پخشِ گرم/سردِ موبایل
+        # همیشه با تخفیفِ صفر و مالیاتِ صفر ثبت می‌شدند، صرف‌نظر از قانونِ
+        # تخفیفِ فعال یا درصدِ مالیاتِ تعریف‌شده برایِ کالا/انبار/شرکت.
+        # تخفیف را خودِ کلاینت (از GET /pricing/resolve) می‌فرستد؛ مالیات
+        # را -- دقیقاً هم‌الگو با دسکتاپ -- سرور خودش با همان اولویتِ
+        # شرکت→انبار→کالا تعیین می‌کند، نه کلاینت.
+        tax_percent = catalog_service.resolve_default_tax_percent(ctx.company_id, line.item_id, payload.warehouse_id)
         line_ids.append(
             documents_service.add_line(
                 document_id, ctx.company_id, item_id=line.item_id, uom_id=line.uom_id,
                 quantity=line.quantity, quantity_base=line.quantity, unit_price=line.unit_price,
+                discount_amount=line.discount_amount, tax_percent=tax_percent,
             )
         )
     documents_service.confirm_document(document_id, ctx.company_id, ctx.user_id)

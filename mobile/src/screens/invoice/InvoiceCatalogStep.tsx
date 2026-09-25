@@ -4,7 +4,7 @@ import { CatalogItem, CatalogResponse, CustomerRow } from "../../api/types";
 import { BarcodeScannerModal, BottomSheet, Button, EmptyState, Input, ProductCard, SearchBar, useToast } from "../../components";
 import { formatAmount, parseAmount } from "../../format";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Cart, cartLines, cartTotal } from "./cart";
+import { Cart, cartDiscountTotal, cartLines, cartTaxTotal, cartTotal } from "./cart";
 
 interface Props {
   customer: CustomerRow;
@@ -15,6 +15,9 @@ interface Props {
   /** در پخشِ گرم: تعداد از موجودیِ خودرو بیشتر نمی‌شود. */
   stockLimited: boolean;
   onSetQuantity: (item: CatalogItem, quantity: number) => void;
+  /** طبقِ درخواستِ صریحِ کاربر («مقدار و قیمت در همان حالتِ اولیه وارد
+   * بشه»): تغییرِ دستیِ قیمت همین‌جا، بدونِ نیاز به رفتن به گامِ تسویه. */
+  onSetPrice: (itemId: number, price: number | null) => void;
   onNext: () => void;
   onBack: () => void;
 }
@@ -42,7 +45,7 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
  * روش داره -- دسته‌بندی‌ها و برند و غیره -- و امکانِ جستجویِ زنده و اسکنِ
  * بارکد از طریقِ دوربینِ موبایل»): همهٔ فیلتر/جستجو رویِ گوشی و بدونِ
  * درخواستِ شبکه انجام می‌شود (کاتالوگ یک‌جا بارگذاری/کش شده). */
-export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stockLimited, onSetQuantity, onNext, onBack }: Props) {
+export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stockLimited, onSetQuantity, onSetPrice, onNext, onBack }: Props) {
   const { colors, spacing, typography } = useTheme();
   const toast = useToast();
   const [search, setSearch] = useState("");
@@ -52,6 +55,7 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
   const [scannerOpen, setScannerOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [editingQty, setEditingQty] = useState("");
+  const [editingPrice, setEditingPrice] = useState("");
 
   const stockOf = (item: CatalogItem): number | null => (item.stock_quantity === null ? null : Number(item.stock_quantity));
   const categoryNames = useMemo(() => Object.fromEntries(catalog.categories.map((c) => [c.category_id, c.name])), [catalog]);
@@ -102,6 +106,8 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
 
   const lines = cartLines(cart);
   const total = cartTotal(cart);
+  const discount = cartDiscountTotal(cart);
+  const tax = cartTaxTotal(cart);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -151,6 +157,7 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
               code={meta ? `${item.code} · ${meta}` : item.code}
               name={item.name}
               uomLabel={item.base_uom_code}
+              photoBase64={item.photo_base64}
               stockQuantity={item.stock_quantity !== null ? formatAmount(item.stock_quantity) : undefined}
               unitPrice={line?.unitPrice ? formatAmount(String(line.unitPrice)) : undefined}
               quantity={line?.quantity ?? 0}
@@ -159,6 +166,7 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
               onPress={() => {
                 setEditing(item);
                 setEditingQty(line?.quantity ? String(line.quantity) : "");
+                setEditingPrice(line?.unitPrice ? String(line.unitPrice) : "");
               }}
             />
           );
@@ -170,6 +178,13 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
         <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>
           سبد: {lines.length} قلم -- جمع: {formatAmount(String(total))}
         </Text>
+        {discount > 0 || tax > 0 ? (
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            {discount > 0 ? `تخفیف: ${formatAmount(String(discount))}` : ""}
+            {discount > 0 && tax > 0 ? " -- " : ""}
+            {tax > 0 ? `مالياتِ ارزش‌افزوده: ${formatAmount(String(tax))}` : ""}
+          </Text>
+        ) : null}
         <Button label="ادامه: تسویه" onPress={onNext} disabled={lines.length === 0} />
       </View>
 
@@ -182,10 +197,21 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
           numeric
           autoFocus
         />
+        <Input
+          label="قیمتِ واحد"
+          value={editingPrice}
+          onChangeText={setEditingPrice}
+          keyboardType="numeric"
+          numeric
+          placeholder={editing && cart[editing.item_id]?.unitPrice === null ? "در حالِ دریافتِ قیمت..." : undefined}
+        />
         <Button
           label="تایید"
           onPress={() => {
-            if (editing) setQuantity(editing, parseAmount(editingQty));
+            if (editing) {
+              setQuantity(editing, parseAmount(editingQty));
+              if (editingPrice.trim()) onSetPrice(editing.item_id, parseAmount(editingPrice));
+            }
             setEditing(null);
           }}
         />

@@ -8,14 +8,17 @@
 
 from __future__ import annotations
 
+import base64
 import datetime
 import hashlib
+import io
 import shutil
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from PIL import Image as PILImage
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -385,6 +388,40 @@ def get_primary_photos_for_accounts(company_id: int, detail_account_ids: list[in
         ).all()
         session.expunge_all()
         return {row.source_record_id: row for row in rows}
+
+
+_THUMBNAIL_MAX_DIMENSION = 96
+
+
+def _thumbnail_base64(storage_key: str, max_dimension: int = _THUMBNAIL_MAX_DIMENSION) -> str | None:
+    """عکسِ کوچک‌شده (بندانگشتی) به‌صورتِ Base64ِ JPEG -- برایِ نمایشِ
+    عکسِ کالا در کاتالوگِ موبایل بدونِ درخواستِ شبکه‌یِ جداگانه به‌ازایِ
+    هر کالا (کلِ کاتالوگ در یک پاسخ، طبقِ طراحیِ /products/catalog)."""
+    path = Path(storage_key)
+    if not path.is_file():
+        return None
+    try:
+        with PILImage.open(path) as img:
+            img = img.convert("RGB")
+            img.thumbnail((max_dimension, max_dimension))
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=70)
+            return base64.b64encode(buffer.getvalue()).decode("ascii")
+    except OSError:
+        return None
+
+
+def get_photo_thumbnails_for_accounts(company_id: int, detail_account_ids: list[int]) -> dict[int, str]:
+    """هم‌الگو با get_primary_photos_for_accounts ولی خروجی مستقیماً
+    Base64ِ کوچک‌شده‌یِ عکسِ اصلیِ هر حساب است (فقط حساب‌هایی که عکسِ
+    اصلیِ سالم دارند در دیکشنریِ خروجی می‌آیند)."""
+    photos = get_primary_photos_for_accounts(company_id, detail_account_ids)
+    result: dict[int, str] = {}
+    for detail_account_id, attachment in photos.items():
+        thumbnail = _thumbnail_base64(attachment.storage_key)
+        if thumbnail is not None:
+            result[detail_account_id] = thumbnail
+    return result
 
 
 def delete_dimension_type(dimension_type_id: int, company_id: int) -> None:

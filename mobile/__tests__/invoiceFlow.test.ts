@@ -3,7 +3,7 @@ import { CatalogResponse, InvoicePrintData } from "../src/api/types";
 import { parseAmount, toAsciiDigits } from "../src/format";
 import { parseJalaliDate } from "../src/jalali";
 import { buildInvoiceHtml } from "../src/print/invoiceHtml";
-import { buildLocalPrintData, cartTotal, missingPriceCount } from "../src/screens/invoice/cart";
+import { buildLocalPrintData, cartDiscountTotal, cartTaxTotal, cartTotal, lineTotalAmount, missingPriceCount } from "../src/screens/invoice/cart";
 import { CatalogCache } from "../src/storage/catalogCache";
 import { InMemoryKeyValueStore } from "../src/storage/keyValueStore";
 import { LocalCache } from "../src/storage/localCache";
@@ -19,7 +19,7 @@ function jsonResponse(status: number, body: unknown): Response {
 
 const ITEM = {
   item_id: 1, code: "9101", name: "آب‌معدنی", barcode: "626", sku: null, category_id: null, brand_id: null,
-  base_uom_id: 1, base_uom_code: "PCS", default_tax_percent: null, stock_quantity: "10",
+  base_uom_id: 1, base_uom_code: "PCS", default_tax_percent: null, stock_quantity: "10", photo_base64: null,
 };
 
 const PRINT: InvoicePrintData = {
@@ -76,7 +76,10 @@ describe("ورودی‌هایِ فارسی", () => {
 
 describe("سبد و پیش‌نمایشِ محلی", () => {
   it("جمع، اقلامِ بی‌قیمت و ماندهٔ نسیه درست است", () => {
-    const cart = { 1: { item: ITEM, quantity: 3, unitPrice: 10000 }, 2: { item: { ...ITEM, item_id: 2 }, quantity: 1, unitPrice: null } };
+    const cart = {
+      1: { item: ITEM, quantity: 3, unitPrice: 10000, discountAmount: 0, taxPercent: 0 },
+      2: { item: { ...ITEM, item_id: 2 }, quantity: 1, unitPrice: null, discountAmount: 0, taxPercent: 0 },
+    };
     expect(cartTotal(cart)).toBe(30000);
     expect(missingPriceCount(cart)).toBe(1);
     const data = buildLocalPrintData({
@@ -86,6 +89,23 @@ describe("سبد و پیش‌نمایشِ محلی", () => {
     expect(data.document_no).toBeNull();
     expect(data.remaining_amount).toBe("20000");
     expect(data.settlement_lines[0].label).toBe("نقدی");
+  });
+
+  // طبقِ باگِ واقعیِ کشف‌شده (R210): تخفیفِ resolve_price و مالياتِ
+  // ارزش‌افزوده قبلاً هیچ‌جایِ سبد/پیش‌نمایش/مبلغِ نسیه لحاظ نمی‌شدند.
+  it("تخفیف و مالياتِ ارزش‌افزوده در جمعِ سبد و مبلغِ هر ردیف لحاظ می‌شود", () => {
+    const line = { item: ITEM, quantity: 3, unitPrice: 10000, discountAmount: 3000, taxPercent: 9 };
+    // خالص = ۳×۱۰۰۰۰ − ۳۰۰۰ = ۲۷۰۰۰ -- مالیات = ۲۷۰۰۰×۹٪ = ۲۴۳۰ -- جمع = ۲۹۴۳۰
+    expect(lineTotalAmount(line)).toBe(29430);
+    const cart = { 1: line };
+    expect(cartDiscountTotal(cart)).toBe(3000);
+    expect(cartTaxTotal(cart)).toBe(2430);
+    expect(cartTotal(cart)).toBe(29430);
+  });
+
+  it("قیمتِ دستیِ ویزیتور تخفیف را صفر می‌کند ولی مالیات همچنان لحاظ می‌شود", () => {
+    const line = { item: ITEM, quantity: 2, unitPrice: 5000, discountAmount: 0, manualPrice: true, taxPercent: 9 };
+    expect(lineTotalAmount(line)).toBe(10900);
   });
 });
 
@@ -116,7 +136,7 @@ describe("SyncEngine و فاکتورِ پخشِ گرم", () => {
   }
   const ORDER = {
     document_type_code: "SALES_INVOICE" as const, counterparty_detail_account_id: 5, warehouse_id: 1, channel_code: "VAN-1",
-    currency_id: 1, lines: [{ item_id: 1, uom_id: 1, quantity: "1", unit_price: "1000" }], post_immediately: true,
+    currency_id: 1, lines: [{ item_id: 1, uom_id: 1, quantity: "1", unit_price: "1000", discount_amount: "0" }], post_immediately: true,
   };
 
   it("شماره و هشدارِ تسویهٔ سرور برایِ صفحهٔ چاپ ذخیره می‌شود", async () => {

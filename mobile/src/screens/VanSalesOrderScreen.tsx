@@ -52,6 +52,7 @@ function catalogFromPull(items: ItemRow[]): CatalogResponse {
     items: items.map((it) => ({
       item_id: it.item_id, code: it.code, name: it.name, barcode: null, sku: null, category_id: null, brand_id: null,
       base_uom_id: it.base_uom_id, base_uom_code: it.base_uom_code, default_tax_percent: null, stock_quantity: null,
+      photo_base64: null,
     })),
     categories: [],
     brands: [],
@@ -112,8 +113,19 @@ export function VanSalesOrderScreen(props: Props) {
     };
   }, [apiClient, catalogCache, items, warehouseId]);
 
+  interface ResolvedPriceInfo {
+    unitPrice: number;
+    discountAmount: number;
+    taxPercent: number;
+  }
+
+  // طبقِ باگِ واقعیِ کشف‌شده (R210): این تابع فقط unit_price را برمی‌گرداند
+  // و discount_amount/tax_percentِ همان پاسخ را دور می‌ریخت -- پس فاکتورِ
+  // پخشِ گرم همیشه بدونِ تخفیف و (چون /orders هم چیزی نمی‌فرستاد) بدونِ
+  // مالياتِ ارزش‌افزوده ثبت می‌شد. مالیات فقط برایِ پیش‌نمایشِ محلی است؛
+  // ثبتِ نهایی را سرور دوباره و مستقلاً تعیین می‌کند.
   const resolvePrice = useCallback(
-    async (item: CatalogItem, quantity: number): Promise<number | null> => {
+    async (item: CatalogItem, quantity: number): Promise<ResolvedPriceInfo | null> => {
       try {
         const resolved = await apiClient.resolvePrice({
           counterpartyDetailAccountId: customer.detail_account_id,
@@ -121,13 +133,18 @@ export function VanSalesOrderScreen(props: Props) {
           uomId: item.base_uom_id,
           quantity: String(quantity),
           documentTypeCode: "SALES_INVOICE",
+          warehouseId,
         });
-        return Number(resolved.unit_price);
+        return {
+          unitPrice: Number(resolved.unit_price),
+          discountAmount: Number(resolved.discount_amount),
+          taxPercent: Number(resolved.tax_percent),
+        };
       } catch {
         return null;
       }
     },
-    [apiClient, customer.detail_account_id],
+    [apiClient, customer.detail_account_id, warehouseId],
   );
 
   const setQuantity = (item: CatalogItem, quantity: number) => {
@@ -137,12 +154,38 @@ export function VanSalesOrderScreen(props: Props) {
         const { [item.item_id]: _removed, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [item.item_id]: { item, quantity, unitPrice: prev[item.item_id]?.unitPrice ?? null, manualPrice: prev[item.item_id]?.manualPrice } };
+      const existing = prev[item.item_id];
+      return {
+        ...prev,
+        [item.item_id]: {
+          item,
+          quantity,
+          unitPrice: existing?.unitPrice ?? null,
+          manualPrice: existing?.manualPrice,
+          discountAmount: existing?.discountAmount ?? 0,
+          // پیش از پاسخِ سرور، پیش‌نمایش با درصدِ پیش‌فرضِ خودِ کالا (اگر
+          // تعریف شده) -- سرور ممکن است رویِ اولویتِ شرکت/انبار آن را
+          // override کند.
+          taxPercent: existing?.taxPercent ?? Number(item.default_tax_percent ?? 0),
+        },
+      };
     });
     if (isNew && quantity > 0) {
-      resolvePrice(item, quantity).then((price) => {
-        if (price === null) return;
-        setCart((prev) => (prev[item.item_id] && !prev[item.item_id].manualPrice ? { ...prev, [item.item_id]: { ...prev[item.item_id], unitPrice: price } } : prev));
+      resolvePrice(item, quantity).then((resolved) => {
+        if (resolved === null) return;
+        setCart((prev) =>
+          prev[item.item_id] && !prev[item.item_id].manualPrice
+            ? {
+                ...prev,
+                [item.item_id]: {
+                  ...prev[item.item_id],
+                  unitPrice: resolved.unitPrice,
+                  discountAmount: resolved.discountAmount,
+                  taxPercent: resolved.taxPercent,
+                },
+              }
+            : prev,
+        );
       });
     }
   };
@@ -151,11 +194,14 @@ export function VanSalesOrderScreen(props: Props) {
     // قیمتِ پلکانی به تعداد وابسته است -- با تعدادِ نهایی دوباره گرفته می‌شود
     // (قیمتِ دستیِ ویزیتور دست‌نخورده می‌ماند).
     const lines = cartLines(cart).filter((l) => !l.manualPrice);
-    const prices = await Promise.all(lines.map((l) => resolvePrice(l.item, l.quantity)));
+    const resolved = await Promise.all(lines.map((l) => resolvePrice(l.item, l.quantity)));
     setCart((prev) => {
       const next = { ...prev };
       lines.forEach((l, i) => {
-        if (prices[i] !== null && next[l.item.item_id]) next[l.item.item_id] = { ...next[l.item.item_id], unitPrice: prices[i] };
+        const r = resolved[i];
+        if (r !== null && next[l.item.item_id]) {
+          next[l.item.item_id] = { ...next[l.item.item_id], unitPrice: r.unitPrice, discountAmount: r.discountAmount, taxPercent: r.taxPercent };
+        }
       });
       return next;
     });
@@ -163,7 +209,12 @@ export function VanSalesOrderScreen(props: Props) {
   };
 
   const changePrice = (itemId: number, price: number | null) =>
-    setCart((prev) => (prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], unitPrice: price, manualPrice: true } } : prev));
+    setCart((prev) =>
+      // طبقِ درخواستِ صریحِ کاربر («قیمتِ دستیِ ویزیتور دیگر با تخفیفِ سیستم
+      // بازنویسی نمی‌شود»): با تایپِ دستیِ قیمت، خودِ همین عدد قیمتِ نهایی
+      // است -- تخفیفِ قانونی دیگر معنا ندارد.
+      prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], unitPrice: price, manualPrice: true, discountAmount: 0 } } : prev,
+    );
 
   const submit = async (settlementLines: OrderSettlementLineInput[], receivedByName: string) => {
     const lines = cartLines(cart);
@@ -172,6 +223,7 @@ export function VanSalesOrderScreen(props: Props) {
       uom_id: l.item.base_uom_id,
       quantity: String(l.quantity),
       unit_price: String(l.unitPrice ?? 0),
+      discount_amount: String(Math.min(l.discountAmount, l.quantity * (l.unitPrice ?? 0))),
     }));
     const order = {
       document_type_code: "SALES_INVOICE" as const,
@@ -268,6 +320,7 @@ export function VanSalesOrderScreen(props: Props) {
       cart={cart}
       stockLimited
       onSetQuantity={setQuantity}
+      onSetPrice={changePrice}
       onNext={goToSettlement}
       onBack={onSubmitted}
     />

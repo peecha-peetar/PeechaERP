@@ -5,7 +5,7 @@ import { Button, Card, Input } from "../../components";
 import { formatAmount, parseAmount, toAsciiDigits } from "../../format";
 import { parseJalaliDate } from "../../jalali";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Cart, cartLines, cartTotal } from "./cart";
+import { Cart, cartDiscountTotal, cartGrossTotal, cartLines, cartTaxTotal, cartTotal, lineTotalAmount } from "./cart";
 
 interface CheckDraft {
   key: number;
@@ -167,23 +167,42 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
       <Card>
         <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>اقلامِ فاکتور</Text>
         {lines.map((l) => (
-          <View key={l.item.item_id} style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.xs }}>
-            <Text style={[typography.body, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
-              {l.item.name} × {formatAmount(String(l.quantity))}
-            </Text>
-            <Input
-              value={l.unitPrice !== null ? String(l.unitPrice) : ""}
-              onChangeText={(v) => onChangePrice(l.item.item_id, v.trim() ? parseAmount(v) : null)}
-              keyboardType="numeric"
-              numeric
-              placeholder="قیمت"
-              error={l.unitPrice === null ? "بدونِ قیمت" : undefined}
-              style={{ width: 120, marginBottom: 0 }}
-            />
+          <View key={l.item.item_id} style={{ paddingVertical: spacing.xs, gap: spacing.xxs }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <Text style={[typography.body, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
+                {l.item.name} × {formatAmount(String(l.quantity))}
+              </Text>
+              <Input
+                value={l.unitPrice !== null ? String(l.unitPrice) : ""}
+                onChangeText={(v) => onChangePrice(l.item.item_id, v.trim() ? parseAmount(v) : null)}
+                keyboardType="numeric"
+                numeric
+                placeholder="قیمت"
+                error={l.unitPrice === null ? "بدونِ قیمت" : undefined}
+                style={{ width: 120, marginBottom: 0 }}
+              />
+            </View>
+            {l.discountAmount > 0 || l.taxPercent > 0 ? (
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                {l.discountAmount > 0 ? `تخفیف: ${formatAmount(String(l.discountAmount))}` : ""}
+                {l.discountAmount > 0 && l.taxPercent > 0 ? " -- " : ""}
+                {l.taxPercent > 0 ? `مالیات ${formatAmount(String(l.taxPercent))}٪` : ""}
+                {" -- "}جمعِ این ردیف: {formatAmount(String(lineTotalAmount(l)))}
+              </Text>
+            ) : null}
           </View>
         ))}
-        <Text style={[typography.bodyBold, { color: colors.textPrimary, marginTop: spacing.sm }]}>مبلغِ فاکتور: {formatAmount(String(total))}</Text>
-        <Text style={[typography.caption, { color: colors.textSecondary }]}>تخفیف/مالیاتِ تعریف‌شده در سیستم هنگامِ ثبت اعمال می‌شود.</Text>
+        <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm }]}>جمعِ کالاها: {formatAmount(String(cartGrossTotal(cart)))}</Text>
+        {cartDiscountTotal(cart) > 0 ? (
+          <Text style={[typography.body, { color: colors.textSecondary }]}>تخفیف: {formatAmount(String(cartDiscountTotal(cart)))}</Text>
+        ) : null}
+        {cartTaxTotal(cart) > 0 ? (
+          <Text style={[typography.body, { color: colors.textSecondary }]}>مالياتِ ارزش‌افزوده: {formatAmount(String(cartTaxTotal(cart)))}</Text>
+        ) : null}
+        <Text style={[typography.bodyBold, { color: colors.textPrimary, marginTop: spacing.xs }]}>مبلغِ فاکتور: {formatAmount(String(total))}</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>
+          تخفیف از فهرست/قانونِ قیمتِ همین مشتری و مالیات از درصدِ تعریف‌شده برایِ کالا/انبار/شرکت -- خودکار محاسبه و در مبلغِ بالا لحاظ شده است.
+        </Text>
       </Card>
 
       {methods.map((method) => {
