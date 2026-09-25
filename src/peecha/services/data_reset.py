@@ -154,6 +154,19 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM treasury.petty_cash_fund_lines WHERE fund_id IN "
     "(SELECT fund_id FROM treasury.petty_cash_funds WHERE company_id = :company_id)",
     "DELETE FROM treasury.petty_cash_funds WHERE company_id = :company_id",
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («خام‌کردنِ اطلاعات با پیامِ نقضِ
+    # vehicle_loadings_stock_document_id_fkey متوقف می‌شود»): بارگیریِ
+    # خودرو/تسویهٔ خودرو (پخشِ گرم، فازِ ۲) هم -- دقیقاً هم‌الگو با
+    # pos_payments/shipments بالا -- مستقیماً به inv.stock_documents وصل‌اند
+    # (بارگیری از طریقِ خودِ stock_document_id، تسویه از طریقِ
+    # return_stock_document_idِ سندِ برگشتِ کالایِ نفروخته) -- باید پیش
+    # از خودِ اسنادِ انبار پاک شوند.
+    "DELETE FROM inv.vehicle_settlement_lines WHERE vehicle_settlement_id IN "
+    "(SELECT vehicle_settlement_id FROM inv.vehicle_settlements WHERE company_id = :company_id)",
+    "DELETE FROM inv.vehicle_settlements WHERE company_id = :company_id",
+    "DELETE FROM inv.vehicle_loading_lines WHERE vehicle_loading_id IN "
+    "(SELECT vehicle_loading_id FROM inv.vehicle_loadings WHERE company_id = :company_id)",
+    "DELETE FROM inv.vehicle_loadings WHERE company_id = :company_id",
     # انبار
     "DELETE FROM inv.cost_layers WHERE stock_ledger_id IN "
     "(SELECT ledger_id FROM inv.stock_ledger WHERE company_id = :company_id)",
@@ -259,6 +272,11 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM inv.uom WHERE company_id = :company_id",
     "DELETE FROM inv.document_reason_codes WHERE company_id = :company_id",
     # انبار.
+    # طبقِ همان رفعِ باگِ خودرو -- تیمِ خودرو (راننده/ویزیتور/موزع) هم
+    # مستقیماً به انبارِ خودرو وصل است؛ باید پیش از خودِ انبارها پاک شود.
+    "DELETE FROM inv.vehicle_team_assignments WHERE vehicle_warehouse_id IN "
+    "(SELECT warehouse_id FROM inv.warehouses WHERE company_id = :company_id)",
+    "DELETE FROM inv.vehicle_settlement_settings WHERE company_id = :company_id",
     "DELETE FROM inv.warehouse_user_access WHERE warehouse_id IN "
     "(SELECT warehouse_id FROM inv.warehouses WHERE company_id = :company_id)",
     "DELETE FROM inv.bin_locations WHERE warehouse_id IN "
