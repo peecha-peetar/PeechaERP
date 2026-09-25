@@ -18,11 +18,17 @@ from peecha_api.deps import AuthContext, get_current_context
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 _ORDER_TYPE_CODES = ("SALES_ORDER", "SALES_INVOICE")
+# طبقِ رفعِ باگِ واقعی («در پخشِ سرد سفارش ثبت کردم ولی در پخشِ گرم نشون
+# میده -- این دو تا کاملاً مجزا باید باشه»): هر حالت فقط سندِ خودش --
+# پخشِ گرم = فاکتورِ آنی رویِ کانالِ VAN_SALES، پخشِ سرد = سفارش رویِ
+# کانالِ PRE_SALES. بدونِ mode (نسخه‌هایِ قدیمیِ اپ) رفتارِ قبلی حفظ می‌شود.
+_DOC_TYPES_BY_MODE = {"VAN_SALES": ("SALES_INVOICE",), "PRE_SALES": ("SALES_ORDER",)}
 
 
 @router.get("/today")
-def today_summary(ctx: AuthContext = Depends(get_current_context)) -> dict:
+def today_summary(mode: str | None = None, ctx: AuthContext = Depends(get_current_context)) -> dict:
     today = datetime.date.today()
+    channel_type_code = mode if mode in _DOC_TYPES_BY_MODE else None
 
     visits_today = field_sales_service.list_customer_visits(
         ctx.company_id, visitor_user_id=ctx.user_id, date_from=today, date_to=today,
@@ -30,7 +36,8 @@ def today_summary(ctx: AuthContext = Depends(get_current_context)) -> dict:
     completed_count = sum(1 for v in visits_today if v.status_code == "COMPLETED")
 
     order_summary = documents_service.summarize_documents_for_user_on_date(
-        ctx.company_id, ctx.user_id, today, _ORDER_TYPE_CODES,
+        ctx.company_id, ctx.user_id, today, _DOC_TYPES_BY_MODE.get(channel_type_code, _ORDER_TYPE_CODES),
+        channel_type_code=channel_type_code,
     )
     collection_amount = treasury_service.sum_voucher_amount_for_user_on_date(
         ctx.company_id, ctx.user_id, today, "RECEIPT",

@@ -105,6 +105,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   const [loggedIn, setLoggedIn] = useState(false);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [userFullName, setUserFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("IDLE");
   const [unreadCount, setUnreadCount] = useState(0);
   // طبقِ درخواستِ صریحِ کاربر («رابطِ کاربریِ موبایل برایِ پخشِ گرم و
@@ -301,6 +302,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
           kvStore={services.kvStore}
           onLoggedIn={async (loginData) => {
             setUserFullName(loginData.full_name);
+            setCompanyName(loginData.company_name);
             await services.syncEngine.pull();
             const cached = await services.localCache.getPullResponse();
             setItems(cached?.items ?? []);
@@ -414,8 +416,13 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   projectDetailAccountId={orderProjectId ?? null}
                   settlementMethods={settlementMethods}
                   customerVisitId={null}
+                  companyName={companyName}
+                  sellerName={userFullName}
                   apiClient={services.apiClient}
                   offlineQueue={services.offlineQueue}
+                  syncEngine={services.syncEngine}
+                  invoiceResults={services.invoiceResults}
+                  catalogCache={services.catalogCache}
                   captureProvider={resolvedCaptureProvider}
                   locationProvider={locationProvider}
                   onSubmitted={() => navigation.navigate("Main", { screen: "ORDER" })}
@@ -452,6 +459,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 // اصلاً معنا ندارند -- فقط «ثبتِ وصول» می‌ماند.
                 collectionOnly={selectedMode === "COLLECTION"}
                 vanSales={selectedMode === "VAN_SALES"}
+                salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
               />
             </SafeAreaView>
           )}
@@ -589,6 +597,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
               userFullName={userFullName}
               onOpenVisit={onOpenVisit}
               hideVisitPlan={selectedMode === "VAN_SALES"}
+              salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
             />
           )}
         </MainTab.Screen>
@@ -608,7 +617,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
           )}
         </MainTab.Screen>
         <MainTab.Screen name="REPORTS">
-          {() => <ReportsScreen apiClient={services.apiClient} />}
+          {() => <ReportsScreen apiClient={services.apiClient} salesMode="VAN_SALES" />}
         </MainTab.Screen>
         <MainTab.Screen name="COLLECTION">
           {() => <CollectionListScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />}

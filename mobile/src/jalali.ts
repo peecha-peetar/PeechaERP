@@ -1,4 +1,4 @@
-import { toJalaali } from "jalaali-js";
+import { isValidJalaaliDate, toGregorian, toJalaali } from "jalaali-js";
 
 const PERSIAN_DIGITS = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
 
@@ -33,4 +33,26 @@ export function formatJalaliDateTime(isoDateTime: string): string {
   if (!timePart) return dateLabel;
   const [hh, mm] = timePart.split(":");
   return `${dateLabel} ${toPersianDigits(`${hh}:${mm}`)}`;
+}
+
+/** ورودیِ تاریخِ شمسیِ کاربر («۱۴۰۵/۰۸/۱۵» یا «1405-8-15») → تاریخِ ISOِ
+ * میلادی («YYYY-MM-DD») برایِ سرور؛ نامعتبر = null. */
+export function parseJalaliDate(text: string): string | null {
+  const normalized = text
+    .trim()
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[-.]/g, "/");
+  const parts = normalized.split("/");
+  if (parts.length !== 3) return null;
+  const [jy, jm, jd] = parts.map(Number);
+  if (!jy || !jm || !jd || !isValidJalaaliDate(jy, jm, jd)) return null;
+  const { gy, gm, gd } = toGregorian(jy, jm, jd);
+  return `${gy}-${pad2(gm)}-${pad2(gd)}`;
+}
+
+/** تاریخِ امروزِ گوشی به‌صورتِ ISO (بدونِ جابه‌جاییِ منطقهٔ زمانی). */
+export function todayIsoDate(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 }

@@ -988,20 +988,26 @@ class DocumentSummary:
 
 def summarize_documents_for_user_on_date(
     company_id: int, created_by_user_id: int, document_date: datetime.date, document_type_codes: tuple[str, ...],
+    channel_type_code: str | None = None,
 ) -> DocumentSummary:
     """جمعِ تعداد/مبلغِ اسنادِ ثبت‌شده‌یِ یک کاربر در یک روز -- برایِ
     داشبوردِ خانه‌یِ اپِ موبایل («سفارشِ امروز»/«فروشِ امروز»، R135).
-    اسنادِ لغوشده جزوِ فروشِ واقعی نیستند."""
+    اسنادِ لغوشده جزوِ فروشِ واقعی نیستند. channel_type_code (طبقِ
+    «پخشِ سرد و گرم کاملاً مجزا باشند») فقط اسنادِ همان نوعِ کانال را
+    حساب می‌کند -- هم‌الگو با list_documents."""
     with new_session() as session:
-        count, total = session.execute(
-            select(func.count(), func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
-                CommercialDocument.company_id == company_id,
-                CommercialDocument.created_by_user_id == created_by_user_id,
-                CommercialDocument.document_date == document_date,
-                CommercialDocument.document_type_code.in_(document_type_codes),
-                CommercialDocument.status_code != "CANCELLED",
-            )
-        ).one()
+        stmt = select(func.count(), func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
+            CommercialDocument.company_id == company_id,
+            CommercialDocument.created_by_user_id == created_by_user_id,
+            CommercialDocument.document_date == document_date,
+            CommercialDocument.document_type_code.in_(document_type_codes),
+            CommercialDocument.status_code != "CANCELLED",
+        )
+        if channel_type_code:
+            stmt = stmt.join(
+                Channel, (Channel.channel_code == CommercialDocument.channel_code) & (Channel.company_id == CommercialDocument.company_id)
+            ).where(Channel.channel_type_code == channel_type_code)
+        count, total = session.execute(stmt).one()
         return DocumentSummary(document_count=count, total_amount=total or decimal.Decimal(0))
 
 

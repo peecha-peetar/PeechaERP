@@ -1,12 +1,14 @@
 import { ApiClient } from "./api/client";
 import { API_BASE_URL } from "./config";
 import { AsyncStorageKeyValueStore } from "./storage/asyncStorageAdapter";
+import { CatalogCache } from "./storage/catalogCache";
 import { KeyValueStore } from "./storage/keyValueStore";
 import { LocalCache } from "./storage/localCache";
 import { TokenStore } from "./storage/tokenStore";
 import { OfflineQueue } from "./sync/offlineQueue";
 import { SyncEngine } from "./sync/syncEngine";
 import { SyncErrorLog } from "./sync/syncErrorLog";
+import { InvoiceResultStore } from "./sync/invoiceResults";
 import { VisitCorrelationStore } from "./sync/visitCorrelation";
 
 /** ساختِ همه‌یِ سرویس‌هایِ لایه‌یِ منطق در یک‌جا -- زیرِ Expo Go،
@@ -23,9 +25,11 @@ export function createServices(kvStore: KeyValueStore = new AsyncStorageKeyValue
   // رویِ همان kvStoreِ اشتراکی باشد، نه یک نمونهٔ جدا -- وگرنه نگاشت با
   // هر بارِ ساختِ SyncEngine از دست می‌رود.
   const visitCorrelation = new VisitCorrelationStore(kvStore);
-  const syncEngine = new SyncEngine(apiClient, offlineQueue, localCache, visitCorrelation);
+  const invoiceResults = new InvoiceResultStore(kvStore);
+  const syncEngine = new SyncEngine(apiClient, offlineQueue, localCache, visitCorrelation, invoiceResults);
   const syncErrorLog = new SyncErrorLog(kvStore);
-  return { kvStore, tokenStore, apiClient, offlineQueue, localCache, syncEngine, syncErrorLog };
+  const catalogCache = new CatalogCache(kvStore);
+  return { kvStore, tokenStore, apiClient, offlineQueue, localCache, syncEngine, syncErrorLog, invoiceResults, catalogCache };
 }
 
 export type Services = ReturnType<typeof createServices>;

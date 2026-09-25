@@ -6,7 +6,9 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["assets/fonts/*"],
+    "assetBundlePatterns": [
+      "assets/fonts/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ir.peecha.fieldsales"
@@ -34,6 +36,13 @@
         "expo-image-picker",
         {
           "cameraPermission": "پیچا برای ثبتِ عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "پیچا برای اسکنِ بارکدِ کالا و عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد.",
+          "recordAudioAndroid": false
         }
       ]
     ]

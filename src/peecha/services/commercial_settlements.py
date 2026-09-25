@@ -384,6 +384,26 @@ def resolve_method_detail_options(company_id: int, direction: str, method_code: 
     return account_id, options
 
 
+def mobile_method_detail_options(company_id: int, method_code: str) -> tuple[bool, list]:
+    """طبقِ درخواستِ صریحِ کاربر («ثبتِ تسویه دقیقاً همون فیلدهایی که
+    دسکتاپ داره»): هم‌الگو با ستونِ «تفصیلی» در دیالوگِ نحوه‌یِ تسویهٔ
+    دسکتاپ -- فقط وقتی معینِ نگاشته‌شدهٔ این روش (دریافت) واقعاً یک
+    تفصیلی (صندوق/حسابِ بانکی/شخص) را الزامی کرده باشد، گزینه‌ها برگردانده
+    می‌شوند؛ در غیرِ این صورت (False, []) و موبایل انتخاب‌گری نشان نمی‌دهد."""
+    from peecha.services import detail_dimensions as dimensions_service
+
+    account_id, options = resolve_method_detail_options(company_id, "RECEIPT", method_code)
+    if account_id is None:
+        return False, []
+    required = [
+        r for r in dimensions_service.get_required_dimensions_for_account(account_id)
+        if r.code not in (dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE)
+    ]
+    if not required and not dimensions_service.get_required_person_groups_for_account(account_id):
+        return False, []
+    return True, options
+
+
 def method_requires_cost_center_or_project(company_id: int, direction: str, method_code: str) -> tuple[bool, bool]:
     """آیا معینِ نگاشته‌شده‌یِ این روش، مرکزِ هزینه/پروژه را الزامی کرده --
     طبقِ درخواستِ صریح («اگر تفصیلی‌ها مراکزِ هزینه و پروژه داشتند در

@@ -27,6 +27,10 @@ import {
   VehicleSettlementSubmitResponse,
   VehicleSettlementSummaryResponse,
   WarehouseRow,
+  SalesMode,
+  BankRow,
+  CatalogResponse,
+  InvoicePrintData,
 } from "./types";
 
 export type Fetcher = typeof fetch;
@@ -159,8 +163,8 @@ export class ApiClient {
     return this.request<PullResponse>("/sync/pull");
   }
 
-  async getTodaySummary(): Promise<TodaySummaryResponse> {
-    return this.request<TodaySummaryResponse>("/dashboard/today");
+  async getTodaySummary(mode?: SalesMode): Promise<TodaySummaryResponse> {
+    return this.request<TodaySummaryResponse>(`/dashboard/today${mode ? `?mode=${mode}` : ""}`);
   }
 
   async listCustomers(query?: string): Promise<CustomerListRow[]> {
@@ -168,8 +172,8 @@ export class ApiClient {
     return this.request<CustomerListRow[]>(`/customers${q}`);
   }
 
-  async getCustomerDetail(detailAccountId: number): Promise<CustomerDetailResponse> {
-    return this.request<CustomerDetailResponse>(`/customers/${detailAccountId}`);
+  async getCustomerDetail(detailAccountId: number, mode?: SalesMode): Promise<CustomerDetailResponse> {
+    return this.request<CustomerDetailResponse>(`/customers/${detailAccountId}${mode ? `?mode=${mode}` : ""}`);
   }
 
   async createPayment(payload: PaymentCreateRequest, idempotencyKey?: string): Promise<PaymentCreateResponse> {
@@ -270,6 +274,19 @@ export class ApiClient {
    * انواعِ تسویه در دسکتاپ باشد»). */
   async listSettlementMethods(): Promise<SettlementMethodRow[]> {
     return this.request<SettlementMethodRow[]>("/pricing/settlement-methods");
+  }
+
+  async listBanks(): Promise<BankRow[]> {
+    return this.request<BankRow[]>("/pricing/banks");
+  }
+
+  /** کاتالوگِ کاملِ قابلِ‌فروش + موجودیِ انبارِ داده‌شده (در پخشِ گرم: انبارِ خودرو). */
+  async getCatalog(warehouseId: number | null): Promise<CatalogResponse> {
+    return this.request<CatalogResponse>(`/products/catalog${warehouseId !== null ? `?warehouse_id=${warehouseId}` : ""}`);
+  }
+
+  async getInvoicePrintData(documentId: number): Promise<InvoicePrintData> {
+    return this.request<InvoicePrintData>(`/orders/${documentId}/print-data`);
   }
 
   /** طبقِ باگِ واقعیِ دومِ کشف‌شده (R198، هم‌الگو با R196): سفارش قبلاً

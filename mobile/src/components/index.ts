@@ -15,3 +15,4 @@ export * from "./SearchBar";
 export * from "./StatusBadge";
 export * from "./Toast";
 export * from "./VisitCard";
+export * from "./BarcodeScannerModal";

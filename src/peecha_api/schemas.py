@@ -61,9 +61,31 @@ class OrderLineRequest(BaseModel):
     unit_price: decimal.Decimal
 
 
+class ReceivedCheckRequest(BaseModel):
+    """طبقِ درخواستِ صریح («فیلدهایِ چک دقیقاً همون فیلدهایِ دسکتاپ»):
+    هم‌فرمت با چکِ دریافتیِ فرمِ دریافتِ خزانه‌داریِ دسکتاپ."""
+
+    check_no: str
+    due_date: datetime.date
+    amount: decimal.Decimal
+    check_serial: str | None = None
+    bank_id: int | None = None
+    check_bank_name: str | None = None
+    iban: str | None = None
+    bank_account_no: str | None = None
+    party_name: str | None = None
+    national_id: str | None = None
+    phone: str | None = None
+
+
 class OrderSettlementLineRequest(BaseModel):
     method_code: str
     amount: decimal.Decimal
+    # طبقِ درخواستِ صریح («ثبتِ تسویه دقیقاً همون فیلدهایی که دسکتاپ داره»):
+    # ستونِ «تفصیلی» (کدام صندوق/حسابِ بانکی) + یادداشت + چک‌ها (فقط CHECK).
+    detail_account_id: int | None = None
+    note: str | None = None
+    checks: list[ReceivedCheckRequest] | None = None
 
 
 class OrderCreateRequest(BaseModel):

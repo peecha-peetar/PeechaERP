@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
+from peecha.services import treasury as treasury_service
 from peecha_api.deps import AuthContext, get_current_context
 from peecha_api.schemas import PriceResolveResponse
 
@@ -80,7 +81,28 @@ def list_settlement_methods(ctx: AuthContext = Depends(get_current_context)) -> 
     """طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
     انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
     موبایل خاموش کنیم»): فقط روش‌هایِ فعال‌شده‌یِ موبایل برمی‌گردد."""
-    return [
-        {"method_code": m.method_code, "label": m.label}
-        for m in settlements_service.list_mobile_settlement_methods(ctx.company_id) if m.is_enabled
-    ]
+    result = []
+    for m in settlements_service.list_mobile_settlement_methods(ctx.company_id):
+        if not m.is_enabled:
+            continue
+        # طبقِ درخواستِ صریح («دقیقاً همون فیلدهایی که دسکتاپ داره»): ستونِ
+        # «تفصیلی» (کدام صندوق/حسابِ بانکی) + پیش‌فرضِ همان روش.
+        requires_detail, options = settlements_service.mobile_method_detail_options(ctx.company_id, m.method_code)
+        default = settlements_service.get_pos_settlement_method_default(ctx.company_id, m.method_code)
+        result.append({
+            "method_code": m.method_code,
+            "label": m.label,
+            "requires_detail": requires_detail,
+            "detail_options": [
+                {"detail_account_id": o.detail_account_id, "code": o.code, "name": o.name or o.code} for o in options
+            ],
+            "default_detail_account_id": default.detail_account_id if default is not None else None,
+        })
+    return result
+
+
+@router.get("/banks")
+def list_banks(ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
+    """فهرستِ بانک‌ها برایِ فیلدِ «بانک» در ثبتِ چکِ دریافتی -- همان
+    فهرستِ دسکتاپ (تنظیماتِ خزانه‌داری)."""
+    return [{"bank_id": b.bank_id, "name": b.name} for b in treasury_service.list_banks(ctx.company_id, active_only=True)]

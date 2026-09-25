@@ -1,6 +1,7 @@
 import { ApiClient, ApiError } from "../api/client";
 import { InMemoryKeyValueStore } from "../storage/keyValueStore";
 import { LocalCache } from "../storage/localCache";
+import { InvoiceResultStore } from "./invoiceResults";
 import { OfflineQueue, PendingAction } from "./offlineQueue";
 import { VisitCorrelationStore } from "./visitCorrelation";
 
@@ -32,6 +33,7 @@ export class SyncEngine {
     // در اپِ واقعی، services.ts همیشه نمونه‌یِ مشترکِ رویِ همان kvStore
     // را می‌دهد (وگرنه نگاشت با هر بارِ ساختِ SyncEngine گم می‌شود).
     private readonly visitCorrelation: VisitCorrelationStore = new VisitCorrelationStore(new InMemoryKeyValueStore()),
+    private readonly invoiceResults: InvoiceResultStore = new InvoiceResultStore(new InMemoryKeyValueStore()),
   ) {}
 
   async pull(): Promise<void> {
@@ -39,7 +41,21 @@ export class SyncEngine {
     await this.cache.savePullResponse(data);
   }
 
-  async pushQueue(): Promise<PushResult> {
+  private inFlightPush: Promise<PushResult> | null = null;
+
+  /** اگر یک ارسالِ صف در جریان است (مثلاً تیکِ خودکارِ پس‌زمینه)، همان
+   * را برمی‌گرداند -- دو ارسالِ هم‌زمان ممکن بود یک اقدام را هم‌زمان دوبار
+   * بفرستند. */
+  pushQueue(): Promise<PushResult> {
+    if (this.inFlightPush === null) {
+      this.inFlightPush = this.pushQueueOnce().finally(() => {
+        this.inFlightPush = null;
+      });
+    }
+    return this.inFlightPush;
+  }
+
+  private async pushQueueOnce(): Promise<PushResult> {
     const succeeded: string[] = [];
     const failedButKept: PushResult["failedButKept"] = [];
     const actions = await this.queue.list();
@@ -123,6 +139,11 @@ export class SyncEngine {
       const orderResult = await this.api.createOrder(action.payload.order, action.idempotencyKey);
       documentId = orderResult.document_id;
       lineIds = orderResult.line_ids;
+      await this.invoiceResults.record(action.idempotencyKey, {
+        documentId,
+        documentNo: orderResult.document_no ?? null,
+        settlementWarning: orderResult.settlement_warning ?? null,
+      });
       // نیمه‌یِ اول موفق شد -- این را همین‌جا در صف ثبت می‌کنیم تا اگر
       // نیمه‌یِ دوم (تاییدِ تحویل) با قطعیِ شبکه مواجه شد، تلاشِ بعدی
       // سفارش را دوباره نسازد.

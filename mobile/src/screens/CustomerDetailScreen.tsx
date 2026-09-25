@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { CustomerDetailResponse, CustomerRow, VisitPlanRow } from "../api/types";
+import { CustomerDetailResponse, CustomerRow, SalesMode, VisitPlanRow } from "../api/types";
 import { formatAmount } from "../format";
-import { Button, Card, ErrorState, SkeletonList, StatusBadge } from "../components";
+import { Button, Card, ErrorState, SkeletonList, StatusBadge, useToast } from "../components";
+import { printInvoice, shareInvoicePdf } from "../print/printInvoice";
 import { formatJalaliDate } from "../jalali";
 import { LocalCache } from "../storage/localCache";
 import { useTheme } from "../theme/ThemeProvider";
@@ -23,6 +24,8 @@ interface Props {
   /** طبقِ درخواستِ صریحِ کاربر («در پخشِ گرم ویزیت معنی نداره»): دکمهٔ
    * «شروعِ ویزیت» پنهان و «ثبتِ سفارش» به «صدورِ فاکتور» تبدیل می‌شود. */
   vanSales?: boolean;
+  /** طبقِ «پخشِ سرد و گرم کاملاً مجزا باشند»: سوابقِ اخیر فقط سندِ همین حالت. */
+  salesMode?: SalesMode;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -47,17 +50,34 @@ export function CustomerDetailScreen({
   onCreateCollection,
   collectionOnly,
   vanSales,
+  salesMode,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
   const [visitPlan, setVisitPlan] = useState<VisitPlanRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [printingId, setPrintingId] = useState<number | null>(null);
+  const toast = useToast();
+
+  // طبقِ درخواستِ صریحِ کاربر («پرینتِ فاکتور و فایلِ pdf»): چاپِ دوبارهٔ
+  // نسخهٔ رسمیِ هر سندِ اخیر از سرور (مثلاً فاکتوری که هنگامِ ثبت آفلاین بود).
+  const printDocument = async (documentId: number, asPdf: boolean) => {
+    setPrintingId(documentId);
+    try {
+      const data = await apiClient.getInvoicePrintData(documentId);
+      await (asPdf ? shareInvoicePdf(data) : printInvoice(data));
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : "چاپ انجام نشد.", "danger");
+    } finally {
+      setPrintingId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [data, cached] = await Promise.all([apiClient.getCustomerDetail(detailAccountId), localCache.getPullResponse()]);
+      const [data, cached] = await Promise.all([apiClient.getCustomerDetail(detailAccountId, salesMode), localCache.getPullResponse()]);
       setDetail(data);
       setVisitPlan(cached?.visit_plans.find((p) => p.customer_detail_account_id === detailAccountId) ?? null);
     } catch (e) {
@@ -65,7 +85,7 @@ export function CustomerDetailScreen({
     } finally {
       setLoading(false);
     }
-  }, [apiClient, localCache, detailAccountId]);
+  }, [apiClient, localCache, detailAccountId, salesMode]);
 
   useEffect(() => {
     load();
@@ -205,16 +225,21 @@ export function CustomerDetailScreen({
                 key={d.document_id}
                 style={{
                   flexDirection: "row",
+                  alignItems: "center",
                   justifyContent: "space-between",
                   paddingVertical: spacing.xs,
                   borderTopWidth: index === 0 ? 0 : 1,
                   borderTopColor: colors.border,
                 }}
               >
-                <Text style={[typography.body, { color: colors.textPrimary }]}>
-                  #{d.document_no} · {formatJalaliDate(d.document_date)}
-                </Text>
-                <Text style={[typography.numeric, { color: colors.textPrimary }]}>{formatAmount(d.total_amount)}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[typography.body, { color: colors.textPrimary }]}>
+                    #{d.document_no} · {formatJalaliDate(d.document_date)}
+                  </Text>
+                  <Text style={[typography.numeric, { color: colors.textPrimary }]}>{formatAmount(d.total_amount)}</Text>
+                </View>
+                <Button label="چاپ" size="md" variant="ghost" fullWidth={false} disabled={printingId !== null} onPress={() => printDocument(d.document_id, false)} />
+                <Button label="PDF" size="md" variant="ghost" fullWidth={false} disabled={printingId !== null} onPress={() => printDocument(d.document_id, true)} />
               </View>
             ))}
           </Card>

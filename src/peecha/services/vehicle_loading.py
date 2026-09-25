@@ -75,7 +75,10 @@ def create_vehicle_loading(
         if line_fields.item_id in variant_parent_ids:
             raise ValueError("این کالا خودِ کالای اصلیِ دارایِ متغیر است -- یکی از متغیرهایش را انتخاب کنید.")
 
-    balances_by_item = {b.item_id: b.quantity_available for b in engine_service.list_balances(company_id, warehouse_id=source_warehouse_id)}
+    # هر ردیفِ list_balances یک مکان (bin) است -- موجودیِ کلِ انبار جمعِ همه است.
+    balances_by_item: dict[int, decimal.Decimal] = {}
+    for b in engine_service.list_balances(company_id, warehouse_id=source_warehouse_id):
+        balances_by_item[b.item_id] = balances_by_item.get(b.item_id, decimal.Decimal(0)) + b.quantity_available
     # طبقِ رفعِ باگِ واقعی («اگر انبار اجازهٔ موجودیِ منفی نداشته باشه
     # نباید منتقل بشه»): تاییدِ راننده هم از همان inventory_engine
     # می‌گذرد که این قاعده را رعایت می‌کند، ولی اگر همان‌جا رد شود پیامِ

@@ -45,7 +45,9 @@ def list_customers(q: str | None = None, ctx: AuthContext = Depends(get_current_
 
 
 @router.get("/{detail_account_id}")
-def get_customer_detail(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> dict:
+def get_customer_detail(
+    detail_account_id: int, mode: str | None = None, ctx: AuthContext = Depends(get_current_context),
+) -> dict:
     customers_by_id = {c["detail_account_id"]: c for c in dimensions_service.list_customers(ctx.company_id)}
     customer = customers_by_id.get(detail_account_id)
     if customer is None:
@@ -56,11 +58,24 @@ def get_customer_detail(detail_account_id: int, ctx: AuthContext = Depends(get_c
     purchase_summary = documents_service.summarize_customer_purchases(ctx.company_id, detail_account_id)
     items_by_id = {it.item_id: it for it in catalog_service.list_items(ctx.company_id)}
 
-    recent_documents = sorted(
-        (
+    # طبقِ رفعِ باگِ واقعی («پخشِ سرد و گرم کاملاً مجزا باشند»): با mode
+    # فقط سندِ همان حالت (گرم = فاکتورِ کانالِ VAN_SALES، سرد = سفارشِ
+    # کانالِ PRE_SALES)؛ بدونِ mode رفتارِ قبلی.
+    if mode == "VAN_SALES":
+        mode_documents = documents_service.list_documents(
+            ctx.company_id, "SALES_INVOICE", counterparty_detail_account_id=detail_account_id, limit=10, channel_type_code="VAN_SALES",
+        )
+    elif mode == "PRE_SALES":
+        mode_documents = documents_service.list_documents(
+            ctx.company_id, "SALES_ORDER", counterparty_detail_account_id=detail_account_id, limit=10, channel_type_code="PRE_SALES",
+        )
+    else:
+        mode_documents = (
             documents_service.list_documents(ctx.company_id, "SALES_ORDER", counterparty_detail_account_id=detail_account_id, limit=10)
             + documents_service.list_documents(ctx.company_id, "SALES_INVOICE", counterparty_detail_account_id=detail_account_id, limit=10)
-        ),
+        )
+    recent_documents = sorted(
+        mode_documents,
         key=lambda d: (d.document_date, d.document_id),
         reverse=True,
     )[:10]

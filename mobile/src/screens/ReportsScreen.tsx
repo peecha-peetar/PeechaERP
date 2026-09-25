@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { TodaySummaryResponse } from "../api/types";
+import { SalesMode, TodaySummaryResponse } from "../api/types";
 import { Card, ErrorState, SkeletonList } from "../components";
 import { formatAmount } from "../format";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface Props {
   apiClient: ApiClient;
+  salesMode: SalesMode;
 }
 
 /** طبقِ درخواستِ صریحِ کاربر («در پخشِ گرم... آیتم‌هایِ مشتری و فاکتور و
@@ -15,7 +16,7 @@ interface Props {
  * معنا ندارد، به‌جایِ فرمِ کاملِ صفحه‌یِ خانه، همین سه شمارهٔ کلیدیِ روزِ
  * همین ویزیتور (تعدادِ فاکتور/جمعِ فروش/جمعِ وصول) -- از همان
  * /dashboard/today که هم‌اکنون هست، بدونِ اندپوینتِ تازه. */
-export function ReportsScreen({ apiClient }: Props) {
+export function ReportsScreen({ apiClient, salesMode }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [summary, setSummary] = useState<TodaySummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ export function ReportsScreen({ apiClient }: Props) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const data = await apiClient.getTodaySummary();
+      const data = await apiClient.getTodaySummary(salesMode);
       setSummary(data);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "دریافتِ گزارشِ امروز ناموفق بود.");
@@ -33,7 +34,7 @@ export function ReportsScreen({ apiClient }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [apiClient]);
+  }, [apiClient, salesMode]);
 
   useEffect(() => {
     load();

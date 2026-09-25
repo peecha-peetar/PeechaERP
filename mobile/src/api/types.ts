@@ -115,14 +115,43 @@ export interface WarehouseRow {
 
 /** طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
  * انواعِ تسویه در دسکتاپ باشد»): فقط روش‌هایِ فعال‌شده‌یِ موبایل. */
+export interface SettlementDetailOption {
+  detail_account_id: number;
+  code: string;
+  name: string;
+}
+
 export interface SettlementMethodRow {
   method_code: string;
   label: string;
+  /** هم‌الگو با ستونِ «تفصیلی» در دیالوگِ نحوه‌یِ تسویهٔ دسکتاپ: اگر true،
+   * باید یکی از detail_options (صندوق/حسابِ بانکی) انتخاب شود. */
+  requires_detail?: boolean;
+  detail_options?: SettlementDetailOption[];
+  default_detail_account_id?: number | null;
+}
+
+/** هم‌فرمت با چکِ دریافتیِ فرمِ دریافتِ خزانه‌داریِ دسکتاپ. */
+export interface ReceivedCheckInput {
+  check_no: string;
+  due_date: string;
+  amount: string;
+  check_serial?: string | null;
+  bank_id?: number | null;
+  check_bank_name?: string | null;
+  iban?: string | null;
+  bank_account_no?: string | null;
+  party_name?: string | null;
+  national_id?: string | null;
+  phone?: string | null;
 }
 
 export interface OrderSettlementLineInput {
   method_code: string;
   amount: string;
+  detail_account_id?: number | null;
+  note?: string | null;
+  checks?: ReceivedCheckInput[];
 }
 
 export interface OrderLineInput {
@@ -151,6 +180,8 @@ export interface OrderCreateRequest {
 export interface OrderCreateResponse {
   document_id: number;
   line_ids: number[];
+  document_no?: number;
+  settlement_warning?: string | null;
 }
 
 export interface DeliveryLineInput {
@@ -334,4 +365,65 @@ export interface TodayCollectionRow {
   customer_name: string | null;
   amount: string;
   description: string | null;
+}
+
+/** حالتِ فروشِ انتخاب‌شده در موبایل -- پخشِ گرم (فاکتورِ آنی) یا پخشِ سرد (سفارش). */
+export type SalesMode = "VAN_SALES" | "PRE_SALES";
+
+export interface CatalogItem {
+  item_id: number;
+  code: string;
+  name: string;
+  barcode: string | null;
+  sku: string | null;
+  category_id: number | null;
+  brand_id: number | null;
+  base_uom_id: number;
+  base_uom_code: string;
+  default_tax_percent: string | null;
+  /** null یعنی انبار مشخص نشده (موجودی نامعلوم). */
+  stock_quantity: string | null;
+}
+
+export interface CatalogResponse {
+  items: CatalogItem[];
+  categories: { category_id: number; parent_category_id: number | null; name: string }[];
+  brands: { brand_id: number; name: string }[];
+}
+
+export interface BankRow {
+  bank_id: number;
+  name: string;
+}
+
+export interface InvoicePrintLine {
+  line_no: number;
+  item_code: string;
+  item_name: string | null;
+  uom_code: string;
+  quantity: string;
+  unit_price: string;
+  discount_amount: string;
+  tax_amount: string;
+  line_total: string;
+}
+
+export interface InvoicePrintData {
+  document_id: number | null;
+  document_type_code: string;
+  document_no: number | null;
+  document_date: string;
+  status_code: string;
+  company: { name: string; legal_name?: string | null; economic_code: string | null; national_id: string | null; registration_no?: string | null };
+  seller_name: string | null;
+  customer: { detail_account_id: number; code: string | null; name: string | null; phone: string | null; address: string | null };
+  lines: InvoicePrintLine[];
+  gross_amount: string;
+  discount_amount: string;
+  tax_amount: string;
+  total_amount: string;
+  settlement_lines: { method_code: string; label: string; amount: string; note: string | null }[];
+  checks: { check_no: string; bank_name: string | null; due_date: string; amount: string }[];
+  settled_amount: string;
+  remaining_amount: string;
 }

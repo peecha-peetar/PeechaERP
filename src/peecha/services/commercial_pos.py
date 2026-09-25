@@ -526,6 +526,10 @@ def record_combined_settlement(
             method_code, amount = entry[0], entry[1]
             note = entry[2] if len(entry) > 2 else None
             detail_account_id = entry[3] if len(entry) > 3 else None
+            # طبقِ درخواستِ صریح («ثبتِ تسویه با همان فیلدهایِ دسکتاپ -- مثلاً
+            # فیلدهایِ چک»): عضوِ پنجمِ اختیاری، فیلدهایِ اضافیِ MethodLine
+            # (checks/check_no/check_bank_name/check_due_date/check_party_name).
+            method_extras = entry[4] if len(entry) > 4 and entry[4] else {}
             doc_total += amount
             default = settlements_service.get_pos_settlement_method_default(company_id, method_code)
             extra_details: dict[int, int] = {}
@@ -540,6 +544,7 @@ def record_combined_settlement(
                 treasury_service.MethodLine(
                     method=method_code, amount=amount, description=note or "",
                     detail_account_id=detail_account_id, extra_details=(extra_details or None),
+                    **method_extras,
                 )
             )
         document_totals[document_id] = doc_total
