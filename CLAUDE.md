@@ -17,7 +17,8 @@ Persian (RTL) multi-company ERP. User communicates in Persian; reply in Persian.
 - Keep code comments short; only for non-obvious reasons.
 
 ## Verify (run only what the change touches)
-- Postgres: `service postgresql start`; user/pass `peecha`/`peecha`, host `localhost`. Each integration script sets `PEECHA_DB_NAME` and needs a fresh DB (`DROP/CREATE DATABASE`).
+- Postgres: `service postgresql start`; user/pass `peecha`/`peecha`, host `localhost`.
+- Integration tests: `tests/integration/run_all.sh [r209]` (filter by release number; it recreates each script's DB). Add a `test_rNNN_*.py` there for each backend change.
 - Integration script pattern: `apply_pending_schema_files(get_engine())` → `bootstrap_system("admin", ..., "secret123", ...)` → create COA accounts/mappings via services → `fastapi.testclient.TestClient(peecha_api.main.app)`.
 - Desktop screens: instantiate with `QT_QPA_PLATFORM=offscreen` and call `.refresh()`.
 - Mobile: `cd mobile && npm run typecheck && npm test`; bundle check `npx expo export --platform android --output-dir <tmp>`.
