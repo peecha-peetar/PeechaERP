@@ -83,13 +83,15 @@ def me(ctx: AuthContext = Depends(get_current_context)) -> dict:
     آن را هر بار با یک درخواستِ جدا (هم‌الگو با /pricing/channels) پس از
     ورود می‌خواند."""
     channel_type = users_service.get_mobile_channel_type(ctx.user_id, ctx.company_id)
-    # طبقِ درخواستِ صریح («فروش بر اساسِ موجودیِ خودرو»، فازِ ۲): فقط
-    # برایِ پخشِ گرم معنا دارد -- ویزیتورِ پخشِ سرد همچنان از انبارِ
-    # پیش‌فرضِ شرکت استفاده می‌کند (سفارش، نه فاکتورِ آنی؛ موجودی همان
-    # لحظه کم نمی‌شود).
-    assigned_vehicle_warehouse_id = (
-        vehicle_team_service.get_assigned_vehicle_warehouse_id(ctx.user_id, ctx.company_id, "VISITOR")
-        if channel_type == "VAN_SALES" else None
+    # طبقِ رفعِ باگِ واقعی («در هر سه نقش خودم را گذاشتم ولی فاکتورِ
+    # موبایل می‌گوید خودرویی وصل نیست»): قبلاً این مقدار فقط وقتی برگردانده
+    # می‌شد که «نوعِ کانالِ موبایلِ» کاربر در تنظیماتِ کاربرانِ دسکتاپ
+    # VAN_SALES بود -- ولی از R205 خودِ ویزیتور حالتِ گرم/سرد را در
+    # موبایل انتخاب می‌کند و آن تنظیم فقط پیشنهادِ پیش‌فرض است. پس
+    # همیشه برگردانده می‌شود؛ موبایل فقط در حالتِ پخشِ گرم از آن استفاده
+    # می‌کند.
+    assigned_vehicle_warehouse_id = vehicle_team_service.get_assigned_vehicle_warehouse_id(
+        ctx.user_id, ctx.company_id, "VISITOR",
     )
     # طبقِ درخواستِ صریح («تسویه آخر روز باید بصورتِ انتخابی به یک نفر از
     # ۳ نقش واگذار بشه»): نقشِ مسئولِ تسویه لزوماً VISITOR نیست (می‌تواند
