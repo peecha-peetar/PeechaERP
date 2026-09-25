@@ -39,6 +39,14 @@ def list_channels(company_id: int) -> list[Channel]:
         return list(session.scalars(select(Channel).where(Channel.company_id == company_id)))
 
 
+def get_channel(company_id: int, channel_code: str) -> Channel | None:
+    with new_session() as session:
+        row = session.get(Channel, (channel_code, company_id))
+        if row is not None:
+            session.expunge(row)
+        return row
+
+
 def create_channel(
     company_id: int, channel_code: str, name: str, channel_type_code: str,
     default_price_list_id: int | None = None, default_warehouse_id: int | None = None,
@@ -69,6 +77,23 @@ def set_channel_mobile_defaults(
             raise ValueError("کانال یافت نشد.")
         row.default_cost_center_detail_account_id = cost_center_detail_account_id
         row.default_project_detail_account_id = project_detail_account_id
+        session.commit()
+
+
+def set_channel_pricing_defaults(
+    company_id: int, channel_code: str, price_list_id: int | None, discount_rule_id: int | None,
+) -> None:
+    """طبقِ درخواستِ صریحِ کاربر («تعریف بشه کدام قیمت برایِ کالاهایِ
+    پخشِ گرم و سرد و حتی تخفیف‌ها/پروموشن‌ها قابلِ‌انتخاب باشه»): وقتی
+    این دو مقدار برایِ یک کانال تعریف شوند، GET /pricing/resolve آن‌ها
+    را به جایِ فهرستِ قیمتِ پیش‌فرضِ خودِ مشتری و بهترینِ قاعدهٔ عمومیِ
+    فعال اعمال می‌کند (channel_code را در پارامترِ resolve بفرستد)."""
+    with new_session() as session:
+        row = session.get(Channel, (channel_code, company_id))
+        if row is None:
+            raise ValueError("کانال یافت نشد.")
+        row.default_price_list_id = price_list_id
+        row.default_discount_rule_id = discount_rule_id
         session.commit()
 
 
@@ -393,6 +418,11 @@ class ResolvedPrice:
 def resolve_price(
     company_id: int, counterparty_detail_account_id: int, item_id: int, uom_id: int, quantity: decimal.Decimal,
     price_list_id: int | None, document_type_code: str, as_of_date: datetime.date | None = None,
+    # طبقِ درخواستِ صریحِ کاربر («تخفیف/پروموشن هم قابلِ‌انتخاب برایِ
+    # پخشِ گرم/سرد باشه»): وقتی مشخص شود (مثلاً از Channel.default_
+    # discount_rule_id)، دقیقاً همین قاعده اعمال می‌شود -- نه بهترینِ
+    # قواعدِ scope=ALLِ فعال (رفتارِ پیش‌فرض وقتی None بماند).
+    discount_rule_id: int | None = None,
 ) -> ResolvedPrice:
     as_of_date = as_of_date or datetime.date.today()
     contract_type = "SALES" if document_type_code.startswith("SALES") else "PURCHASE"
@@ -411,15 +441,24 @@ def resolve_price(
         if base_price is None:
             raise ValueError("قیمتی برایِ این کالا در فهرستِ قیمتِ انتخاب‌شده تعریف نشده است.")
 
-        best_rule = session.scalar(
-            select(DiscountRule)
-            .where(
-                DiscountRule.company_id == company_id, DiscountRule.is_active.is_(True),
-                DiscountRule.scope_type_code == "ALL", DiscountRule.valid_from <= as_of_date,
-                (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+        if discount_rule_id is not None:
+            best_rule = session.scalar(
+                select(DiscountRule).where(
+                    DiscountRule.rule_id == discount_rule_id, DiscountRule.company_id == company_id,
+                    DiscountRule.is_active.is_(True), DiscountRule.valid_from <= as_of_date,
+                    (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+                )
             )
-            .order_by(DiscountRule.priority)
-        )
+        else:
+            best_rule = session.scalar(
+                select(DiscountRule)
+                .where(
+                    DiscountRule.company_id == company_id, DiscountRule.is_active.is_(True),
+                    DiscountRule.scope_type_code == "ALL", DiscountRule.valid_from <= as_of_date,
+                    (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+                )
+                .order_by(DiscountRule.priority)
+            )
         discount_amount = _ZERO
         applied_rule_id = None
         if best_rule is not None:

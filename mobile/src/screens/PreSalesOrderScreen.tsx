@@ -50,7 +50,7 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
     try {
       const resolved = await apiClient.resolvePrice({
         counterpartyDetailAccountId: customer.detail_account_id,
-        itemId, uomId, quantity, documentTypeCode: "SALES_ORDER",
+        itemId, uomId, quantity, documentTypeCode: "SALES_ORDER", channelCode,
       });
       setLine(itemId, "unitPrice", resolved.unit_price);
     } catch {

@@ -262,6 +262,9 @@ export class ApiClient {
     if (params.warehouseId !== null && params.warehouseId !== undefined) {
       query.set("warehouse_id", String(params.warehouseId));
     }
+    if (params.channelCode !== null && params.channelCode !== undefined) {
+      query.set("channel_code", params.channelCode);
+    }
     return this.request<PriceResolveResponse>(`/pricing/resolve?${query.toString()}`);
   }
 

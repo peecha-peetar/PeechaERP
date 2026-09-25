@@ -36,15 +36,27 @@ def resolve_price(
     # باشد نادیده گرفته می‌شود -- دقیقاً هم‌الگو با resolve_default_tax_percentِ
     # دسکتاپ.
     warehouse_id: int | None = Query(None),
+    # طبقِ درخواستِ صریحِ کاربر («تعریف بشه کدام قیمت برایِ کالاهایِ پخشِ
+    # گرم و سرد و حتی تخفیف‌ها/پروموشن‌ها قابلِ‌انتخاب باشه»): اگر همین
+    # کانال در تنظیماتِ بازرگانی فهرستِ قیمت/قاعدهٔ تخفیفِ پیش‌فرضِ خودش
+    # را داشته باشد، به‌جایِ فهرستِ قیمتِ پیش‌فرضِ خودِ مشتری اعمال می‌شود.
+    channel_code: str | None = Query(None),
     ctx: AuthContext = Depends(get_current_context),
 ) -> PriceResolveResponse:
     profile = partners_service.get_customer_profile(counterparty_detail_account_id)
     price_list_id = profile.default_price_list_id if profile is not None else None
+    discount_rule_id = None
+    if channel_code is not None:
+        channel = pricing_service.get_channel(ctx.company_id, channel_code)
+        if channel is not None:
+            if channel.default_price_list_id is not None:
+                price_list_id = channel.default_price_list_id
+            discount_rule_id = channel.default_discount_rule_id
 
     try:
         resolved = pricing_service.resolve_price(
             ctx.company_id, counterparty_detail_account_id, item_id, uom_id, quantity,
-            price_list_id, document_type_code, datetime.date.today(),
+            price_list_id, document_type_code, datetime.date.today(), discount_rule_id=discount_rule_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

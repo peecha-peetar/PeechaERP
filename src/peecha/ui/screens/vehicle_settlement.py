@@ -34,7 +34,7 @@ _STATUS_LABELS = {
     "SUBMITTED": "منتظرِ تاییدِ انبار", "WAREHOUSE_APPROVED": "منتظرِ تاییدِ حسابداری",
     "ACCOUNTING_APPROVED": "قطعی‌شده",
 }
-_LIST_COLUMNS = ["تاریخ", "خودرو", "وضعیت", "مبلغِ فاکتورشده", "نقدِ اعلامی"]
+_LIST_COLUMNS = ["تاریخ", "ساعتِ ثبت", "خودرو", "وضعیت", "مبلغِ فاکتورشده", "نقدِ اعلامی"]
 
 
 def _fmt_qty(value: decimal.Decimal) -> str:
@@ -75,7 +75,7 @@ class VehicleSettlementScreen(FieldHelpMixin, QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table)
 
@@ -123,6 +123,7 @@ class VehicleSettlementScreen(FieldHelpMixin, QWidget):
             vehicle = self._warehouses_by_id.get(s.vehicle_warehouse_id)
             values = [
                 format_jalali_date(s.settlement_date),
+                s.submitted_at.strftime("%H:%M"),
                 vehicle.name if vehicle else str(s.vehicle_warehouse_id),
                 _STATUS_LABELS.get(s.status_code, s.status_code),
                 f"{s.invoiced_amount:,.0f}",

@@ -75,14 +75,22 @@ class SettlementLineSummary:
     sold_quantity: decimal.Decimal
 
 
-def compute_today_summary(vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date) -> list[SettlementLineSummary]:
+def compute_today_summary(
+    vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date,
+    after: datetime.datetime | None = None,
+) -> list[SettlementLineSummary]:
     """طبقِ نیازِ واقعیِ کاربر («سیستم پیشنهاد بدهد») -- بارگیریِ
     تاییدشدهٔ همین خودرو در همین تاریخ (loaded) در برابرِ فاکتورهایِ
     پست‌شده از همین انبار در همین تاریخ (sold). کسری/اضافیِ نهایی =
     loaded - sold - returnedِ اعلام‌شده (returned در submit_settlement
-    گرفته می‌شود، نه این‌جا)."""
+    گرفته می‌شود، نه این‌جا).
+
+    after (طبقِ درخواستِ صریحِ کاربر «چند بار پخشِ گرم و تسویه در یک
+    روز»): وقتی خودرو همان روز قبلاً یک‌بار تسویه شده، این تسویهٔ تازه
+    فقط بارگیری/فروشِ *بعدِ* آن تسویهٔ قبلی را حساب می‌کند -- نه کلِ
+    روز را دوباره (get_open_window_start همین مقدار را می‌دهد)."""
     with new_session() as session:
-        loaded_rows = session.execute(
+        loaded_stmt = (
             select(VehicleLoadingLine.item_id, VehicleLoadingLine.uom_id, func.sum(VehicleLoadingLine.planned_quantity))
             .join(VehicleLoading, VehicleLoading.vehicle_loading_id == VehicleLoadingLine.vehicle_loading_id)
             .where(
@@ -91,9 +99,8 @@ def compute_today_summary(vehicle_warehouse_id: int, company_id: int, settlement
                 VehicleLoading.loading_date == settlement_date,
                 VehicleLoading.status_code == "CONFIRMED",
             )
-            .group_by(VehicleLoadingLine.item_id, VehicleLoadingLine.uom_id)
-        ).all()
-        sold_rows = session.execute(
+        )
+        sold_stmt = (
             select(CommercialDocumentLine.item_id, CommercialDocumentLine.uom_id, func.sum(CommercialDocumentLine.quantity))
             .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
             .where(
@@ -102,8 +109,12 @@ def compute_today_summary(vehicle_warehouse_id: int, company_id: int, settlement
                 CommercialDocument.document_date == settlement_date,
                 CommercialDocument.status_code == "POSTED",
             )
-            .group_by(CommercialDocumentLine.item_id, CommercialDocumentLine.uom_id)
-        ).all()
+        )
+        if after is not None:
+            loaded_stmt = loaded_stmt.where(VehicleLoading.created_at > after)
+            sold_stmt = sold_stmt.where(CommercialDocument.created_at > after)
+        loaded_rows = session.execute(loaded_stmt.group_by(VehicleLoadingLine.item_id, VehicleLoadingLine.uom_id)).all()
+        sold_rows = session.execute(sold_stmt.group_by(CommercialDocumentLine.item_id, CommercialDocumentLine.uom_id)).all()
     sold_by_item = {(item_id, uom_id): qty for item_id, uom_id, qty in sold_rows}
     result = []
     seen = set()
@@ -116,17 +127,42 @@ def compute_today_summary(vehicle_warehouse_id: int, company_id: int, settlement
     return result
 
 
-def compute_invoiced_amount(vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date) -> decimal.Decimal:
+def compute_invoiced_amount(
+    vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date,
+    after: datetime.datetime | None = None,
+) -> decimal.Decimal:
     with new_session() as session:
-        total = session.scalar(
-            select(func.sum(CommercialDocument.total_amount)).where(
-                CommercialDocument.company_id == company_id,
-                CommercialDocument.warehouse_id == vehicle_warehouse_id,
-                CommercialDocument.document_date == settlement_date,
-                CommercialDocument.status_code == "POSTED",
-            )
+        stmt = select(func.sum(CommercialDocument.total_amount)).where(
+            CommercialDocument.company_id == company_id,
+            CommercialDocument.warehouse_id == vehicle_warehouse_id,
+            CommercialDocument.document_date == settlement_date,
+            CommercialDocument.status_code == "POSTED",
         )
+        if after is not None:
+            stmt = stmt.where(CommercialDocument.created_at > after)
+        total = session.scalar(stmt)
         return total or _ZERO
+
+
+def get_open_window_start(vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date) -> datetime.datetime | None:
+    """طبقِ درخواستِ صریحِ کاربر («برایِ هر راننده در روز بتوانیم چند بار
+    پخشِ گرم انجام و تسویه کنیم»): زمانِ ثبتِ آخرین تسویهٔ همین خودرو در
+    همین تاریخ (هر وضعیتی) -- اگر امروز هنوز تسویه‌ای نداشته، None یعنی
+    کلِ روز. today-summary (پیش‌نمایش) و submit_settlement (ثبتِ واقعی)
+    باید دقیقاً همین پنجره را ببینند، وگرنه پیش‌نمایشِ موبایل با مبلغِ
+    واقعاً ثبت‌شده فرق می‌کند."""
+    with new_session() as session:
+        return _last_settlement_submitted_at(session, vehicle_warehouse_id, company_id, settlement_date)
+
+
+def _last_settlement_submitted_at(session, vehicle_warehouse_id: int, company_id: int, settlement_date: datetime.date) -> datetime.datetime | None:
+    return session.scalar(
+        select(func.max(VehicleSettlement.submitted_at)).where(
+            VehicleSettlement.vehicle_warehouse_id == vehicle_warehouse_id,
+            VehicleSettlement.company_id == company_id,
+            VehicleSettlement.settlement_date == settlement_date,
+        )
+    )
 
 
 @dataclass
@@ -152,6 +188,10 @@ class SettlementRow:
     invoiced_amount: decimal.Decimal
     declared_cash_amount: decimal.Decimal
     submitted_by_user_id: int
+    # طبقِ درخواستِ صریحِ کاربر («چند بار پخشِ گرم و تسویه در یک روز»):
+    # چون settlement_date دیگر یکتا نیست، ساعتِ ثبت برایِ تفکیکِ چند
+    # تسویهٔ همان روز در فهرستِ دسکتاپ لازم است.
+    submitted_at: datetime.datetime
     lines: list[SettlementLineRow]
 
 
@@ -160,6 +200,7 @@ def _to_row(s: VehicleSettlement, lines: list[VehicleSettlementLine]) -> Settlem
         vehicle_settlement_id=s.vehicle_settlement_id, vehicle_warehouse_id=s.vehicle_warehouse_id,
         settlement_date=s.settlement_date, status_code=s.status_code, invoiced_amount=s.invoiced_amount,
         declared_cash_amount=s.declared_cash_amount, submitted_by_user_id=s.submitted_by_user_id,
+        submitted_at=s.submitted_at,
         lines=[
             SettlementLineRow(
                 l.item_id, l.uom_id, l.loaded_quantity, l.sold_quantity, l.returned_quantity,
@@ -186,7 +227,7 @@ def list_settlements(company_id: int, status_code: str | None = None) -> list[Se
         stmt = select(VehicleSettlement.vehicle_settlement_id).where(VehicleSettlement.company_id == company_id)
         if status_code is not None:
             stmt = stmt.where(VehicleSettlement.status_code == status_code)
-        stmt = stmt.order_by(VehicleSettlement.settlement_date.desc())
+        stmt = stmt.order_by(VehicleSettlement.settlement_date.desc(), VehicleSettlement.submitted_at.desc())
         ids = session.scalars(stmt).all()
     return [get_settlement(sid, company_id) for sid in ids]
 
@@ -198,15 +239,11 @@ def submit_settlement(
     if not can_submit_settlement(submitted_by_user_id, company_id, vehicle_warehouse_id):
         raise ValueError("شما مجازِ ثبتِ تسویهٔ این خودرو نیستید.")
     with new_session() as session:
-        existing = session.scalar(
-            select(VehicleSettlement).where(
-                VehicleSettlement.vehicle_warehouse_id == vehicle_warehouse_id,
-                VehicleSettlement.settlement_date == settlement_date,
-                VehicleSettlement.company_id == company_id,
-            )
-        )
-        if existing is not None:
-            raise ValueError("تسویهٔ این خودرو برایِ این تاریخ قبلاً ثبت شده است.")
+        # طبقِ درخواستِ صریحِ کاربر («برایِ هر راننده در روز بتوانیم چند
+        # بار پخشِ گرم انجام و تسویه کنیم»): دیگر یک تسویهٔ قطعیِ یکتا در
+        # روز نیست -- هر تسویهٔ تازه فقط بارگیری/فروشِ بعدِ آخرین تسویهٔ
+        # همین خودرو در همین تاریخ را حساب می‌کند (get_open_window_start).
+        window_start = _last_settlement_submitted_at(session, vehicle_warehouse_id, company_id, settlement_date)
 
         # طبقِ درخواستِ صریح: مقصدِ برگشت همان انبارِ مبدأِ آخرین بارگیریِ
         # تاییدشدهٔ همین خودرو در همین تاریخ است (جایی که کالا از آن‌جا
@@ -222,7 +259,7 @@ def submit_settlement(
         if last_loading is None:
             raise ValueError("برایِ این خودرو در این تاریخ هیچ بارگیریِ تاییدشده‌ای ثبت نشده است.")
 
-        invoiced_amount = compute_invoiced_amount(vehicle_warehouse_id, company_id, settlement_date)
+        invoiced_amount = compute_invoiced_amount(vehicle_warehouse_id, company_id, settlement_date, after=window_start)
         settlement = VehicleSettlement(
             company_id=company_id, vehicle_warehouse_id=vehicle_warehouse_id,
             return_destination_warehouse_id=last_loading.source_warehouse_id, settlement_date=settlement_date,

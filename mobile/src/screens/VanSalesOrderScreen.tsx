@@ -134,6 +134,7 @@ export function VanSalesOrderScreen(props: Props) {
           quantity: String(quantity),
           documentTypeCode: "SALES_INVOICE",
           warehouseId,
+          channelCode,
         });
         return {
           unitPrice: Number(resolved.unit_price),
@@ -144,7 +145,7 @@ export function VanSalesOrderScreen(props: Props) {
         return null;
       }
     },
-    [apiClient, customer.detail_account_id, warehouseId],
+    [apiClient, customer.detail_account_id, warehouseId, channelCode],
   );
 
   const setQuantity = (item: CatalogItem, quantity: number) => {

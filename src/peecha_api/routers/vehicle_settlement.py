@@ -33,9 +33,13 @@ def _resolve_vehicle_or_403(ctx: AuthContext) -> int:
 def today_summary(ctx: AuthContext = Depends(get_current_context)) -> dict:
     vehicle_warehouse_id = _resolve_vehicle_or_403(ctx)
     today = datetime.date.today()
-    lines = settlement_service.compute_today_summary(vehicle_warehouse_id, ctx.company_id, today)
+    # طبقِ درخواستِ صریحِ کاربر («چند بار پخشِ گرم و تسویه در یک روز»):
+    # اگر امروز قبلاً تسویه شده، پیش‌نمایش هم فقط بعدِ آن را نشان می‌دهد --
+    # هم‌الگو با submit_settlement، وگرنه پیش‌نمایش با مبلغِ واقعیِ ثبت‌شده فرق می‌کند.
+    window_start = settlement_service.get_open_window_start(vehicle_warehouse_id, ctx.company_id, today)
+    lines = settlement_service.compute_today_summary(vehicle_warehouse_id, ctx.company_id, today, after=window_start)
     items_by_id = {i.item_id: i for i in catalog_service.list_items(ctx.company_id)}
-    invoiced_amount = settlement_service.compute_invoiced_amount(vehicle_warehouse_id, ctx.company_id, today)
+    invoiced_amount = settlement_service.compute_invoiced_amount(vehicle_warehouse_id, ctx.company_id, today, after=window_start)
     return {
         "invoiced_amount": str(invoiced_amount),
         "lines": [
@@ -52,8 +56,10 @@ def today_summary(ctx: AuthContext = Depends(get_current_context)) -> dict:
 def submit(payload: VehicleSettlementSubmitRequest, ctx: AuthContext = Depends(get_current_context)) -> dict:
     vehicle_warehouse_id = _resolve_vehicle_or_403(ctx)
     today = datetime.date.today()
+    window_start = settlement_service.get_open_window_start(vehicle_warehouse_id, ctx.company_id, today)
     summary_by_item = {
-        (l.item_id, l.uom_id): l for l in settlement_service.compute_today_summary(vehicle_warehouse_id, ctx.company_id, today)
+        (l.item_id, l.uom_id): l
+        for l in settlement_service.compute_today_summary(vehicle_warehouse_id, ctx.company_id, today, after=window_start)
     }
     lines = []
     for line in payload.lines:

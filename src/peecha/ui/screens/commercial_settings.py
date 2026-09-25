@@ -662,6 +662,28 @@ class _ChannelsTab(QWidget):
         defaults_form.addWidget(save_defaults_button)
         layout.addLayout(defaults_form)
 
+        # طبقِ درخواستِ صریحِ کاربر («تعریف بشه کدام قیمت برایِ کالاهایِ
+        # پخشِ گرم و سرد و حتی تخفیف‌ها/پروموشن‌ها قابلِ‌انتخاب باشه»):
+        # وقتی برایِ یک کانال تعیین شود، GET /pricing/resolve (موبایل) و
+        # دسکتاپ به‌جایِ فهرستِ قیمتِ پیش‌فرضِ خودِ مشتری، همین‌ها را
+        # اعمال می‌کنند. خالی‌گذاشتن یعنی رفتارِ قبلی دست‌نخورده بماند.
+        pricing_title = QLabel("لیست‌قیمت/تخفیفِ پیش‌فرضِ یک کانال (پخشِ گرم/سرد و غیره)")
+        pricing_title.setObjectName("sectionHint")
+        layout.addWidget(pricing_title)
+
+        pricing_form = QHBoxLayout()
+        self.pricing_channel_combo = QComboBox()
+        self.pricing_channel_combo.currentIndexChanged.connect(self._load_channel_pricing_defaults)
+        pricing_form.addWidget(self.pricing_channel_combo)
+        self.pricing_price_list_combo = QComboBox()
+        pricing_form.addWidget(self.pricing_price_list_combo)
+        self.pricing_discount_rule_combo = QComboBox()
+        pricing_form.addWidget(self.pricing_discount_rule_combo)
+        save_pricing_button = QPushButton("ذخیره")
+        save_pricing_button.clicked.connect(self._save_channel_pricing_defaults)
+        pricing_form.addWidget(save_pricing_button)
+        layout.addLayout(pricing_form)
+
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
@@ -704,6 +726,28 @@ class _ChannelsTab(QWidget):
 
         self._load_channel_defaults()
 
+        current_pricing_channel = self.pricing_channel_combo.currentData()
+        self.pricing_channel_combo.blockSignals(True)
+        self.pricing_channel_combo.clear()
+        for ch in channels:
+            self.pricing_channel_combo.addItem(f"{ch.channel_code} — {ch.name}", ch.channel_code)
+        if current_pricing_channel is not None:
+            index = self.pricing_channel_combo.findData(current_pricing_channel)
+            if index >= 0:
+                self.pricing_channel_combo.setCurrentIndex(index)
+        self.pricing_channel_combo.blockSignals(False)
+
+        self.pricing_price_list_combo.clear()
+        self.pricing_price_list_combo.addItem("(پیش‌فرضِ خودِ مشتری)", None)
+        for pl in pricing_service.list_price_lists(company_id, "SALES"):
+            self.pricing_price_list_combo.addItem(f"{pl.code} — {pl.name}", pl.price_list_id)
+        self.pricing_discount_rule_combo.clear()
+        self.pricing_discount_rule_combo.addItem("(بهترینِ قاعدهٔ عمومیِ فعال)", None)
+        for rule in pricing_service.list_discount_rules(company_id, active_only=False):
+            self.pricing_discount_rule_combo.addItem(f"{rule.code} — {rule.name}", rule.rule_id)
+
+        self._load_channel_pricing_defaults()
+
     def _load_channel_defaults(self) -> None:
         company_id = _company_id()
         channel_code = self.defaults_channel_combo.currentData()
@@ -728,6 +772,31 @@ class _ChannelsTab(QWidget):
             self.defaults_cost_center_combo.currentData(), self.defaults_project_combo.currentData(),
         )
         self.status_label.setText("پیش‌فرضِ موبایلِ این کانال ذخیره شد.")
+
+    def _load_channel_pricing_defaults(self) -> None:
+        company_id = _company_id()
+        channel_code = self.pricing_channel_combo.currentData()
+        if company_id is None or channel_code is None:
+            return
+        channel = next((c for c in pricing_service.list_channels(company_id) if c.channel_code == channel_code), None)
+        if channel is None:
+            return
+        price_list_index = self.pricing_price_list_combo.findData(channel.default_price_list_id)
+        self.pricing_price_list_combo.setCurrentIndex(max(0, price_list_index))
+        discount_rule_index = self.pricing_discount_rule_combo.findData(channel.default_discount_rule_id)
+        self.pricing_discount_rule_combo.setCurrentIndex(max(0, discount_rule_index))
+
+    def _save_channel_pricing_defaults(self) -> None:
+        company_id = _company_id()
+        channel_code = self.pricing_channel_combo.currentData()
+        if company_id is None or channel_code is None:
+            self.status_label.setText("ابتدا یک کانال انتخاب کنید.")
+            return
+        pricing_service.set_channel_pricing_defaults(
+            company_id, channel_code,
+            self.pricing_price_list_combo.currentData(), self.pricing_discount_rule_combo.currentData(),
+        )
+        self.status_label.setText("لیست‌قیمت/تخفیفِ پیش‌فرضِ این کانال ذخیره شد.")
 
     def _add(self) -> None:
         company_id = _company_id()

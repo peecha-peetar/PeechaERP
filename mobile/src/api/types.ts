@@ -217,6 +217,10 @@ export interface PriceResolveRequest {
   documentTypeCode: "SALES_ORDER" | "SALES_INVOICE";
   /** برایِ محاسبهٔ درصدِ مالیات با همان اولویتِ دسکتاپ (شرکت→انبار→کالا). */
   warehouseId?: number | null;
+  /** طبقِ درخواستِ صریحِ کاربر («کدام قیمت برایِ پخشِ گرم/سرد قابلِ‌انتخاب
+   * باشه»): اگر این کانال در تنظیماتِ بازرگانی لیست‌قیمت/تخفیفِ پیش‌فرضِ
+   * خودش را داشته باشد، به‌جایِ پیش‌فرضِ خودِ مشتری اعمال می‌شود. */
+  channelCode?: string | null;
 }
 
 export interface PriceResolveResponse {

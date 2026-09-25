@@ -64,6 +64,11 @@ class Channel(Base):
     name: Mapped[str] = mapped_column(String(100))
     channel_type_code: Mapped[str] = mapped_column(String(15))  # POS|WHOLESALE|ONLINE|AGENT|MARKETPLACE|VAN_SALES|PRE_SALES
     default_price_list_id: Mapped[int | None] = mapped_column(ForeignKey("comm.price_lists.price_list_id"))
+    # طبقِ درخواستِ صریحِ کاربر («تعریف بشه کدام قیمت برایِ پخشِ گرم/سرد و
+    # حتی تخفیف‌ها قابلِ‌انتخاب باشه»): وقتی پر باشد، resolve_price دقیقاً
+    # همین قاعده را اعمال می‌کند (صرفِ‌نظر از scope_type_code)، نه
+    # بهترینِ قواعدِ scope=ALLِ فعال (رفتارِ پیش‌فرضِ قبلی).
+    default_discount_rule_id: Mapped[int | None] = mapped_column(ForeignKey("comm.discount_rules.rule_id"))
     default_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
     # طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه تعیین
     # شود»): پیش‌فرضِ ثابتِ این کانال برایِ سفارش‌هایِ ثبت‌شده از موبایل --
