@@ -129,3 +129,14 @@ class DeliveryConfirmationRequest(BaseModel):
     gps_longitude: decimal.Decimal | None = None
     notes: str | None = None
     lines: list[DeliveryConfirmationLineRequest]
+
+
+class VehicleSettlementLineRequest(BaseModel):
+    item_id: int
+    uom_id: int
+    returned_quantity: decimal.Decimal
+
+
+class VehicleSettlementSubmitRequest(BaseModel):
+    declared_cash_amount: decimal.Decimal
+    lines: list[VehicleSettlementLineRequest]

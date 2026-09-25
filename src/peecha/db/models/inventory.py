@@ -966,3 +966,50 @@ class VehicleTeamAssignment(Base):
     role_code: Mapped[str] = mapped_column(String(15), primary_key=True)  # DRIVER|VISITOR|DISTRIBUTOR
     user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+
+
+# طبقِ درخواستِ صریحِ کاربر (فازِ ۲، بخشِ ۲ از پخشِ گرم): «تسویه آخرِ
+# روز باید بصورتِ انتخابی به یک نفر از ۳ نقش واگذار شود و به تاییدِ
+# انبار و حسابداری برسد» -- هم‌الگو با warehouse_approved_at/
+# weighing_approved_atِ پخشِ سرد (147_pre_sales_fulfillment...sql).
+class VehicleSettlementSettings(Base):
+    __tablename__ = "vehicle_settlement_settings"
+    __table_args__ = ({"schema": "inv"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    settlement_role_code: Mapped[str] = mapped_column(String(15))  # DRIVER|VISITOR|DISTRIBUTOR
+
+
+class VehicleSettlement(Base):
+    __tablename__ = "vehicle_settlements"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_settlement_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    return_destination_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    settlement_date: Mapped[datetime.date] = mapped_column(Date)
+    status_code: Mapped[str] = mapped_column(String(20), default="SUBMITTED")
+    invoiced_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    declared_cash_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    submitted_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    submitted_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    warehouse_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    warehouse_approved_at: Mapped[datetime.datetime | None]
+    accounting_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    accounting_approved_at: Mapped[datetime.datetime | None]
+    return_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class VehicleSettlementLine(Base):
+    __tablename__ = "vehicle_settlement_lines"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_settlement_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    vehicle_settlement_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.vehicle_settlements.vehicle_settlement_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    loaded_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    sold_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    returned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))

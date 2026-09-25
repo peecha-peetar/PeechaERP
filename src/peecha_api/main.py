@@ -26,6 +26,7 @@ from peecha_api.routers import (
     routes,
     smart_sales,
     sync,
+    vehicle_settlement,
     visits,
 )
 
@@ -48,6 +49,7 @@ app.include_router(dashboard.router)
 app.include_router(smart_sales.router)
 app.include_router(manager_dashboard.router)
 app.include_router(collection.router)
+app.include_router(vehicle_settlement.router)
 
 
 @app.get("/health")

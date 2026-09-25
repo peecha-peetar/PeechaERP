@@ -20,6 +20,7 @@ import { ManagerDashboardScreen } from "./screens/ManagerDashboardScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { OrderScreen } from "./screens/OrderScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import { VehicleSettlementScreen } from "./screens/VehicleSettlementScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
 import { createServices } from "./services";
@@ -64,6 +65,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   Settings: undefined;
   ManagerDashboard: undefined;
+  VehicleSettlement: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -110,6 +112,10 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   // طبقِ درخواستِ صریحِ کاربر («فروش بر اساسِ موجودیِ خودرو»، فازِ ۲):
   // فقط برایِ پخشِ گرم معنا دارد -- undefined یعنی هنوز نخوانده‌ایم.
   const [assignedVehicleWarehouseId, setAssignedVehicleWarehouseId] = useState<number | null | undefined>(undefined);
+  // طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورتِ انتخابی به یک
+  // نفر از ۳ نقش واگذار بشه»): اگر مقدار داشته باشد، دکمه‌یِ تسویهٔ
+  // پایانِ روز در تنظیمات نشان داده می‌شود.
+  const [settlementVehicleWarehouseId, setSettlementVehicleWarehouseId] = useState<number | null | undefined>(undefined);
   // طبقِ باگِ واقعیِ کشف‌شده (R196): سفارش نباید یک channel_codeِ
   // هاردکدشده/نامعتبر بفرستد -- undefined یعنی «هنوز بارگذاری‌نشده»،
   // null یعنی «بارگذاری شد ولی هیچ کانالی از این نوع در این شرکت
@@ -137,10 +143,12 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
       .then((me) => {
         setMobileChannelType(me.mobile_channel_type_code);
         setAssignedVehicleWarehouseId(me.assigned_vehicle_warehouse_id);
+        setSettlementVehicleWarehouseId(me.settlement_vehicle_warehouse_id);
       })
       .catch(() => {
         setMobileChannelType(null);
         setAssignedVehicleWarehouseId(null);
+        setSettlementVehicleWarehouseId(null);
       });
   }, [loggedIn, services]);
 
@@ -410,6 +418,9 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 onLoggedOut={() => setLoggedIn(false)}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
                 onOpenManagerDashboard={() => navigation.navigate("ManagerDashboard")}
+                onOpenVehicleSettlement={
+                  settlementVehicleWarehouseId != null ? () => navigation.navigate("VehicleSettlement") : undefined
+                }
               />
             </SafeAreaView>
           )}
@@ -421,6 +432,17 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
               <ManagerDashboardScreen
                 apiClient={services.apiClient}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="VehicleSettlement">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <VehicleSettlementScreen
+                apiClient={services.apiClient}
+                onBack={() => navigation.navigate("Settings")}
               />
             </SafeAreaView>
           )}

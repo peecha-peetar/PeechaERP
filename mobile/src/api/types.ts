@@ -24,6 +24,38 @@ export interface MeResponse {
    * فقط برایِ پخشِ گرم پر می‌شود -- انبارِ همان خودرویی که این ویزیتور
    * در «تیمِ خودرو»یِ دسکتاپ به‌عنوانِ نقشِ VISITOR به آن وصل است. */
   assigned_vehicle_warehouse_id: number | null;
+  /** طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورتِ انتخابی به
+   * یک نفر از ۳ نقش واگذار بشه»): نقشِ مسئولِ تسویه لزوماً VISITOR نیست
+   * -- پس این مقدار مستقل از assigned_vehicle_warehouse_id بالاست. */
+  settlement_vehicle_warehouse_id: number | null;
+}
+
+export interface VehicleSettlementSummaryLine {
+  item_id: number;
+  item_name: string | null;
+  uom_id: number;
+  loaded_quantity: string;
+  sold_quantity: string;
+}
+
+export interface VehicleSettlementSummaryResponse {
+  invoiced_amount: string;
+  lines: VehicleSettlementSummaryLine[];
+}
+
+export interface VehicleSettlementLineInput {
+  item_id: number;
+  uom_id: number;
+  returned_quantity: string;
+}
+
+export interface VehicleSettlementSubmitRequest {
+  declared_cash_amount: string;
+  lines: VehicleSettlementLineInput[];
+}
+
+export interface VehicleSettlementSubmitResponse {
+  vehicle_settlement_id: number;
 }
 
 export interface VisitPlanRow {

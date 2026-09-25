@@ -22,6 +22,9 @@ import {
   StartVisitRequest,
   StartVisitResponse,
   TodaySummaryResponse,
+  VehicleSettlementSubmitRequest,
+  VehicleSettlementSubmitResponse,
+  VehicleSettlementSummaryResponse,
   WarehouseRow,
 } from "./types";
 
@@ -250,5 +253,16 @@ export class ApiClient {
    * وجود ندارد (شکستِ کلیدِ خارجی رویِ گوشیِ فیزیکیِ کاربر تایید شد). */
   async listWarehouses(): Promise<WarehouseRow[]> {
     return this.request<WarehouseRow[]>("/inventory/warehouses");
+  }
+
+  /** طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورت انتخابی به یک
+   * نفر از ۳ نقش واگذار بشه و به تاییدِ انبار و حسابداری برسه»): فقط
+   * کسی که در دسکتاپ به‌عنوانِ مسئولِ تسویه تعیین شده این‌ها را می‌بیند. */
+  async getVehicleSettlementTodaySummary(): Promise<VehicleSettlementSummaryResponse> {
+    return this.request<VehicleSettlementSummaryResponse>("/vehicle-settlement/today-summary");
+  }
+
+  async submitVehicleSettlement(payload: VehicleSettlementSubmitRequest): Promise<VehicleSettlementSubmitResponse> {
+    return this.request<VehicleSettlementSubmitResponse>("/vehicle-settlement", { method: "POST", body: payload });
   }
 }

@@ -12,6 +12,7 @@ from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
 from peecha.services import auth as auth_service
 from peecha.services import users as users_service
+from peecha.services import vehicle_settlement as vehicle_settlement_service
 from peecha.services import vehicle_team as vehicle_team_service
 from peecha_api import security
 from peecha_api.deps import AuthContext, get_current_context
@@ -90,7 +91,13 @@ def me(ctx: AuthContext = Depends(get_current_context)) -> dict:
         vehicle_team_service.get_assigned_vehicle_warehouse_id(ctx.user_id, ctx.company_id, "VISITOR")
         if channel_type == "VAN_SALES" else None
     )
+    # طبقِ درخواستِ صریح («تسویه آخر روز باید بصورتِ انتخابی به یک نفر از
+    # ۳ نقش واگذار بشه»): نقشِ مسئولِ تسویه لزوماً VISITOR نیست (می‌تواند
+    # DRIVER/DISTRIBUTOR هم باشد) -- پس جدا از assigned_vehicle_warehouse_id
+    # بالا محاسبه می‌شود.
+    settlement_vehicle_warehouse_id = vehicle_settlement_service.get_settlement_vehicle_for_user(ctx.user_id, ctx.company_id)
     return {
         "mobile_channel_type_code": channel_type,
         "assigned_vehicle_warehouse_id": assigned_vehicle_warehouse_id,
+        "settlement_vehicle_warehouse_id": settlement_vehicle_warehouse_id,
     }

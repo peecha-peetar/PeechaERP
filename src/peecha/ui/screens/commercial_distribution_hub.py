@@ -25,6 +25,7 @@ from peecha.ui.screens.promotion_rules import PromotionRulesScreen
 from peecha.ui.screens.sms_marketing import SmsMarketingScreen
 from peecha.ui.screens.telesales import TelesalesScreen
 from peecha.ui.screens.vehicle_loading import VehicleLoadingScreen
+from peecha.ui.screens.vehicle_settlement import VehicleSettlementScreen
 from peecha.ui.screens.vehicle_team import VehicleTeamScreen
 from peecha.ui.screens.visit_plans import VisitPlansScreen
 
@@ -64,6 +65,10 @@ class CommercialDistributionHubScreen(QWidget):
         # موزعِ هر خودرو.
         self.vehicle_team_tab = VehicleTeamScreen()
         self.tabs.addTab(self.vehicle_team_tab, "تیمِ خودرو")
+        # طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورت انتخابی به
+        # یک نفر از ۳ نقش واگذار بشه و به تاییدِ انبار و حسابداری برسه»).
+        self.vehicle_settlement_tab = VehicleSettlementScreen()
+        self.tabs.addTab(self.vehicle_settlement_tab, "تسویهٔ خودرو")
         self.customer_visits_tab = CustomerVisitsScreen()
         self.tabs.addTab(self.customer_visits_tab, "ویزیت‌ها")
         self.promotion_rules_tab = PromotionRulesScreen()

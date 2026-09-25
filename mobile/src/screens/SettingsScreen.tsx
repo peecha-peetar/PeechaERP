@@ -17,6 +17,10 @@ interface Props {
   onLoggedOut: () => void;
   onBack: () => void;
   onOpenManagerDashboard: () => void;
+  /** طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورتِ انتخابی به
+   * یک نفر از ۳ نقش واگذار بشه»): فقط برایِ همان یک نفر تعریف می‌شود --
+   * undefined یعنی این کاربر مسئولِ تسویهٔ هیچ خودرویی نیست. */
+  onOpenVehicleSettlement?: () => void;
 }
 
 /** طبقِ اصلِ صریح («Dark/Light Theme»): سوییچِ دستیِ تم + خروجِ حساب --
@@ -34,6 +38,7 @@ interface Props {
  * کاربر از چنین حالتی است، بدونِ نیاز به پاک‌کردنِ کاملِ دیتایِ اپ. */
 export function SettingsScreen({
   apiClient, offlineQueue, syncEngine, syncErrorLog, userFullName, onLoggedOut, onBack, onOpenManagerDashboard,
+  onOpenVehicleSettlement,
 }: Props) {
   const { colors, spacing, typography, mode } = useTheme();
   const { toggleMode } = useThemeControls();
@@ -143,6 +148,10 @@ export function SettingsScreen({
       ) : null}
 
       <Button label="📊 داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
+
+      {onOpenVehicleSettlement ? (
+        <Button label="🚚 تسویهٔ پایانِ روزِ خودرو" variant="secondary" onPress={onOpenVehicleSettlement} />
+      ) : null}
 
       <Button label="🧹 پاکسازیِ صفِ آفلاین (اضطراری)" variant="secondary" onPress={clearOfflineQueue} />
 
