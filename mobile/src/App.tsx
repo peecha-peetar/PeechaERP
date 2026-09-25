@@ -2,8 +2,8 @@ import NetInfo from "@react-native-community/netinfo";
 import { NavigationContainer, NavigatorScreenParams, useNavigation } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator, NativeStackNavigationProp } from "@react-navigation/native-stack";
-import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { AppState, StyleSheet } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { CustomerRow, ItemRow, SettlementMethodRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, ExpoCaptureProvider } from "./capture";
@@ -21,6 +21,7 @@ import { ModeSelectScreen } from "./screens/ModeSelectScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { PreSalesOrderScreen } from "./screens/PreSalesOrderScreen";
 import { VanSalesOrderScreen } from "./screens/VanSalesOrderScreen";
+import { ReportsScreen } from "./screens/ReportsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { VehicleSettlementScreen } from "./screens/VehicleSettlementScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
@@ -55,6 +56,7 @@ export type MainTabParamList = {
   VISITS: undefined;
   CUSTOMERS: undefined;
   ORDER: undefined;
+  REPORTS: undefined;
   COLLECTION: undefined;
 };
 
@@ -147,7 +149,16 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     });
   }, [services]);
 
-  useEffect(() => {
+  // طبقِ رفعِ باگِ واقعیِ گزارش‌شده («از دسکتاپ به‌عنوانِ ویزیتور به
+  // خودرو وصل کردم ولی موبایل هنوز پیامِ «وصل نیستید» را نشان می‌دهد و
+  // نمی‌شود ادامه داد»): قبلاً /auth/me فقط یک‌بار -- درست بعدِ لاگین --
+  // خوانده می‌شد. اگر مدیر این وصل‌کردن را *بعدِ* آن لحظه (مثلاً همین
+  // اپِ بازِ ویزیتور روی گوشی، در حینِ رفت‌وبرگشت به دسکتاپ) انجام دهد،
+  // این مقدار تا آخرِ همان نشستِ اپ برایِ همیشه قدیمی (null) می‌ماند --
+  // چون هیچ رویدادی دوباره آن را نمی‌خواند. حالا هم با برگشتِ اپ از
+  // پس‌زمینه (AppState) و هم با دکمهٔ «تلاشِ دوباره» رویِ خودِ پیامِ
+  // خطا (پایین‌تر) دوباره خوانده می‌شود.
+  const refetchMe = useCallback(() => {
     if (!loggedIn) return;
     services.apiClient
       .getMe()
@@ -162,6 +173,18 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         setSettlementVehicleWarehouseId(null);
       });
   }, [loggedIn, services]);
+
+  useEffect(() => {
+    refetchMe();
+  }, [refetchMe]);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") refetchMe();
+    });
+    return () => subscription.remove();
+  }, [loggedIn, refetchMe]);
 
   useEffect(() => {
     // طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول باشه»): هیچ‌کدام
@@ -362,7 +385,6 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 <InlineSpinner label="در حالِ بررسیِ تنظیماتِ سفارش..." />
               ) : orderChannelCode === null ? (
                 <EmptyState
-                  icon="⚠️"
                   title="کانالِ فروشِ ویزیت تعریف نشده"
                   description={
                     selectedMode === "VAN_SALES"
@@ -372,13 +394,14 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 />
               ) : defaultWarehouseId === null ? (
                 <EmptyState
-                  icon="⚠️"
                   title={selectedMode === "VAN_SALES" ? "شما به هیچ خودرویی وصل نیستید" : "هیچ انباری تعریف نشده"}
                   description={
                     selectedMode === "VAN_SALES"
-                      ? "مدیر باید ابتدا از دسکتاپ، در بخشِ «پخشِ کالا ← تیمِ خودرو»، شما را به‌عنوانِ «ویزیتور» به یک خودرو وصل کند -- بدونِ آن، فروش قابلِ‌ثبت نیست (فروشِ پخشِ گرم فقط از موجودیِ خودروی خودتان انجام می‌شود)."
+                      ? "مدیر باید ابتدا از دسکتاپ، در بخشِ «پخشِ کالا / تیمِ خودرو»، شما را به‌عنوانِ «ویزیتور» به یک خودرو وصل کند -- بدونِ آن، فروش قابلِ‌ثبت نیست (فروشِ پخشِ گرم فقط از موجودیِ خودروی خودتان انجام می‌شود). اگر همین الان این کار را انجام داده‌اید، «تلاشِ دوباره» را بزنید."
                       : "مدیر باید ابتدا از دسکتاپ، حداقل یک انبار (ترجیحاً به‌عنوانِ پیش‌فرض) بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
                   }
+                  actionLabel="تلاشِ دوباره"
+                  onPressAction={refetchMe}
                 />
               ) : selectedMode === "VAN_SALES" ? (
                 <VanSalesOrderScreen
@@ -395,7 +418,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   offlineQueue={services.offlineQueue}
                   captureProvider={resolvedCaptureProvider}
                   locationProvider={locationProvider}
-                  onSubmitted={() => navigation.navigate("Main", { screen: "VISITS" })}
+                  onSubmitted={() => navigation.navigate("Main", { screen: "ORDER" })}
                 />
               ) : (
                 <PreSalesOrderScreen
@@ -428,6 +451,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 // باشه»): در حالتِ خالصِ وصول، دکمه‌هایِ ویزیت/سفارش
                 // اصلاً معنا ندارند -- فقط «ثبتِ وصول» می‌ماند.
                 collectionOnly={selectedMode === "COLLECTION"}
+                vanSales={selectedMode === "VAN_SALES"}
               />
             </SafeAreaView>
           )}
@@ -516,13 +540,15 @@ interface MainScreenProps {
   selectedMode: "VAN_SALES" | "PRE_SALES" | "COLLECTION";
 }
 
-// طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول باشه ولی وصول
-// در هر سه تا بخش باشه»): پخشِ گرم/سرد هر دو تبِ سفارش دارند (چون هردو
-// می‌فروشند، فقط نوعِ سندشان فرق دارد) + تبِ وصول (طبقِ همان جمله --
-// وصول در هر سه بخش حاضر است)؛ حالتِ خالصِ وصول نه ویزیتِ فروش (که
-// همیشه به فرمِ سفارش ختم می‌شود) نیاز دارد، نه تبِ سفارش.
+// طبقِ رفعِ باگِ واقعی («در پخشِ گرم ویزیت معنی نداره و آیتم‌هایِ مشتری
+// و فاکتور و وصول و گزارشات باید باشه و در پخشِ سرد ویزیت و مشتری و
+// سفارش و وصول»): پخشِ گرم چون فروش/امضا/عکس/تسویه همه در همان لحظه‌یِ
+// فاکتور اتفاق می‌افتد، دیگر نیازی به آیینِ جداگانه‌یِ «شروع/پایانِ
+// ویزیت» ندارد -- برخلافِ پخشِ سرد که هنوز به همان چرخهٔ ویزیت نیاز
+// دارد. تبِ «سفارش» در پخشِ گرم برچسبِ «فاکتور» می‌گیرد (labelOverrides
+// پایین‌تر) چون همیشه بلافاصله فاکتورِ آنی می‌سازد، نه سفارش.
 const TABS_BY_MODE: Record<"VAN_SALES" | "PRE_SALES" | "COLLECTION", BottomNavKey[]> = {
-  VAN_SALES: ["HOME", "VISITS", "CUSTOMERS", "ORDER", "COLLECTION"],
+  VAN_SALES: ["HOME", "CUSTOMERS", "ORDER", "REPORTS", "COLLECTION"],
   PRE_SALES: ["HOME", "VISITS", "CUSTOMERS", "ORDER", "COLLECTION"],
   COLLECTION: ["HOME", "CUSTOMERS", "COLLECTION"],
 };
@@ -551,6 +577,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
             active={tabBarProps.state.routeNames[tabBarProps.state.index] as BottomNavKey}
             onChange={(key) => tabBarProps.navigation.navigate(key)}
             visibleKeys={TABS_BY_MODE[selectedMode]}
+            labelOverrides={selectedMode === "VAN_SALES" ? { ORDER: "فاکتور" } : undefined}
           />
         )}
       >
@@ -561,6 +588,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
               localCache={services.localCache}
               userFullName={userFullName}
               onOpenVisit={onOpenVisit}
+              hideVisitPlan={selectedMode === "VAN_SALES"}
             />
           )}
         </MainTab.Screen>
@@ -575,9 +603,12 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
             <CustomersScreen
               apiClient={services.apiClient}
               onOpenCustomer={onOpenCustomer}
-              title="سفارشِ جدید — انتخابِ مشتری"
+              title={selectedMode === "VAN_SALES" ? "فاکتورِ جدید — انتخابِ مشتری" : "سفارشِ جدید — انتخابِ مشتری"}
             />
           )}
+        </MainTab.Screen>
+        <MainTab.Screen name="REPORTS">
+          {() => <ReportsScreen apiClient={services.apiClient} />}
         </MainTab.Screen>
         <MainTab.Screen name="COLLECTION">
           {() => <CollectionListScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} />}

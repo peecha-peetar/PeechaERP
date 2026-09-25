@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from peecha.db.base import new_session
-from peecha.db.models.inventory import VehicleLoading, VehicleLoadingLine
+from peecha.db.models.inventory import Item, VehicleLoading, VehicleLoadingLine
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as engine_service
+from peecha.services import inventory_locations as locations_service
 
 
 @dataclass
@@ -58,7 +59,39 @@ def create_vehicle_loading(
         raise ValueError("انبارِ خودرو و انبارِ مبدا نمی‌توانند یکی باشند.")
     if not lines:
         raise ValueError("حداقل یک ردیف برایِ بارگیری لازم است.")
+    # طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
+    # مرحله انتخاب و مقدار بگیره»): تاییدِ راننده هم این را از طریقِ
+    # inventory_engine رد می‌کند، ولی این‌جا هم -- در همان لحظهٔ
+    # برنامه‌ریزی -- زودتر و با پیامِ روشن جلوگیری می‌شود.
+    with new_session() as check_session:
+        variant_parent_ids = set(
+            check_session.scalars(
+                select(Item.variant_parent_item_id).where(
+                    Item.company_id == company_id, Item.variant_parent_item_id.isnot(None)
+                )
+            ).all()
+        )
+    for line_fields in lines:
+        if line_fields.item_id in variant_parent_ids:
+            raise ValueError("این کالا خودِ کالای اصلیِ دارایِ متغیر است -- یکی از متغیرهایش را انتخاب کنید.")
+
     balances_by_item = {b.item_id: b.quantity_available for b in engine_service.list_balances(company_id, warehouse_id=source_warehouse_id)}
+    # طبقِ رفعِ باگِ واقعی («اگر انبار اجازهٔ موجودیِ منفی نداشته باشه
+    # نباید منتقل بشه»): تاییدِ راننده هم از همان inventory_engine
+    # می‌گذرد که این قاعده را رعایت می‌کند، ولی اگر همان‌جا رد شود پیامِ
+    # خطا دیرهنگام و کم‌زمینه است -- این‌جا، همانِ لحظهٔ برنامه‌ریزی، با
+    # پیامِ روشن و مشخص برایِ همان ردیف جلوگیری می‌شود.
+    source_warehouse = locations_service.get_warehouse(source_warehouse_id, company_id)
+    if source_warehouse is None:
+        raise ValueError("انبارِ مبدا نامعتبر است.")
+    if not source_warehouse.fields.allow_negative_stock:
+        for line_fields in lines:
+            available = balances_by_item.get(line_fields.item_id, decimal.Decimal(0))
+            if line_fields.planned_quantity > available:
+                raise ValueError(
+                    f"موجودیِ انبارِ مبدا برایِ این کالا کافی نیست (موجود: {available}، "
+                    f"درخواستی: {line_fields.planned_quantity}) -- این انبار اجازهٔ موجودیِ منفی ندارد."
+                )
     with new_session() as session:
         loading = VehicleLoading(
             company_id=company_id, vehicle_warehouse_id=vehicle_warehouse_id, source_warehouse_id=source_warehouse_id,

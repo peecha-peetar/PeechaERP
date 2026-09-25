@@ -2,7 +2,6 @@ import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 
-const METHOD_ICON: Record<string, string> = { CASH: "💵", BANK: "💳", CHECK: "📄" };
 const METHOD_LABEL: Record<string, string> = { CASH: "نقد", BANK: "کارت/انتقال", CHECK: "چک" };
 
 export interface PaymentItemProps {
@@ -14,7 +13,7 @@ export interface PaymentItemProps {
 }
 
 export function PaymentItem({ method, amountLabel, customerName, dateLabel, onPress }: PaymentItemProps) {
-  const { colors, spacing, typography, radius } = useTheme();
+  const { colors, spacing, typography } = useTheme();
   return (
     <TouchableOpacity
       disabled={!onPress}
@@ -22,10 +21,7 @@ export function PaymentItem({ method, amountLabel, customerName, dateLabel, onPr
       activeOpacity={0.7}
       style={[styles.row, { paddingVertical: spacing.md, borderBottomColor: colors.border }]}
     >
-      <View style={[styles.iconWrap, { backgroundColor: colors.successSoft, borderRadius: radius.md }]}>
-        <Text style={{ fontSize: 18 }}>{METHOD_ICON[method] ?? "💰"}</Text>
-      </View>
-      <View style={{ flex: 1, marginStart: spacing.sm }}>
+      <View style={{ flex: 1 }}>
         <Text style={[typography.bodyBold, { color: colors.textPrimary }]} numberOfLines={1}>
           {customerName}
         </Text>
@@ -40,5 +36,4 @@ export function PaymentItem({ method, amountLabel, customerName, dateLabel, onPr
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth },
-  iconWrap: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
 });

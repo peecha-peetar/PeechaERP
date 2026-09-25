@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Button, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import { CustomerRow, VisitPlanRow } from "../api/types";
+import { Button, EmptyState } from "../components";
+import { useTheme } from "../theme/ThemeProvider";
 import { LocalCache } from "../storage/localCache";
 import { SyncEngine } from "../sync/syncEngine";
 
@@ -15,6 +17,7 @@ interface Props {
  * (اگر اتصال باشد). فیلترِ روزِ هفته در R133 اضافه می‌شود؛ فعلاً کلِ
  * برنامه‌یِ ویزیتور نمایش داده می‌شود. */
 export function VisitListScreen({ syncEngine, localCache, onOpenVisit }: Props) {
+  const { colors, spacing, typography } = useTheme();
   const [visitPlans, setVisitPlans] = useState<VisitPlanRow[]>([]);
   const [customersById, setCustomersById] = useState<Map<number, CustomerRow>>(new Map());
   const [refreshing, setRefreshing] = useState(false);
@@ -47,9 +50,11 @@ export function VisitListScreen({ syncEngine, localCache, onOpenVisit }: Props) 
   }, [syncEngine, loadFromCache]);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>برنامه‌یِ مراجعه</Text>
-      {syncError !== null ? <Text style={styles.error}>{syncError}</Text> : null}
+    <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
+      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.md }]}>برنامه‌یِ مراجعه</Text>
+      {syncError !== null ? (
+        <Text style={[typography.caption, { color: colors.danger, marginBottom: spacing.sm }]}>{syncError}</Text>
+      ) : null}
       <FlatList
         data={visitPlans}
         keyExtractor={(item) => String(item.visit_plan_id)}
@@ -57,10 +62,20 @@ export function VisitListScreen({ syncEngine, localCache, onOpenVisit }: Props) 
         renderItem={({ item }) => {
           const customer = customersById.get(item.customer_detail_account_id);
           return (
-            <View style={styles.row}>
-              <Text style={styles.customerName}>{customer?.name ?? "مشتریِ نامشخص"}</Text>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingVertical: spacing.sm,
+                borderBottomWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text style={[typography.body, { color: colors.textPrimary, flex: 1 }]}>{customer?.name ?? "مشتریِ نامشخص"}</Text>
               <Button
-                title="شروعِ ویزیت"
+                label="شروعِ ویزیت"
+                fullWidth={false}
                 onPress={() => {
                   if (customer) onOpenVisit(customer, item);
                 }}
@@ -69,17 +84,8 @@ export function VisitListScreen({ syncEngine, localCache, onOpenVisit }: Props) 
             </View>
           );
         }}
-        ListEmptyComponent={<Text style={styles.empty}>برنامه‌یِ مراجعه‌ای یافت نشد.</Text>}
+        ListEmptyComponent={<EmptyState title="برنامه‌یِ مراجعه‌ای یافت نشد." />}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  title: { fontSize: 18, marginBottom: 12, textAlign: "right", writingDirection: "rtl" },
-  error: { color: "#c0392b", marginBottom: 8, textAlign: "right", writingDirection: "rtl" },
-  row: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderColor: "#eee" },
-  customerName: { fontSize: 16, textAlign: "right", writingDirection: "rtl" },
-  empty: { textAlign: "center", color: "#888", marginTop: 40 },
-});

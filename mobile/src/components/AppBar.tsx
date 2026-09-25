@@ -12,14 +12,6 @@ const SYNC_LABEL: Record<SyncStatus, string> = {
   ERROR: "خطایِ Sync",
 };
 
-const SYNC_ICON: Record<SyncStatus, string> = {
-  IDLE: "•",
-  SYNCING: "↻",
-  SYNCED: "✓",
-  OFFLINE: "⚠",
-  ERROR: "✕",
-};
-
 interface AppBarProps {
   userFullName: string;
   syncStatus: SyncStatus;
@@ -39,24 +31,24 @@ export function AppBar({ userFullName, syncStatus, unreadNotificationCount = 0, 
     <View style={[styles.container, { backgroundColor: colors.surface, borderBottomColor: colors.border, paddingHorizontal: spacing.lg }]}>
       <TouchableOpacity onPress={onPressProfile} style={styles.left} accessibilityRole="button">
         <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-          <Text style={{ color: colors.primary, fontWeight: "700" }}>{userFullName.trim().charAt(0) || "؟"}</Text>
+          <Text style={[typography.bodyBold, { color: colors.primary, textAlign: "center" }]}>{userFullName.trim().charAt(0) || "؟"}</Text>
         </View>
         <View style={{ marginStart: spacing.sm }}>
           <Text style={[typography.bodyBold, { color: colors.textPrimary }]} numberOfLines={1}>
             {userFullName}
           </Text>
           <View style={styles.syncRow}>
-            <Text style={{ color: syncTone, fontSize: 11 }}>{SYNC_ICON[syncStatus]}</Text>
+            <View style={[styles.syncDot, { backgroundColor: syncTone }]} />
             <Text style={[typography.caption, { color: syncTone, marginStart: spacing.xxs }]}>{SYNC_LABEL[syncStatus]}</Text>
           </View>
         </View>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={onPressNotifications} accessibilityRole="button" style={styles.bell}>
-        <Text style={{ fontSize: 20 }}>🔔</Text>
+        <Text style={[typography.captionBold, { color: colors.textPrimary }]}>اعلان‌ها</Text>
         {unreadNotificationCount > 0 ? (
           <View style={[styles.badge, { backgroundColor: colors.danger }]}>
-            <Text style={{ color: colors.textInverse, fontSize: 10, fontWeight: "700" }}>
+            <Text style={[typography.captionBold, { color: colors.textInverse, fontSize: 10, textAlign: "center" }]}>
               {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
             </Text>
           </View>
@@ -77,6 +69,7 @@ const styles = StyleSheet.create({
   left: { flexDirection: "row", alignItems: "center", flexShrink: 1 },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   syncRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  syncDot: { width: 7, height: 7, borderRadius: 4 },
   bell: { padding: 6 },
   badge: {
     position: "absolute",

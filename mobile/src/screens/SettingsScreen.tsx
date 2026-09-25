@@ -105,7 +105,7 @@ export function SettingsScreen({
 
   return (
     <ScrollView contentContainerStyle={{ backgroundColor: colors.background, padding: spacing.lg, gap: spacing.lg }}>
-      <Button label="← بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
+      <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
       <Text style={[typography.h2, { color: colors.textPrimary }]}>تنظیمات</Text>
 
       <Card>
@@ -115,7 +115,7 @@ export function SettingsScreen({
       <Card>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={[typography.body, { color: colors.textPrimary }]}>پوسته‌یِ تیره</Text>
-          <Button label={mode === "dark" ? "فعال ✓" : "غیرِفعال"} variant="secondary" fullWidth={false} onPress={toggleMode} />
+          <Button label={mode === "dark" ? "فعال" : "غیرِفعال"} variant="secondary" fullWidth={false} onPress={toggleMode} />
         </View>
       </Card>
 
@@ -126,7 +126,7 @@ export function SettingsScreen({
         </Text>
         <View style={{ marginTop: spacing.sm }}>
           <Button
-            label={syncing ? "در حالِ همگام‌سازی..." : "🔄 همگام‌سازیِ دستی"}
+            label={syncing ? "در حالِ همگام‌سازی..." : "همگام‌سازیِ دستی"}
             variant="secondary"
             onPress={syncNow}
             disabled={syncing}
@@ -152,15 +152,15 @@ export function SettingsScreen({
         </Card>
       ) : null}
 
-      <Button label="🔁 تغییرِ حالتِ پخش (گرم/سرد)" variant="secondary" onPress={onChangeMode} />
+      <Button label="تغییرِ حالتِ پخش (گرم/سرد)" variant="secondary" onPress={onChangeMode} />
 
-      <Button label="📊 داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
+      <Button label="داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
 
       {onOpenVehicleSettlement ? (
-        <Button label="🚚 تسویهٔ پایانِ روزِ خودرو" variant="secondary" onPress={onOpenVehicleSettlement} />
+        <Button label="تسویهٔ پایانِ روزِ خودرو" variant="secondary" onPress={onOpenVehicleSettlement} />
       ) : null}
 
-      <Button label="🧹 پاکسازیِ صفِ آفلاین (اضطراری)" variant="secondary" onPress={clearOfflineQueue} />
+      <Button label="پاکسازیِ صفِ آفلاین (اضطراری)" variant="secondary" onPress={clearOfflineQueue} />
 
       <Button label="خروج از حساب" variant="danger" onPress={logout} />
     </ScrollView>

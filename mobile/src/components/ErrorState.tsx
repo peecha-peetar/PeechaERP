@@ -21,7 +21,6 @@ export function ErrorState({
   const { colors, spacing, typography } = useTheme();
   return (
     <View style={{ alignItems: "center", justifyContent: "center", padding: spacing.xxl }}>
-      <Text style={{ fontSize: 40, marginBottom: spacing.md }}>⚠️</Text>
       <Text style={[typography.h3, { color: colors.textPrimary, marginBottom: spacing.xs }]}>{title}</Text>
       <Text style={[typography.body, { color: colors.textSecondary, textAlign: "center", marginBottom: spacing.lg }]}>
         {description}

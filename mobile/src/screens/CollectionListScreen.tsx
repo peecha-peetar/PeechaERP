@@ -74,7 +74,7 @@ export function CollectionListScreen({ apiClient, onOpenCustomer }: Props) {
           وصولِ امروز {totalCollectedToday > 0 ? `· ${formatAmount(String(totalCollectedToday))}` : ""}
         </Text>
         {todayCollections.length === 0 ? (
-          <EmptyState icon="💰" title="هنوز وصولی ثبت نشده" />
+          <EmptyState title="هنوز وصولی ثبت نشده" />
         ) : (
           <View>
             {todayCollections.map((row) => (
@@ -93,7 +93,7 @@ export function CollectionListScreen({ apiClient, onOpenCustomer }: Props) {
       <View>
         <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>بدهکاران</Text>
         {debtors.length === 0 ? (
-          <EmptyState icon="✅" title="بدهکاری در برنامه‌یِ شما نیست" />
+          <EmptyState title="بدهکاری در برنامه‌یِ شما نیست" />
         ) : (
           <View style={{ gap: spacing.sm }}>
             {debtors.map((d) => (

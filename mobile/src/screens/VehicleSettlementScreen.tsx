@@ -62,7 +62,6 @@ export function VehicleSettlementScreen({ apiClient, onBack }: Props) {
     return (
       <View style={{ flex: 1, padding: spacing.lg, gap: spacing.md }}>
         <EmptyState
-          icon="✅"
           title="تسویه ثبت شد"
           description="این تسویه اکنون منتظرِ تاییدِ انبار و سپس تاییدِ حسابداری است."
         />
@@ -104,7 +103,7 @@ export function VehicleSettlementScreen({ apiClient, onBack }: Props) {
             </Card>
           );
         }}
-        ListEmptyComponent={<EmptyState icon="📦" title="بارگیری/فروشی برایِ امروز ثبت نشده" />}
+        ListEmptyComponent={<EmptyState title="بارگیری/فروشی برایِ امروز ثبت نشده" />}
       />
 
       <Input label="مبلغِ نقدِ تحویلی" value={declaredCash} onChangeText={setDeclaredCash} keyboardType="numeric" numeric />

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Button, StyleSheet, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
+import { Button } from "../components";
+import { useTheme } from "../theme/ThemeProvider";
 import { LoginResponse } from "../api/types";
 import { KeyValueStore } from "../storage/keyValueStore";
 
@@ -20,6 +22,7 @@ const SERVER_URL_KEY = "peecha.server_base_url";
  * (مثلاً IPِ شبکه‌یِ محلی یا دامنه‌یِ عمومی) وصل شود -- این آدرس این‌جا
  * ذخیره و رویِ apiClient اعمال می‌شود، پیش از هر تلاشِ ورود. */
 export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
+  const { colors, spacing, radius, typography } = useTheme();
   const [serverUrl, setServerUrl] = useState(apiClient.getBaseUrl());
   const [showServerField, setShowServerField] = useState(false);
   const [username, setUsername] = useState("");
@@ -57,52 +60,64 @@ export function LoginScreen({ apiClient, kvStore, onLoggedIn }: Props) {
     }
   };
 
+  const inputStyle = [
+    typography.body,
+    {
+      color: colors.textPrimary,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      marginBottom: spacing.md,
+    },
+  ];
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ورود به پیچا -- پخشِ سرد/گرم</Text>
+    <View style={{ flex: 1, justifyContent: "center", padding: spacing.xl, backgroundColor: colors.background }}>
+      <Text style={[typography.h2, { color: colors.textPrimary, textAlign: "center", marginBottom: spacing.xl }]}>
+        ورود به پیچا -- پخشِ سرد/گرم
+      </Text>
       <TextInput
-        style={styles.input}
+        style={inputStyle}
         placeholder="نامِ کاربری"
+        placeholderTextColor={colors.textSecondary}
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
       />
       <TextInput
-        style={styles.input}
+        style={inputStyle}
         placeholder="رمزِ عبور"
+        placeholderTextColor={colors.textSecondary}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
-      {error !== null ? <Text style={styles.error}>{error}</Text> : null}
-      {loading ? <ActivityIndicator /> : <Button title="ورود" onPress={handleLogin} disabled={!username || !password} />}
+      {error !== null ? <Text style={[typography.caption, { color: colors.danger, marginBottom: spacing.md }]}>{error}</Text> : null}
+      <Button label="ورود" onPress={handleLogin} loading={loading} disabled={!username || !password} />
 
       {showServerField ? (
-        <View style={styles.serverBox}>
+        <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
           <TextInput
-            style={styles.input}
+            style={inputStyle}
             placeholder="آدرسِ سرور (مثلاً http://192.168.1.10:8000)"
+            placeholderTextColor={colors.textSecondary}
             value={serverUrl}
             onChangeText={setServerUrl}
             autoCapitalize="none"
             keyboardType="url"
           />
-          <Button title="ذخیره‌یِ آدرسِ سرور" onPress={saveServerUrl} />
+          <Button label="ذخیره‌یِ آدرسِ سرور" variant="secondary" onPress={saveServerUrl} />
         </View>
       ) : (
-        <Text style={styles.serverLink} onPress={() => setShowServerField(true)}>
+        <Text
+          style={[typography.caption, { color: colors.primary, textAlign: "center", marginTop: spacing.xl }]}
+          onPress={() => setShowServerField(true)}
+        >
           آدرسِ سرور: {serverUrl}  (تغییر)
         </Text>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24 },
-  title: { fontSize: 20, marginBottom: 24, textAlign: "center", writingDirection: "rtl" },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, padding: 10, marginBottom: 12, textAlign: "right", writingDirection: "rtl" },
-  error: { color: "#c0392b", marginBottom: 12, textAlign: "right", writingDirection: "rtl" },
-  serverBox: { marginTop: 24, gap: 8 },
-  serverLink: { marginTop: 24, textAlign: "center", color: "#2563eb", writingDirection: "rtl" },
-});

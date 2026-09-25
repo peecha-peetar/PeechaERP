@@ -22,7 +22,7 @@ def pull(ctx: AuthContext = Depends(get_current_context)) -> dict:
     customer_ids = {p.customer_detail_account_id for p in visit_plans}
     customers_by_id = {c["detail_account_id"]: c for c in dimensions_service.list_customers(ctx.company_id)}
 
-    items = catalog_service.list_items(ctx.company_id, active_only=True)
+    items = catalog_service.list_items(ctx.company_id, active_only=True, transactable_only=True)
 
     return {
         "visit_plans": [

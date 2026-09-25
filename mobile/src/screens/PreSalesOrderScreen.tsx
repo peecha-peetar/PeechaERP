@@ -131,7 +131,7 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
             </Card>
           );
         }}
-        ListEmptyComponent={<EmptyState icon="🔍" title="کالایی پیدا نشد" />}
+        ListEmptyComponent={<EmptyState title="کالایی پیدا نشد" />}
       />
 
       <Button

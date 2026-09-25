@@ -2,20 +2,22 @@ import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme/ThemeProvider";
 
-export type BottomNavKey = "HOME" | "VISITS" | "CUSTOMERS" | "ORDER" | "COLLECTION";
+export type BottomNavKey = "HOME" | "VISITS" | "CUSTOMERS" | "ORDER" | "COLLECTION" | "REPORTS";
 
 interface BottomNavItem {
   key: BottomNavKey;
   label: string;
-  icon: string;
 }
 
+// طبقِ درخواستِ صریحِ کاربر («از ایکن‌ها استفاده نکن»): برچسبِ متنی
+// به‌تنهایی -- بدونِ ایموجی/گلیفِ تزئینی -- برایِ هر تب.
 const ITEMS: BottomNavItem[] = [
-  { key: "HOME", label: "خانه", icon: "🏠" },
-  { key: "VISITS", label: "ویزیت‌ها", icon: "📍" },
-  { key: "CUSTOMERS", label: "مشتریان", icon: "👥" },
-  { key: "ORDER", label: "سفارش", icon: "🛒" },
-  { key: "COLLECTION", label: "وصول", icon: "💰" },
+  { key: "HOME", label: "خانه" },
+  { key: "VISITS", label: "ویزیت‌ها" },
+  { key: "CUSTOMERS", label: "مشتریان" },
+  { key: "ORDER", label: "سفارش" },
+  { key: "REPORTS", label: "گزارشات" },
+  { key: "COLLECTION", label: "وصول" },
 ];
 
 interface BottomNavProps {
@@ -23,15 +25,19 @@ interface BottomNavProps {
   onChange: (key: BottomNavKey) => void;
   badgeCounts?: Partial<Record<BottomNavKey, number>>;
   /** طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول باشه»): اگر
-   * داده نشود، هر ۵ تب نشان داده می‌شود (رفتارِ قبلی) -- برایِ حالتِ
-   * «وصول»، فقط زیرمجموعه‌ای از تب‌ها مربوط است. */
+   * داده نشود، همه‌یِ تب‌ها نشان داده می‌شود -- برایِ حالت‌هایی که
+   * فقط زیرمجموعه‌ای از تب‌ها مربوط است (وصول/پخشِ گرم/پخشِ سرد). */
   visibleKeys?: BottomNavKey[];
+  /** طبقِ درخواستِ صریحِ کاربر («در پخشِ گرم فاکتور، در پخشِ سرد
+   * سفارش»): همان تبِ ORDER بسته به حالت برچسبِ متفاوتی می‌خواهد --
+   * به‌جایِ ساختنِ یک تبِ تازه برایِ همان صفحه. */
+  labelOverrides?: Partial<Record<BottomNavKey, string>>;
 }
 
-/** طبقِ ساختارِ پیشنهادیِ کاربر: ۵ تبِ ثابت، بدونِ react-navigation
+/** طبقِ ساختارِ پیشنهادیِ کاربر: تب‌هایِ ثابت، بدونِ react-navigation
  * (محدودیتِ سندباکس -- توضیح در App.tsx) -- این کامپوننت فقط UI است،
  * تغییرِ صفحه با همان روتینگِ دستیِ App.tsx انجام می‌شود. */
-export function BottomNav({ active, onChange, badgeCounts, visibleKeys }: BottomNavProps) {
+export function BottomNav({ active, onChange, badgeCounts, visibleKeys, labelOverrides }: BottomNavProps) {
   const { colors, spacing, typography } = useTheme();
   const visibleItems = visibleKeys ? ITEMS.filter((item) => visibleKeys.includes(item.key)) : ITEMS;
   return (
@@ -48,23 +54,22 @@ export function BottomNav({ active, onChange, badgeCounts, visibleKeys }: Bottom
             onPress={() => onChange(item.key)}
           >
             <View>
-              <Text style={{ fontSize: 20 }}>{item.icon}</Text>
               {badge ? (
                 <View style={[styles.badge, { backgroundColor: colors.danger }]}>
-                  <Text style={{ color: colors.textInverse, fontSize: 10, fontWeight: "700" }}>
+                  <Text style={[typography.captionBold, { color: colors.textInverse, fontSize: 10, textAlign: "center" }]}>
                     {badge > 9 ? "9+" : badge}
                   </Text>
                 </View>
               ) : null}
+              <Text
+                style={[
+                  typography.captionBold,
+                  { color: isActive ? colors.primary : colors.textSecondary },
+                ]}
+              >
+                {labelOverrides?.[item.key] ?? item.label}
+              </Text>
             </View>
-            <Text
-              style={[
-                typography.caption,
-                { color: isActive ? colors.primary : colors.textSecondary, marginTop: spacing.xxs },
-              ]}
-            >
-              {item.label}
-            </Text>
           </TouchableOpacity>
         );
       })}
@@ -77,7 +82,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: 6,
-    paddingTop: 8,
+    paddingTop: 10,
   },
   item: { flex: 1, alignItems: "center", justifyContent: "center" },
   badge: {

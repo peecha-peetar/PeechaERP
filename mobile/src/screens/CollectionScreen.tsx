@@ -13,9 +13,9 @@ interface Props {
 }
 
 const METHODS: { code: PaymentMethod; label: string }[] = [
-  { code: "CASH", label: "💵 نقد" },
-  { code: "BANK", label: "💳 کارت/انتقال" },
-  { code: "CHECK", label: "📄 چک" },
+  { code: "CASH", label: "نقد" },
+  { code: "BANK", label: "کارت/انتقال" },
+  { code: "CHECK", label: "چک" },
 ];
 
 /** طبقِ Phase 5 (Collection): ثبتِ وصول همیشه به صفِ آفلاین اضافه
@@ -94,7 +94,7 @@ export function CollectionScreen({ customer, offlineQueue, onDone }: Props) {
 
       {error ? (
         <Card style={{ backgroundColor: colors.dangerSoft, borderColor: colors.dangerSoft }}>
-          <Text style={{ color: colors.danger }}>{error}</Text>
+          <Text style={[typography.caption, { color: colors.danger }]}>{error}</Text>
         </Card>
       ) : null}
 

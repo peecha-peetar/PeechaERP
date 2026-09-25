@@ -188,7 +188,7 @@ export function VanSalesOrderScreen({
             </Card>
           );
         }}
-        ListEmptyComponent={<EmptyState icon="🔍" title="کالایی پیدا نشد" />}
+        ListEmptyComponent={<EmptyState title="کالایی پیدا نشد" />}
       />
 
       <Input label="نامِ تحویل‌گیرنده (برایِ رسیدِ تحویل)" value={receivedByName} onChangeText={setReceivedByName} />

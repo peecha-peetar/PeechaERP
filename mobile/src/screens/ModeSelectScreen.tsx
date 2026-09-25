@@ -27,7 +27,7 @@ export function ModeSelectScreen({ suggestedMode, onSelect }: Props) {
       <Text style={[typography.h2, { color: colors.textPrimary, textAlign: "center" }]}>امروز چه‌کار می‌کنید؟</Text>
 
       <Card style={{ padding: spacing.lg, gap: spacing.sm }}>
-        <Text style={[typography.h3, { color: colors.textPrimary }]}>🚚 پخشِ گرم</Text>
+        <Text style={[typography.h3, { color: colors.textPrimary }]}>پخشِ گرم</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
           فروشِ خودرویی — فاکتورِ آنی، امضا/عکسِ رسیدِ تحویل، تسویهٔ همان‌لحظه.
         </Text>
@@ -38,7 +38,7 @@ export function ModeSelectScreen({ suggestedMode, onSelect }: Props) {
       </Card>
 
       <Card style={{ padding: spacing.lg, gap: spacing.sm }}>
-        <Text style={[typography.h3, { color: colors.textPrimary }]}>📋 پخشِ سرد</Text>
+        <Text style={[typography.h3, { color: colors.textPrimary }]}>پخشِ سرد</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
           فقط سفارش‌گیری — بدونِ فاکتورِ آنی؛ ادامه (تاییدِ انبار/توزین و تبدیل به فاکتور) در دسکتاپ انجام می‌شود.
         </Text>
@@ -54,7 +54,7 @@ export function ModeSelectScreen({ suggestedMode, onSelect }: Props) {
           که کارش صرفاً وصولِ مطالبات است -- بدونِ ویزیت/سفارش. خودِ
           قابلیتِ «ثبتِ وصول» در دو حالتِ بالا هم هست (کارتِ مشتری). */}
       <Card style={{ padding: spacing.lg, gap: spacing.sm }}>
-        <Text style={[typography.h3, { color: colors.textPrimary }]}>💰 وصول</Text>
+        <Text style={[typography.h3, { color: colors.textPrimary }]}>وصول</Text>
         <Text style={[typography.body, { color: colors.textSecondary }]}>
           فقط وصولِ مطالبات — بدونِ ویزیت/سفارش؛ برایِ کسی که کارش صرفاً جمع‌آوریِ چک/نقد از مشتریانِ بدهکار است.
         </Text>

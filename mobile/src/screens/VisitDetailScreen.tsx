@@ -106,12 +106,12 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
       </View>
 
       {phase === "NOT_STARTED" ? (
-        <Button label="📍 ثبتِ ورود (شروعِ ویزیت)" onPress={start} loading={busy} />
+        <Button label="ثبتِ ورود (شروعِ ویزیت)" onPress={start} loading={busy} />
       ) : (
         <>
           <Card>
             <Text style={[typography.body, { color: gpsCaptured ? colors.success : colors.textSecondary }]}>
-              {gpsCaptured ? "📍 موقعیتِ مکانی ثبت شد" : "📍 موقعیتِ مکانی در دسترس نبود"}
+              {gpsCaptured ? "موقعیتِ مکانی ثبت شد" : "موقعیتِ مکانی در دسترس نبود"}
             </Text>
           </Card>
 
@@ -121,13 +121,13 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
                   و عکس و سفارش باشه»): اختیاری -- گرفتنِ عکسی از مغازه/
                   ویترین به‌عنوانِ مستندِ ویزیت. */}
               <Button
-                label={photoBase64 ? "📷 عکس گرفته شد (دوباره بگیر)" : "📷 گرفتنِ عکس (اختیاری)"}
+                label={photoBase64 ? "عکس گرفته شد (دوباره بگیر)" : "گرفتنِ عکس (اختیاری)"}
                 variant="secondary"
                 onPress={capturePhoto}
                 loading={capturingPhoto}
               />
               <Input label="یادداشت (اختیاری)" value={notes} onChangeText={setNotes} placeholder="مثلاً: قفسه‌چینیِ محصولات انجام شد" />
-              <Button label="✓ تکمیلِ ویزیت" onPress={complete} />
+              <Button label="تکمیلِ ویزیت" onPress={complete} />
 
               <Input
                 label="دلیلِ ردِ ویزیت (فقط اگر ویزیت انجام نشد)"
@@ -135,7 +135,7 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
                 onChangeText={setSkipReason}
                 placeholder="مثلاً: فروشگاه بسته بود"
               />
-              <Button label="✕ ردِ ویزیت" variant="danger" onPress={skip} disabled={!skipReason.trim()} />
+              <Button label="ردِ ویزیت" variant="danger" onPress={skip} disabled={!skipReason.trim()} />
             </>
           ) : (
             <Text style={[typography.body, { color: colors.textSecondary }]}>ویزیت ثبت شد.</Text>

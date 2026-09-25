@@ -26,7 +26,7 @@ export function CustomerCard({ code, name, distanceLabel, balanceLabel, isOverdu
           </Text>
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
             {code}
-            {distanceLabel ? ` · 📍 ${distanceLabel}` : ""}
+            {distanceLabel ? ` · ${distanceLabel}` : ""}
           </Text>
         </View>
         {statusCode && statusLabel ? <StatusBadge statusCode={statusCode} label={statusLabel} /> : null}

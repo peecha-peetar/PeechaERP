@@ -953,7 +953,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         if company_id is None:
             return
-        self._items = catalog_service.list_items(company_id, active_only=True)
+        self._items = catalog_service.list_items(company_id, active_only=True, transactable_only=True)
         self._warehouses = locations_service.list_warehouses(company_id, active_only=True)
         self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
         self._unit_cost_decimal_places = companies_service.get_base_currency_decimal_places(company_id)

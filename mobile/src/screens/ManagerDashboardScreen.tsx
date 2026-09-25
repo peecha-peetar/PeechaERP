@@ -76,7 +76,7 @@ export function ManagerDashboardScreen({ apiClient, onBack }: Props) {
 
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, backgroundColor: colors.background }}>
-      <Button label="← بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
+      <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
       <Text style={[typography.h2, { color: colors.textPrimary }]}>داشبوردِ مدیریت</Text>
 
       <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>

@@ -286,6 +286,11 @@ class ItemRow:
     is_sellable: bool = True
     is_purchasable: bool = True
     is_stock_tracked: bool = True
+    # طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
+    # مرحله انتخاب و مقدار بگیره»): خودِ کالای اصلی/الگو -- که یک یا چند
+    # متغیرِ زیرمجموعه دارد -- هیچ‌وقت قابلِ‌فروش/انتقال/موجودی‌گیریِ
+    # مستقیم نیست؛ فقط متغیرهایش تراکنش‌پذیرند.
+    has_variants: bool = False
     track_serial: bool = False
     track_batch: bool = False
     track_expiry: bool = False
@@ -332,7 +337,15 @@ def _item_dimension_type_id(company_id: int) -> int:
     return dimensions_service.get_specialized_dimension_type_id(company_id, ITEM_DIMENSION_CODE)
 
 
-def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
+def list_items(company_id: int, active_only: bool = False, transactable_only: bool = False) -> list[ItemRow]:
+    """طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
+    مرحله انتخاب و مقدار بگیره»): پارامترِ transactable_only را برایِ
+    هر جایی که کاربر می‌خواهد یک کالا را رویِ یک سند/تراکنش انتخاب کند
+    (فروش، خرید، بارگیریِ خودرو، سندِ انبار، POS، همگام‌سازیِ موبایل...)
+    True بدهید -- کالاهایِ اصلی/الگو (has_variants=True) حذف می‌شوند،
+    چون خودِ آن‌ها موجودی/فروش ندارند و فقط متغیرهایشان معنا دارند.
+    برایِ صفحاتِ مدیریتِ کاتالوگ (فهرستِ کالاها/متغیرها) این پارامتر
+    نباید ست شود -- کالای اصلی هم باید در آن‌جا قابلِ‌دیدن/ویرایش باشد."""
     dimension_type_id = _item_dimension_type_id(company_id)
     detail_rows = {
         r.detail_account_id: r for r in dimensions_service.list_detail_accounts(company_id, dimension_type_id)
@@ -346,12 +359,16 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
         # variants می‌آید. برایِ کالاهایِ عادی/اصلی (که در این جدول ردیفی
         # ندارند) دقیقاً مثلِ قبل از رویِ خودِ تفصیلی خوانده می‌شود.
         variant_codes = {v.item_id: v.variant_code for v in session.scalars(select(ItemVariant))}
+        parent_ids = {it.variant_parent_item_id for it in items if it.variant_parent_item_id is not None}
         result: list[ItemRow] = []
         for it in items:
             detail = detail_rows.get(it.item_detail_account_id)
             if detail is None:
                 continue
             if active_only and not detail.is_active:
+                continue
+            has_variants = it.item_id in parent_ids
+            if transactable_only and has_variants:
                 continue
             result.append(
                 ItemRow(
@@ -371,6 +388,7 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
                     is_sellable=it.is_sellable,
                     is_purchasable=it.is_purchasable,
                     is_stock_tracked=it.is_stock_tracked,
+                    has_variants=has_variants,
                     track_serial=it.track_serial,
                     track_batch=it.track_batch,
                     track_expiry=it.track_expiry,

@@ -45,12 +45,12 @@ export function ProductCard({ code, name, uomLabel, unitPrice, stockQuantity, qu
 }
 
 function QtyButton({ label, onPress }: { label: string; onPress: () => void }) {
-  const { colors } = useTheme();
+  const { colors, typography } = useTheme();
   return (
     <Text
       onPress={onPress}
       accessibilityRole="button"
-      style={{ color: colors.primary, fontSize: 20, fontWeight: "700", paddingHorizontal: 12, paddingVertical: 4 }}
+      style={[typography.bodyBold, { color: colors.primary, fontSize: 20, textAlign: "center", paddingHorizontal: 12, paddingVertical: 4 }]}
     >
       {label}
     </Text>

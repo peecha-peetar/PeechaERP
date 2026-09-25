@@ -15,7 +15,7 @@ router = APIRouter(prefix="/products", tags=["products"])
 
 @router.get("")
 def list_products(q: str | None = None, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
-    items = catalog_service.list_items(ctx.company_id, active_only=True)
+    items = catalog_service.list_items(ctx.company_id, active_only=True, transactable_only=True)
     if q:
         needle = q.strip().lower()
         items = [

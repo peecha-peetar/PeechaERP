@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import session as app_session
+from peecha.numerals import format_jalali_date
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import vehicle_settlement as settlement_service
@@ -121,7 +122,7 @@ class VehicleSettlementScreen(FieldHelpMixin, QWidget):
         for row, s in enumerate(self._settlements):
             vehicle = self._warehouses_by_id.get(s.vehicle_warehouse_id)
             values = [
-                s.settlement_date.isoformat(),
+                format_jalali_date(s.settlement_date),
                 vehicle.name if vehicle else str(s.vehicle_warehouse_id),
                 _STATUS_LABELS.get(s.status_code, s.status_code),
                 f"{s.invoiced_amount:,.0f}",

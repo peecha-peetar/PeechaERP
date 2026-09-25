@@ -63,7 +63,7 @@ export function CustomersScreen({ apiClient, onOpenCustomer, title }: Props) {
           renderItem={({ item }) => (
             <CustomerCard code={item.code} name={item.name} onPress={() => onOpenCustomer(item.detail_account_id)} />
           )}
-          ListEmptyComponent={<EmptyState icon="🔍" title="مشتری‌ای پیدا نشد" description="کلیدواژه‌یِ دیگری امتحان کنید." />}
+          ListEmptyComponent={<EmptyState title="مشتری‌ای پیدا نشد" description="کلیدواژه‌یِ دیگری امتحان کنید." />}
         />
       )}
     </View>

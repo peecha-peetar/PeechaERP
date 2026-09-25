@@ -20,6 +20,9 @@ interface Props {
    * دکمه‌هایِ «شروعِ ویزیت»/«ثبتِ سفارش» را پنهان می‌کند -- فقط برایِ
    * حالتِ خالصِ وصول. */
   collectionOnly?: boolean;
+  /** طبقِ درخواستِ صریحِ کاربر («در پخشِ گرم ویزیت معنی نداره»): دکمهٔ
+   * «شروعِ ویزیت» پنهان و «ثبتِ سفارش» به «صدورِ فاکتور» تبدیل می‌شود. */
+  vanSales?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -43,6 +46,7 @@ export function CustomerDetailScreen({
   onCreateOrder,
   onCreateCollection,
   collectionOnly,
+  vanSales,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
@@ -110,7 +114,7 @@ export function CustomerDetailScreen({
 
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, backgroundColor: colors.background }}>
-      <Button label="← بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
+      <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
 
       <View>
         <Text style={[typography.h2, { color: colors.textPrimary }]}>{detail.name}</Text>
@@ -148,24 +152,24 @@ export function CustomerDetailScreen({
       </Card>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-        {!collectionOnly ? (
+        {!collectionOnly && !vanSales ? (
           <Button
-            label="📍 شروعِ ویزیت"
+            label="شروعِ ویزیت"
             fullWidth={false}
             disabled={visitPlan === null}
             onPress={() => visitPlan && onStartVisit(customerRow, visitPlan)}
           />
         ) : null}
         {!collectionOnly ? (
-          <Button label="🛒 ثبتِ سفارش" fullWidth={false} variant="secondary" onPress={() => onCreateOrder(customerRow)} />
+          <Button label={vanSales ? "صدورِ فاکتور" : "ثبتِ سفارش"} fullWidth={false} variant="secondary" onPress={() => onCreateOrder(customerRow)} />
         ) : null}
-        <Button label="💰 ثبتِ وصول" fullWidth={false} variant="secondary" onPress={() => onCreateCollection(customerRow)} />
-        {detail.phone ? <Button label="📞 تماس" fullWidth={false} variant="ghost" onPress={callCustomer} /> : null}
+        <Button label="ثبتِ وصول" fullWidth={false} variant="secondary" onPress={() => onCreateCollection(customerRow)} />
+        {detail.phone ? <Button label="تماس" fullWidth={false} variant="ghost" onPress={callCustomer} /> : null}
         {detail.gps_latitude || detail.address ? (
-          <Button label="🗺️ مسیریابی" fullWidth={false} variant="ghost" onPress={navigateToCustomer} />
+          <Button label="مسیریابی" fullWidth={false} variant="ghost" onPress={navigateToCustomer} />
         ) : null}
       </View>
-      {!collectionOnly && visitPlan === null ? (
+      {!collectionOnly && !vanSales && visitPlan === null ? (
         <Text style={[typography.caption, { color: colors.textSecondary }]}>این مشتری برنامه‌یِ ویزیتِ ثبت‌شده‌ای ندارد.</Text>
       ) : null}
 

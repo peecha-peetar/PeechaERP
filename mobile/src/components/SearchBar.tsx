@@ -21,7 +21,6 @@ export function SearchBar({ value, onChangeText, placeholder = "جستجو...", 
         { backgroundColor: colors.surfaceAlt, borderRadius: radius.pill, paddingHorizontal: spacing.lg },
       ]}
     >
-      <Text style={{ color: colors.textSecondary, marginEnd: spacing.sm }}>🔍</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -31,8 +30,8 @@ export function SearchBar({ value, onChangeText, placeholder = "جستجو...", 
         style={[typography.body, { color: colors.textPrimary, flex: 1, height: 44 }]}
       />
       {value.length > 0 ? (
-        <Text onPress={() => onChangeText("")} style={{ color: colors.textSecondary, padding: spacing.xs }}>
-          ✕
+        <Text onPress={() => onChangeText("")} style={[typography.caption, { color: colors.textSecondary, padding: spacing.xs }]}>
+          پاک
         </Text>
       ) : null}
     </View>

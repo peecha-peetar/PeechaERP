@@ -556,6 +556,17 @@ def post_stock_document(
 
         item_ids = {ln.item_id for ln in lines}
         items_by_id = {it.item_id: it for it in session.scalars(select(Item).where(Item.item_id.in_(item_ids)))}
+        # طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در
+        # هیچ مرحله انتخاب و مقدار بگیره»): این هم یک گیتِ سختِ سمتِ
+        # سرور است -- مستقل از فیلترشدنِ درستِ گزینشگرهایِ رابطِ کاربری --
+        # چون خودِ کالای اصلی/الگو موجودیِ مستقلی ندارد.
+        variant_parent_item_ids = set(
+            session.scalars(
+                select(Item.variant_parent_item_id).where(
+                    Item.company_id == company_id, Item.variant_parent_item_id.isnot(None)
+                )
+            ).all()
+        )
         # طبقِ درخواستِ صریحِ کاربر («بله، مثلِ کاردکس تجمیع شود»): سندِ
         # حسابداریِ متغیرها هم‌الگو با تجمیعِ کاردکسِ R151 باید زیرِ بُعدِ
         # کالایِ *اصلی* نوشته شود، نه یک ردیفِ جداگانه برایِ هر متغیر --
@@ -731,6 +742,11 @@ def post_stock_document(
                 raise ValueError(f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» در وضعیتِ فعال نیست و قابلِ‌ثبت در سند نیست.")
             if not item.is_stock_tracked:
                 raise ValueError("این کالا موجودی‌محور نیست.")
+            if item.item_id in variant_parent_item_ids:
+                raise ValueError(
+                    f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» خودِ کالای اصلیِ دارایِ متغیر است -- "
+                    "فقط متغیرهایِ زیرمجموعه‌اش قابلِ‌انتخاب/موجودی‌گیری هستند."
+                )
             je_item_detail_account_id = je_dimension_account_id(item)
 
             if doc_type in ("RECEIPT", "RETURN_IN"):

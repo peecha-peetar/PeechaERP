@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { Button, StyleSheet, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { DeliveryLineInput } from "../api/types";
+import { Button } from "../components";
+import { useTheme } from "../theme/ThemeProvider";
 import { CaptureProvider } from "../capture";
 import { LocationProvider } from "../location";
 import { OfflineQueue } from "../sync/offlineQueue";
@@ -28,6 +30,7 @@ export function DeliveryConfirmScreen({
   offlineQueue,
   onDone,
 }: Props) {
+  const { colors, spacing, radius, typography } = useTheme();
   const [receivedByName, setReceivedByName] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -63,23 +66,37 @@ export function DeliveryConfirmScreen({
     }
   };
 
+  const inputStyle = [
+    typography.body,
+    {
+      color: colors.textPrimary,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      marginVertical: spacing.sm,
+    },
+  ];
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>تاییدِ تحویل</Text>
+    <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
+      <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing.lg }]}>تاییدِ تحویل</Text>
       <TextInput
-        style={styles.input}
+        style={inputStyle}
         placeholder="نامِ تحویل‌گیرنده"
+        placeholderTextColor={colors.textSecondary}
         value={receivedByName}
         onChangeText={setReceivedByName}
       />
-      <TextInput style={styles.input} placeholder="یادداشت" value={notes} onChangeText={setNotes} />
-      <Button title={submitting ? "در حالِ ثبت..." : "ثبتِ رسیدِ تحویل"} onPress={submit} disabled={submitting} />
+      <TextInput
+        style={inputStyle}
+        placeholder="یادداشت"
+        placeholderTextColor={colors.textSecondary}
+        value={notes}
+        onChangeText={setNotes}
+      />
+      <Button label="ثبتِ رسیدِ تحویل" onPress={submit} loading={submitting} disabled={submitting} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  title: { fontSize: 18, marginBottom: 16, textAlign: "right", writingDirection: "rtl" },
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, padding: 10, marginVertical: 8, textAlign: "right", writingDirection: "rtl" },
-});

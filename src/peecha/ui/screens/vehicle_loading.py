@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import session as app_session
+from peecha.numerals import format_jalali_date
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import vehicle_loading as vehicle_loading_service
@@ -184,7 +185,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
             if w.fields.warehouse_type_code != "VEHICLE":
                 self.source_warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
 
-        self._items = catalog_service.list_items(company_id, active_only=True)
+        self._items = catalog_service.list_items(company_id, active_only=True, transactable_only=True)
         self.item_combo.clear()
         for it in self._items:
             self.item_combo.addItem(f"{it.code} — {it.name or ''}", it.item_id)
@@ -195,7 +196,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
             vehicle = self._warehouses_by_id.get(loading.vehicle_warehouse_id)
             source = self._warehouses_by_id.get(loading.source_warehouse_id)
             values = [
-                loading.loading_date.isoformat(),
+                format_jalali_date(loading.loading_date),
                 vehicle.name if vehicle else str(loading.vehicle_warehouse_id),
                 source.name if source else str(loading.source_warehouse_id),
                 _STATUS_LABELS.get(loading.status_code, loading.status_code),
@@ -219,7 +220,7 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
 
     def _load_into_form(self, loading: vehicle_loading_service.VehicleLoadingRow) -> None:
         self._editing_id = loading.vehicle_loading_id
-        self.form_title.setText(f"بارگیریِ {loading.loading_date.isoformat()}")
+        self.form_title.setText(f"بارگیریِ {format_jalali_date(loading.loading_date)}")
         self.status_label.setText("")
         index = self.vehicle_combo.findData(loading.vehicle_warehouse_id)
         self.vehicle_combo.setCurrentIndex(max(0, index))
