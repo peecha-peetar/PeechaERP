@@ -20,6 +20,10 @@ export interface RefreshResponse {
  * نباید حدس بزند. */
 export interface MeResponse {
   mobile_channel_type_code: "VAN_SALES" | "PRE_SALES" | null;
+  /** طبقِ درخواستِ صریحِ کاربر («فروش بر اساسِ موجودیِ خودرو»، فازِ ۲):
+   * فقط برایِ پخشِ گرم پر می‌شود -- انبارِ همان خودرویی که این ویزیتور
+   * در «تیمِ خودرو»یِ دسکتاپ به‌عنوانِ نقشِ VISITOR به آن وصل است. */
+  assigned_vehicle_warehouse_id: number | null;
 }
 
 export interface VisitPlanRow {

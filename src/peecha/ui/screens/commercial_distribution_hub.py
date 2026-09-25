@@ -25,6 +25,7 @@ from peecha.ui.screens.promotion_rules import PromotionRulesScreen
 from peecha.ui.screens.sms_marketing import SmsMarketingScreen
 from peecha.ui.screens.telesales import TelesalesScreen
 from peecha.ui.screens.vehicle_loading import VehicleLoadingScreen
+from peecha.ui.screens.vehicle_team import VehicleTeamScreen
 from peecha.ui.screens.visit_plans import VisitPlansScreen
 
 
@@ -59,6 +60,10 @@ class CommercialDistributionHubScreen(QWidget):
         self.tabs.addTab(self.visit_plans_tab, "برنامهٔ مراجعه")
         self.vehicle_loading_tab = VehicleLoadingScreen()
         self.tabs.addTab(self.vehicle_loading_tab, "بارگیریِ خودرو")
+        # طبقِ درخواستِ صریحِ کاربر (فازِ ۲ از پخشِ گرم): راننده/ویزیتور/
+        # موزعِ هر خودرو.
+        self.vehicle_team_tab = VehicleTeamScreen()
+        self.tabs.addTab(self.vehicle_team_tab, "تیمِ خودرو")
         self.customer_visits_tab = CustomerVisitsScreen()
         self.tabs.addTab(self.customer_visits_tab, "ویزیت‌ها")
         self.promotion_rules_tab = PromotionRulesScreen()

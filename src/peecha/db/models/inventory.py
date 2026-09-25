@@ -954,3 +954,15 @@ class VehicleLoadingLine(Base):
     uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
     planned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     available_quantity_at_planning: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+
+
+# طبقِ درخواستِ صریحِ کاربر (فازِ ۲ از پخشِ گرم): سه نقشِ مستقل که
+# می‌توانند به یک نفر یا سه نفرِ جدا برسند -- راننده/ویزیتور/موزع.
+class VehicleTeamAssignment(Base):
+    __tablename__ = "vehicle_team_assignments"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"), primary_key=True)
+    role_code: Mapped[str] = mapped_column(String(15), primary_key=True)  # DRIVER|VISITOR|DISTRIBUTOR
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))

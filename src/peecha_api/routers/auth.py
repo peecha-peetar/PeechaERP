@@ -12,6 +12,7 @@ from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
 from peecha.services import auth as auth_service
 from peecha.services import users as users_service
+from peecha.services import vehicle_team as vehicle_team_service
 from peecha_api import security
 from peecha_api.deps import AuthContext, get_current_context
 from peecha_api.rate_limit import enforce_login_rate_limit
@@ -80,4 +81,16 @@ def me(ctx: AuthContext = Depends(get_current_context)) -> dict:
     می‌ماند)، این مقدار نباید فقط در پاسخِ /auth/login باشد -- اپِ موبایل
     آن را هر بار با یک درخواستِ جدا (هم‌الگو با /pricing/channels) پس از
     ورود می‌خواند."""
-    return {"mobile_channel_type_code": users_service.get_mobile_channel_type(ctx.user_id, ctx.company_id)}
+    channel_type = users_service.get_mobile_channel_type(ctx.user_id, ctx.company_id)
+    # طبقِ درخواستِ صریح («فروش بر اساسِ موجودیِ خودرو»، فازِ ۲): فقط
+    # برایِ پخشِ گرم معنا دارد -- ویزیتورِ پخشِ سرد همچنان از انبارِ
+    # پیش‌فرضِ شرکت استفاده می‌کند (سفارش، نه فاکتورِ آنی؛ موجودی همان
+    # لحظه کم نمی‌شود).
+    assigned_vehicle_warehouse_id = (
+        vehicle_team_service.get_assigned_vehicle_warehouse_id(ctx.user_id, ctx.company_id, "VISITOR")
+        if channel_type == "VAN_SALES" else None
+    )
+    return {
+        "mobile_channel_type_code": channel_type,
+        "assigned_vehicle_warehouse_id": assigned_vehicle_warehouse_id,
+    }

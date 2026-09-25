@@ -107,6 +107,9 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   // این کاربر کدام مسیر را ببیند. undefined یعنی هنوز نخوانده‌ایم،
   // null یعنی مدیر هنوز از دسکتاپ تنظیم نکرده (نه یک سوییچِ دستی در گوشی).
   const [mobileChannelType, setMobileChannelType] = useState<"VAN_SALES" | "PRE_SALES" | null | undefined>(undefined);
+  // طبقِ درخواستِ صریحِ کاربر («فروش بر اساسِ موجودیِ خودرو»، فازِ ۲):
+  // فقط برایِ پخشِ گرم معنا دارد -- undefined یعنی هنوز نخوانده‌ایم.
+  const [assignedVehicleWarehouseId, setAssignedVehicleWarehouseId] = useState<number | null | undefined>(undefined);
   // طبقِ باگِ واقعیِ کشف‌شده (R196): سفارش نباید یک channel_codeِ
   // هاردکدشده/نامعتبر بفرستد -- undefined یعنی «هنوز بارگذاری‌نشده»،
   // null یعنی «بارگذاری شد ولی هیچ کانالی از این نوع در این شرکت
@@ -131,8 +134,14 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     if (!loggedIn) return;
     services.apiClient
       .getMe()
-      .then((me) => setMobileChannelType(me.mobile_channel_type_code))
-      .catch(() => setMobileChannelType(null));
+      .then((me) => {
+        setMobileChannelType(me.mobile_channel_type_code);
+        setAssignedVehicleWarehouseId(me.assigned_vehicle_warehouse_id);
+      })
+      .catch(() => {
+        setMobileChannelType(null);
+        setAssignedVehicleWarehouseId(null);
+      });
   }, [loggedIn, services]);
 
   useEffect(() => {
@@ -150,14 +159,24 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         setOrderCostCenterId(null);
         setOrderProjectId(null);
       });
-    services.apiClient
-      .listWarehouses()
-      .then((warehouses) => {
-        const chosen = warehouses.find((w) => w.is_default) ?? warehouses[0];
-        setDefaultWarehouseId(chosen?.warehouse_id ?? null);
-      })
-      .catch(() => setDefaultWarehouseId(null));
-  }, [loggedIn, mobileChannelType, services]);
+
+    // طبقِ درخواستِ صریحِ کاربر («فروش بر اساسِ موجودیِ خودرو»، فازِ ۲):
+    // پخشِ گرم دیگر از انبارِ پیش‌فرضِ شرکت نمی‌فروشد -- از انبارِ همان
+    // خودرویی که این ویزیتور به آن وصل است (اگر وصل نباشد، EmptyState
+    // نشان داده می‌شود، نه سقوطِ خاموش به انبارِ پیش‌فرض). پخشِ سرد
+    // (سفارش، نه فاکتورِ آنی) هم‌چنان انبارِ پیش‌فرضِ شرکت را می‌گیرد.
+    if (mobileChannelType === "VAN_SALES") {
+      setDefaultWarehouseId(assignedVehicleWarehouseId ?? null);
+    } else {
+      services.apiClient
+        .listWarehouses()
+        .then((warehouses) => {
+          const chosen = warehouses.find((w) => w.is_default) ?? warehouses[0];
+          setDefaultWarehouseId(chosen?.warehouse_id ?? null);
+        })
+        .catch(() => setDefaultWarehouseId(null));
+    }
+  }, [loggedIn, mobileChannelType, assignedVehicleWarehouseId, services]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -309,8 +328,12 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
               ) : defaultWarehouseId === null ? (
                 <EmptyState
                   icon="⚠️"
-                  title="هیچ انباری تعریف نشده"
-                  description="مدیر باید ابتدا از دسکتاپ، حداقل یک انبار (ترجیحاً به‌عنوانِ پیش‌فرض) بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                  title={mobileChannelType === "VAN_SALES" ? "شما به هیچ خودرویی وصل نیستید" : "هیچ انباری تعریف نشده"}
+                  description={
+                    mobileChannelType === "VAN_SALES"
+                      ? "مدیر باید ابتدا از دسکتاپ، در بخشِ «پخشِ کالا ← تیمِ خودرو»، شما را به‌عنوانِ «ویزیتور» به یک خودرو وصل کند -- بدونِ آن، فروش قابلِ‌ثبت نیست (فروشِ پخشِ گرم فقط از موجودیِ خودروی خودتان انجام می‌شود)."
+                      : "مدیر باید ابتدا از دسکتاپ، حداقل یک انبار (ترجیحاً به‌عنوانِ پیش‌فرض) بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                  }
                 />
               ) : (
                 <OrderScreen
