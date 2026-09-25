@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from peecha.config import SETTINGS_DIR
+from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_partners as partners_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -29,7 +30,14 @@ from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import FORM_CUSTOMER_MANAGEMENT, require_permission
-from peecha_api.schemas import CustomerCreateRequest, CustomerRejectRequest, PartyAddressRequest
+from peecha_api.schemas import (
+    CustomerContractRequest,
+    CustomerCreateRequest,
+    CustomerGuaranteeRequest,
+    CustomerMerchandisingRequest,
+    CustomerRejectRequest,
+    PartyAddressRequest,
+)
 
 _TEMP_UPLOAD_DIR = SETTINGS_DIR / "mobile_uploads_tmp"
 
@@ -145,6 +153,8 @@ def get_customer_detail(
         "notes": customer.get("notes"),
         "customer_type_code": customer.get("customer_type_code"),
         "customer_class": customer.get("customer_class"),
+        "outlet_type_code": profile.outlet_type_code if profile else None,
+        "priority_code": profile.priority_code if profile else None,
         "status_code": profile.status_code if profile else None,
         "customer_group_id": profile.customer_group_id if profile else None,
         "credit_limit_amount": str(profile.credit_limit_amount) if profile else None,
@@ -405,3 +415,161 @@ def delete_customer_address(
         {"source": "mobile", "customer_detail_account_id": detail_account_id},
     )
     return {"address_id": address_id}
+
+
+def _guarantee_to_dict(g) -> dict:
+    return {
+        "guarantee_id": g.guarantee_id, "guarantee_type_code": g.guarantee_type_code, "status_code": g.status_code,
+        "amount": str(g.amount), "valid_until_date": g.valid_until_date.isoformat() if g.valid_until_date else None,
+        "bank_id": g.bank_id, "check_no": g.check_no,
+        "check_due_date": g.check_due_date.isoformat() if g.check_due_date else None,
+        "description": g.description, "created_at": g.created_at.isoformat(),
+    }
+
+
+@router.get("/{detail_account_id}/guarantees")
+def list_customer_guarantees(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۵)."""
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    return [_guarantee_to_dict(g) for g in partners_service.list_customer_guarantees(detail_account_id)]
+
+
+@router.post("/{detail_account_id}/guarantees")
+def create_customer_guarantee(
+    detail_account_id: int, payload: CustomerGuaranteeRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        guarantee_id = partners_service.add_customer_guarantee(
+            ctx.company_id, detail_account_id, payload.guarantee_type_code, payload.amount, ctx.user_id,
+            valid_until_date=payload.valid_until_date, bank_id=payload.bank_id, check_no=payload.check_no,
+            check_due_date=payload.check_due_date, description=payload.description,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CustomerGuarantee", guarantee_id, "CREATE",
+        {"source": "mobile", "customer_detail_account_id": detail_account_id, "guarantee_type_code": payload.guarantee_type_code, "amount": str(payload.amount)},
+    )
+    return {"guarantee_id": guarantee_id}
+
+
+@router.post("/{detail_account_id}/guarantees/{guarantee_id}/release")
+def release_customer_guarantee(
+    detail_account_id: int, guarantee_id: int,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        partners_service.release_customer_guarantee(guarantee_id, ctx.company_id, ctx.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CustomerGuarantee", guarantee_id, "UPDATE",
+        {"source": "mobile", "action": "release", "customer_detail_account_id": detail_account_id},
+    )
+    return {"guarantee_id": guarantee_id}
+
+
+def _contract_to_dict(c) -> dict:
+    return {
+        "contract_id": c.contract_id, "contract_type_code": c.contract_type_code,
+        "contract_category_code": c.contract_category_code, "item_id": c.item_id,
+        "committed_quantity": str(c.committed_quantity) if c.committed_quantity is not None else None,
+        "consumed_quantity": str(c.consumed_quantity), "committed_amount": str(c.committed_amount) if c.committed_amount is not None else None,
+        "consumed_amount": str(c.consumed_amount), "contract_price": str(c.contract_price) if c.contract_price is not None else None,
+        "valid_from": c.valid_from.isoformat(), "valid_to": c.valid_to.isoformat() if c.valid_to else None,
+        "status_code": c.status_code, "commitments_text": c.commitments_text,
+    }
+
+
+@router.get("/{detail_account_id}/contracts")
+def list_customer_contracts(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۷)."""
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    contracts = [
+        c for c in contracts_service.list_contracts(ctx.company_id, detail_account_id)
+        if c.contract_type_code == "SALES"
+    ]
+    return [_contract_to_dict(c) for c in contracts]
+
+
+@router.post("/{detail_account_id}/contracts")
+def create_customer_contract(
+    detail_account_id: int, payload: CustomerContractRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        contract_id = contracts_service.create_contract(
+            ctx.company_id, "SALES", detail_account_id, payload.valid_from,
+            item_id=payload.item_id, committed_quantity=payload.committed_quantity,
+            contract_price=payload.contract_price, valid_to=payload.valid_to,
+            contract_category_code=payload.contract_category_code, committed_amount=payload.committed_amount,
+            commitments_text=payload.commitments_text,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CommercialContract", contract_id, "CREATE",
+        {"source": "mobile", "customer_detail_account_id": detail_account_id, "contract_category_code": payload.contract_category_code},
+    )
+    return {"contract_id": contract_id}
+
+
+@router.post("/{detail_account_id}/contracts/{contract_id}/cancel")
+def cancel_customer_contract(
+    detail_account_id: int, contract_id: int,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        contracts_service.cancel_contract(contract_id, ctx.company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CommercialContract", contract_id, "UPDATE",
+        {"source": "mobile", "action": "cancel", "customer_detail_account_id": detail_account_id},
+    )
+    return {"contract_id": contract_id}
+
+
+@router.get("/{detail_account_id}/merchandising")
+def get_customer_merchandising(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> dict:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۰)."""
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    row = partners_service.get_customer_merchandising(detail_account_id)
+    if row is None:
+        return {
+            "store_area_sqm": None, "checkout_count": None, "fridge_count": None, "shelf_count": None,
+            "available_brands": None, "competitor_brands": None, "layout_status_code": None,
+        }
+    return {
+        "store_area_sqm": str(row.store_area_sqm) if row.store_area_sqm is not None else None,
+        "checkout_count": row.checkout_count, "fridge_count": row.fridge_count, "shelf_count": row.shelf_count,
+        "available_brands": row.available_brands, "competitor_brands": row.competitor_brands,
+        "layout_status_code": row.layout_status_code,
+    }
+
+
+@router.put("/{detail_account_id}/merchandising")
+def set_customer_merchandising(
+    detail_account_id: int, payload: CustomerMerchandisingRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        partners_service.set_customer_merchandising(
+            detail_account_id, ctx.user_id, store_area_sqm=payload.store_area_sqm,
+            checkout_count=payload.checkout_count, fridge_count=payload.fridge_count, shelf_count=payload.shelf_count,
+            available_brands=payload.available_brands, competitor_brands=payload.competitor_brands,
+            layout_status_code=payload.layout_status_code,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CustomerMerchandising", detail_account_id, "UPDATE",
+        {"source": "mobile"},
+    )
+    return {"detail_account_id": detail_account_id}

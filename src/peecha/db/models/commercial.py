@@ -665,6 +665,18 @@ class CustomerProfile(Base):
     hold_reason: Mapped[str | None] = mapped_column(String(500))
     held_at: Mapped[datetime.datetime | None]
     held_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۳ -- طبقه‌بندیِ
+    # فروش/تنظیماتِ سفارش).
+    outlet_type_code: Mapped[str | None] = mapped_column(String(20))
+    priority_code: Mapped[str | None] = mapped_column(String(10))
+    min_order_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    min_order_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
+    allowed_order_days_mask: Mapped[int | None] = mapped_column(SmallInteger)
+    allowed_order_hour_from: Mapped[int | None] = mapped_column(SmallInteger)
+    allowed_order_hour_to: Mapped[int | None] = mapped_column(SmallInteger)
+    expected_delivery_days: Mapped[int | None] = mapped_column(SmallInteger)
+    shipment_type_code: Mapped[str | None] = mapped_column(String(20))
+    default_warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
 
 
 class SupplierProfile(Base):
@@ -723,6 +735,51 @@ class PartyContact(Base):
     is_primary: Mapped[bool] = mapped_column(default=False)
 
 
+class CustomerGuarantee(Base):
+    """چک/سفته/ضمانت‌نامه/ضامن/وثیقه به‌عنوانِ اطلاعاتِ اعتباریِ خودِ
+    مشتری (R219، بخشِ ۵) -- مستقل از خزانه‌داری تا وقتی صراحتاً وصول/ضبط شود."""
+
+    __tablename__ = "customer_guarantees"
+    __table_args__ = ({"schema": "comm"},)
+
+    guarantee_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    guarantee_type_code: Mapped[str] = mapped_column(String(20))
+    status_code: Mapped[str] = mapped_column(String(15), default="ACTIVE")
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    valid_until_date: Mapped[datetime.date | None]
+    bank_id: Mapped[int | None] = mapped_column(ForeignKey("treasury.banks.bank_id"))
+    check_no: Mapped[str | None] = mapped_column(String(30))
+    check_due_date: Mapped[datetime.date | None]
+    description: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    released_at: Mapped[datetime.datetime | None]
+    released_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+
+
+class CustomerMerchandising(Base):
+    """اطلاعاتِ فروشگاهی/Merchandising (R219، بخشِ ۱۰) -- فقط برایِ
+    مشتریانِ نوعِ فروشگاه معنا دارد؛ ماهولِ جداگانه از customer_profiles."""
+
+    __tablename__ = "customer_merchandising"
+    __table_args__ = ({"schema": "comm"},)
+
+    customer_detail_account_id: Mapped[int] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id"), primary_key=True
+    )
+    store_area_sqm: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
+    checkout_count: Mapped[int | None] = mapped_column(SmallInteger)
+    fridge_count: Mapped[int | None] = mapped_column(SmallInteger)
+    shelf_count: Mapped[int | None] = mapped_column(SmallInteger)
+    available_brands: Mapped[str | None] = mapped_column(String(500))
+    competitor_brands: Mapped[str | None] = mapped_column(String(500))
+    layout_status_code: Mapped[str | None] = mapped_column(String(15))
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+
+
 # =======================================================================
 # قرارداد، کمیسیون، حمل، اشتراک — معادلِ
 # 069_commercial_contracts_commission_shipping.sql
@@ -742,6 +799,12 @@ class CommercialContract(Base):
     valid_from: Mapped[datetime.date] = mapped_column(Date)
     valid_to: Mapped[datetime.date | None] = mapped_column(Date)
     status_code: Mapped[str] = mapped_column(String(15), default="ACTIVE")
+    # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۷ -- قراردادِ
+    # نمایندگی/سازمانی + سهمیه‌یِ مبلغی + تعهدات).
+    contract_category_code: Mapped[str] = mapped_column(String(15), default="STANDARD")
+    committed_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    consumed_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    commitments_text: Mapped[str | None] = mapped_column(String(1000))
 
 
 class CommissionEntry(Base):
@@ -1660,6 +1723,10 @@ class CustomerVisit(Base):
     check_in_latitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
     check_in_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
     distance_from_customer_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
+    # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۴/۹ -- GeoFence):
+    # None یعنی این مشتری اصلاً GeoFence ندارد (بدونِ آدرسِ دارایِ
+    # geofence_radius_meters) -- نه «داخلِ محدوده».
+    is_outside_geofence: Mapped[bool | None]
     notes: Mapped[str | None] = mapped_column(String(500))
     # طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
     # سفارش باشه»): اختیاری، برایِ هر دو نوعِ پخش.

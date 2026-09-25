@@ -34,10 +34,19 @@ def start_visit(
             payload.check_in_latitude, payload.check_in_longitude,
         )
 
+    def _serialize(customer_visit_id: int) -> dict:
+        # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۴/۹ -- GeoFence):
+        # هرگز مسدودکننده نیست -- فقط برایِ هشدارِ غیرِمسدودکننده به
+        # ویزیتور (None یعنی این مشتری اصلاً GeoFence ندارد).
+        return {
+            "customer_visit_id": customer_visit_id,
+            "is_outside_geofence": field_sales_service.get_visit_geofence_status(customer_visit_id),
+        }
+
     try:
         return run_idempotent(
             idempotency_key, "POST /visits/start", ctx.user_id, ctx.company_id,
-            status.HTTP_200_OK, _do, lambda customer_visit_id: {"customer_visit_id": customer_visit_id},
+            status.HTTP_200_OK, _do, _serialize,
         )
     except IdempotentReplay as replay:
         return replay.body

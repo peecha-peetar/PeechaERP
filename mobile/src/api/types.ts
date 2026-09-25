@@ -99,6 +99,9 @@ export interface StartVisitRequest {
 
 export interface StartVisitResponse {
   customer_visit_id: number;
+  /** طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۴/۹ -- GeoFence):
+   * هرگز مسدودکننده نیست؛ null یعنی این مشتری اصلاً GeoFence ندارد. */
+  is_outside_geofence?: boolean | null;
 }
 
 export interface ChannelRow {
@@ -290,6 +293,8 @@ export interface CustomerDetailResponse {
   notes: string | null;
   customer_type_code: string | null;
   customer_class: string | null;
+  outlet_type_code: string | null;
+  priority_code: string | null;
   status_code: string | null;
   customer_group_id: number | null;
   credit_limit_amount: string | null;

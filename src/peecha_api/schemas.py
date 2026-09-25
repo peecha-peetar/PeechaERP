@@ -194,6 +194,46 @@ class PartyAddressRequest(BaseModel):
     geofence_radius_meters: int | None = None
 
 
+class CustomerGuaranteeRequest(BaseModel):
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۵ -- چک/سفته/
+    ضمانت‌نامه/ضامن/وثیقه)."""
+
+    guarantee_type_code: str  # CHECK|PROMISSORY_NOTE|BANK_GUARANTEE|GUARANTOR|COLLATERAL
+    amount: decimal.Decimal
+    valid_until_date: datetime.date | None = None
+    bank_id: int | None = None
+    check_no: str | None = None
+    check_due_date: datetime.date | None = None
+    description: str | None = None
+
+
+class CustomerContractRequest(BaseModel):
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۷ -- قراردادِ
+    نمایندگی/سازمانی + سهمیه + تعهدات)."""
+
+    contract_category_code: str = "STANDARD"  # STANDARD|AGENCY|ORGANIZATIONAL
+    valid_from: datetime.date
+    valid_to: datetime.date | None = None
+    item_id: int | None = None
+    committed_quantity: decimal.Decimal | None = None
+    committed_amount: decimal.Decimal | None = None
+    contract_price: decimal.Decimal | None = None
+    commitments_text: str | None = None
+
+
+class CustomerMerchandisingRequest(BaseModel):
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۰ --
+    Merchandising)."""
+
+    store_area_sqm: decimal.Decimal | None = None
+    checkout_count: int | None = None
+    fridge_count: int | None = None
+    shelf_count: int | None = None
+    available_brands: str | None = None
+    competitor_brands: str | None = None
+    layout_status_code: str | None = None  # EXCELLENT|GOOD|AVERAGE|POOR
+
+
 class CustomerRejectRequest(BaseModel):
     reason: str
 

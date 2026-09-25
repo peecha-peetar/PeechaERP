@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from peecha.db.base import new_session
-from peecha.db.models.commercial import CustomerProfile, CustomerVisit, VisitPlan
+from peecha.db.models.commercial import CustomerProfile, CustomerVisit, PartyAddress, VisitPlan
 
 VISIT_STATUS_CODES = ("IN_PROGRESS", "COMPLETED", "SKIPPED")
 
@@ -144,6 +144,7 @@ class CustomerVisitRow:
     check_in_latitude: decimal.Decimal | None
     check_in_longitude: decimal.Decimal | None
     distance_from_customer_m: decimal.Decimal | None
+    is_outside_geofence: bool | None
     notes: str | None
 
 
@@ -165,22 +166,54 @@ def start_visit(
     check_in_longitude: decimal.Decimal | None = None,
 ) -> int:
     distance_from_customer_m = None
+    is_outside_geofence = None
     if check_in_latitude is not None and check_in_longitude is not None:
         with new_session() as session:
-            profile = session.get(CustomerProfile, customer_detail_account_id)
-            if profile is not None and profile.gps_latitude is not None and profile.gps_longitude is not None:
-                distance_from_customer_m = _haversine_distance_m(
-                    check_in_latitude, check_in_longitude, profile.gps_latitude, profile.gps_longitude
+            # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۴/۹ --
+            # GeoFence): آدرسِ نوعِ «فروشگاه» (اگر با GPS ثبت شده باشد)
+            # دقیق‌ترین مرجع است -- در نبودش، به gps_latitude/longitudeِ
+            # قدیمیِ خودِ مشتری (بدونِ GeoFence، فقط فاصله) برمی‌گردیم.
+            store_address = session.scalar(
+                select(PartyAddress)
+                .where(
+                    PartyAddress.party_detail_account_id == customer_detail_account_id,
+                    PartyAddress.address_type_code == "STORE",
+                    PartyAddress.gps_latitude.is_not(None),
+                    PartyAddress.gps_longitude.is_not(None),
                 )
+                .order_by(PartyAddress.is_default.desc(), PartyAddress.address_id)
+                .limit(1)
+            )
+            ref_lat = ref_lon = geofence_radius = None
+            if store_address is not None:
+                ref_lat, ref_lon, geofence_radius = (
+                    store_address.gps_latitude, store_address.gps_longitude, store_address.geofence_radius_meters,
+                )
+            else:
+                profile = session.get(CustomerProfile, customer_detail_account_id)
+                if profile is not None and profile.gps_latitude is not None and profile.gps_longitude is not None:
+                    ref_lat, ref_lon = profile.gps_latitude, profile.gps_longitude
+            if ref_lat is not None and ref_lon is not None:
+                distance_from_customer_m = _haversine_distance_m(check_in_latitude, check_in_longitude, ref_lat, ref_lon)
+                if geofence_radius is not None:
+                    is_outside_geofence = distance_from_customer_m > geofence_radius
     with new_session() as session:
         visit = CustomerVisit(
             company_id=company_id, visit_plan_id=visit_plan_id, customer_detail_account_id=customer_detail_account_id,
             visitor_user_id=visitor_user_id, check_in_latitude=check_in_latitude, check_in_longitude=check_in_longitude,
-            distance_from_customer_m=distance_from_customer_m,
+            distance_from_customer_m=distance_from_customer_m, is_outside_geofence=is_outside_geofence,
         )
         session.add(visit)
         session.commit()
         return visit.customer_visit_id
+
+
+def get_visit_geofence_status(customer_visit_id: int) -> bool | None:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۴/۹): فقط برایِ
+    نمایشِ هشدارِ غیرِمسدودکننده به موبایل، بلافاصله بعدِ start_visit."""
+    with new_session() as session:
+        visit = session.get(CustomerVisit, customer_visit_id)
+        return visit.is_outside_geofence if visit is not None else None
 
 
 def complete_visit(
@@ -250,7 +283,7 @@ def list_customer_visits(
             CustomerVisitRow(
                 r.customer_visit_id, r.visit_plan_id, r.customer_detail_account_id, r.visitor_user_id,
                 r.status_code, r.skip_reason, r.checked_in_at, r.checked_out_at,
-                r.check_in_latitude, r.check_in_longitude, r.distance_from_customer_m, r.notes,
+                r.check_in_latitude, r.check_in_longitude, r.distance_from_customer_m, r.is_outside_geofence, r.notes,
             )
             for r in rows
         ]

@@ -59,6 +59,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import hr as hr_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import inventory_locations as locations_service
 from peecha.services import payroll as payroll_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
@@ -99,6 +100,16 @@ _CUSTOMER_TYPE_OPTIONS = [
 ]
 _PERSON_TYPE_OPTIONS = [("NATURAL", "حقیقی"), ("LEGAL", "حقوقی")]
 _CUSTOMER_CLASS_OPTIONS = [("A", "A"), ("B", "B"), ("C", "C"), ("D", "D")]
+# طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۳ -- طبقه‌بندیِ فروش/تنظیماتِ سفارش).
+_OUTLET_TYPE_OPTIONS = [
+    ("SUPERMARKET", "سوپرمارکت"), ("CHAIN_STORE", "فروشگاهِ زنجیره‌ای"), ("WHOLESALE", "عمده‌فروشی"),
+    ("RESTAURANT", "رستوران"), ("PHARMACY", "داروخانه"), ("SPECIALTY_STORE", "فروشگاهِ تخصصی"),
+    ("ORGANIZATIONAL", "سازمانی"), ("OTHER", "سایر"),
+]
+_PRIORITY_OPTIONS = [("LOW", "کم"), ("NORMAL", "عادی"), ("HIGH", "بالا"), ("VIP", "ویژه/VIP")]
+_SHIPMENT_TYPE_OPTIONS = [
+    ("VEHICLE_ROUTE", "خودرو/مسیرِ پخش"), ("COURIER", "پیک"), ("FREIGHT", "باربری"), ("PICKUP", "حضوری/تحویلِ درِ انبار"),
+]
 _EMPLOYEE_STATUS_LABELS = {"ACTIVE": "فعال", "ON_LEAVE": "مرخصی", "TERMINATED": "پایان‌یافته"}
 # طبقِ یکپارچه‌سازیِ مشتری/تامین‌کننده در فرمِ تفصیلی (مرحلهٔ بازرگانی):
 # وضعیتِ گردشِ کارِ تاییدِ اعتباری (comm.customer_profiles/supplier_profiles.status_code).
@@ -136,6 +147,16 @@ _PERSON_FIELD_LABELS = {
     "person_type_code": "نوعِ شخصیت",
     "customer_class": "طبقه‌یِ مشتری",
     "geographic_region": "منطقه‌یِ جغرافیایی",
+    "outlet_type_code": "نوعِ کانال/فروشگاه",
+    "priority_code": "اولویتِ مشتری",
+    "min_order_amount": "حداقلِ مبلغِ سفارش",
+    "min_order_quantity": "حداقلِ تعدادِ سفارش",
+    "allowed_order_days_mask": "روزهایِ مجازِ سفارش (بیت‌مسک، ۱-۱۲۷)",
+    "allowed_order_hour_from": "ساعتِ مجازِ سفارش -- از",
+    "allowed_order_hour_to": "ساعتِ مجازِ سفارش -- تا",
+    "expected_delivery_days": "زمانِ تحویلِ موردِانتظار (روز)",
+    "shipment_type_code": "نوعِ ارسال",
+    "default_warehouse_id": "انبارِ پیش‌فرض",
 }
 
 # طبقِ یکپارچه‌سازیِ «تعریفِ کارمند فقط از طریقِ تفصیلی»: این کمبوها
@@ -173,6 +194,12 @@ _PERSON_COMBO_LOADERS = {
     "customer_type_code": lambda company_id: _CUSTOMER_TYPE_OPTIONS,
     "person_type_code": lambda company_id: _PERSON_TYPE_OPTIONS,
     "customer_class": lambda company_id: _CUSTOMER_CLASS_OPTIONS,
+    "outlet_type_code": lambda company_id: _OUTLET_TYPE_OPTIONS,
+    "priority_code": lambda company_id: _PRIORITY_OPTIONS,
+    "shipment_type_code": lambda company_id: _SHIPMENT_TYPE_OPTIONS,
+    "default_warehouse_id": lambda company_id: [
+        (w.warehouse_id, f"{w.code} — {w.name}") for w in locations_service.list_warehouses(company_id)
+    ],
 }
 
 # طبقِ گزارشِ صریح («وقتی گروهِ پرسنل چند سطح دارد، فقط آخرین سطح باید
@@ -200,6 +227,10 @@ _PERSON_GROUP_META = {
             ("address", "text"), ("customer_group_id", "combo"), ("default_price_list_id", "combo"),
             ("default_channel_code", "combo"), ("payment_term_days", "decimal"), ("credit_limit_amount", "decimal"),
             ("is_tax_exempt", "bool"), ("distribution_route_detail_account_id", "combo"), ("notes", "text"),
+            ("outlet_type_code", "combo"), ("priority_code", "combo"), ("min_order_amount", "decimal"),
+            ("min_order_quantity", "decimal"), ("allowed_order_days_mask", "decimal"),
+            ("allowed_order_hour_from", "decimal"), ("allowed_order_hour_to", "decimal"),
+            ("expected_delivery_days", "decimal"), ("shipment_type_code", "combo"), ("default_warehouse_id", "combo"),
         ),
         "list_fn": partners_service.list_customer_detail_accounts,
         "create_fn": partners_service.create_customer_detail_account,

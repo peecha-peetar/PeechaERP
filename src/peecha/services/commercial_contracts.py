@@ -28,19 +28,32 @@ def list_contracts(company_id: int, counterparty_detail_account_id: int | None =
         return list(session.scalars(stmt))
 
 
+_CONTRACT_CATEGORIES = ("STANDARD", "AGENCY", "ORGANIZATIONAL")
+
+
 def create_contract(
     company_id: int, contract_type_code: str, counterparty_detail_account_id: int, valid_from: datetime.date,
     item_id: int | None = None, committed_quantity: decimal.Decimal | None = None,
     contract_price: decimal.Decimal | None = None, valid_to: datetime.date | None = None,
+    contract_category_code: str = "STANDARD", committed_amount: decimal.Decimal | None = None,
+    commitments_text: str | None = None,
 ) -> int:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۷ -- قراردادِ
+    نمایندگی/سازمانی + سهمیه‌یِ مبلغی + تعهدات): committed_amount
+    مستقل از committed_quantityِ قدیمی است -- یک قرارداد می‌تواند سهمیه‌یِ
+    مبلغی (بدونِ کالایِ خاص، item_id=None) یا سهمیه‌یِ تعدادیِ یک کالایِ
+    مشخص باشد، یا هردو."""
     if contract_type_code not in ("SALES", "PURCHASE"):
         raise ValueError("نوعِ قرارداد نامعتبر است.")
+    if contract_category_code not in _CONTRACT_CATEGORIES:
+        raise ValueError("دسته‌یِ قرارداد نامعتبر است.")
     with new_session() as session:
         row = CommercialContract(
             company_id=company_id, contract_type_code=contract_type_code,
             counterparty_detail_account_id=counterparty_detail_account_id, item_id=item_id,
             committed_quantity=committed_quantity, contract_price=contract_price, valid_from=valid_from,
-            valid_to=valid_to,
+            valid_to=valid_to, contract_category_code=contract_category_code, committed_amount=committed_amount,
+            commitments_text=commitments_text,
         )
         session.add(row)
         session.commit()
@@ -53,6 +66,23 @@ def cancel_contract(contract_id: int, company_id: int) -> None:
         if row is None or row.company_id != company_id:
             raise ValueError("قرارداد نامعتبر است.")
         row.status_code = "CANCELLED"
+        session.commit()
+
+
+def record_contract_consumption(contract_id: int, quantity: decimal.Decimal, amount: decimal.Decimal) -> None:
+    """طبقِ اصلِ «سهمیه بدونِ ردیابیِ مصرف بی‌معناست»: مصرفِ تعدادی/مبلغی
+    را رویِ قرارداد اضافه می‌کند -- عمداً فراخوانیِ دستی/جداگانه است (نه
+    قلابِ خودکارِ رویِ هر فاکتور)، چون تطبیقِ خودکارِ خط-به-خطِ فاکتور با
+    قراردادِ درست (کدام قرارداد از چند قراردادِ فعالِ هم‌کالا) یک تصمیمِ
+    کسب‌وکاریِ جداگانه است که بدونِ نمونه‌یِ واقعیِ کاربر نباید حدس زده شود."""
+    with new_session() as session:
+        row = session.get(CommercialContract, contract_id)
+        if row is None:
+            raise ValueError("قرارداد نامعتبر است.")
+        if row.status_code != "ACTIVE":
+            raise ValueError("فقط قراردادِ فعال قابلِ‌مصرف است.")
+        row.consumed_quantity = (row.consumed_quantity or decimal.Decimal(0)) + quantity
+        row.consumed_amount = (row.consumed_amount or decimal.Decimal(0)) + amount
         session.commit()
 
 

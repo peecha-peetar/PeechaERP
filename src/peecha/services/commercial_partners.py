@@ -16,6 +16,8 @@ from peecha.db.models.commercial import (
     CommercialDocument,
     CommissionRule,
     CustomerGroup,
+    CustomerGuarantee,
+    CustomerMerchandising,
     CustomerProfile,
     PartyAddress,
     PartyContact,
@@ -100,6 +102,17 @@ class CustomerProfileFields:
     distribution_route_detail_account_id: int | None = None
     gps_latitude: "decimal.Decimal | None" = None
     gps_longitude: "decimal.Decimal | None" = None
+    # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۳).
+    outlet_type_code: str | None = None
+    priority_code: str | None = None
+    min_order_amount: "decimal.Decimal | None" = None
+    min_order_quantity: "decimal.Decimal | None" = None
+    allowed_order_days_mask: int | None = None
+    allowed_order_hour_from: int | None = None
+    allowed_order_hour_to: int | None = None
+    expected_delivery_days: int | None = None
+    shipment_type_code: str | None = None
+    default_warehouse_id: int | None = None
 
 
 def create_customer(
@@ -136,6 +149,12 @@ def create_customer(
                 is_tax_exempt=fields.is_tax_exempt,
                 distribution_route_detail_account_id=fields.distribution_route_detail_account_id,
                 gps_latitude=fields.gps_latitude, gps_longitude=fields.gps_longitude,
+                outlet_type_code=fields.outlet_type_code, priority_code=fields.priority_code,
+                min_order_amount=fields.min_order_amount, min_order_quantity=fields.min_order_quantity,
+                allowed_order_days_mask=fields.allowed_order_days_mask,
+                allowed_order_hour_from=fields.allowed_order_hour_from, allowed_order_hour_to=fields.allowed_order_hour_to,
+                expected_delivery_days=fields.expected_delivery_days, shipment_type_code=fields.shipment_type_code,
+                default_warehouse_id=fields.default_warehouse_id,
                 submitted_by_user_id=submitted_by_user_id, submitted_at=datetime.datetime.now(),
             )
         )
@@ -280,6 +299,9 @@ _CUSTOMER_PROFILE_FIELD_KEYS = (
     "customer_group_id", "default_price_list_id", "default_channel_code", "payment_term_days",
     "credit_limit_amount", "is_tax_exempt", "distribution_route_detail_account_id",
     "gps_latitude", "gps_longitude",
+    "outlet_type_code", "priority_code", "min_order_amount", "min_order_quantity",
+    "allowed_order_days_mask", "allowed_order_hour_from", "allowed_order_hour_to",
+    "expected_delivery_days", "shipment_type_code", "default_warehouse_id",
 )
 
 
@@ -669,6 +691,110 @@ def delete_party_address(address_id: int, party_detail_account_id: int) -> None:
         if row is None or row.party_detail_account_id != party_detail_account_id:
             raise ValueError("آدرس نامعتبر است.")
         session.delete(row)
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# چک/سفته/ضمانت‌نامه/ضامن/وثیقه -- اطلاعاتِ اعتباریِ خودِ مشتری (R219،
+# بخشِ ۵). مستقل از treasury (بدونِ اثرِ حسابداری تا وصول/ضبطِ صریح).
+# ---------------------------------------------------------------------
+_GUARANTEE_TYPES = ("CHECK", "PROMISSORY_NOTE", "BANK_GUARANTEE", "GUARANTOR", "COLLATERAL")
+
+
+def list_customer_guarantees(customer_detail_account_id: int, active_only: bool = False) -> list[CustomerGuarantee]:
+    with new_session() as session:
+        stmt = select(CustomerGuarantee).where(
+            CustomerGuarantee.customer_detail_account_id == customer_detail_account_id
+        ).order_by(CustomerGuarantee.created_at.desc())
+        if active_only:
+            stmt = stmt.where(CustomerGuarantee.status_code == "ACTIVE")
+        return list(session.scalars(stmt))
+
+
+def add_customer_guarantee(
+    company_id: int, customer_detail_account_id: int, guarantee_type_code: str, amount, created_by_user_id: int,
+    valid_until_date: datetime.date | None = None, bank_id: int | None = None, check_no: str | None = None,
+    check_due_date: datetime.date | None = None, description: str | None = None,
+) -> int:
+    if guarantee_type_code not in _GUARANTEE_TYPES:
+        raise ValueError("نوعِ ضمانت نامعتبر است.")
+    if amount is None or amount < 0:
+        raise ValueError("مبلغِ ضمانت باید نامنفی باشد.")
+    with new_session() as session:
+        row = CustomerGuarantee(
+            company_id=company_id, customer_detail_account_id=customer_detail_account_id,
+            guarantee_type_code=guarantee_type_code, amount=amount, valid_until_date=valid_until_date,
+            bank_id=bank_id, check_no=check_no, check_due_date=check_due_date, description=description,
+            created_by_user_id=created_by_user_id,
+        )
+        session.add(row)
+        session.commit()
+        return row.guarantee_id
+
+
+def release_customer_guarantee(guarantee_id: int, company_id: int, released_by_user_id: int, status_code: str = "RELEASED") -> None:
+    if status_code not in ("RELEASED", "CALLED", "EXPIRED"):
+        raise ValueError("وضعیتِ نامعتبر برایِ آزادسازیِ ضمانت.")
+    with new_session() as session:
+        row = session.get(CustomerGuarantee, guarantee_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("ضمانت نامعتبر است.")
+        if row.status_code != "ACTIVE":
+            raise ValueError("این ضمانت قبلاً بسته شده است.")
+        row.status_code = status_code
+        row.released_at = datetime.datetime.now()
+        row.released_by_user_id = released_by_user_id
+        session.commit()
+
+
+def total_active_guarantee_amount(customer_detail_account_id: int) -> "decimal.Decimal":
+    """طبقِ اصلِ «سقفِ اعتبارِ تضمین‌شده»: جمعِ ضمانت‌هایِ فعالِ مشتری --
+    برایِ نمایشِ کنارِ سقفِ اعتبار (بدونِ اضافه‌کردنِ خودکار به آن، چون
+    تصمیمِ سیاستیِ «آیا ضمانت سقفِ اعتبار را افزایش می‌دهد یا نه» به
+    مدیریتِ مالیِ شرکت وابسته است، نه چیزی که این‌جا حدس زده شود)."""
+    with new_session() as session:
+        total = session.scalar(
+            select(func.coalesce(func.sum(CustomerGuarantee.amount), 0)).where(
+                CustomerGuarantee.customer_detail_account_id == customer_detail_account_id,
+                CustomerGuarantee.status_code == "ACTIVE",
+            )
+        )
+        return total or 0
+
+
+# ---------------------------------------------------------------------
+# اطلاعاتِ فروشگاهی/Merchandising (R219، بخشِ ۱۰) -- عکس‌ها از همان
+# سازوکارِ عمومیِ پیوستِ حساب‌هایِ تفصیلی (detail_dimensions.attach_detail_account_file).
+# ---------------------------------------------------------------------
+_LAYOUT_STATUS_CODES = ("EXCELLENT", "GOOD", "AVERAGE", "POOR")
+
+
+def get_customer_merchandising(customer_detail_account_id: int) -> CustomerMerchandising | None:
+    with new_session() as session:
+        return session.get(CustomerMerchandising, customer_detail_account_id)
+
+
+def set_customer_merchandising(
+    customer_detail_account_id: int, updated_by_user_id: int, store_area_sqm=None, checkout_count: int | None = None,
+    fridge_count: int | None = None, shelf_count: int | None = None, available_brands: str | None = None,
+    competitor_brands: str | None = None, layout_status_code: str | None = None,
+) -> None:
+    if layout_status_code is not None and layout_status_code not in _LAYOUT_STATUS_CODES:
+        raise ValueError("وضعیتِ چیدمان نامعتبر است.")
+    with new_session() as session:
+        row = session.get(CustomerMerchandising, customer_detail_account_id)
+        if row is None:
+            row = CustomerMerchandising(customer_detail_account_id=customer_detail_account_id)
+            session.add(row)
+        row.store_area_sqm = store_area_sqm
+        row.checkout_count = checkout_count
+        row.fridge_count = fridge_count
+        row.shelf_count = shelf_count
+        row.available_brands = available_brands
+        row.competitor_brands = competitor_brands
+        row.layout_status_code = layout_status_code
+        row.updated_at = datetime.datetime.now()
+        row.updated_by_user_id = updated_by_user_id
         session.commit()
 
 
