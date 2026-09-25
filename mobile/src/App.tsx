@@ -17,8 +17,10 @@ import { DeliveryConfirmScreen } from "./screens/DeliveryConfirmScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { ManagerDashboardScreen } from "./screens/ManagerDashboardScreen";
+import { ModeSelectScreen } from "./screens/ModeSelectScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
-import { OrderScreen } from "./screens/OrderScreen";
+import { PreSalesOrderScreen } from "./screens/PreSalesOrderScreen";
+import { VanSalesOrderScreen } from "./screens/VanSalesOrderScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { VehicleSettlementScreen } from "./screens/VehicleSettlementScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
@@ -103,12 +105,18 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   const [userFullName, setUserFullName] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("IDLE");
   const [unreadCount, setUnreadCount] = useState(0);
-  // طبقِ درخواستِ صریحِ کاربر («تعیینِ کانالِ مجزا برایِ پخشِ سرد و
-  // گرم»): قبلاً اپ برایِ همه‌یِ ویزیتورها بدونِ استثنا فقط مسیرِ پخشِ
-  // گرم را نشان می‌داد -- این مقدار از /auth/me می‌آید و مشخص می‌کند
-  // این کاربر کدام مسیر را ببیند. undefined یعنی هنوز نخوانده‌ایم،
-  // null یعنی مدیر هنوز از دسکتاپ تنظیم نکرده (نه یک سوییچِ دستی در گوشی).
-  const [mobileChannelType, setMobileChannelType] = useState<"VAN_SALES" | "PRE_SALES" | null | undefined>(undefined);
+  // طبقِ درخواستِ صریحِ کاربر («رابطِ کاربریِ موبایل برایِ پخشِ گرم و
+  // سرد جدا بشه و کاربر اول برنامه انتخاب کنه -- ممکنه یک نفر روزی
+  // گرم روزی سرد کار کند»): برخلافِ نسخهٔ قبلی (که این مسیر را فقط از
+  // تنظیماتِ دسکتاپ می‌خواند و اگر تنظیم نشده بود کاربر رویِ «در حالِ
+  // بررسیِ تنظیماتِ سفارش...» گیر می‌کرد)، حالا خودِ ویزیتور هر بار که
+  // وارد اپ می‌شود (بعدِ لاگین، پیش از هر صفحهٔ دیگر) صراحتاً انتخاب
+  // می‌کند -- null یعنی هنوز انتخاب نکرده (ModeSelectScreen نشان داده می‌شود).
+  const [selectedMode, setSelectedMode] = useState<"VAN_SALES" | "PRE_SALES" | null>(null);
+  // مقدارِ /auth/me فقط به‌عنوانِ پیش‌فرضِ پیشنهادی در ModeSelectScreen
+  // استفاده می‌شود (برجسته‌کردنِ دکمه‌یِ معمولِ همین ویزیتور) -- دیگر
+  // چیزی را قفل/گیت نمی‌کند.
+  const [suggestedMode, setSuggestedMode] = useState<"VAN_SALES" | "PRE_SALES" | null>(null);
   // طبقِ درخواستِ صریحِ کاربر («فروش بر اساسِ موجودیِ خودرو»، فازِ ۲):
   // فقط برایِ پخشِ گرم معنا دارد -- undefined یعنی هنوز نخوانده‌ایم.
   const [assignedVehicleWarehouseId, setAssignedVehicleWarehouseId] = useState<number | null | undefined>(undefined);
@@ -144,21 +152,21 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     services.apiClient
       .getMe()
       .then((me) => {
-        setMobileChannelType(me.mobile_channel_type_code);
+        setSuggestedMode(me.mobile_channel_type_code);
         setAssignedVehicleWarehouseId(me.assigned_vehicle_warehouse_id);
         setSettlementVehicleWarehouseId(me.settlement_vehicle_warehouse_id);
       })
       .catch(() => {
-        setMobileChannelType(null);
+        setSuggestedMode(null);
         setAssignedVehicleWarehouseId(null);
         setSettlementVehicleWarehouseId(null);
       });
   }, [loggedIn, services]);
 
   useEffect(() => {
-    if (!loggedIn || !mobileChannelType) return;
+    if (!loggedIn || !selectedMode) return;
     services.apiClient
-      .listChannels(mobileChannelType)
+      .listChannels(selectedMode)
       .then((channels) => {
         const channel = channels[0];
         setOrderChannelCode(channel?.channel_code ?? null);
@@ -176,7 +184,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     // خودرویی که این ویزیتور به آن وصل است (اگر وصل نباشد، EmptyState
     // نشان داده می‌شود، نه سقوطِ خاموش به انبارِ پیش‌فرض). پخشِ سرد
     // (سفارش، نه فاکتورِ آنی) هم‌چنان انبارِ پیش‌فرضِ شرکت را می‌گیرد.
-    if (mobileChannelType === "VAN_SALES") {
+    if (selectedMode === "VAN_SALES") {
       setDefaultWarehouseId(assignedVehicleWarehouseId ?? null);
       // طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
       // انواعِ تسویه در دسکتاپ باشد»): فقط برایِ فاکتورِ آنیِ پخشِ گرم لازم است.
@@ -190,7 +198,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         })
         .catch(() => setDefaultWarehouseId(null));
     }
-  }, [loggedIn, mobileChannelType, assignedVehicleWarehouseId, services]);
+  }, [loggedIn, selectedMode, assignedVehicleWarehouseId, services]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -278,6 +286,18 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     );
   }
 
+  // طبقِ درخواستِ صریحِ کاربر («کاربر اول برنامه انتخاب کنه پخش گرم و
+  // سرد و کلاً پروسه‌هاشون جدا باشه»): این انتخاب پیش از هر صفحهٔ دیگر
+  // (حتی صفحهٔ اصلی/Home) نشان داده می‌شود -- نه فقط دفنِ شده در اعماقِ
+  // فرمِ سفارش.
+  if (selectedMode === null) {
+    return (
+      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+        <ModeSelectScreen suggestedMode={suggestedMode} onSelect={setSelectedMode} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <NavigationContainer>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
@@ -314,27 +334,22 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   واقعیِ R196/R198: قبلاً «VAN_SALES» و «۱» مستقیم
                   فرستاده می‌شدند و سند به‌خاطرِ شکستِ کلیدِ خارجی اصلاً
                   ساخته نمی‌شد -- هردو رویِ گوشیِ فیزیکیِ کاربر تایید شد).
-                  مسیرِ پخشِ گرم/سرد هم دیگر هاردکد نیست (طبقِ درخواستِ
-                  صریحِ کاربر «تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم») --
-                  از /auth/me می‌آید. customerVisitId هم فعلاً null است:
-                  شناسه‌یِ واقعیِ ویزیت مثلِ document_id فقط بعدِ سینکِ موفقِ
-                  START_VISIT از سرور می‌آید -- وصل‌کردنِ آن به تاییدِ
-                  تحویل (هم‌الگو با resolvedDocumentId در syncEngine.ts)
-                  کارِ باقی‌ماندهٔ فازِ بعد است. */}
-              {mobileChannelType === undefined || orderChannelCode === undefined || defaultWarehouseId === undefined ? (
+                  انتخابِ پخشِ گرم/سرد خودِ selectedMode است (طبقِ درخواستِ
+                  صریحِ کاربر «کاربر اول برنامه انتخاب کنه») -- همیشه
+                  غیرِnullِ است چون بدونِ آن اصلاً به این صفحه نمی‌رسیم.
+                  customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت
+                  مثلِ document_id فقط بعدِ سینکِ موفقِ START_VISIT از
+                  سرور می‌آید -- وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با
+                  resolvedDocumentId در syncEngine.ts) کارِ باقی‌ماندهٔ
+                  فازِ بعد است. */}
+              {orderChannelCode === undefined || defaultWarehouseId === undefined ? (
                 <InlineSpinner label="در حالِ بررسیِ تنظیماتِ سفارش..." />
-              ) : mobileChannelType === null ? (
-                <EmptyState
-                  icon="⚠️"
-                  title="نوعِ کانالِ موبایلِ شما تنظیم نشده"
-                  description="مدیر باید ابتدا از دسکتاپ، در بخشِ کاربران، برایِ شما «پخشِ گرم» یا «پخشِ سرد» را انتخاب کند -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
-                />
               ) : orderChannelCode === null ? (
                 <EmptyState
                   icon="⚠️"
                   title="کانالِ فروشِ ویزیت تعریف نشده"
                   description={
-                    mobileChannelType === "VAN_SALES"
+                    selectedMode === "VAN_SALES"
                       ? "مدیر باید ابتدا از دسکتاپ، در تنظیماتِ کانال‌هایِ فروش، یک کانال از نوعِ «پخشِ گرم/VAN_SALES» بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
                       : "مدیر باید ابتدا از دسکتاپ، در تنظیماتِ کانال‌هایِ فروش، یک کانال از نوعِ «پخشِ سرد/PRE_SALES» بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
                   }
@@ -342,18 +357,17 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
               ) : defaultWarehouseId === null ? (
                 <EmptyState
                   icon="⚠️"
-                  title={mobileChannelType === "VAN_SALES" ? "شما به هیچ خودرویی وصل نیستید" : "هیچ انباری تعریف نشده"}
+                  title={selectedMode === "VAN_SALES" ? "شما به هیچ خودرویی وصل نیستید" : "هیچ انباری تعریف نشده"}
                   description={
-                    mobileChannelType === "VAN_SALES"
+                    selectedMode === "VAN_SALES"
                       ? "مدیر باید ابتدا از دسکتاپ، در بخشِ «پخشِ کالا ← تیمِ خودرو»، شما را به‌عنوانِ «ویزیتور» به یک خودرو وصل کند -- بدونِ آن، فروش قابلِ‌ثبت نیست (فروشِ پخشِ گرم فقط از موجودیِ خودروی خودتان انجام می‌شود)."
                       : "مدیر باید ابتدا از دسکتاپ، حداقل یک انبار (ترجیحاً به‌عنوانِ پیش‌فرض) بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
                   }
                 />
-              ) : (
-                <OrderScreen
+              ) : selectedMode === "VAN_SALES" ? (
+                <VanSalesOrderScreen
                   customer={route.params.customer}
                   items={items}
-                  channelTypeCode={mobileChannelType}
                   channelCode={orderChannelCode}
                   warehouseId={defaultWarehouseId}
                   currencyId={1}
@@ -365,6 +379,17 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   offlineQueue={services.offlineQueue}
                   captureProvider={resolvedCaptureProvider}
                   locationProvider={locationProvider}
+                  onSubmitted={() => navigation.navigate("Main", { screen: "VISITS" })}
+                />
+              ) : (
+                <PreSalesOrderScreen
+                  customer={route.params.customer}
+                  items={items}
+                  channelCode={orderChannelCode}
+                  warehouseId={defaultWarehouseId}
+                  currencyId={1}
+                  apiClient={services.apiClient}
+                  offlineQueue={services.offlineQueue}
                   onSubmitted={() => navigation.navigate("Main", { screen: "VISITS" })}
                 />
               )}
@@ -422,7 +447,11 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 syncEngine={services.syncEngine}
                 syncErrorLog={services.syncErrorLog}
                 userFullName={userFullName}
-                onLoggedOut={() => setLoggedIn(false)}
+                onLoggedOut={() => {
+                  setLoggedIn(false);
+                  setSelectedMode(null);
+                }}
+                onChangeMode={() => setSelectedMode(null)}
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
                 onOpenManagerDashboard={() => navigation.navigate("ManagerDashboard")}
                 onOpenVehicleSettlement={

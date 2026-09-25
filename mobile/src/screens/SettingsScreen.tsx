@@ -21,6 +21,11 @@ interface Props {
    * یک نفر از ۳ نقش واگذار بشه»): فقط برایِ همان یک نفر تعریف می‌شود --
    * undefined یعنی این کاربر مسئولِ تسویهٔ هیچ خودرویی نیست. */
   onOpenVehicleSettlement?: () => void;
+  /** طبقِ درخواستِ صریحِ کاربر («کاربر اول برنامه انتخاب کنه پخش گرم و
+   * سرد»): چون این انتخاب فقط برایِ همان نشستِ اپ است (نه یک تنظیمِ
+   * دائمی)، این‌جا راهی برایِ عوض‌کردنش می‌گذاریم -- برایِ روزی که
+   * ویزیتور برنامه‌اش عوض شود، بدونِ نیاز به خروج/ورودِ دوباره. */
+  onChangeMode: () => void;
 }
 
 /** طبقِ اصلِ صریح («Dark/Light Theme»): سوییچِ دستیِ تم + خروجِ حساب --
@@ -38,7 +43,7 @@ interface Props {
  * کاربر از چنین حالتی است، بدونِ نیاز به پاک‌کردنِ کاملِ دیتایِ اپ. */
 export function SettingsScreen({
   apiClient, offlineQueue, syncEngine, syncErrorLog, userFullName, onLoggedOut, onBack, onOpenManagerDashboard,
-  onOpenVehicleSettlement,
+  onOpenVehicleSettlement, onChangeMode,
 }: Props) {
   const { colors, spacing, typography, mode } = useTheme();
   const { toggleMode } = useThemeControls();
@@ -146,6 +151,8 @@ export function SettingsScreen({
           ))}
         </Card>
       ) : null}
+
+      <Button label="🔁 تغییرِ حالتِ پخش (گرم/سرد)" variant="secondary" onPress={onChangeMode} />
 
       <Button label="📊 داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
 

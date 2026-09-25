@@ -31,6 +31,11 @@ import {
 
 export type Fetcher = typeof fetch;
 
+// طبقِ باگِ واقعیِ «صفحه تا ابد رویِ چرخانِ بارگذاری می‌ماند»: بدونِ
+// این سقف، یک شبکهٔ واقعاً قطع‌شده (نه فقط کند) Promiseِ fetch را تا
+// ابد در حالتِ pending نگه می‌داشت.
+const REQUEST_TIMEOUT_MS = 15_000;
+
 /** خطایِ HTTP با کدِ وضعیت و پیامِ سرور -- برایِ نمایشِ پیامِ فارسیِ
  * برگشتی از FastAPI (فیلدِ detail) مستقیماً در UI. */
 export class ApiError extends Error {
@@ -72,12 +77,21 @@ export class ApiClient {
       const token = await this.tokenStore.getAccessToken();
       if (token) headers["Authorization"] = `Bearer ${token}`;
     }
-    const doFetch = () =>
-      this.fetcher(`${this.baseUrl}${path}`, {
+    // طبقِ باگِ واقعیِ کشف‌شده رویِ گوشیِ فیزیکیِ کاربر («در حالِ بررسیِ
+    // تنظیماتِ سفارش...» تا ابد آویزان می‌ماند): fetchِ خام هیچ Timeout
+    // ندارد -- اگر شبکه واقعاً قطع شود (نه یک ۴xx/۵xx تمیز)، Promise
+    // هیچ‌وقت resolve/reject نمی‌شود، پس catch()های صفحه هم هیچ‌وقت
+    // اجرا نمی‌شوند و مقدارِ state برایِ همیشه undefined می‌ماند.
+    const doFetch = () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      return this.fetcher(`${this.baseUrl}${path}`, {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+    };
 
     let response = await doFetch();
     if (response.status === 401 && auth) {
