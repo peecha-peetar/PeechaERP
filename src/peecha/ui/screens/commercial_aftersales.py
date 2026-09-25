@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import commercial_aftersales as aftersales_service
 from peecha.services import commercial_documents as documents_service
@@ -177,8 +178,8 @@ class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
             item = items_by_id.get(w.item_id)
             status = aftersales_service.get_effective_warranty_status(w.warranty_id)
             self.warranty_table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(w.item_id)))
-            self.warranty_table.setItem(row_index, 1, QTableWidgetItem(str(w.start_date)))
-            self.warranty_table.setItem(row_index, 2, QTableWidgetItem(str(w.end_date)))
+            self.warranty_table.setItem(row_index, 1, QTableWidgetItem(numerals.format_jalali_date(w.start_date)))
+            self.warranty_table.setItem(row_index, 2, QTableWidgetItem(numerals.format_jalali_date(w.end_date)))
             self.warranty_table.setItem(row_index, 3, QTableWidgetItem(_WARRANTY_STATUS_LABELS.get(status, status)))
             void_button = QPushButton("🚫")
             void_button.setObjectName("iconButton")

@@ -284,22 +284,30 @@ def add_quick_add_button(
 
 class JalaliDateEdit(QLineEdit):
     """فیلدِ متنیِ تاریخِ شمسی با ارقامِ فارسی — معادلِ رفتارِ تاریخ‌گیرِ
-    Kivy (که هم آن یک فیلدِ متنی بود، نه پاپ‌آپِ تقویم)."""
+    Kivy (که هم آن یک فیلدِ متنی بود، نه پاپ‌آپِ تقویم).
 
-    def __init__(self, placeholder: str = "۱۴۰۳/۰۴/۲۸") -> None:
+    allow_empty (طبقِ درخواستِ صریحِ کاربر «همه‌جا فقط تاریخِ شمسی
+    باشه» -- جایگزینِ ترفندِ minimumDate/setSpecialValueTextِ QDateEdit
+    برایِ فیلدهایِ تاریخِ اختیاری): وقتی True باشد، خالی‌گذاشتنِ متن
+    یعنی «بدونِ تاریخ» -- date() مقدارِ None برمی‌گرداند و setDate(None)
+    فیلد را خالی می‌کند. پیش‌فرض False است تا رفتارِ همه‌یِ استفاده‌هایِ
+    قبلی (که همیشه یک تاریخِ معتبر می‌خواهند) دست‌نخورده بماند."""
+
+    def __init__(self, placeholder: str = "۱۴۰۳/۰۴/۲۸", *, allow_empty: bool = False) -> None:
         super().__init__()
         self.setPlaceholderText(placeholder)
         # اندازه‌یِ ثابت و یکسان در همه‌یِ فرم‌ها — قبلاً هر صفحه یک
         # setMaximumWidth دلبخواهی (۱۲۰ تا ۱۵۰) می‌گذاشت یا اصلاً نمی‌گذاشت
         # و فیلد کشیده می‌شد؛ حالا این کلاسِ مشترک اندازه را تعیین می‌کند.
         self.setFixedWidth(118)
-        self._date = datetime.date.today()
+        self._allow_empty = allow_empty
+        self._date: datetime.date | None = None if allow_empty else datetime.date.today()
         self._refresh_text()
         self.textEdited.connect(self._on_text_edited)
         self.editingFinished.connect(self._on_editing_finished)
 
     def _refresh_text(self) -> None:
-        self.setText(numerals.format_jalali_date(self._date))
+        self.setText(numerals.format_jalali_date(self._date) if self._date is not None else "")
         self.setCursorPosition(0)
 
     def _on_text_edited(self, text: str) -> None:
@@ -310,19 +318,24 @@ class JalaliDateEdit(QLineEdit):
             self.setCursorPosition(cursor)
 
     def _on_editing_finished(self) -> None:
+        if self._allow_empty and not self.text().strip():
+            self._date = None
+            return
         try:
             self._date = numerals.parse_jalali_date(self.text())
         except ValueError:
             pass
         self._refresh_text()
 
-    def date(self) -> datetime.date:
+    def date(self) -> datetime.date | None:
+        if self._allow_empty and not self.text().strip():
+            return None
         try:
             return numerals.parse_jalali_date(self.text())
         except ValueError:
             return self._date
 
-    def setDate(self, value: datetime.date) -> None:
+    def setDate(self, value: datetime.date | None) -> None:
         self._date = value
         self._refresh_text()
 

@@ -13,7 +13,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QDateEdit,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -25,13 +24,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, wrap_scrollable
 
 _REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصدِ ثابت", "VOLUME_TIER": "پلکانیِ حجمی"}
 _ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحالِ تجمیع", "SETTLED": "تسویه‌شده"}
@@ -94,8 +94,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         self.rebate_basis_combo = QComboBox()
         for code, label in _REBATE_BASIS_LABELS.items():
             self.rebate_basis_combo.addItem(label, code)
-        self.rebate_valid_from_field = QDateEdit()
-        self.rebate_valid_from_field.setCalendarPopup(True)
+        self.rebate_valid_from_field = JalaliDateEdit()
         self.rebate_valid_from_field.setDate(datetime.date.today())
         self.agreement_form_grid = FieldGrid([
             FieldSpec("supplier", "تامین‌کننده", self.rebate_supplier_combo, span=2),
@@ -142,12 +141,10 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         self.rebate_invoice_combo = QComboBox()
         right.addWidget(self.rebate_invoice_combo)
         period_row = QHBoxLayout()
-        self.rebate_period_from_field = QDateEdit()
-        self.rebate_period_from_field.setCalendarPopup(True)
+        self.rebate_period_from_field = JalaliDateEdit()
         self.rebate_period_from_field.setDate(datetime.date.today().replace(day=1))
         period_row.addWidget(self.rebate_period_from_field)
-        self.rebate_period_to_field = QDateEdit()
-        self.rebate_period_to_field.setCalendarPopup(True)
+        self.rebate_period_to_field = JalaliDateEdit()
         self.rebate_period_to_field.setDate(datetime.date.today())
         period_row.addWidget(self.rebate_period_to_field)
         right.addLayout(period_row)
@@ -199,7 +196,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
             return
         try:
             purchasing_service.create_rebate_agreement(
-                supplier_id, self.rebate_basis_combo.currentData(), self.rebate_valid_from_field.date().toPython(),
+                supplier_id, self.rebate_basis_combo.currentData(), self.rebate_valid_from_field.date(),
                 item_id=self.rebate_item_combo.currentData(),
             )
         except ValueError as exc:
@@ -259,8 +256,8 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         if company_id is None or document_id is None:
             self.rebate_status_label.setText("یک فاکتورِ Postشده را انتخاب کنید.")
             return
-        period_from = self.rebate_period_from_field.date().toPython()
-        period_to = self.rebate_period_to_field.date().toPython()
+        period_from = self.rebate_period_from_field.date()
+        period_to = self.rebate_period_to_field.date()
         try:
             purchasing_service.accrue_rebate_for_invoice(document_id, company_id, period_from, period_to)
         except ValueError as exc:
@@ -330,7 +327,8 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
             supplier = suppliers_by_id.get(a.supplier_detail_account_id)
             values = [
                 f"{supplier['code']} — {supplier['name'] or ''}" if supplier else str(a.supplier_detail_account_id),
-                _REBATE_BASIS_LABELS.get(a.rebate_basis_code, a.rebate_basis_code), str(a.valid_from), str(a.valid_to or ""),
+                _REBATE_BASIS_LABELS.get(a.rebate_basis_code, a.rebate_basis_code),
+                numerals.format_jalali_date(a.valid_from), numerals.format_jalali_date(a.valid_to) if a.valid_to else "",
             ]
             for col_index, value in enumerate(values):
                 cell = QTableWidgetItem(value)

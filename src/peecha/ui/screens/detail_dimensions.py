@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QDateEdit,
     QDialog,
     QDoubleSpinBox,
     QFileDialog,
@@ -244,11 +243,7 @@ def _make_field_widget(kind: str) -> QWidget:
         widget.setDecimals(2)
         return widget
     if kind == "date":
-        widget = QDateEdit()
-        widget.setCalendarPopup(True)
-        widget.setSpecialValueText(" ")
-        widget.setDate(widget.minimumDate())
-        return widget
+        return JalaliDateEdit(allow_empty=True)
     if kind == "bool":
         return QCheckBox()
     return PersianDigitLineEdit()
@@ -881,8 +876,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             values = [
                 f"{c.pay_item_code} — {c.pay_item_name}",
                 numerals.format_company_amount(c.amount) if c.amount is not None else "—",
-                numerals.to_persian_digits(c.effective_from.isoformat()),
-                numerals.to_persian_digits(c.effective_to.isoformat()) if c.effective_to else "—",
+                numerals.format_jalali_date(c.effective_from),
+                numerals.format_jalali_date(c.effective_to) if c.effective_to else "—",
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -1363,8 +1358,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 value = widget.value()
                 result[field_key] = decimal.Decimal(str(value)) if value else None
             elif kind == "date":
-                qdate = widget.date()
-                result[field_key] = None if qdate == widget.minimumDate() else datetime.date(qdate.year(), qdate.month(), qdate.day())
+                result[field_key] = widget.date()
             elif kind == "combo":
                 result[field_key] = widget.currentData()
             elif kind == "bool":
@@ -1443,8 +1437,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             elif kind == "decimal":
                 result[key] = decimal.Decimal(str(widget.value())) if widget.value() else None
             elif kind == "date":
-                qdate = widget.date()
-                result[key] = None if qdate == widget.minimumDate() else datetime.date(qdate.year(), qdate.month(), qdate.day())
+                result[key] = widget.date()
             elif kind == "bank":
                 result[key] = widget.currentData()
             elif kind == "account_type":

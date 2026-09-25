@@ -908,7 +908,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
             action_labels = {"REOPENED": "بازگشایی/اصلاح‌شده", "DELETED": "حذف‌شده"}
             lines = [
                 f"سند #{e.document_id} — {action_labels.get(e.action_code, e.action_code)} — "
-                f"{numerals.to_persian_digits(e.performed_at.strftime('%Y-%m-%d %H:%M'))}"
+                f"{numerals.format_jalali_datetime(e.performed_at)}"
                 for e in audit_entries
             ]
             QMessageBox.information(

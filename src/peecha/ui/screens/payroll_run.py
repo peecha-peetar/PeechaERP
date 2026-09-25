@@ -243,8 +243,8 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         for row_index, p in enumerate(self._periods):
             values = [
                 status_labels.get(p.status, p.status),
-                numerals.to_persian_digits(p.period_end_date.isoformat()),
-                numerals.to_persian_digits(p.period_start_date.isoformat()),
+                numerals.format_jalali_date(p.period_end_date),
+                numerals.format_jalali_date(p.period_start_date),
                 numerals.to_persian_digits(str(p.jalali_month)),
                 numerals.to_persian_digits(str(p.jalali_year)),
             ]
@@ -272,7 +272,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         type_labels = {"REGULAR": "معمولی", "CORRECTION": "اصلاحی", "OFF_CYCLE": "بین‌دوره‌ای"}
         self.runs_table.setRowCount(len(self._runs))
         for row_index, r in enumerate(self._runs):
-            finished = numerals.to_persian_digits(r.finished_at.strftime("%Y-%m-%d %H:%M")) if r.finished_at else "—"
+            finished = numerals.format_jalali_datetime(r.finished_at) if r.finished_at else "—"
             values = [finished, status_labels.get(r.status, r.status), type_labels.get(r.run_type, r.run_type), numerals.to_persian_digits(str(r.run_no))]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)

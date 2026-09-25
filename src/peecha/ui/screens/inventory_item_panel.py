@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
     QComboBox,
-    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -47,7 +46,7 @@ from peecha.services import item_variants as variants_service
 from peecha.services import supplier_price_import as spi_service
 from peecha.ui.barcode_print import print_barcode_labels
 from peecha.ui import theme
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_section_layout
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, build_section_layout
 
 _SUPPLIER_CODE_TYPE_LABELS = {"CODE": "کد", "NAME": "نام"}
 
@@ -1162,8 +1161,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         for code, label in _DEPRECIATION_LABELS.items():
             self.depreciation_method_combo.addItem(label, code)
 
-        self.acquisition_date_field = QDateEdit()
-        self.acquisition_date_field.setCalendarPopup(True)
+        self.acquisition_date_field = JalaliDateEdit()
         self.acquisition_date_field.setDate(datetime.date.today())
 
         self.acquisition_cost_field = QLineEdit()
@@ -1955,7 +1953,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             extended_service.set_asset_detail(
                 self._item_id,
                 useful_life_months=useful_life,
-                acquisition_date=self.acquisition_date_field.date().toPython(),
+                acquisition_date=self.acquisition_date_field.date(),
                 acquisition_cost=cost,
                 depreciation_method_code=self.depreciation_method_combo.currentData(),
                 asset_tag_no=self.asset_tag_field.text().strip() or None,

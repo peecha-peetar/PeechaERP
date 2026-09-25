@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import field_sales_dashboard as dashboard_service
 from peecha.ui import theme
@@ -147,7 +148,7 @@ class FieldSalesDashboardScreen(FieldHelpMixin, QWidget):
         rows = dashboard_service.compute_delivery_compliance(company_id, self.date_from.date(), self.date_to.date())
         self.compliance_table.setRowCount(len(rows))
         for row_index, r in enumerate(rows):
-            values = [str(r.document_no), r.document_date.isoformat(), r.customer_label]
+            values = [str(r.document_no), numerals.format_jalali_date(r.document_date), r.customer_label]
             for col_index, value in enumerate(values):
                 self.compliance_table.setItem(row_index, col_index, QTableWidgetItem(value))
             self.compliance_table.setItem(row_index, 3, _amount_item(r.total_amount))
@@ -160,6 +161,6 @@ class FieldSalesDashboardScreen(FieldHelpMixin, QWidget):
         self.loading_table.setRowCount(len(rows))
         for row_index, r in enumerate(rows):
             self.loading_table.setItem(row_index, 0, QTableWidgetItem(r.vehicle_warehouse_label))
-            self.loading_table.setItem(row_index, 1, QTableWidgetItem(r.loading_date.isoformat()))
+            self.loading_table.setItem(row_index, 1, QTableWidgetItem(numerals.format_jalali_date(r.loading_date)))
             self.loading_table.setItem(row_index, 2, QTableWidgetItem(str(r.item_count_short)))
             self.loading_table.setItem(row_index, 3, _amount_item(r.total_shortage_quantity))

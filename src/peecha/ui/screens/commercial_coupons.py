@@ -136,7 +136,7 @@ class CommercialCouponsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 coupon.code,
                 _DISCOUNT_TYPE_LABELS.get(coupon.discount_type_code, coupon.discount_type_code),
                 numerals.format_money(coupon.amount, 2),
-                coupon.valid_until.isoformat() if coupon.valid_until else "—",
+                numerals.format_jalali_date(coupon.valid_until) if coupon.valid_until else "—",
                 _SYNC_STATUS_LABELS.get(coupon.sync_status, coupon.sync_status),
             ]
             for col_index, value in enumerate(values):

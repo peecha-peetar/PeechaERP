@@ -2007,7 +2007,7 @@ class _SettlementPlanDialog(QDialog):
             return
         self.table.setEnabled(not plan.is_approved)
         if plan.is_approved:
-            approved_at = numerals.to_persian_digits(plan.approved_at.strftime("%Y-%m-%d %H:%M")) if plan.approved_at else ""
+            approved_at = numerals.format_jalali_datetime(plan.approved_at) if plan.approved_at else ""
             self.status_banner.setText(f"✅ نحوه‌یِ تسویه تاییدِ مدیر شد. ({approved_at})")
             self.status_banner.setStyleSheet("color: #15803d; font-weight: bold;")
         else:

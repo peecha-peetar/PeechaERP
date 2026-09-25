@@ -374,8 +374,8 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
                 numerals.format_company_amount(w.hourly_amount) if w.hourly_amount is not None else "—",
                 numerals.format_company_amount(w.daily_amount) if w.daily_amount is not None else "—",
                 numerals.format_company_amount(w.monthly_amount),
-                numerals.to_persian_digits(w.effective_to.isoformat()) if w.effective_to else "—",
-                numerals.to_persian_digits(w.effective_from.isoformat()),
+                numerals.format_jalali_date(w.effective_to) if w.effective_to else "—",
+                numerals.format_jalali_date(w.effective_from),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -540,7 +540,7 @@ class _PoliciesTab(FormScreenBase):
             )
             values = [
                 "بله" if p.is_company_override else "خیر",
-                numerals.to_persian_digits(p.effective_from.isoformat()),
+                numerals.format_jalali_date(p.effective_from),
                 value_str,
                 p.label,
             ]
@@ -1097,8 +1097,8 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
                 numerals.to_persian_digits(str(c.unemployment_rate * 100)),
                 numerals.to_persian_digits(str(c.employer_rate * 100)),
                 numerals.to_persian_digits(str(c.employee_rate * 100)),
-                numerals.to_persian_digits(c.effective_to.isoformat()) if c.effective_to else "—",
-                numerals.to_persian_digits(c.effective_from.isoformat()),
+                numerals.format_jalali_date(c.effective_to) if c.effective_to else "—",
+                numerals.format_jalali_date(c.effective_from),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -1512,8 +1512,8 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, r in enumerate(self._rows):
             values = [
-                numerals.to_persian_digits(r.effective_to.isoformat()) if r.effective_to else "—",
-                numerals.to_persian_digits(r.effective_from.isoformat()),
+                numerals.format_jalali_date(r.effective_to) if r.effective_to else "—",
+                numerals.format_jalali_date(r.effective_from),
                 stacking_labels.get(r.stacking_mode, r.stacking_mode),
                 numerals.to_persian_digits(str(r.multiplier)),
                 code_labels.get(r.code, r.code),

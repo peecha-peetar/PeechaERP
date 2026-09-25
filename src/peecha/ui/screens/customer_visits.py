@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
@@ -99,8 +100,8 @@ class CustomerVisitsScreen(FieldHelpMixin, QWidget):
                 _STATUS_LABELS.get(r.status_code, r.status_code),
                 f"{customer['code']} — {customer['name'] or ''}" if customer else str(r.customer_detail_account_id),
                 users_by_id.get(r.visitor_user_id, "—"),
-                r.checked_in_at.strftime("%Y-%m-%d %H:%M"),
-                r.checked_out_at.strftime("%Y-%m-%d %H:%M") if r.checked_out_at else "—",
+                numerals.format_jalali_datetime(r.checked_in_at),
+                numerals.format_jalali_datetime(r.checked_out_at) if r.checked_out_at else "—",
                 f"{r.distance_from_customer_m:g}" if r.distance_from_customer_m is not None else "—",
                 note,
             ]

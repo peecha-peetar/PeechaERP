@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import commercial_social as social_service
 from peecha.ui import theme
@@ -254,7 +255,7 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             connection = connections_by_id.get(post.connection_id)
             connection_label = f"{_PLATFORM_LABELS.get(connection.platform_code, connection.platform_code)} — {connection.display_name}" if connection else str(post.connection_id)
             values = [
-                post.scheduled_at.strftime("%Y-%m-%d %H:%M"), connection_label, post.title or "",
+                numerals.format_jalali_datetime(post.scheduled_at), connection_label, post.title or "",
                 _POST_STATUS_LABELS.get(post.status_code, post.status_code), post.error_message or "",
             ]
             for col_index, value in enumerate(values):

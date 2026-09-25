@@ -279,7 +279,7 @@ class _CustomerNoteDialog(QDialog):
     def _reload_history(self) -> None:
         self.history_list.clear()
         for note in telesales_service.list_customer_notes(self._company_id, self._customer_id):
-            text = f"{note.created_at.strftime('%Y-%m-%d %H:%M')} — {note.note_text}"
+            text = f"{numerals.format_jalali_datetime(note.created_at)} — {note.note_text}"
             self.history_list.addItem(QListWidgetItem(text))
 
     def _add_note(self) -> None:
