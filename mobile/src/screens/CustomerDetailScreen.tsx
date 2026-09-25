@@ -3,7 +3,7 @@ import { Linking, ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
 import { CustomerDetailResponse, CustomerRow, SalesMode, VisitPlanRow } from "../api/types";
 import { formatAmount } from "../format";
-import { Button, Card, ErrorState, SkeletonList, StatusBadge, useToast } from "../components";
+import { Button, Card, ErrorState, Input, SkeletonList, StatusBadge, useToast } from "../components";
 import { printInvoice, shareInvoicePdf } from "../print/printInvoice";
 import { formatJalaliDate } from "../jalali";
 import { LocalCache } from "../storage/localCache";
@@ -26,6 +26,9 @@ interface Props {
   vanSales?: boolean;
   /** طبقِ «پخشِ سرد و گرم کاملاً مجزا باشند»: سوابقِ اخیر فقط سندِ همین حالت. */
   salesMode?: SalesMode;
+  /** طبقِ درخواستِ صریحِ کاربر («تاییدِ مشتری، داشبوردِ سرپرست»): دکمه‌هایِ
+   * تایید/ردِ مشتریِ درانتظار فقط برایِ سرپرست نمایش داده می‌شوند. */
+  isManager?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -51,6 +54,7 @@ export function CustomerDetailScreen({
   collectionOnly,
   vanSales,
   salesMode,
+  isManager,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
@@ -58,7 +62,37 @@ export function CustomerDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [approving, setApproving] = useState(false);
   const toast = useToast();
+
+  const approve = async () => {
+    setApproving(true);
+    try {
+      await apiClient.approveCustomer(detailAccountId);
+      toast.show("مشتری تایید شد.", "success");
+      await load();
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : "تاییدِ مشتری ناموفق بود.", "danger");
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const reject = async () => {
+    if (!rejectReason.trim()) return;
+    setApproving(true);
+    try {
+      await apiClient.rejectCustomer(detailAccountId, rejectReason.trim());
+      toast.show("مشتری رد شد.", "success");
+      setRejectReason("");
+      await load();
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : "ردِ مشتری ناموفق بود.", "danger");
+    } finally {
+      setApproving(false);
+    }
+  };
 
   // طبقِ درخواستِ صریحِ کاربر («پرینتِ فاکتور و فایلِ pdf»): چاپِ دوبارهٔ
   // نسخهٔ رسمیِ هر سندِ اخیر از سرور (مثلاً فاکتوری که هنگامِ ثبت آفلاین بود).
@@ -144,7 +178,28 @@ export function CustomerDetailScreen({
             <StatusBadge statusCode={detail.status_code} label={STATUS_LABELS[detail.status_code] ?? detail.status_code} />
           </View>
         ) : null}
+        {detail.mobile ? (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>موبایل: {detail.mobile}</Text>
+        ) : null}
+        {detail.notes ? (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>یادداشت: {detail.notes}</Text>
+        ) : null}
       </View>
+
+      {isManager && detail.status_code === "PENDING_APPROVAL" ? (
+        <Card>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>تاییدِ مشتریِ جدید</Text>
+          <Button label="تاییدِ مشتری" onPress={approve} loading={approving} />
+          <Input
+            label="دلیلِ رد (فقط اگر رد می‌کنید)"
+            value={rejectReason}
+            onChangeText={setRejectReason}
+            placeholder="مثلاً: اطلاعات ناقص است"
+            style={{ marginTop: spacing.sm }}
+          />
+          <Button label="ردِ مشتری" variant="danger" onPress={reject} loading={approving} disabled={!rejectReason.trim()} />
+        </Card>
+      ) : null}
 
       <Card>
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>

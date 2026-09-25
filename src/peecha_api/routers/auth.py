@@ -11,6 +11,7 @@ from peecha.db.base import new_session
 from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
 from peecha.services import auth as auth_service
+from peecha.services import roles as roles_service
 from peecha.services import users as users_service
 from peecha.services import vehicle_settlement as vehicle_settlement_service
 from peecha.services import vehicle_team as vehicle_team_service
@@ -102,4 +103,8 @@ def me(ctx: AuthContext = Depends(get_current_context)) -> dict:
         "mobile_channel_type_code": channel_type,
         "assigned_vehicle_warehouse_id": assigned_vehicle_warehouse_id,
         "settlement_vehicle_warehouse_id": settlement_vehicle_warehouse_id,
+        # طبقِ درخواستِ صریحِ کاربر («امکاناتِ مدیریتی -- تاییدِ مشتری،
+        # داشبوردِ سرپرست»): موبایل بدونِ این، مجبور بود کورکورانه دکمه‌ها
+        # را نشان بدهد و فقط رویِ خطایِ ۴۰۳ تشخیص بدهد.
+        "is_manager": roles_service.is_manager(ctx.user_id, ctx.company_id),
     }

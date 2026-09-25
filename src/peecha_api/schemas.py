@@ -150,7 +150,11 @@ class PaymentCreateRequest(BaseModel):
 
 
 class CustomerCreateRequest(BaseModel):
-    code: str
+    # طبقِ درخواستِ صریحِ کاربر («Customer Acquisition باید آفلاین هم کار
+    # کند»): None یعنی سرور خودش، هنگامِ همگام‌سازیِ واقعی، کدِ بعدی را
+    # پیشنهاد/اختصاص می‌دهد -- ویزیتورِ آفلاین نمی‌تواند کدِ بعدیِ شرکت
+    # را از قبل بداند.
+    code: str | None = None
     name: str
     customer_group_id: int | None = None
     default_price_list_id: int | None = None
@@ -160,8 +164,15 @@ class CustomerCreateRequest(BaseModel):
     distribution_route_detail_account_id: int | None = None
     address: str | None = None
     phone: str | None = None
+    mobile: str | None = None
+    notes: str | None = None
+    photo_base64: str | None = None
     gps_latitude: decimal.Decimal | None = None
     gps_longitude: decimal.Decimal | None = None
+
+
+class CustomerRejectRequest(BaseModel):
+    reason: str
 
 
 class DeliveryConfirmationRequest(BaseModel):

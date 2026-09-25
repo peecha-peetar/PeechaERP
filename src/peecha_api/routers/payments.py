@@ -12,6 +12,8 @@ import decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from peecha.services import field_sales as field_sales_service
+from peecha.services import roles as roles_service
 from peecha.services import treasury as treasury_service
 from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_idempotency_key
@@ -32,6 +34,11 @@ def create_payment(
 ) -> dict:
     if not payload.method_lines:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="حداقل یک ردیفِ روشِ وصول لازم است.")
+    # طبقِ درخواستِ صریحِ کاربر («فقط مشتریانِ خودش»): مدیر از این محدودیت معاف است.
+    if not roles_service.is_manager(ctx.user_id, ctx.company_id) and not field_sales_service.is_customer_assigned_to_user(
+        ctx.company_id, payload.customer_detail_account_id, ctx.user_id
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="این مشتری به شما اختصاص داده نشده است.")
     for line in payload.method_lines:
         if line.method not in _ALLOWED_METHODS:
             raise HTTPException(

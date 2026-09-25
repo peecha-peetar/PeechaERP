@@ -113,6 +113,9 @@ export class SyncEngine {
       case "CREATE_PAYMENT":
         await this.api.createPayment(action.payload, action.idempotencyKey);
         return;
+      case "CREATE_CUSTOMER":
+        await this.api.createCustomer(action.payload, action.idempotencyKey);
+        return;
       case "CREATE_VAN_SALE_DELIVERY":
         await this.sendVanSaleDelivery(action);
         return;

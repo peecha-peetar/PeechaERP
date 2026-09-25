@@ -24,6 +24,7 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import currencies as currencies_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import field_sales as field_sales_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import roles as roles_service
@@ -55,6 +56,12 @@ def create_order(
     form_code = _FORM_BY_TYPE[payload.document_type_code]
     if not roles_service.user_has_permission(ctx.user_id, ctx.company_id, form_code, "CREATE"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"دسترسیِ ثبتِ {form_code} وجود ندارد.")
+    # طبقِ درخواستِ صریحِ کاربر («فقط مشتریانِ خودش»): مدیر از این محدودیت
+    # معاف است (باید بتواند به‌جایِ هر ویزیتوری هم عمل کند).
+    if not roles_service.is_manager(ctx.user_id, ctx.company_id) and not field_sales_service.is_customer_assigned_to_user(
+        ctx.company_id, payload.counterparty_detail_account_id, ctx.user_id
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="این مشتری به شما اختصاص داده نشده است.")
 
     try:
         return run_idempotent(

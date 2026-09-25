@@ -101,6 +101,36 @@ def list_visit_plans(
         ]
 
 
+def is_customer_assigned_to_user(company_id: int, customer_detail_account_id: int, user_id: int) -> bool:
+    """طبقِ درخواستِ صریحِ کاربر («فقط مشتریانِ خودش، محدودتر/امن‌تر»):
+    ثبتِ سفارش/وصولی از موبایل فقط برایِ مشتری‌ای مجاز است که حداقل
+    یک برنامهٔ مراجعهٔ فعال به همین کاربر اختصاص داشته باشد -- تا یک
+    ویزیتور نتواند برایِ مشتریِ ویزیتورِ دیگر (که برنامهٔ مراجعه‌اش به
+    شخصِ دیگری اختصاص دارد) سفارش/وصولی ثبت کند. اگر این مشتری اصلاً
+    هنوز به هیچ ویزیتوری اختصاص نیافته (تازه تایید شده/بدونِ مسیر)،
+    True برمی‌گردد -- وگرنه مشتریانِ تازه تا مسیریابیِ دستی برایِ همه
+    غیرِقابلِ‌دسترس می‌ماندند."""
+    with new_session() as session:
+        any_assignment = session.scalar(
+            select(VisitPlan.visit_plan_id).where(
+                VisitPlan.company_id == company_id,
+                VisitPlan.customer_detail_account_id == customer_detail_account_id,
+                VisitPlan.is_active.is_(True),
+            ).limit(1)
+        )
+        if any_assignment is None:
+            return True
+        own_assignment = session.scalar(
+            select(VisitPlan.visit_plan_id).where(
+                VisitPlan.company_id == company_id,
+                VisitPlan.customer_detail_account_id == customer_detail_account_id,
+                VisitPlan.assigned_visitor_user_id == user_id,
+                VisitPlan.is_active.is_(True),
+            ).limit(1)
+        )
+        return own_assignment is not None
+
+
 @dataclass
 class CustomerVisitRow:
     customer_visit_id: int

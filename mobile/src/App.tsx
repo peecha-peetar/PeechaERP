@@ -18,6 +18,7 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { ManagerDashboardScreen } from "./screens/ManagerDashboardScreen";
 import { ModeSelectScreen } from "./screens/ModeSelectScreen";
+import { NewCustomerScreen } from "./screens/NewCustomerScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { PreSalesOrderScreen } from "./screens/PreSalesOrderScreen";
 import { VanSalesOrderScreen } from "./screens/VanSalesOrderScreen";
@@ -65,6 +66,7 @@ export type RootStackParamList = {
   VisitDetail: { customer: CustomerRow; visitPlan: VisitPlanRow };
   OrderForm: { customer: CustomerRow };
   CustomerDetail: { detailAccountId: number };
+  NewCustomer: undefined;
   CollectPayment: { customer: CustomerRow };
   Notifications: undefined;
   Settings: undefined;
@@ -143,6 +145,9 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   // طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
   // انواعِ تسویه در دسکتاپ باشد»): فقط برایِ پخشِ گرم لازم است.
   const [settlementMethods, setSettlementMethods] = useState<SettlementMethodRow[]>([]);
+  // طبقِ درخواستِ صریحِ کاربر («تاییدِ مشتری، داشبوردِ سرپرست»): دکمه‌هایِ
+  // مدیریتی (تاییدِ مشتری) فقط برایِ سرپرست نمایش داده می‌شوند.
+  const [isManager, setIsManager] = useState(false);
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
@@ -167,11 +172,13 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         setSuggestedMode(me.mobile_channel_type_code);
         setAssignedVehicleWarehouseId(me.assigned_vehicle_warehouse_id);
         setSettlementVehicleWarehouseId(me.settlement_vehicle_warehouse_id);
+        setIsManager(me.is_manager);
       })
       .catch(() => {
         setSuggestedMode(null);
         setAssignedVehicleWarehouseId(null);
         setSettlementVehicleWarehouseId(null);
+        setIsManager(false);
       });
   }, [loggedIn, services]);
 
@@ -460,6 +467,21 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 collectionOnly={selectedMode === "COLLECTION"}
                 vanSales={selectedMode === "VAN_SALES"}
                 salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
+                isManager={isManager}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="NewCustomer">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <NewCustomerScreen
+                apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
+                locationProvider={locationProvider}
+                captureProvider={resolvedCaptureProvider}
+                onDone={() => navigation.navigate("Main", { screen: "CUSTOMERS" })}
               />
             </SafeAreaView>
           )}
@@ -605,7 +627,14 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
           {() => <VisitListScreen syncEngine={services.syncEngine} localCache={services.localCache} onOpenVisit={onOpenVisit} />}
         </MainTab.Screen>
         <MainTab.Screen name="CUSTOMERS">
-          {() => <CustomersScreen apiClient={services.apiClient} onOpenCustomer={onOpenCustomer} title="مشتریان" />}
+          {() => (
+            <CustomersScreen
+              apiClient={services.apiClient}
+              onOpenCustomer={onOpenCustomer}
+              title="مشتریان"
+              onAddCustomer={() => navigation.navigate("NewCustomer")}
+            />
+          )}
         </MainTab.Screen>
         <MainTab.Screen name="ORDER">
           {() => (

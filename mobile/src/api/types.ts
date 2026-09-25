@@ -28,6 +28,9 @@ export interface MeResponse {
    * یک نفر از ۳ نقش واگذار بشه»): نقشِ مسئولِ تسویه لزوماً VISITOR نیست
    * -- پس این مقدار مستقل از assigned_vehicle_warehouse_id بالاست. */
   settlement_vehicle_warehouse_id: number | null;
+  /** طبقِ درخواستِ صریحِ کاربر («تاییدِ مشتری، داشبوردِ سرپرست»): بدونِ
+   * این، موبایل نمی‌توانست بدونِ حدس‌زدن دکمه‌هایِ مدیریتی را نشان بدهد. */
+  is_manager: boolean;
 }
 
 export interface VehicleSettlementSummaryLine {
@@ -282,7 +285,9 @@ export interface CustomerDetailResponse {
   code: string;
   name: string;
   phone: string | null;
+  mobile: string | null;
   address: string | null;
+  notes: string | null;
   status_code: string | null;
   customer_group_id: number | null;
   credit_limit_amount: string | null;
@@ -294,6 +299,46 @@ export interface CustomerDetailResponse {
   last_purchase_date: string | null;
   top_products: CustomerTopProduct[];
   recent_documents: CustomerRecentDocument[];
+}
+
+/** طبقِ درخواستِ صریحِ کاربر (Customer Acquisition): code عمداً اختیاری
+ * است -- اگر ویزیتور آفلاین باشد نمی‌تواند کدِ بعدیِ شرکت را بداند؛
+ * سرور خودش هنگامِ همگام‌سازیِ واقعی کدِ بعدی را اختصاص می‌دهد. */
+export interface CustomerCreateRequest {
+  code?: string | null;
+  name: string;
+  customer_group_id?: number | null;
+  default_channel_code?: string | null;
+  distribution_route_detail_account_id?: number | null;
+  address?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  notes?: string | null;
+  photo_base64?: string | null;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
+}
+
+export interface CustomerCreateResponse {
+  detail_account_id: number;
+  code: string;
+  status_code: "PENDING_APPROVAL";
+}
+
+export interface CustomerGroupRow {
+  group_id: number;
+  code: string;
+  name: string;
+}
+
+export interface NewCustomerFormOptions {
+  suggested_code: string;
+  groups: CustomerGroupRow[];
+}
+
+export interface CustomerApprovalResponse {
+  detail_account_id: number;
+  status_code: string;
 }
 
 export type PaymentMethod = "CASH" | "BANK" | "CHECK";

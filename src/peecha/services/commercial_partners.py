@@ -161,6 +161,25 @@ def approve_customer(customer_detail_account_id: int, approved_by_user_id: int) 
         session.commit()
 
 
+def reject_customer(customer_detail_account_id: int, rejected_by_user_id: int, reason: str) -> None:
+    """طبقِ درخواستِ صریحِ کاربر («Manager بتواند Approve/Reject کند»):
+    مشتریِ درانتظارِ تایید را غیرِفعال می‌کند -- comm.customer_profiles.
+    status_code هیچ مقدارِ «REJECTED»یِ جداگانه ندارد (بدونِ migrationِ
+    غیرضروری)، پس هم‌الگو با set_customer_hold از همان دو ستونِ عمومیِ
+    hold_reason/held_at/held_by_user_id استفاده می‌کند."""
+    with new_session() as session:
+        profile = session.get(CustomerProfile, customer_detail_account_id)
+        if profile is None:
+            raise ValueError("مشتری نامعتبر است.")
+        if profile.status_code != "PENDING_APPROVAL":
+            raise ValueError("فقط مشتریِ درانتظارِ تایید قابلِ‌رد است.")
+        profile.status_code = "INACTIVE"
+        profile.hold_reason = reason
+        profile.held_at = datetime.datetime.now()
+        profile.held_by_user_id = rejected_by_user_id
+        session.commit()
+
+
 def set_customer_hold(
     customer_detail_account_id: int, status_code: str, reason: str, held_by_user_id: int
 ) -> None:

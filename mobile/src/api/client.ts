@@ -1,6 +1,9 @@
 import { TokenStore } from "../storage/tokenStore";
 import {
   ChannelRow,
+  CustomerApprovalResponse,
+  CustomerCreateRequest,
+  CustomerCreateResponse,
   CustomerDetailResponse,
   CustomerListRow,
   DebtorRow,
@@ -9,6 +12,7 @@ import {
   LoginResponse,
   ManagerDashboardResponse,
   MeResponse,
+  NewCustomerFormOptions,
   NotificationRow,
   TodayCollectionRow,
   OrderCreateRequest,
@@ -178,6 +182,28 @@ export class ApiClient {
 
   async createPayment(payload: PaymentCreateRequest, idempotencyKey?: string): Promise<PaymentCreateResponse> {
     return this.request<PaymentCreateResponse>("/payments", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  /** طبقِ Customer Acquisition: گزینه‌هایِ فرمِ مشتریِ جدید (کدِ پیشنهادی
+   * + گروه‌هایِ مشتری) -- فقط وقتی آنلاین هستیم؛ در آفلاین فرم بدونِ
+   * کدِ پیشنهادی و با گروهِ خالی نمایش داده می‌شود. */
+  async getNewCustomerFormOptions(): Promise<NewCustomerFormOptions> {
+    return this.request<NewCustomerFormOptions>("/customers/new-form-options");
+  }
+
+  async createCustomer(payload: CustomerCreateRequest, idempotencyKey?: string): Promise<CustomerCreateResponse> {
+    return this.request<CustomerCreateResponse>("/customers", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  async approveCustomer(detailAccountId: number): Promise<CustomerApprovalResponse> {
+    return this.request<CustomerApprovalResponse>(`/customers/${detailAccountId}/approve`, { method: "POST" });
+  }
+
+  async rejectCustomer(detailAccountId: number, reason: string): Promise<CustomerApprovalResponse> {
+    return this.request<CustomerApprovalResponse>(`/customers/${detailAccountId}/reject`, {
+      method: "POST",
+      body: { reason },
+    });
   }
 
   async listNotifications(unreadOnly = false): Promise<NotificationRow[]> {

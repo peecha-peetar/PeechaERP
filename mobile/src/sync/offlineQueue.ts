@@ -1,5 +1,6 @@
 import { KeyValueStore } from "../storage/keyValueStore";
 import {
+  CustomerCreateRequest,
   DeliveryConfirmationRequest,
   OrderCreateRequest,
   PaymentCreateRequest,
@@ -54,7 +55,8 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "CREATE_ORDER"; payload: OrderCreateRequest }
   | { idempotencyKey: string; createdAt: string; type: "CREATE_DELIVERY_CONFIRMATION"; payload: DeliveryConfirmationRequest }
   | { idempotencyKey: string; createdAt: string; type: "CREATE_VAN_SALE_DELIVERY"; payload: VanSaleDeliveryPayload }
-  | { idempotencyKey: string; createdAt: string; type: "CREATE_PAYMENT"; payload: PaymentCreateRequest };
+  | { idempotencyKey: string; createdAt: string; type: "CREATE_PAYMENT"; payload: PaymentCreateRequest }
+  | { idempotencyKey: string; createdAt: string; type: "CREATE_CUSTOMER"; payload: CustomerCreateRequest };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">
@@ -63,7 +65,8 @@ export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "CREATE_ORDER" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CREATE_DELIVERY_CONFIRMATION" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CREATE_VAN_SALE_DELIVERY" }>, "idempotencyKey" | "createdAt">
-  | Omit<Extract<PendingAction, { type: "CREATE_PAYMENT" }>, "idempotencyKey" | "createdAt">;
+  | Omit<Extract<PendingAction, { type: "CREATE_PAYMENT" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "CREATE_CUSTOMER" }>, "idempotencyKey" | "createdAt">;
 
 /** صفِ اقدام‌هایِ آفلاین -- الگویِ pull-latest + push-queue طبقِ سندِ
  * معماری: هر اقدامِ کاربر (شروع/تکمیل/ردِ ویزیت، ثبتِ سفارش، تاییدِ

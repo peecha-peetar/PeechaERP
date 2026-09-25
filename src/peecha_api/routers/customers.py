@@ -11,8 +11,14 @@ CREATE/EDIT رویِ فرمِ GL_DIM به آن نقش داده شده باشد (
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import base64
+import os
+import uuid
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
+
+from peecha.config import SETTINGS_DIR
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_partners as partners_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -23,7 +29,9 @@ from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import FORM_CUSTOMER_MANAGEMENT, require_permission
-from peecha_api.schemas import CustomerCreateRequest
+from peecha_api.schemas import CustomerCreateRequest, CustomerRejectRequest
+
+_TEMP_UPLOAD_DIR = SETTINGS_DIR / "mobile_uploads_tmp"
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -42,6 +50,22 @@ def list_customers(q: str | None = None, ctx: AuthContext = Depends(get_current_
         {"detail_account_id": c["detail_account_id"], "code": c["code"], "name": c["name"], "phone": c.get("phone")}
         for c in customers
     ]
+
+
+@router.get("/new-form-options")
+def new_customer_form_options(ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "CREATE"))) -> dict:
+    """طبقِ درخواستِ صریحِ کاربر («Customer Acquisition»): گزینه‌هایِ
+    لازم برایِ فرمِ «مشتریِ جدید»یِ موبایل -- کدِ پیشنهادی (هم‌الگو با
+    suggest_next_codeِ دسکتاپ) و نوعِ مشتری (customer group). مسیر/کانال
+    از همان GET /routes و GET /pricing/channels گرفته می‌شود (تکراری
+    ساخته نشد)."""
+    dimension_type_id = dimensions_service.get_person_dimension_type_id(ctx.company_id)
+    person_group_id = dimensions_service.get_person_group_id(ctx.company_id, dimensions_service.CUSTOMER_GROUP_CODE)
+    suggested_code = dimensions_service.suggest_next_code(ctx.company_id, dimension_type_id, level_no=1, person_group_id=person_group_id)
+    return {
+        "suggested_code": suggested_code,
+        "groups": [{"group_id": g.group_id, "code": g.code, "name": g.name} for g in partners_service.list_customer_groups(ctx.company_id)],
+    }
 
 
 @router.get("/{detail_account_id}")
@@ -85,7 +109,9 @@ def get_customer_detail(
         "code": customer["code"],
         "name": customer["name"],
         "phone": customer.get("phone"),
+        "mobile": customer.get("mobile"),
         "address": customer.get("address"),
+        "notes": customer.get("notes"),
         "status_code": profile.status_code if profile else None,
         "customer_group_id": profile.customer_group_id if profile else None,
         "credit_limit_amount": str(profile.credit_limit_amount) if profile else None,
@@ -128,7 +154,7 @@ def create_customer(
         return run_idempotent(
             idempotency_key, "POST /customers", ctx.user_id, ctx.company_id,
             status.HTTP_200_OK, lambda: _create_customer(payload, ctx),
-            lambda detail_account_id: {"detail_account_id": detail_account_id, "status_code": "PENDING_APPROVAL"},
+            lambda result: {"detail_account_id": result[0], "code": result[1], "status_code": "PENDING_APPROVAL"},
         )
     except IdempotentReplay as replay:
         return replay.body
@@ -136,7 +162,22 @@ def create_customer(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> int:
+def _save_temp_upload(photo_base64: str) -> str:
+    _TEMP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    destination = _TEMP_UPLOAD_DIR / f"{uuid.uuid4().hex}.jpg"
+    destination.write_bytes(base64.b64decode(photo_base64))
+    return str(destination)
+
+
+def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[int, str]:
+    # طبقِ درخواستِ صریحِ کاربر («Customer Acquisition باید آفلاین هم کار
+    # کند»): اگر ویزیتورِ آفلاین کدی نفرستاده، همین‌جا (فقط لحظه‌یِ
+    # همگام‌سازیِ واقعی -- نه در گوشی) کدِ بعدی پیشنهاد/اختصاص می‌شود.
+    code = (payload.code or "").strip()
+    if not code:
+        dimension_type_id = dimensions_service.get_person_dimension_type_id(ctx.company_id)
+        person_group_id = dimensions_service.get_person_group_id(ctx.company_id, dimensions_service.CUSTOMER_GROUP_CODE)
+        code = dimensions_service.suggest_next_code(ctx.company_id, dimension_type_id, level_no=1, person_group_id=person_group_id)
     fields = partners_service.CustomerProfileFields(
         customer_group_id=payload.customer_group_id,
         default_price_list_id=payload.default_price_list_id,
@@ -151,21 +192,43 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> int:
     extra_fields = {}
     if payload.phone:
         extra_fields["phone"] = payload.phone
+    if payload.mobile:
+        extra_fields["mobile"] = payload.mobile
     if payload.address:
         extra_fields["address"] = payload.address
-    detail_account_id = partners_service.create_customer(
-        ctx.company_id, payload.code, payload.name, fields=fields,
-        fast_track=False, submitted_by_user_id=ctx.user_id, **extra_fields,
-    )
+    if payload.notes:
+        extra_fields["notes"] = payload.notes
+    try:
+        detail_account_id = partners_service.create_customer(
+            ctx.company_id, code, payload.name, fields=fields,
+            fast_track=False, submitted_by_user_id=ctx.user_id, **extra_fields,
+        )
+    except IntegrityError as exc:
+        # طبقِ باگِ واقعیِ کشف‌شده (R199 -- همین الگو): تصادفِ کدِ پیشنهادی
+        # با یک ثبتِ هم‌زمانِ دیگر (مثلاً دو ویزیتورِ آفلاین که هردو
+        # هنگامِ آفلاین‌بودن یک کد را پیشنهادی گرفته‌اند) نباید ۵۰۰ی خام
+        # بدهد -- ویزیتور دوباره تلاش می‌کند (صفِ آفلاین همین اقدام را
+        # نگه می‌دارد، کدِ کاملاً هرزمان دوباره محاسبه می‌شود).
+        raise ValueError("این کدِ مشتری از قبل استفاده شده است -- دوباره تلاش کنید.") from exc
+    # طبقِ درخواستِ صریحِ کاربر («عکسِ فروشگاه»): همان مکانیزمِ عکسِ
+    # حساب‌هایِ تفصیلی (تبِ «عکس‌ها و فایل‌ها»یِ دسکتاپ) -- نه یک سیستمِ
+    # موازیِ تازه.
+    if payload.photo_base64:
+        temp_path = _save_temp_upload(payload.photo_base64)
+        try:
+            attachment_id = dimensions_service.attach_detail_account_file(ctx.company_id, detail_account_id, ctx.user_id, temp_path)
+            dimensions_service.set_primary_detail_account_photo(attachment_id, ctx.company_id)
+        finally:
+            os.unlink(temp_path)
     audit_log.record(
         ctx.company_id, ctx.user_id, "CustomerProfile", detail_account_id, "CREATE",
-        {"source": "mobile", "code": payload.code, "name": payload.name},
+        {"source": "mobile", "code": code, "name": payload.name},
     )
     notifications_service.notify_managers(
         ctx.company_id, "CUSTOMER_APPROVAL_NEEDED", f"مشتریِ جدید «{payload.name}» نیازِ تاییدِ اعتباری دارد",
         entity_type="CustomerProfile", entity_id=detail_account_id,
     )
-    return detail_account_id
+    return detail_account_id, code
 
 
 @router.post("/{detail_account_id}/approve")
@@ -179,3 +242,23 @@ def approve_customer(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     audit_log.record(ctx.company_id, ctx.user_id, "CustomerProfile", detail_account_id, "APPROVE", {"source": "mobile"})
     return {"detail_account_id": detail_account_id, "status_code": "ACTIVE"}
+
+
+@router.post("/{detail_account_id}/reject")
+def reject_customer(
+    detail_account_id: int,
+    payload: CustomerRejectRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    try:
+        partners_service.reject_customer(detail_account_id, ctx.user_id, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    # طبقِ محدودیتِ دیتابیس (ck_activity_log_action): action فقط یکی از
+    # CREATE/UPDATE/DELETE/APPROVE/REVERSE می‌تواند باشد -- «رد» همان
+    # تغییرِ وضعیت (UPDATE) است، با جزئیاتِ دلیل در changes.
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CustomerProfile", detail_account_id, "UPDATE",
+        {"source": "mobile", "action": "reject", "reason": payload.reason},
+    )
+    return {"detail_account_id": detail_account_id, "status_code": "INACTIVE"}
