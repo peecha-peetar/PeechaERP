@@ -388,6 +388,7 @@ export interface PaymentMethodLineInput {
   method: PaymentMethod;
   amount: string;
   description?: string;
+  detail_account_id?: number | null;
   check_no?: string | null;
   check_bank_name?: string | null;
   check_due_date?: string | null;

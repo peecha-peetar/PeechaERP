@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { ApiClient } from "../api/client";
 import { VehicleSettlementSummaryLine } from "../api/types";
 import { Button, Card, EmptyState, InlineSpinner, Input } from "../components";
+import { generateIdempotencyKey } from "../sync/idempotency";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface Props {
@@ -26,6 +27,11 @@ export function VehicleSettlementScreen({ apiClient, onBack }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // طبقِ باگِ واقعیِ کشف‌شده (R217): یک کلید برایِ کلِ همین جلسه‌یِ
+  // صفحه -- اگر تسویه به‌خاطرِ Timeoutِ شبکه (نه ردِ تمیزِ سرور) شکست
+  // بخورد و کاربر دوباره «ثبت» بزند، سرور همان تسویه را دوباره
+  // نمی‌سازد. با خروج از صفحه/ورودِ دوباره، کلیدِ تازه ساخته می‌شود.
+  const idempotencyKeyRef = useRef(generateIdempotencyKey());
 
   useEffect(() => {
     apiClient
@@ -42,12 +48,15 @@ export function VehicleSettlementScreen({ apiClient, onBack }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      await apiClient.submitVehicleSettlement({
-        declared_cash_amount: declaredCash || "0",
-        lines: lines.map((l) => ({
-          item_id: l.item_id, uom_id: l.uom_id, returned_quantity: returnedByItem[l.item_id] || "0",
-        })),
-      });
+      await apiClient.submitVehicleSettlement(
+        {
+          declared_cash_amount: declaredCash || "0",
+          lines: lines.map((l) => ({
+            item_id: l.item_id, uom_id: l.uom_id, returned_quantity: returnedByItem[l.item_id] || "0",
+          })),
+        },
+        idempotencyKeyRef.current,
+      );
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message ?? "ثبتِ تسویه ناموفق بود.");

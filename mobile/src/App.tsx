@@ -508,6 +508,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
           {({ route, navigation }) => (
             <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
               <CollectionScreen
+                apiClient={services.apiClient}
                 customer={route.params.customer}
                 offlineQueue={services.offlineQueue}
                 onDone={() =>
@@ -641,7 +642,14 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedM
           )}
         </MainTab.Screen>
         <MainTab.Screen name="VISITS">
-          {() => <VisitListScreen syncEngine={services.syncEngine} localCache={services.localCache} onOpenVisit={onOpenVisit} />}
+          {() => (
+            <VisitListScreen
+              apiClient={services.apiClient}
+              syncEngine={services.syncEngine}
+              localCache={services.localCache}
+              onOpenVisit={onOpenVisit}
+            />
+          )}
         </MainTab.Screen>
         <MainTab.Screen name="CUSTOMERS">
           {() => (

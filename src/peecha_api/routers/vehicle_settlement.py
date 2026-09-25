@@ -13,7 +13,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import vehicle_settlement as settlement_service
-from peecha_api.deps import AuthContext, get_current_context
+from peecha_api import audit_log
+from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
+from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.schemas import VehicleSettlementSubmitRequest
 
 router = APIRouter(prefix="/vehicle-settlement", tags=["vehicle-settlement"])
@@ -53,7 +55,29 @@ def today_summary(ctx: AuthContext = Depends(get_current_context)) -> dict:
 
 
 @router.post("")
-def submit(payload: VehicleSettlementSubmitRequest, ctx: AuthContext = Depends(get_current_context)) -> dict:
+def submit(
+    payload: VehicleSettlementSubmitRequest,
+    ctx: AuthContext = Depends(get_current_context),
+    idempotency_key: str | None = Depends(get_idempotency_key),
+) -> dict:
+    # طبقِ باگِ واقعیِ کشف‌شده (R217): برخلافِ سایرِ endpointهایِ نوشتاریِ
+    # موبایل (orders/payments/customers)، این‌جا نه Idempotency-Key بررسی
+    # می‌شد نه در audit_log ثبت -- یعنی تکرارِ یک POST به‌خاطرِ Timeoutِ
+    # شبکه (همان مشکلِ کلاسیکِ صفِ آفلاین) می‌توانست دو تسویهٔ جداگانه
+    # برایِ یک بارِ واقعیِ کارِ راننده بسازد، بدونِ هیچ ردِ قابلِ‌پیگیری.
+    try:
+        return run_idempotent(
+            idempotency_key, "POST /vehicle-settlement", ctx.user_id, ctx.company_id,
+            status.HTTP_200_OK, lambda: _submit_settlement(payload, ctx),
+            lambda result: {"vehicle_settlement_id": result},
+        )
+    except IdempotentReplay as replay:
+        return replay.body
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+def _submit_settlement(payload: VehicleSettlementSubmitRequest, ctx: AuthContext) -> int:
     vehicle_warehouse_id = _resolve_vehicle_or_403(ctx)
     today = datetime.date.today()
     window_start = settlement_service.get_open_window_start(vehicle_warehouse_id, ctx.company_id, today)
@@ -72,10 +96,14 @@ def submit(payload: VehicleSettlementSubmitRequest, ctx: AuthContext = Depends(g
                 returned_quantity=line.returned_quantity,
             )
         )
-    try:
-        vehicle_settlement_id = settlement_service.submit_settlement(
-            vehicle_warehouse_id, ctx.company_id, ctx.user_id, today, lines, payload.declared_cash_amount,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return {"vehicle_settlement_id": vehicle_settlement_id}
+    vehicle_settlement_id = settlement_service.submit_settlement(
+        vehicle_warehouse_id, ctx.company_id, ctx.user_id, today, lines, payload.declared_cash_amount,
+    )
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "VehicleSettlement", vehicle_settlement_id, "CREATE",
+        {
+            "source": "mobile", "vehicle_warehouse_id": vehicle_warehouse_id,
+            "declared_cash_amount": str(payload.declared_cash_amount), "line_count": len(lines),
+        },
+    )
+    return vehicle_settlement_id

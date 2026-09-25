@@ -1,40 +1,97 @@
-import React, { useState } from "react";
-import { Text, View } from "react-native";
-import { ApiError } from "../api/client";
-import { CustomerRow, PaymentMethod } from "../api/types";
+import React, { useEffect, useState } from "react";
+import { Text, TouchableOpacity, View } from "react-native";
+import { ApiClient, ApiError } from "../api/client";
+import { BankRow, CustomerRow, PaymentMethod, SettlementMethodRow } from "../api/types";
 import { Button, Card, Input, useToast } from "../components";
+import { parseJalaliDate } from "../jalali";
 import { useTheme } from "../theme/ThemeProvider";
 import { OfflineQueue } from "../sync/offlineQueue";
 
 interface Props {
+  apiClient: ApiClient;
   customer: CustomerRow;
   offlineQueue: OfflineQueue;
   onDone: () => void;
 }
 
-const METHODS: { code: PaymentMethod; label: string }[] = [
-  { code: "CASH", label: "نقد" },
-  { code: "BANK", label: "کارت/انتقال" },
-  { code: "CHECK", label: "چک" },
+const FALLBACK_METHODS: SettlementMethodRow[] = [
+  { method_code: "CASH", label: "نقد" },
+  { method_code: "BANK", label: "کارت/انتقال" },
+  { method_code: "CHECK", label: "چک" },
 ];
 
-/** طبقِ Phase 5 (Collection): ثبتِ وصول همیشه به صفِ آفلاین اضافه
- * می‌شود (هم‌الگو با سفارش/ویزیت) -- هیچ‌وقت منتظرِ پاسخِ شبکه
- * نمی‌مانَد. رویِ همان /payments (R134) که خودش رویِ
- * treasury.create_treasury_voucher موجود سوار است -- بدونِ منطقِ تازه‌یِ
- * حسابداری این‌جا. */
-export function CollectionScreen({ customer, offlineQueue, onDone }: Props) {
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const { colors, spacing, radius, typography } = useTheme();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: radius.md,
+        borderWidth: 1.5,
+        borderColor: selected ? colors.primary : colors.border,
+        backgroundColor: selected ? colors.primary : "transparent",
+        marginEnd: spacing.xs,
+        marginBottom: spacing.xs,
+      }}
+    >
+      <Text style={[typography.caption, { color: selected ? colors.textInverse : colors.textPrimary }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+/** طبقِ Phase 5 (Collection) + بازبینیِ صریحِ کاربر («فیلدهایِ چک دقیقاً
+ * همون فیلدهایِ دسکتاپ»): برخلافِ نسخهٔ قبلی (فقط شماره+نامِ‌آزادِ بانک)،
+ * حالا صندوق/حسابِ مقصد (هم‌الگو با GET /pricing/settlement-methods)،
+ * بانکِ چک (از فهرستِ واقعیِ بانک‌ها)، سررسید و نامِ صاحبِ چک هم گرفته
+ * می‌شود -- دقیقاً همان فیلدهایی که PaymentMethodLineRequestِ سرور از
+ * قبل می‌پذیرفت ولی این فرم نمی‌فرستاد. ثبتِ وصول هم‌چنان همیشه به صفِ
+ * آفلاین اضافه می‌شود (هیچ‌وقت منتظرِ پاسخِ شبکه نمی‌مانَد). */
+export function CollectionScreen({ apiClient, customer, offlineQueue, onDone }: Props) {
   const { colors, spacing, typography } = useTheme();
   const toast = useToast();
+  const [methods, setMethods] = useState<SettlementMethodRow[]>(FALLBACK_METHODS);
+  const [banks, setBanks] = useState<BankRow[]>([]);
   const [method, setMethod] = useState<PaymentMethod>("CASH");
+  const [detailAccountId, setDetailAccountId] = useState<number | null>(null);
   const [amount, setAmount] = useState("");
   const [checkNo, setCheckNo] = useState("");
+  const [bankId, setBankId] = useState<number | null>(null);
   const [checkBankName, setCheckBankName] = useState("");
+  const [checkDueDate, setCheckDueDate] = useState("");
+  const [checkPartyName, setCheckPartyName] = useState(customer.name);
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = amount.trim().length > 0 && Number(amount) > 0 && (method !== "CHECK" || checkNo.trim().length > 0);
+  useEffect(() => {
+    apiClient
+      .listSettlementMethods()
+      .then((rows) => {
+        const allowed = rows.filter((r) => r.method_code === "CASH" || r.method_code === "BANK" || r.method_code === "CHECK");
+        if (allowed.length > 0) setMethods(allowed);
+      })
+      .catch(() => {
+        // آفلاین: فهرستِ پیش‌فرضِ سه‌روشیِ بدونِ فیلدِ تفصیلی هم‌چنان قابلِ‌ثبت است.
+      });
+    apiClient.listBanks().then(setBanks).catch(() => undefined);
+  }, [apiClient]);
+
+  useEffect(() => {
+    const row = methods.find((m) => m.method_code === method);
+    setDetailAccountId(row?.default_detail_account_id ?? null);
+  }, [method, methods]);
+
+  const currentMethodRow = methods.find((m) => m.method_code === method);
+  const requiresDetail = currentMethodRow?.requires_detail ?? false;
+  const detailOptions = currentMethodRow?.detail_options ?? [];
+
+  const canSubmit =
+    amount.trim().length > 0 &&
+    Number(amount) > 0 &&
+    (method !== "CHECK" || checkNo.trim().length > 0) &&
+    (!requiresDetail || detailAccountId !== null);
 
   const submit = async () => {
     setError(null);
@@ -49,8 +106,11 @@ export function CollectionScreen({ customer, offlineQueue, onDone }: Props) {
             {
               method,
               amount: amount.trim(),
+              detail_account_id: detailAccountId,
               check_no: method === "CHECK" ? checkNo.trim() : undefined,
-              check_bank_name: method === "CHECK" ? checkBankName.trim() || undefined : undefined,
+              check_bank_name: method === "CHECK" ? (bankId === null ? checkBankName.trim() || undefined : undefined) : undefined,
+              check_due_date: method === "CHECK" ? parseJalaliDate(checkDueDate) ?? undefined : undefined,
+              check_party_name: method === "CHECK" ? checkPartyName.trim() || undefined : undefined,
             },
           ],
         },
@@ -70,23 +130,44 @@ export function CollectionScreen({ customer, offlineQueue, onDone }: Props) {
       <Text style={[typography.body, { color: colors.textSecondary }]}>{customer.name}</Text>
 
       <View style={{ flexDirection: "row", gap: spacing.sm }}>
-        {METHODS.map((m) => (
+        {methods.map((m) => (
           <Button
-            key={m.code}
+            key={m.method_code}
             label={m.label}
-            variant={method === m.code ? "primary" : "secondary"}
+            variant={method === m.method_code ? "primary" : "secondary"}
             fullWidth={false}
-            onPress={() => setMethod(m.code)}
+            onPress={() => setMethod(m.method_code as PaymentMethod)}
           />
         ))}
       </View>
 
       <Input label="مبلغ" value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0" />
 
+      {requiresDetail && detailOptions.length > 0 ? (
+        <View>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>صندوق/حسابِ مقصد</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+            {detailOptions.map((o) => (
+              <Chip key={o.detail_account_id} label={o.name} selected={detailAccountId === o.detail_account_id} onPress={() => setDetailAccountId(o.detail_account_id)} />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {method === "CHECK" ? (
         <>
-          <Input label="شماره‌یِ چک" value={checkNo} onChangeText={setCheckNo} />
-          <Input label="نامِ بانک (اختیاری)" value={checkBankName} onChangeText={setCheckBankName} />
+          <Input label="شماره‌یِ چک *" value={checkNo} onChangeText={setCheckNo} />
+          <View>
+            <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>بانک</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {banks.map((b) => (
+                <Chip key={b.bank_id} label={b.name} selected={bankId === b.bank_id} onPress={() => setBankId(bankId === b.bank_id ? null : b.bank_id)} />
+              ))}
+            </View>
+            {bankId === null ? <Input label="نامِ بانک (اگر در فهرست نیست)" value={checkBankName} onChangeText={setCheckBankName} /> : null}
+          </View>
+          <Input label="سررسید (۱۴۰۵/۰۸/۱۵)" value={checkDueDate} onChangeText={setCheckDueDate} numeric />
+          <Input label="نامِ صاحبِ چک" value={checkPartyName} onChangeText={setCheckPartyName} />
         </>
       ) : null}
 

@@ -44,6 +44,15 @@
           "cameraPermission": "پیچا برای اسکنِ بارکدِ کالا و عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد.",
           "recordAudioAndroid": false
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#E6F4FE"
+        }
       ]
     ]
   }

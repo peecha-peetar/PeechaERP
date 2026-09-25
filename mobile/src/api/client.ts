@@ -360,7 +360,10 @@ export class ApiClient {
     return this.request<VehicleSettlementSummaryResponse>("/vehicle-settlement/today-summary");
   }
 
-  async submitVehicleSettlement(payload: VehicleSettlementSubmitRequest): Promise<VehicleSettlementSubmitResponse> {
-    return this.request<VehicleSettlementSubmitResponse>("/vehicle-settlement", { method: "POST", body: payload });
+  async submitVehicleSettlement(
+    payload: VehicleSettlementSubmitRequest,
+    idempotencyKey?: string,
+  ): Promise<VehicleSettlementSubmitResponse> {
+    return this.request<VehicleSettlementSubmitResponse>("/vehicle-settlement", { method: "POST", body: payload, idempotencyKey });
   }
 }
