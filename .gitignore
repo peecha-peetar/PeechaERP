@@ -38,3 +38,7 @@ assets/fonts/*.otf
 tools/jasper-runner/target/
 tools/jasper-runner/dependency-reduced-pom.xml
 tools/jasper-runner/src/main/resources/fonts/*.ttf
+
+# آرشیوِ تحویل (git archive ... -o PeechaERP-R###.zip، طبقِ CLAUDE.md) --
+# فقط برایِ ارسال به کاربر ساخته می‌شود، نباید خودش داخلِ ریپو کامیت شود.
+/PeechaERP-R*.zip
