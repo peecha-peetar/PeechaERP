@@ -78,13 +78,24 @@ def new_customer_form_options(ctx: AuthContext = Depends(require_permission(FORM
     لازم برایِ فرمِ «مشتریِ جدید»یِ موبایل -- کدِ پیشنهادی (هم‌الگو با
     suggest_next_codeِ دسکتاپ) و نوعِ مشتری (customer group). مسیر/کانال
     از همان GET /routes و GET /pricing/channels گرفته می‌شود (تکراری
-    ساخته نشد)."""
+    ساخته نشد).
+
+    طبقِ بازبینیِ صریحِ کاربر (R218): مشتری خودش یک تفصیلیِ چندسطحی‌ست --
+    اگر گروهِ مشتری بیش از یک سطح پیکربندی شده باشد (dimension_group_config.py)،
+    مشتریِ تازه همیشه باید فرزندِ سطحِ آخر باشد، پس کدِ پیشنهادی هم از
+    همان سطح (نه سطحِ ۱ِ هاردکدشده‌یِ قبلی -- که برایِ گروه‌هایِ چندسطحی
+    اصلاً درست نبود) محاسبه می‌شود؛ parent_options فقط در همین حالت پر است."""
     dimension_type_id = dimensions_service.get_person_dimension_type_id(ctx.company_id)
     person_group_id = dimensions_service.get_person_group_id(ctx.company_id, dimensions_service.CUSTOMER_GROUP_CODE)
-    suggested_code = dimensions_service.suggest_next_code(ctx.company_id, dimension_type_id, level_no=1, person_group_id=person_group_id)
+    hierarchy = partners_service.get_customer_hierarchy_options(ctx.company_id)
+    suggested_code = dimensions_service.suggest_next_code(
+        ctx.company_id, dimension_type_id, level_no=hierarchy["leaf_level_no"], person_group_id=person_group_id
+    )
     return {
         "suggested_code": suggested_code,
         "groups": [{"group_id": g.group_id, "code": g.code, "name": g.name} for g in partners_service.list_customer_groups(ctx.company_id)],
+        "max_level_no": hierarchy["max_level_no"],
+        "parent_options": hierarchy["parent_options"],
     }
 
 
@@ -192,6 +203,21 @@ def _save_temp_upload(photo_base64: str) -> str:
 
 
 def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[int, str]:
+    # طبقِ بازبینیِ صریحِ کاربر (R218): مشتری یک تفصیلیِ چندسطحی‌ست --
+    # اگر گروهِ مشتری بیش از یک سطح پیکربندی شده، والد الزامی و باید
+    # دقیقاً در سطحِ ماقبلِ‌آخر باشد (یعنی مشتریِ تازه همیشه در سطحِ آخر
+    # ساخته می‌شود، نه سطحِ ۱ِ هاردکدِ قبلی که برایِ گروه‌هایِ چندسطحی
+    # اصلاً معنا نداشت).
+    hierarchy = partners_service.get_customer_hierarchy_options(ctx.company_id)
+    if hierarchy["max_level_no"] > 1:
+        valid_parent_ids = {o["detail_account_id"] for o in hierarchy["parent_options"]}
+        if payload.parent_detail_account_id is None:
+            raise ValueError(
+                "گروهِ مشتری چندسطحی است -- ابتدا سطحِ بالاترِ مشتری را انتخاب کنید "
+                "(این کار نیازمندِ اتصالِ اینترنت است)."
+            )
+        if payload.parent_detail_account_id not in valid_parent_ids:
+            raise ValueError("سطحِ بالاترِ انتخاب‌شده معتبر نیست.")
     # طبقِ درخواستِ صریحِ کاربر («Customer Acquisition باید آفلاین هم کار
     # کند»): اگر ویزیتورِ آفلاین کدی نفرستاده، همین‌جا (فقط لحظه‌یِ
     # همگام‌سازیِ واقعی -- نه در گوشی) کدِ بعدی پیشنهاد/اختصاص می‌شود.
@@ -199,7 +225,9 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[
     if not code:
         dimension_type_id = dimensions_service.get_person_dimension_type_id(ctx.company_id)
         person_group_id = dimensions_service.get_person_group_id(ctx.company_id, dimensions_service.CUSTOMER_GROUP_CODE)
-        code = dimensions_service.suggest_next_code(ctx.company_id, dimension_type_id, level_no=1, person_group_id=person_group_id)
+        code = dimensions_service.suggest_next_code(
+            ctx.company_id, dimension_type_id, level_no=hierarchy["leaf_level_no"], person_group_id=person_group_id
+        )
     fields = partners_service.CustomerProfileFields(
         customer_group_id=payload.customer_group_id,
         default_price_list_id=payload.default_price_list_id,
@@ -227,7 +255,8 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[
     try:
         detail_account_id = partners_service.create_customer(
             ctx.company_id, code, payload.name, fields=fields,
-            fast_track=False, submitted_by_user_id=ctx.user_id, **extra_fields,
+            fast_track=False, submitted_by_user_id=ctx.user_id,
+            parent_detail_account_id=payload.parent_detail_account_id, **extra_fields,
         )
     except IntegrityError as exc:
         # طبقِ باگِ واقعیِ کشف‌شده (R199 -- همین الگو): تصادفِ کدِ پیشنهادی

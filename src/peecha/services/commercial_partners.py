@@ -104,7 +104,8 @@ class CustomerProfileFields:
 
 def create_customer(
     company_id: int, code: str, name: str, fields: CustomerProfileFields | None = None,
-    fast_track: bool = False, submitted_by_user_id: int | None = None, **extra_fields,
+    fast_track: bool = False, submitted_by_user_id: int | None = None,
+    parent_detail_account_id: int | None = None, **extra_fields,
 ) -> int:
     """fast_track=True (مرحلهٔ ۳، پیشنهادِ معمار): مشتریِ کم‌ریسک بدونِ
     گذر از PENDING_APPROVAL مستقیم ACTIVE می‌شود.
@@ -112,9 +113,16 @@ def create_customer(
     extra_fields (R134، برایِ APIِ موبایل): فیلدهایِ خودِ customer_details
     (مثلِ phone/address) -- مستقیم به dimensions_service.create_customer
     منتقل می‌شود، اختیاری و عطف‌به‌ماسبق‌سازگار (فراخوانی‌هایِ قبلی بدونِ
-    این فیلدها دست‌نخورده می‌مانند)."""
+    این فیلدها دست‌نخورده می‌مانند).
+
+    parent_detail_account_id (R218، بازبینیِ صریحِ کاربر): وقتی گروهِ
+    مشتری بیش از یک سطح دارد (dimension_group_config.py)، مشتریِ
+    تراکنش‌پذیر همیشه باید فرزندِ سطحِ آخر باشد -- None یعنی گروهِ تخت
+    (تکسطحی، رفتارِ پیش‌فرض/قبلی، بدونِ تغییر)."""
     fields = fields or CustomerProfileFields()
-    detail_account_id = dimensions_service.create_customer(company_id, code, name, **extra_fields)
+    detail_account_id = dimensions_service.create_customer(
+        company_id, code, name, parent_detail_account_id=parent_detail_account_id, **extra_fields
+    )
     with new_session() as session:
         status = "ACTIVE" if fast_track else "PENDING_APPROVAL"
         session.add(
@@ -282,6 +290,35 @@ def _split_customer_fields(person_fields: dict) -> tuple[dict, dict]:
     profile_fields["credit_limit_amount"] = profile_fields["credit_limit_amount"] or 0
     profile_fields["is_tax_exempt"] = bool(profile_fields["is_tax_exempt"])
     return detail_fields, profile_fields
+
+
+def get_customer_hierarchy_options(company_id: int) -> dict:
+    """طبقِ بازبینیِ صریحِ کاربر («مشتری یک تفصیلی‌ست که والد دارد و
+    چندسطحی‌ست؛ هنگامِ تعریف باید سطوحِ بالاتر انتخاب و طبقِ تعدادِ سطحِ
+    تنظیم‌شده، در سطحِ آخر تعریف شود»): اگر گروهِ مشتری تک‌سطحی است
+    (پیش‌فرض)، max_level_no=1 و parent_options خالی -- هیچ انتخابی لازم
+    نیست. اگر بیش از یک سطح دارد، parent_options فقط گره‌هایِ سطحِ
+    ماقبلِ‌آخر را برمی‌گرداند (تنها والدهایِ معتبر برایِ یک مشتریِ
+    تراکنش‌پذیرِ تازه، که همیشه باید در سطحِ آخر ساخته شود)."""
+    dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    customer_group_id = dimensions_service.get_person_group_id(company_id, dimensions_service.CUSTOMER_GROUP_CODE)
+    max_level_no = dimensions_service.get_group_max_level_no(dimension_type_id, customer_group_id)
+    parent_options = []
+    if max_level_no > 1:
+        parent_level = max_level_no - 1
+        # طبقِ باگِ واقعیِ کشف‌شده (تستِ همین قابلیت): اگر گروه قبلاً
+        # تک‌سطحی بوده و بعداً چندسطحی شده، مشتریانِ واقعیِ قدیمی هم در
+        # همان سطحِ ۱ نشسته‌اند -- آن‌ها گره‌هایِ خالصِ گروه‌بندی نیستند
+        # (خودشان CustomerProfile/مشتریِ تراکنش‌پذیر دارند)، پس نباید
+        # به‌عنوانِ والدِ یک مشتریِ تازه پیشنهاد شوند.
+        existing_profile_ids = {p.customer_detail_account_id for p in list_customer_profiles(company_id)}
+        parent_options = [
+            {"detail_account_id": r.detail_account_id, "code": r.code, "name": r.name or r.code, "full_code": r.full_code}
+            for r in dimensions_service.list_detail_accounts(company_id, dimension_type_id)
+            if r.person_group_id == customer_group_id and r.level_no == parent_level and r.is_active
+            and r.detail_account_id not in existing_profile_ids
+        ]
+    return {"max_level_no": max_level_no, "leaf_level_no": max_level_no, "parent_options": parent_options}
 
 
 def find_duplicate_customers(

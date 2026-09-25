@@ -321,6 +321,9 @@ export interface CustomerCreateRequest {
   gps_longitude?: number | null;
   customer_type_code?: string | null;
   customer_class?: string | null;
+  /** طبقِ بازبینیِ صریحِ کاربر (R218 -- مشتری یک تفصیلیِ چندسطحی‌ست):
+   * فقط وقتی NewCustomerFormOptions.max_level_no > 1 الزامی است. */
+  parent_detail_account_id?: number | null;
 }
 
 export interface CustomerCreateResponse {
@@ -335,9 +338,20 @@ export interface CustomerGroupRow {
   name: string;
 }
 
+export interface CustomerParentOption {
+  detail_account_id: number;
+  code: string;
+  name: string;
+  full_code: string;
+}
+
 export interface NewCustomerFormOptions {
   suggested_code: string;
   groups: CustomerGroupRow[];
+  /** ۱ یعنی گروهِ مشتری تک‌سطحی است (پیش‌فرض) -- parent_options همیشه
+   * خالی و انتخابِ والد لازم نیست. */
+  max_level_no: number;
+  parent_options: CustomerParentOption[];
 }
 
 export interface DuplicateCustomerRow {

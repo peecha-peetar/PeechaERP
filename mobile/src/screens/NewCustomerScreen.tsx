@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { CustomerGroupRow, DuplicateCustomerRow } from "../api/types";
+import { CustomerGroupRow, CustomerParentOption, DuplicateCustomerRow } from "../api/types";
 import { CaptureProvider } from "../capture";
 import { Button, Card, Input, useToast } from "../components";
 import { LocationProvider } from "../location";
+import { LocalCache } from "../storage/localCache";
 import { OfflineQueue } from "../sync/offlineQueue";
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -13,6 +14,7 @@ interface Props {
   offlineQueue: OfflineQueue;
   locationProvider: LocationProvider;
   captureProvider: CaptureProvider;
+  localCache: LocalCache;
   onDone: () => void;
   /** طبقِ تشخیصِ مشتریِ تکراری (R216): «مشاهدهِ مشتری» رویِ یکی از
    * موردهایِ مشابه‌یِ پیشنهادی. */
@@ -51,11 +53,17 @@ function GroupChip({ label, selected, onPress }: { label: string; selected: bool
  * الگویِ همینِ START_VISIT/CREATE_ORDER). کدِ مشتری و مصوبه (approve)
  * سمتِ سرور است -- این‌جا فقط پیشنهادِ کد (وقتی آنلاین) برایِ اطمینانِ
  * ویزیتور نمایش داده می‌شود، نه ارسال. */
-export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, captureProvider, onDone, onOpenCustomer }: Props) {
+export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, captureProvider, localCache, onDone, onOpenCustomer }: Props) {
   const { colors, spacing, typography } = useTheme();
   const toast = useToast();
   const [suggestedCode, setSuggestedCode] = useState<string | null>(null);
   const [groups, setGroups] = useState<CustomerGroupRow[]>([]);
+  // طبقِ بازبینیِ صریحِ کاربر (R218 -- «مشتری یک تفصیلیِ چندسطحی‌ست، در
+  // سطحِ آخر تعریف بشه»): پیش‌فرض ۱ (تک‌سطحی، رفتارِ پیشین) تا وقتی
+  // گزینه‌هایِ واقعی (آنلاین یا از کشِ آخرین دریافتِ موفق) برسد.
+  const [maxLevelNo, setMaxLevelNo] = useState(1);
+  const [parentOptions, setParentOptions] = useState<CustomerParentOption[]>([]);
+  const [parentDetailAccountId, setParentDetailAccountId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [phone, setPhone] = useState("");
@@ -73,19 +81,39 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
   const [duplicates, setDuplicates] = useState<DuplicateCustomerRow[]>([]);
   const gpsRef = React.useRef<{ latitude: number; longitude: number } | null>(null);
 
+  const applyFormOptions = (options: {
+    suggested_code: string;
+    groups: CustomerGroupRow[];
+    max_level_no: number;
+    parent_options: CustomerParentOption[];
+  }) => {
+    setSuggestedCode(options.suggested_code);
+    setGroups(options.groups);
+    setMaxLevelNo(options.max_level_no);
+    setParentOptions(options.parent_options);
+    if (options.max_level_no <= 1 || options.parent_options.length === 1) {
+      setParentDetailAccountId(options.parent_options[0]?.detail_account_id ?? null);
+    }
+  };
+
   useEffect(() => {
     apiClient
       .getNewCustomerFormOptions()
       .then((options) => {
-        setSuggestedCode(options.suggested_code);
-        setGroups(options.groups);
+        applyFormOptions(options);
+        localCache.saveNewCustomerFormOptions(options);
       })
       .catch(() => {
-        // آفلاین یا خطایِ شبکه: فرم بدونِ کدِ پیشنهادی/فهرستِ گروه هم
-        // قابلِ‌ثبت است -- طبقِ نیازِ صریحِ «Customer Acquisition باید
-        // آفلاین هم کار کند».
+        // آفلاین یا خطایِ شبکه: طبقِ نیازِ صریحِ «Customer Acquisition
+        // باید آفلاین هم کار کند» -- به آخرین گزینه‌هایِ واقعاً
+        // دریافت‌شده برمی‌گردیم (نه فرضِ همیشگیِ «تک‌سطحی»، که برایِ
+        // شرکت‌هایِ چندسطحی می‌توانست باعثِ گم‌شدنِ کارِ ویزیتور در
+        // زمانِ همگام‌سازی شود).
+        localCache.getNewCustomerFormOptions().then((cached) => {
+          if (cached) applyFormOptions(cached);
+        });
       });
-  }, [apiClient]);
+  }, [apiClient, localCache]);
 
   const capturePhoto = async () => {
     setCapturingPhoto(true);
@@ -125,6 +153,7 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
           gps_longitude: gpsRef.current?.longitude ?? null,
           customer_type_code: customerTypeCode,
           customer_class: customerClass,
+          parent_detail_account_id: parentDetailAccountId,
         },
       });
       toast.show("مشتری ثبت شد و برایِ تاییدِ سرپرست ارسال می‌شود.", "success");
@@ -143,6 +172,10 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
   const submit = async () => {
     if (!name.trim()) {
       toast.show("نامِ مشتری الزامی است.", "danger");
+      return;
+    }
+    if (maxLevelNo > 1 && parentDetailAccountId === null) {
+      toast.show("ابتدا سطحِ بالاترِ مشتری را انتخاب کنید.", "danger");
       return;
     }
     setCheckingDuplicates(true);
@@ -173,6 +206,30 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
       <Text style={[typography.h2, { color: colors.textPrimary }]}>ثبتِ مشتریِ جدید</Text>
       {suggestedCode ? (
         <Text style={[typography.caption, { color: colors.textSecondary }]}>کدِ پیشنهادی: {suggestedCode}</Text>
+      ) : null}
+
+      {maxLevelNo > 1 ? (
+        <View>
+          <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
+            سطحِ بالاترِ مشتری *
+          </Text>
+          {parentOptions.length === 0 ? (
+            <Text style={[typography.caption, { color: colors.danger }]}>
+              هیچ سطحِ بالاتری تعریف نشده -- ابتدا از دسکتاپ ساختارِ گروهِ مشتری را بسازید.
+            </Text>
+          ) : (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+              {parentOptions.map((p) => (
+                <GroupChip
+                  key={p.detail_account_id}
+                  label={p.name}
+                  selected={parentDetailAccountId === p.detail_account_id}
+                  onPress={() => setParentDetailAccountId(p.detail_account_id)}
+                />
+              ))}
+            </View>
+          )}
+        </View>
       ) : null}
 
       <Input label="نامِ مشتری *" value={name} onChangeText={setName} placeholder="نامِ فروشگاه/مشتری" />
@@ -240,7 +297,12 @@ export function NewCustomerScreen({ apiClient, offlineQueue, locationProvider, c
           <Button label="ادامه و ثبتِ مشتریِ جدید" variant="secondary" onPress={submitDespiteDuplicates} loading={submitting} />
         </Card>
       ) : (
-        <Button label="ثبتِ مشتری" onPress={submit} loading={submitting || checkingDuplicates} disabled={!name.trim()} />
+        <Button
+          label="ثبتِ مشتری"
+          onPress={submit}
+          loading={submitting || checkingDuplicates}
+          disabled={!name.trim() || (maxLevelNo > 1 && parentDetailAccountId === null)}
+        />
       )}
     </ScrollView>
   );

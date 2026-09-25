@@ -174,6 +174,9 @@ class CustomerCreateRequest(BaseModel):
     # شخصیت و منطقه‌یِ جغرافیایی فعلاً فقط از دسکتاپ قابلِ‌ویرایش‌اند.
     customer_type_code: str | None = None
     customer_class: str | None = None
+    # طبقِ بازبینیِ صریحِ کاربر (R218): فقط وقتی گروهِ مشتری چندسطحی
+    # پیکربندی شده لازم است -- در حالتِ پیش‌فرضِ تک‌سطحی نادیده گرفته می‌شود.
+    parent_detail_account_id: int | None = None
 
 
 class PartyAddressRequest(BaseModel):

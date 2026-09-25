@@ -497,6 +497,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 offlineQueue={services.offlineQueue}
                 locationProvider={locationProvider}
                 captureProvider={resolvedCaptureProvider}
+                localCache={services.localCache}
                 onDone={() => navigation.navigate("Main", { screen: "CUSTOMERS" })}
                 onOpenCustomer={(detailAccountId) => navigation.navigate("CustomerDetail", { detailAccountId })}
               />
