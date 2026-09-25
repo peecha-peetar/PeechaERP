@@ -153,7 +153,9 @@ def start_visit(
         return visit.customer_visit_id
 
 
-def complete_visit(customer_visit_id: int, company_id: int, notes: str | None = None) -> None:
+def complete_visit(
+    customer_visit_id: int, company_id: int, notes: str | None = None, photo_base64: str | None = None,
+) -> None:
     with new_session() as session:
         visit = session.get(CustomerVisit, customer_visit_id)
         if visit is None or visit.company_id != company_id:
@@ -163,6 +165,11 @@ def complete_visit(customer_visit_id: int, company_id: int, notes: str | None = 
         visit.status_code = "COMPLETED"
         visit.checked_out_at = datetime.datetime.now()
         visit.notes = notes or visit.notes
+        # طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس
+        # و سفارش باشه»): اختیاری -- اگر عکسی گرفته نشده باشد، چیزی
+        # تغییر نمی‌کند.
+        if photo_base64 is not None:
+            visit.photo_base64 = photo_base64
         session.commit()
 
 

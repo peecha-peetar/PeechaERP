@@ -47,7 +47,7 @@ def start_visit(
 def complete_visit(customer_visit_id: int, payload: VisitCompleteRequest, ctx: AuthContext = Depends(get_current_context)) -> None:
     _ensure_own_visit(ctx, customer_visit_id)
     try:
-        field_sales_service.complete_visit(customer_visit_id, ctx.company_id, payload.notes)
+        field_sales_service.complete_visit(customer_visit_id, ctx.company_id, payload.notes, payload.photo_base64)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

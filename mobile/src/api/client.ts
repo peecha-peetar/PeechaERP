@@ -215,8 +215,11 @@ export class ApiClient {
     return this.request<StartVisitResponse>("/visits/start", { method: "POST", body: payload, idempotencyKey });
   }
 
-  async completeVisit(customerVisitId: number, notes?: string): Promise<void> {
-    await this.request<void>(`/visits/${customerVisitId}/complete`, { method: "POST", body: { notes: notes ?? null } });
+  async completeVisit(customerVisitId: number, notes?: string, photoBase64?: string | null): Promise<void> {
+    await this.request<void>(`/visits/${customerVisitId}/complete`, {
+      method: "POST",
+      body: { notes: notes ?? null, photo_base64: photoBase64 ?? null },
+    });
   }
 
   async skipVisit(customerVisitId: number, skipReason: string): Promise<void> {

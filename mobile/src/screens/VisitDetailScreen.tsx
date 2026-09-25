@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { CustomerRow, VisitPlanRow } from "../api/types";
+import { CaptureProvider } from "../capture";
 import { Button, Card, Input, StatusBadge } from "../components";
 import { LocationProvider } from "../location";
 import { OfflineQueue } from "../sync/offlineQueue";
@@ -11,6 +12,11 @@ interface Props {
   visitPlan: VisitPlanRow;
   offlineQueue: OfflineQueue;
   locationProvider: LocationProvider;
+  /** طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
+   * سفارش باشه»): اختیاری -- برایِ هر دو نوعِ پخش قابلِ‌استفاده است،
+   * نه فقط پخشِ سرد (پخشِ گرم عکسِ خودش را جداگانه در رسیدِ تحویل
+   * می‌گیرد، اما گرفتنِ این عکسِ اضافی هم آسیبی ندارد). */
+  captureProvider: CaptureProvider;
   onDone: () => void;
 }
 
@@ -22,7 +28,7 @@ interface Props {
  * می‌کنند تا SyncEngine از رویِ VisitCorrelationStore شناسهٔ واقعی را
  * resolve کند؛ برایِ همین دکمه‌هایِ تکمیل/رد تا وقتی «شروعِ ویزیت» زده
  * نشده غیرِفعال‌اند. */
-export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationProvider, onDone }: Props) {
+export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationProvider, captureProvider, onDone }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [phase, setPhase] = useState<"NOT_STARTED" | "IN_PROGRESS" | "DONE">("NOT_STARTED");
   const [startActionKey, setStartActionKey] = useState<string | undefined>();
@@ -30,6 +36,21 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
   const [notes, setNotes] = useState("");
   const [skipReason, setSkipReason] = useState("");
   const [busy, setBusy] = useState(false);
+  // طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
+  // سفارش باشه»): اختیاری -- ویزیتور می‌تواند بدونِ گرفتنِ عکس هم
+  // ویزیت را تکمیل کند.
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
+
+  const capturePhoto = async () => {
+    setCapturingPhoto(true);
+    try {
+      const photo = await captureProvider.capturePhoto();
+      setPhotoBase64(photo);
+    } finally {
+      setCapturingPhoto(false);
+    }
+  };
 
   const start = async () => {
     setBusy(true);
@@ -56,7 +77,7 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
     if (!startActionKey) return;
     await offlineQueue.enqueue({
       type: "COMPLETE_VISIT",
-      payload: { startActionKey, notes: notes.trim() || undefined },
+      payload: { startActionKey, notes: notes.trim() || undefined, photoBase64 },
     });
     setPhase("DONE");
     onDone();
@@ -96,6 +117,15 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
 
           {phase === "IN_PROGRESS" ? (
             <>
+              {/* طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت
+                  و عکس و سفارش باشه»): اختیاری -- گرفتنِ عکسی از مغازه/
+                  ویترین به‌عنوانِ مستندِ ویزیت. */}
+              <Button
+                label={photoBase64 ? "📷 عکس گرفته شد (دوباره بگیر)" : "📷 گرفتنِ عکس (اختیاری)"}
+                variant="secondary"
+                onPress={capturePhoto}
+                loading={capturingPhoto}
+              />
               <Input label="یادداشت (اختیاری)" value={notes} onChangeText={setNotes} placeholder="مثلاً: قفسه‌چینیِ محصولات انجام شد" />
               <Button label="✓ تکمیلِ ویزیت" onPress={complete} />
 

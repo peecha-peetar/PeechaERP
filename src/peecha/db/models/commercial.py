@@ -1653,6 +1653,9 @@ class CustomerVisit(Base):
     check_in_longitude: Mapped[decimal.Decimal | None] = mapped_column(Numeric(9, 6))
     distance_from_customer_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 1))
     notes: Mapped[str | None] = mapped_column(String(500))
+    # طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
+    # سفارش باشه»): اختیاری، برایِ هر دو نوعِ پخش.
+    photo_base64: Mapped[str | None] = mapped_column(Text)
 
 
 class DeliveryConfirmation(Base):

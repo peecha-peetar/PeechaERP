@@ -45,6 +45,9 @@ class VisitStartRequest(BaseModel):
 
 class VisitCompleteRequest(BaseModel):
     notes: str | None = None
+    # طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
+    # سفارش باشه»): اختیاری -- برایِ هر دو نوعِ پخش.
+    photo_base64: str | None = None
 
 
 class VisitSkipRequest(BaseModel):

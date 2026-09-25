@@ -112,7 +112,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   // بررسیِ تنظیماتِ سفارش...» گیر می‌کرد)، حالا خودِ ویزیتور هر بار که
   // وارد اپ می‌شود (بعدِ لاگین، پیش از هر صفحهٔ دیگر) صراحتاً انتخاب
   // می‌کند -- null یعنی هنوز انتخاب نکرده (ModeSelectScreen نشان داده می‌شود).
-  const [selectedMode, setSelectedMode] = useState<"VAN_SALES" | "PRE_SALES" | null>(null);
+  const [selectedMode, setSelectedMode] = useState<"VAN_SALES" | "PRE_SALES" | "COLLECTION" | null>(null);
   // مقدارِ /auth/me فقط به‌عنوانِ پیش‌فرضِ پیشنهادی در ModeSelectScreen
   // استفاده می‌شود (برجسته‌کردنِ دکمه‌یِ معمولِ همین ویزیتور) -- دیگر
   // چیزی را قفل/گیت نمی‌کند.
@@ -164,7 +164,9 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   }, [loggedIn, services]);
 
   useEffect(() => {
-    if (!loggedIn || !selectedMode) return;
+    // طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول باشه»): هیچ‌کدام
+    // از این‌ها (کانال/انبار/تسویه) برایِ حالتِ خالصِ وصول معنا ندارند.
+    if (!loggedIn || !selectedMode || selectedMode === "COLLECTION") return;
     services.apiClient
       .listChannels(selectedMode)
       .then((channels) => {
@@ -303,7 +305,13 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         <RootStack.Screen name="Main">
           {() => (
-            <MainScreen services={services} userFullName={userFullName} syncStatus={syncStatus} unreadCount={unreadCount} />
+            <MainScreen
+              services={services}
+              userFullName={userFullName}
+              syncStatus={syncStatus}
+              unreadCount={unreadCount}
+              selectedMode={selectedMode}
+            />
           )}
         </RootStack.Screen>
 
@@ -315,7 +323,15 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 visitPlan={route.params.visitPlan}
                 offlineQueue={services.offlineQueue}
                 locationProvider={locationProvider}
-                onDone={() => navigation.navigate("OrderForm", { customer: route.params.customer })}
+                captureProvider={resolvedCaptureProvider}
+                onDone={() =>
+                  // طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول
+                  // باشه»): برایِ حالتِ خالصِ وصول، ویزیت به فرمِ سفارش
+                  // ختم نمی‌شود (که اصلاً برایِ این حالت وجود ندارد).
+                  selectedMode === "COLLECTION"
+                    ? navigation.navigate("Main", { screen: "HOME" })
+                    : navigation.navigate("OrderForm", { customer: route.params.customer })
+                }
               />
             </SafeAreaView>
           )}
@@ -408,6 +424,10 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 onStartVisit={(customer, visitPlan) => navigation.navigate("VisitDetail", { customer, visitPlan })}
                 onCreateOrder={(customer) => navigation.navigate("OrderForm", { customer })}
                 onCreateCollection={(customer) => navigation.navigate("CollectPayment", { customer })}
+                // طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول
+                // باشه»): در حالتِ خالصِ وصول، دکمه‌هایِ ویزیت/سفارش
+                // اصلاً معنا ندارند -- فقط «ثبتِ وصول» می‌ماند.
+                collectionOnly={selectedMode === "COLLECTION"}
               />
             </SafeAreaView>
           )}
@@ -493,9 +513,21 @@ interface MainScreenProps {
   userFullName: string;
   syncStatus: SyncStatus;
   unreadCount: number;
+  selectedMode: "VAN_SALES" | "PRE_SALES" | "COLLECTION";
 }
 
-function MainScreen({ services, userFullName, syncStatus, unreadCount }: MainScreenProps) {
+// طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول باشه ولی وصول
+// در هر سه تا بخش باشه»): پخشِ گرم/سرد هر دو تبِ سفارش دارند (چون هردو
+// می‌فروشند، فقط نوعِ سندشان فرق دارد) + تبِ وصول (طبقِ همان جمله --
+// وصول در هر سه بخش حاضر است)؛ حالتِ خالصِ وصول نه ویزیتِ فروش (که
+// همیشه به فرمِ سفارش ختم می‌شود) نیاز دارد، نه تبِ سفارش.
+const TABS_BY_MODE: Record<"VAN_SALES" | "PRE_SALES" | "COLLECTION", BottomNavKey[]> = {
+  VAN_SALES: ["HOME", "VISITS", "CUSTOMERS", "ORDER", "COLLECTION"],
+  PRE_SALES: ["HOME", "VISITS", "CUSTOMERS", "ORDER", "COLLECTION"],
+  COLLECTION: ["HOME", "CUSTOMERS", "COLLECTION"],
+};
+
+function MainScreen({ services, userFullName, syncStatus, unreadCount, selectedMode }: MainScreenProps) {
   const { colors } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -518,6 +550,7 @@ function MainScreen({ services, userFullName, syncStatus, unreadCount }: MainScr
           <BottomNav
             active={tabBarProps.state.routeNames[tabBarProps.state.index] as BottomNavKey}
             onChange={(key) => tabBarProps.navigation.navigate(key)}
+            visibleKeys={TABS_BY_MODE[selectedMode]}
           />
         )}
       >

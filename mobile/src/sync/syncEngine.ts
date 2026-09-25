@@ -80,7 +80,7 @@ export class SyncEngine {
       }
       case "COMPLETE_VISIT": {
         const customerVisitId = await this.resolveCustomerVisitId(action.payload);
-        await this.api.completeVisit(customerVisitId, action.payload.notes);
+        await this.api.completeVisit(customerVisitId, action.payload.notes, action.payload.photoBase64);
         return;
       }
       case "SKIP_VISIT": {

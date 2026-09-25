@@ -16,6 +16,10 @@ interface Props {
   onStartVisit: (customer: CustomerRow, visitPlan: VisitPlanRow) => void;
   onCreateOrder: (customer: CustomerRow) => void;
   onCreateCollection: (customer: CustomerRow) => void;
+  /** طبقِ درخواستِ صریحِ کاربر («وصولگر فقط به دنبالِ وصول باشه»):
+   * دکمه‌هایِ «شروعِ ویزیت»/«ثبتِ سفارش» را پنهان می‌کند -- فقط برایِ
+   * حالتِ خالصِ وصول. */
+  collectionOnly?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -38,6 +42,7 @@ export function CustomerDetailScreen({
   onStartVisit,
   onCreateOrder,
   onCreateCollection,
+  collectionOnly,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
@@ -143,20 +148,24 @@ export function CustomerDetailScreen({
       </Card>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-        <Button
-          label="📍 شروعِ ویزیت"
-          fullWidth={false}
-          disabled={visitPlan === null}
-          onPress={() => visitPlan && onStartVisit(customerRow, visitPlan)}
-        />
-        <Button label="🛒 ثبتِ سفارش" fullWidth={false} variant="secondary" onPress={() => onCreateOrder(customerRow)} />
+        {!collectionOnly ? (
+          <Button
+            label="📍 شروعِ ویزیت"
+            fullWidth={false}
+            disabled={visitPlan === null}
+            onPress={() => visitPlan && onStartVisit(customerRow, visitPlan)}
+          />
+        ) : null}
+        {!collectionOnly ? (
+          <Button label="🛒 ثبتِ سفارش" fullWidth={false} variant="secondary" onPress={() => onCreateOrder(customerRow)} />
+        ) : null}
         <Button label="💰 ثبتِ وصول" fullWidth={false} variant="secondary" onPress={() => onCreateCollection(customerRow)} />
         {detail.phone ? <Button label="📞 تماس" fullWidth={false} variant="ghost" onPress={callCustomer} /> : null}
         {detail.gps_latitude || detail.address ? (
           <Button label="🗺️ مسیریابی" fullWidth={false} variant="ghost" onPress={navigateToCustomer} />
         ) : null}
       </View>
-      {visitPlan === null ? (
+      {!collectionOnly && visitPlan === null ? (
         <Text style={[typography.caption, { color: colors.textSecondary }]}>این مشتری برنامه‌یِ ویزیتِ ثبت‌شده‌ای ندارد.</Text>
       ) : null}
 
