@@ -93,13 +93,21 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
         )
     documents_service.confirm_document(document_id, ctx.company_id, ctx.user_id)
     if payload.document_type_code == "SALES_INVOICE" and payload.post_immediately:
-        # طبقِ محدودیتِ شناخته‌شده: ثبتِ نهاییِ فاکتورِ غیرِPOS نیازمندِ
-        # نقشه‌یِ تسویه‌یِ تاییدشده است (commercial_settlements.py).
-        # وصولِ واقعیِ چندروشیِ درمحل (نقد/کارت/چک/ترکیبی -- بخشِ ۸ِ
-        # سندِ کاربر) هنوز به این اندپوینت وصل نشده و یک کارِ جداگانه‌یِ
-        # آینده است؛ فعلاً برایِ بازنکردنِ مسیرِ ثبتِ نهایی، به‌صورتِ
-        # موقت تمامِ مبلغ نقدی فرض و خودکار تاییدمی‌شود.
-        settlements_service.auto_approve_full_cash_settlement_plan(document_id, ctx.company_id, ctx.user_id)
+        # طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+        # انواعِ تسویه در دسکتاپ باشد»): ویزیتور روشِ واقعیِ دریافت (نقد/
+        # بانکی/چک/... -- هرچه مدیر برایِ موبایل فعال کرده باشد) و مبلغِ
+        # هر روش را انتخاب می‌کند؛ مانده‌یِ پوشش‌داده‌نشده خودکار نسیه
+        # می‌شود (save_settlement_plan). None یعنی موبایلِ آپدیت‌نشده
+        # (سازگاریِ عقب‌رو با رفتارِ قبلی: ۱۰۰٪ نقدی).
+        if payload.settlement_lines is None:
+            settlements_service.auto_approve_full_cash_settlement_plan(document_id, ctx.company_id, ctx.user_id)
+        else:
+            enabled_codes = settlements_service.list_enabled_mobile_settlement_method_codes(ctx.company_id)
+            for line in payload.settlement_lines:
+                if line.method_code not in enabled_codes:
+                    raise ValueError(f"روشِ تسویهٔ «{line.method_code}» برایِ موبایل فعال نیست.")
+            settlement_lines = [(line.method_code, line.amount, None) for line in payload.settlement_lines]
+            settlements_service.auto_approve_settlement_plan(document_id, ctx.company_id, ctx.user_id, settlement_lines)
         documents_service.post_document(document_id, ctx.company_id, ctx.user_id)
     audit_log.record(
         ctx.company_id, ctx.user_id, "CommercialDocument", document_id, "CREATE",

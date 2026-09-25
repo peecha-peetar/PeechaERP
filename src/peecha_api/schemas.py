@@ -58,6 +58,11 @@ class OrderLineRequest(BaseModel):
     unit_price: decimal.Decimal
 
 
+class OrderSettlementLineRequest(BaseModel):
+    method_code: str
+    amount: decimal.Decimal
+
+
 class OrderCreateRequest(BaseModel):
     document_type_code: str  # "SALES_ORDER" (پخشِ سرد) یا "SALES_INVOICE" (پخشِ گرم)
     counterparty_detail_account_id: int
@@ -71,6 +76,11 @@ class OrderCreateRequest(BaseModel):
     # می‌خواند و بدونِ نمایشِ انتخاب‌گر به ویزیتور، همین‌جا می‌فرستد.
     cost_center_detail_account_id: int | None = None
     project_detail_account_id: int | None = None
+    # طبقِ درخواستِ صریح («نوعِ تسویه در پخشِ گرم باید همانندِ انواعِ
+    # تسویه در دسکتاپ باشد»): None یعنی موبایل هنوز آپدیت نشده (سازگاریِ
+    # عقب‌رو -- رفتارِ قدیمیِ «۱۰۰٪ نقدی»)؛ فهرستِ خالی یعنی صراحتاً
+    # «همه‌اش نسیه» (مانده‌یِ پوشش‌داده‌نشده خودکار محاسبه می‌شود).
+    settlement_lines: list[OrderSettlementLineRequest] | None = None
 
 
 class DeliveryConfirmationLineRequest(BaseModel):

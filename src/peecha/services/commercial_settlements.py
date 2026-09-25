@@ -24,6 +24,7 @@ from peecha.db.models.commercial import (
     CommercialDocumentSettlementPlanLine,
     CustomerProfile,
     InvoiceSettlement,
+    MobileSettlementMethod,
     PosSettlementMethodDefault,
     SettlementAlarmSettings,
     SupplierProfile,
@@ -80,6 +81,49 @@ def settlement_plan_method_codes(document_type_code: str, company_id: int | None
     for custom_method in custom_methods:
         SETTLEMENT_PLAN_METHOD_LABELS[f"CUSTOM_{custom_method.custom_method_id}"] = custom_method.label
     return fixed + tuple(f"CUSTOM_{custom_method.custom_method_id}" for custom_method in custom_methods)
+
+
+@dataclass
+class MobileSettlementMethodRow:
+    method_code: str
+    label: str
+    is_enabled: bool
+
+
+def list_mobile_settlement_methods(company_id: int) -> list[MobileSettlementMethodRow]:
+    """طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+    انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
+    موبایل خاموش کنیم»): همه‌یِ روش‌هایِ واقعیِ همین شرکت برایِ فاکتورِ
+    فروش (settlement_plan_method_codes) + وضعیتِ فعال/غیرِفعالِ موبایل
+    -- بدونِ تنظیمِ صریح، پیش‌فرض فعال است."""
+    codes = settlement_plan_method_codes("SALES_INVOICE", company_id)
+    with new_session() as session:
+        overrides = {
+            r.method_code: r.is_enabled
+            for r in session.scalars(
+                select(MobileSettlementMethod).where(MobileSettlementMethod.company_id == company_id)
+            ).all()
+        }
+    return [
+        MobileSettlementMethodRow(code, SETTLEMENT_PLAN_METHOD_LABELS.get(code, code), overrides.get(code, True))
+        for code in codes
+    ]
+
+
+def set_mobile_settlement_method_enabled(company_id: int, method_code: str, is_enabled: bool) -> None:
+    if method_code not in settlement_plan_method_codes("SALES_INVOICE", company_id):
+        raise ValueError("روشِ تسویه نامعتبر است.")
+    with new_session() as session:
+        row = session.get(MobileSettlementMethod, (company_id, method_code))
+        if row is None:
+            session.add(MobileSettlementMethod(company_id=company_id, method_code=method_code, is_enabled=is_enabled))
+        else:
+            row.is_enabled = is_enabled
+        session.commit()
+
+
+def list_enabled_mobile_settlement_method_codes(company_id: int) -> set[str]:
+    return {r.method_code for r in list_mobile_settlement_methods(company_id) if r.is_enabled}
 
 
 @dataclass
@@ -406,25 +450,22 @@ def require_approved_settlement_plan(document_id: int, company_id: int) -> Settl
     return plan
 
 
-def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, user_id: int) -> None:
+def auto_approve_settlement_plan(document_id: int, company_id: int, user_id: int, lines: list[tuple]) -> None:
     """میان‌بُرِ برنامه‌نویسی -- برایِ ابزارهایِ داخلی/فراخوانی‌هایِ خودکار
-    و بخصوص برایِ اپِ پخشِ گرم (ون‌سیلز): کلِ مبلغِ فاکتور را یک‌جا «نقدی»
-    ثبت و بلافاصله تاییدمی‌کند. گذرگاهِ واقعیِ کاربرِ دسکتاپ همچنان دکمه‌یِ
+    و بخصوص برایِ اپِ پخشِ گرم (ون‌سیلز): طبقِ درخواستِ صریحِ کاربر («نوعِ
+    تسویه در پخشِ گرم باید همانندِ انواعِ تسویه در دسکتاپ باشد»)، این
+    تابع (برخلافِ نسخهٔ قبلی‌اش که همیشه ۱۰۰٪ نقدی می‌ساخت) هر ترکیبِ
+    دلخواهی از روش‌ها/مبالغ را می‌پذیرد (همان قالبِ save_settlement_plan)
+    و بلافاصله تاییدمی‌کند. گذرگاهِ واقعیِ کاربرِ دسکتاپ همچنان دکمه‌یِ
     «نحوه‌یِ تسویه» + تاییدِ مدیر (approve_settlement_plan) است.
 
     این تابع عمداً از گیتِ is_manager عبور می‌کند و خودش تاییدمی‌کند --
-    چون در پخشِ گرم، مبلغِ نقد همان‌لحظه توسطِ خودِ ویزیتور از مشتری در
-    محل دریافت می‌شود و هیچ مدیری حضورِ فیزیکی برایِ زدنِ دکمه‌یِ تاییدِ
+    چون در پخشِ گرم، مبلغ همان‌لحظه توسطِ خودِ ویزیتور از مشتری در محل
+    دریافت می‌شود و هیچ مدیری حضورِ فیزیکی برایِ زدنِ دکمه‌یِ تاییدِ
     مدیر ندارد؛ اجباری‌کردنِ آن تاییدِ دستی، عملاً کلِ گردشِ کارِ فروشِ
-    نقدیِ فی‌المجلس را غیرِممکن می‌کند. کنترلِ صحتِ این تراکنش (به‌جایِ
-    امضایِ مدیر) از طریقِ رسیدِ تحویل تامین می‌شود (delivery_confirmation:
+    فی‌المجلس را غیرِممکن می‌کند. کنترلِ صحتِ این تراکنش (به‌جایِ امضایِ
+    مدیر) از طریقِ رسیدِ تحویل تامین می‌شود (delivery_confirmation:
     امضا/عکس/مختصاتِ GPS/زمان -- در peecha_api.routers.delivery)."""
-    with new_session() as session:
-        doc = session.get(CommercialDocument, document_id)
-        if doc is None or doc.company_id != company_id:
-            raise ValueError("فاکتور نامعتبر است.")
-        total_amount = doc.total_amount
-    lines = [("CASH", total_amount, None)] if total_amount > _ZERO else []
     save_settlement_plan(document_id, company_id, user_id, lines)
     with new_session() as session:
         plan = session.scalar(
@@ -439,6 +480,20 @@ def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, us
         plan.approved_by_user_id = user_id
         plan.approved_at = datetime.datetime.now()
         session.commit()
+
+
+def auto_approve_full_cash_settlement_plan(document_id: int, company_id: int, user_id: int) -> None:
+    """پوششِ سازگاریِ عقب‌رو -- فقط برایِ نسخه‌هایِ قدیمیِ اپِ موبایل که
+    هنوز settlement_lines نمی‌فرستند (پیش از این رفع، رفتارِ همیشگی
+    «۱۰۰٪ نقدی» بود)؛ نسخه‌هایِ تازه باید صریحاً auto_approve_settlement_plan
+    را با روش‌هایِ انتخاب‌شده‌یِ کاربر صدا بزنند."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("فاکتور نامعتبر است.")
+        total_amount = doc.total_amount
+    lines = [("CASH", total_amount, None)] if total_amount > _ZERO else []
+    auto_approve_settlement_plan(document_id, company_id, user_id, lines)
 
 
 def compute_due_date(

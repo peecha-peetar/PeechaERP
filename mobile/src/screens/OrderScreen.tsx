@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { ApiClient } from "../api/client";
-import { CustomerRow, ItemRow, OrderLineInput } from "../api/types";
+import { CustomerRow, ItemRow, OrderLineInput, SettlementMethodRow } from "../api/types";
 import { CaptureProvider } from "../capture";
 import { LocationProvider } from "../location";
 import { Button, Card, EmptyState, Input, SearchBar } from "../components";
@@ -27,6 +27,10 @@ interface Props {
    * در سرِسند فرستاده می‌شود. */
   costCenterDetailAccountId: number | null;
   projectDetailAccountId: number | null;
+  /** طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+   * انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
+   * موبایل خاموش کنیم»): فهرستِ روش‌هایِ فعال‌شده‌یِ همین شرکت. */
+  settlementMethods: SettlementMethodRow[];
   customerVisitId: number | null;
   apiClient: ApiClient;
   offlineQueue: OfflineQueue;
@@ -50,7 +54,7 @@ interface Props {
  * قیمت‌گذاری/ثبت دست‌نخورده مانده. */
 export function OrderScreen({
   customer, items, channelTypeCode, channelCode, warehouseId, currencyId,
-  costCenterDetailAccountId, projectDetailAccountId, customerVisitId,
+  costCenterDetailAccountId, projectDetailAccountId, settlementMethods, customerVisitId,
   apiClient, offlineQueue, captureProvider, locationProvider, onSubmitted,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
@@ -60,6 +64,10 @@ export function OrderScreen({
     channelTypeCode === "VAN_SALES" ? "SALES_INVOICE" : "SALES_ORDER",
   );
   const [receivedByName, setReceivedByName] = useState("");
+  // طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+  // انواعِ تسویه در دسکتاپ باشد»): مبلغِ واردشده برایِ هر روشِ فعال --
+  // خالی/صفر یعنی این روش استفاده نشده.
+  const [settlementAmounts, setSettlementAmounts] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const filteredItems = useMemo(() => {
@@ -69,6 +77,8 @@ export function OrderScreen({
   }, [items, search]);
 
   const lineCount = Object.values(lines).filter((l) => Number(l.quantity) > 0).length;
+  const orderTotal = Object.values(lines).reduce((sum, l) => sum + Number(l.quantity || 0) * Number(l.unitPrice || 0), 0);
+  const settledTotal = Object.values(settlementAmounts).reduce((sum, v) => sum + Number(v || 0), 0);
 
   const setLine = (itemId: number, field: "quantity" | "unitPrice", value: string) => {
     setLines((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] ?? { quantity: "", unitPrice: "" }), [field]: value } }));
@@ -111,6 +121,16 @@ export function OrderScreen({
       post_immediately: documentTypeCode === "SALES_INVOICE",
       cost_center_detail_account_id: costCenterDetailAccountId,
       project_detail_account_id: projectDetailAccountId,
+      // طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+      // انواعِ تسویه در دسکتاپ باشد»): فقط برایِ فاکتورِ آنی می‌فرستیم --
+      // فهرستِ خالی (اگر ویزیتور چیزی وارد نکند) یعنی صراحتاً «همه‌اش
+      // نسیه»، نه سقوطِ خاموش به «همه‌اش نقد».
+      settlement_lines:
+        documentTypeCode === "SALES_INVOICE"
+          ? Object.entries(settlementAmounts)
+              .filter(([, amount]) => Number(amount) > 0)
+              .map(([method_code, amount]) => ({ method_code, amount }))
+          : undefined,
     };
 
     setSubmitting(true);
@@ -146,6 +166,7 @@ export function OrderScreen({
         await offlineQueue.enqueue({ type: "CREATE_ORDER", payload: order });
       }
       setLines({});
+      setSettlementAmounts({});
       onSubmitted();
     } finally {
       setSubmitting(false);
@@ -194,7 +215,29 @@ export function OrderScreen({
       />
 
       {documentTypeCode === "SALES_INVOICE" ? (
-        <Input label="نامِ تحویل‌گیرنده (برایِ رسیدِ تحویل)" value={receivedByName} onChangeText={setReceivedByName} />
+        <>
+          <Input label="نامِ تحویل‌گیرنده (برایِ رسیدِ تحویل)" value={receivedByName} onChangeText={setReceivedByName} />
+
+          {/* طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید
+              همانندِ انواعِ تسویه در دسکتاپ باشد»): هر روشِ فعال‌شده یک
+              فیلدِ مبلغ دارد؛ خالی‌گذاشتنِ همه یعنی این فاکتور صراحتاً
+              نسیه است. */}
+          <Text style={[typography.bodyBold, { color: colors.textPrimary }]}>نحوه‌یِ تسویه</Text>
+          {settlementMethods.map((method) => (
+            <Input
+              key={method.method_code}
+              label={method.label}
+              value={settlementAmounts[method.method_code] ?? ""}
+              onChangeText={(v) => setSettlementAmounts((prev) => ({ ...prev, [method.method_code]: v }))}
+              keyboardType="numeric"
+              numeric
+            />
+          ))}
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            جمعِ سفارش: {orderTotal.toLocaleString("fa-IR")} — تسویه‌شده: {settledTotal.toLocaleString("fa-IR")}
+            {settledTotal < orderTotal ? ` — نسیه: ${(orderTotal - settledTotal).toLocaleString("fa-IR")}` : ""}
+          </Text>
+        </>
       ) : null}
 
       <Button

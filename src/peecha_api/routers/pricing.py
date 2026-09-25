@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_settlements as settlements_service
 from peecha_api.deps import AuthContext, get_current_context
 from peecha_api.schemas import PriceResolveResponse
 
@@ -71,4 +72,15 @@ def list_channels(
             "default_project_detail_account_id": c.default_project_detail_account_id,
         }
         for c in channels
+    ]
+
+
+@router.get("/settlement-methods")
+def list_settlement_methods(ctx: AuthContext = Depends(get_current_context)) -> list[dict]:
+    """طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+    انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
+    موبایل خاموش کنیم»): فقط روش‌هایِ فعال‌شده‌یِ موبایل برمی‌گردد."""
+    return [
+        {"method_code": m.method_code, "label": m.label}
+        for m in settlements_service.list_mobile_settlement_methods(ctx.company_id) if m.is_enabled
     ]

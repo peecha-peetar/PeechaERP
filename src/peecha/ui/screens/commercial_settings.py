@@ -824,3 +824,63 @@ class _DistributionSettlementTypesTab(QWidget):
         self.name_field.clear()
         self.status_label.setText("")
         self.refresh()
+
+
+class _MobileSettlementMethodsTab(QWidget):
+    """طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+    انواعِ تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ
+    موبایل خاموش کنیم»)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+
+        title = QLabel("روش‌هایِ تسویهٔ موبایل")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+
+        hint = QLabel(
+            "این‌ها همان روش‌هایِ واقعیِ تسویهٔ فاکتورِ فروشِ همین شرکت‌اند (دسکتاپ) -- فقط مشخص کن کدام‌ها "
+            "برایِ ثبتِ فاکتورِ پخشِ گرم در موبایل هم قابلِ‌انتخاب باشند."
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.checkboxes: dict[str, QCheckBox] = {}
+        self.checkbox_layout = QVBoxLayout()
+        layout.addLayout(self.checkbox_layout)
+
+        save_button = QPushButton("ذخیره")
+        save_button.clicked.connect(self._save)
+        layout.addWidget(save_button)
+
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("statusError")
+        layout.addWidget(self.status_label)
+        layout.addStretch(1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        self.status_label.setText("")
+        for checkbox in self.checkboxes.values():
+            checkbox.setParent(None)
+        self.checkboxes.clear()
+
+        for method in settlements_service.list_mobile_settlement_methods(company_id):
+            checkbox = QCheckBox(method.label)
+            checkbox.setChecked(method.is_enabled)
+            self.checkbox_layout.addWidget(checkbox)
+            self.checkboxes[method.method_code] = checkbox
+
+    def _save(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        for method_code, checkbox in self.checkboxes.items():
+            settlements_service.set_mobile_settlement_method_enabled(company_id, method_code, checkbox.isChecked())
+        self.status_label.setText("ذخیره شد.")

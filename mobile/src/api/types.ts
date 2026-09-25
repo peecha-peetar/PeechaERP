@@ -113,6 +113,18 @@ export interface WarehouseRow {
   is_default: boolean;
 }
 
+/** طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+ * انواعِ تسویه در دسکتاپ باشد»): فقط روش‌هایِ فعال‌شده‌یِ موبایل. */
+export interface SettlementMethodRow {
+  method_code: string;
+  label: string;
+}
+
+export interface OrderSettlementLineInput {
+  method_code: string;
+  amount: string;
+}
+
 export interface OrderLineInput {
   item_id: number;
   uom_id: number;
@@ -130,6 +142,10 @@ export interface OrderCreateRequest {
   lines: OrderLineInput[];
   cost_center_detail_account_id?: number | null;
   project_detail_account_id?: number | null;
+  /** طبقِ درخواستِ صریح: undefined یعنی نفرستادن (سازگاریِ عقب‌رو با
+   * رفتارِ قدیمیِ سرور -- ۱۰۰٪ نقدی)؛ فهرستِ خالی یعنی صراحتاً «همه‌اش
+   * نسیه». */
+  settlement_lines?: OrderSettlementLineInput[];
 }
 
 export interface OrderCreateResponse {

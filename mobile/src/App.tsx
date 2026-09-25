@@ -5,7 +5,7 @@ import { createNativeStackNavigator, NativeStackNavigationProp } from "@react-na
 import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { CustomerRow, ItemRow, VisitPlanRow } from "./api/types";
+import { CustomerRow, ItemRow, SettlementMethodRow, VisitPlanRow } from "./api/types";
 import { CaptureProvider, ExpoCaptureProvider } from "./capture";
 import { ExpoLocationProvider, LocationProvider } from "./location";
 import { AppBar, BottomNav, BottomNavKey, EmptyState, InlineSpinner, SyncStatus, ToastProvider } from "./components";
@@ -129,6 +129,9 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   // (بدونِ مرکزِ هزینه/پروژه فرستاده می‌شود، هم‌مثلِ قبل).
   const [orderCostCenterId, setOrderCostCenterId] = useState<number | null | undefined>(undefined);
   const [orderProjectId, setOrderProjectId] = useState<number | null | undefined>(undefined);
+  // طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+  // انواعِ تسویه در دسکتاپ باشد»): فقط برایِ پخشِ گرم لازم است.
+  const [settlementMethods, setSettlementMethods] = useState<SettlementMethodRow[]>([]);
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
@@ -175,6 +178,9 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
     // (سفارش، نه فاکتورِ آنی) هم‌چنان انبارِ پیش‌فرضِ شرکت را می‌گیرد.
     if (mobileChannelType === "VAN_SALES") {
       setDefaultWarehouseId(assignedVehicleWarehouseId ?? null);
+      // طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+      // انواعِ تسویه در دسکتاپ باشد»): فقط برایِ فاکتورِ آنیِ پخشِ گرم لازم است.
+      services.apiClient.listSettlementMethods().then(setSettlementMethods).catch(() => setSettlementMethods([]));
     } else {
       services.apiClient
         .listWarehouses()
@@ -353,6 +359,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   currencyId={1}
                   costCenterDetailAccountId={orderCostCenterId ?? null}
                   projectDetailAccountId={orderProjectId ?? null}
+                  settlementMethods={settlementMethods}
                   customerVisitId={null}
                   apiClient={services.apiClient}
                   offlineQueue={services.offlineQueue}

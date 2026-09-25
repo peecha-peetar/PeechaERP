@@ -1206,6 +1206,18 @@ class CommercialCompanyFeature(Base):
     is_enabled: Mapped[bool] = mapped_column(default=False)
 
 
+# طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ انواعِ
+# تسویه در دسکتاپ باشد -- فقط جایی باشد که برخی را برایِ موبایل خاموش
+# کنیم»): بدونِ ردیف یعنی فعال (پیش‌فرضِ باز، نه بسته).
+class MobileSettlementMethod(Base):
+    __tablename__ = "mobile_settlement_methods"
+    __table_args__ = ({"schema": "comm"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    method_code: Mapped[str] = mapped_column(String(30), primary_key=True)
+    is_enabled: Mapped[bool] = mapped_column(default=True)
+
+
 class IndustryProfile(Base):
     __tablename__ = "industry_profiles"
     __table_args__ = ({"schema": "comm"},)

@@ -19,6 +19,7 @@ import {
   PriceResolveResponse,
   PullResponse,
   RouteRow,
+  SettlementMethodRow,
   StartVisitRequest,
   StartVisitResponse,
   TodaySummaryResponse,
@@ -246,6 +247,12 @@ export class ApiClient {
   async listChannels(channelTypeCode?: string): Promise<ChannelRow[]> {
     const q = channelTypeCode ? `?channel_type_code=${encodeURIComponent(channelTypeCode)}` : "";
     return this.request<ChannelRow[]>(`/pricing/channels${q}`);
+  }
+
+  /** طبقِ درخواستِ صریحِ کاربر («نوعِ تسویه در پخشِ گرم باید همانندِ
+   * انواعِ تسویه در دسکتاپ باشد»). */
+  async listSettlementMethods(): Promise<SettlementMethodRow[]> {
+    return this.request<SettlementMethodRow[]>("/pricing/settlement-methods");
   }
 
   /** طبقِ باگِ واقعیِ دومِ کشف‌شده (R198، هم‌الگو با R196): سفارش قبلاً
