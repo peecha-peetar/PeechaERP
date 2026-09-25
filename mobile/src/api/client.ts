@@ -4,6 +4,7 @@ import {
   CustomerApprovalResponse,
   CustomerCreateRequest,
   CustomerCreateResponse,
+  Customer360Response,
   CustomerDetailResponse,
   CustomerListRow,
   DebtorRow,
@@ -181,6 +182,12 @@ export class ApiClient {
 
   async getCustomerDetail(detailAccountId: number, mode?: SalesMode): Promise<CustomerDetailResponse> {
     return this.request<CustomerDetailResponse>(`/customers/${detailAccountId}${mode ? `?mode=${mode}` : ""}`);
+  }
+
+  /** طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۲ -- Customer 360):
+   * همه‌یِ ابعادِ مشتری از یک درخواستِ تکی. */
+  async getCustomer360(detailAccountId: number, mode?: SalesMode): Promise<Customer360Response> {
+    return this.request<Customer360Response>(`/customers/${detailAccountId}/360${mode ? `?mode=${mode}` : ""}`);
   }
 
   async createPayment(payload: PaymentCreateRequest, idempotencyKey?: string): Promise<PaymentCreateResponse> {

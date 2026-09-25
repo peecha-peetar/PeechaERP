@@ -15,6 +15,7 @@ from peecha.db.models.commercial import (
     CommercialContract,
     CommercialDocument,
     CommissionRule,
+    CustomerActivity,
     CustomerGroup,
     CustomerGuarantee,
     CustomerMerchandising,
@@ -795,6 +796,69 @@ def set_customer_merchandising(
         row.layout_status_code = layout_status_code
         row.updated_at = datetime.datetime.now()
         row.updated_by_user_id = updated_by_user_id
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# CRMِ کامل: شکایت/جلسه/فرصتِ فروش/وظیفه (R219، بخشِ ۱۱).
+# ---------------------------------------------------------------------
+_ACTIVITY_TYPES = ("COMPLAINT", "MEETING", "OPPORTUNITY", "TASK")
+_ACTIVITY_OPEN_STATUSES = ("OPEN", "IN_PROGRESS")
+_ACTIVITY_CLOSE_STATUSES = {
+    "COMPLAINT": ("RESOLVED", "CANCELLED"),
+    "MEETING": ("DONE", "CANCELLED"),
+    "OPPORTUNITY": ("WON", "LOST", "CANCELLED"),
+    "TASK": ("DONE", "CANCELLED"),
+}
+
+
+def list_customer_activities(
+    customer_detail_account_id: int, activity_type_code: str | None = None, open_only: bool = False,
+) -> list[CustomerActivity]:
+    with new_session() as session:
+        stmt = select(CustomerActivity).where(
+            CustomerActivity.customer_detail_account_id == customer_detail_account_id
+        ).order_by(CustomerActivity.created_at.desc())
+        if activity_type_code is not None:
+            stmt = stmt.where(CustomerActivity.activity_type_code == activity_type_code)
+        if open_only:
+            stmt = stmt.where(CustomerActivity.status_code.in_(_ACTIVITY_OPEN_STATUSES))
+        return list(session.scalars(stmt))
+
+
+def create_customer_activity(
+    company_id: int, customer_detail_account_id: int, activity_type_code: str, subject: str, created_by_user_id: int,
+    description: str | None = None, due_date: datetime.date | None = None,
+    estimated_value: "decimal.Decimal | None" = None, assigned_to_user_id: int | None = None,
+) -> int:
+    if activity_type_code not in _ACTIVITY_TYPES:
+        raise ValueError("نوعِ فعالیت نامعتبر است.")
+    if not subject.strip():
+        raise ValueError("موضوع الزامی است.")
+    with new_session() as session:
+        row = CustomerActivity(
+            company_id=company_id, customer_detail_account_id=customer_detail_account_id,
+            activity_type_code=activity_type_code, subject=subject.strip(), description=description,
+            due_date=due_date, estimated_value=estimated_value, assigned_to_user_id=assigned_to_user_id,
+            created_by_user_id=created_by_user_id,
+        )
+        session.add(row)
+        session.commit()
+        return row.activity_id
+
+
+def close_customer_activity(activity_id: int, company_id: int, status_code: str, resolved_by_user_id: int) -> None:
+    with new_session() as session:
+        row = session.get(CustomerActivity, activity_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("فعالیت نامعتبر است.")
+        if row.status_code not in _ACTIVITY_OPEN_STATUSES:
+            raise ValueError("این فعالیت قبلاً بسته شده است.")
+        if status_code not in _ACTIVITY_CLOSE_STATUSES[row.activity_type_code]:
+            raise ValueError("وضعیتِ نامعتبر برایِ بستنِ این نوعِ فعالیت.")
+        row.status_code = status_code
+        row.resolved_at = datetime.datetime.now()
+        row.resolved_by_user_id = resolved_by_user_id
         session.commit()
 
 

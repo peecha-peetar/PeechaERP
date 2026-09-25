@@ -501,6 +501,16 @@ def _standard_cost(session, item_id: int, as_of_date: datetime.date) -> decimal.
     return row.standard_unit_cost
 
 
+def get_last_known_unit_cost(item_id: int) -> decimal.Decimal | None:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۸ -- داشبوردِ
+    بالایِ فرمِ مشتری، «سود»): نسخه‌یِ عمومیِ _last_known_unit_cost برایِ
+    برآوردِ سودِ ناخالص (نه سودِ دقیقِ حسابداری‌شده‌یِ همان لحظه‌یِ فروش --
+    آن نیاز به اتصال به آرتیکل‌هایِ واقعیِ بهایِ‌تمام‌شده در دفترِ روزنامه
+    دارد که فراتر از این گزارشِ خلاصه است)."""
+    with new_session() as session:
+        return _last_known_unit_cost(session, item_id)
+
+
 def _last_known_unit_cost(session, item_id: int) -> decimal.Decimal | None:
     """آخرین بهایِ واحدِ واقعاً ثبت‌شده برایِ این کالا در دفترِ انبار —
     وقتی سندِ مستقیمِ انبار (رسید/برگشت) بدونِ بهایِ واحد ثبتِ نهایی

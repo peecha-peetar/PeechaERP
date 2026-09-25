@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -117,6 +118,13 @@ _PARTNER_STATUS_LABELS = {
     "DRAFT": "پیش‌نویس", "PENDING_APPROVAL": "درانتظارِ تاییدِ اعتباری", "ACTIVE": "فعال",
     "SUSPENDED": "معلق", "BLACKLISTED": "لیستِ سیاه", "ON_HOLD": "متوقف", "DISQUALIFIED": "ردِ صلاحیت",
     "INACTIVE": "غیرفعال",
+}
+# طبقِ آیتمِ ۱۰ از بازبینیِ «تعریفِ مشتری» (R219): تبِ آدرس‌هایِ چندگانه در
+# فرمِ حسابِ تفصیلی -- کدهایِ نوعِ آدرس هم‌الگو با comm.party_addresses و
+# مشابهِ ADDRESS_TYPE_LABELS در موبایل (CustomerAddressesScreen.tsx).
+_PARTY_ADDRESS_TYPE_LABELS = {
+    "OFFICE": "دفتر", "STORE": "فروشگاه", "WAREHOUSE": "انبار",
+    "DELIVERY": "تحویل", "BILLING": "صورتحساب", "RETURN": "مرجوعی",
 }
 
 _PERSON_FIELD_LABELS = {
@@ -355,6 +363,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._current_employee_id: int | None = None
         self._pay_components: list[payroll_service.EmployeePayComponentRow] = []
         self._editing_pay_component_id: int | None = None
+        # طبقِ آیتمِ ۱۰ از بازبینیِ «تعریفِ مشتری» (R219): چندآدرسیِ مشتری/
+        # تامین‌کننده (comm.party_addresses) که در موبایل از پیش هست، این‌جا
+        # هم در تبِ جداگانه‌یِ فرمِ حسابِ تفصیلی مدیریت می‌شود.
+        self._addresses: list = []
+        self._editing_address_id: int | None = None
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
@@ -562,6 +575,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.account_tabs.addTab(scroll, "اطلاعات")
         self.files_tab = self._build_files_tab()
         self.account_tabs.addTab(self.files_tab, "عکس‌ها و فایل‌ها")
+        self.addresses_tab = self._build_addresses_tab()
+        self.account_tabs.addTab(self.addresses_tab, "آدرس‌ها")
         wrapper_layout.addWidget(self.account_tabs, stretch=1)
 
         self.save_button = QPushButton("💾")
@@ -990,6 +1005,206 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         payroll_service.delete_employee_pay_component(self._editing_pay_component_id)
         self._refresh_pay_components_section(self._current_employee_id)
+
+    # --- تبِ «آدرس‌ها» (طبقِ آیتمِ ۱۰ از بازبینیِ «تعریفِ مشتری»، R219):
+    # چندآدرسیِ مشتری/تامین‌کننده، هم‌الگو با تبِ «حکمِ حقوق». -----------
+    def _build_addresses_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = build_section_layout(tab)
+
+        layout.addWidget(QLabel("آدرس‌هایِ این حساب — دفتر/فروشگاه/انبار/تحویل/صورتحساب/مرجوعی"))
+
+        self.addresses_table = QTableWidget(0, 4)
+        self.addresses_table.setHorizontalHeaderLabels(["نوع", "آدرس", "شهر", "پیش‌فرض"])
+        self.addresses_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.addresses_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.addresses_table.verticalHeader().setVisible(False)
+        self.addresses_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.addresses_table.cellClicked.connect(self._on_address_row_clicked)
+        self.addresses_table.setMaximumHeight(160)
+        layout.addWidget(self.addresses_table)
+
+        type_row = QHBoxLayout()
+        type_row.addWidget(QLabel("نوع"))
+        self.address_type_combo = QComboBox()
+        for code, label in _PARTY_ADDRESS_TYPE_LABELS.items():
+            self.address_type_combo.addItem(label, code)
+        type_row.addWidget(self.address_type_combo, stretch=1)
+        self.address_default_checkbox = QCheckBox("پیش‌فرضِ این نوع")
+        type_row.addWidget(self.address_default_checkbox)
+        layout.addLayout(type_row)
+
+        self.address_line1_field = QLineEdit()
+        self.address_line1_field.setPlaceholderText("متنِ کاملِ آدرس")
+        layout.addWidget(self.address_line1_field)
+
+        city_row = QHBoxLayout()
+        self.address_city_field = QLineEdit()
+        self.address_city_field.setPlaceholderText("شهر")
+        city_row.addWidget(self.address_city_field)
+        self.address_province_field = QLineEdit()
+        self.address_province_field.setPlaceholderText("استان")
+        city_row.addWidget(self.address_province_field)
+        self.address_postal_code_field = QLineEdit()
+        self.address_postal_code_field.setPlaceholderText("کدِپستی")
+        city_row.addWidget(self.address_postal_code_field)
+        layout.addLayout(city_row)
+
+        gps_row = QHBoxLayout()
+        gps_row.addWidget(QLabel("عرضِ جغرافیایی"))
+        self.address_lat_field = QDoubleSpinBox()
+        self.address_lat_field.setRange(-90, 90)
+        self.address_lat_field.setDecimals(6)
+        gps_row.addWidget(self.address_lat_field)
+        gps_row.addWidget(QLabel("طولِ جغرافیایی"))
+        self.address_lon_field = QDoubleSpinBox()
+        self.address_lon_field.setRange(-180, 180)
+        self.address_lon_field.setDecimals(6)
+        gps_row.addWidget(self.address_lon_field)
+        gps_row.addWidget(QLabel("شعاعِ GeoFence (متر)"))
+        self.address_geofence_field = QSpinBox()
+        self.address_geofence_field.setRange(0, 100_000)
+        self.address_geofence_field.setSpecialValueText("—")
+        gps_row.addWidget(self.address_geofence_field)
+        layout.addLayout(gps_row)
+
+        self.address_status_label = QLabel("")
+        self.address_status_label.setObjectName("statusError")
+        self.address_status_label.setWordWrap(True)
+        layout.addWidget(self.address_status_label)
+
+        addr_button_cluster = QWidget()
+        addr_button_cluster.setLayoutDirection(Qt.LeftToRight)
+        addr_buttons = QHBoxLayout(addr_button_cluster)
+        addr_buttons.setContentsMargins(0, 0, 0, 0)
+        add_address_button = QPushButton("➕")
+        add_address_button.setObjectName("iconButton")
+        add_address_button.setFixedWidth(44)
+        add_address_button.setToolTip("افزودن/به‌روزرسانی")
+        add_address_button.clicked.connect(self._save_address)
+        addr_buttons.addWidget(add_address_button)
+        clear_address_button = QPushButton("↩️")
+        clear_address_button.setObjectName("iconButton")
+        clear_address_button.setFixedWidth(44)
+        clear_address_button.setToolTip("انصراف")
+        clear_address_button.clicked.connect(self._reset_address_form)
+        addr_buttons.addWidget(clear_address_button)
+        self.delete_address_button = QPushButton("🗑️")
+        self.delete_address_button.setObjectName("dangerIconButton")
+        self.delete_address_button.setFixedWidth(44)
+        self.delete_address_button.setToolTip("حذفِ آدرس")
+        self.delete_address_button.clicked.connect(self._delete_address)
+        self.delete_address_button.setVisible(False)
+        addr_buttons.addWidget(self.delete_address_button)
+        layout.addWidget(addr_button_cluster, alignment=Qt.AlignLeft)
+
+        layout.addStretch(1)
+        return tab
+
+    def _refresh_addresses_tab(self) -> None:
+        self._reset_address_form()
+        group_code = self._selected[1] if self._selected else None
+        is_partner_group = group_code in (dimensions_service.CUSTOMER_GROUP_CODE, dimensions_service.SUPPLIER_GROUP_CODE)
+        tab_index = self.account_tabs.indexOf(self.addresses_tab)
+        can_show = is_partner_group and self._editing_account_id is not None
+        self.account_tabs.setTabVisible(tab_index, can_show)
+        if not can_show:
+            self._addresses = []
+            self.addresses_table.setRowCount(0)
+            return
+        self._addresses = partners_service.list_party_addresses(self._editing_account_id)
+        self.addresses_table.setRowCount(len(self._addresses))
+        for row_index, a in enumerate(self._addresses):
+            values = [
+                _PARTY_ADDRESS_TYPE_LABELS.get(a.address_type_code, a.address_type_code),
+                a.line1,
+                a.city or "—",
+                "بله" if a.is_default else "—",
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, a.address_id)
+                self.addresses_table.setItem(row_index, col_index, item)
+
+    def _on_address_row_clicked(self, row: int, _column: int) -> None:
+        address_id = self.addresses_table.item(row, 0).data(Qt.UserRole)
+        address = next((a for a in self._addresses if a.address_id == address_id), None)
+        if address is None:
+            return
+        self._editing_address_id = address.address_id
+        self.address_status_label.setText("")
+        index = self.address_type_combo.findData(address.address_type_code)
+        self.address_type_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.address_line1_field.setText(address.line1 or "")
+        self.address_city_field.setText(address.city or "")
+        self.address_province_field.setText(address.province or "")
+        self.address_postal_code_field.setText(address.postal_code or "")
+        self.address_default_checkbox.setChecked(address.is_default)
+        self.address_lat_field.setValue(float(address.gps_latitude) if address.gps_latitude is not None else 0)
+        self.address_lon_field.setValue(float(address.gps_longitude) if address.gps_longitude is not None else 0)
+        self.address_geofence_field.setValue(address.geofence_radius_meters or 0)
+        self.delete_address_button.setVisible(True)
+
+    def _reset_address_form(self) -> None:
+        self._editing_address_id = None
+        self.address_status_label.setText("")
+        self.address_type_combo.setCurrentIndex(0)
+        self.address_line1_field.clear()
+        self.address_city_field.clear()
+        self.address_province_field.clear()
+        self.address_postal_code_field.clear()
+        self.address_default_checkbox.setChecked(False)
+        self.address_lat_field.setValue(0)
+        self.address_lon_field.setValue(0)
+        self.address_geofence_field.setValue(0)
+        self.delete_address_button.setVisible(False)
+        self.addresses_table.clearSelection()
+
+    def _save_address(self) -> None:
+        if self._editing_account_id is None:
+            return
+        address_type_code = self.address_type_combo.currentData()
+        line1 = self.address_line1_field.text().strip()
+        if not line1:
+            self.address_status_label.setText("متنِ آدرس را وارد کنید.")
+            return
+        lat = decimal.Decimal(str(self.address_lat_field.value())) if self.address_lat_field.value() != 0 else None
+        lon = decimal.Decimal(str(self.address_lon_field.value())) if self.address_lon_field.value() != 0 else None
+        geofence = self.address_geofence_field.value() or None
+        try:
+            if self._editing_address_id is not None:
+                partners_service.update_party_address(
+                    self._editing_address_id, self._editing_account_id, address_type_code, line1,
+                    city=self.address_city_field.text().strip() or None,
+                    province=self.address_province_field.text().strip() or None,
+                    postal_code=self.address_postal_code_field.text().strip() or None,
+                    is_default=self.address_default_checkbox.isChecked(),
+                    gps_latitude=lat, gps_longitude=lon, geofence_radius_meters=geofence,
+                )
+            else:
+                partners_service.add_party_address(
+                    self._editing_account_id, address_type_code, line1,
+                    city=self.address_city_field.text().strip() or None,
+                    province=self.address_province_field.text().strip() or None,
+                    postal_code=self.address_postal_code_field.text().strip() or None,
+                    is_default=self.address_default_checkbox.isChecked(),
+                    gps_latitude=lat, gps_longitude=lon, geofence_radius_meters=geofence,
+                )
+        except ValueError as exc:
+            self.address_status_label.setText(str(exc))
+            return
+        self._refresh_addresses_tab()
+
+    def _delete_address(self) -> None:
+        if self._editing_address_id is None or self._editing_account_id is None:
+            return
+        confirm = QMessageBox.question(
+            self, "حذفِ آدرس", "این آدرس حذف شود؟", QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        partners_service.delete_party_address(self._editing_address_id, self._editing_account_id)
+        self._refresh_addresses_tab()
 
     # --- بارگذاری --------------------------------------------------------
     def _company_id(self) -> int | None:
@@ -1537,6 +1752,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self._refresh_pay_components_section(row.get("employee_id") if is_employee else None)
             self._update_partner_status_display(row)
             self._refresh_files_tab()
+            self._refresh_addresses_tab()
             return
 
         account = self._accounts_by_id.get(detail_account_id)
@@ -1563,6 +1779,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.terminate_employee_button.setVisible(False)
         self._refresh_pay_components_section(None)
         self._refresh_files_tab()
+        self._refresh_addresses_tab()
 
     def _on_copy_from_changed(self) -> None:
         source_id = self.copy_from_combo.currentData()
@@ -1692,6 +1909,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.approve_partner_button.setVisible(False)
         self.customer_score_label.setVisible(False)
         self._refresh_files_tab()
+        self._refresh_addresses_tab()
 
     def _terminate_employee(self) -> None:
         if self._editing_account_id is None:

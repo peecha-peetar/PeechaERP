@@ -11,6 +11,7 @@ import { ExpoLocationProvider, LocationProvider } from "./location";
 import { AppBar, BottomNav, BottomNavKey, EmptyState, InlineSpinner, SyncStatus, ToastProvider } from "./components";
 import { CollectionListScreen } from "./screens/CollectionListScreen";
 import { CollectionScreen } from "./screens/CollectionScreen";
+import { Customer360Screen } from "./screens/Customer360Screen";
 import { CustomerAddressesScreen } from "./screens/CustomerAddressesScreen";
 import { CustomerDetailScreen } from "./screens/CustomerDetailScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
@@ -68,6 +69,7 @@ export type RootStackParamList = {
   OrderForm: { customer: CustomerRow };
   CustomerDetail: { detailAccountId: number };
   CustomerAddresses: { detailAccountId: number };
+  Customer360: { detailAccountId: number };
   NewCustomer: undefined;
   CollectPayment: { customer: CustomerRow };
   Notifications: undefined;
@@ -471,6 +473,19 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 salesMode={selectedMode === "COLLECTION" ? undefined : selectedMode}
                 isManager={isManager}
                 onOpenAddresses={() => navigation.navigate("CustomerAddresses", { detailAccountId: route.params.detailAccountId })}
+                onOpen360={() => navigation.navigate("Customer360", { detailAccountId: route.params.detailAccountId })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="Customer360">
+          {({ route, navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <Customer360Screen
+                apiClient={services.apiClient}
+                detailAccountId={route.params.detailAccountId}
+                onBack={() => navigation.navigate("CustomerDetail", { detailAccountId: route.params.detailAccountId })}
               />
             </SafeAreaView>
           )}

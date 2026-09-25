@@ -31,6 +31,8 @@ interface Props {
   isManager?: boolean;
   /** طبقِ چندآدرسیِ واقعی + GeoFence (R216، بخشِ ۲). */
   onOpenAddresses: () => void;
+  /** طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۲ -- Customer 360). */
+  onOpen360: () => void;
 }
 
 const CUSTOMER_TYPE_LABELS: Record<string, string> = {
@@ -63,6 +65,7 @@ export function CustomerDetailScreen({
   salesMode,
   isManager,
   onOpenAddresses,
+  onOpen360,
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
@@ -262,6 +265,7 @@ export function CustomerDetailScreen({
           <Button label="مسیریابی" fullWidth={false} variant="ghost" onPress={navigateToCustomer} />
         ) : null}
         <Button label="آدرس‌ها" fullWidth={false} variant="ghost" onPress={onOpenAddresses} />
+        <Button label="نمایِ کامل (۳۶۰)" fullWidth={false} variant="ghost" onPress={onOpen360} />
       </View>
       {!collectionOnly && !vanSales && visitPlan === null ? (
         <Text style={[typography.caption, { color: colors.textSecondary }]}>این مشتری برنامه‌یِ ویزیتِ ثبت‌شده‌ای ندارد.</Text>

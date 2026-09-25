@@ -38,9 +38,51 @@ with new_session() as s:
 company_id = company.company_id
 sess.current_company = company
 
+from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_partners as partners_service
+from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_settings as csettings_service
+from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import fiscal_years as fiscal_years_service
+from peecha.services import inventory_catalog as catalog_service
+from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import treasury as treasury_service
+
+fiscal_years_service.create_fiscal_year_for_date(company_id, 1, 1, datetime.date.today())
+lang_id = company.default_language_id
+g1 = coa_service.create_account(company_id, "1", "دارایی‌ها", "DEBIT", "ASSET", "PERMANENT", False, lang_id)
+k2 = coa_service.create_account(company_id, "13", "حساب‌هایِ دریافتنی", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+ar_gl = coa_service.create_account(company_id, "1304", "حساب‌هایِ دریافتنیِ مشتریان", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k2.account_id)
+k3 = coa_service.create_account(company_id, "11b", "موجودیِ انبار", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+inv_asset_gl = coa_service.create_account(company_id, "102", "موجودیِ کالا", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3.account_id)
+k3b = coa_service.create_account(company_id, "11c", "نقد و بانک", "DEBIT", "ASSET", "PERMANENT", False, lang_id, parent_account_id=g1.account_id)
+cash_gl = coa_service.create_account(company_id, "1101", "صندوق", "DEBIT", "ASSET", "PERMANENT", True, lang_id, parent_account_id=k3b.account_id)
+g2 = coa_service.create_account(company_id, "4", "درآمدها", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id)
+k4 = coa_service.create_account(company_id, "41", "درآمدِ عملیاتی", "CREDIT", "REVENUE", "TEMPORARY", False, lang_id, parent_account_id=g2.account_id)
+revenue_gl = coa_service.create_account(company_id, "411", "درآمدِ فروش", "CREDIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+discount_gl = coa_service.create_account(company_id, "412", "تخفیفِ فروش", "DEBIT", "REVENUE", "TEMPORARY", True, lang_id, parent_account_id=k4.account_id)
+g4 = coa_service.create_account(company_id, "2", "بدهی‌ها", "CREDIT", "LIABILITY", "PERMANENT", False, lang_id)
+k6 = coa_service.create_account(company_id, "21", "مالیاتِ پرداختنی", "CREDIT", "LIABILITY", "PERMANENT", False, lang_id, parent_account_id=g4.account_id)
+tax_gl = coa_service.create_account(company_id, "2101", "مالیاتِ فروشِ پرداختنی", "CREDIT", "LIABILITY", "PERMANENT", True, lang_id, parent_account_id=k6.account_id)
+g3 = coa_service.create_account(company_id, "5", "هزینه‌ها", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id)
+k5 = coa_service.create_account(company_id, "51", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", False, lang_id, parent_account_id=g3.account_id)
+cogs_gl = coa_service.create_account(company_id, "511", "بهایِ تمام‌شده", "DEBIT", "EXPENSE", "TEMPORARY", True, lang_id, parent_account_id=k5.account_id)
+engine_service.set_account_mapping(company_id, "INVENTORY_ASSET", inv_asset_gl.account_id)
+engine_service.set_account_mapping(company_id, "CUSTOMER_RECEIVABLE", ar_gl.account_id)
+engine_service.set_account_mapping(company_id, "COGS", cogs_gl.account_id)
+csettings_service.set_account_mapping(company_id, "SALES_REVENUE", revenue_gl.account_id)
+csettings_service.set_account_mapping(company_id, "SALES_DISCOUNT", discount_gl.account_id)
+csettings_service.set_account_mapping(company_id, "SALES_TAX_PAYABLE", tax_gl.account_id)
+customer_group_id_for_receipt = next(g.person_group_id for g in dimensions_service.list_person_groups(company_id) if g.code == "CUSTOMER")
+treasury_service.create_counterparty_mapping(company_id, "RECEIPT", cash_gl.account_id, person_group_id=customer_group_id_for_receipt)
+treasury_service.set_account_mapping(company_id, "RECEIPT_CASH", cash_gl.account_id)
+van_channel_code = pricing_service.create_channel(company_id, "VAN-1", "پخشِ گرمِ آزمایشی", "VAN_SALES")
+uom_id = catalog_service.create_uom(company_id, "PCS", "عدد", "COUNT")
+item_id = catalog_service.create_item(
+    company_id, "9101", "کالایِ عادی", catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=uom_id, is_sellable=True),
+)
 
 from fastapi.testclient import TestClient
 from peecha_api.main import app
@@ -221,5 +263,94 @@ check(merch["layout_status_code"] == "GOOD", f"وضعیتِ چیدمان ذخی�
 
 r = client.put(f"/customers/{customer_id}/merchandising", headers=auth(admin_token), json={"layout_status_code": "INVALID"})
 check(r.status_code == 400, f"وضعیتِ چیدمانِ نامعتبر رد می‌شود (status={r.status_code})")
+
+# ---------- R219-6: CRMِ کامل (شکایت/جلسه/فرصتِ فروش/وظیفه) ----------
+r = client.get(f"/customers/{customer_id}/activities", headers=auth(admin_token))
+check(r.status_code == 200 and r.json() == [], f"بدونِ فعالیت در ابتدا (status={r.status_code}, body={r.text})")
+
+r = client.post(
+    f"/customers/{customer_id}/activities", headers=auth(admin_token),
+    json={"activity_type_code": "COMPLAINT", "subject": "تأخیر در تحویل", "description": "فاکتورِ اخیر دیر رسید"},
+)
+check(r.status_code == 200, f"ثبتِ شکایت موفق بود (status={r.status_code}, body={r.text})")
+complaint_id = r.json()["activity_id"]
+
+r = client.post(
+    f"/customers/{customer_id}/activities", headers=auth(admin_token),
+    json={"activity_type_code": "OPPORTUNITY", "subject": "خطِ تولیدِ جدید", "estimated_value": "50000000"},
+)
+check(r.status_code == 200, f"ثبتِ فرصتِ فروش موفق بود (status={r.status_code}, body={r.text})")
+opportunity_id = r.json()["activity_id"]
+
+r = client.get(f"/customers/{customer_id}/activities", headers=auth(admin_token), params={"open_only": True})
+check(len(r.json()) == 2, f"دو فعالیتِ بازِ مستقل ثبت شد (got {len(r.json())})")
+
+r = client.post(f"/customers/{customer_id}/activities/{complaint_id}/close", headers=auth(admin_token), json={"status_code": "RESOLVED"})
+check(r.status_code == 200, f"بستنِ شکایت با RESOLVED موفق بود (status={r.status_code}, body={r.text})")
+
+r = client.post(f"/customers/{customer_id}/activities/{opportunity_id}/close", headers=auth(admin_token), json={"status_code": "RESOLVED"})
+check(r.status_code == 400, f"وضعیتِ نامتناسب با نوعِ فعالیت (RESOLVED برایِ فرصتِ فروش) رد می‌شود (status={r.status_code})")
+
+r = client.post(f"/customers/{customer_id}/activities/{opportunity_id}/close", headers=auth(admin_token), json={"status_code": "WON"})
+check(r.status_code == 200, f"بستنِ فرصتِ فروش با WON موفق بود (status={r.status_code}, body={r.text})")
+
+r = client.get(f"/customers/{customer_id}/activities", headers=auth(admin_token), params={"open_only": True})
+check(r.json() == [], f"بعدِ بستنِ هردو، فعالیتِ بازی نمانده (got {r.json()})")
+
+r = client.post(f"/customers/{customer_id}/activities/{complaint_id}/close", headers=auth(admin_token), json={"status_code": "RESOLVED"})
+check(r.status_code == 400, f"بستنِ دوباره‌یِ فعالیتِ بسته‌شده رد می‌شود (status={r.status_code})")
+
+# ---------- R219-7: صفحه‌یِ Customer 360 (یک endpointِ تکی) ----------
+r = client.get(f"/customers/{customer_id}/360", headers=auth(admin_token))
+check(r.status_code == 200, f"GETِ Customer 360 موفق بود (status={r.status_code}, body={r.text[:300]})")
+c360 = r.json()
+check(c360["detail"]["code"] == "C-OUTLET", f"بخشِ detail درست است (got {c360['detail'].get('code')})")
+check(len(c360["guarantees"]) == 2, f"بخشِ guarantees تاریخچه‌یِ کامل (فعال+آزادشده) را می‌دهد (got {len(c360['guarantees'])})")
+check(len(c360["contracts"]) == 1, f"بخشِ contracts شاملِ قراردادِ لغوشده هم هست (got {len(c360['contracts'])})")
+check(len(c360["activities"]) == 2, f"بخشِ activities شاملِ هر دو فعالیتِ بسته‌شده است (got {len(c360['activities'])})")
+check(len(c360["addresses"]) == 1, f"بخشِ addresses شاملِ آدرسِ فروشگاه است (got {len(c360['addresses'])})")
+check(c360["merchandising"] is not None and c360["merchandising"]["shelf_count"] == 12, f"بخشِ merchandising درست است (got {c360['merchandising']})")
+check(len(c360["recent_visits"]) == 3, f"بخشِ recent_visits شاملِ هر سه ویزیتِ ثبت‌شده است (got {len(c360['recent_visits'])})")
+
+# ---------- R219-8: امتیازدهی/سگمنت‌بندیِ مشتری ----------
+from peecha.services import commercial_documents as documents_service
+
+r = client.get(f"/customers/{customer_id}/segment", headers=auth(admin_token))
+check(r.status_code == 200, f"GETِ سگمنتِ مشتری موفق بود (status={r.status_code}, body={r.text})")
+seg = r.json()
+check(seg["segment_code"] == "NEW", f"مشتریِ بدونِ فاکتورِ POSTED هنوز NEW است (got {seg['segment_code']})")
+
+# مشتریِ بدهکار (طبقِ اصلِ صریح: بدهیِ نامتناسب با حجمِ خریدِ عادی)
+customer_debtor_id = partners_service.create_customer(
+    company_id, "C-SEG-DEBTOR", "مشتریِ بدهکارِ آزمایشی",
+    fields=partners_service.CustomerProfileFields(credit_limit_amount=decimal.Decimal("0")), fast_track=True,
+)
+order_debtor = {
+    "document_type_code": "SALES_INVOICE", "counterparty_detail_account_id": customer_debtor_id,
+    "currency_id": company.base_currency_id, "warehouse_id": wh_id,
+    "channel_code": van_channel_code, "post_immediately": True,
+    "lines": [{"item_id": item_id, "uom_id": uom_id, "quantity": "3", "unit_price": "10000"}],
+    "settlement_lines": [{"method_code": "CASH", "amount": "1000"}],
+}
+r = client.post("/orders", headers=auth(admin_token), json=order_debtor)
+check(r.status_code == 200, f"فاکتورِ نسیه برایِ سنجشِ سگمنت ثبت شد (status={r.status_code}, body={r.text})")
+
+seg_info = documents_service.compute_customer_segment(company_id, customer_debtor_id)
+check(seg_info.balance_nature == "بدهکار" and seg_info.balance_amount > 0, f"مانده‌یِ بدهکار محاسبه شد (got {seg_info.balance_amount} {seg_info.balance_nature})")
+check(seg_info.order_count_last_12_months == 1, f"تعدادِ سفارشِ ۱۲ماهِ اخیر درست است (got {seg_info.order_count_last_12_months})")
+
+# ---------- R219-9: داشبوردِ بالایِ فرمِ مشتری (سودِ برآوردیِ ۳ماهِ اخیر) ----------
+# بدونِ سابقه‌یِ رسیدِ کالا، بهایِ تمام‌شدهٔ آخرینِ شناخته‌شده صفر است؛ پس سودِ
+# برآوردی باید با خودِ فروشِ ۳ماهِ اخیر برابر باشد (۳ عدد × ۱۰٬۰۰۰).
+check(
+    seg_info.estimated_profit_last_3_months == seg_info.sales_last_3_months == decimal.Decimal("30000"),
+    f"سودِ برآوردیِ ۳ماهِ اخیر بدونِ بهایِ شناخته‌شده برابرِ فروش است (got profit={seg_info.estimated_profit_last_3_months}, sales={seg_info.sales_last_3_months})",
+)
+
+r = client.get(f"/customers/{customer_debtor_id}/segment", headers=auth(admin_token))
+check(r.status_code == 200 and decimal.Decimal(r.json()["estimated_profit_last_3_months"]) == decimal.Decimal("30000"), f"فیلدِ سود در پاسخِ /segment ارائه شد (status={r.status_code}, body={r.text})")
+
+r = client.get(f"/customers/{customer_debtor_id}/360", headers=auth(admin_token))
+check(r.status_code == 200 and decimal.Decimal(r.json()["segment"]["estimated_profit_last_3_months"]) == decimal.Decimal("30000"), f"فیلدِ سود در پاسخِ /360 هم ارائه شد (status={r.status_code}, body={r.text[:300]})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")

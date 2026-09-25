@@ -23,14 +23,18 @@ from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_partners as partners_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import field_sales as field_sales_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import notifications as notifications_service
+from peecha.services import telesales as telesales_service
 from peecha.services import treasury as treasury_service
 from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import FORM_CUSTOMER_MANAGEMENT, require_permission
 from peecha_api.schemas import (
+    CustomerActivityCloseRequest,
+    CustomerActivityRequest,
     CustomerContractRequest,
     CustomerCreateRequest,
     CustomerGuaranteeRequest,
@@ -573,3 +577,134 @@ def set_customer_merchandising(
         {"source": "mobile"},
     )
     return {"detail_account_id": detail_account_id}
+
+
+def _activity_to_dict(a) -> dict:
+    return {
+        "activity_id": a.activity_id, "activity_type_code": a.activity_type_code, "subject": a.subject,
+        "description": a.description, "status_code": a.status_code,
+        "due_date": a.due_date.isoformat() if a.due_date else None,
+        "estimated_value": str(a.estimated_value) if a.estimated_value is not None else None,
+        "assigned_to_user_id": a.assigned_to_user_id, "created_at": a.created_at.isoformat(),
+    }
+
+
+@router.get("/{detail_account_id}/activities")
+def list_customer_activities(
+    detail_account_id: int, activity_type_code: str | None = None, open_only: bool = False,
+    ctx: AuthContext = Depends(get_current_context),
+) -> list[dict]:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۱ -- CRMِ کامل)."""
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    activities = partners_service.list_customer_activities(detail_account_id, activity_type_code, open_only)
+    return [_activity_to_dict(a) for a in activities]
+
+
+@router.post("/{detail_account_id}/activities")
+def create_customer_activity(
+    detail_account_id: int, payload: CustomerActivityRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        activity_id = partners_service.create_customer_activity(
+            ctx.company_id, detail_account_id, payload.activity_type_code, payload.subject, ctx.user_id,
+            description=payload.description, due_date=payload.due_date, estimated_value=payload.estimated_value,
+            assigned_to_user_id=payload.assigned_to_user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CustomerActivity", activity_id, "CREATE",
+        {"source": "mobile", "customer_detail_account_id": detail_account_id, "activity_type_code": payload.activity_type_code},
+    )
+    return {"activity_id": activity_id}
+
+
+@router.post("/{detail_account_id}/activities/{activity_id}/close")
+def close_customer_activity(
+    detail_account_id: int, activity_id: int, payload: CustomerActivityCloseRequest,
+    ctx: AuthContext = Depends(require_permission(FORM_CUSTOMER_MANAGEMENT, "EDIT")),
+) -> dict:
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    try:
+        partners_service.close_customer_activity(activity_id, ctx.company_id, payload.status_code, ctx.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_log.record(
+        ctx.company_id, ctx.user_id, "CustomerActivity", activity_id, "UPDATE",
+        {"source": "mobile", "action": "close", "status_code": payload.status_code, "customer_detail_account_id": detail_account_id},
+    )
+    return {"activity_id": activity_id}
+
+
+def _segment_to_dict(segment) -> dict:
+    return {
+        "segment_code": segment.segment_code,
+        "sales_this_month": str(segment.sales_this_month), "sales_last_3_months": str(segment.sales_last_3_months),
+        "order_count_last_12_months": segment.order_count_last_12_months, "avg_order_value": str(segment.avg_order_value),
+        "avg_days_between_orders": str(segment.avg_days_between_orders) if segment.avg_days_between_orders is not None else None,
+        "balance_amount": str(segment.balance_amount), "balance_nature": segment.balance_nature,
+        "return_percent": str(segment.return_percent),
+        "estimated_profit_last_3_months": str(segment.estimated_profit_last_3_months),
+    }
+
+
+@router.get("/{detail_account_id}/segment")
+def get_customer_segment(detail_account_id: int, ctx: AuthContext = Depends(get_current_context)) -> dict:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۳ -- امتیازدهی/
+    سگمنت‌بندی) -- همیشه محاسبه‌شده از دادهٔ واقعی، بدونِ فیلدِ ذخیره‌شده."""
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    segment = documents_service.compute_customer_segment(ctx.company_id, detail_account_id)
+    return _segment_to_dict(segment)
+
+
+@router.get("/{detail_account_id}/360")
+def get_customer_360(
+    detail_account_id: int, mode: str | None = None, ctx: AuthContext = Depends(get_current_context),
+) -> dict:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۲ -- Customer
+    ۳۶۰): همه‌یِ ابعادِ مشتری از یک درخواستِ تکی -- هم‌الگو با
+    GET /dashboard/today (یک درخواست، نه ده تا) -- تا کاربر برایِ دیدنِ
+    وضعیتِ کاملِ مشتری مجبور به جابه‌جایی بینِ چند صفحه نباشد."""
+    detail = get_customer_detail(detail_account_id, mode, ctx)
+    guarantees = [_guarantee_to_dict(g) for g in partners_service.list_customer_guarantees(detail_account_id)]
+    contracts = [
+        _contract_to_dict(c) for c in contracts_service.list_contracts(ctx.company_id, detail_account_id)
+        if c.contract_type_code == "SALES"
+    ]
+    activities = [_activity_to_dict(a) for a in partners_service.list_customer_activities(detail_account_id)][:20]
+    addresses = [_address_to_dict(a) for a in partners_service.list_party_addresses(detail_account_id)]
+    merch_row = partners_service.get_customer_merchandising(detail_account_id)
+    merchandising = (
+        {
+            "store_area_sqm": str(merch_row.store_area_sqm) if merch_row.store_area_sqm is not None else None,
+            "checkout_count": merch_row.checkout_count, "fridge_count": merch_row.fridge_count,
+            "shelf_count": merch_row.shelf_count, "available_brands": merch_row.available_brands,
+            "competitor_brands": merch_row.competitor_brands, "layout_status_code": merch_row.layout_status_code,
+        }
+        if merch_row is not None else None
+    )
+    calls = [
+        {"call_log_id": c.call_log_id, "phone_number": c.phone_number, "started_at": c.started_at.isoformat(), "was_successful": c.was_successful, "note": c.note}
+        for c in telesales_service.list_customer_calls(ctx.company_id, detail_account_id)
+    ]
+    notes = [
+        {"note_id": n.note_id, "note_text": n.note_text, "created_at": n.created_at.isoformat()}
+        for n in telesales_service.list_customer_notes(ctx.company_id, detail_account_id)
+    ]
+    segment = documents_service.compute_customer_segment(ctx.company_id, detail_account_id)
+    segment_dict = _segment_to_dict(segment)
+    recent_visits = [
+        {
+            "customer_visit_id": v.customer_visit_id, "status_code": v.status_code, "checked_in_at": v.checked_in_at.isoformat(),
+            "checked_out_at": v.checked_out_at.isoformat() if v.checked_out_at else None,
+            "is_outside_geofence": v.is_outside_geofence,
+        }
+        for v in field_sales_service.list_customer_visits(ctx.company_id, customer_detail_account_id=detail_account_id)[:20]
+    ]
+    return {
+        "detail": detail, "guarantees": guarantees, "contracts": contracts, "activities": activities,
+        "addresses": addresses, "merchandising": merchandising, "calls": calls, "notes": notes,
+        "recent_visits": recent_visits, "segment": segment_dict,
+    }

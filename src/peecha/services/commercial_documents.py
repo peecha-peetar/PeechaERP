@@ -45,6 +45,7 @@ from peecha.services import inventory_engine as inv_engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import journal_entries as je_service
 from peecha.services import roles as roles_service
+from peecha.services import treasury as treasury_service
 
 DOCUMENT_TYPE_CODES = (
     "SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN",
@@ -1110,6 +1111,133 @@ def summarize_customer_purchases(
             last_purchase_date=last_purchase_date,
             top_products=[TopProductRow(item_id=r[0], total_quantity=r[1], total_amount=r[2]) for r in top_rows],
         )
+
+
+_SEGMENT_LABELS_FA = {
+    "NEW": "مشتریِ جدید", "ACTIVE": "فعال", "LOYAL": "وفادار", "LOW_PURCHASE": "کم‌خرید",
+    "AT_RISK": "در معرضِ ریزش", "INACTIVE": "غیرفعال", "DEBTOR": "بدهکار", "VIP": "VIP",
+}
+
+
+@dataclass
+class CustomerSegmentInfo:
+    segment_code: str
+    sales_this_month: decimal.Decimal
+    sales_last_3_months: decimal.Decimal
+    order_count_last_12_months: int
+    avg_order_value: decimal.Decimal
+    avg_days_between_orders: decimal.Decimal | None
+    balance_amount: decimal.Decimal
+    balance_nature: str
+    return_percent: decimal.Decimal
+    estimated_profit_last_3_months: decimal.Decimal
+
+
+def compute_customer_segment(company_id: int, customer_detail_account_id: int) -> CustomerSegmentInfo:
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۳ -- امتیازدهی/
+    سگمنت‌بندی): همیشه محاسبه‌شده از دادهٔ واقعیِ فروش/دریافت -- هیچ
+    فیلدِ ذخیره‌شده‌ای ندارد که بتواند با واقعیت ناهم‌گام شود. آستانه‌ها
+    (۳۰/۹۰/۱۸۰ روز، ۱۰ سفارش برایِ «وفادار») تصمیمِ ابتداییِ معقول‌اند --
+    اگر شرکت آستانه‌یِ دیگری بخواهد، تنظیم‌پذیر شدنشان کارِ آینده است."""
+    today = datetime.date.today()
+    month_start = today.replace(day=1)
+    d90 = today - datetime.timedelta(days=90)
+    d365 = today - datetime.timedelta(days=365)
+    with new_session() as session:
+        base_filter = (
+            CommercialDocument.company_id == company_id,
+            CommercialDocument.counterparty_detail_account_id == customer_detail_account_id,
+            CommercialDocument.document_type_code == "SALES_INVOICE",
+            CommercialDocument.status_code == "POSTED",
+        )
+        sales_this_month = session.scalar(
+            select(func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
+                *base_filter, CommercialDocument.document_date >= month_start
+            )
+        )
+        sales_last_3_months = session.scalar(
+            select(func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
+                *base_filter, CommercialDocument.document_date >= d90
+            )
+        )
+        year_rows = session.execute(
+            select(CommercialDocument.document_date, CommercialDocument.total_amount).where(
+                *base_filter, CommercialDocument.document_date >= d365
+            ).order_by(CommercialDocument.document_date)
+        ).all()
+        first_order_date = session.scalar(
+            select(func.min(CommercialDocument.document_date)).where(*base_filter)
+        )
+        last_order_date = session.scalar(
+            select(func.max(CommercialDocument.document_date)).where(*base_filter)
+        )
+        returned_amount = session.scalar(
+            select(func.coalesce(func.sum(CommercialDocument.total_amount), 0)).where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.counterparty_detail_account_id == customer_detail_account_id,
+                CommercialDocument.document_type_code == "SALES_RETURN",
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocument.document_date >= d365,
+            )
+        )
+        last_3m_lines = session.execute(
+            select(CommercialDocumentLine.item_id, CommercialDocumentLine.quantity_base, CommercialDocumentLine.line_total)
+            .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+            .where(*base_filter, CommercialDocument.document_date >= d90)
+        ).all()
+
+    order_count = len(year_rows)
+    avg_order_value = (sum((r[1] for r in year_rows), decimal.Decimal(0)) / order_count) if order_count else decimal.Decimal(0)
+    avg_days_between_orders = None
+    if order_count >= 2:
+        dates = [r[0] for r in year_rows]
+        gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+        avg_days_between_orders = decimal.Decimal(sum(gaps)) / len(gaps)
+    gross_sales_last_365 = sum((r[1] for r in year_rows), decimal.Decimal(0))
+    return_percent = (returned_amount / gross_sales_last_365 * 100) if gross_sales_last_365 else decimal.Decimal(0)
+
+    # طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۸ -- «سود» در
+    # داشبوردِ بالایِ فرم): برآوردِ سودِ ناخالص با آخرین بهایِ شناخته‌شدهٔ
+    # هر کالا -- تقریبی است، نه سودِ دقیقِ حسابداری‌شده در لحظه‌یِ همان
+    # فروش (که نیازمندِ اتصال به آرتیکل‌هایِ واقعیِ COGSِ دفترِ روزنامه
+    # است، فراتر از این گزارشِ خلاصه).
+    _cost_cache: dict[int, decimal.Decimal] = {}
+    estimated_profit_last_3_months = decimal.Decimal(0)
+    for item_id, qty, line_total in last_3m_lines:
+        if item_id not in _cost_cache:
+            cost = inv_engine_service.get_last_known_unit_cost(item_id)
+            _cost_cache[item_id] = cost if cost is not None else decimal.Decimal(0)
+        estimated_profit_last_3_months += line_total - (_cost_cache[item_id] * qty)
+
+    balance_amount, balance_nature = treasury_service.get_counterparty_balance(company_id, customer_detail_account_id)
+    is_debtor = balance_nature == "بدهکار" and balance_amount > 0
+
+    if first_order_date is None:
+        segment_code = "NEW"
+    elif is_debtor and balance_amount > (avg_order_value * 3 if avg_order_value else decimal.Decimal(0)):
+        # طبقِ اصلِ صریح («اگر اعتبار ۵۰ میلیون بوده، بدهی ۸۰ میلیون شده،
+        # آیا نباید تاثیری داشته باشه؟» -- sales_assistant.py، همان روح):
+        # بدهیِ نامتناسب با حجمِ خریدِ عادی، مهم‌تر از سگمنت‌هایِ رفتاری است.
+        segment_code = "DEBTOR"
+    elif last_order_date is not None and (today - first_order_date).days <= 30:
+        segment_code = "NEW"
+    elif last_order_date is not None and (today - last_order_date).days <= 30 and order_count >= 10:
+        segment_code = "LOYAL"
+    elif last_order_date is not None and (today - last_order_date).days <= 30:
+        segment_code = "ACTIVE"
+    elif last_order_date is not None and (today - last_order_date).days <= 90:
+        segment_code = "AT_RISK" if order_count >= 3 else "LOW_PURCHASE"
+    elif last_order_date is not None and (today - last_order_date).days <= 180:
+        segment_code = "AT_RISK"
+    else:
+        segment_code = "INACTIVE"
+
+    return CustomerSegmentInfo(
+        segment_code=segment_code, sales_this_month=sales_this_month or 0, sales_last_3_months=sales_last_3_months or 0,
+        order_count_last_12_months=order_count, avg_order_value=avg_order_value,
+        avg_days_between_orders=avg_days_between_orders, balance_amount=balance_amount, balance_nature=balance_nature,
+        return_percent=return_percent, estimated_profit_last_3_months=estimated_profit_last_3_months,
+    )
 
 
 def list_documents(

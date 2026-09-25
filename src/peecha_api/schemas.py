@@ -234,6 +234,22 @@ class CustomerMerchandisingRequest(BaseModel):
     layout_status_code: str | None = None  # EXCELLENT|GOOD|AVERAGE|POOR
 
 
+class CustomerActivityRequest(BaseModel):
+    """طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۱ -- CRMِ کامل:
+    شکایت/جلسه/فرصتِ فروش/وظیفه)."""
+
+    activity_type_code: str  # COMPLAINT|MEETING|OPPORTUNITY|TASK
+    subject: str
+    description: str | None = None
+    due_date: datetime.date | None = None
+    estimated_value: decimal.Decimal | None = None
+    assigned_to_user_id: int | None = None
+
+
+class CustomerActivityCloseRequest(BaseModel):
+    status_code: str  # RESOLVED|DONE|WON|LOST|CANCELLED
+
+
 class CustomerRejectRequest(BaseModel):
     reason: str
 

@@ -759,6 +759,29 @@ class CustomerGuarantee(Base):
     released_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
 
 
+class CustomerActivity(Base):
+    """CRMِ کامل: شکایت/جلسه/فرصتِ فروش/وظیفه (R219، بخشِ ۱۱) -- یک
+    جدولِ عمومیِ فعالیت، نه چهار جدولِ موازی."""
+
+    __tablename__ = "customer_activities"
+    __table_args__ = ({"schema": "comm"},)
+
+    activity_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    activity_type_code: Mapped[str] = mapped_column(String(15))
+    subject: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(1000))
+    status_code: Mapped[str] = mapped_column(String(15), default="OPEN")
+    due_date: Mapped[datetime.date | None]
+    estimated_value: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    assigned_to_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    resolved_at: Mapped[datetime.datetime | None]
+    resolved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+
+
 class CustomerMerchandising(Base):
     """اطلاعاتِ فروشگاهی/Merchandising (R219، بخشِ ۱۰) -- فقط برایِ
     مشتریانِ نوعِ فروشگاه معنا دارد؛ ماهولِ جداگانه از customer_profiles."""

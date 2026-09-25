@@ -308,6 +308,106 @@ export interface CustomerDetailResponse {
   recent_documents: CustomerRecentDocument[];
 }
 
+/** طبقِ بازبینیِ ساختارِ «تعریفِ مشتری» (R219، بخشِ ۱۲ -- Customer 360). */
+export interface CustomerGuaranteeRow {
+  guarantee_id: number;
+  guarantee_type_code: "CHECK" | "PROMISSORY_NOTE" | "BANK_GUARANTEE" | "GUARANTOR" | "COLLATERAL";
+  status_code: "ACTIVE" | "RELEASED" | "CALLED" | "EXPIRED";
+  amount: string;
+  valid_until_date: string | null;
+  bank_id: number | null;
+  check_no: string | null;
+  check_due_date: string | null;
+  description: string | null;
+  created_at: string;
+}
+
+export interface CustomerContractRow {
+  contract_id: number;
+  contract_type_code: string;
+  contract_category_code: "STANDARD" | "AGENCY" | "ORGANIZATIONAL";
+  item_id: number | null;
+  committed_quantity: string | null;
+  consumed_quantity: string;
+  committed_amount: string | null;
+  consumed_amount: string;
+  contract_price: string | null;
+  valid_from: string;
+  valid_to: string | null;
+  status_code: string;
+  commitments_text: string | null;
+}
+
+export interface CustomerActivityRow {
+  activity_id: number;
+  activity_type_code: "COMPLAINT" | "MEETING" | "OPPORTUNITY" | "TASK";
+  subject: string;
+  description: string | null;
+  status_code: string;
+  due_date: string | null;
+  estimated_value: string | null;
+  assigned_to_user_id: number | null;
+  created_at: string;
+}
+
+export interface CustomerMerchandisingInfo {
+  store_area_sqm: string | null;
+  checkout_count: number | null;
+  fridge_count: number | null;
+  shelf_count: number | null;
+  available_brands: string | null;
+  competitor_brands: string | null;
+  layout_status_code: string | null;
+}
+
+export interface CustomerCallLogRow {
+  call_log_id: number;
+  phone_number: string;
+  started_at: string;
+  was_successful: boolean;
+  note: string | null;
+}
+
+export interface CustomerSalesNoteRow {
+  note_id: number;
+  note_text: string;
+  created_at: string;
+}
+
+export interface CustomerVisitSummaryRow {
+  customer_visit_id: number;
+  status_code: string;
+  checked_in_at: string;
+  checked_out_at: string | null;
+  is_outside_geofence: boolean | null;
+}
+
+export interface CustomerSegmentInfo {
+  segment_code: "NEW" | "ACTIVE" | "LOYAL" | "LOW_PURCHASE" | "AT_RISK" | "INACTIVE" | "DEBTOR" | "VIP";
+  sales_this_month: string;
+  sales_last_3_months: string;
+  order_count_last_12_months: number;
+  avg_order_value: string;
+  avg_days_between_orders: string | null;
+  balance_amount: string;
+  balance_nature: "بدهکار" | "بستانکار";
+  return_percent: string;
+  estimated_profit_last_3_months: string;
+}
+
+export interface Customer360Response {
+  detail: CustomerDetailResponse;
+  guarantees: CustomerGuaranteeRow[];
+  contracts: CustomerContractRow[];
+  activities: CustomerActivityRow[];
+  addresses: PartyAddressRow[];
+  merchandising: CustomerMerchandisingInfo | null;
+  calls: CustomerCallLogRow[];
+  notes: CustomerSalesNoteRow[];
+  recent_visits: CustomerVisitSummaryRow[];
+  segment: CustomerSegmentInfo;
+}
+
 /** طبقِ درخواستِ صریحِ کاربر (Customer Acquisition): code عمداً اختیاری
  * است -- اگر ویزیتور آفلاین باشد نمی‌تواند کدِ بعدیِ شرکت را بداند؛
  * سرور خودش هنگامِ همگام‌سازیِ واقعی کدِ بعدی را اختصاص می‌دهد. */
