@@ -81,6 +81,11 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.pos_default_price_list_combo, "فهرستِ قیمتی که در فروشِ حضوری برایِ این کاربر پیش‌فرض انتخاب می‌شود."),
             (self.pos_default_customer_combo, "مشتری‌ای که در فروشِ حضوری برایِ این کاربر پیش‌فرض انتخاب می‌شود."),
             (self.voip_extension_field, "شماره‌یِ داخلیِ این کاربر در سیستمِ سانترال/وویپ -- برایِ تماسِ مستقیم از داخلِ برنامه."),
+            (
+                self.mobile_channel_type_combo,
+                "این ویزیتور در اپِ موبایل فقط پخشِ گرم (فاکتورِ آنی) یا فقط پخشِ سرد (صرفاً سفارش‌گیری) می‌بیند -- "
+                "بدونِ تعیینِ این مقدار، اپِ موبایلِ او قابلِ‌استفاده نیست.",
+            ),
         ])
 
     def _build_list_panel(self) -> QWidget:
@@ -182,7 +187,23 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("voip_extension", "داخلیِ سانترال", self.voip_extension_field, span=1),
         ])
         layout.addWidget(self.voip_grid)
-        self.register_field_grids("users", [self.basic_grid, self.pos_grid, self.voip_grid])
+
+        # طبقِ درخواستِ صریح («تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم»):
+        # اپِ موبایل قبلاً برایِ همه‌یِ ویزیتورها بدونِ استثنا فقط مسیرِ
+        # پخشِ گرم را نشان می‌داد -- این ترکیب مشخص می‌کند این کاربر در
+        # موبایل کدام مسیر را ببیند (برایِ شرکتِ فعلاً انتخاب‌شده).
+        mobile_title = QLabel("اپِ موبایل — برایِ شرکتِ فعلی")
+        mobile_title.setObjectName("sectionTitle")
+        layout.addWidget(mobile_title)
+        self.mobile_channel_type_combo = QComboBox()
+        self.mobile_channel_type_combo.addItem("(تعیین نشده)", None)
+        self.mobile_channel_type_combo.addItem("پخشِ گرم (فاکتورِ آنی)", "VAN_SALES")
+        self.mobile_channel_type_combo.addItem("پخشِ سرد (فقط سفارش‌گیری)", "PRE_SALES")
+        self.mobile_grid = FieldGrid([
+            FieldSpec("mobile_channel_type", "نوعِ کانالِ موبایل", self.mobile_channel_type_combo, span=1),
+        ])
+        layout.addWidget(self.mobile_grid)
+        self.register_field_grids("users", [self.basic_grid, self.pos_grid, self.voip_grid, self.mobile_grid])
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
@@ -304,6 +325,13 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.voip_extension_field.setText(extension or "")
         self.voip_grid.setEnabled(current_company_id is not None and current_company_id in user.company_ids)
 
+        mobile_channel_type = (
+            users_service.get_mobile_channel_type(user.user_id, current_company_id) if current_company_id is not None else None
+        )
+        index = self.mobile_channel_type_combo.findData(mobile_channel_type)
+        self.mobile_channel_type_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.mobile_grid.setEnabled(current_company_id is not None and current_company_id in user.company_ids)
+
     def _reset_form(self) -> None:
         self._editing_id = None
         self.form_title.setText("کاربرِ جدید")
@@ -321,6 +349,8 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.pos_default_customer_combo.setCurrentIndex(0)
         self.voip_extension_field.clear()
         self.voip_grid.setEnabled(False)
+        self.mobile_channel_type_combo.setCurrentIndex(0)
+        self.mobile_grid.setEnabled(False)
         self._rebuild_company_widgets(set())
         self.table.clearSelection()
 
@@ -391,5 +421,8 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             )
             if current_company_id in company_ids:
                 users_service.set_voip_extension(saved_user_id, current_company_id, self.voip_extension_field.text())
+                users_service.set_mobile_channel_type(
+                    saved_user_id, current_company_id, self.mobile_channel_type_combo.currentData()
+                )
 
         self.refresh()

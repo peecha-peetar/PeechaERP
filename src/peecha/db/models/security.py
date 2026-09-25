@@ -58,6 +58,11 @@ class UserCompany(Base):
     # در سانترالِ همین شرکت -- چون سانترال (و درنتیجه شماره‌یِ داخلی)
     # می‌تواند بینِ شرکت‌ها فرق کند، نه رویِ خودِ sec.users.
     voip_extension: Mapped[str | None] = mapped_column(String(20))
+    # طبقِ درخواستِ صریح («تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم»): نوعِ
+    # کانالِ ثابتِ اپِ موبایلِ این کاربر برایِ همین شرکت -- "VAN_SALES"
+    # (پخشِ گرم/فاکتورِ آنی) یا "PRE_SALES" (پخشِ سرد/فقط سفارش‌گیری)؛
+    # None یعنی هنوز تنظیم نشده (اپِ موبایل باید پیامِ راهنما نشان دهد).
+    mobile_channel_type_code: Mapped[str | None] = mapped_column(String(15))
 
 
 class Module(Base):

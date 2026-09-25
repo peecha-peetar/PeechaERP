@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 
 from peecha.db.base import new_session
 from peecha.db.models.core import Company
 from peecha.db.models.security import UserCompany
 from peecha.services import auth as auth_service
+from peecha.services import users as users_service
 from peecha_api import security
+from peecha_api.deps import AuthContext, get_current_context
 from peecha_api.rate_limit import enforce_login_rate_limit
 from peecha_api.schemas import (
     AccessTokenResponse,
@@ -69,3 +71,13 @@ def logout(payload: LogoutRequest) -> None:
         return
     device_token_id, _user_id, company_id = resolved
     security.revoke_device_token(device_token_id, company_id)
+
+
+@router.get("/me")
+def me(ctx: AuthContext = Depends(get_current_context)) -> dict:
+    """طبقِ درخواستِ صریح («تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم»): چون
+    بازکردنِ روزانهٔ اپ لاگینِ دوباره نمی‌زند (توکنِ ذخیره‌شده معتبر
+    می‌ماند)، این مقدار نباید فقط در پاسخِ /auth/login باشد -- اپِ موبایل
+    آن را هر بار با یک درخواستِ جدا (هم‌الگو با /pricing/channels) پس از
+    ورود می‌خواند."""
+    return {"mobile_channel_type_code": users_service.get_mobile_channel_type(ctx.user_id, ctx.company_id)}

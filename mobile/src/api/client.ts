@@ -8,6 +8,7 @@ import {
   DeliveryConfirmationResponse,
   LoginResponse,
   ManagerDashboardResponse,
+  MeResponse,
   NotificationRow,
   TodayCollectionRow,
   OrderCreateRequest,
@@ -116,6 +117,14 @@ export class ApiClient {
     });
     await this.tokenStore.setTokens(data.access_token, data.refresh_token);
     return data;
+  }
+
+  /** طبقِ درخواستِ صریحِ کاربر («تعیینِ کانالِ مجزا برایِ پخشِ سرد و
+   * گرم»): بازکردنِ روزانهٔ اپ لاگینِ دوباره نمی‌زند (توکنِ ذخیره‌شده
+   * معتبر می‌ماند)، پس این مقدار باید هر بار جدا خوانده شود، نه فقط از
+   * پاسخِ login. */
+  async getMe(): Promise<MeResponse> {
+    return this.request<MeResponse>("/auth/me");
   }
 
   async logout(): Promise<void> {

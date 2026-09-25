@@ -101,19 +101,25 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   const [userFullName, setUserFullName] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("IDLE");
   const [unreadCount, setUnreadCount] = useState(0);
+  // طبقِ درخواستِ صریحِ کاربر («تعیینِ کانالِ مجزا برایِ پخشِ سرد و
+  // گرم»): قبلاً اپ برایِ همه‌یِ ویزیتورها بدونِ استثنا فقط مسیرِ پخشِ
+  // گرم را نشان می‌داد -- این مقدار از /auth/me می‌آید و مشخص می‌کند
+  // این کاربر کدام مسیر را ببیند. undefined یعنی هنوز نخوانده‌ایم،
+  // null یعنی مدیر هنوز از دسکتاپ تنظیم نکرده (نه یک سوییچِ دستی در گوشی).
+  const [mobileChannelType, setMobileChannelType] = useState<"VAN_SALES" | "PRE_SALES" | null | undefined>(undefined);
   // طبقِ باگِ واقعیِ کشف‌شده (R196): سفارش نباید یک channel_codeِ
   // هاردکدشده/نامعتبر بفرستد -- undefined یعنی «هنوز بارگذاری‌نشده»،
-  // null یعنی «بارگذاری شد ولی هیچ کانالِ VAN_SALES‌ای در این شرکت
+  // null یعنی «بارگذاری شد ولی هیچ کانالی از این نوع در این شرکت
   // تعریف نشده».
-  const [vanSalesChannelCode, setVanSalesChannelCode] = useState<string | null | undefined>(undefined);
+  const [orderChannelCode, setOrderChannelCode] = useState<string | null | undefined>(undefined);
   // طبقِ باگِ واقعیِ دومِ کشف‌شده (R198، هم‌الگو با بالا): warehouse_id=1
   // در بسیاری از شرکت‌ها اصلاً وجود ندارد.
   const [defaultWarehouseId, setDefaultWarehouseId] = useState<number | null | undefined>(undefined);
   // طبقِ درخواستِ صریحِ کاربر («در تنظیماتِ موبایل مرکزِ هزینه/پروژه
-  // تعیین شود»): پیش‌فرضِ ثابتِ همان کانالِ VAN_SALES -- null یعنی
-  // تنظیم نشده (بدونِ مرکزِ هزینه/پروژه فرستاده می‌شود، هم‌مثلِ قبل).
-  const [vanSalesCostCenterId, setVanSalesCostCenterId] = useState<number | null | undefined>(undefined);
-  const [vanSalesProjectId, setVanSalesProjectId] = useState<number | null | undefined>(undefined);
+  // تعیین شود»): پیش‌فرضِ ثابتِ همان کانال -- null یعنی تنظیم نشده
+  // (بدونِ مرکزِ هزینه/پروژه فرستاده می‌شود، هم‌مثلِ قبل).
+  const [orderCostCenterId, setOrderCostCenterId] = useState<number | null | undefined>(undefined);
+  const [orderProjectId, setOrderProjectId] = useState<number | null | undefined>(undefined);
 
   useEffect(() => {
     services.localCache.getPullResponse().then((cached) => {
@@ -124,17 +130,25 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
   useEffect(() => {
     if (!loggedIn) return;
     services.apiClient
-      .listChannels("VAN_SALES")
+      .getMe()
+      .then((me) => setMobileChannelType(me.mobile_channel_type_code))
+      .catch(() => setMobileChannelType(null));
+  }, [loggedIn, services]);
+
+  useEffect(() => {
+    if (!loggedIn || !mobileChannelType) return;
+    services.apiClient
+      .listChannels(mobileChannelType)
       .then((channels) => {
         const channel = channels[0];
-        setVanSalesChannelCode(channel?.channel_code ?? null);
-        setVanSalesCostCenterId(channel?.default_cost_center_detail_account_id ?? null);
-        setVanSalesProjectId(channel?.default_project_detail_account_id ?? null);
+        setOrderChannelCode(channel?.channel_code ?? null);
+        setOrderCostCenterId(channel?.default_cost_center_detail_account_id ?? null);
+        setOrderProjectId(channel?.default_project_detail_account_id ?? null);
       })
       .catch(() => {
-        setVanSalesChannelCode(null);
-        setVanSalesCostCenterId(null);
-        setVanSalesProjectId(null);
+        setOrderChannelCode(null);
+        setOrderCostCenterId(null);
+        setOrderProjectId(null);
       });
     services.apiClient
       .listWarehouses()
@@ -143,7 +157,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
         setDefaultWarehouseId(chosen?.warehouse_id ?? null);
       })
       .catch(() => setDefaultWarehouseId(null));
-  }, [loggedIn, services]);
+  }, [loggedIn, mobileChannelType, services]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -267,17 +281,30 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                   واقعیِ R196/R198: قبلاً «VAN_SALES» و «۱» مستقیم
                   فرستاده می‌شدند و سند به‌خاطرِ شکستِ کلیدِ خارجی اصلاً
                   ساخته نمی‌شد -- هردو رویِ گوشیِ فیزیکیِ کاربر تایید شد).
-                  customerVisitId هم فعلاً null است: شناسه‌یِ واقعیِ ویزیت مثلِ
-                  document_id فقط بعدِ سینکِ موفقِ START_VISIT از سرور می‌آید --
-                  وصل‌کردنِ آن به تاییدِ تحویل (هم‌الگو با resolvedDocumentId در
-                  syncEngine.ts) کارِ باقی‌ماندهٔ فازِ بعد است. */}
-              {vanSalesChannelCode === undefined || defaultWarehouseId === undefined ? (
+                  مسیرِ پخشِ گرم/سرد هم دیگر هاردکد نیست (طبقِ درخواستِ
+                  صریحِ کاربر «تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم») --
+                  از /auth/me می‌آید. customerVisitId هم فعلاً null است:
+                  شناسه‌یِ واقعیِ ویزیت مثلِ document_id فقط بعدِ سینکِ موفقِ
+                  START_VISIT از سرور می‌آید -- وصل‌کردنِ آن به تاییدِ
+                  تحویل (هم‌الگو با resolvedDocumentId در syncEngine.ts)
+                  کارِ باقی‌ماندهٔ فازِ بعد است. */}
+              {mobileChannelType === undefined || orderChannelCode === undefined || defaultWarehouseId === undefined ? (
                 <InlineSpinner label="در حالِ بررسیِ تنظیماتِ سفارش..." />
-              ) : vanSalesChannelCode === null ? (
+              ) : mobileChannelType === null ? (
+                <EmptyState
+                  icon="⚠️"
+                  title="نوعِ کانالِ موبایلِ شما تنظیم نشده"
+                  description="مدیر باید ابتدا از دسکتاپ، در بخشِ کاربران، برایِ شما «پخشِ گرم» یا «پخشِ سرد» را انتخاب کند -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                />
+              ) : orderChannelCode === null ? (
                 <EmptyState
                   icon="⚠️"
                   title="کانالِ فروشِ ویزیت تعریف نشده"
-                  description="مدیر باید ابتدا از دسکتاپ، در تنظیماتِ کانال‌هایِ فروش، یک کانال از نوعِ «پخشِ گرم/VAN_SALES» بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                  description={
+                    mobileChannelType === "VAN_SALES"
+                      ? "مدیر باید ابتدا از دسکتاپ، در تنظیماتِ کانال‌هایِ فروش، یک کانال از نوعِ «پخشِ گرم/VAN_SALES» بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                      : "مدیر باید ابتدا از دسکتاپ، در تنظیماتِ کانال‌هایِ فروش، یک کانال از نوعِ «پخشِ سرد/PRE_SALES» بسازد -- بدونِ آن، سفارش قابلِ‌ثبت نیست."
+                  }
                 />
               ) : defaultWarehouseId === null ? (
                 <EmptyState
@@ -289,12 +316,12 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 <OrderScreen
                   customer={route.params.customer}
                   items={items}
-                  channelTypeCode="VAN_SALES"
-                  channelCode={vanSalesChannelCode}
+                  channelTypeCode={mobileChannelType}
+                  channelCode={orderChannelCode}
                   warehouseId={defaultWarehouseId}
                   currencyId={1}
-                  costCenterDetailAccountId={vanSalesCostCenterId ?? null}
-                  projectDetailAccountId={vanSalesProjectId ?? null}
+                  costCenterDetailAccountId={orderCostCenterId ?? null}
+                  projectDetailAccountId={orderProjectId ?? null}
                   customerVisitId={null}
                   apiClient={services.apiClient}
                   offlineQueue={services.offlineQueue}

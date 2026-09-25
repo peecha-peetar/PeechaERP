@@ -15,6 +15,13 @@ export interface RefreshResponse {
   access_token: string;
 }
 
+/** طبقِ درخواستِ صریحِ کاربر («تعیینِ کانالِ مجزا برایِ پخشِ سرد و
+ * گرم»): null یعنی مدیر هنوز این ویزیتور را تنظیم نکرده -- اپِ موبایل
+ * نباید حدس بزند. */
+export interface MeResponse {
+  mobile_channel_type_code: "VAN_SALES" | "PRE_SALES" | null;
+}
+
 export interface VisitPlanRow {
   visit_plan_id: number;
   customer_detail_account_id: number;
