@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { Customer360Response } from "../api/types";
+import { Customer360Response, CustomerStatement } from "../api/types";
 import { Button, Card, ErrorState, Input, SkeletonList, StatusBadge, useToast } from "../components";
 import { formatAmount } from "../format";
 import { formatJalaliDate, formatJalaliDateTime } from "../jalali";
@@ -97,6 +97,13 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
   const [savingActivity, setSavingActivity] = useState(false);
   const [closingActivityId, setClosingActivityId] = useState<number | null>(null);
 
+  // طبقِ گزارشِ کاربر («معینِ حساب هم در داشبوردِ مشتری باشد»): جدا از
+  // بارگذاریِ اصلیِ ۳۶۰ (که ممکن است طولانی باشد)، فقط با درخواستِ کاربر.
+  const [statement, setStatement] = useState<CustomerStatement | null>(null);
+  const [showStatement, setShowStatement] = useState(false);
+  const [loadingStatement, setLoadingStatement] = useState(false);
+  const [statementFullHistory, setStatementFullHistory] = useState(false);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -153,6 +160,24 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
       toast.show(e instanceof ApiError ? e.message : "بستنِ فعالیت ناموفق بود.", "danger");
     } finally {
       setClosingActivityId(null);
+    }
+  };
+
+  const toggleStatement = async (fullHistory: boolean) => {
+    if (showStatement && fullHistory === statementFullHistory) {
+      setShowStatement(false);
+      return;
+    }
+    setShowStatement(true);
+    setStatementFullHistory(fullHistory);
+    setLoadingStatement(true);
+    try {
+      setStatement(await apiClient.getCustomerStatement(detailAccountId, fullHistory));
+    } catch (e) {
+      toast.show(e instanceof ApiError ? e.message : "دریافتِ معینِ حساب ناموفق بود.", "danger");
+      setShowStatement(false);
+    } finally {
+      setLoadingStatement(false);
     }
   };
 
@@ -213,6 +238,59 @@ export function Customer360Screen({ apiClient, detailAccountId, onBack }: Props)
           </Text>
         ) : null}
       </View>
+
+      <SectionHeader label="معینِ حساب" count={statement?.lines.length ?? 0} />
+      <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
+        <Button
+          label={showStatement && !statementFullHistory ? "بستنِ معینِ حساب" : "معینِ حساب (۱۲ماهِ اخیر)"}
+          size="md"
+          fullWidth={false}
+          variant="secondary"
+          loading={loadingStatement && !statementFullHistory}
+          onPress={() => toggleStatement(false)}
+        />
+        <Button
+          label={showStatement && statementFullHistory ? "بستنِ معینِ حساب" : "کلِ سابقه"}
+          size="md"
+          fullWidth={false}
+          variant="ghost"
+          loading={loadingStatement && statementFullHistory}
+          onPress={() => toggleStatement(true)}
+        />
+      </View>
+      {showStatement && statement ? (
+        <>
+          <Card>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>ماندهٔ پایانی</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{statement.closing_balance_nature}</Text>
+            </View>
+            <Text style={[typography.numeric, { fontSize: 18, color: statement.closing_balance_nature === "بدهکار" ? colors.danger : colors.success }]}>
+              {formatAmount(statement.closing_balance_amount)}
+            </Text>
+          </Card>
+          {statement.lines.length === 0 ? (
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>در این بازه هیچ گردشی ثبت نشده.</Text>
+          ) : (
+            statement.lines.map((ln, index) => (
+              <Card key={index}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={[typography.body, { color: colors.textPrimary, flex: 1 }]} numberOfLines={2}>{ln.description}</Text>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>{formatJalaliDate(ln.document_date)}</Text>
+                </View>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: spacing.xs }}>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                    {Number(ln.debit) > 0 ? `بدهکار: ${formatAmount(ln.debit)}` : `بستانکار: ${formatAmount(ln.credit)}`}
+                  </Text>
+                  <Text style={[typography.numeric, { color: colors.textSecondary }]}>
+                    مانده: {formatAmount(String(Number(ln.running_debit) - Number(ln.running_credit)))}
+                  </Text>
+                </View>
+              </Card>
+            ))
+          )}
+        </>
+      ) : null}
 
       <SectionHeader label="ضمانت‌ها" count={guarantees.length} />
       {guarantees.length === 0 ? (

@@ -382,6 +382,24 @@ export interface CustomerVisitSummaryRow {
   is_outside_geofence: boolean | null;
 }
 
+export interface CustomerStatementLine {
+  document_date: string;
+  document_no: number | null;
+  description: string;
+  debit: string;
+  credit: string;
+  running_debit: string;
+  running_credit: string;
+}
+
+export interface CustomerStatement {
+  opening_debit: string;
+  opening_credit: string;
+  closing_balance_amount: string;
+  closing_balance_nature: "بدهکار" | "بستانکار";
+  lines: CustomerStatementLine[];
+}
+
 export interface CustomerSegmentInfo {
   segment_code: "NEW" | "ACTIVE" | "LOYAL" | "LOW_PURCHASE" | "AT_RISK" | "INACTIVE" | "DEBTOR" | "VIP";
   sales_this_month: string;
@@ -579,11 +597,39 @@ export interface RouteRow {
   name: string | null;
 }
 
+export interface CartableTaskRow {
+  cartable_item_id: number;
+  form_code: string;
+  form_label: string;
+  description: string | null;
+  submitted_by_name: string | null;
+  submitted_at: string | null;
+  current_step_no: number;
+  total_steps: number;
+}
+
+export interface PendingCustomerRow {
+  customer_detail_account_id: number;
+  code: string | null;
+  name: string | null;
+  submitted_by_user_id: number | null;
+  submitted_at: string | null;
+}
+
+export interface ApprovalsResponse {
+  cartable_tasks: CartableTaskRow[];
+  pending_customers: PendingCustomerRow[];
+}
+
 export interface DebtorRow {
   detail_account_id: number;
   code: string;
   name: string;
   balance_amount: string;
+  // طبقِ رفعِ گزارشِ گمراه‌کننده‌یِ Aging: null یعنی هیچ فاکتورِ
+  // سررسیددارِ بازی نیست (نامشخص)، نه «در مهلت».
+  earliest_due_date: string | null;
+  is_overdue: boolean;
 }
 
 export interface TodayCollectionRow {

@@ -195,5 +195,39 @@ check({l["method_code"] for l in pdata["settlement_lines"]} == {"CASH", "CHECK"}
 check(len(pdata["checks"]) == 2 and decimal.Decimal(pdata["remaining_amount"]) == 7000, f"چک‌ها و مانده در چاپ (got {pdata['checks']}, {pdata['remaining_amount']})")
 check(client.get("/orders/99999/print-data", headers=H).status_code == 404, "سندِ نامعتبر ۴۰۴")
 
+# ---------- ۵. باگِ واقعیِ رفع‌شده («چاپِ فاکتور کار نمی‌کند»): چکِ
+# مجوزِ print-data باید بر اساسِ نوعِ سند باشد (COLD برایِ SALES_ORDER،
+# HOT برایِ SALES_INVOICE)، نه همیشه HOT -- وگرنه کاربری که فقط دسترسیِ
+# پخشِ سرد دارد هرگز نمی‌توانست سفارشِ پخشِ سردِ دیگری را چاپ کند.
+from peecha.services import roles as roles_service
+from peecha.services import users as users_service
+
+cold_form_id = next(f.form_id for f in roles_service.list_forms() if f.code == "cold_distribution")
+hot_form_id = next(f.form_id for f in roles_service.list_forms() if f.code == "commercial_distribution_hub")
+
+rep_cold = users_service.create_user("repcold", "ویزیتورِ سرد", "secret123", None, lang_id, False, [company_id], company_id)
+role_cold = roles_service.create_role(company_id, "COLD_VIEWER", None)
+roles_service.set_role_permission(role_cold.role_id, cold_form_id, "VIEW", True)
+roles_service.set_user_role(rep_cold.user_id, role_cold.role_id, company_id, True)
+
+rep_hot = users_service.create_user("rephot", "ویزیتورِ گرم", "secret123", None, lang_id, False, [company_id], company_id)
+role_hot = roles_service.create_role(company_id, "HOT_VIEWER", None)
+roles_service.set_role_permission(role_hot.role_id, hot_form_id, "VIEW", True)
+roles_service.set_user_role(rep_hot.user_id, role_hot.role_id, company_id, True)
+
+token_cold = client.post("/auth/login", json={"username": "repcold", "password": "secret123"}).json()["access_token"]
+H_cold = {"Authorization": f"Bearer {token_cold}"}
+token_hot = client.post("/auth/login", json={"username": "rephot", "password": "secret123"}).json()["access_token"]
+H_hot = {"Authorization": f"Bearer {token_hot}"}
+
+check(client.get(f"/orders/{cold_doc}/print-data", headers=H_cold).status_code == 200,
+      "کاربرِ فقط-پخشِ‌سرد می‌تواند سفارشِ پخشِ‌سردِ دیگری را چاپ کند (باگِ اصلی)")
+check(client.get(f"/orders/{paid_doc}/print-data", headers=H_cold).status_code == 404,
+      "همان کاربر نمی‌تواند فاکتورِ پخشِ‌گرم را چاپ کند (بدونِ مجوزِ HOT)")
+check(client.get(f"/orders/{paid_doc}/print-data", headers=H_hot).status_code == 200,
+      "کاربرِ فقط-پخشِ‌گرم می‌تواند فاکتورِ پخشِ‌گرمِ دیگری را چاپ کند")
+check(client.get(f"/orders/{cold_doc}/print-data", headers=H_hot).status_code == 404,
+      "همان کاربر نمی‌تواند سفارشِ پخشِ‌سرد را چاپ کند (بدونِ مجوزِ COLD)")
+
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

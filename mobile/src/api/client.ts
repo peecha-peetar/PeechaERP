@@ -1,10 +1,12 @@
 import { TokenStore } from "../storage/tokenStore";
 import {
+  ApprovalsResponse,
   ChannelRow,
   CustomerActivityRequest,
   CustomerActivityRow,
   CustomerApprovalResponse,
   CustomerSegmentInfo,
+  CustomerStatement,
   CustomerCreateRequest,
   CustomerCreateResponse,
   Customer360Response,
@@ -200,6 +202,12 @@ export class ApiClient {
     return this.request<CustomerSegmentInfo>(`/customers/${detailAccountId}/segment`);
   }
 
+  /** طبقِ گزارشِ کاربر («معینِ حساب هم در داشبوردِ مشتری باشد»): همان
+   * دفترِ معینِ ازپیش‌موجودِ دسکتاپ، فقط برایِ همین مشتری. */
+  async getCustomerStatement(detailAccountId: number, fullHistory = false): Promise<CustomerStatement> {
+    return this.request<CustomerStatement>(`/customers/${detailAccountId}/statement${fullHistory ? "?full_history=true" : ""}`);
+  }
+
   /** طبقِ بازخوردِ کاربر رویِ R220 («CRM کجاست؟»): فرمِ ثبت/بستنِ فعالیت
    * که پیش‌تر فقط API/سرویس داشت، حالا از رویِ Customer360Screen قابلِ
    * استفاده است. */
@@ -254,6 +262,21 @@ export class ApiClient {
     });
   }
 
+  /** طبقِ گزارشِ آدیت («/approvals در بک‌اند آماده بود ولی هیچ صفحه‌یِ
+   * موبایلی صدایش نمی‌زد»): صندوقِ تاییدهایِ کارتابلِ عمومی (اسنادی که
+   * برایِ فرم‌شان گردشِ کارِ تایید فعال است) + مشتریانِ درانتظار. */
+  async listApprovals(): Promise<ApprovalsResponse> {
+    return this.request<ApprovalsResponse>("/approvals");
+  }
+
+  async approveCartableItem(cartableItemId: number, comment = ""): Promise<void> {
+    await this.request<void>(`/approvals/cartable/${cartableItemId}/approve`, { method: "POST", body: { comment } });
+  }
+
+  async rejectCartableItem(cartableItemId: number, comment = ""): Promise<void> {
+    await this.request<void>(`/approvals/cartable/${cartableItemId}/reject`, { method: "POST", body: { comment } });
+  }
+
   async listCustomerAddresses(detailAccountId: number): Promise<PartyAddressRow[]> {
     return this.request<PartyAddressRow[]>(`/customers/${detailAccountId}/addresses`);
   }
@@ -305,10 +328,12 @@ export class ApiClient {
     return this.request<StartVisitResponse>("/visits/start", { method: "POST", body: payload, idempotencyKey });
   }
 
-  async completeVisit(customerVisitId: number, notes?: string, photoBase64?: string | null): Promise<void> {
+  async completeVisit(
+    customerVisitId: number, notes?: string, photoBase64?: string | null, signatureBase64?: string | null,
+  ): Promise<void> {
     await this.request<void>(`/visits/${customerVisitId}/complete`, {
       method: "POST",
-      body: { notes: notes ?? null, photo_base64: photoBase64 ?? null },
+      body: { notes: notes ?? null, photo_base64: photoBase64 ?? null, signature_base64: signatureBase64 ?? null },
     });
   }
 

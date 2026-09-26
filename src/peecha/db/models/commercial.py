@@ -1752,8 +1752,11 @@ class CustomerVisit(Base):
     is_outside_geofence: Mapped[bool | None]
     notes: Mapped[str | None] = mapped_column(String(500))
     # طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
-    # سفارش باشه»): اختیاری، برایِ هر دو نوعِ پخش.
-    photo_base64: Mapped[str | None] = mapped_column(Text)
+    # سفارش باشه»): اختیاری، برایِ هر دو نوعِ پخش. طبقِ رفعِ ناسازگاریِ
+    # ذخیره‌سازی (R222): فایل رویِ دیسک است (هم‌الگو با
+    # delivery_confirmations)، این‌جا فقط مسیرش ذخیره می‌شود.
+    photo_storage_key: Mapped[str | None] = mapped_column(Text)
+    signature_storage_key: Mapped[str | None] = mapped_column(Text)
 
 
 class DeliveryConfirmation(Base):

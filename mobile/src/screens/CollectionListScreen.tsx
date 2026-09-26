@@ -4,6 +4,7 @@ import { ApiClient, ApiError } from "../api/client";
 import { DebtorRow, TodayCollectionRow } from "../api/types";
 import { CustomerCard, EmptyState, ErrorState, PaymentItem, SkeletonList } from "../components";
 import { formatAmount } from "../format";
+import { formatJalaliDate } from "../jalali";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface Props {
@@ -16,8 +17,8 @@ interface Props {
  * ویزیت) را نشان می‌دهد. زدنِ هر بدهکار به جزئیاتِ مشتری می‌رود که
  * دکمه‌یِ «ثبتِ وصول» همان‌جاست -- بدونِ تکرارِ فرمِ وصول در این صفحه.
  *
- * محدودیتِ شناخته‌شده: تفکیکِ «عقب‌افتاده» از «هنوز در مهلت» نیست
- * (نیازمندِ Agingِ واقعی بر اساسِ سررسیدِ هر فاکتور -- کارِ جداگانه). */
+ * طبقِ رفعِ گزارشِ گمراه‌کننده‌یِ کاربر: «عقب‌افتاده» حالا از رویِ
+ * earliest_due_dateِ واقعیِ سرور (Agingِ فاکتورهایِ تسویه‌نشده) است. */
 export function CollectionListScreen({ apiClient, onOpenCustomer }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [debtors, setDebtors] = useState<DebtorRow[]>([]);
@@ -100,9 +101,12 @@ export function CollectionListScreen({ apiClient, onOpenCustomer }: Props) {
               <CustomerCard
                 key={d.detail_account_id}
                 code={d.code}
+                distanceLabel={d.earliest_due_date ? `سررسید: ${formatJalaliDate(d.earliest_due_date)}` : undefined}
                 name={d.name}
                 balanceLabel={formatAmount(d.balance_amount)}
-                isOverdue
+                isOverdue={d.is_overdue}
+                statusCode={d.is_overdue ? "OVERDUE" : d.earliest_due_date ? "ACTIVE" : "PENDING"}
+                statusLabel={d.is_overdue ? "عقب‌افتاده" : d.earliest_due_date ? "در مهلت" : "نامشخص"}
                 onPress={() => onOpenCustomer(d.detail_account_id)}
               />
             ))}

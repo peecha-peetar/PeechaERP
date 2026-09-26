@@ -41,6 +41,10 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
   // ویزیت را تکمیل کند.
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
+  // طبقِ گزارشِ کاربر («امضایِ ویزیت کجاست؟»): تا امروز فقط تاییدِ
+  // تحویلِ پخشِ گرم امضا داشت؛ ویزیتِ عمومی (هردو نوعِ پخش) نداشت.
+  const [signatureBase64, setSignatureBase64] = useState<string | null>(null);
+  const [capturingSignature, setCapturingSignature] = useState(false);
 
   const capturePhoto = async () => {
     setCapturingPhoto(true);
@@ -49,6 +53,16 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
       setPhotoBase64(photo);
     } finally {
       setCapturingPhoto(false);
+    }
+  };
+
+  const captureSignature = async () => {
+    setCapturingSignature(true);
+    try {
+      const signature = await captureProvider.captureSignature();
+      setSignatureBase64(signature);
+    } finally {
+      setCapturingSignature(false);
     }
   };
 
@@ -77,7 +91,7 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
     if (!startActionKey) return;
     await offlineQueue.enqueue({
       type: "COMPLETE_VISIT",
-      payload: { startActionKey, notes: notes.trim() || undefined, photoBase64 },
+      payload: { startActionKey, notes: notes.trim() || undefined, photoBase64, signatureBase64 },
     });
     setPhase("DONE");
     onDone();
@@ -125,6 +139,12 @@ export function VisitDetailScreen({ customer, visitPlan, offlineQueue, locationP
                 variant="secondary"
                 onPress={capturePhoto}
                 loading={capturingPhoto}
+              />
+              <Button
+                label={signatureBase64 ? "امضا ثبت شد (دوباره بگیر)" : "ثبتِ امضا (اختیاری)"}
+                variant="secondary"
+                onPress={captureSignature}
+                loading={capturingSignature}
               />
               <Input label="یادداشت (اختیاری)" value={notes} onChangeText={setNotes} placeholder="مثلاً: قفسه‌چینیِ محصولات انجام شد" />
               <Button label="تکمیلِ ویزیت" onPress={complete} />

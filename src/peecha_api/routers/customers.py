@@ -12,6 +12,7 @@ CREATE/EDIT رویِ فرمِ GL_DIM به آن نقش داده شده باشد (
 from __future__ import annotations
 
 import base64
+import datetime
 import os
 import uuid
 
@@ -26,6 +27,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import notifications as notifications_service
+from peecha.services import reports as reports_service
 from peecha.services import telesales as telesales_service
 from peecha.services import treasury as treasury_service
 from peecha_api import audit_log
@@ -657,6 +659,41 @@ def get_customer_segment(detail_account_id: int, ctx: AuthContext = Depends(get_
     _ensure_customer_in_company(detail_account_id, ctx.company_id)
     segment = documents_service.compute_customer_segment(ctx.company_id, detail_account_id)
     return _segment_to_dict(segment)
+
+
+@router.get("/{detail_account_id}/statement")
+def get_customer_statement(
+    detail_account_id: int, date_from: str | None = None, date_to: str | None = None,
+    full_history: bool = False, ctx: AuthContext = Depends(get_current_context),
+) -> dict:
+    """طبقِ گزارشِ کاربر («معینِ حساب هم در داشبوردِ مشتری باشد»): همان
+    دفترِ معینِ ازپیش‌موجودِ دسکتاپ (reports.list_ledger_entries، طبقِ
+    detail_account_id) -- هیچ منطقِ حسابداریِ تازه‌ای ساخته نشده، فقط
+    از موبایل هم در دسترس شده. به‌طورِ پیش‌فرض فقط یک‌سالِ اخیر (برایِ
+    سبک‌ماندنِ پاسخ)؛ full_history=true کلِ سابقه را برمی‌گرداند."""
+    _ensure_customer_in_company(detail_account_id, ctx.company_id)
+    parsed_from = (
+        datetime.date.fromisoformat(date_from) if date_from
+        else None if full_history
+        else datetime.date.today() - datetime.timedelta(days=365)
+    )
+    parsed_to = datetime.date.fromisoformat(date_to) if date_to else None
+    opening_debit, opening_credit, lines = reports_service.list_ledger_entries(
+        ctx.company_id, parsed_from, parsed_to, detail_account_id=detail_account_id,
+    )
+    closing_amount, closing_nature = treasury_service.get_counterparty_balance(ctx.company_id, detail_account_id)
+    return {
+        "opening_debit": str(opening_debit), "opening_credit": str(opening_credit),
+        "closing_balance_amount": str(closing_amount), "closing_balance_nature": closing_nature,
+        "lines": [
+            {
+                "document_date": ln.document_date.isoformat(), "document_no": ln.temporary_no,
+                "description": ln.description, "debit": str(ln.debit), "credit": str(ln.credit),
+                "running_debit": str(ln.running_debit), "running_credit": str(ln.running_credit),
+            }
+            for ln in lines
+        ],
+    }
 
 
 @router.get("/{detail_account_id}/360")

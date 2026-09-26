@@ -198,6 +198,22 @@ def start_visit(
                 if geofence_radius is not None:
                     is_outside_geofence = distance_from_customer_m > geofence_radius
     with new_session() as session:
+        # طبقِ گزارشِ واقعیِ کاربر («جلوگیری از ویزیتِ تکراری»): همان
+        # ویزیتور نباید بتواند رویِ همان مشتری، درحالی‌که ویزیتِ قبلی‌اش
+        # هنوز IN_PROGRESS است (چک‌این‌زده ولی چک‌اوت‌نشده)، دوباره
+        # «شروعِ ویزیت» بزند -- معمولاً نتیجهٔ دوبار لمس‌کردن یا
+        # بازگشت‌به‌صفحه است، نه یک ویزیتِ واقعیِ دوم. ویزیتِ دومِ واقعی
+        # (مثلاً تحویلِ اضافه در همان روز) بعدِ چک‌اوتِ اولی مجاز است.
+        existing_in_progress = session.scalar(
+            select(CustomerVisit).where(
+                CustomerVisit.company_id == company_id,
+                CustomerVisit.customer_detail_account_id == customer_detail_account_id,
+                CustomerVisit.visitor_user_id == visitor_user_id,
+                CustomerVisit.status_code == "IN_PROGRESS",
+            )
+        )
+        if existing_in_progress is not None:
+            raise ValueError("یک ویزیتِ بازِ دیگر برایِ همین مشتری دارید -- ابتدا آن را تکمیل یا رد کنید.")
         visit = CustomerVisit(
             company_id=company_id, visit_plan_id=visit_plan_id, customer_detail_account_id=customer_detail_account_id,
             visitor_user_id=visitor_user_id, check_in_latitude=check_in_latitude, check_in_longitude=check_in_longitude,
@@ -217,7 +233,8 @@ def get_visit_geofence_status(customer_visit_id: int) -> bool | None:
 
 
 def complete_visit(
-    customer_visit_id: int, company_id: int, notes: str | None = None, photo_base64: str | None = None,
+    customer_visit_id: int, company_id: int, notes: str | None = None,
+    photo_storage_key: str | None = None, signature_storage_key: str | None = None,
 ) -> None:
     with new_session() as session:
         visit = session.get(CustomerVisit, customer_visit_id)
@@ -229,10 +246,12 @@ def complete_visit(
         visit.checked_out_at = datetime.datetime.now()
         visit.notes = notes or visit.notes
         # طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس
-        # و سفارش باشه»): اختیاری -- اگر عکسی گرفته نشده باشد، چیزی
-        # تغییر نمی‌کند.
-        if photo_base64 is not None:
-            visit.photo_base64 = photo_base64
+        # و سفارش باشه» + امضا طبقِ R222): اختیاری -- عکس/امضا قبلاً
+        # رویِ دیسک ذخیره شده (router)، این‌جا فقط مسیرش ثبت می‌شود.
+        if photo_storage_key is not None:
+            visit.photo_storage_key = photo_storage_key
+        if signature_storage_key is not None:
+            visit.signature_storage_key = signature_storage_key
         session.commit()
 
 

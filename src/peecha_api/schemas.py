@@ -46,8 +46,10 @@ class VisitStartRequest(BaseModel):
 class VisitCompleteRequest(BaseModel):
     notes: str | None = None
     # طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
-    # سفارش باشه»): اختیاری -- برایِ هر دو نوعِ پخش.
+    # سفارش باشه» + امضا طبقِ R222): اختیاری -- برایِ هر دو نوعِ پخش.
+    # رویِ دیسک ذخیره می‌شوند (هم‌الگو با DeliveryConfirmationRequest).
     photo_base64: str | None = None
+    signature_base64: str | None = None
 
 
 class VisitSkipRequest(BaseModel):

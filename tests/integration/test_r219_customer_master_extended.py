@@ -219,6 +219,7 @@ visit_in_id = field_sales_service.start_visit(
     check_in_latitude=decimal.Decimal("35.700010"), check_in_longitude=decimal.Decimal("51.400010"),
 )
 check(field_sales_service.get_visit_geofence_status(visit_in_id) is False, f"ویزیتِ داخلِ محدوده پرچم نمی‌خورد (got {field_sales_service.get_visit_geofence_status(visit_in_id)})")
+field_sales_service.complete_visit(visit_in_id, company_id)  # طبقِ جلوگیریِ از ویزیتِ تکراری (R222): باید قبلِ ویزیتِ بعدی بسته شود.
 
 # خارج از محدوده (چند کیلومتر با مرکزِ GeoFence فاصله)
 visit_out_id = field_sales_service.start_visit(
@@ -226,6 +227,7 @@ visit_out_id = field_sales_service.start_visit(
     check_in_latitude=decimal.Decimal("35.750000"), check_in_longitude=decimal.Decimal("51.450000"),
 )
 check(field_sales_service.get_visit_geofence_status(visit_out_id) is True, f"ویزیتِ خارجِ محدوده پرچم می‌خورد (got {field_sales_service.get_visit_geofence_status(visit_out_id)})")
+field_sales_service.complete_visit(visit_out_id, company_id)
 
 r = client.post(
     "/visits/start", headers=auth(admin_token),
@@ -352,5 +354,18 @@ check(r.status_code == 200 and decimal.Decimal(r.json()["estimated_profit_last_3
 
 r = client.get(f"/customers/{customer_debtor_id}/360", headers=auth(admin_token))
 check(r.status_code == 200 and decimal.Decimal(r.json()["segment"]["estimated_profit_last_3_months"]) == decimal.Decimal("30000"), f"فیلدِ سود در پاسخِ /360 هم ارائه شد (status={r.status_code}, body={r.text[:300]})")
+
+# ---------- R222-3: معینِ حساب در داشبوردِ مشتری ----------
+r = client.get(f"/customers/{customer_debtor_id}/statement", headers=auth(admin_token))
+check(r.status_code == 200, f"GETِ معینِ حساب موفق بود (status={r.status_code}, body={r.text[:300]})")
+statement = r.json()
+check(statement["closing_balance_nature"] == "بدهکار" and decimal.Decimal(statement["closing_balance_amount"]) == decimal.Decimal("29000"),
+      f"ماندهٔ پایانیِ معین با ماندهٔ واقعی یکی است (got {statement['closing_balance_amount']} {statement['closing_balance_nature']})")
+check(len(statement["lines"]) == 2, f"معین شاملِ ردیفِ فاکتور و ردیفِ دریافتِ نقدی است (got {statement['lines']})")
+check(decimal.Decimal(statement["lines"][-1]["running_debit"]) - decimal.Decimal(statement["lines"][-1]["running_credit"]) == decimal.Decimal("29000"),
+      f"ماندهٔ رواگردِ آخرین ردیف با ماندهٔ پایانی یکی است (got {statement['lines'][-1]})")
+
+r = client.get(f"/customers/{99999}/statement", headers=auth(admin_token))
+check(r.status_code == 404, f"معینِ مشتریِ نامعتبر ۴۰۴ است (status={r.status_code})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")

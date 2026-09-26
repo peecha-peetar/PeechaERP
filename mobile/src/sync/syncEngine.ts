@@ -96,7 +96,7 @@ export class SyncEngine {
       }
       case "COMPLETE_VISIT": {
         const customerVisitId = await this.resolveCustomerVisitId(action.payload);
-        await this.api.completeVisit(customerVisitId, action.payload.notes, action.payload.photoBase64);
+        await this.api.completeVisit(customerVisitId, action.payload.notes, action.payload.photoBase64, action.payload.signatureBase64);
         return;
       }
       case "SKIP_VISIT": {

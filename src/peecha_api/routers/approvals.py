@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from peecha.services import cartable as cartable_service
 from peecha.services import commercial_partners as partners_service
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import roles as roles_service
 from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context
@@ -29,9 +30,14 @@ def list_approvals(ctx: AuthContext = Depends(get_current_context)) -> dict:
     tasks = cartable_service.list_my_tasks(ctx.user_id, ctx.company_id)
     pending_customers = []
     if roles_service.user_has_permission(ctx.user_id, ctx.company_id, FORM_CUSTOMER_MANAGEMENT, "EDIT"):
+        # طبقِ گزارشِ آدیت («/approvals یتیم بود»): نام/کدِ مشتری هم اضافه
+        # شد تا صندوقِ تاییدِ موبایل بدونِ نمایشِ صرفِ شناسه قابلِ‌استفاده باشد.
+        customers_by_id = {c["detail_account_id"]: c for c in dimensions_service.list_customers(ctx.company_id)}
         pending_customers = [
             {
                 "customer_detail_account_id": p.customer_detail_account_id,
+                "code": customers_by_id.get(p.customer_detail_account_id, {}).get("code"),
+                "name": customers_by_id.get(p.customer_detail_account_id, {}).get("name"),
                 "submitted_by_user_id": p.submitted_by_user_id,
                 "submitted_at": p.submitted_at.isoformat() if p.submitted_at else None,
             }

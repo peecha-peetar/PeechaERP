@@ -582,6 +582,9 @@ class InvoiceSettlementStatus:
     settled_amount: decimal.Decimal
     remaining_amount: decimal.Decimal
     due_date: datetime.date | None
+    # طبقِ رفعِ گزارشِ گمراه‌کننده‌یِ Aging در وصولیِ موبایل (R222):
+    # بدونِ این، نمی‌شد فاکتورهایِ تسویه‌نشده را به مشتریِ‌شان نگاشت کرد.
+    counterparty_detail_account_id: int | None = None
 
     @property
     def is_fully_settled(self) -> bool:
@@ -605,6 +608,7 @@ def get_invoice_settlement_status(document_id: int, company_id: int) -> InvoiceS
         return InvoiceSettlementStatus(
             document_id=document_id, total_amount=doc.total_amount, settled_amount=settled,
             remaining_amount=doc.total_amount - settled, due_date=doc.due_date,
+            counterparty_detail_account_id=doc.counterparty_detail_account_id,
         )
 
 
@@ -632,6 +636,7 @@ def list_unsettled_invoices(company_id: int, document_type_code: str | None = No
                 result.append(InvoiceSettlementStatus(
                     document_id=doc.document_id, total_amount=doc.total_amount, settled_amount=settled,
                     remaining_amount=remaining, due_date=doc.due_date,
+                    counterparty_detail_account_id=doc.counterparty_detail_account_id,
                 ))
         return result
 

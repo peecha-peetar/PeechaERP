@@ -2,18 +2,36 @@
 (R129). طبقِ نکتهٔ امنیتی: سرویسِ زیرین فقط company_id را چک می‌کند
 (چون از دسکتاپ هم برایِ سرپرست قابلِ‌استفاده است)؛ این‌جا -- جایی که
 کلاینت خودِ ویزیتور است، نه سرپرست -- اضافه‌تر چک می‌شود که آن ویزیت
-واقعاً مالِ همین کاربر باشد."""
+واقعاً مالِ همین کاربر باشد.
+
+طبقِ رفعِ ناسازگاریِ ذخیره‌سازی (R222 -- «عکس/امضایِ ویزیت کجا ذخیره
+می‌شود؟»): عکس/امضایِ base64 این‌جا رویِ دیسک ذخیره می‌شوند (هم‌الگو با
+routers/delivery.py)، نه در ستونِ دیتابیس."""
 
 from __future__ import annotations
 
+import base64
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from peecha.config import SETTINGS_DIR
 from peecha.services import field_sales as field_sales_service
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.schemas import VisitCompleteRequest, VisitSkipRequest, VisitStartRequest
 
 router = APIRouter(prefix="/visits", tags=["visits"])
+
+_MEDIA_DIR = SETTINGS_DIR / "field_sales_media"
+
+
+def _save_base64(data_base64: str, extension: str) -> str:
+    _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    content = base64.b64decode(data_base64)
+    destination = _MEDIA_DIR / f"{uuid.uuid4().hex}.{extension}"
+    destination.write_bytes(content)
+    return str(destination)
 
 
 def _ensure_own_visit(ctx: AuthContext, customer_visit_id: int) -> None:
@@ -50,13 +68,19 @@ def start_visit(
         )
     except IdempotentReplay as replay:
         return replay.body
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("/{customer_visit_id}/complete", status_code=status.HTTP_204_NO_CONTENT)
 def complete_visit(customer_visit_id: int, payload: VisitCompleteRequest, ctx: AuthContext = Depends(get_current_context)) -> None:
     _ensure_own_visit(ctx, customer_visit_id)
+    photo_storage_key = _save_base64(payload.photo_base64, "jpg") if payload.photo_base64 else None
+    signature_storage_key = _save_base64(payload.signature_base64, "png") if payload.signature_base64 else None
     try:
-        field_sales_service.complete_visit(customer_visit_id, ctx.company_id, payload.notes, payload.photo_base64)
+        field_sales_service.complete_visit(
+            customer_visit_id, ctx.company_id, payload.notes, photo_storage_key, signature_storage_key,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

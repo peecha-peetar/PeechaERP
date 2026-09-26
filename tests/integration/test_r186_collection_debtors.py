@@ -149,6 +149,58 @@ check(
     f"ماندهٔ مشتریِ بدهکار درست است (got {debtors})",
 )
 
+# ---------- رفعِ گزارشِ گمراه‌کننده‌یِ Aging (R222): «عقب‌افتاده» باید
+# واقعاً از رویِ سررسیدِ فاکتور (document_date + payment_term_days)
+# محاسبه شود، نه یک پرچمِ ثابت رویِ همه‌یِ بدهکاران. ----------
+customer_overdue = partners_service.create_customer(
+    company_id, "C-4", "فروشگاهِ عقب‌افتاده", fields=partners_service.CustomerProfileFields(payment_term_days=30), fast_track=True,
+)
+customer_not_due_yet = partners_service.create_customer(
+    company_id, "C-5", "فروشگاهِ درمهلت", fields=partners_service.CustomerProfileFields(payment_term_days=30), fast_track=True,
+)
+field_sales_service.create_visit_plan(company_id, customer_overdue, 0, 3, visitor.user_id)
+field_sales_service.create_visit_plan(company_id, customer_not_due_yet, 0, 4, visitor.user_id)
+
+
+def _invoice_on_date(customer_id, document_date):
+    invoice_id = documents_service.create_document(
+        company_id, visitor.user_id, "SALES_INVOICE", document_date,
+        documents_service.DocumentHeaderFields(
+            counterparty_detail_account_id=customer_id, currency_id=company.base_currency_id,
+            warehouse_id=warehouse_id, channel_code=channel_code,
+        ),
+    )
+    documents_service.add_line(
+        invoice_id, company_id, item_id=item_id, uom_id=uom_id, quantity=decimal.Decimal(1),
+        quantity_base=decimal.Decimal(1), unit_price=decimal.Decimal(100000),
+    )
+    documents_service.confirm_document(invoice_id, company_id, visitor.user_id)
+    settlements_service.auto_approve_full_cash_settlement_plan(invoice_id, company_id, visitor.user_id)
+    documents_service.post_document(invoice_id, company_id, visitor.user_id)
+    return invoice_id
+
+
+# سررسید = ۴۰ روزِ پیش + ۳۰ روزِ مهلت = ۱۰ روزِ گذشته -- عقب‌افتاده.
+_invoice_on_date(customer_overdue, today - datetime.timedelta(days=40))
+# سررسید = امروز + ۳۰ روزِ مهلت = آینده -- هنوز در مهلت.
+_invoice_on_date(customer_not_due_yet, today)
+
+resp = client.get("/collection/debtors", headers=auth)
+check(resp.status_code == 200, f"فهرستِ بدهکاران بعدِ افزودنِ سناریوهایِ Aging موفق بود (status={resp.status_code})")
+debtors2 = {d["detail_account_id"]: d for d in resp.json()}
+check(
+    customer_overdue in debtors2 and debtors2[customer_overdue]["is_overdue"] is True,
+    f"مشتریِ با سررسیدِ گذشته عقب‌افتاده است (got {debtors2.get(customer_overdue)})",
+)
+check(
+    customer_not_due_yet in debtors2 and debtors2[customer_not_due_yet]["is_overdue"] is False,
+    f"مشتریِ با سررسیدِ آینده عقب‌افتاده نیست (got {debtors2.get(customer_not_due_yet)})",
+)
+check(
+    debtors2[customer_overdue]["earliest_due_date"] == (today - datetime.timedelta(days=10)).isoformat(),
+    f"سررسیدِ واقعی محاسبه شد (got {debtors2[customer_overdue]['earliest_due_date']})",
+)
+
 resp = client.get("/collection/today", headers=auth)
 check(resp.status_code == 200, f"وصولِ امروز موفق بود (status={resp.status_code})")
 today_collections = resp.json()

@@ -227,10 +227,15 @@ def print_data(document_id: int, ctx: AuthContext = Depends(get_current_context)
         doc, lines = documents_service.get_document(document_id, ctx.company_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    if doc.document_type_code not in ("SALES_INVOICE", "SALES_ORDER"):
+    if doc.document_type_code not in _FORM_BY_TYPE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="سند یافت نشد.")
+    # باگِ واقعیِ رفع‌شده («چاپِ فاکتور کار نمی‌کند»): این چک همیشه
+    # FORM_HOT_DISTRIBUTION را می‌سنجید، حتی برایِ SALES_ORDER (پخشِ
+    # سرد) -- پس مدیر/سرپرستی که فقط دسترسیِ FORM_COLD_DISTRIBUTION
+    # داشت هرگز نمی‌توانست سفارشِ رپِ دیگر را چاپ کند، هرچند در همین
+    # صفحه (Customer Detail) کاملاً قابلِ‌مشاهده بود.
     if doc.created_by_user_id != ctx.user_id and not roles_service.user_has_permission(
-        ctx.user_id, ctx.company_id, FORM_HOT_DISTRIBUTION, "VIEW",
+        ctx.user_id, ctx.company_id, _FORM_BY_TYPE[doc.document_type_code], "VIEW",
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="سند یافت نشد.")
 

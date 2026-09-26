@@ -43,8 +43,12 @@ export type PendingAction =
       // Syncِ موفقِ START_VISIT مشخص می‌شود)؛ SyncEngine از رویِ
       // VisitCorrelationStore آن را resolve می‌کند.
       // طبقِ درخواستِ صریحِ کاربر («برای ویزیت پخش سرد هم ویزیت و عکس و
-      // سفارش باشه»): عکسِ اختیاریِ ویزیت -- برایِ هر دو نوعِ پخش.
-      payload: { customerVisitId?: number; startActionKey?: string; notes?: string; photoBase64?: string | null };
+      // سفارش باشه» + امضا طبقِ گزارشِ کاربر): عکس/امضایِ اختیاریِ
+      // ویزیت -- برایِ هر دو نوعِ پخش.
+      payload: {
+        customerVisitId?: number; startActionKey?: string; notes?: string;
+        photoBase64?: string | null; signatureBase64?: string | null;
+      };
     }
   | {
       idempotencyKey: string;
