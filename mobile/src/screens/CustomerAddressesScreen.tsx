@@ -4,6 +4,7 @@ import { ApiClient, ApiError } from "../api/client";
 import { PartyAddressRow } from "../api/types";
 import { Button, Card, EmptyState, ErrorState, Input, SkeletonList, useToast } from "../components";
 import { LocationProvider } from "../location";
+import { MapPickerModal } from "../map/MapPickerModal";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface Props {
@@ -52,6 +53,7 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
   const [geofenceRadius, setGeofenceRadius] = useState("");
   const [capturingGps, setCapturingGps] = useState(false);
   const [gpsCaptured, setGpsCaptured] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const gpsRef = React.useRef<{ latitude: number; longitude: number } | null>(null);
 
@@ -79,6 +81,12 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
     } finally {
       setCapturingGps(false);
     }
+  };
+
+  const confirmMapLocation = (latitude: number, longitude: number) => {
+    gpsRef.current = { latitude, longitude };
+    setGpsCaptured(true);
+    setShowMapPicker(false);
   };
 
   const resetForm = () => {
@@ -177,7 +185,10 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
               <Text style={[typography.body, { color: gpsCaptured ? colors.success : colors.textSecondary, marginBottom: spacing.sm }]}>
                 {gpsCaptured ? "موقعیتِ مکانی ثبت شد" : "موقعیتِ مکانی ثبت نشده"}
               </Text>
-              <Button label="ثبتِ موقعیتِ مکانی" variant="secondary" onPress={captureGps} loading={capturingGps} style={{ marginBottom: spacing.sm }} />
+              <View style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm }}>
+                <Button label="ثبتِ موقعیتِ فعلی" variant="secondary" onPress={captureGps} loading={capturingGps} style={{ flex: 1 }} />
+                <Button label="انتخاب رویِ نقشه" variant="secondary" onPress={() => setShowMapPicker(true)} style={{ flex: 1 }} />
+              </View>
               <Button label="ذخیره‌یِ آدرس" onPress={save} loading={saving} disabled={!line1.trim()} />
               <Button label="انصراف" variant="ghost" onPress={resetForm} style={{ marginTop: spacing.sm }} />
             </Card>
@@ -186,6 +197,14 @@ export function CustomerAddressesScreen({ apiClient, locationProvider, detailAcc
           )}
         </>
       )}
+
+      <MapPickerModal
+        visible={showMapPicker}
+        initialLatitude={gpsRef.current?.latitude ?? null}
+        initialLongitude={gpsRef.current?.longitude ?? null}
+        onCancel={() => setShowMapPicker(false)}
+        onConfirm={confirmMapLocation}
+      />
     </ScrollView>
   );
 }

@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals
 from peecha import session
+from peecha.services import commercial_contracts as contracts_service
 from peecha.services import commercial_partners as partners_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -126,6 +127,18 @@ _PARTY_ADDRESS_TYPE_LABELS = {
     "OFFICE": "دفتر", "STORE": "فروشگاه", "WAREHOUSE": "انبار",
     "DELIVERY": "تحویل", "BILLING": "صورتحساب", "RETURN": "مرجوعی",
 }
+# طبقِ آیتمِ ۲ از بازخوردِ کاربر رویِ R220: تبِ ضمانت‌هایِ مشتری در فرمِ
+# دسکتاپ (سرویس/API از R219 آماده بود، فقط UI نداشت).
+_GUARANTEE_TYPE_LABELS = {
+    "CHECK": "چکِ تضمینی", "PROMISSORY_NOTE": "سفته", "BANK_GUARANTEE": "ضمانت‌نامه",
+    "GUARANTOR": "ضامن", "COLLATERAL": "وثیقه",
+}
+_GUARANTEE_STATUS_LABELS = {"ACTIVE": "فعال", "RELEASED": "آزادشده", "CALLED": "ضبط‌شده", "EXPIRED": "منقضی"}
+_GUARANTEE_RELEASE_STATUS_OPTIONS = [("RELEASED", "آزادسازی"), ("CALLED", "ضبط"), ("EXPIRED", "اعلامِ انقضا")]
+# طبقِ آیتمِ ۳ از همان بازخورد: تبِ قراردادهایِ مشتری/تامین‌کننده.
+_CONTRACT_CATEGORY_LABELS = {"STANDARD": "استاندارد", "AGENCY": "نمایندگی", "ORGANIZATIONAL": "سازمانی"}
+_CONTRACT_CATEGORY_OPTIONS = [("STANDARD", "استاندارد"), ("AGENCY", "نمایندگی"), ("ORGANIZATIONAL", "سازمانی")]
+_CONTRACT_STATUS_LABELS = {"ACTIVE": "فعال", "CANCELLED": "لغوشده", "EXPIRED": "منقضی"}
 
 _PERSON_FIELD_LABELS = {
     "economic_code": "کدِ اقتصادی",
@@ -155,7 +168,7 @@ _PERSON_FIELD_LABELS = {
     "person_type_code": "نوعِ شخصیت",
     "customer_class": "طبقه‌یِ مشتری",
     "geographic_region": "منطقه‌یِ جغرافیایی",
-    "outlet_type_code": "نوعِ کانال/فروشگاه",
+    "outlet_type_code": "نوعِ فروشگاه",
     "priority_code": "اولویتِ مشتری",
     "min_order_amount": "حداقلِ مبلغِ سفارش",
     "min_order_quantity": "حداقلِ تعدادِ سفارش",
@@ -368,6 +381,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         # هم در تبِ جداگانه‌یِ فرمِ حسابِ تفصیلی مدیریت می‌شود.
         self._addresses: list = []
         self._editing_address_id: int | None = None
+        self._address_lat: float | None = None
+        self._address_lon: float | None = None
+        self._guarantees: list = []
+        self._selected_guarantee_id: int | None = None
+        self._contracts: list = []
+        self._selected_contract_id: int | None = None
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
@@ -577,6 +596,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.account_tabs.addTab(self.files_tab, "عکس‌ها و فایل‌ها")
         self.addresses_tab = self._build_addresses_tab()
         self.account_tabs.addTab(self.addresses_tab, "آدرس‌ها")
+        self.guarantees_tab = self._build_guarantees_tab()
+        self.account_tabs.addTab(self.guarantees_tab, "ضمانت‌ها")
+        self.contracts_tab = self._build_contracts_tab()
+        self.account_tabs.addTab(self.contracts_tab, "قراردادها")
         wrapper_layout.addWidget(self.account_tabs, stretch=1)
 
         self.save_button = QPushButton("💾")
@@ -1051,16 +1074,11 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addLayout(city_row)
 
         gps_row = QHBoxLayout()
-        gps_row.addWidget(QLabel("عرضِ جغرافیایی"))
-        self.address_lat_field = QDoubleSpinBox()
-        self.address_lat_field.setRange(-90, 90)
-        self.address_lat_field.setDecimals(6)
-        gps_row.addWidget(self.address_lat_field)
-        gps_row.addWidget(QLabel("طولِ جغرافیایی"))
-        self.address_lon_field = QDoubleSpinBox()
-        self.address_lon_field.setRange(-180, 180)
-        self.address_lon_field.setDecimals(6)
-        gps_row.addWidget(self.address_lon_field)
+        self.address_gps_label = QLabel("موقعیتِ مکانی: ثبت‌نشده")
+        gps_row.addWidget(self.address_gps_label, stretch=1)
+        pick_on_map_button = QPushButton("انتخاب رویِ نقشه")
+        pick_on_map_button.clicked.connect(self._pick_address_location_on_map)
+        gps_row.addWidget(pick_on_map_button)
         gps_row.addWidget(QLabel("شعاعِ GeoFence (متر)"))
         self.address_geofence_field = QSpinBox()
         self.address_geofence_field.setRange(0, 100_000)
@@ -1140,10 +1158,26 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.address_province_field.setText(address.province or "")
         self.address_postal_code_field.setText(address.postal_code or "")
         self.address_default_checkbox.setChecked(address.is_default)
-        self.address_lat_field.setValue(float(address.gps_latitude) if address.gps_latitude is not None else 0)
-        self.address_lon_field.setValue(float(address.gps_longitude) if address.gps_longitude is not None else 0)
+        self._address_lat = float(address.gps_latitude) if address.gps_latitude is not None else None
+        self._address_lon = float(address.gps_longitude) if address.gps_longitude is not None else None
+        self._refresh_address_gps_label()
         self.address_geofence_field.setValue(address.geofence_radius_meters or 0)
         self.delete_address_button.setVisible(True)
+
+    def _refresh_address_gps_label(self) -> None:
+        if self._address_lat is None or self._address_lon is None:
+            self.address_gps_label.setText("موقعیتِ مکانی: ثبت‌نشده")
+        else:
+            self.address_gps_label.setText(f"موقعیتِ مکانی: {self._address_lat:.6f}, {self._address_lon:.6f}")
+
+    def _pick_address_location_on_map(self) -> None:
+        from peecha.ui.map_picker import MapPickerDialog
+
+        dialog = MapPickerDialog(self, initial_lat=self._address_lat, initial_lon=self._address_lon)
+        if dialog.exec() == QDialog.Accepted:
+            self._address_lat = dialog.result_lat
+            self._address_lon = dialog.result_lon
+            self._refresh_address_gps_label()
 
     def _reset_address_form(self) -> None:
         self._editing_address_id = None
@@ -1154,8 +1188,9 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.address_province_field.clear()
         self.address_postal_code_field.clear()
         self.address_default_checkbox.setChecked(False)
-        self.address_lat_field.setValue(0)
-        self.address_lon_field.setValue(0)
+        self._address_lat = None
+        self._address_lon = None
+        self._refresh_address_gps_label()
         self.address_geofence_field.setValue(0)
         self.delete_address_button.setVisible(False)
         self.addresses_table.clearSelection()
@@ -1168,8 +1203,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         if not line1:
             self.address_status_label.setText("متنِ آدرس را وارد کنید.")
             return
-        lat = decimal.Decimal(str(self.address_lat_field.value())) if self.address_lat_field.value() != 0 else None
-        lon = decimal.Decimal(str(self.address_lon_field.value())) if self.address_lon_field.value() != 0 else None
+        lat = decimal.Decimal(str(self._address_lat)) if self._address_lat is not None else None
+        lon = decimal.Decimal(str(self._address_lon)) if self._address_lon is not None else None
         geofence = self.address_geofence_field.value() or None
         try:
             if self._editing_address_id is not None:
@@ -1205,6 +1240,365 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         partners_service.delete_party_address(self._editing_address_id, self._editing_account_id)
         self._refresh_addresses_tab()
+
+    # --- تبِ «ضمانت‌ها» (طبقِ آیتمِ ۲ از بازخوردِ کاربر رویِ R220): سفته/
+    # ضامن/وثیقه/چکِ تضمینی روی خودِ مشتری -- فقط برایِ گروهِ CUSTOMER،
+    # هم‌الگو با تبِ «آدرس‌ها». ---------------------------------------
+    def _build_guarantees_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = build_section_layout(tab)
+
+        self.guarantees_summary_label = QLabel("")
+        layout.addWidget(self.guarantees_summary_label)
+
+        self.guarantees_table = QTableWidget(0, 4)
+        self.guarantees_table.setHorizontalHeaderLabels(["نوع", "مبلغ", "وضعیت", "تاریخِ انقضا"])
+        self.guarantees_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.guarantees_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.guarantees_table.verticalHeader().setVisible(False)
+        self.guarantees_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.guarantees_table.cellClicked.connect(self._on_guarantee_row_clicked)
+        self.guarantees_table.setMaximumHeight(150)
+        layout.addWidget(self.guarantees_table)
+
+        type_row = QHBoxLayout()
+        type_row.addWidget(QLabel("نوع"))
+        self.guarantee_type_combo = QComboBox()
+        for code, label in _GUARANTEE_TYPE_LABELS.items():
+            self.guarantee_type_combo.addItem(label, code)
+        type_row.addWidget(self.guarantee_type_combo, stretch=1)
+        type_row.addWidget(QLabel("مبلغ"))
+        self.guarantee_amount_field = QDoubleSpinBox()
+        self.guarantee_amount_field.setRange(0, 1_000_000_000_000)
+        self.guarantee_amount_field.setDecimals(0)
+        type_row.addWidget(self.guarantee_amount_field, stretch=1)
+        layout.addLayout(type_row)
+
+        date_row = QHBoxLayout()
+        date_row.addWidget(QLabel("تاریخِ انقضا"))
+        self.guarantee_valid_until_field = JalaliDateEdit()
+        date_row.addWidget(self.guarantee_valid_until_field)
+        self.guarantee_no_expiry_checkbox = QCheckBox("بدونِ تاریخِ انقضا")
+        self.guarantee_no_expiry_checkbox.setChecked(True)
+        self.guarantee_no_expiry_checkbox.toggled.connect(
+            lambda checked: self.guarantee_valid_until_field.setEnabled(not checked)
+        )
+        self.guarantee_valid_until_field.setEnabled(False)
+        date_row.addWidget(self.guarantee_no_expiry_checkbox)
+        layout.addLayout(date_row)
+
+        bank_row = QHBoxLayout()
+        bank_row.addWidget(QLabel("بانک (چک/ضمانت‌نامه)"))
+        self.guarantee_bank_combo = QComboBox()
+        bank_row.addWidget(self.guarantee_bank_combo, stretch=1)
+        layout.addLayout(bank_row)
+
+        check_row = QHBoxLayout()
+        self.guarantee_check_no_field = QLineEdit()
+        self.guarantee_check_no_field.setPlaceholderText("شماره‌یِ چک/سفته")
+        check_row.addWidget(self.guarantee_check_no_field)
+        check_row.addWidget(QLabel("سررسید"))
+        self.guarantee_check_due_field = JalaliDateEdit()
+        check_row.addWidget(self.guarantee_check_due_field)
+        layout.addLayout(check_row)
+
+        self.guarantee_description_field = QLineEdit()
+        self.guarantee_description_field.setPlaceholderText("توضیح")
+        layout.addWidget(self.guarantee_description_field)
+
+        self.guarantee_status_label = QLabel("")
+        self.guarantee_status_label.setObjectName("statusError")
+        self.guarantee_status_label.setWordWrap(True)
+        layout.addWidget(self.guarantee_status_label)
+
+        button_row = QHBoxLayout()
+        add_guarantee_button = QPushButton("➕ ثبتِ ضمانتِ تازه")
+        add_guarantee_button.clicked.connect(self._save_guarantee)
+        button_row.addWidget(add_guarantee_button)
+        self.guarantee_release_status_combo = QComboBox()
+        for code, label in _GUARANTEE_RELEASE_STATUS_OPTIONS:
+            self.guarantee_release_status_combo.addItem(label, code)
+        button_row.addWidget(self.guarantee_release_status_combo)
+        self.release_guarantee_button = QPushButton("بستنِ ضمانتِ انتخاب‌شده")
+        self.release_guarantee_button.clicked.connect(self._release_guarantee)
+        self.release_guarantee_button.setVisible(False)
+        button_row.addWidget(self.release_guarantee_button)
+        layout.addLayout(button_row)
+
+        layout.addStretch(1)
+        return tab
+
+    def _refresh_guarantees_tab(self) -> None:
+        self._reset_guarantee_form()
+        group_code = self._selected[1] if self._selected else None
+        tab_index = self.account_tabs.indexOf(self.guarantees_tab)
+        can_show = group_code == dimensions_service.CUSTOMER_GROUP_CODE and self._editing_account_id is not None
+        self.account_tabs.setTabVisible(tab_index, can_show)
+        company_id = self._company_id()
+        self.guarantee_bank_combo.clear()
+        self.guarantee_bank_combo.addItem("—", None)
+        if company_id is not None:
+            for bank in treasury_service.list_banks(company_id, active_only=True):
+                self.guarantee_bank_combo.addItem(bank.name, bank.bank_id)
+        if not can_show:
+            self._guarantees = []
+            self.guarantees_table.setRowCount(0)
+            self.guarantees_summary_label.setText("")
+            return
+        self._guarantees = partners_service.list_customer_guarantees(self._editing_account_id)
+        total_active = partners_service.total_active_guarantee_amount(self._editing_account_id)
+        self.guarantees_summary_label.setText(f"جمعِ ضمانتِ فعال: {numerals.format_company_amount(total_active)}")
+        self.guarantees_table.setRowCount(len(self._guarantees))
+        for row_index, g in enumerate(self._guarantees):
+            values = [
+                _GUARANTEE_TYPE_LABELS.get(g.guarantee_type_code, g.guarantee_type_code),
+                numerals.format_company_amount(g.amount),
+                _GUARANTEE_STATUS_LABELS.get(g.status_code, g.status_code),
+                numerals.format_jalali_date(g.valid_until_date) if g.valid_until_date else "—",
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, g.guarantee_id)
+                self.guarantees_table.setItem(row_index, col_index, item)
+
+    def _on_guarantee_row_clicked(self, row: int, _column: int) -> None:
+        guarantee_id = self.guarantees_table.item(row, 0).data(Qt.UserRole)
+        guarantee = next((g for g in self._guarantees if g.guarantee_id == guarantee_id), None)
+        if guarantee is None:
+            return
+        self._selected_guarantee_id = guarantee.guarantee_id
+        self.guarantee_status_label.setText("")
+        self.release_guarantee_button.setVisible(guarantee.status_code == "ACTIVE")
+
+    def _reset_guarantee_form(self) -> None:
+        self._selected_guarantee_id = None
+        self.guarantee_status_label.setText("")
+        self.guarantee_type_combo.setCurrentIndex(0)
+        self.guarantee_amount_field.setValue(0)
+        self.guarantee_no_expiry_checkbox.setChecked(True)
+        self.guarantee_check_no_field.clear()
+        self.guarantee_description_field.clear()
+        self.release_guarantee_button.setVisible(False)
+        self.guarantees_table.clearSelection()
+
+    def _save_guarantee(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        amount = decimal.Decimal(str(self.guarantee_amount_field.value()))
+        valid_until = None if self.guarantee_no_expiry_checkbox.isChecked() else self.guarantee_valid_until_field.date()
+        try:
+            partners_service.add_customer_guarantee(
+                company_id, self._editing_account_id, self.guarantee_type_combo.currentData(), amount,
+                session.current_user.user_id, valid_until_date=valid_until,
+                bank_id=self.guarantee_bank_combo.currentData(),
+                check_no=self.guarantee_check_no_field.text().strip() or None,
+                check_due_date=self.guarantee_check_due_field.date(),
+                description=self.guarantee_description_field.text().strip() or None,
+            )
+        except ValueError as exc:
+            self.guarantee_status_label.setText(str(exc))
+            return
+        self._refresh_guarantees_tab()
+
+    def _release_guarantee(self) -> None:
+        if self._selected_guarantee_id is None:
+            return
+        status_code = self.guarantee_release_status_combo.currentData()
+        try:
+            partners_service.release_customer_guarantee(
+                self._selected_guarantee_id, self._company_id(), session.current_user.user_id, status_code=status_code
+            )
+        except ValueError as exc:
+            self.guarantee_status_label.setText(str(exc))
+            return
+        self._refresh_guarantees_tab()
+
+    # --- تبِ «قراردادها» (طبقِ آیتمِ ۳ از همان بازخورد): قراردادِ
+    # نمایندگی/سازمانی/سهمیه، برایِ مشتری (SALES) و تامین‌کننده (PURCHASE). --
+    def _build_contracts_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = build_section_layout(tab)
+
+        self.contracts_table = QTableWidget(0, 4)
+        self.contracts_table.setHorizontalHeaderLabels(["دسته", "وضعیت", "سهمیه‌یِ مبلغی", "مصرف‌شده"])
+        self.contracts_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.contracts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.contracts_table.verticalHeader().setVisible(False)
+        self.contracts_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.contracts_table.cellClicked.connect(self._on_contract_row_clicked)
+        self.contracts_table.setMaximumHeight(150)
+        layout.addWidget(self.contracts_table)
+
+        cat_row = QHBoxLayout()
+        cat_row.addWidget(QLabel("دسته"))
+        self.contract_category_combo = QComboBox()
+        for code, label in _CONTRACT_CATEGORY_OPTIONS:
+            self.contract_category_combo.addItem(label, code)
+        cat_row.addWidget(self.contract_category_combo, stretch=1)
+        layout.addLayout(cat_row)
+
+        dates_row = QHBoxLayout()
+        dates_row.addWidget(QLabel("از تاریخ"))
+        self.contract_valid_from_field = JalaliDateEdit()
+        dates_row.addWidget(self.contract_valid_from_field)
+        dates_row.addWidget(QLabel("تا تاریخ"))
+        self.contract_valid_to_field = JalaliDateEdit()
+        dates_row.addWidget(self.contract_valid_to_field)
+        self.contract_unbounded_checkbox = QCheckBox("تا اطلاعِ ثانوی")
+        self.contract_unbounded_checkbox.setChecked(True)
+        self.contract_unbounded_checkbox.toggled.connect(
+            lambda checked: self.contract_valid_to_field.setEnabled(not checked)
+        )
+        self.contract_valid_to_field.setEnabled(False)
+        dates_row.addWidget(self.contract_unbounded_checkbox)
+        layout.addLayout(dates_row)
+
+        amount_row = QHBoxLayout()
+        amount_row.addWidget(QLabel("سهمیه‌یِ مبلغی (اختیاری)"))
+        self.contract_committed_amount_field = QDoubleSpinBox()
+        self.contract_committed_amount_field.setRange(0, 1_000_000_000_000)
+        self.contract_committed_amount_field.setDecimals(0)
+        amount_row.addWidget(self.contract_committed_amount_field, stretch=1)
+        layout.addLayout(amount_row)
+
+        item_row = QHBoxLayout()
+        item_row.addWidget(QLabel("کالایِ خاص (اختیاری)"))
+        self.contract_item_combo = QComboBox()
+        item_row.addWidget(self.contract_item_combo, stretch=2)
+        item_row.addWidget(QLabel("سهمیه‌یِ تعدادی"))
+        self.contract_committed_quantity_field = QDoubleSpinBox()
+        self.contract_committed_quantity_field.setRange(0, 1_000_000_000)
+        self.contract_committed_quantity_field.setDecimals(2)
+        item_row.addWidget(self.contract_committed_quantity_field, stretch=1)
+        layout.addLayout(item_row)
+
+        self.contract_commitments_field = QLineEdit()
+        self.contract_commitments_field.setPlaceholderText("تعهداتِ متنیِ قرارداد")
+        layout.addWidget(self.contract_commitments_field)
+
+        self.contract_status_label = QLabel("")
+        self.contract_status_label.setObjectName("statusError")
+        self.contract_status_label.setWordWrap(True)
+        layout.addWidget(self.contract_status_label)
+
+        button_row = QHBoxLayout()
+        add_contract_button = QPushButton("➕ ثبتِ قراردادِ تازه")
+        add_contract_button.clicked.connect(self._save_contract)
+        button_row.addWidget(add_contract_button)
+        self.cancel_contract_button = QPushButton("لغوِ قراردادِ انتخاب‌شده")
+        self.cancel_contract_button.clicked.connect(self._cancel_contract)
+        self.cancel_contract_button.setVisible(False)
+        button_row.addWidget(self.cancel_contract_button)
+        layout.addLayout(button_row)
+
+        layout.addStretch(1)
+        return tab
+
+    def _contract_type_for_current_group(self) -> str | None:
+        group_code = self._selected[1] if self._selected else None
+        if group_code == dimensions_service.CUSTOMER_GROUP_CODE:
+            return "SALES"
+        if group_code == dimensions_service.SUPPLIER_GROUP_CODE:
+            return "PURCHASE"
+        return None
+
+    def _refresh_contracts_tab(self) -> None:
+        self._reset_contract_form()
+        contract_type = self._contract_type_for_current_group()
+        tab_index = self.account_tabs.indexOf(self.contracts_tab)
+        can_show = contract_type is not None and self._editing_account_id is not None
+        self.account_tabs.setTabVisible(tab_index, can_show)
+        company_id = self._company_id()
+        self.contract_item_combo.clear()
+        self.contract_item_combo.addItem("—", None)
+        if company_id is not None:
+            for item in catalog_service.list_items(company_id, transactable_only=True):
+                self.contract_item_combo.addItem(f"{item.code} — {item.name}", item.item_id)
+        if not can_show:
+            self._contracts = []
+            self.contracts_table.setRowCount(0)
+            return
+        self._contracts = [
+            c for c in contracts_service.list_contracts(company_id, counterparty_detail_account_id=self._editing_account_id)
+            if c.contract_type_code == contract_type
+        ]
+        self.contracts_table.setRowCount(len(self._contracts))
+        for row_index, c in enumerate(self._contracts):
+            values = [
+                _CONTRACT_CATEGORY_LABELS.get(c.contract_category_code, c.contract_category_code),
+                _CONTRACT_STATUS_LABELS.get(c.status_code, c.status_code),
+                numerals.format_company_amount(c.committed_amount) if c.committed_amount is not None else "—",
+                numerals.format_company_amount(c.consumed_amount) if c.consumed_amount is not None else "—",
+            ]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, c.contract_id)
+                self.contracts_table.setItem(row_index, col_index, item)
+
+    def _on_contract_row_clicked(self, row: int, _column: int) -> None:
+        contract_id = self.contracts_table.item(row, 0).data(Qt.UserRole)
+        contract = next((c for c in self._contracts if c.contract_id == contract_id), None)
+        if contract is None:
+            return
+        self._selected_contract_id = contract.contract_id
+        self.contract_status_label.setText("")
+        self.cancel_contract_button.setVisible(contract.status_code == "ACTIVE")
+
+    def _reset_contract_form(self) -> None:
+        self._selected_contract_id = None
+        self.contract_status_label.setText("")
+        self.contract_category_combo.setCurrentIndex(0)
+        self.contract_valid_from_field.setDate(datetime.date.today())
+        self.contract_unbounded_checkbox.setChecked(True)
+        self.contract_committed_amount_field.setValue(0)
+        self.contract_committed_quantity_field.setValue(0)
+        self.contract_commitments_field.clear()
+        self.cancel_contract_button.setVisible(False)
+        self.contracts_table.clearSelection()
+
+    def _save_contract(self) -> None:
+        if self._editing_account_id is None:
+            return
+        company_id = self._company_id()
+        contract_type = self._contract_type_for_current_group()
+        if company_id is None or contract_type is None:
+            return
+        valid_to = None if self.contract_unbounded_checkbox.isChecked() else self.contract_valid_to_field.date()
+        committed_amount = (
+            decimal.Decimal(str(self.contract_committed_amount_field.value()))
+            if self.contract_committed_amount_field.value() else None
+        )
+        item_id = self.contract_item_combo.currentData()
+        committed_quantity = (
+            decimal.Decimal(str(self.contract_committed_quantity_field.value()))
+            if item_id is not None and self.contract_committed_quantity_field.value() else None
+        )
+        try:
+            contracts_service.create_contract(
+                company_id, contract_type, self._editing_account_id, self.contract_valid_from_field.date(),
+                item_id=item_id, committed_quantity=committed_quantity, valid_to=valid_to,
+                contract_category_code=self.contract_category_combo.currentData(),
+                committed_amount=committed_amount,
+                commitments_text=self.contract_commitments_field.text().strip() or None,
+            )
+        except ValueError as exc:
+            self.contract_status_label.setText(str(exc))
+            return
+        self._refresh_contracts_tab()
+
+    def _cancel_contract(self) -> None:
+        if self._selected_contract_id is None:
+            return
+        confirm = QMessageBox.question(
+            self, "لغوِ قرارداد", "این قرارداد لغو شود؟", QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        contracts_service.cancel_contract(self._selected_contract_id, self._company_id())
+        self._refresh_contracts_tab()
 
     # --- بارگذاری --------------------------------------------------------
     def _company_id(self) -> int | None:
@@ -1753,6 +2147,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self._update_partner_status_display(row)
             self._refresh_files_tab()
             self._refresh_addresses_tab()
+            self._refresh_guarantees_tab()
+            self._refresh_contracts_tab()
             return
 
         account = self._accounts_by_id.get(detail_account_id)
@@ -1780,6 +2176,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._refresh_pay_components_section(None)
         self._refresh_files_tab()
         self._refresh_addresses_tab()
+        self._refresh_guarantees_tab()
+        self._refresh_contracts_tab()
 
     def _on_copy_from_changed(self) -> None:
         source_id = self.copy_from_combo.currentData()
@@ -1910,6 +2308,8 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.customer_score_label.setVisible(False)
         self._refresh_files_tab()
         self._refresh_addresses_tab()
+        self._refresh_guarantees_tab()
+        self._refresh_contracts_tab()
 
     def _terminate_employee(self) -> None:
         if self._editing_account_id is None:

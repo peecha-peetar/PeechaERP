@@ -484,6 +484,15 @@ export interface PartyAddressRow {
   geofence_radius_meters: number | null;
 }
 
+export interface CustomerActivityRequest {
+  activity_type_code: "COMPLAINT" | "MEETING" | "OPPORTUNITY" | "TASK";
+  subject: string;
+  description?: string | null;
+  due_date?: string | null;
+  estimated_value?: string | null;
+  assigned_to_user_id?: number | null;
+}
+
 export interface PartyAddressRequest {
   address_type_code: string;
   line1: string;

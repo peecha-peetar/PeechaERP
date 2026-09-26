@@ -28,6 +28,22 @@ const STATUS_TONE_MAP: Record<string, StatusTone> = {
   POSTED: "success",
   CANCELLED: "danger",
   DONE: "success",
+  // طبقِ بازطراحیِ Customer360Screen (بازخوردِ کاربر رویِ R220): وضعیت‌هایِ
+  // ضمانت/فعالیتِ CRM هم از همین نگاشتِ مشترکِ رنگ استفاده کنند.
+  OPEN: "warning",
+  RESOLVED: "success",
+  WON: "success",
+  LOST: "danger",
+  RELEASED: "success",
+  CALLED: "danger",
+  EXPIRED: "neutral",
+  // سگمنتِ مشتری (commercial_documents.compute_customer_segment).
+  NEW: "info",
+  LOYAL: "success",
+  LOW_PURCHASE: "warning",
+  AT_RISK: "warning",
+  DEBTOR: "danger",
+  VIP: "success",
 };
 
 export function statusTone(statusCode: string): StatusTone {

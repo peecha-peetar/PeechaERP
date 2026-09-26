@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { CustomerDetailResponse, CustomerRow, SalesMode, VisitPlanRow } from "../api/types";
+import { CustomerDetailResponse, CustomerRow, CustomerSegmentInfo, SalesMode, VisitPlanRow } from "../api/types";
 import { formatAmount } from "../format";
 import { Button, Card, ErrorState, Input, SkeletonList, StatusBadge, useToast } from "../components";
 import { printInvoice, shareInvoicePdf } from "../print/printInvoice";
@@ -48,6 +48,21 @@ const STATUS_LABELS: Record<string, string> = {
   INACTIVE: "غیرِفعال",
 };
 
+const SEGMENT_LABELS: Record<string, string> = {
+  NEW: "مشتریِ جدید", ACTIVE: "فعال", LOYAL: "وفادار", LOW_PURCHASE: "کم‌خرید",
+  AT_RISK: "در معرضِ ریزش", INACTIVE: "غیرفعال", DEBTOR: "بدهکار", VIP: "VIP",
+};
+
+function DashboardStat({ label, value }: { label: string; value: string }) {
+  const { colors, spacing, radius, typography } = useTheme();
+  return (
+    <View style={{ flexBasis: "48%", backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm }}>
+      <Text style={[typography.caption, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[typography.h3, { color: colors.textPrimary, marginTop: spacing.xxs }]}>{value}</Text>
+    </View>
+  );
+}
+
 /** طبقِ اصلِ صریح (نیازمندی‌هایِ صفحه‌یِ مشتری): مانده/سقفِ اعتبار/
  * آخرین‌خرید/پرفروش‌ترین‌کالاها/تاریخچه از یک درخواستِ تکی
  * (GET /customers/{id})، به‌اضافه‌یِ اقدام‌هایِ سریع (شروعِ ویزیت/ثبتِ
@@ -69,6 +84,7 @@ export function CustomerDetailScreen({
 }: Props) {
   const { colors, spacing, typography } = useTheme();
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
+  const [segment, setSegment] = useState<CustomerSegmentInfo | null>(null);
   const [visitPlan, setVisitPlan] = useState<VisitPlanRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +145,14 @@ export function CustomerDetailScreen({
       setError(e instanceof ApiError ? e.message : "دریافتِ اطلاعاتِ مشتری ناموفق بود.");
     } finally {
       setLoading(false);
+    }
+    // طبقِ بازخوردِ کاربر رویِ R220 («داشبوردِ مشتری را ندیدم»): این
+    // درخواستِ سبک جدا از اصلیِ بالا است -- خطایِ آن (مثلاً آفلاین‌بودن)
+    // نباید کلِ فرمِ مشتری را غیرِقابلِ‌استفاده کند، فقط داشبورد را پنهان می‌کند.
+    try {
+      setSegment(await apiClient.getCustomerSegment(detailAccountId));
+    } catch {
+      setSegment(null);
     }
   }, [apiClient, localCache, detailAccountId, salesMode]);
 
@@ -206,6 +230,22 @@ export function CustomerDetailScreen({
           <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>یادداشت: {detail.notes}</Text>
         ) : null}
       </View>
+
+      {segment ? (
+        <Card>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm }}>
+            <Text style={[typography.captionBold, { color: colors.textSecondary }]}>داشبوردِ مشتری</Text>
+            <StatusBadge statusCode={segment.segment_code} label={SEGMENT_LABELS[segment.segment_code] ?? segment.segment_code} />
+          </View>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
+            <DashboardStat label="فروشِ ماهِ جاری" value={formatAmount(segment.sales_this_month)} />
+            <DashboardStat label="فروشِ ۳ماهِ اخیر" value={formatAmount(segment.sales_last_3_months)} />
+            <DashboardStat label="تعدادِ سفارش (۱۲ماهِ اخیر)" value={String(segment.order_count_last_12_months)} />
+            <DashboardStat label="سودِ برآوردیِ ۳ماهِ اخیر" value={formatAmount(segment.estimated_profit_last_3_months)} />
+          </View>
+          <Button label="نمایِ کامل (۳۶۰)" size="md" fullWidth={false} variant="ghost" onPress={onOpen360} />
+        </Card>
+      ) : null}
 
       {isManager && detail.status_code === "PENDING_APPROVAL" ? (
         <Card>

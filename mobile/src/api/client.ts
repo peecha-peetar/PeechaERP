@@ -1,7 +1,10 @@
 import { TokenStore } from "../storage/tokenStore";
 import {
   ChannelRow,
+  CustomerActivityRequest,
+  CustomerActivityRow,
   CustomerApprovalResponse,
+  CustomerSegmentInfo,
   CustomerCreateRequest,
   CustomerCreateResponse,
   Customer360Response,
@@ -188,6 +191,31 @@ export class ApiClient {
    * همه‌یِ ابعادِ مشتری از یک درخواستِ تکی. */
   async getCustomer360(detailAccountId: number, mode?: SalesMode): Promise<Customer360Response> {
     return this.request<Customer360Response>(`/customers/${detailAccountId}/360${mode ? `?mode=${mode}` : ""}`);
+  }
+
+  /** طبقِ بازخوردِ کاربر رویِ R220 («داشبوردِ مشتری را ندیدم»): همان
+   * محاسبه‌یِ سبک‌ترِ سگمنت -- بدونِ کشیدنِ کلِ ۳۶۰ -- برایِ نمایش در
+   * بالایِ خودِ فرمِ مشتری (CustomerDetailScreen)، نه فقط صفحه‌یِ ۳۶۰. */
+  async getCustomerSegment(detailAccountId: number): Promise<CustomerSegmentInfo> {
+    return this.request<CustomerSegmentInfo>(`/customers/${detailAccountId}/segment`);
+  }
+
+  /** طبقِ بازخوردِ کاربر رویِ R220 («CRM کجاست؟»): فرمِ ثبت/بستنِ فعالیت
+   * که پیش‌تر فقط API/سرویس داشت، حالا از رویِ Customer360Screen قابلِ
+   * استفاده است. */
+  async listCustomerActivities(detailAccountId: number, openOnly = false): Promise<CustomerActivityRow[]> {
+    return this.request<CustomerActivityRow[]>(`/customers/${detailAccountId}/activities${openOnly ? "?open_only=true" : ""}`);
+  }
+
+  async createCustomerActivity(detailAccountId: number, payload: CustomerActivityRequest): Promise<{ activity_id: number }> {
+    return this.request<{ activity_id: number }>(`/customers/${detailAccountId}/activities`, { method: "POST", body: payload });
+  }
+
+  async closeCustomerActivity(detailAccountId: number, activityId: number, statusCode: string): Promise<void> {
+    await this.request<void>(`/customers/${detailAccountId}/activities/${activityId}/close`, {
+      method: "POST",
+      body: { status_code: statusCode },
+    });
   }
 
   async createPayment(payload: PaymentCreateRequest, idempotencyKey?: string): Promise<PaymentCreateResponse> {
