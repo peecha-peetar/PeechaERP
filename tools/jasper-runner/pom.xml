@@ -1,0 +1,82 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.peecha.reporting</groupId>
+  <artifactId>jasper-runner</artifactId>
+  <version>1.0</version>
+  <packaging>jar</packaging>
+
+  <!--
+    این ماژول عمداً کاملاً مستقل از build اصلیِ پایتونی است؛ خروجی‌اش یک
+    fat-jar است که src/peecha/reporting/jasper_bridge.py با subprocess صدا
+    می‌زند. طبقِ تصمیمِ معماریِ گزارش‌ها: JasperReports فقط چیدمان/خروجی را
+    انجام می‌دهد؛ منطقِ محاسباتی (رول‌آپ، بهای تمام‌شده، ...) همیشه در
+    reports.py/inventory_engine.py می‌ماند و فقط دیتایِ آماده (JSON) به این
+    ماژول داده می‌شود.
+  -->
+
+  <properties>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- طبقِ نتیجه‌یِ Spike: نسخه‌یِ 7.0.1 با فرمتِ کلاسیکِ JRXML (همانی که
+         Jaspersoft Studio تولید می‌کند) ناسازگار است؛ موتورِ جدیدِ
+         Jackson-based آن فقط ریشه‌ی بدون namespace را می‌شناسد و ساختارِ
+         <band> را هم نمی‌شناسد. ۶.۲۱.۳ یک نسخه‌یِ پایدار و رایج است که
+         کاملاً با خروجیِ استانداردِ Jaspersoft Studio سازگار است. -->
+    <jasper.version>6.21.3</jasper.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>net.sf.jasperreports</groupId>
+      <artifactId>jasperreports</artifactId>
+      <version>${jasper.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>net.sf.jasperreports</groupId>
+      <artifactId>jasperreports-fonts</artifactId>
+      <version>${jasper.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>2.24.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j2-impl</artifactId>
+      <version>2.24.1</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>jasper-runner</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>com.peecha.reporting.ReportRunner</mainClass>
+                </transformer>
+                <!-- طبقِ لزومِ jasperreports_extension.properties: هر جار
+                     نسخه‌یِ خودش را دارد و باید merge شود، نه فقط اولی که
+                     shade پیدا می‌کند؛ وگرنه ثبت‌کننده‌یِ فونت/JSON از
+                     دست می‌رود. -->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                  <resource>jasperreports_extension.properties</resource>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -90,12 +90,17 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self._build_entries_panel(), stretch=3)
 
         self.set_field_help([
+            (self.employee_combo, "کارمندی که این اضافه‌کاری برایِ او ثبت می‌شود."),
+            (self.period_combo, "دورهٔ حقوقی‌ای که این اضافه‌کاری متعلق به آن است."),
+            (self.rule_combo, "نوعِ اضافه‌کاری (طبقِ قوانینِ تعریف‌شده در تنظیماتِ حقوق) که ضریبِ محاسبه از آن خوانده می‌شود."),
             (self.hours_field, "تعدادِ ساعاتِ این نوعِ اضافه‌کاری برایِ این کارمند در این دوره."),
             (
                 self.import_button,
                 "فایلِ اکسل/CSVِ خروجیِ دستگاهِ حضوروغیاب را انتخاب کنید — با ستون‌هایِ کدِ پرسنلی، "
                 "دوره، نوعِ اضافه‌کاری، و ساعت. ردیف‌هایِ ایمپورت‌شده هم مثلِ ثبتِ دستی، درانتظارِ تایید می‌مانند.",
             ),
+            (self.period_filter_combo, "فقط ردیف‌هایِ همین دوره را نشان بده -- خالی یعنی همه‌یِ دوره‌ها."),
+            (self.employee_filter_combo, "فقط ردیف‌هایِ همین کارمند را نشان بده -- خالی یعنی همه‌یِ کارمندان."),
         ])
 
     def _build_form_panel(self) -> QWidget:

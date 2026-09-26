@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "پیچا -- پخش سرد/گرم",
+    "slug": "peecha-field-sales",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "assets/fonts/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ir.peecha.fieldsales"
+    },
+    "android": {
+      "package": "ir.peecha.fieldsales",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "پیچا برای ثبتِ محلِ ویزیت و تحویل به دسترسیِ موقعیتِ مکانی نیاز دارد."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "پیچا برای ثبتِ عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "پیچا برای اسکنِ بارکدِ کالا و عکسِ رسیدِ تحویل به دسترسیِ دوربین نیاز دارد.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#E6F4FE"
+        }
+      ]
+    ]
+  }
+}

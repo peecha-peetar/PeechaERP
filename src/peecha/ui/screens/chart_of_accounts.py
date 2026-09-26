@@ -305,6 +305,7 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         layout.addStretch(1)
 
         self.set_field_help([
+            (self.search_field, "جست‌وجو در کد یا نامِ حساب برایِ فیلترکردنِ درختِ حساب‌ها."),
             (
                 self.parent_combo,
                 "اگر این حساب زیرمجموعه‌یِ یک حسابِ دیگر است، والدش را این‌جا انتخاب کنید. "

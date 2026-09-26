@@ -41,6 +41,22 @@ def format_money(value: decimal.Decimal | int, decimal_places: int = 0, symbol: 
     return f"{text} {symbol}" if symbol else text
 
 
+def format_company_amount(value: decimal.Decimal | int, symbol: str | None = None) -> str:
+    """نمایشِ مبلغ طبقِ تعدادِ رقمِ اعشارِ ارزِ پایه‌یِ *شرکتِ جاری*ِ سشن --
+    برایِ جاهایی که استفاده از format_money با پاس‌دادنِ دستیِ
+    decimal_places در هر محل عملی نیست (مثلاً یک ستونِ جدول در یک حلقه).
+    فقط برایِ مبالغِ واقعیِ پولی استفاده شود -- نرخِ ارز/درصد/کمیت را با
+    format_amount یا فرمتِ اختصاصیِ خودشان نشان بده، نه این تابع را، چون
+    آن‌ها معمولاً نیازمندِ دقتِ اعشاریِ متفاوتی از ارزِ پایه‌اند."""
+    from peecha import session as app_session
+    from peecha.services import companies as companies_service
+
+    decimal_places = 0
+    if app_session.current_company is not None:
+        decimal_places = companies_service.get_base_currency_decimal_places(app_session.current_company.company_id)
+    return format_money(value, decimal_places, symbol)
+
+
 def parse_decimal(text: str) -> decimal.Decimal:
     normalized = to_ascii_digits(text).strip().replace(",", "")
     if not normalized:

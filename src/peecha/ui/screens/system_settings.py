@@ -12,10 +12,18 @@ from peecha.ui.screens.audit_log import AuditLogScreen
 from peecha.ui.screens.commercial_settings import (
     _AccountMappingsTab as _CommercialAccountMappingsTab,
     _ChannelsTab as _CommercialChannelsTab,
+    _DistributionSettlementTypesTab,
     _FeatureToggleTab,
     _IndustryProfileTab,
+    _MobileSettlementMethodsTab,
     _NumberingSequencesTab,
+    _PricingPolicyTab,
+    _SettlementAlarmTab,
+    _SmsGatewaySettingsTab,
+    _VoipSettingsTab,
 )
+from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
+from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
 from peecha.ui.screens.companies import CompaniesScreen
 from peecha.ui.screens.currencies import CurrenciesScreen
 from peecha.ui.screens.field_labels import FieldLabelsScreen
@@ -41,15 +49,17 @@ from peecha.ui.screens.payroll_settings import (
     _PoliciesTab,
     _TaxTab,
 )
+from peecha.ui.screens.report_template_settings import _ReportTemplatesTab
 from peecha.ui.screens.roles import RolesScreen
 from peecha.ui.screens.translations import TranslationsScreen
 from peecha.ui.screens.treasury_banks import TreasuryBanksScreen
 from peecha.ui.screens.treasury_counterparty_settings import TreasuryCounterpartySettingsScreen
 from peecha.ui.screens.users import UsersScreen
 from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
+from peecha.ui.widgets import FieldHelpMixin
 
 
-class SystemSettingsScreen(QWidget):
+class SystemSettingsScreen(FieldHelpMixin, QWidget):
     # طبقِ رفعِ باگِ صریح («بازکردنِ تنظیماتِ حسابداری/ماژول‌ها ۱۰ تا ۱۵
     # ثانیه طول می‌کشد»): این صفحه یک singletonِ سنگین است که ~۴۰ زیرصفحه‌یِ
     # مستقل (کدینگ/خزانه‌داری/عمومی/کاربران/حقوق‌ودستمزد/انبار/بازرگانی و...)
@@ -109,6 +119,10 @@ class SystemSettingsScreen(QWidget):
         # طبقِ همان الگو: تنظیماتِ مدیریتِ بازرگانی هم این‌جا و هم از
         # آیکونِ چرخ‌دنده‌یِ کنارِ گروه‌هایِ «فروش»/«خرید» در دسترس است.
         self._add_outer_tab("مدیریتِ بازرگانی", self._build_commercial_tab())
+        # طبقِ درخواستِ صریح («برایِ هر فرم بتوان چند گزارشِ نام‌گذاری‌شده
+        # تعریف/ویرایش/اجرا کرد»): رجیستریِ گزارش‌هایِ حرفه‌ای (Jasper) --
+        # هر فرمِ پشتیبانی‌شده (کاردکس، فاکتور) یک پنلِ مستقل این‌جا دارد.
+        self._add_outer_tab("گزارش‌هایِ حرفه‌ای", self._build_reports_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
 
@@ -121,6 +135,10 @@ class SystemSettingsScreen(QWidget):
         self.settings_search.setCurrentIndex(-1)
         self.settings_search.activated.connect(self._on_search_activated)
         self.settings_search.lineEdit().returnPressed.connect(self._on_search_return)
+
+        self.set_field_help([
+            (self.settings_search, "بخشی از تنظیمات را تایپ کنید (مثلاً «بانک‌ها») تا مستقیم به همان تب/زیرتب بروید."),
+        ])
 
     def _add_outer_tab(self, label: str, built: tuple[QWidget, "callable"]) -> None:
         widget, refresher = built
@@ -181,6 +199,9 @@ class SystemSettingsScreen(QWidget):
             [
                 ("انواعِ سندِ دریافت/پرداخت", TreasuryCounterpartySettingsScreen()),
                 ("بانک‌ها", TreasuryBanksScreen()),
+                # طبقِ درخواستِ صریح («تمامیِ تنظیماتِ POS از منوها برداشته
+                # شود و در تنظیماتِ اصلی، زیرِ خزانه‌داری بیاید»).
+                ("ترمینال‌ها، شیفت‌ها و تنظیماتِ تک‌فروشی", CommercialPosSessionsScreen()),
             ]
         )
 
@@ -291,8 +312,29 @@ class SystemSettingsScreen(QWidget):
                 ("نمایهٔ صنعتی", _IndustryProfileTab()),
                 ("شماره‌گذاریِ اسناد", _NumberingSequencesTab()),
                 ("کانال‌ها", _CommercialChannelsTab()),
+                ("انواعِ تسویهٔ پخش", _DistributionSettlementTypesTab()),
+                ("روش‌هایِ تسویهٔ موبایل", _MobileSettlementMethodsTab()),
+                ("هشدارِ موعدِ تسویه", _SettlementAlarmTab()),
+                ("حاشیهٔ سود و پیشنهادِ قیمت", _PricingPolicyTab()),
+                ("سانترال / وویپ", _VoipSettingsTab()),
+                ("درگاهِ پیامک", _SmsGatewaySettingsTab()),
+                # طبقِ درخواستِ صریح («در منویِ فروشِ اینترنتی فقط
+                # سفارش‌هایِ فروشِ مشتری بیاید، و تنظیمات به تبِ تنظیماتِ
+                # فروشِ اینترنتی برود»): اتصالات/نگاشتِ کالا-مشتری/سینکِ
+                # خودکار/مسیریابیِ سفارش -- همان صفحه‌ای که قبلاً خودش یک
+                # آیتمِ مستقلِ ناوبری بود، حالا این‌جاست.
+                ("تنظیماتِ فروشِ اینترنتی", CommercialEcommerceScreen()),
             ]
         )
+
+    def _build_reports_tab(self):
+        screen = _ReportTemplatesTab()
+        self._sub_screens.append(screen)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(screen)
+        return scroll, screen.refresh
 
     def refresh(self) -> None:
         # فقط زیرصفحه‌یِ *فعلاً قابلِ‌مشاهده* رفرش می‌شود، نه هر ~۴۰ زیرصفحه —

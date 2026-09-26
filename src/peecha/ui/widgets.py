@@ -53,6 +53,56 @@ from peecha.ui import theme
 
 _FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
 
+# ---------------------------------------------------------------------
+# استانداردِ چیدمانِ صفحه‌ها -- طبقِ درخواستِ صریح («طراحیِ فرم‌ها یک
+# رویهٔ خاص داشته باشه»). بررسیِ کدِ موجود نشان داد ده‌ها مقدارِ
+# پراکنده‌یِ margin/spacing در سراسرِ صفحه‌ها دستی نوشته شده بود (بعضی
+# فرم‌ها ۴px حاشیه داشتند، بعضی ۲۴px، بدونِ هیچ قاعده‌ای) -- همین
+# پراکندگی دلیلِ اصلیِ «بعضی فرم‌ها فضایِ خالیِ زیاد دارند، بعضی فشرده‌اند»
+# است. این چند مقدار از این پس تنها منبعِ حقیقتِ فاصله‌گذاریِ صفحه‌هاست؛
+# مقدارها از رویِ رایج‌ترین الگویِ ازپیش‌موجود انتخاب شده‌اند (نه
+# اختراعِ عددهایِ تازه) تا کمترین اصطکاک را با ظاهرِ فعلی داشته باشد.
+PAGE_MARGINS = (20, 14, 20, 14)
+SECTION_MARGINS = (14, 10, 14, 10)
+SECTION_SPACING = 10
+
+
+def build_page_layout(widget: QWidget) -> QVBoxLayout:
+    """چیدمانِ سطحِ‌بالایِ یک صفحه‌یِ کامل (ثبت‌شده در shell_window) --
+    حاشیه/فاصلهٔ استانداردِ بیرونی. جایگزینِ نوشتنِ دستیِ
+    setContentsMargins/setSpacing با عددهایِ دلخواه در هر صفحه."""
+    layout = QVBoxLayout(widget)
+    layout.setContentsMargins(*PAGE_MARGINS)
+    layout.setSpacing(SECTION_SPACING)
+    return layout
+
+
+def build_section_layout(widget: QWidget) -> QVBoxLayout:
+    """چیدمانِ یک بخش/تب/کارتِ داخلِ صفحه -- حاشیه/فاصلهٔ استانداردِ
+    داخلی. اکثرِ محتوایِ تب‌ها/کارت‌ها باید از همین به‌جایِ margin/spacingِ
+    دستیِ خودشان استفاده کنند."""
+    layout = QVBoxLayout(widget)
+    layout.setContentsMargins(*SECTION_MARGINS)
+    layout.setSpacing(SECTION_SPACING)
+    return layout
+
+
+def build_page_header(title_text: str, hint_text: str | None = None) -> QWidget:
+    """کارتِ استانداردِ عنوان (+ راهنمایِ اختیاری) بالایِ هر صفحه -- الگویی
+    که تقریباً هر صفحه (با فاصله‌گذاریِ کمی متفاوت) خودش دوباره می‌نوشت."""
+    card = QWidget()
+    card.setObjectName("card")
+    layout = build_section_layout(card)
+    title = QLabel(title_text)
+    title.setObjectName("pageTitle")
+    layout.addWidget(title)
+    if hint_text:
+        hint = QLabel(hint_text)
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+    return card
+
 
 def field_help_is_enabled() -> bool:
     """وضعیتِ سراسریِ روشن/خاموشِ کادرِ راهنمایِ فیلدها — مستقل از اینکه
@@ -234,22 +284,30 @@ def add_quick_add_button(
 
 class JalaliDateEdit(QLineEdit):
     """فیلدِ متنیِ تاریخِ شمسی با ارقامِ فارسی — معادلِ رفتارِ تاریخ‌گیرِ
-    Kivy (که هم آن یک فیلدِ متنی بود، نه پاپ‌آپِ تقویم)."""
+    Kivy (که هم آن یک فیلدِ متنی بود، نه پاپ‌آپِ تقویم).
 
-    def __init__(self, placeholder: str = "۱۴۰۳/۰۴/۲۸") -> None:
+    allow_empty (طبقِ درخواستِ صریحِ کاربر «همه‌جا فقط تاریخِ شمسی
+    باشه» -- جایگزینِ ترفندِ minimumDate/setSpecialValueTextِ QDateEdit
+    برایِ فیلدهایِ تاریخِ اختیاری): وقتی True باشد، خالی‌گذاشتنِ متن
+    یعنی «بدونِ تاریخ» -- date() مقدارِ None برمی‌گرداند و setDate(None)
+    فیلد را خالی می‌کند. پیش‌فرض False است تا رفتارِ همه‌یِ استفاده‌هایِ
+    قبلی (که همیشه یک تاریخِ معتبر می‌خواهند) دست‌نخورده بماند."""
+
+    def __init__(self, placeholder: str = "۱۴۰۳/۰۴/۲۸", *, allow_empty: bool = False) -> None:
         super().__init__()
         self.setPlaceholderText(placeholder)
         # اندازه‌یِ ثابت و یکسان در همه‌یِ فرم‌ها — قبلاً هر صفحه یک
         # setMaximumWidth دلبخواهی (۱۲۰ تا ۱۵۰) می‌گذاشت یا اصلاً نمی‌گذاشت
         # و فیلد کشیده می‌شد؛ حالا این کلاسِ مشترک اندازه را تعیین می‌کند.
         self.setFixedWidth(118)
-        self._date = datetime.date.today()
+        self._allow_empty = allow_empty
+        self._date: datetime.date | None = None if allow_empty else datetime.date.today()
         self._refresh_text()
         self.textEdited.connect(self._on_text_edited)
         self.editingFinished.connect(self._on_editing_finished)
 
     def _refresh_text(self) -> None:
-        self.setText(numerals.format_jalali_date(self._date))
+        self.setText(numerals.format_jalali_date(self._date) if self._date is not None else "")
         self.setCursorPosition(0)
 
     def _on_text_edited(self, text: str) -> None:
@@ -260,19 +318,24 @@ class JalaliDateEdit(QLineEdit):
             self.setCursorPosition(cursor)
 
     def _on_editing_finished(self) -> None:
+        if self._allow_empty and not self.text().strip():
+            self._date = None
+            return
         try:
             self._date = numerals.parse_jalali_date(self.text())
         except ValueError:
             pass
         self._refresh_text()
 
-    def date(self) -> datetime.date:
+    def date(self) -> datetime.date | None:
+        if self._allow_empty and not self.text().strip():
+            return None
         try:
             return numerals.parse_jalali_date(self.text())
         except ValueError:
             return self._date
 
-    def setDate(self, value: datetime.date) -> None:
+    def setDate(self, value: datetime.date | None) -> None:
         self._date = value
         self._refresh_text()
 
@@ -1095,7 +1158,7 @@ class SummaryCard(QFrame):
     عوض می‌شود — برایِ نمایشِ زنده‌یِ وضعیت (مثلاً مانده=۰ سبز، غیرِصفر
     قرمز) بدونِ بازسازیِ کارت."""
 
-    def __init__(self, title: str, role: str = "neutral", parent: QWidget | None = None) -> None:
+    def __init__(self, title: str, role: str = "neutral", parent: QWidget | None = None, icon: str = "") -> None:
         super().__init__(parent)
         self.setObjectName("card")
         self._role = role
@@ -1107,7 +1170,11 @@ class SummaryCard(QFrame):
         outer.setContentsMargins(10, 6, 10, 6)
         outer.setSpacing(2)
 
-        self._title_label = QLabel(title)
+        # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر (کارت‌هایِ رنگیِ آیکون‌دار در
+        # نوارِ خلاصه‌یِ فاکتور): آیکون اختیاری است -- صفحاتِ قدیمی‌تر
+        # (journal_entry.py/treasury_voucher.py) بدونِ آن صدا زده می‌شوند
+        # و دقیقاً مثلِ قبل بدونِ آیکون می‌مانند.
+        self._title_label = QLabel(f"{icon}  {title}" if icon else title)
         outer.addWidget(self._title_label)
 
         self.value_label = QLabel("۰")

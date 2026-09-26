@@ -67,6 +67,16 @@ def _set_combo(combo: QComboBox, value) -> None:
     combo.setCurrentIndex(max(0, combo.findData(value)))
 
 
+def _decimal_or_none(text: str) -> decimal.Decimal | None:
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        return decimal.Decimal(text)
+    except decimal.InvalidOperation:
+        return None
+
+
 class _BinLocationDialog(QDialog):
     def __init__(self, parent: QWidget, existing_bins: list[locations_service.BinLocationRow]) -> None:
         super().__init__(parent)
@@ -134,9 +144,87 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addWidget(self.bins_panel, stretch=2)
 
         self.set_field_help([
-            (self.type_combo, "انبارِ پروژه‌ای باید به یک پروژهٔ تفصیلیِ حسابداری وصل شود."),
-            (self.allow_negative_checkbox, "اگر روشن باشد، حواله/خروجی حتی با موجودیِ ناکافی نیز Post می‌شود."),
-            (self.access_level_combo, "سطحِ محدود یعنی فقط کاربرانِ فهرست‌شده در تبِ امنیت به این انبار دسترسی دارند."),
+            # پایه
+            (self.code_field, "کدِ یکتایِ انبار در همین شرکت -- بعدِ ذخیره قابلِ‌ویرایش نیست."),
+            (self.name_field, "نامِ نمایشیِ انبار در فهرست‌ها و کمبوهایِ انتخابِ انبار."),
+            (self.english_name_field, "نامِ انگلیسی -- اختیاری، فقط برایِ گزارش/چاپِ دوزبانه."),
+            (self.type_combo, "انبارِ پروژه‌ای باید به یک پروژهٔ تفصیلیِ حسابداری وصل شود؛ انبارِ خودرو (سیار) فیلدهایِ پلاک/راننده/ظرفیت را نشان می‌دهد."),
+            (self.project_combo, "پروژه‌یِ تفصیلیِ حسابداریِ مرتبط -- فقط برایِ انبارِ نوعِ «پروژه‌ای» الزامی است."),
+            (self.vehicle_plate_field, "پلاکِ خودرو -- فقط برایِ انبارِ نوعِ «خودرو (سیار)»."),
+            (self.vehicle_driver_combo, "راننده/مسئولِ همین خودروی سیار."),
+            (self.vehicle_capacity_weight_field, "حداکثرِ باری که این خودرو می‌تواند حمل کند -- برایِ هشدارِ بارگیریِ بیش‌ازحد."),
+            (self.vehicle_capacity_volume_field, "حداکثرِ حجمِ باری که این خودرو می‌تواند حمل کند."),
+            (self.org_unit_combo, "واحدِ سازمانیِ مسئولِ این انبار -- برایِ گزارش‌هایِ سازمانی."),
+            (self.cost_center_combo, "مرکزِ هزینه‌ای که هزینه‌هایِ عملیاتیِ این انبار (مثلاً اصلاحِ موجودی) رویِ آن ثبت می‌شود."),
+            (self.is_default_checkbox, "انبارِ پیش‌فرضِ همین شرکت -- در فرم‌هایِ سند وقتی انبارِ دیگری انتخاب نشود، همین پیش‌فرض است."),
+            (self.is_active_checkbox, "انبارهایِ غیرِفعال در کمبوهایِ انتخابِ انبارِ سندهایِ تازه دیده نمی‌شوند."),
+            # مکانی
+            (self.country_field, "کشورِ محلِ استقرارِ انبار -- اختیاری، فقط اطلاعاتی."),
+            (self.province_field, "استانِ محلِ استقرارِ انبار."),
+            (self.city_field, "شهرِ محلِ استقرارِ انبار."),
+            (self.postal_code_field, "کدپستیِ محلِ استقرارِ انبار -- برایِ برچسبِ حمل/فاکتورِ رسمی."),
+            (self.phone_field, "تلفنِ تماسِ انبار."),
+            (self.gps_field, "مختصاتِ جغرافیایی (طول/عرض) -- برایِ نقشه/مسیریابیِ تحویل."),
+            (self.address_field, "آدرسِ کاملِ انبار."),
+            (self.manager_combo, "کاربرِ مسئول/مدیرِ این انبار."),
+            # عملیاتی
+            (self.allow_purchase_checkbox, "اگر خاموش باشد، این انبار در فاکتور/رسیدِ خرید قابلِ‌انتخاب نیست."),
+            (self.allow_sale_checkbox, "اگر خاموش باشد، این انبار در فاکتورِ فروش قابلِ‌انتخاب نیست."),
+            (self.allow_production_checkbox, "این انبار می‌تواند به‌عنوانِ انبارِ ورودی/خروجیِ سندهایِ تولید استفاده شود."),
+            (self.allow_transfer_checkbox, "این انبار در سندِ انتقالِ بینِ‌انباری قابلِ‌انتخاب است."),
+            (self.allow_cycle_count_checkbox, "این انبار در ماژولِ انبارگردانی/شمارشِ چرخه‌ای قابلِ‌انتخاب است."),
+            (self.allow_reservation_checkbox, "موجودیِ این انبار می‌تواند برایِ سفارش/پیش‌فاکتور رزرو شود."),
+            (self.allow_direct_sale_checkbox, "امکانِ فروشِ مستقیم از همین انبار (مثلاً فروشگاه/POS) بدونِ سندِ واسط."),
+            (self.allow_negative_checkbox, "اگر روشن باشد، حواله/خروجی حتی با موجودیِ ناکافی نیز Post می‌شود -- کمبود دیگر مانعِ تاییدِ سرپرست نمی‌شود."),
+            (self.requires_receipt_approval_checkbox, "رسیدِ ورودیِ این انبار پیش از اثرگذاری رویِ موجودی، نیازمندِ تاییدِ جداگانه است."),
+            (self.requires_issue_approval_checkbox, "حواله/خروجیِ این انبار پیش از اثرگذاری رویِ موجودی، نیازمندِ تاییدِ جداگانه است."),
+            (self.temp_controlled_checkbox, "اگر روشن باشد، بازهٔ دمایِ مجازِ زیر فعال می‌شود (برایِ کالاهایِ سردخانه‌ای)."),
+            (self.min_temp_field, "پایین‌ترین دمایِ مجازِ نگه‌داری در این انبار."),
+            (self.max_temp_field, "بالاترین دمایِ مجازِ نگه‌داری در این انبار."),
+            # کنترلِ موجودی
+            (self.costing_method_combo, "روشِ بهایابیِ موجودیِ این انبار -- خالی یعنی از روشِ پیش‌فرضِ شرکت پیروی می‌کند."),
+            (self.min_qty_field, "حداقلِ موجودیِ پیش‌فرض برایِ کالاهایی که خودشان مقدارِ اختصاصی ندارند -- برایِ هشدارِ کمبود."),
+            (self.max_qty_field, "حداکثرِ موجودیِ پیش‌فرضِ توصیه‌شده -- برایِ هشدارِ مازاد."),
+            (self.reorder_point_field, "نقطه‌یِ سفارشِ پیش‌فرض -- وقتی موجودی به این عدد برسد، هشدارِ سفارشِ مجدد صادر می‌شود."),
+            (self.withdrawal_policy_combo, "سیاستِ برداشتِ پیش‌فرضِ کالا از این انبار (FIFO/LIFO/FEFO/دستی)."),
+            (
+                self.default_tax_percent_field,
+                "درصدِ مالیاتِ پیش‌فرضِ فروش از همین انبار -- طبقِ سیاستِ اولویتی، فقط وقتی تنظیماتِ کلیِ شرکت خالی باشد اثر می‌کند؛ خالی‌ماندنش یعنی نوبت به مالیاتِ خودِ کالا می‌رسد.",
+            ),
+            # کیفیت
+            (self.requires_qc_checkbox, "کالایِ واردشده به این انبار پیش از افزوده‌شدن به موجودیِ قابلِ‌فروش، نیازمندِ کنترلِ کیفیت است."),
+            (self.requires_quarantine_checkbox, "کالایِ مشکوک/ردشده در QC به‌جایِ این انبار، به انبارِ قرنطینهٔ زیر منتقل می‌شود."),
+            (self.quarantine_warehouse_combo, "انباری که کالایِ قرنطینه‌شده از این انبار به آن منتقل می‌شود."),
+            # امنیت
+            (self.access_level_combo, "سطحِ محدود یعنی فقط کاربرانِ فهرست‌شده در همین تب به این انبار دسترسی دارند."),
+            # تجهیزات
+            (self.has_barcode_checkbox, "این انبار مجهز به بارکدخوان است."),
+            (self.has_qr_checkbox, "این انبار مجهز به دستگاهِ خواندنِ QR است."),
+            (self.has_rfid_checkbox, "این انبار مجهز به تجهیزاتِ RFID است."),
+            (self.has_pda_checkbox, "این انبار مجهز به دستگاهِ PDA (جمع‌آورِ داده) است."),
+            (self.has_scanner_checkbox, "این انبار مجهز به اسکنرِ عمومی است."),
+            (self.has_scale_checkbox, "این انبار مجهز به باسکول/ترازو است -- برایِ بارکدِ وزنی/فروشِ وزنی لازم است."),
+            # فروشگاه/POS
+            (self.pos_enabled_checkbox, "این انبار در فرمِ فروشِ حضوری (POS) به‌عنوانِ انبارِ ترمینال قابلِ‌انتخاب است."),
+            (self.pos_priority_field, "اولویتِ برداشتِ موجودی از این انبار وقتی چند انبارِ POS به یک کالا دسترسی دارند -- عددِ کوچک‌تر، اولویتِ بالاتر."),
+            # تولید
+            (self.raw_material_wh_combo, "زیرانبارِ پیش‌فرض برایِ موادِ اولیه در سندهایِ تولید."),
+            (self.production_line_wh_combo, "زیرانبارِ پیش‌فرض برایِ کالایِ درجریانِ تولید."),
+            (self.finished_goods_wh_combo, "زیرانبارِ پیش‌فرض برایِ کالایِ نهاییِ خروجیِ تولید."),
+            (self.scrap_wh_combo, "زیرانبارِ پیش‌فرض برایِ ضایعاتِ حاصل از تولید."),
+            # مالی
+            (self.profit_center_combo, "مرکزِ سودی که فروشِ ثبت‌شده از این انبار به آن نسبت داده می‌شود."),
+            # توضیحات
+            (self.notes_field, "یادداشتِ آزادِ داخلی دربارهٔ این انبار -- در هیچ گزارش/چاپی نمایش داده نمی‌شود."),
+            # امنیت -- افزودنِ دسترسیِ کاربر
+            (self.access_user_combo, "کاربری که به این انبارِ محدود دسترسی می‌گیرد."),
+            (self.access_view_checkbox, "این کاربر می‌تواند موجودیِ این انبار را ببیند."),
+            (self.access_receipt_checkbox, "این کاربر می‌تواند برایِ این انبار رسیدِ ورودی ثبت کند."),
+            (self.access_issue_checkbox, "این کاربر می‌تواند برایِ این انبار حواله/خروجی ثبت کند."),
+            (self.access_adjust_checkbox, "این کاربر می‌تواند موجودیِ این انبار را اصلاح کند."),
+        ] + [
+            (self._mapping_combos[key], f"حسابِ تفصیلیِ نگاشت‌شده برایِ «{engine_service.MAPPING_LABELS[key]}» -- مخصوصِ این انبار (نه کلِ شرکت).")
+            for key in _FINANCIAL_MAPPING_KEYS
         ])
         self.register_field_grids("inventory_warehouses", [
             self.basic_grid, self.location_grid, self.operational_grid, self.stock_control_grid,
@@ -250,24 +338,42 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.is_active_checkbox = QCheckBox("فعال")
         self.is_active_checkbox.setChecked(True)
 
+        self.vehicle_plate_field = QLineEdit()
+        self.vehicle_driver_combo = QComboBox()
+        self.vehicle_capacity_weight_field = QDoubleSpinBox()
+        self.vehicle_capacity_weight_field.setRange(0, 999_999)
+        self.vehicle_capacity_weight_field.setDecimals(3)
+        self.vehicle_capacity_volume_field = QDoubleSpinBox()
+        self.vehicle_capacity_volume_field.setRange(0, 999_999)
+        self.vehicle_capacity_volume_field.setDecimals(3)
+
         self.basic_grid = FieldGrid([
             FieldSpec("code", "کد", self.code_field, span=1),
             FieldSpec("name", "نام", self.name_field, span=2),
             FieldSpec("english_name", "نامِ انگلیسی", self.english_name_field, span=2),
             FieldSpec("type", "نوعِ انبار", self.type_combo, span=1),
             FieldSpec("project", "پروژه", self.project_combo, span=3),
+            FieldSpec("vehicle_plate", "پلاکِ خودرو", self.vehicle_plate_field, span=1),
+            FieldSpec("vehicle_driver", "راننده", self.vehicle_driver_combo, span=1),
+            FieldSpec("vehicle_capacity_weight", "ظرفیتِ وزنی (کیلوگرم)", self.vehicle_capacity_weight_field, span=1),
+            FieldSpec("vehicle_capacity_volume", "ظرفیتِ حجمی (مترمکعب)", self.vehicle_capacity_volume_field, span=1),
             FieldSpec("org_unit", "واحدِ سازمانی", self.org_unit_combo, span=1),
             FieldSpec("cost_center", "مرکزِ هزینه", self.cost_center_combo, span=1),
             FieldSpec("is_default", "", self.is_default_checkbox, span=1),
             FieldSpec("is_active", "", self.is_active_checkbox, span=3),
         ])
-        # طبقِ درخواستِ صریح: پروژه فقط برایِ نوعِ PROJECT دیده شود. تکیه‌کردن
-        # به سیگنالِ currentIndexChanged کافی نیست — اگر ایندکسِ اولیه‌یِ
-        # کمبو از قبل ۰ (GENERAL) باشد، ست‌کردنِ دوباره‌یِ همان ایندکس هیچ
-        # سیگنالی صادر نمی‌کند و این ردیف با حالتِ پیش‌فرضِ QWidget (نمایان)
-        # می‌ماند؛ برایِ همین این‌جا صریحاً پنهانش می‌کنیم، هم‌الگو با
-        # temp_range در تبِ عملیاتی.
+        # طبقِ درخواستِ صریح: پروژه فقط برایِ نوعِ PROJECT و فیلدهایِ خودرو
+        # فقط برایِ نوعِ VEHICLE دیده شوند. تکیه‌کردن به سیگنالِ
+        # currentIndexChanged کافی نیست — اگر ایندکسِ اولیه‌یِ کمبو از قبل ۰
+        # (GENERAL) باشد، ست‌کردنِ دوباره‌یِ همان ایندکس هیچ سیگنالی صادر
+        # نمی‌کند و این ردیف‌ها با حالتِ پیش‌فرضِ QWidget (نمایان) می‌مانند؛
+        # برایِ همین این‌جا صریحاً پنهانشان می‌کنیم، هم‌الگو با temp_range
+        # در تبِ عملیاتی.
         self.basic_grid.set_field_visible("project", False)
+        self.basic_grid.set_field_visible("vehicle_plate", False)
+        self.basic_grid.set_field_visible("vehicle_driver", False)
+        self.basic_grid.set_field_visible("vehicle_capacity_weight", False)
+        self.basic_grid.set_field_visible("vehicle_capacity_volume", False)
         layout.addWidget(self.basic_grid)
         layout.addStretch(1)
         return panel
@@ -381,12 +487,21 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         for code, label in _WITHDRAWAL_POLICY_LABELS.items():
             self.withdrawal_policy_combo.addItem(label, code)
 
+        # طبقِ درخواستِ صریح («سیاستِ مالیات: شرکت -> انبار -> کالا»): اگر
+        # تنظیماتِ کلیِ شرکت خالی باشد، پیش از سراغِ‌رفتن به مالیاتِ خودِ
+        # کالا، این مقدار بررسی می‌شود.
+        self.default_tax_percent_field = QLineEdit()
+
         self.stock_control_grid = FieldGrid([
             FieldSpec("costing_method", "روشِ قیمت‌گذاری", self.costing_method_combo, span=1),
             FieldSpec("min_qty", "حداقلِ موجودی (پیش‌فرض)", self.min_qty_field, span=1),
             FieldSpec("max_qty", "حداکثرِ موجودی (پیش‌فرض)", self.max_qty_field, span=1),
             FieldSpec("reorder_point", "نقطهٔ‌سفارش (پیش‌فرض)", self.reorder_point_field, span=1),
-            FieldSpec("withdrawal_policy", "سیاستِ برداشت", self.withdrawal_policy_combo, span=2),
+            FieldSpec("withdrawal_policy", "سیاستِ برداشت", self.withdrawal_policy_combo, span=1),
+            FieldSpec(
+                "default_tax_percent", "درصدِ مالیاتِ پیش‌فرض (خالی = سراغِ مالیاتِ کالا)",
+                self.default_tax_percent_field, span=1,
+            ),
         ])
         layout.addWidget(self.stock_control_grid)
         layout.addStretch(1)
@@ -703,7 +818,13 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     # رفتار
     # ------------------------------------------------------------------
     def _on_type_changed(self) -> None:
-        self.basic_grid.set_field_visible("project", self.type_combo.currentData() == "PROJECT")
+        is_project = self.type_combo.currentData() == "PROJECT"
+        is_vehicle = self.type_combo.currentData() == "VEHICLE"
+        self.basic_grid.set_field_visible("project", is_project)
+        self.basic_grid.set_field_visible("vehicle_plate", is_vehicle)
+        self.basic_grid.set_field_visible("vehicle_driver", is_vehicle)
+        self.basic_grid.set_field_visible("vehicle_capacity_weight", is_vehicle)
+        self.basic_grid.set_field_visible("vehicle_capacity_volume", is_vehicle)
 
     def _on_temp_toggled(self, checked: bool) -> None:
         self.operational_grid.set_field_visible("temp_range", checked)
@@ -765,6 +886,11 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.manager_combo.addItem(u.full_name, u.user_id)
             self.access_user_combo.addItem(u.full_name, u.user_id)
 
+        self.vehicle_driver_combo.clear()
+        self.vehicle_driver_combo.addItem("(بدون)", None)
+        for p in dimensions_service.list_personnel(company_id):
+            self.vehicle_driver_combo.addItem(f"{p['code']} — {p['name'] or ''}", p["detail_account_id"])
+
         accounts = [(a.account_id, f"{a.full_code} — {a.name}") for a in coa_service.list_accounts(company_id) if a.is_postable]
         for combo in self._mapping_combos.values():
             combo.clear()
@@ -821,6 +947,10 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         _set_combo(self.type_combo, f.warehouse_type_code)
         self._on_type_changed()  # setCurrentIndex بی‌تغییر سیگنال نمی‌دهد؛ صریح فراخوانی می‌شود
         _set_combo(self.project_combo, f.project_detail_account_id)
+        self.vehicle_plate_field.setText(f.vehicle_plate_number or "")
+        _set_combo(self.vehicle_driver_combo, f.vehicle_driver_detail_account_id)
+        self.vehicle_capacity_weight_field.setValue(float(f.vehicle_capacity_weight_kg or 0))
+        self.vehicle_capacity_volume_field.setValue(float(f.vehicle_capacity_volume_m3 or 0))
         _set_combo(self.org_unit_combo, f.org_unit_id)
         _set_combo(self.cost_center_combo, f.cost_center_detail_account_id)
         self.is_default_checkbox.setChecked(f.is_default)
@@ -857,6 +987,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_qty_field.setValue(float(f.default_max_qty or 0))
         self.reorder_point_field.setValue(float(f.default_reorder_point_qty or 0))
         _set_combo(self.withdrawal_policy_combo, f.withdrawal_policy_code)
+        self.default_tax_percent_field.setText(str(f.default_tax_percent) if f.default_tax_percent is not None else "")
 
         # کیفیت
         self.requires_qc_checkbox.setChecked(f.requires_qc)
@@ -916,6 +1047,10 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.type_combo.setCurrentIndex(0)
         self._on_type_changed()  # setCurrentIndex بی‌تغییر سیگنال نمی‌دهد؛ صریح فراخوانی می‌شود
         self.project_combo.setCurrentIndex(0)
+        self.vehicle_plate_field.clear()
+        self.vehicle_driver_combo.setCurrentIndex(0)
+        self.vehicle_capacity_weight_field.setValue(0)
+        self.vehicle_capacity_volume_field.setValue(0)
         self.org_unit_combo.setCurrentIndex(0)
         self.cost_center_combo.setCurrentIndex(0)
         self.is_default_checkbox.setChecked(False)
@@ -949,6 +1084,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_qty_field.setValue(0)
         self.reorder_point_field.setValue(0)
         self.withdrawal_policy_combo.setCurrentIndex(0)
+        self.default_tax_percent_field.clear()
 
         self.requires_qc_checkbox.setChecked(False)
         self.requires_quarantine_checkbox.setChecked(False)
@@ -990,6 +1126,22 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         return locations_service.WarehouseFields(
             warehouse_type_code=warehouse_type_code,
             project_detail_account_id=self.project_combo.currentData() if warehouse_type_code == "PROJECT" else None,
+            vehicle_plate_number=(
+                self.vehicle_plate_field.text().strip() or None if warehouse_type_code == "VEHICLE" else None
+            ),
+            vehicle_driver_detail_account_id=(
+                self.vehicle_driver_combo.currentData() if warehouse_type_code == "VEHICLE" else None
+            ),
+            vehicle_capacity_weight_kg=(
+                decimal.Decimal(str(self.vehicle_capacity_weight_field.value()))
+                if warehouse_type_code == "VEHICLE" and self.vehicle_capacity_weight_field.value()
+                else None
+            ),
+            vehicle_capacity_volume_m3=(
+                decimal.Decimal(str(self.vehicle_capacity_volume_field.value()))
+                if warehouse_type_code == "VEHICLE" and self.vehicle_capacity_volume_field.value()
+                else None
+            ),
             allow_negative_stock=self.allow_negative_checkbox.isChecked(),
             is_temperature_controlled=temp_controlled,
             min_temp_c=decimal.Decimal(str(self.min_temp_field.value())) if temp_controlled else None,
@@ -1022,6 +1174,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 decimal.Decimal(str(self.reorder_point_field.value())) if self.reorder_point_field.value() else None
             ),
             withdrawal_policy_code=self.withdrawal_policy_combo.currentData(),
+            default_tax_percent=_decimal_or_none(self.default_tax_percent_field.text()),
             requires_qc=self.requires_qc_checkbox.isChecked(),
             requires_quarantine=self.requires_quarantine_checkbox.isChecked(),
             default_quarantine_warehouse_id=self.quarantine_warehouse_combo.currentData(),

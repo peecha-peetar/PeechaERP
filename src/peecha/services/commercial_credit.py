@@ -68,6 +68,13 @@ def check_credit_exposure(company_id: int, customer_detail_account_id: int, addi
     with new_session() as session:
         profile = session.get(CustomerProfile, customer_detail_account_id)
         credit_limit = profile.credit_limit_amount if profile is not None else _ZERO
+    # طبقِ باگِ واقعیِ کشف‌شده (R216): هم‌الگو با sales_assistant.py
+    # (_credit_limit_exceeded_item) -- سقفِ صفر/تعریف‌نشده یعنی «بدونِ
+    # محدودیتِ اعتبار»، نه «تحملِ صفر». بدونِ این نگهبان، هر مشتریِ
+    # عادیِ بدونِ سقفِ صریح (پیش‌فرضِ ۰) با اولین نسیه‌یِ هرچند کوچک
+    # هُلدِ اعتباری می‌گرفت.
+    if not credit_limit:
+        return False
     exposure = compute_customer_exposure(company_id, customer_detail_account_id)
     return (exposure + additional_amount) > credit_limit
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QMessageBox
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
@@ -79,6 +79,7 @@ class TrialBalanceScreen(ReportScreenBase):
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
         self.enable_document_no_filter()
+        self.enable_jasper_report("TRIAL_BALANCE")
 
         self.add_field_help([
             (
@@ -306,3 +307,56 @@ class TrialBalanceScreen(ReportScreenBase):
 
         footer = ["", "جمعِ کل", *[fmt(v) for v in totals]]
         return headers, table_rows, footer
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        # طبقِ محدودیتِ مستندشده: قالبِ trial_balance.jrxml فقط شکلِ
+        # استانداردِ «۶ ستونی» (کد، نام + مانده‌یِ اول/گردش/مانده‌یِ آخرِ
+        # بد و بس) را پوشش می‌دهد -- حالتِ ۴/۸ ستونی یا «تفکیکِ گردش»
+        # شکلِ ستونیِ کاملاً متفاوتی دارند؛ برایِ آن‌ها می‌توان از همان
+        # تنظیماتِ گزارش‌هایِ حرفه‌ای یک گزارشِ اختصاصی (با قالبِ دیگر) ساخت.
+        if self.column_mode_combo.currentData() != 6:
+            QMessageBox.information(
+                self, "گزارش", "چاپِ حرفه‌ای فعلاً فقط برایِ حالتِ «۶ ستونی» پشتیبانی می‌شود."
+            )
+            return None
+        if self.level_combo.currentData() == 4 and self.breakdown_checkbox.isChecked():
+            QMessageBox.information(
+                self, "گزارش", "چاپِ حرفه‌ای برایِ حالتِ «تفکیکِ گردش بر اساسِ حساب» فعلاً پشتیبانی نمی‌شود."
+            )
+            return None
+        if not self._rows:
+            QMessageBox.information(self, "گزارش", "داده‌ای برایِ چاپ وجود ندارد.")
+            return None
+
+        print_rows = [
+            {
+                "account_code": row[0],
+                "account_name": row[1],
+                "opening_debit_display": row[2],
+                "opening_credit_display": row[3],
+                "period_debit_display": row[4],
+                "period_credit_display": row[5],
+                "closing_debit_display": row[6],
+                "closing_credit_display": row[7],
+            }
+            for row in self._rows
+        ]
+        company = session.current_company
+        date_range_label = (
+            f"از {numerals.format_jalali_date(self.date_from.date())} "
+            f"تا {numerals.format_jalali_date(self.date_to.date())}"
+        )
+        footer = self._footer or ["", "", "", "", "", "", "", ""]
+        params = {
+            "companyName": company.display_name if company else "",
+            "levelLabel": self.level_combo.currentText(),
+            "dateRangeLabel": date_range_label,
+            "generatedAt": numerals.format_jalali_datetime(datetime.datetime.now()),
+            "totalOpeningDebitDisplay": footer[2],
+            "totalOpeningCreditDisplay": footer[3],
+            "totalPeriodDebitDisplay": footer[4],
+            "totalPeriodCreditDisplay": footer[5],
+            "totalClosingDebitDisplay": footer[6],
+            "totalClosingCreditDisplay": footer[7],
+        }
+        return print_rows, params

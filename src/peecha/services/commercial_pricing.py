@@ -9,7 +9,7 @@ import datetime
 import decimal
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.commercial import (
@@ -19,8 +19,10 @@ from peecha.db.models.commercial import (
     Coupon,
     DiscountRule,
     DiscountRuleTier,
+    DistributionSettlementType,
     PriceList,
     PriceListItem,
+    PriceListItemPriceHistory,
     PricingPolicy,
     Promotion,
 )
@@ -37,11 +39,19 @@ def list_channels(company_id: int) -> list[Channel]:
         return list(session.scalars(select(Channel).where(Channel.company_id == company_id)))
 
 
+def get_channel(company_id: int, channel_code: str) -> Channel | None:
+    with new_session() as session:
+        row = session.get(Channel, (channel_code, company_id))
+        if row is not None:
+            session.expunge(row)
+        return row
+
+
 def create_channel(
     company_id: int, channel_code: str, name: str, channel_type_code: str,
     default_price_list_id: int | None = None, default_warehouse_id: int | None = None,
 ) -> str:
-    if channel_type_code not in ("POS", "WHOLESALE", "ONLINE", "AGENT", "MARKETPLACE"):
+    if channel_type_code not in ("POS", "WHOLESALE", "ONLINE", "AGENT", "MARKETPLACE", "VAN_SALES", "PRE_SALES"):
         raise ValueError("نوعِ کانال نامعتبر است.")
     with new_session() as session:
         row = Channel(
@@ -51,6 +61,111 @@ def create_channel(
         session.add(row)
         session.commit()
         return row.channel_code
+
+
+def set_channel_mobile_defaults(
+    company_id: int, channel_code: str,
+    cost_center_detail_account_id: int | None, project_detail_account_id: int | None,
+) -> None:
+    """طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه تعیین
+    شود»): این دو مقدار پیش‌فرضِ ثابتِ همین کانال‌اند -- سفارش‌هایِ
+    ثبت‌شده از موبایل (بدونِ گزینه‌یِ انتخابِ دستی برایِ ویزیتور) هر بار
+    همین‌ها را در سرِسند می‌فرستند."""
+    with new_session() as session:
+        row = session.get(Channel, (channel_code, company_id))
+        if row is None:
+            raise ValueError("کانال یافت نشد.")
+        row.default_cost_center_detail_account_id = cost_center_detail_account_id
+        row.default_project_detail_account_id = project_detail_account_id
+        session.commit()
+
+
+def set_channel_pricing_defaults(
+    company_id: int, channel_code: str, price_list_id: int | None, discount_rule_id: int | None,
+) -> None:
+    """طبقِ درخواستِ صریحِ کاربر («تعریف بشه کدام قیمت برایِ کالاهایِ
+    پخشِ گرم و سرد و حتی تخفیف‌ها/پروموشن‌ها قابلِ‌انتخاب باشه»): وقتی
+    این دو مقدار برایِ یک کانال تعریف شوند، GET /pricing/resolve آن‌ها
+    را به جایِ فهرستِ قیمتِ پیش‌فرضِ خودِ مشتری و بهترینِ قاعدهٔ عمومیِ
+    فعال اعمال می‌کند (channel_code را در پارامترِ resolve بفرستد)."""
+    with new_session() as session:
+        row = session.get(Channel, (channel_code, company_id))
+        if row is None:
+            raise ValueError("کانال یافت نشد.")
+        row.default_price_list_id = price_list_id
+        row.default_discount_rule_id = discount_rule_id
+        session.commit()
+
+
+# ---------------------------------------------------------------------
+# نوعِ تسویهٔ پخش -- طبقِ اصلاحِ صریحِ کاربر: کاملاً مفهومی جدا از نوعِ
+# تسویه/روشِ دریافتِ خزانه‌داری («تسویهٔ نقدیِ پایِ بار»، «تسویهٔ چک»،
+# «رسید»، «تسویهٔ یک‌هفته‌ای»، «تسویهٔ پایِ بار» -- و هر نوعِ سفارشیِ
+# دیگری که کاربر اضافه کند).
+# ---------------------------------------------------------------------
+_DEFAULT_DISTRIBUTION_SETTLEMENT_TYPES = (
+    ("CASH_ON_TRUCK", "تسویهٔ نقدیِ پایِ بار"),
+    ("CHECK", "تسویهٔ چک"),
+    ("RECEIPT", "رسید"),
+    ("WEEKLY", "تسویهٔ یک‌هفته‌ای"),
+    ("ON_TRUCK", "تسویهٔ پایِ بار"),
+)
+
+
+def ensure_default_distribution_settlement_types(company_id: int) -> None:
+    """طبقِ همان الگویِ get-or-create در سراسرِ این پروژه (مثلِ
+    ensure_person_groups/ensure_specialized_dimensions): اولین‌باری که
+    این فهرست برایِ یک شرکت خوانده می‌شود، اگر هنوز چیزی تعریف نشده،
+    این چند نوعِ پیش‌فرض (طبقِ نمونه‌هایِ خودِ کاربر) ساخته می‌شوند --
+    کاملاً قابلِ‌ویرایش/افزودنِ بیشتر پس از آن."""
+    with new_session() as session:
+        existing = session.scalar(
+            select(func.count()).select_from(DistributionSettlementType).where(DistributionSettlementType.company_id == company_id)
+        )
+        if existing:
+            return
+        for code, name in _DEFAULT_DISTRIBUTION_SETTLEMENT_TYPES:
+            session.add(DistributionSettlementType(company_id=company_id, code=code, name=name))
+        session.commit()
+
+
+def list_distribution_settlement_types(company_id: int, active_only: bool = False) -> list[DistributionSettlementType]:
+    ensure_default_distribution_settlement_types(company_id)
+    with new_session() as session:
+        query = select(DistributionSettlementType).where(DistributionSettlementType.company_id == company_id)
+        if active_only:
+            query = query.where(DistributionSettlementType.is_active.is_(True))
+        rows = session.scalars(query.order_by(DistributionSettlementType.code)).all()
+        for row in rows:
+            session.expunge(row)
+        return list(rows)
+
+
+def create_distribution_settlement_type(company_id: int, code: str, name: str) -> str:
+    code = code.strip().upper()
+    name = name.strip()
+    if not code or not name:
+        raise ValueError("کد و نام نمی‌توانند خالی باشند.")
+    with new_session() as session:
+        if session.get(DistributionSettlementType, (code, company_id)) is not None:
+            raise ValueError(f"نوعِ تسویه‌ای با کدِ «{code}» از قبل وجود دارد.")
+        row = DistributionSettlementType(code=code, company_id=company_id, name=name)
+        session.add(row)
+        session.commit()
+        return row.code
+
+
+def update_distribution_settlement_type(company_id: int, code: str, name: str, is_active: bool) -> None:
+    name = name.strip()
+    if not name:
+        raise ValueError("نام نمی‌تواند خالی باشد.")
+    with new_session() as session:
+        row = session.get(DistributionSettlementType, (code, company_id))
+        if row is None:
+            raise ValueError("نوعِ تسویه نامعتبر است.")
+        row.name = name
+        row.is_active = is_active
+        session.commit()
 
 
 # ---------------------------------------------------------------------
@@ -80,7 +195,14 @@ def create_price_list(
         return row.price_list_id
 
 
-def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_price: decimal.Decimal, min_quantity: decimal.Decimal = decimal.Decimal(1)) -> int:
+def set_price_list_item(
+    price_list_id: int, item_id: int, uom_id: int, unit_price: decimal.Decimal,
+    min_quantity: decimal.Decimal = decimal.Decimal(1), *, changed_by_user_id: int | None = None,
+    source_code: str = "MANUAL", note: str | None = None,
+) -> int:
+    """طبقِ درخواستِ صریح («لاگِ قیمت‌ها را نگه دار تا سابقه حفظ شود»):
+    هر تغییرِ واقعیِ قیمت (نه فراخوانیِ بی‌اثر با همان مقدارِ قبلی) یک
+    ردیف در PriceListItemPriceHistory ثبت می‌کند."""
     with new_session() as session:
         row = session.scalar(
             select(PriceListItem).where(
@@ -88,6 +210,7 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
                 PriceListItem.uom_id == uom_id, PriceListItem.min_quantity == min_quantity,
             )
         )
+        old_price = row.unit_price if row is not None else None
         if row is None:
             row = PriceListItem(
                 price_list_id=price_list_id, item_id=item_id, uom_id=uom_id, min_quantity=min_quantity,
@@ -96,6 +219,12 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
             session.add(row)
         else:
             row.unit_price = unit_price
+        if old_price is None or old_price != unit_price:
+            session.add(PriceListItemPriceHistory(
+                price_list_id=price_list_id, item_id=item_id, uom_id=uom_id, min_quantity=min_quantity,
+                old_price=old_price, new_price=unit_price, source_code=source_code, note=note,
+                changed_by_user_id=changed_by_user_id,
+            ))
         session.commit()
         return row.price_list_item_id
 
@@ -103,6 +232,68 @@ def set_price_list_item(price_list_id: int, item_id: int, uom_id: int, unit_pric
 def list_price_list_items(price_list_id: int) -> list[PriceListItem]:
     with new_session() as session:
         return list(session.scalars(select(PriceListItem).where(PriceListItem.price_list_id == price_list_id)))
+
+
+# ---------------------------------------------------------------------
+# تاریخچهٔ قیمت -- طبقِ درخواستِ صریح («لاگِ قیمت‌ها ... اگر اشتباهی شد
+# بشه قیمتو برگردوند»)
+# ---------------------------------------------------------------------
+@dataclass
+class PriceHistoryRow:
+    history_id: int
+    price_list_id: int
+    item_id: int
+    uom_id: int
+    min_quantity: decimal.Decimal
+    old_price: decimal.Decimal | None
+    new_price: decimal.Decimal
+    source_code: str
+    note: str | None
+    changed_by_user_id: int | None
+    changed_at: datetime.datetime
+
+
+def list_price_history(price_list_id: int, item_id: int | None = None) -> list[PriceHistoryRow]:
+    with new_session() as session:
+        stmt = select(PriceListItemPriceHistory).where(PriceListItemPriceHistory.price_list_id == price_list_id)
+        if item_id is not None:
+            stmt = stmt.where(PriceListItemPriceHistory.item_id == item_id)
+        stmt = stmt.order_by(PriceListItemPriceHistory.changed_at.desc(), PriceListItemPriceHistory.history_id.desc())
+        return [
+            PriceHistoryRow(
+                r.history_id, r.price_list_id, r.item_id, r.uom_id, r.min_quantity, r.old_price, r.new_price,
+                r.source_code, r.note, r.changed_by_user_id, r.changed_at,
+            )
+            for r in session.scalars(stmt).all()
+        ]
+
+
+def revert_price_history(history_id: int, changed_by_user_id: int | None = None) -> None:
+    """قیمت را دقیقاً به old_priceِ همین ردیفِ تاریخچه برمی‌گرداند --
+    خودِ برگشت هم یک ردیفِ تازه (source_code='REVERT') ثبت می‌کند تا
+    لاگ همیشه append-only بماند و چیزی حذف/بازنویسی نشود."""
+    with new_session() as session:
+        hist = session.get(PriceListItemPriceHistory, history_id)
+        if hist is None:
+            raise ValueError("این ردیفِ تاریخچه یافت نشد.")
+        if hist.old_price is None:
+            raise ValueError("این ردیف اولین قیمتِ ثبت‌شده بوده؛ چیزی برایِ برگشت وجود ندارد.")
+        row = session.scalar(
+            select(PriceListItem).where(
+                PriceListItem.price_list_id == hist.price_list_id, PriceListItem.item_id == hist.item_id,
+                PriceListItem.uom_id == hist.uom_id, PriceListItem.min_quantity == hist.min_quantity,
+            )
+        )
+        if row is None:
+            raise ValueError("ردیفِ قیمتِ مربوطه دیگر در فهرستِ قیمت وجود ندارد.")
+        current_price = row.unit_price
+        row.unit_price = hist.old_price
+        session.add(PriceListItemPriceHistory(
+            price_list_id=hist.price_list_id, item_id=hist.item_id, uom_id=hist.uom_id, min_quantity=hist.min_quantity,
+            old_price=current_price, new_price=hist.old_price, source_code="REVERT",
+            note=f"بازگشت به قیمتِ ردیفِ تاریخچهٔ #{history_id}", changed_by_user_id=changed_by_user_id,
+        ))
+        session.commit()
 
 
 def _lookup_tiered_price(session, price_list_id: int, item_id: int, uom_id: int, quantity: decimal.Decimal) -> decimal.Decimal | None:
@@ -227,6 +418,11 @@ class ResolvedPrice:
 def resolve_price(
     company_id: int, counterparty_detail_account_id: int, item_id: int, uom_id: int, quantity: decimal.Decimal,
     price_list_id: int | None, document_type_code: str, as_of_date: datetime.date | None = None,
+    # طبقِ درخواستِ صریحِ کاربر («تخفیف/پروموشن هم قابلِ‌انتخاب برایِ
+    # پخشِ گرم/سرد باشه»): وقتی مشخص شود (مثلاً از Channel.default_
+    # discount_rule_id)، دقیقاً همین قاعده اعمال می‌شود -- نه بهترینِ
+    # قواعدِ scope=ALLِ فعال (رفتارِ پیش‌فرض وقتی None بماند).
+    discount_rule_id: int | None = None,
 ) -> ResolvedPrice:
     as_of_date = as_of_date or datetime.date.today()
     contract_type = "SALES" if document_type_code.startswith("SALES") else "PURCHASE"
@@ -245,15 +441,24 @@ def resolve_price(
         if base_price is None:
             raise ValueError("قیمتی برایِ این کالا در فهرستِ قیمتِ انتخاب‌شده تعریف نشده است.")
 
-        best_rule = session.scalar(
-            select(DiscountRule)
-            .where(
-                DiscountRule.company_id == company_id, DiscountRule.is_active.is_(True),
-                DiscountRule.scope_type_code == "ALL", DiscountRule.valid_from <= as_of_date,
-                (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+        if discount_rule_id is not None:
+            best_rule = session.scalar(
+                select(DiscountRule).where(
+                    DiscountRule.rule_id == discount_rule_id, DiscountRule.company_id == company_id,
+                    DiscountRule.is_active.is_(True), DiscountRule.valid_from <= as_of_date,
+                    (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+                )
             )
-            .order_by(DiscountRule.priority)
-        )
+        else:
+            best_rule = session.scalar(
+                select(DiscountRule)
+                .where(
+                    DiscountRule.company_id == company_id, DiscountRule.is_active.is_(True),
+                    DiscountRule.scope_type_code == "ALL", DiscountRule.valid_from <= as_of_date,
+                    (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+                )
+                .order_by(DiscountRule.priority)
+            )
         discount_amount = _ZERO
         applied_rule_id = None
         if best_rule is not None:
@@ -272,6 +477,49 @@ def resolve_price(
             applied_rule_id = best_rule.rule_id
 
     return ResolvedPrice(unit_price=base_price, source="PRICE_LIST", discount_amount=discount_amount, applied_discount_rule_id=applied_rule_id)
+
+
+def resolve_sale_price(company_id: int, base_price: decimal.Decimal, as_of_date: datetime.date | None = None) -> decimal.Decimal | None:
+    """قیمتِ «حراج» برایِ نمایشِ بیرونی (مثلاً فروشگاهِ اینترنتی) -- طبقِ
+    درخواستِ صریحِ کاربر («اگر کالا در فهرستِ تخفیف/کمپین باشد، هم
+    regular_price هم sale_price فرستاده شود»). عمداً همان قاعدهٔ
+    تخفیفِ عمومی (scope=ALL) را بررسی می‌کند که resolve_price هم در
+    فاکتور/سفارش خودکار اعمال می‌کند -- تا قیمتِ حراجِ نمایش‌داده‌شده
+    با قیمتِ واقعیِ فروش هماهنگ بماند؛ برایِ تعدادِ ۱ محاسبه می‌شود
+    (چون sale_price در ووکامرس یک عددِ ثابت است، نه پلکانی/بسته به
+    تعداد). اگر تخفیفِ فعالی نبود، None برمی‌گرداند (یعنی «حراج»
+    برایِ این کالا معنا ندارد)."""
+    as_of_date = as_of_date or datetime.date.today()
+    quantity = decimal.Decimal(1)
+    with new_session() as session:
+        best_rule = session.scalar(
+            select(DiscountRule)
+            .where(
+                DiscountRule.company_id == company_id, DiscountRule.is_active.is_(True),
+                DiscountRule.scope_type_code == "ALL", DiscountRule.valid_from <= as_of_date,
+                (DiscountRule.valid_to.is_(None)) | (DiscountRule.valid_to >= as_of_date),
+            )
+            .order_by(DiscountRule.priority)
+        )
+        if best_rule is None:
+            return None
+        discount_amount = _ZERO
+        if best_rule.discount_type_code == "PERCENT" and best_rule.discount_value is not None:
+            discount_amount = base_price * (best_rule.discount_value / 100)
+        elif best_rule.discount_type_code == "AMOUNT" and best_rule.discount_value is not None:
+            discount_amount = best_rule.discount_value
+        elif best_rule.discount_type_code == "TIERED":
+            tier = session.scalar(
+                select(DiscountRuleTier)
+                .where(DiscountRuleTier.rule_id == best_rule.rule_id, DiscountRuleTier.min_quantity <= quantity)
+                .order_by(DiscountRuleTier.min_quantity.desc())
+            )
+            if tier is not None:
+                discount_amount = base_price * (tier.discount_value / 100)
+    if discount_amount <= _ZERO:
+        return None
+    sale_price = base_price - discount_amount
+    return sale_price if sale_price > _ZERO else None
 
 
 # ---------------------------------------------------------------------

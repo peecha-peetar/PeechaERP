@@ -141,6 +141,19 @@ def update_user(
             user.password_salt = password_salt
             user.must_change_password = True
 
+        # طبقِ رفعِ حفره‌یِ کشف‌شده: این حلقه همه‌یِ ردیف‌هایِ UserCompany را
+        # حذف و دوباره می‌سازد -- بدونِ این نگه‌داری، هر ویرایشِ ساده‌یِ
+        # کاربر (مثلاً تغییرِ نام) بی‌سروصدا داخلیِ سانترالِ ثبت‌شده
+        # (voip_extension، R137) را هم پاک می‌کرد. mobile_channel_type_code
+        # هم دقیقاً همین حفره را دارد -- باید هم‌الگو نگه داشته شود.
+        existing_extensions = {
+            uc.company_id: uc.voip_extension
+            for uc in session.scalars(select(UserCompany).where(UserCompany.user_id == user_id)).all()
+        }
+        existing_mobile_channel_types = {
+            uc.company_id: uc.mobile_channel_type_code
+            for uc in session.scalars(select(UserCompany).where(UserCompany.user_id == user_id)).all()
+        }
         session.execute(UserCompany.__table__.delete().where(UserCompany.user_id == user_id))
         for company_id in company_ids:
             session.add(
@@ -148,12 +161,53 @@ def update_user(
                     user_id=user_id,
                     company_id=company_id,
                     is_default=(company_id == default_company_id),
+                    voip_extension=existing_extensions.get(company_id),
+                    mobile_channel_type_code=existing_mobile_channel_types.get(company_id),
                 )
             )
         session.commit()
         session.refresh(user)
         session.expunge(user)
         return user
+
+
+def get_voip_extension(user_id: int, company_id: int) -> str | None:
+    with new_session() as session:
+        uc = session.get(UserCompany, (user_id, company_id))
+        return uc.voip_extension if uc else None
+
+
+def set_voip_extension(user_id: int, company_id: int, extension: str | None) -> None:
+    with new_session() as session:
+        uc = session.get(UserCompany, (user_id, company_id))
+        if uc is None:
+            raise ValueError("این کاربر به این شرکت دسترسی ندارد.")
+        uc.voip_extension = extension.strip() if extension and extension.strip() else None
+        session.commit()
+
+
+MOBILE_CHANNEL_TYPE_CODES = ("VAN_SALES", "PRE_SALES")
+
+
+def get_mobile_channel_type(user_id: int, company_id: int) -> str | None:
+    """طبقِ درخواستِ صریح («تعیینِ کانالِ مجزا برایِ پخشِ سرد و گرم»):
+    اپِ موبایل بر اساسِ همین مقدار مسیرِ فروشِ گرم (فاکتورِ آنی) یا سردِ
+    (فقط سفارش‌گیری) را برایِ این ویزیتور انتخاب می‌کند -- None یعنی
+    هنوز تنظیم نشده."""
+    with new_session() as session:
+        uc = session.get(UserCompany, (user_id, company_id))
+        return uc.mobile_channel_type_code if uc else None
+
+
+def set_mobile_channel_type(user_id: int, company_id: int, channel_type_code: str | None) -> None:
+    if channel_type_code is not None and channel_type_code not in MOBILE_CHANNEL_TYPE_CODES:
+        raise ValueError("نوعِ کانالِ موبایل نامعتبر است.")
+    with new_session() as session:
+        uc = session.get(UserCompany, (user_id, company_id))
+        if uc is None:
+            raise ValueError("این کاربر به این شرکت دسترسی ندارد.")
+        uc.mobile_channel_type_code = channel_type_code
+        session.commit()
 
 
 def list_companies_for_picker() -> list[tuple[int, str]]:
