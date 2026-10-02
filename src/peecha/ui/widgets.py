@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -52,6 +53,20 @@ from peecha import numerals
 from peecha.ui import theme
 
 _FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
+
+
+def show_saved_dialog(parent: QWidget | None, text: str, title: str = "ذخیره") -> QMessageBox:
+    """R226 (درخواستِ صریح): پیامِ ذخیره در یک پنجرهٔ تعاملی با دکمهٔ «تایید»،
+    نه فقط متنِ وضعیت. غیرِمسدودکننده (open) تا جریانِ فرم/تست قفل نشود."""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Information)
+    box.setWindowTitle(title)
+    box.setText(text)
+    box.setLayoutDirection(Qt.RightToLeft)
+    box.addButton("تایید", QMessageBox.AcceptRole)
+    box.setAttribute(Qt.WA_DeleteOnClose, True)
+    box.open()
+    return box
 
 # ---------------------------------------------------------------------
 # استانداردِ چیدمانِ صفحه‌ها -- طبقِ درخواستِ صریح («طراحیِ فرم‌ها یک

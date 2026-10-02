@@ -26,6 +26,7 @@ import decimal
 from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount, FiscalYear, JournalEntryLine
@@ -445,11 +446,9 @@ def get_order_fulfillment_summary(document_id: int, company_id: int) -> tuple[de
 
 def _receipt_locks_quantity(order: CommercialDocument) -> bool:
     """طبقِ درخواستِ صریحِ کاربر («بعدِ تاییدِ رسید توسطِ انباردار، در صدورِ
-    فاکتور تعداد قابلِ‌تغییر نباشد -- انبار مسئولِ تعداد است؛ تنظیمی باشد»)."""
-    return (
-        order.document_type_code == "PURCHASE_ORDER" and order.warehouse_approved_at is not None
-        and settings_service.is_feature_enabled(order.company_id, "RECEIPT_LOCKS_INVOICE_QUANTITY")
-    )
+    فاکتور تعداد قابلِ‌تغییر نباشد -- انبار مسئولِ تعداد است»). R226: همیشه
+    فعال (دیگر Toggle نیست -- مقدارِ تاییدشدهٔ انبار در فاکتور قفل است)."""
+    return order.document_type_code == "PURCHASE_ORDER" and order.warehouse_approved_at is not None
 
 
 def _locked_line_ids(session, document_id: int) -> set[int]:
@@ -460,12 +459,17 @@ def _locked_line_ids(session, document_id: int) -> set[int]:
         )
     ).all()
     for ln in lines:
-        source_line = session.get(CommercialDocumentLine, ln.source_line_id)
-        if source_line is None:
-            continue
-        order = session.get(CommercialDocument, source_line.document_id)
-        if order is not None and _receipt_locks_quantity(order):
-            locked.add(ln.line_id)
+        # زنجیرهٔ مبدا دنبال می‌شود: اصلاحیهٔ فاکتور -> فاکتور -> سفارشِ رسیده (R226)
+        source_line_id, depth = ln.source_line_id, 0
+        while source_line_id is not None and depth < 6:
+            source_line = session.get(CommercialDocumentLine, source_line_id)
+            if source_line is None:
+                break
+            source_doc = session.get(CommercialDocument, source_line.document_id)
+            if source_doc is not None and _receipt_locks_quantity(source_doc):
+                locked.add(ln.line_id)
+                break
+            source_line_id, depth = source_line.source_line_id, depth + 1
     return locked
 
 
@@ -477,7 +481,7 @@ def receipt_locks_quantity(document_id: int, company_id: int) -> bool:
 
 def get_quantity_locked_line_ids(document_id: int, company_id: int) -> set[int]:
     """ردیف‌هایی از این سند که مقدارشان از رسیدِ تاییدشده‌یِ انبار آمده و
-    (با تنظیمِ RECEIPT_LOCKS_INVOICE_QUANTITY) قابلِ‌تغییر/حذف نیست."""
+    قابلِ‌تغییر/حذف نیست."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -488,8 +492,10 @@ def get_quantity_locked_line_ids(document_id: int, company_id: int) -> set[int]:
 def convert_to_invoice(
     document_id: int, company_id: int, created_by_user_id: int, document_date: datetime.date,
     line_quantities: dict[int, decimal.Decimal] | None = None,
+    line_warehouses: dict[int, int] | None = None,
 ) -> int:
-    """طبقِ درخواستِ صریح («تبدیلِ مرحله‌ای»): سفارش/پیش‌فاکتور می‌تواند
+    """line_warehouses (R226): انبارِ هر ردیفِ فاکتور هنگامِ تبدیل (وقتی سفارش
+    انبار/رسید نداشته). طبقِ درخواستِ صریح («تبدیلِ مرحله‌ای»): سفارش/پیش‌فاکتور می‌تواند
     بارها، هر بار برایِ بخشی از مقدار، به فاکتور تبدیل شود — نه فقط یک
     بارِ کاملِ همه‌یِ ردیف‌ها. اگر line_quantities داده نشود، هرچه از هر
     ردیف مانده (هنوز فاکتور نشده) باشد یک‌جا تبدیل می‌شود؛ در غیرِاین‌صورت
@@ -521,6 +527,7 @@ def convert_to_invoice(
         ).all()
         if not source_lines:
             raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+        _validate_line_warehouses(session, company_id, line_warehouses)
 
         receipt_locked = _receipt_locks_quantity(source)
         line_snapshots = []
@@ -551,7 +558,7 @@ def convert_to_invoice(
                 "unit_price": ln.unit_price, "discount_amount": _money(ln.discount_amount * ratio),
                 "discount_percent": ln.discount_percent, "tax_percent": ln.tax_percent,
                 "batch_id": ln.batch_id, "serial_id": ln.serial_id, "description": ln.description, "line_id": ln.line_id,
-                "warehouse_id": ln.warehouse_id,
+                "warehouse_id": (line_warehouses or {}).get(ln.line_id) or ln.warehouse_id,
             })
         if not line_snapshots:
             raise ValueError("چیزی برایِ تبدیل به فاکتور باقی نمانده است.")
@@ -562,6 +569,8 @@ def convert_to_invoice(
         invoice_warehouse_id = (
             source.consignment_warehouse_id if source.document_type_code == "CONSIGNMENT_OUT" else source.warehouse_id
         )
+        if invoice_warehouse_id is None and line_snapshots and line_snapshots[0]["warehouse_id"] is not None:
+            invoice_warehouse_id = line_snapshots[0]["warehouse_id"]
         # طبقِ رفعِ باگِ واقعیِ گزارش‌شده: اگر سفارشِ مبدا هیچ‌وقت انباری
         # نداشته (کاربر در هدرِ سفارش انتخاب نکرده بود)، فاکتورِ حاصل
         # هم با انبارِ خالی می‌ماند و بعداً در ثبتِ‌نهایی با خطایِ «انبار
@@ -654,7 +663,7 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
                 "conversion_factor": ln.conversion_factor,
                 "unit_price": ln.unit_price, "discount_amount": ln.discount_amount, "discount_percent": ln.discount_percent,
                 "tax_percent": ln.tax_percent, "batch_id": ln.batch_id, "serial_id": ln.serial_id,
-                "description": ln.description, "warehouse_id": ln.warehouse_id,
+                "description": ln.description, "warehouse_id": ln.warehouse_id, "line_id": ln.line_id,
             }
             for ln in lines
         ]
@@ -680,7 +689,7 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
             quantity_base=snap["quantity_base"], unit_price=snap["unit_price"], discount_amount=snap["discount_amount"],
             discount_percent=snap["discount_percent"], tax_percent=snap["tax_percent"], batch_id=snap["batch_id"],
             serial_id=snap["serial_id"], description=snap["description"], warehouse_id=snap["warehouse_id"],
-            conversion_factor=snap["conversion_factor"],
+            conversion_factor=snap["conversion_factor"], source_line_id=snap["line_id"],
         )
 
     with new_session() as session:
@@ -957,21 +966,15 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
     return PostResult(document_id=document_id, stock_document_id=stock_document_id, journal_entry_id=journal_entry_id)
 
 
-# طبقِ درخواستِ صریح («سفارشات در حال حاضر ویرایش نمیشه»): برخلافِ
-# فاکتور/برگشت (که برایِ حفظِ صحتِ حسابداری، بعدِ تاییدشدن قفل می‌مانند)،
-# سفارش/پیش‌فاکتور تا وقتی ثبتِ‌نهایی/لغو نشده صرفاً یک سندِ قصد است —
-# می‌تواند حتی بعدِ تاییدشدن ویرایش شود.
-_ORDER_EDITABLE_STATUSES = ("DRAFT", "CONFIRMED", "APPROVED")
-
-
 def _get_editable_document(session, document_id: int, company_id: int) -> CommercialDocument:
     doc = session.get(CommercialDocument, document_id)
     if doc is None or doc.company_id != company_id:
         raise ValueError("سند نامعتبر است.")
-    if doc.document_type_code in _ORDER_TYPES:
-        if doc.status_code not in _ORDER_EDITABLE_STATUSES:
-            raise ValueError("این سند دیگر ویرایش‌پذیر نیست.")
-    elif doc.status_code != "DRAFT":
+    # R226: سفارشِ تاییدشده هم فقط با «بازگشت به پیش‌نویس» ویرایش می‌شود
+    # (قبلاً سرویس آن را می‌پذیرفت و ویرایش از دیالوگِ ردیف بی‌صدا ذخیره می‌شد).
+    if doc.status_code != "DRAFT":
+        if doc.document_type_code in _ORDER_TYPES:
+            raise ValueError("سفارشِ تاییدشده قابلِ‌ویرایش نیست -- ابتدا «بازگشت به پیش‌نویس» را بزنید.")
         raise ValueError("فقط سندِ پیش‌نویس قابلِ‌ویرایش است.")
     return doc
 
@@ -1656,11 +1659,39 @@ def delete_line(line_id: int, document_id: int, company_id: int) -> None:
         session.commit()
 
 
+def update_document_dimensions(
+    document_id: int, company_id: int, cost_center_detail_account_id: int | None,
+    project_detail_account_id: int | None,
+) -> None:
+    """R226: مرکزِ هزینه/پروژه پس از تایید (تا پیش از ثبتِ نهایی) هم قابلِ‌تکمیل
+    است -- فقط این دو فیلد؛ بقیهٔ هدر همچنان فقط در پیش‌نویس."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        if doc.status_code not in ("DRAFT", "CONFIRMED", "APPROVED"):
+            raise ValueError("مرکزِ هزینه/پروژهٔ سندِ ثبت‌شده/لغوشده قابلِ‌تغییر نیست.")
+        doc.cost_center_detail_account_id = cost_center_detail_account_id
+        doc.project_detail_account_id = project_detail_account_id
+        session.commit()
+
+
+def can_delete_document(doc) -> bool:
+    """فاکتور/برگشتِ تاییدشده حذف نمی‌شود، فقط لغو (R226)."""
+    if doc.status_code in ("POSTED", "CORRECTED"):
+        return False
+    if doc.document_type_code in _INVOICE_TYPES + ("SALES_RETURN", "PURCHASE_RETURN") and doc.status_code != "DRAFT":
+        return False
+    return True
+
+
 def delete_document(document_id: int, company_id: int) -> None:
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
+        if doc.status_code not in ("POSTED", "CORRECTED") and not can_delete_document(doc):
+            raise ValueError("فاکتورِ تاییدشده حذف نمی‌شود -- آن را «لغو» کنید یا به پیش‌نویس برگردانید.")
         # DRAFT/CONFIRMED/APPROVED/CANCELLED هرگز stock_document_id/
         # journal_entry_id پر نمی‌کنند (فقط POSTED این دو را پر می‌کند) —
         # پس حذفِ مستقیمِ هرکدام از این چهار وضعیت همیشه بی‌خطر است.
@@ -1694,9 +1725,19 @@ def delete_document(document_id: int, company_id: int) -> None:
         # قفل‌هایِ متعلق به همین سند هم باید حذف شوند، وگرنه FK خطایِ خام
         # می‌دهد.
         session.query(CreditHold).filter(CreditHold.related_document_id == document_id).delete()
+    # نقشهٔ تسویهٔ پیش‌نویس هم حذف می‌شود؛ هر وابستگیِ دیگر به‌جایِ خطایِ خامِ
+    # پایگاه‌داده (که در UI بی‌صدا گم می‌شد) پیامِ روشن می‌دهد.
+    settlements_service.delete_settlement_plan(document_id, company_id)
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        session.query(CreditHold).filter(CreditHold.related_document_id == document_id).delete()
         session.query(CommercialDocumentLine).filter(CommercialDocumentLine.document_id == document_id).delete()
         session.delete(doc)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise ValueError("این سند به سوابقِ دیگری (تسویه/تحویل/...) وابسته است و حذف نمی‌شود -- آن را «لغو» کنید.") from exc
 
 
 # ---------------------------------------------------------------------
@@ -1857,9 +1898,19 @@ def receivable_warehouse_ids(company_id: int, user_id: int) -> set[int] | None:
         ))
 
 
+def _validate_line_warehouses(session, company_id: int, line_warehouses: dict[int, int] | None) -> None:
+    for warehouse_id in set((line_warehouses or {}).values()):
+        warehouse = session.get(Warehouse, warehouse_id)
+        if warehouse is None or warehouse.company_id != company_id or not warehouse.is_active:
+            raise ValueError("انبارِ انتخاب‌شده برایِ ردیف نامعتبر است.")
+
+
 def approve_warehouse(
     document_id: int, company_id: int, approved_by_user_id: int, warehouse_id: int | None = None,
+    line_warehouses: dict[int, int] | None = None,
 ) -> None:
+    """line_warehouses (R226): انبارِ هر ردیف -- انباردارِ چند انبار می‌تواند
+    هر کالا را در انبارِ جداگانه رسید کند."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -1867,13 +1918,30 @@ def approve_warehouse(
         if doc.document_type_code == "PURCHASE_ORDER":
             # طبقِ درخواستِ صریحِ کاربر: در سفارشِ خرید انبار لازم نیست --
             # انباردار هنگامِ رسید مشخص می‌کند کالا به کدام انبار وارد شد.
-            target_warehouse_id = warehouse_id or doc.warehouse_id
-            if target_warehouse_id is None:
-                raise ValueError("انبارِ دریافت‌کننده را مشخص کنید.")
+            _validate_line_warehouses(session, company_id, line_warehouses)
             allowed = receivable_warehouse_ids(company_id, approved_by_user_id)
-            if allowed is not None and target_warehouse_id not in allowed:
-                raise ValueError("شما انباردارِ این انبار نیستید -- فقط انباردارِ همان انبار یا مدیر می‌تواند رسید را تایید کند.")
-            doc.warehouse_id = target_warehouse_id
+            default_warehouse_id = warehouse_id or doc.warehouse_id
+            lines = session.scalars(
+                select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id)
+            ).all()
+            used: list[int] = []
+            for ln in lines:
+                target = (line_warehouses or {}).get(ln.line_id) or ln.warehouse_id or default_warehouse_id
+                if target is None:
+                    raise ValueError(f"انبارِ دریافت‌کنندهٔ ردیفِ #{ln.line_no} را مشخص کنید.")
+                if allowed is not None and target not in allowed:
+                    raise ValueError(
+                        "شما انباردارِ این انبار نیستید -- فقط انباردارِ همان انبار یا مدیر می‌تواند رسید را تایید کند."
+                    )
+                ln.warehouse_id = target
+                used.append(target)
+            if default_warehouse_id is None and used:
+                default_warehouse_id = used[0]
+            if default_warehouse_id is None:
+                raise ValueError("انبارِ دریافت‌کننده را مشخص کنید.")
+            if allowed is not None and default_warehouse_id not in allowed:
+                default_warehouse_id = used[0] if used else default_warehouse_id
+            doc.warehouse_id = default_warehouse_id
         if not _is_goods_receipt_eligible_order(session, doc):
             raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» یا سفارشِ خریدِ دارایِ Toggleِ رسیدِ انبار معنا دارد.")
         if doc.status_code not in _PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES:
@@ -2056,7 +2124,19 @@ def list_purchase_order_goods_receipt_queue(company_id: int, user_id: int | None
     allowed = receivable_warehouse_ids(company_id, user_id) if user_id is not None else None
     if allowed is None:
         return docs
-    return [d for d in docs if (d.warehouse_id in allowed) or (d.warehouse_id is None and allowed)]
+    with new_session() as session:
+        line_warehouses = {}
+        for wid, did in session.execute(
+            select(CommercialDocumentLine.warehouse_id, CommercialDocumentLine.document_id).where(
+                CommercialDocumentLine.document_id.in_([d.document_id for d in docs]),
+                CommercialDocumentLine.warehouse_id.is_not(None),
+            )
+        ):
+            line_warehouses.setdefault(did, set()).add(wid)
+    return [
+        d for d in docs
+        if (d.warehouse_id in allowed) or (d.warehouse_id is None and allowed) or (line_warehouses.get(d.document_id, set()) & allowed)
+    ]
 
 
 def revert_to_draft(document_id: int, company_id: int) -> None:
@@ -2073,7 +2153,9 @@ def revert_to_draft(document_id: int, company_id: int) -> None:
             raise ValueError("سند نامعتبر است.")
         # سفارش‌ها (که پس از تایید فقط با بازگشت به پیش‌نویس ویرایش می‌شوند)
         # از وضعیتِ تصویب‌شده هم برمی‌گردند؛ بقیه فقط از تاییدشده.
-        allowed_statuses = ("CONFIRMED", "APPROVED") if doc.document_type_code in _ORDER_TYPES else ("CONFIRMED",)
+        # R226: فاکتورِ تصویب‌شده (هنوز ثبت‌نشده) هم -- وگرنه با کمبودِ مرکزِ
+        # هزینه/پروژه در ثبتِ نهایی، نه برمی‌گشت نه حذف می‌شد.
+        allowed_statuses = ("CONFIRMED", "APPROVED")
         if doc.status_code not in allowed_statuses:
             raise ValueError("فقط سندِ تاییدشده (که هنوز ثبتِ‌نهایی نشده) قابلِ‌بازگشت به پیش‌نویس است.")
         if doc.warehouse_approved_at is not None:

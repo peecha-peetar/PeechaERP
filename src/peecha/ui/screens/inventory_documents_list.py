@@ -163,7 +163,12 @@ class InventoryDocumentsListScreen(FieldHelpMixin, QWidget):
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedSize(44, 32)
         is_admin = bool(app_session.current_user and app_session.current_user.is_super_admin)
-        if d.posted_at is None:
+        if d.origin_label is not None:
+            # R226: سندِ صادرشده از فاکتور/برگشت فقط از خودِ همان سند تغییر می‌کند.
+            delete_button.setEnabled(False)
+            delete_button.setToolTip(f"صادرشده از «{d.origin_label}» -- حذف/ویرایش فقط از خودِ همان سند.")
+            edit_button.setToolTip("مشاهده")
+        elif d.posted_at is None:
             # هرگز ثبتِ‌نهایی نشده (DRAFT/CONFIRMED/لغوشدهٔ پیش از ثبت) —
             # هیچ ردیفی در دفترِ انبار ندارد، پس حذفِ مستقیم بی‌خطر است.
             delete_button.setToolTip("حذفِ سند")

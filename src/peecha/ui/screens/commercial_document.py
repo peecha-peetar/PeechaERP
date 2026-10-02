@@ -57,7 +57,7 @@ from peecha.services import roles as roles_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
 from peecha.services import unit_conversion as uc
-from peecha.ui import theme
+from peecha.ui import theme, widgets
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
@@ -1650,18 +1650,21 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
     می‌دهد کاربر برایِ همین‌بار مقدارِ کمتری (تبدیلِ مرحله‌ای) وارد کند —
     پیش‌فرضِ هر ردیف، کلِ مانده‌اش است."""
 
-    _COLUMNS = ["کالا", "سفارشِ اولیه", "تحویلیِ انبار", "فاکتورشده", "مانده", "مقدارِ این‌بار"]
+    _COLUMNS = ["کالا", "سفارشِ اولیه", "تحویلیِ انبار", "فاکتورشده", "مانده", "مقدارِ این‌بار", "انبار"]
 
     def __init__(
         self, parent: QWidget, fulfillment: list, items_by_id: dict, uom_decimal_places: dict | None = None,
-        quantity_locked: bool = False,
+        quantity_locked: bool = False, warehouse_context: dict | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("تبدیل به فاکتور")
         self.setMinimumWidth(600)
         self._fulfillment = [f for f in fulfillment if f.remaining_quantity > 0]
         self._qty_fields: dict[int, _AmountField] = {}
+        self._warehouse_combos: dict[int, QComboBox] = {}
         self._uom_decimal_places = uom_decimal_places or {}
+        # R226: انبارِ هر ردیف (وقتی سفارش انبار/رسیدِ انبار نداشته، همین‌جا تعیین می‌شود)
+        warehouse_context = warehouse_context or convert_warehouse_context(None, None)
 
         layout = QVBoxLayout(self)
         info = QLabel(
@@ -1695,6 +1698,15 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
                 qty_field.setToolTip("مقدار را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌تغییر نیست.")
             self._qty_fields[f.line_id] = qty_field
             table.setCellWidget(row_index, 5, qty_field)
+            wh_combo = QComboBox()
+            for label, wid in warehouse_context["options"]:
+                wh_combo.addItem(label, wid)
+            current = warehouse_context["line_warehouses"].get(f.line_id) or warehouse_context["default"]
+            if current is not None:
+                wh_combo.setCurrentIndex(max(0, wh_combo.findData(current)))
+            wh_combo.setEnabled(warehouse_context["editable"])
+            self._warehouse_combos[f.line_id] = wh_combo
+            table.setCellWidget(row_index, 6, wh_combo)
         table.resizeRowsToContents()
         layout.addWidget(table)
 
@@ -1732,6 +1744,27 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
 
     def result_quantities(self) -> dict[int, decimal.Decimal]:
         return {line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items() if field.value() > 0}
+
+    def result_warehouses(self) -> dict[int, int] | None:
+        selected = {
+            line_id: combo.currentData() for line_id, combo in self._warehouse_combos.items()
+            if combo.isEnabled() and combo.currentData() is not None
+        }
+        return selected or None
+
+
+def convert_warehouse_context(document_id: int | None, company_id: int | None) -> dict:
+    """گزینه‌هایِ انبار برایِ دیالوگِ تبدیل: اگر انبار در رسید تعیین شده، قفل است."""
+    if document_id is None or company_id is None:
+        return {"options": [], "line_warehouses": {}, "default": None, "editable": False}
+    doc, lines = documents_service.get_document(document_id, company_id)
+    options = [(f"{w.code} — {w.name}", w.warehouse_id) for w in locations_service.list_warehouses(company_id, active_only=True)]
+    return {
+        "options": options,
+        "line_warehouses": {ln.line_id: ln.warehouse_id for ln in lines},
+        "default": doc.warehouse_id,
+        "editable": doc.warehouse_approved_at is None and doc.document_type_code != "CONSIGNMENT_OUT",
+    }
 
 
 class _SettlementPlanDialog(QDialog):
@@ -2820,7 +2853,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
         self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرِسند و ردیف‌ها بعداً قابلِ‌ویرایش/حذف‌اند")
-        self.save_button.clicked.connect(self._save_header)
+        self.save_button.clicked.connect(lambda: self._save_header(notify=True))
         self.footer_layout.addWidget(self.save_button)
 
         self.confirm_button = QPushButton("✅")
@@ -3938,7 +3971,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         delete_button.setFixedWidth(28)
         delete_button.setToolTip("حذفِ ردیف")
         delete_button.clicked.connect(lambda _checked=False, r=row_index: self._delete_line_at_row(r))
-        if 0 <= row_index < len(self._lines) and self._lines[row_index].line_id in self._locked_line_ids:
+        if not self._lines_are_editable():
+            # R226: سندِ تاییدشده/ثبت‌شده -- ویرایش/حذفِ ردیف فقط پس از بازگشت به پیش‌نویس.
+            for button in (edit_button, delete_button):
+                button.setEnabled(False)
+                button.setToolTip("سند تایید شده و فقط-خواندنی است.")
+        elif 0 <= row_index < len(self._lines) and self._lines[row_index].line_id in self._locked_line_ids:
             delete_button.setEnabled(False)
             delete_button.setToolTip("مقدارِ این ردیف را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌حذف نیست.")
         layout.addWidget(delete_button)
@@ -4040,7 +4078,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ گزارشِ صریحِ کاربر («بعدِ تایید، تغییرات بدونِ زدنِ هیچ دکمه‌ای
         # ذخیره می‌شود»): سندِ تاییدشده (سفارش هم) فقط-خواندنی است؛ ویرایش
         # فقط با «بازگشت به پیش‌نویس» و تاییدِ دوباره.
-        is_order_type = self.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
         is_editable = is_draft
         for widget in (
             self.date_field, self.counterparty_combo, self.warehouse_combo, self.price_list_combo, self.channel_combo,
@@ -4048,7 +4085,12 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.consignment_warehouse_combo,
         ):
             widget.setEnabled(is_editable)
-        self.save_button.setEnabled(is_editable)
+        # R226: مرکزِ هزینه/پروژه پس از تایید هم (تا ثبتِ نهایی) قابلِ‌تکمیل است،
+        # وگرنه ثبتِ سندِ حسابداری با بُعدِ الزامی گیر می‌کرد.
+        dims_editable = is_editable or is_confirmed or is_approved
+        self.cost_center_combo.setEnabled(dims_editable)
+        self.project_combo.setEnabled(dims_editable)
+        self.save_button.setEnabled(dims_editable and self._document_id is not None or is_editable)
         self.confirm_button.setEnabled(is_draft and self._document_id is not None)
         # طبقِ گزارشِ صریحِ کاربر («چرا دکمه‌یِ تایید غیرفعاله؟ و ردیف‌ها
         # بی‌صدا ذخیره می‌شوند؟»): این دکمه فقط یک‌بار (DRAFT→CONFIRMED)
@@ -4139,7 +4181,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 )
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
         self.revert_button.setEnabled(
-            (is_confirmed or (is_order_type and is_approved)) and not self._warehouse_approved
+            (is_confirmed or is_approved) and not self._warehouse_approved
         )
         self.pick_from_invoice_button.setEnabled(self._lines_are_editable())
         self.landed_cost_button.setEnabled(is_draft and self._document_id is not None)
@@ -4282,7 +4324,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             settlement_type_code=self.settlement_type_combo.currentData() if self._is_sales else None,
         )
 
-    def _save_header(self) -> None:
+    def _save_header(self, notify: bool = False) -> None:
         company_id = self._company_id()
         if company_id is None:
             return
@@ -4290,6 +4332,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if fields is None:
             return
         is_new = self._document_id is None
+        if not is_new and self._status_code in ("CONFIRMED", "APPROVED"):
+            try:
+                documents_service.update_document_dimensions(
+                    self._document_id, company_id, fields.cost_center_detail_account_id, fields.project_detail_account_id,
+                )
+            except ValueError as exc:
+                QMessageBox.warning(self, "خطا در ذخیره", str(exc))
+                return
+            self._load_document()
+            theme.set_status_label(self.status_label, "مرکزِ هزینه/پروژهٔ سند ذخیره شد.", ok=True)
+            if notify:
+                widgets.show_saved_dialog(self, "مرکزِ هزینه/پروژهٔ سند ذخیره شد.")
+            return
         try:
             if is_new:
                 self._document_id = documents_service.create_document(
@@ -4312,6 +4367,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         theme.set_status_label(
             self.status_label, "سند به‌عنوانِ پیش‌نویس ذخیره شد." if is_new else "تغییراتِ سند ذخیره شد.", ok=True,
         )
+        if notify:
+            title = DOC_TYPE_TITLES.get(self.document_type_code, "سند")
+            widgets.show_saved_dialog(self, f"{title} ذخیره شد." if is_new else f"تغییراتِ {title} ذخیره شد.")
 
     def _ensure_saved(self) -> bool:
         if self._document_id is None:
@@ -4677,7 +4735,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._edit_line_object(line)
 
     def _edit_line_object(self, line) -> None:
-        if self._document_id is None:
+        if self._document_id is None or not self._lines_are_editable():
             return
         initial = {
             "item_id": line.item_id, "quantity": line.quantity, "unit_price": line.unit_price,
@@ -4724,7 +4782,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._delete_line_object(line)
 
     def _delete_line_object(self, line) -> None:
-        if self._document_id is None:
+        if self._document_id is None or not self._lines_are_editable():
             return
         confirm = QMessageBox.question(self, "حذفِ ردیف", "این ردیف حذف شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
@@ -4864,6 +4922,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 "ثبتِ نهایی فقط برایِ مدیر (نقشِ ادمین/سوپروایزر/مدیر) ممکن است -- این سند تاییدشده و آماده‌یِ ثبتِ نهایی است.",
             )
             return
+        # R226: مرکزِ هزینه/پروژه‌ای که پس از تایید انتخاب شده پیش از ثبت ذخیره می‌شود.
+        if company_id is not None and self._status_code in ("CONFIRMED", "APPROVED"):
+            try:
+                documents_service.update_document_dimensions(
+                    self._document_id, company_id, self.cost_center_combo.currentData(), self.project_combo.currentData(),
+                )
+            except ValueError as exc:
+                QMessageBox.warning(self, "ثبتِ نهایی", str(exc))
+                return
         # طبقِ گزارشِ صریحِ کاربر («مدیر فقط دیدن و کارِ ثبتِ نهایی انجام
         # دهد»): برایِ فاکتورِ خرید/فروش، اگر نقشه‌یِ تسویه هنوز توسطِ
         # مدیر تاییدنشده، همین‌جا -- پیش از خودِ Post -- تاییدمی‌شود؛
@@ -5073,6 +5140,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         dialog = _ConvertToInvoiceDialog(
             self, fulfillment, items_by_id, self._uom_decimal_places,
             quantity_locked=documents_service.receipt_locks_quantity(self._document_id, company_id),
+            warehouse_context=convert_warehouse_context(self._document_id, company_id),
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -5081,7 +5149,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         try:
             new_document_id = documents_service.convert_to_invoice(
                 self._document_id, company_id, app_session.current_user.user_id, datetime.date.today(),
-                line_quantities=dialog.result_quantities(),
+                line_quantities=dialog.result_quantities(), line_warehouses=dialog.result_warehouses(),
             )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))

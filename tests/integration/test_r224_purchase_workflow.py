@@ -137,7 +137,7 @@ check(any(d.document_id == po_other for d in documents_service.list_purchase_ord
       "مدیر همه‌یِ سفارش‌ها را می‌بیند")
 
 # ===== ۶: قفلِ مقدار پس از رسید =====
-settings_service.set_feature_enabled(company_id, "RECEIPT_LOCKS_INVOICE_QUANTITY", True)
+# R226: قفلِ مقدار دیگر Toggle نیست و همیشه پس از رسید اعمال می‌شود.
 check(raises(lambda: documents_service.convert_to_invoice(po_box, company_id, user.user_id, datetime.date.today(), {po_box_line: decimal.Decimal(1)})),
       "تبدیلِ جزئی (کمتر از مقدارِ رسیدشده) با قفل ممنوع است")
 inv_id = documents_service.convert_to_invoice(po_box, company_id, user.user_id, datetime.date.today())

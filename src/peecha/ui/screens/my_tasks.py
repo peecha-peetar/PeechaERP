@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import cartable as cartable_service
+from peecha.services import operational_tasks as operational_tasks_service
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
 _REQUEST_TYPE_LABELS = {"CREATE": "ثبت/تایید", "EDIT": "ویرایش", "DELETE": "حذف"}
@@ -69,6 +70,14 @@ class _CommentDialog(QDialog):
 
 
 _COLUMNS = ["ماژول/فرم", "شرح", "نوعِ درخواست", "مرحله", "صادرکننده", "تاریخِ ارسال"]
+_OP_COLUMNS = ["کارِ لازم", "سند", "طرفِ حساب", "تاریخ"]
+
+# R226: نوعِ سند -> کدِ منو برایِ بازکردنِ خودِ سند
+_TYPE_TO_NAV_CODE = {
+    "SALES_ORDER": "SALES_ORDER", "SALES_PROFORMA": "SALES_PROFORMA", "SALES_INVOICE": "SALES_INVOICE",
+    "SALES_RETURN": "SALES_RETURN", "PURCHASE_ORDER": "PURCH_ORDER", "PURCHASE_PROFORMA": "PURCH_PROFORMA",
+    "PURCHASE_INVOICE": "PURCH_INVOICE", "PURCHASE_RETURN": "PURCH_RETURN",
+}
 
 
 class MyTasksScreen(FieldHelpMixin, QWidget):
@@ -76,6 +85,7 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         super().__init__()
         self._main_window = main_window
         self._tasks: list[cartable_service.CartableTaskRow] = []
+        self._op_tasks: list[operational_tasks_service.OperationalTask] = []
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -104,6 +114,23 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         self.table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self.table, stretch=1)
 
+        # R226: مراحلِ اسنادِ بازرگانی که منتظرِ همین کاربرند (تصویب، رسیدِ کالا، تسویه، تبدیل)
+        op_title = QLabel("کارهایِ در انتظارِ اسناد (خرید/فروش/انبار)")
+        op_title.setObjectName("sectionTitle")
+        layout.addWidget(op_title)
+        self.op_table = QTableWidget(0, len(_OP_COLUMNS))
+        self.op_table.setHorizontalHeaderLabels(_OP_COLUMNS)
+        self.op_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.op_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.op_table.verticalHeader().setVisible(False)
+        self.op_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.op_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.op_table.cellDoubleClicked.connect(lambda row, _col: self._open_op_task(row))
+        layout.addWidget(self.op_table, stretch=1)
+        self.op_empty_label = QLabel("کارِ در انتظاری نیست.")
+        self.op_empty_label.setObjectName("sectionHint")
+        layout.addWidget(self.op_empty_label)
+
         approve_button = QPushButton("✅")
         approve_button.setObjectName("primaryIconButton")
         approve_button.setFixedWidth(48)
@@ -116,7 +143,13 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         reject_button.setToolTip("رد")
         reject_button.clicked.connect(self._reject_selected)
 
-        outer.addWidget(wrap_scrollable_with_footer(panel, [approve_button, reject_button]))
+        open_op_button = QPushButton("📂")
+        open_op_button.setObjectName("iconButton")
+        open_op_button.setFixedWidth(44)
+        open_op_button.setToolTip("انجامِ کارِ انتخاب‌شده (بازکردنِ سند/صفحهٔ مربوط)")
+        open_op_button.clicked.connect(lambda: self._open_op_task(self.op_table.currentRow()))
+
+        outer.addWidget(wrap_scrollable_with_footer(panel, [approve_button, reject_button, open_op_button]))
 
         self.set_field_help([
             (self.table, "برایِ بازکردنِ خودِ سند، رویِ ردیفش دابل‌کلیک کنید."),
@@ -149,6 +182,35 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, task.cartable_item_id)
                 self.table.setItem(row_index, col_index, item)
+
+        if session.current_user is None or session.current_company is None:
+            self._op_tasks = []
+        else:
+            self._op_tasks = operational_tasks_service.list_operational_tasks(
+                session.current_company.company_id, session.current_user.user_id
+            )
+        self.op_table.setRowCount(len(self._op_tasks))
+        for row_index, task in enumerate(self._op_tasks):
+            values = [
+                task.kind_label, numerals.to_persian_digits(task.title), task.counterparty_name,
+                numerals.format_jalali_date(task.document_date) if task.document_date else "",
+            ]
+            for col_index, value in enumerate(values):
+                self.op_table.setItem(row_index, col_index, QTableWidgetItem(value))
+        self.op_empty_label.setVisible(not self._op_tasks)
+
+    def _open_op_task(self, row: int) -> None:
+        if row < 0 or row >= len(self._op_tasks) or self._main_window is None:
+            return
+        task = self._op_tasks[row]
+        if task.kind == "GOODS_RECEIPT":
+            self._main_window.open_screen("PURCH_GOODS_RECEIPT")
+            return
+        nav_code = _TYPE_TO_NAV_CODE.get(task.document_type_code)
+        if nav_code is None:
+            return
+        document_id = task.document_id
+        self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
 
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
         task = next((t for t in self._tasks if t.cartable_item_id == self.table.item(row, 0).data(Qt.UserRole)), None)

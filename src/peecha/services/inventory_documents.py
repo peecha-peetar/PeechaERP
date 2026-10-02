@@ -136,6 +136,9 @@ class StockDocumentRow:
     journal_entry_id: int | None
     created_by_user_id: int
     posted_at: datetime.datetime | None
+    # R226: اگر این سند از یک سندِ بازرگانی (مثلاً فاکتورِ خرید) صادر شده،
+    # برچسبِ آن -- چنین سندی مستقیماً حذف/ویرایش/برگشت نمی‌شود.
+    origin_label: str | None = None
 
 
 @dataclass
@@ -159,12 +162,46 @@ class StockDocumentLineRow:
     conversion_factor: decimal.Decimal = decimal.Decimal(1)
 
 
-def _to_document_row(d: StockDocument) -> StockDocumentRow:
+_COMMERCIAL_ORIGIN_TITLES = {
+    "SALES_INVOICE": "فاکتورِ فروش", "PURCHASE_INVOICE": "فاکتورِ خرید", "SALES_RETURN": "برگشت از فروش",
+    "PURCHASE_RETURN": "برگشت به تامین‌کننده", "CONSIGNMENT_OUT": "امانیِ خروجی", "CONSIGNMENT_IN": "امانیِ ورودی",
+}
+
+
+def _commercial_origins(session, stock_document_ids: list[int]) -> dict[int, str]:
+    from peecha.db.models.commercial import CommercialDocument
+
+    if not stock_document_ids:
+        return {}
+    rows = session.execute(
+        select(CommercialDocument.stock_document_id, CommercialDocument.document_type_code, CommercialDocument.document_no)
+        .where(CommercialDocument.stock_document_id.in_(stock_document_ids))
+    ).all()
+    return {
+        sid: f"{_COMMERCIAL_ORIGIN_TITLES.get(code, code)} {no}" for sid, code, no in rows
+    }
+
+
+def commercial_origin_label(stock_document_id: int) -> str | None:
+    with new_session() as session:
+        return _commercial_origins(session, [stock_document_id]).get(stock_document_id)
+
+
+def _assert_not_commercial_origin(session, stock_document_id: int) -> None:
+    origin = _commercial_origins(session, [stock_document_id]).get(stock_document_id)
+    if origin is not None:
+        raise ValueError(
+            f"این سندِ انبار از «{origin}» صادر شده و مستقیماً حذف/ویرایش نمی‌شود -- "
+            "تغییر فقط از خودِ همان سند (اصلاح/برگشت) انجام می‌شود."
+        )
+
+
+def _to_document_row(d: StockDocument, origin_label: str | None = None) -> StockDocumentRow:
     return StockDocumentRow(
         d.stock_document_id, d.document_type_code, d.document_no, d.document_date, d.status_code,
         d.source_warehouse_id, d.destination_warehouse_id, d.counterparty_detail_account_id,
         d.cost_center_detail_account_id, d.project_detail_account_id, d.reference_no, d.description,
-        d.journal_entry_id, d.created_by_user_id, d.posted_at,
+        d.journal_entry_id, d.created_by_user_id, d.posted_at, origin_label,
     )
 
 
@@ -178,7 +215,8 @@ def list_stock_documents(
         if status_code is not None:
             query = query.where(StockDocument.status_code == status_code)
         rows = session.scalars(query.order_by(StockDocument.document_date.desc(), StockDocument.stock_document_id.desc())).all()
-        return [_to_document_row(r) for r in rows]
+        origins = _commercial_origins(session, [r.stock_document_id for r in rows])
+        return [_to_document_row(r, origins.get(r.stock_document_id)) for r in rows]
 
 
 def get_stock_document(stock_document_id: int, company_id: int) -> tuple[StockDocumentRow, list[StockDocumentLineRow]]:
@@ -197,7 +235,7 @@ def get_stock_document(stock_document_id: int, company_id: int) -> tuple[StockDo
             )
             for ln in lines
         ]
-        return _to_document_row(doc), line_rows
+        return _to_document_row(doc, _commercial_origins(session, [stock_document_id]).get(stock_document_id)), line_rows
 
 
 WAREHOUSE_REQUIREMENTS = {
@@ -326,6 +364,7 @@ def delete_stock_document(stock_document_id: int, company_id: int) -> None:
             raise ValueError("سند نامعتبر است.")
         if doc.posted_at is not None:
             raise ValueError("سندِ ثبتِ‌نهایی‌شده را نمی‌توان مستقیماً حذف کرد — باید ابتدا اثرش خنثی شود.")
+        _assert_not_commercial_origin(session, stock_document_id)
         session.query(StockDocumentLine).filter(StockDocumentLine.stock_document_id == stock_document_id).delete()
         session.delete(doc)
         session.commit()
@@ -368,6 +407,7 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             raise ValueError("سند نامعتبر است.")
         if original.status_code != "POSTED":
             raise ValueError("این عملیات فقط برایِ سندِ ثبتِ‌نهایی‌شده معنا دارد.")
+        _assert_not_commercial_origin(session, stock_document_id)
         original_no = original.document_no
         original_type = original.document_type_code
         header = DocumentHeaderFields(

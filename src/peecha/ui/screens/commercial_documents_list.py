@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
+from peecha.services import commercial_settings as settings_service
+from peecha.services import roles as roles_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
@@ -32,6 +34,8 @@ from peecha.ui.screens.commercial_document import (
     _CONVERTIBLE_TO_INVOICE_TYPES,
     _CONVERTS_TO_SALES_INVOICE,
     _ConvertToInvoiceDialog,
+    _show_invoice_print,
+    convert_warehouse_context,
 )
 from peecha.ui.widgets import FieldHelpMixin
 
@@ -280,10 +284,8 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         is_pos_pre_approval = (
             d.document_type_code == "SALES_INVOICE" and d.pos_session_id is not None and d.status_code == "CONFIRMED"
         )
-        is_editable = (
-            d.status_code == "DRAFT" or (is_order_type and d.status_code in ("CONFIRMED", "APPROVED"))
-            or is_pos_pre_approval
-        )
+        # R224/R226: سفارشِ تاییدشده هم فقط پس از «بازگشت به پیش‌نویس» ویرایش می‌شود.
+        is_editable = d.status_code == "DRAFT" or is_pos_pre_approval
         # طبقِ رفعِ باگِ واقعی («علامتهایِ حذف و ویرایش و تبدیل در ردیف
         # معلوم نیست»): ✏️/🗑️/🧾 ایموجی‌هایِ نسبتاً تازه‌اند (یونیکدِ ۹ به
         # بعد) و روی فونت/سیستمِ کاربر بدونِ گلیفِ رنگی به‌صورتِ جعبه‌یِ
@@ -295,25 +297,39 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         edit_button.setFixedSize(44, 32)
         edit_button.setToolTip("اصلاح" if is_editable else "مشاهده")
         edit_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._open_existing(doc_id))
-        actions_layout.addWidget(edit_button)
+        # R226: سندِ لغوشده دکمهٔ ویرایش ندارد (فقط نمایشِ چاپی).
+        if d.status_code != "CANCELLED":
+            actions_layout.addWidget(edit_button)
+        else:
+            edit_button.deleteLater()
 
-        delete_button = QPushButton("✕")
-        delete_button.setObjectName("dangerIconButton")
-        delete_button.setFixedSize(44, 32)
-        if d.status_code not in ("POSTED", "CORRECTED"):
-            # طبقِ services/commercial_documents.py:delete_document —
-            # DRAFT/CONFIRMED/APPROVED/CANCELLED هرگز اثری در انبار یا
-            # حسابداری نگذاشته‌اند، پس حذفِ مستقیم همیشه بی‌خطر است.
+        # R226: نمایشِ چاپیِ سند بدونِ بازکردنِ فرمِ ویرایش.
+        print_button = QPushButton("⎙")
+        print_button.setObjectName("iconButton")
+        print_button.setFixedSize(44, 32)
+        print_button.setToolTip("نمایشِ چاپی")
+        print_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._print_document(doc_id))
+        actions_layout.addWidget(print_button)
+
+        # R226: دکمهٔ حذف فقط وقتی حذف واقعاً ممکن است (فاکتورِ تاییدشده فقط لغو
+        # می‌شود؛ سندِ لغوشده/ثبت‌شده/اصلاح‌شده هم دکمهٔ حذف ندارد).
+        if d.status_code != "CANCELLED" and documents_service.can_delete_document(d):
+            delete_button = QPushButton("✕")
+            delete_button.setObjectName("dangerIconButton")
+            delete_button.setFixedSize(44, 32)
             delete_button.setToolTip("حذفِ سند")
             delete_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._delete_document(doc_id))
-        else:
-            delete_button.setEnabled(False)
-            delete_button.setToolTip(
-                "این سند اصلاح شده و تاریخچه‌اش باید دست‌نخورده بماند — حذفِ مستقیم ممکن نیست."
-                if d.status_code == "CORRECTED" else
-                "این سند ثبتِ‌نهایی شده و در انبار/حسابداری اثر دارد — حذفِ مستقیم ممکن نیست."
-            )
-        actions_layout.addWidget(delete_button)
+            actions_layout.addWidget(delete_button)
+
+        next_step = self._next_step(d, fulfillment, pre_sales_status)
+        if next_step is not None:
+            label, tooltip, action = next_step
+            next_button = QPushButton(label)
+            next_button.setObjectName("primaryButton")
+            next_button.setFixedHeight(32)
+            next_button.setToolTip(tooltip)
+            next_button.clicked.connect(lambda _checked=False, fn=action: fn())
+            actions_layout.addWidget(next_button)
 
         # طبقِ درخواستِ صریح («تبدیل باید همین‌جا در صفحه‌یِ اسناد انجام
         # شود، نه با بازکردنِ سفارش و رفتن به فرمِ آن»): دکمه‌یِ تبدیل به
@@ -415,7 +431,11 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برایِ تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
             return
         items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id, active_only=True)}
-        dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id)
+        dialog = _ConvertToInvoiceDialog(
+            self, fulfillment, items_by_id,
+            quantity_locked=documents_service.receipt_locks_quantity(document_id, company_id),
+            warehouse_context=convert_warehouse_context(document_id, company_id),
+        )
         if dialog.exec() != QDialog.Accepted:
             return
         converts_to_sales = doc.document_type_code in _CONVERTS_TO_SALES_INVOICE
@@ -423,7 +443,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         try:
             new_document_id = documents_service.convert_to_invoice(
                 document_id, company_id, app_session.current_user.user_id, datetime.date.today(),
-                line_quantities=dialog.result_quantities(),
+                line_quantities=dialog.result_quantities(), line_warehouses=dialog.result_warehouses(),
             )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا در تبدیل به فاکتور", str(exc))
@@ -431,6 +451,63 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         QMessageBox.information(
             self, "تبدیل به فاکتور", f"{target_title} #{numerals.to_persian_digits(str(new_document_id))} از رویِ این سند ساخته شد."
         )
+        self.refresh()
+
+    def _print_document(self, document_id: int) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            _show_invoice_print(self, company_id, document_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "نمایشِ چاپی", str(exc))
+
+    def _next_step(self, d, fulfillment, pre_sales_status):
+        """R226: مرحلهٔ بعدیِ گردشِ کار همین‌جا در ردیف -- (برچسب، راهنما، اقدام) یا None."""
+        company_id = self._company_id()
+        user = app_session.current_user
+        if company_id is None or user is None or d.status_code not in ("CONFIRMED", "APPROVED"):
+            return None
+        doc_id = d.document_id
+        doc_type = d.document_type_code
+        needs_approval = d.status_code == "CONFIRMED" and (
+            (doc_type == "PURCHASE_ORDER" and not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL"))
+            or (doc_type in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA")
+                and not settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL"))
+        )
+        if needs_approval:
+            if not roles_service.is_manager(user.user_id, company_id):
+                return None
+            return ("تصویب", "مرحلهٔ بعد: تصویبِ مدیر", lambda: self._approve_document(doc_id))
+        if doc_type == "PURCHASE_ORDER":
+            needs_receipt = settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT") and d.warehouse_approved_at is None
+            if needs_receipt:
+                return ("رسیدِ کالا", "مرحلهٔ بعد: تاییدِ رسیدِ کالا توسطِ انباردار",
+                        lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
+        if doc_type in _CONVERTIBLE_TO_INVOICE_TYPES:
+            ready = fulfillment is not None and fulfillment[1] < fulfillment[0] and (
+                pre_sales_status is None or pre_sales_status == "آمادهٔ تبدیل به فاکتور"
+            )
+            if ready:
+                return ("تبدیل به فاکتور", "مرحلهٔ بعد: تبدیل به فاکتور", lambda: self._convert_document(doc_id))
+            return None
+        if doc_type in ("SALES_INVOICE", "PURCHASE_INVOICE", "SALES_RETURN", "PURCHASE_RETURN"):
+            if not roles_service.is_manager(user.user_id, company_id):
+                return None
+            nav_code = _TYPE_TO_NAV_CODE[doc_type]
+            return ("ثبتِ نهایی", "مرحلهٔ بعد: ثبتِ نهایی (فرمِ سند باز می‌شود)",
+                    lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
+        return None
+
+    def _approve_document(self, document_id: int) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        try:
+            documents_service.approve_document(document_id, company_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "تصویب", str(exc))
+            return
         self.refresh()
 
     def _delete_document(self, document_id: int) -> None:

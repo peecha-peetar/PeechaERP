@@ -431,6 +431,7 @@ class _MdiTitleBar(QWidget):
             current = event.globalPosition().toPoint()
             delta = current - self._drag_offset
             self._sub_window.move(self._sub_window.pos() + delta)
+            self._sub_window._fill_area = False
             self._drag_offset = current
         super().mouseMoveEvent(event)
 
@@ -480,6 +481,9 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         # خاموش می‌کند، نه امضایِ maximized_changed را (که ساید‌بار/ریبون
         # همچنان باید بر اساسش به‌روز شوند).
         self._restoring = False
+        # R226: فرم به‌صورتِ پیش‌فرض کلِ ناحیهٔ اصلی را پر می‌کند (بدونِ پنهان‌کردنِ
+        # ساید‌بار)؛ با جابه‌جایی/تغییرِ اندازهٔ دستی خاموش می‌شود.
+        self._fill_area = False
 
     def _save_geometry(self) -> None:
         if self._screen_name is None or self._restoring:
@@ -558,6 +562,7 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if self._resize_dir is not None:
+            self._fill_area = False
             self._save_geometry()
         self._resize_dir = None
         super().mouseReleaseEvent(event)
@@ -589,6 +594,12 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         event.ignore()
         self.hide()
         self.maximized_changed.emit(False)
+        # R226: زیرپنجرهٔ فقط-مخفی داخلِ QMdiArea می‌ماند و Qt هنگامِ maximize/
+        # بازگشتِ فرمِ دیگر آن را دوباره (کاشی‌ای) نشان می‌داد؛ پس واقعاً از
+        # ناحیه جدا می‌شود (نمونهٔ صفحه زنده می‌ماند و open_screen دوباره اضافه‌اش می‌کند).
+        area = self.mdiArea()
+        if area is not None:
+            QTimer.singleShot(0, lambda: self.mdiArea() is area and not self.isVisible() and area.removeSubWindow(self))
 
     def changeEvent(self, event) -> None:  # noqa: N802
         if event.type() == QEvent.WindowStateChange:
@@ -645,6 +656,9 @@ class _ClampingMdiArea(QMdiArea):
         area = self.viewport().rect()
         for sub_window in self.subWindowList():
             if sub_window.isMaximized() or sub_window.isMinimized():
+                continue
+            if getattr(sub_window, "_fill_area", False):
+                sub_window.setGeometry(area)
                 continue
             geo = sub_window.geometry()
             clamped = _clamp_rect_to_area(geo, area)
@@ -1704,6 +1718,9 @@ class MainWindow(QMainWindow):
             sub_window.maximized_changed.connect(self._update_chrome_visibility)
             self.mdi_area.addSubWindow(sub_window)
             self._mdi_subwindows[target_screen_name] = sub_window
+        elif sub_window.mdiArea() is not self.mdi_area:
+            # بعد از بستن از ناحیه جدا شده بود (closeEvent)
+            self.mdi_area.addSubWindow(sub_window, Qt.FramelessWindowHint)
         sub_window.setWindowTitle(item["label"])
         # نکته‌یِ فنیِ کشف‌شده حینِ تست: خودِ show() (نه فقط
         # _restore_or_size_subwindow) هم می‌تواند برایِ زیرپنجره‌یِ تازه
@@ -1771,7 +1788,6 @@ class MainWindow(QMainWindow):
         کاملِ برنامه. اگر چیزی ذخیره نشده باشد (اولین بارِ بازکردنِ این
         صفحه)، همان چیدمانِ آبشاریِ پیش‌فرض به‌کار می‌رود."""
         settings = QSettings("Peecha", "PeechaERP")
-        geometry = settings.value(f"mdiWindow/{screen_name}/geometry", None)
         was_maximized = settings.value(f"mdiWindow/{screen_name}/maximized", False, type=bool)
         # نکته‌یِ فنیِ کشف‌شده حینِ تست: QMdiArea وقتی از قبل یک زیرپنجره‌یِ
         # دیگر (مثلاً داشبورد، چون همیشه اول باز می‌شود) maximize باشد،
@@ -1786,11 +1802,10 @@ class MainWindow(QMainWindow):
             if was_maximized:
                 sub_window.showMaximized()
             else:
+                # R226 (درخواستِ صریح): همهٔ فرم‌ها تمام‌عرضِ ناحیهٔ اصلی باز می‌شوند.
                 sub_window.showNormal()
-                if isinstance(geometry, QRect):
-                    sub_window.setGeometry(self._clamp_to_mdi_area(geometry))
-                else:
-                    self._size_new_subwindow(sub_window)
+                sub_window._fill_area = True
+                sub_window.setGeometry(self.mdi_area.viewport().rect())
         finally:
             sub_window._restoring = False
 

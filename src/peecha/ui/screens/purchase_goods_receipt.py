@@ -43,7 +43,7 @@ from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["شماره", "تاریخ", "تامین‌کننده", "وضعیت", "عملیات"]
-_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی"]
+_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی", "انبارِ دریافت"]
 
 
 def _status_label(doc) -> str:
@@ -60,6 +60,7 @@ class _GoodsReceiptDialog(QDialog):
         self._document_id = document_id
         self._company_id = company_id
         self._qty_fields: dict[int, _AmountField] = {}
+        self._line_warehouse_combos: dict[int, QComboBox] = {}
         self.changed = False
 
         layout = QVBoxLayout(self)
@@ -86,8 +87,11 @@ class _GoodsReceiptDialog(QDialog):
         # هنگامِ رسید مشخص می‌کند کالا به کدام انبار وارد شد؛ فقط
         # انبارهایی که خودش انباردارشان است (فیلدِ «مسئولِ انبار») -- مدیر همه را.
         warehouse_row = QHBoxLayout()
-        warehouse_row.addWidget(QLabel("انبارِ دریافت‌کننده"))
+        warehouse_row.addWidget(QLabel("انبارِ پیش‌فرضِ همهٔ ردیف‌ها"))
         self.warehouse_combo = QComboBox()
+        # R226: انتخابِ انبارِ پیش‌فرض، انبارِ همهٔ ردیف‌ها را هم عوض می‌کند؛
+        # هر ردیف می‌تواند جداگانه انبارِ دیگری داشته باشد.
+        self.warehouse_combo.activated.connect(self._apply_default_warehouse)
         warehouse_row.addWidget(self.warehouse_combo, stretch=1)
         layout.addLayout(warehouse_row)
 
@@ -123,9 +127,14 @@ class _GoodsReceiptDialog(QDialog):
         converted = documents_service.document_has_been_converted(self._document_id, self._company_id)
         allowed = documents_service.receivable_warehouse_ids(self._company_id, app_session.current_user.user_id)
         self.warehouse_combo.clear()
-        for w in locations_service.list_warehouses(self._company_id, active_only=True):
-            if allowed is None or w.warehouse_id in allowed or w.warehouse_id == doc.warehouse_id:
-                self.warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
+        line_warehouse_ids = {ln.warehouse_id for ln in lines if ln.warehouse_id is not None}
+        self._warehouse_options = [
+            (f"{w.code} — {w.name}", w.warehouse_id)
+            for w in locations_service.list_warehouses(self._company_id, active_only=True)
+            if allowed is None or w.warehouse_id in allowed or w.warehouse_id == doc.warehouse_id or w.warehouse_id in line_warehouse_ids
+        ]
+        for label, wid in self._warehouse_options:
+            self.warehouse_combo.addItem(label, wid)
         if doc.warehouse_id is not None:
             self.warehouse_combo.setCurrentIndex(max(0, self.warehouse_combo.findData(doc.warehouse_id)))
         self.warehouse_combo.setEnabled(doc.warehouse_approved_at is None and not converted)
@@ -141,6 +150,8 @@ class _GoodsReceiptDialog(QDialog):
         uom_decimal_places = {u.uom_id: u.decimal_places for u in uoms}
         uom_names = {u.uom_id: u.name or u.code for u in uoms}
         self._qty_fields = {}
+        self._line_warehouse_combos = {}
+        editable = doc.warehouse_approved_at is None and not converted
         self.lines_table.setRowCount(len(lines))
         for row_index, ln in enumerate(lines):
             item = items_by_id.get(ln.item_id)
@@ -154,6 +165,14 @@ class _GoodsReceiptDialog(QDialog):
             qty_field.setEnabled(not converted)
             self._qty_fields[ln.line_id] = qty_field
             self.lines_table.setCellWidget(row_index, 3, qty_field)
+            wh_combo = QComboBox()
+            for label, wid in self._warehouse_options:
+                wh_combo.addItem(label, wid)
+            current = ln.warehouse_id or self.warehouse_combo.currentData()
+            wh_combo.setCurrentIndex(max(0, wh_combo.findData(current)))
+            wh_combo.setEnabled(editable)
+            self._line_warehouse_combos[ln.line_id] = wh_combo
+            self.lines_table.setCellWidget(row_index, 4, wh_combo)
         self.lines_table.resizeRowsToContents()
 
         self.save_button.setEnabled(not converted)
@@ -174,6 +193,12 @@ class _GoodsReceiptDialog(QDialog):
         self.receipt_button.style().unpolish(self.receipt_button)
         self.receipt_button.style().polish(self.receipt_button)
 
+    def _apply_default_warehouse(self, *_args) -> None:
+        wid = self.warehouse_combo.currentData()
+        for combo in self._line_warehouse_combos.values():
+            if combo.isEnabled():
+                combo.setCurrentIndex(max(0, combo.findData(wid)))
+
     def _save_quantities(self) -> None:
         quantities = {line_id: decimal.Decimal(str(field.value())) for line_id, field in self._qty_fields.items()}
         try:
@@ -190,6 +215,10 @@ class _GoodsReceiptDialog(QDialog):
             if self._doc.warehouse_approved_at is None:
                 documents_service.approve_warehouse(
                     self._document_id, self._company_id, user_id, warehouse_id=self.warehouse_combo.currentData(),
+                    line_warehouses={
+                        line_id: combo.currentData() for line_id, combo in self._line_warehouse_combos.items()
+                        if combo.currentData() is not None
+                    },
                 )
             else:
                 documents_service.revert_warehouse_approval(self._document_id, self._company_id)

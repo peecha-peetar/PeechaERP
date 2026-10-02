@@ -42,7 +42,7 @@ from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import report_templates as report_templates_service
 from peecha.services import unit_conversion as uc
-from peecha.ui import theme
+from peecha.ui import theme, widgets
 from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
 from peecha.ui.screens.report_template_settings import pick_report_template
@@ -832,7 +832,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.save_button.setObjectName("primaryIconButton")
         self.save_button.setFixedWidth(48)
         self.save_button.setToolTip("۱) ذخیرهٔ پیش‌نویس — سند ثبت می‌شود ولی هنوز قطعی نیست؛ سرِسند و ردیف‌ها بعداً قابلِ‌ویرایش/حذف‌اند")
-        self.save_button.clicked.connect(self._save_header)
+        self.save_button.clicked.connect(lambda: self._save_header(notify=True))
         self.footer_layout.addWidget(self.save_button)
 
         self.confirm_button = QPushButton("✅")
@@ -1068,6 +1068,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.status_label.setText(str(exc))
             return
         self._status_code = doc.status_code
+        self._origin_label = doc.origin_label
         self.page_title.setText(f"سندِ {DOC_TYPE_TITLES[self.document_type_code]} #{doc.document_no}")
         self.date_field.setDate(doc.document_date)
         if self.document_type_code == "ADJUSTMENT":
@@ -1362,6 +1363,12 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.post_button.setEnabled(is_confirmed)
         self.cancel_button.setEnabled(is_draft or is_confirmed)
         self.lines_table.setEnabled(True)
+        origin = getattr(self, "_origin_label", None) if self._document_id is not None else None
+        if origin:
+            # R226: سندِ صادرشده از فاکتور/برگشت فقط-خواندنی است.
+            for button in (self.save_button, self.confirm_button, self.revert_button, self.post_button, self.cancel_button):
+                button.setEnabled(False)
+            self.status_label.setText(f"این سند از «{origin}» صادر شده و فقط از خودِ همان سند قابلِ‌تغییر است.")
 
     def _reset_form(self, clear_only: bool = False) -> None:
         self._document_id = None
@@ -1413,7 +1420,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             description=self.description_field.text().strip() or None,
         )
 
-    def _save_header(self) -> None:
+    def _save_header(self, notify: bool = False) -> None:
         company_id = self._company_id()
         if company_id is None:
             return
@@ -1438,6 +1445,9 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         theme.set_status_label(
             self.status_label, "سند به‌عنوانِ پیش‌نویس ذخیره شد." if is_new else "تغییراتِ سند ذخیره شد.", ok=True,
         )
+        if notify:
+            title = DOC_TYPE_TITLES.get(self.document_type_code, "سند")
+            widgets.show_saved_dialog(self, f"{title} ذخیره شد." if is_new else f"تغییراتِ {title} ذخیره شد.")
 
     def _ensure_saved(self) -> bool:
         if self._document_id is None:
