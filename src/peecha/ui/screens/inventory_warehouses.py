@@ -166,7 +166,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.phone_field, "تلفنِ تماسِ انبار."),
             (self.gps_field, "مختصاتِ جغرافیایی (طول/عرض) -- برایِ نقشه/مسیریابیِ تحویل."),
             (self.address_field, "آدرسِ کاملِ انبار."),
-            (self.manager_combo, "کاربرِ مسئول/مدیرِ این انبار."),
+            (self.manager_combo, "انباردارِ این انبار -- فقط همین کاربر (یا مدیر) رسیدِ کالایِ سفارشِ خرید را برایِ این انبار تایید می‌کند و فقط سفارش‌هایِ همین انبار را می‌بیند."),
             # عملیاتی
             (self.allow_purchase_checkbox, "اگر خاموش باشد، این انبار در فاکتور/رسیدِ خرید قابلِ‌انتخاب نیست."),
             (self.allow_sale_checkbox, "اگر خاموش باشد، این انبار در فاکتورِ فروش قابلِ‌انتخاب نیست."),
@@ -400,7 +400,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("phone", "تلفن", self.phone_field, span=1),
             FieldSpec("gps", "مختصاتِ GPS", self.gps_field, span=1),
             FieldSpec("address", "آدرس", self.address_field, span=2),
-            FieldSpec("manager", "مسئول/مدیرِ انبار", self.manager_combo, span=1),
+            FieldSpec("manager", "انباردار (مسئولِ انبار)", self.manager_combo, span=1),
         ])
         layout.addWidget(self.location_grid)
         layout.addStretch(1)

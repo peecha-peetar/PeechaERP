@@ -40,6 +40,7 @@ from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import commercial_settings as settings_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as inv_engine_service
 from peecha.services import inventory_locations as locations_service
@@ -441,6 +442,48 @@ def get_order_fulfillment_summary(document_id: int, company_id: int) -> tuple[de
     return ordered_total, invoiced_total
 
 
+def _receipt_locks_quantity(order: CommercialDocument) -> bool:
+    """طبقِ درخواستِ صریحِ کاربر («بعدِ تاییدِ رسید توسطِ انباردار، در صدورِ
+    فاکتور تعداد قابلِ‌تغییر نباشد -- انبار مسئولِ تعداد است؛ تنظیمی باشد»)."""
+    return (
+        order.document_type_code == "PURCHASE_ORDER" and order.warehouse_approved_at is not None
+        and settings_service.is_feature_enabled(order.company_id, "RECEIPT_LOCKS_INVOICE_QUANTITY")
+    )
+
+
+def _locked_line_ids(session, document_id: int) -> set[int]:
+    locked = set()
+    lines = session.scalars(
+        select(CommercialDocumentLine).where(
+            CommercialDocumentLine.document_id == document_id, CommercialDocumentLine.source_line_id.is_not(None)
+        )
+    ).all()
+    for ln in lines:
+        source_line = session.get(CommercialDocumentLine, ln.source_line_id)
+        if source_line is None:
+            continue
+        order = session.get(CommercialDocument, source_line.document_id)
+        if order is not None and _receipt_locks_quantity(order):
+            locked.add(ln.line_id)
+    return locked
+
+
+def receipt_locks_quantity(document_id: int, company_id: int) -> bool:
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        return doc is not None and doc.company_id == company_id and _receipt_locks_quantity(doc)
+
+
+def get_quantity_locked_line_ids(document_id: int, company_id: int) -> set[int]:
+    """ردیف‌هایی از این سند که مقدارشان از رسیدِ تاییدشده‌یِ انبار آمده و
+    (با تنظیمِ RECEIPT_LOCKS_INVOICE_QUANTITY) قابلِ‌تغییر/حذف نیست."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            return set()
+        return _locked_line_ids(session, document_id)
+
+
 def convert_to_invoice(
     document_id: int, company_id: int, created_by_user_id: int, document_date: datetime.date,
     line_quantities: dict[int, decimal.Decimal] | None = None,
@@ -462,6 +505,11 @@ def convert_to_invoice(
         # طبقِ درخواستِ صریح («روالِ پخشِ سرد: سفارشِ تصویب‌شده باید اول
         # انبار و توزین را طی کند، بعد تبدیل به فاکتور شود»): این گیت
         # فقط برایِ سفارش‌هایِ کانالِ PRE_SALES بررسی می‌شود.
+        if (
+            source.document_type_code == "PURCHASE_ORDER" and source.warehouse_approved_at is None
+            and settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT")
+        ):
+            raise ValueError("رسیدِ کالایِ این سفارش هنوز توسطِ انباردار تایید نشده -- ابتدا از «تاییدِ رسیدِ کالا» تایید شود.")
         if _is_pre_sales_order(session, source):
             if source.warehouse_approved_at is None:
                 raise ValueError("این سفارش هنوز تاییدِ انبار نگرفته -- ابتدا از تبِ «تاییدِ انبار و توزین» تایید کنید.")
@@ -473,6 +521,7 @@ def convert_to_invoice(
         if not source_lines:
             raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
 
+        receipt_locked = _receipt_locks_quantity(source)
         line_snapshots = []
         for ln in source_lines:
             # طبقِ درخواستِ صریحِ کاربر (روالِ پخشِ سرد): اگر انباردار
@@ -489,6 +538,10 @@ def convert_to_invoice(
                     raise ValueError("مقدار نمی‌تواند منفی باشد.")
                 if qty_this_time > remaining:
                     raise ValueError(f"مقدارِ درخواستی برایِ ردیفِ #{ln.line_no} از مانده ({remaining}) بیشتر است.")
+                if receipt_locked and 0 < qty_this_time < remaining:
+                    raise ValueError(
+                        f"مقدارِ ردیفِ #{ln.line_no} توسطِ انباردار تایید شده و قابلِ‌تغییر نیست -- یا کلِ مانده یا هیچ."
+                    )
             if qty_this_time <= 0:
                 continue
             ratio = qty_this_time / ln.quantity
@@ -1408,6 +1461,9 @@ def add_line(
 ) -> int:
     if quantity <= 0 or quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    # موجودی همیشه به واحدِ پایه نگه‌داری می‌شود -- مقدارِ پایه همین‌جا از
+    # ضریبِ تبدیلِ تعریف‌شده در فرمِ کالا محاسبه می‌شود، نه از فراخوان.
+    quantity_base = quantity * catalog_service.get_uom_factor(item_id, uom_id)
     with new_session() as session:
         doc = _get_editable_document(session, document_id, company_id)
         # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): وقتی
@@ -1507,7 +1563,7 @@ def add_line(
 def update_line(
     line_id: int, document_id: int, company_id: int, quantity: decimal.Decimal, unit_price: decimal.Decimal,
     discount_amount: decimal.Decimal = _ZERO, discount_percent: decimal.Decimal = _ZERO,
-    tax_percent: decimal.Decimal = _ZERO,
+    tax_percent: decimal.Decimal = _ZERO, description: str | None | object = ...,
 ) -> None:
     """طبقِ درخواستِ صریحِ کاربر («در همان ردیف تعداد و قیمت و تخفیف و
     مالیات را وارد کرد»): برایِ ویرایشِ زنده/درجایِ یک ردیفِ ازپیش‌ذخیره‌شده
@@ -1526,6 +1582,8 @@ def update_line(
         line = session.get(CommercialDocumentLine, line_id)
         if line is None or line.document_id != document_id:
             raise ValueError("ردیف نامعتبر است.")
+        if quantity != line.quantity and line_id in _locked_line_ids(session, document_id):
+            raise ValueError("مقدارِ این ردیف را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌تغییر نیست.")
         # طبقِ صحتِ ردگیریِ تبدیل‌شدنِ سفارش به فاکتور/رسیدِ انبار: کاهشِ
         # مقدار به کمتر از مقدارِ قبلاً دریافت‌شده/فاکتورشده، آن ردگیری
         # را به یک عددِ منفیِ بی‌معنا می‌رساند -- هم‌الگو با بررسیِ
@@ -1544,12 +1602,14 @@ def update_line(
         net_amount = gross_amount - discount_amount
         tax_amount = _money(net_amount * (tax_percent / 100)) if tax_percent and net_amount > 0 else _ZERO
         line.quantity = quantity
-        line.quantity_base = quantity
+        line.quantity_base = quantity * catalog_service.get_uom_factor(line.item_id, line.uom_id)
         line.unit_price = unit_price
         line.discount_amount = discount_amount
         line.discount_percent = discount_percent
         line.tax_percent = tax_percent
         line.tax_amount = tax_amount
+        if description is not ...:
+            line.description = description or None
         session.flush()
         _recompute_header_totals(session, document_id)
         session.commit()
@@ -1570,6 +1630,8 @@ def delete_line(line_id: int, document_id: int, company_id: int) -> None:
         )
         if still_referenced is not None:
             raise ValueError("این ردیف قبلاً (به‌طور کامل یا جزئی) به فاکتور تبدیل شده و دیگر حذف نمی‌شود.")
+        if line_id in _locked_line_ids(session, document_id):
+            raise ValueError("مقدارِ این ردیف را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌حذف نیست.")
         session.query(CommercialDocumentLine).filter(CommercialDocumentLine.line_id == line_id).delete()
         _recompute_header_totals(session, document_id)
         session.commit()
@@ -1762,11 +1824,37 @@ def list_pre_sales_pending_weighing_approval(company_id: int) -> list[Commercial
         return [doc for doc in session.scalars(stmt) if document_requires_weighing(doc.document_id, company_id)]
 
 
-def approve_warehouse(document_id: int, company_id: int, approved_by_user_id: int) -> None:
+def receivable_warehouse_ids(company_id: int, user_id: int) -> set[int] | None:
+    """طبقِ درخواستِ صریحِ کاربر («برایِ انبار، انباردار معلوم باشد و دسترسی
+    از همان طریق باشد»): انبارهایی که این کاربر انباردارِ آن‌هاست (فیلدِ
+    «مسئولِ انبار» در فرمِ انبار). None یعنی همه (کاربرِ مدیر)."""
+    if roles_service.is_manager(user_id, company_id):
+        return None
+    with new_session() as session:
+        return set(session.scalars(
+            select(Warehouse.warehouse_id).where(
+                Warehouse.company_id == company_id, Warehouse.manager_user_id == user_id, Warehouse.is_active.is_(True),
+            )
+        ))
+
+
+def approve_warehouse(
+    document_id: int, company_id: int, approved_by_user_id: int, warehouse_id: int | None = None,
+) -> None:
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
+        if doc.document_type_code == "PURCHASE_ORDER":
+            # طبقِ درخواستِ صریحِ کاربر: در سفارشِ خرید انبار لازم نیست --
+            # انباردار هنگامِ رسید مشخص می‌کند کالا به کدام انبار وارد شد.
+            target_warehouse_id = warehouse_id or doc.warehouse_id
+            if target_warehouse_id is None:
+                raise ValueError("انبارِ دریافت‌کننده را مشخص کنید.")
+            allowed = receivable_warehouse_ids(company_id, approved_by_user_id)
+            if allowed is not None and target_warehouse_id not in allowed:
+                raise ValueError("شما انباردارِ این انبار نیستید -- فقط انباردارِ همان انبار یا مدیر می‌تواند رسید را تایید کند.")
+            doc.warehouse_id = target_warehouse_id
         if not _is_goods_receipt_eligible_order(session, doc):
             raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» یا سفارشِ خریدِ دارایِ Toggleِ رسیدِ انبار معنا دارد.")
         if doc.status_code not in _PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES:
@@ -1929,7 +2017,7 @@ def list_pre_sales_fulfillment_queue(company_id: int) -> list[CommercialDocument
         return [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
 
 
-def list_purchase_order_goods_receipt_queue(company_id: int) -> list[CommercialDocument]:
+def list_purchase_order_goods_receipt_queue(company_id: int, user_id: int | None = None) -> list[CommercialDocument]:
     """هم‌الگو با list_pre_sales_fulfillment_queue، برایِ سفارشِ خرید --
     طبقِ گزارشِ صریحِ کاربر («بعدِ تاییدِ سفارش، انباردار کجا رسیدِ کالا را
     تایید کند؟»). فقط وقتی Toggleِ PURCHASE_ORDER_GOODS_RECEIPT برایِ
@@ -1945,7 +2033,11 @@ def list_purchase_order_goods_receipt_queue(company_id: int) -> list[CommercialD
             )
             .order_by(CommercialDocument.document_id)
         )
-        return [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
+        docs = [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
+    allowed = receivable_warehouse_ids(company_id, user_id) if user_id is not None else None
+    if allowed is None:
+        return docs
+    return [d for d in docs if (d.warehouse_id in allowed) or (d.warehouse_id is None and allowed)]
 
 
 def revert_to_draft(document_id: int, company_id: int) -> None:
@@ -1960,8 +2052,15 @@ def revert_to_draft(document_id: int, company_id: int) -> None:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
-        if doc.status_code != "CONFIRMED":
-            raise ValueError("فقط سندِ تاییدشده (که هنوز تصویب/ثبتِ‌نهایی نشده) قابلِ‌بازگشت به پیش‌نویس است.")
+        # سفارش‌ها (که پس از تایید فقط با بازگشت به پیش‌نویس ویرایش می‌شوند)
+        # از وضعیتِ تصویب‌شده هم برمی‌گردند؛ بقیه فقط از تاییدشده.
+        allowed_statuses = ("CONFIRMED", "APPROVED") if doc.document_type_code in _ORDER_TYPES else ("CONFIRMED",)
+        if doc.status_code not in allowed_statuses:
+            raise ValueError("فقط سندِ تاییدشده (که هنوز ثبتِ‌نهایی نشده) قابلِ‌بازگشت به پیش‌نویس است.")
+        if doc.warehouse_approved_at is not None:
+            raise ValueError("رسید/تاییدِ انبارِ این سفارش ثبت شده -- ابتدا انباردار باید تاییدش را برگرداند.")
+        if _has_any_invoiced_quantity(session, document_id):
+            raise ValueError("این سفارش (کامل یا جزئی) به فاکتور تبدیل شده و دیگر به پیش‌نویس برنمی‌گردد.")
         # اگر تاییدِ این سند یک قفلِ اعتباری ساخته بود (مثلاً سفارشی که
         # از سقفِ اعتبار عبور کرده)، با بازگشت به پیش‌نویس آن قفل دیگر
         # معنا ندارد -- وگرنه برایِ همیشه بازِ حل‌نشده می‌ماند.
@@ -2315,7 +2414,7 @@ def _post_consignment_document(
         line_unit_cost = None
         line_tax_amount = None
         if document_type_code == "CONSIGNMENT_IN":
-            net_of_discount = (quantity * unit_price - discount_amount) / quantity if quantity else unit_price
+            net_of_discount = (quantity * unit_price - discount_amount) / quantity_base if quantity_base else unit_price
             line_unit_cost = _money(net_of_discount)
             line_tax_amount = tax_amount
         inv_line_id = inv_documents_service.add_line(
@@ -2358,7 +2457,10 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         # به پیش‌فاکتورِ خرید هم): برایِ این دو نوعِ سند، دیگر کافی نیست
         # که سند فقط CONFIRMED باشد -- باید حتماً از مرحلهٔ تصویبِ مدیر
         # (APPROVED) هم عبور کرده باشد.
-        if doc.document_type_code in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA") and doc.status_code != "APPROVED":
+        if (
+            doc.document_type_code in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA") and doc.status_code != "APPROVED"
+            and not settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL")
+        ):
             raise ValueError("این سند ابتدا باید توسطِ مدیر تصویب شود -- تاییدِ کاربر به‌تنهایی برایِ ثبتِ نهایی کافی نیست.")
 
         document_type_code = doc.document_type_code
@@ -2589,14 +2691,15 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                 if stock_document_type == "ISSUE":
                     stock_unit_cost = None
                 elif stock_document_type == "RECEIPT":
-                    net_of_discount = (quantity * unit_price - _discount_amt) / quantity if quantity else unit_price
+                    # بهایِ لجر به‌ازایِ واحدِ پایه است (موجودی به واحدِ پایه نگه‌داری می‌شود).
+                    net_of_discount = (quantity * unit_price - _discount_amt) / quantity_base if quantity_base else unit_price
                     # طبقِ درخواستِ صریح («دو نوعِ ثبت: رسمی/غیررسمی»): در
                     # حالتِ غیررسمی، مالياتِ خرید ردیفِ جداگانه‌یِ «مالياتِ
                     # خرید-قابلِ‌مطالبه» نمی‌گیرد -- مستقیماً به بهایِ
                     # موجودیِ همین ردیف اضافه می‌شود (اگر ماليات صفر باشد
                     # هردو حالت یکسان‌اند).
-                    if is_informal_tax and _tax_amt and quantity:
-                        net_of_discount += _tax_amt / quantity
+                    if is_informal_tax and _tax_amt and quantity_base:
+                        net_of_discount += _tax_amt / quantity_base
                     else:
                         line_tax_amount = _tax_amt
                     stock_unit_cost = _money(net_of_discount)
@@ -2608,7 +2711,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     # خودِ موتورِ انبار می‌گیرد (پارامترِ is_informal_tax در
                     # پایین‌تر) — چون بهایِ برگشت از رویِ سابقهٔ همان کالا
                     # محاسبه می‌شود، نه از unit_price همین ردیف.
-                    stock_unit_cost = unit_price
+                    stock_unit_cost = unit_price * quantity / quantity_base if quantity_base else unit_price
                     line_tax_amount = _tax_amt
                 line_reason_code_id = (
                     _ensure_return_reason_code(company_id, stock_document_type)

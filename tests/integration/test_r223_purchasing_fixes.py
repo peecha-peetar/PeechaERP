@@ -190,7 +190,9 @@ check(any(d.document_id == receipt_doc_id for d in queue), "با روشن‌کر
 
 check("قیمت" not in "".join(_LINE_COLUMNS), "جدولِ تاییدِ رسیدِ کالا هیچ ستونِ قیمتی ندارد")
 
-documents_service.approve_warehouse(receipt_doc_id, company_id, user.user_id)
+from peecha.services import inventory_locations as locations_service
+receipt_wh = locations_service.create_warehouse(company_id, "WH-R", "انبارِ رسید", locations_service.WarehouseFields())
+documents_service.approve_warehouse(receipt_doc_id, company_id, user.user_id, warehouse_id=receipt_wh)
 documents_service.set_warehouse_delivered_quantities(receipt_doc_id, company_id, {receipt_line_id: decimal.Decimal(8)})
 
 receipt_screen = PurchaseGoodsReceiptScreen()

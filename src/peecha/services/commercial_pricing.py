@@ -27,6 +27,8 @@ from peecha.db.models.commercial import (
     Promotion,
 )
 from peecha.services import commercial_partners as partners_service
+from peecha.services import inventory_catalog as catalog_service
+from peecha.db.models.inventory import Item
 
 _ZERO = decimal.Decimal(0)
 
@@ -427,17 +429,28 @@ def resolve_price(
     as_of_date = as_of_date or datetime.date.today()
     contract_type = "SALES" if document_type_code.startswith("SALES") else "PURCHASE"
 
+    # قیمتِ قرارداد/فهرستِ قیمت به واحدِ پایه است؛ برایِ واحدِ تبدیلی (مثلاً
+    # کارتن) در ضریبِ تبدیل ضرب می‌شود، مگر قیمتِ مستقیمِ همان واحد تعریف شده باشد.
+    try:
+        uom_factor = catalog_service.get_uom_factor(item_id, uom_id)
+    except ValueError:
+        uom_factor = decimal.Decimal(1)
     contract_price = partners_service.get_active_contract_price(
         counterparty_detail_account_id, item_id, contract_type, as_of_date
     )
     if contract_price is not None:
-        return ResolvedPrice(unit_price=contract_price, source="CONTRACT")
+        return ResolvedPrice(unit_price=contract_price * uom_factor, source="CONTRACT")
 
     if price_list_id is None:
         raise ValueError("فهرستِ قیمت مشخص نشده و قراردادِ فعالی هم وجود ندارد.")
 
     with new_session() as session:
         base_price = _lookup_tiered_price(session, price_list_id, item_id, uom_id, quantity)
+        if base_price is None and uom_factor != 1:
+            item = session.get(Item, item_id)
+            per_base = _lookup_tiered_price(session, price_list_id, item_id, item.base_uom_id, quantity * uom_factor)
+            if per_base is not None:
+                base_price = per_base * uom_factor
         if base_price is None:
             raise ValueError("قیمتی برایِ این کالا در فهرستِ قیمتِ انتخاب‌شده تعریف نشده است.")
 

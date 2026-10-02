@@ -21,6 +21,7 @@ import decimal
 
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -37,6 +38,7 @@ from peecha import numerals, session as app_session
 from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin
 
@@ -80,6 +82,15 @@ class _GoodsReceiptDialog(QDialog):
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         layout.addWidget(self.lines_table)
 
+        # طبقِ گزارشِ صریحِ کاربر: در سفارش انبار لازم نیست -- انباردار
+        # هنگامِ رسید مشخص می‌کند کالا به کدام انبار وارد شد؛ فقط
+        # انبارهایی که خودش انباردارشان است (فیلدِ «مسئولِ انبار») -- مدیر همه را.
+        warehouse_row = QHBoxLayout()
+        warehouse_row.addWidget(QLabel("انبارِ دریافت‌کننده"))
+        self.warehouse_combo = QComboBox()
+        warehouse_row.addWidget(self.warehouse_combo, stretch=1)
+        layout.addLayout(warehouse_row)
+
         self.save_button = QPushButton("💾 ذخیرهٔ مقادیرِ دریافتی")
         self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self._save_quantities)
@@ -110,6 +121,14 @@ class _GoodsReceiptDialog(QDialog):
             return
         self._doc = doc
         converted = documents_service.document_has_been_converted(self._document_id, self._company_id)
+        allowed = documents_service.receivable_warehouse_ids(self._company_id, app_session.current_user.user_id)
+        self.warehouse_combo.clear()
+        for w in locations_service.list_warehouses(self._company_id, active_only=True):
+            if allowed is None or w.warehouse_id in allowed or w.warehouse_id == doc.warehouse_id:
+                self.warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
+        if doc.warehouse_id is not None:
+            self.warehouse_combo.setCurrentIndex(max(0, self.warehouse_combo.findData(doc.warehouse_id)))
+        self.warehouse_combo.setEnabled(doc.warehouse_approved_at is None and not converted)
 
         self.header_label.setText(
             f"سفارشِ خریدِ شماره‌یِ {numerals.to_persian_digits(str(doc.document_no))} -- "
@@ -118,14 +137,16 @@ class _GoodsReceiptDialog(QDialog):
         )
 
         items_by_id = {it.item_id: it for it in catalog_service.list_items(self._company_id)}
-        uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(self._company_id)}
+        uoms = catalog_service.list_uoms(self._company_id)
+        uom_decimal_places = {u.uom_id: u.decimal_places for u in uoms}
+        uom_names = {u.uom_id: u.name or u.code for u in uoms}
         self._qty_fields = {}
         self.lines_table.setRowCount(len(lines))
         for row_index, ln in enumerate(lines):
             item = items_by_id.get(ln.item_id)
-            dp = uom_decimal_places.get(item.base_uom_id, 3) if item else 3
+            dp = uom_decimal_places.get(ln.uom_id, 3)
             self.lines_table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(ln.item_id)))
-            self.lines_table.setItem(row_index, 1, QTableWidgetItem(item.base_uom_code if item else ""))
+            self.lines_table.setItem(row_index, 1, QTableWidgetItem(uom_names.get(ln.uom_id, "")))
             self.lines_table.setItem(row_index, 2, QTableWidgetItem(numerals.format_money(ln.quantity, dp)))
             qty_field = _AmountField()
             qty_field.setDecimals(dp)
@@ -167,7 +188,9 @@ class _GoodsReceiptDialog(QDialog):
         user_id = app_session.current_user.user_id
         try:
             if self._doc.warehouse_approved_at is None:
-                documents_service.approve_warehouse(self._document_id, self._company_id, user_id)
+                documents_service.approve_warehouse(
+                    self._document_id, self._company_id, user_id, warehouse_id=self.warehouse_combo.currentData(),
+                )
             else:
                 documents_service.revert_warehouse_approval(self._document_id, self._company_id)
         except ValueError as exc:
@@ -222,12 +245,15 @@ class PurchaseGoodsReceiptScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
         self.status_label.setText("")
-        self._queue = documents_service.list_purchase_order_goods_receipt_queue(company_id)
+        user = app_session.current_user
+        self._queue = documents_service.list_purchase_order_goods_receipt_queue(
+            company_id, user.user_id if user is not None else None,
+        )
         if not self._queue:
             self.status_label.setObjectName("sectionHint")
             self.status_label.setText(
                 "موردی نیست -- یا سفارشِ خریدِ در انتظار وجود ندارد، یا Toggleِ «تاییدِ رسیدِ کالا» "
-                "در تنظیماتِ بازرگانی هنوز روشن نشده است."
+                "در تنظیماتِ بازرگانی روشن نیست، یا شما انباردارِ (مسئولِ) هیچ انباری نیستید."
             )
         self.table.setRowCount(len(self._queue))
         for row_index, doc in enumerate(self._queue):

@@ -812,6 +812,56 @@ def delete_item_uom_conversion(conversion_id: int, item_id: int) -> None:
         session.commit()
 
 
+@dataclass
+class ItemUomOption:
+    uom_id: int
+    code: str
+    name: str
+    factor: decimal.Decimal
+    is_base: bool
+    is_purchase_default: bool
+    is_sales_default: bool
+    decimal_places: int
+
+
+def list_item_uom_options(item_id: int) -> list[ItemUomOption]:
+    """واحدهایی که این کالا در اسنادِ خرید/فروش با آن‌ها ثبت می‌شود: اول
+    واحدِ پایه (ضریبِ ۱)، بعد واحدهایِ تبدیلِ تعریف‌شده در فرمِ کالا."""
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None:
+            return []
+        uoms = {u.uom_id: u for u in session.scalars(select(Uom))}
+        base = uoms.get(item.base_uom_id)
+        options = []
+        if base is not None:
+            options.append(ItemUomOption(base.uom_id, base.code, base.name, decimal.Decimal(1), True, False, False, base.decimal_places))
+        for r in session.scalars(select(ItemUomConversion).where(ItemUomConversion.item_id == item_id)):
+            u = uoms.get(r.uom_id)
+            if u is None or r.uom_id == item.base_uom_id:
+                continue
+            options.append(ItemUomOption(
+                u.uom_id, u.code, u.name, r.conversion_factor, False, r.is_purchase_default, r.is_sales_default, u.decimal_places,
+            ))
+        return options
+
+
+def get_uom_factor(item_id: int, uom_id: int) -> decimal.Decimal:
+    """ضریبِ تبدیلِ یک واحد به واحدِ پایه‌یِ کالا (پایه = ۱)."""
+    with new_session() as session:
+        item = session.get(Item, item_id)
+        if item is None:
+            raise ValueError("کالا نامعتبر است.")
+        if uom_id == item.base_uom_id:
+            return decimal.Decimal(1)
+        row = session.scalar(
+            select(ItemUomConversion).where(ItemUomConversion.item_id == item_id, ItemUomConversion.uom_id == uom_id)
+        )
+        if row is None:
+            raise ValueError("برایِ این واحد، تبدیل به واحدِ پایه‌یِ کالا در فرمِ کالا تعریف نشده است.")
+        return row.conversion_factor
+
+
 # ---------------------------------------------------------------------
 # کالاهایِ جایگزین/مکمل
 # ---------------------------------------------------------------------
