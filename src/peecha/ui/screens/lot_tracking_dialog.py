@@ -39,7 +39,8 @@ class LotTrackingDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("ردیابی: بچ / سریال / تاریخِ انقضا")
-        self.setMinimumWidth(760)
+        self.setMinimumWidth(900)
+        self.resize(980, 620)
         self._company_id = company_id
         self._stock_line_id = stock_line_id
         self._commercial_line_id = commercial_line_id
@@ -59,13 +60,18 @@ class LotTrackingDialog(QDialog):
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.verticalHeader().setVisible(False)
+        # R228: ردیف‌ها بلندتر تا فیلدها/تاریخ‌هایِ داخلِ سلول کامل دیده شوند
+        self.table.verticalHeader().setDefaultSectionSize(46)
+        self.table.verticalHeader().setMinimumSectionSize(42)
+        self.table.setAlternatingRowColors(True)
+        self.table.setMinimumHeight(300)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setColumnHidden(0, not self.track_batch)
         self.table.setColumnHidden(1, not self.track_batch)
         self.table.setColumnHidden(2, not self.track_batch)
         self.table.setColumnHidden(3, not self.track_serial)
-        layout.addWidget(self.table)
+        layout.addWidget(self.table, stretch=1)
 
         buttons_row = QHBoxLayout()
         self.add_button = QPushButton("➕ ردیف")
@@ -135,6 +141,7 @@ class LotTrackingDialog(QDialog):
         qty.textChanged.connect(self._update_total)
         for col, w in enumerate((batch, mfg, exp, serial, qty)):
             w.setEnabled(w.isEnabled() and not self._read_only)
+            w.setMinimumHeight(34)
             self.table.setCellWidget(r, col, w)
 
     def _remove_row(self) -> None:

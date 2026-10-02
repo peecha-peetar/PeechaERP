@@ -56,7 +56,7 @@ class _GoodsReceiptDialog(QDialog):
     def __init__(self, parent: QWidget, document_id: int, company_id: int) -> None:
         super().__init__(parent)
         self.setWindowTitle("بازکردنِ سفارش -- تاییدِ رسیدِ کالا")
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(900)
         self._document_id = document_id
         self._company_id = company_id
         self._qty_fields: dict[int, _AmountField] = {}
@@ -81,7 +81,10 @@ class _GoodsReceiptDialog(QDialog):
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.verticalHeader().setVisible(False)
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        layout.addWidget(self.lines_table)
+        # R228: ردیف‌ها بلندتر (کمبویِ انبار/دکمهٔ ردیابی داخلِ سلول)
+        self.lines_table.verticalHeader().setDefaultSectionSize(46)
+        self.lines_table.setMinimumHeight(260)
+        layout.addWidget(self.lines_table, stretch=1)
 
         # طبقِ گزارشِ صریحِ کاربر: در سفارش انبار لازم نیست -- انباردار
         # هنگامِ رسید مشخص می‌کند کالا به کدام انبار وارد شد؛ فقط
@@ -180,7 +183,6 @@ class _GoodsReceiptDialog(QDialog):
                     lambda _c=False, line=ln, it=item, ro=not editable: self._open_lot_tracking(line, it, ro)
                 )
                 self.lines_table.setCellWidget(row_index, 5, track_button)
-        self.lines_table.resizeRowsToContents()
 
         self.save_button.setEnabled(not converted)
 

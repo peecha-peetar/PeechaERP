@@ -256,6 +256,7 @@ r3, r3_line = receipt(med, 5)
 dlg = LotTrackingDialog(None, company_id, med, "دارو", D(5), stock_line_id=r3_line)
 dlg.table.cellWidget(0, 0).setText("B-UI")
 dlg.table.cellWidget(0, 2).setDate(today + datetime.timedelta(days=100))
+check(dlg.table.rowHeight(0) >= 42, f"ردیف‌هایِ فرمِ ردیابی ارتفاعِ کافی دارند (got {dlg.table.rowHeight(0)})")
 dlg._save()
 check([e.batch_no for e in lt.get_line_tracking(stock_line_id=r3_line)] == ["B-UI"], "دیالوگِ ردیابی بچ/انقضا را ذخیره کرد")
 from peecha.ui.screens.inventory_document import InventoryDocumentScreen

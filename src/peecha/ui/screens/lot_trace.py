@@ -42,6 +42,8 @@ def _table(columns: list[str]) -> QTableWidget:
     table.setEditTriggers(QAbstractItemView.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectRows)
     table.verticalHeader().setVisible(False)
+    table.verticalHeader().setDefaultSectionSize(40)
+    table.setAlternatingRowColors(True)
     table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
     return table
 
