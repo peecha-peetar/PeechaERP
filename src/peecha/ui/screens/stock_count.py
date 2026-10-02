@@ -28,7 +28,7 @@ from peecha.services import stock_count as count_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _AmountField, _make_searchable_combo
 
-_COLUMNS = ["کالا", "واحدِ شمارش", "مقدارِ شمارش", "معادل به واحدِ پایه", "موجودیِ دفتری", "اختلاف"]
+_COLUMNS = ["کالا", "واحدِ شمارش", "مقدارِ شمارش", "معادل به واحدِ پایه", "موجودیِ دفتری", "اختلاف", "بچ/سریال"]
 
 
 class StockCountScreen(QWidget):
@@ -78,12 +78,19 @@ class StockCountScreen(QWidget):
         self.record_button = QPushButton("ثبتِ شمارش")
         self.record_button.clicked.connect(self._record)
         entry_row.addWidget(self.record_button)
+        # R228: شمارش به تفکیکِ بچ/سریال (موجودیِ دفتریِ هر بچ پیش‌پر می‌شود)
+        self.track_count_button = QPushButton("🏷 شمارش به تفکیکِ بچ/سریال")
+        self.track_count_button.setEnabled(False)
+        self.track_count_button.clicked.connect(lambda: self._open_tracking_count(self.item_combo.currentData()))
+        entry_row.addWidget(self.track_count_button)
         layout.addLayout(entry_row)
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(42)
+        self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         layout.addWidget(self.table, stretch=1)
 
@@ -144,6 +151,8 @@ class StockCountScreen(QWidget):
         item_id = self.item_combo.currentData()
         self.uom_combo.clear()
         self._uom_factors = {}
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        self.track_count_button.setEnabled(item is not None and (item.track_batch or item.track_serial))
         if item_id is None:
             return
         for option in catalog_service.list_item_uom_options(item_id, purpose="INVENTORY"):
@@ -201,6 +210,34 @@ class StockCountScreen(QWidget):
             ]
             for j, v in enumerate(values):
                 self.table.setItem(i, j, QTableWidgetItem(v))
+            if item is not None and (item.track_batch or item.track_serial):
+                button = QPushButton("🏷 بچ/سریال")
+                button.clicked.connect(lambda _c=False, iid=ln.item_id, lid=ln.line_id, ro=not is_open: self._open_tracking_count(iid, lid, ro))
+                self.table.setCellWidget(i, len(values), button)
+
+    def _open_tracking_count(self, item_id: int | None, line_id: int | None = None, read_only: bool = False) -> None:
+        from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
+
+        company_id = self._company_id()
+        session_id = self.session_combo.currentData()
+        if company_id is None or session_id is None or item_id is None:
+            self.status_label.setText("جلسهٔ انبارگردانی و کالا را انتخاب کنید.")
+            return
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        data = count_service.get_count_session(session_id, company_id)
+        if line_id is None:
+            line_id = next((ln.line_id for ln in data.lines if ln.item_id == item_id), None)
+
+        def save(entries) -> None:
+            count_service.record_count_tracking(session_id, company_id, item_id, entries)
+
+        LotTrackingDialog(
+            self, company_id, item_id, f"{item.code} — {item.name or ''}" if item else str(item_id), None,
+            self._uom_names.get(item.base_uom_id, "") if item else "", cycle_count_line_id=line_id,
+            read_only=read_only or data.status_code != "COUNTING", direction="COUNT", warehouse_id=data.warehouse_id,
+            on_save=save,
+        ).exec()
+        self._load_session()
 
     def _finalize(self) -> None:
         company_id = self._company_id()

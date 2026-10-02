@@ -51,6 +51,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import lot_tracking as lot_tracking_service
 from peecha.services import item_variants as variants_service
 from peecha.services import report_templates as report_templates_service
 from peecha.services import roles as roles_service
@@ -124,6 +125,8 @@ _POST_BUTTON_DEFAULT_TOOLTIP = "۴) ثبتِ نهایی — قطعی و برگش
 # ممکن نیست -- باید حتماً از مرحلهٔ تصویبِ مدیر (APPROVED) هم عبور کند
 # (سفارش/فروش/امانی طبقِ صراحتِ کاربر دست‌نخورده می‌مانند).
 _TWO_STAGE_APPROVAL_TYPES = ("PURCHASE_INVOICE", "PURCHASE_PROFORMA")
+# R228: سندهایی که کالا را از انبار خارج می‌کنند -- انتخابِ منبع (بچ/سریال/امانی)
+_LOT_OUT_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_OUT")
 # طبقِ همان تفکیک: کدام از انواعِ قابلِ‌تبدیل به فاکتورِ فروش تبدیل
 # می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
 _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
@@ -4001,7 +4004,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         layout.addWidget(price_history_button)
         line = self._lines[row_index] if 0 <= row_index < len(self._lines) else None
         item = next((it for it in self._items if line is not None and it.item_id == line.item_id), None)
-        if item is not None and (item.track_batch or item.track_serial):
+        is_out = self.document_type_code in _LOT_OUT_TYPES
+        if item is not None and (
+            item.track_batch or item.track_serial
+            or (is_out and self._company_id() is not None and lot_tracking_service.has_pools(self._company_id(), item.item_id))
+        ):
             # R227: بچ/سریال/انقضایِ همین ردیف (فاکتورِ خرید، امانیِ ورودی، برگشت، فروش)
             track_button = QPushButton("🏷")
             track_button.setObjectName("iconButton")
@@ -4017,10 +4024,15 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         company_id = self._company_id()
         if company_id is None:
             return
+        # R228: در فروش/برگشت به تامین‌کننده، موجودیِ همان انبار برایِ انتخابِ دقیقِ
+        # بچ/سریال/تامین‌کننده/امانی نمایش داده می‌شود.
+        is_out = self.document_type_code in _LOT_OUT_TYPES
         LotTrackingDialog(
             self, company_id, item.item_id, f"{item.code} — {item.name or ''}", line.quantity_base,
             commercial_line_id=line.line_id,
             read_only=self._status_code not in ("DRAFT", "CONFIRMED", "APPROVED"),
+            direction="OUT" if is_out else "IN",
+            warehouse_id=line.warehouse_id or self.warehouse_combo.currentData(),
         ).exec()
 
     def _item_info_tooltip_text(self, item_id: int) -> str:

@@ -40,6 +40,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import lot_tracking as lot_tracking_service
 from peecha.services import report_templates as report_templates_service
 from peecha.services import unit_conversion as uc
 from peecha.ui import theme, widgets
@@ -1134,7 +1135,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 cell.setData(Qt.UserRole, ln.line_id)
                 self.lines_table.setItem(row_index, col_index, cell)
             self.lines_table.removeCellWidget(row_index, len(values) - 1)
-            if item is not None and (item.track_batch or item.track_serial):
+            is_out = self.document_type_code in ("ISSUE", "RETURN_OUT", "TRANSFER") or (
+                self.document_type_code == "ADJUSTMENT" and self.source_wh_combo.currentData() is not None
+                and self.destination_wh_combo.currentData() is None
+            )
+            if item is not None and (
+                item.track_batch or item.track_serial
+                or (is_out and company_id is not None and lot_tracking_service.has_pools(company_id, item.item_id))
+            ):
                 # R227: ورودِ بچ/سریال/انقضایِ همین ردیف
                 track_button = QPushButton("🏷 ردیابی")
                 track_button.setObjectName("iconButton")
@@ -1156,6 +1164,12 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
     def _open_lot_tracking(self, line, item) -> None:
         from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
 
+        # R228: حواله/برگشت/انتقال -> انتخاب از موجودیِ انبارِ مبدا
+        is_out = self.document_type_code in ("ISSUE", "RETURN_OUT", "TRANSFER") or (
+            self.document_type_code == "ADJUSTMENT" and self.source_wh_combo.currentData() is not None
+            and self.destination_wh_combo.currentData() is None
+        )
+
         company_id = self._company_id()
         if company_id is None:
             return
@@ -1163,6 +1177,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             self, company_id, item.item_id, f"{item.code} — {item.name or ''}", line.quantity_base,
             getattr(self, "_uom_names", {}).get(item.base_uom_id, ""), stock_line_id=line.line_id,
             read_only=self._status_code not in ("DRAFT", "CONFIRMED") or bool(getattr(self, "_origin_label", None)),
+            direction="OUT" if is_out else "IN",
+            warehouse_id=self.source_wh_combo.currentData() if is_out else self.destination_wh_combo.currentData(),
         )
         dialog.exec()
 

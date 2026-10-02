@@ -19,6 +19,7 @@ from peecha.db.base import new_session
 from peecha.db.models.inventory import CycleCountLine, CycleCountSession, Item, StockBalance, Warehouse
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import lot_tracking as uc_tracking
 from peecha.services import unit_conversion as uc
 
 _ZERO = decimal.Decimal(0)
@@ -112,6 +113,18 @@ def record_count(
         return line.line_id
 
 
+def record_count_tracking(
+    session_id: int, company_id: int, item_id: int, entries: list[uc_tracking.TrackingEntry],
+) -> int:
+    """R228: شمارش به تفکیکِ بچ/سریال -- مقدارِ شمارش = جمعِ ردیف‌ها (واحدِ پایه)."""
+    total = sum((decimal.Decimal(e.quantity) for e in entries), _ZERO)
+    with new_session() as session:
+        base_uom_id = session.scalar(select(Item.base_uom_id).where(Item.item_id == item_id))
+    line_id = record_count(session_id, company_id, item_id, base_uom_id, total)
+    uc_tracking.set_line_tracking(company_id, entries, cycle_count_line_id=line_id)
+    return line_id
+
+
 def get_count_session(session_id: int, company_id: int) -> CountSessionRow:
     with new_session() as session:
         s = session.get(CycleCountSession, session_id)
@@ -149,13 +162,49 @@ def finalize_count_session(session_id: int, company_id: int, approved_by_user_id
     data = get_count_session(session_id, company_id)
     if data.status_code != "COUNTING":
         raise ValueError("این انبارگردانی قبلاً بسته شده است.")
-    gains = [l for l in data.lines if l.variance_quantity_base is not None and l.variance_quantity_base > 0]
-    losses = [l for l in data.lines if l.variance_quantity_base is not None and l.variance_quantity_base < 0]
+    # R228: ردیفِ شمرده‌شده به تفکیکِ بچ/سریال، اختلاف را هم به تفکیکِ همان بچ/سریال
+    # ثبت می‌کند (ممکن است جمع برابر باشد ولی بچ‌ها جابه‌جا شده باشند).
+    gains: list[tuple] = []   # (item_id, qty, entry|None, description)
+    losses: list[tuple] = []
+    for l in data.lines:
+        if l.counted_quantity_base is None:
+            continue
+        counted_entries = uc_tracking.get_line_tracking(cycle_count_line_id=l.line_id)
+        if not counted_entries:
+            if l.variance_quantity_base and l.variance_quantity_base > 0:
+                gains.append((l.item_id, l.variance_quantity_base, None, l))
+            elif l.variance_quantity_base and l.variance_quantity_base < 0:
+                losses.append((l.item_id, -l.variance_quantity_base, None, l))
+            continue
+        expected_entries = uc_tracking.expected_tracking(company_id, l.item_id, data.warehouse_id)
+        key = lambda e: (e.batch_no or None, e.serial_no or None)  # noqa: E731
+        expected: dict[tuple, decimal.Decimal] = {}
+        counted: dict[tuple, decimal.Decimal] = {}
+        sample: dict[tuple, uc_tracking.TrackingEntry] = {}
+        for e in expected_entries:
+            expected[key(e)] = expected.get(key(e), _ZERO) + decimal.Decimal(e.quantity)
+            sample.setdefault(key(e), e)
+        untracked_expected = l.expected_quantity_base - sum(expected.values(), _ZERO)
+        if untracked_expected:
+            expected[(None, None)] = expected.get((None, None), _ZERO) + untracked_expected
+        for e in counted_entries:
+            counted[key(e)] = counted.get(key(e), _ZERO) + decimal.Decimal(e.quantity)
+            sample[key(e)] = e
+        for k in set(expected) | set(counted):
+            diff = counted.get(k, _ZERO) - expected.get(k, _ZERO)
+            if diff == 0:
+                continue
+            base = sample.get(k)
+            entry = None if k == (None, None) else uc_tracking.TrackingEntry(
+                abs(diff), batch_no=k[0], serial_no=k[1],
+                expiry_date=base.expiry_date if base else None, manufacture_date=base.manufacture_date if base else None,
+            )
+            (gains if diff > 0 else losses).append((l.item_id, abs(diff), entry, l))
     reason_code_id = _reason_code(company_id) if gains or losses else None
     with new_session() as session:
         base_uom = {
-            l.item_id: session.scalar(select(Item.base_uom_id).where(Item.item_id == l.item_id))
-            for l in gains + losses
+            item_id: session.scalar(select(Item.base_uom_id).where(Item.item_id == item_id))
+            for item_id, _q, _e, _l in gains + losses
         }
     document_ids = []
     for rows, header in (
@@ -167,13 +216,17 @@ def finalize_count_session(session_id: int, company_id: int, approved_by_user_id
         header.reference_no = data.session_code
         header.description = f"اختلافِ انبارگردانیِ {data.session_code}"
         doc_id = inv_documents_service.create_stock_document(company_id, approved_by_user_id, "ADJUSTMENT", datetime.date.today(), header)
-        for l in rows:
-            qty = abs(l.variance_quantity_base)
-            inv_documents_service.add_line(doc_id, company_id, inv_documents_service.LineFields(
-                item_id=l.item_id, uom_id=base_uom[l.item_id], quantity=qty, quantity_base=qty,
+        for item_id, qty, entry, l in rows:
+            stock_line_id = inv_documents_service.add_line(doc_id, company_id, inv_documents_service.LineFields(
+                item_id=item_id, uom_id=base_uom[item_id], quantity=qty, quantity_base=qty,
                 conversion_factor=decimal.Decimal(1), reason_code_id=reason_code_id,
-                description=f"انبارگردانی: دفتری {l.expected_quantity_base.normalize()}، شمارش {l.counted_quantity_base.normalize()}",
+                description=(
+                    f"انبارگردانی: دفتری {l.expected_quantity_base.normalize()}، شمارش {l.counted_quantity_base.normalize()}"
+                    + (f" -- {'بچ ' + entry.batch_no if entry.batch_no else 'سریال ' + entry.serial_no}" if entry else "")
+                ),
             ))
+            if entry is not None:
+                uc_tracking.set_line_tracking(company_id, [entry], stock_line_id=stock_line_id)
         inv_documents_service.confirm_stock_document(doc_id, company_id)
         inv_documents_service.post_stock_document(doc_id, company_id, approved_by_user_id)
         document_ids.append(doc_id)

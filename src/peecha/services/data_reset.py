@@ -26,6 +26,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -38,11 +40,59 @@ _FK_HINT = (
 )
 
 
+_DELETE_RE = re.compile(r"^DELETE FROM ([a-z_]+\.[a-z_]+) WHERE (.+)$", re.S)
+
+# جدول‌هایِ تغییرناپذیر (تریگر) که خودِ فهرست‌ها صریحاً مدیریتشان می‌کنند
+_SKIP_REFERENCE_TABLES = {"inv.stock_ledger", "acc.journal_entry_lines", "acc.journal_entries"}
+
+
+def _foreign_keys_to(session, table: str) -> list[tuple[str, str, str, bool]]:
+    """(جدولِ فرزند، ستونِ فرزند، ستونِ والد، nullable) برایِ FKهایِ تک‌ستونی به table."""
+    rows = session.execute(text(
+        "SELECT n.nspname || '.' || c.relname, a.attname, pa.attname, NOT a.attnotnull "
+        "FROM pg_constraint k "
+        "JOIN pg_class c ON c.oid = k.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = k.conkey[1] "
+        "JOIN pg_attribute pa ON pa.attrelid = k.confrelid AND pa.attnum = k.confkey[1] "
+        "WHERE k.contype = 'f' AND k.confrelid = CAST(:t AS regclass) AND array_length(k.conkey, 1) = 1 "
+        "AND k.confdeltype NOT IN ('c', 'n')"
+    ), {"t": table}).all()
+    return [(r[0], r[1], r[2], bool(r[3])) for r in rows]
+
+
+def _clear_references(session, table: str, where: str, params: dict, depth: int = 0) -> None:
+    """R228: پیش از حذفِ ردیف‌هایِ table، هر ردیفِ وابسته در هر جدولِ دیگری
+    (حتی ماژول‌هایی که این فهرست‌ها نام نبرده‌اند) پاک می‌شود: ستونِ اختیاری
+    NULL می‌شود و ردیفِ وابستهٔ اجباری -- با همین قاعده، بازگشتی -- حذف."""
+    if depth > 8:
+        return
+    for child, col, parent_col, nullable in _foreign_keys_to(session, table):
+        if child in _SKIP_REFERENCE_TABLES:
+            continue
+        subquery = f"SELECT {parent_col} FROM {table} WHERE {where}"
+        if child == table or nullable:
+            savepoint = session.begin_nested()
+            try:
+                session.execute(text(f"UPDATE {child} SET {col} = NULL WHERE {col} IN ({subquery})"), params)
+                savepoint.commit()
+                continue
+            except IntegrityError:
+                # NULL با CHECKِ جدول نمی‌خواند (مثلاً «حداقل یک گروه») -- ردیف حذف می‌شود
+                savepoint.rollback()
+        child_where = f"{col} IN ({subquery})"
+        _clear_references(session, child, child_where, params, depth + 1)
+        session.execute(text(f"DELETE FROM {child} WHERE {child_where}"), params)
+
+
 def _run_delete_sequence(company_id: int, statements: list[str]) -> None:
+    params = {"company_id": company_id}
     with new_session() as session:
         try:
             for sql in statements:
-                session.execute(text(sql), {"company_id": company_id})
+                match = _DELETE_RE.match(sql.strip())
+                if match is not None and match.group(1) not in _SKIP_REFERENCE_TABLES:
+                    _clear_references(session, match.group(1), match.group(2), params)
+                session.execute(text(sql), params)
             session.commit()
         except IntegrityError as exc:
             session.rollback()
@@ -53,6 +103,18 @@ def _run_delete_sequence(company_id: int, statements: list[str]) -> None:
 # ۱) اسناد — فروش/خرید + انبار + مالی/حسابداری، با هم، یک تراکنشِ واحد.
 # ---------------------------------------------------------------------
 _DOCUMENT_DELETE_STATEMENTS = [
+    # R228: لایهٔ ردیابی (R227) و انبارگردانی/بچ/سریال -- هم به ردیف‌هایِ سندِ
+    # بازرگانی و هم به ردیف‌هایِ سندِ انبار وصل‌اند؛ پیش از همه پاک می‌شوند.
+    "DELETE FROM inv.lot_movements WHERE company_id = :company_id",
+    "DELETE FROM inv.line_tracking_entries WHERE company_id = :company_id",
+    "DELETE FROM inv.serial_movements WHERE serial_id IN "
+    "(SELECT serial_id FROM inv.serial_numbers WHERE company_id = :company_id)",
+    "DELETE FROM inv.qc_inspections WHERE company_id = :company_id",
+    "DELETE FROM inv.serial_numbers WHERE company_id = :company_id",
+    "DELETE FROM inv.batches WHERE company_id = :company_id",
+    "DELETE FROM inv.cycle_count_lines WHERE session_id IN "
+    "(SELECT session_id FROM inv.cycle_count_sessions WHERE company_id = :company_id)",
+    "DELETE FROM inv.cycle_count_sessions WHERE company_id = :company_id",
     # طبقِ رفعِ باگِ واقعی («هنوز رکوردهایی به این وابسته‌اند -- invoice_
     # settlements»): تسویه‌یِ فاکتورها (comm.invoice_settlements) و
     # اقساط (comm.installment_plans/installment_lines) بعدِ ساختِ اولیه‌یِ
@@ -233,6 +295,8 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "DELETE FROM acc.personnel_details WHERE detail_account_id IN "
     "(SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id)",
     # قیمت‌گذاری/کانال.
+    "DELETE FROM comm.price_list_item_price_history WHERE price_list_id IN "
+    "(SELECT price_list_id FROM comm.price_lists WHERE company_id = :company_id)",
     "DELETE FROM comm.price_list_items WHERE price_list_id IN "
     "(SELECT price_list_id FROM comm.price_lists WHERE company_id = :company_id)",
     "DELETE FROM comm.price_lists WHERE company_id = :company_id",
@@ -256,6 +320,8 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     "(SELECT attribute_id FROM inv.item_attributes WHERE company_id = :company_id)",
     "DELETE FROM inv.related_items WHERE item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id) "
     "OR related_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",
+    # R225: بارکدهایِ هر واحد پیش از خودِ واحدهایِ کالا
+    "DELETE FROM inv.item_unit_barcodes WHERE company_id = :company_id",
     "DELETE FROM inv.item_uom_conversions WHERE item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",
     "DELETE FROM inv.bom_lines WHERE bom_id IN "
     "(SELECT bom_id FROM inv.bom_headers WHERE finished_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)) "

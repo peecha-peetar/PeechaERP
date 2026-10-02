@@ -1078,6 +1078,12 @@ class LineTrackingEntry(Base):
     expiry_date: Mapped[datetime.date | None] = mapped_column(Date)
     serial_no: Mapped[str | None] = mapped_column(String(100))
     quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    # R228: انتخابِ منبع در خروج (کالایِ امانیِ یک تامین‌کنندهٔ مشخص)
+    supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    is_consignment: Mapped[bool | None]
+    cycle_count_line_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("inv.cycle_count_lines.line_id", ondelete="CASCADE")
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 

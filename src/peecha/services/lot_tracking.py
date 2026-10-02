@@ -43,6 +43,9 @@ class TrackingEntry:
     manufacture_date: datetime.date | None = None
     expiry_date: datetime.date | None = None
     serial_no: str | None = None
+    # R228: انتخابِ منبع در خروج -- امانی/خریداری‌شدهٔ یک تامین‌کنندهٔ مشخص
+    supplier_detail_account_id: int | None = None
+    is_consignment: bool | None = None
 
 
 @dataclass
@@ -89,14 +92,46 @@ def item_tracking_flags(item_id: int) -> tuple[bool, bool, bool]:
         return bool(item.track_batch), bool(item.track_serial), bool(item.track_expiry)
 
 
+def has_pools(company_id: int, item_id: int) -> bool:
+    """کالایی که (حتی بدونِ بچ/سریال) سابقهٔ ردیابی دارد -- مثلاً امانیِ تامین‌کننده."""
+    with new_session() as session:
+        return session.scalar(
+            select(func.count()).select_from(LotMovement).where(
+                LotMovement.company_id == company_id, LotMovement.item_id == item_id,
+            )
+        ) > 0
+
+
+def expected_tracking(company_id: int, item_id: int, warehouse_id: int) -> list[TrackingEntry]:
+    """موجودیِ دفتریِ هر بچ/سریال در انبار (برایِ انبارگردانی) -- بدونِ تفکیکِ تامین‌کننده."""
+    totals: dict[tuple, decimal.Decimal] = {}
+    for r in list_lot_balances(company_id, item_id=item_id, warehouse_id=warehouse_id):
+        key = (r.batch_no, r.serial_no, r.expiry_date, r.manufacture_date)
+        totals[key] = totals.get(key, _ZERO) + r.quantity
+    return [
+        TrackingEntry(q, batch_no=k[0], serial_no=k[1], expiry_date=k[2], manufacture_date=k[3])
+        for k, q in totals.items() if q > 0
+    ]
+
+
 def is_tracked(item_id: int) -> bool:
     batch, serial, _expiry = item_tracking_flags(item_id)
     return batch or serial
 
 
-def _line_owner(session, stock_line_id: int | None, commercial_line_id: int | None):
-    if (stock_line_id is None) == (commercial_line_id is None):
-        raise ValueError("دقیقاً یکی از ردیفِ سندِ انبار یا ردیفِ سندِ بازرگانی باید مشخص باشد.")
+def _line_owner(session, stock_line_id: int | None, commercial_line_id: int | None, cycle_count_line_id: int | None = None):
+    if sum(x is not None for x in (stock_line_id, commercial_line_id, cycle_count_line_id)) != 1:
+        raise ValueError("دقیقاً یکی از ردیفِ سندِ انبار، سندِ بازرگانی یا انبارگردانی باید مشخص باشد.")
+    if cycle_count_line_id is not None:
+        from peecha.db.models.inventory import CycleCountLine, CycleCountSession
+
+        line = session.get(CycleCountLine, cycle_count_line_id)
+        if line is None:
+            raise ValueError("ردیفِ انبارگردانی نامعتبر است.")
+        count = session.get(CycleCountSession, line.session_id)
+        status = "DRAFT" if count.status_code == "COUNTING" else "POSTED"
+        # در انبارگردانی مقدارِ شمارش همان جمعِ ردیف‌هایِ ردیابی است (سقف ندارد)
+        return line, count.company_id, None, status
     if stock_line_id is not None:
         line = session.get(StockDocumentLine, stock_line_id)
         if line is None:
@@ -139,50 +174,62 @@ def _validate_entries(item: Item, entries: list[TrackingEntry], total_base: deci
                 raise ValueError(f"سریالِ «{serial}» تکراری است.")
             serials.add(serial)
         total += quantity
-    if total > total_base:
+    if total_base is not None and total > total_base:
         raise ValueError(f"جمعِ مقدارِ ردیابی ({total.normalize()}) از مقدارِ ردیف ({total_base.normalize()}) بیشتر است.")
 
 
 def set_line_tracking(
     company_id: int, entries: list[TrackingEntry], *, stock_line_id: int | None = None,
-    commercial_line_id: int | None = None,
+    commercial_line_id: int | None = None, cycle_count_line_id: int | None = None,
 ) -> None:
     """جایگزینیِ کاملِ اطلاعاتِ ردیابیِ یک ردیف (مقادیر به واحدِ پایه)."""
     with new_session() as session:
-        line, line_company_id, total_base, status_code = _line_owner(session, stock_line_id, commercial_line_id)
+        line, line_company_id, total_base, status_code = _line_owner(
+            session, stock_line_id, commercial_line_id, cycle_count_line_id,
+        )
         if line_company_id != company_id:
             raise ValueError("ردیفِ سند نامعتبر است.")
         if status_code in ("POSTED", "CANCELLED", "CORRECTED"):
             raise ValueError("اطلاعاتِ ردیابیِ سندِ ثبت‌شده/لغوشده قابلِ‌تغییر نیست.")
         item = session.get(Item, line.item_id)
         _validate_entries(item, entries, total_base, _item_name(session, item))
-        owner = (
-            LineTrackingEntry.stock_line_id == stock_line_id if stock_line_id is not None
-            else LineTrackingEntry.commercial_line_id == commercial_line_id
-        )
-        session.query(LineTrackingEntry).filter(owner).delete()
+        session.query(LineTrackingEntry).filter(_owner_filter(stock_line_id, commercial_line_id, cycle_count_line_id)).delete()
         for e in entries:
             session.add(LineTrackingEntry(
                 company_id=company_id, stock_line_id=stock_line_id, commercial_line_id=commercial_line_id,
+                cycle_count_line_id=cycle_count_line_id,
                 batch_no=(e.batch_no or "").strip() or None, manufacture_date=e.manufacture_date,
                 expiry_date=e.expiry_date, serial_no=(e.serial_no or "").strip() or None,
-                quantity=decimal.Decimal(e.quantity),
+                quantity=decimal.Decimal(e.quantity), supplier_detail_account_id=e.supplier_detail_account_id,
+                is_consignment=e.is_consignment,
             ))
         session.commit()
 
 
-def get_line_tracking(*, stock_line_id: int | None = None, commercial_line_id: int | None = None) -> list[TrackingEntry]:
+def _owner_filter(stock_line_id=None, commercial_line_id=None, cycle_count_line_id=None):
+    if stock_line_id is not None:
+        return LineTrackingEntry.stock_line_id == stock_line_id
+    if commercial_line_id is not None:
+        return LineTrackingEntry.commercial_line_id == commercial_line_id
+    return LineTrackingEntry.cycle_count_line_id == cycle_count_line_id
+
+
+def get_line_tracking(
+    *, stock_line_id: int | None = None, commercial_line_id: int | None = None, cycle_count_line_id: int | None = None,
+) -> list[TrackingEntry]:
     with new_session() as session:
-        return _own_entries(session, stock_line_id=stock_line_id, commercial_line_id=commercial_line_id)
+        return _own_entries(
+            session, stock_line_id=stock_line_id, commercial_line_id=commercial_line_id, cycle_count_line_id=cycle_count_line_id,
+        )
 
 
-def _own_entries(session, *, stock_line_id=None, commercial_line_id=None) -> list[TrackingEntry]:
-    q = select(LineTrackingEntry)
-    q = q.where(LineTrackingEntry.stock_line_id == stock_line_id) if stock_line_id is not None else q.where(
-        LineTrackingEntry.commercial_line_id == commercial_line_id
-    )
+def _own_entries(session, *, stock_line_id=None, commercial_line_id=None, cycle_count_line_id=None) -> list[TrackingEntry]:
+    q = select(LineTrackingEntry).where(_owner_filter(stock_line_id, commercial_line_id, cycle_count_line_id))
     return [
-        TrackingEntry(e.quantity, e.batch_no, e.manufacture_date, e.expiry_date, e.serial_no)
+        TrackingEntry(
+            e.quantity, e.batch_no, e.manufacture_date, e.expiry_date, e.serial_no,
+            e.supplier_detail_account_id, e.is_consignment,
+        )
         for e in session.scalars(q.order_by(LineTrackingEntry.entry_id))
     ]
 
@@ -368,6 +415,10 @@ def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quant
         elif e.batch_no:
             batch = session.scalar(select(Batch).where(Batch.item_id == item.item_id, Batch.batch_no == e.batch_no))
             keys = [k for k in keys if batch is not None and k[0] == batch.batch_id]
+        if e.supplier_detail_account_id is not None:
+            keys = [k for k in keys if k[2] == e.supplier_detail_account_id]
+        if e.is_consignment is not None:
+            keys = [k for k in keys if bool(k[3]) == bool(e.is_consignment)]
         requested = min(decimal.Decimal(e.quantity), wanted)
         left = take(ordered(keys), requested)
         wanted -= requested - left
@@ -410,7 +461,8 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
             )
             is_consignment_in = comm_doc is not None and comm_doc.document_type_code == "CONSIGNMENT_IN"
             tracked = bool(item.track_batch or item.track_serial)
-            entries = _entries_for_stock_line(session, line) if tracked else []
+            # R228: انتخابِ منبع (تامین‌کننده/امانی) برایِ کالایِ بدونِ بچ/سریال هم خوانده می‌شود
+            entries = _entries_for_stock_line(session, line)
             transfer_pools: list[tuple] = []
             for direction, warehouse_id in directions:
                 if warehouse_id is None:
