@@ -100,7 +100,9 @@ from peecha.ui.screens.commercial_document import CommercialDocumentScreen
 screen = CommercialDocumentScreen("PURCHASE_ORDER", None)
 screen.edit_document(po_box)
 check(not screen._lines_are_editable(), "سفارشِ تاییدشده در فرم فقط-خواندنی است")
-check(not screen.save_button.isEnabled(), "دکمهٔ ذخیره برایِ سفارشِ تاییدشده غیرفعال است")
+# R226: ذخیره فقط برایِ مرکزِ هزینه/پروژه فعال می‌ماند؛ بقیهٔ هدر قفل است.
+check(not screen.counterparty_combo.isEnabled() and screen.cost_center_combo.isEnabled(),
+      "در سفارشِ تاییدشده فقط مرکزِ هزینه/پروژه قابلِ‌تغییر است")
 check(screen.revert_button.isEnabled(), "بازگشت به پیش‌نویس برایِ ویرایش فعال است")
 documents_service.approve_document(po_box, company_id)
 screen.edit_document(po_box)
