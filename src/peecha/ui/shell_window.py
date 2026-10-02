@@ -1472,6 +1472,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.commercial_aftersales import CommercialAftersalesScreen
         from peecha.ui.screens.commercial_purchasing_extras import CommercialPurchasingExtrasScreen
         from peecha.ui.screens.order_tracking import OrderTrackingScreen
+        from peecha.ui.screens.purchase_goods_receipt import PurchaseGoodsReceiptScreen
         from peecha.ui.screens.commercial_settlement import InvoiceSettlementScreen
         from peecha.ui.screens.installments_list import InstallmentsListScreen
         from peecha.ui.screens.commercial_consignment_tracking import ConsignmentTrackingScreen
@@ -1600,6 +1601,7 @@ class MainWindow(QMainWindow):
         self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
         self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())
         self.register_screen("order_tracking", OrderTrackingScreen(self))
+        self.register_screen("purchase_goods_receipt", PurchaseGoodsReceiptScreen())
         # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
         # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
         # همان کلاس با invoice_type متفاوت است.

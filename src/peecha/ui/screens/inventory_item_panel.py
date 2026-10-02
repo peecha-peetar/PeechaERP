@@ -187,6 +187,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.category_combo, "دسته‌بندیِ داخلیِ این کالا -- برایِ فیلترِ فهرست‌ها و نگاشتِ حساب‌هایِ گروهی."),
             (self.related_item_combo, "کالایِ دیگری که با این کالا رابطه دارد (جایگزین یا مکمل)."),
             (self.relation_type_combo, "نوعِ رابطه با کالایِ انتخاب‌شده -- جایگزین (می‌تواند به‌جایش فروخته شود) یا مکمل (معمولاً همراهش پیشنهاد می‌شود)."),
+            (self.uom_conversion_combo, "واحدِ دیگری که این کالا می‌تواند با آن هم سنجیده شود (مثلاً کارتن/بسته) -- واحدِ پایه در این فهرست نیست."),
+            (self.uom_conversion_factor_field, "یک واحدِ انتخاب‌شده معادلِ چند واحدِ پایه است (مثلاً اگر واحدِ پایه «عدد» و این واحد «کارتن» باشد و هر کارتن ۲۴ عدد داشته باشد، عددِ ۲۴ را وارد کنید)."),
+            (self.uom_conversion_purchase_default_checkbox, "در فرمِ سفارش/فاکتورِ خرید، این واحد به‌صورتِ پیش‌فرض برایِ این کالا پیشنهاد شود."),
+            (self.uom_conversion_sales_default_checkbox, "در فرمِ سفارش/فاکتورِ فروش، این واحد به‌صورتِ پیش‌فرض برایِ این کالا پیشنهاد شود."),
             # خرید -- کدهایِ تامین‌کننده
             (self.supplier_combo, "تامین‌کننده‌ای که این کالا از او خریداری می‌شود."),
             (self.item_code_type_combo, "نوعِ کدِ ثبت‌شده نزدِ این تامین‌کننده -- کدِ کالایِ اوست یا نامِ کالا نزدِ اوست."),
@@ -223,6 +227,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.kind_combo.currentIndexChanged.connect(self._on_kind_changed)
 
         self.uom_combo = QComboBox()
+        self.uom_combo.currentIndexChanged.connect(self._rebuild_uom_conversion_combo)
         uom_row = self._make_combo_with_add_row("واحدِ پایه", self.uom_combo, self._quick_add_uom)
 
         self.brand_combo = QComboBox()
@@ -360,6 +365,42 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("package_qty", "تعدادِ بسته‌بندیِ خرید", self.purchase_package_qty_field, span=1),
         ])
         layout.addWidget(self.purchasing_grid)
+
+        # طبقِ گزارشِ صریحِ کاربر («تعریفِ واحدهایِ اندازه‌گیری خیلی ساده و
+        # غیراستاندارد است»): بک‌اندِ تبدیلِ واحدِ هر کالا (مثلاً «۱ کارتن
+        # = ۲۴ عدد») از قبل ساخته شده بود (ItemUomConversion) ولی هیچ UI
+        # نداشت -- کاربر فقط می‌توانست با همان واحدِ پایه سفارش ثبت کند.
+        layout.addWidget(QLabel("تبدیلِ واحد (مثلاً ۱ کارتن = ۲۴ عدد)"))
+        self.uom_conversion_combo = QComboBox()
+        self.uom_conversion_factor_field = QLineEdit()
+        self.uom_conversion_factor_field.setPlaceholderText("ضریبِ تبدیل به واحدِ پایه")
+        self.uom_conversion_purchase_default_checkbox = QCheckBox("پیش‌فرضِ خرید")
+        self.uom_conversion_sales_default_checkbox = QCheckBox("پیش‌فرضِ فروش")
+        conversion_row = QHBoxLayout()
+        conversion_row.addWidget(self.uom_conversion_combo, stretch=2)
+        conversion_row.addWidget(self.uom_conversion_factor_field, stretch=1)
+        conversion_row.addWidget(self.uom_conversion_purchase_default_checkbox)
+        conversion_row.addWidget(self.uom_conversion_sales_default_checkbox)
+        add_conversion_button = QPushButton("+")
+        add_conversion_button.setObjectName("iconButton")
+        add_conversion_button.setFixedWidth(28)
+        add_conversion_button.clicked.connect(self._add_uom_conversion)
+        conversion_row.addWidget(add_conversion_button)
+        layout.addLayout(conversion_row)
+        self.uom_conversion_table = QTableWidget(0, 4)
+        self.uom_conversion_table.setHorizontalHeaderLabels(["واحد", "ضریبِ تبدیل به واحدِ پایه", "پیش‌فرضِ خرید", "پیش‌فرضِ فروش"])
+        self.uom_conversion_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.uom_conversion_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.uom_conversion_table.verticalHeader().setVisible(False)
+        self.uom_conversion_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.uom_conversion_table.setMinimumHeight(120)
+        layout.addWidget(self.uom_conversion_table, stretch=1)
+        remove_conversion_button = QPushButton("🗑️")
+        remove_conversion_button.setObjectName("dangerIconButton")
+        remove_conversion_button.setFixedWidth(44)
+        remove_conversion_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
+        remove_conversion_button.clicked.connect(self._remove_uom_conversion)
+        layout.addWidget(remove_conversion_button)
 
         layout.addWidget(QLabel("تامین‌کنندگان"))
         self.supplier_combo = QComboBox()
@@ -1450,10 +1491,30 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             self.item_code_supplier_combo.addItem(f"{s['code']} — {s['name']}", s["detail_account_id"])
 
         self._rebuild_related_item_combo()
+        self._rebuild_uom_conversion_combo()
         self._reload_item_attributes()
         self._reload_variant_price_lists()
 
         self._apply_visibility()
+
+    def _rebuild_uom_conversion_combo(self) -> None:
+        """هم‌الگو با _rebuild_related_item_combo: واحدِ پایهٔ کالایِ در
+        حالِ ویرایش (یا کالایِ درحالِ‌تعریف) از فهرست حذف می‌شود -- ضریبِ
+        تبدیلِ واحدِ پایه نسبت به خودش همیشه ۱ است و معنایی برایِ تعریف
+        ندارد. با تغییرِ واحدِ پایه (uom_combo) هم دوباره صدا زده می‌شود."""
+        if self._company_id is None:
+            return
+        current_selection = self.uom_conversion_combo.currentData()
+        self.uom_conversion_combo.clear()
+        base_uom_id = self.uom_combo.currentData()
+        for u in catalog_service.list_uoms(self._company_id, active_only=True):
+            if u.uom_id == base_uom_id:
+                continue
+            self.uom_conversion_combo.addItem(f"{u.code} — {u.name}", u.uom_id)
+        if current_selection is not None:
+            idx = self.uom_conversion_combo.findData(current_selection)
+            if idx >= 0:
+                self.uom_conversion_combo.setCurrentIndex(idx)
 
     def _rebuild_related_item_combo(self) -> None:
         """طبقِ رفعِ باگِ واقعی: قبلاً این کمبو خودِ کالایِ در حالِ ویرایش
@@ -1561,6 +1622,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.asset_status_label.setText("")
         self._apply_visibility()
+        self._rebuild_uom_conversion_combo()
+        self._refresh_uom_conversions_table()
         self._refresh_suppliers_table()
         self._refresh_item_codes_table()
         self._refresh_related_table()
@@ -1647,6 +1710,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.supplier_table.setRowCount(0)
         self.item_codes_table.setRowCount(0)
         self.related_table.setRowCount(0)
+        self.uom_conversion_table.setRowCount(0)
+        self.uom_conversion_factor_field.clear()
+        self.uom_conversion_purchase_default_checkbox.setChecked(False)
+        self.uom_conversion_sales_default_checkbox.setChecked(False)
         self.bom_lines_table.setRowCount(0)
         self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
         self._refresh_ecommerce_mappings()
@@ -1708,6 +1775,60 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             qc_test_spec=self.qc_test_spec_field.toPlainText().strip() or None,
             qc_inspection_interval_days=_int_or_none(self.qc_interval_field.text()),
         )
+
+    # --- تبدیلِ واحد ---------------------------------------------------------
+    def _refresh_uom_conversions_table(self) -> None:
+        self.uom_conversion_table.setRowCount(0)
+        if self._item_id is None:
+            return
+        rows = catalog_service.list_item_uom_conversions(self._item_id)
+        self.uom_conversion_table.setRowCount(len(rows))
+        for row_index, r in enumerate(rows):
+            idx = self.uom_conversion_combo.findData(r.uom_id)
+            uom_label = self.uom_conversion_combo.itemText(idx) if idx >= 0 else r.uom_code
+            values = [uom_label, str(r.conversion_factor), "بله" if r.is_purchase_default else "خیر", "بله" if r.is_sales_default else "خیر"]
+            for col_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, r.conversion_id)
+                self.uom_conversion_table.setItem(row_index, col_index, item)
+
+    def _add_uom_conversion(self) -> None:
+        if self._item_id is None:
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس تبدیلِ واحد اضافه کنید.")
+            return
+        uom_id = self.uom_conversion_combo.currentData()
+        if uom_id is None:
+            return
+        factor = _decimal_or_none(self.uom_conversion_factor_field.text())
+        if factor is None:
+            QMessageBox.warning(self, "خطا", "ضریبِ تبدیل را وارد کنید.")
+            return
+        try:
+            catalog_service.set_item_uom_conversion(
+                self._item_id, uom_id, factor,
+                is_purchase_default=self.uom_conversion_purchase_default_checkbox.isChecked(),
+                is_sales_default=self.uom_conversion_sales_default_checkbox.isChecked(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.uom_conversion_factor_field.clear()
+        self.uom_conversion_purchase_default_checkbox.setChecked(False)
+        self.uom_conversion_sales_default_checkbox.setChecked(False)
+        self._refresh_uom_conversions_table()
+
+    def _remove_uom_conversion(self) -> None:
+        if self._item_id is None:
+            return
+        selected = self.uom_conversion_table.selectedItems()
+        if not selected:
+            return
+        try:
+            catalog_service.delete_item_uom_conversion(selected[0].data(Qt.UserRole), self._item_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_uom_conversions_table()
 
     # --- تامین‌کنندگان -----------------------------------------------------
     def _refresh_suppliers_table(self) -> None:

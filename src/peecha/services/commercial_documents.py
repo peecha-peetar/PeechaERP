@@ -1701,6 +1701,20 @@ def _is_pre_sales_order(session, doc: CommercialDocument) -> bool:
     return channel is not None and channel.channel_type_code == "PRE_SALES"
 
 
+def _is_goods_receipt_eligible_order(session, doc: CommercialDocument) -> bool:
+    """طبقِ گزارشِ صریحِ کاربر («بعدِ تاییدِ سفارشِ خرید، انباردار کجا
+    رسیدِ کالا را تایید کند؟»): همان زیرساختِ تاییدِ انبار/مقدارِ تحویلیِ
+    پخشِ سرد (پایین‌تر) حالا برایِ سفارشِ خرید هم -- فقط وقتی Toggleِ
+    PURCHASE_ORDER_GOODS_RECEIPT برایِ شرکت روشن باشد -- قابلِ‌استفاده
+    است؛ پیش‌فرض خاموش، یعنی رفتارِ قبلی (تبدیلِ مستقیم به فاکتور بدونِ
+    مرحلهٔ جداگانهٔ رسید) دست‌نخورده می‌ماند."""
+    if _is_pre_sales_order(session, doc):
+        return True
+    return doc.document_type_code == "PURCHASE_ORDER" and settings_service.is_feature_enabled(
+        doc.company_id, "PURCHASE_ORDER_GOODS_RECEIPT"
+    )
+
+
 def document_requires_weighing(document_id: int, company_id: int) -> bool:
     """طبقِ درخواستِ صریح («توزین اگر داشته باشه»): یعنی حداقل یک ردیفِ
     سند، کالایی با pos_requires_weight=true (کالایِ وزنی/ترازویی -- همان
@@ -1753,8 +1767,8 @@ def approve_warehouse(document_id: int, company_id: int, approved_by_user_id: in
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
-        if not _is_pre_sales_order(session, doc):
-            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if not _is_goods_receipt_eligible_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» یا سفارشِ خریدِ دارایِ Toggleِ رسیدِ انبار معنا دارد.")
         if doc.status_code not in _PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES:
             raise ValueError("فقط سفارشِ تاییدشده/تصویب‌شده قابلِ‌تاییدِ انبار است.")
         if doc.warehouse_approved_at is not None:
@@ -1843,8 +1857,8 @@ def set_warehouse_delivered_quantities(
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
-        if not _is_pre_sales_order(session, doc):
-            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if not _is_goods_receipt_eligible_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» یا سفارشِ خریدِ دارایِ Toggleِ رسیدِ انبار معنا دارد.")
         if _has_any_invoiced_quantity(session, document_id):
             raise ValueError("این سفارش قبلاً (به‌طورِ کامل/جزئی) به فاکتور تبدیل شده -- مقدارِ تحویلی دیگر قابلِ‌ویرایش نیست.")
         lines_by_id = {
@@ -1866,8 +1880,8 @@ def revert_warehouse_approval(document_id: int, company_id: int) -> None:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
-        if not _is_pre_sales_order(session, doc):
-            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» معنا دارد.")
+        if not _is_goods_receipt_eligible_order(session, doc):
+            raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» یا سفارشِ خریدِ دارایِ Toggleِ رسیدِ انبار معنا دارد.")
         if doc.warehouse_approved_at is None:
             raise ValueError("این سفارش هنوز تاییدِ انبار نگرفته است.")
         if doc.weighing_approved_at is not None:
@@ -1909,6 +1923,25 @@ def list_pre_sales_fulfillment_queue(company_id: int) -> list[CommercialDocument
                 CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
                 CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
                 Channel.channel_type_code == "PRE_SALES",
+            )
+            .order_by(CommercialDocument.document_id)
+        )
+        return [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
+
+
+def list_purchase_order_goods_receipt_queue(company_id: int) -> list[CommercialDocument]:
+    """هم‌الگو با list_pre_sales_fulfillment_queue، برایِ سفارشِ خرید --
+    طبقِ گزارشِ صریحِ کاربر («بعدِ تاییدِ سفارش، انباردار کجا رسیدِ کالا را
+    تایید کند؟»). فقط وقتی Toggleِ PURCHASE_ORDER_GOODS_RECEIPT برایِ
+    شرکت روشن باشد نتیجه‌ای برمی‌گرداند -- وگرنه فهرست همیشه خالی است."""
+    if not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT"):
+        return []
+    with new_session() as session:
+        stmt = (
+            select(CommercialDocument)
+            .where(
+                CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "PURCHASE_ORDER",
+                CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
             )
             .order_by(CommercialDocument.document_id)
         )

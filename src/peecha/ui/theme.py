@@ -485,6 +485,10 @@ QPushButton#primaryButton:hover {{
 QPushButton#primaryButton:pressed {{
     background-color: {ACCENT_PRESSED};
 }}
+QPushButton#primaryButton:disabled {{
+    background-color: {HOVER};
+    color: {TEXT_DISABLED};
+}}
 QPushButton#flatButton {{
     background-color: transparent;
     color: {PRIMARY};
@@ -536,6 +540,17 @@ QPushButton#iconButton:pressed {{
     border: 1px solid {BORDER};
     border-top: 2px solid {rgba(TEXT_PRIMARY, 0.30)};
 }}
+/* طبقِ گزارشِ صریحِ کاربر («دکمه‌هایِ غیرفعال باید خاکستری/قابلِ‌تشخیص
+باشند»): چون این سه کلاس با QPushButton#objectName انتخاب می‌شوند،
+نسبت به قاعدهٔ عمومیِ QPushButton:disabled اولویتِ بالاتری دارند و
+بدونِ این سه قاعده، حتی وقتی غیرفعال‌اند همان ظاهرِ رنگی/گرادیانیِ
+فعال را نشان می‌دادند. */
+QPushButton#iconButton:disabled {{
+    background-color: {rgba(TEXT_DISABLED, 0.08)};
+    color: {TEXT_DISABLED};
+    border: 1px solid {rgba(TEXT_DISABLED, 0.25)};
+    border-bottom: 1px solid {rgba(TEXT_DISABLED, 0.25)};
+}}
 QPushButton#dangerIconButton {{
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 {rgba(DANGER, 0.18)}, stop:1 {rgba(DANGER, 0.08)});
@@ -556,6 +571,12 @@ QPushButton#dangerIconButton:pressed {{
         stop:0 {rgba(DANGER, 0.08)}, stop:1 {rgba(DANGER, 0.18)});
     border: 1px solid {rgba(DANGER, 0.4)};
     border-top: 2px solid {rgba(DANGER, 0.55)};
+}}
+QPushButton#dangerIconButton:disabled {{
+    background-color: {rgba(TEXT_DISABLED, 0.08)};
+    color: {TEXT_DISABLED};
+    border: 1px solid {rgba(TEXT_DISABLED, 0.25)};
+    border-bottom: 1px solid {rgba(TEXT_DISABLED, 0.25)};
 }}
 /* نسخه‌یِ آیکونیِ primaryButton — برایِ دکمه‌هایِ کوچکِ ثبت/ذخیره‌یِ اصلیِ
 فرم (✔️/💾). طبقِ گزارشِ صریح («نیازی به رنگِ آبیِ توپُر نیست، فقط هاورِ
@@ -584,6 +605,12 @@ QPushButton#primaryIconButton:pressed {{
     border: 1px solid {rgba(ACCENT, 0.4)};
     border-top: 2px solid {rgba(ACCENT, 0.55)};
 }}
+QPushButton#primaryIconButton:disabled {{
+    background-color: {rgba(TEXT_DISABLED, 0.08)};
+    color: {TEXT_DISABLED};
+    border: 1px solid {rgba(TEXT_DISABLED, 0.25)};
+    border-bottom: 1px solid {rgba(TEXT_DISABLED, 0.25)};
+}}
 QPushButton#dangerButton {{
     background-color: transparent;
     color: {DANGER};
@@ -591,6 +618,10 @@ QPushButton#dangerButton {{
 }}
 QPushButton#dangerButton:hover {{
     background-color: {rgba(DANGER, 0.14)};
+}}
+QPushButton#dangerButton:disabled {{
+    background-color: transparent;
+    color: {TEXT_DISABLED};
 }}
 
 /* --- جدول‌ها ------------------------------------------------------------ */

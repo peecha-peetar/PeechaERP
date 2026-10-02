@@ -43,6 +43,7 @@ from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_purchasing as purchasing_service
+from peecha.services import commercial_settings as settings_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import companies as companies_service
 from peecha.services import detail_dimensions as dimensions_service
@@ -141,7 +142,9 @@ _HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمع�
 def _build_invoice_print_html(
     company_name: str, doc, lines: list, items_by_id: dict, counterparty_label: str, decimal_places: int,
     font_family: str, header_text: str | None = None, footer_text: str | None = None,
+    uom_decimal_places: dict | None = None,
 ) -> str:
+    uom_decimal_places = uom_decimal_places or {}
     esc = _escape_receipt_html
     header_html = (
         f'<div style="text-align:center; font-size:10pt; margin-bottom:6px;">{esc(header_text)}</div>' if header_text else ""
@@ -156,7 +159,7 @@ def _build_invoice_print_html(
         rows_html += (
             "<tr>"
             f"<td>{esc(item_label)}</td>"
-            f"<td style='text-align:center;'>{numerals.format_money(ln.quantity, 3)}</td>"
+            f"<td style='text-align:center;'>{numerals.format_money(ln.quantity, uom_decimal_places.get(item.base_uom_id, 3) if item else 3)}</td>"
             f"<td style='text-align:center;'>{numerals.format_money(ln.unit_price, decimal_places)}</td>"
             f"<td style='text-align:center;'>{numerals.format_money(ln.discount_amount, decimal_places)}</td>"
             f"<td style='text-align:center;'>{numerals.format_money(ln.tax_amount, decimal_places)}</td>"
@@ -363,9 +366,10 @@ def _show_invoice_print(
             counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
         company_name = app_session.current_company.display_name if app_session.current_company else ""
         items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+        uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
         html = _build_invoice_print_html(
             company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
-            header_text=header_text, footer_text=footer_text,
+            header_text=header_text, footer_text=footer_text, uom_decimal_places=uom_decimal_places,
         )
         for printer_name in (printer_names or [None]):
             _print_receipt_document(parent, html, printer_name=printer_name)
@@ -406,9 +410,10 @@ def _show_invoice_print(
         counterparty_label = dimensions_service.get_detail_account_label(doc.counterparty_detail_account_id)
     company_name = app_session.current_company.display_name if app_session.current_company else ""
     items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id)}
+    uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
     html = _build_invoice_print_html(
         company_name, doc, lines, items_by_id, counterparty_label, decimal_places, _receipt_font_family(),
-        header_text=header_text, footer_text=footer_text,
+        header_text=header_text, footer_text=footer_text, uom_decimal_places=uom_decimal_places,
     )
     _print_receipt_document(parent, html)
 
@@ -591,6 +596,7 @@ class _ReturnLinesPickerDialog(QDialog):
         _doc, lines = documents_service.get_document(source_document_id, company_id)
         fulfillment_by_line = {f.line_id: f for f in documents_service.get_line_fulfillment(source_document_id, company_id)}
         items_by_id = {it.item_id: it for it in catalog_service.list_items(company_id, active_only=False)}
+        uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
 
         self.table = QTableWidget(len(lines), 5)
         self.table.setHorizontalHeaderLabels(["", "کالا", "مقدارِ فاکتور", "قبلاً برگشتی", "مقدارِ برگشتی"])
@@ -612,7 +618,7 @@ class _ReturnLinesPickerDialog(QDialog):
             self.table.setItem(row_index, 3, QTableWidgetItem(numerals.to_persian_digits(str(already_returned))))
 
             qty_field = _AmountField()
-            qty_field.setDecimals(3)
+            qty_field.setDecimals(uom_decimal_places.get(item.base_uom_id, 3) if item else 3)
             # طبقِ محدودیتِ خودِ _AmountField (بدونِ setMaximum -- برخلافِ
             # QDoubleSpinBox): سقفِ واقعی همین‌جا در _accept بررسی می‌شود.
             qty_field.setValue(float(returnable) if returnable > 0 else 0.0)
@@ -1121,7 +1127,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
                     pass
             self.variant_table.setCellWidget(row, 2, price_field)
             qty_field = _AmountField()
-            qty_field.setDecimals(3)
+            qty_field.setDecimals(self._uom_decimal_places.get(variant_item.base_uom_id, 3) if variant_item else 3)
             qty_field.valueChanged.connect(self._on_selection_changed)
             self.variant_table.setCellWidget(row, 3, qty_field)
             row_price_fields.append(price_field)
@@ -1317,6 +1323,11 @@ class _LineDialog(LayoutEditMixin, QDialog):
         # شمارشِ خودِ همان کالا اعمال می‌شود.
         item = self._items_by_id.get(item_id)
         qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
+        # طبقِ گزارشِ صریحِ کاربر («واحدِ کالا اعشار ندارد، چرا در سفارش
+        # مقدار اعشار دارد؟»): خودِ فیلدِ ورودیِ مقدار هم باید دقیقاً
+        # همین تعدادِ اعشار را اعمال کند -- قبلاً این عدد فقط برایِ متنِ
+        # نمایشیِ موجودی مصرف می‌شد، نه رویِ quantity_field.
+        self.quantity_field.setDecimals(qty_decimals)
         if not nonzero:
             self.stock_info_label.setText("موجودی: صفر")
         else:
@@ -1578,12 +1589,13 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
 
     _COLUMNS = ["کالا", "سفارشِ اولیه", "تحویلیِ انبار", "فاکتورشده", "مانده", "مقدارِ این‌بار"]
 
-    def __init__(self, parent: QWidget, fulfillment: list, items_by_id: dict) -> None:
+    def __init__(self, parent: QWidget, fulfillment: list, items_by_id: dict, uom_decimal_places: dict | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("تبدیل به فاکتور")
         self.setMinimumWidth(600)
         self._fulfillment = [f for f in fulfillment if f.remaining_quantity > 0]
         self._qty_fields: dict[int, _AmountField] = {}
+        self._uom_decimal_places = uom_decimal_places or {}
 
         layout = QVBoxLayout(self)
         info = QLabel(
@@ -1600,16 +1612,17 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         for row_index, f in enumerate(self._fulfillment):
             item = items_by_id.get(f.item_id)
+            dp = self._uom_decimal_places.get(item.base_uom_id, 3) if item else 3
             table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(f.item_id)))
-            table.setItem(row_index, 1, QTableWidgetItem(numerals.format_money(f.quantity, 3)))
+            table.setItem(row_index, 1, QTableWidgetItem(numerals.format_money(f.quantity, dp)))
             table.setItem(
                 row_index, 2,
-                QTableWidgetItem(numerals.format_money(f.delivered_quantity, 3) if f.delivered_quantity is not None else "—"),
+                QTableWidgetItem(numerals.format_money(f.delivered_quantity, dp) if f.delivered_quantity is not None else "—"),
             )
-            table.setItem(row_index, 3, QTableWidgetItem(numerals.format_money(f.invoiced_quantity, 3)))
-            table.setItem(row_index, 4, QTableWidgetItem(numerals.format_money(f.remaining_quantity, 3)))
+            table.setItem(row_index, 3, QTableWidgetItem(numerals.format_money(f.invoiced_quantity, dp)))
+            table.setItem(row_index, 4, QTableWidgetItem(numerals.format_money(f.remaining_quantity, dp)))
             qty_field = _AmountField()
-            qty_field.setDecimals(3)
+            qty_field.setDecimals(dp)
             qty_field.setValue(float(f.remaining_quantity))
             self._qty_fields[f.line_id] = qty_field
             table.setCellWidget(row_index, 5, qty_field)
@@ -2266,6 +2279,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._lines: list = []
         self._items: list[catalog_service.ItemRow] = []
         self._decimal_places = 0
+        self._uom_decimal_places: dict[int, int] = {}
+        self._skip_purchase_order_approval = False
         self._cost_center_required = False
         self._project_required = False
         self._per_line_warehouse_enabled = False
@@ -2977,6 +2992,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._items = catalog_service.list_items(company_id, active_only=True)
         self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        self._skip_purchase_order_approval = (
+            self.document_type_code == "PURCHASE_ORDER"
+            and settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL")
+        )
         warehouses = locations_service.list_warehouses(company_id, active_only=True)
         self._warehouses = warehouses
         self._per_line_warehouse_enabled = documents_service.is_per_line_warehouse_enabled(company_id)
@@ -3241,7 +3261,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         values = [
             numerals.to_persian_digits(str(row_index + 1)),
             f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
-            numerals.format_money(ln.quantity, 3),
+            numerals.format_money(ln.quantity, self._uom_decimal_places.get(item.base_uom_id, 3) if item else 3),
             numerals.format_money(ln.unit_price, dp),
             (
                 f"{numerals.format_money(ln.discount_amount, dp)} ({numerals.format_money(ln.discount_percent, 2)}٪)"
@@ -3304,7 +3324,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setItem(row_index, 1, item_cell)
 
         qty_field = _AmountField()
-        qty_field.setDecimals(3)
+        qty_field.setDecimals(self._uom_decimal_places.get(item.base_uom_id, 3) if item else 3)
         qty_field.setValue(float(ln.quantity))
         qty_field.editingFinished.connect(lambda r=row_index: self._commit_inline_line_edit(r))
         self.lines_table.setCellWidget(row_index, 2, qty_field)
@@ -3519,6 +3539,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         widgets["info_kardex_button"].setEnabled(True)
         widgets["info_price_button"].setEnabled(True)
         widgets["item_combo"].setToolTip(self._item_info_tooltip_text(item_id))
+        widgets["qty"].setDecimals(self._uom_decimal_places.get(item.base_uom_id, 3))
         company_id = self._company_id()
         if company_id is None:
             return
@@ -3650,13 +3671,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         transfer_qty = min(quantity - current_stock, best.quantity_on_hand)
         current_wh = next((w for w in self._warehouses if w.warehouse_id == warehouse_id), None)
         current_wh_name = current_wh.name if current_wh is not None else ""
+        qty_dp = self._uom_decimal_places.get(item.base_uom_id, 3)
         confirm = QMessageBox.question(
             self, "کمبودِ موجودی",
             (
                 f"موجودیِ «{item.name or item.code}» در انبارِ «{current_wh_name}» "
-                f"{numerals.format_money(current_stock, 3)} است (نیاز: {numerals.format_money(quantity, 3)}).\n"
-                f"در انبارِ «{best.warehouse_name}»، {numerals.format_money(best.quantity_on_hand, 3)} موجودی هست.\n\n"
-                f"یک حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, 3)} عددی از «{best.warehouse_name}» "
+                f"{numerals.format_money(current_stock, qty_dp)} است (نیاز: {numerals.format_money(quantity, qty_dp)}).\n"
+                f"در انبارِ «{best.warehouse_name}»، {numerals.format_money(best.quantity_on_hand, qty_dp)} موجودی هست.\n\n"
+                f"یک حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, qty_dp)} عددی از «{best.warehouse_name}» "
                 f"به «{current_wh_name}» صادر و ثبتِ‌نهایی شود؟"
             ),
             QMessageBox.Yes | QMessageBox.No,
@@ -3675,7 +3697,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فقط این‌جا در یک متغیرِ نمونه یادداشت می‌شود تا _commit_entry_row
         # پس از اتمامِ کاملِ ذخیره‌سازی/بازسازیِ جدول، آن را واقعاً نشان دهد.
         self._pending_transfer_notice = (
-            f"حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, 3)} عددی از «{best.warehouse_name}» ثبت شد."
+            f"حواله‌یِ انتقالِ {numerals.format_money(transfer_qty, qty_dp)} عددی از «{best.warehouse_name}» ثبت شد."
         )
         return True
 
@@ -3892,6 +3914,26 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             widget.setEnabled(is_editable)
         self.save_button.setEnabled(is_editable)
         self.confirm_button.setEnabled(is_draft and self._document_id is not None)
+        # طبقِ گزارشِ صریحِ کاربر («چرا دکمه‌یِ تایید غیرفعاله؟ و ردیف‌ها
+        # بی‌صدا ذخیره می‌شوند؟»): این دکمه فقط یک‌بار (DRAFT→CONFIRMED)
+        # فعال است؛ بعدِ آن، تغییرِ هدر با دکمه‌یِ 💾 و تغییرِ ردیف‌ها
+        # بلافاصله (با پیامِ «ردیف ... شد») ذخیره می‌شوند -- نه با این
+        # دکمه. راهنماییِ متن برایِ شفاف‌شدنِ این تفاوت.
+        if is_editable and not is_draft:
+            self.confirm_button.setToolTip(
+                "این سند قبلاً تایید شده -- تغییرِ ردیف‌ها بلافاصله ذخیره می‌شود؛ این دکمه فقط برایِ گذرِ یک‌بارهٔ پیش‌نویس به تاییدشده بود."
+            )
+        # طبقِ گزارشِ صریحِ کاربر («سفارشِ خرید و مراحلِ آن قابلِ‌تنظیم
+        # باشد... بسیار کار پیچیده و سخت است برایِ سازمان‌هایی که نیازِ
+        # این مراحل را ندارند»): با روشن‌بودنِ Toggleِ PURCHASE_ORDER_
+        # SKIP_APPROVAL، مرحله‌یِ تصویبِ جداگانه اصلاً نمایش داده نمی‌شود
+        # -- گردشِ کار سه‌مرحله‌ای می‌شود (پیش‌نویس -> تاییدِ سفارش ->
+        # ثبتِ نهایی)؛ سرویس هم از قبل برایِ PURCHASE_ORDER صرفِ CONFIRMED
+        # را برایِ ثبتِ نهایی کافی می‌داند (نگاه کن: _TWO_STAGE_APPROVAL_TYPES).
+        self.approve_button.setVisible(
+            (not self._is_invoice or self.document_type_code in _TWO_STAGE_APPROVAL_TYPES)
+            and not self._skip_purchase_order_approval
+        )
         self.approve_button.setEnabled(is_confirmed)
         # طبقِ درخواستِ صریح («با تاییدِ مدیر نسبت به نحوه‌یِ تسویه، فاکتور
         # سند بخوره و تسویه بشه»): برایِ فاکتورِ خرید/فروش، ثبتِ نهایی
@@ -4232,6 +4274,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._load_document()
             self._refresh_cross_sell_suggestion(fields.get("item_id"))
             self._refresh_upsell_suggestion(fields.get("item_id"))
+            theme.set_status_label(self.status_label, "ردیف اضافه شد.", ok=True)
             return
 
         # طبقِ درخواستِ صریح («جلویِ هر متغیر مقدار وارد کنیم»): افزودنِ
@@ -4255,6 +4298,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._refresh_upsell_suggestion(last_item_id)
         if errors:
             QMessageBox.warning(self, "خطا در برخی ردیف‌ها", "\n".join(errors))
+        else:
+            theme.set_status_label(self.status_label, f"{len(fields_list)} ردیف اضافه شد.", ok=True)
 
     def _refresh_customer_summary(self) -> None:
         """طبقِ درخواستِ صریح («فاکتورِ فوق‌هوشمند»): خلاصه‌یِ وضعیتِ همان
@@ -4511,6 +4556,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._warn_if_consignment_cost_mixing(fields.get("item_id"), fields.get("warehouse_id") or self.warehouse_combo.currentData())
         self._load_document()
+        theme.set_status_label(self.status_label, "ردیف ویرایش شد.", ok=True)
 
     def _delete_line(self) -> None:
         line = self._selected_line()
@@ -4530,6 +4576,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self._load_document()
+        theme.set_status_label(self.status_label, "ردیف حذف شد.", ok=True)
 
     def _confirm(self) -> bool:
         """طبقِ عمد: این تابع فقط خودِ تاییدِ سند را انجام می‌دهد (بدونِ
@@ -4836,7 +4883,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.information(self, "تبدیل به فاکتور", "چیزی برایِ تبدیل به فاکتور باقی نمانده است — کل این سند قبلاً فاکتور شده.")
             return
         items_by_id = {it.item_id: it for it in self._items}
-        dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id)
+        dialog = _ConvertToInvoiceDialog(self, fulfillment, items_by_id, self._uom_decimal_places)
         if dialog.exec() != QDialog.Accepted:
             return
         converts_to_sales = self.document_type_code in _CONVERTS_TO_SALES_INVOICE
