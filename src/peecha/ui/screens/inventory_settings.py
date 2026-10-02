@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import decimal
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -29,6 +31,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
+from peecha.services import unit_conversion as uc
 from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
 
 # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
@@ -49,30 +52,133 @@ def _company_id() -> int | None:
     return app_session.current_company.company_id if app_session.current_company else None
 
 
+class _UomDialog(QDialog):
+    """فرمِ تعریف/ویرایشِ واحدِ اندازه‌گیری (R225): نام، کد، نماد، نوع، واحدِ پایه،
+    ضریبِ تبدیل، تعدادِ اعشار، اعشارِ مجاز، وضعیت، توضیحات."""
+
+    def __init__(self, parent: QWidget, rows: list, row=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("ویرایشِ واحد" if row is not None else "واحدِ جدید")
+        self.setMinimumWidth(420)
+        self.name_field = QLineEdit(row.name if row else "")
+        self.code_field = QLineEdit(row.code if row else "")
+        self.symbol_field = QLineEdit((row.symbol or "") if row else "")
+        self.type_combo = QComboBox()
+        for code, label in uc.UOM_TYPE_LABELS.items():
+            self.type_combo.addItem(label, code)
+        self.base_combo = QComboBox()
+        self.base_combo.addItem("(بدونِ واحدِ پایه -- خودش مبناست)", None)
+        for r in rows:
+            if row is None or r.uom_id != row.uom_id:
+                self.base_combo.addItem(f"{r.name} ({r.code})", r.uom_id)
+        self.factor_field = QLineEdit(str(row.conversion_factor.normalize()) if row else "1")
+        self.decimal_spin = QSpinBox()
+        self.decimal_spin.setRange(0, 6)
+        self.allow_decimal_checkbox = QCheckBox("اعشار مجاز است")
+        self.active_checkbox = QCheckBox("فعال")
+        self.active_checkbox.setChecked(row.is_active if row else True)
+        self.description_field = QLineEdit((row.description or "") if row else "")
+        if row is not None:
+            self.type_combo.setCurrentIndex(max(0, self.type_combo.findData(row.uom_type_code)))
+            self.base_combo.setCurrentIndex(max(0, self.base_combo.findData(row.base_uom_id)))
+            self.decimal_spin.setValue(row.decimal_places)
+            self.allow_decimal_checkbox.setChecked(row.allow_decimal)
+            self.code_field.setReadOnly(True)
+        else:
+            self.type_combo.currentIndexChanged.connect(self._sync_default_decimal_places)
+            self._sync_default_decimal_places()
+        self.allow_decimal_checkbox.toggled.connect(lambda on: self.decimal_spin.setEnabled(on))
+        self.decimal_spin.setEnabled(self.allow_decimal_checkbox.isChecked())
+
+        layout = QVBoxLayout(self)
+        grid = FieldGrid([
+            FieldSpec("name", "نامِ واحد", self.name_field, span=1),
+            FieldSpec("code", "کد", self.code_field, span=1),
+            FieldSpec("symbol", "نماد", self.symbol_field, span=1),
+            FieldSpec("type", "نوع", self.type_combo, span=1),
+            FieldSpec("base", "واحدِ پایه", self.base_combo, span=1),
+            FieldSpec("factor", "ضریبِ تبدیل به واحدِ پایه", self.factor_field, span=1),
+            FieldSpec("decimals", "تعدادِ اعشار", self.decimal_spin, span=1),
+            FieldSpec("allow_decimal", "", self.allow_decimal_checkbox, span=1),
+            FieldSpec("active", "", self.active_checkbox, span=1),
+            FieldSpec("description", "توضیحات", self.description_field, span=3),
+        ])
+        layout.addWidget(grid)
+        hint = QLabel("مثال: کیلوگرم ← واحدِ پایه «گرم»، ضریب ۱۰۰۰. واحدِ بسته‌بندی (کارتن/بسته) ضریبِ واقعی‌اش را در فرمِ هر کالا می‌گیرد.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _sync_default_decimal_places(self) -> None:
+        whole = self.type_combo.currentData() in ("COUNT", "PACKAGING")
+        self.allow_decimal_checkbox.setChecked(not whole)
+        self.decimal_spin.setValue(0 if whole else (3 if self.type_combo.currentData() in ("WEIGHT", "VOLUME") else 2))
+
+    def values(self) -> dict:
+        try:
+            factor = decimal.Decimal(numerals.to_ascii_digits(self.factor_field.text().strip() or "1"))
+        except decimal.InvalidOperation as exc:
+            raise ValueError("ضریبِ تبدیل باید عدد باشد.") from exc
+        return dict(
+            code=self.code_field.text().strip(), name=self.name_field.text().strip(),
+            uom_type_code=self.type_combo.currentData(), decimal_places=self.decimal_spin.value(),
+            symbol=self.symbol_field.text().strip() or None, base_uom_id=self.base_combo.currentData(),
+            conversion_factor=factor, allow_decimal=self.allow_decimal_checkbox.isChecked(),
+            description=self.description_field.text().strip() or None, is_active=self.active_checkbox.isChecked(),
+        )
+
+
 class _UomTab(QWidget):
+    """مدیریتِ واحدهایِ اندازه‌گیری (R225): جست‌وجو، فیلترِ نوع/وضعیت، افزودن،
+    ویرایش، غیرفعال‌سازی. واحدِ استفاده‌شده هرگز حذفِ سخت نمی‌شود."""
+
+    _COLUMNS = ["کد", "نام", "نماد", "نوع", "واحدِ پایه", "ضریب", "اعشار", "وضعیت", "سیستمی"]
+
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[catalog_service.UomRow] = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(10)
-        _title_label = QLabel("واحدهایِ اندازه‌گیری")
+        _title_label = QLabel("مدیریتِ واحدهایِ اندازه‌گیری")
         _title_label.setObjectName("pageTitle")
         layout.addWidget(_title_label)
 
+        filter_row = QHBoxLayout()
+        self.search_field = QLineEdit()
+        self.search_field.setPlaceholderText("جست‌وجو در کد/نام/نماد")
+        self.search_field.textChanged.connect(self._apply_filter)
+        filter_row.addWidget(self.search_field, stretch=2)
+        self.type_filter = QComboBox()
+        self.type_filter.addItem("(همهٔ انواع)", None)
+        for code, label in uc.UOM_TYPE_LABELS.items():
+            self.type_filter.addItem(label, code)
+        self.type_filter.currentIndexChanged.connect(self._apply_filter)
+        filter_row.addWidget(self.type_filter, stretch=1)
+        self.active_filter = QComboBox()
+        self.active_filter.addItem("(فعال و غیرفعال)", None)
+        self.active_filter.addItem("فقط فعال", True)
+        self.active_filter.addItem("فقط غیرفعال", False)
+        self.active_filter.currentIndexChanged.connect(self._apply_filter)
+        filter_row.addWidget(self.active_filter, stretch=1)
         add_button = QPushButton("➕")
         add_button.setObjectName("primaryIconButton")
         add_button.setFixedWidth(48)
         add_button.setToolTip("واحدِ جدید")
         add_button.clicked.connect(self._add)
-        layout.addWidget(add_button, alignment=Qt.AlignLeft)
+        filter_row.addWidget(add_button)
+        layout.addLayout(filter_row)
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["فعال", "تعدادِ اعشار", "نوع", "نام", "کد"])
+        self.table = QTableWidget(0, len(self._COLUMNS))
+        self.table.setHorizontalHeaderLabels(self._COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.cellDoubleClicked.connect(self._edit_selected)
         layout.addWidget(self.table)
 
@@ -86,24 +192,50 @@ class _UomTab(QWidget):
         edit_button.setToolTip("ویرایش")
         edit_button.clicked.connect(self._edit_selected)
         buttons.addWidget(edit_button)
-        delete_button = QPushButton("🗑️")
+        delete_button = QPushButton("🚫")
         delete_button.setObjectName("dangerIconButton")
         delete_button.setFixedWidth(44)
-        delete_button.setToolTip("حذف")
+        delete_button.setToolTip("غیرفعال‌سازی/حذف (واحدِ استفاده‌شده فقط غیرفعال می‌شود)")
         delete_button.clicked.connect(self._delete_selected)
         buttons.addWidget(delete_button)
         layout.addWidget(button_cluster, alignment=Qt.AlignLeft)
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
 
     def refresh(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
         self._rows = catalog_service.list_uoms(company_id)
-        self.table.setRowCount(len(self._rows))
-        for row_index, u in enumerate(self._rows):
+        self._apply_filter()
+
+    def _visible_rows(self) -> list:
+        needle = self.search_field.text().strip().lower()
+        type_code = self.type_filter.currentData()
+        active = self.active_filter.currentData()
+        rows = []
+        for r in self._rows:
+            if needle and needle not in f"{r.code} {r.name} {r.symbol or ''}".lower():
+                continue
+            if type_code is not None and r.uom_type_code != type_code:
+                continue
+            if active is not None and r.is_active != active:
+                continue
+            rows.append(r)
+        return rows
+
+    def _apply_filter(self) -> None:
+        names = {r.uom_id: r.name for r in self._rows}
+        rows = self._visible_rows()
+        self.table.setRowCount(len(rows))
+        for row_index, u in enumerate(rows):
             values = [
-                "بله" if u.is_active else "خیر", numerals.to_persian_digits(str(u.decimal_places)),
-                _UOM_TYPE_LABELS.get(u.uom_type_code, u.uom_type_code), u.name, u.code,
+                u.code, u.name, u.symbol or "", uc.UOM_TYPE_LABELS.get(u.uom_type_code, u.uom_type_code),
+                names.get(u.base_uom_id, "") if u.base_uom_id else "",
+                numerals.to_persian_digits(format(u.conversion_factor.normalize(), "f")) if u.base_uom_id else "",
+                numerals.to_persian_digits(str(u.decimal_places)) if u.allow_decimal else "بدونِ اعشار",
+                "فعال" if u.is_active else "غیرفعال", "بله" if u.is_global else "",
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -118,44 +250,18 @@ class _UomTab(QWidget):
         return next((r for r in self._rows if r.uom_id == uom_id), None)
 
     def _add(self) -> None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("واحدِ جدید")
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("کد"))
-        code_field = QLineEdit()
-        layout.addWidget(code_field)
-        layout.addWidget(QLabel("نام"))
-        name_field = QLineEdit()
-        layout.addWidget(name_field)
-        layout.addWidget(QLabel("نوع"))
-        type_combo = QComboBox()
-        for code, label in _UOM_TYPE_LABELS.items():
-            type_combo.addItem(label, code)
-        layout.addWidget(type_combo)
-        layout.addWidget(QLabel("تعدادِ اعشارِ مقدار (۰ = عددِ صحیح)"))
-        decimal_places_spin = QSpinBox()
-        decimal_places_spin.setRange(0, 6)
-        decimal_places_spin.setValue(0)
-
-        def _sync_default_decimal_places() -> None:
-            decimal_places_spin.setValue(0 if type_combo.currentData() == "COUNT" else 2)
-
-        type_combo.currentIndexChanged.connect(_sync_default_decimal_places)
-        _sync_default_decimal_places()
-        layout.addWidget(decimal_places_spin)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        dialog = _UomDialog(self, self._rows)
         if dialog.exec() != QDialog.Accepted:
             return
         company_id = _company_id()
-        if company_id is None or not code_field.text().strip() or not name_field.text().strip():
+        if company_id is None:
             return
         try:
+            v = dialog.values()
             catalog_service.create_uom(
-                company_id, code_field.text().strip(), name_field.text().strip(), type_combo.currentData(),
-                decimal_places_spin.value(),
+                company_id, v["code"], v["name"], v["uom_type_code"], v["decimal_places"], symbol=v["symbol"],
+                base_uom_id=v["base_uom_id"], conversion_factor=v["conversion_factor"],
+                allow_decimal=v["allow_decimal"], description=v["description"],
             )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
@@ -164,33 +270,20 @@ class _UomTab(QWidget):
 
     def _edit_selected(self, *_args) -> None:
         row = self._selected_row()
-        if row is None or row.is_global:
+        if row is None:
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("ویرایشِ واحد")
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("نام"))
-        name_field = QLineEdit(row.name)
-        layout.addWidget(name_field)
-        layout.addWidget(QLabel("تعدادِ اعشارِ مقدار (۰ = عددِ صحیح)"))
-        decimal_places_spin = QSpinBox()
-        decimal_places_spin.setRange(0, 6)
-        decimal_places_spin.setValue(row.decimal_places)
-        layout.addWidget(decimal_places_spin)
-        active_checkbox = QCheckBox("فعال")
-        active_checkbox.setChecked(row.is_active)
-        layout.addWidget(active_checkbox)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        if row.is_global:
+            QMessageBox.information(self, "واحدِ سیستمی", "واحدهایِ سیستمی (استاندارد) قابلِ‌ویرایش نیستند؛ برایِ نیازِ خاص، واحدِ اختصاصی بسازید.")
+            return
+        dialog = _UomDialog(self, self._rows, row)
         if dialog.exec() != QDialog.Accepted:
             return
-        company_id = _company_id()
         try:
+            v = dialog.values()
             catalog_service.update_uom(
-                row.uom_id, company_id, row.code, name_field.text().strip(), row.uom_type_code,
-                active_checkbox.isChecked(), decimal_places_spin.value(),
+                row.uom_id, _company_id(), row.code, v["name"], v["uom_type_code"], v["is_active"], v["decimal_places"],
+                symbol=v["symbol"], base_uom_id=v["base_uom_id"], conversion_factor=v["conversion_factor"],
+                allow_decimal=v["allow_decimal"], description=v["description"],
             )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
@@ -199,17 +292,95 @@ class _UomTab(QWidget):
 
     def _delete_selected(self) -> None:
         row = self._selected_row()
-        if row is None:
+        if row is None or row.is_global:
             return
-        confirm = QMessageBox.question(self, "حذف", "این واحد حذف شود؟", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(
+            self, "حذف/غیرفعال‌سازی",
+            "این واحد حذف شود؟ (اگر در کالا/سند/فهرستِ قیمت استفاده شده باشد، فقط غیرفعال می‌شود.)",
+            QMessageBox.Yes | QMessageBox.No,
+        )
         if confirm != QMessageBox.Yes:
             return
         try:
-            catalog_service.delete_uom(row.uom_id, _company_id())
+            outcome = catalog_service.delete_uom(row.uom_id, _company_id())
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
+        self.status_label.setText("واحد حذف شد." if outcome == "DELETED" else "این واحد در اسناد/کالاها استفاده شده بود و غیرفعال شد.")
         self.refresh()
+
+
+class _BarcodeManagerTab(QWidget):
+    """Barcode Manager (R225): جست‌وجویِ مرکزیِ بارکد، نمایشِ کالا/واحدِ هر بارکد،
+    و کنترلِ تکراری‌ها (شاملِ بارکدهایِ قدیمیِ پیش از سیستمِ واحد)."""
+
+    _COLUMNS = ["بارکد", "نوع", "کالا", "واحد", "ضریب", "اصلی", "وضعیت"]
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(10)
+        title = QLabel("مدیریتِ بارکد")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        row = QHBoxLayout()
+        self.search_field = QLineEdit()
+        self.search_field.setPlaceholderText("بارکد را وارد/اسکن کنید")
+        self.search_field.returnPressed.connect(self.refresh)
+        row.addWidget(self.search_field, stretch=1)
+        search_button = QPushButton("🔎")
+        search_button.setObjectName("iconButton")
+        search_button.setFixedWidth(44)
+        search_button.clicked.connect(self.refresh)
+        row.addWidget(search_button)
+        layout.addLayout(row)
+        self.resolve_label = QLabel("")
+        self.resolve_label.setWordWrap(True)
+        layout.addWidget(self.resolve_label)
+        self.table = QTableWidget(0, len(self._COLUMNS))
+        self.table.setHorizontalHeaderLabels(self._COLUMNS)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        layout.addWidget(self.table, stretch=2)
+        layout.addWidget(QLabel("بارکدهایِ تکراری بینِ کالاها"))
+        self.duplicates_table = QTableWidget(0, 2)
+        self.duplicates_table.setHorizontalHeaderLabels(["بارکد", "کالاها"])
+        self.duplicates_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.duplicates_table.verticalHeader().setVisible(False)
+        self.duplicates_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        layout.addWidget(self.duplicates_table, stretch=1)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        search = self.search_field.text().strip() or None
+        rows = uc.list_barcodes(company_id, search=search)
+        self.table.setRowCount(len(rows))
+        for i, b in enumerate(rows):
+            values = [
+                b.barcode, uc.BARCODE_TYPE_LABELS.get(b.barcode_type, b.barcode_type), f"{b.item_code} — {b.item_name}",
+                b.unit_name, numerals.to_persian_digits(format(b.factor.normalize(), "f")),
+                "✓" if b.is_primary else "", "فعال" if b.is_active else "غیرفعال",
+            ]
+            for j, v in enumerate(values):
+                self.table.setItem(i, j, QTableWidgetItem(v))
+        if search:
+            match = uc.resolve_barcode(company_id, search, with_price=False)
+            self.resolve_label.setText(
+                f"اسکن: {match.item_code} — {match.item_name} | واحد: {match.unit_name} | ضریب: "
+                f"{numerals.to_persian_digits(format(match.factor.normalize(), 'f'))}" if match else "این بارکد به هیچ کالایِ فعالی وصل نیست."
+            )
+        else:
+            self.resolve_label.setText("")
+        items = {it.item_id: f"{it.code} — {it.name}" for it in catalog_service.list_items(company_id)}
+        duplicates = uc.find_duplicate_barcodes(company_id)
+        self.duplicates_table.setRowCount(len(duplicates))
+        for i, (code, item_ids) in enumerate(duplicates):
+            self.duplicates_table.setItem(i, 0, QTableWidgetItem(code))
+            self.duplicates_table.setItem(i, 1, QTableWidgetItem("، ".join(items.get(x, str(x)) for x in item_ids)))
 
 
 class _BrandManufacturerTab(QWidget):

@@ -48,6 +48,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import item_variants as variants_service
 from peecha.services import pos_scale as scale_service
+from peecha.services import unit_conversion as uc
 from peecha.ui.screens.commercial_document import STATUS_LABELS, _LineDialog, _SettlementPlanDialog, _show_invoice_print
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
@@ -114,6 +115,10 @@ class _PosVariantPickerDialog(QDialog):
             (v for v in self._variants if (v.barcode or "").strip().lower() == needle or v.code.strip().lower() == needle),
             None,
         )
+        if match is None and app_session.current_company is not None:
+            resolved = uc.resolve_barcode(app_session.current_company.company_id, needle, with_price=False)
+            if resolved is not None:
+                match = next((v for v in self._variants if v.variant_item_id == resolved.item_id), None)
         if match is not None:
             self.selected_item_id = match.variant_item_id
             self.accept()
@@ -498,6 +503,9 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         self._quick_button_order = [int(x) for x in order_text.split(",") if x.strip().isdigit()] if order_text else []
 
         self._items = catalog_service.list_items(company_id, active_only=True)
+        uoms = catalog_service.list_uoms(company_id)
+        self._uom_names = {u.uom_id: u.name for u in uoms}
+        self._uom_decimals = {u.uom_id: u.decimal_places for u in uoms}
         # طبقِ رفعِ باگِ گزارش‌شده («وقتی کالایِ متغیردار انتخاب می‌شود،
         # متغیرها پیشنهاد داده نمی‌شوند و چیزی برایِ ثبت نیست»): این
         # مجموعه در _add_item_to_cart برایِ تشخیصِ «این کالا خودش
@@ -857,6 +865,17 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         query = self.scan_field.text().strip()
         if self._try_add_weight_barcode(query):
             return
+        # سیستمِ واحد (R225): بارکدِ هر واحد خودش واحد را مشخص می‌کند (بارکدِ
+        # کارتن ← ۱ کارتن) -- فروشنده دیگر واحد را انتخاب نمی‌کند.
+        company_id = self._company_id()
+        match = uc.resolve_barcode(company_id, query, with_price=False) if company_id is not None else None
+        if match is not None:
+            matched_item = next((it for it in self._items if it.item_id == match.item_id), None)
+            if matched_item is not None:
+                self.scan_field.clear()
+                self._add_item_to_cart(matched_item, decimal.Decimal("1"), uom_id=match.uom_id)
+                self.scan_field.setFocus()
+                return
         item = self._resolve_scanned_item(query)
         if item is None:
             # طبقِ درخواستِ صریح: به‌جایِ فقط پیامِ خطا برایِ چندتایی،
@@ -1115,7 +1134,9 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
 
     def _add_item_to_cart(
         self, item: catalog_service.ItemRow, quantity: decimal.Decimal, unit_price: decimal.Decimal | None = None,
+        uom_id: int | None = None,
     ) -> bool:
+        uom_id = uom_id or item.base_uom_id
         if self._is_confirmed:
             self.status_label.setText("این فروش قبلاً تایید شده — برایِ فروشِ تازه، «فروشِ تازه» را بزنید.")
             return False
@@ -1141,7 +1162,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
         company_id = self._company_id()
         # طبقِ درخواستِ صریح («اگر با بارکد/دستی کالایی جستجو شد که
         # قبلاً در ردیف‌ها بود، فقط به تعدادِ همان ردیف اضافه شود»):
-        existing = next((ln for ln in self._lines if ln.item_id == item.item_id), None)
+        existing = next((ln for ln in self._lines if ln.item_id == item.item_id and ln.uom_id == uom_id), None)
         try:
             if existing is not None:
                 # طبقِ رفعِ باگِ واقعی («مالیاتِ کالا محاسبه بشه»): قبلاً
@@ -1150,7 +1171,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
                 # پاک می‌شد (تنظیم نمی‌شد چون این‌جا پاس داده نمی‌شد).
                 documents_service.delete_line(existing.line_id, self._document_id, company_id)
                 documents_service.add_line(
-                    self._document_id, company_id, item.item_id, item.base_uom_id,
+                    self._document_id, company_id, item.item_id, uom_id,
                     existing.quantity + quantity, existing.quantity + quantity, unit_price=existing.unit_price,
                     discount_amount=existing.discount_amount, discount_percent=existing.discount_percent,
                     tax_percent=existing.tax_percent,
@@ -1163,7 +1184,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
                 # همیشه با ۰٪ مالیات ثبت می‌شد؛ فقط اگر کاربر با دوبار‌کلیک
                 # واردِ فرمِ ردیف می‌شد اعمال می‌شد.
                 documents_service.add_line(
-                    self._document_id, company_id, item.item_id, item.base_uom_id, quantity, quantity, unit_price=unit_price,
+                    self._document_id, company_id, item.item_id, uom_id, quantity, quantity, unit_price=unit_price,
                     tax_percent=catalog_service.resolve_default_tax_percent(
                         company_id, item.item_id, self._current_warehouse_id
                     ),
@@ -1206,7 +1227,7 @@ class CommercialPosSaleScreen(FieldHelpMixin, QWidget):
             item = items_by_id.get(ln.item_id)
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
-                numerals.format_money(ln.quantity, 3),
+                f"{numerals.format_money(ln.quantity, getattr(self, '_uom_decimals', {}).get(ln.uom_id, 3))} {getattr(self, '_uom_names', {}).get(ln.uom_id, '')}".strip(),
                 numerals.format_money(ln.unit_price, decimal_places),
                 numerals.format_money(ln.line_total, decimal_places),
             ]

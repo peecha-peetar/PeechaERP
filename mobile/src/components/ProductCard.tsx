@@ -16,11 +16,13 @@ export interface ProductCardProps {
   onIncrease?: () => void;
   onDecrease?: () => void;
   onPress?: () => void;
+  /** زیرِ کارت -- مثلاً انتخابِ واحدِ فروش (کارتن/بسته/عدد). */
+  footer?: React.ReactNode;
 }
 
 /** طبقِ اصلِ «سریع‌ترین قسمتِ برنامه» (سفارش‌گیری، Phase 4): افزایش/
  * کاهشِ تعداد مستقیم رویِ خودِ کارت، بدونِ بازکردنِ صفحه/دیالوگِ جدا. */
-export function ProductCard({ code, name, uomLabel, unitPrice, stockQuantity, quantity, photoBase64, onIncrease, onDecrease, onPress }: ProductCardProps) {
+export function ProductCard({ code, name, uomLabel, unitPrice, stockQuantity, quantity, photoBase64, onIncrease, onDecrease, onPress, footer }: ProductCardProps) {
   const { colors, spacing, typography, radius } = useTheme();
   return (
     <Card onPress={onPress} style={{ padding: spacing.md }}>
@@ -50,6 +52,7 @@ export function ProductCard({ code, name, uomLabel, unitPrice, stockQuantity, qu
           </View>
         ) : null}
       </View>
+      {footer ? <View style={{ marginTop: spacing.sm }}>{footer}</View> : null}
     </Card>
   );
 }

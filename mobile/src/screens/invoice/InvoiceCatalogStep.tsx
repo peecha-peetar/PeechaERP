@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { FlatList, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { CatalogItem, CatalogResponse, CustomerRow } from "../../api/types";
+import { CatalogItem, CatalogResponse, CatalogUnit, CustomerRow } from "../../api/types";
 import { BarcodeScannerModal, BottomSheet, Button, EmptyState, Input, ProductCard, SearchBar, useToast } from "../../components";
 import { formatAmount, parseAmount } from "../../format";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Cart, cartDiscountTotal, cartLines, cartTaxTotal, cartTotal } from "./cart";
+import {
+  Cart, cartDiscountTotal, cartKey, cartLines, cartTaxTotal, cartTotal, defaultSalesUnit, itemBaseQuantity, itemUnits,
+  resolveScannedCode, unitLabel,
+} from "./cart";
 
 interface Props {
   customer: CustomerRow;
@@ -14,10 +17,10 @@ interface Props {
   cart: Cart;
   /** در پخشِ گرم: تعداد از موجودیِ خودرو بیشتر نمی‌شود. */
   stockLimited: boolean;
-  onSetQuantity: (item: CatalogItem, quantity: number) => void;
+  onSetQuantity: (item: CatalogItem, unit: CatalogUnit, quantity: number) => void;
   /** طبقِ درخواستِ صریحِ کاربر («مقدار و قیمت در همان حالتِ اولیه وارد
    * بشه»): تغییرِ دستیِ قیمت همین‌جا، بدونِ نیاز به رفتن به گامِ تسویه. */
-  onSetPrice: (itemId: number, price: number | null) => void;
+  onSetPrice: (key: string, price: number | null) => void;
   onNext: () => void;
   onBack: () => void;
 }
@@ -56,6 +59,15 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [editingQty, setEditingQty] = useState("");
   const [editingPrice, setEditingPrice] = useState("");
+  // واحدِ انتخاب‌شدهٔ هر کالا رویِ کارت (پیش‌فرض: واحدِ پیش‌فرضِ فروش).
+  const [selectedUnits, setSelectedUnits] = useState<Record<number, number>>({});
+
+  const unitOf = (item: CatalogItem): CatalogUnit => {
+    const units = itemUnits(item);
+    const chosen = selectedUnits[item.item_id];
+    return units.find((u) => u.uom_id === chosen) ?? defaultSalesUnit(item);
+  };
+  const lineOf = (item: CatalogItem, unit: CatalogUnit) => cart[cartKey(item.item_id, unit.uom_id)];
 
   const stockOf = (item: CatalogItem): number | null => (item.stock_quantity === null ? null : Number(item.stock_quantity));
   const categoryNames = useMemo(() => Object.fromEntries(catalog.categories.map((c) => [c.category_id, c.name])), [catalog]);
@@ -66,41 +78,54 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
     return catalog.items.filter((item) => {
       if (categoryId !== null && item.category_id !== categoryId) return false;
       if (brandId !== null && item.brand_id !== brandId) return false;
-      if (onlyInStock && stockOf(item) !== null && stockOf(item)! <= 0 && !cart[item.item_id]) return false;
+      if (onlyInStock && stockOf(item) !== null && stockOf(item)! <= 0 && itemBaseQuantity(cart, item.item_id) <= 0) return false;
       if (!needle) return true;
       return (
         item.name.toLowerCase().includes(needle) ||
         item.code.toLowerCase().includes(needle) ||
         (item.barcode ?? "").toLowerCase().includes(needle) ||
-        (item.sku ?? "").toLowerCase().includes(needle)
+        (item.sku ?? "").toLowerCase().includes(needle) ||
+        (item.units ?? []).some((u) => u.barcodes.some((b) => b.toLowerCase().includes(needle)))
       );
     });
   }, [catalog, search, categoryId, brandId, onlyInStock, cart]);
 
-  const setQuantity = (item: CatalogItem, requested: number): boolean => {
+  /** موجودی به واحدِ پایه است: جمعِ (مقدار × ضریب) همهٔ واحدهایِ همین کالا
+   * در سبد نباید از آن بیشتر شود. */
+  const setQuantity = (item: CatalogItem, unit: CatalogUnit, requested: number): boolean => {
     const stock = stockOf(item);
-    const quantity = Math.max(0, requested);
-    if (stockLimited && stock !== null && quantity > stock) {
-      toast.show(`موجودیِ خودرو برایِ «${item.name}» فقط ${formatAmount(String(stock))} است.`, "warning");
-      onSetQuantity(item, stock);
-      return false;
+    const factor = Number(unit.factor) || 1;
+    let quantity = Math.max(0, requested);
+    if (!unit.allow_decimal) quantity = Math.floor(quantity);
+    if (stockLimited && stock !== null) {
+      const others = itemBaseQuantity(cart, item.item_id, cartKey(item.item_id, unit.uom_id));
+      const maxForUnit = Math.max(0, Math.floor(((stock - others) / factor) * 1e6) / 1e6);
+      if (quantity > maxForUnit) {
+        const allowed = unit.allow_decimal ? maxForUnit : Math.floor(maxForUnit);
+        toast.show(
+          `موجودیِ خودرو برایِ «${item.name}» فقط ${formatAmount(String(stock))} ${item.base_uom_code} است` +
+            (factor !== 1 ? ` (حداکثر ${formatAmount(String(allowed))} ${unit.name}).` : "."),
+          "warning",
+        );
+        onSetQuantity(item, unit, allowed);
+        return false;
+      }
     }
-    onSetQuantity(item, quantity);
+    onSetQuantity(item, unit, quantity);
     return true;
   };
 
   const onScanned = (code: string) => {
-    const needle = code.trim();
-    const item =
-      catalog.items.find((i) => i.barcode === needle) ??
-      catalog.items.find((i) => i.sku === needle) ??
-      catalog.items.find((i) => i.code === needle);
-    if (!item) {
-      toast.show(`کالایی با بارکدِ ${needle} پیدا نشد.`, "danger");
+    const match = resolveScannedCode(catalog.items, code);
+    if (!match) {
+      toast.show(`کالایی با بارکدِ ${code.trim()} پیدا نشد.`, "danger");
       return;
     }
-    if (setQuantity(item, (cart[item.item_id]?.quantity ?? 0) + 1)) {
-      toast.show(`${item.name} -- ${(cart[item.item_id]?.quantity ?? 0) + 1} عدد`, "success");
+    const { item, unit } = match;
+    setSelectedUnits((prev) => ({ ...prev, [item.item_id]: unit.uom_id }));
+    const next = (lineOf(item, unit)?.quantity ?? 0) + 1;
+    if (setQuantity(item, unit, next)) {
+      toast.show(`${item.name} -- ${formatAmount(String(next))} ${unit.name}`, "success");
     }
   };
 
@@ -148,7 +173,13 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
         contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.sm }}
         keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => {
-          const line = cart[item.item_id];
+          const units = itemUnits(item);
+          const unit = unitOf(item);
+          const line = lineOf(item, unit);
+          const otherLines = units
+            .filter((u) => u.uom_id !== unit.uom_id)
+            .map((u) => ({ u, l: lineOf(item, u) }))
+            .filter(({ l }) => l && l.quantity > 0);
           const meta = [item.category_id ? categoryNames[item.category_id] : null, item.brand_id ? brandNames[item.brand_id] : null]
             .filter(Boolean)
             .join(" · ");
@@ -156,13 +187,34 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
             <ProductCard
               code={meta ? `${item.code} · ${meta}` : item.code}
               name={item.name}
-              uomLabel={item.base_uom_code}
+              uomLabel={unitLabel(unit)}
               photoBase64={item.photo_base64}
               stockQuantity={item.stock_quantity !== null ? formatAmount(item.stock_quantity) : undefined}
               unitPrice={line?.unitPrice ? formatAmount(String(line.unitPrice)) : undefined}
               quantity={line?.quantity ?? 0}
-              onIncrease={() => setQuantity(item, (line?.quantity ?? 0) + 1)}
-              onDecrease={() => setQuantity(item, (line?.quantity ?? 0) - 1)}
+              onIncrease={() => setQuantity(item, unit, (line?.quantity ?? 0) + 1)}
+              onDecrease={() => setQuantity(item, unit, (line?.quantity ?? 0) - 1)}
+              footer={
+                units.length > 1 ? (
+                  <View style={{ gap: spacing.xs }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs }}>
+                      {units.map((u) => (
+                        <Chip
+                          key={`u${u.uom_id}`}
+                          label={unitLabel(u)}
+                          selected={u.uom_id === unit.uom_id}
+                          onPress={() => setSelectedUnits((prev) => ({ ...prev, [item.item_id]: u.uom_id }))}
+                        />
+                      ))}
+                    </ScrollView>
+                    {otherLines.length > 0 ? (
+                      <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                        در سبد: {otherLines.map(({ u, l }) => `${formatAmount(String(l!.quantity))} ${u.name}`).join("، ")}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : undefined
+              }
               onPress={() => {
                 setEditing(item);
                 setEditingQty(line?.quantity ? String(line.quantity) : "");
@@ -190,7 +242,7 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
 
       <BottomSheet visible={editing !== null} onClose={() => setEditing(null)} title={editing?.name}>
         <Input
-          label="تعداد"
+          label={editing ? `تعداد (${unitOf(editing).name})` : "تعداد"}
           value={editingQty}
           onChangeText={setEditingQty}
           keyboardType="numeric"
@@ -203,14 +255,15 @@ export function InvoiceCatalogStep({ customer, catalog, catalogNote, cart, stock
           onChangeText={setEditingPrice}
           keyboardType="numeric"
           numeric
-          placeholder={editing && cart[editing.item_id]?.unitPrice === null ? "در حالِ دریافتِ قیمت..." : undefined}
+          placeholder={editing && lineOf(editing, unitOf(editing))?.unitPrice === null ? "در حالِ دریافتِ قیمت..." : undefined}
         />
         <Button
           label="تایید"
           onPress={() => {
             if (editing) {
-              setQuantity(editing, parseAmount(editingQty));
-              if (editingPrice.trim()) onSetPrice(editing.item_id, parseAmount(editingPrice));
+              const unit = unitOf(editing);
+              setQuantity(editing, unit, parseAmount(editingQty));
+              if (editingPrice.trim()) onSetPrice(cartKey(editing.item_id, unit.uom_id), parseAmount(editingPrice));
             }
             setEditing(null);
           }}

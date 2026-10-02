@@ -144,9 +144,10 @@ rows = catalog_service.list_item_uom_conversions(count_item_id)
 check(len(rows) == 1, f"ردیفِ تبدیلِ واحد ذخیره شد (got {len(rows)})")
 check(rows[0].uom_id == box_uom_id and rows[0].conversion_factor == decimal.Decimal(24), "واحد و ضریبِ درست ذخیره شدند")
 check(rows[0].is_purchase_default is True, "پرچمِ پیش‌فرضِ خرید ذخیره شد")
-check(panel.uom_conversion_table.rowCount() == 1, "جدولِ تبدیلِ واحد در UI هم رفرش شد")
+# R225: جدولِ واحدها ردیفِ واحدِ پایه را هم نشان می‌دهد (پایه + کارتن).
+check(panel.uom_conversion_table.rowCount() == 2, "جدولِ تبدیلِ واحد در UI هم رفرش شد")
 
-panel.uom_conversion_table.selectRow(0)
+panel._select_unit_row(rows[0].conversion_id)
 panel._remove_uom_conversion()
 rows = catalog_service.list_item_uom_conversions(count_item_id)
 check(len(rows) == 0, "حذفِ ردیفِ تبدیلِ واحد از UI کار می‌کند")

@@ -97,6 +97,9 @@ NAV_ITEMS = [
             {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in", "hidden_from_sidebar": True},
             {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out", "hidden_from_sidebar": True},
             {"code": "INV_ADJUSTMENT", "label": "اصلاحِ موجودی", "screen": "inventory_document_adjustment"},
+            # سیستمِ واحد (R225): شمارشِ موجودی با واحدِ دلخواه (کارتن/بسته/عدد)؛
+            # اختلاف به واحدِ پایه با سندِ اصلاحِ موجودی ثبت می‌شود.
+            {"code": "INV_STOCK_COUNT", "label": "انبارگردانی", "screen": "stock_count"},
             # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): دیدِ کلیِ
             # مانده‌یِ همه‌یِ اسنادِ امانیِ بازِ خروجی/ورودی + بازگردانیِ
             # کالایِ فروخته‌نشده/مصرف‌نشده (تسویه‌یِ واقعی از طریقِ همان

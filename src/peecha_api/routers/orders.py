@@ -29,6 +29,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import roles as roles_service
 from peecha.services import treasury as treasury_service
+from peecha.services import unit_conversion as uc
 from peecha_api import audit_log
 from peecha_api.deps import AuthContext, get_current_context, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
@@ -157,6 +158,7 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
     # نیازِ R133: اپِ موبایل برایِ تاییدِ تحویلِ همین سفارش (پخشِ گرم) به
     # document_line_id هر ردیف نیاز دارد که فقط بعدِ همین ثبت مشخص می‌شود.
     line_ids: list[int] = []
+    unit_warnings: list[str] = []
     for line in payload.lines:
         # طبقِ باگِ واقعیِ کشف‌شده (R210): این حلقه قبلاً نه تخفیف و نه
         # مالیات را به add_line می‌داد -- پس فاکتورهایِ پخشِ گرم/سردِ موبایل
@@ -166,11 +168,24 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
         # را -- دقیقاً هم‌الگو با دسکتاپ -- سرور خودش با همان اولویتِ
         # شرکت→انبار→کالا تعیین می‌کند، نه کلاینت.
         tax_percent = catalog_service.resolve_default_tax_percent(ctx.company_id, line.item_id, payload.warehouse_id)
+        # سیستمِ واحد (R225): مقدارِ پایه را سرور از ضریبِ تعریف‌شده محاسبه می‌کند
+        # (نه موبایل). واحدی که بعد از ثبتِ آفلاین غیرفعال شده/قوانینِ اعشار
+        # را نقض می‌کند، فروشِ واقعی را رد نمی‌کند -- فقط هشدار برمی‌گرداند.
+        try:
+            factor = uc.get_factor(line.item_id, line.uom_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        try:
+            uc.validate_quantity(
+                line.item_id, line.uom_id, line.quantity, purpose=uc.purpose_for_document_type(payload.document_type_code),
+            )
+        except ValueError as exc:
+            unit_warnings.append(str(exc))
         line_ids.append(
             documents_service.add_line(
                 document_id, ctx.company_id, item_id=line.item_id, uom_id=line.uom_id,
-                quantity=line.quantity, quantity_base=line.quantity, unit_price=line.unit_price,
-                discount_amount=line.discount_amount, tax_percent=tax_percent,
+                quantity=line.quantity, quantity_base=line.quantity * factor, unit_price=line.unit_price,
+                discount_amount=line.discount_amount, tax_percent=tax_percent, conversion_factor=factor,
             )
         )
     documents_service.confirm_document(document_id, ctx.company_id, ctx.user_id)
@@ -214,6 +229,9 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
         {"source": "mobile", "document_type_code": payload.document_type_code, "line_count": len(line_ids)},
     )
     document_no = documents_service.get_document(document_id, ctx.company_id)[0].document_no
+    if unit_warnings:
+        note = "هشدارِ واحد: " + "؛ ".join(unit_warnings)
+        settlement_warning = f"{settlement_warning} | {note}" if settlement_warning else note
     return document_id, line_ids, document_no, settlement_warning
 
 

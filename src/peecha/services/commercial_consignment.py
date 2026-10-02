@@ -136,7 +136,7 @@ def _return_consignment(
         inv_documents_service.add_line(
             stock_document_id, company_id,
             inv_documents_service.LineFields(
-                item_id=ln.item_id, uom_id=ln.uom_id, quantity=quantity, quantity_base=quantity, batch_id=ln.batch_id,
+                item_id=ln.item_id, uom_id=ln.uom_id, quantity=quantity, quantity_base=quantity * ln.conversion_factor, batch_id=ln.batch_id,
             ),
         )
         returned_by_line[line_id] = quantity

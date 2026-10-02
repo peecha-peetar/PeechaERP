@@ -537,6 +537,7 @@ class CommercialDocumentLine(Base):
     uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
     quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     unit_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     discount_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=0)
     discount_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)

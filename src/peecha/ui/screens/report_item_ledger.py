@@ -6,11 +6,13 @@ inv.stock_ledger. طبقِ درخواستِ صریح («دکمه‌ای برای
 from __future__ import annotations
 
 import datetime
+import decimal
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -29,6 +31,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import report_templates as templates_service
+from peecha.services import unit_conversion as uc
 from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
 from peecha.ui.screens.report_template_settings import pick_report_template
@@ -73,6 +76,14 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         self.warehouse_combo.setMinimumWidth(170)
         self.warehouse_combo.currentIndexChanged.connect(self._on_filters_changed)
         filters_row.addWidget(self.warehouse_combo)
+
+        # سیستمِ واحد (R225): نمایشِ مقدار/مانده بر حسبِ هر واحدِ کالا (مثلاً
+        # ۲۸۸۰ عدد = ۱۲۰ کارتن)؛ داده‌یِ کاردکس همچنان به واحدِ پایه است.
+        filters_row.addWidget(QLabel("واحدِ نمایش"))
+        self.display_uom_combo = QComboBox()
+        self.display_uom_combo.setMinimumWidth(110)
+        self.display_uom_combo.currentIndexChanged.connect(lambda _i=0: self._refresh_table())
+        filters_row.addWidget(self.display_uom_combo)
 
         self.date_filter_checkbox = QCheckBox("فیلترِ تاریخ")
         filters_row.addWidget(self.date_filter_checkbox)
@@ -148,6 +159,7 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         index = self.item_combo.findData(item_id)
         if index >= 0:
             self.item_combo.setCurrentIndex(index)
+        self._reload_display_units()
         warehouse_index = self.warehouse_combo.findData(warehouse_id)
         self.warehouse_combo.setCurrentIndex(max(0, warehouse_index))
         self._refresh_table()
@@ -158,7 +170,22 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         self._refresh_table()
 
     def _on_filters_changed(self) -> None:
+        self._reload_display_units()
         self._refresh_table()
+
+    def _reload_display_units(self) -> None:
+        item_id = self.item_combo.currentData()
+        self.display_uom_combo.blockSignals(True)
+        self.display_uom_combo.clear()
+        self._display_factors: dict[int, decimal.Decimal] = {}
+        if item_id is not None:
+            for u in uc.get_item_units(item_id):
+                self.display_uom_combo.addItem(u.label, u.uom_id)
+                self._display_factors[u.uom_id] = u.factor
+        self.display_uom_combo.blockSignals(False)
+
+    def _display_factor(self) -> decimal.Decimal:
+        return getattr(self, "_display_factors", {}).get(self.display_uom_combo.currentData(), decimal.Decimal(1))
 
     def _load_ledger_context(self):
         """طبقِ اشتراکِ منطق بینِ نمایشِ رویِ صفحه و چاپِ حرفه‌ای -- هردو
@@ -220,6 +247,9 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
         cost_decimals = context["cost_decimals"]
         parties_by_id = context["parties_by_id"]
         rows = context["rows"]
+        factor = self._display_factor()
+        if factor != 1:
+            qty_decimals = max(qty_decimals, 3)
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             values = [
@@ -228,13 +258,13 @@ class ItemLedgerScreen(FieldHelpMixin, QWidget):
                 numerals.to_persian_digits(str(row.document_no)),
                 row.warehouse_name,
                 parties_by_id.get(row.counterparty_detail_account_id, "—"),
-                numerals.format_money(row.quantity_in, qty_decimals) if row.quantity_in else "",
-                numerals.format_money(row.quantity_out, qty_decimals) if row.quantity_out else "",
-                numerals.format_money(row.unit_cost, cost_decimals) if row.unit_cost is not None else "",
+                numerals.format_money(row.quantity_in / factor, qty_decimals) if row.quantity_in else "",
+                numerals.format_money(row.quantity_out / factor, qty_decimals) if row.quantity_out else "",
+                numerals.format_money(row.unit_cost * factor, cost_decimals) if row.unit_cost is not None else "",
                 numerals.format_money(row.value_in, cost_decimals) if row.value_in else "",
                 numerals.format_money(row.value_out, cost_decimals) if row.value_out else "",
                 numerals.format_money(row.sale_unit_price, cost_decimals) if row.sale_unit_price is not None else "",
-                numerals.format_money(row.running_balance, qty_decimals),
+                numerals.format_money(row.running_balance / factor, qty_decimals),
                 numerals.format_money(row.running_value_balance, cost_decimals),
             ]
             for col_index, value in enumerate(values):

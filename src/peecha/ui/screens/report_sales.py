@@ -38,11 +38,12 @@ class SalesReportScreen(ReportScreenBase):
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         rows = documents_service.compute_sales_report_by_item(company_id, date_from, date_to)
 
-        headers = ["کالا", "تعدادِ فروخته‌شده", "تعدادِ فاکتور", "فروشِ خالص"]
+        headers = ["کالا", "تعدادِ فروخته‌شده (واحدِ پایه)", "مقدارِ تراکنش (به تفکیکِ واحد)", "تعدادِ فاکتور", "فروشِ خالص"]
         table_rows = [
             [
                 r.item_name,
-                numerals.format_money(r.quantity_sold, 2),
+                f"{numerals.format_money(r.quantity_sold, 2)} {r.base_uom_name}".strip(),
+                " + ".join(f"{numerals.format_money(q, 2)} {name}" for name, q in r.transaction_quantities.items()),
                 numerals.to_persian_digits(str(r.invoice_count)),
                 self._fmt(r.net_revenue),
             ]
@@ -53,7 +54,7 @@ class SalesReportScreen(ReportScreenBase):
         total_invoices = sum((r.invoice_count for r in rows), 0)
         total_revenue = sum((r.net_revenue for r in rows), _ZERO)
         footer = [
-            "جمعِ کل", numerals.format_money(total_quantity, 2),
+            "جمعِ کل", numerals.format_money(total_quantity, 2), "",
             numerals.to_persian_digits(str(total_invoices)), self._fmt(total_revenue),
         ]
         return headers, table_rows, footer

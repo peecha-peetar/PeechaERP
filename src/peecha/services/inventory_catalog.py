@@ -83,12 +83,18 @@ class UomRow:
     is_active: bool
     is_global: bool
     decimal_places: int = 2
+    symbol: str | None = None
+    base_uom_id: int | None = None
+    conversion_factor: decimal.Decimal = decimal.Decimal(1)
+    allow_decimal: bool = True
+    is_system: bool = False
+    description: str | None = None
 
 
-# طبقِ گزارشِ صریح: واحدِ شمارشی (COUNT) پیش‌فرض عددِ صحیح است، بقیه‌یِ
-# انواع دو رقمِ اعشار — هنگامِ ساختِ واحدِ تازه (بدونِ مقدارِ صریح) همین
-# پیش‌فرض به‌کار می‌رود.
-_DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE = {"COUNT": 0}
+# طبقِ گزارشِ صریح: واحدِ شمارشی (COUNT) و بسته‌بندی پیش‌فرض عددِ صحیح است،
+# بقیه‌یِ انواع دو رقمِ اعشار — هنگامِ ساختِ واحدِ تازه (بدونِ مقدارِ صریح).
+_DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE = {"COUNT": 0, "PACKAGING": 0}
+UOM_TYPE_CODES = ("COUNT", "WEIGHT", "LENGTH", "AREA", "VOLUME", "TIME", "PACKAGING", "OTHER")
 
 
 def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
@@ -98,20 +104,52 @@ def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
             query = query.where(Uom.is_active)
         rows = session.scalars(query.order_by(Uom.code)).all()
         return [
-            UomRow(r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None, r.decimal_places)
+            UomRow(
+                r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None, r.decimal_places,
+                r.symbol, r.base_uom_id, r.conversion_factor, r.allow_decimal, r.is_system, r.description,
+            )
             for r in rows
         ]
 
 
-def create_uom(company_id: int, code: str, name: str, uom_type_code: str, decimal_places: int | None = None) -> int:
-    if decimal_places is None:
-        decimal_places = _DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE.get(uom_type_code, 2)
+def _validate_uom_master(
+    session, company_id: int, uom_type_code: str, decimal_places: int, base_uom_id: int | None,
+    conversion_factor: decimal.Decimal, self_uom_id: int | None = None,
+) -> None:
+    if uom_type_code not in UOM_TYPE_CODES:
+        raise ValueError("نوعِ واحد نامعتبر است.")
     if not (0 <= decimal_places <= 6):
         raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
+    if conversion_factor is None or decimal.Decimal(conversion_factor) <= 0:
+        raise ValueError("ضریبِ تبدیل باید بزرگ‌تر از صفر باشد.")
+    if base_uom_id is not None:
+        if base_uom_id == self_uom_id:
+            raise ValueError("واحد نمی‌تواند واحدِ پایهٔ خودش باشد.")
+        base = session.get(Uom, base_uom_id)
+        if base is None or (base.company_id is not None and base.company_id != company_id):
+            raise ValueError("واحدِ پایه نامعتبر است.")
+        if base.uom_type_code != uom_type_code and uom_type_code != "PACKAGING":
+            raise ValueError("واحدِ پایه باید هم‌نوع با همین واحد باشد (مثلاً کیلوگرم ← گرم).")
+
+
+def create_uom(
+    company_id: int, code: str, name: str, uom_type_code: str, decimal_places: int | None = None, *,
+    symbol: str | None = None, base_uom_id: int | None = None, conversion_factor: decimal.Decimal = decimal.Decimal(1),
+    allow_decimal: bool | None = None, description: str | None = None,
+) -> int:
+    if decimal_places is None:
+        decimal_places = _DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE.get(uom_type_code, 2)
+    if not code.strip() or not name.strip():
+        raise ValueError("کد و نامِ واحد الزامی است.")
     with new_session() as session:
+        _validate_uom_master(session, company_id, uom_type_code, decimal_places, base_uom_id, conversion_factor)
+        if allow_decimal is None:
+            allow_decimal = decimal_places > 0
         uom = Uom(
             company_id=company_id, code=code.strip(), name=name.strip(), uom_type_code=uom_type_code,
-            decimal_places=decimal_places,
+            decimal_places=decimal_places if allow_decimal else 0, symbol=(symbol or None), base_uom_id=base_uom_id,
+            conversion_factor=decimal.Decimal(conversion_factor), allow_decimal=allow_decimal,
+            description=(description or None),
         )
         session.add(uom)
         session.commit()
@@ -119,36 +157,59 @@ def create_uom(company_id: int, code: str, name: str, uom_type_code: str, decima
 
 
 def update_uom(
-    uom_id: int, company_id: int, code: str, name: str, uom_type_code: str, is_active: bool, decimal_places: int,
+    uom_id: int, company_id: int, code: str, name: str, uom_type_code: str, is_active: bool, decimal_places: int, *,
+    symbol: str | None = None, base_uom_id: int | None = None, conversion_factor: decimal.Decimal | None = None,
+    allow_decimal: bool | None = None, description: str | None = None,
 ) -> None:
-    if not (0 <= decimal_places <= 6):
-        raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
     with new_session() as session:
         uom = session.get(Uom, uom_id)
         if uom is None or uom.company_id != company_id:
             raise ValueError("واحدِ اندازه‌گیری نامعتبر است (فقط واحدهایِ اختصاصیِ همین شرکت قابلِ‌ویرایش‌اند).")
+        factor = decimal.Decimal(conversion_factor) if conversion_factor is not None else uom.conversion_factor
+        _validate_uom_master(session, company_id, uom_type_code, decimal_places, base_uom_id, factor, uom_id)
+        if allow_decimal is None:
+            allow_decimal = decimal_places > 0
         uom.code = code.strip()
         uom.name = name.strip()
         uom.uom_type_code = uom_type_code
         uom.is_active = is_active
-        uom.decimal_places = decimal_places
+        uom.decimal_places = decimal_places if allow_decimal else 0
+        uom.allow_decimal = allow_decimal
+        uom.symbol = symbol or None
+        uom.base_uom_id = base_uom_id
+        uom.conversion_factor = factor
+        uom.description = description or None
+        uom.updated_at = func.now()
         session.commit()
 
 
-def delete_uom(uom_id: int, company_id: int) -> None:
+def _uom_in_use(session, uom_id: int) -> bool:
+    from peecha.db.models.commercial import CommercialDocumentLine, PriceListItem
+    from peecha.db.models.inventory import StockDocumentLine
+
+    if session.scalar(select(func.count()).select_from(Item).where(Item.base_uom_id == uom_id)):
+        return True
+    for model in (ItemUomConversion, CommercialDocumentLine, StockDocumentLine, PriceListItem):
+        if session.scalar(select(func.count()).select_from(model).where(model.uom_id == uom_id)):
+            return True
+    return False
+
+
+def delete_uom(uom_id: int, company_id: int) -> str:
+    """طبقِ سیستمِ واحد (R225): واحدِ استفاده‌شده هرگز حذفِ سخت نمی‌شود --
+    فقط غیرفعال (برایِ سندِ تازه قابلِ‌انتخاب نیست؛ اسنادِ قبلی دست‌نخورده).
+    خروجی: DELETED یا DEACTIVATED."""
     with new_session() as session:
         uom = session.get(Uom, uom_id)
         if uom is None or uom.company_id != company_id:
             raise ValueError("واحدِ اندازه‌گیری نامعتبر است.")
-        in_use = session.scalar(
-            select(func.count()).select_from(Item).where(Item.base_uom_id == uom_id)
-        ) or session.scalar(
-            select(func.count()).select_from(ItemUomConversion).where(ItemUomConversion.uom_id == uom_id)
-        )
-        if in_use:
-            raise ValueError("این واحد در تعریفِ کالاها استفاده شده و قابلِ‌حذف نیست.")
+        if _uom_in_use(session, uom_id):
+            uom.is_active = False
+            session.commit()
+            return "DEACTIVATED"
         session.delete(uom)
         session.commit()
+        return "DELETED"
 
 
 # ---------------------------------------------------------------------
@@ -526,6 +587,9 @@ def create_item(
     dimensions_service.create_detail_account در detail_dimensions.py
     ساخته می‌شوند و به این تابع نیازی ندارند."""
     _validate_item_fields(fields)
+    from peecha.services import unit_conversion as uc
+
+    uc.assert_barcode_available(company_id, fields.barcode)
     dimension_type_id = _item_dimension_type_id(company_id)
     detail_account = dimensions_service.create_detail_account(
         company_id, dimension_type_id, code, name, parent_detail_account_id=parent_detail_account_id
@@ -554,8 +618,13 @@ def create_item(
             **_extended_item_kwargs(fields),
         )
         session.add(item)
+        session.flush()
+        uc.ensure_base_unit(session, item)
         session.commit()
-        return item.item_id
+        item_id = item.item_id
+    if fields.barcode:
+        uc.set_item_base_barcode(company_id, item_id, fields.barcode)
+    return item_id
 
 
 def bulk_set_brand_category(company_id: int, item_ids: list[int], *, set_brand: bool = False, brand_id: int | None = None, set_category: bool = False, category_id: int | None = None) -> int:
@@ -587,11 +656,20 @@ def update_item(
         raise ValueError("وضعیتِ چرخهٔ‌عمر نامعتبر است.")
 
     from peecha.services import inventory_engine as engine_service
+    from peecha.services import unit_conversion as uc
 
+    uc.assert_barcode_available(company_id, fields.barcode, item_id)
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
             raise ValueError("کالا نامعتبر است.")
+        # طبقِ سیستمِ واحد (R225): تغییرِ واحدِ پایهٔ کالایی که سند/تراکنش دارد
+        # مجاز نیست -- مقدارِ پایهٔ همهٔ اسنادِ قبلی بی‌معنا می‌شد.
+        if item.base_uom_id != fields.base_uom_id and uc.item_has_history(item_id):
+            raise ValueError(
+                "این کالا سابقهٔ سند/تراکنش دارد؛ تغییرِ واحدِ پایه فقط از طریقِ مهاجرتِ تخصصیِ داده ممکن است -- "
+                "به‌جایش واحدِ تازه را در «واحدها و بسته‌بندی» با ضریبِ تبدیل اضافه کنید."
+            )
 
         # طبقِ مرحلهٔ ۸ (۱۰۸): واحدِ پایه/روشِ قیمت‌گذاری فقط با موجودیِ صفر
         # در همهٔ انبارها قابلِ‌تغییر است — نه صرفِ نبودِ سابقهٔ حرکت.
@@ -664,9 +742,12 @@ def update_item(
                 # کالایِ مادر، برایِ متغیرهایِ ازپیش‌ساخته‌شده اثر نمی‌کند.
                 variant.default_tax_percent = fields.default_tax_percent
                 variant.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                uc.ensure_base_unit(session, variant)
 
+        uc.ensure_base_unit(session, item)
         session.commit()
 
+    uc.set_item_base_barcode(company_id, item_id, fields.barcode)
     dimensions_service.update_detail_account(detail_account_id, company_id, code, is_active, name)
 
 
@@ -762,54 +843,32 @@ class UomConversionRow:
     is_sales_default: bool
 
 
+# سازگاری با کدِ پیش از R225 -- همه به services/unit_conversion.py واگذار می‌شوند.
 def list_item_uom_conversions(item_id: int) -> list[UomConversionRow]:
-    with new_session() as session:
-        rows = session.scalars(
-            select(ItemUomConversion).where(ItemUomConversion.item_id == item_id)
-        ).all()
-        uom_codes = {u.uom_id: u.code for u in session.scalars(select(Uom))}
-        return [
-            UomConversionRow(
-                r.conversion_id, r.uom_id, uom_codes.get(r.uom_id, ""), r.conversion_factor,
-                r.is_purchase_default, r.is_sales_default,
-            )
-            for r in rows
-        ]
+    """فقط واحدهایِ غیرِپایهٔ فعال (همان معنایِ قبلی)."""
+    from peecha.services import unit_conversion as uc
+
+    return [
+        UomConversionRow(u.item_unit_id, u.uom_id, u.code, u.factor, u.is_default_purchase, u.is_default_sales)
+        for u in uc.get_item_units(item_id) if not u.is_base
+    ]
 
 
 def set_item_uom_conversion(
     item_id: int, uom_id: int, conversion_factor: decimal.Decimal,
     is_purchase_default: bool = False, is_sales_default: bool = False,
 ) -> None:
-    if conversion_factor <= 0:
-        raise ValueError("ضریبِ تبدیل باید بزرگ‌تر از صفر باشد.")
-    with new_session() as session:
-        existing = session.scalar(
-            select(ItemUomConversion).where(
-                ItemUomConversion.item_id == item_id, ItemUomConversion.uom_id == uom_id
-            )
-        )
-        if existing is not None:
-            existing.conversion_factor = conversion_factor
-            existing.is_purchase_default = is_purchase_default
-            existing.is_sales_default = is_sales_default
-        else:
-            session.add(
-                ItemUomConversion(
-                    item_id=item_id, uom_id=uom_id, conversion_factor=conversion_factor,
-                    is_purchase_default=is_purchase_default, is_sales_default=is_sales_default,
-                )
-            )
-        session.commit()
+    from peecha.services import unit_conversion as uc
+
+    uc.set_item_unit(
+        item_id, uom_id, conversion_factor, is_default_purchase=is_purchase_default, is_default_sales=is_sales_default,
+    )
 
 
 def delete_item_uom_conversion(conversion_id: int, item_id: int) -> None:
-    with new_session() as session:
-        row = session.get(ItemUomConversion, conversion_id)
-        if row is None or row.item_id != item_id:
-            raise ValueError("ردیفِ تبدیلِ واحد نامعتبر است.")
-        session.delete(row)
-        session.commit()
+    from peecha.services import unit_conversion as uc
+
+    uc.remove_item_unit(conversion_id, item_id)
 
 
 @dataclass
@@ -824,42 +883,21 @@ class ItemUomOption:
     decimal_places: int
 
 
-def list_item_uom_options(item_id: int) -> list[ItemUomOption]:
-    """واحدهایی که این کالا در اسنادِ خرید/فروش با آن‌ها ثبت می‌شود: اول
-    واحدِ پایه (ضریبِ ۱)، بعد واحدهایِ تبدیلِ تعریف‌شده در فرمِ کالا."""
-    with new_session() as session:
-        item = session.get(Item, item_id)
-        if item is None:
-            return []
-        uoms = {u.uom_id: u for u in session.scalars(select(Uom))}
-        base = uoms.get(item.base_uom_id)
-        options = []
-        if base is not None:
-            options.append(ItemUomOption(base.uom_id, base.code, base.name, decimal.Decimal(1), True, False, False, base.decimal_places))
-        for r in session.scalars(select(ItemUomConversion).where(ItemUomConversion.item_id == item_id)):
-            u = uoms.get(r.uom_id)
-            if u is None or r.uom_id == item.base_uom_id:
-                continue
-            options.append(ItemUomOption(
-                u.uom_id, u.code, u.name, r.conversion_factor, False, r.is_purchase_default, r.is_sales_default, u.decimal_places,
-            ))
-        return options
+def list_item_uom_options(item_id: int, purpose: str | None = None) -> list[ItemUomOption]:
+    """واحدهایِ قابلِ‌انتخاب در سندِ تازه (فعال، مجاز برایِ purpose)، اول واحدِ پایه."""
+    from peecha.services import unit_conversion as uc
+
+    return [
+        ItemUomOption(u.uom_id, u.code, u.name, u.factor, u.is_base, u.is_default_purchase, u.is_default_sales, u.decimal_places)
+        for u in uc.get_item_units(item_id, purpose=purpose)
+    ]
 
 
 def get_uom_factor(item_id: int, uom_id: int) -> decimal.Decimal:
     """ضریبِ تبدیلِ یک واحد به واحدِ پایه‌یِ کالا (پایه = ۱)."""
-    with new_session() as session:
-        item = session.get(Item, item_id)
-        if item is None:
-            raise ValueError("کالا نامعتبر است.")
-        if uom_id == item.base_uom_id:
-            return decimal.Decimal(1)
-        row = session.scalar(
-            select(ItemUomConversion).where(ItemUomConversion.item_id == item_id, ItemUomConversion.uom_id == uom_id)
-        )
-        if row is None:
-            raise ValueError("برایِ این واحد، تبدیل به واحدِ پایه‌یِ کالا در فرمِ کالا تعریف نشده است.")
-        return row.conversion_factor
+    from peecha.services import unit_conversion as uc
+
+    return uc.get_factor(item_id, uom_id)
 
 
 # ---------------------------------------------------------------------

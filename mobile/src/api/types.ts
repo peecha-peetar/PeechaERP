@@ -82,6 +82,7 @@ export interface ItemRow {
   name: string;
   base_uom_id: number;
   base_uom_code: string;
+  units?: CatalogUnit[];
 }
 
 export interface PullResponse {
@@ -658,6 +659,28 @@ export interface CatalogItem {
   /** JPEGِ کوچک‌شده‌یِ Base64 -- null یعنی این کالا عکسِ اصلی ندارد یا
    * عکس برایِ گروهِ «کالا» در دسکتاپ فعال نیست. */
   photo_base64: string | null;
+  /** واحدهایِ قابلِ‌فروشِ کالا (R225) -- نسخه‌هایِ قدیمیِ سرور/کش ندارند. */
+  units?: CatalogUnit[];
+}
+
+/** یک واحدِ کالا (مثلاً کارتنِ ۲۴تایی): مقدار × factor = مقدار به واحدِ پایه. */
+export interface CatalogUnit {
+  uom_id: number;
+  item_unit_id: number | null;
+  code: string;
+  name: string;
+  symbol: string | null;
+  factor: string;
+  is_base: boolean;
+  is_default_sales: boolean;
+  is_default_purchase: boolean;
+  decimal_places: number;
+  allow_decimal: boolean;
+  min_quantity: string | null;
+  max_quantity: string | null;
+  /** قیمتِ فهرستِ پیش‌فرض برایِ همین واحد -- قیمتِ نهایی همچنان از /pricing/resolve. */
+  price: string | null;
+  barcodes: string[];
 }
 
 export interface CatalogResponse {

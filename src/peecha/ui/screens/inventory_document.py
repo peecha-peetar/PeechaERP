@@ -41,6 +41,7 @@ from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import report_templates as report_templates_service
+from peecha.services import unit_conversion as uc
 from peecha.ui import theme
 from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
 from peecha.ui.screens.journal_entry import _AmountField, _fill_options, _make_searchable_combo
@@ -317,14 +318,23 @@ class _LineDialog(QDialog):
         stock_row.addWidget(self.price_history_button)
         layout.addLayout(stock_row)
 
-        layout.addWidget(QLabel("مقدار (واحدِ پایهٔ کالا)"))
+        layout.addWidget(QLabel("مقدار / واحد"))
         # طبقِ سندِ راهنمایِ UI/UX (بخشِ ۶.۲/۶.۳): _AmountField به‌جایِ
         # QDoubleSpinBoxِ خام — گروه‌بندیِ سه‌رقمیِ زنده + ارقامِ فارسی حینِ
         # تایپ، دقیقاً هم‌الگو با journal_entry.py/treasury_voucher.py.
         self.quantity_field = _AmountField()
         self.quantity_field.setDecimals(6)
-        layout.addWidget(self.quantity_field)
+        # سیستمِ واحد (R225): ورود/خروج/انتقال/اصلاح با هر واحدِ کالا (مثلاً
+        # ۲ کارتن)؛ موجودی با ضریبِ همان واحد به واحدِ پایه ثبت می‌شود.
+        self.uom_combo = QComboBox()
+        self._uom_factors: dict[int, decimal.Decimal] = {}
+        self._initial_uom_id = initial.uom_id if initial is not None else None
+        quantity_row = QHBoxLayout()
+        quantity_row.addWidget(self.quantity_field, stretch=1)
+        quantity_row.addWidget(self.uom_combo)
+        layout.addLayout(quantity_row)
         self.item_combo.currentIndexChanged.connect(self._on_item_changed)
+        self.uom_combo.currentIndexChanged.connect(self._apply_uom_decimals)
 
         self.bin_row = QWidget()
         bin_layout = QVBoxLayout(self.bin_row)
@@ -352,7 +362,7 @@ class _LineDialog(QDialog):
         self.unit_cost_row = QWidget()
         cost_layout = QVBoxLayout(self.unit_cost_row)
         cost_layout.setContentsMargins(0, 0, 0, 0)
-        cost_layout.addWidget(QLabel("بهایِ واحد (اختیاری)"))
+        cost_layout.addWidget(QLabel("بهایِ واحد (اختیاری -- به‌ازایِ واحدِ انتخاب‌شده)"))
         self.unit_cost_field = _AmountField()
         self.unit_cost_field.setDecimals(unit_cost_decimal_places)
         cost_layout.addWidget(self.unit_cost_field)
@@ -429,7 +439,7 @@ class _LineDialog(QDialog):
             if initial.destination_bin_location_id is not None:
                 self.destination_bin_combo.setCurrentIndex(max(0, self.destination_bin_combo.findData(initial.destination_bin_location_id)))
             if initial.unit_cost is not None:
-                self.unit_cost_field.setValue(float(initial.unit_cost))
+                self.unit_cost_field.setValue(float(initial.unit_cost * self._selected_factor()))
             if initial.reason_code_id is not None:
                 self.reason_combo.setCurrentIndex(max(0, self.reason_combo.findData(initial.reason_code_id)))
             self.description_field.setText(initial.description or "")
@@ -448,10 +458,35 @@ class _LineDialog(QDialog):
         # طبقِ گزارشِ صریح: تعدادِ اعشارِ «مقدار» باید از تعریفِ واحدِ
         # پایهٔ همان کالا ارث ببرد (مثلاً واحدِ شمارشی «عدد» = عددِ صحیح)،
         # نه همیشه ۶ رقمِ ثابتِ اعشار.
-        item = self._items_by_id.get(self.item_combo.currentData())
-        decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 6
-        self.quantity_field.setDecimals(decimals)
+        item_id = self.item_combo.currentData()
+        options = catalog_service.list_item_uom_options(item_id) if item_id is not None else []
+        self.uom_combo.blockSignals(True)
+        self.uom_combo.clear()
+        self._uom_factors = {}
+        for option in options:
+            label = option.name if option.is_base else f"{option.name} (×{numerals.to_persian_digits(format(option.factor.normalize(), 'f'))})"
+            self.uom_combo.addItem(label, option.uom_id)
+            self._uom_factors[option.uom_id] = option.factor
+        if self._initial_uom_id is not None and item_id is not None and self.uom_combo.findData(self._initial_uom_id) < 0:
+            legacy = uc.get_item_unit(item_id, self._initial_uom_id)
+            if legacy is not None:
+                self.uom_combo.addItem(f"{legacy.label} (غیرفعال)", legacy.uom_id)
+                self._uom_factors[legacy.uom_id] = legacy.factor
+        if self._initial_uom_id is not None and self.uom_combo.findData(self._initial_uom_id) >= 0:
+            self.uom_combo.setCurrentIndex(self.uom_combo.findData(self._initial_uom_id))
+            self._initial_uom_id = None
+        self.uom_combo.setVisible(self.uom_combo.count() > 1)
+        self.uom_combo.blockSignals(False)
+        self._apply_uom_decimals()
         self._refresh_stock_info()
+
+    def _selected_factor(self) -> decimal.Decimal:
+        return self._uom_factors.get(self.uom_combo.currentData(), decimal.Decimal(1))
+
+    def _apply_uom_decimals(self) -> None:
+        item = self._items_by_id.get(self.item_combo.currentData())
+        uom_id = self.uom_combo.currentData() or (item.base_uom_id if item else None)
+        self.quantity_field.setDecimals(self._uom_decimal_places.get(uom_id, 2) if uom_id is not None else 6)
 
     def _refresh_stock_info(self) -> None:
         item_id = self.item_combo.currentData()
@@ -535,13 +570,16 @@ class _LineDialog(QDialog):
         item_id = self.item_combo.currentData()
         item = self._items_by_id.get(item_id)
         quantity = decimal.Decimal(str(self.quantity_field.value()))
+        factor = self._selected_factor()
+        # بهایِ لجرِ موجودی همیشه به‌ازایِ واحدِ پایه است.
         unit_cost = (
-            decimal.Decimal(str(self.unit_cost_field.value()))
+            decimal.Decimal(str(self.unit_cost_field.value())) / factor
             if self.unit_cost_row.isVisibleTo(self) and self.unit_cost_field.value() > 0
             else None
         )
+        uom_id = self.uom_combo.currentData() or (item.base_uom_id if item else 0)
         return documents_service.LineFields(
-            item_id=item_id, uom_id=item.base_uom_id if item else 0, quantity=quantity, quantity_base=quantity,
+            item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity * factor, conversion_factor=factor,
             bin_location_id=self.bin_combo.currentData(),
             destination_bin_location_id=(
                 self.destination_bin_combo.currentData() if self.destination_bin_row.isVisibleTo(self) else None
@@ -955,7 +993,9 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._items = catalog_service.list_items(company_id, active_only=True, transactable_only=True)
         self._warehouses = locations_service.list_warehouses(company_id, active_only=True)
-        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in catalog_service.list_uoms(company_id)}
+        uoms = catalog_service.list_uoms(company_id)
+        self._uom_decimal_places = {u.uom_id: u.decimal_places for u in uoms}
+        self._uom_names = {u.uom_id: u.name for u in uoms}
         self._unit_cost_decimal_places = companies_service.get_base_currency_decimal_places(company_id)
 
         for combo in (self.source_wh_combo, self.destination_wh_combo):
@@ -1073,10 +1113,13 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setRowCount(len(self._lines) + (1 if editable else 0))
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
-            qty_decimals = self._uom_decimal_places.get(item.base_uom_id, 2) if item else 2
+            qty_decimals = self._uom_decimal_places.get(ln.uom_id, 2)
+            qty_text = f"{numerals.format_money(ln.quantity, qty_decimals)} {getattr(self, '_uom_names', {}).get(ln.uom_id, '')}".strip()
+            if item is not None and ln.uom_id != item.base_uom_id:
+                qty_text += f" (= {numerals.format_money(ln.quantity_base, self._uom_decimal_places.get(item.base_uom_id, 2))})"
             values = [
                 f"{item.code} — {item.name or ''}" if item else str(ln.item_id),
-                numerals.format_money(ln.quantity, qty_decimals),
+                qty_text,
                 all_bins.get(ln.bin_location_id).code if ln.bin_location_id in all_bins else "پیش‌فرض",
                 all_bins.get(ln.destination_bin_location_id).code if ln.destination_bin_location_id in all_bins else "",
                 numerals.format_money(ln.unit_cost, self._unit_cost_decimal_places) if ln.unit_cost is not None else "",
@@ -1434,6 +1477,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             item_id=line.item_id, uom_id=line.uom_id, quantity=line.quantity, quantity_base=line.quantity_base,
             bin_location_id=line.bin_location_id, destination_bin_location_id=line.destination_bin_location_id,
             unit_cost=line.unit_cost, reason_code_id=line.reason_code_id, description=line.description,
+            conversion_factor=line.conversion_factor,
         )
         dialog = _LineDialog(
             self, self.document_type_code, self._items, source_bins, destination_bins, reasons, initial,

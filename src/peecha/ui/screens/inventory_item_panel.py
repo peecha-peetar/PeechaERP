@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session as app_session
+from peecha import numerals, session as app_session
 from peecha.services import commercial_ecommerce as ecommerce_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_pricing as pricing_service
@@ -44,6 +44,7 @@ from peecha.services import inventory_extended as extended_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import item_variants as variants_service
 from peecha.services import supplier_price_import as spi_service
+from peecha.services import unit_conversion as uc
 from peecha.ui.barcode_print import print_barcode_labels
 from peecha.ui import theme
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, build_section_layout
@@ -58,6 +59,7 @@ _LIFECYCLE_LABELS = {"DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "DISCON
 _COSTING_LABELS = {"": "(پیش‌فرضِ شرکت)", "FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
 _RELATION_LABELS = {"SUBSTITUTE": "جایگزین", "COMPLEMENTARY": "مکمل"}
+_UNIT_COLUMNS = ["واحد", "ضریب", "خرید", "فروش", "پیش‌فرضِ خرید", "پیش‌فرضِ فروش", "بارکدها", "قیمت", "وضعیت"]
 _DEPRECIATION_LABELS = {"STRAIGHT_LINE": "خطِ‌مستقیم", "DECLINING_BALANCE": "نزولی"}
 _CONSUMER_FACING_KINDS = ("GOOD", "FINISHED_GOOD", "BUNDLE", "KIT")
 _ECOMMERCE_PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
@@ -92,6 +94,8 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._categories: list[catalog_service.ItemCategoryRow] = []
         self._enabled_features: set[str] = set()
         self._current_bom_id: int | None = None
+        self._item_units: list = []
+        self._unit_barcode_rows: list = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -103,6 +107,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             ("basic", self._build_basic_info_tab(), "اطلاعاتِ پایه"),
             ("tracking", self._build_sales_tracking_tab(), "فروش/خرید و ردیابی"),
             ("grouping", self._build_grouping_tab(), "گروه‌بندی و شناسه"),
+            ("units", self._build_units_tab(), "واحدها و بسته‌بندی"),
             ("purchasing", self._build_purchasing_tab(), "خرید"),
             ("variants", self._build_variants_tab(), "ویژگی‌ها و متغیرها"),
             ("sales_extra", self._build_sales_extra_tab(), "فروشِ تکمیلی"),
@@ -351,6 +356,129 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         return tab
 
     # --- تبِ خرید -------------------------------------------------------------
+    # --- تبِ واحدها و بسته‌بندی (R225) ----------------------------------------
+    def _build_units_tab(self) -> QWidget:
+        """واحدهایِ مجازِ کالا (پایه + بسته‌بندی‌ها)، ضریبِ تبدیل، مجاز برایِ
+        خرید/فروش، پیش‌فرض‌ها، قیمتِ هر واحد و بارکدهایِ هر واحد. همهٔ منطق در
+        services/unit_conversion.py است؛ این‌جا فقط UI."""
+        tab = QWidget()
+        layout = build_section_layout(tab)
+        self.base_unit_label = QLabel("")
+        self.base_unit_label.setObjectName("sectionHint")
+        self.base_unit_label.setWordWrap(True)
+        layout.addWidget(self.base_unit_label)
+
+        layout.addWidget(QLabel("افزودنِ واحد (مثلاً ۱ کارتن = ۲۴ عدد)"))
+        self.uom_conversion_combo = QComboBox()
+        self.uom_conversion_factor_field = QLineEdit()
+        self.uom_conversion_factor_field.setPlaceholderText("ضریبِ تبدیل به واحدِ پایه")
+        self.uom_conversion_purchase_unit_checkbox = QCheckBox("خرید")
+        self.uom_conversion_purchase_unit_checkbox.setChecked(True)
+        self.uom_conversion_sales_unit_checkbox = QCheckBox("فروش")
+        self.uom_conversion_sales_unit_checkbox.setChecked(True)
+        self.uom_conversion_purchase_default_checkbox = QCheckBox("پیش‌فرضِ خرید")
+        self.uom_conversion_sales_default_checkbox = QCheckBox("پیش‌فرضِ فروش")
+        conversion_row = QHBoxLayout()
+        conversion_row.addWidget(self.uom_conversion_combo, stretch=2)
+        conversion_row.addWidget(self.uom_conversion_factor_field, stretch=1)
+        for w in (
+            self.uom_conversion_purchase_unit_checkbox, self.uom_conversion_sales_unit_checkbox,
+            self.uom_conversion_purchase_default_checkbox, self.uom_conversion_sales_default_checkbox,
+        ):
+            conversion_row.addWidget(w)
+        add_conversion_button = QPushButton("+")
+        add_conversion_button.setObjectName("iconButton")
+        add_conversion_button.setFixedWidth(28)
+        add_conversion_button.setToolTip("افزودنِ واحد")
+        add_conversion_button.clicked.connect(self._add_uom_conversion)
+        conversion_row.addWidget(add_conversion_button)
+        layout.addLayout(conversion_row)
+
+        price_row = QHBoxLayout()
+        price_row.addWidget(QLabel("فهرستِ قیمتِ نمایش/ثبتِ قیمتِ واحد"))
+        self.unit_price_list_combo = QComboBox()
+        self.unit_price_list_combo.currentIndexChanged.connect(lambda _i=0: self._refresh_uom_conversions_table())
+        price_row.addWidget(self.unit_price_list_combo, stretch=1)
+        layout.addLayout(price_row)
+
+        self.uom_conversion_table = QTableWidget(0, len(_UNIT_COLUMNS))
+        self.uom_conversion_table.setHorizontalHeaderLabels(_UNIT_COLUMNS)
+        self.uom_conversion_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.uom_conversion_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.uom_conversion_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.uom_conversion_table.verticalHeader().setVisible(False)
+        self.uom_conversion_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.uom_conversion_table.setMinimumHeight(150)
+        self.uom_conversion_table.setToolTip("برایِ ویرایشِ واحد (ضریب، مجاز/پیش‌فرض، حداقل/حداکثر، وزن/حجم، فعال) دوبار کلیک کنید.")
+        self.uom_conversion_table.cellDoubleClicked.connect(lambda _r, _c: self._edit_item_unit())
+        self.uom_conversion_table.itemSelectionChanged.connect(self._refresh_unit_barcodes_table)
+        layout.addWidget(self.uom_conversion_table, stretch=1)
+
+        unit_buttons = QHBoxLayout()
+        edit_unit_button = QPushButton("✏️")
+        edit_unit_button.setObjectName("iconButton")
+        edit_unit_button.setFixedWidth(44)
+        edit_unit_button.setToolTip("ویرایشِ واحدِ انتخاب‌شده")
+        edit_unit_button.clicked.connect(self._edit_item_unit)
+        unit_buttons.addWidget(edit_unit_button)
+        remove_conversion_button = QPushButton("🗑️")
+        remove_conversion_button.setObjectName("dangerIconButton")
+        remove_conversion_button.setFixedWidth(44)
+        remove_conversion_button.setToolTip("حذف/غیرفعال‌سازیِ واحد (واحدِ استفاده‌شده فقط غیرفعال می‌شود)")
+        remove_conversion_button.clicked.connect(self._remove_uom_conversion)
+        unit_buttons.addWidget(remove_conversion_button)
+        self.unit_price_field = QLineEdit()
+        self.unit_price_field.setPlaceholderText("قیمتِ واحدِ انتخاب‌شده")
+        unit_buttons.addWidget(self.unit_price_field, stretch=1)
+        set_price_button = QPushButton("💲 ثبتِ قیمتِ واحد")
+        set_price_button.clicked.connect(self._set_unit_price)
+        unit_buttons.addWidget(set_price_button)
+        layout.addLayout(unit_buttons)
+
+        layout.addWidget(QLabel("بارکدهایِ واحدِ انتخاب‌شده"))
+        barcode_row = QHBoxLayout()
+        self.unit_barcode_field = QLineEdit()
+        self.unit_barcode_field.setPlaceholderText("بارکد را وارد/اسکن کنید")
+        barcode_row.addWidget(self.unit_barcode_field, stretch=2)
+        self.unit_barcode_type_combo = QComboBox()
+        self.unit_barcode_type_combo.addItem("(تشخیصِ خودکار)", None)
+        for code, label in uc.BARCODE_TYPE_LABELS.items():
+            self.unit_barcode_type_combo.addItem(label, code)
+        barcode_row.addWidget(self.unit_barcode_type_combo, stretch=1)
+        self.unit_barcode_primary_checkbox = QCheckBox("اصلی")
+        barcode_row.addWidget(self.unit_barcode_primary_checkbox)
+        add_barcode_button = QPushButton("➕")
+        add_barcode_button.setObjectName("iconButton")
+        add_barcode_button.setFixedWidth(44)
+        add_barcode_button.setToolTip("افزودنِ بارکد")
+        add_barcode_button.clicked.connect(self._add_unit_barcode)
+        barcode_row.addWidget(add_barcode_button)
+        layout.addLayout(barcode_row)
+        self.unit_barcodes_table = QTableWidget(0, 5)
+        self.unit_barcodes_table.setHorizontalHeaderLabels(["بارکد", "نوع", "اصلی", "وضعیت", "توضیح"])
+        self.unit_barcodes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.unit_barcodes_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.unit_barcodes_table.verticalHeader().setVisible(False)
+        self.unit_barcodes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.unit_barcodes_table.setMinimumHeight(110)
+        self.unit_barcodes_table.setToolTip("برایِ ویرایشِ بارکد دوبار کلیک کنید.")
+        self.unit_barcodes_table.cellDoubleClicked.connect(lambda _r, _c: self._edit_unit_barcode())
+        layout.addWidget(self.unit_barcodes_table, stretch=1)
+        barcode_buttons = QHBoxLayout()
+        primary_button = QPushButton("⭐ اصلی")
+        primary_button.clicked.connect(self._set_primary_unit_barcode)
+        barcode_buttons.addWidget(primary_button)
+        deactivate_button = QPushButton("🚫 غیرفعال")
+        deactivate_button.setObjectName("dangerButton")
+        deactivate_button.clicked.connect(self._deactivate_unit_barcode)
+        barcode_buttons.addWidget(deactivate_button)
+        barcode_buttons.addStretch(1)
+        layout.addLayout(barcode_buttons)
+        self.units_status_label = QLabel("")
+        self.units_status_label.setWordWrap(True)
+        layout.addWidget(self.units_status_label)
+        return tab
+
     def _build_purchasing_tab(self) -> QWidget:
         tab = QWidget()
         layout = build_section_layout(tab)
@@ -365,42 +493,6 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("package_qty", "تعدادِ بسته‌بندیِ خرید", self.purchase_package_qty_field, span=1),
         ])
         layout.addWidget(self.purchasing_grid)
-
-        # طبقِ گزارشِ صریحِ کاربر («تعریفِ واحدهایِ اندازه‌گیری خیلی ساده و
-        # غیراستاندارد است»): بک‌اندِ تبدیلِ واحدِ هر کالا (مثلاً «۱ کارتن
-        # = ۲۴ عدد») از قبل ساخته شده بود (ItemUomConversion) ولی هیچ UI
-        # نداشت -- کاربر فقط می‌توانست با همان واحدِ پایه سفارش ثبت کند.
-        layout.addWidget(QLabel("تبدیلِ واحد (مثلاً ۱ کارتن = ۲۴ عدد)"))
-        self.uom_conversion_combo = QComboBox()
-        self.uom_conversion_factor_field = QLineEdit()
-        self.uom_conversion_factor_field.setPlaceholderText("ضریبِ تبدیل به واحدِ پایه")
-        self.uom_conversion_purchase_default_checkbox = QCheckBox("پیش‌فرضِ خرید")
-        self.uom_conversion_sales_default_checkbox = QCheckBox("پیش‌فرضِ فروش")
-        conversion_row = QHBoxLayout()
-        conversion_row.addWidget(self.uom_conversion_combo, stretch=2)
-        conversion_row.addWidget(self.uom_conversion_factor_field, stretch=1)
-        conversion_row.addWidget(self.uom_conversion_purchase_default_checkbox)
-        conversion_row.addWidget(self.uom_conversion_sales_default_checkbox)
-        add_conversion_button = QPushButton("+")
-        add_conversion_button.setObjectName("iconButton")
-        add_conversion_button.setFixedWidth(28)
-        add_conversion_button.clicked.connect(self._add_uom_conversion)
-        conversion_row.addWidget(add_conversion_button)
-        layout.addLayout(conversion_row)
-        self.uom_conversion_table = QTableWidget(0, 4)
-        self.uom_conversion_table.setHorizontalHeaderLabels(["واحد", "ضریبِ تبدیل به واحدِ پایه", "پیش‌فرضِ خرید", "پیش‌فرضِ فروش"])
-        self.uom_conversion_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.uom_conversion_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.uom_conversion_table.verticalHeader().setVisible(False)
-        self.uom_conversion_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.uom_conversion_table.setMinimumHeight(120)
-        layout.addWidget(self.uom_conversion_table, stretch=1)
-        remove_conversion_button = QPushButton("🗑️")
-        remove_conversion_button.setObjectName("dangerIconButton")
-        remove_conversion_button.setFixedWidth(44)
-        remove_conversion_button.setToolTip("حذفِ ردیفِ انتخاب‌شده")
-        remove_conversion_button.clicked.connect(self._remove_uom_conversion)
-        layout.addWidget(remove_conversion_button)
 
         layout.addWidget(QLabel("تامین‌کنندگان"))
         self.supplier_combo = QComboBox()
@@ -1492,6 +1584,15 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self._rebuild_related_item_combo()
         self._rebuild_uom_conversion_combo()
+        current_price_list = self.unit_price_list_combo.currentData()
+        self.unit_price_list_combo.blockSignals(True)
+        self.unit_price_list_combo.clear()
+        for pl in pricing_service.list_price_lists(company_id):
+            kind = "فروش" if pl.price_list_type_code == "SALES" else "خرید"
+            self.unit_price_list_combo.addItem(f"{pl.code} — {pl.name} ({kind})", pl.price_list_id)
+        if current_price_list is not None:
+            self.unit_price_list_combo.setCurrentIndex(max(0, self.unit_price_list_combo.findData(current_price_list)))
+        self.unit_price_list_combo.blockSignals(False)
         self._reload_item_attributes()
         self._reload_variant_price_lists()
 
@@ -1714,6 +1815,10 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.uom_conversion_factor_field.clear()
         self.uom_conversion_purchase_default_checkbox.setChecked(False)
         self.uom_conversion_sales_default_checkbox.setChecked(False)
+        self.unit_barcodes_table.setRowCount(0)
+        self._item_units = []
+        self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهایِ بسته‌بندی و بارکدها را تعریف کنید.")
+        self.units_status_label.setText("")
         self.bom_lines_table.setRowCount(0)
         self.bom_status_label.setText("ابتدا کالا را ذخیره کنید.")
         self._refresh_ecommerce_mappings()
@@ -1776,25 +1881,59 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             qc_inspection_interval_days=_int_or_none(self.qc_interval_field.text()),
         )
 
-    # --- تبدیلِ واحد ---------------------------------------------------------
+    # --- واحدها و بسته‌بندی (R225) ----------------------------------------------
+    def _selected_item_unit(self):
+        rows = self.uom_conversion_table.selectionModel().selectedRows() if self.uom_conversion_table.selectionModel() else []
+        if not rows:
+            items = self.uom_conversion_table.selectedItems()
+            if not items:
+                return None
+            row_index = items[0].row()
+        else:
+            row_index = rows[0].row()
+        cell = self.uom_conversion_table.item(row_index, 0)
+        if cell is None:
+            return None
+        unit_id = cell.data(Qt.UserRole)
+        return next((u for u in self._item_units if u.item_unit_id == unit_id), None)
+
     def _refresh_uom_conversions_table(self) -> None:
         self.uom_conversion_table.setRowCount(0)
+        self._item_units = []
         if self._item_id is None:
+            self.base_unit_label.setText("ابتدا کالا را ذخیره کنید؛ سپس واحدهایِ بسته‌بندی و بارکدها را تعریف کنید.")
+            self.unit_barcodes_table.setRowCount(0)
             return
-        rows = catalog_service.list_item_uom_conversions(self._item_id)
-        self.uom_conversion_table.setRowCount(len(rows))
-        for row_index, r in enumerate(rows):
-            idx = self.uom_conversion_combo.findData(r.uom_id)
-            uom_label = self.uom_conversion_combo.itemText(idx) if idx >= 0 else r.uom_code
-            values = [uom_label, str(r.conversion_factor), "بله" if r.is_purchase_default else "خیر", "بله" if r.is_sales_default else "خیر"]
+        self._item_units = uc.get_item_units(self._item_id, active_only=False)
+        base = next((u for u in self._item_units if u.is_base), None)
+        self.base_unit_label.setText(
+            f"واحدِ پایهٔ موجودی: «{base.label}» -- همهٔ موجودی‌ها به این واحد نگه‌داری می‌شوند؛ "
+            "هر واحدِ دیگر با ضریبِ تبدیلش به همین واحد تبدیل می‌شود." if base else ""
+        )
+        price_list_id = self.unit_price_list_combo.currentData()
+        self.uom_conversion_table.setRowCount(len(self._item_units))
+        for row_index, u in enumerate(self._item_units):
+            price = uc.get_price_for_unit(self._company_id, self._item_id, u.uom_id, price_list_id) if price_list_id else None
+            values = [
+                u.label + (" (پایه)" if u.is_base else ""),
+                numerals.to_persian_digits(format(u.factor.normalize(), "f")),
+                "✓" if (u.is_purchase_unit or u.is_base) else "",
+                "✓" if (u.is_sales_unit or u.is_base) else "",
+                "✓" if u.is_default_purchase else "",
+                "✓" if u.is_default_sales else "",
+                "، ".join(u.barcodes),
+                numerals.format_money(price, 0) if price is not None else "",
+                "فعال" if u.is_active else "غیرفعال",
+            ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, r.conversion_id)
+                item.setData(Qt.UserRole, u.item_unit_id)
                 self.uom_conversion_table.setItem(row_index, col_index, item)
+        self._refresh_unit_barcodes_table()
 
     def _add_uom_conversion(self) -> None:
         if self._item_id is None:
-            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس تبدیلِ واحد اضافه کنید.")
+            QMessageBox.information(self, "توجه", "ابتدا کالا را ذخیره کنید، سپس واحدِ بسته‌بندی اضافه کنید.")
             return
         uom_id = self.uom_conversion_combo.currentData()
         if uom_id is None:
@@ -1804,10 +1943,12 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             QMessageBox.warning(self, "خطا", "ضریبِ تبدیل را وارد کنید.")
             return
         try:
-            catalog_service.set_item_uom_conversion(
+            uc.set_item_unit(
                 self._item_id, uom_id, factor,
-                is_purchase_default=self.uom_conversion_purchase_default_checkbox.isChecked(),
-                is_sales_default=self.uom_conversion_sales_default_checkbox.isChecked(),
+                is_purchase_unit=self.uom_conversion_purchase_unit_checkbox.isChecked(),
+                is_sales_unit=self.uom_conversion_sales_unit_checkbox.isChecked(),
+                is_default_purchase=self.uom_conversion_purchase_default_checkbox.isChecked(),
+                is_default_sales=self.uom_conversion_sales_default_checkbox.isChecked(),
             )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
@@ -1818,17 +1959,215 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._refresh_uom_conversions_table()
 
     def _remove_uom_conversion(self) -> None:
-        if self._item_id is None:
-            return
-        selected = self.uom_conversion_table.selectedItems()
-        if not selected:
+        unit = self._selected_item_unit()
+        if self._item_id is None or unit is None:
             return
         try:
-            catalog_service.delete_item_uom_conversion(selected[0].data(Qt.UserRole), self._item_id)
+            outcome = uc.remove_item_unit(unit.item_unit_id, self._item_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.units_status_label.setText(
+            "واحد حذف شد." if outcome == "DELETED" else "این واحد در اسناد/قیمت‌ها/بارکدها استفاده شده بود و غیرفعال شد (اسنادِ قبلی دست‌نخورده‌اند)."
+        )
+        self._refresh_uom_conversions_table()
+
+    def _edit_item_unit(self) -> None:
+        unit = self._selected_item_unit()
+        if self._item_id is None or unit is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"ویرایشِ واحدِ «{unit.label}»")
+        dlayout = QVBoxLayout(dialog)
+        factor_field = QLineEdit(format(unit.factor.normalize(), "f"))
+        factor_field.setEnabled(not unit.is_base)
+        purchase_cb = QCheckBox("مجاز برایِ خرید")
+        purchase_cb.setChecked(unit.is_purchase_unit or unit.is_base)
+        sales_cb = QCheckBox("مجاز برایِ فروش")
+        sales_cb.setChecked(unit.is_sales_unit or unit.is_base)
+        inventory_cb = QCheckBox("واحدِ انبار/شمارش")
+        inventory_cb.setChecked(unit.is_inventory_unit or unit.is_base)
+        default_purchase_cb = QCheckBox("پیش‌فرضِ خرید")
+        default_purchase_cb.setChecked(unit.is_default_purchase)
+        default_sales_cb = QCheckBox("پیش‌فرضِ فروش")
+        default_sales_cb.setChecked(unit.is_default_sales)
+        decimals_field = QLineEdit(str(unit.decimal_places))
+        min_field = QLineEdit(format(unit.min_quantity.normalize(), "f") if unit.min_quantity is not None else "")
+        max_field = QLineEdit(format(unit.max_quantity.normalize(), "f") if unit.max_quantity is not None else "")
+        weight_field = QLineEdit(format(unit.weight_kg.normalize(), "f") if unit.weight_kg is not None else "")
+        volume_field = QLineEdit(format(unit.volume_m3.normalize(), "f") if unit.volume_m3 is not None else "")
+        active_cb = QCheckBox("فعال")
+        active_cb.setChecked(unit.is_active)
+        active_cb.setEnabled(not unit.is_base)
+        dlayout.addWidget(FieldGrid([
+            FieldSpec("factor", "ضریبِ تبدیل به واحدِ پایه", factor_field, span=1),
+            FieldSpec("decimals", "تعدادِ اعشار", decimals_field, span=1),
+            FieldSpec("purchase", "", purchase_cb, span=1),
+            FieldSpec("sales", "", sales_cb, span=1),
+            FieldSpec("inventory", "", inventory_cb, span=1),
+            FieldSpec("default_purchase", "", default_purchase_cb, span=1),
+            FieldSpec("default_sales", "", default_sales_cb, span=1),
+            FieldSpec("min", "حداقلِ مقدار (همین واحد)", min_field, span=1),
+            FieldSpec("max", "حداکثرِ مقدار (همین واحد)", max_field, span=1),
+            FieldSpec("weight", "وزنِ هر واحد (kg)", weight_field, span=1),
+            FieldSpec("volume", "حجمِ هر واحد (m³)", volume_field, span=1),
+            FieldSpec("active", "", active_cb, span=1),
+        ]))
+        hint = QLabel("تغییرِ ضریب فقط رویِ اسنادِ تازه اثر دارد؛ اسنادِ ثبت‌شده ضریبِ لحظهٔ ثبتِ خودشان را نگه می‌دارند.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        dlayout.addWidget(hint)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dlayout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            factor = _decimal_or_none(factor_field.text()) or decimal.Decimal(1)
+            decimals_text = decimals_field.text().strip()
+            uc.set_item_unit(
+                self._item_id, unit.uom_id, factor,
+                is_purchase_unit=purchase_cb.isChecked(), is_sales_unit=sales_cb.isChecked(),
+                is_inventory_unit=inventory_cb.isChecked(),
+                is_default_purchase=default_purchase_cb.isChecked(), is_default_sales=default_sales_cb.isChecked(),
+                decimal_places=int(numerals.to_ascii_digits(decimals_text)) if decimals_text else None,
+                min_quantity=_decimal_or_none(min_field.text()), max_quantity=_decimal_or_none(max_field.text()),
+                weight_kg=_decimal_or_none(weight_field.text()), volume_m3=_decimal_or_none(volume_field.text()),
+                is_active=active_cb.isChecked(),
+            )
+        except (ValueError, decimal.InvalidOperation) as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self._refresh_uom_conversions_table()
+
+    def _set_unit_price(self) -> None:
+        unit = self._selected_item_unit()
+        price_list_id = self.unit_price_list_combo.currentData()
+        price = _decimal_or_none(self.unit_price_field.text())
+        if self._item_id is None or unit is None or price_list_id is None or price is None:
+            QMessageBox.information(self, "قیمتِ واحد", "واحد، فهرستِ قیمت و مبلغ را مشخص کنید.")
+            return
+        user = app_session.current_user
+        pricing_service.set_price_list_item(
+            price_list_id, self._item_id, unit.uom_id, price, changed_by_user_id=user.user_id if user else None,
+        )
+        self.unit_price_field.clear()
+        self._refresh_uom_conversions_table()
+
+    def _refresh_unit_barcodes_table(self) -> None:
+        unit = self._selected_item_unit()
+        self.unit_barcodes_table.setRowCount(0)
+        self._unit_barcode_rows = []
+        if self._item_id is None or unit is None:
+            return
+        self._unit_barcode_rows = [
+            b for b in uc.list_barcodes(self._company_id, item_id=self._item_id) if b.item_unit_id == unit.item_unit_id
+        ]
+        self.unit_barcodes_table.setRowCount(len(self._unit_barcode_rows))
+        for i, b in enumerate(self._unit_barcode_rows):
+            values = [b.barcode, uc.BARCODE_TYPE_LABELS.get(b.barcode_type, b.barcode_type), "✓" if b.is_primary else "",
+                      "فعال" if b.is_active else "غیرفعال", b.description or ""]
+            for j, v in enumerate(values):
+                cell = QTableWidgetItem(v)
+                cell.setData(Qt.UserRole, b.barcode_id)
+                self.unit_barcodes_table.setItem(i, j, cell)
+
+    def _selected_unit_barcode(self):
+        items = self.unit_barcodes_table.selectedItems()
+        if not items:
+            return None
+        barcode_id = items[0].data(Qt.UserRole)
+        return next((b for b in self._unit_barcode_rows if b.barcode_id == barcode_id), None)
+
+    def _add_unit_barcode(self) -> None:
+        unit = self._selected_item_unit()
+        if self._item_id is None or unit is None:
+            QMessageBox.information(self, "بارکد", "ابتدا واحدِ موردِ نظر را در جدولِ واحدها انتخاب کنید.")
+            return
+        try:
+            uc.add_barcode(
+                self._company_id, self._item_id, unit.uom_id, self.unit_barcode_field.text(),
+                self.unit_barcode_type_combo.currentData(), self.unit_barcode_primary_checkbox.isChecked(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا در ثبتِ بارکد", str(exc))
+            return
+        self.unit_barcode_field.clear()
+        self.unit_barcode_primary_checkbox.setChecked(False)
+        selected_unit_id = unit.item_unit_id
+        self._refresh_uom_conversions_table()
+        self._select_unit_row(selected_unit_id)
+
+    def _select_unit_row(self, item_unit_id: int) -> None:
+        for r in range(self.uom_conversion_table.rowCount()):
+            cell = self.uom_conversion_table.item(r, 0)
+            if cell is not None and cell.data(Qt.UserRole) == item_unit_id:
+                self.uom_conversion_table.selectRow(r)
+                break
+        self._refresh_unit_barcodes_table()
+
+    def _edit_unit_barcode(self) -> None:
+        b = self._selected_unit_barcode()
+        if b is None:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ویرایشِ بارکد")
+        dlayout = QVBoxLayout(dialog)
+        code_field = QLineEdit(b.barcode)
+        type_combo = QComboBox()
+        for code, label in uc.BARCODE_TYPE_LABELS.items():
+            type_combo.addItem(label, code)
+        type_combo.setCurrentIndex(max(0, type_combo.findData(b.barcode_type)))
+        primary_cb = QCheckBox("اصلی")
+        primary_cb.setChecked(b.is_primary)
+        active_cb = QCheckBox("فعال")
+        active_cb.setChecked(b.is_active)
+        description_field = QLineEdit(b.description or "")
+        dlayout.addWidget(FieldGrid([
+            FieldSpec("barcode", "بارکد", code_field, span=2),
+            FieldSpec("type", "نوع", type_combo, span=1),
+            FieldSpec("primary", "", primary_cb, span=1),
+            FieldSpec("active", "", active_cb, span=1),
+            FieldSpec("description", "توضیح", description_field, span=3),
+        ]))
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dlayout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        try:
+            uc.update_barcode(
+                b.barcode_id, self._company_id, code_field.text(), type_combo.currentData(), primary_cb.isChecked(),
+                active_cb.isChecked(), description_field.text().strip() or None,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        unit_id = b.item_unit_id
+        self._refresh_uom_conversions_table()
+        self._select_unit_row(unit_id)
+
+    def _set_primary_unit_barcode(self) -> None:
+        b = self._selected_unit_barcode()
+        if b is None:
+            return
+        try:
+            uc.set_primary_barcode(b.barcode_id, self._company_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
         self._refresh_uom_conversions_table()
+        self._select_unit_row(b.item_unit_id)
+
+    def _deactivate_unit_barcode(self) -> None:
+        b = self._selected_unit_barcode()
+        if b is None:
+            return
+        uc.deactivate_barcode(b.barcode_id, self._company_id)
+        self._refresh_uom_conversions_table()
+        self._select_unit_row(b.item_unit_id)
 
     # --- تامین‌کنندگان -----------------------------------------------------
     def _refresh_suppliers_table(self) -> None:

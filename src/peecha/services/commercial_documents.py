@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import datetime
 import decimal
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
 
@@ -41,6 +41,7 @@ from peecha.services import commercial_settings as settings_service
 from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import unit_conversion as uc
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as inv_engine_service
 from peecha.services import inventory_locations as locations_service
@@ -650,6 +651,7 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
         line_snapshots = [
             {
                 "item_id": ln.item_id, "uom_id": ln.uom_id, "quantity": ln.quantity, "quantity_base": ln.quantity_base,
+                "conversion_factor": ln.conversion_factor,
                 "unit_price": ln.unit_price, "discount_amount": ln.discount_amount, "discount_percent": ln.discount_percent,
                 "tax_percent": ln.tax_percent, "batch_id": ln.batch_id, "serial_id": ln.serial_id,
                 "description": ln.description, "warehouse_id": ln.warehouse_id,
@@ -678,6 +680,7 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
             quantity_base=snap["quantity_base"], unit_price=snap["unit_price"], discount_amount=snap["discount_amount"],
             discount_percent=snap["discount_percent"], tax_percent=snap["tax_percent"], batch_id=snap["batch_id"],
             serial_id=snap["serial_id"], description=snap["description"], warehouse_id=snap["warehouse_id"],
+            conversion_factor=snap["conversion_factor"],
         )
 
     with new_session() as session:
@@ -1458,12 +1461,26 @@ def add_line(
     tax_percent: decimal.Decimal = _ZERO,
     batch_id: int | None = None, serial_id: int | None = None, source_line_id: int | None = None,
     description: str | None = None, warehouse_id: int | None = None,
+    conversion_factor: decimal.Decimal | None = None,
 ) -> int:
     if quantity <= 0 or quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
-    # موجودی همیشه به واحدِ پایه نگه‌داری می‌شود -- مقدارِ پایه همین‌جا از
-    # ضریبِ تبدیلِ تعریف‌شده در فرمِ کالا محاسبه می‌شود، نه از فراخوان.
-    quantity_base = quantity * catalog_service.get_uom_factor(item_id, uom_id)
+    # سیستمِ واحد (R225): موجودی همیشه به واحدِ پایه است؛ مقدارِ پایه همین‌جا
+    # (نه از فراخوان -- مثلاً موبایل) با ضریبِ واحد محاسبه و ضریب در ردیف
+    # snapshot می‌شود تا تغییرِ بعدیِ ضریب اسنادِ قبلی را عوض نکند. ردیفِ
+    # کپی‌شده از سندِ مبدا (تبدیل/اصلاح) ضریبِ همان ردیفِ مبدا را نگه می‌دارد.
+    if conversion_factor is None and source_line_id is not None:
+        with new_session() as session:
+            source_line = session.get(CommercialDocumentLine, source_line_id)
+            if source_line is not None and source_line.uom_id == uom_id:
+                conversion_factor = source_line.conversion_factor
+    if conversion_factor is None:
+        with new_session() as session:
+            doc_row = session.get(CommercialDocument, document_id)
+            doc_type = doc_row.document_type_code if doc_row is not None else None
+        uc.validate_quantity(item_id, uom_id, quantity, purpose=uc.purpose_for_document_type(doc_type))
+        conversion_factor = uc.get_factor(item_id, uom_id, require_active=True)
+    quantity_base = quantity * conversion_factor
     with new_session() as session:
         doc = _get_editable_document(session, document_id, company_id)
         # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): وقتی
@@ -1548,7 +1565,7 @@ def add_line(
         ) + 1
         line = CommercialDocumentLine(
             document_id=document_id, line_no=next_no, item_id=item_id, uom_id=uom_id, quantity=quantity,
-            quantity_base=quantity_base, unit_price=unit_price, discount_amount=discount_amount,
+            quantity_base=quantity_base, conversion_factor=conversion_factor, unit_price=unit_price, discount_amount=discount_amount,
             discount_percent=discount_percent, tax_percent=tax_percent, tax_amount=tax_amount,
             batch_id=batch_id, serial_id=serial_id,
             source_line_id=source_line_id, description=(description or None), warehouse_id=warehouse_id,
@@ -1602,7 +1619,9 @@ def update_line(
         net_amount = gross_amount - discount_amount
         tax_amount = _money(net_amount * (tax_percent / 100)) if tax_percent and net_amount > 0 else _ZERO
         line.quantity = quantity
-        line.quantity_base = quantity * catalog_service.get_uom_factor(line.item_id, line.uom_id)
+        if quantity != line.quantity:
+            uc.validate_quantity(line.item_id, line.uom_id, quantity, check_min_max=False, require_active=False)
+        line.quantity_base = quantity * line.conversion_factor
         line.unit_price = unit_price
         line.discount_amount = discount_amount
         line.discount_percent = discount_percent
@@ -2421,6 +2440,7 @@ def _post_consignment_document(
             stock_document_id, company_id,
             inv_documents_service.LineFields(
                 item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                conversion_factor=(quantity_base / quantity) if quantity else None,
                 batch_id=batch_id, unit_cost=line_unit_cost, tax_amount=line_tax_amount,
             ),
         )
@@ -2721,6 +2741,7 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
                     group_stock_document_id, company_id,
                     inv_documents_service.LineFields(
                         item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                conversion_factor=(quantity_base / quantity) if quantity else None,
                         batch_id=batch_id, unit_cost=stock_unit_cost, tax_amount=line_tax_amount,
                         landed_cost_amount=landed_cost_share_by_line.get(line_id, _ZERO),
                         reason_code_id=line_reason_code_id,
@@ -2876,6 +2897,10 @@ class SalesReportRow:
     quantity_sold: decimal.Decimal
     invoice_count: int
     net_revenue: decimal.Decimal
+    # سیستمِ واحد (R225): quantity_sold به واحدِ پایه است؛ این‌جا مقدارِ
+    # تراکنش به تفکیکِ واحدِ ثبت‌شده (مثلاً {«کارتن»: ۲، «عدد»: ۳}).
+    base_uom_name: str = ""
+    transaction_quantities: dict[str, decimal.Decimal] = field(default_factory=dict)
 
 
 def compute_sales_report_by_item(
@@ -2906,6 +2931,24 @@ def compute_sales_report_by_item(
             .group_by(CommercialDocumentLine.item_id)
         )
         item_totals = {row[0]: (row[1], row[2], row[3]) for row in session.execute(stmt)}
+        from peecha.db.models.inventory import Uom
+
+        uom_names = {u.uom_id: u.name for u in session.scalars(select(Uom))}
+        breakdown: dict[int, dict[str, decimal.Decimal]] = {}
+        for item_id, uom_id, qty in session.execute(
+            select(CommercialDocumentLine.item_id, CommercialDocumentLine.uom_id, func.sum(CommercialDocumentLine.quantity))
+            .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+            .where(
+                CommercialDocument.company_id == company_id,
+                CommercialDocument.document_type_code == "SALES_INVOICE",
+                CommercialDocument.status_code == "POSTED",
+                CommercialDocument.document_date >= date_from,
+                CommercialDocument.document_date <= date_to,
+            )
+            .group_by(CommercialDocumentLine.item_id, CommercialDocumentLine.uom_id)
+        ):
+            breakdown.setdefault(item_id, {})[uom_names.get(uom_id, str(uom_id))] = qty
+        base_uom_by_item = dict(session.execute(select(Item.item_id, Item.base_uom_id).where(Item.item_id.in_(item_totals.keys()))).all())
         item_detail_account_by_id = {
             item_id: detail_account_id
             for item_id, detail_account_id in session.execute(
@@ -2920,6 +2963,8 @@ def compute_sales_report_by_item(
             quantity_sold=quantity_sold,
             invoice_count=invoice_count,
             net_revenue=net_revenue,
+            base_uom_name=uom_names.get(base_uom_by_item.get(item_id), ""),
+            transaction_quantities=breakdown.get(item_id, {}),
         )
         for item_id, (quantity_sold, invoice_count, net_revenue) in item_totals.items()
     ]

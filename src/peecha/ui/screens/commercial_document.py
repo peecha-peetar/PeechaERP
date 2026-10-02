@@ -56,6 +56,7 @@ from peecha.services import report_templates as report_templates_service
 from peecha.services import roles as roles_service
 from peecha.services import sales_assistant as assistant_service
 from peecha.services import treasury as treasury_service
+from peecha.services import unit_conversion as uc
 from peecha.ui import theme
 from peecha.ui.screens.inventory_document import _enter_signal
 from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
@@ -1061,7 +1062,7 @@ class _LineDialog(LayoutEditMixin, QDialog):
 
     def _reload_uom_options(self, item_id: int | None) -> None:
         is_purchase = (self._document_type_code or "").startswith("PURCHASE") or self._document_type_code == "CONSIGNMENT_IN"
-        options = catalog_service.list_item_uom_options(item_id) if item_id is not None else []
+        options = catalog_service.list_item_uom_options(item_id, purpose="PURCHASE" if is_purchase else "SALES") if item_id is not None else []
         self.uom_combo.blockSignals(True)
         self.uom_combo.clear()
         self._uom_factors = {}
@@ -1072,6 +1073,12 @@ class _LineDialog(LayoutEditMixin, QDialog):
             self._uom_factors[option.uom_id] = option.factor
             if (is_purchase and option.is_purchase_default) or (not is_purchase and option.is_sales_default):
                 default_index = index
+        if self._initial_uom_id is not None and item_id is not None and self.uom_combo.findData(self._initial_uom_id) < 0:
+            # ردیفِ قدیمی با واحدی که حالا غیرفعال/نامجاز شده: همان واحد برایِ ویرایش نمایش داده می‌شود.
+            legacy = uc.get_item_unit(item_id, self._initial_uom_id)
+            if legacy is not None:
+                self.uom_combo.addItem(f"{legacy.label} (غیرفعال)", legacy.uom_id)
+                self._uom_factors[legacy.uom_id] = legacy.factor
         if self._initial_uom_id is not None and self.uom_combo.findData(self._initial_uom_id) >= 0:
             default_index = self.uom_combo.findData(self._initial_uom_id)
             self._initial_uom_id = None
@@ -3662,7 +3669,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         widgets = self._entry_row_widgets
         combo = widgets["uom"]
         is_purchase = self.document_type_code.startswith("PURCHASE") or self.document_type_code == "CONSIGNMENT_IN"
-        options = catalog_service.list_item_uom_options(item.item_id)
+        options = catalog_service.list_item_uom_options(item.item_id, purpose="PURCHASE" if is_purchase else "SALES")
         combo.blockSignals(True)
         combo.clear()
         widgets["uom_factors"] = {}

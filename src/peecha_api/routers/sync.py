@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
 from peecha.services import inventory_catalog as catalog_service
+from peecha.services import unit_conversion as uc
 from peecha_api.deps import AuthContext, get_current_context
 
 router = APIRouter(prefix="/sync", tags=["sync"])
@@ -23,6 +24,7 @@ def pull(ctx: AuthContext = Depends(get_current_context)) -> dict:
     customers_by_id = {c["detail_account_id"]: c for c in dimensions_service.list_customers(ctx.company_id)}
 
     items = catalog_service.list_items(ctx.company_id, active_only=True, transactable_only=True)
+    units = uc.get_units_for_items(ctx.company_id, [it.item_id for it in items], purpose="SALES")
 
     return {
         "visit_plans": [
@@ -50,7 +52,10 @@ def pull(ctx: AuthContext = Depends(get_current_context)) -> dict:
         # منطقِ چندلایه‌یِ از قبل تست‌شده) و اتصالِ درستش به اپِ موبایل در
         # فازِ بعد (هم‌زمان با ثبتِ سفارشِ واقعی از موبایل) انجام می‌شود.
         "items": [
-            {"item_id": it.item_id, "code": it.code, "name": it.name, "base_uom_id": it.base_uom_id, "base_uom_code": it.base_uom_code}
+            {
+                "item_id": it.item_id, "code": it.code, "name": it.name, "base_uom_id": it.base_uom_id,
+                "base_uom_code": it.base_uom_code, "units": units.get(it.item_id, []),
+            }
             for it in items
         ],
     }

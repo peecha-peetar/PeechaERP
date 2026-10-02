@@ -84,13 +84,21 @@ def create_vehicle_loading(
     # می‌گذرد که این قاعده را رعایت می‌کند، ولی اگر همان‌جا رد شود پیامِ
     # خطا دیرهنگام و کم‌زمینه است -- این‌جا، همانِ لحظهٔ برنامه‌ریزی، با
     # پیامِ روشن و مشخص برایِ همان ردیف جلوگیری می‌شود.
+    from peecha.services import unit_conversion as uc
+
+    # سیستمِ واحد (R225): مقایسهٔ موجودی و حوالهٔ انتقال به واحدِ پایه.
+    base_by_line = {}
+    for index, line_fields in enumerate(lines):
+        if line_fields.planned_quantity > 0:
+            uc.validate_quantity(line_fields.item_id, line_fields.uom_id, line_fields.planned_quantity, check_min_max=False)
+        base_by_line[index] = uc.convert_to_base(line_fields.item_id, line_fields.planned_quantity, line_fields.uom_id)[0]
     source_warehouse = locations_service.get_warehouse(source_warehouse_id, company_id)
     if source_warehouse is None:
         raise ValueError("انبارِ مبدا نامعتبر است.")
     if not source_warehouse.fields.allow_negative_stock:
-        for line_fields in lines:
+        for index, line_fields in enumerate(lines):
             available = balances_by_item.get(line_fields.item_id, decimal.Decimal(0))
-            if line_fields.planned_quantity > available:
+            if base_by_line[index] > available:
                 raise ValueError(
                     f"موجودیِ انبارِ مبدا برایِ این کالا کافی نیست (موجود: {available}، "
                     f"درخواستی: {line_fields.planned_quantity}) -- این انبار اجازهٔ موجودیِ منفی ندارد."
@@ -102,13 +110,13 @@ def create_vehicle_loading(
         )
         session.add(loading)
         session.flush()
-        for line_fields in lines:
+        for index, line_fields in enumerate(lines):
             if line_fields.planned_quantity <= 0:
                 raise ValueError("مقدارِ برنامه‌ریزی‌شده باید بزرگ‌تر از صفر باشد.")
             session.add(
                 VehicleLoadingLine(
                     vehicle_loading_id=loading.vehicle_loading_id, item_id=line_fields.item_id, uom_id=line_fields.uom_id,
-                    planned_quantity=line_fields.planned_quantity,
+                    planned_quantity=line_fields.planned_quantity, planned_quantity_base=base_by_line[index],
                     available_quantity_at_planning=balances_by_item.get(line_fields.item_id, decimal.Decimal(0)),
                 )
             )
@@ -127,7 +135,7 @@ def get_vehicle_loading(vehicle_loading_id: int, company_id: int) -> VehicleLoad
         lines = [
             VehicleLoadingLineRow(
                 r.vehicle_loading_line_id, r.item_id, r.uom_id, r.planned_quantity, r.available_quantity_at_planning,
-                shortage_quantity=max(decimal.Decimal(0), r.planned_quantity - (r.available_quantity_at_planning or decimal.Decimal(0))),
+                shortage_quantity=max(decimal.Decimal(0), (r.planned_quantity_base or r.planned_quantity) - (r.available_quantity_at_planning or decimal.Decimal(0))),
             )
             for r in line_rows
         ]
@@ -174,16 +182,19 @@ def confirm_vehicle_loading(vehicle_loading_id: int, company_id: int, driver_use
         line_rows = session.scalars(
             select(VehicleLoadingLine).where(VehicleLoadingLine.vehicle_loading_id == vehicle_loading_id)
         ).all()
-        lines = [(r.item_id, r.uom_id, r.planned_quantity) for r in line_rows]
+        lines = [(r.item_id, r.uom_id, r.planned_quantity, r.planned_quantity_base) for r in line_rows]
 
     stock_document_id = inv_documents_service.create_stock_document(
         company_id, driver_user_id, "TRANSFER", loading_date,
         inv_documents_service.DocumentHeaderFields(source_warehouse_id=source_warehouse_id, destination_warehouse_id=vehicle_warehouse_id),
     )
-    for item_id, uom_id, quantity in lines:
+    for item_id, uom_id, quantity, quantity_base in lines:
         inv_documents_service.add_line(
             stock_document_id, company_id,
-            inv_documents_service.LineFields(item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity),
+            inv_documents_service.LineFields(
+                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base or quantity,
+                conversion_factor=(quantity_base / quantity) if quantity_base and quantity else None,
+            ),
         )
     inv_documents_service.confirm_stock_document(stock_document_id, company_id)
     inv_documents_service.post_stock_document(stock_document_id, company_id, driver_user_id)

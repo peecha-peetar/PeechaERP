@@ -13,6 +13,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
+from peecha.services import unit_conversion as uc
 from peecha_api.deps import AuthContext, get_current_context
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -29,18 +30,39 @@ def list_products(q: str | None = None, ctx: AuthContext = Depends(get_current_c
             or needle in (it.name or "").lower()
             or needle in (it.barcode or "").lower()
         ]
+        match = uc.resolve_barcode(ctx.company_id, q, with_price=False)
+        if match is not None and all(it.item_id != match.item_id for it in items):
+            items += [it for it in catalog_service.list_items(ctx.company_id, active_only=True, transactable_only=True) if it.item_id == match.item_id]
+    units = uc.get_units_for_items(ctx.company_id, [it.item_id for it in items], purpose="SALES")
     return [
         {
             "item_id": it.item_id, "code": it.code, "name": it.name, "barcode": it.barcode,
             "base_uom_id": it.base_uom_id, "base_uom_code": it.base_uom_code,
             "is_sellable": it.is_sellable, "default_tax_percent": str(it.default_tax_percent) if it.default_tax_percent is not None else None,
+            "units": units.get(it.item_id, []),
         }
         for it in items
     ]
 
 
+@router.get("/barcode/{barcode}")
+def resolve_barcode(barcode: str, price_list_id: int | None = None, ctx: AuthContext = Depends(get_current_context)) -> dict:
+    """اسکنِ بارکد -> کالا + واحد (مثلاً کارتن ×۲۴) + قیمتِ همان واحد. منطق فقط در
+    services/unit_conversion.resolve_barcode است."""
+    match = uc.resolve_barcode(ctx.company_id, barcode, price_list_id=price_list_id)
+    if match is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="کالایی با این بارکد پیدا نشد.")
+    return {
+        "item_id": match.item_id, "code": match.item_code, "name": match.item_name, "uom_id": match.uom_id,
+        "unit_name": match.unit_name, "factor": format(match.factor.normalize(), "f"), "barcode": match.barcode,
+        "price": str(match.default_price) if match.default_price is not None else None,
+    }
+
+
 @router.get("/catalog")
-def catalog(warehouse_id: int | None = None, ctx: AuthContext = Depends(get_current_context)) -> dict:
+def catalog(
+    warehouse_id: int | None = None, price_list_id: int | None = None, ctx: AuthContext = Depends(get_current_context),
+) -> dict:
     """طبقِ درخواستِ صریحِ کاربر («مشتری انتخاب میشه، کاتالوگِ کالا باز
     میشه که انواعِ فیلترها روش داره -- دسته‌بندی‌ها و برند -- و جستجویِ
     زنده و اسکنِ بارکد»): کلِ کاتالوگِ قابلِ‌فروش در یک درخواست (تا
@@ -51,6 +73,7 @@ def catalog(warehouse_id: int | None = None, ctx: AuthContext = Depends(get_curr
     if warehouse_id is not None and locations_service.get_warehouse(warehouse_id, ctx.company_id) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="انبارِ انتخاب‌شده برایِ این شرکت معتبر نیست.")
     items = [it for it in catalog_service.list_items(ctx.company_id, active_only=True, transactable_only=True) if it.is_sellable]
+    units = uc.get_units_for_items(ctx.company_id, [it.item_id for it in items], purpose="SALES", price_list_id=price_list_id)
     stock_by_item: dict[int, decimal.Decimal] = {}
     if warehouse_id is not None:
         for b in engine_service.list_balances(ctx.company_id, warehouse_id=warehouse_id):
@@ -76,6 +99,9 @@ def catalog(warehouse_id: int | None = None, ctx: AuthContext = Depends(get_curr
                 "default_tax_percent": str(it.default_tax_percent) if it.default_tax_percent is not None else None,
                 "stock_quantity": str(stock_by_item.get(it.item_id, decimal.Decimal(0))) if warehouse_id is not None else None,
                 "photo_base64": photo_thumbnails.get(it.item_detail_account_id),
+                # سیستمِ واحد (R225): واحدهایِ قابلِ‌فروش + ضریب + قیمت + بارکدِ هر واحد.
+                # stock_quantity همچنان به واحدِ پایه است.
+                "units": units.get(it.item_id, []),
             }
             for it in items
         ],

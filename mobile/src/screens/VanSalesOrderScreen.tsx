@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { ApiClient } from "../api/client";
 import {
-  BankRow, CatalogItem, CatalogResponse, CustomerRow, InvoicePrintData, ItemRow, OrderLineInput,
+  BankRow, CatalogItem, CatalogResponse, CatalogUnit, CustomerRow, InvoicePrintData, ItemRow, OrderLineInput,
   OrderSettlementLineInput, SettlementMethodRow,
 } from "../api/types";
 import { CaptureProvider } from "../capture";
@@ -13,7 +13,7 @@ import { InvoiceResultStore } from "../sync/invoiceResults";
 import { OfflineQueue } from "../sync/offlineQueue";
 import { SyncEngine } from "../sync/syncEngine";
 import { useTheme } from "../theme/ThemeProvider";
-import { buildLocalPrintData, Cart, cartLines } from "./invoice/cart";
+import { baseQuantitiesByItem, buildLocalPrintData, Cart, cartKey, cartLines, lineKey, lineUomId } from "./invoice/cart";
 import { InvoiceCatalogStep } from "./invoice/InvoiceCatalogStep";
 import { InvoiceReceiptStep } from "./invoice/InvoiceReceiptStep";
 import { InvoiceSettlementStep } from "./invoice/InvoiceSettlementStep";
@@ -52,7 +52,7 @@ function catalogFromPull(items: ItemRow[]): CatalogResponse {
     items: items.map((it) => ({
       item_id: it.item_id, code: it.code, name: it.name, barcode: null, sku: null, category_id: null, brand_id: null,
       base_uom_id: it.base_uom_id, base_uom_code: it.base_uom_code, default_tax_percent: null, stock_quantity: null,
-      photo_base64: null,
+      photo_base64: null, units: it.units,
     })),
     categories: [],
     brands: [],
@@ -125,12 +125,12 @@ export function VanSalesOrderScreen(props: Props) {
   // مالياتِ ارزش‌افزوده ثبت می‌شد. مالیات فقط برایِ پیش‌نمایشِ محلی است؛
   // ثبتِ نهایی را سرور دوباره و مستقلاً تعیین می‌کند.
   const resolvePrice = useCallback(
-    async (item: CatalogItem, quantity: number): Promise<ResolvedPriceInfo | null> => {
+    async (item: CatalogItem, uomId: number, quantity: number): Promise<ResolvedPriceInfo | null> => {
       try {
         const resolved = await apiClient.resolvePrice({
           counterpartyDetailAccountId: customer.detail_account_id,
           itemId: item.item_id,
-          uomId: item.base_uom_id,
+          uomId,
           quantity: String(quantity),
           documentTypeCode: "SALES_INVOICE",
           warehouseId,
@@ -148,20 +148,28 @@ export function VanSalesOrderScreen(props: Props) {
     [apiClient, customer.detail_account_id, warehouseId, channelCode],
   );
 
-  const setQuantity = (item: CatalogItem, quantity: number) => {
-    const isNew = !cart[item.item_id];
+  const setQuantity = (item: CatalogItem, unit: CatalogUnit, quantity: number) => {
+    const key = cartKey(item.item_id, unit.uom_id);
+    const isNew = !cart[key];
+    const factor = Number(unit.factor) || 1;
+    // قیمتِ فهرستِ همین واحد تا پاسخِ /pricing/resolve برسد (آفلاین هم کار می‌کند).
+    const listPrice = unit.price !== null ? Number(unit.price) : null;
     setCart((prev) => {
       if (quantity <= 0) {
-        const { [item.item_id]: _removed, ...rest } = prev;
+        const { [key]: _removed, ...rest } = prev;
         return rest;
       }
-      const existing = prev[item.item_id];
+      const existing = prev[key];
       return {
         ...prev,
-        [item.item_id]: {
+        [key]: {
           item,
           quantity,
-          unitPrice: existing?.unitPrice ?? null,
+          uomId: unit.uom_id,
+          uomCode: unit.code,
+          uomName: unit.name,
+          factor,
+          unitPrice: existing?.unitPrice ?? listPrice,
           manualPrice: existing?.manualPrice,
           discountAmount: existing?.discountAmount ?? 0,
           // پیش از پاسخِ سرور، پیش‌نمایش با درصدِ پیش‌فرضِ خودِ کالا (اگر
@@ -172,14 +180,14 @@ export function VanSalesOrderScreen(props: Props) {
       };
     });
     if (isNew && quantity > 0) {
-      resolvePrice(item, quantity).then((resolved) => {
+      resolvePrice(item, unit.uom_id, quantity).then((resolved) => {
         if (resolved === null) return;
         setCart((prev) =>
-          prev[item.item_id] && !prev[item.item_id].manualPrice
+          prev[key] && !prev[key].manualPrice
             ? {
                 ...prev,
-                [item.item_id]: {
-                  ...prev[item.item_id],
+                [key]: {
+                  ...prev[key],
                   unitPrice: resolved.unitPrice,
                   discountAmount: resolved.discountAmount,
                   taxPercent: resolved.taxPercent,
@@ -195,13 +203,14 @@ export function VanSalesOrderScreen(props: Props) {
     // قیمتِ پلکانی به تعداد وابسته است -- با تعدادِ نهایی دوباره گرفته می‌شود
     // (قیمتِ دستیِ ویزیتور دست‌نخورده می‌ماند).
     const lines = cartLines(cart).filter((l) => !l.manualPrice);
-    const resolved = await Promise.all(lines.map((l) => resolvePrice(l.item, l.quantity)));
+    const resolved = await Promise.all(lines.map((l) => resolvePrice(l.item, lineUomId(l), l.quantity)));
     setCart((prev) => {
       const next = { ...prev };
       lines.forEach((l, i) => {
         const r = resolved[i];
-        if (r !== null && next[l.item.item_id]) {
-          next[l.item.item_id] = { ...next[l.item.item_id], unitPrice: r.unitPrice, discountAmount: r.discountAmount, taxPercent: r.taxPercent };
+        const key = lineKey(l);
+        if (r !== null && next[key]) {
+          next[key] = { ...next[key], unitPrice: r.unitPrice, discountAmount: r.discountAmount, taxPercent: r.taxPercent };
         }
       });
       return next;
@@ -209,19 +218,19 @@ export function VanSalesOrderScreen(props: Props) {
     setStep("SETTLEMENT");
   };
 
-  const changePrice = (itemId: number, price: number | null) =>
+  const changePrice = (key: string, price: number | null) =>
     setCart((prev) =>
       // طبقِ درخواستِ صریحِ کاربر («قیمتِ دستیِ ویزیتور دیگر با تخفیفِ سیستم
       // بازنویسی نمی‌شود»): با تایپِ دستیِ قیمت، خودِ همین عدد قیمتِ نهایی
       // است -- تخفیفِ قانونی دیگر معنا ندارد.
-      prev[itemId] ? { ...prev, [itemId]: { ...prev[itemId], unitPrice: price, manualPrice: true, discountAmount: 0 } } : prev,
+      prev[key] ? { ...prev, [key]: { ...prev[key], unitPrice: price, manualPrice: true, discountAmount: 0 } } : prev,
     );
 
   const submit = async (settlementLines: OrderSettlementLineInput[], receivedByName: string) => {
     const lines = cartLines(cart);
     const orderLines: OrderLineInput[] = lines.map((l) => ({
       item_id: l.item.item_id,
-      uom_id: l.item.base_uom_id,
+      uom_id: lineUomId(l),
       quantity: String(l.quantity),
       unit_price: String(l.unitPrice ?? 0),
       discount_amount: String(Math.min(l.discountAmount, l.quantity * (l.unitPrice ?? 0))),
@@ -259,10 +268,8 @@ export function VanSalesOrderScreen(props: Props) {
           },
         },
       });
-      const updatedCatalog = await catalogCache.deductStock(
-        warehouseId,
-        Object.fromEntries(lines.map((l) => [l.item.item_id, l.quantity])),
-      );
+      // موجودیِ کش به واحدِ پایه است -- مقدارِ هر ردیف × ضریبِ واحدش.
+      const updatedCatalog = await catalogCache.deductStock(warehouseId, baseQuantitiesByItem(cart));
       if (updatedCatalog) setCatalog(updatedCatalog);
       setReceipt({
         actionKey: action.idempotencyKey,

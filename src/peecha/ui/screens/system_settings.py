@@ -36,6 +36,7 @@ from peecha.ui.screens.inventory_settings import (
     _CostingSettingsTab,
     _FeatureToggleTab as _InventoryFeatureToggleTab,
     _ReasonCodesTab,
+    _BarcodeManagerTab,
     _UomTab,
 )
 from peecha.ui.screens.languages import LanguagesScreen
@@ -281,6 +282,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         return self._sub_tabs(
             [
                 ("واحدهایِ اندازه‌گیری", _UomTab()),
+                ("مدیریتِ بارکد", _BarcodeManagerTab()),
                 ("برند و تولیدکننده", _BrandManufacturerTab()),
                 ("دسته‌بندیِ کالا", _CategoriesTab()),
                 ("قیمت‌گذاری", _CostingSettingsTab()),

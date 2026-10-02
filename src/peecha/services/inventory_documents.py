@@ -156,6 +156,7 @@ class StockDocumentLineRow:
     reason_code_id: int | None
     source_line_id: int | None
     description: str | None
+    conversion_factor: decimal.Decimal = decimal.Decimal(1)
 
 
 def _to_document_row(d: StockDocument) -> StockDocumentRow:
@@ -192,7 +193,7 @@ def get_stock_document(stock_document_id: int, company_id: int) -> tuple[StockDo
             StockDocumentLineRow(
                 ln.line_id, ln.line_no, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.bin_location_id,
                 ln.destination_bin_location_id, ln.batch_id, ln.unit_cost, ln.line_total_cost, ln.tax_amount,
-                ln.quality_status_code, ln.reason_code_id, ln.source_line_id, ln.description,
+                ln.quality_status_code, ln.reason_code_id, ln.source_line_id, ln.description, ln.conversion_factor,
             )
             for ln in lines
         ]
@@ -382,7 +383,7 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             (
                 ln.line_no, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base,
                 ln.destination_bin_location_id if original_type == "TRANSFER" else ln.bin_location_id,
-                ln.bin_location_id if original_type == "TRANSFER" else None,
+                ln.bin_location_id if original_type == "TRANSFER" else None, ln.conversion_factor,
             )
             for ln in session.scalars(
                 select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id).order_by(StockDocumentLine.line_no)
@@ -396,9 +397,9 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
 
     reversal_doc_id = create_stock_document(company_id, user_id, reversal_type, datetime.date.today(), header)
     try:
-        for line_no, item_id, uom_id, quantity, quantity_base, bin_location_id, destination_bin_location_id in lines_snapshot:
+        for line_no, item_id, uom_id, quantity, quantity_base, bin_location_id, destination_bin_location_id, factor in lines_snapshot:
             add_line(reversal_doc_id, company_id, LineFields(
-                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base, conversion_factor=factor,
                 bin_location_id=bin_location_id, destination_bin_location_id=destination_bin_location_id,
                 reason_code_id=reason_code_id, description=f"برگشتِ ردیفِ #{line_no} از سندِ #{original_no}",
             ))
@@ -446,11 +447,29 @@ class LineFields:
     reason_code_id: int | None = None
     source_line_id: int | None = None
     description: str | None = None
+    # سیستمِ واحد (R225): ضریبِ تبدیلِ لحظهٔ ثبت؛ None یعنی از تعریفِ کالا محاسبه شود.
+    conversion_factor: decimal.Decimal | None = None
+
+
+def _resolve_unit_quantities(fields: LineFields) -> tuple[decimal.Decimal, decimal.Decimal]:
+    """(quantity_base، ضریب). اگر فراخوان (مثلاً سندِ بازرگانیِ ثبت‌شده) خودش
+    مقدارِ پایه را داده، همان حفظ می‌شود؛ اگر برایِ واحدِ غیرِپایه مقدارِ پایه
+    = مقدار فرستاده شده (یعنی تبدیل نکرده)، با ضریبِ تعریف‌شدهٔ کالا تبدیل می‌شود."""
+    from peecha.services import unit_conversion as uc
+
+    if fields.conversion_factor is not None:
+        return fields.quantity * fields.conversion_factor, fields.conversion_factor
+    factor = uc.get_factor(fields.item_id, fields.uom_id)
+    if factor != 1 and fields.quantity_base == fields.quantity:
+        uc.validate_quantity(fields.item_id, fields.uom_id, fields.quantity, check_min_max=False)
+        return fields.quantity * factor, factor
+    return fields.quantity_base, (fields.quantity_base / fields.quantity) if fields.quantity else decimal.Decimal(1)
 
 
 def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int:
     if fields.quantity <= 0 or fields.quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    quantity_base, conversion_factor = _resolve_unit_quantities(fields)
     with new_session() as session:
         doc = _get_draft_document(session, stock_document_id, company_id)
         next_no = (
@@ -464,7 +483,8 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
                 raise ValueError("مکانِ مبدا و مقصد نمی‌توانند یکسان باشند.")
         line = StockDocumentLine(
             stock_document_id=stock_document_id, line_no=next_no, item_id=fields.item_id, uom_id=fields.uom_id,
-            quantity=fields.quantity, quantity_base=fields.quantity_base, bin_location_id=fields.bin_location_id,
+            quantity=fields.quantity, quantity_base=quantity_base, conversion_factor=conversion_factor,
+            bin_location_id=fields.bin_location_id,
             destination_bin_location_id=fields.destination_bin_location_id, batch_id=fields.batch_id,
             unit_cost=fields.unit_cost, tax_amount=(fields.tax_amount or decimal.Decimal(0)),
             landed_cost_amount=(fields.landed_cost_amount or decimal.Decimal(0)),
@@ -483,13 +503,15 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
 def update_line(line_id: int, stock_document_id: int, company_id: int, fields: LineFields) -> None:
     if fields.quantity <= 0 or fields.quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    quantity_base, conversion_factor = _resolve_unit_quantities(fields)
     with new_session() as session:
         _get_draft_document(session, stock_document_id, company_id)
         line = session.get(StockDocumentLine, line_id)
         if line is None or line.stock_document_id != stock_document_id:
             raise ValueError("ردیف نامعتبر است.")
         line.item_id, line.uom_id = fields.item_id, fields.uom_id
-        line.quantity, line.quantity_base = fields.quantity, fields.quantity_base
+        line.quantity, line.quantity_base = fields.quantity, quantity_base
+        line.conversion_factor = conversion_factor
         line.bin_location_id = fields.bin_location_id
         line.destination_bin_location_id = fields.destination_bin_location_id
         line.batch_id = fields.batch_id

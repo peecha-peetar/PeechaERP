@@ -47,6 +47,14 @@ class Uom(Base):
     uom_type_code: Mapped[str] = mapped_column(String(10))
     decimal_places: Mapped[int] = mapped_column(SmallInteger, default=2)
     is_active: Mapped[bool] = mapped_column(default=True)
+    symbol: Mapped[str | None] = mapped_column(String(20))
+    base_uom_id: Mapped[int | None] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
+    allow_decimal: Mapped[bool] = mapped_column(default=True)
+    is_system: Mapped[bool] = mapped_column(default=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class Brand(Base):
@@ -219,6 +227,37 @@ class ItemUomConversion(Base):
     conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     is_purchase_default: Mapped[bool] = mapped_column(default=False)
     is_sales_default: Mapped[bool] = mapped_column(default=False)
+    # R225: همین جدول نقشِ item_units را دارد (واحدهایِ مجازِ کالا).
+    is_base_unit: Mapped[bool] = mapped_column(default=False)
+    is_purchase_unit: Mapped[bool] = mapped_column(default=True)
+    is_sales_unit: Mapped[bool] = mapped_column(default=True)
+    is_inventory_unit: Mapped[bool] = mapped_column(default=False)
+    decimal_places: Mapped[int | None] = mapped_column(SmallInteger)
+    min_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    max_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 4))
+    volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 6))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    sort_order: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class ItemUnitBarcode(Base):
+    __tablename__ = "item_unit_barcodes"
+    __table_args__ = {"schema": "inv"}
+
+    barcode_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    item_unit_id: Mapped[int] = mapped_column(ForeignKey("inv.item_uom_conversions.conversion_id"))
+    barcode: Mapped[str] = mapped_column(String(100))
+    barcode_type: Mapped[str] = mapped_column(String(15), default="INTERNAL")
+    is_primary: Mapped[bool] = mapped_column(default=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class ItemAttribute(Base):
@@ -570,6 +609,7 @@ class StockDocumentLine(Base):
     uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
     quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
     destination_bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("inv.batches.batch_id"))
@@ -898,6 +938,9 @@ class CycleCountLine(Base):
     variance_quantity_base: Mapped[decimal.Decimal | None] = mapped_column(
         Numeric(18, 6), Computed("counted_quantity_base - expected_quantity_base")
     )
+    counted_uom_id: Mapped[int | None] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    counted_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    conversion_factor: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     counted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     counted_at: Mapped[datetime.datetime | None]
     recount_requested: Mapped[bool] = mapped_column(default=False)
@@ -953,6 +996,7 @@ class VehicleLoadingLine(Base):
     item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
     uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
     planned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    planned_quantity_base: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     available_quantity_at_planning: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
 
 

@@ -5,7 +5,7 @@ import { Button, Card, Input } from "../../components";
 import { formatAmount, parseAmount, toAsciiDigits } from "../../format";
 import { parseJalaliDate } from "../../jalali";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Cart, cartDiscountTotal, cartGrossTotal, cartLines, cartTaxTotal, cartTotal, lineTotalAmount } from "./cart";
+import { Cart, cartDiscountTotal, cartGrossTotal, cartLines, cartTaxTotal, cartTotal, lineKey, lineTotalAmount } from "./cart";
 
 interface CheckDraft {
   key: number;
@@ -35,7 +35,7 @@ interface Props {
   methods: SettlementMethodRow[];
   banks: BankRow[];
   submitting: boolean;
-  onChangePrice: (itemId: number, price: number | null) => void;
+  onChangePrice: (key: string, price: number | null) => void;
   onBack: () => void;
   onSubmit: (settlementLines: OrderSettlementLineInput[], receivedByName: string) => void;
 }
@@ -167,14 +167,14 @@ export function InvoiceSettlementStep({ customer, cart, methods, banks, submitti
       <Card>
         <Text style={[typography.captionBold, { color: colors.textSecondary, marginBottom: spacing.sm }]}>اقلامِ فاکتور</Text>
         {lines.map((l) => (
-          <View key={l.item.item_id} style={{ paddingVertical: spacing.xs, gap: spacing.xxs }}>
+          <View key={lineKey(l)} style={{ paddingVertical: spacing.xs, gap: spacing.xxs }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
               <Text style={[typography.body, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
-                {l.item.name} × {formatAmount(String(l.quantity))}
+                {l.item.name} × {formatAmount(String(l.quantity))}{l.uomName && l.uomId !== l.item.base_uom_id ? ` ${l.uomName}` : ""}
               </Text>
               <Input
                 value={l.unitPrice !== null ? String(l.unitPrice) : ""}
-                onChangeText={(v) => onChangePrice(l.item.item_id, v.trim() ? parseAmount(v) : null)}
+                onChangeText={(v) => onChangePrice(lineKey(l), v.trim() ? parseAmount(v) : null)}
                 keyboardType="numeric"
                 numeric
                 placeholder="قیمت"

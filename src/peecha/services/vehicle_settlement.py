@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine
 from peecha.db.models.inventory import (
+    Item,
     VehicleLoading,
     VehicleLoadingLine,
     VehicleSettlement,
@@ -91,7 +92,11 @@ def compute_today_summary(
     روز را دوباره (get_open_window_start همین مقدار را می‌دهد)."""
     with new_session() as session:
         loaded_stmt = (
-            select(VehicleLoadingLine.item_id, VehicleLoadingLine.uom_id, func.sum(VehicleLoadingLine.planned_quantity))
+            select(
+                VehicleLoadingLine.item_id, Item.base_uom_id,
+                func.sum(func.coalesce(VehicleLoadingLine.planned_quantity_base, VehicleLoadingLine.planned_quantity)),
+            )
+            .join(Item, Item.item_id == VehicleLoadingLine.item_id)
             .join(VehicleLoading, VehicleLoading.vehicle_loading_id == VehicleLoadingLine.vehicle_loading_id)
             .where(
                 VehicleLoading.vehicle_warehouse_id == vehicle_warehouse_id,
@@ -101,7 +106,10 @@ def compute_today_summary(
             )
         )
         sold_stmt = (
-            select(CommercialDocumentLine.item_id, CommercialDocumentLine.uom_id, func.sum(CommercialDocumentLine.quantity))
+            # سیستمِ واحد (R225): بارگیری/فروش/برگشت همه به واحدِ پایه جمع می‌شوند
+            # (فروشِ ۲ کارتن + ۳ عدد از یک کالا = یک ردیفِ تسویه).
+            select(CommercialDocumentLine.item_id, Item.base_uom_id, func.sum(CommercialDocumentLine.quantity_base))
+            .join(Item, Item.item_id == CommercialDocumentLine.item_id)
             .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
             .where(
                 CommercialDocument.company_id == company_id,
@@ -113,8 +121,8 @@ def compute_today_summary(
         if after is not None:
             loaded_stmt = loaded_stmt.where(VehicleLoading.created_at > after)
             sold_stmt = sold_stmt.where(CommercialDocument.created_at > after)
-        loaded_rows = session.execute(loaded_stmt.group_by(VehicleLoadingLine.item_id, VehicleLoadingLine.uom_id)).all()
-        sold_rows = session.execute(sold_stmt.group_by(CommercialDocumentLine.item_id, CommercialDocumentLine.uom_id)).all()
+        loaded_rows = session.execute(loaded_stmt.group_by(VehicleLoadingLine.item_id, Item.base_uom_id)).all()
+        sold_rows = session.execute(sold_stmt.group_by(CommercialDocumentLine.item_id, Item.base_uom_id)).all()
     sold_by_item = {(item_id, uom_id): qty for item_id, uom_id, qty in sold_rows}
     result = []
     seen = set()

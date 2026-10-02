@@ -1,10 +1,21 @@
 import React, { useMemo, useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { ApiClient } from "../api/client";
-import { CustomerRow, ItemRow, OrderLineInput } from "../api/types";
+import { CatalogItem, CustomerRow, ItemRow, OrderLineInput } from "../api/types";
 import { Button, Card, EmptyState, Input, SearchBar } from "../components";
 import { useTheme } from "../theme/ThemeProvider";
 import { OfflineQueue } from "../sync/offlineQueue";
+import { defaultSalesUnit, itemUnits, unitLabel } from "./invoice/cart";
+
+type Line = { quantity: string; unitPrice: string; uomId?: number };
+
+function asCatalogItem(it: ItemRow): CatalogItem {
+  return {
+    item_id: it.item_id, code: it.code, name: it.name, barcode: null, sku: null, category_id: null, brand_id: null,
+    base_uom_id: it.base_uom_id, base_uom_code: it.base_uom_code, default_tax_percent: null, stock_quantity: null,
+    photo_base64: null, units: it.units,
+  };
+}
 
 interface Props {
   customer: CustomerRow;
@@ -28,9 +39,9 @@ interface Props {
  * تاییدِ انبار/توزین -> تبدیل به فاکتور می‌رود (commercial_documents.
  * convert_to_invoice) -- ویزیتور این‌جا کاری با آن چرخه ندارد. */
 export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId, currencyId, apiClient, offlineQueue, onSubmitted }: Props) {
-  const { colors, spacing, typography } = useTheme();
+  const { colors, spacing, typography, radius } = useTheme();
   const [search, setSearch] = useState("");
-  const [lines, setLines] = useState<Record<number, { quantity: string; unitPrice: string }>>({});
+  const [lines, setLines] = useState<Record<number, Line>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const filteredItems = useMemo(() => {
@@ -40,6 +51,16 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
   }, [items, search]);
 
   const lineCount = Object.values(lines).filter((l) => Number(l.quantity) > 0).length;
+
+  const unitsOf = (it: ItemRow) => itemUnits(asCatalogItem(it));
+  const uomOf = (it: ItemRow) => lines[it.item_id]?.uomId ?? defaultSalesUnit(asCatalogItem(it)).uom_id;
+
+  /** تغییرِ واحد: قیمتِ قبلی مالِ واحدِ دیگر بود -- پاک و دوباره گرفته می‌شود. */
+  const setUnit = (it: ItemRow, uomId: number) => {
+    const current = lines[it.item_id];
+    setLines((prev) => ({ ...prev, [it.item_id]: { quantity: current?.quantity ?? "", unitPrice: "", uomId } }));
+    if (current?.quantity) lookupPrice(it.item_id, uomId, current.quantity);
+  };
 
   const setLine = (itemId: number, field: "quantity" | "unitPrice", value: string) => {
     setLines((prev) => ({ ...prev, [itemId]: { ...(prev[itemId] ?? { quantity: "", unitPrice: "" }), [field]: value } }));
@@ -65,7 +86,7 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
         const item = items.find((i) => i.item_id === Number(itemId));
         return {
           item_id: Number(itemId),
-          uom_id: item!.base_uom_id,
+          uom_id: l.uomId ?? defaultSalesUnit(asCatalogItem(item!)).uom_id,
           quantity: l.quantity,
           unit_price: l.unitPrice || "0",
           discount_amount: "0",
@@ -105,8 +126,10 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
         contentContainerStyle={{ gap: spacing.sm }}
         renderItem={({ item }) => {
           const line = lines[item.item_id];
+          const units = unitsOf(item);
+          const uomId = uomOf(item);
           return (
-            <Card style={{ padding: spacing.md }}>
+            <Card style={{ padding: spacing.md, gap: spacing.xs }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
                 <Text style={[typography.bodyBold, { color: colors.textPrimary, flex: 1 }]} numberOfLines={1}>
                   {item.name}
@@ -114,7 +137,7 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
                 <Input
                   value={line?.quantity ?? ""}
                   onChangeText={(v) => setLine(item.item_id, "quantity", v)}
-                  onEndEditing={(e) => lookupPrice(item.item_id, item.base_uom_id, e.nativeEvent.text)}
+                  onEndEditing={(e) => lookupPrice(item.item_id, uomId, e.nativeEvent.text)}
                   keyboardType="numeric"
                   placeholder="تعداد"
                   numeric
@@ -129,6 +152,27 @@ export function PreSalesOrderScreen({ customer, items, channelCode, warehouseId,
                   style={{ width: 100 }}
                 />
               </View>
+              {units.length > 1 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs }}>
+                  {units.map((u) => {
+                    const selected = u.uom_id === uomId;
+                    return (
+                      <TouchableOpacity
+                        key={u.uom_id}
+                        onPress={() => setUnit(item, u.uom_id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        style={{
+                          paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill,
+                          backgroundColor: selected ? colors.primary : colors.surfaceAlt,
+                        }}
+                      >
+                        <Text style={[typography.captionBold, { color: selected ? colors.textInverse : colors.textPrimary }]}>{unitLabel(u)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              ) : null}
             </Card>
           );
         }}
