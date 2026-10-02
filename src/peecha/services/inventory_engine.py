@@ -49,6 +49,7 @@ MAPPING_LABELS: dict[str, str] = {
     "INVENTORY_ADJUSTMENT_GAIN": "مازادِ اصلاحِ موجودی",
     "INVENTORY_ADJUSTMENT_LOSS": "کسریِ اصلاحِ موجودی",
     "INVENTORY_COST_VARIANCE": "مغایرتِ بهایِ استاندارد",
+    "INVENTORY_REVALUATION": "تسعیر/اصلاحِ ماندهٔ ریالیِ موجودیِ صفر",
     "SUPPLIER_PAYABLE": "حساب‌هایِ پرداختنیِ تامین‌کنندگان",
     "CUSTOMER_RECEIVABLE": "حساب‌هایِ دریافتنیِ مشتریان",
     "PURCHASE_TAX_RECEIVABLE": "مالياتِ خرید — قابلِ مطالبه",

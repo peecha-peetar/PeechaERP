@@ -77,6 +77,7 @@ _TYPE_TO_NAV_CODE = {
     "SALES_ORDER": "SALES_ORDER", "SALES_PROFORMA": "SALES_PROFORMA", "SALES_INVOICE": "SALES_INVOICE",
     "SALES_RETURN": "SALES_RETURN", "PURCHASE_ORDER": "PURCH_ORDER", "PURCHASE_PROFORMA": "PURCH_PROFORMA",
     "PURCHASE_INVOICE": "PURCH_INVOICE", "PURCHASE_RETURN": "PURCH_RETURN",
+    "CONSIGNMENT_IN": "PURCH_CONSIGNMENT_IN", "CONSIGNMENT_OUT": "SALES_CONSIGNMENT_OUT",
 }
 
 
@@ -205,6 +206,9 @@ class MyTasksScreen(FieldHelpMixin, QWidget):
         task = self._op_tasks[row]
         if task.kind == "GOODS_RECEIPT":
             self._main_window.open_screen("PURCH_GOODS_RECEIPT")
+            return
+        if task.kind == "INVENTORY_RESIDUAL":
+            self._main_window.open_screen("INV_RESIDUAL_ADJUST")
             return
         nav_code = _TYPE_TO_NAV_CODE.get(task.document_type_code)
         if nav_code is None:

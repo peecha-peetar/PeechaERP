@@ -22,7 +22,7 @@ from peecha import numerals, session as app_session
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.inventory_document import DOC_TYPE_TITLES, STATUS_LABELS
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, persist_column_widths
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "انبارِ مبدا", "انبارِ مقصد", "وضعیت", "شمارهٔ مرجع", "عملیات"]
 
@@ -94,6 +94,7 @@ class InventoryDocumentsListScreen(FieldHelpMixin, QWidget):
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
+        persist_column_widths(self.table, "inventoryDocumentsList")
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)

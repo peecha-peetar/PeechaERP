@@ -1823,6 +1823,21 @@ def _is_pre_sales_order(session, doc: CommercialDocument) -> bool:
     return channel is not None and channel.channel_type_code == "PRE_SALES"
 
 
+def receipt_eligible_statuses(company_id: int, document_type_code: str) -> tuple[str, ...]:
+    """R230: سفارشِ خرید فقط پس از «ثبتِ نهایی» به تاییدِ رسیدِ انبار می‌رسد -- مگر
+    مرحلهٔ ثبتِ نهاییِ سفارش در تنظیمات (PURCHASE_ORDER_SKIP_POST) حذف شده باشد."""
+    if document_type_code == "PURCHASE_ORDER" and not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST"):
+        return ("POSTED",)
+    return _PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES
+
+
+def consignment_requires_warehouse_approval(company_id: int, document_type_code: str) -> bool:
+    """R230: امانیِ ورودی/خروجی پیش از ثبتِ نهایی به تاییدِ انباردار برسد (تنظیمی)."""
+    return document_type_code in _CONSIGNMENT_TYPES and settings_service.is_feature_enabled(
+        company_id, "CONSIGNMENT_WAREHOUSE_APPROVAL"
+    )
+
+
 def _is_goods_receipt_eligible_order(session, doc: CommercialDocument) -> bool:
     """طبقِ گزارشِ صریحِ کاربر («بعدِ تاییدِ سفارشِ خرید، انباردار کجا
     رسیدِ کالا را تایید کند؟»): همان زیرساختِ تاییدِ انبار/مقدارِ تحویلیِ
@@ -1831,6 +1846,8 @@ def _is_goods_receipt_eligible_order(session, doc: CommercialDocument) -> bool:
     است؛ پیش‌فرض خاموش، یعنی رفتارِ قبلی (تبدیلِ مستقیم به فاکتور بدونِ
     مرحلهٔ جداگانهٔ رسید) دست‌نخورده می‌ماند."""
     if _is_pre_sales_order(session, doc):
+        return True
+    if consignment_requires_warehouse_approval(doc.company_id, doc.document_type_code):
         return True
     return doc.document_type_code == "PURCHASE_ORDER" and settings_service.is_feature_enabled(
         doc.company_id, "PURCHASE_ORDER_GOODS_RECEIPT"
@@ -1964,10 +1981,17 @@ def approve_warehouse(
             doc.warehouse_id = default_warehouse_id
         if not _is_goods_receipt_eligible_order(session, doc):
             raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» یا سفارشِ خریدِ دارایِ Toggleِ رسیدِ انبار معنا دارد.")
-        if doc.status_code not in _PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES:
-            raise ValueError("فقط سفارشِ تاییدشده/تصویب‌شده قابلِ‌تاییدِ انبار است.")
+        if doc.status_code not in receipt_eligible_statuses(company_id, doc.document_type_code):
+            raise ValueError(
+                "سفارشِ خرید ابتدا باید ثبتِ نهایی شود، سپس رسیدِ انبار." if doc.document_type_code == "PURCHASE_ORDER"
+                else "فقط سندِ تاییدشده/تصویب‌شده قابلِ‌تاییدِ انبار است."
+            )
         if doc.warehouse_approved_at is not None:
             raise ValueError("این سفارش قبلاً از سویِ انبار تایید شده است.")
+        if doc.document_type_code in _CONSIGNMENT_TYPES:
+            allowed = receivable_warehouse_ids(company_id, approved_by_user_id)
+            if allowed is not None and doc.warehouse_id not in allowed:
+                raise ValueError("شما انباردارِ انبارِ این سندِ امانی نیستید.")
         doc.warehouse_approved_by_user_id = approved_by_user_id
         doc.warehouse_approved_at = datetime.datetime.now()
         session.commit()
@@ -2129,18 +2153,27 @@ def list_purchase_order_goods_receipt_queue(company_id: int, user_id: int | None
     طبقِ گزارشِ صریحِ کاربر («بعدِ تاییدِ سفارش، انباردار کجا رسیدِ کالا را
     تایید کند؟»). فقط وقتی Toggleِ PURCHASE_ORDER_GOODS_RECEIPT برایِ
     شرکت روشن باشد نتیجه‌ای برمی‌گرداند -- وگرنه فهرست همیشه خالی است."""
-    if not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT"):
-        return []
+    docs: list[CommercialDocument] = []
     with new_session() as session:
-        stmt = (
-            select(CommercialDocument)
-            .where(
-                CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "PURCHASE_ORDER",
-                CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
+        if settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT"):
+            stmt = (
+                select(CommercialDocument)
+                .where(
+                    CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "PURCHASE_ORDER",
+                    CommercialDocument.status_code.in_(receipt_eligible_statuses(company_id, "PURCHASE_ORDER")),
+                )
+                .order_by(CommercialDocument.document_id)
             )
-            .order_by(CommercialDocument.document_id)
-        )
-        docs = [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
+            docs = [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
+        if settings_service.is_feature_enabled(company_id, "CONSIGNMENT_WAREHOUSE_APPROVAL"):
+            # R230: امانیِ ورودی/خروجیِ تاییدشده که هنوز ثبتِ نهایی (جابه‌جاییِ کالا) نشده
+            docs += list(session.scalars(
+                select(CommercialDocument).where(
+                    CommercialDocument.company_id == company_id,
+                    CommercialDocument.document_type_code.in_(_CONSIGNMENT_TYPES),
+                    CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
+                ).order_by(CommercialDocument.document_id)
+            ))
     allowed = receivable_warehouse_ids(company_id, user_id) if user_id is not None else None
     if allowed is None:
         return docs
@@ -2453,20 +2486,61 @@ def _build_consignment_in_settlement_je(
             session.execute(select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(item_ids))).all()
         )
 
+    # R230: بهایِ ثبت‌شده در لحظهٔ امانیِ ورودی (حتی صفر/تخمینی) همان بهایِ موجودی
+    # است؛ اختلافِ قیمتِ نهاییِ تسویه با آن، برایِ بخشی که هنوز در انبار است
+    # ارزشِ موجودی را اصلاح می‌کند و برایِ بخشی که پیش از تسویه فروخته شده
+    # به بهایِ تمام‌شدهٔ فروش می‌رود (همان روشِ اصلاحِ بهایِ خرید).
     total = _ZERO
     inventory_by_item: dict[int, decimal.Decimal] = {}
+    cogs_by_item: dict[int, decimal.Decimal] = {}
     for snap in line_snapshots:
-        item_id, quantity, unit_cost = snap[1], snap[3], snap[5]
-        amount = _money(quantity * unit_cost)
-        total += amount
+        line_id, item_id, quantity, quantity_base, unit_price = snap[0], snap[1], snap[3], snap[4], snap[5]
+        settled_amount = _money(quantity * unit_price - (snap[8] or _ZERO))
+        total += settled_amount
+        recorded_amount = settled_amount
+        inventory_amount, cogs_amount = settled_amount, _ZERO
+        with new_session() as session:
+            line = session.get(CommercialDocumentLine, line_id)
+            source = session.get(CommercialDocumentLine, line.source_line_id) if line and line.source_line_id else None
+            source_doc = session.get(CommercialDocument, source.document_id) if source is not None else None
+        if source is not None and source.quantity_base and quantity_base:
+            recorded_unit = (source.quantity * source.unit_price - (source.discount_amount or _ZERO)) / source.quantity_base
+            recorded_amount = _money(quantity_base * recorded_unit)
+            delta_per_base = (settled_amount / quantity_base) - recorded_unit
+            inventory_amount, cogs_amount = recorded_amount, _ZERO
+            if delta_per_base and source_doc is not None and source_doc.warehouse_id is not None:
+                try:
+                    correction = inv_engine_service.apply_purchase_cost_correction(
+                        item_id, source_doc.warehouse_id, None, company_id, quantity_base, delta_per_base,
+                    )
+                    inventory_amount += correction.inventory_value_delta
+                    cogs_amount += correction.variance_value_delta
+                except ValueError:
+                    cogs_amount += _money(quantity_base * delta_per_base)
+            # گردِ کردن: جمعِ بدهکار دقیقاً برابرِ بستانکار
+            cogs_amount += settled_amount - (inventory_amount + cogs_amount)
         detail_account_id = item_detail_account_by_item_id.get(item_id)
-        if detail_account_id is not None:
-            inventory_by_item[detail_account_id] = inventory_by_item.get(detail_account_id, _ZERO) + amount
+        inventory_by_item[detail_account_id] = inventory_by_item.get(detail_account_id, _ZERO) + inventory_amount
+        if cogs_amount:
+            cogs_by_item[detail_account_id] = cogs_by_item.get(detail_account_id, _ZERO) + cogs_amount
 
-    je_lines: list[je_service.LineInput] = _build_role_je_lines(
-        inventory_account_id, description, extra_dims, total, is_debit=True,
-        item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account=inventory_by_item,
-    )
+    je_lines: list[je_service.LineInput] = []
+    for k, v in inventory_by_item.items():
+        if v:
+            je_lines += _build_role_je_lines(
+                inventory_account_id, description, extra_dims, abs(v), is_debit=v > 0,
+                item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account={k: abs(v)},
+            )
+    if any(cogs_by_item.values()):
+        cogs_account_id = inv_engine_service.get_account_mapping(company_id, "COGS")
+        if cogs_account_id is None:
+            raise ValueError("حسابِ «بهایِ تمام‌شده» در تنظیماتِ انبار مشخص نشده است (اختلافِ بهایِ امانیِ فروخته‌شده).")
+        for k, v in cogs_by_item.items():
+            if v:
+                je_lines += _build_role_je_lines(
+                    cogs_account_id, f"{description} -- اختلافِ بهایِ امانیِ فروخته‌شده", extra_dims, abs(v), is_debit=v > 0,
+                    item_dim_type_id=item_dim_type_id, amounts_by_item_detail_account={k: abs(v)},
+                )
     je_lines.append(
         je_service.LineInput(
             account_id=ap_account_id, description=description, debit=_ZERO, credit=total,
@@ -2593,6 +2667,9 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         # همان بررسی ساخته شده‌اند و ممکن است هنوز بدونِ انبار مانده
         # باشند؛ بدونِ آن، این سندها برایِ همیشه در همین حلقه‌یِ ثبتِ‌
         # نهایی/شکست گیر می‌کردند.
+        if consignment_requires_warehouse_approval(company_id, document_type_code) and doc.warehouse_approved_at is None:
+            raise ValueError("این سندِ امانی هنوز به تاییدِ انباردار نرسیده است -- ابتدا از «تاییدِ رسیدِ کالا» تایید شود.")
+
         if document_type_code in _STOCK_DOC_TYPE_BY_TYPE and doc.warehouse_id is None:
             default_warehouse = locations_service.get_default_warehouse(company_id)
             if default_warehouse is not None:

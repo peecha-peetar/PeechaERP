@@ -597,6 +597,11 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         self._save_geometry()
         event.ignore()
         self.hide()
+        # R230: بستنِ فرم حالتِ تمرکز را تمام می‌کند -- وگرنه با بازماندنِ فرمِ
+        # دیگری (مثلاً داشبورد) منو/ریبون پنهان می‌ماند.
+        main_window = getattr(self, "_main_window", None)
+        if main_window is not None:
+            main_window._focus_mode = False
         self.maximized_changed.emit(False)
         # R226: زیرپنجرهٔ فقط-مخفی داخلِ QMdiArea می‌ماند و Qt هنگامِ maximize/
         # بازگشتِ فرمِ دیگر آن را دوباره (کاشی‌ای) نشان می‌داد؛ پس واقعاً از
@@ -1393,6 +1398,10 @@ class MainWindow(QMainWindow):
         عرض/ارتفاعِ زیرِ هدرِ اصلی را در اختیارِ فرمِ maximize‌شده بگذارد؛
         با خارج‌شدن از حالتِ maximize (یا بستنِ فرم)، هردو دوباره
         نمایش داده می‌شوند."""
+        # R230: با بستنِ آخرین فرم، حالتِ تمرکز خودکار تمام می‌شود -- وگرنه
+        # منو/ریبون پنهان می‌ماند و راهی برایِ بازکردنِ فرمِ دیگر نبود.
+        if not any(sw.isVisible() for sw in self.mdi_area.subWindowList()):
+            self._focus_mode = False
         focus = getattr(self, "_focus_mode", False)
         self._quick_access_scroll.setVisible(not focus)
         self._sidebar_scroll.setVisible(not focus)
@@ -1513,6 +1522,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.purchase_goods_receipt import PurchaseGoodsReceiptScreen
         from peecha.ui.screens.stock_count import StockCountScreen
         from peecha.ui.screens.lot_trace import LotTraceScreen
+        from peecha.ui.screens.inventory_residual import InventoryResidualScreen
         from peecha.ui.screens.commercial_settlement import InvoiceSettlementScreen
         from peecha.ui.screens.installments_list import InstallmentsListScreen
         from peecha.ui.screens.commercial_consignment_tracking import ConsignmentTrackingScreen
@@ -1644,6 +1654,7 @@ class MainWindow(QMainWindow):
         self.register_screen("purchase_goods_receipt", PurchaseGoodsReceiptScreen())
         self.register_screen("stock_count", StockCountScreen())
         self.register_screen("lot_trace", LotTraceScreen())
+        self.register_screen("inventory_residual", InventoryResidualScreen())
         # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
         # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
         # همان کلاس با invoice_type متفاوت است.

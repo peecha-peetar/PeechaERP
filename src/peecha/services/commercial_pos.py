@@ -982,3 +982,76 @@ def list_recent_pos_invoices(company_id: int, limit: int = 10) -> list[Commercia
             .limit(limit)
         )
         return list(session.scalars(stmt))
+
+
+_CHECK_METHOD_CODES = ("CHECK", "CHECK_DISBURSEMENT")
+
+
+def post_invoice_settlement_plan(company_id: int, user_id: int, document_id: int) -> tuple[int | None, decimal.Decimal]:
+    """R230: پس از ثبتِ نهاییِ فاکتورِ خرید/فروش، «نحوهٔ تسویه»ٔ تاییدشده خودکار
+    سندِ دریافت/پرداختِ خزانه‌داری (و سندِ حسابداری) می‌سازد و به همان فاکتور
+    تخصیص می‌یابد -- قبلاً فقط فرمِ دریافت/پرداخت پیش‌پر می‌شد و اگر کاربر آن را
+    ذخیره نمی‌کرد هیچ سندی در دفترِ روزنامه ثبت نمی‌شد.
+    ردیف‌هایِ چک (نیازمندِ شماره/سررسید) خودکار ثبت نمی‌شوند؛ مبلغِ آن‌ها
+    برگردانده می‌شود تا فرمِ دریافت/پرداخت فقط برایِ همان بخش باز شود.
+    خروجی: (شناسهٔ سندِ حسابداری یا None، مبلغِ باقی‌ماندهٔ چکی)."""
+    plan = settlements_service.get_settlement_plan(document_id, company_id)
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("سند نامعتبر است.")
+        is_sales = doc.document_type_code == "SALES_INVOICE"
+        counterparty_id = doc.counterparty_detail_account_id
+        document_date = doc.document_date
+        document_no = doc.document_no
+    if plan is None or not plan.lines:
+        return None, decimal.Decimal(0)
+    auto_lines = [ln for ln in plan.lines if ln.method_code not in _CHECK_METHOD_CODES and ln.amount > 0]
+    check_total = sum((ln.amount for ln in plan.lines if ln.method_code in _CHECK_METHOD_CODES), decimal.Decimal(0))
+    if not auto_lines:
+        return None, check_total
+    direction = "RECEIPT" if is_sales else "PAYMENT"
+    group_code = "CUSTOMER" if is_sales else "SUPPLIER"
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    group_id = next((g.person_group_id for g in dimensions_service.list_person_groups(company_id) if g.code == group_code), None)
+    mapping_account_id = next(
+        (m.account_id for m in treasury_service.list_counterparty_mappings(company_id, direction) if m.person_group_id == group_id),
+        None,
+    )
+    if mapping_account_id is None:
+        raise ValueError(
+            f"نگاشتِ حسابِ {'دریافت' if is_sales else 'پرداخت'} برایِ گروهِ «{'مشتری' if is_sales else 'تامین‌کننده'}» "
+            "در تنظیماتِ خزانه‌داری مشخص نشده است."
+        )
+    cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
+    project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+    voucher_lines = []
+    total = decimal.Decimal(0)
+    for ln in auto_lines:
+        default = settlements_service.get_pos_settlement_method_default(company_id, ln.method_code)
+        detail_account_id = ln.detail_account_id
+        extra_details: dict[int, int] = {}
+        if default is not None:
+            detail_account_id = detail_account_id or default.detail_account_id
+            if default.cost_center_detail_account_id is not None:
+                extra_details[cost_center_type_id] = default.cost_center_detail_account_id
+            if default.project_detail_account_id is not None:
+                extra_details[project_type_id] = default.project_detail_account_id
+        voucher_lines.append(treasury_service.MethodLine(
+            method=ln.method_code, amount=ln.amount, description=ln.note or "",
+            detail_account_id=detail_account_id, extra_details=(extra_details or None),
+        ))
+        total += ln.amount
+    counterparty_details = _resolve_receivable_counterparty_details(
+        company_id, person_dimension_type_id, counterparty_id, cost_center_type_id, project_type_id,
+    )
+    title = "فاکتورِ فروش" if is_sales else "فاکتورِ خرید"
+    result = treasury_service.create_treasury_voucher(
+        company_id, user_id, direction, mapping_account_id, counterparty_details, document_date,
+        f"{'دریافت' if is_sales else 'پرداخت'} بابتِ {title} #{document_no}", voucher_lines,
+    )
+    settlements_service.allocate_settlement(
+        company_id, document_id, result.journal_entry_id, datetime.date.today(), total, user_id,
+        description=f"تسویهٔ خودکار طبقِ نحوهٔ تسویهٔ {title}",
+    )
+    return result.journal_entry_id, check_total

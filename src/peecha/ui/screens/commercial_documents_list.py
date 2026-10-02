@@ -37,7 +37,7 @@ from peecha.ui.screens.commercial_document import (
     _show_invoice_print,
     convert_warehouse_context,
 )
-from peecha.ui.widgets import FieldHelpMixin
+from peecha.ui.widgets import FieldHelpMixin, persist_column_widths
 
 _COLUMNS = ["ردیف", "نوع", "شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "وضعیت", "شمارهٔ مرجع", "وضعیتِ تبدیل", "عملیات"]
 
@@ -156,6 +156,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
+        persist_column_widths(self.table, "commercialDocumentsList")
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -466,7 +467,10 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         """R226: مرحلهٔ بعدیِ گردشِ کار همین‌جا در ردیف -- (برچسب، راهنما، اقدام) یا None."""
         company_id = self._company_id()
         user = app_session.current_user
-        if company_id is None or user is None or d.status_code not in ("CONFIRMED", "APPROVED"):
+        if company_id is None or user is None:
+            return None
+        is_order = d.document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES
+        if d.status_code not in ("CONFIRMED", "APPROVED") and not (is_order and d.status_code == "POSTED"):
             return None
         doc_id = d.document_id
         doc_type = d.document_type_code
@@ -481,9 +485,23 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             return ("تصویب", "مرحلهٔ بعد: تصویبِ مدیر", lambda: self._approve_document(doc_id))
         if doc_type == "PURCHASE_ORDER":
             needs_receipt = settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT") and d.warehouse_approved_at is None
+            if needs_receipt and d.status_code not in documents_service.receipt_eligible_statuses(company_id, doc_type):
+                # R230: سفارش ابتدا ثبتِ نهایی می‌شود، بعد به تاییدِ رسیدِ انبار می‌رسد
+                if not roles_service.is_manager(user.user_id, company_id):
+                    return None
+                nav_code = _TYPE_TO_NAV_CODE[doc_type]
+                return ("ثبتِ نهایی", "مرحلهٔ بعد: ثبتِ نهاییِ سفارش (سپس تاییدِ رسیدِ انبار)",
+                        lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
             if needs_receipt:
                 return ("رسیدِ کالا", "مرحلهٔ بعد: تاییدِ رسیدِ کالا توسطِ انباردار",
                         lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
+        if doc_type in ("CONSIGNMENT_IN", "CONSIGNMENT_OUT") and d.status_code in ("CONFIRMED", "APPROVED"):
+            if documents_service.consignment_requires_warehouse_approval(company_id, doc_type) and d.warehouse_approved_at is None:
+                return ("تاییدِ انبار", "مرحلهٔ بعد: تاییدِ انباردار", lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
+            if roles_service.is_manager(user.user_id, company_id):
+                nav_code = _TYPE_TO_NAV_CODE[doc_type]
+                return ("ثبتِ نهایی", "مرحلهٔ بعد: ثبتِ نهاییِ امانی (جابه‌جاییِ کالا)",
+                        lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
         if doc_type in _CONVERTIBLE_TO_INVOICE_TYPES:
             ready = fulfillment is not None and fulfillment[1] < fulfillment[0] and (
                 pre_sales_status is None or pre_sales_status == "آمادهٔ تبدیل به فاکتور"

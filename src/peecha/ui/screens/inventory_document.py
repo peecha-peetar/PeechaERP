@@ -53,7 +53,7 @@ from peecha.ui.screens.treasury_voucher import (
     _print_receipt_document,
     _receipt_font_family,
 )
-from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper, add_quick_add_button
+from peecha.ui.widgets import FieldHelpMixin, FormScreenBase, JalaliDateEdit, SectionStepper, add_quick_add_button, persist_column_widths
 
 DOC_TYPE_TITLES = {
     "RECEIPT": "رسید",
@@ -783,6 +783,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
         self.lines_table.verticalHeader().setDefaultSectionSize(48)
+        persist_column_widths(self.lines_table, f"stockLines/{self.document_type_code}")
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         last_col = len(_LINE_COLUMNS) - 1
         self.lines_table.horizontalHeader().setSectionResizeMode(last_col, QHeaderView.Fixed)

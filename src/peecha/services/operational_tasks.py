@@ -24,6 +24,7 @@ _DOC_TYPE_TITLES = {
     "SALES_ORDER": "سفارشِ فروش", "SALES_PROFORMA": "پیش‌فاکتورِ فروش", "SALES_INVOICE": "فاکتورِ فروش",
     "SALES_RETURN": "برگشت از فروش", "PURCHASE_ORDER": "سفارشِ خرید", "PURCHASE_PROFORMA": "پیش‌فاکتورِ خرید",
     "PURCHASE_INVOICE": "فاکتورِ خرید", "PURCHASE_RETURN": "برگشت به تامین‌کننده",
+    "CONSIGNMENT_IN": "امانیِ ورودی", "CONSIGNMENT_OUT": "امانیِ خروجی",
 }
 
 # نوعِ کار -> برچسب
@@ -33,6 +34,8 @@ KIND_LABELS = {
     "PRE_SALES_WAREHOUSE": "تاییدِ انبارِ سفارش",
     "SETTLEMENT_APPROVAL": "تاییدِ نحوهٔ تسویه",
     "CONVERT_TO_INVOICE": "تبدیل به فاکتور",
+    "POST_ORDER": "ثبتِ نهاییِ سفارش (پیش از رسید)",
+    "INVENTORY_RESIDUAL": "اصلاحِ ماندهٔ ریالیِ موجودیِ صفر",
 }
 
 
@@ -96,6 +99,19 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
             manager_docs, plan_docs = [], []
     tasks += _rows(company_id, manager_docs, "MANAGER_APPROVAL")
 
+    # R230: سفارشِ خریدی که تا ثبتِ نهایی نشود به تاییدِ رسید نمی‌رسد
+    if is_manager and settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT") \
+            and not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST"):
+        skip_approval = settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL")
+        with new_session() as session:
+            to_post = list(session.scalars(
+                select(CommercialDocument).where(
+                    CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "PURCHASE_ORDER",
+                    CommercialDocument.status_code.in_(("CONFIRMED", "APPROVED") if skip_approval else ("APPROVED",)),
+                ).order_by(CommercialDocument.document_id)
+            ))
+        tasks += _rows(company_id, to_post, "POST_ORDER")
+
     receipt_queue = documents_service.list_purchase_order_goods_receipt_queue(company_id, user_id)
     tasks += _rows(company_id, [d for d in receipt_queue if d.warehouse_approved_at is None], "GOODS_RECEIPT")
 
@@ -113,4 +129,17 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
         if d.warehouse_approved_at is not None and (is_manager or d.created_by_user_id == user_id)
     ]
     tasks += _rows(company_id, received, "CONVERT_TO_INVOICE")
+
+    if is_manager:
+        from peecha.services import inventory_residual as residual_service
+
+        try:
+            residuals = residual_service.list_residuals(company_id)
+        except Exception:  # noqa: BLE001 -- هشدارِ اختیاری نباید کارتابل را از کار بیندازد
+            residuals = []
+        if residuals:
+            tasks.append(OperationalTask(
+                "INVENTORY_RESIDUAL", KIND_LABELS["INVENTORY_RESIDUAL"], 0, "",
+                f"{len(residuals)} کالا با موجودیِ صفر و ماندهٔ ریالی -- پیشنهادِ سندِ تسعیر", "", None, "",
+            ))
     return tasks

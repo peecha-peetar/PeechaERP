@@ -42,6 +42,7 @@ from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_pricing as pricing_service
+from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import commercial_settings as settings_service
 from peecha.services import commercial_settlements as settlements_service
@@ -81,6 +82,7 @@ from peecha.ui.widgets import (
     SummaryCard,
     SummaryCardBar,
     add_quick_add_button,
+    persist_column_widths,
 )
 
 DOC_TYPE_TITLES = {
@@ -1711,6 +1713,7 @@ class _ConvertToInvoiceDialog(LayoutEditMixin, QDialog):
             self._warehouse_combos[f.line_id] = wh_combo
             table.setCellWidget(row_index, 6, wh_combo)
         table.resizeRowsToContents()
+        persist_column_widths(table, "convertToInvoice")
         layout.addWidget(table)
 
         self.status_label = QLabel("")
@@ -2772,7 +2775,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # نیازی به کوچک‌کردنِ دستیِ آن نیست.
         _line_column_widths = {
             1: 220,  # کالا
-            2: 80,   # مقدار
+            2: 170,  # مقدار + واحد (R230: کمبویِ واحد کنارِ مقدار جا نمی‌شد)
             3: 140,  # بهایِ واحد (فی)
             4: 165,  # تخفیف (کمبویِ نوع + فیلدِ مبلغ/درصد)
             5: 70,   # درصدِ مالیات
@@ -2787,12 +2790,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # داده، همان مقدار (مشترک بینِ همه‌یِ فرم‌هایِ خرید/فروش) به‌جایِ
             # پیش‌فرض به‌کار می‌رود.
             saved_width = settings.value(f"linesTable/column_{column_index}/width", None, type=int)
+            if column_index == 2 and saved_width:
+                saved_width = max(saved_width, 150)
             self.lines_table.setColumnWidth(column_index, saved_width if saved_width else width)
         self.lines_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
         self.lines_table.horizontalHeader().sectionResized.connect(self._on_lines_table_column_resized)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
         self.body_layout.addWidget(self.lines_table)
+        # R230: موجودیِ کالایِ انتخاب‌شده در ردیفِ ورودی -- بلافاصله پس از انتخاب
+        self.entry_stock_label = QLabel("")
+        self.entry_stock_label.setObjectName("sectionHint")
+        self.entry_stock_label.setWordWrap(True)
+        self.body_layout.addWidget(self.entry_stock_label)
 
         self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
 
@@ -3635,7 +3645,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # نمی‌کند؛ فقط زدنِ صریحِ Enter (بعد از دیدنِ انتخابِ نهایی) تصمیم
         # می‌گیرد که دیالوگِ متغیرها باز شود یا فوکوس به ردیف ادامه یابد.
         _enter_signal(item_combo).connect(self._on_entry_row_item_enter)
-        enter_chain = [qty_field, price_field, discount_field, discount_type_combo, tax_field, description_field]
+        # R230: بعد از مقدار (و واحد)، برایِ کالایِ بچ/سریال‌دار پنجرهٔ ردیابی باز می‌شود
+        # و پس از تایید، ورودِ بقیهٔ ردیف (قیمت/تخفیف/...) ادامه می‌یابد.
+        _enter_signal(qty_field).connect(lambda: (self._open_entry_row_tracking(), price_field.setFocus()))
+        enter_chain = [price_field, discount_field, discount_type_combo, tax_field, description_field]
         for widget, next_widget in zip(enter_chain, enter_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
         _enter_signal(description_field).connect(self._commit_entry_row)
@@ -3675,6 +3688,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         widgets["info_kardex_button"].setEnabled(True)
         widgets["info_price_button"].setEnabled(True)
         widgets["item_combo"].setToolTip(self._item_info_tooltip_text(item_id))
+        self._show_entry_stock(item)
         if widgets.get("uom_item_id") != item.item_id:
             widgets["uom_item_id"] = item.item_id
             self._fill_entry_row_uoms(item)
@@ -3887,6 +3901,65 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         inv_documents_service.confirm_stock_document(transfer_id, company_id)
         inv_documents_service.post_stock_document(transfer_id, company_id, user_id)
 
+    def _show_entry_stock(self, item) -> None:
+        company_id = self._company_id()
+        if company_id is None or item is None:
+            self.entry_stock_label.setText("")
+            return
+        rows = engine_service.get_item_stock_by_warehouse(company_id, item.item_id)
+        warehouse_id = self.warehouse_combo.currentData()
+        total = sum((r.quantity_on_hand for r in rows), decimal.Decimal(0))
+        here = sum((r.quantity_on_hand for r in rows if r.warehouse_id == warehouse_id), decimal.Decimal(0))
+        uom_name = self._uom_codes.get(item.base_uom_id, "")
+        dp = self._uom_decimal_places.get(item.base_uom_id, 2)
+        text = f"موجودیِ «{item.name or item.code}»: "
+        if warehouse_id is not None:
+            text += f"این انبار {numerals.format_money(here, dp)} {uom_name} -- "
+        text += f"کلِ انبارها {numerals.format_money(total, dp)} {uom_name}"
+        theme.set_status_label(self.entry_stock_label, text, ok=(here if warehouse_id is not None else total) > 0)
+
+    def _entry_row_needs_tracking(self, item) -> bool:
+        if item is None:
+            return False
+        if item.track_batch or item.track_serial:
+            return True
+        company_id = self._company_id()
+        return (
+            self.document_type_code in _LOT_OUT_TYPES and company_id is not None
+            and lot_tracking_service.has_pools(company_id, item.item_id)
+        )
+
+    def _open_entry_row_tracking(self, force: bool = False) -> bool:
+        """پنجرهٔ بچ/سریال/انقضا برایِ ردیفِ در حالِ ورود (پیش از ذخیرهٔ ردیف)؛
+        False یعنی کاربر انصراف داد."""
+        from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
+
+        widgets = getattr(self, "_entry_row_widgets", None)
+        company_id = self._company_id()
+        if not widgets or company_id is None:
+            return True
+        item_id = widgets["item_combo"].currentData()
+        item = next((it for it in self._items if it.item_id == item_id), None)
+        if not self._entry_row_needs_tracking(item) or widgets["qty"].value() <= 0:
+            return True
+        uom_id = widgets["uom"].currentData() or item.base_uom_id
+        quantity_base = decimal.Decimal(str(widgets["qty"].value())) * widgets["uom_factors"].get(uom_id, decimal.Decimal(1))
+        signature = (item_id, quantity_base)
+        if not force and widgets.get("tracking_signature") == signature:
+            return True
+
+        def stash(entries) -> None:
+            widgets["pending_tracking"] = entries
+            widgets["tracking_signature"] = signature
+
+        is_out = self.document_type_code in _LOT_OUT_TYPES
+        dialog = LotTrackingDialog(
+            self, company_id, item_id, f"{item.code} — {item.name or ''}", quantity_base,
+            direction="OUT" if is_out else "IN", warehouse_id=self.warehouse_combo.currentData(),
+            on_save=stash, initial_entries=widgets.get("pending_tracking"),
+        )
+        return dialog.exec() == QDialog.Accepted
+
     def _commit_entry_row(self) -> None:
         widgets = getattr(self, "_entry_row_widgets", None)
         if not widgets:
@@ -3901,6 +3974,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         item = next((it for it in self._items if it.item_id == item_id), None)
         if item is None:
             return
+        if self._entry_row_needs_tracking(item) and not self._open_entry_row_tracking():
+            return
+        pending_tracking = widgets.get("pending_tracking")
         # طبقِ رفعِ باگِ واقعی: اگر سند هنوز ذخیره نشده، _ensure_saved زیرِ
         # پوست _load_document (بازسازیِ کاملِ lines_table، از جمله همینِ
         # ردیفِ ورودی) را صدا می‌زند -- پس همه‌یِ مقادیر باید *پیش* از آن
@@ -3921,7 +3997,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if not self._ensure_saved():
             return
         try:
-            documents_service.add_line(
+            new_line_id = documents_service.add_line(
                 self._document_id, self._company_id(), item_id=item_id, uom_id=uom_id,
                 quantity=quantity, quantity_base=quantity * uom_factor, unit_price=unit_price,
                 discount_amount=decimal.Decimal(0) if is_percent_discount else discount_value,
@@ -3929,6 +4005,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 tax_percent=tax_percent, description=description,
                 warehouse_id=warehouse_id,
             )
+            if pending_tracking:
+                lot_tracking_service.set_line_tracking(self._company_id(), pending_tracking, commercial_line_id=new_line_id)
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return
@@ -5040,20 +5118,39 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             nav_code = "TREASURY_RECEIPT" if is_sales else "TREASURY_PAYMENT"
             description = f"بابتِ {DOC_TYPE_TITLES[posted_type]}ِ #{numerals.to_persian_digits(str(posted_no))}"
             if posted_settlement_plan is not None and posted_settlement_plan.lines_total > 0:
-                # نقشه‌یِ تسویه‌یِ ازپیش‌تاییدشده مستقیماً در فرمِ دریافت/
-                # پرداخت پر می‌شود (دیگر پرسیدنِ «آیا ثبت شود؟» لازم
-                # نیست -- خودِ ثبتِ نهایی مستلزمِ داشتنِ همین نقشه بود) و
-                # با ذخیرهٔ همان فرم، خودکار به همین فاکتور هم تسویه/وصل
-                # می‌شود (settle_invoices).
-                method_lines = [(ln.method_code, ln.amount, ln.note) for ln in posted_settlement_plan.lines]
-                self._main_window.open_screen(
-                    nav_code,
-                    then=lambda screen: screen.prefill_for_invoice(
-                        posted_counterparty_id, posted_settlement_plan.lines_total, description,
-                        settle_invoices=[(posted_document_id, posted_settlement_plan.lines_total)],
-                        method_lines=method_lines,
-                    ),
-                )
+                # R230: نحوهٔ تسویهٔ تاییدشده خودکار سندِ دریافت/پرداخت (و سندِ
+                # حسابداری) می‌سازد و به فاکتور تخصیص می‌یابد؛ فقط ردیف‌هایِ چک
+                # (شماره/سررسید لازم دارند) در فرمِ دریافت/پرداخت باز می‌شوند.
+                try:
+                    voucher_je_id, check_total = pos_service.post_invoice_settlement_plan(
+                        company_id, app_session.current_user.user_id, posted_document_id,
+                    )
+                except ValueError as exc:
+                    voucher_je_id, check_total = None, posted_settlement_plan.lines_total
+                    QMessageBox.warning(
+                        self, "ثبتِ خودکارِ دریافت/پرداخت",
+                        f"{exc}\nفرمِ دریافت/پرداخت برایِ ثبتِ دستی باز می‌شود.",
+                    )
+                if voucher_je_id is not None:
+                    theme.set_status_label(
+                        self.status_label,
+                        f"سند ثبتِ نهایی شد.{je_note} سندِ {'دریافت' if is_sales else 'پرداخت'} هم طبقِ نحوهٔ تسویه ثبت و به فاکتور تخصیص یافت.",
+                        ok=True,
+                    )
+                if check_total > 0:
+                    lines_for_form = (
+                        [(ln.method_code, ln.amount, ln.note) for ln in posted_settlement_plan.lines]
+                        if voucher_je_id is None else
+                        [(ln.method_code, ln.amount, ln.note) for ln in posted_settlement_plan.lines if ln.method_code in ("CHECK", "CHECK_DISBURSEMENT")]
+                    )
+                    self._main_window.open_screen(
+                        nav_code,
+                        then=lambda screen: screen.prefill_for_invoice(
+                            posted_counterparty_id, check_total, description,
+                            settle_invoices=[(posted_document_id, check_total)],
+                            method_lines=lines_for_form,
+                        ),
+                    )
             elif posted_settlement_plan is None:
                 noun = "دریافتِ وجه" if is_sales else "پرداختِ وجه"
                 confirm_payment = QMessageBox.question(

@@ -55,6 +55,24 @@ from peecha.ui import theme
 _FIELD_HELP_SETTINGS_KEY = "field_help/enabled"
 
 
+def persist_column_widths(table, key: str, skip_columns: tuple[int, ...] = ()) -> None:
+    """R230: عرضِ ستون‌هایی که کاربر دستی تغییر داده ذخیره و دفعهٔ بعد اعمال می‌شود."""
+    settings = QSettings("Peecha", "PeechaERP")
+    header = table.horizontalHeader()
+    for column in range(table.columnCount()):
+        if column in skip_columns:
+            continue
+        width = settings.value(f"columnWidths/{key}/{column}", None, type=int)
+        if width:
+            table.setColumnWidth(column, width)
+
+    def save(column: int, _old: int, new: int) -> None:
+        if column not in skip_columns and new > 0:
+            QSettings("Peecha", "PeechaERP").setValue(f"columnWidths/{key}/{column}", new)
+
+    header.sectionResized.connect(save)
+
+
 def show_saved_dialog(parent: QWidget | None, text: str, title: str = "ذخیره") -> QMessageBox:
     """R226 (درخواستِ صریح): پیامِ ذخیره در یک پنجرهٔ تعاملی با دکمهٔ «تایید»،
     نه فقط متنِ وضعیت. غیرِمسدودکننده (open) تا جریانِ فرم/تست قفل نشود."""
