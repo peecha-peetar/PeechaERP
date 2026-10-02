@@ -1133,6 +1133,14 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.UserRole, ln.line_id)
                 self.lines_table.setItem(row_index, col_index, cell)
+            self.lines_table.removeCellWidget(row_index, len(values) - 1)
+            if item is not None and (item.track_batch or item.track_serial):
+                # R227: ورودِ بچ/سریال/انقضایِ همین ردیف
+                track_button = QPushButton("🏷 ردیابی")
+                track_button.setObjectName("iconButton")
+                track_button.setToolTip("بچ / سریال / تاریخِ انقضا")
+                track_button.clicked.connect(lambda _c=False, line=ln, it=item: self._open_lot_tracking(line, it))
+                self.lines_table.setCellWidget(row_index, len(values) - 1, track_button)
         # طبقِ گزارشِ صریحِ کاربر («فرمِ سندِ انبار هم یک ردیفِ ورودیِ
         # همیشه‌حاضر داشته باشد، مثلِ فرمِ خرید/فروش»): آخرین ردیفِ جدول،
         # وقتی سند هنوز پیش‌نویس است، همیشه یک ردیفِ خامِ قابلِ‌ورود است --
@@ -1144,6 +1152,19 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
 
     def _lines_are_editable(self) -> bool:
         return self._status_code == "DRAFT"
+
+    def _open_lot_tracking(self, line, item) -> None:
+        from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        dialog = LotTrackingDialog(
+            self, company_id, item.item_id, f"{item.code} — {item.name or ''}", line.quantity_base,
+            getattr(self, "_uom_names", {}).get(item.base_uom_id, ""), stock_line_id=line.line_id,
+            read_only=self._status_code not in ("DRAFT", "CONFIRMED") or bool(getattr(self, "_origin_label", None)),
+        )
+        dialog.exec()
 
     def _render_entry_row(self, row_index: int) -> None:
         doc_type = self.document_type_code

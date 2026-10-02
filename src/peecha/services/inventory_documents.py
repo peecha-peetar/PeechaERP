@@ -443,6 +443,9 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
                 bin_location_id=bin_location_id, destination_bin_location_id=destination_bin_location_id,
                 reason_code_id=reason_code_id, description=f"برگشتِ ردیفِ #{line_no} از سندِ #{original_no}",
             ))
+        from peecha.services import lot_tracking
+
+        lot_tracking.mirror_tracking_for_reversal(stock_document_id, reversal_doc_id)
         confirm_stock_document(reversal_doc_id, company_id)
         post_stock_document(reversal_doc_id, company_id, user_id)
     except ValueError:
@@ -647,9 +650,15 @@ def post_stock_document(
     stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
     extra_je_lines: list[je_service.LineInput] | None = None,
 ) -> engine_service.PostResult:
-    return engine_service.post_stock_document(
+    from peecha.services import lot_tracking
+
+    # R227: بچ/سریال/انقضا -- اعتبارسنجی پیش از موتورِ انبار، ثبتِ ردیابی پس از آن.
+    lot_tracking.validate_before_post(stock_document_id, company_id)
+    result = engine_service.post_stock_document(
         stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines,
     )
+    lot_tracking.apply_after_post(stock_document_id, company_id)
+    return result
 
 
 def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> engine_service.PostResult:
@@ -657,4 +666,8 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
     نه اینکه سندِ اصلی با تاریخِ عقب‌دار دست‌کاری شود») -- پیاده‌سازیِ کاملش
     در inventory_engine.py است (تنها نقطه‌یِ نوشتنِ stock_ledger/
     stock_balance)؛ این‌جا فقط delegate می‌کند، هم‌الگو با post_stock_document."""
-    return engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)
+    from peecha.services import lot_tracking
+
+    result = engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)
+    lot_tracking.reverse_document_movements(stock_document_id, company_id)
+    return result

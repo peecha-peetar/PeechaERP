@@ -43,7 +43,7 @@ from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin
 
 _COLUMNS = ["شماره", "تاریخ", "تامین‌کننده", "وضعیت", "عملیات"]
-_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی", "انبارِ دریافت"]
+_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی", "انبارِ دریافت", "بچ/سریال/انقضا"]
 
 
 def _status_label(doc) -> str:
@@ -173,6 +173,13 @@ class _GoodsReceiptDialog(QDialog):
             wh_combo.setEnabled(editable)
             self._line_warehouse_combos[ln.line_id] = wh_combo
             self.lines_table.setCellWidget(row_index, 4, wh_combo)
+            if item is not None and (item.track_batch or item.track_serial):
+                # R227: ورودِ بچ/سریال/انقضا هنگامِ تاییدِ رسید
+                track_button = QPushButton("🏷 ردیابی")
+                track_button.clicked.connect(
+                    lambda _c=False, line=ln, it=item, ro=not editable: self._open_lot_tracking(line, it, ro)
+                )
+                self.lines_table.setCellWidget(row_index, 5, track_button)
         self.lines_table.resizeRowsToContents()
 
         self.save_button.setEnabled(not converted)
@@ -192,6 +199,16 @@ class _GoodsReceiptDialog(QDialog):
         self.receipt_button.setStyleSheet("")
         self.receipt_button.style().unpolish(self.receipt_button)
         self.receipt_button.style().polish(self.receipt_button)
+
+    def _open_lot_tracking(self, line, item, read_only: bool) -> None:
+        from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
+
+        field = self._qty_fields.get(line.line_id)
+        delivered = decimal.Decimal(str(field.value())) if field is not None else line.quantity
+        LotTrackingDialog(
+            self, self._company_id, item.item_id, f"{item.code} — {item.name or ''}",
+            delivered * (line.conversion_factor or 1), commercial_line_id=line.line_id, read_only=read_only,
+        ).exec()
 
     def _apply_default_warehouse(self, *_args) -> None:
         wid = self.warehouse_combo.currentData()

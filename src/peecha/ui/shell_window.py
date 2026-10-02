@@ -395,7 +395,9 @@ class _MdiTitleBar(QWidget):
         layout.addWidget(self.maximize_btn)
 
         self.minimize_btn = self._make_control_button("—", theme.HOVER)
-        self.minimize_btn.clicked.connect(sub_window.showMinimized)
+        # R227: کوچک‌کردن = کنار رفتنِ فرم (مثلِ بستن؛ وضعیتِ فرم حفظ می‌شود)،
+        # نه نوارِ کوچکِ نیمه‌کاره در گوشهٔ ناحیه.
+        self.minimize_btn.clicked.connect(sub_window.close)
         layout.addWidget(self.minimize_btn)
 
         layout.addStretch(1)
@@ -415,10 +417,12 @@ class _MdiTitleBar(QWidget):
         return button
 
     def _toggle_maximize(self) -> None:
-        if self._sub_window.isMaximized():
-            self._sub_window.showNormal()
-        else:
-            self._sub_window.showMaximized()
+        # R227: به‌جایِ maximizeِ بومیِ Qt (که به فرم‌هایِ دیگر سرایت می‌کرد و
+        # با بازگشت اندازهٔ نیمه‌کاره می‌داد)، «حالتِ تمرکز» -- پنهان‌شدنِ
+        # ساید‌بار/ریبون برایِ همهٔ فرم‌ها؛ فرم‌ها همیشه کلِ ناحیه را پر می‌کنند.
+        main_window = getattr(self._sub_window, "_main_window", None)
+        if main_window is not None:
+            main_window.toggle_focus_mode()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton:
@@ -604,8 +608,24 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
     def changeEvent(self, event) -> None:  # noqa: N802
         if event.type() == QEvent.WindowStateChange:
             self.maximized_changed.emit(self.isMaximized())
-            self._save_geometry()
+            # R227: حالتِ maximize/minimizeِ بومی (مثلاً سرایتِ QMdiArea) به
+            # همان چیدمانِ یکسانِ «پرکردنِ ناحیه» برگردانده می‌شود.
+            if (self.isMaximized() or self.isMinimized()) and not getattr(self, "_normalizing", False):
+                QTimer.singleShot(0, self._normalize_to_fill)
         super().changeEvent(event)
+
+    def _normalize_to_fill(self) -> None:
+        area = self.mdiArea()
+        if area is None or not self.isVisible():
+            return
+        self._normalizing = True
+        try:
+            if self.isMaximized() or self.isMinimized():
+                self.showNormal()
+            self._fill_area = True
+            self.setGeometry(area.viewport().rect())
+        finally:
+            self._normalizing = False
 
 
 class _MdiFormWrapper(QFrame):
@@ -1373,11 +1393,15 @@ class MainWindow(QMainWindow):
         عرض/ارتفاعِ زیرِ هدرِ اصلی را در اختیارِ فرمِ maximize‌شده بگذارد؛
         با خارج‌شدن از حالتِ maximize (یا بستنِ فرم)، هردو دوباره
         نمایش داده می‌شوند."""
-        any_maximized = any(
-            sw.isVisible() and sw.isMaximized() for sw in self._mdi_subwindows.values()
-        )
-        self._quick_access_scroll.setVisible(not any_maximized)
-        self._sidebar_scroll.setVisible(not any_maximized)
+        focus = getattr(self, "_focus_mode", False)
+        self._quick_access_scroll.setVisible(not focus)
+        self._sidebar_scroll.setVisible(not focus)
+
+    def toggle_focus_mode(self) -> None:
+        """R227: دکمهٔ بزرگ‌کردنِ تیتربار -- پنهان/نمایانِ ساید‌بار و ریبون؛
+        فرم‌ها (با resizeEventِ ناحیه) خودکار کلِ فضایِ تازه را پر می‌کنند."""
+        self._focus_mode = not getattr(self, "_focus_mode", False)
+        self._update_chrome_visibility()
 
     def _populate_open_windows_menu(self) -> None:
         """طبقِ نگرانیِ صریح دربابِ انبوهِ فرم‌هایِ روی‌هم — فهرستِ همه‌ی
@@ -1488,6 +1512,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.order_tracking import OrderTrackingScreen
         from peecha.ui.screens.purchase_goods_receipt import PurchaseGoodsReceiptScreen
         from peecha.ui.screens.stock_count import StockCountScreen
+        from peecha.ui.screens.lot_trace import LotTraceScreen
         from peecha.ui.screens.commercial_settlement import InvoiceSettlementScreen
         from peecha.ui.screens.installments_list import InstallmentsListScreen
         from peecha.ui.screens.commercial_consignment_tracking import ConsignmentTrackingScreen
@@ -1618,6 +1643,7 @@ class MainWindow(QMainWindow):
         self.register_screen("order_tracking", OrderTrackingScreen(self))
         self.register_screen("purchase_goods_receipt", PurchaseGoodsReceiptScreen())
         self.register_screen("stock_count", StockCountScreen())
+        self.register_screen("lot_trace", LotTraceScreen())
         # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
         # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
         # همان کلاس با invoice_type متفاوت است.
@@ -1787,8 +1813,6 @@ class MainWindow(QMainWindow):
         _FramelessMdiSubWindow) این‌جا بازیابی می‌شود — حتی بعدِ بستنِ
         کاملِ برنامه. اگر چیزی ذخیره نشده باشد (اولین بارِ بازکردنِ این
         صفحه)، همان چیدمانِ آبشاریِ پیش‌فرض به‌کار می‌رود."""
-        settings = QSettings("Peecha", "PeechaERP")
-        was_maximized = settings.value(f"mdiWindow/{screen_name}/maximized", False, type=bool)
         # نکته‌یِ فنیِ کشف‌شده حینِ تست: QMdiArea وقتی از قبل یک زیرپنجره‌یِ
         # دیگر (مثلاً داشبورد، چون همیشه اول باز می‌شود) maximize باشد،
         # زیرپنجره‌یِ تازه را هم با اولین show()اش خودکار maximize نمایش
@@ -1797,15 +1821,18 @@ class MainWindow(QMainWindow):
         # اول باید صریحاً از آن حالت خارج شویم (showNormal)، و *بعد* جایگاهِ
         # درستِ ذخیره‌شده را ست کنیم — نه برعکس، وگرنه showNormal دوباره
         # آن را بازنویسی می‌کند.
+        # R227: یک قاعدهٔ واحد برایِ همهٔ فرم‌ها -- پرکردنِ کلِ ناحیهٔ اصلی؛
+        # حالتِ maximize/اندازهٔ ذخیره‌شدهٔ قدیمی دیگر خوانده نمی‌شود.
         sub_window._restoring = True
         try:
-            if was_maximized:
-                sub_window.showMaximized()
-            else:
-                # R226 (درخواستِ صریح): همهٔ فرم‌ها تمام‌عرضِ ناحیهٔ اصلی باز می‌شوند.
-                sub_window.showNormal()
-                sub_window._fill_area = True
-                sub_window.setGeometry(self.mdi_area.viewport().rect())
+            for other in self.mdi_area.subWindowList():
+                if other is not sub_window and other.isVisible() and (other.isMaximized() or other.isMinimized()):
+                    other.showNormal()
+                    other._fill_area = True
+                    other.setGeometry(self.mdi_area.viewport().rect())
+            sub_window.showNormal()
+            sub_window._fill_area = True
+            sub_window.setGeometry(self.mdi_area.viewport().rect())
         finally:
             sub_window._restoring = False
 

@@ -114,11 +114,14 @@ def _return_consignment(
             )
         }
         description = f"بازگشتِ امانی #{doc.document_no}"
+        counterparty_id = doc.counterparty_detail_account_id
 
     statuses = {s.line_id: s for s in get_consignment_status(document_id, company_id)}
     header_fields = inv_documents_service.DocumentHeaderFields(
         source_warehouse_id=source_warehouse_id, destination_warehouse_id=destination_warehouse_id,
         reference_no=f"COMM-{document_id}-RETURN", description=description,
+        # R227: بازگشت از استخرِ امانیِ همین تامین‌کننده برداشته شود
+        counterparty_detail_account_id=counterparty_id,
     )
     stock_document_id = inv_documents_service.create_stock_document(
         company_id, posted_by_user_id, stock_document_type, return_date, header_fields

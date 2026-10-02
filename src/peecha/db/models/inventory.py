@@ -1057,3 +1057,45 @@ class VehicleSettlementLine(Base):
     loaded_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     sold_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     returned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+
+
+class LineTrackingEntry(Base):
+    """R227: بچ/سریال/انقضایِ واردشده رویِ ردیفِ سندِ انبار یا بازرگانی (پیش از ثبت)."""
+
+    __tablename__ = "line_tracking_entries"
+    __table_args__ = {"schema": "inv"}
+
+    entry_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    commercial_line_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("comm.commercial_document_lines.line_id", ondelete="CASCADE")
+    )
+    stock_line_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("inv.stock_document_lines.line_id", ondelete="CASCADE")
+    )
+    batch_no: Mapped[str | None] = mapped_column(String(50))
+    manufacture_date: Mapped[datetime.date | None] = mapped_column(Date)
+    expiry_date: Mapped[datetime.date | None] = mapped_column(Date)
+    serial_no: Mapped[str | None] = mapped_column(String(100))
+    quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class LotMovement(Base):
+    """R227: دفترِ حرکتِ ردیابی (بچ/سریال/تامین‌کنندهٔ امانی)، به واحدِ پایه و علامت‌دار."""
+
+    __tablename__ = "lot_movements"
+    __table_args__ = {"schema": "inv"}
+
+    movement_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("inv.batches.batch_id"))
+    serial_id: Mapped[int | None] = mapped_column(ForeignKey("inv.serial_numbers.serial_id"))
+    supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    is_consignment: Mapped[bool] = mapped_column(default=False)
+    stock_document_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
+    commercial_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

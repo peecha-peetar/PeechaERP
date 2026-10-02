@@ -3999,7 +3999,29 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             lambda _checked=False, r=row_index: self._open_item_price_history(self._lines[r].item_id) if 0 <= r < len(self._lines) else None
         )
         layout.addWidget(price_history_button)
+        line = self._lines[row_index] if 0 <= row_index < len(self._lines) else None
+        item = next((it for it in self._items if line is not None and it.item_id == line.item_id), None)
+        if item is not None and (item.track_batch or item.track_serial):
+            # R227: بچ/سریال/انقضایِ همین ردیف (فاکتورِ خرید، امانیِ ورودی، برگشت، فروش)
+            track_button = QPushButton("🏷")
+            track_button.setObjectName("iconButton")
+            track_button.setFixedWidth(28)
+            track_button.setToolTip("ردیابی: بچ / سریال / تاریخِ انقضا")
+            track_button.clicked.connect(lambda _checked=False, ln=line, it=item: self._open_lot_tracking(ln, it))
+            layout.addWidget(track_button)
         return container
+
+    def _open_lot_tracking(self, line, item) -> None:
+        from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        LotTrackingDialog(
+            self, company_id, item.item_id, f"{item.code} — {item.name or ''}", line.quantity_base,
+            commercial_line_id=line.line_id,
+            read_only=self._status_code not in ("DRAFT", "CONFIRMED", "APPROVED"),
+        ).exec()
 
     def _item_info_tooltip_text(self, item_id: int) -> str:
         """طبقِ موردِ ۳ («اطلاعاتِ کالا شاملِ کاردکس و قیمت‌هایِ قبلی و

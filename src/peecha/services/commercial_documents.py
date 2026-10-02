@@ -1905,6 +1905,25 @@ def _validate_line_warehouses(session, company_id: int, line_warehouses: dict[in
             raise ValueError("انبارِ انتخاب‌شده برایِ ردیف نامعتبر است.")
 
 
+def _require_receipt_tracking(session, ln: CommercialDocumentLine) -> None:
+    """R227: کالایِ دارایِ بچ/سریال بدونِ اطلاعاتِ کاملِ ردیابی رسید نمی‌شود."""
+    from peecha.db.models.inventory import LineTrackingEntry
+
+    item = session.get(Item, ln.item_id)
+    if item is None or not (item.track_batch or item.track_serial):
+        return
+    delivered = ln.warehouse_delivered_quantity if ln.warehouse_delivered_quantity is not None else ln.quantity
+    needed = delivered * (ln.conversion_factor or 1)
+    entered = decimal.Decimal(session.scalar(
+        select(func.coalesce(func.sum(LineTrackingEntry.quantity), 0)).where(LineTrackingEntry.commercial_line_id == ln.line_id)
+    ) or 0)
+    if entered != needed:
+        raise ValueError(
+            f"بچ/سریال/انقضایِ کالایِ ردیفِ #{ln.line_no} کامل نیست ({entered.normalize()} از {needed.normalize()}) "
+            "-- از دکمهٔ «🏷 ردیابی» همان ردیف وارد کنید."
+        )
+
+
 def approve_warehouse(
     document_id: int, company_id: int, approved_by_user_id: int, warehouse_id: int | None = None,
     line_warehouses: dict[int, int] | None = None,
@@ -1935,6 +1954,7 @@ def approve_warehouse(
                     )
                 ln.warehouse_id = target
                 used.append(target)
+                _require_receipt_tracking(session, ln)
             if default_warehouse_id is None and used:
                 default_warehouse_id = used[0]
             if default_warehouse_id is None:
@@ -2747,6 +2767,10 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         journal_entry_id = _build_consignment_in_settlement_je(
             company_id, posted_by_user_id, document_date, description, counterparty_id, extra_dims, line_snapshots,
         )
+        # R227: مالکیتِ کالایِ امانیِ همین تامین‌کننده در دفترِ ردیابی منتقل می‌شود.
+        from peecha.services import lot_tracking
+
+        lot_tracking.settle_consignment(document_id, company_id)
     else:
         stock_document_type = _STOCK_DOC_TYPE_BY_TYPE[document_type_code]
         is_receipt_like = stock_document_type in ("RECEIPT", "RETURN_IN")
