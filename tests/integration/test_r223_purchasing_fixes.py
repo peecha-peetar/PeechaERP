@@ -185,6 +185,7 @@ check(
 )
 
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
+settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST", True)  # R230: رفتارِ پیشین (رسید پیش از ثبتِ نهایی)
 
 queue = documents_service.list_purchase_order_goods_receipt_queue(company_id)
 check(any(d.document_id == receipt_doc_id for d in queue), "با روشن‌کردنِ Toggle، سفارشِ خرید در صفِ تاییدِ رسید ظاهر می‌شود")

@@ -126,6 +126,7 @@ for b in boxes:
 
 # ===== ۴: کارتابل -- تصویب، رسید، تبدیل =====
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
+settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST", True)  # R230: رفتارِ پیشین (رسید پیش از ثبتِ نهایی)
 po, (l1, l2) = new_doc("PURCHASE_ORDER", [(item_id, 5), (item2, 7)])
 documents_service.confirm_document(po, company_id, user.user_id)
 kinds = {(t.kind, t.document_id) for t in ops_service.list_operational_tasks(company_id, user.user_id)}

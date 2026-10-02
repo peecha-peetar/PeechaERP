@@ -114,6 +114,7 @@ documents_service.confirm_document(po_box, company_id, user.user_id)
 
 # ===== ۲/۴/۵: رسیدِ کالا =====
 settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
+settings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST", True)  # R230: رفتارِ پیشین (رسید پیش از ثبتِ نهایی)
 check(raises(lambda: documents_service.convert_to_invoice(po_box, company_id, user.user_id, datetime.date.today())),
       "پیش از تاییدِ رسید، تبدیل به فاکتور مجاز نیست")
 screen.edit_document(po_box)

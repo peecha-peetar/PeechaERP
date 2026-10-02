@@ -189,6 +189,7 @@ check([(r.batch_no, r.quantity) for r in bal(med, wh2)] == [("B-LATE", 3)], "ا�
 
 # ===== ۵: سریال در تاییدِ رسیدِ سفارشِ خرید تا فروش =====
 csettings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT", True)
+csettings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST", True)  # R230: رفتارِ پیشین
 csettings_service.set_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL", True)
 csettings_service.set_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL", True)
 po = documents_service.create_document(company_id, user.user_id, "PURCHASE_ORDER", today,
