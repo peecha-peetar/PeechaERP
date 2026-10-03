@@ -1,5 +1,5 @@
 import os, sys, datetime, decimal, io
-os.environ["PEECHA_DB_NAME"] = "peecha_test_r234_1"
+os.environ["PEECHA_DB_NAME"] = "peecha_test_r239_1"
 os.environ["PEECHA_DB_USER"] = "peecha"
 os.environ["PEECHA_DB_PASSWORD"] = "peecha"
 os.environ["PEECHA_DB_HOST"] = "localhost"
@@ -17,6 +17,10 @@ def check(cond, msg):
         print("OK:", msg)
 
 from PySide6.QtWidgets import QApplication, QMessageBox
+import tempfile
+from PySide6.QtCore import QSettings
+QSettings.setPath(QSettings.NativeFormat, QSettings.UserScope, tempfile.mkdtemp())
+QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, tempfile.mkdtemp())
 app = QApplication.instance() or QApplication([])
 QMessageBox.warning = staticmethod(lambda *a, **k: None)
 QMessageBox.information = staticmethod(lambda *a, **k: None)
@@ -175,117 +179,139 @@ ret, _ = dated("PURCHASE_RETURN", bolt, 5, s1, 110, today)
 documents_service.confirm_document(ret, company_id, user.user_id)
 documents_service.post_document(ret, company_id, user.user_id)
 
-import dataclasses
-from peecha.services import commercial_purchasing as purchasing_service
-from peecha.services import inventory_extended as extended_service
+pos_service_jid = None
 from peecha.services import commercial_pos as pos_service
-F = pr.PurchaseFilters(today - dt.timedelta(days=60), today)
+plan_inv, _ = dated("PURCHASE_INVOICE", bolt, 10, s2, 100, today - dt.timedelta(days=45))
+post_invoice(plan_inv, [("CASH", D(400))])
+pos_service.post_invoice_settlement_plan(company_id, user.user_id, plan_inv)
+import dataclasses
+from peecha.services import purchase_reports_ext as ext
+from peecha.db.models.inventory import ReorderPolicy
+from peecha.db.models.commercial import CommercialDocument as CD
+# سفارشِ لغوشده، سفارشِ فروشِ باز (تقاضا)، سیاستِ سفارش برایِ پیچ
+po_x, _ = dated("PURCHASE_ORDER", bolt, 7, s2, 90, today)
+documents_service.cancel_document(po_x, company_id)
+so, _ = dated("SALES_ORDER", bolt, 400, customer, 300, today)
+documents_service.confirm_document(so, company_id, user.user_id)
+with new_session() as s_:
+    s_.add(ReorderPolicy(company_id=company_id, item_id=bolt, warehouse_id=wh, min_qty=D(50), max_qty=D(500),
+                         reorder_point_qty=D(100), reorder_qty=D(200), lead_time_days=7, is_active=True))
+    s_.get(CD, po2).requested_delivery_date = today - dt.timedelta(days=3)
+    s_.commit()
+
+F = pr.PurchaseFilters(today - dt.timedelta(days=30), today)
 def run(code, **kw):
     return pr.run_report(company_id, code, dataclasses.replace(F, **kw))
 def rows(code, **kw):
     return run(code, **kw).rows
+from peecha.services import purchase_dashboard as dash
+from peecha import numerals
+no = lambda d: documents_service.get_document(d, company_id)[0].document_no
+A, B = today - dt.timedelta(days=60), today
 
-# --- دادهٔ تکمیلیِ فاز ۲
-po1_doc = documents_service.get_document(po1, company_id)[0]
-with new_session() as s_:
-    from peecha.db.models.commercial import CommercialDocument as CD
-    for doc_id, req in ((po1, d10 + dt.timedelta(days=3)), (po3, today), (po2, today - dt.timedelta(days=2))):
-        s_.get(CD, doc_id).requested_delivery_date = req
-    s_.commit()
-cat_a = catalog_service.create_category(company_id, "CAT-A", "قطعات")
-nut = catalog_service.create_item(company_id, "N-2", "مهره", catalog_service.ItemFields(item_kind_code="GOOD", base_uom_id=pcs, category_id=cat_a))
-cc_dim = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
-cc = dimensions_service.create_detail_account(company_id, cc_dim, "CC-1", "تولید")
-cc = getattr(cc, "detail_account_id", cc)
-ni, _ = dated("PURCHASE_INVOICE", nut, 10, s1, 50, today)
-with new_session() as s_:
-    s_.get(CD, ni).cost_center_detail_account_id = cc
-    s_.commit()
-purchasing_service.add_landed_cost_line(ni, D(100), cash_gl.account_id, notes="کرایه")
-ag = purchasing_service.create_rebate_agreement(s1, "FLAT_PERCENT", today - dt.timedelta(days=30))
-purchasing_service.add_rebate_tier(ag, D(0), D(2))
-post_invoice(ni)
-purchasing_service.accrue_rebate_for_invoice(ni, company_id, today.replace(day=1), today)
-cin, _ = dated("CONSIGNMENT_IN", nut, 8, s2, 40, today)
-documents_service.confirm_document(cin, company_id, user.user_id)
-documents_service.post_document(cin, company_id, user.user_id)
-extended_service.add_item_supplier(nut, s1, supplier_sku="SKU-N", lead_time_days=4, is_preferred=True)
-csettings_service.set_feature_enabled(company_id, "ALLOW_EDIT_POSTED_INVOICE", True)
-engine_service.set_account_mapping(company_id, "INVENTORY_COST_VARIANCE", adj_gl.account_id)
-corr = documents_service.start_invoice_correction(direct, company_id, user.user_id)
-corr_line = documents_service.get_document(corr, company_id)[1][0]
-documents_service.update_line(corr_line.line_id, corr, company_id, D(30), D(97))
-documents_service.confirm_document(corr, company_id, user.user_id)
-documents_service.post_invoice_correction(corr, company_id, user.user_id)
+# --- ۱) شاخص‌هایِ داشبوردِ مدیریتی = جمعِ گزارشِ مبدا
+k = {x.code: x for x in dash.executive_kpis(company_id, A, B)}
+def foot(code, header, **options):
+    res = pr.run_report(company_id, code, dash.filters_for(code, A, B, options=options))
+    return dash.total(res, header)
+check(k["NET"].value == foot("BY_SUPPLIER", "خالصِ خرید") == 80 * 110 + 30 * 95 + 1000 - 550, f"خالصِ خرید (got {k['NET'].value})")
+check(k["OPEN_PO"].value == foot("OPEN_PO", "ارزشِ مانده") == 6800, f"ارزشِ سفارش‌هایِ باز (got {k['OPEN_PO'].value})")
+check(k["GRIR"].value == 3000 and k["OVERDUE"].value == 600 and k["PPV"].value == 350, f"GR/IR، معوق، PPV (got {k['GRIR'].value}, {k['OVERDUE'].value}, {k['PPV'].value})")
+check(k["RETURN_RATE"].value == D(550) * 100 / (80 * 110 + 30 * 95 + 1000) and k["CYCLE"].value == 10, "نرخِ برگشت و زمانِ سفارش→رسید")
+check(k["OTD"].value is None and k["SUPPLIERS"].value == 2 and k["INVOICES"].value == 3, "OTD بدونِ داده، تامین‌کنندگان/فاکتورها")
+check(all(x.formula and x.report_code in pr.REPORTS_BY_CODE for x in k.values()), "هر شاخص فرمول و گزارشِ مبدا دارد")
+ch = dash.executive_charts(company_id, A, B)
+check(len(ch["monthly"]) == 2 and ch["suppliers"][0][1] >= ch["suppliers"][-1][1] and len(ch["aging"]) == 5, f"داده‌یِ نمودارها (got {ch['monthly']})")
 
-# --- بررسی‌ها
-r = rows("OVERDUE")
-po2_no = documents_service.get_document(po2, company_id)[0].document_no
-o = next(x for x in r if x[0] == po2_no)
-check(o[8] == 20 and o[10] == 2 and o[11] == "معوق", f"۲) سفارشِ ۲: ۲۰ عدد، ۲ روز معوق (got {o[8:12]})")
-r = rows("CONSIGNMENTS")
-check(len(r) == 1 and r[0][8] == 8, f"۶) امانیِ تسویه‌نشده ۸ عدد (got {r})")
-r = rows("RETURNS")
-check(len(r) == 1 and r[0][5] == 5, "۷) برگشت به تامین‌کننده")
-r = rows("BY_CATEGORY")
-check(any("قطعات" in x[0] and x[5] == 500 for x in r) and any(x[0] == "بدونِ گروه" for x in r), f"۱۰) خرید به تفکیکِ گروه (got {r})")
-r = rows("BY_COST_CENTER")
-check(any("تولید" in x[0] and x[4] == 500 for x in r), "۱۱) خرید به تفکیکِ مرکزِ هزینه")
-r = rows("MONTHLY")
-check(len(r) >= 1 and sum(x[5] for x in r) > 0, "۱۲) روندِ ماهانه")
-r = rows("ABC")
-check(r[0][5] == "A" and r[0][4] <= 100 and abs(r[-1][4] - 100) < D("0.01"), f"۱۳) ABC با سهمِ تجمعیِ ۱۰۰٪ (got {r})")
-r = rows("CONCENTRATION")
-check(any("مهره" in x[0] and x[6] == "تک‌منبعی" and x[2] == 1 for x in r), "۱۴) مهره تک‌منبعی است")
-r = rows("CORRECTIONS")
-check(len(r) == 1 and r[0][6] == 30 * 2, f"۱۸) اصلاحیه: اختلافِ ۶۰ (got {r})")
-r = rows("LANDED_COST")
-check(len(r) == 1 and r[0][4] == 100 and r[0][6] == 20, f"۱۹) هزینهٔ جانبی ۱۰۰ = ۲۰٪ کالا (got {r})")
-r = rows("SAVINGS")
-s1_row = next(x for x in r if "یک" in x[0])
-check(s1_row[4] == 10, f"۲۰) ریبیتِ معوقِ ۲٪ رویِ ۵۰۰ (got {s1_row})")
-r = rows("OTD")
-s1_otd = next(x for x in r if "یک" in x[0])
-check(s1_otd[1] == 2 and s1_otd[2] == 1 and s1_otd[3] == 1, f"۲۲) S1: یک به‌موقع و یک با تاخیر (got {s1_otd})")
-r = rows("QUALITY")
-q1 = next(x for x in r if "یک" in x[0])
-check(q1[2] == 5 and q1[3] > 0, "۲۴) نرخِ برگشتِ S1")
-r = rows("SCORECARD")
-check(all(x[7] for x in r if x[6] is not None) and len(r) == 2, f"۲۱) کارنامه برایِ دو تامین‌کننده (got {r})")
-r = rows("FORECAST")
-check(len(r) >= 3 and r[-1][6] == sum(x[5] for x in r), "۲۸) پیش‌بینیِ پرداخت با جمعِ تجمعی")
-r = rows("PREPAYMENTS")
-check(isinstance(r, list), "۳۰) پیش‌پرداخت‌ها اجرا شد")
-r = rows("ITEMS")
-nut_row = next(x for x in r if x[0] == "N-2")
-check(nut_row[2] == "قطعات" and "یک" in nut_row[8] and nut_row[9] == 50, f"۳۲) کالایِ قابلِ‌خرید (got {nut_row})")
-r = rows("PRICE_LISTS")
-check(any(x[8] == "SKU-N" and x[10] == "★" for x in r), "۳۳) تامین‌کنندهٔ ترجیحیِ کالا")
-r = rows("REBATES")
-check(len(r) == 1 and r[0][7] == 10, f"۳۴) قراردادِ ریبیت با ۱۰ معوق (got {r})")
-r = rows("WAREHOUSES")
-check(len(r) >= 1 and r[0][7] >= 1, f"۳۵) انبار با رسیدِ در انتظار (got {r})")
+# --- ۲) داشبوردِ استثناها
+ex = {x.code: x for x in dash.exceptions(company_id, A, B)}
+check(ex["THREE_WAY"].count == 3 and ex["THREE_WAY"].amount == 800, f"استثنا: مغایرتِ سه‌طرفه (got {ex['THREE_WAY']})")
+check(ex["OVERDUE"].count == 1 and ex["OVERDUE"].amount == 600 and ex["LATE_ORDERS"].count == 1, "استثنا: معوق و دیرکرد")
+check(ex["DEMAND_NO_PO"].count == 1 and ex["CANCELLED"].count == 1 and ex["PRICE_ABOVE"].amount == 800, "استثنا: تقاضا، لغو، قیمتِ بالاتر")
+check(ex["BELOW_ROP"].count == 0 and ex["INVOICE_NO_RECEIPT"].count == 0, "استثنا‌هایِ بدونِ مورد")
 
-# --- منو و UI
+# --- ۳) Drill-down از ردیفِ تجمیعی
+res = pr.run_report(company_id, "BY_SUPPLIER", dash.filters_for("BY_SUPPLIER", A, B))
+s1_row = next(r_ for r_ in res.rows if r_[0].startswith("S1"))
+check(dash.drill_target(company_id, "BY_SUPPLIER", "PURCHASE", s1_row) == ("REG_INVOICE_LINES", {"supplier_id": s1}), "Drill: تامین‌کننده → ریزِ اقلام")
+check(dash.drill_target(company_id, "BALANCES", "PURCHASE", s1_row) == ("STATEMENT", {"supplier_id": s1}), "Drill: گزارشِ مالی → صورت‌حساب")
+res = pr.run_report(company_id, "BY_ITEM", dash.filters_for("BY_ITEM", A, B))
+check(dash.drill_target(company_id, "BY_ITEM", "PURCHASE", res.rows[0]) == ("REG_INVOICE_LINES", {"item_id": bolt}), "Drill: کالا → ریزِ اقلام")
+
+# --- ۴) UI: داشبوردها از منو
 from peecha import nav_catalog
-menu_codes = [e[0] for _g, _l, items in nav_catalog.PURCHASE_REPORT_MENU for e in items if not isinstance(e, dict)]
-check(sorted(menu_codes) == sorted(r.code for r in pr.REPORTS), "منو و سرویس هم‌خوان")
 from peecha.ui.shell_window import MainWindow
-mw = MainWindow(); mw.resize(1300, 850); mw.show(); app.processEvents()
-failed = []
-for rep in pr.REPORTS:
-    mw.open_screen(f"PURCH_RPT_{rep.code}"); app.processEvents()
-    scr = mw._screens[f"purchase_report_{rep.code.lower()}"]
-    scr.date_from.setDate(today - dt.timedelta(days=60)); scr._reload()
-    if scr.table.columnCount() == 0:
-        failed.append(rep.code)
-check(not failed, f"همهٔ ۳۵ گزارش از منو باز و اجرا شدند (failed {failed})")
-od = mw._screens["purchase_report_overdue"]
-check(not od.date_from.isVisibleTo(od) and od.date_to.isVisibleTo(od), "گزارشِ «تا تاریخ»: فقط فیلدِ تا تاریخ")
-po_screen = mw._screens["commercial_document_purchase_order"]
-po_screen.refresh(); po_screen.edit_document(po2); app.processEvents()
-check(po_screen.delivery_date_box.isVisibleTo(po_screen) and po_screen.delivery_date_field.date() == today - dt.timedelta(days=2),
-      "فیلدِ «تاریخِ تحویلِ مورد انتظار» در فرمِ سفارشِ خرید")
+mw = MainWindow(); mw.resize(1400, 900); mw.show(); app.processEvents()
+mw.open_screen("PURCH_RPT_DASH_EXEC"); app.processEvents()
+de = mw._screens["purchase_dashboard_exec"]
+de.date_from.setDate(A); de.reload(); app.processEvents()
+check(de.cards["OVERDUE"].value_label.text() == numerals.format_money(D(600), 0, None),
+      f"کارتِ بدهیِ معوق (got {de.cards['OVERDUE'].value_label.text()})")
+check(de.cards["NET"]._title_label.text() == "خالصِ خرید" and "فرمول" in de.cards["NET"].toolTip(), "عنوان و فرمولِ کارت")
+de._open_kpi("OVERDUE"); app.processEvents()
+un = mw._screens["purchase_report_unpaid"]
+check(un._option_combos["view"][1].currentData() == "OVERDUE" and un.table.rowCount() == 2, f"کلیکِ کارت: فاکتورهایِ معوق (rows {un.table.rowCount()})")
+mw.open_screen("PURCH_RPT_DASH_EXCEPTIONS"); app.processEvents()
+dx = mw._screens["purchase_dashboard_exceptions"]
+dx.date_from.setDate(A); dx.reload(); app.processEvents()
+check(dx.table.rowCount() == len(ex) and dx.table.item(0, 0).text() == "بالا", "جدولِ استثناها، مرتب بر اساسِ شدت")
+first = dx._rows[0]
+dx.open_exception(0); app.processEvents()
+scr = mw._screens[f"purchase_report_{first.report_code.lower()}"]
+check(scr.table.rowCount() >= first.count, f"دابل‌کلیکِ استثنا، گزارشِ مبدا را باز کرد ({first.report_code})")
+
+# --- ۵) مرتب‌سازی، گروه‌بندی، ستون‌ها، CSV/کپی، نما، نمودار
+mw.open_screen("PURCH_RPT_OPEN_PO"); app.processEvents()
+op = mw._screens["purchase_report_open_po"]
+op.date_from.setDate(A); op._reload()
+value_col = [h for h, _k in op._result.columns].index("ارزشِ مانده")
+op.sort_by(value_col, descending=True)
+vals = [op._result.rows[op._row_raw[id(r_)]][value_col] for r_ in op._rows]
+check(vals == sorted(vals, reverse=True) and op.table.horizontalHeader().isSortIndicatorShown(), f"مرتب‌سازیِ نزولی (got {vals})")
+op._on_header_clicked(value_col)
+vals = [op._result.rows[op._row_raw[id(r_)]][value_col] for r_ in op._rows]
+check(vals == sorted(vals), "کلیکِ دوباره: صعودی")
+op.group_combo.setCurrentIndex(op.group_combo.findText("تامین‌کننده")); app.processEvents()
+subtotals = [r_ for r_, b in zip(op._rows, op._row_bold) if b]
+check(len(subtotals) == 2 and op.table.rowCount() == 3 + 2 + 1 and all(r_[0].startswith("جمعِ") for r_ in subtotals), f"گروه‌بندی با جمعِ هر تامین‌کننده (rows {op.table.rowCount()})")
+s1_sub = next(r_ for r_ in subtotals if "یک" in r_[0])
+check(s1_sub[value_col] == numerals.format_money(D(5000), 0, None), f"جمعِ گروهِ S1 = ۵۰۰۰ (got {s1_sub[value_col]})")
+op._open_row(op._rows.index(s1_sub), 0)
+op.group_combo.setCurrentIndex(0)
+op.set_hidden_columns({"واحد", "وضعیت"})
+headers, rows_, footer_ = op._export_data()
+check("واحد" not in headers and len(headers) == len(op._headers) - 2 and op.table.isColumnHidden(op._headers.index("واحد")), "پنهان‌کردنِ ستون در جدول و خروجی")
+csv_ = op.csv_text()
+check(csv_.splitlines()[0].split(",")[0] == "شمارهٔ سفارش" and ",6800," in csv_ and "واحد" not in csv_.splitlines()[0].split(","), f"CSV با اعدادِ ساده (got {csv_.splitlines()[-1]})")
+op.table.selectRow(0)
+cp = op.copy_text().split("\n")
+check(len(cp) == 2 and "\t" in cp[0], "کپیِ ردیفِ انتخاب‌شده با سرستون")
+op.group_combo.setCurrentIndex(op.group_combo.findText("تامین‌کننده"))
+op.save_view("بدهی‌ها")
+op.set_hidden_columns(set()); op.group_combo.setCurrentIndex(0); op.sort_by(None)
+op.load_view("بدهی‌ها"); app.processEvents()
+check(op.group_combo.currentText() == "تامین‌کننده" and op.hidden_columns() == {"واحد", "وضعیت"} and op._sort_col == value_col,
+      "نمایِ ذخیره‌شده: گروه، ستون‌ها و مرتب‌سازی بازگردانی شد")
+check(op.view_combo.findData("بدهی‌ها") > 0, "نما در فهرستِ نماها")
+op.delete_view("بدهی‌ها"); op.set_hidden_columns(set())
+check(op.view_combo.findData("بدهی‌ها") < 0, "حذفِ نما")
+dlg = op.open_chart(); app.processEvents()
+check(dlg is not None and len(dlg.series()) >= 1, f"نمودارِ گزارش (got {dlg and dlg.series()})")
+dlg.type_combo.setCurrentIndex(1); app.processEvents(); dlg.close()
+
+# --- ۶) Drill-down در UI: خرید به تفکیکِ تامین‌کننده → ریزِ اقلامِ همان تامین‌کننده
+mw.open_screen("PURCH_RPT_BY_SUPPLIER"); app.processEvents()
+bs = mw._screens["purchase_report_by_supplier"]
+bs.date_from.setDate(A); bs._reload()
+row = next(i for i, r_ in enumerate(bs._rows) if "دو" in r_[0])
+bs._open_row(row, 0); app.processEvents()
+il = mw._screens["purchase_report_reg_invoice_lines"]
+check(il.supplier_combo.currentData() == s2 and il.table.rowCount() == 2 + 1, f"Drill-down: ریزِ اقلامِ S2 (rows {il.table.rowCount()})")
+# ستون‌ها/CSV در گزارش‌هایِ دیگر (پایهٔ مشترک)
+mw.open_screen("REPORTS_TRIAL_BALANCE"); app.processEvents()
+tb = mw._screens["report_trial_balance"]
+check(tb.columns_button.isVisibleTo(tb) and tb.csv_text().splitlines()[0] == ",".join(tb._export_data()[0]),
+      "CSV و انتخابِ ستون در گزارش‌هایِ دیگر (تراز آزمایشی) هم هست")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

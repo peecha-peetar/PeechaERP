@@ -10,6 +10,10 @@ from __future__ import annotations
 
 # R233/R236: منویِ «گزارش‌ها ‹ گزارشاتِ خرید» -- کدها هم‌نامِ services/purchase_reports.REPORTS (تست تطابق را بررسی می‌کند)
 PURCHASE_REPORT_MENU = [
+    ("DASH", "داشبوردها", [
+        {"code": "PURCH_RPT_DASH_EXEC", "label": "داشبوردِ مدیریتیِ خرید", "screen": "purchase_dashboard_exec"},
+        {"code": "PURCH_RPT_DASH_EXCEPTIONS", "label": "داشبوردِ استثناهایِ خرید", "screen": "purchase_dashboard_exceptions"},
+    ]),
     ("OPS", "عملیاتی", [
         ("REG_INVOICE", "دفترِ فاکتورهایِ خرید"), ("REG_INVOICE_LINES", "ریزِ اقلامِ فاکتورهایِ خرید"),
         ("REG_ORDER", "دفترِ سفارش‌هایِ خرید"), ("REG_PROFORMA", "دفترِ پیش‌فاکتورهایِ خرید"),
