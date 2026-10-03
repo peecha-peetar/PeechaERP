@@ -1056,6 +1056,8 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
             doc.due_date = settlements_service.compute_due_date(
                 company_id, doc.document_type_code, fields.counterparty_detail_account_id, document_date,
             )
+        if fields.requested_delivery_date is not None:
+            doc.requested_delivery_date = fields.requested_delivery_date
         doc.sales_rep_detail_account_id = fields.sales_rep_detail_account_id
         doc.cost_center_detail_account_id = fields.cost_center_detail_account_id
         doc.project_detail_account_id = fields.project_detail_account_id

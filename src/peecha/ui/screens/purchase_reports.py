@@ -24,9 +24,6 @@ _TYPE_TO_NAV_CODE = {
     "PURCHASE_ORDER": "PURCH_ORDER", "PURCHASE_PROFORMA": "PURCH_PROFORMA", "PURCHASE_INVOICE": "PURCH_INVOICE",
     "PURCHASE_RETURN": "PURCH_RETURN", "CONSIGNMENT_IN": "PURCH_CONSIGNMENT_IN",
 }
-# گزارش‌هایی که فقط «تا تاریخ» دارند / اصلاً تاریخ ندارند
-_AS_OF = ("GRIR", "AGING")
-_UNDATED = ("PENDING_RECEIPTS", "PENDING_INVOICES")
 
 
 def _searchable_combo() -> QComboBox:
@@ -60,17 +57,16 @@ class PurchaseReportScreen(ReportScreenBase):
         self._decimal_places = 0
         self._note = ""
 
-        # وضعیتِ سندِ حسابداری در این گزارش‌ها معنا ندارد
+        # وضعیتِ سندِ حسابداری در این گزارش‌ها معنا ندارد؛ تاریخ طبقِ نوعِ گزارش (بازه/تا تاریخ/بدونِ تاریخ)
+        mode = self._def.date_mode
         self.status_combo.setVisible(False)
         for label in self.findChildren(QLabel):
-            if label.text() in ("وضعیتِ سند:",) or (report_code in _UNDATED and label.text() in ("از تاریخ:", "تا تاریخ:")) \
-                    or (report_code in _AS_OF and label.text() == "از تاریخ:"):
+            text = label.text()
+            if text == "وضعیتِ سند:" or (mode == "none" and text in ("از تاریخ:", "تا تاریخ:")) \
+                    or (mode == "as_of" and text == "از تاریخ:"):
                 label.setVisible(False)
-        if report_code in _UNDATED:
-            self.date_from.setVisible(False)
-            self.date_to.setVisible(False)
-        elif report_code in _AS_OF:
-            self.date_from.setVisible(False)
+        self.date_from.setVisible(mode == "range")
+        self.date_to.setVisible(mode != "none")
 
         self.supplier_combo = _searchable_combo()
         self.item_combo = _searchable_combo()
@@ -118,8 +114,10 @@ class PurchaseReportScreen(ReportScreenBase):
         def value(key: str):
             return self._filter_widgets[key][1].currentData() if key in self._def.filters else None
 
-        if self._def.code in _UNDATED:
+        if self._def.date_mode == "none":
             date_from, date_to = datetime.date(1900, 1, 1), datetime.date.today()
+        elif self._def.date_mode == "as_of":
+            date_from = datetime.date(1900, 1, 1)
         return reports_service.PurchaseFilters(
             date_from=date_from, date_to=date_to, supplier_id=value("supplier"), item_id=value("item"),
             category_id=value("category"), warehouse_id=value("warehouse"),
@@ -138,7 +136,7 @@ class PurchaseReportScreen(ReportScreenBase):
             return f"{numerals.format_money(decimal.Decimal(value), 1, None)}٪"
         if kind in (reports_service.INT, reports_service.DAYS):
             return numerals.to_persian_digits(str(value))
-        return numerals.to_persian_digits(str(value)) if isinstance(value, (int, decimal.Decimal)) else str(value)
+        return numerals.to_persian_digits(str(value))
 
     def load_report(self, company_id: int, date_from: datetime.date, date_to: datetime.date):
         try:

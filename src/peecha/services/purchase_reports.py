@@ -714,6 +714,626 @@ def supplier_list(company_id: int, f: PurchaseFilters) -> ReportResult:
     return result
 
 
+# =====================================================================
+# فاز ۲ (R234)
+# =====================================================================
+def _jalali_month(value: datetime.date) -> str:
+    import jdatetime
+
+    j = jdatetime.date.fromgregorian(date=value)
+    return f"{j.year}/{j.month:02d}"
+
+
+def _supplier_of_lines(f: PurchaseFilters, doc: CommercialDocument) -> bool:
+    return f.supplier_id is None or doc.counterparty_detail_account_id == f.supplier_id
+
+
+# ۲) کالاهایِ در راه / معوق
+def overdue_orders(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    pairs = _lines(company_id, ("PURCHASE_ORDER",), ("CONFIRMED", "APPROVED", "POSTED"), f, ctx, dated=False)
+    invoiced = _invoiced_base_by_source_line(company_id, [ln.line_id for _d, ln in pairs])
+    result = ReportResult([
+        ("شمارهٔ سفارش", INT), ("تاریخِ سفارش", DATE), ("تاریخِ تحویلِ مورد انتظار", DATE), ("تامین‌کننده", TEXT),
+        ("کالا", TEXT), ("واحد", TEXT), ("مقدارِ سفارش", QTY), ("دریافت‌شده", QTY), ("در راه/معوق", QTY),
+        ("ارزش", MONEY), ("روزِ تاخیر", DAYS), ("وضعیت", TEXT),
+    ], no_total={0, 10},
+        note="سفارش‌هایی که هنوز کامل نرسیده‌اند؛ «تاریخِ تحویلِ مورد انتظار» در فرمِ سفارشِ خرید ثبت می‌شود.")
+    as_of = f.date_to
+    for doc, ln in pairs:
+        received = _received_base(doc, ln)
+        if received is None:
+            received = invoiced.get(ln.line_id, _ZERO)
+        outstanding = ln.quantity_base - received
+        if outstanding <= 0:
+            continue
+        expected = doc.requested_delivery_date
+        late = (as_of - expected).days if expected is not None else 0
+        status = "بدونِ تاریخِ تحویل" if expected is None else ("معوق" if late > 0 else "در راه")
+        result.add([
+            doc.document_no, doc.document_date, expected, ctx.names.get(doc.counterparty_detail_account_id, ""),
+            ctx.item_label(ln.item_id), ctx.base_uom(ln.item_id), ln.quantity_base, received, outstanding,
+            (outstanding * _base_price(ln)).quantize(decimal.Decimal("0.01")), max(late, 0), status,
+        ], (doc.document_id, doc.document_type_code))
+    result.rows, result.refs = zip(*sorted(zip(result.rows, result.refs), key=lambda rr: -rr[0][10])) if result.rows else ([], [])
+    result.rows, result.refs = list(result.rows), list(result.refs)
+    return result
+
+
+# ۶) امانی‌هایِ ورودیِ تسویه‌نشده
+def open_consignments(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    pairs = _lines(company_id, ("CONSIGNMENT_IN",), ("POSTED",), f, ctx, dated=False)
+    with new_session() as session:
+        settled: dict[int, decimal.Decimal] = defaultdict(lambda: _ZERO)
+        ids = [ln.line_id for _d, ln in pairs]
+        if ids:
+            for source_line_id, qty in session.execute(
+                select(CommercialDocumentLine.source_line_id, CommercialDocumentLine.quantity_base)
+                .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
+                .where(CommercialDocumentLine.source_line_id.in_(ids), CommercialDocument.status_code == "POSTED",
+                       CommercialDocument.corrects_document_id.is_(None))
+            ):
+                settled[source_line_id] += qty
+    result = ReportResult([
+        ("شمارهٔ امانی", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("کالا", TEXT), ("واحد", TEXT),
+        ("مقدارِ دریافتی", QTY), ("تسویه‌شده (خرید)", QTY), ("برگشت‌داده‌شده", QTY), ("ماندهٔ امانی", QTY),
+        ("فیِ توافقی", MONEY), ("ارزشِ مانده", MONEY), ("روز نزدِ ما", DAYS),
+    ], no_total={0, 9})
+    for doc, ln in pairs:
+        returned = (ln.returned_quantity or _ZERO) * (ln.conversion_factor or 1)
+        open_qty = ln.quantity_base - settled[ln.line_id] - returned
+        if open_qty <= 0:
+            continue
+        price = _base_price(ln)
+        result.add([
+            doc.document_no, doc.document_date, ctx.names.get(doc.counterparty_detail_account_id, ""), ctx.item_label(ln.item_id),
+            ctx.base_uom(ln.item_id), ln.quantity_base, settled[ln.line_id], returned, open_qty, price,
+            (open_qty * price).quantize(decimal.Decimal("0.01")), _days(doc.document_date),
+        ], (doc.document_id, doc.document_type_code))
+    return result
+
+
+# ۷) برگشت به تامین‌کننده
+def purchase_returns(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.inventory import DocumentReasonCode, StockDocumentLine
+
+    ctx = _ctx(company_id)
+    pairs = _lines(company_id, ("PURCHASE_RETURN",), ("POSTED",), f, ctx)
+    reasons: dict[int, str] = {}
+    with new_session() as session:
+        stock_ids = [ln.stock_document_line_id for _d, ln in pairs if ln.stock_document_line_id]
+        if stock_ids:
+            reasons = dict(session.execute(
+                select(StockDocumentLine.line_id, DocumentReasonCode.name)
+                .join(DocumentReasonCode, DocumentReasonCode.reason_code_id == StockDocumentLine.reason_code_id)
+                .where(StockDocumentLine.line_id.in_(stock_ids))
+            ).all())
+    result = ReportResult([
+        ("تاریخ", DATE), ("شماره", INT), ("تامین‌کننده", TEXT), ("کالا", TEXT), ("واحد", TEXT), ("مقدار", QTY),
+        ("مبلغ", MONEY), ("مالیات", MONEY), ("علت", TEXT),
+    ], no_total={1})
+    for doc, ln in pairs:
+        result.add([
+            doc.document_date, doc.document_no, ctx.names.get(doc.counterparty_detail_account_id, ""),
+            ctx.item_label(ln.item_id), ctx.base_uom(ln.item_id), ln.quantity_base, _net(ln), ln.tax_amount or _ZERO,
+            reasons.get(ln.stock_document_line_id, "") or (doc.description or ""),
+        ], (doc.document_id, doc.document_type_code))
+    return result
+
+
+# ۱۰) خرید به تفکیکِ گروهِ کالا
+def purchases_by_category(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    categories = {c.category_id: f"{c.code} — {c.name}" for c in catalog_service.list_categories(company_id)}
+    purchases, returns = _posted_purchase_and_returns(company_id, f, ctx)
+    agg: dict[int | None, dict] = defaultdict(lambda: {"amount": _ZERO, "returns": _ZERO, "items": set(), "docs": set()})
+    for doc, ln in purchases:
+        item = ctx.items.get(ln.item_id)
+        a = agg[item.category_id if item else None]
+        a["amount"] += _net(ln)
+        a["items"].add(ln.item_id)
+        a["docs"].add(doc.document_id)
+    for _doc, ln in returns:
+        item = ctx.items.get(ln.item_id)
+        agg[item.category_id if item else None]["returns"] += _net(ln)
+    total = sum((a["amount"] - a["returns"] for a in agg.values()), _ZERO)
+    result = ReportResult([
+        ("گروهِ کالا", TEXT), ("تعدادِ کالا", INT), ("تعدادِ فاکتور", INT), ("مبلغِ خرید", MONEY), ("برگشتی", MONEY),
+        ("خالص", MONEY), ("سهم از کل", PERCENT),
+    ], no_total={1, 2})
+    for category_id, a in sorted(agg.items(), key=lambda kv: -(kv[1]["amount"] - kv[1]["returns"])):
+        net = a["amount"] - a["returns"]
+        result.add([categories.get(category_id, "بدونِ گروه"), len(a["items"]), len(a["docs"]), a["amount"], a["returns"],
+                    net, (net * 100 / total) if total else _ZERO])
+    return result
+
+
+# ۱۱) خرید به تفکیکِ مرکزِ هزینه/پروژه
+def purchases_by_cost_center(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    purchases, _returns = _posted_purchase_and_returns(company_id, f, ctx)
+    agg: dict[tuple, dict] = defaultdict(lambda: {"amount": _ZERO, "docs": set(), "suppliers": set()})
+    for doc, ln in purchases:
+        a = agg[(doc.cost_center_detail_account_id, doc.project_detail_account_id)]
+        a["amount"] += _net(ln)
+        a["docs"].add(doc.document_id)
+        a["suppliers"].add(doc.counterparty_detail_account_id)
+    total = sum((a["amount"] for a in agg.values()), _ZERO)
+    result = ReportResult([
+        ("مرکزِ هزینه", TEXT), ("پروژه", TEXT), ("تعدادِ فاکتور", INT), ("تعدادِ تامین‌کننده", INT),
+        ("مبلغِ خرید (بدونِ مالیات)", MONEY), ("سهم از کل", PERCENT),
+    ], no_total={3})
+    for (cc, pj), a in sorted(agg.items(), key=lambda kv: -kv[1]["amount"]):
+        result.add([ctx.names.get(cc, "— بدونِ مرکزِ هزینه —") if cc else "— بدونِ مرکزِ هزینه —",
+                    ctx.names.get(pj, "") if pj else "", len(a["docs"]), len(a["suppliers"]), a["amount"],
+                    (a["amount"] * 100 / total) if total else _ZERO])
+    return result
+
+
+# ۱۲) روندِ ماهانهٔ خرید
+def monthly_trend(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    purchases, returns = _posted_purchase_and_returns(company_id, f, ctx)
+    agg: dict[str, dict] = defaultdict(lambda: {"amount": _ZERO, "returns": _ZERO, "docs": set(), "qty": _ZERO})
+    for doc, ln in purchases:
+        a = agg[_jalali_month(doc.document_date)]
+        a["amount"] += _net(ln)
+        a["qty"] += ln.quantity_base
+        a["docs"].add(doc.document_id)
+    for doc, ln in returns:
+        agg[_jalali_month(doc.document_date)]["returns"] += _net(ln)
+    result = ReportResult([
+        ("ماه", TEXT), ("تعدادِ فاکتور", INT), ("مقدار (پایه)", QTY), ("مبلغِ خرید", MONEY), ("برگشتی", MONEY),
+        ("خالص", MONEY), ("تغییر نسبت به ماهِ قبل", PERCENT),
+    ])
+    previous = None
+    for month in sorted(agg):
+        a = agg[month]
+        net = a["amount"] - a["returns"]
+        change = ((net - previous) * 100 / previous) if previous else None
+        result.add([month, len(a["docs"]), a["qty"], a["amount"], a["returns"], net, change])
+        previous = net
+    return result
+
+
+# ۱۳) تحلیلِ ABC خرید
+def abc_analysis(company_id: int, f: PurchaseFilters) -> ReportResult:
+    base = purchases_by_item(company_id, f)
+    rows = sorted(base.rows, key=lambda r: -r[7])
+    total = sum((r[7] for r in rows if r[7] > 0), _ZERO)
+    result = ReportResult([
+        ("رتبه", INT), ("کالا", TEXT), ("خالصِ مبلغِ خرید", MONEY), ("سهم", PERCENT), ("سهمِ تجمعی", PERCENT), ("کلاس", TEXT),
+    ], no_total={0}, note="A = اقلامی که تا ۸۰٪ هزینه را می‌سازند (کنترلِ دقیق و مذاکره)، B = تا ۹۵٪، C = بقیه.")
+    cumulative = _ZERO
+    for rank, r in enumerate(rows, start=1):
+        share = (r[7] * 100 / total) if total else _ZERO
+        cumulative += share
+        klass = "A" if cumulative - share < 80 else "B" if cumulative - share < 95 else "C"
+        result.add([rank, r[0], r[7], share, cumulative, klass])
+    return result
+
+
+# ۱۴) تمرکزِ تامین (ریسکِ تک‌منبعی)
+def supply_concentration(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.inventory import ItemSupplier
+
+    ctx = _ctx(company_id)
+    purchases, _r = _posted_purchase_and_returns(company_id, f, ctx)
+    agg: dict[int, dict[int, decimal.Decimal]] = defaultdict(lambda: defaultdict(lambda: _ZERO))
+    for doc, ln in purchases:
+        agg[ln.item_id][doc.counterparty_detail_account_id] += _net(ln)
+    with new_session() as session:
+        defined: dict[int, int] = defaultdict(int)
+        for (item_id,) in session.execute(select(ItemSupplier.item_id)):
+            defined[item_id] += 1
+    result = ReportResult([
+        ("کالا", TEXT), ("تعدادِ تامین‌کنندهٔ فعال", INT), ("تامین‌کنندگانِ تعریف‌شده", INT), ("تامین‌کنندهٔ اصلی", TEXT),
+        ("سهمِ تامین‌کنندهٔ اصلی", PERCENT), ("مبلغِ خرید", MONEY), ("ریسک", TEXT),
+    ], no_total={1, 2}, note="«تک‌منبعی» = همهٔ خریدِ این کالا از یک تامین‌کننده بوده؛ جایگزین پیدا کنید.")
+    for item_id, by_supplier in sorted(agg.items(), key=lambda kv: -sum(kv[1].values())):
+        total = sum(by_supplier.values(), _ZERO)
+        top_id, top_amount = max(by_supplier.items(), key=lambda kv: kv[1])
+        share = (top_amount * 100 / total) if total else _ZERO
+        risk = "تک‌منبعی" if len(by_supplier) == 1 else "تمرکزِ بالا" if share >= 80 else "متنوع"
+        result.add([ctx.item_label(item_id), len(by_supplier), defined.get(item_id, 0), ctx.names.get(top_id, ""), share,
+                    total, risk])
+    return result
+
+
+# ۱۸) اصلاحیه‌هایِ فاکتورِ خرید
+def invoice_corrections(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    variance_id = engine_service.get_account_mapping(company_id, "INVENTORY_COST_VARIANCE")
+    inventory_id = engine_service.get_account_mapping(company_id, "INVENTORY_ASSET")
+    with new_session() as session:
+        corrections = list(session.scalars(
+            select(CommercialDocument).where(
+                CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "PURCHASE_INVOICE",
+                CommercialDocument.status_code == "POSTED", CommercialDocument.corrects_document_id.is_not(None),
+                CommercialDocument.document_date.between(f.date_from, f.date_to),
+            ).order_by(CommercialDocument.document_date)
+        ))
+        originals = {d.document_id: d for d in session.scalars(
+            select(CommercialDocument).where(CommercialDocument.document_id.in_([c.corrects_document_id for c in corrections]))
+        )} if corrections else {}
+        je_amounts: dict[tuple[int, int], decimal.Decimal] = defaultdict(lambda: _ZERO)
+        je_ids = [c.journal_entry_id for c in corrections if c.journal_entry_id]
+        if je_ids:
+            for je_id, account_id, dr, cr in session.execute(
+                select(JournalEntryLine.journal_entry_id, JournalEntryLine.account_id,
+                       JournalEntryLine.debit_amount_base, JournalEntryLine.credit_amount_base)
+                .where(JournalEntryLine.journal_entry_id.in_(je_ids))
+            ):
+                je_amounts[(je_id, account_id)] += dr - cr
+    result = ReportResult([
+        ("تاریخِ اصلاح", DATE), ("فاکتورِ اصلی", INT), ("اصلاحیه", INT), ("تامین‌کننده", TEXT), ("مبلغِ اصلی", MONEY),
+        ("مبلغِ اصلاح‌شده", MONEY), ("اختلاف", MONEY), ("اثر بر موجودی", MONEY), ("اثر بر مغایرتِ بها", MONEY),
+    ], no_total={1, 2})
+    for c in corrections:
+        if not _supplier_of_lines(f, c):
+            continue
+        original = originals.get(c.corrects_document_id)
+        old_total = original.total_amount if original else _ZERO
+        result.add([
+            c.document_date, original.document_no if original else None, c.document_no,
+            ctx.names.get(c.counterparty_detail_account_id, ""), old_total, c.total_amount, c.total_amount - old_total,
+            je_amounts.get((c.journal_entry_id, inventory_id), _ZERO) if c.journal_entry_id != (original.journal_entry_id if original else None) else _ZERO,
+            je_amounts.get((c.journal_entry_id, variance_id), _ZERO) if c.journal_entry_id != (original.journal_entry_id if original else None) else _ZERO,
+        ], (c.document_id, c.document_type_code))
+    return result
+
+
+# ۱۹) هزینه‌هایِ جانبیِ خرید (Landed Cost)
+_COST_TYPES = {"FREIGHT": "حمل", "CUSTOMS": "گمرک", "INSURANCE": "بیمه", "HANDLING": "تخلیه/بارگیری", "OTHER": "سایر"}
+
+
+def landed_costs(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.commercial import LandedCostAllocation
+
+    ctx = _ctx(company_id)
+    with new_session() as session:
+        rows = session.execute(
+            select(LandedCostAllocation, CommercialDocument)
+            .join(CommercialDocument, CommercialDocument.document_id == LandedCostAllocation.purchase_invoice_document_id)
+            .where(CommercialDocument.company_id == company_id, CommercialDocument.status_code.in_(("POSTED", "CORRECTED")),
+                   CommercialDocument.document_date.between(f.date_from, f.date_to))
+            .order_by(CommercialDocument.document_date)
+        ).all()
+    result = ReportResult([
+        ("تاریخ", DATE), ("شمارهٔ فاکتور", INT), ("تامین‌کننده", TEXT), ("نوعِ هزینه", TEXT), ("مبلغ", MONEY),
+        ("مبلغِ کالا (فاکتور)", MONEY), ("درصد از کالا", PERCENT), ("حسابِ بستانکار", TEXT), ("شرح", TEXT),
+    ], no_total={1, 5, 6})
+    for alloc, doc in rows:
+        if not _supplier_of_lines(f, doc):
+            continue
+        goods = doc.subtotal_amount - doc.discount_amount
+        result.add([
+            doc.document_date, doc.document_no, ctx.names.get(doc.counterparty_detail_account_id, ""),
+            _COST_TYPES.get(alloc.cost_type_code or "", alloc.cost_type_code or ""), alloc.amount, goods,
+            (alloc.amount * 100 / goods) if goods else _ZERO,
+            ctx.names.get(alloc.credit_detail_account_id, "") if alloc.credit_detail_account_id else "", alloc.notes or "",
+        ], (doc.document_id, doc.document_type_code))
+    return result
+
+
+# ۲۰) تخفیف‌ها و ریبیتِ خرید
+def discounts_and_rebates(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import commercial_purchasing as purchasing_service
+
+    ctx = _ctx(company_id)
+    purchases, _r = _posted_purchase_and_returns(company_id, f, ctx)
+    agg: dict[int, dict] = defaultdict(lambda: {"gross": _ZERO, "discount": _ZERO, "accrued": _ZERO, "settled": _ZERO})
+    for doc, ln in purchases:
+        a = agg[doc.counterparty_detail_account_id]
+        a["gross"] += (ln.quantity * ln.unit_price).quantize(decimal.Decimal("0.01"))
+        a["discount"] += ln.discount_amount or _ZERO
+    agreements = {ag.agreement_id: ag for ag in purchasing_service.list_rebate_agreements(company_id)}
+    for accrual in purchasing_service.list_rebate_accruals():
+        ag = agreements.get(accrual.agreement_id)
+        if ag is None or accrual.period_to < f.date_from or accrual.period_from > f.date_to:
+            continue
+        if f.supplier_id is not None and ag.supplier_detail_account_id != f.supplier_id:
+            continue
+        a = agg[ag.supplier_detail_account_id]
+        key = "settled" if accrual.status_code == "SETTLED" else "accrued"
+        a[key] += accrual.accrued_amount
+    result = ReportResult([
+        ("تامین‌کننده", TEXT), ("مبلغِ ناخالصِ خرید", MONEY), ("تخفیفِ فاکتور", MONEY), ("درصدِ تخفیف", PERCENT),
+        ("ریبیتِ معوق (تسویه‌نشده)", MONEY), ("ریبیتِ تسویه‌شده", MONEY), ("جمعِ صرفه‌جویی", MONEY),
+    ])
+    for supplier_id, a in sorted(agg.items(), key=lambda kv: -(kv[1]["discount"] + kv[1]["accrued"] + kv[1]["settled"])):
+        saving = a["discount"] + a["accrued"] + a["settled"]
+        result.add([ctx.names.get(supplier_id, ""), a["gross"], a["discount"],
+                    (a["discount"] * 100 / a["gross"]) if a["gross"] else _ZERO, a["accrued"], a["settled"], saving])
+    return result
+
+
+# ۲۲) تحویلِ به‌موقع (OTD)
+def on_time_delivery(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    agg: dict[int, dict] = defaultdict(lambda: {"docs": {}, "no_date": set()})
+    for doc, _ln, _received, received_on in _received_orders(company_id, f, ctx):
+        a = agg[doc.counterparty_detail_account_id]
+        if doc.requested_delivery_date is None:
+            a["no_date"].add(doc.document_id)
+            continue
+        a["docs"][doc.document_id] = (received_on - doc.requested_delivery_date).days
+    result = ReportResult([
+        ("تامین‌کننده", TEXT), ("سفارش‌هایِ دریافت‌شده", INT), ("به‌موقع", INT), ("با تاخیر", INT), ("درصدِ به‌موقع", PERCENT),
+        ("میانگینِ روزِ تاخیر", DAYS), ("بدونِ تاریخِ تحویل", INT),
+    ], no_total=set(), note="مبنا: «تاریخِ تحویلِ مورد انتظار»ِ سفارش در برابرِ تاریخِ تاییدِ رسید (یا اولین فاکتور).")
+    for supplier_id, a in sorted(agg.items(), key=lambda kv: ctx.names.get(kv[0], "")):
+        delays = list(a["docs"].values())
+        on_time = sum(1 for d in delays if d <= 0)
+        late = [d for d in delays if d > 0]
+        result.add([ctx.names.get(supplier_id, ""), len(delays), on_time, len(late),
+                    decimal.Decimal(on_time * 100) / len(delays) if delays else _ZERO,
+                    round(sum(late) / len(late)) if late else 0, len(a["no_date"])])
+    return result
+
+
+# ۲۴) کیفیت / نرخِ برگشت
+def quality_returns(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.inventory import QcInspection
+
+    ctx = _ctx(company_id)
+    purchases, returns = _posted_purchase_and_returns(company_id, f, ctx)
+    agg: dict[int, dict] = defaultdict(lambda: {"qty": _ZERO, "ret": _ZERO, "rejected": _ZERO, "inspected": 0})
+    by_stock_line: dict[int, int] = {}
+    for doc, ln in purchases:
+        agg[doc.counterparty_detail_account_id]["qty"] += ln.quantity_base
+        if ln.stock_document_line_id:
+            by_stock_line[ln.stock_document_line_id] = doc.counterparty_detail_account_id
+    for doc, ln in returns:
+        agg[doc.counterparty_detail_account_id]["ret"] += ln.quantity_base
+    if by_stock_line:
+        with new_session() as session:
+            for stock_line_id, rejected in session.execute(
+                select(QcInspection.stock_document_line_id, QcInspection.rejected_quantity)
+                .where(QcInspection.stock_document_line_id.in_(list(by_stock_line)))
+            ):
+                a = agg[by_stock_line[stock_line_id]]
+                a["inspected"] += 1
+                a["rejected"] += rejected or _ZERO
+    result = ReportResult([
+        ("تامین‌کننده", TEXT), ("مقدارِ خرید", QTY), ("مقدارِ برگشتی", QTY), ("نرخِ برگشت", PERCENT),
+        ("تعدادِ بازرسیِ کیفیت", INT), ("مقدارِ ردشده در کنترلِ کیفیت", QTY), ("نرخِ ردی", PERCENT),
+    ])
+    for supplier_id, a in sorted(agg.items(), key=lambda kv: -(kv[1]["ret"] / kv[1]["qty"] if kv[1]["qty"] else 0)):
+        result.add([ctx.names.get(supplier_id, ""), a["qty"], a["ret"], (a["ret"] * 100 / a["qty"]) if a["qty"] else _ZERO,
+                    a["inspected"], a["rejected"], (a["rejected"] * 100 / a["qty"]) if a["qty"] else _ZERO])
+    return result
+
+
+# ۲۱) کارنامهٔ تامین‌کننده
+def supplier_scorecard(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = _ctx(company_id)
+    by_name = lambda rep: {r[0]: r for r in rep.rows}  # noqa: E731
+    fill = by_name(fill_rate(company_id, f))
+    otd = by_name(on_time_delivery(company_id, f))
+    quality = by_name(quality_returns(company_id, f))
+    prices = supplier_price_comparison(company_id, f)
+    price_gap: dict[str, list[decimal.Decimal]] = defaultdict(list)
+    for r in prices.rows:
+        price_gap[r[1]].append(r[6])
+    spend = by_name(purchases_by_supplier(company_id, f))
+    names = set(fill) | set(otd) | set(quality) | set(price_gap) | set(spend)
+    result = ReportResult([
+        ("تامین‌کننده", TEXT), ("خالصِ خرید", MONEY), ("امتیازِ قیمت", PERCENT), ("دقتِ مقدار", PERCENT),
+        ("تحویلِ به‌موقع", PERCENT), ("امتیازِ کیفیت", PERCENT), ("امتیازِ کل", PERCENT), ("رتبه", TEXT),
+    ], no_total=set(), note="امتیازِ قیمت = ۱۰۰ − میانگینِ درصدِ گرانی نسبت به ارزان‌ترین؛ کیفیت = ۱۰۰ − نرخِ برگشت. "
+                            "امتیازِ کل = میانگینِ شاخص‌هایِ موجود.")
+    for name in sorted(names):
+        price = (100 - sum(price_gap[name]) / len(price_gap[name])) if price_gap.get(name) else None
+        fr = fill[name][5] if name in fill else None
+        ot = otd[name][4] if name in otd and otd[name][1] else None
+        ql = (100 - quality[name][3]) if name in quality and quality[name][1] else None
+        parts = [decimal.Decimal(v) for v in (price, fr, ot, ql) if v is not None]
+        overall = sum(parts, _ZERO) / len(parts) if parts else None
+        grade = "" if overall is None else "عالی" if overall >= 90 else "خوب" if overall >= 75 else "متوسط" if overall >= 60 else "ضعیف"
+        result.add([name, spend[name][7] if name in spend else _ZERO, price, fr, ot, ql, overall, grade])
+    result.rows.sort(key=lambda r: -(r[6] or 0))
+    result.refs = [None] * len(result.rows)
+    return result
+
+
+# ۲۸) پیش‌بینیِ پرداخت‌ها
+def payment_forecast(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.treasury import CheckStatus, IssuedCheck
+    from peecha.services import commercial_settlements as settlements_service
+
+    ctx = _ctx(company_id)
+    today = datetime.date.today()
+    entries: list[tuple[datetime.date, str, str, str, decimal.Decimal, tuple[int, str] | None]] = []
+    with new_session() as session:
+        docs = {d.document_id: d for d in session.scalars(
+            select(CommercialDocument).where(CommercialDocument.company_id == company_id,
+                                             CommercialDocument.document_type_code == "PURCHASE_INVOICE",
+                                             CommercialDocument.status_code == "POSTED"))}
+        checks = session.execute(
+            select(IssuedCheck).join(CheckStatus, CheckStatus.status_id == IssuedCheck.status_id)
+            .where(IssuedCheck.company_id == company_id, CheckStatus.code == "ISSUED")
+        ).scalars().all()
+    for status in settlements_service.list_unsettled_invoices(company_id, "PURCHASE_INVOICE"):
+        doc = docs.get(status.document_id)
+        if doc is None or (f.supplier_id is not None and doc.counterparty_detail_account_id != f.supplier_id):
+            continue
+        entries.append((status.due_date or doc.document_date, "فاکتورِ تسویه‌نشده", f"فاکتور {doc.document_no}",
+                        ctx.names.get(doc.counterparty_detail_account_id, ""), status.remaining_amount,
+                        (doc.document_id, doc.document_type_code)))
+    for chk in checks:
+        if f.supplier_id is not None and chk.counterparty_detail_account_id != f.supplier_id:
+            continue
+        entries.append((chk.due_date, "چکِ پرداختنی", f"چک {chk.check_no}",
+                        ctx.names.get(chk.counterparty_detail_account_id, "") if chk.counterparty_detail_account_id else (chk.payee_name or ""),
+                        chk.amount, None))
+    result = ReportResult([
+        ("سررسید", DATE), ("بازه", TEXT), ("نوع", TEXT), ("مرجع", TEXT), ("طرفِ حساب", TEXT), ("مبلغ", MONEY), ("تجمعی", MONEY),
+    ], no_total={6}, note="فاکتورهایِ خریدِ تسویه‌نشده (ماندهٔ باز) و چک‌هایِ پرداختنیِ وصول‌نشده، به ترتیبِ سررسید.")
+    running = _ZERO
+    for due, kind, ref_label, party, amount, ref in sorted(entries, key=lambda e: e[0]):
+        days = (due - today).days
+        bucket = "سررسیدگذشته" if days < 0 else "این هفته" if days <= 7 else "هفتهٔ بعد" if days <= 14 else \
+            "تا ۳۰ روز" if days <= 30 else "تا ۹۰ روز" if days <= 90 else "بعد از ۹۰ روز"
+        running += amount
+        result.add([due, bucket, kind, ref_label, party, amount, running], ref)
+    return result
+
+
+# ۳۰) پیش‌پرداخت‌ها و سفارش‌هایِ در جریانِ پرداخت
+def prepayments(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import order_tracking as order_tracking_service
+
+    ctx = _ctx(company_id)
+    result = ReportResult([
+        ("بخش", TEXT), ("طرف/سفارش", TEXT), ("شرح", TEXT), ("وضعیت", TEXT), ("پرداخت‌شده", MONEY), ("برگشت/تسویه", MONEY),
+        ("مانده", MONEY),
+    ], note="پیش‌پرداخت = تامین‌کنندهٔ دارایِ ماندهٔ بدهکار (طلبِ ما)؛ سفارش‌هایِ «مدیریتِ سفارشات» با پرداخت‌هایِ ثبت‌شده.")
+    try:
+        balances = _balances(company_id, PurchaseFilters(datetime.date(1900, 1, 1), f.date_to, f.supplier_id))
+    except ValueError:
+        balances = {}
+    for supplier_id, a in balances.items():
+        closing = a["open"] + a["credit"] - a["debit"]
+        if closing < 0:
+            result.add(["پیش‌پرداختِ تامین‌کننده", ctx.names.get(supplier_id, ""), "", "", a["debit"], a["credit"], -closing])
+    for order in order_tracking_service.list_orders(company_id):
+        payments = [p for p in order_tracking_service.list_order_payments(company_id, order.detail_account_id)
+                    if p.document_date <= f.date_to]
+        paid = sum((p.debit for p in payments), _ZERO)
+        back = sum((p.credit for p in payments), _ZERO)
+        if not payments:
+            continue
+        result.add(["سفارشِ در جریان", f"{order.code} — {order.name or ''}", order.description or "",
+                    "باز" if order.status_code == "OPEN" else "بسته", paid, back, paid - back])
+    return result
+
+
+# ۳۲) کالاهایِ قابلِ‌خرید و واحدها
+def purchasable_items(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.inventory import ItemSupplier
+    from peecha.services import unit_conversion as uc
+
+    ctx = _ctx(company_id)
+    categories = {c.category_id: c.name for c in catalog_service.list_categories(company_id)}
+    last_price: dict[int, tuple[decimal.Decimal, datetime.date]] = {}
+    for doc, ln in _lines(company_id, ("PURCHASE_INVOICE",), ("POSTED",), None, ctx, dated=False):
+        last_price[ln.item_id] = (_base_price(ln), doc.document_date)
+    with new_session() as session:
+        preferred = {
+            item_id: supplier_id for item_id, supplier_id in session.execute(
+                select(ItemSupplier.item_id, ItemSupplier.supplier_detail_account_id).where(ItemSupplier.is_preferred.is_(True))
+            )
+        }
+    result = ReportResult([
+        ("کد", TEXT), ("نام", TEXT), ("گروه", TEXT), ("واحدِ پایه", TEXT), ("واحدهایِ خرید (ضریب)", TEXT),
+        ("واحدِ پیش‌فرضِ خرید", TEXT), ("زمانِ تحویل (روز)", TEXT), ("حداقلِ سفارش", TEXT), ("تامین‌کنندهٔ ترجیحی", TEXT),
+        ("آخرین فیِ خرید (پایه)", MONEY), ("تاریخِ آخرین خرید", DATE), ("ردیابی", TEXT),
+    ], no_total={9})
+    for item in catalog_service.list_items(company_id, transactable_only=True):
+        if not item.is_purchasable or (f.item_id is not None and item.item_id != f.item_id) \
+                or (f.category_id is not None and item.category_id != f.category_id):
+            continue
+        units = [u for u in uc.get_item_units(item.item_id, purpose="PURCHASE") if not u.is_base]
+        default_unit = next((u.name for u in units if u.is_default_purchase), ctx.uom_names.get(item.base_uom_id, ""))
+        tracking = "، ".join(t for t, on in (("سریال", item.track_serial), ("بچ", item.track_batch), ("انقضا", item.track_expiry)) if on)
+        price = last_price.get(item.item_id)
+        result.add([
+            item.code, item.name or "", categories.get(item.category_id, ""), ctx.uom_names.get(item.base_uom_id, ""),
+            "، ".join(f"{u.name} ({numerals_factor(u.factor)})" for u in units), default_unit,
+            str(item.purchase_lead_time_days or ""), str(item.purchase_min_order_qty.normalize()) if item.purchase_min_order_qty else "",
+            ctx.names.get(preferred.get(item.item_id), "") if preferred.get(item.item_id) else "",
+            price[0] if price else None, price[1] if price else None, tracking,
+        ])
+    return result
+
+
+def numerals_factor(value: decimal.Decimal) -> str:
+    return format(value.normalize(), "f")
+
+
+# ۳۳) فهرستِ قیمتِ تامین‌کنندگان
+def supplier_price_lists(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.inventory import ItemSupplier
+    from peecha.services import commercial_pricing as pricing_service
+
+    ctx = _ctx(company_id)
+    result = ReportResult([
+        ("منبع", TEXT), ("فهرست/تامین‌کننده", TEXT), ("کالا", TEXT), ("واحد", TEXT), ("حداقلِ مقدار", QTY), ("فی", MONEY),
+        ("اعتبار از", DATE), ("اعتبار تا", DATE), ("کدِ کالا نزدِ تامین‌کننده", TEXT), ("زمانِ تحویل", TEXT), ("ترجیحی", TEXT),
+    ], no_total={4, 5})
+    for price_list in pricing_service.list_price_lists(company_id, "PURCHASE"):
+        for row in pricing_service.list_price_list_items(price_list.price_list_id):
+            if (f.item_id is not None and row.item_id != f.item_id) or (
+                    f.category_id is not None and getattr(ctx.items.get(row.item_id), "category_id", None) != f.category_id):
+                continue
+            result.add(["فهرستِ قیمتِ خرید", price_list.name, ctx.item_label(row.item_id), ctx.uom_names.get(row.uom_id, ""),
+                        row.min_quantity, row.unit_price, price_list.valid_from, price_list.valid_to, "", "", ""])
+    with new_session() as session:
+        links = list(session.scalars(select(ItemSupplier)))
+    for link in links:
+        if link.item_id not in ctx.items or (f.supplier_id is not None and link.supplier_detail_account_id != f.supplier_id) \
+                or (f.item_id is not None and link.item_id != f.item_id):
+            continue
+        result.add(["تامین‌کنندهٔ کالا", ctx.names.get(link.supplier_detail_account_id, ""), ctx.item_label(link.item_id), "",
+                    link.min_order_qty, None, None, None, link.supplier_sku or "",
+                    f"{link.lead_time_days} روز" if link.lead_time_days else "", "★" if link.is_preferred else ""])
+    return result
+
+
+# ۳۴) قراردادهایِ ریبیت
+def rebate_agreements(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import commercial_purchasing as purchasing_service
+
+    ctx = _ctx(company_id)
+    accruals = purchasing_service.list_rebate_accruals()
+    result = ReportResult([
+        ("تامین‌کننده", TEXT), ("کالا", TEXT), ("مبنا", TEXT), ("پله‌ها (حداقلِ خرید ← درصد)", TEXT), ("اعتبار از", DATE),
+        ("اعتبار تا", DATE), ("وضعیت", TEXT), ("معوق", MONEY), ("تسویه‌شده", MONEY),
+    ])
+    for ag in purchasing_service.list_rebate_agreements(company_id):
+        if f.supplier_id is not None and ag.supplier_detail_account_id != f.supplier_id:
+            continue
+        tiers = purchasing_service.list_rebate_tiers(ag.agreement_id)
+        mine = [a for a in accruals if a.agreement_id == ag.agreement_id]
+        result.add([
+            ctx.names.get(ag.supplier_detail_account_id, ""), ctx.item_label(ag.item_id) if ag.item_id else "همهٔ کالاها",
+            "درصدِ ثابت" if ag.rebate_basis_code == "FLAT_PERCENT" else "پلکانیِ حجمی",
+            "؛ ".join(f"{t.min_purchase_amount.normalize():f} ← {t.rebate_percent.normalize():f}٪" for t in tiers),
+            ag.valid_from, ag.valid_to, "فعال" if ag.status_code == "ACTIVE" else ag.status_code,
+            sum((a.accrued_amount for a in mine if a.status_code != "SETTLED"), _ZERO),
+            sum((a.accrued_amount for a in mine if a.status_code == "SETTLED"), _ZERO),
+        ])
+    return result
+
+
+# ۳۵) انبارها و انباردارِ مسئول
+def warehouses_and_keepers(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.db.models.security import User
+
+    queue = documents_service.list_purchase_order_goods_receipt_queue(company_id)
+    pending: dict[int | None, int] = defaultdict(int)
+    for doc in queue:
+        if doc.warehouse_approved_at is None:
+            pending[doc.warehouse_id] += 1
+    with new_session() as session:
+        rows = session.execute(
+            select(Warehouse, User.full_name).outerjoin(User, User.user_id == Warehouse.manager_user_id)
+            .where(Warehouse.company_id == company_id).order_by(Warehouse.code)
+        ).all()
+    result = ReportResult([
+        ("کد", TEXT), ("نام", TEXT), ("انباردارِ مسئول", TEXT), ("پیش‌فرض", TEXT), ("فعال", TEXT), ("موجودیِ منفی مجاز", TEXT),
+        ("نشانی", TEXT), ("رسید/حوالهٔ در انتظار", INT),
+    ], note="رسید/حوالهٔ هر انبار فقط توسطِ انباردارِ مسئولِ همان انبار (یا مدیر) تایید می‌شود.")
+    for wh, keeper in rows:
+        if f.warehouse_id is not None and wh.warehouse_id != f.warehouse_id:
+            continue
+        result.add([wh.code, wh.name, keeper or "— (فقط مدیر)", "بله" if wh.is_default else "", "بله" if wh.is_active else "خیر",
+                    "بله" if wh.allow_negative_stock else "", wh.address or "", pending.get(wh.warehouse_id, 0)])
+    return result
+
+
 # ---------------------------------------------------------------------
 # فهرستِ گزارش‌ها (ترتیبِ منو)
 # ---------------------------------------------------------------------
@@ -724,40 +1344,90 @@ class ReportDef:
     func: object
     filters: tuple[str, ...]  # supplier, item, category, warehouse
     hint: str
-    dated: bool = True
+    date_mode: str = "range"  # range | as_of | none
+    group: str = ""
 
+
+_OP, _AN, _PR, _VP, _FI, _MD = "عملیاتی", "تحلیلِ خرید", "قیمت و هزینه", "ارزیابیِ تامین‌کننده", "مالی و بدهی", "اطلاعاتِ پایه"
+_ALL = ("supplier", "item", "category", "warehouse")
 
 REPORTS: list[ReportDef] = [
-    ReportDef("OPEN_PO", "سفارش‌هایِ خریدِ باز", open_purchase_orders, ("supplier", "item", "category", "warehouse"),
-              "سفارش‌هایی که هنوز کامل فاکتور نشده‌اند -- مقدارِ سفارش، رسیده، فاکتورشده و مانده."),
-    ReportDef("PENDING_RECEIPTS", "رسیدهایِ در انتظارِ انبار", pending_receipts, ("supplier", "item", "category", "warehouse"),
-              "سفارش‌ها/امانی‌هایی که منتظرِ تاییدِ انباردار هستند و چند روز است معطل مانده‌اند.", dated=False),
-    ReportDef("GRIR", "رسیده ولی فاکتورنشده (GR/IR)", received_not_invoiced, ("supplier", "item", "category", "warehouse"),
-              "کالایِ تحویل‌گرفته‌ای که فاکتورش هنوز صادر نشده -- بدهیِ شناسایی‌نشده تا «تا تاریخ».", dated=False),
-    ReportDef("PENDING_INVOICES", "فاکتورهایِ خریدِ در انتظار", pending_invoices, ("supplier", "item", "category", "warehouse"),
-              "فاکتور/پیش‌فاکتور/برگشتِ خریدی که در یکی از مراحل مانده‌اند.", dated=False),
-    ReportDef("BY_ITEM", "خرید به تفکیکِ کالا", purchases_by_item, ("supplier", "item", "category", "warehouse"),
-              "مقدار، مبلغ، برگشتی و میانگین/کمترین/بیشترین/آخرین فیِ هر کالا در بازه."),
-    ReportDef("BY_SUPPLIER", "خرید به تفکیکِ تامین‌کننده", purchases_by_supplier, ("supplier", "item", "category", "warehouse"),
-              "حجمِ خرید، تخفیف، مالیات، برگشتی و سهمِ هر تامین‌کننده."),
-    ReportDef("PRICE_HISTORY", "تاریخچهٔ قیمتِ خرید", price_history, ("supplier", "item", "category", "warehouse"),
-              "فیِ هر خرید به واحدِ پایه و درصدِ تغییر نسبت به خریدِ قبلیِ همان کالا."),
+    # --- عملیاتی
+    ReportDef("OPEN_PO", "سفارش‌هایِ خریدِ باز", open_purchase_orders, _ALL,
+              "سفارش‌هایی که هنوز کامل فاکتور نشده‌اند -- مقدارِ سفارش، رسیده، فاکتورشده و مانده.", group=_OP),
+    ReportDef("OVERDUE", "کالاهایِ در راه / معوق", overdue_orders, _ALL,
+              "سفارش‌هایی که هنوز کامل نرسیده‌اند، با روزِ تاخیر نسبت به «تاریخِ تحویلِ مورد انتظار».", "as_of", _OP),
+    ReportDef("PENDING_RECEIPTS", "رسیدهایِ در انتظارِ انبار", pending_receipts, _ALL,
+              "سفارش‌ها/امانی‌هایی که منتظرِ تاییدِ انباردار هستند و چند روز است معطل مانده‌اند.", "none", _OP),
+    ReportDef("GRIR", "رسیده ولی فاکتورنشده (GR/IR)", received_not_invoiced, _ALL,
+              "کالایِ تحویل‌گرفته‌ای که فاکتورش هنوز صادر نشده -- بدهیِ شناسایی‌نشده تا «تا تاریخ».", "as_of", _OP),
+    ReportDef("PENDING_INVOICES", "فاکتورهایِ خریدِ در انتظار", pending_invoices, _ALL,
+              "فاکتور/پیش‌فاکتور/برگشتِ خریدی که در یکی از مراحل مانده‌اند.", "none", _OP),
+    ReportDef("CONSIGNMENTS", "امانی‌هایِ ورودیِ تسویه‌نشده", open_consignments, _ALL,
+              "کالایِ امانیِ هر تامین‌کننده: دریافتی، تسویه‌شده (خرید)، برگشتی و ماندهٔ امانی.", "none", _OP),
+    ReportDef("RETURNS", "برگشت به تامین‌کننده", purchase_returns, _ALL,
+              "برگشت‌هایِ خرید به تفکیکِ کالا/تامین‌کننده با علتِ برگشت.", group=_OP),
+    # --- تحلیلی
+    ReportDef("BY_ITEM", "خرید به تفکیکِ کالا", purchases_by_item, _ALL,
+              "مقدار، مبلغ، برگشتی و میانگین/کمترین/بیشترین/آخرین فیِ هر کالا در بازه.", group=_AN),
+    ReportDef("BY_SUPPLIER", "خرید به تفکیکِ تامین‌کننده", purchases_by_supplier, _ALL,
+              "حجمِ خرید، تخفیف، مالیات، برگشتی و سهمِ هر تامین‌کننده.", group=_AN),
+    ReportDef("BY_CATEGORY", "خرید به تفکیکِ گروهِ کالا", purchases_by_category, _ALL,
+              "تحلیلِ هزینه (Spend Analysis) به تفکیکِ گروهِ کالا.", group=_AN),
+    ReportDef("BY_COST_CENTER", "خرید به تفکیکِ مرکزِ هزینه/پروژه", purchases_by_cost_center, _ALL,
+              "هزینهٔ خریدِ هر مرکزِ هزینه/پروژه (از سرِ فاکتور).", group=_AN),
+    ReportDef("MONTHLY", "روندِ ماهانهٔ خرید", monthly_trend, _ALL,
+              "خرید/برگشت/خالصِ هر ماهِ شمسی و درصدِ تغییر نسبت به ماهِ قبل.", group=_AN),
+    ReportDef("ABC", "تحلیلِ ABC خرید (پارتو)", abc_analysis, _ALL,
+              "کالاهایی که بیشترِ هزینهٔ خرید را می‌سازند -- کلاسِ A/B/C.", group=_AN),
+    ReportDef("CONCENTRATION", "تمرکزِ تامین (ریسکِ تک‌منبعی)", supply_concentration, ("supplier", "item", "category"),
+              "کالاهایی که فقط از یک تامین‌کننده خریده شده‌اند یا سهمِ یک تامین‌کننده خیلی بالاست.", group=_AN),
+    # --- قیمت و هزینه
+    ReportDef("PRICE_HISTORY", "تاریخچهٔ قیمتِ خرید", price_history, _ALL,
+              "فیِ هر خرید به واحدِ پایه و درصدِ تغییر نسبت به خریدِ قبلیِ همان کالا.", group=_PR),
     ReportDef("PRICE_COMPARE", "مقایسهٔ قیمتِ تامین‌کنندگان", supplier_price_comparison, ("supplier", "item", "category"),
-              "آخرین/میانگین/کمترین فیِ هر تامین‌کننده برایِ هر کالا؛ ★ = ارزان‌ترین آخرین قیمت."),
-    ReportDef("PPV", "انحرافِ قیمتِ خرید (PPV)", purchase_price_variance, ("supplier", "item", "category", "warehouse"),
-              "اختلافِ فیِ فاکتور با فیِ سفارشِ مبدا (یا آخرین خرید) و اثرِ ریالیِ آن."),
-    ReportDef("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان", fill_rate, ("supplier", "item", "category", "warehouse"),
-              "مقدارِ دریافتی در برابرِ مقدارِ سفارش، به تفکیکِ تامین‌کننده."),
-    ReportDef("LEAD_TIME", "زمانِ تحویل (Lead Time)", lead_time, ("supplier", "item", "category", "warehouse"),
-              "فاصلهٔ تاریخِ سفارش تا رسید (یا اولین فاکتور) -- میانگین/کمترین/بیشترین."),
+              "آخرین/میانگین/کمترین فیِ هر تامین‌کننده برایِ هر کالا؛ ★ = ارزان‌ترین آخرین قیمت.", group=_PR),
+    ReportDef("PPV", "انحرافِ قیمتِ خرید (PPV)", purchase_price_variance, _ALL,
+              "اختلافِ فیِ فاکتور با فیِ سفارشِ مبدا (یا آخرین خرید) و اثرِ ریالیِ آن.", group=_PR),
+    ReportDef("CORRECTIONS", "اصلاحیه‌هایِ فاکتور و مغایرتِ بها", invoice_corrections, ("supplier",),
+              "فاکتورهایِ خریدِ اصلاح‌شده، اختلافِ مبلغ و اثرِ آن بر موجودی و حسابِ مغایرتِ بها.", group=_PR),
+    ReportDef("LANDED_COST", "هزینه‌هایِ جانبیِ خرید (Landed Cost)", landed_costs, ("supplier",),
+              "حمل/گمرک/بیمه/... ثبت‌شده رویِ فاکتورهایِ خرید و درصدِ آن از مبلغِ کالا.", group=_PR),
+    ReportDef("SAVINGS", "تخفیف‌ها و ریبیتِ خرید", discounts_and_rebates, ("supplier", "item", "category", "warehouse"),
+              "تخفیفِ گرفته‌شده در فاکتورها و ریبیتِ معوق/تسویه‌شدهٔ هر تامین‌کننده.", group=_PR),
+    # --- ارزیابیِ تامین‌کننده
+    ReportDef("SCORECARD", "کارنامهٔ تامین‌کننده", supplier_scorecard, ("supplier", "item", "category"),
+              "امتیازِ ترکیبیِ قیمت، دقتِ مقدار، تحویلِ به‌موقع و کیفیت.", group=_VP),
+    ReportDef("OTD", "تحویلِ به‌موقع (OTD)", on_time_delivery, _ALL,
+              "درصدِ سفارش‌هایی که تا «تاریخِ تحویلِ مورد انتظار» رسیده‌اند.", group=_VP),
+    ReportDef("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان", fill_rate, _ALL,
+              "مقدارِ دریافتی در برابرِ مقدارِ سفارش، به تفکیکِ تامین‌کننده.", group=_VP),
+    ReportDef("QUALITY", "کیفیت / نرخِ برگشت", quality_returns, _ALL,
+              "درصدِ کالایِ برگشتی و ردشده در کنترلِ کیفیت، به تفکیکِ تامین‌کننده.", group=_VP),
+    ReportDef("LEAD_TIME", "زمانِ تحویل (Lead Time)", lead_time, _ALL,
+              "فاصلهٔ تاریخِ سفارش تا رسید (یا اولین فاکتور) -- میانگین/کمترین/بیشترین.", group=_VP),
+    # --- مالی و بدهی
     ReportDef("BALANCES", "ماندهٔ حسابِ تامین‌کنندگان", supplier_balances, ("supplier",),
-              "ماندهٔ اول/گردش/ماندهٔ پایانِ دورهٔ هر تامین‌کننده از دفترِ کل."),
+              "ماندهٔ اول/گردش/ماندهٔ پایانِ دورهٔ هر تامین‌کننده از دفترِ کل.", group=_FI),
     ReportDef("AGING", "سنی‌کردنِ بدهی (AP Aging)", ap_aging, ("supplier",),
-              "ماندهٔ فاکتورهایِ باز به تفکیکِ روزهایِ گذشته از سررسید، تا «تا تاریخ».", dated=False),
+              "ماندهٔ فاکتورهایِ باز به تفکیکِ روزهایِ گذشته از سررسید، تا «تا تاریخ».", "as_of", _FI),
+    ReportDef("FORECAST", "پیش‌بینیِ پرداخت‌ها", payment_forecast, ("supplier",),
+              "سررسیدِ فاکتورهایِ تسویه‌نشده و چک‌هایِ پرداختنی در روزها/هفته‌هایِ آینده.", "none", _FI),
     ReportDef("STATEMENT", "صورت‌حسابِ تامین‌کننده", supplier_statement, ("supplier",),
-              "ریزِ گردشِ حسابِ یک تامین‌کننده با ماندهٔ جاری."),
+              "ریزِ گردشِ حسابِ یک تامین‌کننده با ماندهٔ جاری.", group=_FI),
+    ReportDef("PREPAYMENTS", "پیش‌پرداخت‌ها و سفارش‌هایِ در جریان", prepayments, ("supplier",),
+              "تامین‌کنندگانِ دارایِ پیش‌پرداخت و پرداخت‌هایِ سفارش‌هایِ «مدیریتِ سفارشات».", "as_of", _FI),
+    # --- اطلاعاتِ پایه
     ReportDef("SUPPLIERS", "فهرستِ تامین‌کنندگان", supplier_list, ("supplier",),
-              "اطلاعاتِ پایهٔ تامین‌کنندگان با خریدِ بازه، آخرین خرید و ماندهٔ حساب."),
+              "اطلاعاتِ پایهٔ تامین‌کنندگان با خریدِ بازه، آخرین خرید و ماندهٔ حساب.", group=_MD),
+    ReportDef("ITEMS", "کالاهایِ قابلِ‌خرید و واحدها", purchasable_items, ("item", "category"),
+              "واحدهایِ خرید و ضرایب، واحدِ پیش‌فرض، زمانِ تحویل، تامین‌کنندهٔ ترجیحی و آخرین فی.", "none", _MD),
+    ReportDef("PRICE_LISTS", "فهرستِ قیمتِ تامین‌کنندگان", supplier_price_lists, ("supplier", "item", "category"),
+              "فهرست‌هایِ قیمتِ خرید و تامین‌کنندگانِ تعریف‌شدهٔ هر کالا (کد/زمانِ تحویل/ترجیحی).", "none", _MD),
+    ReportDef("REBATES", "قراردادهایِ ریبیت", rebate_agreements, ("supplier",),
+              "قراردادهایِ ریبیت/تخفیفِ پلکانیِ تامین‌کنندگان با مبلغِ معوق و تسویه‌شده.", "none", _MD),
+    ReportDef("WAREHOUSES", "انبارها و انباردارِ مسئول", warehouses_and_keepers, ("warehouse",),
+              "انباردارِ هر انبار برایِ کنترلِ دسترسیِ رسید/حواله و تعدادِ سندِ در انتظار.", "none", _MD),
 ]
 
 REPORTS_BY_CODE = {r.code: r for r in REPORTS}

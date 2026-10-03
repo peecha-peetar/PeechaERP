@@ -8,6 +8,43 @@
 
 from __future__ import annotations
 
+# R233/R234: منویِ گزارشاتِ تدارکات -- کدها هم‌نامِ services/purchase_reports.REPORTS (تستِ r234 تطابق را بررسی می‌کند)
+PURCHASE_REPORT_MENU = [
+    ("OPS", "عملیاتی", [
+        ("OPEN_PO", "سفارش‌هایِ خریدِ باز"), ("OVERDUE", "کالاهایِ در راه / معوق"),
+        ("PENDING_RECEIPTS", "رسیدهایِ در انتظارِ انبار"), ("GRIR", "رسیده ولی فاکتورنشده (GR/IR)"),
+        ("PENDING_INVOICES", "فاکتورهایِ خریدِ در انتظار"), ("CONSIGNMENTS", "امانی‌هایِ ورودیِ تسویه‌نشده"),
+        ("RETURNS", "برگشت به تامین‌کننده"),
+    ]),
+    ("ANALYSIS", "تحلیلِ خرید", [
+        ("BY_ITEM", "خرید به تفکیکِ کالا"), ("BY_SUPPLIER", "خرید به تفکیکِ تامین‌کننده"),
+        ("BY_CATEGORY", "خرید به تفکیکِ گروهِ کالا"), ("BY_COST_CENTER", "خرید به تفکیکِ مرکزِ هزینه/پروژه"),
+        ("MONTHLY", "روندِ ماهانهٔ خرید"), ("ABC", "تحلیلِ ABC خرید (پارتو)"),
+        ("CONCENTRATION", "تمرکزِ تامین (ریسکِ تک‌منبعی)"),
+    ]),
+    ("PRICE", "قیمت و هزینه", [
+        ("PRICE_HISTORY", "تاریخچهٔ قیمتِ خرید"), ("PRICE_COMPARE", "مقایسهٔ قیمتِ تامین‌کنندگان"),
+        ("PPV", "انحرافِ قیمتِ خرید (PPV)"), ("CORRECTIONS", "اصلاحیه‌هایِ فاکتور و مغایرتِ بها"),
+        ("LANDED_COST", "هزینه‌هایِ جانبیِ خرید (Landed Cost)"), ("SAVINGS", "تخفیف‌ها و ریبیتِ خرید"),
+    ]),
+    ("VENDOR", "ارزیابیِ تامین‌کننده", [
+        ("SCORECARD", "کارنامهٔ تامین‌کننده"), ("OTD", "تحویلِ به‌موقع (OTD)"),
+        ("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان"), ("QUALITY", "کیفیت / نرخِ برگشت"),
+        ("LEAD_TIME", "زمانِ تحویل (Lead Time)"),
+    ]),
+    ("FINANCE", "مالی و بدهی", [
+        ("BALANCES", "ماندهٔ حسابِ تامین‌کنندگان"), ("AGING", "سنی‌کردنِ بدهی (AP Aging)"),
+        ("FORECAST", "پیش‌بینیِ پرداخت‌ها"), ("STATEMENT", "صورت‌حسابِ تامین‌کننده"),
+        ("PREPAYMENTS", "پیش‌پرداخت‌ها و سفارش‌هایِ در جریان"),
+    ]),
+    ("MASTER", "اطلاعاتِ پایه", [
+        ("SUPPLIERS", "فهرستِ تامین‌کنندگان"), ("ITEMS", "کالاهایِ قابلِ‌خرید و واحدها"),
+        ("PRICE_LISTS", "فهرستِ قیمتِ تامین‌کنندگان"), ("REBATES", "قراردادهایِ ریبیت"),
+        ("WAREHOUSES", "انبارها و انباردارِ مسئول"),
+    ]),
+]
+
+
 NAV_ITEMS = [
     {"code": "dashboard", "label": "داشبورد", "screen": "dashboard"},
     # طبقِ درخواستِ صریح («سیستمِ کارتابل قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
@@ -181,29 +218,20 @@ NAV_ITEMS = [
             # نه تبی درونِ فرمِ سفارشِ خرید -- تا بشود فقط همین دسترسی
             # (بدونِ دسترسی به فرمِ کاملِ دارایِ قیمت) به انباردار داد.
             {"code": "PURCH_GOODS_RECEIPT", "label": "تاییدِ رسیدِ کالا", "screen": "purchase_goods_receipt"},
-            # R233: گزارشاتِ تدارکات (services/purchase_reports.py)
+            # R233/R234: گزارشاتِ تدارکات (services/purchase_reports.py) -- شش گروه
             {
                 "code": "PURCH_REPORTS",
                 "label": "گزارشاتِ تدارکات",
                 "children": [
-                    {"code": f"PURCH_RPT_{code}", "label": label, "screen": f"purchase_report_{code.lower()}"}
-                    for code, label in (
-                        ("OPEN_PO", "سفارش‌هایِ خریدِ باز"),
-                        ("PENDING_RECEIPTS", "رسیدهایِ در انتظارِ انبار"),
-                        ("GRIR", "رسیده ولی فاکتورنشده (GR/IR)"),
-                        ("PENDING_INVOICES", "فاکتورهایِ خریدِ در انتظار"),
-                        ("BY_ITEM", "خرید به تفکیکِ کالا"),
-                        ("BY_SUPPLIER", "خرید به تفکیکِ تامین‌کننده"),
-                        ("PRICE_HISTORY", "تاریخچهٔ قیمتِ خرید"),
-                        ("PRICE_COMPARE", "مقایسهٔ قیمتِ تامین‌کنندگان"),
-                        ("PPV", "انحرافِ قیمتِ خرید (PPV)"),
-                        ("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان"),
-                        ("LEAD_TIME", "زمانِ تحویل (Lead Time)"),
-                        ("BALANCES", "ماندهٔ حسابِ تامین‌کنندگان"),
-                        ("AGING", "سنی‌کردنِ بدهی (AP Aging)"),
-                        ("STATEMENT", "صورت‌حسابِ تامین‌کننده"),
-                        ("SUPPLIERS", "فهرستِ تامین‌کنندگان"),
-                    )
+                    {
+                        "code": f"PURCH_RPT_GRP_{group_code}",
+                        "label": group_label,
+                        "children": [
+                            {"code": f"PURCH_RPT_{code}", "label": label, "screen": f"purchase_report_{code.lower()}"}
+                            for code, label in reports
+                        ],
+                    }
+                    for group_code, group_label, reports in PURCHASE_REPORT_MENU
                 ],
             },
         ],

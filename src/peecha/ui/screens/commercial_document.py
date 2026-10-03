@@ -2571,6 +2571,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         due_date_layout.addWidget(self.due_date_field)
         row2_grid.addWidget(self.due_date_box, 0, 5, 2, 1)
         self.due_date_box.setVisible(self._is_invoice)
+        # R234: تاریخِ تحویلِ مورد انتظارِ سفارش -- مبنایِ گزارش‌هایِ «کالایِ معوق» و «تحویلِ به‌موقع»
+        self.delivery_date_box = QWidget()
+        delivery_date_layout = QVBoxLayout(self.delivery_date_box)
+        delivery_date_layout.setContentsMargins(0, 0, 0, 0)
+        delivery_date_layout.setSpacing(3)
+        delivery_date_layout.addWidget(QLabel("تاریخِ تحویلِ مورد انتظار"))
+        self.delivery_date_field = JalaliDateEdit()
+        delivery_date_layout.addWidget(self.delivery_date_field)
+        row2_grid.addWidget(self.delivery_date_box, 0, 5, 2, 1)
+        self.delivery_date_box.setVisible(self.document_type_code in ("PURCHASE_ORDER", "SALES_ORDER"))
 
         # طبقِ درخواستِ صریح (فاکتورِ امانیِ خروجی): علاوه‌بر انبارِ خودمان
         # (فیلدِ «انبار» بالا -- مبدأِ ارسال)، یک انبارِ دوم لازم است که
@@ -3302,6 +3312,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # می‌کند -- این‌جا با مقدارِ واقعاً ذخیره‌شده رویِ سند
             # جای‌گزینش می‌کنیم تا موعدِ دستی‌تنظیم‌شده گم نشود.
             self.due_date_field.setDate(doc.due_date or doc.document_date)
+        if self.delivery_date_box.isVisibleTo(self):
+            self.delivery_date_field.setDate(doc.requested_delivery_date or doc.document_date)
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
         self.tax_posting_mode_combo.setCurrentIndex(max(0, self.tax_posting_mode_combo.findData(doc.tax_posting_mode)))
@@ -4369,6 +4381,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.date_field.setDate(datetime.date.today())
         if self._is_invoice:
             self.due_date_field.setDate(datetime.date.today())
+        self.delivery_date_field.setDate(datetime.date.today() + datetime.timedelta(days=7))
         self.counterparty_combo.setCurrentIndex(0)
         self.warehouse_combo.setCurrentIndex(0)
         if self.document_type_code == "CONSIGNMENT_OUT":
@@ -4462,6 +4475,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             cost_center_detail_account_id=self.cost_center_combo.currentData(),
             project_detail_account_id=self.project_combo.currentData(),
             due_date=self.due_date_field.date() if self._is_invoice else None,
+            requested_delivery_date=(
+                self.delivery_date_field.date() if self.document_type_code in ("PURCHASE_ORDER", "SALES_ORDER") else None
+            ),
             reference_no=self.reference_field.text().strip() or None,
             description=self.description_field.text().strip() or None,
             tax_posting_mode=self.tax_posting_mode_combo.currentData() if self._supports_tax_posting_mode else None,
