@@ -8,9 +8,11 @@
 
 from __future__ import annotations
 
-# R233/R234: منویِ گزارشاتِ تدارکات -- کدها هم‌نامِ services/purchase_reports.REPORTS (تستِ r234 تطابق را بررسی می‌کند)
+# R233/R236: منویِ «گزارش‌ها ‹ گزارشاتِ خرید» -- کدها هم‌نامِ services/purchase_reports.REPORTS (تست تطابق را بررسی می‌کند)
 PURCHASE_REPORT_MENU = [
     ("OPS", "عملیاتی", [
+        ("REG_INVOICE", "دفترِ فاکتورهایِ خرید"), ("REG_INVOICE_LINES", "ریزِ اقلامِ فاکتورهایِ خرید"),
+        ("REG_ORDER", "دفترِ سفارش‌هایِ خرید"), ("REG_PROFORMA", "دفترِ پیش‌فاکتورهایِ خرید"),
         ("OPEN_PO", "سفارش‌هایِ خریدِ باز"), ("OVERDUE", "کالاهایِ در راه / معوق"),
         ("PENDING_RECEIPTS", "رسیدهایِ در انتظارِ انبار"), ("GRIR", "رسیده ولی فاکتورنشده (GR/IR)"),
         ("PENDING_INVOICES", "فاکتورهایِ خریدِ در انتظار"), ("CONSIGNMENTS", "امانی‌هایِ ورودیِ تسویه‌نشده"),
@@ -43,6 +45,61 @@ PURCHASE_REPORT_MENU = [
         ("WAREHOUSES", "انبارها و انباردارِ مسئول"),
     ]),
 ]
+
+
+# R236: منویِ «گزارش‌ها ‹ گزارشاتِ فروش» -- (کد، برچسب) = services/purchase_reports.SALES_REPORTS؛
+# dict = صفحه‌هایِ گزارشِ فروشِ قبلی
+SALES_REPORT_MENU = [
+    ("OPS", "عملیاتی", [
+        ("REG_INVOICE", "دفترِ فاکتورهایِ فروش"), ("REG_INVOICE_LINES", "ریزِ اقلامِ فاکتورهایِ فروش"),
+        ("REG_ORDER", "دفترِ سفارش‌هایِ فروش"), ("REG_PROFORMA", "دفترِ پیش‌فاکتورهایِ فروش"),
+        ("OPEN_ORDERS", "سفارش‌هایِ فروشِ باز"), ("OVERDUE", "سفارش‌هایِ معوق در تحویل"),
+        ("PENDING_ISSUES", "حواله‌هایِ در انتظارِ انبار"), ("DELIVERED_NOT_INVOICED", "تحویل‌شده ولی فاکتورنشده"),
+        ("PENDING_INVOICES", "فاکتورهایِ فروشِ در انتظار"), ("CONSIGNMENTS", "امانی‌هایِ خروجیِ تسویه‌نشده"),
+        ("RETURNS", "برگشت از فروش"),
+    ]),
+    ("ANALYSIS", "تحلیلِ فروش", [
+        ("BY_ITEM", "فروش به تفکیکِ کالا"), ("BY_CUSTOMER", "فروش به تفکیکِ مشتری"),
+        ("BY_CATEGORY", "فروش به تفکیکِ گروهِ کالا"), ("BY_COST_CENTER", "فروش به تفکیکِ مرکزِ هزینه/پروژه"),
+        ("BY_REP", "فروش به تفکیکِ فروشنده/ویزیتور"), ("MONTHLY", "روندِ ماهانهٔ فروش"), ("ABC", "تحلیلِ ABC فروش (پارتو)"),
+        {"code": "REPORTS_SALES_BY_ITEM", "label": "گزارشِ فروش (خلاصهٔ کالا)", "screen": "report_sales"},
+        {"code": "REPORTS_SALES_BY_CHANNEL", "label": "گزارشِ فروش بر اساسِ کانال", "screen": "report_sales_by_channel"},
+        {"code": "REPORTS_SALES_FORECAST", "label": "پیش‌بینیِ فروش", "screen": "report_sales_forecast"},
+    ]),
+    ("PROFIT", "سود، قیمت و تخفیف", [
+        ("GP_ITEM", "سودِ ناخالص به تفکیکِ کالا"), ("GP_CUSTOMER", "سودِ ناخالص به تفکیکِ مشتری"),
+        {"code": "REPORTS_CUSTOMER_PROFIT", "label": "سودِ واقعیِ مشتریان", "screen": "report_customer_profit"},
+        ("PRICE_HISTORY", "تاریخچهٔ قیمتِ فروش"), ("PRICE_COMPARE", "مقایسهٔ قیمتِ فروش به مشتریان"),
+        ("DISCOUNTS", "تخفیف‌هایِ فروش"), ("CORRECTIONS", "اصلاحیه‌هایِ فاکتورِ فروش"),
+    ]),
+    ("DELIVERY", "عملکردِ تحویل", [
+        ("OTD", "تحویلِ به‌موقع به مشتری"), ("FILL_RATE", "دقتِ مقدارِ تحویل به مشتری"),
+        ("LEAD_TIME", "زمانِ تحویلِ سفارش"), ("QUALITY", "نرخِ برگشت از فروش"),
+    ]),
+    ("FINANCE", "مالی و مطالبات", [
+        ("BALANCES", "ماندهٔ حسابِ مشتریان"), ("AGING", "سنی‌کردنِ مطالبات (AR Aging)"), ("FORECAST", "پیش‌بینیِ وصول"),
+        ("STATEMENT", "صورت‌حسابِ مشتری"), ("PREPAYMENTS", "پیش‌دریافت‌هایِ مشتریان"),
+    ]),
+    ("MASTER", "اطلاعاتِ پایه", [
+        ("CUSTOMERS", "فهرستِ مشتریان"), ("ITEMS", "کالاهایِ قابلِ‌فروش و واحدها"),
+        ("PRICE_LISTS", "فهرست‌هایِ قیمتِ فروش"), ("WAREHOUSES", "انبارها و انباردارِ مسئول"),
+    ]),
+]
+
+
+def _report_menu(prefix: str, screen_prefix: str, menu: list) -> list[dict]:
+    return [
+        {
+            "code": f"{prefix}_GRP_{group_code}",
+            "label": group_label,
+            "children": [
+                entry if isinstance(entry, dict)
+                else {"code": f"{prefix}_{entry[0]}", "label": entry[1], "screen": f"{screen_prefix}{entry[0].lower()}"}
+                for entry in entries
+            ],
+        }
+        for group_code, group_label, entries in menu
+    ]
 
 
 NAV_ITEMS = [
@@ -218,22 +275,6 @@ NAV_ITEMS = [
             # نه تبی درونِ فرمِ سفارشِ خرید -- تا بشود فقط همین دسترسی
             # (بدونِ دسترسی به فرمِ کاملِ دارایِ قیمت) به انباردار داد.
             {"code": "PURCH_GOODS_RECEIPT", "label": "تاییدِ رسیدِ کالا", "screen": "purchase_goods_receipt"},
-            # R233/R234: گزارشاتِ تدارکات (services/purchase_reports.py) -- شش گروه
-            {
-                "code": "PURCH_REPORTS",
-                "label": "گزارشاتِ تدارکات",
-                "children": [
-                    {
-                        "code": f"PURCH_RPT_GRP_{group_code}",
-                        "label": group_label,
-                        "children": [
-                            {"code": f"PURCH_RPT_{code}", "label": label, "screen": f"purchase_report_{code.lower()}"}
-                            for code, label in reports
-                        ],
-                    }
-                    for group_code, group_label, reports in PURCHASE_REPORT_MENU
-                ],
-            },
         ],
     },
     {
@@ -332,35 +373,9 @@ NAV_ITEMS = [
                     {"code": "REPORTS_ITEM_LEDGER", "label": "کاردکسِ کالا", "screen": "report_item_ledger"},
                 ],
             },
-            {
-                "code": "REPORTS_SALES",
-                "label": "فروش",
-                "children": [
-                    {
-                        "code": "REPORTS_SALES_BY_ITEM",
-                        "label": "گزارشِ فروش",
-                        "screen": "report_sales",
-                    },
-                    {
-                        "code": "REPORTS_CUSTOMER_PROFIT",
-                        "label": "سودِ واقعیِ مشتریان",
-                        "screen": "report_customer_profit",
-                    },
-                    {
-                        "code": "REPORTS_SALES_FORECAST",
-                        "label": "پیش‌بینیِ فروش",
-                        "screen": "report_sales_forecast",
-                    },
-                    # طبقِ بازخوردِ صریحِ کاربر («امکاناتِ حیاتیِ PeechaSync
-                    # -- گزارشِ فروشِ اینترنتی بر اساسِ کانال»): سهمِ هر
-                    # کانال (POS/عمده/اینترنتی/نماینده/مارکت‌پلیس) از فروش.
-                    {
-                        "code": "REPORTS_SALES_BY_CHANNEL",
-                        "label": "گزارشِ فروش بر اساسِ کانال",
-                        "screen": "report_sales_by_channel",
-                    },
-                ],
-            },
+            # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
+            {"code": "REPORTS_PURCHASE", "label": "گزارشاتِ خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
+            {"code": "REPORTS_SALES", "label": "گزارشاتِ فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ

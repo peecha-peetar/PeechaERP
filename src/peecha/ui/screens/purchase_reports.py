@@ -23,6 +23,8 @@ from peecha.ui.widgets import persist_column_widths
 _TYPE_TO_NAV_CODE = {
     "PURCHASE_ORDER": "PURCH_ORDER", "PURCHASE_PROFORMA": "PURCH_PROFORMA", "PURCHASE_INVOICE": "PURCH_INVOICE",
     "PURCHASE_RETURN": "PURCH_RETURN", "CONSIGNMENT_IN": "PURCH_CONSIGNMENT_IN",
+    "SALES_ORDER": "SALES_ORDER", "SALES_PROFORMA": "SALES_PROFORMA", "SALES_INVOICE": "SALES_INVOICE",
+    "SALES_RETURN": "SALES_RETURN", "CONSIGNMENT_OUT": "SALES_CONSIGNMENT_OUT",
 }
 
 
@@ -50,8 +52,9 @@ def _fill(combo: QComboBox, options: list[tuple[str, int]]) -> None:
 
 
 class PurchaseReportScreen(ReportScreenBase):
-    def __init__(self, report_code: str, main_window=None) -> None:
-        self._def = reports_service.REPORTS_BY_CODE[report_code]
+    def __init__(self, report_code: str, main_window=None, side: str = "PURCHASE") -> None:
+        self._side = side
+        self._def = reports_service.report_def(report_code, side)
         super().__init__(self._def.title)
         self._main_window = main_window
         self._decimal_places = 0
@@ -73,7 +76,7 @@ class PurchaseReportScreen(ReportScreenBase):
         self.category_combo = _searchable_combo()
         self.warehouse_combo = _searchable_combo()
         self._filter_widgets = {
-            "supplier": ("تامین‌کننده:", self.supplier_combo),
+            "supplier": ("تامین‌کننده:" if side == "PURCHASE" else "مشتری:", self.supplier_combo),
             "item": ("کالا:", self.item_combo),
             "category": ("گروهِ کالا:", self.category_combo),
             "warehouse": ("انبار:", self.warehouse_combo),
@@ -90,9 +93,9 @@ class PurchaseReportScreen(ReportScreenBase):
 
         self.table.cellDoubleClicked.connect(self._open_row)
         self.table.setToolTip("دابل‌کلیک رویِ ردیف، سندِ مربوط را باز می‌کند.")
-        persist_column_widths(self.table, f"purchaseReport/{report_code}")
+        persist_column_widths(self.table, f"{'purchase' if side == 'PURCHASE' else 'sales'}Report/{report_code}")
         self.add_field_help([
-            (self.supplier_combo, "فقط اسنادِ همین تامین‌کننده. با تایپِ کد/نام جستجو کنید."),
+            (self.supplier_combo, "فقط اسنادِ همین طرفِ حساب. با تایپِ کد/نام جستجو کنید."),
             (self.item_combo, "فقط ردیف‌هایِ همین کالا."),
             (self.category_combo, "فقط کالاهایِ این گروه."),
             (self.warehouse_combo, "فقط ردیف‌هایِ این انبار."),
@@ -102,8 +105,9 @@ class PurchaseReportScreen(ReportScreenBase):
         company_id = self._company_id()
         if company_id is not None:
             self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
-            _fill(self.supplier_combo, [(f"{s['code']} — {s['name'] or ''}", s["detail_account_id"])
-                                        for s in dimensions_service.list_suppliers(company_id)])
+            parties = dimensions_service.list_suppliers(company_id) if self._side == "PURCHASE" \
+                else dimensions_service.list_customers(company_id)
+            _fill(self.supplier_combo, [(f"{s['code']} — {s['name'] or ''}", s["detail_account_id"]) for s in parties])
             _fill(self.item_combo, [(f"{i.code} — {i.name or ''}", i.item_id)
                                     for i in catalog_service.list_items(company_id, transactable_only=True)])
             _fill(self.category_combo, [(f"{c.code} — {c.name}", c.category_id) for c in catalog_service.list_categories(company_id)])
@@ -120,7 +124,7 @@ class PurchaseReportScreen(ReportScreenBase):
             date_from = datetime.date(1900, 1, 1)
         return reports_service.PurchaseFilters(
             date_from=date_from, date_to=date_to, supplier_id=value("supplier"), item_id=value("item"),
-            category_id=value("category"), warehouse_id=value("warehouse"),
+            category_id=value("category"), warehouse_id=value("warehouse"), side=self._side,
         )
 
     def _fmt(self, value, kind: str) -> str:

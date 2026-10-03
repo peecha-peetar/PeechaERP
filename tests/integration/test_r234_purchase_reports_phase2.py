@@ -269,7 +269,7 @@ check(len(r) >= 1 and r[0][7] >= 1, f"۳۵) انبار با رسیدِ در ان
 # --- منو و UI
 from peecha import nav_catalog
 menu_codes = [c for _g, _l, items in nav_catalog.PURCHASE_REPORT_MENU for c, _ in items]
-check(sorted(menu_codes) == sorted(r.code for r in pr.REPORTS) and len(menu_codes) == 35, "منو و سرویس: ۳۵ گزارش هم‌خوان")
+check(sorted(menu_codes) == sorted(r.code for r in pr.REPORTS), "منو و سرویس هم‌خوان")
 from peecha.ui.shell_window import MainWindow
 mw = MainWindow(); mw.resize(1300, 850); mw.show(); app.processEvents()
 failed = []

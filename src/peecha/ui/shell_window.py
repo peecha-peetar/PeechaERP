@@ -1660,6 +1660,10 @@ class MainWindow(QMainWindow):
 
         for report in _PURCHASE_REPORTS:
             self.register_screen(f"purchase_report_{report.code.lower()}", PurchaseReportScreen(report.code, self))
+        from peecha.services.purchase_reports import SALES_REPORTS as _SALES_REPORTS
+
+        for report in _SALES_REPORTS:
+            self.register_screen(f"sales_report_{report.code.lower()}", PurchaseReportScreen(report.code, self, side="SALES"))
         # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
         # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
         # همان کلاس با invoice_type متفاوت است.
