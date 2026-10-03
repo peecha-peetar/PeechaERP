@@ -25,13 +25,13 @@ import datetime
 import decimal
 from dataclasses import dataclass, field
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import AccountDetailDimension, DetailAccount, FiscalYear, JournalEntryLine
 from peecha.db.models.commercial import (
-    Channel, CommercialDocument, CommercialDocumentLine, CreditHold, CustomerProfile, LandedCostAllocation, PosSettings,
+    Channel, CommercialDocument, CommercialDocumentLine, CreditHold, CustomerProfile, DocumentChangeLog, LandedCostAllocation, PosSettings,
 )
 from peecha.db.models.inventory import Item, StockDocument, Warehouse
 from peecha.services import commercial_contracts as contracts_service
@@ -368,6 +368,67 @@ class DocumentHeaderFields:
     # طبقِ درخواستِ صریح («نوعِ تسویه در سفارش/فاکتورِ پخشِ سرد مشخص
     # بشه»): برچسبِ نمایشیِ سبک -- جدا از نقشه‌یِ کاملِ تسویه‌یِ فاکتور.
     settlement_type_code: str | None = None
+    # R240: نوعِ خرید (comm.purchase_types) -- فقط برایِ اسنادِ خرید معنا دارد
+    purchase_type_id: int | None = None
+
+
+# ---------------------------------------------------------------------
+# R240: تاریخچهٔ تغییرات/وضعیتِ اسناد (comm.document_change_log) -- فقط ثبت، بدونِ اثر بر منطق
+# ---------------------------------------------------------------------
+def _actor(user_id: int | None = None) -> int | None:
+    if user_id is not None:
+        return user_id
+    from peecha import session as app_session
+
+    return app_session.current_user.user_id if app_session.current_user is not None else None
+
+
+def _log_change(session, doc, action: str, *, user_id: int | None = None, line_id: int | None = None,
+                field_name: str | None = None, old=None, new=None) -> None:
+    if doc.pos_session_id is not None:
+        return
+    session.add(DocumentChangeLog(
+        document_id=doc.document_id, line_id=line_id, user_id=_actor(user_id), action=action, status_code=doc.status_code,
+        field_name=field_name, old_value=None if old is None else str(old), new_value=None if new is None else str(new),
+    ))
+
+
+def _was_confirmed(session, document_id: int) -> bool:
+    """آیا سند قبلاً تایید/تصویب شده (پس تغییرِ فعلی «تغییر پس از تایید» است)؟"""
+    return session.scalar(
+        select(DocumentChangeLog.log_id).where(
+            DocumentChangeLog.document_id == document_id, DocumentChangeLog.action == "STATUS",
+            or_(DocumentChangeLog.new_value.in_(("CONFIRMED", "APPROVED")), DocumentChangeLog.old_value.in_(("CONFIRMED", "APPROVED"))),
+        ).limit(1)
+    ) is not None
+
+
+def _log_status(session, doc, old_status: str, user_id: int | None = None) -> None:
+    _log_change(session, doc, "STATUS", user_id=user_id, field_name="status_code", old=old_status, new=doc.status_code)
+
+
+def list_document_changes(document_id: int) -> list[DocumentChangeLog]:
+    with new_session() as session:
+        return list(session.scalars(
+            select(DocumentChangeLog).where(DocumentChangeLog.document_id == document_id)
+            .order_by(DocumentChangeLog.changed_at, DocumentChangeLog.log_id)
+        ))
+
+
+def set_line_expected_delivery_date(line_id: int, document_id: int, company_id: int, value: datetime.date | None) -> None:
+    """R240: تاریخِ تحویلِ ردیف -- در هر وضعیتی جز لغو قابلِ‌تغییر است (اثری بر موجودی/حسابداری ندارد)."""
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        line = session.get(CommercialDocumentLine, line_id)
+        if doc is None or doc.company_id != company_id or line is None or line.document_id != document_id:
+            raise ValueError("ردیف نامعتبر است.")
+        if doc.status_code == "CANCELLED":
+            raise ValueError("سندِ لغوشده قابلِ‌تغییر نیست.")
+        if line.expected_delivery_date != value:
+            _log_change(session, doc, "UPDATE_LINE", line_id=line_id, field_name="expected_delivery_date",
+                        old=line.expected_delivery_date, new=value)
+            line.expected_delivery_date = value
+        session.commit()
 
 
 def create_document(
@@ -408,7 +469,7 @@ def create_document(
             project_detail_account_id=fields.project_detail_account_id,
             reference_no=(fields.reference_no or None), description=(fields.description or None),
             tax_posting_mode=fields.tax_posting_mode, tax_exempt=fields.tax_exempt,
-            settlement_type_code=fields.settlement_type_code,
+            settlement_type_code=fields.settlement_type_code, purchase_type_id=fields.purchase_type_id,
             created_by_user_id=created_by_user_id,
         )
         session.add(doc)
@@ -627,7 +688,7 @@ def convert_to_invoice(
             cost_center_detail_account_id=source.cost_center_detail_account_id,
             project_detail_account_id=source.project_detail_account_id,
             reference_no=source.reference_no, description=source.description,
-            settlement_type_code=source.settlement_type_code,
+            settlement_type_code=source.settlement_type_code, purchase_type_id=source.purchase_type_id,
         )
 
     new_document_id = create_document(company_id, created_by_user_id, target_type, document_date, header_fields)
@@ -717,6 +778,7 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
             cost_center_detail_account_id=original.cost_center_detail_account_id,
             project_detail_account_id=original.project_detail_account_id,
             reference_no=original.reference_no, description=original.description,
+            purchase_type_id=original.purchase_type_id,
         )
         original_type = original.document_type_code
 
@@ -1043,6 +1105,17 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
         raise ValueError("نوعِ ثبتِ سند نامعتبر است.")
     with new_session() as session:
         doc = _get_editable_document(session, document_id, company_id)
+        if _was_confirmed(session, document_id):
+            for field_name, new in (
+                ("document_date", document_date), ("counterparty_detail_account_id", fields.counterparty_detail_account_id),
+                ("warehouse_id", fields.warehouse_id), ("requested_delivery_date", fields.requested_delivery_date),
+                ("purchase_type_id", fields.purchase_type_id),
+            ):
+                old = getattr(doc, field_name)
+                if new is not None and old != new:
+                    _log_change(session, doc, "UPDATE_HEADER", field_name=field_name, old=old, new=new)
+        if fields.purchase_type_id is not None:
+            doc.purchase_type_id = fields.purchase_type_id
         doc.document_date = document_date
         doc.fiscal_year_id = _resolve_fiscal_year_id(session, company_id, document_date)
         doc.counterparty_detail_account_id = fields.counterparty_detail_account_id
@@ -1525,7 +1598,7 @@ def add_line(
     tax_percent: decimal.Decimal = _ZERO,
     batch_id: int | None = None, serial_id: int | None = None, source_line_id: int | None = None,
     description: str | None = None, warehouse_id: int | None = None,
-    conversion_factor: decimal.Decimal | None = None,
+    conversion_factor: decimal.Decimal | None = None, expected_delivery_date: datetime.date | None = None,
 ) -> int:
     if quantity <= 0 or quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
@@ -1633,9 +1706,12 @@ def add_line(
             discount_percent=discount_percent, tax_percent=tax_percent, tax_amount=tax_amount,
             batch_id=batch_id, serial_id=serial_id,
             source_line_id=source_line_id, description=(description or None), warehouse_id=warehouse_id,
+            expected_delivery_date=expected_delivery_date,
         )
         session.add(line)
         session.flush()
+        if _was_confirmed(session, document_id):
+            _log_change(session, doc, "ADD_LINE", line_id=line.line_id, field_name="quantity", new=quantity)
         _recompute_header_totals(session, document_id)
         session.commit()
         return line.line_id
@@ -1645,6 +1721,7 @@ def update_line(
     line_id: int, document_id: int, company_id: int, quantity: decimal.Decimal, unit_price: decimal.Decimal,
     discount_amount: decimal.Decimal = _ZERO, discount_percent: decimal.Decimal = _ZERO,
     tax_percent: decimal.Decimal = _ZERO, description: str | None | object = ...,
+    expected_delivery_date: datetime.date | None | object = ...,
 ) -> None:
     """طبقِ درخواستِ صریحِ کاربر («در همان ردیف تعداد و قیمت و تخفیف و
     مالیات را وارد کرد»): برایِ ویرایشِ زنده/درجایِ یک ردیفِ ازپیش‌ذخیره‌شده
@@ -1682,6 +1759,15 @@ def update_line(
             discount_amount = _money(gross_amount * (discount_percent / 100))
         net_amount = gross_amount - discount_amount
         tax_amount = _money(net_amount * (tax_percent / 100)) if tax_percent and net_amount > 0 else _ZERO
+        if _was_confirmed(session, document_id):
+            for field_name, old, new in (
+                ("quantity", line.quantity, quantity), ("unit_price", line.unit_price, unit_price),
+                ("discount_amount", line.discount_amount, discount_amount), ("tax_percent", line.tax_percent, tax_percent),
+            ):
+                if old != new:
+                    _log_change(session, doc, "UPDATE_LINE", line_id=line_id, field_name=field_name, old=old, new=new)
+        if expected_delivery_date is not ...:
+            line.expected_delivery_date = expected_delivery_date
         line.quantity = quantity
         if quantity != line.quantity:
             uc.validate_quantity(line.item_id, line.uom_id, quantity, check_min_max=False, require_active=False)
@@ -1715,6 +1801,11 @@ def delete_line(line_id: int, document_id: int, company_id: int) -> None:
             raise ValueError("این ردیف قبلاً (به‌طور کامل یا جزئی) به فاکتور تبدیل شده و دیگر حذف نمی‌شود.")
         if line_id in _locked_line_ids(session, document_id):
             raise ValueError("مقدارِ این ردیف را انباردار در رسیدِ کالا تایید کرده -- قابلِ‌حذف نیست.")
+        if _was_confirmed(session, document_id):
+            deleted = session.get(CommercialDocumentLine, line_id)
+            doc = session.get(CommercialDocument, document_id)
+            _log_change(session, doc, "DELETE_LINE", line_id=line_id, field_name="quantity",
+                        old=deleted.quantity if deleted is not None else None)
         session.query(CommercialDocumentLine).filter(CommercialDocumentLine.line_id == line_id).delete()
         _recompute_header_totals(session, document_id)
         session.commit()
@@ -1835,6 +1926,7 @@ def confirm_document(document_id: int, company_id: int, confirmed_by_user_id: in
                     "لطفاً یک انبار انتخاب کنید یا انبارِ پیش‌فرض را در تنظیماتِ انبار مشخص کنید."
                 )
         doc.status_code = "CONFIRMED"
+        _log_status(session, doc, "DRAFT", confirmed_by_user_id)
         document_type_code = doc.document_type_code
         counterparty_id = doc.counterparty_detail_account_id
         total_amount = doc.total_amount
@@ -1848,7 +1940,7 @@ def confirm_document(document_id: int, company_id: int, confirmed_by_user_id: in
             )
 
 
-def approve_document(document_id: int, company_id: int) -> None:
+def approve_document(document_id: int, company_id: int, approved_by_user_id: int | None = None) -> None:
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -1861,6 +1953,9 @@ def approve_document(document_id: int, company_id: int) -> None:
         if open_hold is not None:
             raise ValueError("این سند قفلِ اعتباریِ بازِ حل‌نشده دارد — ابتدا آزادسازی کنید.")
         doc.status_code = "APPROVED"
+        doc.approved_by_user_id = _actor(approved_by_user_id)
+        doc.approved_at = datetime.datetime.now()
+        _log_status(session, doc, "CONFIRMED", approved_by_user_id)
         session.commit()
 
 
@@ -2327,7 +2422,9 @@ def revert_to_draft(document_id: int, company_id: int) -> None:
         session.query(CreditHold).filter(
             CreditHold.related_document_id == document_id, CreditHold.released_at.is_(None)
         ).delete()
+        _old_status = doc.status_code
         doc.status_code = "DRAFT"
+        _log_status(session, doc, _old_status)
         session.commit()
 
 
@@ -2425,14 +2522,24 @@ def create_compensating_transfer(company_id: int, user_id: int, shortage: StockS
     return transfer_doc_id
 
 
-def cancel_document(document_id: int, company_id: int) -> None:
+def cancel_document(
+    document_id: int, company_id: int, *, reason_id: int | None = None, note: str | None = None,
+    cancelled_by_user_id: int | None = None,
+) -> None:
+    """R240: علت/توضیح/کاربر/زمانِ لغو هم ثبت می‌شود (اختیاری؛ فراخوان‌هایِ قبلی بی‌تغییر کار می‌کنند)."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         if doc.status_code not in ("DRAFT", "CONFIRMED", "APPROVED"):
             raise ValueError("سندِ ثبت‌شده هرگز لغو نمی‌شود — برایِ اصلاح، سندِ تازه‌ای ثبت کنید.")
+        _old_status = doc.status_code
         doc.status_code = "CANCELLED"
+        doc.cancellation_reason_id = reason_id
+        doc.cancellation_note = (note or None)
+        doc.cancelled_at = datetime.datetime.now()
+        doc.cancelled_by_user_id = _actor(cancelled_by_user_id)
+        _log_status(session, doc, _old_status, cancelled_by_user_id)
         # طبقِ رفعِ باگِ واقعی («اگر پیش‌نویسِ اصلاح لغو شود، سندِ اصلی برایِ
         # همیشه قفل می‌ماند»): وقتی خودِ این سند یک پیش‌نویسِ اصلاحیِ
         # ناتمام است، لغوش یعنی «اصلاح منصرف شد» -- قفلِ سندِ اصلی هم باید

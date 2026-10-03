@@ -228,17 +228,32 @@ def cancelled_documents(company_id: int, f: PurchaseFilters) -> ReportResult:
                 CommercialDocument.document_date.between(f.date_from, f.date_to),
             ).order_by(CommercialDocument.document_date)
         ))
+    reasons = _cancel_reason_names(company_id)
     result = ReportResult([
         ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("مبلغ", MONEY), ("ثبت‌کننده", TEXT),
-        ("شرح", TEXT),
-    ], no_total={1}, note="علتِ لغو در سیستم ثبت نمی‌شود (GAP) -- شرحِ سند نمایش داده می‌شود.")
+        ("علتِ لغو", TEXT), ("توضیحِ لغو", TEXT), ("لغوکننده", TEXT), ("زمانِ لغو", TEXT), ("شرح", TEXT),
+    ], no_total={1}, note="علت/کاربر/زمانِ لغو از R240 ثبت می‌شود؛ اسنادِ لغوشدهٔ قبلی «ثبت‌نشده» نشان داده می‌شوند.")
     for doc in docs:
         if f.supplier_id is not None and doc.counterparty_detail_account_id != f.supplier_id:
             continue
         result.add([_TITLES[doc.document_type_code], doc.document_no, doc.document_date,
                     ctx.names.get(doc.counterparty_detail_account_id, ""), doc.total_amount,
-                    users.get(doc.created_by_user_id, ""), doc.description or ""], (doc.document_id, doc.document_type_code))
+                    users.get(doc.created_by_user_id, ""), reasons.get(doc.cancellation_reason_id, "— ثبت‌نشده —"),
+                    doc.cancellation_note or "", users.get(doc.cancelled_by_user_id, ""), _when(doc.cancelled_at),
+                    doc.description or ""], (doc.document_id, doc.document_type_code))
     return result
+
+
+def _cancel_reason_names(company_id: int) -> dict[int, str]:
+    from peecha.services import procurement_masters as masters_service
+
+    return {r.reason_id: r.name for r in masters_service.list_cancellation_reasons(company_id)}
+
+
+def _when(value) -> str:
+    from peecha import numerals
+
+    return numerals.format_jalali_datetime(value) if value else ""
 
 
 # =====================================================================
@@ -462,6 +477,7 @@ def cycle_time(company_id: int, f: PurchaseFilters) -> ReportResult:
 _DIMENSIONS = (
     ("PROJECT", "پروژه"), ("WAREHOUSE", "انبار"), ("BRAND", "برند"), ("USER", "کاربرِ ثبت‌کننده"),
     ("KIND", "کالا / خدمت"), ("CURRENCY", "داخلی (ریالی) / ارزی"), ("PAYMENT", "نقدی / نسیه"),
+    ("PURCHASE_TYPE", "نوعِ خرید (برنامه‌ای / اضطراری)"),
 )
 
 
@@ -473,6 +489,9 @@ def purchases_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
     ctx = base._ctx(company_id)
     users = _users()
     brands = {b.brand_id: b.name for b in catalog_service.list_brands(company_id)}
+    from peecha.services import procurement_masters as masters_service
+
+    purchase_types = {t.purchase_type_id: t.name for t in masters_service.list_purchase_types(company_id)}
     purchases, returns = base._posted_purchase_and_returns(company_id, f, ctx)
     agg: dict[str, dict] = defaultdict(lambda: {"amount": _ZERO, "returns": _ZERO, "docs": set(), "suppliers": set()})
     if dim == "PAYMENT":
@@ -503,6 +522,8 @@ def purchases_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
                 return users.get(doc.created_by_user_id, "")
             if dim == "KIND":
                 return "خدمت" if item and item.item_kind_code == "SERVICE" else "کالا"
+            if dim == "PURCHASE_TYPE":
+                return purchase_types.get(doc.purchase_type_id, "— تعیین‌نشده —")
             return "ارزی" if doc.currency_id != _base_currency(company_id) else "داخلی (ریالی)"
 
         for doc, ln in purchases:
@@ -736,16 +757,29 @@ def late_orders(company_id: int, f: PurchaseFilters) -> ReportResult:
         ("شمارهٔ سفارش", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("تحویلِ مورد انتظار", DATE), ("تاریخِ رسید", DATE),
         ("روزِ تاخیر", DAYS), ("وضعیت", TEXT), ("مبلغ", MONEY),
     ], no_total={0, 5})
+    line_dates = _earliest_line_dates([o.document_id for o in _purchase_docs(company_id, f, ("PURCHASE_ORDER",))])
     for o in _purchase_docs(company_id, f, ("PURCHASE_ORDER",)):
-        if o.requested_delivery_date is None or o.status_code in ("DRAFT", "CANCELLED"):
+        expected = line_dates.get(o.document_id) or o.requested_delivery_date
+        if expected is None or o.status_code in ("DRAFT", "CANCELLED"):
             continue
         on = received.get(o.document_id)
-        late = ((on or today) - o.requested_delivery_date).days
+        late = ((on or today) - expected).days
         if late <= 0:
             continue
-        result.add([o.document_no, o.document_date, ctx.names.get(o.counterparty_detail_account_id, ""), o.requested_delivery_date,
+        result.add([o.document_no, o.document_date, ctx.names.get(o.counterparty_detail_account_id, ""), expected,
                     on, late, "رسیده با تاخیر" if on else "هنوز نرسیده", o.total_amount], (o.document_id, o.document_type_code))
     return result
+
+
+def _earliest_line_dates(document_ids: list[int]) -> dict[int, datetime.date]:
+    if not document_ids:
+        return {}
+    with new_session() as session:
+        return dict(session.execute(
+            select(CommercialDocumentLine.document_id, func.min(CommercialDocumentLine.expected_delivery_date))
+            .where(CommercialDocumentLine.document_id.in_(document_ids), CommercialDocumentLine.expected_delivery_date.is_not(None))
+            .group_by(CommercialDocumentLine.document_id)
+        ).all())
 
 
 def inactive_suppliers(company_id: int, f: PurchaseFilters) -> ReportResult:
@@ -1237,6 +1271,259 @@ def approval_rules(company_id: int, f: PurchaseFilters) -> ReportResult:
 
 
 # =====================================================================
+# R240: تاریخچهٔ تغییرات/تصویب، تفکیکِ وظایف، لغو، نوعِ خرید، تحویلِ ردیفی
+# =====================================================================
+_FIELD_LABELS = {
+    "quantity": "مقدار", "unit_price": "فی", "discount_amount": "تخفیف", "tax_percent": "درصدِ مالیات",
+    "expected_delivery_date": "تاریخِ تحویلِ ردیف", "document_date": "تاریخِ سند", "counterparty_detail_account_id": "طرفِ حساب",
+    "warehouse_id": "انبار", "requested_delivery_date": "تاریخِ تحویل", "purchase_type_id": "نوعِ خرید", "status_code": "وضعیت",
+}
+_ACTION_LABELS = {"ADD_LINE": "افزودنِ ردیف", "UPDATE_LINE": "ویرایشِ ردیف", "DELETE_LINE": "حذفِ ردیف",
+                  "UPDATE_HEADER": "ویرایشِ سرِ سند", "STATUS": "تغییرِ وضعیت"}
+
+
+def _change_logs(company_id: int, f: PurchaseFilters, actions: tuple[str, ...]):
+    from peecha.db.models.commercial import DocumentChangeLog
+
+    start = datetime.datetime.combine(f.date_from, datetime.time.min)
+    end = datetime.datetime.combine(f.date_to, datetime.time.max)
+    with new_session() as session:
+        rows = session.execute(
+            select(DocumentChangeLog, CommercialDocument)
+            .join(CommercialDocument, CommercialDocument.document_id == DocumentChangeLog.document_id)
+            .where(CommercialDocument.company_id == company_id, CommercialDocument.document_type_code.in_(tuple(_TITLES)),
+                   DocumentChangeLog.action.in_(actions), DocumentChangeLog.changed_at.between(start, end))
+            .order_by(DocumentChangeLog.changed_at, DocumentChangeLog.log_id)
+        ).all()
+        line_items = dict(session.execute(
+            select(CommercialDocumentLine.line_id, CommercialDocumentLine.item_id)
+            .where(CommercialDocumentLine.line_id.in_({log.line_id for log, _d in rows if log.line_id}))
+        ).all()) if rows else {}
+    return [(log, doc) for log, doc in rows if f.supplier_id is None or doc.counterparty_detail_account_id == f.supplier_id], line_items
+
+
+def changes_after_approval(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """تغییرِ ردیف/سرِ سند پس از اولین تایید (سند به پیش‌نویس برگشته و ویرایش شده)."""
+    scope = _opt(f, "scope", "PRICE_QTY")
+    ctx = base._ctx(company_id)
+    users = _users()
+    logs, line_items = _change_logs(company_id, f, ("ADD_LINE", "UPDATE_LINE", "DELETE_LINE", "UPDATE_HEADER"))
+    result = ReportResult([
+        ("زمانِ تغییر", TEXT), ("نوع", TEXT), ("شماره", INT), ("تامین‌کننده", TEXT), ("کالا", TEXT), ("عملیات", TEXT),
+        ("فیلد", TEXT), ("مقدارِ قبلی", TEXT), ("مقدارِ جدید", TEXT), ("کاربر", TEXT),
+    ], no_total={2}, note="از R240 ثبت می‌شود: هر تغییری که پس از اولین تایید/تصویبِ سند انجام شده است.")
+    for log, doc in logs:
+        if scope == "PRICE_QTY" and log.field_name not in ("quantity", "unit_price", "discount_amount"):
+            continue
+        item_id = line_items.get(log.line_id)
+        result.add([_when(log.changed_at), _TITLES[doc.document_type_code], doc.document_no,
+                    ctx.names.get(doc.counterparty_detail_account_id, ""),
+                    ctx.item_label(item_id) if item_id else ("ردیفِ حذف‌شده" if log.action == "DELETE_LINE" else ""),
+                    _ACTION_LABELS.get(log.action, log.action), _FIELD_LABELS.get(log.field_name, log.field_name or ""),
+                    log.old_value or "", log.new_value or "", users.get(log.user_id, "")], (doc.document_id, doc.document_type_code))
+    return result
+
+
+def modified_documents(company_id: int, f: PurchaseFilters) -> ReportResult:
+    ctx = base._ctx(company_id)
+    users = _users()
+    logs, _items = _change_logs(company_id, f, ("ADD_LINE", "UPDATE_LINE", "DELETE_LINE", "UPDATE_HEADER", "STATUS"))
+    agg: dict[int, dict] = {}
+    for log, doc in logs:
+        a = agg.setdefault(doc.document_id, {"doc": doc, "changes": 0, "reverts": 0, "users": set(), "last": None})
+        if log.action == "STATUS":
+            if log.new_value == "DRAFT":
+                a["reverts"] += 1
+            continue
+        a["changes"] += 1
+        a["users"].add(users.get(log.user_id, ""))
+        a["last"] = log.changed_at
+    result = ReportResult([
+        ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("وضعیت", TEXT), ("دفعاتِ بازگشت به پیش‌نویس", INT),
+        ("تعدادِ تغییر پس از تایید", INT), ("آخرین تغییر", TEXT), ("تغییردهندگان", TEXT), ("مبلغ", MONEY),
+    ], no_total={1}, note="اسنادی که پس از تایید به پیش‌نویس برگشته یا ویرایش شده‌اند.")
+    for a in sorted(agg.values(), key=lambda a: -a["changes"]):
+        if not (a["changes"] or a["reverts"]):
+            continue
+        d = a["doc"]
+        result.add([_TITLES[d.document_type_code], d.document_no, d.document_date, ctx.names.get(d.counterparty_detail_account_id, ""),
+                    base._STATUS_LABELS.get(d.status_code, d.status_code), a["reverts"], a["changes"], _when(a["last"]),
+                    "، ".join(sorted(u for u in a["users"] if u)), d.total_amount], (d.document_id, d.document_type_code))
+    return result
+
+
+def _status_events(document_ids: list[int]) -> dict[int, list]:
+    from peecha.db.models.commercial import DocumentChangeLog
+
+    out: dict[int, list] = defaultdict(list)
+    if not document_ids:
+        return out
+    with new_session() as session:
+        for log in session.scalars(select(DocumentChangeLog).where(
+                DocumentChangeLog.document_id.in_(document_ids), DocumentChangeLog.action == "STATUS")
+                .order_by(DocumentChangeLog.changed_at, DocumentChangeLog.log_id)):
+            out[log.document_id].append(log)
+    return out
+
+
+def approval_history(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """ایجاد → تایید → تصویبِ مدیر → ثبتِ نهایی، با کاربر و زمانِ هر مرحله و فاصلهٔ ساعتِ تصویب."""
+    ctx = base._ctx(company_id)
+    users = _users()
+    docs = [d for d in _purchase_docs(company_id, f, ("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE"))
+            if d.status_code != "DRAFT"]
+    events = _status_events([d.document_id for d in docs])
+
+    def stamp(user_id, when):
+        return f"{users.get(user_id, '')} -- {_when(when)}" if when else ""
+
+    result = ReportResult([
+        ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("وضعیت", TEXT), ("ایجاد", TEXT),
+        ("تاییدِ کاربر", TEXT), ("تصویبِ مدیر", TEXT), ("ثبتِ نهایی", TEXT), ("بازگشت به پیش‌نویس", INT),
+        ("ساعتِ انتظارِ تصویب", INT), ("مبلغ", MONEY),
+    ], no_total={1, 10}, note="مراحلِ تایید از R240 ثبت می‌شوند؛ برایِ اسنادِ قدیمی فقط ایجاد و ثبتِ نهایی موجود است.")
+    for d in docs:
+        evs = events.get(d.document_id, [])
+        confirm = next((e for e in reversed(evs) if e.new_value == "CONFIRMED"), None)
+        wait = None
+        if confirm is not None and d.approved_at is not None:
+            wait = int((d.approved_at - confirm.changed_at).total_seconds() // 3600)
+        result.add([_TITLES[d.document_type_code], d.document_no, d.document_date, ctx.names.get(d.counterparty_detail_account_id, ""),
+                    base._STATUS_LABELS.get(d.status_code, d.status_code), stamp(d.created_by_user_id, d.created_at),
+                    stamp(confirm.user_id, confirm.changed_at) if confirm else "", stamp(d.approved_by_user_id, d.approved_at),
+                    stamp(d.posted_by_user_id, d.posted_at), sum(1 for e in evs if e.new_value == "DRAFT"), wait, d.total_amount],
+                   (d.document_id, d.document_type_code))
+    return result
+
+
+def segregation_violations(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """تخلفاتِ تفکیکِ وظایف: ایجادکننده = تصویب‌کننده، تصویب‌کننده بدونِ نقشِ مدیر، ایجادکننده = تاییدکنندهٔ رسید."""
+    from peecha.services import roles as roles_service
+
+    ctx = base._ctx(company_id)
+    users = _users()
+    managers: dict[int, bool] = {}
+    result = ReportResult([
+        ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("مبلغ", MONEY), ("کاربر", TEXT), ("تخلف", TEXT),
+    ], no_total={1}, note="قاعده‌ها فقط گزارش می‌شوند؛ جلویِ عملیات گرفته نمی‌شود.")
+    for d in _purchase_docs(company_id, f, ("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE")):
+        issues = []
+        if d.approved_by_user_id is not None:
+            if d.approved_by_user_id == d.created_by_user_id:
+                issues.append((d.approved_by_user_id, "ایجاد و تصویبِ سند توسطِ یک کاربر"))
+            if d.approved_by_user_id not in managers:
+                managers[d.approved_by_user_id] = roles_service.is_manager(d.approved_by_user_id, company_id)
+            if not managers[d.approved_by_user_id]:
+                issues.append((d.approved_by_user_id, "تصویب توسطِ کاربرِ بدونِ نقشِ مدیر"))
+        if d.warehouse_approved_by_user_id is not None and d.warehouse_approved_by_user_id == d.created_by_user_id:
+            issues.append((d.created_by_user_id, "ثبتِ سفارش و تاییدِ رسیدِ انبار توسطِ یک کاربر"))
+        for user_id, text in issues:
+            result.add([_TITLES[d.document_type_code], d.document_no, d.document_date,
+                        ctx.names.get(d.counterparty_detail_account_id, ""), d.total_amount, users.get(user_id, ""), text],
+                       (d.document_id, d.document_type_code))
+    return result
+
+
+def cancellation_analysis(company_id: int, f: PurchaseFilters) -> ReportResult:
+    reasons = _cancel_reason_names(company_id)
+    docs = [d for d in _purchase_docs(company_id, f) if d.status_code == "CANCELLED"]
+    agg: dict[str, list] = defaultdict(lambda: [0, _ZERO])
+    for d in docs:
+        a = agg[reasons.get(d.cancellation_reason_id, "— ثبت‌نشده —")]
+        a[0] += 1
+        a[1] += d.total_amount
+    total = sum(a[0] for a in agg.values())
+    result = ReportResult([("علتِ لغو", TEXT), ("تعداد", INT), ("مبلغ", MONEY), ("سهم از لغوها", PERCENT)])
+    for name, (count, amount) in sorted(agg.items(), key=lambda kv: -kv[1][0]):
+        result.add([name, count, amount, decimal.Decimal(count * 100) / total if total else _ZERO])
+    return result
+
+
+def emergency_purchases(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import procurement_masters as masters_service
+
+    ctx = base._ctx(company_id)
+    types = {t.purchase_type_id: t for t in masters_service.list_purchase_types(company_id)}
+    result = ReportResult([
+        ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("نوعِ خرید", TEXT), ("وضعیت", TEXT), ("مبلغ", MONEY),
+    ], no_total={1}, note="اسنادی که نوعِ خریدشان «اضطراری» علامت خورده است.")
+    for d in _purchase_docs(company_id, f, ("PURCHASE_ORDER", "PURCHASE_INVOICE")):
+        t = types.get(d.purchase_type_id)
+        if t is None or not t.is_emergency or d.status_code == "CANCELLED":
+            continue
+        result.add([_TITLES[d.document_type_code], d.document_no, d.document_date, ctx.names.get(d.counterparty_detail_account_id, ""),
+                    t.name, base._STATUS_LABELS.get(d.status_code, d.status_code), d.total_amount], (d.document_id, d.document_type_code))
+    return result
+
+
+def line_delivery(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """تحویلِ ردیفی: تاریخِ موردِ انتظارِ ردیف (وگرنه سرِ سند) در برابرِ تاریخِ رسید."""
+    view = _opt(f, "view", "ALL")
+    ctx = base._ctx(company_id)
+    today = min(f.date_to, datetime.date.today())
+    received = {ln.line_id: on for _doc, ln, _r, on in base._received_orders(company_id, f, ctx)}
+    result = ReportResult([
+        ("شمارهٔ سفارش", INT), ("تامین‌کننده", TEXT), ("کالا", TEXT), ("مقدار", QTY), ("تحویلِ موردِ انتظار", DATE), ("منبعِ تاریخ", TEXT),
+        ("تاریخِ رسید", DATE), ("روزِ تاخیر", DAYS), ("وضعیت", TEXT),
+    ], no_total={0, 7})
+    for doc, ln in base._lines(company_id, ("PURCHASE_ORDER",), _OPEN_ORDER_STATUSES, f, ctx):
+        expected = ln.expected_delivery_date or doc.requested_delivery_date
+        if expected is None:
+            continue
+        on = received.get(ln.line_id)
+        delay = ((on or today) - expected).days
+        state = ("به‌موقع" if delay <= 0 else "با تاخیر") if on else ("دیرکرد -- نرسیده" if delay > 0 else "در انتظار")
+        if (view == "LATE" and delay <= 0) or (view == "OPEN" and on is not None):
+            continue
+        result.add([doc.document_no, ctx.names.get(doc.counterparty_detail_account_id, ""), ctx.item_label(ln.item_id), ln.quantity_base,
+                    expected, "ردیف" if ln.expected_delivery_date else "سرِ سند", on, max(delay, 0), state],
+                   (doc.document_id, doc.document_type_code))
+    return result
+
+
+def purchase_types_master(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import procurement_masters as masters_service
+
+    with new_session() as session:
+        usage = dict(session.execute(select(CommercialDocument.purchase_type_id, func.count()).where(
+            CommercialDocument.company_id == company_id, CommercialDocument.purchase_type_id.is_not(None))
+            .group_by(CommercialDocument.purchase_type_id)).all())
+    result = ReportResult([("کد", TEXT), ("عنوان", TEXT), ("اضطراری", TEXT), ("فعال", TEXT), ("تعدادِ اسناد", INT)])
+    for t in masters_service.list_purchase_types(company_id):
+        result.add([t.code, t.name, "بله" if t.is_emergency else "خیر", "بله" if t.is_active else "خیر", usage.get(t.purchase_type_id, 0)])
+    return result
+
+
+def cancellation_reasons_master(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import procurement_masters as masters_service
+
+    with new_session() as session:
+        usage = dict(session.execute(select(CommercialDocument.cancellation_reason_id, func.count()).where(
+            CommercialDocument.company_id == company_id, CommercialDocument.cancellation_reason_id.is_not(None))
+            .group_by(CommercialDocument.cancellation_reason_id)).all())
+    result = ReportResult([("کد", TEXT), ("عنوان", TEXT), ("فعال", TEXT), ("تعدادِ اسناد", INT)])
+    for r in masters_service.list_cancellation_reasons(company_id):
+        result.add([r.code, r.name, "بله" if r.is_active else "خیر", usage.get(r.reason_id, 0)])
+    return result
+
+
+def reorder_policies_master(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import procurement_masters as masters_service
+
+    ctx = base._ctx(company_id)
+    result = ReportResult([
+        ("کالا", TEXT), ("انبار", TEXT), ("حداقل", QTY), ("نقطهٔ سفارش", QTY), ("حداکثر", QTY), ("مقدارِ سفارش", QTY),
+        ("زمانِ تحویل (روز)", DAYS), ("فعال", TEXT),
+    ], no_total={2, 3, 4, 5, 6})
+    for p in masters_service.list_reorder_policies(company_id):
+        if f.item_id is not None and p.item_id != f.item_id:
+            continue
+        result.add([ctx.item_label(p.item_id), ctx.warehouses.get(p.warehouse_id, "همهٔ انبارها") if p.warehouse_id else "همهٔ انبارها",
+                    p.min_qty, p.reorder_point_qty, p.max_qty, p.reorder_qty, p.lead_time_days, "بله" if p.is_active else "خیر"])
+    return result
+
+
+# =====================================================================
 # ثبتِ گزارش‌ها
 # =====================================================================
 _OP, _AN, _PR, _VP, _FI, _MD = "عملیاتی", "تحلیلِ خرید", "قیمت و هزینه", "ارزیابیِ تامین‌کننده", "مالی و بدهی", "اطلاعاتِ پایه"
@@ -1321,5 +1608,25 @@ PURCHASE_EXT_REPORTS: list[ReportDef] = [
     ReportDef("DISCOUNT_RULES", "قواعدِ تخفیف", discount_rules, (), "قواعدِ تخفیفِ تعریف‌شده.", "none", _MD),
     ReportDef("RETURN_REASONS", "علت‌هایِ برگشت", return_reasons, (), "علت‌هایِ برگشت و تعدادِ استفاده.", "none", _MD),
     ReportDef("APPROVAL_RULES", "قواعدِ تایید و گردشِ کار", approval_rules, (), "وضعیتِ تنظیماتِ مراحلِ تایید.", "none", _MD),
+    # --- R240
+    ReportDef("CHANGED_AFTER_APPROVAL", "تغییرِ قیمت/مقدار پس از تایید", changes_after_approval, ("supplier",),
+              "ویرایش‌هایِ ردیف و سرِ سند پس از اولین تایید، با مقدارِ قبلی/جدید و کاربر.", group=_CT,
+              options=(("scope", "نمایش", (("PRICE_QTY", "فقط قیمت/مقدار/تخفیف"), ("ALL", "همهٔ تغییرات"))),)),
+    ReportDef("MODIFIED_DOCS", "اسنادِ اصلاح‌شده پس از تایید", modified_documents, ("supplier",),
+              "اسنادی که به پیش‌نویس برگشته یا پس از تایید ویرایش شده‌اند.", group=_CT),
+    ReportDef("APPROVAL_HISTORY", "تاریخچهٔ تایید و تصویب", approval_history, ("supplier",),
+              "کاربر و زمانِ ایجاد، تایید، تصویبِ مدیر و ثبتِ نهایی، و زمانِ انتظارِ تصویب.", group=_CT),
+    ReportDef("SOD_VIOLATIONS", "تخلفاتِ تفکیکِ وظایف", segregation_violations, ("supplier",),
+              "ایجاد و تصویب یا ثبت و رسید توسطِ یک کاربر، تصویبِ کاربرِ غیرمدیر.", group=_CT),
+    ReportDef("CANCEL_ANALYSIS", "تحلیلِ علت‌هایِ لغو", cancellation_analysis, ("supplier",),
+              "تعداد و مبلغِ اسنادِ لغوشده به تفکیکِ علت.", group=_OP),
+    ReportDef("EMERGENCY", "خریدهایِ اضطراری", emergency_purchases, ("supplier",), "سفارش/فاکتورهایِ با نوعِ خریدِ اضطراری.", group=_OP),
+    ReportDef("LINE_DELIVERY", "تحویلِ ردیفیِ سفارش‌ها", line_delivery, _ALL,
+              "تاریخِ تحویلِ هر ردیف (یا سرِ سند) در برابرِ رسید.", group=_VP,
+              options=(("view", "نمایش", (("ALL", "همه"), ("LATE", "فقط با تاخیر"), ("OPEN", "فقط نرسیده"))),)),
+    ReportDef("PURCHASE_TYPES", "انواعِ خرید", purchase_types_master, (), "انواعِ خریدِ تعریف‌شده و تعدادِ استفاده.", "none", _MD),
+    ReportDef("CANCEL_REASONS", "علت‌هایِ لغو", cancellation_reasons_master, (), "علت‌هایِ لغوِ تعریف‌شده و تعدادِ استفاده.", "none", _MD),
+    ReportDef("REORDER_POLICIES", "سیاست‌هایِ سفارشِ کالا", reorder_policies_master, ("item",),
+              "حداقل/نقطهٔ سفارش/حداکثر/زمانِ تحویلِ تعریف‌شده برایِ کالاها.", "none", _MD),
 ]
 base.register_reports(PURCHASE_EXT_REPORTS)

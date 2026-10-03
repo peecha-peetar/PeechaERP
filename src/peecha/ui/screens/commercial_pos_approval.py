@@ -299,7 +299,7 @@ class CommercialPosApprovalScreen(FieldHelpMixin, QWidget):
         reference = self.reference_field.text().strip() or None
         try:
             for doc in selected:
-                documents_service.approve_document(doc.document_id, company_id)
+                documents_service.approve_document(doc.document_id, company_id, user_id)
                 documents_service.post_document(doc.document_id, company_id, user_id)
 
             if merge_plan_entries:

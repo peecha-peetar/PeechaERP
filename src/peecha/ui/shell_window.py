@@ -1668,6 +1668,9 @@ class MainWindow(QMainWindow):
 
         self.register_screen("purchase_dashboard_exec", ProcurementExecutiveDashboard(self))
         self.register_screen("purchase_dashboard_exceptions", ProcurementExceptionDashboard(self))
+        from peecha.ui.screens.procurement_masters import ProcurementMastersScreen
+
+        self.register_screen("procurement_masters", ProcurementMastersScreen())
         # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
         # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
         # همان کلاس با invoice_type متفاوت است.

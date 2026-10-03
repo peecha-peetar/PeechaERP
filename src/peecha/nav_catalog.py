@@ -23,12 +23,15 @@ PURCHASE_REPORT_MENU = [
         ("RETURNS", "برگشت به تامین‌کننده"), ("PARTIAL_RECEIPT", "سفارش‌هایِ با دریافتِ ناقص"),
         ("NO_RECEIPT", "سفارش‌هایِ بدونِ رسید"), ("NO_INVOICE", "سفارش‌هایِ بدونِ فاکتور"),
         ("RECEIPT_MISMATCH", "رسیدهایِ دارایِ مغایرت"), ("CANCELLED", "اسنادِ خریدِ لغوشده"),
+        ("CANCEL_ANALYSIS", "تحلیلِ علت‌هایِ لغو"), ("EMERGENCY", "خریدهایِ اضطراری"),
     ]),
     ("CONTROL", "کنترل و حسابرسی", [
         ("THREE_WAY", "تطبیقِ سه‌طرفه (سفارش/رسید/فاکتور)"), ("NO_PO", "خریدِ بدونِ سفارش"),
         ("INVOICE_NO_RECEIPT", "فاکتورِ بدونِ رسید"), ("INVOICE_OVER_PO", "فاکتورِ بیش از سفارش"),
         ("RECEIPT_OVER_PO", "رسیدِ بیش از سفارش"), ("APPROVAL_PENDING", "اسنادِ منتظرِ تصویبِ مدیر"),
         ("DOC_TRAIL", "ردِ اسنادِ خرید (Audit Trail)"), ("USER_ACTIVITY", "فعالیتِ کاربران در خرید"),
+        ("CHANGED_AFTER_APPROVAL", "تغییرِ قیمت/مقدار پس از تایید"), ("MODIFIED_DOCS", "اسنادِ اصلاح‌شده پس از تایید"),
+        ("APPROVAL_HISTORY", "تاریخچهٔ تایید و تصویب"), ("SOD_VIOLATIONS", "تخلفاتِ تفکیکِ وظایف"),
     ]),
     ("PROCESS", "فرآیندِ خرید", [
         ("PO_FLOW", "گردشِ سفارشِ خرید"), ("CYCLE_TIME", "زمانِ چرخهٔ خرید"),
@@ -51,6 +54,7 @@ PURCHASE_REPORT_MENU = [
         ("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان"), ("QUALITY", "کیفیت / نرخِ برگشت"),
         ("LEAD_TIME", "زمانِ تحویل (Lead Time)"), ("PRICE_STABILITY", "ثباتِ قیمتِ تامین‌کننده"),
         ("LATE_ORDERS", "سفارش‌هایِ دیرکرد"), ("INACTIVE_SUPPLIERS", "تامین‌کنندگانِ غیرفعال"),
+        ("LINE_DELIVERY", "تحویلِ ردیفیِ سفارش‌ها"),
     ]),
     ("FINANCE", "مالی و بدهی", [
         ("BALANCES", "ماندهٔ حسابِ تامین‌کنندگان"), ("AGING", "سنی‌کردنِ بدهی (AP Aging)"),
@@ -68,7 +72,8 @@ PURCHASE_REPORT_MENU = [
         ("PRICE_LISTS", "فهرستِ قیمتِ تامین‌کنندگان"), ("REBATES", "قراردادهایِ ریبیت"),
         ("WAREHOUSES", "انبارها و انباردارِ مسئول"), ("SUPPLIER_TERMS", "شرایطِ پرداخت و تحویلِ تامین‌کنندگان"),
         ("CONTRACTS", "قراردادهایِ خرید"), ("DISCOUNT_RULES", "قواعدِ تخفیف"), ("RETURN_REASONS", "علت‌هایِ برگشت"),
-        ("APPROVAL_RULES", "قواعدِ تایید و گردشِ کار"),
+        ("APPROVAL_RULES", "قواعدِ تایید و گردشِ کار"), ("PURCHASE_TYPES", "انواعِ خرید"),
+        ("CANCEL_REASONS", "علت‌هایِ لغو"), ("REORDER_POLICIES", "سیاست‌هایِ سفارشِ کالا"),
     ]),
 ]
 
@@ -301,6 +306,8 @@ NAV_ITEMS = [
             # نه تبی درونِ فرمِ سفارشِ خرید -- تا بشود فقط همین دسترسی
             # (بدونِ دسترسی به فرمِ کاملِ دارایِ قیمت) به انباردار داد.
             {"code": "PURCH_GOODS_RECEIPT", "label": "تاییدِ رسیدِ کالا", "screen": "purchase_goods_receipt"},
+            # R240: انواعِ خرید، علت‌هایِ لغو، سیاستِ سفارشِ کالا
+            {"code": "PURCH_MASTERS", "label": "اطلاعاتِ پایهٔ تدارکات", "screen": "procurement_masters"},
         ],
     },
     {

@@ -26,6 +26,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -524,6 +525,14 @@ class CommercialDocument(Base):
     # CUSTOM_<id> (هم‌الگو با commercial_settlements.SETTLEMENT_PLAN_
     # METHOD_LABELS)؛ جدا از نقشه‌یِ کاملِ تسویه‌یِ حسابداریِ فاکتور.
     settlement_type_code: Mapped[str | None] = mapped_column(String(20))
+    # R240 (migration 177): نوعِ خرید، علت/زمان/کاربرِ لغو، تصویب‌کنندهٔ مدیر
+    purchase_type_id: Mapped[int | None] = mapped_column(ForeignKey("comm.purchase_types.purchase_type_id"))
+    cancellation_reason_id: Mapped[int | None] = mapped_column(ForeignKey("comm.cancellation_reasons.reason_id"))
+    cancellation_note: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[datetime.datetime | None]
+    cancelled_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    approved_at: Mapped[datetime.datetime | None]
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
 
 
 class CommercialDocumentLine(Base):
@@ -576,6 +585,8 @@ class CommercialDocumentLine(Base):
     # وزن)؛ خالی یعنی هنوز واردنشده -- رفتارِ پیش‌فرض همچنان از quantity
     # پیروی می‌کند.
     warehouse_delivered_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    # R240: تاریخِ تحویلِ مورد انتظارِ همین ردیف (خالی = تاریخِ تحویلِ سرِ سند)
+    expected_delivery_date: Mapped[datetime.date | None]
 
 
 # =======================================================================
@@ -1877,3 +1888,48 @@ class CustomerCallLog(Base):
     started_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     was_successful: Mapped[bool] = mapped_column(Boolean)
     note: Mapped[str | None] = mapped_column(String(500))
+
+
+class PurchaseType(Base):
+    """R240: نوعِ خرید (برنامه‌ریزی‌شده/اضطراری/...)."""
+
+    __tablename__ = "purchase_types"
+    __table_args__ = {"schema": "comm"}
+
+    purchase_type_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    is_emergency: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class CancellationReason(Base):
+    """R240: علتِ لغوِ سند."""
+
+    __tablename__ = "cancellation_reasons"
+    __table_args__ = {"schema": "comm"}
+
+    reason_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class DocumentChangeLog(Base):
+    """R240: تاریخچهٔ وضعیت و تغییراتِ اسنادِ بازرگانی -- فقط افزودنی."""
+
+    __tablename__ = "document_change_log"
+    __table_args__ = {"schema": "comm"}
+
+    log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    line_id: Mapped[int | None] = mapped_column(BigInteger)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    changed_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    action: Mapped[str] = mapped_column(String(20))
+    status_code: Mapped[str | None] = mapped_column(String(20))
+    field_name: Mapped[str | None] = mapped_column(String(50))
+    old_value: Mapped[str | None] = mapped_column(Text)
+    new_value: Mapped[str | None] = mapped_column(Text)

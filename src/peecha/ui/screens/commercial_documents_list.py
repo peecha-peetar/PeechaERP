@@ -531,7 +531,7 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
         try:
-            documents_service.approve_document(document_id, company_id)
+            documents_service.approve_document(document_id, company_id, app_session.current_user.user_id if app_session.current_user else None)
         except ValueError as exc:
             QMessageBox.warning(self, "تصویب", str(exc))
             return

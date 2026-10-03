@@ -41,6 +41,7 @@ from peecha.reporting import registry as report_templates_registry
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import commercial_consignment as consignment_service
 from peecha.services import commercial_documents as documents_service
+from peecha.ui.screens.procurement_dialogs import CancellationReasonDialog, DocumentHistoryDialog, LineDeliveryDatesDialog
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_purchasing as purchasing_service
@@ -85,6 +86,7 @@ from peecha.ui.widgets import (
     persist_column_widths,
 )
 
+_PURCHASE_TYPE_DOCS = ("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE")
 DOC_TYPE_TITLES = {
     "SALES_ORDER": "سفارشِ فروش",
     "SALES_PROFORMA": "پیش‌فاکتورِ فروش",
@@ -2618,6 +2620,17 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         row2_grid.addWidget(self.tax_posting_mode_box, 0, 7, 2, 1)
         self.tax_posting_mode_box.setVisible(self._supports_tax_posting_mode)
 
+        # R240: نوعِ خرید (برنامه‌ریزی‌شده/اضطراری) -- اطلاعاتِ پایهٔ تدارکات
+        self.purchase_type_box = QWidget()
+        purchase_type_layout = QVBoxLayout(self.purchase_type_box)
+        purchase_type_layout.setContentsMargins(0, 0, 0, 0)
+        purchase_type_layout.setSpacing(3)
+        purchase_type_layout.addWidget(QLabel("نوعِ خرید"))
+        self.purchase_type_combo = _EnterComboBox()
+        purchase_type_layout.addWidget(self.purchase_type_combo)
+        row2_grid.addWidget(self.purchase_type_box, 0, 8, 2, 1)
+        self.purchase_type_box.setVisible(self.document_type_code in _PURCHASE_TYPE_DOCS)
+
         # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): برایِ
         # سندِ ازپیش‌ذخیره‌شده، تغییرِ این تیک بلافاصله (بدونِ نیازِ ذخیرهٔ
         # هدر) اعمال می‌شود -- چون باید مالیاتِ ردیف‌هایِ ازپیش‌ثبت‌شده را
@@ -2951,6 +2964,21 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.revert_button.clicked.connect(self._revert_to_draft)
         self.footer_layout.addWidget(self.revert_button)
 
+        # R240: تاریخچهٔ تغییرات/تایید، و تاریخِ تحویلِ ردیف‌هایِ سفارشِ خرید
+        self.history_button = QPushButton("🕘")
+        self.history_button.setObjectName("iconButton")
+        self.history_button.setFixedWidth(44)
+        self.history_button.setToolTip("تاریخچهٔ تغییرات و تاییدِ سند")
+        self.history_button.clicked.connect(self._show_history)
+        self.footer_layout.addWidget(self.history_button)
+        self.line_dates_button = QPushButton("📅")
+        self.line_dates_button.setObjectName("iconButton")
+        self.line_dates_button.setFixedWidth(44)
+        self.line_dates_button.setToolTip("تاریخِ تحویلِ موردِ انتظارِ هر ردیف (حتی پس از تایید)")
+        self.line_dates_button.clicked.connect(self._edit_line_dates)
+        self.line_dates_button.setVisible(self.document_type_code == "PURCHASE_ORDER")
+        self.footer_layout.addWidget(self.line_dates_button)
+
         # طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند»):
         # فقط برایِ فاکتورِ خرید/فروش نمایش داده می‌شود؛ فعال‌بودنش هم به
         # وضعیتِ POSTED هم به مجازبودنِ کاربر (نقشِ مدیر + تنظیمِ روشنِ
@@ -3209,6 +3237,16 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             if index >= 0:
                 self.counterparty_combo.setCurrentIndex(index)
 
+        if self.purchase_type_box.isVisibleTo(self) or self.document_type_code in _PURCHASE_TYPE_DOCS:
+            from peecha.services import procurement_masters as masters_service
+
+            current_type = self.purchase_type_combo.currentData()
+            self.purchase_type_combo.clear()
+            self.purchase_type_combo.addItem("— تعیین‌نشده —", None)
+            for purchase_type in masters_service.list_purchase_types(company_id, active_only=True):
+                self.purchase_type_combo.addItem(purchase_type.name, purchase_type.purchase_type_id)
+            self.purchase_type_combo.setCurrentIndex(max(0, self.purchase_type_combo.findData(current_type)))
+
         current_price_list = self.price_list_combo.currentData()
         self.price_list_combo.clear()
         self.price_list_combo.addItem("(بدونِ فهرستِ قیمت)", None)
@@ -3314,6 +3352,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.due_date_field.setDate(doc.due_date or doc.document_date)
         if self.delivery_date_box.isVisibleTo(self):
             self.delivery_date_field.setDate(doc.requested_delivery_date or doc.document_date)
+        if self.document_type_code in _PURCHASE_TYPE_DOCS:
+            self.purchase_type_combo.setCurrentIndex(max(0, self.purchase_type_combo.findData(doc.purchase_type_id)))
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
         self.tax_posting_mode_combo.setCurrentIndex(max(0, self.tax_posting_mode_combo.findData(doc.tax_posting_mode)))
@@ -4335,6 +4375,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                     f"{_POST_BUTTON_DEFAULT_TOOLTIP}\n(ثبتِ نهایی فقط برایِ مدیر -- نقشِ ادمین/سوپروایزر/مدیر -- ممکن است.)"
                 )
         self.cancel_button.setEnabled(is_draft or is_confirmed or is_approved)
+        self.history_button.setEnabled(self._document_id is not None)
+        self.line_dates_button.setEnabled(self._document_id is not None and self._status_code != "CANCELLED")
         self.revert_button.setEnabled(
             (is_confirmed or is_approved) and not self._warehouse_approved
         )
@@ -4382,6 +4424,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self._is_invoice:
             self.due_date_field.setDate(datetime.date.today())
         self.delivery_date_field.setDate(datetime.date.today() + datetime.timedelta(days=7))
+        self.purchase_type_combo.setCurrentIndex(0)
         self.counterparty_combo.setCurrentIndex(0)
         self.warehouse_combo.setCurrentIndex(0)
         if self.document_type_code == "CONSIGNMENT_OUT":
@@ -4483,6 +4526,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             tax_posting_mode=self.tax_posting_mode_combo.currentData() if self._supports_tax_posting_mode else None,
             tax_exempt=self.tax_exempt_checkbox.isChecked(),
             settlement_type_code=self.settlement_type_combo.currentData() if self._is_sales else None,
+            purchase_type_id=self.purchase_type_combo.currentData() if self.document_type_code in _PURCHASE_TYPE_DOCS else None,
         )
 
     def _save_header(self, notify: bool = False) -> None:
@@ -5010,7 +5054,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self._requires_doc_approval and self._status_code == "CONFIRMED"
         ):
             try:
-                documents_service.approve_document(self._document_id, company_id)
+                documents_service.approve_document(
+                    self._document_id, company_id, app_session.current_user.user_id if app_session.current_user else None)
             except ValueError as exc:
                 QMessageBox.warning(self, "خطا در تصویبِ سند", str(exc))
                 return
@@ -5056,7 +5101,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 )
                 return
         try:
-            documents_service.approve_document(self._document_id, company_id)
+            documents_service.approve_document(
+                    self._document_id, company_id, app_session.current_user.user_id if app_session.current_user else None)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در تصویبِ سند", str(exc))
@@ -5219,8 +5265,14 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         confirm = QMessageBox.question(self, "لغوِ سند", "این سند لغو شود؟", QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
+        reason = CancellationReasonDialog.ask(self, self._company_id())
+        if reason is None:
+            return
         try:
-            documents_service.cancel_document(self._document_id, self._company_id())
+            documents_service.cancel_document(
+                self._document_id, self._company_id(), reason_id=reason[0], note=reason[1],
+                cancelled_by_user_id=app_session.current_user.user_id if app_session.current_user else None,
+            )
         except ValueError as exc:
             self.status_label.setText(str(exc))
             QMessageBox.warning(self, "خطا در لغوِ سند", str(exc))
@@ -5229,6 +5281,24 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فرم قابلِ‌ادامه‌کاری نیست، پس فرم برایِ سندِ بعدی ریست می‌شود.
         self._reset_form()
         theme.set_status_label(self.status_label, "سند لغو شد.", ok=True)
+
+    def _show_history(self) -> DocumentHistoryDialog | None:
+        if self._document_id is None:
+            return None
+        from peecha.services.purchase_reports_ext import _users
+
+        dialog = DocumentHistoryDialog(self, self._document_id, _users())
+        dialog.open()
+        return dialog
+
+    def _edit_line_dates(self) -> LineDeliveryDatesDialog | None:
+        company_id = self._company_id()
+        if self._document_id is None or company_id is None:
+            return None
+        labels = {i.item_id: f"{i.code} — {i.name or ''}" for i in catalog_service.list_items(company_id)}
+        dialog = LineDeliveryDatesDialog(self, self._document_id, company_id, labels)
+        dialog.open()
+        return dialog
 
     def _revert_to_draft(self) -> None:
         if self._document_id is None:
