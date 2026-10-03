@@ -587,6 +587,8 @@ class CommercialDocumentLine(Base):
     warehouse_delivered_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     # R240: تاریخِ تحویلِ مورد انتظارِ همین ردیف (خالی = تاریخِ تحویلِ سرِ سند)
     expected_delivery_date: Mapped[datetime.date | None]
+    # R241: ردیفِ درخواستِ خریدِ مبدا (سفارشِ ساخته‌شده از درخواست)
+    purchase_request_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.purchase_request_lines.line_id"))
 
 
 # =======================================================================
@@ -1933,3 +1935,48 @@ class DocumentChangeLog(Base):
     field_name: Mapped[str | None] = mapped_column(String(50))
     old_value: Mapped[str | None] = mapped_column(Text)
     new_value: Mapped[str | None] = mapped_column(Text)
+
+
+class PurchaseRequest(Base):
+    """R241: درخواستِ خرید."""
+
+    __tablename__ = "purchase_requests"
+    __table_args__ = {"schema": "comm"}
+
+    request_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    request_no: Mapped[int]
+    request_date: Mapped[datetime.date]
+    required_date: Mapped[datetime.date | None]
+    requester_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    priority_code: Mapped[str] = mapped_column(String(10), default="NORMAL")
+    purchase_type_id: Mapped[int | None] = mapped_column(ForeignKey("comm.purchase_types.purchase_type_id"))
+    warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="DRAFT")
+    description: Mapped[str | None] = mapped_column(Text)
+    submitted_at: Mapped[datetime.datetime | None]
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    approved_at: Mapped[datetime.datetime | None]
+    rejected_reason: Mapped[str | None] = mapped_column(Text)
+    cancellation_reason_id: Mapped[int | None] = mapped_column(ForeignKey("comm.cancellation_reasons.reason_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+
+
+class PurchaseRequestLine(Base):
+    __tablename__ = "purchase_request_lines"
+    __table_args__ = {"schema": "comm"}
+
+    line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    request_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.purchase_requests.request_id", ondelete="CASCADE"))
+    line_no: Mapped[int]
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    required_date: Mapped[datetime.date | None]
+    suggested_supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    estimated_unit_price: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 4))
+    description: Mapped[str | None] = mapped_column(Text)

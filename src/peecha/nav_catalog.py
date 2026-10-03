@@ -25,6 +25,11 @@ PURCHASE_REPORT_MENU = [
         ("RECEIPT_MISMATCH", "رسیدهایِ دارایِ مغایرت"), ("CANCELLED", "اسنادِ خریدِ لغوشده"),
         ("CANCEL_ANALYSIS", "تحلیلِ علت‌هایِ لغو"), ("EMERGENCY", "خریدهایِ اضطراری"),
     ]),
+    ("REQUESTS", "درخواستِ خرید", [
+        ("PR_REGISTER", "دفترِ درخواست‌هایِ خرید"), ("PR_PENDING", "درخواست‌هایِ منتظرِ تصویب"),
+        ("PR_NOT_ORDERED", "درخواست‌هایِ تصویب‌شدهٔ بدونِ سفارش"), ("PR_CYCLE", "زمانِ چرخهٔ درخواست تا سفارش"),
+        ("PR_BY_REQUESTER", "درخواست‌ها به تفکیکِ درخواست‌کننده"), ("PR_REJECTED", "درخواست‌هایِ ردشده/لغوشده"),
+    ]),
     ("CONTROL", "کنترل و حسابرسی", [
         ("THREE_WAY", "تطبیقِ سه‌طرفه (سفارش/رسید/فاکتور)"), ("NO_PO", "خریدِ بدونِ سفارش"),
         ("INVOICE_NO_RECEIPT", "فاکتورِ بدونِ رسید"), ("INVOICE_OVER_PO", "فاکتورِ بیش از سفارش"),
@@ -32,6 +37,7 @@ PURCHASE_REPORT_MENU = [
         ("DOC_TRAIL", "ردِ اسنادِ خرید (Audit Trail)"), ("USER_ACTIVITY", "فعالیتِ کاربران در خرید"),
         ("CHANGED_AFTER_APPROVAL", "تغییرِ قیمت/مقدار پس از تایید"), ("MODIFIED_DOCS", "اسنادِ اصلاح‌شده پس از تایید"),
         ("APPROVAL_HISTORY", "تاریخچهٔ تایید و تصویب"), ("SOD_VIOLATIONS", "تخلفاتِ تفکیکِ وظایف"),
+        ("PO_WITHOUT_PR", "سفارشِ خریدِ بدونِ درخواست"),
     ]),
     ("PROCESS", "فرآیندِ خرید", [
         ("PO_FLOW", "گردشِ سفارشِ خرید"), ("CYCLE_TIME", "زمانِ چرخهٔ خرید"),
@@ -288,6 +294,8 @@ NAV_ITEMS = [
         "code": "PURCH",
         "label": "خرید و تدارکات",
         "children": [
+            # R241: درخواستِ خرید (پیش از سفارش)
+            {"code": "PURCH_REQUESTS", "label": "درخواستِ خرید", "screen": "purchase_requests"},
             {"code": "PURCH_ORDER", "label": "سفارشِ خرید", "screen": "commercial_document_purchase_order"},
             {"code": "PURCH_PROFORMA", "label": "پیش‌فاکتورِ خرید", "screen": "commercial_document_purchase_proforma"},
             {"code": "PURCH_INVOICE", "label": "فاکتورِ خرید", "screen": "commercial_document_purchase_invoice"},

@@ -1524,10 +1524,179 @@ def reorder_policies_master(company_id: int, f: PurchaseFilters) -> ReportResult
 
 
 # =====================================================================
+# R241: درخواستِ خرید
+# =====================================================================
+def _requests(company_id: int, f: PurchaseFilters, statuses=None):
+    from peecha.db.models.commercial import PurchaseRequestLine
+    from peecha.services import purchase_requests as pr_service
+
+    reqs = pr_service.list_requests(company_id, f.date_from, f.date_to, statuses)
+    with new_session() as session:
+        lines: dict[int, list] = defaultdict(list)
+        if reqs:
+            for ln in session.scalars(select(PurchaseRequestLine).where(
+                    PurchaseRequestLine.request_id.in_([r.request_id for r in reqs])).order_by(PurchaseRequestLine.line_no)):
+                lines[ln.request_id].append(ln)
+    ordered = pr_service.ordered_quantities([ln.line_id for ls in lines.values() for ln in ls])
+    ctx = base._ctx(company_id)
+    out = []
+    for r in reqs:
+        ls = [ln for ln in lines.get(r.request_id, [])
+              if (f.item_id is None or ln.item_id == f.item_id)
+              and (f.category_id is None or (ctx.items.get(ln.item_id) and ctx.items[ln.item_id].category_id == f.category_id))
+              and (f.supplier_id is None or ln.suggested_supplier_detail_account_id == f.supplier_id)]
+        if (f.item_id is not None or f.category_id is not None or f.supplier_id is not None) and not ls:
+            continue
+        if f.warehouse_id is not None and r.warehouse_id != f.warehouse_id:
+            continue
+        out.append((r, ls))
+    return out, ordered, ctx
+
+
+def _estimated(lines) -> decimal.Decimal:
+    return sum(((ln.estimated_unit_price or _ZERO) * ln.quantity for ln in lines), _ZERO)
+
+
+def request_register(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import purchase_requests as pr_service
+
+    reqs, ordered, _ctx = _requests(company_id, f)
+    users = _users()
+    result = ReportResult([
+        ("شمارهٔ درخواست", INT), ("تاریخ", DATE), ("درخواست‌کننده", TEXT), ("اولویت", TEXT), ("تاریخِ نیاز", DATE), ("وضعیت", TEXT),
+        ("تعدادِ ردیف", INT), ("ارزشِ برآوردی", MONEY), ("وضعیتِ سفارش", TEXT), ("درصدِ سفارش‌شده", PERCENT), ("تصویب‌کننده", TEXT),
+    ], no_total={0, 9})
+    for r, ls in reqs:
+        total = sum((ln.quantity_base for ln in ls), _ZERO)
+        done = sum((min(ordered.get(ln.line_id, _ZERO), ln.quantity_base) for ln in ls), _ZERO)
+        result.add([r.request_no, r.request_date, users.get(r.requester_user_id, ""), pr_service.PRIORITY_LABELS[r.priority_code],
+                    r.required_date, pr_service.STATUS_LABELS[r.status_code], len(ls), _estimated(ls),
+                    pr_service.FULFILMENT_LABELS[pr_service.fulfilment(ls, ordered)] if r.status_code == "APPROVED" else "",
+                    (done * 100 / total) if total else _ZERO, users.get(r.approved_by_user_id, "")], (r.request_id, "PURCHASE_REQUEST"))
+    return result
+
+
+def requests_pending_approval(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import purchase_requests as pr_service
+
+    reqs, _ordered, _ctx = _requests(company_id, f, ("SUBMITTED",))
+    users = _users()
+    now = datetime.datetime.now()
+    result = ReportResult([
+        ("شمارهٔ درخواست", INT), ("تاریخ", DATE), ("درخواست‌کننده", TEXT), ("اولویت", TEXT), ("تاریخِ نیاز", DATE),
+        ("ارزشِ برآوردی", MONEY), ("روزِ انتظار", DAYS),
+    ], no_total={0, 6})
+    for r, ls in reqs:
+        result.add([r.request_no, r.request_date, users.get(r.requester_user_id, ""), pr_service.PRIORITY_LABELS[r.priority_code],
+                    r.required_date, _estimated(ls), (now - r.submitted_at).days if r.submitted_at else None],
+                   (r.request_id, "PURCHASE_REQUEST"))
+    return result
+
+
+def approved_not_ordered(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """ردیف‌هایِ درخواستِ تصویب‌شده که (کامل یا بخشی) هنوز سفارش نشده‌اند."""
+    reqs, ordered, ctx = _requests(company_id, f, ("APPROVED",))
+    today = datetime.date.today()
+    result = ReportResult([
+        ("شمارهٔ درخواست", INT), ("تاریخِ تصویب", DATE), ("کالا", TEXT), ("واحدِ پایه", TEXT), ("مقدارِ درخواست", QTY), ("سفارش‌شده", QTY),
+        ("مانده", QTY), ("تاریخِ نیاز", DATE), ("روز تا نیاز", INT), ("تامین‌کنندهٔ پیشنهادی", TEXT), ("ارزشِ برآوردیِ مانده", MONEY),
+    ], no_total={0, 8})
+    for r, ls in reqs:
+        for ln in ls:
+            remaining = ln.quantity_base - ordered.get(ln.line_id, _ZERO)
+            if remaining <= 0:
+                continue
+            needed = ln.required_date or r.required_date
+            result.add([r.request_no, r.approved_at.date() if r.approved_at else None, ctx.item_label(ln.item_id), ctx.base_uom(ln.item_id),
+                        ln.quantity_base, ordered.get(ln.line_id, _ZERO), remaining, needed, (needed - today).days if needed else None,
+                        ctx.names.get(ln.suggested_supplier_detail_account_id, ""),
+                        _money((ln.estimated_unit_price or _ZERO) * remaining / ln.conversion_factor)], (r.request_id, "PURCHASE_REQUEST"))
+    return result
+
+
+def request_cycle(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """زمانِ چرخهٔ درخواست: ثبت → ارسال → تصویب → اولین سفارش (روز)."""
+    from peecha.services import purchase_requests as pr_service
+
+    reqs, _ordered, _ctx = _requests(company_id, f, ("SUBMITTED", "APPROVED", "REJECTED"))
+    users = _users()
+    result = ReportResult([
+        ("شمارهٔ درخواست", INT), ("تاریخ", DATE), ("درخواست‌کننده", TEXT), ("وضعیت", TEXT), ("ارسال", DATE), ("تصویب", DATE),
+        ("اولین سفارش", DATE), ("ثبت→ارسال", DAYS), ("ارسال→تصویب", DAYS), ("تصویب→سفارش", DAYS), ("کلِ چرخه", DAYS),
+    ], no_total={0, 7, 8, 9, 10})
+    for r, _ls in reqs:
+        orders = [o for o in pr_service.linked_orders(r.request_id) if o.status_code != "CANCELLED"]
+        first = min((o.document_date for o in orders), default=None)
+        sub = r.submitted_at.date() if r.submitted_at else None
+        appr = r.approved_at.date() if r.approved_at else None
+        result.add([r.request_no, r.request_date, users.get(r.requester_user_id, ""), pr_service.STATUS_LABELS[r.status_code], sub, appr,
+                    first, _gap(r.request_date, sub), _gap(sub, appr), _gap(appr, first), _gap(r.request_date, first)],
+                   (r.request_id, "PURCHASE_REQUEST"))
+    return result
+
+
+def requests_by_requester(company_id: int, f: PurchaseFilters) -> ReportResult:
+    reqs, ordered, ctx = _requests(company_id, f)
+    users = _users()
+    agg: dict[str, dict] = defaultdict(lambda: {"count": 0, "approved": 0, "rejected": 0, "value": _ZERO, "ordered": 0})
+    from peecha.services import purchase_requests as pr_service
+
+    for r, ls in reqs:
+        key = users.get(r.requester_user_id, "")
+        if r.cost_center_detail_account_id:
+            key = f"{key} / {ctx.names.get(r.cost_center_detail_account_id, '')}"
+        a = agg[key]
+        a["count"] += 1
+        a["value"] += _estimated(ls)
+        a["approved"] += r.status_code == "APPROVED"
+        a["rejected"] += r.status_code == "REJECTED"
+        a["ordered"] += r.status_code == "APPROVED" and pr_service.fulfilment(ls, ordered) == "FULL"
+    result = ReportResult([
+        ("درخواست‌کننده / مرکزِ هزینه", TEXT), ("تعدادِ درخواست", INT), ("تصویب‌شده", INT), ("ردشده", INT), ("کاملاً سفارش‌شده", INT),
+        ("نرخِ رد", PERCENT), ("ارزشِ برآوردی", MONEY),
+    ])
+    for key, a in sorted(agg.items(), key=lambda kv: -kv[1]["value"]):
+        result.add([key, a["count"], a["approved"], a["rejected"], a["ordered"],
+                    decimal.Decimal(a["rejected"] * 100) / a["count"] if a["count"] else _ZERO, a["value"]])
+    return result
+
+
+def rejected_requests(company_id: int, f: PurchaseFilters) -> ReportResult:
+    reqs, _ordered, _ctx = _requests(company_id, f, ("REJECTED", "CANCELLED"))
+    users = _users()
+    reasons = _cancel_reason_names(company_id)
+    result = ReportResult([
+        ("شمارهٔ درخواست", INT), ("تاریخ", DATE), ("درخواست‌کننده", TEXT), ("وضعیت", TEXT), ("علت", TEXT), ("ارزشِ برآوردی", MONEY),
+    ], no_total={0})
+    for r, ls in reqs:
+        why = r.rejected_reason if r.status_code == "REJECTED" else reasons.get(r.cancellation_reason_id, "")
+        result.add([r.request_no, r.request_date, users.get(r.requester_user_id, ""), "ردشده" if r.status_code == "REJECTED" else "لغوشده",
+                    why or "", _estimated(ls)], (r.request_id, "PURCHASE_REQUEST"))
+    return result
+
+
+def orders_without_request(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """ردیف‌هایِ سفارشِ خریدِ ثبت‌شده که از درخواستِ خرید نیامده‌اند."""
+    ctx = base._ctx(company_id)
+    users = _users()
+    result = ReportResult([
+        ("شمارهٔ سفارش", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("کالا", TEXT), ("مقدار (پایه)", QTY), ("مبلغِ خالص", MONEY),
+        ("ثبت‌کننده", TEXT),
+    ], no_total={0}, note="خریدِ بدونِ درخواست؛ سفارش‌هایِ پیش از R241 هم این‌جا می‌آیند.")
+    for doc, ln in base._lines(company_id, ("PURCHASE_ORDER",), _OPEN_ORDER_STATUSES, f, ctx):
+        if ln.purchase_request_line_id is not None:
+            continue
+        result.add([doc.document_no, doc.document_date, ctx.names.get(doc.counterparty_detail_account_id, ""), ctx.item_label(ln.item_id),
+                    ln.quantity_base, base._net(ln), users.get(doc.created_by_user_id, "")], (doc.document_id, doc.document_type_code))
+    return result
+
+
+# =====================================================================
 # ثبتِ گزارش‌ها
 # =====================================================================
 _OP, _AN, _PR, _VP, _FI, _MD = "عملیاتی", "تحلیلِ خرید", "قیمت و هزینه", "ارزیابیِ تامین‌کننده", "مالی و بدهی", "اطلاعاتِ پایه"
 _CT, _PC, _IN = "کنترل و حسابرسی", "فرآیندِ خرید", "انبار و تدارکات"
+_RQ = "درخواستِ خرید"
 _ALL = ("supplier", "item", "category", "warehouse")
 _DAYS_OPT = ("days", "آستانه (روز)", (("180", "۱۸۰ روز"), ("90", "۹۰ روز"), ("365", "۳۶۵ روز"), ("30", "۳۰ روز")))
 
@@ -1628,5 +1797,19 @@ PURCHASE_EXT_REPORTS: list[ReportDef] = [
     ReportDef("CANCEL_REASONS", "علت‌هایِ لغو", cancellation_reasons_master, (), "علت‌هایِ لغوِ تعریف‌شده و تعدادِ استفاده.", "none", _MD),
     ReportDef("REORDER_POLICIES", "سیاست‌هایِ سفارشِ کالا", reorder_policies_master, ("item",),
               "حداقل/نقطهٔ سفارش/حداکثر/زمانِ تحویلِ تعریف‌شده برایِ کالاها.", "none", _MD),
+    # --- R241: درخواستِ خرید
+    ReportDef("PR_REGISTER", "دفترِ درخواست‌هایِ خرید", request_register, _ALL,
+              "همهٔ درخواست‌ها با وضعیت، ارزشِ برآوردی و درصدِ سفارش‌شده.", group=_RQ),
+    ReportDef("PR_PENDING", "درخواست‌هایِ منتظرِ تصویب", requests_pending_approval, _ALL,
+              "درخواست‌هایِ ارسال‌شده‌ای که هنوز تصویب/رد نشده‌اند.", group=_RQ),
+    ReportDef("PR_NOT_ORDERED", "درخواست‌هایِ تصویب‌شدهٔ بدونِ سفارش", approved_not_ordered, _ALL,
+              "ماندهٔ سفارش‌نشدهٔ ردیف‌هایِ درخواستِ تصویب‌شده.", group=_RQ),
+    ReportDef("PR_CYCLE", "زمانِ چرخهٔ درخواست تا سفارش", request_cycle, _ALL,
+              "ثبت → ارسال → تصویب → اولین سفارش (روز).", group=_RQ),
+    ReportDef("PR_BY_REQUESTER", "درخواست‌ها به تفکیکِ درخواست‌کننده", requests_by_requester, _ALL,
+              "تعداد، نرخِ رد و ارزشِ برآوردیِ درخواست‌هایِ هر کاربر/مرکزِ هزینه.", group=_RQ),
+    ReportDef("PR_REJECTED", "درخواست‌هایِ ردشده/لغوشده", rejected_requests, _ALL, "با علتِ رد یا لغو.", group=_RQ),
+    ReportDef("PO_WITHOUT_PR", "سفارشِ خریدِ بدونِ درخواست", orders_without_request, _ALL,
+              "ردیف‌هایِ سفارش که از درخواستِ خرید نیامده‌اند.", group=_CT),
 ]
 base.register_reports(PURCHASE_EXT_REPORTS)
