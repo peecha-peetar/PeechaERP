@@ -30,7 +30,7 @@ _DOC_TYPE_TITLES = {
 # نوعِ کار -> برچسب
 KIND_LABELS = {
     "MANAGER_APPROVAL": "تصویبِ مدیر",
-    "GOODS_RECEIPT": "تاییدِ رسیدِ کالا",
+    "GOODS_RECEIPT": "تاییدِ انبار (رسید/حواله)",
     "PRE_SALES_WAREHOUSE": "تاییدِ انبارِ سفارش",
     "SETTLEMENT_APPROVAL": "تاییدِ نحوهٔ تسویه",
     "CONVERT_TO_INVOICE": "تبدیل به فاکتور",
@@ -75,11 +75,11 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks: list[OperationalTask] = []
     with new_session() as session:
         if is_manager:
-            approval_types = []
-            if not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL"):
-                approval_types.append("PURCHASE_ORDER")
-            if not settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL"):
-                approval_types += ["PURCHASE_INVOICE", "PURCHASE_PROFORMA"]
+            # R232: خرید و فروش با همان قاعدهٔ تنظیمی
+            approval_types = [
+                t for t in ("PURCHASE_ORDER", "PURCHASE_INVOICE", "PURCHASE_PROFORMA", "SALES_ORDER", "SALES_INVOICE", "SALES_PROFORMA")
+                if documents_service.requires_manager_approval(company_id, t)
+            ]
             manager_docs = list(session.scalars(
                 select(CommercialDocument).where(
                     CommercialDocument.company_id == company_id, CommercialDocument.status_code == "CONFIRMED",
@@ -99,17 +99,20 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
             manager_docs, plan_docs = [], []
     tasks += _rows(company_id, manager_docs, "MANAGER_APPROVAL")
 
-    # R230: سفارشِ خریدی که تا ثبتِ نهایی نشود به تاییدِ رسید نمی‌رسد
-    if is_manager and settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT") \
-            and not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST"):
-        skip_approval = settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL")
+    # R230/R232: سفارشی که تا ثبتِ نهایی نشود به تاییدِ رسید/حوالهٔ انبار نمی‌رسد
+    for order_type in ("PURCHASE_ORDER", "SALES_ORDER"):
+        if not is_manager or documents_service.receipt_eligible_statuses(company_id, order_type) != ("POSTED",):
+            continue
+        ready = ("APPROVED",) if documents_service.requires_manager_approval(company_id, order_type) else ("CONFIRMED", "APPROVED")
         with new_session() as session:
-            to_post = list(session.scalars(
-                select(CommercialDocument).where(
-                    CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "PURCHASE_ORDER",
-                    CommercialDocument.status_code.in_(("CONFIRMED", "APPROVED") if skip_approval else ("APPROVED",)),
-                ).order_by(CommercialDocument.document_id)
-            ))
+            to_post = [
+                d for d in session.scalars(
+                    select(CommercialDocument).where(
+                        CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == order_type,
+                        CommercialDocument.status_code.in_(ready),
+                    ).order_by(CommercialDocument.document_id)
+                ) if not documents_service._is_pre_sales_order(session, d)
+            ]
         tasks += _rows(company_id, to_post, "POST_ORDER")
 
     receipt_queue = documents_service.list_purchase_order_goods_receipt_queue(company_id, user_id)
@@ -123,10 +126,11 @@ def list_operational_tasks(company_id: int, user_id: int) -> list[OperationalTas
     tasks += _rows(company_id, pre_sales, "PRE_SALES_WAREHOUSE")
     tasks += _rows(company_id, plan_docs, "SETTLEMENT_APPROVAL")
 
-    # سفارشِ خریدِ رسیده که هنوز فاکتور نشده: برایِ ثبت‌کنندهٔ سفارش و مدیر
+    # سفارشِ خرید/فروشِ رسیده/حواله‌شده که هنوز فاکتور نشده: برایِ ثبت‌کنندهٔ سفارش و مدیر
     received = [
         d for d in documents_service.list_purchase_order_goods_receipt_queue(company_id)
-        if d.warehouse_approved_at is not None and (is_manager or d.created_by_user_id == user_id)
+        if d.warehouse_approved_at is not None and d.document_type_code in ("PURCHASE_ORDER", "SALES_ORDER")
+        and (is_manager or d.created_by_user_id == user_id)
     ]
     tasks += _rows(company_id, received, "CONVERT_TO_INVOICE")
 

@@ -479,7 +479,9 @@ def _receipt_locks_quantity(order: CommercialDocument) -> bool:
     """طبقِ درخواستِ صریحِ کاربر («بعدِ تاییدِ رسید توسطِ انباردار، در صدورِ
     فاکتور تعداد قابلِ‌تغییر نباشد -- انبار مسئولِ تعداد است»). R226: همیشه
     فعال (دیگر Toggle نیست -- مقدارِ تاییدشدهٔ انبار در فاکتور قفل است)."""
-    return order.document_type_code == "PURCHASE_ORDER" and order.warehouse_approved_at is not None
+    # R232: حوالهٔ تاییدشدهٔ سفارشِ فروش هم مقدارِ فاکتور را قفل می‌کند
+    return order.document_type_code in ("PURCHASE_ORDER", "SALES_ORDER") and order.warehouse_approved_at is not None \
+        and (order.document_type_code == "PURCHASE_ORDER" or order_warehouse_step_enabled(order.company_id, "SALES_ORDER"))
 
 
 def _locked_line_ids(session, document_id: int) -> set[int]:
@@ -548,6 +550,11 @@ def convert_to_invoice(
             and settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT")
         ):
             raise ValueError("رسیدِ کالایِ این سفارش هنوز توسطِ انباردار تایید نشده -- ابتدا از «تاییدِ رسیدِ کالا» تایید شود.")
+        if (
+            source.document_type_code == "SALES_ORDER" and source.warehouse_approved_at is None
+            and order_warehouse_step_enabled(company_id, "SALES_ORDER") and not _is_pre_sales_order(session, source)
+        ):
+            raise ValueError("حوالهٔ انبارِ این سفارش هنوز توسطِ انباردار تایید نشده -- ابتدا از «تاییدِ انبار» تایید شود.")
         if _is_pre_sales_order(session, source):
             if source.warehouse_approved_at is None:
                 raise ValueError("این سفارش هنوز تاییدِ انبار نگرفته -- ابتدا از تبِ «تاییدِ انبار و توزین» تایید کنید.")
@@ -1875,10 +1882,39 @@ def _is_pre_sales_order(session, doc: CommercialDocument) -> bool:
     return channel is not None and channel.channel_type_code == "PRE_SALES"
 
 
+# R232: تنظیماتِ گردشِ کارِ انبارِ سفارش، برایِ خرید و فروش هم‌تراز
+_ORDER_WAREHOUSE_TOGGLES = {
+    "PURCHASE_ORDER": ("PURCHASE_ORDER_GOODS_RECEIPT", "PURCHASE_ORDER_SKIP_POST"),
+    "SALES_ORDER": ("SALES_ORDER_WAREHOUSE_ISSUE", "SALES_ORDER_SKIP_POST"),
+}
+
+
+def order_warehouse_step_enabled(company_id: int, document_type_code: str) -> bool:
+    """رسیدِ انبارِ سفارشِ خرید / حوالهٔ انبارِ سفارشِ فروش توسطِ انباردار روشن است؟"""
+    toggles = _ORDER_WAREHOUSE_TOGGLES.get(document_type_code)
+    return toggles is not None and settings_service.is_feature_enabled(company_id, toggles[0])
+
+
+def requires_manager_approval(company_id: int, document_type_code: str) -> bool:
+    """R232: تصویبِ مدیر پیش از ثبتِ نهایی -- خرید پیش‌فرض روشن (قابلِ‌حذف)، فروش پیش‌فرض خاموش."""
+    if document_type_code == "PURCHASE_ORDER":
+        return not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL")
+    if document_type_code in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA"):
+        return not settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL")
+    if document_type_code == "SALES_ORDER":
+        return settings_service.is_feature_enabled(company_id, "SALES_ORDER_MANAGER_APPROVAL")
+    if document_type_code in ("SALES_INVOICE", "SALES_PROFORMA"):
+        return settings_service.is_feature_enabled(company_id, "SALES_INVOICE_MANAGER_APPROVAL")
+    return False
+
+
 def receipt_eligible_statuses(company_id: int, document_type_code: str) -> tuple[str, ...]:
     """R230: سفارشِ خرید فقط پس از «ثبتِ نهایی» به تاییدِ رسیدِ انبار می‌رسد -- مگر
-    مرحلهٔ ثبتِ نهاییِ سفارش در تنظیمات (PURCHASE_ORDER_SKIP_POST) حذف شده باشد."""
-    if document_type_code == "PURCHASE_ORDER" and not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_POST"):
+    مرحلهٔ ثبتِ نهاییِ سفارش در تنظیمات (PURCHASE_ORDER_SKIP_POST) حذف شده باشد.
+    R232: سفارشِ فروش با حوالهٔ انبار هم به همین شکل (SALES_ORDER_SKIP_POST)."""
+    toggles = _ORDER_WAREHOUSE_TOGGLES.get(document_type_code)
+    if toggles is not None and settings_service.is_feature_enabled(company_id, toggles[0]) \
+            and not settings_service.is_feature_enabled(company_id, toggles[1]):
         return ("POSTED",)
     return _PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES
 
@@ -1901,9 +1937,7 @@ def _is_goods_receipt_eligible_order(session, doc: CommercialDocument) -> bool:
         return True
     if consignment_requires_warehouse_approval(doc.company_id, doc.document_type_code):
         return True
-    return doc.document_type_code == "PURCHASE_ORDER" and settings_service.is_feature_enabled(
-        doc.company_id, "PURCHASE_ORDER_GOODS_RECEIPT"
-    )
+    return order_warehouse_step_enabled(doc.company_id, doc.document_type_code)
 
 
 def document_requires_weighing(document_id: int, company_id: int) -> bool:
@@ -2003,7 +2037,9 @@ def approve_warehouse(
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
-        if doc.document_type_code == "PURCHASE_ORDER":
+        if doc.document_type_code == "PURCHASE_ORDER" or (
+            doc.document_type_code == "SALES_ORDER" and not _is_pre_sales_order(session, doc)
+        ):
             # طبقِ درخواستِ صریحِ کاربر: در سفارشِ خرید انبار لازم نیست --
             # انباردار هنگامِ رسید مشخص می‌کند کالا به کدام انبار وارد شد.
             _validate_line_warehouses(session, company_id, line_warehouses)
@@ -2036,6 +2072,8 @@ def approve_warehouse(
         if doc.status_code not in receipt_eligible_statuses(company_id, doc.document_type_code):
             raise ValueError(
                 "سفارشِ خرید ابتدا باید ثبتِ نهایی شود، سپس رسیدِ انبار." if doc.document_type_code == "PURCHASE_ORDER"
+                else "سفارشِ فروش ابتدا باید ثبتِ نهایی شود، سپس حوالهٔ انبار."
+                if doc.document_type_code == "SALES_ORDER" and not _is_pre_sales_order(session, doc)
                 else "فقط سندِ تاییدشده/تصویب‌شده قابلِ‌تاییدِ انبار است."
             )
         if doc.warehouse_approved_at is not None:
@@ -2217,6 +2255,20 @@ def list_purchase_order_goods_receipt_queue(company_id: int, user_id: int | None
                 .order_by(CommercialDocument.document_id)
             )
             docs = [doc for doc in session.scalars(stmt) if not _has_any_invoiced_quantity(session, doc.document_id)]
+        if order_warehouse_step_enabled(company_id, "SALES_ORDER"):
+            # R232: حوالهٔ انبارِ سفارشِ فروش (سفارش‌هایِ پخشِ سرد روالِ «انبار و توزین» خودشان را دارند)
+            stmt = (
+                select(CommercialDocument)
+                .where(
+                    CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "SALES_ORDER",
+                    CommercialDocument.status_code.in_(receipt_eligible_statuses(company_id, "SALES_ORDER")),
+                )
+                .order_by(CommercialDocument.document_id)
+            )
+            docs += [
+                doc for doc in session.scalars(stmt)
+                if not _is_pre_sales_order(session, doc) and not _has_any_invoiced_quantity(session, doc.document_id)
+            ]
         if settings_service.is_feature_enabled(company_id, "CONSIGNMENT_WAREHOUSE_APPROVAL"):
             # R230: امانیِ ورودی/خروجیِ تاییدشده که هنوز ثبتِ نهایی (جابه‌جاییِ کالا) نشده
             docs += list(session.scalars(
@@ -2691,7 +2743,10 @@ def _post_consignment_document(
     return PostResult(document_id=document_id, stock_document_id=stock_document_id, journal_entry_id=None)
 
 
-def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> PostResult:
+def post_document(
+    document_id: int, company_id: int, posted_by_user_id: int, *, from_field_sales: bool = False,
+) -> PostResult:
+    """from_field_sales: فروشِ موبایل (کالا تحویل شده) -- تصویبِ مدیرِ فروش مانعش نمی‌شود."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -2705,10 +2760,9 @@ def post_document(document_id: int, company_id: int, posted_by_user_id: int) -> 
         # به پیش‌فاکتورِ خرید هم): برایِ این دو نوعِ سند، دیگر کافی نیست
         # که سند فقط CONFIRMED باشد -- باید حتماً از مرحلهٔ تصویبِ مدیر
         # (APPROVED) هم عبور کرده باشد.
-        if (
-            doc.document_type_code in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA") and doc.status_code != "APPROVED"
-            and not settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL")
-        ):
+        if doc.document_type_code in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA", "SALES_ORDER", "SALES_INVOICE", "SALES_PROFORMA") \
+                and doc.status_code != "APPROVED" and requires_manager_approval(company_id, doc.document_type_code) \
+                and not from_field_sales and doc.pos_session_id is None:
             raise ValueError("این سند ابتدا باید توسطِ مدیر تصویب شود -- تاییدِ کاربر به‌تنهایی برایِ ثبتِ نهایی کافی نیست.")
 
         document_type_code = doc.document_type_code

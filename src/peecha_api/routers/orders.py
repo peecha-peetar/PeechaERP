@@ -205,7 +205,7 @@ def _create_order(payload: OrderCreateRequest, ctx: AuthContext) -> tuple[int, l
                 for line in payload.settlement_lines
             ]
             settlements_service.auto_approve_settlement_plan(document_id, ctx.company_id, ctx.user_id, settlement_lines)
-        documents_service.post_document(document_id, ctx.company_id, ctx.user_id)
+        documents_service.post_document(document_id, ctx.company_id, ctx.user_id, from_field_sales=True)
         # طبقِ باگِ واقعیِ کشف‌شده («سقفِ اعتبار فقط برایِ SALES_ORDER بررسی
         # می‌شود، هرگز برایِ فاکتور»): بعدِ ثبتِ‌نهایی (نه پیش از آن -- بنگرید
         # توضیحِ check_settlement_credit_exposure) -- کالا فیزیکاً تحویل

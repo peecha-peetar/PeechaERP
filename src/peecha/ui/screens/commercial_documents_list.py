@@ -353,6 +353,16 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
                 # غیرِفعال است، با دلیلِ روشن.
                 convert_button.setEnabled(False)
                 convert_button.setToolTip(f"{pre_sales_status} -- ابتدا از تبِ «تاییدِ انبار و توزین» تایید کنید.")
+            elif (
+                pre_sales_status is None and d.warehouse_approved_at is None
+                and documents_service.order_warehouse_step_enabled(self._company_id(), d.document_type_code)
+            ):
+                # R232: سفارشِ خرید/فروش تا تاییدِ رسید/حوالهٔ انبار تبدیل نمی‌شود
+                convert_button.setEnabled(False)
+                convert_button.setToolTip(
+                    "ابتدا حوالهٔ انبارِ این سفارش باید توسطِ انباردار تایید شود."
+                    if d.document_type_code == "SALES_ORDER" else "ابتدا رسیدِ کالایِ این سفارش باید توسطِ انباردار تایید شود."
+                )
             else:
                 convert_button.setToolTip("تبدیل به فاکتور")
                 convert_button.clicked.connect(lambda _checked=False, doc_id=d.document_id: self._convert_document(doc_id))
@@ -474,27 +484,26 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             return None
         doc_id = d.document_id
         doc_type = d.document_type_code
-        needs_approval = d.status_code == "CONFIRMED" and (
-            (doc_type == "PURCHASE_ORDER" and not settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_SKIP_APPROVAL"))
-            or (doc_type in ("PURCHASE_INVOICE", "PURCHASE_PROFORMA")
-                and not settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL"))
-        )
+        # R232: تصویبِ مدیر برایِ خرید و فروش با همان قاعدهٔ تنظیمی
+        needs_approval = d.status_code == "CONFIRMED" and documents_service.requires_manager_approval(company_id, doc_type)
         if needs_approval:
             if not roles_service.is_manager(user.user_id, company_id):
                 return None
             return ("تصویب", "مرحلهٔ بعد: تصویبِ مدیر", lambda: self._approve_document(doc_id))
-        if doc_type == "PURCHASE_ORDER":
-            needs_receipt = settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT") and d.warehouse_approved_at is None
+        if doc_type in ("PURCHASE_ORDER", "SALES_ORDER") and pre_sales_status is None:
+            is_sale = doc_type == "SALES_ORDER"
+            step = "حوالهٔ انبار" if is_sale else "رسیدِ کالا"
+            needs_receipt = documents_service.order_warehouse_step_enabled(company_id, doc_type) and d.warehouse_approved_at is None
             if needs_receipt and d.status_code not in documents_service.receipt_eligible_statuses(company_id, doc_type):
-                # R230: سفارش ابتدا ثبتِ نهایی می‌شود، بعد به تاییدِ رسیدِ انبار می‌رسد
+                # R230/R232: سفارش ابتدا ثبتِ نهایی می‌شود، بعد به تاییدِ انبار می‌رسد
                 if not roles_service.is_manager(user.user_id, company_id):
                     return None
                 nav_code = _TYPE_TO_NAV_CODE[doc_type]
-                return ("ثبتِ نهایی", "مرحلهٔ بعد: ثبتِ نهاییِ سفارش (سپس تاییدِ رسیدِ انبار)",
+                return ("ثبتِ نهایی", f"مرحلهٔ بعد: ثبتِ نهاییِ سفارش (سپس تاییدِ {step})",
                         lambda: self._main_window.open_screen(nav_code, then=lambda screen: (screen.edit_document(doc_id), screen._post())))
             if needs_receipt:
-                return ("رسیدِ کالا", "مرحلهٔ بعد: تاییدِ رسیدِ کالا توسطِ انباردار",
-                        lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
+                return (step, f"مرحلهٔ بعد: تاییدِ {step} توسطِ انباردار",
+                        lambda: self._main_window.open_screen("SALES_WAREHOUSE_ISSUE" if is_sale else "PURCH_GOODS_RECEIPT"))
         if doc_type in ("CONSIGNMENT_IN", "CONSIGNMENT_OUT") and d.status_code in ("CONFIRMED", "APPROVED"):
             if documents_service.consignment_requires_warehouse_approval(company_id, doc_type) and d.warehouse_approved_at is None:
                 return ("تاییدِ انبار", "مرحلهٔ بعد: تاییدِ انباردار", lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))

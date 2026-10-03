@@ -127,6 +127,8 @@ _POST_BUTTON_DEFAULT_TOOLTIP = "۴) ثبتِ نهایی — قطعی و برگش
 # ممکن نیست -- باید حتماً از مرحلهٔ تصویبِ مدیر (APPROVED) هم عبور کند
 # (سفارش/فروش/امانی طبقِ صراحتِ کاربر دست‌نخورده می‌مانند).
 _TWO_STAGE_APPROVAL_TYPES = ("PURCHASE_INVOICE", "PURCHASE_PROFORMA")
+# R232: انواعی که ثبتِ نهایی‌شان (طبقِ تنظیمات) منوط به تصویبِ مدیر است -- خرید و فروش هم‌تراز
+_APPROVAL_GATED_TYPES = ("PURCHASE_INVOICE", "PURCHASE_PROFORMA", "SALES_ORDER", "SALES_INVOICE", "SALES_PROFORMA")
 # R228: سندهایی که کالا را از انبار خارج می‌کنند -- انتخابِ منبع (بچ/سریال/امانی)
 _LOT_OUT_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_OUT")
 # R231: در سفارش/پیش‌فاکتور بچ/سریال هنوز موضوعیت ندارد (انباردار هنگامِ رسید/تحویل
@@ -2394,6 +2396,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self._uom_codes: dict[int, str] = {}
         self._skip_purchase_order_approval = False
         self._skip_invoice_approval = False
+        self._requires_doc_approval = False
         self._one_step_invoice_post = False
         self._goods_receipt_enabled = False
         self._warehouse_approved = False
@@ -3127,11 +3130,13 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.document_type_code in _TWO_STAGE_APPROVAL_TYPES
             and settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_SKIP_APPROVAL")
         )
-        self._one_step_invoice_post = self._is_invoice and settings_service.is_feature_enabled(company_id, "INVOICE_ONE_STEP_POST")
-        self._goods_receipt_enabled = (
-            self.document_type_code == "PURCHASE_ORDER"
-            and settings_service.is_feature_enabled(company_id, "PURCHASE_ORDER_GOODS_RECEIPT")
+        self._requires_doc_approval = (
+            self.document_type_code in _APPROVAL_GATED_TYPES
+            and documents_service.requires_manager_approval(company_id, self.document_type_code)
         )
+        self._one_step_invoice_post = self._is_invoice and settings_service.is_feature_enabled(company_id, "INVOICE_ONE_STEP_POST")
+        # R232: رسیدِ انبارِ سفارشِ خرید / حوالهٔ انبارِ سفارشِ فروش
+        self._goods_receipt_enabled = documents_service.order_warehouse_step_enabled(company_id, self.document_type_code)
         warehouses = locations_service.list_warehouses(company_id, active_only=True)
         self._warehouses = warehouses
         self._per_line_warehouse_enabled = documents_service.is_per_line_warehouse_enabled(company_id)
@@ -3142,7 +3147,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.warehouse_label.setText("انبارِ نگه‌داری")
         else:
             self.warehouse_label.setText("انبار (پیش‌فرضِ ردیف‌ها)" if self._per_line_warehouse_enabled else "انبار")
-        if self._goods_receipt_enabled:
+        if self._goods_receipt_enabled and self.document_type_code == "PURCHASE_ORDER":
             # کالا هنوز وارد انبار نشده -- انباردار هنگامِ تاییدِ رسید انبار را مشخص می‌کند.
             self.warehouse_label.setText("انبار (اختیاری -- در رسید مشخص می‌شود)")
         current_wh = self.warehouse_combo.currentData()
@@ -4247,8 +4252,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # ثبتِ نهایی)؛ سرویس هم از قبل برایِ PURCHASE_ORDER صرفِ CONFIRMED
         # را برایِ ثبتِ نهایی کافی می‌داند (نگاه کن: _TWO_STAGE_APPROVAL_TYPES).
         self.approve_button.setVisible(
-            (not self._is_invoice or self.document_type_code in _TWO_STAGE_APPROVAL_TYPES)
-            and not self._skip_purchase_order_approval and not self._skip_invoice_approval
+            (self._requires_doc_approval or (not self._is_invoice and self.document_type_code not in _TWO_STAGE_APPROVAL_TYPES))
+            and not self._skip_purchase_order_approval
         )
         self.approve_button.setEnabled(is_confirmed)
         # طبقِ درخواستِ صریح («با تاییدِ مدیر نسبت به نحوه‌یِ تسویه، فاکتور
@@ -4265,7 +4270,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # یک دکمه، اگر نقشه‌ای موجود باشد، هم تاییدِ آن (فقط برایِ
             # مدیر -- همان اعتبارسنجیِ approve_settlement_plan) و هم
             # ثبتِ نهایی را با هم انجام می‌دهد (پیاده‌سازی در _post()).
-            requires_doc_approval = self.document_type_code in _TWO_STAGE_APPROVAL_TYPES and not self._skip_invoice_approval
+            requires_doc_approval = self._requires_doc_approval
             self.post_button.setEnabled((is_approved if requires_doc_approval else (is_confirmed or is_approved)) and has_plan)
             if self._settlement_plan is None:
                 self.settlement_plan_button.setStyleSheet("font-weight: bold; color: #b45309;")
@@ -4307,7 +4312,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             # طبقِ گزارشِ صریحِ کاربر («برایِ پیش‌فاکتورِ خرید هم همین کارو
             # بکن»): برخلافِ سفارش (که دست‌نخورده می‌ماند)، پیش‌فاکتورِ
             # خرید هم اکنون به تصویبِ جداگانه‌یِ مدیر (نه فقط CONFIRMED) نیاز دارد.
-            requires_doc_approval = self.document_type_code in _TWO_STAGE_APPROVAL_TYPES and not self._skip_invoice_approval
+            requires_doc_approval = self._requires_doc_approval
             self.post_button.setEnabled(is_approved if requires_doc_approval else (is_confirmed or is_approved))
             if requires_doc_approval and is_confirmed and not is_approved:
                 self.post_button.setToolTip(
@@ -4327,7 +4332,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         needs_receipt = self._goods_receipt_enabled and not self._warehouse_approved
         self.convert_button.setEnabled((is_confirmed or is_approved or is_posted) and not needs_receipt)
         self.convert_button.setToolTip(
-            "تبدیل به فاکتور -- غیرِفعال است، چون رسیدِ کالایِ این سفارش هنوز توسطِ انباردار تایید نشده."
+            ("تبدیل به فاکتور -- غیرِفعال است، چون حوالهٔ انبارِ این سفارش هنوز توسطِ انباردار تایید نشده."
+             if self.document_type_code == "SALES_ORDER" else
+             "تبدیل به فاکتور -- غیرِفعال است، چون رسیدِ کالایِ این سفارش هنوز توسطِ انباردار تایید نشده.")
             if needs_receipt else "تبدیل به فاکتور — از مقدارِ باقی‌ماندهٔ این سند، فاکتورِ تازه می‌سازد"
         )
         can_correct = is_posted and self._document_id is not None and self._can_correct_posted()
@@ -4984,8 +4991,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if self._settlement_plan is None:
             return
         if (
-            self.document_type_code in _TWO_STAGE_APPROVAL_TYPES and not self._skip_invoice_approval
-            and self._status_code == "CONFIRMED"
+            self._requires_doc_approval and self._status_code == "CONFIRMED"
         ):
             try:
                 documents_service.approve_document(self._document_id, company_id)
@@ -5025,7 +5031,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # طبقِ گزارشِ صریحِ کاربر («تاییدِ کاربر و تاییدِ مدیر»): برایِ
         # فاکتورِ خرید/پیش‌فاکتورِ خرید، این مرحله واقعاً بایدتاییدِ
         # *مدیر* باشد -- نه صرفاً یک کلیکِ دیگرِ همان کاربر.
-        if self.document_type_code in _TWO_STAGE_APPROVAL_TYPES:
+        if self._requires_doc_approval:
             user = app_session.current_user
             if company_id is not None and user is not None and not roles_service.is_manager(user.user_id, company_id):
                 QMessageBox.warning(

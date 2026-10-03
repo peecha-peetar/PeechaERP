@@ -123,6 +123,8 @@ NAV_ITEMS = [
             # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ
             # خروجی از نظرِ طرفِ‌حساب هم‌الگویِ فروش است.
             {"code": "SALES_CONSIGNMENT_OUT", "label": "امانیِ خروجی", "screen": "commercial_document_consignment_out"},
+            # R232: همان فرمِ تاییدِ انبار (رسید/حواله) -- حوالهٔ سفارش‌هایِ فروش برایِ انباردار
+            {"code": "SALES_WAREHOUSE_ISSUE", "label": "تاییدِ حوالهٔ انبار", "screen": "purchase_goods_receipt"},
             {"code": "SALES_DOCUMENTS_LIST", "label": "اسنادِ فروش", "screen": "commercial_documents_list_sales"},
             {"code": "SALES_PRICING", "label": "فهرستِ قیمت و تخفیف", "screen": "commercial_pricing"},
             {"code": "SALES_POS_SALE", "label": "فروشِ حضوری (POS)", "screen": "commercial_pos_sale"},

@@ -42,26 +42,34 @@ from peecha.services import inventory_locations as locations_service
 from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin, persist_column_widths
 
-_COLUMNS = ["شماره", "تاریخ", "تامین‌کننده", "وضعیت", "عملیات"]
-_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی", "انبارِ دریافت", "بچ/سریال/انقضا"]
+_COLUMNS = ["شماره", "تاریخ", "طرفِ حساب", "وضعیت", "عملیات"]
+_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی/تحویلی", "انبار", "بچ/سریال/انقضا"]
 
 
-_DOC_TITLES = {"PURCHASE_ORDER": "سفارشِ خرید", "CONSIGNMENT_IN": "امانیِ ورودی", "CONSIGNMENT_OUT": "امانیِ خروجی"}
+_DOC_TITLES = {
+    "PURCHASE_ORDER": "سفارشِ خرید", "SALES_ORDER": "سفارشِ فروش",
+    "CONSIGNMENT_IN": "امانیِ ورودی", "CONSIGNMENT_OUT": "امانیِ خروجی",
+}
+_ORDER_TYPES = ("PURCHASE_ORDER", "SALES_ORDER")
+# خروجِ کالا: بچ/سریال از موجودیِ همان انبار انتخاب می‌شود
+_OUT_TYPES = ("SALES_ORDER", "CONSIGNMENT_OUT")
 
 
 def _status_label(doc) -> str:
     title = _DOC_TITLES.get(doc.document_type_code, "")
     if doc.warehouse_approved_at is None:
         return f"{title} -- در انتظارِ تاییدِ انباردار"
-    if doc.document_type_code != "PURCHASE_ORDER":
+    if doc.document_type_code not in _ORDER_TYPES:
         return f"{title} -- تاییدِ انبار شد، آمادهٔ ثبتِ نهایی"
+    if doc.document_type_code == "SALES_ORDER":
+        return f"{title} -- حواله تایید شده، آمادهٔ تبدیل به فاکتور"
     return f"{title} -- رسید تایید شده، آمادهٔ تبدیل به فاکتور"
 
 
 class _GoodsReceiptDialog(QDialog):
     def __init__(self, parent: QWidget, document_id: int, company_id: int) -> None:
         super().__init__(parent)
-        self.setWindowTitle("بازکردنِ سفارش -- تاییدِ رسیدِ کالا")
+        self.setWindowTitle("بازکردنِ سند -- تاییدِ انبار (رسید/حواله)")
         self.setMinimumWidth(900)
         self._document_id = document_id
         self._company_id = company_id
@@ -75,8 +83,8 @@ class _GoodsReceiptDialog(QDialog):
         layout.addWidget(self.header_label)
 
         hint = QLabel(
-            "مقدارِ واقعاً دریافت‌شدهٔ هر ردیف را وارد/ویرایش کنید -- اگر خالی/برابرِ مقدارِ سفارش بماند، "
-            "همان مقدارِ سفارش به‌عنوانِ مقدارِ دریافتی لحاظ می‌شود."
+            "مقدارِ واقعاً دریافت‌شده (خرید) یا تحویل‌شده (فروش) هر ردیف را وارد/ویرایش کنید -- اگر برابرِ مقدارِ سفارش بماند، "
+            "همان مقدارِ سفارش لحاظ می‌شود. برایِ کالایِ بچ/سریال‌دار، از «🏷 ردیابی» وارد/انتخاب کنید."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -105,7 +113,7 @@ class _GoodsReceiptDialog(QDialog):
         warehouse_row.addWidget(self.warehouse_combo, stretch=1)
         layout.addLayout(warehouse_row)
 
-        self.save_button = QPushButton("💾 ذخیرهٔ مقادیرِ دریافتی")
+        self.save_button = QPushButton("💾 ذخیرهٔ مقادیرِ دریافتی/تحویلی")
         self.save_button.setObjectName("primaryButton")
         self.save_button.clicked.connect(self._save_quantities)
         layout.addWidget(self.save_button)
@@ -163,7 +171,7 @@ class _GoodsReceiptDialog(QDialog):
         self._line_warehouse_combos = {}
         editable = doc.warehouse_approved_at is None and not converted
         # R230: در امانی، انبار و مقدار همان سند است -- انباردار فقط تایید می‌کند
-        is_consignment = doc.document_type_code != "PURCHASE_ORDER"
+        is_consignment = doc.document_type_code not in _ORDER_TYPES
         self.lines_table.setRowCount(len(lines))
         for row_index, ln in enumerate(lines):
             item = items_by_id.get(ln.item_id)
@@ -193,20 +201,21 @@ class _GoodsReceiptDialog(QDialog):
                 )
                 self.lines_table.setCellWidget(row_index, 5, track_button)
 
+        word = "حوالهٔ انبار" if doc.document_type_code in _OUT_TYPES else "رسیدِ کالا"
         self.save_button.setEnabled(not converted and not is_consignment)
         if is_consignment:
             self.warehouse_combo.setEnabled(False)
 
         if converted:
-            self.receipt_button.setText("✅ تاییدِ رسید (قطعی -- به فاکتور تبدیل شده)")
+            self.receipt_button.setText(f"✅ تاییدِ {word} (قطعی -- به فاکتور تبدیل شده)")
             self.receipt_button.setEnabled(False)
             return
 
         if doc.warehouse_approved_at is None:
-            self.receipt_button.setText("✅ تاییدِ رسیدِ کالا")
+            self.receipt_button.setText(f"✅ تاییدِ {word}")
             self.receipt_button.setObjectName("primaryButton")
         else:
-            self.receipt_button.setText("↩️ بازگشتِ تاییدِ رسید")
+            self.receipt_button.setText(f"↩️ بازگشتِ تاییدِ {word}")
             self.receipt_button.setObjectName("dangerButton")
         self.receipt_button.setEnabled(True)
         self.receipt_button.setStyleSheet("")
@@ -218,9 +227,13 @@ class _GoodsReceiptDialog(QDialog):
 
         field = self._qty_fields.get(line.line_id)
         delivered = decimal.Decimal(str(field.value())) if field is not None else line.quantity
+        is_out = self._doc.document_type_code in _OUT_TYPES
+        combo = self._line_warehouse_combos.get(line.line_id)
         LotTrackingDialog(
             self, self._company_id, item.item_id, f"{item.code} — {item.name or ''}",
             delivered * (line.conversion_factor or 1), commercial_line_id=line.line_id, read_only=read_only,
+            direction="OUT" if is_out else "IN",
+            warehouse_id=(combo.currentData() if combo is not None else None) or line.warehouse_id or self._doc.warehouse_id,
         ).exec()
 
     def _apply_default_warehouse(self, *_args) -> None:
@@ -268,12 +281,12 @@ class PurchaseGoodsReceiptScreen(FieldHelpMixin, QWidget):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(14)
 
-        title = QLabel("تاییدِ انبار -- رسیدِ سفارش‌هایِ خرید و امانیِ ورودی/خروجی")
+        title = QLabel("تاییدِ انبار -- رسید/حوالهٔ سفارش‌هایِ خرید و فروش و امانیِ ورودی/خروجی")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
         hint = QLabel(
-            "فقط سفارش‌هایِ خریدِ تاییدشده/تصویب‌شده‌ای که هنوز به فاکتور تبدیل نشده‌اند این‌جا می‌آیند -- "
-            "بدونِ قیمت، فقط مقدار. با «📂 بازکردن» مقدارِ واقعیِ دریافتیِ هر ردیف را ثبت و رسید را تایید کنید."
+            "سفارش‌هایِ خرید (رسید) و فروش (حواله) که آمادهٔ تاییدِ انبار هستند و هنوز به فاکتور تبدیل نشده‌اند، "
+            "به‌همراهِ امانی‌ها -- بدونِ قیمت، فقط مقدار. با «📂 بازکردن» مقدار، انبار و بچ/سریالِ هر ردیف را ثبت و تایید کنید."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -311,7 +324,7 @@ class PurchaseGoodsReceiptScreen(FieldHelpMixin, QWidget):
         if not self._queue:
             self.status_label.setObjectName("sectionHint")
             self.status_label.setText(
-                "موردی نیست -- یا سفارشِ خریدِ در انتظار وجود ندارد، یا Toggleِ «تاییدِ رسیدِ کالا» "
+                "موردی نیست -- یا سندِ در انتظار وجود ندارد، یا «تاییدِ رسیدِ کالا»/«تاییدِ حوالهٔ انبار» "
                 "در تنظیماتِ بازرگانی روشن نیست، یا شما انباردارِ (مسئولِ) هیچ انباری نیستید."
             )
         self.table.setRowCount(len(self._queue))
