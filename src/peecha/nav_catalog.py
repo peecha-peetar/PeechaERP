@@ -535,4 +535,6 @@ def build_form_catalog() -> list[tuple[str, str, str]]:
         catalog.append((code, "SETTINGS", label))
     for code, module_code, label in _EMBEDDED_HUB_SUB_FORMS:
         catalog.append((code, module_code, label))
-    return catalog
+    # R232: یک صفحه می‌تواند از دو منو باز شود (مثلاً تاییدِ انبار در خرید و فروش) -- یک فرمِ دسترسی
+    seen: set[str] = set()
+    return [row for row in catalog if not (row[0] in seen or seen.add(row[0]))]
