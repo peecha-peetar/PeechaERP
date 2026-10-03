@@ -85,6 +85,16 @@ class PurchaseReportScreen(ReportScreenBase):
             label, widget = self._filter_widgets[key]
             self.extra_filter_row.addWidget(QLabel(label))
             self.extra_filter_row.addWidget(widget)
+        # R238: گزینه‌هایِ اختصاصیِ گزارش (مرجعِ قیمت، بُعد، آستانهٔ روز، ...)
+        self._option_combos: dict[str, tuple[str, QComboBox]] = {}
+        for key, label, choices in self._def.options:
+            combo = QComboBox()
+            for value, text in choices:
+                combo.addItem(text, value)
+            combo.currentIndexChanged.connect(lambda _i: self.refresh())
+            self.extra_filter_row.addWidget(QLabel(f"{label}:"))
+            self.extra_filter_row.addWidget(combo)
+            self._option_combos[key] = (label, combo)
 
         self.hint_label = QLabel(self._def.hint)
         self.hint_label.setObjectName("sectionHint")
@@ -125,6 +135,7 @@ class PurchaseReportScreen(ReportScreenBase):
         return reports_service.PurchaseFilters(
             date_from=date_from, date_to=date_to, supplier_id=value("supplier"), item_id=value("item"),
             category_id=value("category"), warehouse_id=value("warehouse"), side=self._side,
+            options={key: combo.currentData() for key, (_label, combo) in self._option_combos.items()},
         )
 
     def _fmt(self, value, kind: str) -> str:
@@ -163,6 +174,8 @@ class PurchaseReportScreen(ReportScreenBase):
             label, widget = self._filter_widgets[key]
             if widget.currentData() is not None:
                 parts.append((label.rstrip(":"), widget.currentText()))
+        for label, combo in self._option_combos.values():
+            parts.append((label, combo.currentText()))
         return parts
 
     def _open_row(self, row: int, _col: int) -> None:

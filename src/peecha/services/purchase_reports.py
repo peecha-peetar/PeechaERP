@@ -53,6 +53,8 @@ class PurchaseFilters:
     category_id: int | None = None
     warehouse_id: int | None = None
     side: str = "PURCHASE"
+    # R238: گزینه‌هایِ اختصاصیِ هر گزارش (مثلاً مرجعِ قیمت/بُعدِ تحلیل) -- {کلید: مقدار}
+    options: dict = field(default_factory=dict)
 
 
 ReportFilters = PurchaseFilters
@@ -1677,6 +1679,8 @@ class ReportDef:
     hint: str
     date_mode: str = "range"  # range | as_of | none
     group: str = ""
+    # R238: ((کلید، برچسب، ((مقدار، برچسب)، ...))، ...) -- اولین مقدار پیش‌فرض است
+    options: tuple = ()
 
 
 _OP, _AN, _PR, _VP, _FI, _MD = "عملیاتی", "تحلیلِ خرید", "قیمت و هزینه", "ارزیابیِ تامین‌کننده", "مالی و بدهی", "اطلاعاتِ پایه"
@@ -1867,3 +1871,18 @@ def run_report(company_id: int, code: str, f: PurchaseFilters) -> ReportResult:
         result.columns = [(sales_words(h), k) for h, k in result.columns]
         result.note = sales_words(result.note) if result.note else result.note
     return result
+
+
+# R238: گزارش‌هایِ مرحلهٔ ۱ (کنترل/حسابرسی، فرآیند، انبار و تدارکات، مالی، ...) -- ماژولِ جدا
+def register_reports(defs: list[ReportDef]) -> None:
+    for r in defs:
+        if r.code not in REPORTS_BY_CODE:
+            REPORTS.append(r)
+            REPORTS_BY_CODE[r.code] = r
+
+
+try:
+    from peecha.services.purchase_reports_ext import PURCHASE_EXT_REPORTS as _EXT  # noqa: E402
+except ImportError:  # ماژولِ ext اول بارگذاری شده و در انتهایِ خودش ثبت می‌کند
+    _EXT = []
+register_reports(_EXT)
