@@ -181,6 +181,31 @@ NAV_ITEMS = [
             # نه تبی درونِ فرمِ سفارشِ خرید -- تا بشود فقط همین دسترسی
             # (بدونِ دسترسی به فرمِ کاملِ دارایِ قیمت) به انباردار داد.
             {"code": "PURCH_GOODS_RECEIPT", "label": "تاییدِ رسیدِ کالا", "screen": "purchase_goods_receipt"},
+            # R233: گزارشاتِ تدارکات (services/purchase_reports.py)
+            {
+                "code": "PURCH_REPORTS",
+                "label": "گزارشاتِ تدارکات",
+                "children": [
+                    {"code": f"PURCH_RPT_{code}", "label": label, "screen": f"purchase_report_{code.lower()}"}
+                    for code, label in (
+                        ("OPEN_PO", "سفارش‌هایِ خریدِ باز"),
+                        ("PENDING_RECEIPTS", "رسیدهایِ در انتظارِ انبار"),
+                        ("GRIR", "رسیده ولی فاکتورنشده (GR/IR)"),
+                        ("PENDING_INVOICES", "فاکتورهایِ خریدِ در انتظار"),
+                        ("BY_ITEM", "خرید به تفکیکِ کالا"),
+                        ("BY_SUPPLIER", "خرید به تفکیکِ تامین‌کننده"),
+                        ("PRICE_HISTORY", "تاریخچهٔ قیمتِ خرید"),
+                        ("PRICE_COMPARE", "مقایسهٔ قیمتِ تامین‌کنندگان"),
+                        ("PPV", "انحرافِ قیمتِ خرید (PPV)"),
+                        ("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان"),
+                        ("LEAD_TIME", "زمانِ تحویل (Lead Time)"),
+                        ("BALANCES", "ماندهٔ حسابِ تامین‌کنندگان"),
+                        ("AGING", "سنی‌کردنِ بدهی (AP Aging)"),
+                        ("STATEMENT", "صورت‌حسابِ تامین‌کننده"),
+                        ("SUPPLIERS", "فهرستِ تامین‌کنندگان"),
+                    )
+                ],
+            },
         ],
     },
     {

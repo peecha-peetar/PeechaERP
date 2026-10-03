@@ -79,7 +79,7 @@ def list_residuals(company_id: int, zero_quantity_only: bool = True, threshold: 
             .where(
                 JournalEntry.company_id == company_id, JournalEntryLine.account_id == inventory_account_id,
                 JournalEntryLineDetail.dimension_type_id == item_dim_type_id,
-                JournalEntryStatus.code.notin_(("DRAFT", "CANCELLED", "REVERSED")),
+                JournalEntryStatus.code.notin_(("DRAFT", "CANCELLED")),  # سندِ برگشتی و برگشتش هر دو حساب می‌شوند
             )
             .group_by(JournalEntryLineDetail.detail_account_id)
         ).all())
