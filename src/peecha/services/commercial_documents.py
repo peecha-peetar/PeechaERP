@@ -29,7 +29,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from peecha.db.base import new_session
-from peecha.db.models.accounting import DetailAccount, FiscalYear, JournalEntryLine
+from peecha.db.models.accounting import AccountDetailDimension, DetailAccount, FiscalYear, JournalEntryLine
 from peecha.db.models.commercial import (
     Channel, CommercialDocument, CommercialDocumentLine, CreditHold, CustomerProfile, LandedCostAllocation, PosSettings,
 )
@@ -220,8 +220,39 @@ def is_per_line_warehouse_enabled(company_id: int) -> bool:
 
 
 def _account_requires_dimension(account_id: int, dimension_type_id: int) -> bool:
-    required = dimensions_service.get_required_dimensions_for_account(account_id)
-    return any(r.dimension_type_id == dimension_type_id for r in required)
+    return dimension_type_id in _required_dimension_ids(account_id)
+
+
+def _required_dimension_ids(account_id: int) -> set[int]:
+    with new_session() as session:
+        return set(session.scalars(
+            select(AccountDetailDimension.dimension_type_id).where(
+                AccountDetailDimension.account_id == account_id, AccountDetailDimension.is_required.is_(True),
+            )
+        ).all())
+
+
+def auto_line(
+    account_id: int, description: str, debit: decimal.Decimal, credit: decimal.Decimal, extra_dims: dict[int, int],
+    *, item: tuple[int, int] | None = None, person: tuple[int, int] | None = None,
+    fixed_detail_account_id: int | None = None,
+) -> "je_service.LineInput":
+    """R231: ردیفِ سندِ خودکار با تفصیلی‌هایی که خودِ حساب الزامی کرده
+    (کالا/مرکزِ هزینه/پروژه...) -- item/person = (نوعِ‌بُعد، تفصیلی).
+    شخص (طرفِ حساب) همیشه رویِ ردیف می‌نشیند تا حسابِ طرف درست بماند."""
+    required = _required_dimension_ids(account_id)
+    details = {}
+    if fixed_detail_account_id is not None:
+        with new_session() as session:
+            fixed = session.get(DetailAccount, fixed_detail_account_id)
+        if fixed is not None:
+            details[fixed.dimension_type_id] = fixed.detail_account_id
+    details.update(extra_dims)
+    if item is not None and item[1] is not None and item[0] in required:
+        details[item[0]] = item[1]
+    if person is not None and person[1] is not None:
+        details[person[0]] = person[1]
+    return je_service.LineInput(account_id=account_id, description=description, debit=debit, credit=credit, details=details)
 
 
 def _role_line_amounts_by_item(
@@ -798,6 +829,27 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
     for dim_type_id, detail_account_id in _pos_receivable_dims_fallback(company_id, draft.pos_session_id).items():
         extra_dims.setdefault(dim_type_id, detail_account_id)
 
+    # R231: تفصیلیِ کالا/شخص/مرکزِ هزینه/پروژه برایِ ردیف‌هایِ اصلاحی (مثلاً
+    # «کالا» الزامی رویِ «مغایرتِ بهایِ استاندارد» یا موجودی).
+    corr_item_dim = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+    corr_person = (dimensions_service.get_person_dimension_type_id(company_id), counterparty_id)
+    with new_session() as session:
+        corr_item_details = dict(session.execute(
+            select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(all_item_ids))
+        ).all()) if all_item_ids else {}
+
+    corr_fixed_details = {
+        key: inv_engine_service.get_account_mapping_detail(company_id, key) for key in ("PURCHASE_TAX_RECEIVABLE",)
+    }
+
+    def _L(account_id: int, debit, credit, item_id: int | None = None, party: bool = False, role: str | None = None) -> je_service.LineInput:
+        return auto_line(
+            account_id, description, debit, credit, extra_dims,
+            item=(corr_item_dim, corr_item_details.get(item_id)) if item_id is not None else None,
+            person=corr_person if party else None,
+            fixed_detail_account_id=corr_fixed_details.get(role) if role else None,
+        )
+
     def _role_account(role_key: str) -> int:
         account_id = inv_engine_service.get_account_mapping(company_id, role_key)
         if account_id is None:
@@ -842,11 +894,11 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
             cogs_account_id = _role_account("COGS")
             inventory_account_id = _role_account("INVENTORY_ASSET")
             if result.direction == "OUT":
-                adj_je_lines.append(je_service.LineInput(account_id=cogs_account_id, description=description, debit=result.amount, credit=_ZERO))
-                adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=_ZERO, credit=result.amount))
+                adj_je_lines.append(_L(cogs_account_id, result.amount, _ZERO, item_id=item_id))
+                adj_je_lines.append(_L(inventory_account_id, _ZERO, result.amount, item_id=item_id))
             else:
-                adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=result.amount, credit=_ZERO))
-                adj_je_lines.append(je_service.LineInput(account_id=cogs_account_id, description=description, debit=_ZERO, credit=result.amount))
+                adj_je_lines.append(_L(inventory_account_id, result.amount, _ZERO, item_id=item_id))
+                adj_je_lines.append(_L(cogs_account_id, _ZERO, result.amount, item_id=item_id))
 
         if original_journal_entry_id is not None:
             je_service.reverse_journal_entry(original_journal_entry_id, company_id, posted_by_user_id)
@@ -891,11 +943,11 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
                 inventory_account_id = _role_account("INVENTORY_ASSET")
                 payable_account_id = _role_account("SUPPLIER_PAYABLE")
                 if result.direction == "IN":
-                    adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=result.amount, credit=_ZERO))
-                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=_ZERO, credit=result.amount))
+                    adj_je_lines.append(_L(inventory_account_id, result.amount, _ZERO, item_id=item_id))
+                    adj_je_lines.append(_L(payable_account_id, _ZERO, result.amount, item_id=item_id, party=True))
                 else:
-                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=result.amount, credit=_ZERO))
-                    adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=_ZERO, credit=result.amount))
+                    adj_je_lines.append(_L(payable_account_id, result.amount, _ZERO, item_id=item_id, party=True))
+                    adj_je_lines.append(_L(inventory_account_id, _ZERO, result.amount, item_id=item_id))
             elif old_unit_cost != new_unit_cost and old_qty > 0:
                 if inv_engine_service.get_effective_costing_method(item_id, company_id) == "FIFO":
                     cost_result = inv_engine_service.apply_purchase_cost_correction_fifo(
@@ -911,27 +963,27 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
                 payable_account_id = _role_account("SUPPLIER_PAYABLE")
                 if total > 0:
                     if cost_result.inventory_value_delta:
-                        adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=cost_result.inventory_value_delta, credit=_ZERO))
+                        adj_je_lines.append(_L(inventory_account_id, cost_result.inventory_value_delta, _ZERO, item_id=item_id))
                     if cost_result.variance_value_delta:
-                        adj_je_lines.append(je_service.LineInput(account_id=variance_account_id, description=description, debit=cost_result.variance_value_delta, credit=_ZERO))
-                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=_ZERO, credit=total))
+                        adj_je_lines.append(_L(variance_account_id, cost_result.variance_value_delta, _ZERO, item_id=item_id))
+                    adj_je_lines.append(_L(payable_account_id, _ZERO, total, item_id=item_id, party=True))
                 elif total < 0:
                     if cost_result.inventory_value_delta:
-                        adj_je_lines.append(je_service.LineInput(account_id=inventory_account_id, description=description, debit=_ZERO, credit=-cost_result.inventory_value_delta))
+                        adj_je_lines.append(_L(inventory_account_id, _ZERO, -cost_result.inventory_value_delta, item_id=item_id))
                     if cost_result.variance_value_delta:
-                        adj_je_lines.append(je_service.LineInput(account_id=variance_account_id, description=description, debit=_ZERO, credit=-cost_result.variance_value_delta))
-                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=-total, credit=_ZERO))
+                        adj_je_lines.append(_L(variance_account_id, _ZERO, -cost_result.variance_value_delta, item_id=item_id))
+                    adj_je_lines.append(_L(payable_account_id, -total, _ZERO, item_id=item_id, party=True))
 
             tax_delta = new_tax - old_tax
             if tax_delta != 0:
                 tax_account_id = _role_account("PURCHASE_TAX_RECEIVABLE")
                 payable_account_id = _role_account("SUPPLIER_PAYABLE")
                 if tax_delta > 0:
-                    adj_je_lines.append(je_service.LineInput(account_id=tax_account_id, description=description, debit=tax_delta, credit=_ZERO))
-                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=_ZERO, credit=tax_delta))
+                    adj_je_lines.append(_L(tax_account_id, tax_delta, _ZERO, item_id=item_id, role="PURCHASE_TAX_RECEIVABLE"))
+                    adj_je_lines.append(_L(payable_account_id, _ZERO, tax_delta, item_id=item_id, party=True))
                 else:
-                    adj_je_lines.append(je_service.LineInput(account_id=tax_account_id, description=description, debit=_ZERO, credit=-tax_delta))
-                    adj_je_lines.append(je_service.LineInput(account_id=payable_account_id, description=description, debit=-tax_delta, credit=_ZERO))
+                    adj_je_lines.append(_L(tax_account_id, _ZERO, -tax_delta, item_id=item_id, role="PURCHASE_TAX_RECEIVABLE"))
+                    adj_je_lines.append(_L(payable_account_id, -tax_delta, _ZERO, item_id=item_id, party=True))
 
         if adj_je_lines:
             adj_result = je_service.create_journal_entry(

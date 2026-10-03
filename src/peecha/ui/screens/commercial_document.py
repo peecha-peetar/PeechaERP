@@ -129,6 +129,9 @@ _POST_BUTTON_DEFAULT_TOOLTIP = "۴) ثبتِ نهایی — قطعی و برگش
 _TWO_STAGE_APPROVAL_TYPES = ("PURCHASE_INVOICE", "PURCHASE_PROFORMA")
 # R228: سندهایی که کالا را از انبار خارج می‌کنند -- انتخابِ منبع (بچ/سریال/امانی)
 _LOT_OUT_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_OUT")
+# R231: در سفارش/پیش‌فاکتور بچ/سریال هنوز موضوعیت ندارد (انباردار هنگامِ رسید/تحویل
+# وارد می‌کند) -- پنجرهٔ ردیابی هنگامِ ورودِ ردیف اجباری نیست (دکمهٔ 🏷 اختیاری می‌ماند).
+_TRACKING_OPTIONAL_TYPES = ("SALES_ORDER", "SALES_PROFORMA", "PURCHASE_ORDER", "PURCHASE_PROFORMA")
 # طبقِ همان تفکیک: کدام از انواعِ قابلِ‌تبدیل به فاکتورِ فروش تبدیل
 # می‌شوند (بقیه به فاکتورِ خرید) -- برایِ عنوانِ پیامِ موفقیتِ تبدیل.
 _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT")
@@ -3563,7 +3566,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
 
         qty_field = _AmountField()
         qty_field.setDecimals(3)
-        uom_combo = QComboBox()
+        uom_combo = _EnterComboBox()
         uom_combo.setVisible(False)
         qty_container = QWidget()
         qty_layout = QHBoxLayout(qty_container)
@@ -3647,11 +3650,31 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         _enter_signal(item_combo).connect(self._on_entry_row_item_enter)
         # R230: بعد از مقدار (و واحد)، برایِ کالایِ بچ/سریال‌دار پنجرهٔ ردیابی باز می‌شود
         # و پس از تایید، ورودِ بقیهٔ ردیف (قیمت/تخفیف/...) ادامه می‌یابد.
-        _enter_signal(qty_field).connect(lambda: (self._open_entry_row_tracking(), price_field.setFocus()))
+        # R231: Enter رویِ مقدار -> انتخابِ واحد -> (Enter) پنجرهٔ بچ/سریال -> قیمت
+        _enter_signal(qty_field).connect(self._on_entry_qty_enter)
+        uom_combo.enterPressed.connect(self._on_entry_uom_enter)
         enter_chain = [price_field, discount_field, discount_type_combo, tax_field, description_field]
         for widget, next_widget in zip(enter_chain, enter_chain[1:]):
             _enter_signal(widget).connect(next_widget.setFocus)
         _enter_signal(description_field).connect(self._commit_entry_row)
+
+    def _on_entry_qty_enter(self) -> None:
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if not widgets:
+            return
+        uom = widgets["uom"]
+        if uom.isVisible() and uom.count() > 1:
+            uom.setFocus()
+            uom.showPopup()
+            return
+        self._on_entry_uom_enter()
+
+    def _on_entry_uom_enter(self) -> None:
+        widgets = getattr(self, "_entry_row_widgets", None)
+        if not widgets:
+            return
+        self._open_entry_row_tracking()
+        widgets["price"].setFocus()
 
     def _on_entry_row_item_enter(self) -> None:
         widgets = getattr(self, "_entry_row_widgets", None)
@@ -3919,7 +3942,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         theme.set_status_label(self.entry_stock_label, text, ok=(here if warehouse_id is not None else total) > 0)
 
     def _entry_row_needs_tracking(self, item) -> bool:
-        if item is None:
+        if item is None or self.document_type_code in _TRACKING_OPTIONAL_TYPES:
             return False
         if item.track_batch or item.track_serial:
             return True
@@ -4108,7 +4131,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         LotTrackingDialog(
             self, company_id, item.item_id, f"{item.code} — {item.name or ''}", line.quantity_base,
             commercial_line_id=line.line_id,
-            read_only=self._status_code not in ("DRAFT", "CONFIRMED", "APPROVED"),
+            read_only=self._status_code not in ("DRAFT", "CONFIRMED", "APPROVED") and not (
+                # R231: سفارشِ ثبتِ نهایی‌شده تا پیش از تاییدِ انبار
+                self._status_code == "POSTED" and self.document_type_code in ("PURCHASE_ORDER", "SALES_ORDER")
+            ),
             direction="OUT" if is_out else "IN",
             warehouse_id=line.warehouse_id or self.warehouse_combo.currentData(),
         ).exec()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPushButton, QTableWidget,
+    QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPushButton, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -40,6 +40,10 @@ class InventoryResidualScreen(QWidget):
         layout.addWidget(hint)
         self.account_label = QLabel()
         layout.addWidget(self.account_label)
+        # R231: ابعادِ الزامیِ دیگرِ حساب‌ها (مرکزِ هزینه/پروژه...) برایِ سندِ تسعیر
+        self.dims_layout = QHBoxLayout()
+        layout.addLayout(self.dims_layout)
+        self._dim_combos: dict[int, QComboBox] = {}
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
@@ -83,6 +87,7 @@ class InventoryResidualScreen(QWidget):
                 self.account_label.text() + "\n⚠ تفصیلیِ «کالا» رویِ معینِ موجودیِ کالا الزامی نیست؛ "
                 "ماندهٔ ریالی به تفکیکِ کالا قابلِ‌تشخیص نیست (ساختارِ حساب‌ها ‹ معینِ موجودی ‹ تفصیلی‌ها)."
             )
+        self._build_dimension_pickers(company_id)
         self._rows = residual_service.list_residuals(company_id)
         self.table.setRowCount(len(self._rows))
         for r, row in enumerate(self._rows):
@@ -97,6 +102,26 @@ class InventoryResidualScreen(QWidget):
                 self.table.setItem(r, c, cell)
         self.post_button.setEnabled(bool(self._rows))
 
+    def _build_dimension_pickers(self, company_id: int) -> None:
+        previous = {k: c.currentData() for k, c in self._dim_combos.items()}
+        while self.dims_layout.count():
+            widget = self.dims_layout.takeAt(0).widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._dim_combos = {}
+        from peecha.services import detail_dimensions as dimensions_service
+
+        for dim in residual_service.required_extra_dimensions(company_id):
+            label = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(dim.code, dim.code)
+            self.dims_layout.addWidget(QLabel(label))
+            combo = QComboBox()
+            combo.addItem("(انتخاب کنید)", None)
+            for row in dim.detail_accounts:
+                combo.addItem(numerals.to_persian_digits(f"{row.full_code or row.code} — {row.name or ''}"), row.detail_account_id)
+            combo.setCurrentIndex(max(0, combo.findData(previous.get(dim.dimension_type_id))))
+            self.dims_layout.addWidget(combo, stretch=1)
+            self._dim_combos[dim.dimension_type_id] = combo
+
     def _post_selected(self) -> None:
         company_id = self._company_id()
         if company_id is None or app_session.current_user is None:
@@ -105,8 +130,15 @@ class InventoryResidualScreen(QWidget):
         if not item_ids:
             QMessageBox.information(self, "تسعیر", "ابتدا ردیف‌ها را انتخاب کنید.")
             return
+        missing = [i for i, c in self._dim_combos.items() if c.currentData() is None]
+        if missing:
+            QMessageBox.warning(self, "تسعیر", "تفصیلی‌هایِ الزامیِ بالایِ جدول (مثلاً مرکزِ هزینه/پروژه) را انتخاب کنید.")
+            return
         try:
-            je_id = residual_service.post_residual_adjustment(company_id, app_session.current_user.user_id, item_ids)
+            je_id = residual_service.post_residual_adjustment(
+                company_id, app_session.current_user.user_id, item_ids,
+                extra_details={i: c.currentData() for i, c in self._dim_combos.items()},
+            )
         except ValueError as exc:
             QMessageBox.warning(self, "خطا", str(exc))
             return

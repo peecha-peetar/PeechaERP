@@ -142,7 +142,12 @@ def _line_owner(session, stock_line_id: int | None, commercial_line_id: int | No
     if line is None:
         raise ValueError("ردیفِ سند نامعتبر است.")
     doc = session.get(CommercialDocument, line.document_id)
-    return line, doc.company_id, line.quantity_base, doc.status_code
+    status = doc.status_code
+    # R231: سفارشِ ثبتِ نهایی‌شده اثرِ انبار ندارد؛ انباردار تا پیش از تاییدِ رسید
+    # بچ/سریال را وارد می‌کند (وگرنه تاییدِ رسید بن‌بست می‌شد).
+    if status == "POSTED" and doc.document_type_code in ("PURCHASE_ORDER", "SALES_ORDER") and doc.warehouse_approved_at is None:
+        status = "APPROVED"
+    return line, doc.company_id, line.quantity_base, status
 
 
 def _item_name(session, item: Item) -> str:

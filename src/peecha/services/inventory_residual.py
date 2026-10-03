@@ -107,18 +107,47 @@ def list_residuals(company_id: int, zero_quantity_only: bool = True, threshold: 
     return rows
 
 
-def post_residual_adjustment(company_id: int, user_id: int, item_ids: list[int], document_date: datetime.date | None = None) -> int:
-    """سندِ اصلاحی: ماندهٔ دفتریِ موجودیِ کالاهایِ انتخاب‌شده به حسابِ مقابل بسته می‌شود."""
+def required_extra_dimensions(company_id: int) -> list[dimensions_service.RequiredDimension]:
+    """R231: ابعادِ الزامیِ حسابِ موجودی و حسابِ مقابل (به‌جز «کالا» که خودکار
+    پر می‌شود) -- مثلاً مرکزِ هزینه/پروژه -- تا در فرمِ تسعیر انتخاب شوند."""
+    item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+    counter_id, key = counter_account_id(company_id)
+    fixed = engine_service.get_account_mapping_detail(company_id, key) if key else None
+    fixed_dim = None
+    if fixed is not None:
+        with new_session() as session:
+            row = session.get(DetailAccount, fixed)
+            fixed_dim = row.dimension_type_id if row is not None else None
+    seen: dict[int, dimensions_service.RequiredDimension] = {}
+    for account_id in (engine_service.get_account_mapping(company_id, "INVENTORY_ASSET"), counter_id):
+        if account_id is None:
+            continue
+        for dim in dimensions_service.get_required_dimensions_for_account(account_id):
+            if dim.dimension_type_id not in (item_dim_type_id, fixed_dim):
+                seen.setdefault(dim.dimension_type_id, dim)
+    return list(seen.values())
+
+
+def post_residual_adjustment(
+    company_id: int, user_id: int, item_ids: list[int], document_date: datetime.date | None = None,
+    extra_details: dict[int, int] | None = None,
+) -> int:
+    """سندِ اصلاحی: ماندهٔ دفتریِ موجودیِ کالاهایِ انتخاب‌شده به حسابِ مقابل بسته می‌شود.
+    extra_details: تفصیلی‌هایِ الزامیِ دیگر (مرکزِ هزینه/پروژه...)، {نوعِ‌بُعد: تفصیلی}."""
+    from peecha.services.commercial_documents import auto_line
+
     rows = [r for r in list_residuals(company_id) if r.item_id in set(item_ids)]
     if not rows:
         raise ValueError("ماندهٔ ریالیِ قابلِ‌اصلاحی برایِ کالاهایِ انتخاب‌شده وجود ندارد.")
-    counter_id, _key = counter_account_id(company_id)
+    counter_id, key = counter_account_id(company_id)
     if counter_id is None:
         raise ValueError(
             "حسابِ «اختلافِ بهایِ موجودی (تسعیر)» در تنظیماتِ انبار ‹ نگاشتِ حساب‌ها مشخص نشده است."
         )
+    fixed_detail = engine_service.get_account_mapping_detail(company_id, key)
     inventory_account_id = engine_service.get_account_mapping(company_id, "INVENTORY_ASSET")
     item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+    dims = {k: v for k, v in (extra_details or {}).items() if v is not None}
     description = "اصلاحِ ماندهٔ ریالیِ موجودیِ کالایِ با موجودیِ صفر (تسعیر)"
     lines: list[je_service.LineInput] = []
     for r in rows:
@@ -126,15 +155,15 @@ def post_residual_adjustment(company_id: int, user_id: int, item_ids: list[int],
         if not amount:
             continue
         positive = r.residual > 0  # دفترِ کل بیشتر از واقعیت -> بستانکارِ موجودی
-        lines.append(je_service.LineInput(
-            account_id=inventory_account_id, description=f"{description} -- {r.item_label}",
-            debit=_ZERO if positive else amount, credit=amount if positive else _ZERO,
-            details={item_dim_type_id: r.item_detail_account_id},
+        item = (item_dim_type_id, r.item_detail_account_id)
+        lines.append(auto_line(
+            inventory_account_id, f"{description} -- {r.item_label}",
+            _ZERO if positive else amount, amount if positive else _ZERO, dims, item=item,
         ))
-        lines.append(je_service.LineInput(
-            account_id=counter_id, description=f"{description} -- {r.item_label}",
-            debit=amount if positive else _ZERO, credit=_ZERO if positive else amount,
-            details={item_dim_type_id: r.item_detail_account_id} if engine_service_requires_item(counter_id, item_dim_type_id) else {},
+        lines.append(auto_line(
+            counter_id, f"{description} -- {r.item_label}",
+            amount if positive else _ZERO, _ZERO if positive else amount, dims, item=item,
+            fixed_detail_account_id=fixed_detail,
         ))
     result = je_service.create_journal_entry(
         company_id, user_id, document_date or datetime.date.today(), description, lines, entry_type_code="COMMERCIAL",
