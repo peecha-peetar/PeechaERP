@@ -3023,17 +3023,27 @@ def post_document(
                     # پایین‌تر) — چون بهایِ برگشت از رویِ سابقهٔ همان کالا
                     # محاسبه می‌شود، نه از unit_price همین ردیف.
                     stock_unit_cost = unit_price * quantity / quantity_base if quantity_base else unit_price
-                    if stock_document_type == "RETURN_OUT" and quantity_base:
-                        # R235: مبلغِ برگشت به تامین‌کننده خالص از تخفیفِ ردیف
+                    if quantity_base:
+                        # R235/R237: مبلغِ برگشت (به تامین‌کننده یا از مشتری) خالص از تخفیفِ ردیف؛
+                        # بهایِ کالا را خودِ موتورِ انبار جدا محاسبه می‌کند.
                         stock_unit_cost = (quantity * unit_price - _discount_amt) / quantity_base
                     line_tax_amount = _tax_amt
                 line_reason_code_id = (
                     _ensure_return_reason_code(company_id, stock_document_type)
                     if stock_document_type in ("RETURN_IN", "RETURN_OUT") else None
                 )
+                # R237: برگشت از فروشِ دارایِ ارجاع به فاکتور -> بهایِ همان فروش (ردیفِ حوالهٔ فاکتور)
+                source_stock_line_id = None
+                if stock_document_type == "RETURN_IN":
+                    with new_session() as session:
+                        comm_line = session.get(CommercialDocumentLine, line_id)
+                        source_comm_line = session.get(CommercialDocumentLine, comm_line.source_line_id) \
+                            if comm_line is not None and comm_line.source_line_id else None
+                        source_stock_line_id = source_comm_line.stock_document_line_id if source_comm_line is not None else None
                 inv_line_id = inv_documents_service.add_line(
                     group_stock_document_id, company_id,
                     inv_documents_service.LineFields(
+                        source_line_id=source_stock_line_id,
                         item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
                 conversion_factor=(quantity_base / quantity) if quantity else None,
                         batch_id=batch_id, unit_cost=stock_unit_cost, tax_amount=line_tax_amount,

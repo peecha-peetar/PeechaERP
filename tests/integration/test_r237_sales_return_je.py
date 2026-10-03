@@ -1,5 +1,5 @@
 import os, sys, datetime, decimal, io
-os.environ["PEECHA_DB_NAME"] = "peecha_test_r236_1"
+os.environ["PEECHA_DB_NAME"] = "peecha_test_r237_1"
 os.environ["PEECHA_DB_USER"] = "peecha"
 os.environ["PEECHA_DB_PASSWORD"] = "peecha"
 os.environ["PEECHA_DB_HOST"] = "localhost"
@@ -124,114 +124,59 @@ def doc_with_line(doc_type, item_id, qty, cp, price):
 def status(doc_id):
     return documents_service.get_document(doc_id, company_id)[0]
 
-import dataclasses, datetime as dt
-from peecha.services import purchase_reports as pr
+
 from peecha.db.models.commercial import CommercialDocument as CD
-customer2 = partners_service.create_customer(company_id, "C-2", "فروشگاهِ دو", fast_track=True)
-rep_id = dimensions_service.create_supplier(company_id, "R-1", "ویزیتورِ یک")
-customer_group_id = next(g.person_group_id for g in dimensions_service.list_person_groups(company_id) if g.code == "CUSTOMER")
-treasury_service.create_counterparty_mapping(company_id, "RECEIPT", ar_gl.account_id, person_group_id=customer_group_id)
-treasury_service.set_account_mapping(company_id, "RECEIPT_CASH", cash_gl.account_id)
-d10 = today - dt.timedelta(days=10)
-
-def make(doc_type, qty, cp, price, when=today):
-    d = documents_service.create_document(company_id, user.user_id, doc_type, when, HF(cp))
-    documents_service.add_line(d, company_id, plain, pcs, D(qty), D(qty), unit_price=D(price))
-    return d
-def post(d, plan=()):
+ret_gl = A("413", "برگشت از فروش", "DEBIT", "REVENUE", "TEMPORARY", True, k4.account_id)
+def je(doc_id):
+    out = {}
+    with new_session() as s_:
+        je_id = s_.get(CD, doc_id).journal_entry_id
+        for l in s_.scalars(select(JournalEntryLine).where(JournalEntryLine.journal_entry_id == je_id)):
+            out[l.account_id] = out.get(l.account_id, D(0)) + l.debit_amount_base - l.credit_amount_base
+    return out
+def doc(doc_type, cp, qty, price, discount=D(0), tax=D(0), source_line=None):
+    d = documents_service.create_document(company_id, user.user_id, doc_type, today, HF(cp))
+    ln = documents_service.add_line(d, company_id, plain, pcs, D(qty), D(qty), unit_price=D(price),
+                                    discount_amount=discount, tax_percent=tax, source_line_id=source_line)
     documents_service.confirm_document(d, company_id, user.user_id)
-    if documents_service.get_document(d, company_id)[0].document_type_code.endswith("_INVOICE"):
-        settlements_service.auto_approve_settlement_plan(d, company_id, user.user_id, list(plan))
+    if doc_type.endswith("_INVOICE"):
+        settlements_service.auto_approve_settlement_plan(d, company_id, user.user_id, [])
     documents_service.post_document(d, company_id, user.user_id)
+    return d, ln
+def stock_value():
+    from peecha.db.models.inventory import StockBalance
+    with new_session() as s_:
+        return sum(s_.scalars(select(StockBalance.total_value).where(StockBalance.item_id == plain)), D(0))
 
-post(make("PURCHASE_INVOICE", 20, s1, 100))            # بهایِ تمام‌شده = ۱۰۰
-so = make("SALES_ORDER", 10, customer, 300, d10)
-with new_session() as s_:
-    s_.get(CD, so).requested_delivery_date = d10 + dt.timedelta(days=5)
-    s_.commit()
-post(so)
-inv1 = documents_service.convert_to_invoice(so, company_id, user.user_id, today)
-post(inv1)
-inv2 = make("SALES_INVOICE", 5, customer2, 280)
-with new_session() as s_:
-    s_.get(CD, inv2).sales_rep_detail_account_id = rep_id
-    s_.commit()
-post(inv2, [("CASH", D(1400))])
-pos_service.post_invoice_settlement_plan(company_id, user.user_id, inv2)
-post(make("SALES_RETURN", 2, customer, 300))
-make("SALES_PROFORMA", 3, customer2, 290)
+doc("PURCHASE_INVOICE", s1, 10, 100)
+doc("PURCHASE_INVOICE", s1, 10, 200)          # میانگین = ۱۵۰
+inv, inv_line = doc("SALES_INVOICE", customer, 4, 400)   # بهایِ فروش = ۴×۱۵۰ = ۶۰۰
+doc("PURCHASE_INVOICE", s1, 4, 300)           # میانگینِ تازه = (۱۶×۱۵۰+۱۲۰۰)/۲۰ = ۱۸۰
 
-F = pr.PurchaseFilters(today - dt.timedelta(days=30), today, side="SALES")
-def run(code, **kw):
-    return pr.run_report(company_id, code, dataclasses.replace(F, **kw))
-def rows(code, **kw):
-    return run(code, **kw).rows
+# ۱) برگشتِ بدونِ ارجاع، بدونِ حسابِ «برگشت از فروش» -> از درآمدِ فروش کم می‌شود؛ کالا با میانگینِ فعلی (۱۸۰)
+before = stock_value()
+r1, _ = doc("SALES_RETURN", customer, 2, 400)
+j = je(r1)
+check(j.get(ar_gl.account_id) == -800, f"مشتری با مبلغِ برگشت (۲×۴۰۰=۸۰۰) بستانکار شد (got {j.get(ar_gl.account_id)})")
+check(j.get(rev_gl.account_id) == 800, f"درآمدِ فروش ۸۰۰ بدهکار شد (got {j.get(rev_gl.account_id)})")
+check(j.get(inv_gl.account_id) == 360 and j.get(cogs_gl.account_id) == -360, f"موجودی/بهایِ تمام‌شده با بها (۲×۱۸۰=۳۶۰) (got {j})")
+check(stock_value() - before == 360, f"ارزشِ انبار با بها بالا رفت، نه با فیِ فروش (got {stock_value() - before})")
+check(sum(j.values()) == 0, "سند تراز است")
 
-r = rows("REG_INVOICE")
-by_no = {x[0]: x for x in r}
-inv1_no = documents_service.get_document(inv1, company_id)[0].document_no
-inv2_no = documents_service.get_document(inv2, company_id)[0].document_no
-check(len(r) == 2 and by_no[inv1_no][12] == 3000 and by_no[inv2_no][11] == 1400 and by_no[inv2_no][12] == 0,
-      f"دفترِ فاکتورهایِ فروش: مانده/وصول‌شده (got {r})")
-r = rows("REG_ORDER")
-check(len(r) == 1 and r[0][11] == 100, f"دفترِ سفارش‌هایِ فروش: ۱۰۰٪ تبدیل‌شده (got {r})")
-r = rows("REG_PROFORMA")
-check(len(r) == 1 and r[0][3] == "پیش‌نویس" and r[0][11] == 0, f"دفترِ پیش‌فاکتورهایِ فروش (got {r})")
-r = rows("REG_INVOICE_LINES")
-check(len(r) == 2, "ریزِ اقلامِ فاکتورهایِ فروش")
-check(len(pr.run_report(company_id, "REG_INVOICE", dataclasses.replace(F, side="PURCHASE")).rows) == 1, "دفترِ فاکتورهایِ خرید")
-check(rows("OPEN_ORDERS") == [], "سفارشِ فروشِ کامل‌فاکتورشده باز نیست")
-r = rows("GP_ITEM")
-check(r[0][3] == 3000 + 1400 - 600 and r[0][4] == 1000 + 500 - 200 and r[0][5] == 2500, f"سودِ ناخالصِ کالا (got {r})")
-gp_c = {x[0]: x for x in rows("GP_CUSTOMER")}
-c1 = next(v for k, v in gp_c.items() if "C-1" in k)
-check(c1[3] == 2400 and c1[4] == 800, f"سودِ ناخالصِ مشتری (got {c1})")
-reps = {x[0]: x for x in rows("BY_REP")}
-check(any("ویزیتور" in k and v[5] == 1400 for k, v in reps.items()) and any("بدونِ فروشنده" in k and v[5] == 2400 for k, v in reps.items()),
-      f"فروش به تفکیکِ فروشنده (got {reps})")
-res = run("BY_CUSTOMER")
-check(res.columns[0][0] == "مشتری" and len(res.rows) == 2, f"عنوانِ ستون‌ها برایِ فروش (got {res.columns[0]})")
-bal = {x[0]: x for x in rows("BALANCES")}
-b1 = next(v for k, v in bal.items() if "C-1" in k)
-b2 = next(v for k, v in bal.items() if "C-2" in k)
-check(b1[4] == 2400 and b1[5] == "بدهکار است" and b2[4] == 0, f"ماندهٔ مشتریان (got {b1}, {b2})")
-ag = rows("AGING")
-check(len(ag) == 1 and ag[0][7] == 3000, f"سنی‌کردنِ مطالبات (got {ag})")
-st = rows("STATEMENT", supplier_id=customer)
-check(st[-1][5] == 2400, f"صورت‌حسابِ مشتری: ماندهٔ ۲۴۰۰ (got {st[-1]})")
-fc = rows("FORECAST")
-check(len(fc) == 1 and fc[0][5] == 3000, f"پیش‌بینیِ وصول (got {fc})")
-otd = rows("OTD")
-check(len(otd) == 1 and otd[0][1] == 1, f"تحویل به مشتری (got {otd})")
-check(len(rows("CUSTOMERS")) == 2, "فهرستِ مشتریان")
-check(any(x[0] == "N-1" for x in rows("ITEMS")), "کالاهایِ قابلِ‌فروش")
+# ۲) با حسابِ «برگشت از فروش» + ارجاع به فاکتور -> بهایِ همان فروش (۱۵۰)، با تخفیف و مالیات
+engine_service.set_account_mapping(company_id, "SALES_RETURNS", ret_gl.account_id)
+engine_service.set_account_mapping(company_id, "SALES_TAX_PAYABLE", tax_gl.account_id)
+r2, _ = doc("SALES_RETURN", customer, 2, 400, discount=D(100), tax=D(10), source_line=inv_line)
+j = je(r2)
+check(j.get(ret_gl.account_id) == 700, f"برگشت از فروش با مبلغِ خالص از تخفیف (۸۰۰−۱۰۰=۷۰۰) (got {j.get(ret_gl.account_id)})")
+check(j.get(tax_gl.account_id) == 70 and j.get(ar_gl.account_id) == -770, f"مالیات ۷۰ و مشتری ۷۷۰ (got {j})")
+check(j.get(inv_gl.account_id) == 300 and j.get(cogs_gl.account_id) == -300, f"بهایِ همان فروش (۲×۱۵۰=۳۰۰) (got {j})")
+check(j.get(rev_gl.account_id, D(0)) == 0 and sum(j.values()) == 0, "درآمدِ فروش دست نخورد و سند تراز است")
 
-from peecha import nav_catalog
-sales_codes = [e[0] for _g, _l, entries in nav_catalog.SALES_REPORT_MENU for e in entries if not isinstance(e, dict)]
-check(sorted(sales_codes) == sorted(r.code for r in pr.SALES_REPORTS), "منویِ فروش با سرویس هم‌خوان")
-reports_menu = next(i for i in nav_catalog.NAV_ITEMS if i["code"] == "REPORTS")
-check([c["code"] for c in reports_menu["children"]][-2:] == ["REPORTS_PURCHASE", "REPORTS_SALES"], "منویِ گزارش‌ها: خرید و فروش")
-purch_menu = next(i for i in nav_catalog.NAV_ITEMS if i["code"] == "PURCH")
-check(not any(c["code"] == "PURCH_REPORTS" for c in purch_menu["children"]), "گزارشاتِ خرید به منویِ گزارش‌ها منتقل شد")
-
-from peecha.ui.shell_window import MainWindow
-mw = MainWindow(); mw.resize(1300, 850); mw.show(); app.processEvents()
-failed = []
-for rep in pr.SALES_REPORTS:
-    mw.open_screen(f"SALES_RPT_{rep.code}"); app.processEvents()
-    scr = mw._screens[f"sales_report_{rep.code.lower()}"]
-    scr.date_from.setDate(today - dt.timedelta(days=30)); scr._reload()
-    if scr.table.columnCount() == 0:
-        failed.append(rep.code)
-for code in ("REPORTS_SALES_BY_ITEM", "REPORTS_CUSTOMER_PROFIT", "REPORTS_SALES_FORECAST", "REPORTS_SALES_BY_CHANNEL",
-             "PURCH_RPT_REG_INVOICE", "PURCH_RPT_REG_ORDER", "PURCH_RPT_REG_PROFORMA", "PURCH_RPT_OPEN_PO"):
-    mw.open_screen(code); app.processEvents()
-check(not failed, f"همهٔ گزارش‌هایِ فروش از منو باز و اجرا شدند (failed {failed})")
-scr = mw._screens["sales_report_reg_invoice"]; scr._reload()
-check(scr.supplier_combo.count() == 3 and "مشتری" in [l.text() for l in scr.findChildren(type(scr.hint_label))][0:99].__str__(),
-      "فیلترِ «مشتری» در گزارش‌هایِ فروش")
-scr._open_row(0, 0); app.processEvents()
-check(mw._screens["commercial_document_sales_invoice"]._document_id in (inv1, inv2), "دابل‌کلیک فاکتورِ فروش را باز کرد")
+# ۳) گزارشِ سودِ ناخالص با بهایِ درست
+from peecha.services import purchase_reports as pr
+gp = pr.run_report(company_id, "GP_ITEM", pr.PurchaseFilters(today, today, side="SALES")).rows[0]
+check(gp[3] == 1600 - 800 - 700 and gp[4] == 600 - 360 - 300, f"سودِ ناخالص: فروشِ خالص ۱۰۰، بها −۶۰ (got {gp[3:6]})")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

@@ -60,6 +60,8 @@ MAPPING_LABELS: dict[str, str] = {
     # این‌جا هم (جدا از نگاشتِ هم‌نامِ خودِ تنظیماتِ بازرگانی که فاکتورِ
     # فروش از آن استفاده می‌کند) لازم است.
     "SALES_TAX_PAYABLE": "مالياتِ فروشِ پرداختنی (برایِ برگشت از فروش)",
+    # R237: کاهشِ درآمد در برگشت از فروش (اگر تعریف نشود: خودِ «درآمدِ فروش» در تنظیماتِ بازرگانی)
+    "SALES_RETURNS": "برگشت از فروش (کاهشِ درآمد)",
 }
 
 
@@ -132,6 +134,11 @@ def list_account_mappings(company_id: int) -> list[AccountMappingRow]:
 
 def _resolve_role_account(session, company_id: int, mapping_key: str) -> int:
     row = session.get(InventoryAccountMapping, (company_id, mapping_key))
+    if row is None and mapping_key == "SALES_RETURNS":
+        # R237: بدونِ حسابِ جداگانهٔ «برگشت از فروش»، مستقیماً از درآمدِ فروش کم می‌شود
+        from peecha.services import commercial_settings as commercial_settings_service
+
+        return commercial_settings_service.resolve_role_account(session, company_id, "SALES_REVENUE")
     if row is None:
         raise ValueError(f"حسابِ «{MAPPING_LABELS.get(mapping_key, mapping_key)}» هنوز در تنظیماتِ انبار مشخص نشده است.")
     return row.account_id
@@ -512,6 +519,18 @@ def get_last_known_unit_cost(item_id: int) -> decimal.Decimal | None:
         return _last_known_unit_cost(session, item_id)
 
 
+def _current_average_cost(session, item_id: int, warehouse_id: int) -> decimal.Decimal | None:
+    """میانگینِ بهایِ فعلیِ کالا در انبار (یا همهٔ انبارها) -- None اگر موجودی نیست."""
+    for condition in ((StockBalance.warehouse_id == warehouse_id,), ()):
+        qty, value = session.execute(
+            select(func.sum(StockBalance.quantity_on_hand), func.sum(StockBalance.quantity_on_hand * StockBalance.average_unit_cost))
+            .where(StockBalance.item_id == item_id, StockBalance.quantity_on_hand > 0, *condition)
+        ).one()
+        if qty:
+            return (value or _ZERO) / qty
+    return None
+
+
 def _last_known_unit_cost(session, item_id: int) -> decimal.Decimal | None:
     """آخرین بهایِ واحدِ واقعاً ثبت‌شده برایِ این کالا در دفترِ انبار —
     وقتی سندِ مستقیمِ انبار (رسید/برگشت) بدونِ بهایِ واحد ثبتِ نهایی
@@ -773,8 +792,18 @@ def post_stock_document(
                 bin_id = resolve_bin(warehouse_id, line.bin_location_id)
                 method = costing_method(item)
 
+                # R237: برگشت از فروشِ مشتری با فیِ برگشت -- کالا با «بها» به انبار برمی‌گردد
+                # (بهایِ همان فروش اگر ارجاع دارد، وگرنه میانگینِ فعلیِ انبار)، نه با فیِ فروش.
+                return_price_unit = (
+                    line.unit_cost if doc_type == "RETURN_IN" and doc.counterparty_detail_account_id is not None
+                    and line.unit_cost is not None else None
+                )
                 if doc_type == "RETURN_IN" and line.source_line_id is not None:
                     actual_cost = _source_line_unit_cost(session, line.source_line_id)
+                elif return_price_unit is not None:
+                    actual_cost = _current_average_cost(session, item.item_id, warehouse_id)
+                    if actual_cost is None:
+                        actual_cost = _last_known_unit_cost(session, item.item_id) or return_price_unit
                 else:
                     actual_cost = line.unit_cost
                     if actual_cost is None:
@@ -854,6 +883,17 @@ def post_stock_document(
                 # ارزشِ موجودی افزوده می‌شود (بهایِ واحدِ Ledger/میانگین
                 # دست‌نخورده می‌ماند، این فقط یک تعدیلِ سطحِ سند است).
                 tax_amount = line.tax_amount or _ZERO
+                if return_price_unit is not None:
+                    # R237: سندِ استانداردِ برگشت از فروش:
+                    #   بدهکار موجودی / بستانکار بهایِ تمام‌شده (به بها)
+                    #   بدهکار برگشت از فروش (+ مالیات) / بستانکار مشتری (به مبلغِ برگشت)
+                    price_amount = _money(return_price_unit * line.quantity_base)
+                    add_credit("COGS", inventory_amount, je_item_detail_account_id)
+                    add_debit("SALES_RETURNS", price_amount + (tax_amount if is_informal_tax else _ZERO), je_item_detail_account_id)
+                    if tax_amount and not is_informal_tax:
+                        add_debit("SALES_TAX_PAYABLE", tax_amount, je_item_detail_account_id)
+                    add_credit("CUSTOMER_RECEIVABLE", price_amount + tax_amount, je_item_detail_account_id)
+                    continue
                 if tax_amount:
                     if is_informal_tax:
                         add_debit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
