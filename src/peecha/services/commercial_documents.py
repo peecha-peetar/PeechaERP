@@ -3023,6 +3023,9 @@ def post_document(
                     # پایین‌تر) — چون بهایِ برگشت از رویِ سابقهٔ همان کالا
                     # محاسبه می‌شود، نه از unit_price همین ردیف.
                     stock_unit_cost = unit_price * quantity / quantity_base if quantity_base else unit_price
+                    if stock_document_type == "RETURN_OUT" and quantity_base:
+                        # R235: مبلغِ برگشت به تامین‌کننده خالص از تخفیفِ ردیف
+                        stock_unit_cost = (quantity * unit_price - _discount_amt) / quantity_base
                     line_tax_amount = _tax_amt
                 line_reason_code_id = (
                     _ensure_return_reason_code(company_id, stock_document_type)

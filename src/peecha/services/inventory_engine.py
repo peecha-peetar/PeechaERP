@@ -745,6 +745,14 @@ def post_stock_document(
         doc_type = doc.document_type_code
         movement_date = doc.document_date
 
+        def return_variance_role(difference: decimal.Decimal) -> str:
+            """R235: حسابِ اختلافِ مبلغِ برگشت با بهایِ تمام‌شده."""
+            if get_account_mapping(company_id, "INVENTORY_COST_VARIANCE") is not None:
+                return "INVENTORY_COST_VARIANCE"
+            if difference > 0 and get_account_mapping(company_id, "INVENTORY_ADJUSTMENT_GAIN") is not None:
+                return "INVENTORY_ADJUSTMENT_GAIN"
+            return "INVENTORY_ADJUSTMENT_LOSS"
+
         for line in sorted_lines:
             item = items_by_id.get(line.item_id)
             if item is None or item.company_id != company_id:
@@ -887,11 +895,22 @@ def post_stock_document(
                             add_credit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
                         else:
                             add_credit("PURCHASE_TAX_RECEIVABLE", tax_amount, je_item_detail_account_id)
-                    debit_amount = total_amount + tax_amount
-                    if doc.counterparty_detail_account_id is not None:
-                        add_debit("SUPPLIER_PAYABLE", debit_amount, je_item_detail_account_id)
+                    if doc.counterparty_detail_account_id is not None and line.unit_cost is not None:
+                        # R235: طبقِ استاندارد، حسابِ تامین‌کننده با «مبلغِ برگشت» (فیِ توافقی) بدهکار
+                        # می‌شود و موجودی با بهایِ تمام‌شده بستانکار؛ اختلاف به مغایرتِ بها.
+                        agreed = _money(line.unit_cost * line.quantity_base)
+                        add_debit("SUPPLIER_PAYABLE", agreed + tax_amount, je_item_detail_account_id)
+                        difference = agreed - total_amount
+                        if difference:
+                            variance_role = return_variance_role(difference)
+                            if difference > 0:
+                                add_credit(variance_role, difference, je_item_detail_account_id)
+                            else:
+                                add_debit(variance_role, -difference, je_item_detail_account_id)
+                    elif doc.counterparty_detail_account_id is not None:
+                        add_debit("SUPPLIER_PAYABLE", total_amount + tax_amount, je_item_detail_account_id)
                     else:
-                        add_debit("INVENTORY_ADJUSTMENT_LOSS", debit_amount, je_item_detail_account_id)
+                        add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount + tax_amount, je_item_detail_account_id)
 
             elif doc_type == "TRANSFER":
                 source_wh, dest_wh = doc.source_warehouse_id, doc.destination_warehouse_id
