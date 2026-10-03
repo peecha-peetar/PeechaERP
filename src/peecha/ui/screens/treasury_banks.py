@@ -100,6 +100,7 @@ class TreasuryBanksScreen(FieldHelpMixin, QWidget):
         outer.addWidget(wrap_scrollable(panel))
 
         self.set_field_help([
+            (self.code_field, "کدِ اختیاریِ بانک -- خالی هم می‌تواند بماند."),
             (self.name_field, "نامِ بانک — بعداً در فرمِ ثبتِ چکِ دریافتی از این فهرست انتخاب می‌شود."),
             (self.table, "برایِ ویرایشِ یک بانک، رویِ ردیفش کلیک کنید."),
         ])

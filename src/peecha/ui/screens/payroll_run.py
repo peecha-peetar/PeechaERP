@@ -68,6 +68,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         self.set_field_help([
             (self.year_field, "سالِ شمسیِ دوره."),
             (self.month_field, "ماهِ شمسیِ دوره (۱ تا ۱۲)."),
+            (self.bank_combo, "بانکی که فایلِ واریزِ دسته‌جمعیِ حقوق برایِ آن تولید می‌شود."),
         ])
 
     def _build_periods_panel(self) -> QWidget:
@@ -242,8 +243,8 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         for row_index, p in enumerate(self._periods):
             values = [
                 status_labels.get(p.status, p.status),
-                numerals.to_persian_digits(p.period_end_date.isoformat()),
-                numerals.to_persian_digits(p.period_start_date.isoformat()),
+                numerals.format_jalali_date(p.period_end_date),
+                numerals.format_jalali_date(p.period_start_date),
                 numerals.to_persian_digits(str(p.jalali_month)),
                 numerals.to_persian_digits(str(p.jalali_year)),
             ]
@@ -271,7 +272,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         type_labels = {"REGULAR": "معمولی", "CORRECTION": "اصلاحی", "OFF_CYCLE": "بین‌دوره‌ای"}
         self.runs_table.setRowCount(len(self._runs))
         for row_index, r in enumerate(self._runs):
-            finished = numerals.to_persian_digits(r.finished_at.strftime("%Y-%m-%d %H:%M")) if r.finished_at else "—"
+            finished = numerals.format_jalali_datetime(r.finished_at) if r.finished_at else "—"
             values = [finished, status_labels.get(r.status, r.status), type_labels.get(r.run_type, r.run_type), numerals.to_persian_digits(str(r.run_no))]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -295,7 +296,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         total_gross = sum((p.gross_amount for p in payslips), decimal.Decimal(0))
         total_net = sum((p.net_pay for p in payslips), decimal.Decimal(0))
         summary = f"تعدادِ کارمندانِ محاسبه‌شده: {numerals.to_persian_digits(str(len(payslips)))} — " \
-                  f"جمعِ ناخالص: {numerals.format_amount(total_gross)} — جمعِ خالص: {numerals.format_amount(total_net)}"
+                  f"جمعِ ناخالص: {numerals.format_company_amount(total_gross)} — جمعِ خالص: {numerals.format_company_amount(total_net)}"
         if run is not None and run.error_log:
             summary += f"\nخطاها: {run.error_log}"
         self.summary_label.setText(summary)
@@ -303,9 +304,9 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         self.payslips_table.setRowCount(len(payslips))
         for row_index, p in enumerate(payslips):
             values = [
-                numerals.format_amount(p.net_pay),
-                numerals.format_amount(p.total_deductions),
-                numerals.format_amount(p.gross_amount),
+                numerals.format_company_amount(p.net_pay),
+                numerals.format_company_amount(p.total_deductions),
+                numerals.format_company_amount(p.gross_amount),
                 p.employee_name,
             ]
             for col_index, value in enumerate(values):
@@ -405,12 +406,12 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
             return
         printable = payslip_service.get_printable_payslip(self._selected_payslip_id)
         headers = ["نوع", "شرح", "مبلغ"]
-        rows = [["مزایا", l.label, numerals.format_amount(l.amount)] for l in printable.earning_lines]
-        rows += [["کسورات", l.label, numerals.format_amount(l.amount)] for l in printable.deduction_lines]
+        rows = [["مزایا", l.label, numerals.format_company_amount(l.amount)] for l in printable.earning_lines]
+        rows += [["کسورات", l.label, numerals.format_company_amount(l.amount)] for l in printable.deduction_lines]
         footer = [
-            ["", "ناخالص", numerals.format_amount(printable.gross_amount)],
-            ["", "جمعِ کسورات", numerals.format_amount(printable.total_deductions)],
-            ["", "خالصِ پرداختنی", numerals.format_amount(printable.net_pay)],
+            ["", "ناخالص", numerals.format_company_amount(printable.gross_amount)],
+            ["", "جمعِ کسورات", numerals.format_company_amount(printable.total_deductions)],
+            ["", "خالصِ پرداختنی", numerals.format_company_amount(printable.net_pay)],
         ]
         title = f"فیشِ حقوقی — {printable.employee_full_name} — {numerals.to_persian_digits(f'{printable.jalali_year}/{printable.jalali_month:02d}')}"
         company_name = app_session.current_company.display_name if app_session.current_company else ""
@@ -429,7 +430,7 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         except ValueError as exc:
             theme.set_status_label(self.bank_status_label, str(exc), ok=False)
             return
-        message = f"batch ساخته شد — شامل: {numerals.to_persian_digits(str(result.included_count))} نفر، جمع: {numerals.format_amount(result.total_amount)}"
+        message = f"batch ساخته شد — شامل: {numerals.to_persian_digits(str(result.included_count))} نفر، جمع: {numerals.format_company_amount(result.total_amount)}"
         if result.exceptions:
             message += "\nاستثناها: " + "، ".join(f"{e.employee_name} ({e.reason})" for e in result.exceptions)
         theme.set_status_label(self.bank_status_label, message, ok=True)

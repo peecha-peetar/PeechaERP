@@ -19,15 +19,19 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFileDialog,
+    QMenu,
     QComboBox,
     QCompleter,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -38,8 +42,11 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
+from peecha.services import report_templates as report_templates_service
 from peecha.services.reports import code_in_range
 from peecha.ui import report_export
+from peecha.ui.screens.jasper_preview import JasperReportPreviewDialog
+from peecha.ui.screens.report_template_settings import pick_report_template
 from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, PersianDigitLineEdit
 
 _ZERO = decimal.Decimal("0")
@@ -225,6 +232,37 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         excel_button.setObjectName("flatButton")
         excel_button.clicked.connect(self._on_export_excel)
         search_row.addWidget(excel_button)
+
+        # R239: CSV، کپی و انتخابِ ستون‌ها (ستون‌هایِ پنهان در چاپ/خروجی هم نمی‌آیند)
+        csv_button = QPushButton("CSV")
+        csv_button.setObjectName("flatButton")
+        csv_button.setToolTip("خروجیِ CSV (UTF-8، اعداد بدونِ جداکننده)")
+        csv_button.clicked.connect(self._on_export_csv)
+        search_row.addWidget(csv_button)
+        copy_button = QPushButton("کپی")
+        copy_button.setObjectName("flatButton")
+        copy_button.setToolTip("کپیِ ردیف‌هایِ انتخاب‌شده (یا همه) برایِ چسباندن در اکسل")
+        copy_button.clicked.connect(self._on_copy)
+        search_row.addWidget(copy_button)
+        self.columns_button = QPushButton("ستون‌ها")
+        self.columns_button.setObjectName("flatButton")
+        self.columns_button.setToolTip("نمایش/پنهان‌کردنِ ستون‌ها -- برایِ همین گزارش ذخیره می‌شود")
+        self.columns_button.clicked.connect(self._on_choose_columns)
+        search_row.addWidget(self.columns_button)
+
+        # طبقِ درخواستِ صریح («این قابلیت برایِ بقیه‌یِ گزارش‌ها هم باشد»):
+        # زیرکلاسی که چاپِ حرفه‌ای (Jasper) برایش آماده شده با
+        # enable_jasper_report(form_code) این دکمه را نمایان می‌کند --
+        # پیش‌فرض مخفی، چون هنوز همه‌یِ گزارش‌ها قالبِ jrxml ندارند.
+        self.jasper_form_code: str | None = None
+        self.jasper_report_button = QPushButton("📄 گزارشِ حرفه‌ای")
+        self.jasper_report_button.setToolTip(
+            "اجرایِ یکی از گزارش‌هایِ حرفه‌ایِ تخصیص‌داده‌شده به این فرم -- "
+            "برایِ تعریف/ویرایشِ گزارش‌ها به «تنظیماتِ سیستم ›  گزارش‌هایِ حرفه‌ای» مراجعه کنید."
+        )
+        self.jasper_report_button.clicked.connect(self._on_jasper_report)
+        self.jasper_report_button.setVisible(False)
+        search_row.addWidget(self.jasper_report_button)
         layout.addLayout(search_row)
 
         self.table = QTableWidget(0, 0)
@@ -290,6 +328,38 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
     def enable_cost_center_filter(self) -> None:
         self.cost_center_label.setVisible(True)
         self.cost_center_combo.setVisible(True)
+
+    def enable_jasper_report(self, form_code: str) -> None:
+        """زیرکلاسی که یک قالبِ jrxml برایِ خودش دارد (و
+        _build_jasper_rows_and_params را override کرده) این را در
+        __init__ صدا می‌زند تا دکمه‌یِ «📄 گزارشِ حرفه‌ای» نمایان شود."""
+        self.jasper_form_code = form_code
+        self.jasper_report_button.setVisible(True)
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        """زیرکلاس‌هایی که enable_jasper_report را صدا می‌زنند این را
+        override می‌کنند: self._rows/self._footerِ همینِ فعلاً رویِ صفحه
+        (بعدِ فیلتر/جستجو) را به دیکشنری‌هایِ هم‌نامِ فیلدهایِ قالبِ jrxml
+        تبدیل می‌کند. اگر حالتِ فعلیِ فیلترها را پشتیبانی نمی‌کند، خودش
+        پیامِ راهنما نشان می‌دهد و None برمی‌گرداند."""
+        raise NotImplementedError
+
+    def _on_jasper_report(self) -> None:
+        company_id = self._company_id()
+        if company_id is None or self.jasper_form_code is None:
+            return
+        built = self._build_jasper_rows_and_params()
+        if built is None:
+            return
+        print_rows, params = built
+
+        template_row = pick_report_template(self, company_id, self.jasper_form_code)
+        if template_row is None:
+            return
+        jrxml_path = report_templates_service.get_template_path(template_row.report_template_id, company_id)
+
+        dialog = JasperReportPreviewDialog(self, jrxml_path, print_rows, params, self._title, title=self._title)
+        dialog.exec()
 
     def enable_document_no_filter(self) -> None:
         self.document_no_label.setVisible(True)
@@ -443,6 +513,9 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
                 item.setFont(font)
                 self.table.setItem(footer_row, col_index, item)
         self.table.resizeColumnsToContents()
+        hidden = self.hidden_columns()
+        for col_index, header in enumerate(headers):
+            self.table.setColumnHidden(col_index, header in hidden)
 
     def load_report(
         self, company_id: int, date_from: datetime.date, date_to: datetime.date
@@ -483,6 +556,93 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
             parts.append(("جستجو در نتایج", self.search_field.text().strip()))
         return parts
 
+    # --- R239: ستون‌هایِ پنهان، CSV و کپی ------------------------------------
+    def _columns_key(self) -> str:
+        return f"reportColumns/{self._title}"
+
+    def hidden_columns(self) -> set[str]:
+        value = QSettings("Peecha", "PeechaERP").value(self._columns_key(), [])
+        return set([value] if isinstance(value, str) else (value or []))
+
+    def set_hidden_columns(self, headers: set[str]) -> None:
+        QSettings("Peecha", "PeechaERP").setValue(self._columns_key(), sorted(headers))
+        for col_index, header in enumerate(self._headers):
+            self.table.setColumnHidden(col_index, header in headers)
+
+    def _on_choose_columns(self) -> None:
+        menu = QMenu(self)
+        hidden = self.hidden_columns()
+        for header in self._headers:
+            action = menu.addAction(header)
+            action.setCheckable(True)
+            action.setChecked(header not in hidden)
+            action.toggled.connect(lambda checked, h=header: self._toggle_column(h, checked))
+        menu.addSeparator()
+        menu.addAction("نمایشِ همهٔ ستون‌ها").triggered.connect(lambda: self.set_hidden_columns(set()))
+        menu.exec(self.columns_button.mapToGlobal(self.columns_button.rect().bottomLeft()))
+
+    def _toggle_column(self, header: str, visible: bool) -> None:
+        hidden = self.hidden_columns()
+        if visible:
+            hidden.discard(header)
+        elif len([h for h in self._headers if h not in hidden]) > 1:
+            hidden.add(header)
+        self.set_hidden_columns(hidden)
+
+    def _export_data(self) -> tuple[list[str], list[list], list | None]:
+        """داده‌یِ چاپ/خروجی = ردیف‌هایِ فعلیِ رویِ صفحه، بدونِ ستون‌هایِ پنهان."""
+        hidden = self.hidden_columns()
+        keep = [i for i, h in enumerate(self._headers) if h not in hidden]
+        if len(keep) == len(self._headers):
+            return self._headers, self._rows, self._footer
+        pick = lambda row: [row[i] if i < len(row) else "" for i in keep]  # noqa: E731
+        footer = pick(self._footer) if self._footer else None
+        if footer and self._footer and keep and keep[0] != 0 and not str(footer[0]).strip():
+            footer[0] = self._footer[0]
+        return [self._headers[i] for i in keep], [pick(r) for r in self._rows], footer
+
+    @staticmethod
+    def _plain(value) -> str:
+        """عددِ نمایشی (ارقامِ فارسی/جداکننده) → عددِ ساده برایِ CSV؛ متن دست‌نخورده."""
+        text = numerals.to_ascii_digits(str(value)).strip()
+        candidate = text.replace(",", "").replace("٬", "").replace("٫", ".").rstrip("٪%").strip()
+        try:
+            decimal.Decimal(candidate)
+        except (decimal.InvalidOperation, ValueError):
+            return numerals.to_ascii_digits(str(value)) if "/" in text and text.replace("/", "").isdigit() else str(value)
+        return candidate
+
+    def csv_text(self) -> str:
+        import csv
+        import io
+
+        headers, rows, footer = self._export_data()
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(headers)
+        for row in rows + ([footer] if footer else []):
+            writer.writerow([self._plain(v) for v in row])
+        return buffer.getvalue()
+
+    def _on_export_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "خروجیِ CSV", f"{self._title}.csv", "CSV (*.csv)")
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8-sig", newline="") as handle:
+            handle.write(self.csv_text())
+
+    def copy_text(self) -> str:
+        headers, rows, footer = self._export_data()
+        selected = sorted({i.row() for i in self.table.selectedIndexes()})
+        if selected and len(self._rows) == len(rows):
+            rows = [rows[i] for i in selected if i < len(rows)]
+            footer = None
+        lines = ["\t".join(headers)] + ["\t".join(str(v) for v in row) for row in rows + ([footer] if footer else [])]
+        return "\n".join(lines)
+
+    def _on_copy(self) -> None:
+        QGuiApplication.clipboard().setText(self.copy_text())
+
     def _export_kwargs(self) -> dict:
         return {
             "company_name": session.current_company.display_name if session.current_company else "",
@@ -499,7 +659,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         همان تنظیماتِ قبلی به‌عنوانِ پیش‌فرض می‌آید."""
         defaults = getattr(self, "_last_print_options", None) or report_export.load_print_options(self._title)
         options = report_export.prompt_print_options(
-            self, self._title, self._headers, defaults, **self._export_kwargs()
+            self, self._title, self._export_data()[0], defaults, **self._export_kwargs()
         )
         if options is not None:
             self._last_print_options = options
@@ -508,33 +668,27 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
 
     def _on_print(self) -> None:
         if not self._rows:
-            report_export.print_report(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            report_export.print_report(self, self._title, *self._export_data(), **self._export_kwargs())
             return
         options = self._prompt_print_options()
         if options is None:
             return
-        report_export.print_report(
-            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
-        )
+        report_export.print_report(self, self._title, *self._export_data(), options=options, **self._export_kwargs())
 
     def _on_export_pdf(self) -> None:
         if not self._rows:
-            report_export.export_report_pdf(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            report_export.export_report_pdf(self, self._title, *self._export_data(), **self._export_kwargs())
             return
         options = self._prompt_print_options()
         if options is None:
             return
-        report_export.export_report_pdf(
-            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
-        )
+        report_export.export_report_pdf(self, self._title, *self._export_data(), options=options, **self._export_kwargs())
 
     def _on_export_excel(self) -> None:
         if not self._rows:
-            report_export.export_report_excel(self, self._title, self._headers, self._rows, self._footer, **self._export_kwargs())
+            report_export.export_report_excel(self, self._title, *self._export_data(), **self._export_kwargs())
             return
         options = self._prompt_print_options()
         if options is None:
             return
-        report_export.export_report_excel(
-            self, self._title, self._headers, self._rows, self._footer, options=options, **self._export_kwargs()
-        )
+        report_export.export_report_excel(self, self._title, *self._export_data(), options=options, **self._export_kwargs())

@@ -55,6 +55,7 @@ class PositionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.org_unit_combo, "واحدِ سازمانی‌ای که این پست به آن تعلق دارد."),
             (self.job_grade_combo, "ردهٔ شغلیِ این پست — اختیاری."),
             (self.capacity_field, "تعدادِ نفراتی که هم‌زمان می‌توانند این پست را داشته باشند."),
+            (self.is_active_checkbox, "پست‌هایِ غیرِفعال دیگر در فهرستِ انتخابِ پست برایِ کارمندِ تازه نشان داده نمی‌شوند."),
         ])
         self.register_field_grids("hr_positions", [self.form_grid])
 

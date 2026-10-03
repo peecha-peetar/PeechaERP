@@ -299,11 +299,33 @@ def compute_detail_balances(
     """معادلِ compute_account_balances ولی در سطحِ حساب‌هایِ تفصیلیِ یک
     نوع‌بُعدِ مشخص (مثلاً مشتریان یا مراکزِ هزینه)، رول‌آپ‌شده رویِ سلسله‌مراتبِ
     تا ۴سطحیِ acc.detail_accounts.parent_detail_account_id."""
-    detail_rows = [
-        r for r in dimensions_service.list_all_detail_accounts(company_id) if r.dimension_type_id == dimension_type_id
+    # طبقِ گزارشِ صریح («سندِ حسابداری غیرِاستاندارد و برایِ خیلی از
+    # شرکت‌ها غیرِقابلِ‌قبول است»): ردیفِ سیستمیِ «بدون تفصیل» (که
+    # journal_entries._resolve_lines برایِ هر ردیفی که واقعاً به شخصی
+    # مرتبط نیست، خودکار می‌گذارد تا الزامِ همیشگیِ تفصیلیِ اشخاص برآورده
+    # شود) یک حسابِ واقعی نیست و نباید در ترازِ تفصیلی به‌عنوانِ یک
+    # «تفصیلیِ دیگر با گردشِ نامربوط» ظاهر شود -- هم‌الگو با
+    # detail_dimensions.detail_level_has_accounts که همین ردیف را کنار
+    # می‌گذارد.
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    all_type_rows = [
+        r
+        for r in dimensions_service.list_all_detail_accounts(company_id)
+        if r.dimension_type_id == dimension_type_id
+        and not (dimension_type_id == person_dimension_type_id and r.code == dimensions_service.NO_DETAIL_CODE)
     ]
-    ids = [r.detail_account_id for r in detail_rows]
-    parent_map = {r.detail_account_id: r.parent_detail_account_id for r in detail_rows}
+    ids = [r.detail_account_id for r in all_type_rows]
+    parent_map = {r.detail_account_id: r.parent_detail_account_id for r in all_type_rows}
+    # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («تراز تفصیلی گردشِ اضافی دارد و
+    # جمعِ کل با گردشِ واقعی نمی‌خواند»): _rollup_sums مانده‌یِ هر گره
+    # (چه برگ چه والد) را با احتسابِ همه‌یِ فرزندانش حساب می‌کند -- پس
+    # اگر ردیفِ والد (مثلاً «۹۹۹») و ردیفِ فرزندش («۹۹۹-۹۹۹۹۹۹۹») هردو در
+    # جدولِ خروجی باشند، جمعِ‌کلِ پایینِ گزارش دوبار همان گردش را می‌شمارد.
+    # چون تفصیلی برخلافِ حساب (که سطحِ گروه/کل/معین را کاربر جداگانه
+    # انتخاب می‌کند) این‌جا یک سطحِ واحد ندارد، فقط برگ‌هایِ درخت -- یعنی
+    # حساب‌هایِ تفصیلیِ واقعاً قابلِ‌ثبتِ سند -- باید نمایش داده شوند.
+    parent_ids = {p for p in parent_map.values() if p is not None}
+    detail_rows = [r for r in all_type_rows if r.detail_account_id not in parent_ids]
 
     with new_session() as session:
         opening_leaf = (
@@ -394,10 +416,14 @@ def compute_detail_account_breakdown(
             current = accounts_by_id.get(current.parent_account_id)
         return current.account_id if current is not None and current.account_level == gl_level else None
 
+    # طبقِ همان رفعِ باگِ compute_detail_balances -- ردیفِ سیستمیِ «بدون
+    # تفصیل» نباید در این تفکیک هم به‌عنوانِ یک تفصیلیِ واقعی ظاهر شود.
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
     detail_rows = {
         r.detail_account_id: r
         for r in dimensions_service.list_all_detail_accounts(company_id)
         if r.dimension_type_id == dimension_type_id
+        and not (dimension_type_id == person_dimension_type_id and r.code == dimensions_service.NO_DETAIL_CODE)
     }
 
     with new_session() as session:
@@ -467,9 +493,16 @@ class JournalBookLineRow:
     # دارند (هم‌الگو با ستون‌بندیِ journal_entry.py)؛ بقیه‌یِ بُعدهایِ
     # ردیف (تفصیلیِ شخص، بانک، کالا، گروه‌هایِ سفارشی، ...) در یک ستونِ
     # واحدِ «تفصیلی» با کاما جمع می‌شوند.
+    # رفعِ باگِ واقعیِ کشف‌شده (با عکسِ دفترِ روزنامه‌یِ کاربر): «مرکزِ سود»
+    # هم -- درست مثلِ مرکزِ هزینه/پروژه -- به‌طورِ خودکار از انبارِ سند به
+    # *هر* ردیف وصل می‌شود، اما قبلاً ستونِ اختصاصیِ خودش را نداشت و در
+    # همین ستونِ «تفصیلی» با تفصیلیِ واقعیِ ردیف (کالا/تامین‌کننده) قاطی
+    # می‌شد -- یعنی کاربر برایِ هر ردیف دو مقدار در ستونِ «تفصیلی» می‌دید
+    # و آن را «دو تفصیلیِ اضافه» تعبیر می‌کرد.
     detail_name: str
     cost_center_name: str
     project_name: str
+    profit_center_name: str
 
 
 def list_journal_book_lines(
@@ -522,12 +555,14 @@ def list_journal_book_lines(
     detail_names_by_id = {d.detail_account_id: (d.name or d.code) for d in dimensions_service.list_all_detail_accounts(company_id)}
     cost_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
     project_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+    profit_center_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)
 
     result: list[JournalBookLineRow] = []
     for line, document_date, temporary_no, entry_description in rows:
         account = accounts_by_id.get(line.account_id)
         cost_center_name = ""
         project_name = ""
+        profit_center_name = ""
         other_names: list[str] = []
         for dimension_type_id, detail_account_id in details_by_line.get(line.line_id, []):
             name = detail_names_by_id.get(detail_account_id)
@@ -537,6 +572,8 @@ def list_journal_book_lines(
                 cost_center_name = name
             elif dimension_type_id == project_type_id:
                 project_name = name
+            elif dimension_type_id == profit_center_type_id:
+                profit_center_name = name
             else:
                 other_names.append(name)
         result.append(
@@ -551,6 +588,7 @@ def list_journal_book_lines(
                 detail_name="، ".join(other_names),
                 cost_center_name=cost_center_name,
                 project_name=project_name,
+                profit_center_name=profit_center_name,
             )
         )
     return result

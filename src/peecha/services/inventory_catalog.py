@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 
 from peecha.db.base import new_session
+from peecha.db.models.commercial import PriceListItem, PriceListItemPriceHistory
 from peecha.db.models.core import Company
 from peecha.db.models.inventory import (
     AssetDepreciationEntry,
@@ -31,7 +32,9 @@ from peecha.db.models.inventory import (
     ItemCategory,
     ItemMedia,
     ItemSupplier,
+    ItemSupplierCode,
     ItemUomConversion,
+    ItemVariant,
     ItemVariantValue,
     Manufacturer,
     ReorderPolicy,
@@ -42,6 +45,7 @@ from peecha.db.models.inventory import (
     StockDocumentLine,
     StockReservation,
     Uom,
+    Warehouse,
 )
 from peecha.services import detail_dimensions as dimensions_service
 
@@ -59,7 +63,7 @@ _EXTENDED_ITEM_FIELD_KEYS = (
     "default_tax_percent",
     "warranty_months", "seo_title", "seo_url_slug", "seo_meta_description", "seo_meta_keywords",
     "website_category", "website_tags", "pos_shortcut_key", "pos_button_color", "pos_requires_weight",
-    "pos_requires_serial",
+    "pos_requires_serial", "pos_menu_group_id", "ecommerce_stock_mode",
 )
 
 
@@ -79,12 +83,18 @@ class UomRow:
     is_active: bool
     is_global: bool
     decimal_places: int = 2
+    symbol: str | None = None
+    base_uom_id: int | None = None
+    conversion_factor: decimal.Decimal = decimal.Decimal(1)
+    allow_decimal: bool = True
+    is_system: bool = False
+    description: str | None = None
 
 
-# طبقِ گزارشِ صریح: واحدِ شمارشی (COUNT) پیش‌فرض عددِ صحیح است، بقیه‌یِ
-# انواع دو رقمِ اعشار — هنگامِ ساختِ واحدِ تازه (بدونِ مقدارِ صریح) همین
-# پیش‌فرض به‌کار می‌رود.
-_DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE = {"COUNT": 0}
+# طبقِ گزارشِ صریح: واحدِ شمارشی (COUNT) و بسته‌بندی پیش‌فرض عددِ صحیح است،
+# بقیه‌یِ انواع دو رقمِ اعشار — هنگامِ ساختِ واحدِ تازه (بدونِ مقدارِ صریح).
+_DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE = {"COUNT": 0, "PACKAGING": 0}
+UOM_TYPE_CODES = ("COUNT", "WEIGHT", "LENGTH", "AREA", "VOLUME", "TIME", "PACKAGING", "OTHER")
 
 
 def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
@@ -94,20 +104,52 @@ def list_uoms(company_id: int, active_only: bool = False) -> list[UomRow]:
             query = query.where(Uom.is_active)
         rows = session.scalars(query.order_by(Uom.code)).all()
         return [
-            UomRow(r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None, r.decimal_places)
+            UomRow(
+                r.uom_id, r.code, r.name, r.uom_type_code, r.is_active, r.company_id is None, r.decimal_places,
+                r.symbol, r.base_uom_id, r.conversion_factor, r.allow_decimal, r.is_system, r.description,
+            )
             for r in rows
         ]
 
 
-def create_uom(company_id: int, code: str, name: str, uom_type_code: str, decimal_places: int | None = None) -> int:
-    if decimal_places is None:
-        decimal_places = _DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE.get(uom_type_code, 2)
+def _validate_uom_master(
+    session, company_id: int, uom_type_code: str, decimal_places: int, base_uom_id: int | None,
+    conversion_factor: decimal.Decimal, self_uom_id: int | None = None,
+) -> None:
+    if uom_type_code not in UOM_TYPE_CODES:
+        raise ValueError("نوعِ واحد نامعتبر است.")
     if not (0 <= decimal_places <= 6):
         raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
+    if conversion_factor is None or decimal.Decimal(conversion_factor) <= 0:
+        raise ValueError("ضریبِ تبدیل باید بزرگ‌تر از صفر باشد.")
+    if base_uom_id is not None:
+        if base_uom_id == self_uom_id:
+            raise ValueError("واحد نمی‌تواند واحدِ پایهٔ خودش باشد.")
+        base = session.get(Uom, base_uom_id)
+        if base is None or (base.company_id is not None and base.company_id != company_id):
+            raise ValueError("واحدِ پایه نامعتبر است.")
+        if base.uom_type_code != uom_type_code and uom_type_code != "PACKAGING":
+            raise ValueError("واحدِ پایه باید هم‌نوع با همین واحد باشد (مثلاً کیلوگرم ← گرم).")
+
+
+def create_uom(
+    company_id: int, code: str, name: str, uom_type_code: str, decimal_places: int | None = None, *,
+    symbol: str | None = None, base_uom_id: int | None = None, conversion_factor: decimal.Decimal = decimal.Decimal(1),
+    allow_decimal: bool | None = None, description: str | None = None,
+) -> int:
+    if decimal_places is None:
+        decimal_places = _DEFAULT_DECIMAL_PLACES_BY_UOM_TYPE.get(uom_type_code, 2)
+    if not code.strip() or not name.strip():
+        raise ValueError("کد و نامِ واحد الزامی است.")
     with new_session() as session:
+        _validate_uom_master(session, company_id, uom_type_code, decimal_places, base_uom_id, conversion_factor)
+        if allow_decimal is None:
+            allow_decimal = decimal_places > 0
         uom = Uom(
             company_id=company_id, code=code.strip(), name=name.strip(), uom_type_code=uom_type_code,
-            decimal_places=decimal_places,
+            decimal_places=decimal_places if allow_decimal else 0, symbol=(symbol or None), base_uom_id=base_uom_id,
+            conversion_factor=decimal.Decimal(conversion_factor), allow_decimal=allow_decimal,
+            description=(description or None),
         )
         session.add(uom)
         session.commit()
@@ -115,36 +157,59 @@ def create_uom(company_id: int, code: str, name: str, uom_type_code: str, decima
 
 
 def update_uom(
-    uom_id: int, company_id: int, code: str, name: str, uom_type_code: str, is_active: bool, decimal_places: int,
+    uom_id: int, company_id: int, code: str, name: str, uom_type_code: str, is_active: bool, decimal_places: int, *,
+    symbol: str | None = None, base_uom_id: int | None = None, conversion_factor: decimal.Decimal | None = None,
+    allow_decimal: bool | None = None, description: str | None = None,
 ) -> None:
-    if not (0 <= decimal_places <= 6):
-        raise ValueError("تعدادِ اعشار باید بینِ ۰ تا ۶ باشد.")
     with new_session() as session:
         uom = session.get(Uom, uom_id)
         if uom is None or uom.company_id != company_id:
             raise ValueError("واحدِ اندازه‌گیری نامعتبر است (فقط واحدهایِ اختصاصیِ همین شرکت قابلِ‌ویرایش‌اند).")
+        factor = decimal.Decimal(conversion_factor) if conversion_factor is not None else uom.conversion_factor
+        _validate_uom_master(session, company_id, uom_type_code, decimal_places, base_uom_id, factor, uom_id)
+        if allow_decimal is None:
+            allow_decimal = decimal_places > 0
         uom.code = code.strip()
         uom.name = name.strip()
         uom.uom_type_code = uom_type_code
         uom.is_active = is_active
-        uom.decimal_places = decimal_places
+        uom.decimal_places = decimal_places if allow_decimal else 0
+        uom.allow_decimal = allow_decimal
+        uom.symbol = symbol or None
+        uom.base_uom_id = base_uom_id
+        uom.conversion_factor = factor
+        uom.description = description or None
+        uom.updated_at = func.now()
         session.commit()
 
 
-def delete_uom(uom_id: int, company_id: int) -> None:
+def _uom_in_use(session, uom_id: int) -> bool:
+    from peecha.db.models.commercial import CommercialDocumentLine, PriceListItem
+    from peecha.db.models.inventory import StockDocumentLine
+
+    if session.scalar(select(func.count()).select_from(Item).where(Item.base_uom_id == uom_id)):
+        return True
+    for model in (ItemUomConversion, CommercialDocumentLine, StockDocumentLine, PriceListItem):
+        if session.scalar(select(func.count()).select_from(model).where(model.uom_id == uom_id)):
+            return True
+    return False
+
+
+def delete_uom(uom_id: int, company_id: int) -> str:
+    """طبقِ سیستمِ واحد (R225): واحدِ استفاده‌شده هرگز حذفِ سخت نمی‌شود --
+    فقط غیرفعال (برایِ سندِ تازه قابلِ‌انتخاب نیست؛ اسنادِ قبلی دست‌نخورده).
+    خروجی: DELETED یا DEACTIVATED."""
     with new_session() as session:
         uom = session.get(Uom, uom_id)
         if uom is None or uom.company_id != company_id:
             raise ValueError("واحدِ اندازه‌گیری نامعتبر است.")
-        in_use = session.scalar(
-            select(func.count()).select_from(Item).where(Item.base_uom_id == uom_id)
-        ) or session.scalar(
-            select(func.count()).select_from(ItemUomConversion).where(ItemUomConversion.uom_id == uom_id)
-        )
-        if in_use:
-            raise ValueError("این واحد در تعریفِ کالاها استفاده شده و قابلِ‌حذف نیست.")
+        if _uom_in_use(session, uom_id):
+            uom.is_active = False
+            session.commit()
+            return "DEACTIVATED"
         session.delete(uom)
         session.commit()
+        return "DELETED"
 
 
 # ---------------------------------------------------------------------
@@ -282,6 +347,11 @@ class ItemRow:
     is_sellable: bool = True
     is_purchasable: bool = True
     is_stock_tracked: bool = True
+    # طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
+    # مرحله انتخاب و مقدار بگیره»): خودِ کالای اصلی/الگو -- که یک یا چند
+    # متغیرِ زیرمجموعه دارد -- هیچ‌وقت قابلِ‌فروش/انتقال/موجودی‌گیریِ
+    # مستقیم نیست؛ فقط متغیرهایش تراکنش‌پذیرند.
+    has_variants: bool = False
     track_serial: bool = False
     track_batch: bool = False
     track_expiry: bool = False
@@ -320,13 +390,23 @@ class ItemRow:
     pos_button_color: str | None = None
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
+    pos_menu_group_id: int | None = None
+    ecommerce_stock_mode: str = "DATABASE"
 
 
 def _item_dimension_type_id(company_id: int) -> int:
     return dimensions_service.get_specialized_dimension_type_id(company_id, ITEM_DIMENSION_CODE)
 
 
-def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
+def list_items(company_id: int, active_only: bool = False, transactable_only: bool = False) -> list[ItemRow]:
+    """طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در هیچ
+    مرحله انتخاب و مقدار بگیره»): پارامترِ transactable_only را برایِ
+    هر جایی که کاربر می‌خواهد یک کالا را رویِ یک سند/تراکنش انتخاب کند
+    (فروش، خرید، بارگیریِ خودرو، سندِ انبار، POS، همگام‌سازیِ موبایل...)
+    True بدهید -- کالاهایِ اصلی/الگو (has_variants=True) حذف می‌شوند،
+    چون خودِ آن‌ها موجودی/فروش ندارند و فقط متغیرهایشان معنا دارند.
+    برایِ صفحاتِ مدیریتِ کاتالوگ (فهرستِ کالاها/متغیرها) این پارامتر
+    نباید ست شود -- کالای اصلی هم باید در آن‌جا قابلِ‌دیدن/ویرایش باشد."""
     dimension_type_id = _item_dimension_type_id(company_id)
     detail_rows = {
         r.detail_account_id: r for r in dimensions_service.list_detail_accounts(company_id, dimension_type_id)
@@ -334,6 +414,13 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
     with new_session() as session:
         items = session.scalars(select(Item).where(Item.company_id == company_id)).all()
         uom_codes = {u.uom_id: u.code for u in session.scalars(select(Uom))}
+        # طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی نشوند، در
+        # یک جدولِ مستقل با کدبندیِ متفاوت ذخیره شوند»): کدِ نمایشیِ یک
+        # متغیر دیگر همان کدِ تفصیلیِ فنیِ زیرینش نیست -- از inv.item_
+        # variants می‌آید. برایِ کالاهایِ عادی/اصلی (که در این جدول ردیفی
+        # ندارند) دقیقاً مثلِ قبل از رویِ خودِ تفصیلی خوانده می‌شود.
+        variant_codes = {v.item_id: v.variant_code for v in session.scalars(select(ItemVariant))}
+        parent_ids = {it.variant_parent_item_id for it in items if it.variant_parent_item_id is not None}
         result: list[ItemRow] = []
         for it in items:
             detail = detail_rows.get(it.item_detail_account_id)
@@ -341,11 +428,14 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
                 continue
             if active_only and not detail.is_active:
                 continue
+            has_variants = it.item_id in parent_ids
+            if transactable_only and has_variants:
+                continue
             result.append(
                 ItemRow(
                     item_id=it.item_id,
                     item_detail_account_id=it.item_detail_account_id,
-                    code=detail.code,
+                    code=variant_codes.get(it.item_id, detail.code),
                     name=detail.name,
                     is_active=detail.is_active,
                     item_kind_code=it.item_kind_code,
@@ -359,6 +449,7 @@ def list_items(company_id: int, active_only: bool = False) -> list[ItemRow]:
                     is_sellable=it.is_sellable,
                     is_purchasable=it.is_purchasable,
                     is_stock_tracked=it.is_stock_tracked,
+                    has_variants=has_variants,
                     track_serial=it.track_serial,
                     track_batch=it.track_batch,
                     track_expiry=it.track_expiry,
@@ -395,17 +486,24 @@ def get_item_row_by_detail_account_id(company_id: int, item_detail_account_id: i
     )
 
 
-def resolve_default_tax_percent(company_id: int, item_id: int) -> decimal.Decimal:
-    """طبقِ درخواستِ صریح: درصدِ مالیاتِ پیش‌فرضِ ردیفِ سند با اولویت خوانده
-    می‌شود — اول خودِ کالا (Item.default_tax_percent)، اگر خالی بود
-    تنظیماتِ کلیِ شرکت (Company.default_tax_percent)، در نهایت صفر."""
+def resolve_default_tax_percent(company_id: int, item_id: int, warehouse_id: int | None = None) -> decimal.Decimal:
+    """طبقِ درخواستِ صریحِ کاربر («سیاستِ محاسبهٔ مالیات: اگر رویِ تنظیماتِ
+    شرکت بود برایِ همه لحاظ کند، اگر شرکت تنظیم نداشت رویِ انبار، و اگر
+    انبار نداشت رویِ کالا نگاه کند»): اولویت -- اول تنظیماتِ کلیِ شرکت
+    (Company.default_tax_percent)، اگر خالی بود انبار (Warehouse.
+    default_tax_percent)، اگر آن هم خالی بود خودِ کالا (Item.
+    default_tax_percent)، در نهایت صفر."""
     with new_session() as session:
-        item = session.get(Item, item_id)
-        if item is not None and item.default_tax_percent is not None:
-            return item.default_tax_percent
         company = session.get(Company, company_id)
         if company is not None and company.default_tax_percent is not None:
             return company.default_tax_percent
+        if warehouse_id is not None:
+            warehouse = session.get(Warehouse, warehouse_id)
+            if warehouse is not None and warehouse.default_tax_percent is not None:
+                return warehouse.default_tax_percent
+        item = session.get(Item, item_id)
+        if item is not None and item.default_tax_percent is not None:
+            return item.default_tax_percent
         return decimal.Decimal(0)
 
 
@@ -462,6 +560,8 @@ class ItemFields:
     pos_button_color: str | None = None
     pos_requires_weight: bool = False
     pos_requires_serial: bool = False
+    pos_menu_group_id: int | None = None
+    ecommerce_stock_mode: str = "DATABASE"
 
 
 def _validate_item_fields(fields: ItemFields) -> None:
@@ -471,6 +571,8 @@ def _validate_item_fields(fields: ItemFields) -> None:
         raise ValueError("خدمت نمی‌تواند موجودی‌محور باشد.")
     if fields.track_expiry and not fields.track_batch:
         raise ValueError("ردیابیِ انقضا نیازمندِ فعال‌بودنِ ردیابیِ بچ است.")
+    if fields.ecommerce_stock_mode not in ("DATABASE", "ALWAYS_IN_STOCK", "OUT_OF_STOCK"):
+        raise ValueError("حالتِ موجودیِ فروشِ اینترنتی نامعتبر است.")
 
 
 def create_item(
@@ -485,6 +587,9 @@ def create_item(
     dimensions_service.create_detail_account در detail_dimensions.py
     ساخته می‌شوند و به این تابع نیازی ندارند."""
     _validate_item_fields(fields)
+    from peecha.services import unit_conversion as uc
+
+    uc.assert_barcode_available(company_id, fields.barcode)
     dimension_type_id = _item_dimension_type_id(company_id)
     detail_account = dimensions_service.create_detail_account(
         company_id, dimension_type_id, code, name, parent_detail_account_id=parent_detail_account_id
@@ -513,8 +618,34 @@ def create_item(
             **_extended_item_kwargs(fields),
         )
         session.add(item)
+        session.flush()
+        uc.ensure_base_unit(session, item)
         session.commit()
-        return item.item_id
+        item_id = item.item_id
+    if fields.barcode:
+        uc.set_item_base_barcode(company_id, item_id, fields.barcode)
+    return item_id
+
+
+def bulk_set_brand_category(company_id: int, item_ids: list[int], *, set_brand: bool = False, brand_id: int | None = None, set_category: bool = False, category_id: int | None = None) -> int:
+    """طبقِ درخواستِ صریح (پورتِ «Category & Brand Studio»ِ PeechaSync): تخصیصِ
+    گروهیِ دسته/برند به چند کالا در یک اقدام -- به‌جایِ بازکردنِ تک‌تکِ
+    فرمِ کالا. set_brand/set_category جدا از خودِ برند/دسته است تا کاربر
+    بتواند فقط یکی از این دو را تغییر دهد و «بدونِ برند»/«بدونِ دسته»
+    (یعنی None) هم یک انتخابِ معتبر باشد."""
+    if not set_brand and not set_category:
+        return 0
+    with new_session() as session:
+        items = session.scalars(
+            select(Item).where(Item.company_id == company_id, Item.item_id.in_(item_ids))
+        ).all()
+        for item in items:
+            if set_brand:
+                item.brand_id = brand_id
+            if set_category:
+                item.category_id = category_id
+        session.commit()
+        return len(items)
 
 
 def update_item(
@@ -525,11 +656,20 @@ def update_item(
         raise ValueError("وضعیتِ چرخهٔ‌عمر نامعتبر است.")
 
     from peecha.services import inventory_engine as engine_service
+    from peecha.services import unit_conversion as uc
 
+    uc.assert_barcode_available(company_id, fields.barcode, item_id)
     with new_session() as session:
         item = session.get(Item, item_id)
         if item is None or item.company_id != company_id:
             raise ValueError("کالا نامعتبر است.")
+        # طبقِ سیستمِ واحد (R225): تغییرِ واحدِ پایهٔ کالایی که سند/تراکنش دارد
+        # مجاز نیست -- مقدارِ پایهٔ همهٔ اسنادِ قبلی بی‌معنا می‌شد.
+        if item.base_uom_id != fields.base_uom_id and uc.item_has_history(item_id):
+            raise ValueError(
+                "این کالا سابقهٔ سند/تراکنش دارد؛ تغییرِ واحدِ پایه فقط از طریقِ مهاجرتِ تخصصیِ داده ممکن است -- "
+                "به‌جایش واحدِ تازه را در «واحدها و بسته‌بندی» با ضریبِ تبدیل اضافه کنید."
+            )
 
         # طبقِ مرحلهٔ ۸ (۱۰۸): واحدِ پایه/روشِ قیمت‌گذاری فقط با موجودیِ صفر
         # در همهٔ انبارها قابلِ‌تغییر است — نه صرفِ نبودِ سابقهٔ حرکت.
@@ -542,11 +682,19 @@ def update_item(
         if has_open_balance and item.costing_method_code != fields.costing_method_code:
             raise ValueError("این کالا در انباری موجودی دارد؛ روشِ قیمت‌گذاری فقط با موجودیِ صفر قابلِ‌تغییر است.")
 
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده («ویرایشِ متغیرها کرش می‌کند» +
+        # «متغیرها ویژگیِ کالایِ اصلی را نمی‌گیرند»): variant_parent_item_id
+        # هرگز نباید از رویِ فرم بازنویسی شود -- خودِ فرمِ عمومیِ کالا
+        # (collect_fields) اصلاً این فیلد را نمی‌شناسد و همیشه None
+        # می‌فرستد، پس نوشتنِ کورکورانه‌یِ آن این‌جا هر بار که یک متغیر
+        # (حتیّ بدونِ تغییرِ واقعی) از طریقِ همین فرمِ عمومی ذخیره شود، آن
+        # را از کالایِ اصلی‌اش یتیم می‌کرد -- این پیوند فقط توسطِ
+        # item_variants.generate_item_variants (در create_item) تعیین
+        # می‌شود و بعد از آن دیگر از این مسیر تغییر نمی‌کند.
         item.item_kind_code = fields.item_kind_code
         item.base_uom_id = fields.base_uom_id
         item.brand_id = fields.brand_id
         item.manufacturer_id = fields.manufacturer_id
-        item.variant_parent_item_id = fields.variant_parent_item_id
         item.costing_method_code = fields.costing_method_code
         item.lifecycle_status_code = lifecycle_status_code
         item.is_sellable = fields.is_sellable
@@ -564,8 +712,42 @@ def update_item(
             setattr(item, key, value)
         item.updated_at = datetime.datetime.now(datetime.timezone.utc)
         detail_account_id = item.item_detail_account_id
+
+        # طبقِ درخواستِ صریح («وقتی کالایِ اصلی موجودی‌محور باشه باید
+        # واریانت‌ها هم همون ویژگی‌هایِ کالایِ اصلی را بگیرد» + «متغیرها
+        # همه از کالایِ اصلی ارث ببرند»): این همگام‌سازی فقط یک‌بارِ
+        # هنگامِ تولیدِ اولیه‌یِ متغیرها کافی نیست -- هر بار که خودِ کالایِ
+        # اصلی (نه یک متغیر) ذخیره می‌شود، این فیلدهایِ ساختاری/ردیابی به
+        # همه‌یِ متغیرهایِ موجودش هم اعمال می‌شود. فیلدهایِ
+        # is_sellable/is_purchasable/is_stock_tracked عمداً این‌جا نیستند:
+        # کالایِ اصلیِ دارایِ متغیر خودش همیشه غیرِقابلِ‌معامله می‌شود
+        # (طبقِ _sync_parent_transactability در item_variants.py) پس مقدارِ
+        # فعلیِ آن فیلدها رویِ خودِ فرم معنایِ «الگو» ندارد و نباید به
+        # متغیرهایی که از قبل درست تنظیم شده‌اند سرایت کند.
+        if item.variant_parent_item_id is None:
+            variants = session.scalars(select(Item).where(Item.variant_parent_item_id == item_id)).all()
+            for variant in variants:
+                variant.item_kind_code = fields.item_kind_code
+                variant.base_uom_id = fields.base_uom_id
+                variant.brand_id = fields.brand_id
+                variant.manufacturer_id = fields.manufacturer_id
+                variant.costing_method_code = fields.costing_method_code
+                variant.track_serial = fields.track_serial
+                variant.track_batch = fields.track_batch
+                variant.track_expiry = fields.track_expiry
+                # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («درصدِ مالیاتِ کالایِ مادر
+                # برایِ متغیرها محاسبه نمی‌شود»): default_tax_percent هم باید
+                # مثلِ فیلدهایِ ساختاریِ بالا، هر بار ویرایشِ کالایِ اصلی، به
+                # همه‌یِ متغیرهایش سرایت کند -- وگرنه تغییرِ بعدیِ مالیات رویِ
+                # کالایِ مادر، برایِ متغیرهایِ ازپیش‌ساخته‌شده اثر نمی‌کند.
+                variant.default_tax_percent = fields.default_tax_percent
+                variant.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                uc.ensure_base_unit(session, variant)
+
+        uc.ensure_base_unit(session, item)
         session.commit()
 
+    uc.set_item_base_barcode(company_id, item_id, fields.barcode)
     dimensions_service.update_detail_account(detail_account_id, company_id, code, is_active, name)
 
 
@@ -620,6 +802,14 @@ def delete_item(item_id: int, company_id: int) -> None:
         session.execute(delete(ItemUomConversion).where(ItemUomConversion.item_id == item_id))
         session.execute(delete(ItemVariantValue).where(ItemVariantValue.item_id == item_id))
         session.execute(delete(ItemSupplier).where(ItemSupplier.item_id == item_id))
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده («کالای بدونِ هیچ گردشی حذف نمی‌شود
+        # و پیامی هم نشان داده نمی‌شود»): این کالا شکست می‌خورد چون
+        # inv.item_supplier_codes (کدها/نام‌هایِ تامین‌کننده‌یِ R62) هم
+        # فقط با خودِ همین کالا معنا دارد اما این‌جا پاک نمی‌شد -- نقضِ
+        # کلیدِ خارجی به‌صورتِ یک IntegrityErrorِ خام بالا می‌آمد که هیچ‌جا
+        # به ValueErrorِ قابلِ‌نمایش تبدیل نمی‌شد، پس UI هیچ پیامی نشان
+        # نمی‌داد (فقط trace رویِ کنسول).
+        session.execute(delete(ItemSupplierCode).where(ItemSupplierCode.item_id == item_id))
         session.execute(delete(ItemMedia).where(ItemMedia.item_id == item_id))
         session.execute(
             delete(RelatedItem).where((RelatedItem.item_id == item_id) | (RelatedItem.related_item_id == item_id))
@@ -627,6 +817,12 @@ def delete_item(item_id: int, company_id: int) -> None:
         session.execute(delete(StandardCost).where(StandardCost.item_id == item_id))
         session.execute(delete(ReorderPolicy).where(ReorderPolicy.item_id == item_id))
         session.execute(delete(ReorderSuggestionAcknowledgement).where(ReorderSuggestionAcknowledgement.item_id == item_id))
+        # طبقِ رفعِ باگِ واقعیِ کشف‌شده (حینِ حذفِ متغیرهایِ دارایِ قیمت):
+        # ردیف‌هایِ فهرستِ قیمت/تاریخچهٔ قیمتِ همین کالا هم فقط با خودِ
+        # همین کالا معنا دارند -- مثلِ بقیه‌یِ زیرجدول‌هایِ تعریفیِ بالا،
+        # پیش از حذفِ خودِ کالا پاک می‌شوند.
+        session.execute(delete(PriceListItemPriceHistory).where(PriceListItemPriceHistory.item_id == item_id))
+        session.execute(delete(PriceListItem).where(PriceListItem.item_id == item_id))
 
         detail_account_id = item.item_detail_account_id
         session.delete(item)
@@ -647,54 +843,61 @@ class UomConversionRow:
     is_sales_default: bool
 
 
+# سازگاری با کدِ پیش از R225 -- همه به services/unit_conversion.py واگذار می‌شوند.
 def list_item_uom_conversions(item_id: int) -> list[UomConversionRow]:
-    with new_session() as session:
-        rows = session.scalars(
-            select(ItemUomConversion).where(ItemUomConversion.item_id == item_id)
-        ).all()
-        uom_codes = {u.uom_id: u.code for u in session.scalars(select(Uom))}
-        return [
-            UomConversionRow(
-                r.conversion_id, r.uom_id, uom_codes.get(r.uom_id, ""), r.conversion_factor,
-                r.is_purchase_default, r.is_sales_default,
-            )
-            for r in rows
-        ]
+    """فقط واحدهایِ غیرِپایهٔ فعال (همان معنایِ قبلی)."""
+    from peecha.services import unit_conversion as uc
+
+    return [
+        UomConversionRow(u.item_unit_id, u.uom_id, u.code, u.factor, u.is_default_purchase, u.is_default_sales)
+        for u in uc.get_item_units(item_id) if not u.is_base
+    ]
 
 
 def set_item_uom_conversion(
     item_id: int, uom_id: int, conversion_factor: decimal.Decimal,
     is_purchase_default: bool = False, is_sales_default: bool = False,
 ) -> None:
-    if conversion_factor <= 0:
-        raise ValueError("ضریبِ تبدیل باید بزرگ‌تر از صفر باشد.")
-    with new_session() as session:
-        existing = session.scalar(
-            select(ItemUomConversion).where(
-                ItemUomConversion.item_id == item_id, ItemUomConversion.uom_id == uom_id
-            )
-        )
-        if existing is not None:
-            existing.conversion_factor = conversion_factor
-            existing.is_purchase_default = is_purchase_default
-            existing.is_sales_default = is_sales_default
-        else:
-            session.add(
-                ItemUomConversion(
-                    item_id=item_id, uom_id=uom_id, conversion_factor=conversion_factor,
-                    is_purchase_default=is_purchase_default, is_sales_default=is_sales_default,
-                )
-            )
-        session.commit()
+    from peecha.services import unit_conversion as uc
+
+    uc.set_item_unit(
+        item_id, uom_id, conversion_factor, is_default_purchase=is_purchase_default, is_default_sales=is_sales_default,
+    )
 
 
 def delete_item_uom_conversion(conversion_id: int, item_id: int) -> None:
-    with new_session() as session:
-        row = session.get(ItemUomConversion, conversion_id)
-        if row is None or row.item_id != item_id:
-            raise ValueError("ردیفِ تبدیلِ واحد نامعتبر است.")
-        session.delete(row)
-        session.commit()
+    from peecha.services import unit_conversion as uc
+
+    uc.remove_item_unit(conversion_id, item_id)
+
+
+@dataclass
+class ItemUomOption:
+    uom_id: int
+    code: str
+    name: str
+    factor: decimal.Decimal
+    is_base: bool
+    is_purchase_default: bool
+    is_sales_default: bool
+    decimal_places: int
+
+
+def list_item_uom_options(item_id: int, purpose: str | None = None) -> list[ItemUomOption]:
+    """واحدهایِ قابلِ‌انتخاب در سندِ تازه (فعال، مجاز برایِ purpose)، اول واحدِ پایه."""
+    from peecha.services import unit_conversion as uc
+
+    return [
+        ItemUomOption(u.uom_id, u.code, u.name, u.factor, u.is_base, u.is_default_purchase, u.is_default_sales, u.decimal_places)
+        for u in uc.get_item_units(item_id, purpose=purpose)
+    ]
+
+
+def get_uom_factor(item_id: int, uom_id: int) -> decimal.Decimal:
+    """ضریبِ تبدیلِ یک واحد به واحدِ پایه‌یِ کالا (پایه = ۱)."""
+    from peecha.services import unit_conversion as uc
+
+    return uc.get_factor(item_id, uom_id)
 
 
 # ---------------------------------------------------------------------

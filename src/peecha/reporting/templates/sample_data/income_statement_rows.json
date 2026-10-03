@@ -1,0 +1,18 @@
+{
+  "rows": [
+    {
+      "account_code": "4-41",
+      "account_name": "درآمدِ عملیاتی",
+      "category_label": "درآمد",
+      "current_amount_display": "۵۰,۰۰۰",
+      "previous_amount_display": "۳۰,۰۰۰"
+    },
+    {
+      "account_code": "5-51",
+      "account_name": "بهایِ تمام‌شده",
+      "category_label": "هزینه",
+      "current_amount_display": "۰",
+      "previous_amount_display": "۱۰,۰۰۰"
+    }
+  ]
+}

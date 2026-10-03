@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from peecha import session
+from peecha import numerals, session
 from peecha.services import audit as audit_service
 from peecha.ui.widgets import FieldHelpMixin
 
@@ -96,7 +96,7 @@ class AuditLogScreen(FieldHelpMixin, QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, r in enumerate(self._rows):
             values = [
-                r.created_at.strftime("%Y-%m-%d %H:%M"),
+                numerals.format_jalali_datetime(r.created_at),
                 r.user_full_name or "سیستم",
                 _ACTION_LABELS.get(r.action, r.action),
                 str(r.entity_id),

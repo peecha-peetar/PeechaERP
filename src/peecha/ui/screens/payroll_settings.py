@@ -276,6 +276,7 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.set_field_help([
             (self.from_date_field, "شروعِ اعتبارِ این نرخِ حداقل‌دستمزد."),
             (self.to_date_field, "پایانِ اعتبار — خالی یعنی تا اطلاعِ ثانوی."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلدِ پایانِ اعتبار غیرِفعال می‌شود -- این نرخ تا وضعِ نرخِ تازه‌تر معتبر می‌ماند."),
             (self.monthly_field, "حداقلِ دستمزدِ ماهانهٔ مصوب."),
         ])
 
@@ -370,11 +371,11 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, w in enumerate(self._rows):
             values = [
-                numerals.format_amount(w.hourly_amount) if w.hourly_amount is not None else "—",
-                numerals.format_amount(w.daily_amount) if w.daily_amount is not None else "—",
-                numerals.format_amount(w.monthly_amount),
-                numerals.to_persian_digits(w.effective_to.isoformat()) if w.effective_to else "—",
-                numerals.to_persian_digits(w.effective_from.isoformat()),
+                numerals.format_company_amount(w.hourly_amount) if w.hourly_amount is not None else "—",
+                numerals.format_company_amount(w.daily_amount) if w.daily_amount is not None else "—",
+                numerals.format_company_amount(w.monthly_amount),
+                numerals.format_jalali_date(w.effective_to) if w.effective_to else "—",
+                numerals.format_jalali_date(w.effective_from),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -539,7 +540,7 @@ class _PoliciesTab(FormScreenBase):
             )
             values = [
                 "بله" if p.is_company_override else "خیر",
-                numerals.to_persian_digits(p.effective_from.isoformat()),
+                numerals.format_jalali_date(p.effective_from),
                 value_str,
                 p.label,
             ]
@@ -599,12 +600,27 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addWidget(self._build_form_panel(), stretch=2)
 
         self.set_field_help([
+            (self.code_field, "کدِ یکتایِ این آیتمِ حقوقی -- در فرمول‌هایِ آیتم‌هایِ دیگر با {CODE} به آن ارجاع داده می‌شود."),
+            (self.name_field, "نامِ نمایشیِ این آیتم در فیش/گزارشِ حقوق."),
+            (self.item_type_combo, "این آیتم به جمعِ حقوق اضافه می‌شود (مزایا) یا از آن کم می‌شود (کسورات)."),
+            (self.calculation_method_combo, "روشِ محاسبهٔ مبلغِ این آیتم -- مبلغِ ثابت، درصدی، یا فرمولِ سفارشی."),
+            (self.calculation_phase_combo, "این آیتم در کدام مرحله از محاسبهٔ حقوق اعمال می‌شود -- ترتیب رویِ آیتم‌هایِ وابسته اثر دارد."),
             (self.formula_field, "زبانِ محدودِ فرمول: + - * / ( )، اعداد، BASE_SALARY/WORKED_DAYS/CALENDAR_DAYS/"
                                   "CHILDREN_COUNT/WEEKLY_HOURS، ارجاع به آیتمِ دیگر با {CODE}، و POLICY(CODE)."),
+            (self.fixed_amount_field, "مبلغِ ثابتِ این آیتم -- فقط وقتی روشِ محاسبه «مبلغِ ثابت» باشد به‌کار می‌رود."),
+            (self.percentage_field, "درصدِ این آیتم از حقوقِ پایه -- فقط وقتی روشِ محاسبه «درصدی» باشد به‌کار می‌رود."),
+            (self.deduction_priority_field, "اولویتِ کسرِ این آیتم وقتی خالص‌ حقوق برایِ کسرِ همه‌یِ آیتم‌ها کافی نباشد -- عددِ کوچک‌تر زودتر کسر می‌شود."),
             (self.eligibility_field, "شرطِ تخصیصِ خودکار، مثلاً «CHILDREN_COUNT > 0» — خالی یعنی همیشه اعمال شود."),
             (self.gl_account_combo, "حسابِ کلی که این آیتم در سندِ حسابداریِ خودکارِ حقوق به آن می‌رود."),
             (self.detail_account_combo, "تفصیلیِ اختیاری برایِ همین ردیفِ سند (مثلاً مرکزِ هزینه)."),
             (self.description_template_field, "شرحِ ردیفِ این آیتم در سند — جای‌گذارهایِ مجاز: {نام_آیتم} {دوره} {اجرا}."),
+            (self.is_prorated_checkbox, "اگر روشن باشد، مبلغِ این آیتم به نسبتِ روزهایِ واقعیِ کارکرد در دوره تعدیل می‌شود."),
+            (self.is_taxable_checkbox, "این آیتم در محاسبهٔ مالیاتِ حقوق لحاظ می‌شود."),
+            (self.is_insurable_checkbox, "این آیتم در محاسبهٔ حقِ‌بیمه لحاظ می‌شود."),
+            (self.is_continuous_checkbox, "این آیتم مستمر است -- در محاسبهٔ سنوات/اضافه‌کاری هم به‌عنوانِ مبنا لحاظ می‌شود."),
+            (self.is_cash_checkbox, "این آیتم در جمعِ نهاییِ قابلِ‌پرداختِ نقدیِ فیش لحاظ می‌شود."),
+            (self.is_court_order_checkbox, "این آیتم یک کسرِ الزامیِ ناشی از حکمِ دادگاه است -- اولویتِ کسر رویِ آن اثر دارد."),
+            (self.is_active_checkbox, "آیتم‌هایِ غیرِفعال دیگر در محاسبهٔ حقوقِ دوره‌هایِ تازه اعمال نمی‌شوند."),
         ])
         self.register_field_grids("payroll_settings_pay_items", [self.form_grid])
 
@@ -949,6 +965,7 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.employer_expense_account_combo, "حسابِ هزینه‌ای که سهمِ کارفرمایِ بیمه در سندِ خودکار به‌عنوانِ بدهکار به آن می‌رود."),
             (self.employer_expense_detail_combo, "تفصیلیِ اختیاری برایِ همان ردیف."),
             (self.insurance_description_template_field, "شرحِ ردیفِ سهمِ کارفرما — جای‌گذارهایِ مجاز: {دوره} {اجرا}."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلدِ پایانِ اعتبار غیرِفعال می‌شود -- این تنظیم تا وضعِ نرخِ تازه‌تر معتبر می‌ماند."),
         ])
         self.register_field_grids("payroll_settings_insurance", [self.form_grid])
 
@@ -1080,8 +1097,8 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
                 numerals.to_persian_digits(str(c.unemployment_rate * 100)),
                 numerals.to_persian_digits(str(c.employer_rate * 100)),
                 numerals.to_persian_digits(str(c.employee_rate * 100)),
-                numerals.to_persian_digits(c.effective_to.isoformat()) if c.effective_to else "—",
-                numerals.to_persian_digits(c.effective_from.isoformat()),
+                numerals.format_jalali_date(c.effective_to) if c.effective_to else "—",
+                numerals.format_jalali_date(c.effective_from),
             ]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
@@ -1243,6 +1260,12 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         self.footer_layout.addWidget(save_exemption_button)
         self.footer_layout.addStretch(1)
 
+        self.set_field_help([
+            (self.brackets_from_date_field, "تاریخِ شروعِ اجرایِ همین چیدمانِ پلکانی -- پلکانِ قبلی تا این تاریخ معتبر می‌ماند."),
+            (self.exemption_field, "مبلغِ سالانه‌ای که پیش از محاسبهٔ مالیات، از حقوقِ مشمول کسر می‌شود."),
+            (self.exemption_from_date_field, "تاریخِ شروعِ اجرایِ همین سقفِ معافیت."),
+        ])
+
     def _add_bracket_row(self, from_amount: str = "", to_amount: str = "", rate: str = "") -> None:
         row_layout = QHBoxLayout()
         from_field = _AmountField()
@@ -1295,8 +1318,8 @@ class _TaxTab(FieldHelpMixin, FormScreenBase):
         if brackets:
             parts = []
             for b in brackets:
-                to_text = numerals.format_amount(b.to_annual_amount) if b.to_annual_amount is not None else "∞"
-                parts.append(f"{numerals.format_amount(b.from_annual_amount)} تا {to_text}: {numerals.to_persian_digits(str(b.rate * 100))}٪")
+                to_text = numerals.format_company_amount(b.to_annual_amount) if b.to_annual_amount is not None else "∞"
+                parts.append(f"{numerals.format_company_amount(b.from_annual_amount)} تا {to_text}: {numerals.to_persian_digits(str(b.rate * 100))}٪")
             self.current_brackets_label.setText("پلکان‌هایِ فعلی — " + " | ".join(parts))
             for b in brackets:
                 self._add_bracket_row(str(b.from_annual_amount), str(b.to_annual_amount) if b.to_annual_amount is not None else "", str(b.rate * 100))
@@ -1383,8 +1406,11 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.addWidget(self._build_form_panel(), stretch=2)
 
         self.set_field_help([
+            (self.code_combo, "نوعِ اضافه‌کاری که این قانون تعریف می‌کند (مثلاً روزانه، تعطیل، شب‌کاری)."),
             (self.multiplier_field, "ضریبِ این نوعِ اضافه‌کاری — مثلاً ۱٫۴ برایِ ۴۰٪ اضافه."),
             (self.stacking_mode_combo, "وقتی چند نوعِ اضافه‌کاری هم‌زمان رخ می‌دهد، ضرایب چگونه ترکیب شوند."),
+            (self.max_hours_policy_field, "کدِ سیاستِ سقفِ ساعتِ اضافه‌کاریِ ماهانه -- اختیاری، برایِ محدودکردنِ سقفِ محاسبه."),
+            (self.to_date_unbounded_checkbox, "اگر روشن باشد، فیلدِ پایانِ اعتبار غیرِفعال می‌شود -- این قانون تا وضعِ قانونِ تازه‌تر معتبر می‌ماند."),
         ])
         self.register_field_grids("payroll_settings_overtime_rules", [self.form_grid])
 
@@ -1486,8 +1512,8 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.table.setRowCount(len(self._rows))
         for row_index, r in enumerate(self._rows):
             values = [
-                numerals.to_persian_digits(r.effective_to.isoformat()) if r.effective_to else "—",
-                numerals.to_persian_digits(r.effective_from.isoformat()),
+                numerals.format_jalali_date(r.effective_to) if r.effective_to else "—",
+                numerals.format_jalali_date(r.effective_from),
                 stacking_labels.get(r.stacking_mode, r.stacking_mode),
                 numerals.to_persian_digits(str(r.multiplier)),
                 code_labels.get(r.code, r.code),
@@ -1615,6 +1641,10 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
                 "یک فایلِ نمونهٔ خروجیِ دستگاه (CSV یا اکسل) را انتخاب کنید و ستون‌هایش را یک‌بار مشخص کنید — "
                 "این تناظر با همین الگو ذخیره می‌شود تا دفعاتِ بعد تکرار نشود.",
             ),
+            (self.name_field, "نامِ این الگو -- معمولاً نامِ شرکتِ سازندهٔ دستگاهِ حضوروغیاب."),
+            (self.header_row_checkbox, "اگر روشن باشد، اولین ردیفِ فایلِ ایمپورت‌شده به‌عنوانِ دیتا خوانده نمی‌شود (فقط عنوانِ ستون‌هاست)."),
+            (self.date_format_combo, "قالبِ نوشته‌شدنِ تاریخ در فایلِ خروجیِ دستگاه."),
+            (self.time_format_combo, "قالبِ نوشته‌شدنِ ساعت در فایلِ خروجیِ دستگاه."),
         ])
         self.register_field_grids("payroll_settings_attendance_templates", [self.form_grid])
 

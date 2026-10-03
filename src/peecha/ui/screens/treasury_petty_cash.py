@@ -299,6 +299,18 @@ class PettyCashScreen(FieldHelpMixin, FormScreenBase):
 
         self._on_line_method_changed()
 
+        self.set_field_help([
+            (self.custodian_combo, "تفصیلیِ سطحِ آخرِ گروهِ تنخواه که این تنخواه به او سپرده شده."),
+            (self.fund_combo, "تنخواهی که می‌خواهید افتتاح/مدیریت کنید."),
+            (self.opening_description_field, "شرحِ سندِ حسابداریِ افتتاحِ این تنخواه."),
+            (self.cost_center_combo, "مرکزِ هزینه‌ای که این تنخواه به آن نسبت داده می‌شود."),
+            (self.project_combo, "پروژه‌ای که این تنخواه به آن مربوط است."),
+            (self.line_method_combo, "روشِ پرداختِ همین ردیفِ واریزی/هزینه (نقد، چک، کارت، ...)."),
+            (self.line_detail_combo, "تفصیلیِ لازم برایِ همین روش -- مثلاً حسابِ بانکی برایِ روشِ چک/کارت."),
+            (self.line_check_no_field, "شماره‌یِ چک -- فقط وقتی روشِ ردیف چک باشد."),
+            (self.line_description_field, "شرحِ همین ردیف."),
+        ])
+
     # --- بارگذاری ----------------------------------------------------------
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None

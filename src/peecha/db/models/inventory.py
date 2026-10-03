@@ -47,6 +47,14 @@ class Uom(Base):
     uom_type_code: Mapped[str] = mapped_column(String(10))
     decimal_places: Mapped[int] = mapped_column(SmallInteger, default=2)
     is_active: Mapped[bool] = mapped_column(default=True)
+    symbol: Mapped[str | None] = mapped_column(String(20))
+    base_uom_id: Mapped[int | None] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
+    allow_decimal: Mapped[bool] = mapped_column(default=True)
+    is_system: Mapped[bool] = mapped_column(default=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class Brand(Base):
@@ -171,11 +179,42 @@ class Item(Base):
     seo_meta_keywords: Mapped[str | None] = mapped_column(String(300))
     website_category: Mapped[str | None] = mapped_column(String(150))
     website_tags: Mapped[str | None] = mapped_column(String(300))
+    # طبقِ درخواستِ صریح («حالت‌هایِ موجودی» برایِ فروشِ اینترنتی):
+    # DATABASE (پیش‌فرض، موجودیِ واقعیِ انبار)، ALWAYS_IN_STOCK (صرفِ‌نظر
+    # از موجودیِ واقعی همیشه قابلِ‌سفارش)، OUT_OF_STOCK (فروشِ اینترنتی
+    # موقتاً متوقف، بدونِ تغییرِ موجودیِ خودِ ERP).
+    ecommerce_stock_mode: Mapped[str] = mapped_column(String(20), default="DATABASE")
     pos_shortcut_key: Mapped[str | None] = mapped_column(String(10))
     pos_button_color: Mapped[str | None] = mapped_column(String(20))
     pos_requires_weight: Mapped[bool] = mapped_column(default=False)
     pos_requires_serial: Mapped[bool] = mapped_column(default=False)
+    # طبقِ بازخوردِ صریح («دسته‌بندیِ مخصوصِ POS، جدا از category_id»):
+    # این کاملاً مستقل از category_id (دسته‌بندیِ عمومیِ انبار) است --
+    # فقط برایِ تعیینِ تبِ دسترسیِ‌سریع در صفحه‌یِ فروشِ حضوری.
+    pos_menu_group_id: Mapped[int | None] = mapped_column(ForeignKey("comm.pos_menu_groups.group_id"))
     updated_at: Mapped[datetime.datetime | None]
+
+
+class ItemSupplierCode(Base):
+    """طبقِ درخواستِ صریح («کدهایِ تامین‌کننده با کدهایِ من فرق دارد» و
+    بعداً «بعضی تامین‌کننده‌ها فقط نامِ کالا دارند»): یک کالا می‌تواند چند
+    کد و چند نامِ تامین‌کننده داشته باشد (value_type می‌گوید کدام‌اند) --
+    برایِ شناساییِ خودکارِ ترکیبی (کد یا نام) در وارداتِ فایلِ قیمتِ هر
+    تامین‌کننده (اکسل/PDF/عکس) و تطبیقشان به کالایِ داخلی."""
+
+    __tablename__ = "item_supplier_codes"
+    __table_args__ = (
+        UniqueConstraint("item_id", "supplier_detail_account_id", "value_type", "normalized_code"),
+        {"schema": "inv"},
+    )
+
+    item_supplier_code_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    value_type: Mapped[str] = mapped_column(String(10), default="CODE")  # CODE | NAME
+    supplier_code: Mapped[str] = mapped_column(String(60))
+    normalized_code: Mapped[str] = mapped_column(String(60))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class ItemUomConversion(Base):
@@ -188,6 +227,37 @@ class ItemUomConversion(Base):
     conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     is_purchase_default: Mapped[bool] = mapped_column(default=False)
     is_sales_default: Mapped[bool] = mapped_column(default=False)
+    # R225: همین جدول نقشِ item_units را دارد (واحدهایِ مجازِ کالا).
+    is_base_unit: Mapped[bool] = mapped_column(default=False)
+    is_purchase_unit: Mapped[bool] = mapped_column(default=True)
+    is_sales_unit: Mapped[bool] = mapped_column(default=True)
+    is_inventory_unit: Mapped[bool] = mapped_column(default=False)
+    decimal_places: Mapped[int | None] = mapped_column(SmallInteger)
+    min_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    max_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 4))
+    volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 6))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    sort_order: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class ItemUnitBarcode(Base):
+    __tablename__ = "item_unit_barcodes"
+    __table_args__ = {"schema": "inv"}
+
+    barcode_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    item_unit_id: Mapped[int] = mapped_column(ForeignKey("inv.item_uom_conversions.conversion_id"))
+    barcode: Mapped[str] = mapped_column(String(100))
+    barcode_type: Mapped[str] = mapped_column(String(15), default="INTERNAL")
+    is_primary: Mapped[bool] = mapped_column(default=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class ItemAttribute(Base):
@@ -199,6 +269,7 @@ class ItemAttribute(Base):
     code: Mapped[str] = mapped_column(String(20))
     name: Mapped[str] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(default=True)
+    display_order: Mapped[int] = mapped_column(SmallInteger, default=0)
 
 
 class ItemAttributeValue(Base):
@@ -219,6 +290,23 @@ class ItemVariantValue(Base):
     item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"), primary_key=True)
     attribute_id: Mapped[int] = mapped_column(ForeignKey("inv.item_attributes.attribute_id"), primary_key=True)
     value_id: Mapped[int] = mapped_column(ForeignKey("inv.item_attribute_values.value_id"))
+
+
+class ItemVariant(Base):
+    """طبقِ درخواستِ صریح («متغیرها دیگر بعنوانِ تفصیلی معرفی نشوند، در
+    یک جدولِ مستقل با کدبندیِ متفاوت ذخیره شوند»): هویتِ واقعیِ یک
+    متغیر (کدِ مستقل، ارتباط با کالایِ اصلی) این‌جاست -- ردیفِ inv.items/
+    acc.detail_accounts خودِ متغیر همچنان به‌صورتِ فنی در پس‌زمینه وجود
+    دارد (برایِ threadingِ بُعدِ حسابداری) ولی دیگر هرگز مستقیماً در
+    UIِ تفصیلی‌ها نمایش داده نمی‌شود."""
+
+    __tablename__ = "item_variants"
+    __table_args__ = (UniqueConstraint("parent_item_id", "variant_code"), {"schema": "inv"})
+
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"), primary_key=True)
+    parent_item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    variant_code: Mapped[str] = mapped_column(String(40))
+    display_order: Mapped[int] = mapped_column(SmallInteger, default=0)
 
 
 class RelatedItem(Base):
@@ -402,8 +490,20 @@ class Warehouse(Base):
     profit_center_detail_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("acc.detail_accounts.detail_account_id")
     )
+    # طبقِ درخواستِ صریح («سیاستِ مالیات: شرکت -> انبار -> کالا»): اگر
+    # تنظیماتِ کلیِ شرکت (Company.default_tax_percent) خالی باشد، این
+    # مقدار پیش از سراغِ‌رفتن به Item.default_tax_percent بررسی می‌شود.
+    default_tax_percent: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
     # توضیحات
     notes: Mapped[str | None] = mapped_column(Text)
+    # طبقِ درخواستِ صریح («خودرو به‌عنوانِ انبارِ سیار» -- ماژولِ پخشِ گرم):
+    # این فیلدها فقط برایِ warehouse_type_code == "VEHICLE" پر می‌شوند.
+    vehicle_plate_number: Mapped[str | None] = mapped_column(String(30))
+    vehicle_driver_detail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("acc.detail_accounts.detail_account_id")
+    )
+    vehicle_capacity_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
+    vehicle_capacity_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
 
 
 class BinLocation(Base):
@@ -509,6 +609,7 @@ class StockDocumentLine(Base):
     uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
     quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
     bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
     destination_bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("inv.batches.batch_id"))
@@ -516,6 +617,19 @@ class StockDocumentLine(Base):
     line_total_cost: Mapped[decimal.Decimal | None] = mapped_column(
         Numeric(18, 2), Computed("round(quantity_base * unit_cost, 2)")
     )
+    # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید هیچ‌وقت به سندِ
+    # حسابداری نمی‌رسد»): مبلغِ مالياتی که همراهِ همین ردیف (اگر از یک
+    # سندِ بازرگانی آمده باشد) باید جداگانه بستانکارِ حساب‌هایِ پرداختنی
+    # را زیاد کند و بدهکارِ «مالياتِ خرید-قابلِ مطالبه» شود -- بدونِ اینکه
+    # وارد ارزشِ خودِ موجودی (unit_cost) شود.
+    tax_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ اقلامِ
+    # فاکتور، به حسابِ موجودی/بهایِ تمام‌شده لحاظ بشه»): سهمِ همین ردیف از
+    # هزینه‌هایِ جانبیِ فاکتورِ خرید (ترخیص/گمرک/...) -- به ارزشِ
+    # موجودی/بهایِ لجرِ همین ردیف اضافه می‌شود، بدونِ اینکه وارد
+    # بستانکاریِ حساب‌هایِ پرداختنیِ تامین‌کنندهٔ کالا شود (آن، حساب‌هایِ
+    # جداگانه‌ایِ خودِ هزینه را بستانکار می‌کند).
+    landed_cost_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     quality_status_code: Mapped[str] = mapped_column(String(15), default="APPROVED")
     reason_code_id: Mapped[int | None] = mapped_column(ForeignKey("inv.document_reason_codes.reason_code_id"))
     source_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
@@ -756,6 +870,13 @@ class InventoryAccountMapping(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
     mapping_key: Mapped[str] = mapped_column(String(30), primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("acc.chart_of_accounts.account_id"))
+    # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
+    # برایِ انتخابش نیست»): تفصیلیِ ثابتِ ازپیش‌تخصیص‌یافته برایِ این
+    # حسابِ نقش‌محور -- برایِ بُعدهایی که نه از سرِسند (مرکزِ هزینه/
+    # پروژه) و نه از طرفِ‌حساب/کالایِ ردیف قابلِ‌تامین‌اند و همیشه یک
+    # مقدارِ ثابت دارند. دقیقاً هم‌الگو با
+    # treasury.account_mappings.detail_account_id.
+    detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
 
 
 class FeatureDefinition(Base):
@@ -817,6 +938,9 @@ class CycleCountLine(Base):
     variance_quantity_base: Mapped[decimal.Decimal | None] = mapped_column(
         Numeric(18, 6), Computed("counted_quantity_base - expected_quantity_base")
     )
+    counted_uom_id: Mapped[int | None] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    counted_quantity: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    conversion_factor: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     counted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     counted_at: Mapped[datetime.datetime | None]
     recount_requested: Mapped[bool] = mapped_column(default=False)
@@ -840,3 +964,144 @@ class DailyKpiSnapshot(Base):
     near_expiry_value: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     critical_reorder_count: Mapped[int] = mapped_column(default=0)
     open_reservations_value: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+
+
+# =======================================================================
+# بارگیریِ خودرو (R129) -- معادلِ 136_field_sales_foundation.sql
+# =======================================================================
+class VehicleLoading(Base):
+    __tablename__ = "vehicle_loadings"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_loading_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    source_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    loading_date: Mapped[datetime.date] = mapped_column(Date)
+    status_code: Mapped[str] = mapped_column(String(15), default="DRAFT")
+    stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
+    driver_confirmed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    driver_confirmed_at: Mapped[datetime.datetime | None]
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class VehicleLoadingLine(Base):
+    __tablename__ = "vehicle_loading_lines"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_loading_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    vehicle_loading_id: Mapped[int] = mapped_column(ForeignKey("inv.vehicle_loadings.vehicle_loading_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    planned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    planned_quantity_base: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    available_quantity_at_planning: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+
+
+# طبقِ درخواستِ صریحِ کاربر (فازِ ۲ از پخشِ گرم): سه نقشِ مستقل که
+# می‌توانند به یک نفر یا سه نفرِ جدا برسند -- راننده/ویزیتور/موزع.
+class VehicleTeamAssignment(Base):
+    __tablename__ = "vehicle_team_assignments"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"), primary_key=True)
+    role_code: Mapped[str] = mapped_column(String(15), primary_key=True)  # DRIVER|VISITOR|DISTRIBUTOR
+    user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+
+
+# طبقِ درخواستِ صریحِ کاربر (فازِ ۲، بخشِ ۲ از پخشِ گرم): «تسویه آخرِ
+# روز باید بصورتِ انتخابی به یک نفر از ۳ نقش واگذار شود و به تاییدِ
+# انبار و حسابداری برسد» -- هم‌الگو با warehouse_approved_at/
+# weighing_approved_atِ پخشِ سرد (147_pre_sales_fulfillment...sql).
+class VehicleSettlementSettings(Base):
+    __tablename__ = "vehicle_settlement_settings"
+    __table_args__ = ({"schema": "inv"},)
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    settlement_role_code: Mapped[str] = mapped_column(String(15))  # DRIVER|VISITOR|DISTRIBUTOR
+
+
+class VehicleSettlement(Base):
+    __tablename__ = "vehicle_settlements"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_settlement_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    vehicle_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    return_destination_warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    settlement_date: Mapped[datetime.date] = mapped_column(Date)
+    status_code: Mapped[str] = mapped_column(String(20), default="SUBMITTED")
+    invoiced_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    declared_cash_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    submitted_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    submitted_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    warehouse_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    warehouse_approved_at: Mapped[datetime.datetime | None]
+    accounting_approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    accounting_approved_at: Mapped[datetime.datetime | None]
+    return_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class VehicleSettlementLine(Base):
+    __tablename__ = "vehicle_settlement_lines"
+    __table_args__ = ({"schema": "inv"},)
+
+    vehicle_settlement_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    vehicle_settlement_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.vehicle_settlements.vehicle_settlement_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    loaded_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    sold_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    returned_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+
+
+class LineTrackingEntry(Base):
+    """R227: بچ/سریال/انقضایِ واردشده رویِ ردیفِ سندِ انبار یا بازرگانی (پیش از ثبت)."""
+
+    __tablename__ = "line_tracking_entries"
+    __table_args__ = {"schema": "inv"}
+
+    entry_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    commercial_line_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("comm.commercial_document_lines.line_id", ondelete="CASCADE")
+    )
+    stock_line_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("inv.stock_document_lines.line_id", ondelete="CASCADE")
+    )
+    batch_no: Mapped[str | None] = mapped_column(String(50))
+    manufacture_date: Mapped[datetime.date | None] = mapped_column(Date)
+    expiry_date: Mapped[datetime.date | None] = mapped_column(Date)
+    serial_no: Mapped[str | None] = mapped_column(String(100))
+    quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    # R228: انتخابِ منبع در خروج (کالایِ امانیِ یک تامین‌کنندهٔ مشخص)
+    supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    is_consignment: Mapped[bool | None]
+    cycle_count_line_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("inv.cycle_count_lines.line_id", ondelete="CASCADE")
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class LotMovement(Base):
+    """R227: دفترِ حرکتِ ردیابی (بچ/سریال/تامین‌کنندهٔ امانی)، به واحدِ پایه و علامت‌دار."""
+
+    __tablename__ = "lot_movements"
+    __table_args__ = {"schema": "inv"}
+
+    movement_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("inv.batches.batch_id"))
+    serial_id: Mapped[int | None] = mapped_column(ForeignKey("inv.serial_numbers.serial_id"))
+    supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    is_consignment: Mapped[bool] = mapped_column(default=False)
+    stock_document_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
+    commercial_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

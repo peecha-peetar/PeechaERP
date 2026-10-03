@@ -117,6 +117,7 @@ class WorkflowDesignerScreen(FieldHelpMixin, QWidget):
                 self.form_combo,
                 "با انتخابِ خالی‌گذاشتنِ همه‌ی مراحل و ذخیره، گردشِ کارِ این فرم حذف می‌شود و به حالتِ بدونِ‌کارتابل برمی‌گردد.",
             ),
+            (self.active_checkbox, "اگر خاموش باشد، این گردشِ کار روی سندهایِ تازه اعمال نمی‌شود -- انگار اصلاً تعریف نشده."),
         ])
 
     def _company_id(self) -> int | None:

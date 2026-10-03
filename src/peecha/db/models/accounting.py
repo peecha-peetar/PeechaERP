@@ -210,6 +210,10 @@ class DetailDimensionType(Base):
     # رنگِ اختصاصیِ این گروه (مثلاً "#15A672") — طبقِ درخواستِ صریح، در فهرستِ
     # تفصیلی‌ها و کمبویِ تفصیلیِ سندِ حسابداری استفاده می‌شود.
     color: Mapped[str | None] = mapped_column(String(7))
+    # طبقِ درخواستِ صریح («برایِ گروه‌هایی که تیک می‌زنیم عکس آپلود
+    # کرد»): وقتی True، فرمِ حسابِ تفصیلیِ این گروه امکانِ آپلودِ عکس
+    # را نشان می‌دهد.
+    photo_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class DetailAccount(Base):
@@ -302,6 +306,8 @@ class PersonGroup(Base):
     # طبقِ درخواستِ صریح: «کدام گروه(هایِ) تفصیلی = پرسنل» باید از تنظیمات
     # کنترل شود، نه هاردکدِ PERSONNEL_GROUP_CODE در کد.
     is_personnel: Mapped[bool] = mapped_column(Boolean, default=False)
+    # هم‌الگو با DetailDimensionType.photo_enabled.
+    photo_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class AccountPersonGroup(Base):
@@ -326,6 +332,10 @@ class CustomerDetail(Base):
     address: Mapped[str | None] = mapped_column(String(400))
     credit_limit: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
     notes: Mapped[str | None] = mapped_column(String(500))
+    customer_type_code: Mapped[str | None] = mapped_column(String(20))
+    person_type_code: Mapped[str | None] = mapped_column(String(10))
+    customer_class: Mapped[str | None] = mapped_column(String(1))
+    geographic_region: Mapped[str | None] = mapped_column(String(100))
 
 
 class SupplierDetail(Base):

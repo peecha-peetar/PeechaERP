@@ -23,13 +23,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from peecha import numerals
 from peecha import session as app_session
 from peecha.services import commercial_aftersales as aftersales_service
 from peecha.services import commercial_documents as documents_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
 
 _WARRANTY_STATUS_LABELS = {"ACTIVE": "معتبر", "EXPIRED": "منقضی", "VOIDED": "باطل‌شده"}
 _TICKET_STATUS_LABELS = {"OPEN": "باز", "IN_PROGRESS": "درحالِ انجام", "RESOLVED": "حل‌شده", "CLOSED": "بسته"}
@@ -46,7 +47,7 @@ class _TabLayoutController(LayoutEditMixin):
     رویِ دیگری اثر نگذارد."""
 
 
-class CommercialAftersalesScreen(QWidget):
+class CommercialAftersalesScreen(FieldHelpMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._items: list[catalog_service.ItemRow] = []
@@ -68,6 +69,27 @@ class CommercialAftersalesScreen(QWidget):
         tabs.addTab(self._build_ticket_tab(), "تیکتِ خدماتی")
         tabs.addTab(self._build_rma_tab(), "RMA (برگشتِ کالا)")
         outer.addWidget(tabs, stretch=1)
+
+        self.set_field_help([
+            (self.warranty_invoice_combo, "فاکتورِ فروشِ ثبت‌شده‌ای که این کالا در آن فروخته شده."),
+            (self.warranty_line_combo, "ردیفِ مشخصِ همان فاکتور که گارانتی برایِ کالایِ آن صادر می‌شود."),
+            (self.warranty_duration_field, "مدتِ اعتبارِ گارانتی از تاریخِ فروش، به ماه."),
+            (self.warranty_terms_field, "شرایطِ متنیِ گارانتی -- اختیاری."),
+            (self.ticket_customer_combo, "مشتری‌ای که این تیکتِ خدماتی برایِ او باز می‌شود."),
+            (self.ticket_subject_field, "موضوعِ کوتاهِ تیکت."),
+            (self.ticket_item_combo, "کالایِ مرتبط با این تیکت -- اختیاری."),
+            (self.ticket_warranty_combo, "گارانتیِ مرتبط با این تیکت، اگر موجود باشد."),
+            (self.ticket_description_field, "شرحِ کاملِ مشکل/درخواستِ مشتری."),
+            (self.ticket_status_combo, "وضعیتِ تازه‌ای که برایِ تیکتِ انتخاب‌شده اعمال می‌شود."),
+            (self.ticket_invoice_combo, "فاکتورِ فروشی که هزینهٔ خدماتِ این تیکتِ هزینه‌بردار در آن تسویه می‌شود."),
+            (self.ticket_part_item_combo, "قطعه/کالایی که در رفعِ این تیکت مصرف شده."),
+            (self.ticket_part_qty_field, "مقدارِ مصرف‌شده از این قطعه."),
+            (self.rma_customer_combo, "مشتری‌ای که درخواستِ برگشتِ کالا (RMA) داده."),
+            (self.rma_document_combo, "فاکتورِ فروشِ اصلی‌ای که کالا در آن فروخته شده بود."),
+            (self.rma_reason_combo, "دلیلِ درخواستِ برگشتِ کالا."),
+            (self.rma_quantity_field, "مقدارِ درخواستی برایِ برگشت."),
+            (self.rma_warehouse_combo, "انباری که کالایِ برگشتی هنگامِ تاییدِ RMA به آن وارد می‌شود."),
+        ])
 
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
@@ -156,8 +178,8 @@ class CommercialAftersalesScreen(QWidget):
             item = items_by_id.get(w.item_id)
             status = aftersales_service.get_effective_warranty_status(w.warranty_id)
             self.warranty_table.setItem(row_index, 0, QTableWidgetItem(f"{item.code} — {item.name or ''}" if item else str(w.item_id)))
-            self.warranty_table.setItem(row_index, 1, QTableWidgetItem(str(w.start_date)))
-            self.warranty_table.setItem(row_index, 2, QTableWidgetItem(str(w.end_date)))
+            self.warranty_table.setItem(row_index, 1, QTableWidgetItem(numerals.format_jalali_date(w.start_date)))
+            self.warranty_table.setItem(row_index, 2, QTableWidgetItem(numerals.format_jalali_date(w.end_date)))
             self.warranty_table.setItem(row_index, 3, QTableWidgetItem(_WARRANTY_STATUS_LABELS.get(status, status)))
             void_button = QPushButton("🚫")
             void_button.setObjectName("iconButton")

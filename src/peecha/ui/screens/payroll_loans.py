@@ -65,8 +65,12 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         outer.addWidget(self._build_installments_panel(), stretch=3)
 
         self.set_field_help([
+            (self.employee_combo, "کارمندی که این وام/مساعده برایِ او ثبت می‌شود."),
+            (self.loan_type_combo, "وام معمولاً چندقسطی است؛ مساعده معمولاً یک‌جا یا تک‌قسطی کسر می‌شود."),
             (self.principal_field, "مبلغِ اصلِ وام/مساعده."),
             (self.fee_rate_field, "نرخِ کارمزد به‌صورتِ اعشاری (مثلاً ۰٫۰۵ برایِ ۵٪) — می‌تواند صفر باشد."),
+            (self.start_period_combo, "اولین دورهٔ حقوقی‌ای که قسطِ این وام از حقوقِ کارمند کسر می‌شود."),
+            (self.funding_source_field, "منبعِ تامینِ مالیِ این وام -- اختیاری، صرفاً اطلاعاتی."),
         ])
 
     def _build_form_panel(self) -> QWidget:
@@ -257,7 +261,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
                 loan.funding_source or "—",
                 numerals.to_persian_digits(str(loan.installments_count)),
                 numerals.to_persian_digits(str(loan.fee_rate)),
-                numerals.format_amount(loan.principal_amount),
+                numerals.format_company_amount(loan.principal_amount),
                 "وام" if loan.loan_type == "LOAN" else "مساعده",
             ]
             for col_index, value in enumerate(values):
@@ -292,7 +296,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
             period_label = numerals.to_persian_digits(f"{period.jalali_year}/{period.jalali_month:02d}") if period else "—"
             values = [
                 _INSTALLMENT_STATUS_LABELS.get(inst.status, inst.status),
-                numerals.format_amount(inst.amount),
+                numerals.format_company_amount(inst.amount),
                 period_label,
                 numerals.to_persian_digits(str(inst.installment_no)),
             ]
@@ -301,7 +305,7 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
                 item.setData(Qt.UserRole, inst.loan_installment_id)
                 self.installments_table.setItem(row_index, col_index, item)
         outstanding = loan_service.total_outstanding_balance(self._selected_loan_id)
-        self.outstanding_label.setText(f"ماندهٔ پرداخت‌نشده: {numerals.format_amount(outstanding)}")
+        self.outstanding_label.setText(f"ماندهٔ پرداخت‌نشده: {numerals.format_company_amount(outstanding)}")
 
     def _on_installment_clicked(self, row: int, _column: int) -> None:
         self._selected_installment_id = self.installments_table.item(row, 0).data(Qt.UserRole)

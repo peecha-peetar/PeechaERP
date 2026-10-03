@@ -8,6 +8,131 @@
 
 from __future__ import annotations
 
+# R233/R236: منویِ «گزارش‌ها ‹ گزارشاتِ خرید» -- کدها هم‌نامِ services/purchase_reports.REPORTS (تست تطابق را بررسی می‌کند)
+PURCHASE_REPORT_MENU = [
+    ("DASH", "داشبوردها", [
+        {"code": "PURCH_RPT_DASH_EXEC", "label": "داشبوردِ مدیریتیِ خرید", "screen": "purchase_dashboard_exec"},
+        {"code": "PURCH_RPT_DASH_EXCEPTIONS", "label": "داشبوردِ استثناهایِ خرید", "screen": "purchase_dashboard_exceptions"},
+    ]),
+    ("OPS", "عملیاتی", [
+        ("REG_INVOICE", "دفترِ فاکتورهایِ خرید"), ("REG_INVOICE_LINES", "ریزِ اقلامِ فاکتورهایِ خرید"),
+        ("REG_ORDER", "دفترِ سفارش‌هایِ خرید"), ("REG_PROFORMA", "دفترِ پیش‌فاکتورهایِ خرید"),
+        ("OPEN_PO", "سفارش‌هایِ خریدِ باز"), ("OVERDUE", "کالاهایِ در راه / معوق"),
+        ("PENDING_RECEIPTS", "رسیدهایِ در انتظارِ انبار"), ("GRIR", "رسیده ولی فاکتورنشده (GR/IR)"),
+        ("PENDING_INVOICES", "فاکتورهایِ خریدِ در انتظار"), ("CONSIGNMENTS", "امانی‌هایِ ورودیِ تسویه‌نشده"),
+        ("RETURNS", "برگشت به تامین‌کننده"), ("PARTIAL_RECEIPT", "سفارش‌هایِ با دریافتِ ناقص"),
+        ("NO_RECEIPT", "سفارش‌هایِ بدونِ رسید"), ("NO_INVOICE", "سفارش‌هایِ بدونِ فاکتور"),
+        ("RECEIPT_MISMATCH", "رسیدهایِ دارایِ مغایرت"), ("CANCELLED", "اسنادِ خریدِ لغوشده"),
+        ("CANCEL_ANALYSIS", "تحلیلِ علت‌هایِ لغو"), ("EMERGENCY", "خریدهایِ اضطراری"),
+    ]),
+    ("CONTROL", "کنترل و حسابرسی", [
+        ("THREE_WAY", "تطبیقِ سه‌طرفه (سفارش/رسید/فاکتور)"), ("NO_PO", "خریدِ بدونِ سفارش"),
+        ("INVOICE_NO_RECEIPT", "فاکتورِ بدونِ رسید"), ("INVOICE_OVER_PO", "فاکتورِ بیش از سفارش"),
+        ("RECEIPT_OVER_PO", "رسیدِ بیش از سفارش"), ("APPROVAL_PENDING", "اسنادِ منتظرِ تصویبِ مدیر"),
+        ("DOC_TRAIL", "ردِ اسنادِ خرید (Audit Trail)"), ("USER_ACTIVITY", "فعالیتِ کاربران در خرید"),
+        ("CHANGED_AFTER_APPROVAL", "تغییرِ قیمت/مقدار پس از تایید"), ("MODIFIED_DOCS", "اسنادِ اصلاح‌شده پس از تایید"),
+        ("APPROVAL_HISTORY", "تاریخچهٔ تایید و تصویب"), ("SOD_VIOLATIONS", "تخلفاتِ تفکیکِ وظایف"),
+    ]),
+    ("PROCESS", "فرآیندِ خرید", [
+        ("PO_FLOW", "گردشِ سفارشِ خرید"), ("CYCLE_TIME", "زمانِ چرخهٔ خرید"),
+    ]),
+    ("ANALYSIS", "تحلیلِ خرید", [
+        ("BY_ITEM", "خرید به تفکیکِ کالا"), ("BY_SUPPLIER", "خرید به تفکیکِ تامین‌کننده"),
+        ("BY_CATEGORY", "خرید به تفکیکِ گروهِ کالا"), ("BY_COST_CENTER", "خرید به تفکیکِ مرکزِ هزینه/پروژه"),
+        ("MONTHLY", "روندِ ماهانهٔ خرید"), ("ABC", "تحلیلِ ABC خرید (پارتو)"),
+        ("CONCENTRATION", "تمرکزِ تامین (ریسکِ تک‌منبعی)"), ("BY_DIMENSION", "خرید به تفکیکِ پروژه/انبار/برند/کاربر/..."),
+    ]),
+    ("PRICE", "قیمت و هزینه", [
+        ("PRICE_HISTORY", "تاریخچهٔ قیمتِ خرید"), ("PRICE_COMPARE", "مقایسهٔ قیمتِ تامین‌کنندگان"),
+        ("PPV", "انحرافِ قیمتِ خرید (PPV)"), ("CORRECTIONS", "اصلاحیه‌هایِ فاکتور و مغایرتِ بها"),
+        ("LANDED_COST", "هزینه‌هایِ جانبیِ خرید (Landed Cost)"), ("SAVINGS", "تخفیف‌ها و ریبیتِ خرید"),
+        ("PRICE_VS_REFERENCE", "خرید بالاتر/پایین‌تر از قیمتِ مرجع"), ("PRICE_MOVERS", "بیشترین افزایش/کاهشِ قیمت"),
+        ("LANDED_BY_TYPE", "هزینه‌هایِ جانبی به تفکیکِ نوع"), ("ACTUAL_COST", "بهایِ واقعیِ تامین"),
+    ]),
+    ("VENDOR", "ارزیابیِ تامین‌کننده", [
+        ("SCORECARD", "کارنامهٔ تامین‌کننده"), ("OTD", "تحویلِ به‌موقع (OTD)"),
+        ("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان"), ("QUALITY", "کیفیت / نرخِ برگشت"),
+        ("LEAD_TIME", "زمانِ تحویل (Lead Time)"), ("PRICE_STABILITY", "ثباتِ قیمتِ تامین‌کننده"),
+        ("LATE_ORDERS", "سفارش‌هایِ دیرکرد"), ("INACTIVE_SUPPLIERS", "تامین‌کنندگانِ غیرفعال"),
+        ("LINE_DELIVERY", "تحویلِ ردیفیِ سفارش‌ها"),
+    ]),
+    ("FINANCE", "مالی و بدهی", [
+        ("BALANCES", "ماندهٔ حسابِ تامین‌کنندگان"), ("AGING", "سنی‌کردنِ بدهی (AP Aging)"),
+        ("FORECAST", "پیش‌بینیِ پرداخت‌ها"), ("STATEMENT", "صورت‌حسابِ تامین‌کننده"),
+        ("PREPAYMENTS", "پیش‌پرداخت‌ها و سفارش‌هایِ در جریان"), ("UNPAID", "فاکتورهایِ پرداخت‌نشده (معوق/سررسیدنشده)"),
+        ("PAYMENTS", "پرداخت‌هایِ خرید"), ("COMMITMENTS", "تعهداتِ خرید و پرداخت"),
+    ]),
+    ("INVENTORY", "انبار و تدارکات", [
+        ("STOCK_POLICY", "وضعیتِ موجودی نسبت به سیاستِ سفارش"), ("SUGGESTED", "پیشنهادِ خرید"),
+        ("DEMAND_NO_PO", "تقاضایِ فروشِ بدونِ پوششِ خرید"), ("REORDER_ANALYSIS", "تحلیلِ نقطهٔ سفارش و پوششِ موجودی"),
+        ("SLOW_DEAD", "کالاهایِ راکد و کم‌گردش"),
+    ]),
+    ("MASTER", "اطلاعاتِ پایه", [
+        ("SUPPLIERS", "فهرستِ تامین‌کنندگان"), ("ITEMS", "کالاهایِ قابلِ‌خرید و واحدها"),
+        ("PRICE_LISTS", "فهرستِ قیمتِ تامین‌کنندگان"), ("REBATES", "قراردادهایِ ریبیت"),
+        ("WAREHOUSES", "انبارها و انباردارِ مسئول"), ("SUPPLIER_TERMS", "شرایطِ پرداخت و تحویلِ تامین‌کنندگان"),
+        ("CONTRACTS", "قراردادهایِ خرید"), ("DISCOUNT_RULES", "قواعدِ تخفیف"), ("RETURN_REASONS", "علت‌هایِ برگشت"),
+        ("APPROVAL_RULES", "قواعدِ تایید و گردشِ کار"), ("PURCHASE_TYPES", "انواعِ خرید"),
+        ("CANCEL_REASONS", "علت‌هایِ لغو"), ("REORDER_POLICIES", "سیاست‌هایِ سفارشِ کالا"),
+    ]),
+]
+
+
+# R236: منویِ «گزارش‌ها ‹ گزارشاتِ فروش» -- (کد، برچسب) = services/purchase_reports.SALES_REPORTS؛
+# dict = صفحه‌هایِ گزارشِ فروشِ قبلی
+SALES_REPORT_MENU = [
+    ("OPS", "عملیاتی", [
+        ("REG_INVOICE", "دفترِ فاکتورهایِ فروش"), ("REG_INVOICE_LINES", "ریزِ اقلامِ فاکتورهایِ فروش"),
+        ("REG_ORDER", "دفترِ سفارش‌هایِ فروش"), ("REG_PROFORMA", "دفترِ پیش‌فاکتورهایِ فروش"),
+        ("OPEN_ORDERS", "سفارش‌هایِ فروشِ باز"), ("OVERDUE", "سفارش‌هایِ معوق در تحویل"),
+        ("PENDING_ISSUES", "حواله‌هایِ در انتظارِ انبار"), ("DELIVERED_NOT_INVOICED", "تحویل‌شده ولی فاکتورنشده"),
+        ("PENDING_INVOICES", "فاکتورهایِ فروشِ در انتظار"), ("CONSIGNMENTS", "امانی‌هایِ خروجیِ تسویه‌نشده"),
+        ("RETURNS", "برگشت از فروش"),
+    ]),
+    ("ANALYSIS", "تحلیلِ فروش", [
+        ("BY_ITEM", "فروش به تفکیکِ کالا"), ("BY_CUSTOMER", "فروش به تفکیکِ مشتری"),
+        ("BY_CATEGORY", "فروش به تفکیکِ گروهِ کالا"), ("BY_COST_CENTER", "فروش به تفکیکِ مرکزِ هزینه/پروژه"),
+        ("BY_REP", "فروش به تفکیکِ فروشنده/ویزیتور"), ("MONTHLY", "روندِ ماهانهٔ فروش"), ("ABC", "تحلیلِ ABC فروش (پارتو)"),
+        {"code": "REPORTS_SALES_BY_ITEM", "label": "گزارشِ فروش (خلاصهٔ کالا)", "screen": "report_sales"},
+        {"code": "REPORTS_SALES_BY_CHANNEL", "label": "گزارشِ فروش بر اساسِ کانال", "screen": "report_sales_by_channel"},
+        {"code": "REPORTS_SALES_FORECAST", "label": "پیش‌بینیِ فروش", "screen": "report_sales_forecast"},
+    ]),
+    ("PROFIT", "سود، قیمت و تخفیف", [
+        ("GP_ITEM", "سودِ ناخالص به تفکیکِ کالا"), ("GP_CUSTOMER", "سودِ ناخالص به تفکیکِ مشتری"),
+        {"code": "REPORTS_CUSTOMER_PROFIT", "label": "سودِ واقعیِ مشتریان", "screen": "report_customer_profit"},
+        ("PRICE_HISTORY", "تاریخچهٔ قیمتِ فروش"), ("PRICE_COMPARE", "مقایسهٔ قیمتِ فروش به مشتریان"),
+        ("DISCOUNTS", "تخفیف‌هایِ فروش"), ("CORRECTIONS", "اصلاحیه‌هایِ فاکتورِ فروش"),
+    ]),
+    ("DELIVERY", "عملکردِ تحویل", [
+        ("OTD", "تحویلِ به‌موقع به مشتری"), ("FILL_RATE", "دقتِ مقدارِ تحویل به مشتری"),
+        ("LEAD_TIME", "زمانِ تحویلِ سفارش"), ("QUALITY", "نرخِ برگشت از فروش"),
+    ]),
+    ("FINANCE", "مالی و مطالبات", [
+        ("BALANCES", "ماندهٔ حسابِ مشتریان"), ("AGING", "سنی‌کردنِ مطالبات (AR Aging)"), ("FORECAST", "پیش‌بینیِ وصول"),
+        ("STATEMENT", "صورت‌حسابِ مشتری"), ("PREPAYMENTS", "پیش‌دریافت‌هایِ مشتریان"),
+    ]),
+    ("MASTER", "اطلاعاتِ پایه", [
+        ("CUSTOMERS", "فهرستِ مشتریان"), ("ITEMS", "کالاهایِ قابلِ‌فروش و واحدها"),
+        ("PRICE_LISTS", "فهرست‌هایِ قیمتِ فروش"), ("WAREHOUSES", "انبارها و انباردارِ مسئول"),
+    ]),
+]
+
+
+def _report_menu(prefix: str, screen_prefix: str, menu: list) -> list[dict]:
+    return [
+        {
+            "code": f"{prefix}_GRP_{group_code}",
+            "label": group_label,
+            "children": [
+                entry if isinstance(entry, dict)
+                else {"code": f"{prefix}_{entry[0]}", "label": entry[1], "screen": f"{screen_prefix}{entry[0].lower()}"}
+                for entry in entries
+            ],
+        }
+        for group_code, group_label, entries in menu
+    ]
+
+
 NAV_ITEMS = [
     {"code": "dashboard", "label": "داشبورد", "screen": "dashboard"},
     # طبقِ درخواستِ صریح («سیستمِ کارتابل قابلِ‌گسترش برایِ همه‌یِ ماژول‌ها»):
@@ -42,6 +167,18 @@ NAV_ITEMS = [
             {"code": "TREASURY_RECEIPT", "label": "سندِ دریافت", "screen": "treasury_voucher_receipt"},
             {"code": "TREASURY_PAYMENT", "label": "سندِ پرداخت", "screen": "treasury_voucher_payment"},
             {"code": "TREASURY_LIST", "label": "اسنادِ خزانه‌داری", "screen": "treasury_vouchers_list"},
+            # طبقِ درخواستِ صریح («هر دریافت و پرداخت رفرنسِ فاکتور را
+            # داشته باشد و مدیریتِ تسویه‌یِ فاکتورها را ایجاد کن»): تخصیصِ
+            # (بخشی از) یک سندِ دریافت/پرداختِ ثبت‌شده به یک یا چند فاکتورِ
+            # بازِ فروش/خرید.
+            # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
+            # هم باشه»): یک آیتمِ مشترک قبلاً هردو را با هم نشان می‌داد.
+            {"code": "TREASURY_SETTLEMENT_SALES", "label": "تسویه‌یِ فاکتورهایِ فروش", "screen": "commercial_invoice_settlement_sales"},
+            {"code": "TREASURY_SETTLEMENT_PURCHASE", "label": "تسویه‌یِ فاکتورهایِ خرید", "screen": "commercial_invoice_settlement_purchase"},
+            # طبقِ درخواستِ صریح («روشِ دریافت/پرداختِ اقساطی»): دیدِ کلیِ
+            # همه‌یِ اقساطِ برنامه‌ریزی‌شده -- خودِ دریافت/پرداخت از فرمِ
+            # بالا (دکمه‌یِ 🔗) انجام می‌شود.
+            {"code": "TREASURY_INSTALLMENTS", "label": "مدیریتِ اقساط", "screen": "installments_list"},
             # طبقِ ساختارِ واقعیِ تنخواه‌گردان: هر تنخواه‌دار (تفصیلیِ سطحِ
             # آخرِ گروهِ «تنخواه») چند تنخواهِ باز با شماره‌یِ خودکارِ
             # مستقل می‌تواند داشته باشد.
@@ -72,24 +209,78 @@ NAV_ITEMS = [
             {"code": "INV_RECEIPT", "label": "رسید", "screen": "inventory_document_receipt"},
             {"code": "INV_ISSUE", "label": "حواله", "screen": "inventory_document_issue"},
             {"code": "INV_TRANSFER", "label": "انتقال", "screen": "inventory_document_transfer"},
-            {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in"},
-            {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out"},
+            # طبقِ تشخیصِ صریح («سندِ برگشت از فروش/به تامین‌کننده چه فرقی
+            # با نسخه‌یِ انبار دارد؟»): این دو کد صرفاً برایِ حلِ کدیِ
+            # مسیرِ «مشاهده/ویرایشِ» یک سندِ RETURN_IN/RETURN_OUت که خودِ
+            # سندِ تجاریِ SALES_RETURN/PURCHASE_RETURN بعدِ ثبتِ‌نهایی
+            # به‌صورتِ خودکار می‌سازد (نگاه کن: inventory_documents_list.py،
+            # commercial_documents.py::_STOCK_DOCUMENT_TYPE_BY_COMMERCIAL)
+            # زنده نگه داشته می‌شوند -- دیگر در ساید‌بار نمایش داده
+            # نمی‌شوند (hidden_from_sidebar) چون ساختنِ دستیِ این سند از
+            # این مسیر، مسیرِ صحیح و کاملِ تجاری (قیمت/مالیات/تسویه) را
+            # دور می‌زند و ریسکِ ثبتِ دوباره/نادرستِ حسابداری دارد.
+            {"code": "INV_RETURN_IN", "label": "برگشت از فروش", "screen": "inventory_document_return_in", "hidden_from_sidebar": True},
+            {"code": "INV_RETURN_OUT", "label": "برگشت به تامین‌کننده", "screen": "inventory_document_return_out", "hidden_from_sidebar": True},
             {"code": "INV_ADJUSTMENT", "label": "اصلاحِ موجودی", "screen": "inventory_document_adjustment"},
+            # سیستمِ واحد (R225): شمارشِ موجودی با واحدِ دلخواه (کارتن/بسته/عدد)؛
+            # اختلاف به واحدِ پایه با سندِ اصلاحِ موجودی ثبت می‌شود.
+            {"code": "INV_STOCK_COUNT", "label": "انبارگردانی", "screen": "stock_count"},
+            {"code": "INV_LOT_TRACE", "label": "ردیابیِ بچ/سریال/امانی", "screen": "lot_trace"},
+            {"code": "INV_RESIDUAL_ADJUST", "label": "تسعیر/اصلاحِ ماندهٔ ریالیِ موجودی", "screen": "inventory_residual"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): دیدِ کلیِ
+            # مانده‌یِ همه‌یِ اسنادِ امانیِ بازِ خروجی/ورودی + بازگردانیِ
+            # کالایِ فروخته‌نشده/مصرف‌نشده (تسویه‌یِ واقعی از طریقِ همان
+            # دکمه‌یِ «تبدیل به فاکتور» در خودِ فرمِ سند انجام می‌شود).
+            {"code": "INV_CONSIGNMENT_TRACKING", "label": "پیگیریِ امانی", "screen": "commercial_consignment_tracking"},
         ],
     },
     {
         "code": "SALES",
         "label": "فروش و بازاریابی",
         "children": [
+            # طبقِ درخواستِ صریح («دستیارِ فروش داخلِ ERP»): فهرستِ رتبه‌بندی‌
+            # شده‌یِ مهم‌ترین اقداماتِ امروز (ریسکِ ریزش/فروشِ مکمل/رشدِ مشتری).
+            {"code": "SALES_ASSISTANT", "label": "دستیارِ فروش", "screen": "sales_assistant"},
             {"code": "SALES_ORDER", "label": "سفارشِ فروش", "screen": "commercial_document_sales_order"},
             {"code": "SALES_PROFORMA", "label": "پیش‌فاکتورِ فروش", "screen": "commercial_document_sales_proforma"},
             {"code": "SALES_INVOICE", "label": "فاکتورِ فروش", "screen": "commercial_document_sales_invoice"},
             {"code": "SALES_RETURN", "label": "برگشت از فروش", "screen": "commercial_document_sales_return"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ
+            # خروجی از نظرِ طرفِ‌حساب هم‌الگویِ فروش است.
+            {"code": "SALES_CONSIGNMENT_OUT", "label": "امانیِ خروجی", "screen": "commercial_document_consignment_out"},
+            # R232: همان فرمِ تاییدِ انبار (رسید/حواله) -- حوالهٔ سفارش‌هایِ فروش برایِ انباردار
+            {"code": "SALES_WAREHOUSE_ISSUE", "label": "تاییدِ حوالهٔ انبار", "screen": "purchase_goods_receipt"},
             {"code": "SALES_DOCUMENTS_LIST", "label": "اسنادِ فروش", "screen": "commercial_documents_list_sales"},
             {"code": "SALES_PRICING", "label": "فهرستِ قیمت و تخفیف", "screen": "commercial_pricing"},
-            {"code": "SALES_POS_SESSIONS", "label": "ترمینال‌ها و جلسه‌هایِ صندوق", "screen": "commercial_pos_sessions"},
             {"code": "SALES_POS_SALE", "label": "فروشِ حضوری (POS)", "screen": "commercial_pos_sale"},
-            {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی و Omnichannel", "screen": "commercial_ecommerce"},
+            {"code": "SALES_POS_APPROVAL", "label": "تاییدِ سرپرست -- فروشِ حضوری", "screen": "commercial_pos_approval"},
+            # طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده، فقط فروشِ
+            # اینترنتی باید آنجا باشد»): سفارش‌ها + تقویمِ محتوا/پستِ
+            # خودکار + سینکِ CMS + مرکزِ رسانه + نگهبانِ اتصال، همگی زیرِ
+            # همین یک آیتم، در یک فرمِ تب‌دار (commercial_online_sales_hub)
+            # -- نه پنج آیتمِ جداگانه در منویِ اصلی. اتصالات/نگاشت/
+            # مسیریابیِ کلی همچنان در تبِ «تنظیماتِ فروشِ اینترنتی» زیرِ
+            # «تنظیمات سیستم ‹ مدیریتِ بازرگانی» می‌ماند.
+            {"code": "SALES_ECOMMERCE", "label": "فروشِ اینترنتی", "screen": "commercial_online_sales_hub"},
+            # طبقِ درخواستِ صریحِ بعدیِ کاربر («قسمتِ پخشِ سرد جدا باید
+            # باشه، فرمِ جدا براش درست کن»): روالِ کاملِ پخشِ سرد (سفارش ->
+            # تاییدِ انبار/توزین -> تبدیل به فاکتور -> تیمِ پخش) دیگر تبی
+            # زیرِ «پخشِ کالا» نیست -- آیتمِ ناوبریِ مستقلِ خودش را دارد.
+            {"code": "SALES_COLD_DISTRIBUTION", "label": "پخشِ سرد (سفارش‌گیری)", "screen": "cold_distribution"},
+            # طبقِ درخواستِ صریحِ کاربر («وقتی منویِ پخشِ گرم اجرا می‌شود
+            # فقط تب‌هایِ مربوط به پخشِ گرم باز شود و بقیهٔ تب‌ها در
+            # منویِ مربوط به خودشون ایجاد بشه»): دیگر «ابزارهایِ میدانیِ
+            # مشترک» زیرِ همین آیتم نیست -- فقط چهار تبِ واقعاً مخصوصِ
+            # خودرو/فروشِ خودرویی.
+            {"code": "SALES_DISTRIBUTION", "label": "پخشِ گرم (فروشِ خودرویی)", "screen": "commercial_distribution_hub"},
+            # فروشِ تلفنی: طبقِ همان تفکیک، مخصوصِ سفارش‌گیریِ پخشِ سرد
+            # است، نه پخشِ گرم -- آیتمِ ناوبریِ مستقلِ خودش را گرفت.
+            {"code": "SALES_TELESALES", "label": "فروشِ تلفنی", "screen": "commercial_telesales"},
+            # برنامهٔ مراجعه/ویزیت‌ها/پروموشن‌ها/داشبوردِ سرپرست/بازاریابی:
+            # هیچ‌کدام مخصوصِ پخشِ گرم یا سرد نیستند (هر دو کانال از
+            # همین‌ها استفاده می‌کنند) -- طبقِ درخواستِ صریحِ کاربر، فعلاً
+            # همه زیرِ یک آیتمِ تب‌دارِ تازه.
+            {"code": "SALES_PLANNING", "label": "برنامه‌ریزیِ فروش", "screen": "sales_planning_hub"},
             {"code": "SALES_AFTERSALES", "label": "خدماتِ پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
@@ -101,8 +292,22 @@ NAV_ITEMS = [
             {"code": "PURCH_PROFORMA", "label": "پیش‌فاکتورِ خرید", "screen": "commercial_document_purchase_proforma"},
             {"code": "PURCH_INVOICE", "label": "فاکتورِ خرید", "screen": "commercial_document_purchase_invoice"},
             {"code": "PURCH_RETURN", "label": "برگشت به تامین‌کننده", "screen": "commercial_document_purchase_return"},
+            # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): امانیِ
+            # ورودی از نظرِ طرفِ‌حساب هم‌الگویِ خرید است.
+            {"code": "PURCH_CONSIGNMENT_IN", "label": "امانیِ ورودی", "screen": "commercial_document_consignment_in"},
             {"code": "PURCH_DOCUMENTS_LIST", "label": "اسنادِ خرید", "screen": "commercial_documents_list_purchase"},
-            {"code": "PURCH_EXTRAS", "label": "بهایِ تمام‌شدهٔ وارداتی و ریبیت", "screen": "commercial_purchasing_extras"},
+            {"code": "PURCH_EXTRAS", "label": "ریبیتِ تامین‌کننده", "screen": "commercial_purchasing_extras"},
+            # طبقِ درخواستِ صریح («زیرماژولِ مدیریتِ سفارشات»): پیگیریِ
+            # پرداخت‌هایِ سفارشاتِ در راه (ترخیص/بهایِ اولیهٔ کالا و...) با
+            # همان فرمِ دریافت/پرداختِ خزانه‌داری.
+            {"code": "PURCH_ORDER_TRACKING", "label": "مدیریتِ سفارشات", "screen": "order_tracking"},
+            # طبقِ گزارشِ صریحِ کاربر («بعدِ تاییدِ سفارش، انباردار کجا
+            # رسیدِ کالا را تایید کند، بدونِ دیدنِ قیمت؟»): آیتمِ مستقل،
+            # نه تبی درونِ فرمِ سفارشِ خرید -- تا بشود فقط همین دسترسی
+            # (بدونِ دسترسی به فرمِ کاملِ دارایِ قیمت) به انباردار داد.
+            {"code": "PURCH_GOODS_RECEIPT", "label": "تاییدِ رسیدِ کالا", "screen": "purchase_goods_receipt"},
+            # R240: انواعِ خرید، علت‌هایِ لغو، سیاستِ سفارشِ کالا
+            {"code": "PURCH_MASTERS", "label": "اطلاعاتِ پایهٔ تدارکات", "screen": "procurement_masters"},
         ],
     },
     {
@@ -194,6 +399,16 @@ NAV_ITEMS = [
                     },
                 ],
             },
+            {
+                "code": "REPORTS_INV",
+                "label": "انبار",
+                "children": [
+                    {"code": "REPORTS_ITEM_LEDGER", "label": "کاردکسِ کالا", "screen": "report_item_ledger"},
+                ],
+            },
+            # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
+            {"code": "REPORTS_PURCHASE", "label": "گزارشاتِ خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
+            {"code": "REPORTS_SALES", "label": "گزارشاتِ فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},
         ],
     },
     # این آیتم قبلاً یک گروهِ ۹-فرزندی بود؛ حالا همه‌ی آن فرم‌ها به‌صورتِ
@@ -203,6 +418,10 @@ NAV_ITEMS = [
     # بک‌آپ/بازیابی — چون کاری/عملیاتی است (فایل‌دیالوگ، نه فرمِ ذخیره‌ای)،
     # به‌جایِ تبی درونِ system_settings، آیتمِ مستقلِ خودش را دارد.
     {"code": "SYSTEM_BACKUP", "label": "پشتیبان‌گیری و بازیابی", "screen": "system_backup"},
+    # ابزارِ فنی/محدود (نه ویژگیِ عمومی) — طبقِ درخواستِ صریح: خام‌کردنِ
+    # اطلاعاتِ شرکتِ جاری برایِ تست/راه‌اندازیِ اولیه، بدونِ تاثیر بر
+    # ساختارِ برنامه یا سایرِ شرکت‌ها.
+    {"code": "SYSTEM_DATA_RESET", "label": "خام‌کردنِ اطلاعات (فنی)", "screen": "system_data_reset"},
 ]
 
 # طبقِ درخواستِ صریح («ریبونِ بالا مرتبط با ماژولی باشد که در ساید‌بار
@@ -230,6 +449,9 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("TREASURY_RECEIPT", "💵"),
         ("TREASURY_PAYMENT", "💸"),
         ("TREASURY_LIST", "📚"),
+        ("TREASURY_SETTLEMENT_SALES", "🔗"),
+        ("TREASURY_SETTLEMENT_PURCHASE", "🔁"),
+        ("TREASURY_INSTALLMENTS", "📆"),
         ("TREASURY_PETTY_CASH", "👛"),
         ("TREASURY_PETTY_CASH_LIST", "🧾"),
         ("TREASURY_CHECKS_RECEIVED", "📥"),
@@ -252,22 +474,28 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("INV_RETURN_IN", "↩️"),
         ("INV_RETURN_OUT", "↪️"),
         ("INV_ADJUSTMENT", "🛠️"),
+        ("INV_CONSIGNMENT_TRACKING", "🤝"),
     ],
     "SALES": [
+        ("SALES_ASSISTANT", "🧠"),
         ("SALES_ORDER", "📝"),
         ("SALES_INVOICE", "🧾"),
         ("SALES_RETURN", "↩️"),
+        ("SALES_CONSIGNMENT_OUT", "🤝"),
         ("SALES_DOCUMENTS_LIST", "📚"),
         ("SALES_PRICING", "🏷️"),
-        ("SALES_POS_SESSIONS", "🖥️"),
         ("SALES_POS_SALE", "🛒"),
+        ("SALES_POS_APPROVAL", "🧾"),
         ("SALES_ECOMMERCE", "🌐"),
+        ("SALES_COLD_DISTRIBUTION", "🧊"),
+        ("SALES_DISTRIBUTION", "🚚"),
         ("SALES_AFTERSALES", "🎧"),
     ],
     "PURCH": [
         ("PURCH_ORDER", "📝"),
         ("PURCH_INVOICE", "🧾"),
         ("PURCH_RETURN", "↪️"),
+        ("PURCH_CONSIGNMENT_IN", "🤝"),
         ("PURCH_DOCUMENTS_LIST", "📚"),
         ("PURCH_EXTRAS", "🚢"),
     ],
@@ -299,6 +527,10 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("REPORTS_PERIOD_COMPARISON", "🔀"),
         ("REPORTS_ANOMALIES", "⚠️"),
         ("REPORTS_COST_CENTER", "🏗️"),
+        ("REPORTS_ITEM_LEDGER", "📋"),
+        ("REPORTS_SALES_BY_ITEM", "🛍️"),
+        ("REPORTS_CUSTOMER_PROFIT", "💹"),
+        ("REPORTS_SALES_FORECAST", "🔮"),
     ],
     "SETTINGS": [],
 }
@@ -323,9 +555,22 @@ SETTINGS_SUB_FORMS = [
     ("payroll_settings", "تنظیماتِ حقوق و دستمزد"),
 ]
 
+# طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده»): مرکزِ رسانه دیگر
+# آیتمِ مستقلِ NAV_ITEMS نیست -- یکی از تب‌هایِ commercial_online_sales_hub
+# است، ولی همچنان فرم‌کدِ خودش (media_center) را برایِ ذخیره‌یِ فایل/
+# تعیینِ دسترسی نگه می‌دارد -- پس این‌جا (زیرِ ماژولِ SALES، نه SETTINGS)
+# به‌صورتِ دستی به فهرستِ فرم‌ها اضافه می‌شود.
+_EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
+    ("media_center", "SALES", "مرکزِ رسانه"),
+]
+
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط
 # «داشبورد» با این قاعده مچ نمی‌شود (کدِ خودش با کدِ ماژولش یکی نیست).
-_TOP_LEVEL_MODULE_CODE_OVERRIDE = {"dashboard": "DASH", "SYSTEM_BACKUP": "SETTINGS"}
+_TOP_LEVEL_MODULE_CODE_OVERRIDE = {
+    "dashboard": "DASH",
+    "SYSTEM_BACKUP": "SETTINGS",
+    "SYSTEM_DATA_RESET": "SETTINGS",
+}
 
 
 def flatten_nav_items() -> list[dict]:
@@ -343,6 +588,27 @@ def flatten_nav_items() -> list[dict]:
 
     _walk(NAV_ITEMS)
     return flat
+
+
+def flatten_nav_items_with_breadcrumb() -> list[tuple[str, str, str]]:
+    """مشابهِ flatten_nav_items، ولی به‌ازایِ هر آیتمِ برگ، مسیرِ کاملِ
+    منو (breadcrumb) را هم برمی‌گرداند -- طبقِ نیازِ جستجویِ سراسری
+    (کادرِ ازپیش‌موجودِ ولی تا امروز بی‌اتصالِ «جستجو در سیستم» در
+    نوارِ بالایی): وقتی چند آیتمِ برگ در زیرمنوهایِ مختلف برچسبِ یکسان
+    دارند (مثلاً «نگاشتِ حساب‌ها» هم زیرِ انبار هم زیرِ بازرگانی است)،
+    این مسیر برایِ نمایشِ متمایز و ناوبریِ درست لازم است."""
+    result: list[tuple[str, str, str]] = []
+
+    def _walk(items: list[dict], path: list[str]) -> None:
+        for item in items:
+            if item.get("children"):
+                _walk(item["children"], path + [item["label"]])
+            elif item.get("screen"):
+                breadcrumb = " › ".join(path + [item["label"]]) if path else item["label"]
+                result.append((item["code"], item["label"], breadcrumb))
+
+    _walk(NAV_ITEMS, [])
+    return result
 
 
 def build_form_catalog() -> list[tuple[str, str, str]]:
@@ -368,4 +634,8 @@ def build_form_catalog() -> list[tuple[str, str, str]]:
             catalog.append((item["screen"], module_code, item["label"]))
     for code, label in SETTINGS_SUB_FORMS:
         catalog.append((code, "SETTINGS", label))
-    return catalog
+    for code, module_code, label in _EMBEDDED_HUB_SUB_FORMS:
+        catalog.append((code, module_code, label))
+    # R232: یک صفحه می‌تواند از دو منو باز شود (مثلاً تاییدِ انبار در خرید و فروش) -- یک فرمِ دسترسی
+    seen: set[str] = set()
+    return [row for row in catalog if not (row[0] in seen or seen.add(row[0]))]

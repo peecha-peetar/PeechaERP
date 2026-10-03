@@ -29,6 +29,7 @@ from peecha.db.models.accounting import (
     AccountPersonGroup,
     ChartOfAccount,
     DetailAccount,
+    DetailDimensionType,
     FiscalPeriod,
     FiscalYear,
     JournalEntry,
@@ -186,6 +187,20 @@ def _resolve_lines(
         for account_id, dimension_type_id in rows:
             required_by_account.setdefault(account_id, set()).add(dimension_type_id)
 
+    # طبقِ درخواستِ صریح: پیامِ خطا باید نامِ خودِ بُعدِ گم‌شده را هم بگوید
+    # (نه فقط کدِ حساب) — قبلاً پیام برایِ همه‌یِ بُعدهایِ الزامیِ ازقلم‌افتاده
+    # یکسان بود و کاربر نمی‌فهمید دقیقاً کدام گروهِ تفصیلی را فراموش کرده.
+    dimension_labels_by_id: dict[int, str] = {}
+    all_required_dimension_type_ids = {d for dims in required_by_account.values() for d in dims}
+    if all_required_dimension_type_ids:
+        dim_rows = session.execute(
+            select(DetailDimensionType.dimension_type_id, DetailDimensionType.code).where(
+                DetailDimensionType.dimension_type_id.in_(all_required_dimension_type_ids)
+            )
+        ).all()
+        for dimension_type_id, code in dim_rows:
+            dimension_labels_by_id[dimension_type_id] = dimensions_service.SPECIALIZED_DIMENSION_LABELS.get(code, code)
+
     # طبقِ درخواستِ صریح: یک معین می‌تواند به گروهِ تفصیلیِ خاصی (مشتری/
     # تامین‌کننده/پرسنل) محدود شود — اگر محدود بود، «بدون تفصیلی» دیگر کافی
     # نیست و انتخابِ الزامی از همان گروه لازم است.
@@ -207,19 +222,16 @@ def _resolve_lines(
         ).all()
     )
 
-    # تفصیلیِ اشخاص برخلافِ نوع‌بُعدهای اختیاری (مرکزِ هزینه/پروژه) برایِ
-    # هر ردیف الزامی است — اگر کاربر شخصی انتخاب نکرده باشد، همین‌جا
-    # مقدارِ پیش‌فرضِ «بدون تفصیلی» جایگزین می‌شود تا ترازِ سطحِ تفصیلی
-    # همیشه کامل بماند.
+    # طبقِ گزارشِ صریحِ کاربر («سندِ حسابداریِ غیراستاندارد»، تکرارشده):
+    # قبلاً برایِ *هر* ردیفی که حسابش به گروهِ تفصیلیِ خاصی محدود نبود،
+    # این‌جا خودکار یک تفصیلیِ «بدون تفصیلی» رویِ بُعدِ اشخاص اضافه
+    # می‌شد — یعنی مثلاً ردیفِ موجودیِ کالا (که فقط باید تفصیلیِ کالا
+    # داشته باشد) همزمان یک تفصیلیِ دومِ بی‌معنی هم می‌گرفت و در دفترِ
+    # روزنامه/سندِ حسابداری/ترازِ آزمایشی گردشِ اضافه نشان می‌داد. حالا
+    # وقتی حساب به گروهِ خاصی محدود نیست، اصلاً چیزی رویِ بُعدِ اشخاص
+    # اضافه نمی‌شود — ردیف فقط همان تفصیلی/تفصیلی‌هایی را دارد که خودِ
+    # سند واقعاً به آن نیاز داشته.
     person_dimension_type_id = dimensions_service.ensure_person_dimension(session, company.company_id)
-    no_detail_account = session.scalar(
-        select(DetailAccount).where(
-            DetailAccount.company_id == company.company_id,
-            DetailAccount.dimension_type_id == person_dimension_type_id,
-            DetailAccount.code == dimensions_service.NO_DETAIL_CODE,
-        )
-    )
-    no_detail_account_id = no_detail_account.detail_account_id
 
     all_provided_detail_ids = {v for ln in real_lines for v in ln.details.values()}
     detail_accounts_by_id: dict[int, DetailAccount] = {}
@@ -256,7 +268,12 @@ def _resolve_lines(
         required = required_by_account.get(ln.account_id, set())
         missing = required - set(ln.details.keys())
         if missing:
-            raise ValueError(f"برای حساب «{account.full_code}» انتخابِ گروه‌هایِ تفصیلیِ الزامی فراموش شده است.")
+            missing_labels = ", ".join(
+                sorted(dimension_labels_by_id.get(d, str(d)) for d in missing)
+            )
+            raise ValueError(
+                f"برای حساب «{account.full_code}» انتخابِ «{missing_labels}» الزامی است و فراموش شده است."
+            )
 
         required_person_groups = required_person_groups_by_account.get(ln.account_id)
         person_detail_account_id = ln.details.get(person_dimension_type_id)
@@ -270,8 +287,6 @@ def _resolve_lines(
                 raise ValueError(
                     f"برایِ حساب «{account.full_code}» انتخابِ یک تفصیلیِ اشخاص از گروهِ مجازِ همین حساب الزامی است."
                 )
-        elif person_dimension_type_id not in ln.details:
-            ln.details[person_dimension_type_id] = no_detail_account_id
 
         currency_id = ln.currency_id or company.base_currency_id
         if account.currency_id is not None and account.currency_id != currency_id:
@@ -902,8 +917,12 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
         if original is None or original.company_id != company_id:
             raise ValueError("سند نامعتبر است.")
         original_status = session.get(JournalEntryStatus, original.status_id)
-        if original_status is None or original_status.code != "PERMANENT":
-            raise ValueError("فقط سندهایِ دائم قابلِ برگشت‌زدن‌اند.")
+        # طبقِ نیازِ واقعیِ «اصلاحِ فاکتورِ ثبت‌شده»: سندِ حسابداریِ خودکارِ
+        # یک فاکتور معمولاً هنوز TEMPORARY است (شماره‌یِ دائم نگرفته)، نه
+        # PERMANENT -- برگشت‌زدنِ آن هم دقیقاً همان مکانیزم را لازم دارد،
+        # پس این محدودیت به TEMPORARY هم تعمیم داده شد.
+        if original_status is None or original_status.code not in ("TEMPORARY", "PERMANENT"):
+            raise ValueError("فقط سندهایِ موقت یا دائم قابلِ برگشت‌زدن‌اند.")
 
         company = session.get(Company, company_id)
         if company is None:
@@ -941,7 +960,8 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
         ) + 1
         next_permanent_no = _next_permanent_no(session, company_id, fiscal_year.fiscal_year_id)
 
-        original_no = original.permanent_no
+        original_no = original.permanent_no if original.permanent_no is not None else original.temporary_no
+        original_no_label = "دائمِ" if original.permanent_no is not None else "موقتِ"
         reversal = JournalEntry(
             company_id=company_id,
             fiscal_year_id=fiscal_year.fiscal_year_id,
@@ -950,7 +970,7 @@ def reverse_journal_entry(journal_entry_id: int, company_id: int, created_by_use
             document_date=document_date,
             entry_type_id=entry_type.entry_type_id,
             status_id=permanent_status.status_id,
-            description=f"سندِ برگشتیِ سندِ دائمِ شماره‌ی {original_no}",
+            description=f"سندِ برگشتیِ سندِ {original_no_label} شماره‌ی {original_no}",
             is_system_generated=True,
             reversed_entry_id=original.journal_entry_id,
             created_by_user_id=created_by_user_id,

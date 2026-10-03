@@ -14,11 +14,61 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.accounting import FiscalYear
-from peecha.db.models.inventory import DocumentReasonCode, Item, StockDocument, StockDocumentLine
+from peecha.db.models.inventory import (
+    CompanyCostingSettings,
+    CostingMethod,
+    DocumentReasonCode,
+    Item,
+    StockDocument,
+    StockDocumentLine,
+    StockLedger,
+)
+from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_engine as engine_service
+from peecha.services import journal_entries as je_service
 
-DOCUMENT_TYPE_CODES = ("RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT")
+DOCUMENT_TYPE_CODES = (
+    "RECEIPT", "ISSUE", "TRANSFER", "RETURN_IN", "RETURN_OUT", "ADJUSTMENT",
+    # طبقِ درخواستِ صریح («فاکتورِ امانی، هردو جهت»): این دو نوع فقط از
+    # services/commercial_documents.py (سندِ CONSIGNMENT_IN) و
+    # services/commercial_consignment.py (بازگشتِ امانیِ ورودی) ساخته
+    # می‌شوند -- هیچ‌جایِ UIِ عمومیِ اسنادِ انبار مستقیماً این دو را
+    # نمی‌سازد، پس نیازی به فرمِ اختصاصی ندارند.
+    "CONSIGNMENT_IN", "CONSIGN_RETURN",
+)
 _REASON_REQUIRED_TYPES = ("ADJUSTMENT", "RETURN_IN", "RETURN_OUT")
+
+# طبقِ گزارشِ صریح («در فرمِ رسیدِ اصلاح جایی برایِ ورودِ مرکزِ هزینه
+# نیست، مثلِ فرم‌هایِ فروش/خرید نیست»): نگاشتِ نوعِ سند -> کلیدهایِ
+# نقش‌محورِ حسابی که ممکن است در inventory_engine.post_stock_document
+# برایِ آن نوعِ سند به‌کار روند — برایِ تشخیصِ اینکه آیا مرکزِ هزینه/پروژه
+# رویِ سرِسند *الزامی* است یا نه (هم‌الگو با
+# commercial_documents._HEADER_DIMENSION_ROLE_KEYS).
+_HEADER_DIMENSION_ROLE_KEYS: dict[str, tuple[str, ...]] = {
+    "RECEIPT": ("INVENTORY_ASSET", "INVENTORY_COST_VARIANCE", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_GAIN"),
+    "ISSUE": ("INVENTORY_ASSET", "COGS", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_LOSS"),
+    "RETURN_IN": ("INVENTORY_ASSET", "CUSTOMER_RECEIVABLE", "INVENTORY_ADJUSTMENT_GAIN"),
+    "RETURN_OUT": ("INVENTORY_ASSET", "SUPPLIER_PAYABLE", "INVENTORY_ADJUSTMENT_LOSS"),
+    "ADJUSTMENT": ("INVENTORY_ASSET", "INVENTORY_ADJUSTMENT_GAIN", "INVENTORY_ADJUSTMENT_LOSS"),
+    "TRANSFER": (),
+}
+
+
+def get_header_dimension_requirement(company_id: int, document_type_code: str, dimension_code: str) -> tuple[bool, list]:
+    """(آیا الزامی است, فهرستِ حساب‌هایِ تفصیلیِ سطحِ آخرِ آن گروه) —
+    هم‌الگو با commercial_documents.get_header_dimension_requirement."""
+    dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimension_code)
+    options = dimensions_service.list_leaf_detail_accounts(company_id, dim_type_id)
+    is_required = False
+    for key in _HEADER_DIMENSION_ROLE_KEYS.get(document_type_code, ()):
+        account_id = engine_service.get_account_mapping(company_id, key)
+        if account_id is None:
+            continue
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        if any(r.dimension_type_id == dim_type_id for r in required):
+            is_required = True
+            break
+    return is_required, options
 
 
 # ---------------------------------------------------------------------
@@ -86,6 +136,9 @@ class StockDocumentRow:
     journal_entry_id: int | None
     created_by_user_id: int
     posted_at: datetime.datetime | None
+    # R226: اگر این سند از یک سندِ بازرگانی (مثلاً فاکتورِ خرید) صادر شده،
+    # برچسبِ آن -- چنین سندی مستقیماً حذف/ویرایش/برگشت نمی‌شود.
+    origin_label: str | None = None
 
 
 @dataclass
@@ -101,18 +154,54 @@ class StockDocumentLineRow:
     batch_id: int | None
     unit_cost: decimal.Decimal | None
     line_total_cost: decimal.Decimal | None
+    tax_amount: decimal.Decimal
     quality_status_code: str
     reason_code_id: int | None
     source_line_id: int | None
     description: str | None
+    conversion_factor: decimal.Decimal = decimal.Decimal(1)
 
 
-def _to_document_row(d: StockDocument) -> StockDocumentRow:
+_COMMERCIAL_ORIGIN_TITLES = {
+    "SALES_INVOICE": "فاکتورِ فروش", "PURCHASE_INVOICE": "فاکتورِ خرید", "SALES_RETURN": "برگشت از فروش",
+    "PURCHASE_RETURN": "برگشت به تامین‌کننده", "CONSIGNMENT_OUT": "امانیِ خروجی", "CONSIGNMENT_IN": "امانیِ ورودی",
+}
+
+
+def _commercial_origins(session, stock_document_ids: list[int]) -> dict[int, str]:
+    from peecha.db.models.commercial import CommercialDocument
+
+    if not stock_document_ids:
+        return {}
+    rows = session.execute(
+        select(CommercialDocument.stock_document_id, CommercialDocument.document_type_code, CommercialDocument.document_no)
+        .where(CommercialDocument.stock_document_id.in_(stock_document_ids))
+    ).all()
+    return {
+        sid: f"{_COMMERCIAL_ORIGIN_TITLES.get(code, code)} {no}" for sid, code, no in rows
+    }
+
+
+def commercial_origin_label(stock_document_id: int) -> str | None:
+    with new_session() as session:
+        return _commercial_origins(session, [stock_document_id]).get(stock_document_id)
+
+
+def _assert_not_commercial_origin(session, stock_document_id: int) -> None:
+    origin = _commercial_origins(session, [stock_document_id]).get(stock_document_id)
+    if origin is not None:
+        raise ValueError(
+            f"این سندِ انبار از «{origin}» صادر شده و مستقیماً حذف/ویرایش نمی‌شود -- "
+            "تغییر فقط از خودِ همان سند (اصلاح/برگشت) انجام می‌شود."
+        )
+
+
+def _to_document_row(d: StockDocument, origin_label: str | None = None) -> StockDocumentRow:
     return StockDocumentRow(
         d.stock_document_id, d.document_type_code, d.document_no, d.document_date, d.status_code,
         d.source_warehouse_id, d.destination_warehouse_id, d.counterparty_detail_account_id,
         d.cost_center_detail_account_id, d.project_detail_account_id, d.reference_no, d.description,
-        d.journal_entry_id, d.created_by_user_id, d.posted_at,
+        d.journal_entry_id, d.created_by_user_id, d.posted_at, origin_label,
     )
 
 
@@ -126,7 +215,8 @@ def list_stock_documents(
         if status_code is not None:
             query = query.where(StockDocument.status_code == status_code)
         rows = session.scalars(query.order_by(StockDocument.document_date.desc(), StockDocument.stock_document_id.desc())).all()
-        return [_to_document_row(r) for r in rows]
+        origins = _commercial_origins(session, [r.stock_document_id for r in rows])
+        return [_to_document_row(r, origins.get(r.stock_document_id)) for r in rows]
 
 
 def get_stock_document(stock_document_id: int, company_id: int) -> tuple[StockDocumentRow, list[StockDocumentLineRow]]:
@@ -140,12 +230,12 @@ def get_stock_document(stock_document_id: int, company_id: int) -> tuple[StockDo
         line_rows = [
             StockDocumentLineRow(
                 ln.line_id, ln.line_no, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base, ln.bin_location_id,
-                ln.destination_bin_location_id, ln.batch_id, ln.unit_cost, ln.line_total_cost, ln.quality_status_code,
-                ln.reason_code_id, ln.source_line_id, ln.description,
+                ln.destination_bin_location_id, ln.batch_id, ln.unit_cost, ln.line_total_cost, ln.tax_amount,
+                ln.quality_status_code, ln.reason_code_id, ln.source_line_id, ln.description, ln.conversion_factor,
             )
             for ln in lines
         ]
-        return _to_document_row(doc), line_rows
+        return _to_document_row(doc, _commercial_origins(session, [stock_document_id]).get(stock_document_id)), line_rows
 
 
 WAREHOUSE_REQUIREMENTS = {
@@ -154,6 +244,8 @@ WAREHOUSE_REQUIREMENTS = {
     "ISSUE": {"destination": False, "source": True},
     "RETURN_OUT": {"destination": False, "source": True},
     "TRANSFER": {"destination": True, "source": True},
+    "CONSIGNMENT_IN": {"destination": True, "source": False},
+    "CONSIGN_RETURN": {"destination": False, "source": True},
 }
 
 
@@ -272,6 +364,7 @@ def delete_stock_document(stock_document_id: int, company_id: int) -> None:
             raise ValueError("سند نامعتبر است.")
         if doc.posted_at is not None:
             raise ValueError("سندِ ثبتِ‌نهایی‌شده را نمی‌توان مستقیماً حذف کرد — باید ابتدا اثرش خنثی شود.")
+        _assert_not_commercial_origin(session, stock_document_id)
         session.query(StockDocumentLine).filter(StockDocumentLine.stock_document_id == stock_document_id).delete()
         session.delete(doc)
         session.commit()
@@ -314,6 +407,7 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             raise ValueError("سند نامعتبر است.")
         if original.status_code != "POSTED":
             raise ValueError("این عملیات فقط برایِ سندِ ثبتِ‌نهایی‌شده معنا دارد.")
+        _assert_not_commercial_origin(session, stock_document_id)
         original_no = original.document_no
         original_type = original.document_type_code
         header = DocumentHeaderFields(
@@ -329,7 +423,7 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
             (
                 ln.line_no, ln.item_id, ln.uom_id, ln.quantity, ln.quantity_base,
                 ln.destination_bin_location_id if original_type == "TRANSFER" else ln.bin_location_id,
-                ln.bin_location_id if original_type == "TRANSFER" else None,
+                ln.bin_location_id if original_type == "TRANSFER" else None, ln.conversion_factor,
             )
             for ln in session.scalars(
                 select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id).order_by(StockDocumentLine.line_no)
@@ -343,12 +437,15 @@ def reverse_and_cancel_stock_document(stock_document_id: int, company_id: int, u
 
     reversal_doc_id = create_stock_document(company_id, user_id, reversal_type, datetime.date.today(), header)
     try:
-        for line_no, item_id, uom_id, quantity, quantity_base, bin_location_id, destination_bin_location_id in lines_snapshot:
+        for line_no, item_id, uom_id, quantity, quantity_base, bin_location_id, destination_bin_location_id, factor in lines_snapshot:
             add_line(reversal_doc_id, company_id, LineFields(
-                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base,
+                item_id=item_id, uom_id=uom_id, quantity=quantity, quantity_base=quantity_base, conversion_factor=factor,
                 bin_location_id=bin_location_id, destination_bin_location_id=destination_bin_location_id,
                 reason_code_id=reason_code_id, description=f"برگشتِ ردیفِ #{line_no} از سندِ #{original_no}",
             ))
+        from peecha.services import lot_tracking
+
+        lot_tracking.mirror_tracking_for_reversal(stock_document_id, reversal_doc_id)
         confirm_stock_document(reversal_doc_id, company_id)
         post_stock_document(reversal_doc_id, company_id, user_id)
     except ValueError:
@@ -379,14 +476,43 @@ class LineFields:
     destination_bin_location_id: int | None = None
     batch_id: int | None = None
     unit_cost: decimal.Decimal | None = None
+    # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید هیچ‌وقت به سندِ
+    # حسابداری نمی‌رسد»): وقتی این ردیف از یک سندِ بازرگانی (فاکتورِ
+    # خرید) می‌آید، مالياتِ همان ردیف جداگانه این‌جا هم منتقل می‌شود —
+    # نه بخشی از unit_cost (که ارزشِ خودِ موجودی است).
+    tax_amount: decimal.Decimal | None = None
+    # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ اقلامِ
+    # فاکتور»): سهمِ همین ردیف از هزینه‌هایِ جانبیِ فاکتورِ خرید -- مثلِ
+    # tax_amount، جداگانه از unit_cost منتقل می‌شود (خودِ engine_service
+    # آن را به بهایِ لجر اضافه می‌کند، بدونِ اینکه وارد بستانکاریِ
+    # پرداختنیِ تامین‌کنندهٔ کالا شود).
+    landed_cost_amount: decimal.Decimal | None = None
     reason_code_id: int | None = None
     source_line_id: int | None = None
     description: str | None = None
+    # سیستمِ واحد (R225): ضریبِ تبدیلِ لحظهٔ ثبت؛ None یعنی از تعریفِ کالا محاسبه شود.
+    conversion_factor: decimal.Decimal | None = None
+
+
+def _resolve_unit_quantities(fields: LineFields) -> tuple[decimal.Decimal, decimal.Decimal]:
+    """(quantity_base، ضریب). اگر فراخوان (مثلاً سندِ بازرگانیِ ثبت‌شده) خودش
+    مقدارِ پایه را داده، همان حفظ می‌شود؛ اگر برایِ واحدِ غیرِپایه مقدارِ پایه
+    = مقدار فرستاده شده (یعنی تبدیل نکرده)، با ضریبِ تعریف‌شدهٔ کالا تبدیل می‌شود."""
+    from peecha.services import unit_conversion as uc
+
+    if fields.conversion_factor is not None:
+        return fields.quantity * fields.conversion_factor, fields.conversion_factor
+    factor = uc.get_factor(fields.item_id, fields.uom_id)
+    if factor != 1 and fields.quantity_base == fields.quantity:
+        uc.validate_quantity(fields.item_id, fields.uom_id, fields.quantity, check_min_max=False)
+        return fields.quantity * factor, factor
+    return fields.quantity_base, (fields.quantity_base / fields.quantity) if fields.quantity else decimal.Decimal(1)
 
 
 def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int:
     if fields.quantity <= 0 or fields.quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    quantity_base, conversion_factor = _resolve_unit_quantities(fields)
     with new_session() as session:
         doc = _get_draft_document(session, stock_document_id, company_id)
         next_no = (
@@ -400,9 +526,12 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
                 raise ValueError("مکانِ مبدا و مقصد نمی‌توانند یکسان باشند.")
         line = StockDocumentLine(
             stock_document_id=stock_document_id, line_no=next_no, item_id=fields.item_id, uom_id=fields.uom_id,
-            quantity=fields.quantity, quantity_base=fields.quantity_base, bin_location_id=fields.bin_location_id,
+            quantity=fields.quantity, quantity_base=quantity_base, conversion_factor=conversion_factor,
+            bin_location_id=fields.bin_location_id,
             destination_bin_location_id=fields.destination_bin_location_id, batch_id=fields.batch_id,
-            unit_cost=fields.unit_cost, reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
+            unit_cost=fields.unit_cost, tax_amount=(fields.tax_amount or decimal.Decimal(0)),
+            landed_cost_amount=(fields.landed_cost_amount or decimal.Decimal(0)),
+            reason_code_id=fields.reason_code_id, source_line_id=fields.source_line_id,
             description=(fields.description or None),
         )
         if doc.document_type_code == "RECEIPT":
@@ -417,17 +546,21 @@ def add_line(stock_document_id: int, company_id: int, fields: LineFields) -> int
 def update_line(line_id: int, stock_document_id: int, company_id: int, fields: LineFields) -> None:
     if fields.quantity <= 0 or fields.quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    quantity_base, conversion_factor = _resolve_unit_quantities(fields)
     with new_session() as session:
         _get_draft_document(session, stock_document_id, company_id)
         line = session.get(StockDocumentLine, line_id)
         if line is None or line.stock_document_id != stock_document_id:
             raise ValueError("ردیف نامعتبر است.")
         line.item_id, line.uom_id = fields.item_id, fields.uom_id
-        line.quantity, line.quantity_base = fields.quantity, fields.quantity_base
+        line.quantity, line.quantity_base = fields.quantity, quantity_base
+        line.conversion_factor = conversion_factor
         line.bin_location_id = fields.bin_location_id
         line.destination_bin_location_id = fields.destination_bin_location_id
         line.batch_id = fields.batch_id
         line.unit_cost = fields.unit_cost
+        line.tax_amount = fields.tax_amount or decimal.Decimal(0)
+        line.landed_cost_amount = fields.landed_cost_amount or decimal.Decimal(0)
         line.reason_code_id = fields.reason_code_id
         line.source_line_id = fields.source_line_id
         line.description = fields.description or None
@@ -513,5 +646,28 @@ def cancel_stock_document(stock_document_id: int, company_id: int) -> None:
         session.commit()
 
 
-def post_stock_document(stock_document_id: int, company_id: int, posted_by_user_id: int) -> engine_service.PostResult:
-    return engine_service.post_stock_document(stock_document_id, company_id, posted_by_user_id)
+def post_stock_document(
+    stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
+    extra_je_lines: list[je_service.LineInput] | None = None,
+) -> engine_service.PostResult:
+    from peecha.services import lot_tracking
+
+    # R227: بچ/سریال/انقضا -- اعتبارسنجی پیش از موتورِ انبار، ثبتِ ردیابی پس از آن.
+    lot_tracking.validate_before_post(stock_document_id, company_id)
+    result = engine_service.post_stock_document(
+        stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines,
+    )
+    lot_tracking.apply_after_post(stock_document_id, company_id)
+    return result
+
+
+def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_user_id: int) -> engine_service.PostResult:
+    """طبقِ درخواستِ صریح («اصلاحِ فاکتورِ ثبت‌شده باید عیناً برگشت بخورد،
+    نه اینکه سندِ اصلی با تاریخِ عقب‌دار دست‌کاری شود») -- پیاده‌سازیِ کاملش
+    در inventory_engine.py است (تنها نقطه‌یِ نوشتنِ stock_ledger/
+    stock_balance)؛ این‌جا فقط delegate می‌کند، هم‌الگو با post_stock_document."""
+    from peecha.services import lot_tracking
+
+    result = engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)
+    lot_tracking.reverse_document_movements(stock_document_id, company_id)
+    return result

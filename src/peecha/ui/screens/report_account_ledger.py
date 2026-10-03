@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtWidgets import QComboBox, QLabel, QPushButton
+from PySide6.QtWidgets import QComboBox, QLabel, QMessageBox, QPushButton
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
@@ -70,6 +70,10 @@ class AccountLedgerScreen(ReportScreenBase):
         self.enable_code_range_filter()
         self.enable_cost_center_filter()
         self.enable_document_no_filter()
+        # طبقِ اینکه این صفحه دو شکلِ ستونیِ متفاوت دارد (خلاصه/گردشِ حساب)،
+        # form_code در _build_jasper_rows_and_params بسته به self._mode
+        # همان‌جا عوض می‌شود؛ این‌جا فقط مقدارِ اولیه لازم است.
+        self.enable_jasper_report("ACCOUNT_LEDGER_SUMMARY")
 
         self.add_field_help([
             (
@@ -343,3 +347,60 @@ class AccountLedgerScreen(ReportScreenBase):
         if net >= 0:
             return f"{self._fmt(net)} (بد)"
         return f"{self._fmt(-net)} (بس)"
+
+    def _build_jasper_rows_and_params(self) -> tuple[list[dict], dict] | None:
+        if not self._rows:
+            QMessageBox.information(self, "گزارش", "داده‌ای برایِ چاپ وجود ندارد.")
+            return None
+
+        company = session.current_company
+        date_range_label = (
+            f"از {numerals.format_jalali_date(self.date_from.date())} "
+            f"تا {numerals.format_jalali_date(self.date_to.date())}"
+        )
+        generated_at = numerals.format_jalali_datetime(datetime.datetime.now())
+
+        if self._mode == "ledger":
+            # طبقِ اشتراکِ منطقِ Jasper بینِ دو حالتِ این صفحه: فرمِ
+            # مقصد این‌جا بسته به حالتِ فعلی تعیین می‌شود، چون این دو
+            # حالت شکلِ ستونیِ کاملاً متفاوتی دارند.
+            self.jasper_form_code = "ACCOUNT_LEDGER_DETAIL"
+            field_names = [
+                "date_display", "document_no_display", "description",
+                "debit_display", "credit_display", "balance_display",
+                "fc_amount_display", "fc_currency_display",
+            ]
+            print_rows = [dict(zip(field_names, row)) for row in self._rows]
+            footer = self._footer or [""] * 8
+            params = {
+                "companyName": company.display_name if company else "",
+                "accountLabel": self._ledger_target[2] if self._ledger_target else "",
+                "dateRangeLabel": date_range_label,
+                "generatedAt": generated_at,
+                "totalDebitDisplay": footer[3],
+                "totalCreditDisplay": footer[4],
+            }
+            return print_rows, params
+
+        self.jasper_form_code = "ACCOUNT_LEDGER_SUMMARY"
+        field_names = [
+            "account_code", "account_name",
+            "opening_debit_display", "opening_credit_display",
+            "period_debit_display", "period_credit_display",
+            "closing_debit_display", "closing_credit_display",
+        ]
+        print_rows = [dict(zip(field_names, row)) for row in self._rows]
+        footer = self._footer or [""] * 8
+        params = {
+            "companyName": company.display_name if company else "",
+            "levelLabel": self.level_combo.currentText(),
+            "dateRangeLabel": date_range_label,
+            "generatedAt": generated_at,
+            "totalOpeningDebitDisplay": footer[2],
+            "totalOpeningCreditDisplay": footer[3],
+            "totalPeriodDebitDisplay": footer[4],
+            "totalPeriodCreditDisplay": footer[5],
+            "totalClosingDebitDisplay": footer[6],
+            "totalClosingCreditDisplay": footer[7],
+        }
+        return print_rows, params

@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QCompleter,
     QDialog,
     QDialogButtonBox,
     QFrame,
@@ -53,12 +54,14 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.nav_catalog import DEFAULT_QUICK_ACCESS_BY_MODULE, NAV_ITEMS
 from peecha.nav_catalog import flatten_nav_items as _flatten_nav_items
+from peecha.nav_catalog import flatten_nav_items_with_breadcrumb
 from peecha.services import companies as companies_service
 from peecha.services import fiscal_years as fiscal_years_service
 from peecha.services import languages as languages_service
 from peecha.services import translations as translations_service
 from peecha.ui import theme
 from peecha.ui.widgets import HoverButton, field_help_is_enabled, set_field_help_enabled
+from peecha.version import APP_VERSION
 
 _NAV_ICONS = {
     "dashboard": "🏠",
@@ -260,6 +263,13 @@ class _SidebarGroup(QWidget):
 
     def _populate_body(self, item: dict, layout: QVBoxLayout, on_leaf_click, depth: int) -> None:
         for child in item.get("children", []):
+            # طبقِ تصمیمِ صریح («برگشت از فروش/به تامین‌کننده از منویِ
+            # انبار حذف شود، چون سندِ تجاریِ SALES_RETURN/PURCHASE_RETURN
+            # خودش این را می‌سازد»): این کدها همچنان در nav_catalog.py
+            # ثبت می‌مانند (تا open_screen برایِ مشاهده/ویرایشِ سندِ
+            # ازقبل‌ساخته‌شده هنوز کار کند)، فقط از رندرِ ساید‌بار حذف می‌شوند.
+            if child.get("hidden_from_sidebar"):
+                continue
             if child.get("children"):
                 sub_title = QLabel(child["label"])
                 sub_title.setObjectName("sidebarSubGroupTitle")
@@ -385,7 +395,9 @@ class _MdiTitleBar(QWidget):
         layout.addWidget(self.maximize_btn)
 
         self.minimize_btn = self._make_control_button("—", theme.HOVER)
-        self.minimize_btn.clicked.connect(sub_window.showMinimized)
+        # R227: کوچک‌کردن = کنار رفتنِ فرم (مثلِ بستن؛ وضعیتِ فرم حفظ می‌شود)،
+        # نه نوارِ کوچکِ نیمه‌کاره در گوشهٔ ناحیه.
+        self.minimize_btn.clicked.connect(sub_window.close)
         layout.addWidget(self.minimize_btn)
 
         layout.addStretch(1)
@@ -405,10 +417,12 @@ class _MdiTitleBar(QWidget):
         return button
 
     def _toggle_maximize(self) -> None:
-        if self._sub_window.isMaximized():
-            self._sub_window.showNormal()
-        else:
-            self._sub_window.showMaximized()
+        # R227: به‌جایِ maximizeِ بومیِ Qt (که به فرم‌هایِ دیگر سرایت می‌کرد و
+        # با بازگشت اندازهٔ نیمه‌کاره می‌داد)، «حالتِ تمرکز» -- پنهان‌شدنِ
+        # ساید‌بار/ریبون برایِ همهٔ فرم‌ها؛ فرم‌ها همیشه کلِ ناحیه را پر می‌کنند.
+        main_window = getattr(self._sub_window, "_main_window", None)
+        if main_window is not None:
+            main_window.toggle_focus_mode()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.LeftButton:
@@ -421,6 +435,7 @@ class _MdiTitleBar(QWidget):
             current = event.globalPosition().toPoint()
             delta = current - self._drag_offset
             self._sub_window.move(self._sub_window.pos() + delta)
+            self._sub_window._fill_area = False
             self._drag_offset = current
         super().mouseMoveEvent(event)
 
@@ -470,6 +485,9 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         # خاموش می‌کند، نه امضایِ maximized_changed را (که ساید‌بار/ریبون
         # همچنان باید بر اساسش به‌روز شوند).
         self._restoring = False
+        # R226: فرم به‌صورتِ پیش‌فرض کلِ ناحیهٔ اصلی را پر می‌کند (بدونِ پنهان‌کردنِ
+        # ساید‌بار)؛ با جابه‌جایی/تغییرِ اندازهٔ دستی خاموش می‌شود.
+        self._fill_area = False
 
     def _save_geometry(self) -> None:
         if self._screen_name is None or self._restoring:
@@ -548,6 +566,7 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if self._resize_dir is not None:
+            self._fill_area = False
             self._save_geometry()
         self._resize_dir = None
         super().mouseReleaseEvent(event)
@@ -578,13 +597,40 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
         self._save_geometry()
         event.ignore()
         self.hide()
+        # R230: بستنِ فرم حالتِ تمرکز را تمام می‌کند -- وگرنه با بازماندنِ فرمِ
+        # دیگری (مثلاً داشبورد) منو/ریبون پنهان می‌ماند.
+        main_window = getattr(self, "_main_window", None)
+        if main_window is not None:
+            main_window._focus_mode = False
         self.maximized_changed.emit(False)
+        # R226: زیرپنجرهٔ فقط-مخفی داخلِ QMdiArea می‌ماند و Qt هنگامِ maximize/
+        # بازگشتِ فرمِ دیگر آن را دوباره (کاشی‌ای) نشان می‌داد؛ پس واقعاً از
+        # ناحیه جدا می‌شود (نمونهٔ صفحه زنده می‌ماند و open_screen دوباره اضافه‌اش می‌کند).
+        area = self.mdiArea()
+        if area is not None:
+            QTimer.singleShot(0, lambda: self.mdiArea() is area and not self.isVisible() and area.removeSubWindow(self))
 
     def changeEvent(self, event) -> None:  # noqa: N802
         if event.type() == QEvent.WindowStateChange:
             self.maximized_changed.emit(self.isMaximized())
-            self._save_geometry()
+            # R227: حالتِ maximize/minimizeِ بومی (مثلاً سرایتِ QMdiArea) به
+            # همان چیدمانِ یکسانِ «پرکردنِ ناحیه» برگردانده می‌شود.
+            if (self.isMaximized() or self.isMinimized()) and not getattr(self, "_normalizing", False):
+                QTimer.singleShot(0, self._normalize_to_fill)
         super().changeEvent(event)
+
+    def _normalize_to_fill(self) -> None:
+        area = self.mdiArea()
+        if area is None or not self.isVisible():
+            return
+        self._normalizing = True
+        try:
+            if self.isMaximized() or self.isMinimized():
+                self.showNormal()
+            self._fill_area = True
+            self.setGeometry(area.viewport().rect())
+        finally:
+            self._normalizing = False
 
 
 class _MdiFormWrapper(QFrame):
@@ -635,6 +681,9 @@ class _ClampingMdiArea(QMdiArea):
         area = self.viewport().rect()
         for sub_window in self.subWindowList():
             if sub_window.isMaximized() or sub_window.isMinimized():
+                continue
+            if getattr(sub_window, "_fill_area", False):
+                sub_window.setGeometry(area)
                 continue
             geo = sub_window.geometry()
             clamped = _clamp_rect_to_area(geo, area)
@@ -689,6 +738,33 @@ class MainWindow(QMainWindow):
         self._geometry_poll_timer.start()
         self.resize(1440, 900)
         self._clamp_geometry_to_available_screen()
+
+        # طبقِ درخواستِ صریح («زمان‌بندیِ خودکارِ سینکِ فروشِ اینترنتی»):
+        # هر یک دقیقه بررسی می‌کند آیا اتصالی با auto_sync_enabled به
+        # زمانِ سینکِ بعدی‌اش رسیده -- بدونِ نیاز به کلیکِ دستیِ کاربر.
+        # شکستِ یک اتصال (مثلاً قطعیِ اینترنت) نباید کلِ برنامه را متاثر
+        # کند؛ پس کاملاً بی‌صدا (بدونِ دیالوگِ خطا) اجرا می‌شود.
+        self._ecommerce_auto_sync_timer = QTimer(self)
+        self._ecommerce_auto_sync_timer.setInterval(60_000)
+        self._ecommerce_auto_sync_timer.timeout.connect(self._tick_ecommerce_auto_sync)
+        self._ecommerce_auto_sync_timer.start()
+
+        # طبقِ درخواستِ صریح («تقویمِ محتوایی» + «پستِ خودکار در تلگرام/بله»):
+        # همان الگویِ تیکِ دوره‌ایِ سینکِ فروشِ اینترنتی -- پست‌هایِ سررسیده
+        # بدونِ نیاز به کلیکِ دستیِ کاربر ارسال می‌شوند.
+        self._content_calendar_timer = QTimer(self)
+        self._content_calendar_timer.setInterval(60_000)
+        self._content_calendar_timer.timeout.connect(self._tick_content_calendar)
+        self._content_calendar_timer.start()
+
+        # طبقِ درخواستِ صریح («یک تب برایِ بازاریابی و ارسالِ پیامکِ
+        # زمان‌بندی‌شده»، R139): همان الگویِ تیکِ دوره‌ایِ بالا -- کمپینِ
+        # سررسیده بدونِ نیاز به کلیکِ دستیِ کاربر ارسال می‌شود (فقط تا
+        # وقتی برنامه باز است).
+        self._sms_campaign_timer = QTimer(self)
+        self._sms_campaign_timer.setInterval(60_000)
+        self._sms_campaign_timer.timeout.connect(self._tick_sms_campaigns)
+        self._sms_campaign_timer.start()
 
         self._screens: dict[str, QWidget] = {}
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
@@ -788,6 +864,46 @@ class MainWindow(QMainWindow):
         if self._last_known_available_geometry is not None and available != self._last_known_available_geometry:
             self._clamp_geometry_to_available_screen()
         self._last_known_available_geometry = available
+
+    def _tick_ecommerce_auto_sync(self) -> None:
+        """پشتیبانِ تایمرِ سینکِ خودکارِ فروشِ اینترنتی (ر.ک. توضیحِ کاملِ
+        دلیلِ نیاز به این تایمر در __init__). کاملاً بی‌صدا اجرا می‌شود --
+        نه دیالوگِ خطا، نه اعلانی به کاربر -- چون این یک عملِ پس‌زمینه‌ایِ
+        دوره‌ای است، نه یک اکشنِ دستیِ کاربر."""
+        if session.current_company is None or session.current_user is None:
+            return
+        try:
+            from peecha.services import commercial_ecommerce as ecommerce_service
+
+            ecommerce_service.run_due_auto_syncs(
+                session.current_company.company_id, session.current_user.user_id, session.current_company.base_currency_id,
+            )
+        except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
+            pass
+
+    def _tick_content_calendar(self) -> None:
+        """پشتیبانِ تایمرِ تقویمِ محتوا -- کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
+        با _tick_ecommerce_auto_sync."""
+        if session.current_company is None:
+            return
+        try:
+            from peecha.services import commercial_social as social_service
+
+            social_service.run_due_posts(session.current_company.company_id)
+        except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
+            pass
+
+    def _tick_sms_campaigns(self) -> None:
+        """پشتیبانِ تایمرِ کمپینِ پیامک -- کاملاً بی‌صدا اجرا می‌شود، هم‌الگو
+        با _tick_ecommerce_auto_sync/_tick_content_calendar."""
+        if session.current_company is None:
+            return
+        try:
+            from peecha.services import sms_marketing as sms_marketing_service
+
+            sms_marketing_service.run_due_campaigns(session.current_company.company_id)
+        except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
+            pass
 
     def changeEvent(self, event) -> None:  # noqa: N802 — نامِ متدِ Qt
         # باگِ واقعیِ گزارش‌شده: رویِ بعضی پیکربندی‌هایِ ویندوز، maximize
@@ -960,6 +1076,13 @@ class MainWindow(QMainWindow):
         brand.setFont(brand_font)
         brand.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
         brand_row.addWidget(brand)
+
+        # طبقِ درخواستِ صریح («نسخه‌یِ برنامه در نوارِ بالایی نمایش داده
+        # بشه تا مطمئن بشیم آخرین نسخه در حالِ اجراست»)
+        self.version_label = QLabel(APP_VERSION)
+        self.version_label.setStyleSheet(f"color: {theme.TEXT_DISABLED}; font-size: 11px;")
+        self.version_label.setToolTip("نسخه‌یِ نصب‌شده‌یِ برنامه")
+        brand_row.addWidget(self.version_label)
         layout.addLayout(brand_row)
 
         divider0 = QFrame()
@@ -1010,6 +1133,7 @@ class MainWindow(QMainWindow):
         self.search_field.setPlaceholderText("⌕  جستجو در سیستم...")
         self.search_field.setFixedWidth(320)
         layout.addWidget(self.search_field)
+        self._setup_global_search()
 
         layout.addStretch(1)
 
@@ -1251,6 +1375,20 @@ class MainWindow(QMainWindow):
             title_bar.style().unpolish(title_bar)
             title_bar.style().polish(title_bar)
         self._update_chrome_visibility()
+        # طبقِ گزارشِ صریحِ کاربر («فرمِ اسناد خرید و فروش بعدِ هر تغییر
+        # رفرش نمی‌شود -- باید باز و بسته شود»): علتِ واقعی این بود که
+        # هم‌الگو با همان باگِ قبلاً کشف‌شده در _focus_subwindow (منویِ
+        # «پنجره‌های باز»)، فعال‌شدنِ یک زیرپنجره‌یِ *ازقبل‌بازِ* از طریقِ
+        # کلیکِ مستقیمِ خودِ MDI (نه ساید‌بار، نه آن منو) هرگز از این
+        # هندلر عبور نمی‌کرد -- یعنی مثلاً اگر کاربر لیستِ اسناد را بازِ
+        # نگه دارد، از فرمِ دیگری (مثلاً خزانه‌داری) یک فاکتور را تسویه
+        # کند، و بعد مستقیماً رویِ همان پنجره‌یِ لیستِ (هنوز رویِ صفحه
+        # قابلِ‌کلیک) کلیک کند، وضعیت/رقم‌هایِ آن هنوز کهنه می‌ماند.
+        if active_sub_window is not None:
+            screen_name = getattr(active_sub_window, "_screen_name", None)
+            screen = self._screens.get(screen_name) if screen_name else None
+            if screen is not None and hasattr(screen, "refresh"):
+                screen.refresh()
 
     def _update_chrome_visibility(self, *_args) -> None:
         """طبقِ گزارشِ صریح («فرم‌ها وقتی تمام‌صفحه می‌شن، فقط تویِ یک
@@ -1260,11 +1398,19 @@ class MainWindow(QMainWindow):
         عرض/ارتفاعِ زیرِ هدرِ اصلی را در اختیارِ فرمِ maximize‌شده بگذارد؛
         با خارج‌شدن از حالتِ maximize (یا بستنِ فرم)، هردو دوباره
         نمایش داده می‌شوند."""
-        any_maximized = any(
-            sw.isVisible() and sw.isMaximized() for sw in self._mdi_subwindows.values()
-        )
-        self._quick_access_scroll.setVisible(not any_maximized)
-        self._sidebar_scroll.setVisible(not any_maximized)
+        # R230: با بستنِ آخرین فرم، حالتِ تمرکز خودکار تمام می‌شود -- وگرنه
+        # منو/ریبون پنهان می‌ماند و راهی برایِ بازکردنِ فرمِ دیگر نبود.
+        if not any(sw.isVisible() for sw in self.mdi_area.subWindowList()):
+            self._focus_mode = False
+        focus = getattr(self, "_focus_mode", False)
+        self._quick_access_scroll.setVisible(not focus)
+        self._sidebar_scroll.setVisible(not focus)
+
+    def toggle_focus_mode(self) -> None:
+        """R227: دکمهٔ بزرگ‌کردنِ تیتربار -- پنهان/نمایانِ ساید‌بار و ریبون؛
+        فرم‌ها (با resizeEventِ ناحیه) خودکار کلِ فضایِ تازه را پر می‌کنند."""
+        self._focus_mode = not getattr(self, "_focus_mode", False)
+        self._update_chrome_visibility()
 
     def _populate_open_windows_menu(self) -> None:
         """طبقِ نگرانیِ صریح دربابِ انبوهِ فرم‌هایِ روی‌هم — فهرستِ همه‌ی
@@ -1361,12 +1507,25 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.inventory_documents_list import InventoryDocumentsListScreen
         from peecha.ui.screens.commercial_document import CommercialDocumentScreen
         from peecha.ui.screens.commercial_documents_list import CommercialDocumentsListScreen
+        from peecha.ui.screens.sales_assistant import SalesAssistantScreen
+        from peecha.ui.screens.commercial_online_sales_hub import CommercialOnlineSalesHubScreen
+        from peecha.ui.screens.cold_distribution import ColdDistributionScreen
+        from peecha.ui.screens.commercial_distribution_hub import CommercialDistributionHubScreen
+        from peecha.ui.screens.sales_planning_hub import SalesPlanningHubScreen
+        from peecha.ui.screens.telesales import TelesalesScreen
         from peecha.ui.screens.commercial_pricing import CommercialPricingScreen
-        from peecha.ui.screens.commercial_pos_sessions import CommercialPosSessionsScreen
         from peecha.ui.screens.commercial_pos_sale import CommercialPosSaleScreen
-        from peecha.ui.screens.commercial_ecommerce import CommercialEcommerceScreen
+        from peecha.ui.screens.commercial_pos_approval import CommercialPosApprovalScreen
         from peecha.ui.screens.commercial_aftersales import CommercialAftersalesScreen
         from peecha.ui.screens.commercial_purchasing_extras import CommercialPurchasingExtrasScreen
+        from peecha.ui.screens.order_tracking import OrderTrackingScreen
+        from peecha.ui.screens.purchase_goods_receipt import PurchaseGoodsReceiptScreen
+        from peecha.ui.screens.stock_count import StockCountScreen
+        from peecha.ui.screens.lot_trace import LotTraceScreen
+        from peecha.ui.screens.inventory_residual import InventoryResidualScreen
+        from peecha.ui.screens.commercial_settlement import InvoiceSettlementScreen
+        from peecha.ui.screens.installments_list import InstallmentsListScreen
+        from peecha.ui.screens.commercial_consignment_tracking import ConsignmentTrackingScreen
         from peecha.ui.screens.journal_entries_list import JournalEntriesListScreen
         from peecha.ui.screens.journal_entry import JournalEntryScreen
         from peecha.ui.screens.my_tasks import MyTasksScreen
@@ -1377,11 +1536,16 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_cash_flow import CashFlowScreen
         from peecha.ui.screens.report_cost_center_breakdown import CostCenterBreakdownScreen
         from peecha.ui.screens.report_custom_statement import CustomStatementScreen
+        from peecha.ui.screens.report_customer_profit import CustomerProfitScreen
+        from peecha.ui.screens.report_sales import SalesReportScreen
+        from peecha.ui.screens.report_sales_by_channel import SalesReportByChannelScreen
         from peecha.ui.screens.report_equity_changes import EquityChangesScreen
         from peecha.ui.screens.report_financial_ratios import FinancialRatiosScreen
         from peecha.ui.screens.report_income_statement import IncomeStatementScreen
+        from peecha.ui.screens.report_item_ledger import ItemLedgerScreen
         from peecha.ui.screens.report_journal_book import JournalBookScreen
         from peecha.ui.screens.report_period_comparison import PeriodComparisonScreen
+        from peecha.ui.screens.report_sales_forecast import SalesForecastScreen
         from peecha.ui.screens.report_trial_balance import TrialBalanceScreen
         from peecha.ui.screens.statement_template_designer import (
             StatementTemplateDesignerScreen,
@@ -1391,6 +1555,7 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.report_checks import ChecksReportScreen
         from peecha.ui.screens.system_settings import SystemSettingsScreen
         from peecha.ui.screens.system_backup import SystemBackupScreen
+        from peecha.ui.screens.system_data_reset import SystemDataResetScreen
         from peecha.ui.screens.treasury_checks import IssuedChecksScreen, ReceivedChecksScreen
         from peecha.ui.screens.treasury_reports import TreasuryChecksDueScreen
         from peecha.ui.screens.treasury_voucher import TreasuryVoucherScreen
@@ -1406,12 +1571,13 @@ class MainWindow(QMainWindow):
             ),
         )
 
-        self.register_screen("dashboard", DashboardScreen())
+        self.register_screen("dashboard", DashboardScreen(self))
         self.register_screen("my_tasks", MyTasksScreen(self))
         self.register_screen("placeholder", PlaceholderScreen())
         self.register_screen("chart_of_accounts", ChartOfAccountsScreen())
         self.register_screen("system_settings", SystemSettingsScreen())
         self.register_screen("system_backup", SystemBackupScreen())
+        self.register_screen("system_data_reset", SystemDataResetScreen())
         self.register_screen("dimension_group_config", DimensionGroupConfigScreen())
         self.register_screen("detail_dimensions", DetailDimensionsScreen())
         self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
@@ -1441,20 +1607,76 @@ class MainWindow(QMainWindow):
         self.register_screen("commercial_document_purchase_proforma", CommercialDocumentScreen("PURCHASE_PROFORMA", self))
         self.register_screen("commercial_document_purchase_invoice", CommercialDocumentScreen("PURCHASE_INVOICE", self))
         self.register_screen("commercial_document_purchase_return", CommercialDocumentScreen("PURCHASE_RETURN", self))
+        self.register_screen("commercial_document_consignment_out", CommercialDocumentScreen("CONSIGNMENT_OUT", self))
+        self.register_screen("commercial_document_consignment_in", CommercialDocumentScreen("CONSIGNMENT_IN", self))
         self.register_screen(
             "commercial_documents_list_sales",
-            CommercialDocumentsListScreen(self, type_filter_codes=("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN")),
+            CommercialDocumentsListScreen(
+                self, type_filter_codes=("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN", "CONSIGNMENT_OUT")
+            ),
         )
         self.register_screen(
             "commercial_documents_list_purchase",
-            CommercialDocumentsListScreen(self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN")),
+            CommercialDocumentsListScreen(
+                self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_IN")
+            ),
         )
+        # طبقِ بازخوردِ صریحِ کاربر («منویِ اصلی شلوغ شده، فقط فروشِ
+        # اینترنتی باید آنجا باشد»): سفارش‌ها + تقویمِ محتوا/CMS/رسانه/
+        # نگهبانِ اتصال همگی زیرِ یک صفحه‌یِ تب‌دار (خودِ کلاس این‌ها را
+        # داخلی می‌سازد) -- تنظیماتِ کلیِ اتصال/فهرستِ قیمت همچنان در تبِ
+        # «تنظیماتِ فروشِ اینترنتی» زیرِ سیستم‌سِتینگزِ بازرگانی می‌ماند.
+        self.register_screen("commercial_online_sales_hub", CommercialOnlineSalesHubScreen(self))
+        # طبقِ درخواستِ صریحِ کاربر («وقتی منویِ پخشِ گرم اجرا می‌شود فقط
+        # تب‌هایِ مربوط به پخشِ گرم باز شود»): دیگر ابزارهایِ میدانیِ
+        # مشترک را ندارد -- فقط چهار تبِ واقعاً مخصوصِ خودرو.
+        self.register_screen("commercial_distribution_hub", CommercialDistributionHubScreen(self))
+        # طبقِ درخواستِ صریحِ کاربر («قسمتِ پخشِ سرد جدا باید باشه، فرمِ جدا
+        # براش درست کن»): آیتمِ ناوبریِ مستقل، جدا از پخشِ گرم/زیرساختِ
+        # میدانیِ بالا.
+        self.register_screen("cold_distribution", ColdDistributionScreen(self))
+        # طبقِ همان تفکیک: فروشِ تلفنی مخصوصِ سفارش‌گیریِ پخشِ سرد است،
+        # آیتمِ ناوبریِ مستقلِ خودش را گرفت (دیگر تبِ commercial_
+        # distribution_hub نیست).
+        self.register_screen("commercial_telesales", TelesalesScreen(self))
+        # برنامهٔ مراجعه/ویزیت‌ها/پروموشن‌ها/داشبوردِ سرپرست/بازاریابی:
+        # مشترکِ هر دو کانال (نه مخصوصِ گرم، نه سرد) -- آیتمِ تب‌دارِ
+        # مستقلِ خودشان.
+        self.register_screen("sales_planning_hub", SalesPlanningHubScreen())
+        self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
+        self.register_screen("sales_assistant", SalesAssistantScreen(self))
         self.register_screen("commercial_pricing", CommercialPricingScreen())
-        self.register_screen("commercial_pos_sessions", CommercialPosSessionsScreen())
-        self.register_screen("commercial_pos_sale", CommercialPosSaleScreen())
-        self.register_screen("commercial_ecommerce", CommercialEcommerceScreen())
+        self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
+        self.register_screen("commercial_pos_approval", CommercialPosApprovalScreen())
         self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
         self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())
+        self.register_screen("order_tracking", OrderTrackingScreen(self))
+        self.register_screen("purchase_goods_receipt", PurchaseGoodsReceiptScreen())
+        self.register_screen("stock_count", StockCountScreen())
+        self.register_screen("lot_trace", LotTraceScreen())
+        self.register_screen("inventory_residual", InventoryResidualScreen())
+        from peecha.services.purchase_reports import REPORTS as _PURCHASE_REPORTS
+        from peecha.ui.screens.purchase_reports import PurchaseReportScreen
+
+        for report in _PURCHASE_REPORTS:
+            self.register_screen(f"purchase_report_{report.code.lower()}", PurchaseReportScreen(report.code, self))
+        from peecha.services.purchase_reports import SALES_REPORTS as _SALES_REPORTS
+
+        for report in _SALES_REPORTS:
+            self.register_screen(f"sales_report_{report.code.lower()}", PurchaseReportScreen(report.code, self, side="SALES"))
+        from peecha.ui.screens.purchase_dashboards import ProcurementExceptionDashboard, ProcurementExecutiveDashboard
+
+        self.register_screen("purchase_dashboard_exec", ProcurementExecutiveDashboard(self))
+        self.register_screen("purchase_dashboard_exceptions", ProcurementExceptionDashboard(self))
+        from peecha.ui.screens.procurement_masters import ProcurementMastersScreen
+
+        self.register_screen("procurement_masters", ProcurementMastersScreen())
+        # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
+        # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
+        # همان کلاس با invoice_type متفاوت است.
+        self.register_screen("commercial_invoice_settlement_sales", InvoiceSettlementScreen(self, "SALES_INVOICE"))
+        self.register_screen("commercial_invoice_settlement_purchase", InvoiceSettlementScreen(self, "PURCHASE_INVOICE"))
+        self.register_screen("installments_list", InstallmentsListScreen(self))
         self.register_screen("treasury_voucher_receipt", TreasuryVoucherScreen("RECEIPT", self))
         self.register_screen("treasury_voucher_payment", TreasuryVoucherScreen("PAYMENT", self))
         self.register_screen(
@@ -1503,7 +1725,12 @@ class MainWindow(QMainWindow):
         self.register_screen("statement_template_designer", StatementTemplateDesignerScreen())
         self.register_screen("report_financial_ratios", FinancialRatiosScreen())
         self.register_screen("report_period_comparison", PeriodComparisonScreen())
+        self.register_screen("report_item_ledger", ItemLedgerScreen())
         self.register_screen("report_anomalies", AnomaliesScreen())
+        self.register_screen("report_sales", SalesReportScreen())
+        self.register_screen("report_sales_by_channel", SalesReportByChannelScreen())
+        self.register_screen("report_customer_profit", CustomerProfitScreen())
+        self.register_screen("report_sales_forecast", SalesForecastScreen())
 
     def register_screen(self, name: str, widget: QWidget) -> None:
         self._screens[name] = widget
@@ -1544,6 +1771,9 @@ class MainWindow(QMainWindow):
             sub_window.maximized_changed.connect(self._update_chrome_visibility)
             self.mdi_area.addSubWindow(sub_window)
             self._mdi_subwindows[target_screen_name] = sub_window
+        elif sub_window.mdiArea() is not self.mdi_area:
+            # بعد از بستن از ناحیه جدا شده بود (closeEvent)
+            self.mdi_area.addSubWindow(sub_window, Qt.FramelessWindowHint)
         sub_window.setWindowTitle(item["label"])
         # نکته‌یِ فنیِ کشف‌شده حینِ تست: خودِ show() (نه فقط
         # _restore_or_size_subwindow) هم می‌تواند برایِ زیرپنجره‌یِ تازه
@@ -1580,7 +1810,17 @@ class MainWindow(QMainWindow):
         sub_window.raise_()
         self.mdi_area.setActiveSubWindow(sub_window)
 
-        if hasattr(screen, "refresh"):
+        # طبقِ رفعِ باگِ واقعیِ گزارش‌شده («سفارشِ خریدِ جدید همچنان سندِ
+        # قبلی را نشان می‌دهد»): این صفحات (مثلِ CommercialDocumentScreen)
+        # نمونه‌یِ تکی/کش‌شده‌اند -- وقتی هیچ then‌ای داده نشده (یعنی
+        # بازکردنِ سادهٔ منویِ ساید‌بار، نه ویرایشِ صریحِ یک سندِ مشخص از
+        # فهرستِ اسناد که همیشه then=edit_document خودش را می‌دهد)، صفحه
+        # باید به‌جایِ نمایشِ آخرین سندی که رویش بوده، به‌طورِ صریح ریست
+        # شود. تشخیص با duck-typing رویِ open_as_new (فقط همین صفحات آن
+        # را تعریف کرده‌اند) تا رفتارِ بقیه‌یِ صفحات دست‌نخورده بماند.
+        if then is None and hasattr(screen, "open_as_new"):
+            screen.open_as_new()
+        elif hasattr(screen, "refresh"):
             screen.refresh()
         if then is not None:
             then(screen)
@@ -1600,9 +1840,6 @@ class MainWindow(QMainWindow):
         _FramelessMdiSubWindow) این‌جا بازیابی می‌شود — حتی بعدِ بستنِ
         کاملِ برنامه. اگر چیزی ذخیره نشده باشد (اولین بارِ بازکردنِ این
         صفحه)، همان چیدمانِ آبشاریِ پیش‌فرض به‌کار می‌رود."""
-        settings = QSettings("Peecha", "PeechaERP")
-        geometry = settings.value(f"mdiWindow/{screen_name}/geometry", None)
-        was_maximized = settings.value(f"mdiWindow/{screen_name}/maximized", False, type=bool)
         # نکته‌یِ فنیِ کشف‌شده حینِ تست: QMdiArea وقتی از قبل یک زیرپنجره‌یِ
         # دیگر (مثلاً داشبورد، چون همیشه اول باز می‌شود) maximize باشد،
         # زیرپنجره‌یِ تازه را هم با اولین show()اش خودکار maximize نمایش
@@ -1611,16 +1848,18 @@ class MainWindow(QMainWindow):
         # اول باید صریحاً از آن حالت خارج شویم (showNormal)، و *بعد* جایگاهِ
         # درستِ ذخیره‌شده را ست کنیم — نه برعکس، وگرنه showNormal دوباره
         # آن را بازنویسی می‌کند.
+        # R227: یک قاعدهٔ واحد برایِ همهٔ فرم‌ها -- پرکردنِ کلِ ناحیهٔ اصلی؛
+        # حالتِ maximize/اندازهٔ ذخیره‌شدهٔ قدیمی دیگر خوانده نمی‌شود.
         sub_window._restoring = True
         try:
-            if was_maximized:
-                sub_window.showMaximized()
-            else:
-                sub_window.showNormal()
-                if isinstance(geometry, QRect):
-                    sub_window.setGeometry(self._clamp_to_mdi_area(geometry))
-                else:
-                    self._size_new_subwindow(sub_window)
+            for other in self.mdi_area.subWindowList():
+                if other is not sub_window and other.isVisible() and (other.isMaximized() or other.isMinimized()):
+                    other.showNormal()
+                    other._fill_area = True
+                    other.setGeometry(self.mdi_area.viewport().rect())
+            sub_window.showNormal()
+            sub_window._fill_area = True
+            sub_window.setGeometry(self.mdi_area.viewport().rect())
         finally:
             sub_window._restoring = False
 
@@ -1705,6 +1944,57 @@ class MainWindow(QMainWindow):
         active_sub = self.mdi_area.activeSubWindow()
         if active_sub is not None and hasattr(active_sub.widget(), "refresh"):
             active_sub.widget().refresh()
+
+    def _setup_global_search(self) -> None:
+        """طبقِ ادامهٔ فهرستِ درخواستی («جستجویِ زبانِ‌طبیعی در سراسرِ
+        سیستم»): این کادر از اولِ ساختِ نوارِ بالایی وجود داشت ولی به
+        هیچ signalای وصل نبود -- عملاً یک ورودیِ کاملاً بی‌اثر. حالا
+        از رویِ همان تکِ‌منبعِ حقیقتیِ منو (nav_catalog) یک نمایه‌یِ
+        جستجو ساخته می‌شود: نوشتن هر بخشی از نامِ هر صفحه/گزارش (حتی با
+        مسیرِ منویش، مثلاً «فروش › سودِ واقعیِ مشتریان») آن را در یک
+        منویِ کشویی پیشنهاد می‌دهد؛ زدنِ Enter، حتی بدونِ انتخابِ دقیقِ
+        یک گزینه، بهترین تطبیقِ چندکلمه‌ای را مستقیماً باز می‌کند --
+        بدونِ نیاز به مدلِ یادگیریِ ماشین، فقط تطبیقِ متنیِ ساده رویِ
+        همان کاتالوگِ ازپیش‌موجود."""
+        self._search_entries = flatten_nav_items_with_breadcrumb()
+        self._search_code_by_breadcrumb = {breadcrumb: code for code, _label, breadcrumb in self._search_entries}
+
+        completer = QCompleter([breadcrumb for _code, _label, breadcrumb in self._search_entries], self.search_field)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCompletionMode(QCompleter.PopupCompletion)
+        self.search_field.setCompleter(completer)
+        completer.activated[str].connect(self._on_global_search_selected)
+        self.search_field.returnPressed.connect(self._on_global_search_return_pressed)
+
+    def _on_global_search_selected(self, breadcrumb: str) -> None:
+        code = self._search_code_by_breadcrumb.get(breadcrumb)
+        if code is not None:
+            self.open_screen(code)
+        self.search_field.clear()
+
+    def _on_global_search_return_pressed(self) -> None:
+        """طبقِ ادامهٔ فهرستِ درخواستی: به‌جایِ تکیه بر
+        completer().currentCompletion() (که فقط پیشوندِ همان
+        completionPrefixِ درونیِ QCompleter را می‌شناسد و در حالتِ
+        MatchContains می‌تواند با آنچه کاربر واقعاً می‌بیند هم‌خوان
+        نباشد)، مستقیماً همان نمایه‌یِ ساختگیِ خودمان با تطبیقِ توکنی
+        (همه‌یِ کلماتِ عبارت، در هر ترتیبی) جست‌وجو می‌شود -- پیش‌بینی‌
+        پذیرتر و مستقل از حالتِ داخلیِ ویجت."""
+        query = self.search_field.text().strip()
+        if not query:
+            return
+        words = [w.casefold() for w in query.split()]
+        code = next(
+            (
+                item_code for item_code, _label, breadcrumb in self._search_entries
+                if all(word in breadcrumb.casefold() for word in words)
+            ),
+            None,
+        )
+        if code is not None:
+            self.open_screen(code)
+            self.search_field.clear()
 
     def _on_language_changed(self, index: int) -> None:
         """طبقِ حسابرسیِ صریح: قبلاً این سوییچر هیچ signalای وصل نداشت —

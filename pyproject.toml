@@ -11,12 +11,23 @@ dependencies = [
     "alembic>=1.13",
     "jdatetime>=5.0",         # تقویم شمسی (پیش‌فرض طبق docs/ui-ux-guidelines.md بخش ۱)
     "openpyxl>=3.1",          # خروجیِ Excel برایِ ماژولِ گزارش‌ها
+    "pdfplumber>=0.11",       # خواندنِ جدولِ لیستِ قیمتِ تامین‌کننده از PDFِ متنی (مجوزِ MIT -- نه AGPL)
+    "pytesseract>=0.3.10",    # OCR برایِ لیستِ قیمتِ تامین‌کننده از عکس/PDFِ اسکن‌شده (مجوزِ Apache-2.0)
+    "pypdfium2>=4.0",         # رندرِ صفحهٔ PDFِ اسکن‌شده به تصویر برایِ OCR (مجوزِ Apache-2.0/BSD-3)
+    "requests>=2.31",         # ارتباطِ HTTP با فروشگاهِ اینترنتی (ماژولِ فروشِ اینترنتی)
+    "WooCommerce>=3.0.0",     # کلاینتِ رسمیِ REST APIِ ووکامرس (مجوزِ MIT)
+    "cryptography>=41.0",     # رمزنگاریِ کلیدِ API/رازِ اتصالِ فروشگاه‌هایِ اینترنتی
+    "Pillow>=10.0",           # پردازشِ تصویر (واترمارک/حکِ متن/WebP) برایِ Smart Publish
+    "fastapi>=0.110",         # لایهٔ API برایِ اپِ موبایلِ پخشِ سرد/گرم (R131)
+    "uvicorn>=0.29",          # سرورِ ASGI برایِ اجرایِ peecha_api
+    "PyJWT>=2.8",             # امضا/بررسیِ توکنِ دسترسیِ کوتاه‌مدتِ API
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    "httpx>=0.27",            # کلاینتِ HTTPِ لازم برایِ fastapi.testclient در تست‌هایِ peecha_api
 ]
 
 [build-system]

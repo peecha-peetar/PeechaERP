@@ -10,6 +10,7 @@ from peecha.db.models import (  # noqa: F401
     hr,
     inventory,
     payroll,
+    reporting,
     security,
     treasury,
     workflow,
