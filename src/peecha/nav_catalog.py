@@ -209,7 +209,8 @@ WAREHOUSE_REPORT_MENU = [
     ]),
     ("COUNT", "شمارش و مغایرت", [
         ("VARIANCE", "مغایرتِ موجودی"), ("STOCK_COUNTS", "گزارشِ انبارگردانی‌ها"), ("COUNTER_PERFORMANCE", "عملکردِ شمارشگران"),
-        ("CYCLE_COUNT", "شمارشِ دوره‌ای (Cycle Count)"), ("ACCURACY", "دقتِ موجودی (Inventory Accuracy)"),
+        ("CYCLE_COUNT", "شمارشِ دوره‌ای (Cycle Count)"), ("CYCLE_COUNT_DUE", "شمارش‌هایِ سررسیدشده"),
+        ("ACCURACY", "دقتِ موجودی (Inventory Accuracy)"),
     ]),
     ("LOTS", "بچ، انقضا و سریال", [
         ("BATCH_STOCK", "موجودیِ بچ/لات"), ("EXPIRY", "انقضایِ کالا"), ("SERIALS", "شماره‌سریال‌ها"),
@@ -218,6 +219,10 @@ WAREHOUSE_REPORT_MENU = [
         ("RECEIVING", "رسیدها (Receiving)"), ("ISSUES", "حواله‌ها"), ("TRANSFERS", "انتقال‌هایِ بینِ انبار"),
         ("REPLENISHMENT", "پیشنهادِ جایگزینی (Replenishment)"), ("PRODUCTIVITY", "بهره‌وریِ انبار"), ("CAPACITY", "ظرفیتِ انبار"),
         ("BIN_STOCK", "موجودی به تفکیکِ محلِ نگهداری"),
+    ]),
+    ("WMS", "جانمایی و برداشت", [
+        ("PUTAWAY", "جانمایی (Putaway)"), ("UNLOCATED_STOCK", "دریافت‌شده ولی جانمایی‌نشده"), ("PICKING", "برداشت (Picking)"),
+        ("WMS_PERFORMANCE", "عملکردِ اپراتورهایِ انبار"),
     ]),
     ("MASTER", "اطلاعاتِ پایه", [
         ("MD_WAREHOUSES", "فهرستِ انبارها"), ("MD_UNITS", "واحدها و تبدیلِ واحدِ کالاها"),
@@ -333,6 +338,8 @@ NAV_ITEMS = [
             # سیستمِ واحد (R225): شمارشِ موجودی با واحدِ دلخواه (کارتن/بسته/عدد)؛
             # اختلاف به واحدِ پایه با سندِ اصلاحِ موجودی ثبت می‌شود.
             {"code": "INV_STOCK_COUNT", "label": "انبارگردانی", "screen": "stock_count"},
+            # R247: وظایفِ جانمایی/برداشت و برنامهٔ شمارشِ دوره‌ای
+            {"code": "INV_WMS_TASKS", "label": "جانمایی، برداشت و برنامهٔ شمارش", "screen": "warehouse_operations"},
             {"code": "INV_LOT_TRACE", "label": "ردیابیِ بچ/سریال/امانی", "screen": "lot_trace"},
             {"code": "INV_RESIDUAL_ADJUST", "label": "تسعیر/اصلاحِ ماندهٔ ریالیِ موجودی", "screen": "inventory_residual"},
             # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): دیدِ کلیِ

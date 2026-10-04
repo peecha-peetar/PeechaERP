@@ -506,6 +506,9 @@ class Warehouse(Base):
     )
     vehicle_capacity_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
     vehicle_capacity_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
+    # R247: ظرفیتِ همهٔ انبارها (migration 184)
+    capacity_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
+    capacity_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
 
 
 class BinLocation(Base):
@@ -1107,3 +1110,72 @@ class LotMovement(Base):
     commercial_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
     quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+# --- R247 (migration 184) ----------------------------------------------------
+class CostAdjustmentLog(Base):
+    """لاگِ تاریخ‌دارِ اصلاحِ بهایِ خرید (برایِ ارزشِ تاریخیِ موجودی) -- منطقِ بهایابی را عوض نمی‌کند."""
+
+    __tablename__ = "cost_adjustment_log"
+    __table_args__ = {"schema": "inv"}
+
+    log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    adjusted_on: Mapped[datetime.date] = mapped_column(Date, server_default="CURRENT_DATE")
+    adjusted_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    costing_method: Mapped[str | None] = mapped_column(String(20))
+    unit_cost_delta: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    quantity_remaining: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
+    quantity_consumed: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=0)
+    inventory_value_delta: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    variance_value_delta: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+
+
+class CycleCountPlan(Base):
+    __tablename__ = "cycle_count_plans"
+    __table_args__ = {"schema": "inv"}
+
+    plan_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("inv.item_categories.category_id"))
+    abc_class: Mapped[str | None] = mapped_column(String(1))
+    frequency_days: Mapped[int] = mapped_column(SmallInteger)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class WarehouseTask(Base):
+    """وظیفهٔ جانمایی/برداشت (WMS سبک)."""
+
+    __tablename__ = "warehouse_tasks"
+    __table_args__ = {"schema": "inv"}
+
+    task_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    task_type_code: Mapped[str] = mapped_column(String(15))  # PUTAWAY | PICK
+    source_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
+    source_stock_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
+    source_commercial_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    source_commercial_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    done_quantity_base: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    from_bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
+    to_bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="OPEN")
+    assigned_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    started_at: Mapped[datetime.datetime | None]
+    completed_at: Mapped[datetime.datetime | None]
+    completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    resulting_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
+    notes: Mapped[str | None] = mapped_column(String(500))

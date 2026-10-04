@@ -1,5 +1,5 @@
 import os, sys, datetime, decimal, io
-os.environ["PEECHA_DB_NAME"] = "peecha_test_r246_1"
+os.environ["PEECHA_DB_NAME"] = "peecha_test_r247_1"
 os.environ["PEECHA_DB_USER"] = "peecha"
 os.environ["PEECHA_DB_PASSWORD"] = "peecha"
 os.environ["PEECHA_DB_HOST"] = "localhost"
@@ -171,134 +171,121 @@ masters.save_reorder_policy(company_id, masters.PolicyFields(item_id=g2, warehou
 count_id = count_service.create_count_session(company_id, wh, user.user_id)
 count_service.record_count(count_id, company_id, g1, pcs, D(100))
 
+# =====================================================================
+# R247: اجرایِ پس‌زمینه، صفحه‌بندی، مبنایِ ارزش، لاگِ اصلاحِ بها، ظرفیت، برنامهٔ شمارش، جانمایی/برداشت
+# =====================================================================
+from peecha.services import warehouse_operations as ops
+from peecha.services import inventory_engine as engine_service
+from peecha.ui.screens import purchase_reports as report_screens
+from peecha.ui.screens.purchase_reports import PurchaseReportScreen
+from peecha.db.models.inventory import CostAdjustmentLog
 F = pr.PurchaseFilters(today - datetime.timedelta(days=90), today, side="INVENTORY")
 def run(code, **kw):
     options = kw.pop("options", {})
     return pr.run_report(company_id, code, dataclasses.replace(F, options=options, **kw))
-def rows_by(result, *headers):
-    idx = [[h for h, _k in result.columns].index(h) for h in headers]
-    return [tuple(r[i] for i in idx) for r in result.rows]
 label = lambda item_id: next(f"{i.code} — {i.name}" for i in catalog_service.list_items(company_id) if i.item_id == item_id)  # noqa: E731
-WH, WQ = "WH — مرکزی", "WQ — قرنطینه"
+def bal_value(item_id=None, wid=None):
+    with new_session() as s:
+        q = select(sa_func.sum(StockBalance.total_value)).where(StockBalance.company_id == company_id)
+        if item_id: q = q.where(StockBalance.item_id == item_id)
+        if wid: q = q.where(StockBalance.warehouse_id == wid)
+        return s.scalar(q)
 
-# --- ۱) موجودی -----------------------------------------------------------------
-on_hand = run("STOCK_ON_HAND", options={"state": "ALL"})
-oh = {(r[0], r[4]): r for r in on_hand.rows}
-check(oh[("G-1", WH)][6] == 110 and oh[("G-1", WQ)][6] == 10 and oh[("G-1", WQ)][9] == 10 and oh[("G-1", WH)][9] == 0,
-      "موجودیِ لحظه‌ای: ۱۱۰ در مرکزی و ۱۰ در قرنطینه (ستونِ قرنطینه)")
+# --- ۱) اجرایِ پس‌زمینه و صفحه‌بندی ------------------------------------------
+sync = PurchaseReportScreen("STOCK_ON_HAND", None, side="INVENTORY"); sync.refresh()
+report_screens.BACKGROUND_REPORTS = True
+bg = PurchaseReportScreen("STOCK_ON_HAND", None, side="INVENTORY"); bg.refresh()
+check(bg.busy_label.text() != "" and bg._workers, "گزارش در رشتهٔ پس‌زمینه اجرا می‌شود")
+bg.wait_for_report()
+check(bg._export_data()[1] == sync._export_data()[1] and bg.busy_label.text() == "", "نتیجهٔ پس‌زمینه با اجرایِ همگام یکی است")
+before = bg._export_data()[1]
+bg._on_worker_done(bg._generation - 1, None, ValueError("کهنه"))
+check(bg._export_data()[1] == before, "نتیجهٔ اجرایِ کهنه (نسلِ قبل) نادیده گرفته می‌شود")
+report_screens.BACKGROUND_REPORTS = False
+sync.page_size_combo.setCurrentIndex(sync.page_size_combo.findData(100))
+rows_all = len(sync._rows)
+sync.page_size_combo.addItem("۱", 1); sync.page_size_combo.setCurrentIndex(sync.page_size_combo.count() - 1)
+check(sync.table.rowCount() == 2 and "از" in sync.page_label.text() and sync.next_page_button.isEnabled(), "صفحه‌بندی: یک ردیف + جمع در هر صفحه")
+sync._go_page(1)
+check(sync._page_offset == 1 and sync.raw_row(0) == sync._result.rows[sync._row_raw[id(sync._rows[1])]], "صفحهٔ دوم و نگاشتِ ردیف")
+check(len(sync._export_data()[1]) == rows_all, "خروجی همهٔ ردیف‌ها را دارد، نه فقط صفحهٔ جاری")
+
+# --- ۲) مبنایِ ارزشِ کارتکس و لاگِ اصلاحِ بها -------------------------------
+led = run("STOCK_CARD", item_id=g1, warehouse_id=wh, options={"basis": "LEDGER"})
+check(led.rows[-1][11] == bal_value(g1, wh), f"کارتکس با مبنایِ دفترِ انبار = ارزشِ ماندهٔ سیستم ({led.rows[-1][11]} / {bal_value(g1, wh)})")
+res = engine_service.apply_purchase_cost_correction(g1, wh, None, company_id, D(50), D(100))
 with new_session() as s:
-    balance_value = s.scalar(select(sa_func.sum(StockBalance.total_value)).where(StockBalance.company_id == company_id))
-check(on_hand.footer()[13] == balance_value, f"ارزشِ موجودی = جمعِ ماندهٔ سیستم ({on_hand.footer()[13]} / {balance_value})")
-past = run("STOCK_ON_HAND", date_to=today - datetime.timedelta(days=30))
-check(rows_by(past, "کدِ کالا", "موجودی") == [("G-1", 100)], "موجودی در تاریخِ گذشته از دفترِ انبار (۱۰۰)")
-check(all(r[0] == "G-1" for r in run("STOCK_ON_HAND", brand_id=brand).rows), "فیلترِ برند")
-check({r[0] for r in run("STOCK_ON_HAND", category_id=cat_a).rows} == {"G-1", "G-2"}, "فیلترِ گروهِ کالا")
-check(not run("STOCK_ON_HAND", warehouse_id=wq).rows[1:] and run("STOCK_ON_HAND", warehouse_id=wq).rows[0][0] == "G-1", "فیلترِ انبار")
-neg = run("NEGATIVE_STOCK")
-check(len(neg.rows) == 1 and neg.rows[0][2] == -5 and neg.refs[0] == (neg_issue, "STOCK:ISSUE"),
-      f"موجودیِ منفی با Drill-down به حوالهٔ ایجادکننده (got {neg.rows}, {neg.refs})")
-zero = run("ZERO_STOCK")
-check({r[0].split(" — ")[0] for r in zero.rows} >= {"N-1"} and "G-1 — پیچ‌گوشتی" not in [r[0] for r in zero.rows], "کالاهایِ بدونِ موجودی")
-q = run("QUARANTINE_STOCK")
-check(len(q.rows) == 1 and q.rows[0][4] == "انبارِ قرنطینه" and q.refs[0] == (transfer, "STOCK:TRANSFER"), "قرنطینه با دلیل و سندِ ورود")
-free = {(r[0], r[1]): r for r in run("FREE_STOCK").rows}
-check(free[(label(g1), WQ)][5] == 0 and free[(label(g1), WH)][5] == 110, "آزاد: موجودیِ قرنطینه قابلِ استفاده نیست")
-byw = run("STOCK_BY_WAREHOUSE")
-check(wr.WAREHOUSE_REPORTS_BY_CODE["STOCK_BY_WAREHOUSE"].default_group == "انبار" and byw.columns[0][0] == "انبار", "انبار ← گروه ← کالا")
+    logs = list(s.scalars(select(CostAdjustmentLog).where(CostAdjustmentLog.item_id == g1)))
+check(len(logs) == 1 and logs[0].inventory_value_delta == res.inventory_value_delta and logs[0].warehouse_id == wh,
+      "اصلاحِ بها با تاریخ در inv.cost_adjustment_log ثبت شد")
+pos = wr._ledger_position(company_id, today)
+check(abs(pos[(g1, wh)][2] - bal_value(g1, wh)) <= D("0.05"), f"ارزشِ تاریخی (دفترِ انبار + اصلاح) = مانده ({pos[(g1, wh)][2]} / {bal_value(g1, wh)})")
+led2 = run("STOCK_CARD", item_id=g1, warehouse_id=wh, options={"basis": "LEDGER"})
+check(led2.rows[-1][3] == "اصلاحِ بهایِ خرید (تعدیلِ ارزش)" and abs(led2.rows[-1][11] - bal_value(g1, wh)) <= D("0.05"),
+      "ردیفِ اصلاحِ بها در کارتکس (مبنایِ حسابداری)")
+check(run("VALUE_TREND").rows[-1][2] == sum((r[2] for r in wr._ledger_position(company_id, today).values()), D(0)), "روندِ ارزش با اصلاحِ بها")
 
-# --- ۲) کارتکس و گردش -------------------------------------------------------------
-card = run("STOCK_CARD", item_id=g1, warehouse_id=wh, options={"view": "SUMMARY"})
-summary = {r[0]: r[2] for r in card.rows}
-check(summary["موجودیِ اولِ دوره"] == 0 and summary["رسیدِ خرید/ورود"] == 150 and summary["حواله/مصرف"] == 30
-      and summary["انتقالِ خروجی"] == 10 and summary["موجودیِ پایانِ دوره"] == 110, f"کارتکس: ۰ + ۱۵۰ − ۳۰ − ۱۰ = ۱۱۰ (got {summary})")
-detail = run("STOCK_CARD", item_id=g1, warehouse_id=wh, date_from=d20)
-check(detail.rows[0][3] == "ماندهٔ اولِ دوره" and detail.rows[0][7] == 100 and detail.rows[-1][7] == 110
-      and all(ref and ref[1].startswith("STOCK:") for ref in detail.refs[1:]), "ریزِ کارتکس: مانده از اولِ بازه و ارجاع به سند")
-check(raises(lambda: run("STOCK_CARD")), "کارتکس بدونِ کالا پیامِ راهنما می‌دهد")
-mv = run("ITEM_MOVEMENT", item_id=g1, options={"period": "DAY"})
-check(sum(r[1] for r in mv.rows) == 160 and sum(r[2] for r in mv.rows) == 40, "گردشِ روزانه (ورود ۱۶۰ با انتقالِ ورودی، خروج ۴۰)")
-check(len(run("ITEM_MOVEMENT", options={"period": "YEAR", "doc_type": "TRANSFER"}).rows) >= 1, "فیلترِ نوعِ سند در گردش")
+# --- ۳) ظرفیت و برنامهٔ شمارش -----------------------------------------------
+row = locations_service.get_warehouse(wh, company_id)
+locations_service.update_warehouse(wh, company_id, row.code, row.name, True,
+                                   dataclasses.replace(row.fields, capacity_weight_kg=D(1000), capacity_volume_m3=D(50)))
+cap = {r[0]: r for r in run("CAPACITY").rows}
+check(cap["WH — مرکزی"][1] == 1000 and cap["WH — مرکزی"][5] == 50, "ظرفیتِ وزنی/حجمیِ انبارِ غیرِ خودرو")
+ops.save_plan(company_id, ops.PlanFields("P-G2", "انبردست ماهانه", wh, 30, item_id=g2))
+ops.save_plan(company_id, ops.PlanFields("P-G1", "پیچ‌گوشتی", wh, 30, item_id=g1))
+check(raises(lambda: ops.save_plan(company_id, ops.PlanFields("p-g1", "تکراری", wh, 30))), "کدِ تکراریِ برنامه رد شد")
+check(raises(lambda: ops.save_plan(company_id, ops.PlanFields("X", "دو دامنه", wh, 30, item_id=g1, category_id=cat_a))), "دامنهٔ دوگانه رد شد")
+check(raises(lambda: ops.save_plan(company_id, ops.PlanFields("Y", "صفر", wh, 0))), "تواترِ صفر رد شد")
+due = {r[2]: r for r in run("CYCLE_COUNT_DUE").rows}
+check(label(g2) in due and due[label(g2)][7] == "هرگز شمرده نشده" and label(g1) not in due, f"سررسیدِ شمارش (پیچ‌گوشتی امروز شمرده شد) (got {list(due)})")
+check(ops.due_counts(company_id, today + datetime.timedelta(days=31))[0].item_id in (g1, g2) and
+      len(ops.due_counts(company_id, today + datetime.timedelta(days=31))) == 2, "پس از ۳۰ روز هر دو سررسید")
 
-# --- ۳) ارزش، سن، تحلیل ----------------------------------------------------------
-val = run("VALUATION", options={"by": "CATEGORY"})
-check(sum(r[3] for r in val.rows) == balance_value, "ارزشِ موجودی به تفکیکِ گروه = کل")
-aging = {(r[0], r[1]): r for r in run("STOCK_AGING").rows}
-a = aging[(label(g1), WH)]
-check(a[5] == 50 and a[6] == 60 and sum(a[5:11]) == 110, f"سنِ موجودی: ۵۰ در ۰–۳۰ و ۶۰ در ۳۱–۶۰ (got {a[5:11]})")
-abc = run("ABC")
-check([(r[0], r[6]) for r in abc.rows] == [(label(g1), "A"), (label(g2), "A"), (label(med), "B")], f"ABC بر اساسِ ارزشِ مصرف (got {[(r[0], r[6]) for r in abc.rows]})")
-check(len(run("ABC_XYZ").rows) == 3, "ماتریسِ ABC-XYZ")
-reorder = run("REORDER")
-check(rows_by(reorder, "کالا", "آزاد", "نقطهٔ سفارش", "مقدارِ پیشنهادی") == [(label(g2), -5, 15, 45)], "نقطهٔ سفارش و مقدارِ پیشنهادی (۴۰ − (−۵))")
-check(any(r[0] == label(g1) for r in run("DEAD_STOCK", date_from=d10 + datetime.timedelta(days=1)).rows), "راکد: بدونِ خروج در بازه")
-cover = {(r[0], r[1]): r for r in run("STOCK_COVERAGE").rows}
-check(cover[(label(g1), WH)][5] == int(D(110) / (D(30) / 91)), "پوششِ موجودی (روز)")
+# --- ۴) جانمایی و برداشت ----------------------------------------------------
+a01 = locations_service.create_bin_location(wh, "A-01", "قفسهٔ الف")
+from peecha.db.models.inventory import StockDocumentLine as SDL, StockDocument as SD
+with new_session() as s_:
+    g2_doc = s_.scalar(select(SDL.stock_document_id).join(SD, SD.stock_document_id == SDL.stock_document_id)
+                       .where(SDL.item_id == g2, SD.document_type_code == "RECEIPT"))
+g2_receipt = next(s for s in ops.putaway_sources(company_id) if s.key == ("STOCK", g2_doc))
+ids = ops.generate_tasks(company_id, "PUTAWAY", g2_receipt.key, user.user_id)
+check(len(ids) == 1 and ops.generate_tasks(company_id, "PUTAWAY", g2_receipt.key, user.user_id) == [], "وظیفهٔ جانمایی یک‌بار ساخته می‌شود")
+check(any(r[0] == label(g2) for r in run("UNLOCATED_STOCK").rows), "دریافت‌شده ولی جانمایی‌نشده")
+total_before = bal_value()
+ops.start_task(ids[0], company_id, user.user_id)
+check(raises(lambda: ops.complete_putaway(ids[0], company_id, user.user_id, locations_service.get_default_bin_location(wq).bin_location_id)),
+      "جانمایی به محلِ انبارِ دیگر رد شد")
+doc_id = ops.complete_putaway(ids[0], company_id, user.user_id, a01)
+bins = {(r[1].split(" — ")[0], r[3]): r[4] for r in run("BIN_STOCK").rows}
+check(doc_id and bins.get(("A-01", label(g2))) == 20 and bins.get(("GENERAL", label(g2))) == -25 and bal_value() == total_before,
+      f"جانمایی با سندِ انتقال: ۲۰ عدد به A-01، ارزشِ کل ثابت (got {bins})")
+pa = run("PUTAWAY", options={"view": "DONE"}).rows
+check(len(pa) == 1 and pa[0][6].startswith("A-01") and pa[0][11] == "مدیر سیستم", "گزارشِ جانمایی با محل و اپراتور")
+issue_draft = inv_documents_service.create_stock_document(company_id, user.user_id, "ISSUE", today,
+    inv_documents_service.DocumentHeaderFields(source_warehouse_id=wh))
+inv_documents_service.add_line(issue_draft, company_id, inv_documents_service.LineFields(item_id=g1, uom_id=pcs, quantity=D(5), quantity_base=D(5)))
+check(any(s.key == ("STOCK", issue_draft) for s in ops.pick_sources(company_id)), "حوالهٔ ثبت‌نشده منبعِ برداشت است")
+pick = ops.generate_tasks(company_id, "PICK", ("STOCK", issue_draft), user.user_id)
+ops.start_task(pick[0], company_id, user.user_id)
+ops.complete_pick(pick[0], company_id, user.user_id, D(4))
+pk = run("PICKING", options={"view": "PARTIAL"}).rows
+check(len(pk) == 1 and pk[0][5] == 4 and pk[0][6] == 80, f"برداشتِ ناقص با دقتِ ۸۰٪ (got {pk})")
+check(raises(lambda: ops.complete_pick(pick[0], company_id, user.user_id, D(5))), "وظیفهٔ انجام‌شده دوباره تکمیل نمی‌شود")
+perf = {r[0]: r for r in run("WMS_PERFORMANCE").rows}
+check(perf["برداشت"][2] == 1 and perf["برداشت"][5] == 0 and perf["جانمایی"][2] == 1, "عملکردِ اپراتور")
+kpis, _charts = wd.dashboard(company_id, F.date_from, today)
+check(len(kpis) == 26 and {k.code for k in kpis} >= {"PUTAWAY", "PICKS", "COUNT_DUE"}, "شاخص‌هایِ تازهٔ داشبورد")
 
-# --- ۴) شمارش، بچ، انقضا، عملیات ------------------------------------------------
-var = run("VARIANCE")
-check(len(var.rows) == 1 and var.rows[0][6] == -10 and var.rows[0][7] < 0, f"مغایرت: سیستم ۱۱۰، شمارش ۱۰۰ (got {var.rows})")
-check(run("ACCURACY").rows[0][3] == 0 and len(run("STOCK_COUNTS", options={"view": "UNAPPROVED"}).rows) == 1, "دقتِ موجودی و شمارشِ تاییدنشده")
-exp = run("EXPIRY", options={"window": "30"})
-check(rows_by(exp, "بچ/لات", "مقدار") == [("B-EARLY", 15)], f"نزدیکِ انقضا (FEFO: ۵ عدد از بچِ زودانقضا رفت) (got {exp.rows})")
-check({r[1] for r in run("BATCH_STOCK").rows} == {"B-EARLY", "B-LATE"}, "موجودیِ بچ")
-check(len(run("TRANSFERS", options={"view": "POSTED"}).rows) == 1, "انتقال‌هایِ انجام‌شده")
-check(len(run("RECEIVING", options={"view": "TODAY"}).rows) == 2, "رسیدهایِ امروز")
-check(len(run("MD_WAREHOUSES").rows) >= 3 and run("MD_TRACKED").rows, "اطلاعاتِ پایه")
-for r in wr.WAREHOUSE_REPORTS:
-    try:
-        res = run(r.code, item_id=g1 if r.code == "STOCK_CARD" else None)
-        assert all(len(x) == len(res.columns) for x in res.rows)
-    except Exception as exc:  # noqa: BLE001
-        check(False, f"گزارشِ {r.code} خطا داد: {exc}")
-check(sorted(e[0] for _g, _l, es in nav_catalog.WAREHOUSE_REPORT_MENU for e in es if not isinstance(e, dict))
-      == sorted(r.code for r in wr.WAREHOUSE_REPORTS) and len(wr.WAREHOUSE_REPORTS) == 47, "۴۷ گزارشِ انبار در منو")
-with new_session() as s:
-    idx = {r[0] for r in s.execute(text("select indexname from pg_indexes where indexname like 'ix_%stock_line' or indexname like 'ix_inv_stock_ledger_doc_line'"))}
-check({"ix_inv_stock_ledger_doc_line", "ix_comm_document_lines_stock_line"} <= idx, "ایندکس‌هایِ گزارش ساخته شدند")
-
-# --- ۵) داشبورد ---------------------------------------------------------------------
-kpis, charts = wd.dashboard(company_id, F.date_from, today)
-k = {x.code: x for x in kpis}
-check(len(kpis) == 26 and k["VALUE"].value == balance_value and k["NEGATIVE"].value == 1 and k["NEAR_EXPIRY"].value == 1
-      and k["QUARANTINE"].value == oh[("G-1", WQ)][13] and k["ROP"].value == 1 and k["COUNTS"].value == 1,
-      f"شاخص‌هایِ داشبورد با گزارش‌ها یکی است ({[(x.code, x.value) for x in kpis]})")
-check(len(charts) == 15 and charts["aging"]["series"]["ارزش"] and sum(charts["value_by_wh"]["series"]["ارزش"]) == balance_value,
-      "۱۵ نمودار؛ جمعِ ارزشِ انبارها = ارزشِ کل")
-
-# --- ۶) صفحه: فیلتر، گروه‌بندی، خروجی، Drill-down -----------------------------------
-from peecha.ui.screens.purchase_reports import PurchaseReportScreen
-calls = []
-class FakeMain:
-    def open_screen(self, code, then=None):
-        calls.append(code)
-        if then and code.startswith("INV_RPT_"):
-            target = PurchaseReportScreen(code[len("INV_RPT_"):], None, side="INVENTORY")
-            target.refresh()
-            then(target)
-            calls.append(target)
-scr = PurchaseReportScreen("STOCK_BY_WAREHOUSE", FakeMain(), side="INVENTORY")
-scr.refresh()
-check(scr.group_combo.currentText() == "انبار", "گروه‌بندیِ پیش‌فرض: انبار")
-check(scr.brand_combo.count() == 2 and scr.branch_combo.count() >= 1, "فیلترهایِ برند و شعبه در صفحه")
-target = scr.inventory_drill_target([WH, "ابزار", label(g1)])
-check(target == ("STOCK_CARD", {"item_id": g1, "warehouse_id": wh}), f"Drill-down: کالا و انبار ← کارتکس (got {target})")
-neg_scr = PurchaseReportScreen("NEGATIVE_STOCK", FakeMain(), side="INVENTORY"); neg_scr.refresh()
-neg_scr._open_row(0, 0)
-check(calls and calls[-1] == "INV_ISSUE", f"Drill-down: موجودیِ منفی ← حوالهٔ انبار (got {calls})")
-oh_scr = PurchaseReportScreen("STOCK_ON_HAND", FakeMain(), side="INVENTORY"); oh_scr.refresh()
-oh_scr.item_combo.setCurrentIndex(oh_scr.item_combo.findData(g1)); oh_scr._reload()
-headers, data, footer = oh_scr._export_data()
-check(all(r[0] == "G-1" or r[0] == "G‑1" or "۱" in r[0] for r in data) and len(data) == 2, "فیلترِ کالا در صفحه")
-check(("کالا", oh_scr.item_combo.currentText()) in oh_scr.extra_filters_summary(), "خروجی با همان فیلترهایِ صفحه (سربرگِ چاپ/اکسل)")
-check("ارزشِ موجودی" in oh_scr.csv_text().splitlines()[0] and len(oh_scr.csv_text().splitlines()) == 4, "خروجیِ CSV با جمع")
-oh_scr.set_hidden_columns({"برند"})
-check("برند" not in oh_scr._export_data()[0], "ستون‌هایِ پنهان در خروجی نمی‌آیند")
-oh_scr.set_hidden_columns(set())
-from peecha.ui.screens.warehouse_dashboard import WarehouseDashboard
-dash = WarehouseDashboard(FakeMain()); dash.refresh()
-check(dash.cards["VALUE"]._title_label.text() == "ارزشِ کلِ موجودی" and len(dash.chart_views) == 15, "صفحهٔ داشبوردِ انبار")
-dash._open_kpi("NEGATIVE")
-check(calls[-2] == "INV_RPT_NEGATIVE_STOCK" and len(calls[-1]._result.rows) == 1, "کلیک رویِ شاخص ← گزارشِ مبدا")
+# --- ۵) صفحهٔ عملیات -----------------------------------------------------------
+from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
+QMessageBox.warning = staticmethod(lambda *a, **k: None)
+screen = WarehouseOperationsScreen(); screen.refresh()
+check(screen.plans_tab.table.rowCount() == 2 and screen.tasks_tab.table.rowCount() == 1, "صفحهٔ عملیات: برنامه‌ها و وظایف")
+screen.plans_tab.code_field.setText("P-ALL"); screen.plans_tab.name_field.setText("همهٔ کالا")
+screen.plans_tab.frequency_spin.setValue(90)
+check(screen.plans_tab.save() and len(ops.list_plans(company_id)) == 3, "ذخیرهٔ برنامه از صفحه")
+screen.tasks_tab.type_combo.setCurrentIndex(screen.tasks_tab.type_combo.findData("PICK"))
+check(screen.tasks_tab.table.rowCount() == 1, "فهرستِ وظایفِ برداشت در صفحه")
 
 print("RESULT:", "ALL PASS" if not FAIL else "SOME FAILED")
 sys.exit(1 if FAIL else 0)

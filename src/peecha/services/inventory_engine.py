@@ -1639,6 +1639,21 @@ class CostCorrectionResult:
     variance_value_delta: decimal.Decimal
 
 
+def _log_cost_adjustment(session, company_id, item_id, warehouse_id, method, unit_cost_delta, quantity_remaining,
+                         quantity_consumed, inventory_value_delta, variance_value_delta) -> None:
+    """R247: فقط ثبتِ تاریخ‌دارِ همان اصلاحی که بالا اعمال شد (برایِ ارزشِ تاریخیِ موجودی)؛ در محاسبه اثری ندارد."""
+    from peecha.db.models.inventory import CostAdjustmentLog
+
+    if not inventory_value_delta and not variance_value_delta:
+        return
+    session.add(CostAdjustmentLog(
+        company_id=company_id, item_id=item_id, warehouse_id=warehouse_id, adjusted_on=datetime.date.today(),
+        costing_method=method, unit_cost_delta=unit_cost_delta, quantity_remaining=quantity_remaining,
+        quantity_consumed=quantity_consumed, inventory_value_delta=inventory_value_delta,
+        variance_value_delta=variance_value_delta,
+    ))
+
+
 def apply_purchase_cost_correction(
     item_id: int, warehouse_id: int, bin_location_id: int | None, company_id: int,
     original_quantity: decimal.Decimal, unit_cost_delta: decimal.Decimal,
@@ -1693,6 +1708,8 @@ def apply_purchase_cost_correction(
             variance_value_delta = _money(quantity_consumed * unit_cost_delta)
             bal.average_unit_cost = bal.average_unit_cost + (inventory_value_delta / current_on_hand)
             bal.last_movement_at = datetime.datetime.now()
+        _log_cost_adjustment(session, company_id, item_id, warehouse_id, method, unit_cost_delta, quantity_remaining,
+                             quantity_consumed, inventory_value_delta, variance_value_delta)
         session.commit()
         return CostCorrectionResult(
             quantity_remaining=quantity_remaining, quantity_consumed=quantity_consumed,
@@ -1747,6 +1764,12 @@ def apply_purchase_cost_correction_fifo(
 
         inventory_value_delta = _money(total_remaining * unit_cost_delta)
         variance_value_delta = _money(total_consumed * unit_cost_delta)
+        item = session.get(Item, item_id)
+        for layer in layers:  # سهمِ هر انبار از اصلاح (لایه‌ها ممکن است در انبارهایِ مختلف باشند)
+            share = layer.remaining_quantity * unit_cost_delta
+            _log_cost_adjustment(session, item.company_id, item_id, layer.warehouse_id, "FIFO", unit_cost_delta,
+                                 layer.remaining_quantity, layer.original_quantity - layer.remaining_quantity,
+                                 _money(share), _ZERO)
         session.commit()
         return CostCorrectionResult(
             quantity_remaining=total_remaining, quantity_consumed=total_consumed,

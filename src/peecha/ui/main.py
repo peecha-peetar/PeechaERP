@@ -89,6 +89,10 @@ def main() -> None:
     # طبقِ خواسته‌یِ صریح: لوگویِ برند به‌عنوانِ آیکونِ اپ/تسک‌بار — همه‌یِ
     # پنجره‌هایِ بی‌آیکونِ اختصاصی (ورود، شِلِ اصلی) این را به ارث می‌برند.
     app.setWindowIcon(theme.app_icon())
+    # R247: گزارش‌هایِ سنگین در رشتهٔ پس‌زمینه اجرا شوند تا رابط قفل نشود
+    from peecha.ui.screens import purchase_reports as report_screens
+
+    report_screens.BACKGROUND_REPORTS = True
 
     font_family = get_font_family()
     app.setFont(QFont(font_family, 11.5))

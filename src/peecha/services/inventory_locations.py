@@ -101,6 +101,9 @@ class WarehouseFields:
     vehicle_driver_detail_account_id: int | None = None
     vehicle_capacity_weight_kg: decimal.Decimal | None = None
     vehicle_capacity_volume_m3: decimal.Decimal | None = None
+    # R247: ظرفیتِ وزنی/حجمیِ هر انبار (غیرِ خودرو)
+    capacity_weight_kg: decimal.Decimal | None = None
+    capacity_volume_m3: decimal.Decimal | None = None
 
 
 @dataclass

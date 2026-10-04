@@ -52,7 +52,7 @@ MOVE_CATEGORIES = (
     ("ISSUE", "حواله/مصرف", -1), ("PRODUCTION_CONSUMPTION", "مصرفِ تولید", -1), ("TRANSFER_OUT", "انتقالِ خروجی", -1),
     ("TRANSFER_IN", "انتقالِ ورودی", 1), ("ADJUST_IN", "اصلاحِ موجودی (افزایش)", 1), ("ADJUST_OUT", "اصلاحِ موجودی (کاهش)", -1),
     ("CONSIGN_IN", "امانیِ ورودی", 1), ("CONSIGN_OUT", "برگشتِ امانی", -1), ("OTHER_IN", "سایرِ ورودی", 1),
-    ("OTHER_OUT", "سایرِ خروجی", -1),
+    ("OTHER_OUT", "سایرِ خروجی", -1), ("COST_ADJUST", "اصلاحِ بهایِ خرید (تعدیلِ ارزش)", 1),
 )
 CATEGORY_TITLES = {code: title for code, title, _s in MOVE_CATEGORIES}
 _QUARANTINE_TYPES = ("QUARANTINE",)
@@ -90,8 +90,10 @@ def _meta(company_id: int) -> SimpleNamespace:
     with new_session() as session:
         whs = {w.warehouse_id: SimpleNamespace(
             warehouse_id=w.warehouse_id, code=w.code, name=w.name, type=w.warehouse_type_code, branch_id=w.branch_id,
-            is_active=w.is_active, manager_user_id=w.manager_user_id, cap_weight=w.vehicle_capacity_weight_kg,
-            cap_volume=w.vehicle_capacity_volume_m3, allow_negative=w.allow_negative_stock)
+            is_active=w.is_active, manager_user_id=w.manager_user_id,
+            cap_weight=w.capacity_weight_kg if w.capacity_weight_kg is not None else w.vehicle_capacity_weight_kg,
+            cap_volume=w.capacity_volume_m3 if w.capacity_volume_m3 is not None else w.vehicle_capacity_volume_m3,
+            allow_negative=w.allow_negative_stock)
             for w in session.scalars(select(Warehouse).where(Warehouse.company_id == company_id))}
         categories = {c.category_id: f"{c.code} — {c.name}" for c in session.scalars(
             select(ItemCategory).where(ItemCategory.company_id == company_id))}
@@ -164,7 +166,23 @@ def _ledger_position(company_id: int, as_of: datetime.date) -> dict[tuple[int, i
                    func.sum(sign * StockLedger.quantity_base * func.coalesce(StockLedger.unit_cost, 0)))
             .where(StockLedger.company_id == company_id, StockLedger.movement_date <= as_of)
             .group_by(StockLedger.item_id, StockLedger.warehouse_id)).all()
-    return {(i, w): [q or _ZERO, _ZERO, (v or _ZERO).quantize(_Q2)] for i, w, q, v in rows}
+    out = {(i, w): [q or _ZERO, _ZERO, (v or _ZERO).quantize(_Q2)] for i, w, q, v in rows}
+    for (i, w), delta in cost_adjustments(company_id, as_of).items():  # R247
+        out.setdefault((i, w), [_ZERO, _ZERO, _ZERO])[2] += delta
+    return out
+
+
+def cost_adjustments(company_id: int, as_of: datetime.date, since: datetime.date | None = None) -> dict[tuple, decimal.Decimal]:
+    """R247: جمعِ اصلاحِ بهایِ ثبت‌شده در inv.cost_adjustment_log به ازایِ (کالا، انبار) تا یک تاریخ."""
+    from peecha.db.models.inventory import CostAdjustmentLog
+
+    with new_session() as session:
+        q = (select(CostAdjustmentLog.item_id, CostAdjustmentLog.warehouse_id, func.sum(CostAdjustmentLog.inventory_value_delta))
+             .where(CostAdjustmentLog.company_id == company_id, CostAdjustmentLog.adjusted_on <= as_of))
+        if since is not None:
+            q = q.where(CostAdjustmentLog.adjusted_on >= since)
+        rows = session.execute(q.group_by(CostAdjustmentLog.item_id, CostAdjustmentLog.warehouse_id)).all()
+    return {(i, w): v or _ZERO for i, w, v in rows}
 
 
 def position(company_id: int, f, m=None) -> tuple[dict[tuple[int, int], list], bool]:
@@ -177,7 +195,7 @@ def position(company_id: int, f, m=None) -> tuple[dict[tuple[int, int], list], b
 
 def _position_note(live: bool) -> str:
     return ("ماندهٔ جاری (inv.stock_balance) -- همان مبنایِ حسابداری." if live else
-            "ماندهٔ تاریخی از دفترِ انبار (inv.stock_ledger)؛ اصلاحِ بهایِ بعدی و رزرو در آن دیده نمی‌شود.")
+            "ماندهٔ تاریخی از دفترِ انبار + اصلاحِ بهایِ ثبت‌شده تا همان تاریخ (از R247)؛ رزرو در آن دیده نمی‌شود.")
 
 
 def movements(company_id: int, date_from: datetime.date, date_to: datetime.date, *, item_ids=None,
@@ -460,10 +478,14 @@ def stock_card(company_id: int, f) -> ReportResult:
     if f.item_id is None:
         raise ValueError("برایِ کارتکس ابتدا «کالا» را انتخاب کنید.")
     m = _meta(company_id)
-    rows = engine_service.list_item_ledger(company_id, f.item_id, f.warehouse_id, f.date_from, f.date_to)
-    before = engine_service.list_item_ledger(company_id, f.item_id, f.warehouse_id, None, f.date_from - datetime.timedelta(days=1))
-    opening_qty = before[-1].running_balance if before else _ZERO
-    opening_value = before[-1].running_value_balance if before else _ZERO
+    basis = _opt(f, "basis", "KARDEX")
+    if basis == "LEDGER":
+        opening_qty, opening_value, rows = _ledger_card_rows(company_id, m, f)
+    else:
+        rows = engine_service.list_item_ledger(company_id, f.item_id, f.warehouse_id, f.date_from, f.date_to)
+        before = engine_service.list_item_ledger(company_id, f.item_id, f.warehouse_id, None, f.date_from - datetime.timedelta(days=1))
+        opening_qty = before[-1].running_balance if before else _ZERO
+        opening_value = before[-1].running_value_balance if before else _ZERO
     # نگاشتِ ردیف به سند (نوع، شماره، تاریخ) و نوعِ سندِ بازرگانیِ مبدا -- یک کوئری
     with new_session() as session:
         docs = session.execute(
@@ -477,13 +499,14 @@ def stock_card(company_id: int, f) -> ReportResult:
     detail = []
     for row in rows:
         sid, desc, comm_type = doc_map.get((row.document_type_code, row.document_no, row.movement_date), (None, "", None))
-        direction = "IN" if row.quantity_in else "OUT"
-        cat = category_of(row.document_type_code, direction, comm_type)
+        direction = "IN" if row.quantity_in or getattr(row, "category", None) == "COST_ADJUST" else "OUT"
+        cat = getattr(row, "category", None) or category_of(row.document_type_code, direction, comm_type)
+        desc = getattr(row, "description", None) or desc
         qty = row.quantity_in or row.quantity_out
         value = row.value_in or row.value_out
         totals[cat][0] += qty
         totals[cat][1] += value
-        detail.append(([row.movement_date, str(row.document_no), DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code),
+        detail.append(([row.movement_date, str(row.document_no or ""), DOC_TYPE_TITLES.get(row.document_type_code, row.document_type_code or ""),
                         CATEGORY_TITLES[cat], desc or "", row.quantity_in, row.quantity_out, row.running_balance, unit, row.unit_cost,
                         value, row.running_value_balance, row.warehouse_name,
                         m.ctx.names.get(row.counterparty_detail_account_id, "") if row.counterparty_detail_account_id else ""],
@@ -491,7 +514,10 @@ def stock_card(company_id: int, f) -> ReportResult:
     closing_qty = rows[-1].running_balance if rows else opening_qty
     closing_value = rows[-1].running_value_balance if rows else opening_value
     note = (f"کالا: {m.ctx.item_label(f.item_id)} -- اولِ دوره {base_fmt(opening_qty)} {unit}، پایانِ دوره {base_fmt(closing_qty)} {unit}. "
-            "بها و ارزش همان کاردکسِ سیستم است (بهایِ واحدِ رسید با سهمِ مالیاتِ ردیف برایِ نمایش).")
+            + ("ارزش بر مبنایِ دفترِ انبار و اصلاحِ بهایِ ثبت‌شده -- همان مبنایِ حسابداری و گزارشِ ارزشِ موجودی."
+               if basis == "LEDGER" else
+               "بها و ارزش همان کاردکسِ سیستم است (بهایِ واحدِ رسید با سهمِ مالیاتِ ردیف برایِ نمایش)؛ "
+               "برایِ مبنایِ حسابداری «مبنایِ ارزش» را «دفترِ انبار» کنید."))
     if _opt(f, "view", "DETAIL") == "SUMMARY":
         r = ReportResult([("شرح", TEXT), ("علامت", TEXT), ("مقدار", QTY), ("ارزش", MONEY)], no_total={2, 3}, note=note)
         r.add(["موجودیِ اولِ دوره", "", opening_qty, opening_value])
@@ -509,6 +535,50 @@ def stock_card(company_id: int, f) -> ReportResult:
     for cells, ref in detail:
         r.add(cells, ref)
     return r
+
+
+def _ledger_card_rows(company_id: int, m, f):
+    """R247: کارتکس بر مبنایِ دفترِ انبار (بهایِ ثبت‌شدهٔ هر حرکت، بدونِ مالیات) + ردیف‌هایِ اصلاحِ بها."""
+    from peecha.db.models.inventory import CostAdjustmentLog
+
+    moves = [mv for mv in movements(company_id, _EPOCH, f.date_to, item_ids={f.item_id})
+             if f.warehouse_id is None or mv.warehouse_id == f.warehouse_id]
+    with new_session() as session:
+        q = select(CostAdjustmentLog).where(CostAdjustmentLog.company_id == company_id, CostAdjustmentLog.item_id == f.item_id,
+                                            CostAdjustmentLog.adjusted_on <= f.date_to)
+        if f.warehouse_id is not None:
+            q = q.where(CostAdjustmentLog.warehouse_id == f.warehouse_id)
+        logs = list(session.scalars(q))
+    events = [(mv.date, 0, mv.ledger_id, mv) for mv in moves] + [(lg.adjusted_on, 1, lg.log_id, lg) for lg in logs]
+    qty_b, value_b = _ZERO, _ZERO
+    opening = None
+    rows = []
+    for when, kind, _id, ev in sorted(events, key=lambda e: e[:3]):
+        if when >= f.date_from and opening is None:
+            opening = (qty_b, value_b)
+        if kind == 0:
+            signed = ev.qty if ev.direction == "IN" else -ev.qty
+            qty_b += signed
+            value_b += ev.value if ev.direction == "IN" else -ev.value
+            row = SimpleNamespace(movement_date=ev.date, document_type_code=ev.doc_type, document_no=ev.doc_no,
+                                  quantity_in=ev.qty if ev.direction == "IN" else _ZERO,
+                                  quantity_out=ev.qty if ev.direction == "OUT" else _ZERO, unit_cost=ev.unit_cost,
+                                  value_in=ev.value if ev.direction == "IN" else _ZERO,
+                                  value_out=ev.value if ev.direction == "OUT" else _ZERO,
+                                  running_balance=qty_b, running_value_balance=value_b, warehouse_name=m.whs[ev.warehouse_id].name,
+                                  counterparty_detail_account_id=ev.party)
+        else:
+            value_b += ev.inventory_value_delta
+            row = SimpleNamespace(movement_date=ev.adjusted_on, document_type_code=None, document_no=None, quantity_in=_ZERO,
+                                  quantity_out=_ZERO, unit_cost=ev.unit_cost_delta, value_in=ev.inventory_value_delta, value_out=_ZERO,
+                                  running_balance=qty_b, running_value_balance=value_b, warehouse_name=m.whs[ev.warehouse_id].name,
+                                  counterparty_detail_account_id=None, category="COST_ADJUST",
+                                  description=f"اصلاحِ بهایِ واحد {base_fmt(ev.unit_cost_delta)}")
+        if when >= f.date_from:
+            rows.append(row)
+    if opening is None:
+        opening = (qty_b, value_b)
+    return opening[0], opening[1], rows
 
 
 def base_fmt(value) -> str:
@@ -607,6 +677,12 @@ def value_trend(company_id: int, f) -> ReportResult:
                    func.sum(sign * StockLedger.quantity_base * func.coalesce(StockLedger.unit_cost, 0)))
             .where(StockLedger.company_id == company_id, StockLedger.movement_date <= f.date_to)
             .group_by(StockLedger.movement_date, StockLedger.item_id, StockLedger.warehouse_id)).all()
+        from peecha.db.models.inventory import CostAdjustmentLog
+
+        rows = list(rows) + [(d, i, w, _ZERO, v) for d, i, w, v in session.execute(  # R247: اصلاحِ بهایِ تاریخ‌دار
+            select(CostAdjustmentLog.adjusted_on, CostAdjustmentLog.item_id, CostAdjustmentLog.warehouse_id,
+                   CostAdjustmentLog.inventory_value_delta)
+            .where(CostAdjustmentLog.company_id == company_id, CostAdjustmentLog.adjusted_on <= f.date_to)).all()]
     qty_b, value_b = _ZERO, _ZERO
     months: dict[str, list] = {}
     for when, item_id, wid, qty, value in sorted(rows, key=lambda r: r[0]):
@@ -624,7 +700,7 @@ def value_trend(company_id: int, f) -> ReportResult:
         qty, value = months[key]
         r.add([key, qty, value, value - prev])
         prev = value
-    r.note = "از دفترِ انبار (بهایِ ثبت‌شدهٔ هر حرکت)؛ ماهِ بدونِ حرکت نمایش داده نمی‌شود."
+    r.note = "از دفترِ انبار (بهایِ ثبت‌شدهٔ هر حرکت) + اصلاحِ بهایِ تاریخ‌دار؛ ماهِ بدونِ حرکت نمایش داده نمی‌شود."
     return r
 
 
@@ -1313,7 +1389,7 @@ def capacity(company_id: int, f) -> ReportResult:
                _pct(weight, w.cap_weight) if w.cap_weight else None, w.cap_volume, volume.quantize(_Q2),
                (w.cap_volume - volume).quantize(_Q2) if w.cap_volume else None, _pct(volume, w.cap_volume) if w.cap_volume else None,
                missing])
-    r.note = "ظرفیتِ وزنی/حجمی فقط برایِ انبارهایِ خودرو در فرمِ انبار تعریف می‌شود؛ برایِ بقیه فقط اشغال نمایش داده می‌شود."
+    r.note = "ظرفیت از فرمِ انبار (ظرفیتِ وزنی/حجمیِ انبار، یا ظرفیتِ خودرو)؛ انبارِ بدونِ ظرفیت فقط اشغال را نشان می‌دهد."
     return r
 
 
@@ -1457,6 +1533,166 @@ def md_min_max(company_id: int, f) -> ReportResult:
 
 
 # ---------------------------------------------------------------------
+# R247: WMS سبک (جانمایی/برداشت) و برنامهٔ شمارش
+# ---------------------------------------------------------------------
+def _tasks(company_id: int, f, m, task_type: str) -> list:
+    from peecha.services import warehouse_operations as ops
+
+    out = []
+    for t in ops.list_tasks(company_id, task_type):
+        if not (_item_ok(m, f, t.item_id) and _wh_ok(m, f, t.warehouse_id)):
+            continue
+        if not (f.date_from <= t.created_at.date() <= f.date_to):
+            continue
+        out.append(t)
+    return out
+
+
+def _minutes(start, end) -> decimal.Decimal | None:
+    return decimal.Decimal(str(round((end - start).total_seconds() / 60, 1))) if start and end else None
+
+
+def _task_source(t) -> tuple[str, tuple | None]:
+    if t.source_stock_document_id:
+        return f"سندِ انبار {t.source_stock_document_id}", None
+    if t.source_commercial_document_id:
+        return f"سندِ فروش {t.source_commercial_document_id}", None
+    return "", None
+
+
+def _bins(company_id: int) -> dict[int, str]:
+    with new_session() as session:
+        return {b: f"{c} — {n or ''}" for b, c, n in session.execute(
+            select(BinLocation.bin_location_id, BinLocation.code, BinLocation.name)
+            .join(Warehouse, Warehouse.warehouse_id == BinLocation.warehouse_id).where(Warehouse.company_id == company_id)).all()}
+
+
+_TASK_VIEW = ("view", "نمایش", (("ALL", "همه"), ("OPEN", "در انتظار"), ("IN_PROGRESS", "در حالِ انجام"), ("DONE", "انجام‌شده")))
+
+
+def putaway_report(company_id: int, f) -> ReportResult:
+    from peecha.services.warehouse_operations import TASK_STATUSES
+
+    m, bins, view = _meta(company_id), _bins(company_id), _opt(f, "view", "ALL")
+    r = ReportResult([("وظیفه", INT), ("انبار", TEXT), ("منبع", TEXT), ("کالا", TEXT), ("مقدار", QTY), ("از محل", TEXT), ("به محل", TEXT),
+                      ("وضعیت", TEXT), ("ایجاد", DATE), ("زمانِ انتظار تا شروع (دقیقه)", QTY), ("زمانِ جانمایی (دقیقه)", QTY),
+                      ("اپراتور", TEXT)], no_total={0, 9, 10})
+    for t in _tasks(company_id, f, m, "PUTAWAY"):
+        if view != "ALL" and t.status_code != view:
+            continue
+        r.add([t.task_id, _wh_label(m, t.warehouse_id), _task_source(t)[0], m.ctx.item_label(t.item_id), t.quantity_base,
+               bins.get(t.from_bin_location_id, ""), bins.get(t.to_bin_location_id, ""), TASK_STATUSES[t.status_code], t.created_at.date(),
+               _minutes(t.created_at, t.started_at), _minutes(t.started_at, t.completed_at),
+               m.users.get(t.completed_by_user_id or t.assigned_user_id, "")],
+              _ref(t.resulting_stock_document_id, "TRANSFER") if t.resulting_stock_document_id
+              else (_ref(t.source_stock_document_id, "RECEIPT") if t.source_stock_document_id else None))
+    return r
+
+
+_PICK_VIEW = ("view", "نمایش", (("ALL", "همه"), ("OPEN", "آمادهٔ برداشت"), ("IN_PROGRESS", "در حالِ برداشت"), ("DONE", "برداشته‌شده"),
+                                 ("PARTIAL", "برداشتِ ناقص")))
+
+
+def picking_report(company_id: int, f) -> ReportResult:
+    from peecha.services.warehouse_operations import TASK_STATUSES
+
+    m, bins, view = _meta(company_id), _bins(company_id), _opt(f, "view", "ALL")
+    r = ReportResult([("وظیفه", INT), ("انبار", TEXT), ("منبع", TEXT), ("کالا", TEXT), ("مقدارِ درخواستی", QTY), ("برداشته‌شده", QTY),
+                      ("دقتِ برداشت", PERCENT), ("از محل", TEXT), ("وضعیت", TEXT), ("ایجاد", DATE), ("زمانِ برداشت (دقیقه)", QTY),
+                      ("برداشت‌کننده", TEXT)], no_total={0, 6, 10})
+    for t in _tasks(company_id, f, m, "PICK"):
+        partial = t.status_code == "DONE" and (t.done_quantity_base or _ZERO) != t.quantity_base
+        if view == "PARTIAL" and not partial or (view not in ("ALL", "PARTIAL") and t.status_code != view):
+            continue
+        accuracy = (100 - abs(t.done_quantity_base - t.quantity_base) * 100 / t.quantity_base).quantize(decimal.Decimal("0.1"))             if t.status_code == "DONE" and t.quantity_base else None
+        r.add([t.task_id, _wh_label(m, t.warehouse_id), _task_source(t)[0], m.ctx.item_label(t.item_id), t.quantity_base,
+               t.done_quantity_base, accuracy, bins.get(t.from_bin_location_id, ""),
+               "برداشتِ ناقص" if partial else TASK_STATUSES[t.status_code], t.created_at.date(), _minutes(t.started_at, t.completed_at),
+               m.users.get(t.completed_by_user_id or t.assigned_user_id, "")],
+              (t.source_commercial_document_id, "SALES_ORDER") if t.source_commercial_document_id
+              else (_ref(t.source_stock_document_id, "ISSUE") if t.source_stock_document_id else None))
+    return r
+
+
+def wms_performance(company_id: int, f) -> ReportResult:
+    """عملکردِ اپراتور: وظایفِ انجام‌شده، میانگینِ زمان، ردیف در ساعت و دقتِ برداشت."""
+    from peecha.services.warehouse_operations import TASK_TYPES
+
+    m = _meta(company_id)
+    agg: dict[tuple, list] = defaultdict(lambda: [0, [], 0, 0])
+    for task_type in TASK_TYPES:
+        for t in _tasks(company_id, f, m, task_type):
+            if t.status_code != "DONE":
+                continue
+            a = agg[(TASK_TYPES[task_type], m.users.get(t.completed_by_user_id, "— نامشخص —"))]
+            a[0] += 1
+            minutes = _minutes(t.started_at, t.completed_at)
+            if minutes is not None:
+                a[1].append(minutes)
+            if task_type == "PICK":
+                a[2] += 1
+                a[3] += 1 if t.done_quantity_base == t.quantity_base else 0
+    r = ReportResult([("نوع", TEXT), ("اپراتور", TEXT), ("وظایفِ انجام‌شده", INT), ("میانگینِ زمان (دقیقه)", QTY),
+                      ("ردیف در ساعت", QTY), ("دقتِ برداشت", PERCENT)], no_total={3, 4, 5})
+    for key in sorted(agg):
+        n, minutes, picks, exact = agg[key]
+        total = sum(minutes, _ZERO)
+        r.add(list(key) + [n, (total / len(minutes)).quantize(decimal.Decimal("0.1")) if minutes else None,
+                           (decimal.Decimal(n) * 60 / total).quantize(decimal.Decimal("0.1")) if total >= 1 else None,
+                           _pct(exact, picks) if picks else None])
+    r.note = "زمانِ هر وظیفه از «شروع» تا «تکمیل» در صفحهٔ وظایفِ انبار؛ بسته‌بندی و ارسال جدا ثبت نمی‌شوند."
+    return r
+
+
+def unlocated_stock(company_id: int, f) -> ReportResult:
+    """دریافت‌شده ولی جانمایی‌نشده: موجودیِ محلِ پیش‌فرض در انبارهایی که محلِ دیگری هم دارند + وظایفِ جانماییِ باز."""
+    from peecha.services import warehouse_operations as ops
+    from peecha.services.inventory_locations import DEFAULT_BIN_CODE
+
+    m = _meta(company_id)
+    with new_session() as session:
+        bins = session.execute(select(BinLocation.bin_location_id, BinLocation.warehouse_id, BinLocation.code)
+                               .join(Warehouse, Warehouse.warehouse_id == BinLocation.warehouse_id)
+                               .where(Warehouse.company_id == company_id)).all()
+        rows = session.execute(select(StockBalance.item_id, StockBalance.warehouse_id, StockBalance.bin_location_id,
+                                      func.sum(StockBalance.quantity_on_hand))
+                               .where(StockBalance.company_id == company_id)
+                               .group_by(StockBalance.item_id, StockBalance.warehouse_id, StockBalance.bin_location_id)).all()
+    per_wh: dict[int, int] = defaultdict(int)
+    default_bins = set()
+    for bin_id, wid, code in bins:
+        per_wh[wid] += 1
+        if code == DEFAULT_BIN_CODE:
+            default_bins.add(bin_id)
+    open_tasks: dict[tuple, decimal.Decimal] = defaultdict(lambda: _ZERO)
+    for t in ops.list_tasks(company_id, "PUTAWAY"):
+        if t.status_code in ("OPEN", "IN_PROGRESS"):
+            open_tasks[(t.item_id, t.warehouse_id)] += t.quantity_base
+    r = ReportResult([("کالا", TEXT), ("انبار", TEXT), ("موجودی در محلِ دریافت (پیش‌فرض)", QTY), ("وظیفهٔ جانماییِ باز", QTY)])
+    keys = {(i, w): q for i, w, b, q in rows if b in default_bins and q and per_wh[w] > 1}
+    for key in sorted(set(keys) | set(open_tasks), key=lambda k: (m.ctx.item_label(k[0]), _wh_label(m, k[1]))):
+        if _item_ok(m, f, key[0]) and _wh_ok(m, f, key[1]):
+            r.add([m.ctx.item_label(key[0]), _wh_label(m, key[1]), keys.get(key, _ZERO), open_tasks.get(key, _ZERO)])
+    r.note = "انبارِ تک‌محلی (فقط محلِ پیش‌فرض) جانمایی لازم ندارد و در این فهرست نیست."
+    return r
+
+
+def cycle_count_due(company_id: int, f) -> ReportResult:
+    from peecha.services import warehouse_operations as ops
+
+    m = _meta(company_id)
+    r = ReportResult([("برنامه", TEXT), ("انبار", TEXT), ("کالا", TEXT), ("تواتر (روز)", INT), ("آخرین شمارش", DATE),
+                      ("سررسید", DATE), ("روزِ تاخیر", DAYS), ("وضعیت", TEXT)], no_total={3, 6})
+    for d in sorted(ops.due_counts(company_id, f.date_to, f.warehouse_id), key=lambda d: (d.due_date or _EPOCH, d.plan.code)):
+        if not (_item_ok(m, f, d.item_id) and _wh_ok(m, f, d.warehouse_id)):
+            continue
+        r.add([f"{d.plan.code} — {d.plan.name}", _wh_label(m, d.warehouse_id), m.ctx.item_label(d.item_id), d.plan.frequency_days,
+               d.last_count, d.due_date, d.overdue_days, "هرگز شمرده نشده" if d.last_count is None else "سررسید شده"])
+    r.note = "اقلامِ برنامه‌هایِ فعالِ شمارشِ دوره‌ای که شمارشِ بعدی‌شان رسیده است؛ شمارش با «انبارگردانی» انجام می‌شود."
+    return r
+
+
+# ---------------------------------------------------------------------
 # فهرست
 # ---------------------------------------------------------------------
 _ST, _CD, _VL, _AN, _CT, _LT, _OP, _MD = ("موجودی", "کارتکس و گردش", "ارزشِ موجودی", "تحلیلِ موجودی", "شمارش و مغایرت",
@@ -1485,7 +1721,9 @@ WAREHOUSE_REPORTS: list[ReportDef] = [
     ReportDef("CONSIGNMENT_STOCK", "موجودیِ امانی", consignment_stock, _IF, "موجودیِ امانیِ تامین‌کنندگان.", "none", _ST),
     ReportDef("STOCK_CARD", "کارتکسِ کالا", stock_card, ("item", "warehouse"),
               "اولِ دوره + رسید − برگشتِ خرید + تولید + برگشتِ فروش − فروش − حواله − مصرفِ تولید ± انتقال = پایانِ دوره.", group=_CD,
-              options=(("view", "نمایش", (("DETAIL", "ریزِ حرکات"), ("SUMMARY", "خلاصهٔ فرمولی"))),)),
+              options=(("view", "نمایش", (("DETAIL", "ریزِ حرکات"), ("SUMMARY", "خلاصهٔ فرمولی"))),
+                       ("basis", "مبنایِ ارزش", (("KARDEX", "کاردکسِ سیستم (با سهمِ مالیات)"),
+                                                 ("LEDGER", "دفترِ انبار (مبنایِ حسابداری)"))))),
     ReportDef("ITEM_MOVEMENT", "گردشِ کالا (روزانه/هفتگی/ماهانه/سالانه)", item_movement, _IF,
               "ورود و خروجِ مقداری و ریالی در هر دوره.", group=_CD,
               options=(_PERIOD_OPTION, ("by", "تفکیک", (("TOTAL", "کل"), ("ITEM", "کالا"), ("WAREHOUSE", "انبار"))), _DOC_TYPE_OPTION)),
@@ -1522,6 +1760,8 @@ WAREHOUSE_REPORTS: list[ReportDef] = [
     ReportDef("COUNTER_PERFORMANCE", "عملکردِ شمارشگران", counter_performance, _IF, "ردیف، دقت و اختلافِ هر شمارشگر.", group=_CT),
     ReportDef("CYCLE_COUNT", "شمارشِ دوره‌ای (Cycle Count)", cycle_count, _IF,
               "دفعاتِ شمارشِ هر کالا×انبار، آخرین شمارش، اختلاف‌هایِ قبلی و دقت.", group=_CT),
+    ReportDef("CYCLE_COUNT_DUE", "شمارش‌هایِ سررسیدشده", cycle_count_due, _IF,
+              "اقلامِ برنامه‌هایِ شمارشِ دوره‌ای که باید شمرده شوند.", "as_of", _CT),
     ReportDef("ACCURACY", "دقتِ موجودی (Inventory Accuracy)", inventory_accuracy, _IF,
               "درصدِ ردیف‌هایِ شمارشِ بدونِ اختلاف به تفکیکِ انبار/اپراتور/گروه/ماه.", group=_CT, options=(_ACC_BY,)),
     ReportDef("BATCH_STOCK", "موجودیِ بچ/لات", batch_stock, _IF, "موجودیِ هر بچ با تاریخِ تولید/انقضا، انبار و وضعیت.", "as_of", _LT),
@@ -1543,6 +1783,14 @@ WAREHOUSE_REPORTS: list[ReportDef] = [
               "تعدادِ سند و ردیف، میانگینِ زمان و ردیف در ساعت به تفکیکِ نوعِ سند و کاربر.", group=_OP),
     ReportDef("CAPACITY", "ظرفیتِ انبار", capacity, ("warehouse", "branch"), "ظرفیتِ وزنی/حجمی، اشغال، آزاد و درصدِ استفاده.", "none", _OP),
     ReportDef("BIN_STOCK", "موجودی به تفکیکِ محلِ نگهداری", bin_stock, _IF, "موجودیِ هر محل (Bin) در هر انبار.", "none", _OP),
+    ReportDef("PUTAWAY", "جانمایی (Putaway)", putaway_report, _IF,
+              "وظایفِ جانمایی با محلِ مبدا/مقصد، زمانِ انتظار، زمانِ جانمایی و اپراتور.", group=_OP, options=(_TASK_VIEW,)),
+    ReportDef("UNLOCATED_STOCK", "دریافت‌شده ولی جانمایی‌نشده", unlocated_stock, _IF,
+              "موجودیِ ماندهٔ محلِ دریافت و وظایفِ جانماییِ باز.", "none", _OP),
+    ReportDef("PICKING", "برداشت (Picking)", picking_report, _IF,
+              "آمادهٔ برداشت، برداشته‌شده، در انتظار، ناقص؛ دقت و زمانِ برداشت.", group=_OP, options=(_PICK_VIEW,)),
+    ReportDef("WMS_PERFORMANCE", "عملکردِ اپراتورهایِ انبار", wms_performance, ("warehouse", "branch"),
+              "وظایفِ انجام‌شده، میانگینِ زمان، ردیف در ساعت و دقتِ برداشتِ هر اپراتور.", group=_OP),
     ReportDef("MD_WAREHOUSES", "فهرستِ انبارها", md_warehouses, ("warehouse", "branch"),
               "نوع، شعبه، مسئول، محل‌ها، تعداد و ارزشِ کالاهایِ هر انبار.", "none", _MD),
     ReportDef("MD_UNITS", "واحدها و تبدیلِ واحدِ کالاها", md_units, _IFNW, "واحدهایِ فرعیِ هر کالا و ضریبِ تبدیل.", "none", _MD),

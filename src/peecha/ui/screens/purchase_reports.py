@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QCompleter, QDialog, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QVBoxLayout,
 )
@@ -25,6 +25,27 @@ from peecha.services import purchase_dashboard as dashboard_service
 from peecha.services import purchase_reports as reports_service
 from peecha.ui.screens.reports_common import ReportScreenBase
 from peecha.ui.widgets import persist_column_widths
+
+# R247: اجرایِ گزارش در رشتهٔ پس‌زمینه -- برنامهٔ اصلی (ui/main.py) روشن می‌کند؛ تست‌ها همگام می‌مانند
+BACKGROUND_REPORTS = False
+PAGE_SIZES = ((500, "۵۰۰"), (100, "۱۰۰"), (250, "۲۵۰"), (1000, "۱۰۰۰"), (0, "همه"))
+
+
+class ReportWorker(QThread):
+    """گزارش را بیرون از رشتهٔ رابط اجرا می‌کند؛ نتیجه با سیگنال (در رشتهٔ رابط) برمی‌گردد."""
+
+    done = Signal(int, object, object)  # (نسل، نتیجه، خطا)
+
+    def __init__(self, generation: int, fn, *args) -> None:
+        super().__init__()
+        self._generation, self._fn, self._args = generation, fn, args
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            self.done.emit(self._generation, self._fn(*self._args), None)
+        except Exception as exc:  # noqa: BLE001 -- به رشتهٔ رابط منتقل می‌شود
+            self.done.emit(self._generation, None, exc)
+
 
 _TYPE_TO_NAV_CODE = {
     "PURCHASE_ORDER": "PURCH_ORDER", "PURCHASE_PROFORMA": "PURCH_PROFORMA", "PURCHASE_INVOICE": "PURCH_INVOICE",
@@ -225,6 +246,31 @@ class PurchaseReportScreen(ReportScreenBase):
             self.layout().insertLayout(self.layout().indexOf(self.table), self.options_row)
         self.layout().insertLayout(self.layout().indexOf(self.table), tools)
 
+        # R247: صفحه‌بندیِ نمایش (چاپ/خروجی همیشه همهٔ ردیف‌ها را دارد)
+        self._page, self._page_offset, self._page_total = 0, 0, -1
+        self._generation, self._workers = 0, []
+        pager = QHBoxLayout()
+        self.busy_label = QLabel("")
+        self.busy_label.setObjectName("sectionHint")
+        pager.addWidget(self.busy_label)
+        pager.addStretch(1)
+        pager.addWidget(QLabel("ردیف در صفحه:"))
+        self.page_size_combo = QComboBox()
+        for size, text in PAGE_SIZES:
+            self.page_size_combo.addItem(text, size)
+        self.page_size_combo.currentIndexChanged.connect(lambda _i: self._go_page(0))
+        pager.addWidget(self.page_size_combo)
+        self.prev_page_button = QPushButton("‹ قبلی")
+        self.prev_page_button.setObjectName("flatButton")
+        self.prev_page_button.clicked.connect(lambda: self._go_page(self._page - 1))
+        self.page_label = QLabel("")
+        self.next_page_button = QPushButton("بعدی ›")
+        self.next_page_button.setObjectName("flatButton")
+        self.next_page_button.clicked.connect(lambda: self._go_page(self._page + 1))
+        for w in (self.prev_page_button, self.page_label, self.next_page_button):
+            pager.addWidget(w)
+        self.layout().insertLayout(self.layout().indexOf(self.table) + 1, pager)
+
         header = self.table.horizontalHeader()
         header.setSectionsClickable(True)
         header.sectionClicked.connect(self._on_header_clicked)
@@ -326,7 +372,15 @@ class PurchaseReportScreen(ReportScreenBase):
         try:
             result = reports_service.run_report(company_id, self._def.code, self._filters(date_from, date_to))
         except ValueError as exc:
-            self.hint_label.setText(f"{self._def.hint}\n⚠ {exc}")
+            return self._apply_result(None, exc)
+        return self._apply_result(result, None)
+
+    def _apply_result(self, result, error):
+        self._page = 0
+        if error is not None:
+            if not isinstance(error, ValueError):
+                raise error
+            self.hint_label.setText(f"{self._def.hint}\n⚠ {error}")
             self._result = None
             return [], [], None
         self.hint_label.setText(f"{self._def.hint}\n{result.note}" if result.note else self._def.hint)
@@ -403,8 +457,72 @@ class PurchaseReportScreen(ReportScreenBase):
         self._show_sort_indicator()
 
     def _reload(self) -> None:
-        super()._reload()
+        company_id = self._company_id()
+        if not BACKGROUND_REPORTS or company_id is None:
+            super()._reload()
+            self._show_sort_indicator()
+            return
+        # R247: نسلِ تازه؛ نتیجهٔ اجرایِ قبلی که دیرتر برسد نادیده گرفته می‌شود
+        self._generation += 1
+        filters = self._filters(self.date_from.date(), self.date_to.date())
+        worker = ReportWorker(self._generation, reports_service.run_report, company_id, self._def.code, filters)
+        worker.done.connect(self._on_worker_done)
+        worker.finished.connect(lambda w=worker: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(worker)
+        self.busy_label.setText("در حالِ محاسبهٔ گزارش…")
+        worker.start()
+
+    def wait_for_report(self, timeout_ms: int = 60000) -> None:
+        """برایِ تست/اسکریپت: صبر تا پایانِ اجرایِ پس‌زمینه و اعمالِ نتیجه."""
+        from PySide6.QtCore import QCoreApplication
+
+        for worker in list(self._workers):
+            worker.wait(timeout_ms)
+        QCoreApplication.processEvents()
+
+    def _on_worker_done(self, generation: int, result, error) -> None:
+        if generation != self._generation:
+            return
+        self.busy_label.setText("")
+        self._all_row_ids, self._all_row_bold = [], []
+        try:
+            self._headers, self._all_rows, self._footer = self._apply_result(result, error)
+        except Exception as exc:  # noqa: BLE001
+            self.hint_label.setText(f"{self._def.hint}\n⚠ خطا در اجرایِ گزارش: {exc}")
+            self._result = None
+            self._headers, self._all_rows, self._footer = [], [], None
+        self._apply_search_filter()
         self._show_sort_indicator()
+
+    # --- R247: صفحه‌بندی -------------------------------------------------
+    def _page_size(self) -> int:
+        return self.page_size_combo.currentData() or 0
+
+    def _go_page(self, page: int) -> None:
+        self._page = page
+        self._set_table(self._headers, self._rows, self._footer)
+
+    def _set_table(self, headers: list[str], rows: list[list], footer: list | None) -> None:
+        total, size = len(rows), self._page_size()
+        if total != self._page_total:
+            self._page_total = total
+            self._page = 0
+        pages = max(1, -(-total // size)) if size else 1
+        self._page = max(0, min(self._page, pages - 1))
+        start = self._page * size if size else 0
+        shown = rows[start:start + size] if size else rows
+        saved_bold = self._row_bold
+        if len(saved_bold) == total:
+            self._row_bold = saved_bold[start:start + len(shown)]
+        self._page_offset = start
+        try:
+            super()._set_table(headers, shown, footer)
+        finally:
+            self._row_bold = saved_bold
+        self.page_label.setText(numerals.to_persian_digits(
+            f"ردیفِ {start + 1 if total else 0}–{start + len(shown)} از {total}" + (f" (صفحهٔ {self._page + 1}/{pages})" if pages > 1 else "")))
+        self.prev_page_button.setEnabled(self._page > 0)
+        self.next_page_button.setEnabled(self._page < pages - 1)
 
     def _show_sort_indicator(self) -> None:
         header = self.table.horizontalHeader()
@@ -537,9 +655,10 @@ class PurchaseReportScreen(ReportScreenBase):
 
     # --- دابل‌کلیک: سند، یا ریزِ ردیفِ تجمیعی -----------------------------
     def _open_row(self, row: int, _col: int) -> None:
-        if self._main_window is None or not (0 <= row < len(self._row_ids)):
+        index = row + getattr(self, "_page_offset", 0)
+        if self._main_window is None or not (0 <= index < len(self._row_ids)):
             return
-        ref = self._row_ids[row]
+        ref = self._row_ids[index]
         if ref:
             document_id, doc_type = ref
             if doc_type == "JOURNAL_ENTRY":
@@ -604,6 +723,7 @@ class PurchaseReportScreen(ReportScreenBase):
         return None
 
     def raw_row(self, display_row: int) -> list | None:
+        display_row += getattr(self, "_page_offset", 0)
         if self._result is None or not (0 <= display_row < len(self._rows)):
             return None
         index = self._row_raw.get(id(self._rows[display_row]))

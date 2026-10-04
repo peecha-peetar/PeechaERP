@@ -23,6 +23,7 @@ _ICONS = {
     "OVER": ("📈", "CHART_TEAL"), "DEAD": ("🪨", "DANGER"), "SLOW": ("🐢", "WARNING"), "FAST": ("⚡", "SUCCESS"),
     "NEAR_EXPIRY": ("⏳", "WARNING"), "EXPIRED": ("☠", "DANGER"), "OPEN_RECEIPTS": ("📥", "ACCENT"), "OPEN_ISSUES": ("📤", "ACCENT"),
     "TRANSFERS": ("🔁", "CHART_TEAL"), "COUNTS": ("🧮", "CHART_PURPLE"), "VARIANCE": ("≠", "DANGER"),
+    "PUTAWAY": ("🧭", "CHART_ORANGE"), "PICKS": ("🧺", "ACCENT"), "COUNT_DUE": ("📅", "WARNING"),
 }
 _SERIES_COLORS = ("ACCENT", "CHART_ORANGE", "CHART_TEAL", "CHART_PURPLE")
 
@@ -107,7 +108,27 @@ class WarehouseDashboard(_ProcurementDashboardBase):
         if company_id is None:
             return
         self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
-        kpis, self.chart_data = dashboard_service.dashboard(company_id, self.date_from.date(), self.date_to.date())
+        from peecha.ui.screens import purchase_reports as report_screens
+
+        if report_screens.BACKGROUND_REPORTS:
+            self._generation = getattr(self, "_generation", 0) + 1
+            worker = report_screens.ReportWorker(self._generation, dashboard_service.dashboard, company_id,
+                                                 self.date_from.date(), self.date_to.date())
+            worker.done.connect(self._on_worker_done)
+            self._worker = worker
+            worker.start()
+            return
+        self._apply(*dashboard_service.dashboard(company_id, self.date_from.date(), self.date_to.date()))
+
+    def _on_worker_done(self, generation: int, result, error) -> None:
+        if generation != getattr(self, "_generation", 0):
+            return
+        if error is not None:
+            raise error
+        self._apply(*result)
+
+    def _apply(self, kpis, chart_data) -> None:
+        self.chart_data = chart_data
         self._kpis = {k.code: k for k in kpis}
         for code, kpi in self._kpis.items():
             card = self.cards[code]

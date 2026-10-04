@@ -633,7 +633,8 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
 
     def copy_text(self) -> str:
         headers, rows, footer = self._export_data()
-        selected = sorted({i.row() for i in self.table.selectedIndexes()})
+        offset = getattr(self, "_page_offset", 0)  # R247: صفحه‌بندیِ جدول
+        selected = sorted({i.row() + offset for i in self.table.selectedIndexes()})
         if selected and len(self._rows) == len(rows):
             rows = [rows[i] for i in selected if i < len(rows)]
             footer = None

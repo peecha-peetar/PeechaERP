@@ -96,6 +96,13 @@ def kpis(company_id: int, date_from: datetime.date, date_to: datetime.date, cach
         Kpi("COUNTS", "شمارش‌هایِ باز", len(c("STOCK_COUNTS", view="OPEN").rows) + len(c("STOCK_COUNTS", view="UNAPPROVED").rows),
             "INT", "STOCK_COUNTS", "باز + شمارش‌شدهٔ تاییدنشده"),
         Kpi("VARIANCE", "مغایرت‌هایِ موجودی", len(c("VARIANCE").rows), "INT", "VARIANCE", "ردیف‌هایِ شمارشِ دارایِ اختلاف در بازه"),
+        # R247
+        Kpi("PUTAWAY", "جانمایی‌هایِ در انتظار", len(c("UNLOCATED_STOCK").rows), "INT", "UNLOCATED_STOCK",
+            "کالاهایِ ماندهٔ محلِ دریافت یا با وظیفهٔ جانماییِ باز"),
+        Kpi("PICKS", "برداشت‌هایِ باز", sum(1 for r in c("PICKING").rows if r[8] in ("باز", "در حالِ انجام")), "INT", "PICKING",
+            "وظایفِ برداشتِ باز یا در حالِ انجام در بازه"),
+        Kpi("COUNT_DUE", "شمارش‌هایِ سررسیدشده", len(c("CYCLE_COUNT_DUE").rows), "INT", "CYCLE_COUNT_DUE",
+            "اقلامِ برنامهٔ شمارشِ دوره‌ای که موعدشان رسیده"),
     ]
     return out
 

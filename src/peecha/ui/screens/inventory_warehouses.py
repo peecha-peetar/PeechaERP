@@ -346,6 +346,13 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.vehicle_capacity_volume_field = QDoubleSpinBox()
         self.vehicle_capacity_volume_field.setRange(0, 999_999)
         self.vehicle_capacity_volume_field.setDecimals(3)
+        # R247: ظرفیتِ انبارهایِ غیرِ خودرو (گزارشِ ظرفیت و نمودارِ استفاده)
+        self.capacity_weight_field = QDoubleSpinBox()
+        self.capacity_weight_field.setRange(0, 999_999_999)
+        self.capacity_weight_field.setDecimals(3)
+        self.capacity_volume_field = QDoubleSpinBox()
+        self.capacity_volume_field.setRange(0, 999_999_999)
+        self.capacity_volume_field.setDecimals(3)
 
         self.basic_grid = FieldGrid([
             FieldSpec("code", "کد", self.code_field, span=1),
@@ -357,6 +364,8 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("vehicle_driver", "راننده", self.vehicle_driver_combo, span=1),
             FieldSpec("vehicle_capacity_weight", "ظرفیتِ وزنی (کیلوگرم)", self.vehicle_capacity_weight_field, span=1),
             FieldSpec("vehicle_capacity_volume", "ظرفیتِ حجمی (مترمکعب)", self.vehicle_capacity_volume_field, span=1),
+            FieldSpec("capacity_weight", "ظرفیتِ وزنیِ انبار (کیلوگرم)", self.capacity_weight_field, span=1),
+            FieldSpec("capacity_volume", "ظرفیتِ حجمیِ انبار (مترمکعب)", self.capacity_volume_field, span=1),
             FieldSpec("org_unit", "واحدِ سازمانی", self.org_unit_combo, span=1),
             FieldSpec("cost_center", "مرکزِ هزینه", self.cost_center_combo, span=1),
             FieldSpec("is_default", "", self.is_default_checkbox, span=1),
@@ -825,6 +834,8 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.basic_grid.set_field_visible("vehicle_driver", is_vehicle)
         self.basic_grid.set_field_visible("vehicle_capacity_weight", is_vehicle)
         self.basic_grid.set_field_visible("vehicle_capacity_volume", is_vehicle)
+        self.basic_grid.set_field_visible("capacity_weight", not is_vehicle)
+        self.basic_grid.set_field_visible("capacity_volume", not is_vehicle)
 
     def _on_temp_toggled(self, checked: bool) -> None:
         self.operational_grid.set_field_visible("temp_range", checked)
@@ -951,6 +962,8 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         _set_combo(self.vehicle_driver_combo, f.vehicle_driver_detail_account_id)
         self.vehicle_capacity_weight_field.setValue(float(f.vehicle_capacity_weight_kg or 0))
         self.vehicle_capacity_volume_field.setValue(float(f.vehicle_capacity_volume_m3 or 0))
+        self.capacity_weight_field.setValue(float(f.capacity_weight_kg or 0))
+        self.capacity_volume_field.setValue(float(f.capacity_volume_m3 or 0))
         _set_combo(self.org_unit_combo, f.org_unit_id)
         _set_combo(self.cost_center_combo, f.cost_center_detail_account_id)
         self.is_default_checkbox.setChecked(f.is_default)
@@ -1051,6 +1064,8 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.vehicle_driver_combo.setCurrentIndex(0)
         self.vehicle_capacity_weight_field.setValue(0)
         self.vehicle_capacity_volume_field.setValue(0)
+        self.capacity_weight_field.setValue(0)
+        self.capacity_volume_field.setValue(0)
         self.org_unit_combo.setCurrentIndex(0)
         self.cost_center_combo.setCurrentIndex(0)
         self.is_default_checkbox.setChecked(False)
@@ -1141,6 +1156,14 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 decimal.Decimal(str(self.vehicle_capacity_volume_field.value()))
                 if warehouse_type_code == "VEHICLE" and self.vehicle_capacity_volume_field.value()
                 else None
+            ),
+            capacity_weight_kg=(
+                decimal.Decimal(str(self.capacity_weight_field.value()))
+                if warehouse_type_code != "VEHICLE" and self.capacity_weight_field.value() else None
+            ),
+            capacity_volume_m3=(
+                decimal.Decimal(str(self.capacity_volume_field.value()))
+                if warehouse_type_code != "VEHICLE" and self.capacity_volume_field.value() else None
             ),
             allow_negative_stock=self.allow_negative_checkbox.isChecked(),
             is_temperature_controlled=temp_controlled,
