@@ -183,6 +183,49 @@ ACCOUNTING_REPORT_MENU = [
 ]
 
 
+# R246: منویِ «گزارش‌ها ‹ انبار» -- (کد، برچسب) = services/warehouse_reports.WAREHOUSE_REPORTS
+WAREHOUSE_REPORT_MENU = [
+    ("DASH", "داشبورد", [
+        {"code": "INV_RPT_DASHBOARD", "label": "داشبوردِ انبار", "screen": "warehouse_dashboard"},
+    ]),
+    ("STOCK", "موجودی", [
+        ("STOCK_ON_HAND", "موجودیِ لحظه‌ای"), ("STOCK_BY_WAREHOUSE", "موجودی به تفکیکِ انبار"),
+        ("STOCK_BY_CATEGORY", "موجودی به تفکیکِ گروهِ کالا"), ("STOCK_BY_BRAND", "موجودی به تفکیکِ برند"),
+        ("ZERO_STOCK", "کالاهایِ بدونِ موجودی"), ("NEGATIVE_STOCK", "موجودیِ منفی"), ("RESERVED_STOCK", "موجودیِ رزروشده"),
+        ("FREE_STOCK", "موجودیِ آزاد"), ("QUARANTINE_STOCK", "موجودیِ قرنطینه و مسدود"), ("CONSIGNMENT_STOCK", "موجودیِ امانی"),
+    ]),
+    ("CARD", "کارتکس و گردش", [
+        ("STOCK_CARD", "کارتکسِ کالا"),
+        {"code": "REPORTS_ITEM_LEDGER", "label": "کاردکسِ کالا (نمای قبلی)", "screen": "report_item_ledger"},
+        ("ITEM_MOVEMENT", "گردشِ کالا (روزانه/هفتگی/ماهانه/سالانه)"), ("MOVEMENT_BY_TYPE", "گردش به تفکیکِ نوع"),
+    ]),
+    ("VALUE", "ارزشِ موجودی", [
+        ("VALUATION", "ارزشِ موجودی"), ("VALUE_TREND", "روندِ ارزشِ موجودی"),
+    ]),
+    ("ANALYSIS", "تحلیلِ موجودی", [
+        ("STOCK_AGING", "سنِ موجودی (Aging)"), ("SLOW_MOVING", "کالاهایِ کم‌گردش"), ("DEAD_STOCK", "کالاهایِ راکد (Dead Stock)"),
+        ("OVERSTOCK", "کالاهایِ مازاد (Overstock)"), ("STOCK_COVERAGE", "پوششِ موجودی (روز)"),
+        ("REORDER", "کالاهایِ رسیده به نقطهٔ سفارش"), ("ABC", "تحلیلِ ABC موجودی"), ("ABC_XYZ", "ماتریسِ ABC–XYZ"),
+    ]),
+    ("COUNT", "شمارش و مغایرت", [
+        ("VARIANCE", "مغایرتِ موجودی"), ("STOCK_COUNTS", "گزارشِ انبارگردانی‌ها"), ("COUNTER_PERFORMANCE", "عملکردِ شمارشگران"),
+        ("CYCLE_COUNT", "شمارشِ دوره‌ای (Cycle Count)"), ("ACCURACY", "دقتِ موجودی (Inventory Accuracy)"),
+    ]),
+    ("LOTS", "بچ، انقضا و سریال", [
+        ("BATCH_STOCK", "موجودیِ بچ/لات"), ("EXPIRY", "انقضایِ کالا"), ("SERIALS", "شماره‌سریال‌ها"),
+    ]),
+    ("OPS", "عملیاتِ انبار", [
+        ("RECEIVING", "رسیدها (Receiving)"), ("ISSUES", "حواله‌ها"), ("TRANSFERS", "انتقال‌هایِ بینِ انبار"),
+        ("REPLENISHMENT", "پیشنهادِ جایگزینی (Replenishment)"), ("PRODUCTIVITY", "بهره‌وریِ انبار"), ("CAPACITY", "ظرفیتِ انبار"),
+        ("BIN_STOCK", "موجودی به تفکیکِ محلِ نگهداری"),
+    ]),
+    ("MASTER", "اطلاعاتِ پایه", [
+        ("MD_WAREHOUSES", "فهرستِ انبارها"), ("MD_UNITS", "واحدها و تبدیلِ واحدِ کالاها"),
+        ("MD_TRACKED", "کالاهایِ دارایِ سریال/بچ/انقضا"), ("MD_MIN_MAX", "کالاهایِ دارایِ حداقل/حداکثر موجودی"),
+    ]),
+]
+
+
 def _report_menu(prefix: str, screen_prefix: str, menu: list) -> list[dict]:
     return [
         {
@@ -415,13 +458,8 @@ NAV_ITEMS = [
         "children": [
             # R245: گزارش‌هایِ حسابداری در زیرگروه‌هایِ جمع‌شونده (کدهایِ قبلی بدونِ تغییر)
             {"code": "REPORTS_GL", "label": "حسابداری", "children": _report_menu("ACC_RPT", "accounting_report_", ACCOUNTING_REPORT_MENU)},
-            {
-                "code": "REPORTS_INV",
-                "label": "انبار",
-                "children": [
-                    {"code": "REPORTS_ITEM_LEDGER", "label": "کاردکسِ کالا", "screen": "report_item_ledger"},
-                ],
-            },
+            # R246: گزارش‌ها و تحلیلِ انبار (services/warehouse_reports.py) -- کاردکسِ قبلی با همان کد
+            {"code": "REPORTS_INV", "label": "انبار", "children": _report_menu("INV_RPT", "warehouse_report_", WAREHOUSE_REPORT_MENU)},
             # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
             {"code": "REPORTS_PURCHASE", "label": "گزارشاتِ خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
             {"code": "REPORTS_SALES", "label": "گزارشاتِ فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},

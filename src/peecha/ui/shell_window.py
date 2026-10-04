@@ -1754,6 +1754,13 @@ class MainWindow(QMainWindow):
         for report in _ACCOUNTING_REPORTS:
             self.register_screen(f"accounting_report_{report.code.lower()}",
                                  PurchaseReportScreen(report.code, self, side="ACCOUNTING"))
+        from peecha.services.warehouse_reports import WAREHOUSE_REPORTS as _WAREHOUSE_REPORTS
+        from peecha.ui.screens.warehouse_dashboard import WarehouseDashboard
+
+        for report in _WAREHOUSE_REPORTS:
+            self.register_screen(f"warehouse_report_{report.code.lower()}",
+                                 PurchaseReportScreen(report.code, self, side="INVENTORY"))
+        self.register_screen("warehouse_dashboard", WarehouseDashboard(self))
         from peecha.ui.screens.purchase_dashboards import ProcurementExceptionDashboard, ProcurementExecutiveDashboard
 
         self.register_screen("purchase_dashboard_exec", ProcurementExecutiveDashboard(self))

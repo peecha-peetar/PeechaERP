@@ -58,6 +58,9 @@ class PurchaseFilters:
     # R245: گزارش‌هایِ حسابداری (side=ACCOUNTING)
     account_id: int | None = None
     detail_account_id: int | None = None
+    # R246: گزارش‌هایِ انبار (side=INVENTORY)
+    brand_id: int | None = None
+    branch_id: int | None = None
 
 
 ReportFilters = PurchaseFilters
@@ -1686,6 +1689,8 @@ class ReportDef:
     group: str = ""
     # R238: ((کلید، برچسب، ((مقدار، برچسب)، ...))، ...) -- اولین مقدار پیش‌فرض است
     options: tuple = ()
+    # R246: سرستونی که صفحه در اولین بارگذاری بر اساسِ آن گروه‌بندی می‌کند
+    default_group: str = ""
 
 
 _OP, _AN, _PR, _VP, _FI, _MD = "عملیاتی", "تحلیلِ خرید", "قیمت و هزینه", "ارزیابیِ تامین‌کننده", "مالی و بدهی", "اطلاعاتِ پایه"
@@ -1867,6 +1872,10 @@ SALES_REPORTS_BY_CODE = {r.code: r for r in SALES_REPORTS}
 
 
 def report_def(code: str, side: str = "PURCHASE") -> ReportDef:
+    if side == "INVENTORY":
+        from peecha.services.warehouse_reports import WAREHOUSE_REPORTS_BY_CODE
+
+        return WAREHOUSE_REPORTS_BY_CODE[code]
     if side == "ACCOUNTING":
         from peecha.services.accounting_reports import ACCOUNTING_REPORTS_BY_CODE
 

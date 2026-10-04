@@ -34,7 +34,7 @@ _TYPE_TO_NAV_CODE = {
     "PURCHASE_REQUEST": "PURCH_REQUESTS",
     "RFQ": "PURCH_RFQ",
 }
-_RPT_PREFIX = {"PURCHASE": "PURCH_RPT_", "SALES": "SALES_RPT_", "ACCOUNTING": "ACC_RPT_"}
+_RPT_PREFIX = {"PURCHASE": "PURCH_RPT_", "SALES": "SALES_RPT_", "ACCOUNTING": "ACC_RPT_", "INVENTORY": "INV_RPT_"}
 _NUMERIC = (reports_service.MONEY, reports_service.QTY, reports_service.INT, reports_service.PERCENT, reports_service.DAYS)
 _LABEL_KINDS = (reports_service.TEXT, reports_service.DATE)
 
@@ -155,10 +155,14 @@ class PurchaseReportScreen(ReportScreenBase):
         self.category_combo = _searchable_combo()
         self.warehouse_combo = _searchable_combo()
         self.account_combo = _searchable_combo()
+        self.brand_combo = _searchable_combo()
+        self.branch_combo = _searchable_combo()
         self.detail_combo = _searchable_combo()
         self._filter_widgets = {
             "account": ("حساب:", self.account_combo),
             "detail": ("تفصیلی:", self.detail_combo),
+            "brand": ("برند:", self.brand_combo),
+            "branch": ("شعبه:", self.branch_combo),
             "supplier": ("تامین‌کننده:" if side == "PURCHASE" else "مشتری:", self.supplier_combo),
             "item": ("کالا:", self.item_combo),
             "category": ("گروهِ کالا:", self.category_combo),
@@ -226,7 +230,7 @@ class PurchaseReportScreen(ReportScreenBase):
         header.sectionClicked.connect(self._on_header_clicked)
         self.table.cellDoubleClicked.connect(self._open_row)
         self.table.setToolTip("دابل‌کلیک: بازکردنِ سند یا ریزِ ردیفِ تجمیعی. کلیک رویِ سرِ ستون: مرتب‌سازی.")
-        persist_column_widths(self.table, f"{side.lower() if side == 'ACCOUNTING' else 'purchase' if side == 'PURCHASE' else 'sales'}"
+        persist_column_widths(self.table, f"{side.lower() if side in ('ACCOUNTING', 'INVENTORY') else 'purchase' if side == 'PURCHASE' else 'sales'}"
                                           f"Report/{report_code}")
         self.add_field_help([
             (self.supplier_combo, "فقط اسنادِ همین طرفِ حساب. با تایپِ کد/نام جستجو کنید."),
@@ -235,6 +239,8 @@ class PurchaseReportScreen(ReportScreenBase):
             (self.warehouse_combo, "فقط ردیف‌هایِ این انبار."),
             (self.account_combo, "فقط این حساب و همهٔ زیرحساب‌هایش."),
             (self.detail_combo, "فقط ردیف‌هایی که این حسابِ تفصیلی را دارند."),
+            (self.brand_combo, "فقط کالاهایِ این برند."),
+            (self.branch_combo, "فقط انبارهایِ این شعبه."),
             (self.group_combo, "ردیف‌ها بر اساسِ این ستون گروه و برایِ هر گروه جمع زده می‌شوند."),
             (self.view_combo, "فیلترها، گزینه‌ها، مرتب‌سازی، گروه‌بندی و ستون‌هایِ پنهانِ ذخیره‌شده با یک نام."),
         ])
@@ -251,9 +257,15 @@ class PurchaseReportScreen(ReportScreenBase):
             _fill(self.detail_combo, [(f"{d.full_code or d.code} — {d.name or ''}", d.detail_account_id)
                                       for d in dimensions_service.list_all_detail_accounts(company_id)])
         elif company_id is not None:
-            parties = dimensions_service.list_suppliers(company_id) if self._side == "PURCHASE" \
-                else dimensions_service.list_customers(company_id)
-            _fill(self.supplier_combo, [(f"{s['code']} — {s['name'] or ''}", s["detail_account_id"]) for s in parties])
+            if self._side == "INVENTORY":
+                from peecha.services import procurement_masters as masters_service
+
+                _fill(self.brand_combo, [(f"{b.code} — {b.name}", b.brand_id) for b in catalog_service.list_brands(company_id)])
+                _fill(self.branch_combo, [(f"{b.code} — {b.name}", b.branch_id) for b in masters_service.list_branches(company_id)])
+            else:
+                parties = dimensions_service.list_suppliers(company_id) if self._side == "PURCHASE" \
+                    else dimensions_service.list_customers(company_id)
+                _fill(self.supplier_combo, [(f"{s['code']} — {s['name'] or ''}", s["detail_account_id"]) for s in parties])
             _fill(self.item_combo, [(f"{i.code} — {i.name or ''}", i.item_id)
                                     for i in catalog_service.list_items(company_id, transactable_only=True)])
             _fill(self.category_combo, [(f"{c.code} — {c.name}", c.category_id) for c in catalog_service.list_categories(company_id)])
@@ -290,6 +302,7 @@ class PurchaseReportScreen(ReportScreenBase):
             date_from=date_from, date_to=date_to, supplier_id=value("supplier"), item_id=value("item"),
             category_id=value("category"), warehouse_id=value("warehouse"), side=self._side,
             account_id=value("account"), detail_account_id=value("detail"),
+            brand_id=value("brand"), branch_id=value("branch"),
             options={key: combo.currentData() for key, (_label, combo) in self._option_combos.items()},
         )
 
@@ -320,7 +333,12 @@ class PurchaseReportScreen(ReportScreenBase):
         columns_changed = self._result is None or self._result.columns != result.columns
         self._result = result
         if columns_changed:
+            first_load = self.group_combo.count() <= 1
             self._reload_group_options()
+            if first_load and self._def.default_group:
+                self.group_combo.blockSignals(True)
+                self.group_combo.setCurrentIndex(max(0, self.group_combo.findText(self._def.default_group)))
+                self.group_combo.blockSignals(False)
         return self._compose()
 
     def _reload_group_options(self) -> None:
@@ -527,6 +545,13 @@ class PurchaseReportScreen(ReportScreenBase):
             if doc_type == "JOURNAL_ENTRY":
                 self._main_window.open_screen("GL_JE", then=lambda screen: screen.edit_journal_entry(document_id))
                 return
+            if doc_type.startswith("STOCK:"):
+                from peecha.ui.screens.inventory_documents_list import _TYPE_TO_NAV_CODE as _STOCK_NAV
+
+                nav_code = _STOCK_NAV.get(doc_type.split(":", 1)[1])
+                if nav_code:
+                    self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
+                return
             nav_code = _TYPE_TO_NAV_CODE.get(doc_type)
             if nav_code:
                 self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
@@ -537,6 +562,8 @@ class PurchaseReportScreen(ReportScreenBase):
             return
         if self._side == "ACCOUNTING":
             target = self._account_drill_target(raw)
+        elif self._side == "INVENTORY":
+            target = self.inventory_drill_target(raw)
         else:
             target = dashboard_service.drill_target(company_id, self._def.code, self._side, raw)
         if target is None:
@@ -547,6 +574,25 @@ class PurchaseReportScreen(ReportScreenBase):
         date_to = self.date_to.date()
         self._main_window.open_screen(
             f"{prefix}{code}", then=lambda screen: screen.apply_preset(date_from, date_to, **filters))
+
+    def inventory_drill_target(self, raw: list) -> tuple[str, dict] | None:
+        """ردیفِ تجمیعیِ گزارشِ انبار: کالا (و انبارِ همان ردیف) → کارتکس؛ فقط انبار/گروه → موجودیِ لحظه‌ای با همان فیلتر."""
+        found: dict = {}
+        for cell in raw:
+            if not isinstance(cell, str) or " — " not in cell:
+                continue
+            text = numerals.to_persian_digits(cell)
+            for key, combo in (("item_id", self.item_combo), ("warehouse_id", self.warehouse_combo),
+                               ("category_id", self.category_combo), ("brand_id", self.brand_combo)):
+                index = combo.findText(text)
+                if index > 0 and key not in found:
+                    found[key] = combo.itemData(index)
+                    break
+        if "item_id" in found and self._def.code != "STOCK_CARD":
+            return "STOCK_CARD", {k: v for k, v in found.items() if k in ("item_id", "warehouse_id")}
+        if found and self._def.code != "STOCK_ON_HAND":
+            return "STOCK_ON_HAND", found
+        return None
 
     def _account_drill_target(self, raw: list) -> tuple[str, dict] | None:
         """ردیفِ تجمیعیِ گزارشِ حسابداری: اولین برچسبِ حساب → گردش و ماندهٔ ماهانهٔ همان حساب."""
