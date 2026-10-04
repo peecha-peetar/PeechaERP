@@ -42,6 +42,8 @@ class RequestFields:
     cost_center_detail_account_id: int | None = None
     project_detail_account_id: int | None = None
     description: str | None = None
+    branch_id: int | None = None
+    org_unit_id: int | None = None
 
 
 def _get(session, request_id: int, company_id: int) -> PurchaseRequest:
@@ -71,6 +73,8 @@ def _apply(row: PurchaseRequest, fields: RequestFields) -> None:
     row.cost_center_detail_account_id = fields.cost_center_detail_account_id
     row.project_detail_account_id = fields.project_detail_account_id
     row.description = (fields.description or None)
+    row.branch_id = fields.branch_id
+    row.org_unit_id = fields.org_unit_id
 
 
 def create_request(company_id: int, requester_user_id: int, fields: RequestFields) -> int:
@@ -221,22 +225,24 @@ def cancel_request(request_id: int, company_id: int, reason_id: int | None = Non
 
 
 # --- سفارش‌شده/مانده --------------------------------------------------------------
-def _ordered_by_line(session, line_ids: list[int]) -> dict[int, decimal.Decimal]:
+def _ordered_by_line(session, line_ids: list[int], include_drafts: bool = True) -> dict[int, decimal.Decimal]:
     if not line_ids:
         return {}
+    excluded = ("CANCELLED",) if include_drafts else ("CANCELLED", "DRAFT")
     rows = session.execute(
         select(CommercialDocumentLine.purchase_request_line_id, func.sum(CommercialDocumentLine.quantity_base))
         .join(CommercialDocument, CommercialDocument.document_id == CommercialDocumentLine.document_id)
-        .where(CommercialDocumentLine.purchase_request_line_id.in_(line_ids), CommercialDocument.status_code != "CANCELLED",
+        .where(CommercialDocumentLine.purchase_request_line_id.in_(line_ids), CommercialDocument.status_code.notin_(excluded),
                CommercialDocument.document_type_code == "PURCHASE_ORDER")
         .group_by(CommercialDocumentLine.purchase_request_line_id)
     ).all()
     return {k: v or _ZERO for k, v in rows}
 
 
-def ordered_quantities(line_ids: list[int]) -> dict[int, decimal.Decimal]:
+def ordered_quantities(line_ids: list[int], include_drafts: bool = True) -> dict[int, decimal.Decimal]:
+    """include_drafts=False: فقط سفارش‌هایِ تاییدشده (برایِ بودجه، تا مبلغ نه در «در جریان» گم شود نه دوبار شمرده شود)."""
     with new_session() as session:
-        return _ordered_by_line(session, line_ids)
+        return _ordered_by_line(session, line_ids, include_drafts)
 
 
 def fulfilment(lines: list[PurchaseRequestLine], ordered: dict[int, decimal.Decimal]) -> str:
@@ -301,6 +307,7 @@ def convert_to_orders(
             counterparty_detail_account_id=supplier, currency_id=currency_id, warehouse_id=row.warehouse_id,
             requested_delivery_date=row.required_date, cost_center_detail_account_id=row.cost_center_detail_account_id,
             project_detail_account_id=row.project_detail_account_id, purchase_type_id=row.purchase_type_id,
+            branch_id=row.branch_id, org_unit_id=row.org_unit_id,
             description=f"از درخواستِ خریدِ شمارهٔ {row.request_no}",
         )
         order_id = documents_service.create_document(company_id, user_id, "PURCHASE_ORDER", order_date or datetime.date.today(), header)

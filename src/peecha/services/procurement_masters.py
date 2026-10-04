@@ -138,3 +138,54 @@ def delete_reorder_policy(company_id: int, policy_id: int) -> None:
             raise ValueError("سیاستِ سفارش نامعتبر است.")
         session.delete(row)
         session.commit()
+
+
+# --- R244: شعبه‌ها و دپارتمان‌ها ----------------------------------------------
+def list_branches(company_id: int, active_only: bool = False):
+    from peecha.db.models.commercial import Branch
+
+    with new_session() as session:
+        rows = list(session.scalars(select(Branch).where(Branch.company_id == company_id).order_by(Branch.code)))
+    return [r for r in rows if r.is_active or not active_only]
+
+
+def save_branch(company_id: int, code: str, name: str, address: str | None = None, is_active: bool = True,
+                branch_id: int | None = None) -> int:
+    from peecha.db.models.commercial import Branch
+
+    code, name = (code or "").strip().upper(), (name or "").strip()
+    if not code or not name:
+        raise ValueError("کد و نامِ شعبه الزامی است.")
+    with new_session() as session:
+        clash = session.scalar(select(Branch).where(Branch.company_id == company_id, Branch.code == code))
+        if clash is not None and clash.branch_id != branch_id:
+            raise ValueError("این کدِ شعبه قبلاً تعریف شده است.")
+        row = session.get(Branch, branch_id) if branch_id else Branch(company_id=company_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("شعبه نامعتبر است.")
+        row.code, row.name, row.address, row.is_active = code, name, (address or None), is_active
+        session.add(row)
+        session.commit()
+        return row.branch_id
+
+
+def set_warehouse_branch(company_id: int, warehouse_id: int, branch_id: int | None) -> None:
+    """انبار به شعبه تعلق می‌گیرد؛ سندِ تازهٔ بدونِ شعبه، شعبهٔ انبارش را می‌گیرد (اسنادِ قبلی دست نمی‌خورند)."""
+    from peecha.db.models.inventory import Warehouse
+
+    with new_session() as session:
+        warehouse = session.get(Warehouse, warehouse_id)
+        if warehouse is None or warehouse.company_id != company_id:
+            raise ValueError("انبار نامعتبر است.")
+        warehouse.branch_id = branch_id
+        session.commit()
+
+
+def list_departments(company_id: int):
+    """دپارتمان‌ها = واحدهایِ سازمانیِ منابعِ انسانی (hr.organizational_units)."""
+    from peecha.db.models.hr import OrganizationalUnit
+
+    with new_session() as session:
+        return list(session.scalars(select(OrganizationalUnit).where(OrganizationalUnit.company_id == company_id,
+                                                                     OrganizationalUnit.is_active.is_(True))
+                                    .order_by(OrganizationalUnit.code)))

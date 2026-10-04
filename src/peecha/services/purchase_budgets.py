@@ -39,6 +39,8 @@ class BudgetFields:
     warn_percent: decimal.Decimal = decimal.Decimal(90)
     is_active: bool = True
     note: str | None = None
+    branch_id: int | None = None
+    org_unit_id: int | None = None
 
 
 def list_budgets(company_id: int, active_only: bool = False) -> list[PurchaseBudget]:
@@ -66,7 +68,7 @@ def save_budget(company_id: int, fields: BudgetFields, budget_id: int | None = N
         if row is None or row.company_id != company_id:
             raise ValueError("بودجه نامعتبر است.")
         for name_ in ("period_from", "period_to", "amount", "cost_center_detail_account_id", "project_detail_account_id",
-                      "category_id", "warn_percent", "is_active"):
+                      "category_id", "warn_percent", "is_active", "branch_id", "org_unit_id"):
             setattr(row, name_, getattr(fields, name_))
         row.code, row.name, row.note = code, name, (fields.note or None)
         session.add(row)
@@ -114,8 +116,13 @@ class Usage:
 STATE_LABELS = {"OK": "در محدوده", "WARN": "نزدیک به سقف", "OVER": "عبور از بودجه"}
 
 
-def _matches(budget: PurchaseBudget, when: datetime.date, cost_center: int | None, project: int | None, category: int | None) -> bool:
+def _matches(budget: PurchaseBudget, when: datetime.date, cost_center: int | None, project: int | None, category: int | None,
+             branch: int | None = None, org_unit: int | None = None) -> bool:
     if not (budget.period_from <= when <= budget.period_to):
+        return False
+    if budget.branch_id is not None and branch != budget.branch_id:
+        return False
+    if budget.org_unit_id is not None and org_unit != budget.org_unit_id:
         return False
     if budget.cost_center_detail_account_id is not None and cost_center != budget.cost_center_detail_account_id:
         return False
@@ -141,7 +148,7 @@ def usages(company_id: int, budgets: list[PurchaseBudget] | None = None, with_de
 
     def apply(kind, doc_like, ln, when, cc, pj, amount):
         for u in out:
-            if _matches(u.budget, when, cc, pj, category_of(ln.item_id)):
+            if _matches(u.budget, when, cc, pj, category_of(ln.item_id), doc_like.branch_id, doc_like.org_unit_id):
                 if kind == "ACTUAL":
                     u.actual += amount
                 elif kind == "COMMITMENT":
@@ -165,7 +172,7 @@ def usages(company_id: int, budgets: list[PurchaseBudget] | None = None, with_de
     requests = pr_service.list_requests(company_id, lo, hi, ("APPROVED",))
     for req in requests:
         _r, lines = pr_service.get_request(req.request_id, company_id)
-        ordered = pr_service.ordered_quantities([ln.line_id for ln in lines])
+        ordered = pr_service.ordered_quantities([ln.line_id for ln in lines], include_drafts=False)
         for ln in lines:
             remaining = ln.quantity_base - ordered.get(ln.line_id, _ZERO)
             if remaining > 0 and ln.estimated_unit_price:
@@ -185,7 +192,8 @@ def warnings_for_document(document_id: int, company_id: int) -> list[str]:
     ctx = base._ctx(company_id)
     hit = [b for b in list_budgets(company_id, active_only=True)
            if any(_matches(b, doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id,
-                           ctx.items[ln.item_id].category_id if ln.item_id in ctx.items else None) for ln in lines)]
+                           ctx.items[ln.item_id].category_id if ln.item_id in ctx.items else None, doc.branch_id, doc.org_unit_id)
+                  for ln in lines)]
     out = []
     for u in usages(company_id, hit):
         if u.state != "OK":

@@ -370,6 +370,9 @@ class DocumentHeaderFields:
     settlement_type_code: str | None = None
     # R240: نوعِ خرید (comm.purchase_types) -- فقط برایِ اسنادِ خرید معنا دارد
     purchase_type_id: int | None = None
+    # R244: شعبه (خالی = شعبهٔ انبار) و دپارتمان (واحدِ سازمانی)
+    branch_id: int | None = None
+    org_unit_id: int | None = None
 
 
 # ---------------------------------------------------------------------
@@ -401,6 +404,13 @@ def _was_confirmed(session, document_id: int) -> bool:
             or_(DocumentChangeLog.new_value.in_(("CONFIRMED", "APPROVED")), DocumentChangeLog.old_value.in_(("CONFIRMED", "APPROVED"))),
         ).limit(1)
     ) is not None
+
+
+def _warehouse_branch(session, warehouse_id: int | None) -> int | None:
+    if warehouse_id is None:
+        return None
+    warehouse = session.get(Warehouse, warehouse_id)
+    return warehouse.branch_id if warehouse is not None else None
 
 
 def _log_status(session, doc, old_status: str, user_id: int | None = None) -> None:
@@ -470,6 +480,7 @@ def create_document(
             reference_no=(fields.reference_no or None), description=(fields.description or None),
             tax_posting_mode=fields.tax_posting_mode, tax_exempt=fields.tax_exempt,
             settlement_type_code=fields.settlement_type_code, purchase_type_id=fields.purchase_type_id,
+            branch_id=fields.branch_id or _warehouse_branch(session, fields.warehouse_id), org_unit_id=fields.org_unit_id,
             created_by_user_id=created_by_user_id,
         )
         session.add(doc)
@@ -689,6 +700,7 @@ def convert_to_invoice(
             project_detail_account_id=source.project_detail_account_id,
             reference_no=source.reference_no, description=source.description,
             settlement_type_code=source.settlement_type_code, purchase_type_id=source.purchase_type_id,
+            branch_id=source.branch_id, org_unit_id=source.org_unit_id,
         )
 
     new_document_id = create_document(company_id, created_by_user_id, target_type, document_date, header_fields)
@@ -778,7 +790,7 @@ def start_invoice_correction(document_id: int, company_id: int, correcting_user_
             cost_center_detail_account_id=original.cost_center_detail_account_id,
             project_detail_account_id=original.project_detail_account_id,
             reference_no=original.reference_no, description=original.description,
-            purchase_type_id=original.purchase_type_id,
+            purchase_type_id=original.purchase_type_id, branch_id=original.branch_id, org_unit_id=original.org_unit_id,
         )
         original_type = original.document_type_code
 
@@ -1116,6 +1128,12 @@ def update_document_header(document_id: int, company_id: int, document_date: dat
                     _log_change(session, doc, "UPDATE_HEADER", field_name=field_name, old=old, new=new)
         if fields.purchase_type_id is not None:
             doc.purchase_type_id = fields.purchase_type_id
+        if fields.branch_id is not None:
+            doc.branch_id = fields.branch_id
+        elif doc.branch_id is None:
+            doc.branch_id = _warehouse_branch(session, fields.warehouse_id)
+        if fields.org_unit_id is not None:
+            doc.org_unit_id = fields.org_unit_id
         doc.document_date = document_date
         doc.fiscal_year_id = _resolve_fiscal_year_id(session, company_id, document_date)
         doc.counterparty_detail_account_id = fields.counterparty_detail_account_id

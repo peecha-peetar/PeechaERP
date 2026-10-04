@@ -464,6 +464,8 @@ class Warehouse(Base):
     default_min_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     default_max_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
     default_reorder_point_qty: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 6))
+    # R244: شعبه‌ای که این انبار به آن تعلق دارد (comm.branches)
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("comm.branches.branch_id"))
     withdrawal_policy_code: Mapped[str | None] = mapped_column(String(10))
     # کیفیت
     requires_qc: Mapped[bool] = mapped_column(default=False)

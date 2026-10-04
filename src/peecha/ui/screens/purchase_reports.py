@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import datetime
 import decimal
-import json
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QCompleter, QDialog, QHBoxLayout, QInputDialog, QLabel, QPushButton, QVBoxLayout,
+    QCheckBox, QComboBox, QCompleter, QDialog, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QVBoxLayout,
 )
 
 from peecha import numerals
@@ -197,6 +196,9 @@ class PurchaseReportScreen(ReportScreenBase):
         self.view_combo.setMinimumWidth(180)
         self.view_combo.activated.connect(lambda _i: self.load_view(self.view_combo.currentData()))
         tools.addWidget(self.view_combo)
+        self.shared_check = QCheckBox("اشتراکی")
+        self.shared_check.setToolTip("نما برایِ همهٔ کاربرانِ شرکت هم نمایش داده شود")
+        tools.addWidget(self.shared_check)
         save_view = QPushButton("ذخیرهٔ نما")
         save_view.setObjectName("flatButton")
         save_view.clicked.connect(self._on_save_view)
@@ -207,7 +209,6 @@ class PurchaseReportScreen(ReportScreenBase):
         tools.addWidget(delete_view)
         tools.addStretch(1)
         self.layout().insertLayout(self.layout().indexOf(self.table), tools)
-        self._reload_views()
 
         header = self.table.horizontalHeader()
         header.setSectionsClickable(True)
@@ -237,6 +238,7 @@ class PurchaseReportScreen(ReportScreenBase):
             _fill(self.category_combo, [(f"{c.code} — {c.name}", c.category_id) for c in catalog_service.list_categories(company_id)])
             _fill(self.warehouse_combo, [(f"{w.code} — {w.name}", w.warehouse_id) for w in locations_service.list_warehouses(company_id)])
         super().refresh()
+        self._reload_views()
 
     def apply_preset(self, date_from: datetime.date | None = None, date_to: datetime.date | None = None,
                      options: dict | None = None, **filters) -> None:
@@ -389,22 +391,39 @@ class PurchaseReportScreen(ReportScreenBase):
         dialog.open()
         return dialog
 
-    # --- نماهایِ ذخیره‌شده (QSettings؛ برایِ همین کاربر/دستگاه) ----------
+    # --- نماهایِ ذخیره‌شده -- R244: در پایگاه‌داده، شخصی یا اشتراکی بینِ کاربرانِ شرکت ----------
     def _views_key(self) -> str:
-        return f"reportViews/{self._side}/{self._def.code}"
+        return f"{self._side}/{self._def.code}"
+
+    def _view_rows(self) -> dict[str, object]:
+        from peecha import session as app_session
+        from peecha.services import report_views as views_service
+
+        company_id = self._company_id()
+        user = app_session.current_user
+        if company_id is None or user is None:
+            return {}
+        users = None
+        out = {}
+        for v in views_service.list_views(company_id, self._views_key(), user.user_id):
+            if v.is_mine:
+                out[v.name] = v
+            else:
+                if users is None:
+                    from peecha.services.purchase_reports_ext import _users
+
+                    users = _users()
+                out[f"{v.name} (اشتراکی: {users.get(v.owner_user_id, '')})"] = v
+        return out
 
     def saved_views(self) -> dict[str, dict]:
-        raw = QSettings("Peecha", "PeechaERP").value(self._views_key(), "")
-        try:
-            return json.loads(raw) if raw else {}
-        except (TypeError, ValueError):
-            return {}
+        return {label: v.payload for label, v in self._view_rows().items()}
 
     def _reload_views(self) -> None:
         self.view_combo.clear()
         self.view_combo.addItem("— انتخاب —", None)
-        for name in sorted(self.saved_views()):
-            self.view_combo.addItem(name, name)
+        for label, v in sorted(self._view_rows().items()):
+            self.view_combo.addItem(label + (" ★" if v.is_mine and v.is_shared else ""), label)
 
     def current_view(self) -> dict:
         return {
@@ -415,10 +434,15 @@ class PurchaseReportScreen(ReportScreenBase):
             "hidden": sorted(self.hidden_columns()),
         }
 
-    def save_view(self, name: str) -> None:
-        views = self.saved_views()
-        views[name] = self.current_view()
-        QSettings("Peecha", "PeechaERP").setValue(self._views_key(), json.dumps(views, ensure_ascii=False))
+    def save_view(self, name: str, shared: bool | None = None) -> None:
+        from peecha import session as app_session
+        from peecha.services import report_views as views_service
+
+        company_id = self._company_id()
+        if company_id is None or app_session.current_user is None:
+            return
+        shared = self.shared_check.isChecked() if shared is None else shared
+        views_service.save_view(company_id, self._views_key(), app_session.current_user.user_id, name, self.current_view(), shared)
         self._reload_views()
         self.view_combo.setCurrentIndex(self.view_combo.findData(name))
 
@@ -428,11 +452,17 @@ class PurchaseReportScreen(ReportScreenBase):
             self.save_view(name.strip())
 
     def delete_view(self, name: str | None) -> None:
-        views = self.saved_views()
-        if name in views:
-            del views[name]
-            QSettings("Peecha", "PeechaERP").setValue(self._views_key(), json.dumps(views, ensure_ascii=False))
-            self._reload_views()
+        from peecha import session as app_session
+        from peecha.services import report_views as views_service
+
+        view = self._view_rows().get(name or "")
+        if view is None:
+            return
+        if not view.is_mine:
+            QMessageBox.information(self, "حذفِ نما", "نمایِ اشتراکیِ دیگران فقط توسطِ سازنده‌اش حذف می‌شود.")
+            return
+        views_service.delete_view(self._company_id(), view.view_id, app_session.current_user.user_id)
+        self._reload_views()
 
     def load_view(self, name: str | None) -> None:
         view = self.saved_views().get(name or "")

@@ -87,6 +87,7 @@ from peecha.ui.widgets import (
 )
 
 _PURCHASE_TYPE_DOCS = ("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE")
+_PURCHASE_ORG_DOCS = _PURCHASE_TYPE_DOCS + ("PURCHASE_RETURN", "CONSIGNMENT_IN")
 DOC_TYPE_TITLES = {
     "SALES_ORDER": "سفارشِ فروش",
     "SALES_PROFORMA": "پیش‌فاکتورِ فروش",
@@ -2631,6 +2632,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         row2_grid.addWidget(self.purchase_type_box, 0, 8, 2, 1)
         self.purchase_type_box.setVisible(self.document_type_code in _PURCHASE_TYPE_DOCS)
 
+        # R244: شعبه (خالی = شعبهٔ انبار) و دپارتمان (واحدِ سازمانی) -- اسنادِ خرید
+        self.org_box = QWidget()
+        org_layout = QGridLayout(self.org_box)
+        org_layout.setContentsMargins(0, 0, 0, 0)
+        org_layout.setSpacing(3)
+        org_layout.addWidget(QLabel("شعبه"), 0, 0)
+        org_layout.addWidget(QLabel("دپارتمان"), 0, 1)
+        self.branch_combo, self.department_combo = _EnterComboBox(), _EnterComboBox()
+        org_layout.addWidget(self.branch_combo, 1, 0)
+        org_layout.addWidget(self.department_combo, 1, 1)
+        row2_grid.addWidget(self.org_box, 0, 9, 2, 1)
+        self.org_box.setVisible(self.document_type_code in _PURCHASE_ORG_DOCS)
+
         # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): برایِ
         # سندِ ازپیش‌ذخیره‌شده، تغییرِ این تیک بلافاصله (بدونِ نیازِ ذخیرهٔ
         # هدر) اعمال می‌شود -- چون باید مالیاتِ ردیف‌هایِ ازپیش‌ثبت‌شده را
@@ -3246,6 +3260,19 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             for purchase_type in masters_service.list_purchase_types(company_id, active_only=True):
                 self.purchase_type_combo.addItem(purchase_type.name, purchase_type.purchase_type_id)
             self.purchase_type_combo.setCurrentIndex(max(0, self.purchase_type_combo.findData(current_type)))
+        if self.document_type_code in _PURCHASE_ORG_DOCS:
+            from peecha.services import procurement_masters as masters_service
+
+            for combo, options in (
+                (self.branch_combo, [(b.name, b.branch_id) for b in masters_service.list_branches(company_id, active_only=True)]),
+                (self.department_combo, [(d.name, d.org_unit_id) for d in masters_service.list_departments(company_id)]),
+            ):
+                current = combo.currentData()
+                combo.clear()
+                combo.addItem("—", None)
+                for label, value in options:
+                    combo.addItem(label, value)
+                combo.setCurrentIndex(max(0, combo.findData(current)))
 
         current_price_list = self.price_list_combo.currentData()
         self.price_list_combo.clear()
@@ -3354,6 +3381,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.delivery_date_field.setDate(doc.requested_delivery_date or doc.document_date)
         if self.document_type_code in _PURCHASE_TYPE_DOCS:
             self.purchase_type_combo.setCurrentIndex(max(0, self.purchase_type_combo.findData(doc.purchase_type_id)))
+        if self.document_type_code in _PURCHASE_ORG_DOCS:
+            self.branch_combo.setCurrentIndex(max(0, self.branch_combo.findData(doc.branch_id)))
+            self.department_combo.setCurrentIndex(max(0, self.department_combo.findData(doc.org_unit_id)))
         self.reference_field.setText(doc.reference_no or "")
         self.description_field.setText(doc.description or "")
         self.tax_posting_mode_combo.setCurrentIndex(max(0, self.tax_posting_mode_combo.findData(doc.tax_posting_mode)))
@@ -4425,6 +4455,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             self.due_date_field.setDate(datetime.date.today())
         self.delivery_date_field.setDate(datetime.date.today() + datetime.timedelta(days=7))
         self.purchase_type_combo.setCurrentIndex(0)
+        self.branch_combo.setCurrentIndex(0)
+        self.department_combo.setCurrentIndex(0)
         self.counterparty_combo.setCurrentIndex(0)
         self.warehouse_combo.setCurrentIndex(0)
         if self.document_type_code == "CONSIGNMENT_OUT":
@@ -4527,6 +4559,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             tax_exempt=self.tax_exempt_checkbox.isChecked(),
             settlement_type_code=self.settlement_type_combo.currentData() if self._is_sales else None,
             purchase_type_id=self.purchase_type_combo.currentData() if self.document_type_code in _PURCHASE_TYPE_DOCS else None,
+            branch_id=self.branch_combo.currentData() if self.document_type_code in _PURCHASE_ORG_DOCS else None,
+            org_unit_id=self.department_combo.currentData() if self.document_type_code in _PURCHASE_ORG_DOCS else None,
         )
 
     def _save_header(self, notify: bool = False) -> None:

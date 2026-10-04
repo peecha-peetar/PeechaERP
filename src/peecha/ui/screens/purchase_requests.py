@@ -142,10 +142,12 @@ class PurchaseRequestScreen(QWidget):
         self.type_combo, self.warehouse_combo = QComboBox(), QComboBox()
         self.cost_center_combo, self.project_combo = _editable_combo(), _editable_combo()
         self.description_field = QLineEdit()
+        self.branch_combo, self.department_combo = QComboBox(), QComboBox()
         for col, (text, widget) in enumerate((("تاریخ", self.date_field), ("تاریخِ نیاز", self.required_field),
                                               ("اولویت", self.priority_combo), ("نوعِ خرید", self.type_combo),
                                               ("انبارِ تحویل", self.warehouse_combo), ("مرکزِ هزینه", self.cost_center_combo),
-                                              ("پروژه", self.project_combo), ("شرح", self.description_field))):
+                                              ("پروژه", self.project_combo), ("شعبه", self.branch_combo),
+                                              ("دپارتمان", self.department_combo), ("شرح", self.description_field))):
             _labeled(header, col, text, widget)
         ed.addLayout(header)
         self.info_label = QLabel("")
@@ -220,6 +222,8 @@ class PurchaseRequestScreen(QWidget):
         _searchable(self.supplier_combo, self._suppliers, "—")
         _searchable(self.type_combo, [(t.name, t.purchase_type_id) for t in masters_service.list_purchase_types(company_id, active_only=True)], "—")
         _searchable(self.warehouse_combo, [(w.name, w.warehouse_id) for w in locations_service.list_warehouses(company_id)], "—")
+        _searchable(self.branch_combo, [(b.name, b.branch_id) for b in masters_service.list_branches(company_id, active_only=True)], "—")
+        _searchable(self.department_combo, [(d.name, d.org_unit_id) for d in masters_service.list_departments(company_id)], "—")
         cc_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
         pj_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
         details = dimensions_service.list_all_detail_accounts(company_id)
@@ -279,7 +283,8 @@ class PurchaseRequestScreen(QWidget):
         self.date_field.setDate(today)
         self.required_field.setDate(today + datetime.timedelta(days=7))
         self.line_date_field.setDate(today + datetime.timedelta(days=7))
-        for combo in (self.priority_combo, self.type_combo, self.warehouse_combo, self.cost_center_combo, self.project_combo):
+        for combo in (self.priority_combo, self.type_combo, self.warehouse_combo, self.cost_center_combo, self.project_combo,
+                      self.branch_combo, self.department_combo):
             combo.setCurrentIndex(0)
         self.description_field.clear()
         self.info_label.setText("")
@@ -298,7 +303,8 @@ class PurchaseRequestScreen(QWidget):
         self.required_field.setDate(row.required_date or row.request_date)
         self.priority_combo.setCurrentIndex(max(0, self.priority_combo.findData(row.priority_code)))
         for combo, value in ((self.type_combo, row.purchase_type_id), (self.warehouse_combo, row.warehouse_id),
-                             (self.cost_center_combo, row.cost_center_detail_account_id), (self.project_combo, row.project_detail_account_id)):
+                             (self.cost_center_combo, row.cost_center_detail_account_id), (self.project_combo, row.project_detail_account_id),
+                             (self.branch_combo, row.branch_id), (self.department_combo, row.org_unit_id)):
             combo.setCurrentIndex(max(0, combo.findData(value)))
         self.description_field.setText(row.description or "")
         users = self._users()
@@ -351,6 +357,7 @@ class PurchaseRequestScreen(QWidget):
             purchase_type_id=self.type_combo.currentData(), warehouse_id=self.warehouse_combo.currentData(),
             cost_center_detail_account_id=self.cost_center_combo.currentData(), project_detail_account_id=self.project_combo.currentData(),
             description=self.description_field.text().strip() or None,
+            branch_id=self.branch_combo.currentData(), org_unit_id=self.department_combo.currentData(),
         )
 
     def _run(self, action, success: str) -> bool:

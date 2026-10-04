@@ -289,6 +289,7 @@ def create_orders(rfq_id: int, company_id: int, user_id: int, warehouse_id: int 
             cost_center_detail_account_id=request.cost_center_detail_account_id if request else None,
             project_detail_account_id=request.project_detail_account_id if request else None,
             purchase_type_id=request.purchase_type_id if request else None,
+            branch_id=request.branch_id if request else None, org_unit_id=request.org_unit_id if request else None,
             description=f"از استعلامِ قیمتِ شمارهٔ {row.rfq_no}",
         )
         order_id = documents_service.create_document(company_id, user_id, "PURCHASE_ORDER", order_date or datetime.date.today(), header)

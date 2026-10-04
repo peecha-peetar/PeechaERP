@@ -148,6 +148,62 @@ class _CancelReasonsTab(_CodeNameTab):
         _fill_table(self.table, [[r.code, r.name, "بله" if r.is_active else "خیر"] for r in self._rows])
 
 
+class _BranchesTab(_CodeNameTab):
+    """R244: شعبه‌ها و اختصاصِ انبارها به شعبه (سندِ بدونِ شعبه، شعبهٔ انبارش را می‌گیرد)."""
+
+    def __init__(self) -> None:
+        super().__init__(["کد", "نام", "فعال", "انبارها"], with_emergency=False)
+        box = QHBoxLayout()
+        box.addWidget(QLabel("انبار:"))
+        self.warehouse_combo = QComboBox()
+        box.addWidget(self.warehouse_combo)
+        box.addWidget(QLabel("شعبه:"))
+        self.assign_branch_combo = QComboBox()
+        box.addWidget(self.assign_branch_combo)
+        assign = QPushButton("اختصاصِ انبار به شعبه")
+        assign.clicked.connect(self.assign_warehouse)
+        box.addWidget(assign)
+        box.addStretch(1)
+        self.layout().addLayout(box)
+
+    def row_id(self, row) -> int:
+        return row.branch_id
+
+    def persist(self, company_id: int) -> None:
+        masters_service.save_branch(company_id, self.code_field.text(), self.name_field.text(), None, self.active_check.isChecked(),
+                                    self._editing_id)
+
+    def refresh(self) -> None:
+        company_id = _company_id()
+        if company_id is None:
+            return
+        self._rows = masters_service.list_branches(company_id)
+        self._warehouses = locations_service.list_warehouses(company_id)
+        from peecha.db.base import new_session
+        from peecha.db.models.inventory import Warehouse
+
+        with new_session() as session:
+            branch_of = {w.warehouse_id: session.get(Warehouse, w.warehouse_id).branch_id for w in self._warehouses}
+        self._branch_of = branch_of
+        _fill_table(self.table, [[r.code, r.name, "بله" if r.is_active else "خیر",
+                                  "، ".join(w.name for w in self._warehouses if branch_of.get(w.warehouse_id) == r.branch_id)]
+                                 for r in self._rows])
+        self.warehouse_combo.clear()
+        for w in self._warehouses:
+            self.warehouse_combo.addItem(w.name, w.warehouse_id)
+        self.assign_branch_combo.clear()
+        self.assign_branch_combo.addItem("— بدونِ شعبه —", None)
+        for r in self._rows:
+            self.assign_branch_combo.addItem(r.name, r.branch_id)
+
+    def assign_warehouse(self) -> None:
+        company_id = _company_id()
+        if company_id is None or self.warehouse_combo.currentData() is None:
+            return
+        masters_service.set_warehouse_branch(company_id, self.warehouse_combo.currentData(), self.assign_branch_combo.currentData())
+        self.refresh()
+
+
 class _ReorderPoliciesTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -298,6 +354,7 @@ class _BudgetsTab(QWidget):
         self.code_field.setMaximumWidth(100)
         self.from_field, self.to_field = JalaliDateEdit(), JalaliDateEdit()
         self.cost_center_combo, self.project_combo, self.category_combo = QComboBox(), QComboBox(), QComboBox()
+        self.branch_combo, self.department_combo = QComboBox(), QComboBox()
         self.warn_spin = QSpinBox()
         self.warn_spin.setRange(1, 100)
         self.warn_spin.setValue(90)
@@ -305,7 +362,8 @@ class _BudgetsTab(QWidget):
         self.active_check.setChecked(True)
         for text, widget in (("کد:", self.code_field), ("نام:", self.name_field), ("از:", self.from_field), ("تا:", self.to_field),
                              ("مرکزِ هزینه:", self.cost_center_combo), ("پروژه:", self.project_combo),
-                             ("گروهِ کالا:", self.category_combo), ("مبلغ:", self.amount_field), ("هشدار٪:", self.warn_spin)):
+                             ("گروهِ کالا:", self.category_combo), ("شعبه:", self.branch_combo), ("دپارتمان:", self.department_combo),
+                             ("مبلغ:", self.amount_field), ("هشدار٪:", self.warn_spin)):
             form.addWidget(QLabel(text))
             form.addWidget(widget)
         form.addWidget(self.active_check)
@@ -336,7 +394,9 @@ class _BudgetsTab(QWidget):
                                                          if d.dimension_type_id == cc_type]),
                                (self.project_combo, [(d.detail_account_id, self._names[d.detail_account_id]) for d in details
                                                      if d.dimension_type_id == pj_type]),
-                               (self.category_combo, list(self._categories.items()))):
+                               (self.category_combo, list(self._categories.items())),
+                               (self.branch_combo, [(b.branch_id, b.name) for b in masters_service.list_branches(company_id)]),
+                               (self.department_combo, [(d.org_unit_id, d.name) for d in masters_service.list_departments(company_id)])):
             current = combo.currentData()
             combo.clear()
             combo.addItem("— همه —", None)
@@ -362,7 +422,7 @@ class _BudgetsTab(QWidget):
         today = datetime.date.today()
         self.from_field.setDate(today.replace(day=1))
         self.to_field.setDate(today + datetime.timedelta(days=365))
-        for combo in (self.cost_center_combo, self.project_combo, self.category_combo):
+        for combo in (self.cost_center_combo, self.project_combo, self.category_combo, self.branch_combo, self.department_combo):
             combo.setCurrentIndex(0)
         self.warn_spin.setValue(90)
         self.active_check.setChecked(True)
@@ -380,7 +440,8 @@ class _BudgetsTab(QWidget):
         self.to_field.setDate(b.period_to)
         self.amount_field.setText(numerals.to_persian_digits(format(b.amount.normalize(), "f")))
         for combo, value in ((self.cost_center_combo, b.cost_center_detail_account_id), (self.project_combo, b.project_detail_account_id),
-                             (self.category_combo, b.category_id)):
+                             (self.category_combo, b.category_id), (self.branch_combo, b.branch_id),
+                             (self.department_combo, b.org_unit_id)):
             combo.setCurrentIndex(max(0, combo.findData(value)))
         self.warn_spin.setValue(int(b.warn_percent))
         self.active_check.setChecked(b.is_active)
@@ -395,6 +456,7 @@ class _BudgetsTab(QWidget):
             amount=numerals.parse_decimal(self.amount_field.text()) if self.amount_field.text().strip() else decimal.Decimal(-1),
             cost_center_detail_account_id=self.cost_center_combo.currentData(), project_detail_account_id=self.project_combo.currentData(),
             category_id=self.category_combo.currentData(), warn_percent=decimal.Decimal(self.warn_spin.value()),
+            branch_id=self.branch_combo.currentData(), org_unit_id=self.department_combo.currentData(),
             is_active=self.active_check.isChecked(),
         )
 
@@ -442,8 +504,10 @@ class ProcurementMastersScreen(QWidget):
         self.tabs.addTab(self.policies_tab, "سیاستِ سفارشِ کالا")
         self.budgets_tab = _BudgetsTab()
         self.tabs.addTab(self.budgets_tab, "بودجهٔ خرید")
+        self.branches_tab = _BranchesTab()
+        self.tabs.addTab(self.branches_tab, "شعبه‌ها")
         layout.addWidget(self.tabs, stretch=1)
 
     def refresh(self) -> None:
-        for tab in (self.purchase_types_tab, self.cancel_reasons_tab, self.policies_tab, self.budgets_tab):
+        for tab in (self.purchase_types_tab, self.cancel_reasons_tab, self.policies_tab, self.budgets_tab, self.branches_tab):
             tab.refresh()

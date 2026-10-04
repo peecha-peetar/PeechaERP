@@ -533,6 +533,9 @@ class CommercialDocument(Base):
     cancelled_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     approved_at: Mapped[datetime.datetime | None]
     approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    # R244: شعبه و دپارتمان (واحدِ سازمانی)
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("comm.branches.branch_id"))
+    org_unit_id: Mapped[int | None] = mapped_column(ForeignKey("hr.organizational_units.org_unit_id"))
 
 
 class CommercialDocumentLine(Base):
@@ -1964,6 +1967,8 @@ class PurchaseRequest(Base):
     rejected_reason: Mapped[str | None] = mapped_column(Text)
     cancellation_reason_id: Mapped[int | None] = mapped_column(ForeignKey("comm.cancellation_reasons.reason_id"))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("comm.branches.branch_id"))
+    org_unit_id: Mapped[int | None] = mapped_column(ForeignKey("hr.organizational_units.org_unit_id"))
 
 
 class PurchaseRequestLine(Base):
@@ -2068,3 +2073,35 @@ class PurchaseBudget(Base):
     warn_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=90)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     note: Mapped[str | None] = mapped_column(Text)
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("comm.branches.branch_id"))
+    org_unit_id: Mapped[int | None] = mapped_column(ForeignKey("hr.organizational_units.org_unit_id"))
+
+
+class Branch(Base):
+    """R244: شعبه."""
+
+    __tablename__ = "branches"
+    __table_args__ = {"schema": "comm"}
+
+    branch_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    address: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ReportView(Base):
+    """R244: نمایِ ذخیره‌شدهٔ گزارش -- شخصی یا اشتراکی."""
+
+    __tablename__ = "report_views"
+    __table_args__ = {"schema": "comm"}
+
+    view_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    report_key: Mapped[str] = mapped_column(String(80))
+    name: Mapped[str] = mapped_column(String(100))
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+    payload: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())

@@ -477,8 +477,20 @@ def cycle_time(company_id: int, f: PurchaseFilters) -> ReportResult:
 _DIMENSIONS = (
     ("PROJECT", "پروژه"), ("WAREHOUSE", "انبار"), ("BRAND", "برند"), ("USER", "کاربرِ ثبت‌کننده"),
     ("KIND", "کالا / خدمت"), ("CURRENCY", "داخلی (ریالی) / ارزی"), ("PAYMENT", "نقدی / نسیه"),
-    ("PURCHASE_TYPE", "نوعِ خرید (برنامه‌ای / اضطراری)"),
+    ("PURCHASE_TYPE", "نوعِ خرید (برنامه‌ای / اضطراری)"), ("BRANCH", "شعبه"), ("DEPARTMENT", "دپارتمان (واحدِ سازمانی)"),
 )
+
+
+def _branch_names(company_id: int) -> dict[int, str]:
+    from peecha.services import procurement_masters as masters_service
+
+    return {b.branch_id: f"{b.code} — {b.name}" for b in masters_service.list_branches(company_id)}
+
+
+def _department_names(company_id: int) -> dict[int, str]:
+    from peecha.services import procurement_masters as masters_service
+
+    return {d.org_unit_id: f"{d.code} — {d.name}" for d in masters_service.list_departments(company_id)}
 
 
 def purchases_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
@@ -492,6 +504,7 @@ def purchases_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
     from peecha.services import procurement_masters as masters_service
 
     purchase_types = {t.purchase_type_id: t.name for t in masters_service.list_purchase_types(company_id)}
+    branches, departments = _branch_names(company_id), _department_names(company_id)
     purchases, returns = base._posted_purchase_and_returns(company_id, f, ctx)
     agg: dict[str, dict] = defaultdict(lambda: {"amount": _ZERO, "returns": _ZERO, "docs": set(), "suppliers": set()})
     if dim == "PAYMENT":
@@ -524,6 +537,10 @@ def purchases_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
                 return "خدمت" if item and item.item_kind_code == "SERVICE" else "کالا"
             if dim == "PURCHASE_TYPE":
                 return purchase_types.get(doc.purchase_type_id, "— تعیین‌نشده —")
+            if dim == "BRANCH":
+                return branches.get(doc.branch_id, "— بدونِ شعبه —")
+            if dim == "DEPARTMENT":
+                return departments.get(doc.org_unit_id, "— بدونِ دپارتمان —")
             return "ارزی" if doc.currency_id != _base_currency(company_id) else "داخلی (ریالی)"
 
         for doc, ln in purchases:
@@ -1636,15 +1653,22 @@ def request_cycle(company_id: int, f: PurchaseFilters) -> ReportResult:
 
 
 def requests_by_requester(company_id: int, f: PurchaseFilters) -> ReportResult:
+    group_by = _opt(f, "group", "USER")
     reqs, ordered, ctx = _requests(company_id, f)
     users = _users()
+    branches, departments = _branch_names(company_id), _department_names(company_id)
     agg: dict[str, dict] = defaultdict(lambda: {"count": 0, "approved": 0, "rejected": 0, "value": _ZERO, "ordered": 0})
     from peecha.services import purchase_requests as pr_service
 
     for r, ls in reqs:
-        key = users.get(r.requester_user_id, "")
-        if r.cost_center_detail_account_id:
-            key = f"{key} / {ctx.names.get(r.cost_center_detail_account_id, '')}"
+        if group_by == "DEPARTMENT":
+            key = departments.get(r.org_unit_id, "— بدونِ دپارتمان —")
+        elif group_by == "BRANCH":
+            key = branches.get(r.branch_id, "— بدونِ شعبه —")
+        else:
+            key = users.get(r.requester_user_id, "")
+            if r.cost_center_detail_account_id:
+                key = f"{key} / {ctx.names.get(r.cost_center_detail_account_id, '')}"
         a = agg[key]
         a["count"] += 1
         a["value"] += _estimated(ls)
@@ -1652,7 +1676,7 @@ def requests_by_requester(company_id: int, f: PurchaseFilters) -> ReportResult:
         a["rejected"] += r.status_code == "REJECTED"
         a["ordered"] += r.status_code == "APPROVED" and pr_service.fulfilment(ls, ordered) == "FULL"
     result = ReportResult([
-        ("درخواست‌کننده / مرکزِ هزینه", TEXT), ("تعدادِ درخواست", INT), ("تصویب‌شده", INT), ("ردشده", INT), ("کاملاً سفارش‌شده", INT),
+        ({"DEPARTMENT": "دپارتمان", "BRANCH": "شعبه"}.get(group_by, "درخواست‌کننده / مرکزِ هزینه"), TEXT), ("تعدادِ درخواست", INT), ("تصویب‌شده", INT), ("ردشده", INT), ("کاملاً سفارش‌شده", INT),
         ("نرخِ رد", PERCENT), ("ارزشِ برآوردی", MONEY),
     ])
     for key, a in sorted(agg.items(), key=lambda kv: -kv[1]["value"]):
@@ -1869,6 +1893,10 @@ def _budget_scope(u, ctx) -> str:
         parts.append(ctx.names.get(u.budget.project_detail_account_id, ""))
     if u.budget.category_id:
         parts.append(_category_names(u.budget.company_id).get(u.budget.category_id, ""))
+    if u.budget.branch_id:
+        parts.append(_branch_names(u.budget.company_id).get(u.budget.branch_id, ""))
+    if u.budget.org_unit_id:
+        parts.append(_department_names(u.budget.company_id).get(u.budget.org_unit_id, ""))
     return " / ".join(parts) or "کلِ خرید"
 
 
@@ -1910,19 +1938,23 @@ def budget_overrun(company_id: int, f: PurchaseFilters) -> ReportResult:
     return result
 
 
-_BUDGET_DIMS = (("COST_CENTER", "مرکزِ هزینه"), ("PROJECT", "پروژه"), ("CATEGORY", "گروهِ کالا"))
+_BUDGET_DIMS = (("COST_CENTER", "مرکزِ هزینه"), ("PROJECT", "پروژه"), ("CATEGORY", "گروهِ کالا"), ("BRANCH", "شعبه"),
+                ("DEPARTMENT", "دپارتمان"))
 
 
 def budget_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
     dim = _opt(f, "dimension", "COST_CENTER")
     ctx = base._ctx(company_id)
     categories = _category_names(company_id)
+    branches, departments = _branch_names(company_id), _department_names(company_id)
     agg: dict[str, list] = defaultdict(lambda: [_ZERO, _ZERO, _ZERO, 0])
     for u in _budget_usages(company_id, f):
         b = u.budget
         key = {"COST_CENTER": ctx.names.get(b.cost_center_detail_account_id, "") if b.cost_center_detail_account_id else None,
                "PROJECT": ctx.names.get(b.project_detail_account_id, "") if b.project_detail_account_id else None,
-               "CATEGORY": categories.get(b.category_id, "") if b.category_id else None}[dim] or "— بدونِ این بُعد —"
+               "CATEGORY": categories.get(b.category_id, "") if b.category_id else None,
+               "BRANCH": branches.get(b.branch_id, "") if b.branch_id else None,
+               "DEPARTMENT": departments.get(b.org_unit_id, "") if b.org_unit_id else None}[dim] or "— بدونِ این بُعد —"
         a = agg[key]
         a[0] += b.amount
         a[1] += u.actual
@@ -2033,8 +2065,8 @@ def unbudgeted_purchases(company_id: int, f: PurchaseFilters) -> ReportResult:
     for doc, ln in base._lines(company_id, ("PURCHASE_INVOICE", "PURCHASE_ORDER"), ("POSTED", "CONFIRMED", "APPROVED"), f, ctx):
         item = ctx.items.get(ln.item_id)
         category = item.category_id if item else None
-        if any(budgets_service._matches(b, doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id, category)
-               for b in budgets):
+        if any(budgets_service._matches(b, doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id, category,
+                                        doc.branch_id, doc.org_unit_id) for b in budgets):
             continue
         result.add([_TITLES[doc.document_type_code], doc.document_no, doc.document_date, ctx.names.get(doc.counterparty_detail_account_id, ""),
                     ctx.item_label(ln.item_id), ctx.names.get(doc.cost_center_detail_account_id, "") if doc.cost_center_detail_account_id else "",
@@ -2160,8 +2192,9 @@ PURCHASE_EXT_REPORTS: list[ReportDef] = [
               "ماندهٔ سفارش‌نشدهٔ ردیف‌هایِ درخواستِ تصویب‌شده.", group=_RQ),
     ReportDef("PR_CYCLE", "زمانِ چرخهٔ درخواست تا سفارش", request_cycle, _ALL,
               "ثبت → ارسال → تصویب → اولین سفارش (روز).", group=_RQ),
-    ReportDef("PR_BY_REQUESTER", "درخواست‌ها به تفکیکِ درخواست‌کننده", requests_by_requester, _ALL,
-              "تعداد، نرخِ رد و ارزشِ برآوردیِ درخواست‌هایِ هر کاربر/مرکزِ هزینه.", group=_RQ),
+    ReportDef("PR_BY_REQUESTER", "درخواست‌ها به تفکیکِ درخواست‌کننده/دپارتمان", requests_by_requester, _ALL,
+              "تعداد، نرخِ رد و ارزشِ برآوردیِ درخواست‌ها به تفکیکِ کاربر، دپارتمان یا شعبه.", group=_RQ,
+              options=(("group", "تفکیک", (("USER", "درخواست‌کننده"), ("DEPARTMENT", "دپارتمان"), ("BRANCH", "شعبه"))),)),
     ReportDef("PR_REJECTED", "درخواست‌هایِ ردشده/لغوشده", rejected_requests, _ALL, "با علتِ رد یا لغو.", group=_RQ),
     ReportDef("PO_WITHOUT_PR", "سفارشِ خریدِ بدونِ درخواست", orders_without_request, _ALL,
               "ردیف‌هایِ سفارش که از درخواستِ خرید نیامده‌اند.", group=_CT),
