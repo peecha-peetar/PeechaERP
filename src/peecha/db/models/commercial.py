@@ -2047,3 +2047,24 @@ class RfqQuote(Base):
     valid_until: Mapped[datetime.date | None]
     is_awarded: Mapped[bool] = mapped_column(Boolean, default=False)
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class PurchaseBudget(Base):
+    """R243: بودجهٔ خرید برایِ یک دوره و ترکیبی از مرکزِ هزینه/پروژه/گروهِ کالا."""
+
+    __tablename__ = "purchase_budgets"
+    __table_args__ = {"schema": "comm"}
+
+    budget_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    period_from: Mapped[datetime.date]
+    period_to: Mapped[datetime.date]
+    cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    project_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("inv.item_categories.category_id"))
+    amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    warn_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=90)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[str | None] = mapped_column(Text)

@@ -5027,12 +5027,26 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         theme.set_status_label(self.status_label, "سند تایید شد.", ok=True)
         return True
 
+    def _budget_warnings(self) -> list[str]:
+        """R243: هشدارِ بودجه پس از تاییدِ سندِ خرید (جلویِ ثبت را نمی‌گیرد)."""
+        if self._document_id is None or not self.document_type_code.startswith("PURCHASE"):
+            return []
+        from peecha.services import purchase_budgets as budgets_service
+
+        warnings = budgets_service.warnings_for_document(self._document_id, self._company_id())
+        if warnings:
+            QMessageBox.warning(self, "هشدارِ بودجهٔ خرید", "\n".join(warnings))
+        return warnings
+
     def _confirm_button_clicked(self) -> None:
         # طبقِ گزارشِ صریحِ کاربر («کاربر فاکتور را صادر می‌کند و نحوه‌یِ
         # دریافت هم در ابتدا مشخص می‌شود»): به‌جایِ اینکه کاربر بعداً
         # جداگانه دنبالِ دکمهٔ 🧾 بگردد، همین‌جا -- بلافاصله بعدِ تاییدِ
         # فاکتور -- پرسیده می‌شود.
-        if self._confirm() and self._is_invoice:
+        confirmed = self._confirm()
+        if confirmed:
+            self._budget_warnings()
+        if confirmed and self._is_invoice:
             self._prompt_settlement_after_confirm()
             if self._one_step_invoice_post:
                 self._finish_one_step_post()

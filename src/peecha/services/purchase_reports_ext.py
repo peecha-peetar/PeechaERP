@@ -1850,12 +1850,207 @@ def orders_without_rfq(company_id: int, f: PurchaseFilters) -> ReportResult:
 
 
 # =====================================================================
+# R243: بودجهٔ خرید
+# =====================================================================
+def _budget_usages(company_id: int, f: PurchaseFilters, details: bool = False):
+    from peecha.services import purchase_budgets as budgets_service
+
+    budgets = [b for b in budgets_service.list_budgets(company_id, active_only=True)
+               if b.period_to >= f.date_from and b.period_from <= f.date_to
+               and (f.category_id is None or b.category_id == f.category_id)]
+    return budgets_service.usages(company_id, budgets, with_details=details)
+
+
+def _budget_scope(u, ctx) -> str:
+    parts = []
+    if u.budget.cost_center_detail_account_id:
+        parts.append(ctx.names.get(u.budget.cost_center_detail_account_id, ""))
+    if u.budget.project_detail_account_id:
+        parts.append(ctx.names.get(u.budget.project_detail_account_id, ""))
+    if u.budget.category_id:
+        parts.append(_category_names(u.budget.company_id).get(u.budget.category_id, ""))
+    return " / ".join(parts) or "کلِ خرید"
+
+
+def _category_names(company_id: int) -> dict[int, str]:
+    return {c.category_id: f"{c.code} — {c.name}" for c in catalog_service.list_categories(company_id)}
+
+
+def budget_vs_actual(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """درصدِ مصرف = (واقعی + تعهد) ÷ بودجه؛ مانده = بودجه − واقعی − تعهد؛ «پس از درخواست‌ها» = مانده − درخواست‌هایِ تصویب‌شده."""
+    from peecha.services import purchase_budgets as budgets_service
+
+    ctx = base._ctx(company_id)
+    result = ReportResult([
+        ("بودجه", TEXT), ("دامنه", TEXT), ("از", DATE), ("تا", DATE), ("مبلغِ بودجه", MONEY), ("واقعی (فاکتور)", MONEY),
+        ("تعهد (سفارشِ باز)", MONEY), ("مصرف‌شده", MONEY), ("مانده", MONEY), ("درصدِ مصرف", PERCENT), ("درخواست‌هایِ تصویب‌شده", MONEY),
+        ("مانده پس از درخواست‌ها", MONEY), ("وضعیت", TEXT),
+    ], no_total={9})
+    for u in _budget_usages(company_id, f):
+        result.add([f"{u.budget.code} — {u.budget.name}", _budget_scope(u, ctx), u.budget.period_from, u.budget.period_to, u.budget.amount,
+                    u.actual, u.commitment, u.consumed, u.available, u.used_percent, u.pipeline, u.available - u.pipeline,
+                    budgets_service.STATE_LABELS[u.state]])
+    return result
+
+
+def budget_overrun(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import purchase_budgets as budgets_service
+
+    view = _opt(f, "view", "WARN")
+    ctx = base._ctx(company_id)
+    result = ReportResult([
+        ("بودجه", TEXT), ("دامنه", TEXT), ("مبلغِ بودجه", MONEY), ("مصرف‌شده", MONEY), ("عبور/مانده", MONEY), ("درصدِ مصرف", PERCENT),
+        ("آستانهٔ هشدار", PERCENT), ("وضعیت", TEXT),
+    ], no_total={5, 6})
+    for u in _budget_usages(company_id, f):
+        if u.state == "OK" or (view == "OVER" and u.state != "OVER"):
+            continue
+        result.add([f"{u.budget.code} — {u.budget.name}", _budget_scope(u, ctx), u.budget.amount, u.consumed, u.available, u.used_percent,
+                    u.budget.warn_percent, budgets_service.STATE_LABELS[u.state]])
+    return result
+
+
+_BUDGET_DIMS = (("COST_CENTER", "مرکزِ هزینه"), ("PROJECT", "پروژه"), ("CATEGORY", "گروهِ کالا"))
+
+
+def budget_by_dimension(company_id: int, f: PurchaseFilters) -> ReportResult:
+    dim = _opt(f, "dimension", "COST_CENTER")
+    ctx = base._ctx(company_id)
+    categories = _category_names(company_id)
+    agg: dict[str, list] = defaultdict(lambda: [_ZERO, _ZERO, _ZERO, 0])
+    for u in _budget_usages(company_id, f):
+        b = u.budget
+        key = {"COST_CENTER": ctx.names.get(b.cost_center_detail_account_id, "") if b.cost_center_detail_account_id else None,
+               "PROJECT": ctx.names.get(b.project_detail_account_id, "") if b.project_detail_account_id else None,
+               "CATEGORY": categories.get(b.category_id, "") if b.category_id else None}[dim] or "— بدونِ این بُعد —"
+        a = agg[key]
+        a[0] += b.amount
+        a[1] += u.actual
+        a[2] += u.commitment
+        a[3] += 1
+    result = ReportResult([
+        (dict(_BUDGET_DIMS)[dim], TEXT), ("تعدادِ بودجه", INT), ("بودجه", MONEY), ("واقعی", MONEY), ("تعهد", MONEY), ("مانده", MONEY),
+        ("درصدِ مصرف", PERCENT),
+    ], no_total={6})
+    for key, (amount, actual, commitment, count) in sorted(agg.items()):
+        result.add([key, count, amount, actual, commitment, amount - actual - commitment,
+                    ((actual + commitment) * 100 / amount) if amount else _ZERO])
+    return result
+
+
+def budget_monthly(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """بودجهٔ هر ماه = بودجه × روزهایِ آن ماه در دوره ÷ کلِ روزهایِ دوره (توزیعِ یکنواخت)؛ مقایسه با فاکتورِ ثبت‌شدهٔ همان ماه."""
+    from peecha import numerals
+
+    result = ReportResult([
+        ("بودجه", TEXT), ("ماه", TEXT), ("بودجهٔ ماه", MONEY), ("واقعیِ ماه", MONEY), ("انحرافِ ماه", MONEY), ("بودجهٔ تجمعی", MONEY),
+        ("واقعیِ تجمعی", MONEY), ("انحرافِ تجمعی", MONEY),
+    ], note="توزیعِ بودجه در ماه‌ها یکنواخت (به نسبتِ روز) فرض شده است.")
+    for u in _budget_usages(company_id, f, details=True):
+        b = u.budget
+        days = (b.period_to - b.period_from).days + 1
+        actual_by_month: dict[str, decimal.Decimal] = defaultdict(lambda: _ZERO)
+        for kind, doc, _ln, amount in u.details:
+            if kind == "ACTUAL":
+                actual_by_month[base._jalali_month(doc.document_date)] += amount
+        month_days: dict[str, int] = defaultdict(int)
+        day = b.period_from
+        while day <= b.period_to:
+            month_days[base._jalali_month(day)] += 1
+            day += datetime.timedelta(days=1)
+        cum_b = cum_a = _ZERO
+        for month, count in month_days.items():
+            mb = _money(b.amount * count / days)
+            ma = actual_by_month.get(month, _ZERO)
+            cum_b += mb
+            cum_a += ma
+            result.add([f"{b.code} — {b.name}", numerals.to_persian_digits(month), mb, ma, mb - ma, cum_b, cum_a, cum_b - cum_a])
+    return result
+
+
+def _budget_detail(company_id: int, f: PurchaseFilters, kinds: tuple[str, ...]) -> ReportResult:
+    ctx = base._ctx(company_id)
+    labels = {"ACTUAL": "فاکتور/برگشت", "COMMITMENT": "سفارشِ باز", "PIPELINE": "درخواستِ تصویب‌شده"}
+    result = ReportResult([
+        ("بودجه", TEXT), ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("طرفِ حساب", TEXT), ("کالا", TEXT), ("مبلغ", MONEY),
+    ], no_total={2})
+    for u in _budget_usages(company_id, f, details=True):
+        for kind, doc, ln, amount in u.details:
+            if kind not in kinds:
+                continue
+            if kind == "PIPELINE":
+                result.add([u.budget.name, labels[kind], doc.request_no, doc.request_date,
+                            ctx.names.get(ln.suggested_supplier_detail_account_id, ""), ctx.item_label(ln.item_id), amount],
+                           (doc.request_id, "PURCHASE_REQUEST"))
+            else:
+                result.add([u.budget.name, labels[kind] if kind != "ACTUAL" or amount >= 0 else "برگشت", doc.document_no, doc.document_date,
+                            ctx.names.get(doc.counterparty_detail_account_id, ""), ctx.item_label(ln.item_id), amount],
+                           (doc.document_id, doc.document_type_code))
+    return result
+
+
+def budget_commitments(company_id: int, f: PurchaseFilters) -> ReportResult:
+    return _budget_detail(company_id, f, ("COMMITMENT",))
+
+
+def budget_actuals(company_id: int, f: PurchaseFilters) -> ReportResult:
+    return _budget_detail(company_id, f, ("ACTUAL",))
+
+
+def budget_pipeline(company_id: int, f: PurchaseFilters) -> ReportResult:
+    return _budget_detail(company_id, f, ("PIPELINE",))
+
+
+def budget_forecast(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """پیش‌بینیِ پایانِ دوره = واقعی ÷ روزهایِ گذشته × کلِ روزها (+ تعهدِ باز)؛ انحرافِ پیش‌بینی = بودجه − پیش‌بینی."""
+    ctx = base._ctx(company_id)
+    today = min(f.date_to, datetime.date.today())
+    result = ReportResult([
+        ("بودجه", TEXT), ("دامنه", TEXT), ("مبلغِ بودجه", MONEY), ("روزِ گذشته", INT), ("کلِ روزها", INT), ("واقعی تا امروز", MONEY),
+        ("پیش‌بینیِ واقعی تا پایانِ دوره", MONEY), ("تعهدِ باز", MONEY), ("پیش‌بینیِ کل", MONEY), ("انحرافِ پیش‌بینی", MONEY), ("وضعیت", TEXT),
+    ], no_total={3, 4})
+    for u in _budget_usages(company_id, f):
+        b = u.budget
+        total_days = (b.period_to - b.period_from).days + 1
+        elapsed = max(min((today - b.period_from).days + 1, total_days), 0)
+        projected = _money(u.actual * total_days / elapsed) if elapsed else _ZERO
+        forecast = projected + u.commitment
+        result.add([f"{b.code} — {b.name}", _budget_scope(u, ctx), b.amount, elapsed, total_days, u.actual, projected, u.commitment, forecast,
+                    b.amount - forecast, "پیش‌بینیِ عبور" if forecast > b.amount else "در محدوده"])
+    return result
+
+
+def unbudgeted_purchases(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """خرید (فاکتورِ ثبت‌شده یا سفارشِ باز) که در هیچ بودجهٔ فعالی حساب نمی‌شود."""
+    from peecha.services import purchase_budgets as budgets_service
+
+    ctx = base._ctx(company_id)
+    budgets = budgets_service.list_budgets(company_id, active_only=True)
+    result = ReportResult([
+        ("نوع", TEXT), ("شماره", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("کالا", TEXT), ("مرکزِ هزینه", TEXT), ("پروژه", TEXT),
+        ("مبلغِ خالص", MONEY),
+    ], no_total={1})
+    for doc, ln in base._lines(company_id, ("PURCHASE_INVOICE", "PURCHASE_ORDER"), ("POSTED", "CONFIRMED", "APPROVED"), f, ctx):
+        item = ctx.items.get(ln.item_id)
+        category = item.category_id if item else None
+        if any(budgets_service._matches(b, doc.document_date, doc.cost_center_detail_account_id, doc.project_detail_account_id, category)
+               for b in budgets):
+            continue
+        result.add([_TITLES[doc.document_type_code], doc.document_no, doc.document_date, ctx.names.get(doc.counterparty_detail_account_id, ""),
+                    ctx.item_label(ln.item_id), ctx.names.get(doc.cost_center_detail_account_id, "") if doc.cost_center_detail_account_id else "",
+                    ctx.names.get(doc.project_detail_account_id, "") if doc.project_detail_account_id else "", base._net(ln)],
+                   (doc.document_id, doc.document_type_code))
+    return result
+
+
+# =====================================================================
 # ثبتِ گزارش‌ها
 # =====================================================================
 _OP, _AN, _PR, _VP, _FI, _MD = "عملیاتی", "تحلیلِ خرید", "قیمت و هزینه", "ارزیابیِ تامین‌کننده", "مالی و بدهی", "اطلاعاتِ پایه"
 _CT, _PC, _IN = "کنترل و حسابرسی", "فرآیندِ خرید", "انبار و تدارکات"
 _RQ = "درخواستِ خرید"
 _RF = "استعلامِ قیمت"
+_BG = "بودجهٔ خرید"
 _ALL = ("supplier", "item", "category", "warehouse")
 _DAYS_OPT = ("days", "آستانه (روز)", (("180", "۱۸۰ روز"), ("90", "۹۰ روز"), ("365", "۳۶۵ روز"), ("30", "۳۰ روز")))
 
@@ -1986,5 +2181,24 @@ PURCHASE_EXT_REPORTS: list[ReportDef] = [
               "سفارش‌هایی که از استعلامِ قیمت نیامده‌اند.", group=_CT,
               options=(("threshold", "حداقلِ مبلغ", (("0", "همه"), ("10000000", "۱۰ میلیون"), ("100000000", "۱۰۰ میلیون"),
                                                      ("1000000000", "۱ میلیارد"))),)),
+    # --- R243: بودجه
+    ReportDef("BUDGET_VS_ACTUAL", "بودجه در برابرِ واقعی و تعهد", budget_vs_actual, ("category",),
+              "بودجه، واقعی، تعهد، مانده و درخواست‌هایِ تصویب‌شدهٔ هر بودجهٔ فعالِ بازه.", group=_BG),
+    ReportDef("BUDGET_OVERRUN", "بودجه‌هایِ نزدیک به سقف/عبورکرده", budget_overrun, ("category",),
+              "بودجه‌هایی که از آستانهٔ هشدار گذشته‌اند.", group=_BG,
+              options=(("view", "نمایش", (("WARN", "هشدار و عبور"), ("OVER", "فقط عبور"))),)),
+    ReportDef("BUDGET_BY_DIMENSION", "بودجه به تفکیکِ مرکزِ هزینه/پروژه/گروه", budget_by_dimension, ("category",),
+              "جمعِ بودجه و مصرف به تفکیکِ بُعدِ انتخابی.", group=_BG, options=(("dimension", "بُعد", _BUDGET_DIMS),)),
+    ReportDef("BUDGET_MONTHLY", "روندِ ماهانهٔ بودجه", budget_monthly, ("category",),
+              "بودجهٔ ماهانه (یکنواخت) در برابرِ فاکتورِ ثبت‌شدهٔ هر ماه، تجمعی.", group=_BG),
+    ReportDef("BUDGET_ACTUALS", "ریزِ مصرفِ واقعیِ بودجه", budget_actuals, ("category",), "ردیف‌هایِ فاکتور/برگشتِ هر بودجه.", group=_BG),
+    ReportDef("BUDGET_COMMITMENTS", "تعهداتِ بودجه (سفارش‌هایِ باز)", budget_commitments, ("category",),
+              "ماندهٔ فاکتورنشدهٔ سفارش‌هایِ خرید که بودجه را درگیر کرده‌اند.", group=_BG),
+    ReportDef("BUDGET_PIPELINE", "درخواست‌هایِ در جریانِ بودجه", budget_pipeline, ("category",),
+              "ماندهٔ سفارش‌نشدهٔ درخواست‌هایِ تصویب‌شده (فیِ برآوردی).", group=_BG),
+    ReportDef("BUDGET_FORECAST", "پیش‌بینیِ مصرفِ بودجه تا پایانِ دوره", budget_forecast, ("category",),
+              "روندِ فعلیِ مصرف تا پایانِ دوره + تعهدها.", group=_BG),
+    ReportDef("UNBUDGETED", "خریدِ خارج از بودجه", unbudgeted_purchases, _ALL,
+              "فاکتور/سفارشی که در هیچ بودجهٔ فعالی حساب نمی‌شود.", group=_BG),
 ]
 base.register_reports(PURCHASE_EXT_REPORTS)

@@ -275,6 +275,156 @@ class _ReorderPoliciesTab(QWidget):
         self.refresh()
 
 
+class _BudgetsTab(QWidget):
+    """R243: بودجهٔ خرید -- مبلغ برایِ یک دوره و ترکیبی از مرکزِ هزینه/پروژه/گروهِ کالا (خالی = همه)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from peecha.ui.widgets import JalaliDateEdit
+
+        self._rows: list = []
+        self._editing_id: int | None = None
+        layout = QVBoxLayout(self)
+        hint = QLabel("مصرف = فاکتورِ ثبت‌شده − برگشت + ماندهٔ سفارش‌هایِ باز. با رسیدن به درصدِ هشدار، پس از تاییدِ سندِ خرید "
+                      "پیامِ هشدار نمایش داده می‌شود (جلویِ ثبت گرفته نمی‌شود).")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.table = _table(["کد", "نام", "از", "تا", "مرکزِ هزینه", "پروژه", "گروهِ کالا", "مبلغ", "مصرف‌شده", "درصدِ مصرف", "فعال"])
+        self.table.itemSelectionChanged.connect(self._load_selected)
+        layout.addWidget(self.table, stretch=1)
+        form = QHBoxLayout()
+        self.code_field, self.name_field, self.amount_field = QLineEdit(), QLineEdit(), QLineEdit()
+        self.code_field.setMaximumWidth(100)
+        self.from_field, self.to_field = JalaliDateEdit(), JalaliDateEdit()
+        self.cost_center_combo, self.project_combo, self.category_combo = QComboBox(), QComboBox(), QComboBox()
+        self.warn_spin = QSpinBox()
+        self.warn_spin.setRange(1, 100)
+        self.warn_spin.setValue(90)
+        self.active_check = QCheckBox("فعال")
+        self.active_check.setChecked(True)
+        for text, widget in (("کد:", self.code_field), ("نام:", self.name_field), ("از:", self.from_field), ("تا:", self.to_field),
+                             ("مرکزِ هزینه:", self.cost_center_combo), ("پروژه:", self.project_combo),
+                             ("گروهِ کالا:", self.category_combo), ("مبلغ:", self.amount_field), ("هشدار٪:", self.warn_spin)):
+            form.addWidget(QLabel(text))
+            form.addWidget(widget)
+        form.addWidget(self.active_check)
+        layout.addLayout(form)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        for text, slot, primary in (("جدید", self.clear_form, False), ("حذف", self.delete, False), ("ذخیره", self.save, True)):
+            button = QPushButton(text)
+            if primary:
+                button.setObjectName("primaryButton")
+            button.clicked.connect(slot)
+            buttons.addWidget(button)
+        layout.addLayout(buttons)
+
+    def refresh(self) -> None:
+        from peecha.services import detail_dimensions as dimensions_service
+        from peecha.services import purchase_budgets as budgets_service
+
+        company_id = _company_id()
+        if company_id is None:
+            return
+        cc_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
+        pj_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)
+        details = dimensions_service.list_all_detail_accounts(company_id)
+        self._names = {d.detail_account_id: f"{d.full_code} — {d.name or ''}" for d in details}
+        self._categories = {c.category_id: f"{c.code} — {c.name}" for c in catalog_service.list_categories(company_id)}
+        for combo, options in ((self.cost_center_combo, [(d.detail_account_id, self._names[d.detail_account_id]) for d in details
+                                                         if d.dimension_type_id == cc_type]),
+                               (self.project_combo, [(d.detail_account_id, self._names[d.detail_account_id]) for d in details
+                                                     if d.dimension_type_id == pj_type]),
+                               (self.category_combo, list(self._categories.items()))):
+            current = combo.currentData()
+            combo.clear()
+            combo.addItem("— همه —", None)
+            for value, label in options:
+                combo.addItem(numerals.to_persian_digits(label), value)
+            combo.setCurrentIndex(max(0, combo.findData(current)))
+        self._rows = budgets_service.list_budgets(company_id)
+        usage = {u.budget.budget_id: u for u in budgets_service.usages(company_id, self._rows)}
+        _fill_table(self.table, [[
+            b.code, b.name, numerals.format_jalali_date(b.period_from), numerals.format_jalali_date(b.period_to),
+            self._names.get(b.cost_center_detail_account_id, "همه"), self._names.get(b.project_detail_account_id, "همه"),
+            self._categories.get(b.category_id, "همه"), numerals.format_money(b.amount, 0, None),
+            numerals.format_money(usage[b.budget_id].consumed, 0, None), f"{numerals.format_money(usage[b.budget_id].used_percent, 1, None)}٪",
+            "بله" if b.is_active else "خیر",
+        ] for b in self._rows])
+
+    def clear_form(self) -> None:
+        import datetime
+
+        self._editing_id = None
+        for field in (self.code_field, self.name_field, self.amount_field):
+            field.clear()
+        today = datetime.date.today()
+        self.from_field.setDate(today.replace(day=1))
+        self.to_field.setDate(today + datetime.timedelta(days=365))
+        for combo in (self.cost_center_combo, self.project_combo, self.category_combo):
+            combo.setCurrentIndex(0)
+        self.warn_spin.setValue(90)
+        self.active_check.setChecked(True)
+        self.table.clearSelection()
+
+    def _load_selected(self) -> None:
+        rows = self.table.selectionModel().selectedRows()
+        if not rows or rows[0].row() >= len(self._rows):
+            return
+        b = self._rows[rows[0].row()]
+        self._editing_id = b.budget_id
+        self.code_field.setText(b.code)
+        self.name_field.setText(b.name)
+        self.from_field.setDate(b.period_from)
+        self.to_field.setDate(b.period_to)
+        self.amount_field.setText(numerals.to_persian_digits(format(b.amount.normalize(), "f")))
+        for combo, value in ((self.cost_center_combo, b.cost_center_detail_account_id), (self.project_combo, b.project_detail_account_id),
+                             (self.category_combo, b.category_id)):
+            combo.setCurrentIndex(max(0, combo.findData(value)))
+        self.warn_spin.setValue(int(b.warn_percent))
+        self.active_check.setChecked(b.is_active)
+
+    def fields(self):
+        import decimal
+
+        from peecha.services import purchase_budgets as budgets_service
+
+        return budgets_service.BudgetFields(
+            code=self.code_field.text(), name=self.name_field.text(), period_from=self.from_field.date(), period_to=self.to_field.date(),
+            amount=numerals.parse_decimal(self.amount_field.text()) if self.amount_field.text().strip() else decimal.Decimal(-1),
+            cost_center_detail_account_id=self.cost_center_combo.currentData(), project_detail_account_id=self.project_combo.currentData(),
+            category_id=self.category_combo.currentData(), warn_percent=decimal.Decimal(self.warn_spin.value()),
+            is_active=self.active_check.isChecked(),
+        )
+
+    def save(self) -> None:
+        from peecha.services import purchase_budgets as budgets_service
+
+        company_id = _company_id()
+        if company_id is None:
+            return
+        try:
+            budgets_service.save_budget(company_id, self.fields(), self._editing_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            return
+        self.clear_form()
+        self.refresh()
+
+    def delete(self) -> None:
+        from peecha.services import purchase_budgets as budgets_service
+
+        company_id = _company_id()
+        if company_id is None or self._editing_id is None:
+            return
+        if QMessageBox.question(self, "حذف", "این بودجه حذف شود؟") != QMessageBox.Yes:
+            return
+        budgets_service.delete_budget(company_id, self._editing_id)
+        self.clear_form()
+        self.refresh()
+
+
 class ProcurementMastersScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -290,8 +440,10 @@ class ProcurementMastersScreen(QWidget):
         self.tabs.addTab(self.purchase_types_tab, "انواعِ خرید")
         self.tabs.addTab(self.cancel_reasons_tab, "علت‌هایِ لغو")
         self.tabs.addTab(self.policies_tab, "سیاستِ سفارشِ کالا")
+        self.budgets_tab = _BudgetsTab()
+        self.tabs.addTab(self.budgets_tab, "بودجهٔ خرید")
         layout.addWidget(self.tabs, stretch=1)
 
     def refresh(self) -> None:
-        for tab in (self.purchase_types_tab, self.cancel_reasons_tab, self.policies_tab):
+        for tab in (self.purchase_types_tab, self.cancel_reasons_tab, self.policies_tab, self.budgets_tab):
             tab.refresh()
