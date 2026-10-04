@@ -30,6 +30,10 @@ PURCHASE_REPORT_MENU = [
         ("PR_NOT_ORDERED", "درخواست‌هایِ تصویب‌شدهٔ بدونِ سفارش"), ("PR_CYCLE", "زمانِ چرخهٔ درخواست تا سفارش"),
         ("PR_BY_REQUESTER", "درخواست‌ها به تفکیکِ درخواست‌کننده"), ("PR_REJECTED", "درخواست‌هایِ ردشده/لغوشده"),
     ]),
+    ("RFQ", "استعلامِ قیمت", [
+        ("RFQ_REGISTER", "دفترِ استعلام‌هایِ قیمت"), ("RFQ_COMPARISON", "مقایسهٔ پیشنهادهایِ تامین‌کنندگان"),
+        ("RFQ_SAVINGS", "صرفه‌جوییِ استعلامِ قیمت"), ("RFQ_PENDING", "پاسخ‌هایِ معوقِ استعلام"),
+    ]),
     ("CONTROL", "کنترل و حسابرسی", [
         ("THREE_WAY", "تطبیقِ سه‌طرفه (سفارش/رسید/فاکتور)"), ("NO_PO", "خریدِ بدونِ سفارش"),
         ("INVOICE_NO_RECEIPT", "فاکتورِ بدونِ رسید"), ("INVOICE_OVER_PO", "فاکتورِ بیش از سفارش"),
@@ -37,7 +41,7 @@ PURCHASE_REPORT_MENU = [
         ("DOC_TRAIL", "ردِ اسنادِ خرید (Audit Trail)"), ("USER_ACTIVITY", "فعالیتِ کاربران در خرید"),
         ("CHANGED_AFTER_APPROVAL", "تغییرِ قیمت/مقدار پس از تایید"), ("MODIFIED_DOCS", "اسنادِ اصلاح‌شده پس از تایید"),
         ("APPROVAL_HISTORY", "تاریخچهٔ تایید و تصویب"), ("SOD_VIOLATIONS", "تخلفاتِ تفکیکِ وظایف"),
-        ("PO_WITHOUT_PR", "سفارشِ خریدِ بدونِ درخواست"),
+        ("PO_WITHOUT_PR", "سفارشِ خریدِ بدونِ درخواست"), ("PO_WITHOUT_RFQ", "خریدِ بدونِ استعلامِ رقابتی"),
     ]),
     ("PROCESS", "فرآیندِ خرید", [
         ("PO_FLOW", "گردشِ سفارشِ خرید"), ("CYCLE_TIME", "زمانِ چرخهٔ خرید"),
@@ -60,7 +64,7 @@ PURCHASE_REPORT_MENU = [
         ("FILL_RATE", "دقتِ مقدارِ تحویلِ تامین‌کنندگان"), ("QUALITY", "کیفیت / نرخِ برگشت"),
         ("LEAD_TIME", "زمانِ تحویل (Lead Time)"), ("PRICE_STABILITY", "ثباتِ قیمتِ تامین‌کننده"),
         ("LATE_ORDERS", "سفارش‌هایِ دیرکرد"), ("INACTIVE_SUPPLIERS", "تامین‌کنندگانِ غیرفعال"),
-        ("LINE_DELIVERY", "تحویلِ ردیفیِ سفارش‌ها"),
+        ("LINE_DELIVERY", "تحویلِ ردیفیِ سفارش‌ها"), ("RFQ_RESPONSE", "پاسخ‌گوییِ تامین‌کنندگان به استعلام"),
     ]),
     ("FINANCE", "مالی و بدهی", [
         ("BALANCES", "ماندهٔ حسابِ تامین‌کنندگان"), ("AGING", "سنی‌کردنِ بدهی (AP Aging)"),
@@ -296,6 +300,8 @@ NAV_ITEMS = [
         "children": [
             # R241: درخواستِ خرید (پیش از سفارش)
             {"code": "PURCH_REQUESTS", "label": "درخواستِ خرید", "screen": "purchase_requests"},
+            # R242: استعلامِ قیمت و مقایسهٔ پیشنهادها
+            {"code": "PURCH_RFQ", "label": "استعلامِ قیمت", "screen": "rfqs"},
             {"code": "PURCH_ORDER", "label": "سفارشِ خرید", "screen": "commercial_document_purchase_order"},
             {"code": "PURCH_PROFORMA", "label": "پیش‌فاکتورِ خرید", "screen": "commercial_document_purchase_proforma"},
             {"code": "PURCH_INVOICE", "label": "فاکتورِ خرید", "screen": "commercial_document_purchase_invoice"},

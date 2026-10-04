@@ -1692,11 +1692,170 @@ def orders_without_request(company_id: int, f: PurchaseFilters) -> ReportResult:
 
 
 # =====================================================================
+# R242: استعلامِ قیمت (RFQ)
+# =====================================================================
+def _rfqs(company_id: int, f: PurchaseFilters):
+    from peecha.services import rfqs as rfq_service
+
+    out = []
+    for r in rfq_service.list_rfqs(company_id, f.date_from, f.date_to):
+        row, lines, suppliers, quotes = rfq_service.get_rfq(r.rfq_id, company_id)
+        if f.item_id is not None and not any(ln.item_id == f.item_id for ln in lines):
+            continue
+        if f.supplier_id is not None and not any(sp.supplier_detail_account_id == f.supplier_id for sp in suppliers):
+            continue
+        out.append((row, lines, suppliers, quotes))
+    return out
+
+
+def rfq_register(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import rfqs as rfq_service
+
+    users = _users()
+    result = ReportResult([
+        ("شمارهٔ استعلام", INT), ("تاریخ", DATE), ("مهلتِ پاسخ", DATE), ("وضعیت", TEXT), ("ردیف", INT), ("دعوت‌شده", INT),
+        ("پاسخ‌داده", INT), ("انصراف", INT), ("ارزشِ برنده‌ها", MONEY), ("ایجادکننده", TEXT),
+    ], no_total={0})
+    for row, lines, suppliers, quotes in _rfqs(company_id, f):
+        by_line = {ln.line_id: ln for ln in lines}
+        awarded = sum((rfq_service.net_price(q) * by_line[q.rfq_line_id].quantity for q in quotes if q.is_awarded), _ZERO)
+        result.add([row.rfq_no, row.rfq_date, row.response_due_date, rfq_service.STATUS_LABELS[row.status_code], len(lines),
+                    len(suppliers), sum(sp.status_code == "RESPONDED" for sp in suppliers),
+                    sum(sp.status_code == "DECLINED" for sp in suppliers), _money(awarded), users.get(row.created_by_user_id, "")],
+                   (row.rfq_id, "RFQ"))
+    return result
+
+
+def rfq_comparison(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """مقایسهٔ پیشنهادها: رتبه بر اساسِ فیِ خالص = فی × (۱ − تخفیف٪)؛ تساوی با زمانِ تحویلِ کمتر."""
+    from peecha.services import rfqs as rfq_service
+
+    view = _opt(f, "view", "ALL")
+    ctx = base._ctx(company_id)
+    result = ReportResult([
+        ("استعلام", INT), ("کالا", TEXT), ("مقدار", QTY), ("تامین‌کننده", TEXT), ("فی", MONEY), ("تخفیف٪", PERCENT), ("فیِ خالص", MONEY),
+        ("جمعِ ردیف", MONEY), ("زمانِ تحویل (روز)", DAYS), ("اعتبار تا", DATE), ("رتبه", INT), ("اختلاف با بهترین", PERCENT), ("وضعیت", TEXT),
+    ], no_total={0, 2, 4, 5, 6, 8, 10, 11})
+    for row, _lines, _suppliers, _quotes in _rfqs(company_id, f):
+        rows = rfq_service.compare(row.rfq_id, company_id)
+        best = {r.line.line_id: r.net for r in rows if r.is_best}
+        for r in rows:
+            if (view == "BEST" and not r.is_best) or (view == "AWARDED" and not r.quote.is_awarded):
+                continue
+            if f.supplier_id is not None and r.supplier.supplier_detail_account_id != f.supplier_id:
+                continue
+            b = best.get(r.line.line_id)
+            state = "برنده" if r.quote.is_awarded else ("بهترین پیشنهاد" if r.is_best else "")
+            result.add([row.rfq_no, ctx.item_label(r.line.item_id), r.line.quantity, ctx.names.get(r.supplier.supplier_detail_account_id, ""),
+                        r.quote.unit_price, r.quote.discount_percent, r.net, _money(r.total), r.quote.lead_time_days, r.quote.valid_until,
+                        r.rank, ((r.net - b) * 100 / b) if b else _ZERO, state], (row.rfq_id, "RFQ"))
+    return result
+
+
+def rfq_supplier_response(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """نرخِ پاسخ = پاسخ‌داده ÷ دعوت؛ زمانِ پاسخ = پاسخ − ارسالِ استعلام (روز)؛ نرخِ برد = استعلام‌هایِ برنده ÷ پاسخ‌داده."""
+    ctx = base._ctx(company_id)
+    agg: dict[int, dict] = defaultdict(lambda: {"invited": 0, "responded": 0, "declined": 0, "days": [], "wins": 0})
+    for row, _lines, suppliers, quotes in _rfqs(company_id, f):
+        if row.status_code == "DRAFT":
+            continue
+        winners = {q.rfq_supplier_id for q in quotes if q.is_awarded}
+        for sp in suppliers:
+            a = agg[sp.supplier_detail_account_id]
+            a["invited"] += 1
+            if sp.status_code == "RESPONDED":
+                a["responded"] += 1
+                if sp.responded_at and row.sent_at:
+                    a["days"].append((sp.responded_at - row.sent_at).total_seconds() / 86400)
+            a["declined"] += sp.status_code == "DECLINED"
+            a["wins"] += sp.rfq_supplier_id in winners
+    result = ReportResult([
+        ("تامین‌کننده", TEXT), ("دعوت", INT), ("پاسخ", INT), ("انصراف", INT), ("نرخِ پاسخ", PERCENT), ("میانگینِ زمانِ پاسخ (روز)", DAYS),
+        ("برد", INT), ("نرخِ برد", PERCENT),
+    ], no_total={4, 5, 7})
+    for sid, a in sorted(agg.items(), key=lambda kv: ctx.names.get(kv[0], "")):
+        if f.supplier_id is not None and sid != f.supplier_id:
+            continue
+        result.add([ctx.names.get(sid, ""), a["invited"], a["responded"], a["declined"],
+                    decimal.Decimal(a["responded"] * 100) / a["invited"] if a["invited"] else _ZERO,
+                    round(sum(a["days"]) / len(a["days"])) if a["days"] else None, a["wins"],
+                    decimal.Decimal(a["wins"] * 100) / a["responded"] if a["responded"] else _ZERO])
+    return result
+
+
+def rfq_savings(company_id: int, f: PurchaseFilters) -> ReportResult:
+    """صرفه‌جوییِ استعلام برایِ هر ردیفِ برنده‌دار: (بیشترین/میانگینِ فیِ خالصِ پیشنهادها − فیِ برنده) × مقدار."""
+    from peecha.services import rfqs as rfq_service
+
+    ctx = base._ctx(company_id)
+    result = ReportResult([
+        ("استعلام", INT), ("کالا", TEXT), ("مقدار", QTY), ("تعدادِ پیشنهاد", INT), ("فیِ برنده", MONEY), ("میانگینِ پیشنهادها", MONEY),
+        ("بیشترین پیشنهاد", MONEY), ("صرفه‌جویی نسبت به میانگین", MONEY), ("صرفه‌جویی نسبت به بیشترین", MONEY), ("درصدِ صرفه‌جویی", PERCENT),
+    ], no_total={0, 2, 3, 4, 5, 6, 9})
+    for row, _lines, _suppliers, _quotes in _rfqs(company_id, f):
+        rows = rfq_service.compare(row.rfq_id, company_id)
+        for line_id in {r.line.line_id for r in rows}:
+            ls = [r for r in rows if r.line.line_id == line_id]
+            winner = next((r for r in ls if r.quote.is_awarded), None)
+            if winner is None:
+                continue
+            avg = sum((r.net for r in ls), _ZERO) / len(ls)
+            high = max(r.net for r in ls)
+            qty = winner.line.quantity
+            result.add([row.rfq_no, ctx.item_label(winner.line.item_id), qty, len(ls), winner.net, avg, high, _money((avg - winner.net) * qty),
+                        _money((high - winner.net) * qty), ((high - winner.net) * 100 / high) if high else _ZERO], (row.rfq_id, "RFQ"))
+    return result
+
+
+def rfq_pending(company_id: int, f: PurchaseFilters) -> ReportResult:
+    from peecha.services import rfqs as rfq_service
+
+    ctx = base._ctx(company_id)
+    today = datetime.date.today()
+    result = ReportResult([
+        ("استعلام", INT), ("تاریخ", DATE), ("مهلتِ پاسخ", DATE), ("روز تا مهلت", INT), ("تامین‌کننده", TEXT), ("وضعیتِ پاسخ", TEXT),
+    ], no_total={0, 3}, note="تامین‌کنندگانی که به استعلامِ ارسال‌شده هنوز پاسخ نداده‌اند.")
+    for row, _lines, suppliers, _quotes in _rfqs(company_id, f):
+        if row.status_code != "SENT":
+            continue
+        for sp in suppliers:
+            if sp.status_code != "INVITED":
+                continue
+            result.add([row.rfq_no, row.rfq_date, row.response_due_date,
+                        (row.response_due_date - today).days if row.response_due_date else None,
+                        ctx.names.get(sp.supplier_detail_account_id, ""), rfq_service.SUPPLIER_STATUS_LABELS[sp.status_code]],
+                       (row.rfq_id, "RFQ"))
+    return result
+
+
+def orders_without_rfq(company_id: int, f: PurchaseFilters) -> ReportResult:
+    threshold = decimal.Decimal(_opt(f, "threshold", "0"))
+    ctx = base._ctx(company_id)
+    totals: dict[int, list] = {}
+    for doc, ln in base._lines(company_id, ("PURCHASE_ORDER",), _OPEN_ORDER_STATUSES, f, ctx):
+        if ln.rfq_quote_id is not None:
+            continue
+        t = totals.setdefault(doc.document_id, [doc, _ZERO, 0])
+        t[1] += base._net(ln)
+        t[2] += 1
+    result = ReportResult([
+        ("شمارهٔ سفارش", INT), ("تاریخ", DATE), ("تامین‌کننده", TEXT), ("ردیف‌هایِ بدونِ استعلام", INT), ("مبلغ", MONEY),
+    ], no_total={0}, note="خریدِ تک‌منبعی (بدونِ استعلامِ رقابتی)؛ آستانه برایِ نمایشِ فقط خریدهایِ بزرگ.")
+    for doc, amount, count in totals.values():
+        if amount < threshold:
+            continue
+        result.add([doc.document_no, doc.document_date, ctx.names.get(doc.counterparty_detail_account_id, ""), count, amount],
+                   (doc.document_id, doc.document_type_code))
+    return result
+
+
+# =====================================================================
 # ثبتِ گزارش‌ها
 # =====================================================================
 _OP, _AN, _PR, _VP, _FI, _MD = "عملیاتی", "تحلیلِ خرید", "قیمت و هزینه", "ارزیابیِ تامین‌کننده", "مالی و بدهی", "اطلاعاتِ پایه"
 _CT, _PC, _IN = "کنترل و حسابرسی", "فرآیندِ خرید", "انبار و تدارکات"
 _RQ = "درخواستِ خرید"
+_RF = "استعلامِ قیمت"
 _ALL = ("supplier", "item", "category", "warehouse")
 _DAYS_OPT = ("days", "آستانه (روز)", (("180", "۱۸۰ روز"), ("90", "۹۰ روز"), ("365", "۳۶۵ روز"), ("30", "۳۰ روز")))
 
@@ -1811,5 +1970,21 @@ PURCHASE_EXT_REPORTS: list[ReportDef] = [
     ReportDef("PR_REJECTED", "درخواست‌هایِ ردشده/لغوشده", rejected_requests, _ALL, "با علتِ رد یا لغو.", group=_RQ),
     ReportDef("PO_WITHOUT_PR", "سفارشِ خریدِ بدونِ درخواست", orders_without_request, _ALL,
               "ردیف‌هایِ سفارش که از درخواستِ خرید نیامده‌اند.", group=_CT),
+    # --- R242: استعلامِ قیمت
+    ReportDef("RFQ_REGISTER", "دفترِ استعلام‌هایِ قیمت", rfq_register, ("supplier", "item"),
+              "استعلام‌ها با تعدادِ دعوت/پاسخ و ارزشِ برنده‌ها.", group=_RF),
+    ReportDef("RFQ_COMPARISON", "مقایسهٔ پیشنهادهایِ تامین‌کنندگان", rfq_comparison, ("supplier", "item"),
+              "رتبهٔ پیشنهادهایِ هر ردیف بر اساسِ فیِ خالص و زمانِ تحویل.", group=_RF,
+              options=(("view", "نمایش", (("ALL", "همهٔ پیشنهادها"), ("BEST", "فقط بهترین"), ("AWARDED", "فقط برنده‌ها"))),)),
+    ReportDef("RFQ_RESPONSE", "پاسخ‌گوییِ تامین‌کنندگان به استعلام", rfq_supplier_response, ("supplier",),
+              "نرخ و زمانِ پاسخ، تعداد و نرخِ برد.", group=_VP),
+    ReportDef("RFQ_SAVINGS", "صرفه‌جوییِ استعلامِ قیمت", rfq_savings, ("supplier", "item"),
+              "فیِ برنده در برابرِ میانگین و بیشترین پیشنهاد.", group=_RF),
+    ReportDef("RFQ_PENDING", "پاسخ‌هایِ معوقِ استعلام", rfq_pending, ("supplier", "item"),
+              "تامین‌کنندگانی که هنوز به استعلام پاسخ نداده‌اند.", group=_RF),
+    ReportDef("PO_WITHOUT_RFQ", "خریدِ بدونِ استعلامِ رقابتی", orders_without_rfq, _ALL,
+              "سفارش‌هایی که از استعلامِ قیمت نیامده‌اند.", group=_CT,
+              options=(("threshold", "حداقلِ مبلغ", (("0", "همه"), ("10000000", "۱۰ میلیون"), ("100000000", "۱۰۰ میلیون"),
+                                                     ("1000000000", "۱ میلیارد"))),)),
 ]
 base.register_reports(PURCHASE_EXT_REPORTS)

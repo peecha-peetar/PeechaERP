@@ -1674,6 +1674,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.purchase_requests import PurchaseRequestScreen
 
         self.register_screen("purchase_requests", PurchaseRequestScreen(self))
+        from peecha.ui.screens.rfqs import RfqScreen
+
+        self.register_screen("rfqs", RfqScreen(self))
         # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
         # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
         # همان کلاس با invoice_type متفاوت است.

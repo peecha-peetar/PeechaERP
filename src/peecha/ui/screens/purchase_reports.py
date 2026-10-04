@@ -33,6 +33,7 @@ _TYPE_TO_NAV_CODE = {
     "SALES_ORDER": "SALES_ORDER", "SALES_PROFORMA": "SALES_PROFORMA", "SALES_INVOICE": "SALES_INVOICE",
     "SALES_RETURN": "SALES_RETURN", "CONSIGNMENT_OUT": "SALES_CONSIGNMENT_OUT",
     "PURCHASE_REQUEST": "PURCH_REQUESTS",
+    "RFQ": "PURCH_RFQ",
 }
 _NUMERIC = (reports_service.MONEY, reports_service.QTY, reports_service.INT, reports_service.PERCENT, reports_service.DAYS)
 _LABEL_KINDS = (reports_service.TEXT, reports_service.DATE)

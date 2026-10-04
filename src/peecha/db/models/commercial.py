@@ -589,6 +589,8 @@ class CommercialDocumentLine(Base):
     expected_delivery_date: Mapped[datetime.date | None]
     # R241: ردیفِ درخواستِ خریدِ مبدا (سفارشِ ساخته‌شده از درخواست)
     purchase_request_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.purchase_request_lines.line_id"))
+    # R242: پیشنهادِ استعلامِ برنده‌ای که این ردیفِ سفارش از آن ساخته شده
+    rfq_quote_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.rfq_quotes.quote_id"))
 
 
 # =======================================================================
@@ -1980,3 +1982,68 @@ class PurchaseRequestLine(Base):
     suggested_supplier_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     estimated_unit_price: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 4))
     description: Mapped[str | None] = mapped_column(Text)
+
+
+class Rfq(Base):
+    """R242: استعلامِ قیمت."""
+
+    __tablename__ = "rfqs"
+    __table_args__ = {"schema": "comm"}
+
+    rfq_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    rfq_no: Mapped[int]
+    rfq_date: Mapped[datetime.date]
+    response_due_date: Mapped[datetime.date | None]
+    request_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.purchase_requests.request_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="DRAFT")
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
+    sent_at: Mapped[datetime.datetime | None]
+    awarded_at: Mapped[datetime.datetime | None]
+    awarded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+
+
+class RfqLine(Base):
+    __tablename__ = "rfq_lines"
+    __table_args__ = {"schema": "comm"}
+
+    line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    rfq_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.rfqs.rfq_id", ondelete="CASCADE"))
+    line_no: Mapped[int]
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    uom_id: Mapped[int] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=1)
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    required_date: Mapped[datetime.date | None]
+    purchase_request_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.purchase_request_lines.line_id"))
+    description: Mapped[str | None] = mapped_column(Text)
+
+
+class RfqSupplier(Base):
+    __tablename__ = "rfq_suppliers"
+    __table_args__ = {"schema": "comm"}
+
+    rfq_supplier_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    rfq_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.rfqs.rfq_id", ondelete="CASCADE"))
+    supplier_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    status_code: Mapped[str] = mapped_column(String(15), default="INVITED")
+    responded_at: Mapped[datetime.datetime | None]
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class RfqQuote(Base):
+    __tablename__ = "rfq_quotes"
+    __table_args__ = {"schema": "comm"}
+
+    quote_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    rfq_supplier_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.rfq_suppliers.rfq_supplier_id", ondelete="CASCADE"))
+    rfq_line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.rfq_lines.line_id", ondelete="CASCADE"))
+    unit_price: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 4))
+    discount_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(7, 4), default=0)
+    lead_time_days: Mapped[int | None]
+    valid_until: Mapped[datetime.date | None]
+    is_awarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str | None] = mapped_column(Text)

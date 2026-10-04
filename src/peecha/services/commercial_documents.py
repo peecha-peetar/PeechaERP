@@ -1599,7 +1599,7 @@ def add_line(
     batch_id: int | None = None, serial_id: int | None = None, source_line_id: int | None = None,
     description: str | None = None, warehouse_id: int | None = None,
     conversion_factor: decimal.Decimal | None = None, expected_delivery_date: datetime.date | None = None,
-    purchase_request_line_id: int | None = None,
+    purchase_request_line_id: int | None = None, rfq_quote_id: int | None = None,
 ) -> int:
     if quantity <= 0 or quantity_base <= 0:
         raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
@@ -1708,6 +1708,7 @@ def add_line(
             batch_id=batch_id, serial_id=serial_id,
             source_line_id=source_line_id, description=(description or None), warehouse_id=warehouse_id,
             expected_delivery_date=expected_delivery_date, purchase_request_line_id=purchase_request_line_id,
+            rfq_quote_id=rfq_quote_id,
         )
         session.add(line)
         session.flush()
