@@ -17,6 +17,7 @@ WAREHOUSE_TYPE_CODES = (
     "GENERAL", "PROJECT", "PRODUCTION_LINE", "QUARANTINE", "TRANSIT",
     "CENTRAL", "BRANCH", "STORE", "RAW_MATERIAL", "FINISHED_GOODS",
     "SEMI_FINISHED", "SCRAP", "CONSIGNMENT", "VEHICLE", "RETURNED",
+    "DISTRIBUTION", "COLD_STORAGE", "HOT_STORAGE",  # R248
 )
 
 WITHDRAWAL_POLICY_CODES = ("FIFO", "LIFO", "FEFO", "MANUAL")
@@ -104,6 +105,11 @@ class WarehouseFields:
     # R247: ظرفیتِ وزنی/حجمیِ هر انبار (غیرِ خودرو)
     capacity_weight_kg: decimal.Decimal | None = None
     capacity_volume_m3: decimal.Decimal | None = None
+    # R248: ابعادِ انبار (نقشه) و توضیح
+    width_m: decimal.Decimal | None = None
+    length_m: decimal.Decimal | None = None
+    height_m: decimal.Decimal | None = None
+    description: str | None = None
 
 
 @dataclass

@@ -224,6 +224,11 @@ class PurchaseReportScreen(ReportScreenBase):
         chart_button.setObjectName("flatButton")
         chart_button.clicked.connect(self.open_chart)
         tools.addWidget(chart_button)
+        if side == "INVENTORY":  # R248: اتصال به نقشهٔ انبار
+            map_button = QPushButton("نمایش روی نقشه")
+            map_button.setObjectName("flatButton")
+            map_button.clicked.connect(lambda: self.show_on_map(self.table.currentRow()))
+            tools.addWidget(map_button)
         tools.addSpacing(24)
         tools.addWidget(QLabel("نمایِ ذخیره‌شده:"))
         self.view_combo = QComboBox()
@@ -693,6 +698,38 @@ class PurchaseReportScreen(ReportScreenBase):
         date_to = self.date_to.date()
         self._main_window.open_screen(
             f"{prefix}{code}", then=lambda screen: screen.apply_preset(date_from, date_to, **filters))
+
+    def _labels_in_row(self, raw: list) -> dict:
+        found: dict = {}
+        for cell in raw or []:
+            if not isinstance(cell, str) or " — " not in cell:
+                continue
+            text = numerals.to_persian_digits(cell)
+            for key, combo in (("item_id", self.item_combo), ("warehouse_id", self.warehouse_combo),
+                               ("category_id", self.category_combo), ("brand_id", self.brand_combo)):
+                index = combo.findText(text)
+                if index > 0 and key not in found:
+                    found[key] = combo.itemData(index)
+                    break
+        return found
+
+    def show_on_map(self, row: int) -> bool:
+        """R248: کالایِ ردیف → محل‌هایش رویِ نقشه (هایلایت)؛ فقط انبار → نقشهٔ همان انبار."""
+        if self._main_window is None:
+            return False
+        found = self._labels_in_row(self.raw_row(row) if row >= 0 else None)
+        item_id, warehouse_id = found.get("item_id"), found.get("warehouse_id")
+        if item_id is None and warehouse_id is None:
+            self._main_window.open_screen("INV_WAREHOUSE_MAP")
+            return True
+
+        def focus(screen):
+            if warehouse_id is not None:
+                screen.load_warehouse(warehouse_id)
+            if item_id is not None:
+                screen.focus_item(item_id)
+        self._main_window.open_screen("INV_WAREHOUSE_MAP", then=focus)
+        return True
 
     def inventory_drill_target(self, raw: list) -> tuple[str, dict] | None:
         """ردیفِ تجمیعیِ گزارشِ انبار: کالا (و انبارِ همان ردیف) → کارتکس؛ فقط انبار/گروه → موجودیِ لحظه‌ای با همان فیلتر."""

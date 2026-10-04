@@ -340,6 +340,8 @@ NAV_ITEMS = [
             {"code": "INV_STOCK_COUNT", "label": "انبارگردانی", "screen": "stock_count"},
             # R247: وظایفِ جانمایی/برداشت و برنامهٔ شمارشِ دوره‌ای
             {"code": "INV_WMS_TASKS", "label": "جانمایی، برداشت و برنامهٔ شمارش", "screen": "warehouse_operations"},
+            # R248: نقشهٔ تعاملی و مدیریتِ محل‌هایِ انبار (Zone/Aisle/Rack/Level/Bin)
+            {"code": "INV_WAREHOUSE_MAP", "label": "نقشه و محل‌هایِ انبار", "screen": "warehouse_map"},
             {"code": "INV_LOT_TRACE", "label": "ردیابیِ بچ/سریال/امانی", "screen": "lot_trace"},
             {"code": "INV_RESIDUAL_ADJUST", "label": "تسعیر/اصلاحِ ماندهٔ ریالیِ موجودی", "screen": "inventory_residual"},
             # طبقِ درخواستِ صریح («فاکتورِ امانی -- هردو جهت»): دیدِ کلیِ

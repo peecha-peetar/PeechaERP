@@ -17,6 +17,7 @@ from peecha_api.routers import (
     dashboard,
     delivery,
     inventory,
+    locations,
     manager_dashboard,
     notifications,
     orders,
@@ -50,6 +51,7 @@ app.include_router(smart_sales.router)
 app.include_router(manager_dashboard.router)
 app.include_router(collection.router)
 app.include_router(vehicle_settlement.router)
+app.include_router(locations.router)  # R248: محلِ انبار (اسکن/محتوا/جانمایی/برداشت)
 
 
 @app.get("/health")

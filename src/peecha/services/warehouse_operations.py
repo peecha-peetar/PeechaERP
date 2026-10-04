@@ -300,6 +300,9 @@ def complete_putaway(task_id: int, company_id: int, user_id: int, to_bin_locatio
         bin_ok = session.scalar(select(BinLocation.warehouse_id).where(BinLocation.bin_location_id == to_bin_location_id))
         if bin_ok != task.warehouse_id:
             raise ValueError("محلِ مقصد باید در همان انبار باشد.")
+        target = session.get(BinLocation, to_bin_location_id)  # R248: فقط محلِ فعال و مجاز برایِ جانمایی
+        if not target.is_active or target.status_code != "ACTIVE" or target.is_damaged or not target.allow_putaway:
+            raise ValueError("محلِ مقصد فعال نیست یا ورودِ کالا به آن مجاز نیست.")
         warehouse_id, item_id, qty, from_bin = task.warehouse_id, task.item_id, task.quantity_base, task.from_bin_location_id
         uom_id = session.scalar(select(StockDocumentLine.uom_id).where(StockDocumentLine.line_id == task.source_stock_line_id))
     doc_id = None

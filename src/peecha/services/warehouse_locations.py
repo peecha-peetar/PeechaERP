@@ -1,0 +1,795 @@
+"""مدیریتِ محلِ انبار و نقشهٔ تعاملی -- R248 (لایهٔ WMS رویِ همان inv.bin_locations).
+
+- سلسله‌مراتب: انبار ← AREA (منطقه/Zone) ← AISLE (راهرو) ← RACK (قفسه) ← SHELF (طبقه/Level) ← BIN.
+  سطح همان ستونِ موجودِ bin_type_code است؛ کدِ کاملِ محل (location_code) مثلِ WH01-Z01-A03-R02-L04-B07 یکتاست.
+- موجودی هرگز این‌جا نگه داشته نمی‌شود: محتوا، اشغال و محلِ کالا از inv.stock_balance (همان موجودیِ سیستم) خوانده می‌شود.
+- جابه‌جاییِ کالا بینِ محل‌ها فقط با سندِ انتقالِ عادیِ سیستم (inventory_documents) انجام می‌شود.
+- تاریخچه: حرکات از inv.stock_ledger و تغییرِ مشخصات از audit.activity_log موجود.
+"""
+
+from __future__ import annotations
+
+import datetime
+import decimal
+import math
+from collections import defaultdict
+from dataclasses import dataclass, fields as dc_fields
+from types import SimpleNamespace
+
+from sqlalchemy import func, or_, select
+
+from peecha.db.base import new_session
+from peecha.db.models.inventory import (
+    BinLocation, Item, SerialNumber, StockBalance, StockDocument, StockDocumentLine, StockLedger, Warehouse, WarehouseTask,
+)
+from peecha.services import audit as audit_service
+
+_ZERO = decimal.Decimal(0)
+FORM_CODE = "warehouse_map"  # کدِ فرمِ دسترسی (همان screenِ nav_catalog)
+QR_PREFIX = "PEECHA-LOC"
+
+LEVELS = ("AREA", "AISLE", "RACK", "SHELF", "BIN")
+LEVEL_LABELS = {"AREA": "منطقه (Zone)", "AISLE": "راهرو", "RACK": "قفسه", "SHELF": "طبقه", "BIN": "محل (Bin)"}
+LEVEL_PREFIX = {"AREA": "Z", "AISLE": "A", "RACK": "R", "SHELF": "L", "BIN": "B"}
+_ALLOWED_PARENTS = {"AREA": (None,), "AISLE": ("AREA",), "RACK": ("AISLE", "AREA"), "SHELF": ("RACK",), "BIN": ("SHELF", "RACK")}
+LOCATION_TYPES = {
+    "RECEIVING": "دریافت", "QC": "کنترلِ کیفیت", "QUARANTINE": "قرنطینه", "BULK": "انبارشِ حجیم", "RESERVE": "ذخیره",
+    "PICK_FACE": "جبههٔ برداشت", "PICKING": "برداشت", "STAGING": "آماده‌سازی", "SHIPPING": "ارسال", "RETURNS": "مرجوعی",
+    "DAMAGED": "آسیب‌دیده", "HIGH_VALUE": "کالایِ گران‌بها", "COLD": "سردخانه", "FREEZER": "فریزر", "TRANSIT": "ترانزیت",
+}
+STATUSES = {"ACTIVE": "فعال", "INACTIVE": "غیرفعال", "BLOCKED": "مسدود", "FULL": "پر", "RESERVED": "رزرو",
+            "QUARANTINE": "قرنطینه", "MAINTENANCE": "در حالِ تعمیر"}
+DIRECTIONS = {"NS": "شمال–جنوب", "EW": "شرق–غرب"}
+_OPERABLE = ("ACTIVE",)
+_DEFAULT_SIZE = {"AREA": (400, 300), "AISLE": (60, 260), "RACK": (40, 200), "SHELF": (40, 200), "BIN": (40, 40)}
+
+
+@dataclass
+class LocationFields:
+    name: str | None = None
+    location_type_code: str | None = None
+    description: str | None = None
+    status_code: str = "ACTIVE"
+    level_number: int | None = None
+    direction: str | None = None
+    width_m: decimal.Decimal | None = None
+    length_m: decimal.Decimal | None = None
+    height_m: decimal.Decimal | None = None
+    max_weight_kg: decimal.Decimal | None = None
+    max_volume_m3: decimal.Decimal | None = None
+    temperature_min_c: decimal.Decimal | None = None
+    temperature_max_c: decimal.Decimal | None = None
+    is_pickable: bool = True
+    allow_putaway: bool = True
+    allow_replenishment: bool = True
+    is_damaged: bool = False
+    barcode: str | None = None
+    map_x: decimal.Decimal | None = None
+    map_y: decimal.Decimal | None = None
+    map_z: decimal.Decimal | None = None
+    map_width: decimal.Decimal | None = None
+    map_height: decimal.Decimal | None = None
+    map_rotation: decimal.Decimal | None = None
+
+
+_FIELD_NAMES = tuple(f.name for f in dc_fields(LocationFields))
+
+
+def _warehouse(session, company_id: int, warehouse_id: int) -> Warehouse:
+    wh = session.get(Warehouse, warehouse_id)
+    if wh is None or wh.company_id != company_id:
+        raise ValueError("انبار نامعتبر است.")
+    return wh
+
+
+def _location(session, company_id: int, location_id: int) -> BinLocation:
+    loc = session.get(BinLocation, location_id)
+    if loc is None:
+        raise ValueError("محل نامعتبر است.")
+    _warehouse(session, company_id, loc.warehouse_id)
+    return loc
+
+
+def display_code(loc, warehouse_code: str) -> str:
+    """کدِ کامل؛ محل‌هایِ قدیمی (بدونِ location_code) = کدِ انبار + کدِ محل."""
+    return loc.location_code or f"{warehouse_code}-{loc.code}"
+
+
+def _validate(fields: LocationFields) -> None:
+    for name in ("width_m", "length_m", "height_m", "max_weight_kg", "max_volume_m3"):
+        value = getattr(fields, name)
+        if value is not None and value < 0:
+            raise ValueError("ابعاد و ظرفیت نمی‌توانند منفی باشند.")
+    if fields.status_code not in STATUSES:
+        raise ValueError("وضعیتِ محل نامعتبر است.")
+    if fields.location_type_code is not None and fields.location_type_code not in LOCATION_TYPES:
+        raise ValueError("نوعِ محل نامعتبر است.")
+    if (fields.temperature_min_c is not None and fields.temperature_max_c is not None
+            and fields.temperature_min_c > fields.temperature_max_c):
+        raise ValueError("دمایِ حداقل نمی‌تواند بیشتر از دمایِ حداکثر باشد.")
+
+
+def _changes(row, fields: LocationFields) -> dict:
+    out = {}
+    for name in _FIELD_NAMES:
+        old, new = getattr(row, name), getattr(fields, name)
+        if (old if old is not None else None) != new and not (old is None and new in (None, "")):
+            out[name] = [None if old is None else str(old), None if new is None else str(new)]
+    return out
+
+
+def create_location(company_id: int, warehouse_id: int, level: str, segment: str, parent_id: int | None = None,
+                    fields: LocationFields | None = None, user_id: int | None = None) -> int:
+    """محلِ تازه در سلسله‌مراتب؛ کدِ کامل = کدِ والد (یا انبار) + «-» + کدِ بخش و در انبار یکتاست."""
+    fields = fields or LocationFields()
+    if level not in LEVELS:
+        raise ValueError("سطحِ محل نامعتبر است.")
+    segment = (segment or "").strip().upper()
+    if not segment or "-" in segment or " " in segment:
+        raise ValueError("کدِ بخش الزامی است و نباید «-» یا فاصله داشته باشد.")
+    _validate(fields)
+    with new_session() as session:
+        wh = _warehouse(session, company_id, warehouse_id)
+        parent = None
+        if parent_id is not None:
+            parent = session.get(BinLocation, parent_id)
+            if parent is None or parent.warehouse_id != warehouse_id:
+                raise ValueError("محلِ والد باید در همین انبار باشد.")
+        parent_level = parent.bin_type_code if parent is not None else None
+        if parent_level not in _ALLOWED_PARENTS[level]:
+            allowed = "، ".join(LEVEL_LABELS[p] if p else "خودِ انبار" for p in _ALLOWED_PARENTS[level])
+            raise ValueError(f"{LEVEL_LABELS[level]} فقط زیرِ {allowed} تعریف می‌شود.")
+        prefix = display_code(parent, wh.code) if parent is not None else wh.code
+        full = f"{prefix}-{segment}"
+        short = full[len(wh.code) + 1:]
+        if len(short) > 30:
+            raise ValueError("کدِ محل (بدونِ کدِ انبار) حداکثر ۳۰ نویسه است؛ کدهایِ بخش را کوتاه‌تر کنید.")
+        if session.scalar(select(BinLocation.bin_location_id).where(
+                BinLocation.warehouse_id == warehouse_id,
+                or_(BinLocation.location_code == full, BinLocation.code == short))):
+            raise ValueError(f"محلِ «{full}» قبلاً تعریف شده است.")
+        width, height = _DEFAULT_SIZE[level]
+        siblings = session.scalar(select(func.count()).select_from(BinLocation).where(
+            BinLocation.warehouse_id == warehouse_id,
+            BinLocation.parent_bin_location_id.is_(None) if parent is None else BinLocation.parent_bin_location_id == parent.bin_location_id))
+        row = BinLocation(warehouse_id=warehouse_id, parent_bin_location_id=parent_id, code=short, location_code=full,
+                          bin_type_code=level)
+        for name in _FIELD_NAMES:
+            setattr(row, name, getattr(fields, name))
+        row.is_active = fields.status_code != "INACTIVE"
+        if level in ("AREA", "AISLE", "RACK") and row.map_x is None:  # چیدمانِ اولیه کنارِ هم‌سطح‌ها، درونِ والد
+            origin_x = float(parent.map_x) + 10 if parent is not None and parent.map_x is not None else 10
+            origin_y = float(parent.map_y) + 30 if parent is not None and parent.map_y is not None else 10
+            row.map_x = decimal.Decimal(str(origin_x + (siblings or 0) * (width + 15)))
+            row.map_y = decimal.Decimal(str(origin_y))
+        if row.map_width is None and level in ("AREA", "AISLE", "RACK"):
+            row.map_width, row.map_height = decimal.Decimal(width), decimal.Decimal(height)
+        if level == "SHELF" and row.level_number is None:
+            row.level_number = (siblings or 0) + 1
+        session.add(row)
+        session.flush()
+        audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="BinLocation",
+                                   entity_id=row.bin_location_id, action="CREATE", changes={"location_code": full, "level": level})
+        session.commit()
+        return row.bin_location_id
+
+
+def update_location(company_id: int, location_id: int, fields: LocationFields, user_id: int | None = None) -> None:
+    _validate(fields)
+    with new_session() as session:
+        row = _location(session, company_id, location_id)
+        changes = _changes(row, fields)
+        for name in _FIELD_NAMES:
+            setattr(row, name, getattr(fields, name))
+        row.is_active = fields.status_code != "INACTIVE"
+        if changes:
+            audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="BinLocation",
+                                       entity_id=location_id, action="UPDATE", changes=changes)
+        session.commit()
+
+
+def get_fields(company_id: int, location_id: int) -> LocationFields:
+    with new_session() as session:
+        row = _location(session, company_id, location_id)
+        return LocationFields(**{name: getattr(row, name) for name in _FIELD_NAMES})
+
+
+def set_status(company_id: int, location_id: int, status_code: str, user_id: int | None = None) -> None:
+    f = get_fields(company_id, location_id)
+    f.status_code = status_code
+    update_location(company_id, location_id, f, user_id)
+
+
+def save_geometry(company_id: int, location_id: int, x, y, width=None, height=None, rotation=None, user_id: int | None = None) -> None:
+    """ذخیرهٔ جابه‌جایی/تغییرِ اندازه/چرخشِ عنصرِ نقشه."""
+    q = lambda v: decimal.Decimal(str(round(float(v), 2))) if v is not None else None  # noqa: E731
+    if (width is not None and float(width) <= 0) or (height is not None and float(height) <= 0):
+        raise ValueError("اندازهٔ عنصرِ نقشه باید مثبت باشد.")
+    f = get_fields(company_id, location_id)
+    f.map_x, f.map_y = q(x), q(y)
+    if width is not None:
+        f.map_width = q(width)
+    if height is not None:
+        f.map_height = q(height)
+    if rotation is not None:
+        f.map_rotation = q(float(rotation) % 360)
+    update_location(company_id, location_id, f, user_id)
+
+
+def delete_location(company_id: int, location_id: int, user_id: int | None = None) -> str:
+    """حذف فقط اگر بی‌فرزند و بی‌سابقه باشد؛ وگرنه غیرفعال می‌شود. خروجی: DELETED | DEACTIVATED."""
+    with new_session() as session:
+        row = _location(session, company_id, location_id)
+        has_children = session.scalar(select(func.count()).select_from(BinLocation).where(
+            BinLocation.parent_bin_location_id == location_id))
+        used = session.scalar(select(func.count()).select_from(StockLedger).where(StockLedger.bin_location_id == location_id)) or \
+            session.scalar(select(func.count()).select_from(StockBalance).where(StockBalance.bin_location_id == location_id)) or \
+            session.scalar(select(func.count()).select_from(StockDocumentLine).where(or_(
+                StockDocumentLine.bin_location_id == location_id, StockDocumentLine.destination_bin_location_id == location_id))) or \
+            session.scalar(select(func.count()).select_from(WarehouseTask).where(or_(
+                WarehouseTask.from_bin_location_id == location_id, WarehouseTask.to_bin_location_id == location_id)))
+        if has_children or used:
+            row.status_code, row.is_active = "INACTIVE", False
+            audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="BinLocation",
+                                       entity_id=location_id, action="UPDATE", changes={"status_code": ["", "INACTIVE"]})
+            session.commit()
+            return "DEACTIVATED"
+        audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="BinLocation",
+                                   entity_id=location_id, action="DELETE", changes={"location_code": row.location_code or row.code})
+        session.delete(row)
+        session.commit()
+        return "DELETED"
+
+
+def save_warehouse_dimensions(company_id: int, warehouse_id: int, width_m=None, length_m=None, height_m=None,
+                              max_weight_kg=None, description: str | None = None) -> None:
+    for v in (width_m, length_m, height_m, max_weight_kg):
+        if v is not None and decimal.Decimal(v) < 0:
+            raise ValueError("ابعاد/ظرفیتِ انبار نمی‌تواند منفی باشد.")
+    with new_session() as session:
+        wh = _warehouse(session, company_id, warehouse_id)
+        wh.width_m, wh.length_m, wh.height_m = width_m, length_m, height_m
+        if max_weight_kg is not None:
+            wh.capacity_weight_kg = max_weight_kg
+        if width_m and length_m and height_m and wh.capacity_volume_m3 is None:
+            wh.capacity_volume_m3 = decimal.Decimal(width_m) * decimal.Decimal(length_m) * decimal.Decimal(height_m)
+        wh.description = description or None
+        session.commit()
+
+
+# =====================================================================
+# درخت، هندسه و اشغال
+# =====================================================================
+def tree(company_id: int, warehouse_id: int, active_only: bool = False) -> list[SimpleNamespace]:
+    """همهٔ محل‌هایِ انبار با کدِ کامل، سطح و والد (یک کوئری)."""
+    with new_session() as session:
+        wh = _warehouse(session, company_id, warehouse_id)
+        rows = list(session.scalars(select(BinLocation).where(BinLocation.warehouse_id == warehouse_id)
+                                    .order_by(BinLocation.code)))
+    out = []
+    for r in rows:
+        if active_only and not r.is_active:
+            continue
+        node = SimpleNamespace(**{name: getattr(r, name) for name in _FIELD_NAMES})
+        node.location_id, node.parent_id, node.code, node.level = r.bin_location_id, r.parent_bin_location_id, r.code, r.bin_type_code
+        node.full_code, node.warehouse_id, node.is_active = display_code(r, wh.code), warehouse_id, r.is_active
+        out.append(node)
+    return out
+
+
+def descendants(nodes: list, location_id: int) -> set[int]:
+    children = defaultdict(list)
+    for n in nodes:
+        children[n.parent_id].append(n.location_id)
+    out, stack = set(), [location_id]
+    while stack:
+        current = stack.pop()
+        if current in out:
+            continue
+        out.add(current)
+        stack.extend(children.get(current, []))
+    return out
+
+
+def ancestors(nodes_by_id: dict, location_id: int) -> list:
+    chain, current = [], nodes_by_id.get(location_id)
+    while current is not None:
+        chain.append(current)
+        current = nodes_by_id.get(current.parent_id)
+    return list(reversed(chain))
+
+
+def geometry(company_id: int, warehouse_id: int, nodes: list | None = None) -> dict[int, tuple[float, float, float, float, float]]:
+    """(x, y, w, h, rotation) هر محل رویِ نقشه. Zone/Aisle/Rack مختصاتِ ذخیره‌شده دارند؛ طبقه هم‌اندازهٔ قفسه
+    است و Binهایِ بی‌مختصات به‌صورتِ سلول‌هایِ مساویِ طولِ قفسه/طبقه چیده می‌شوند."""
+    nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
+    by_id = {n.location_id: n for n in nodes}
+    children = defaultdict(list)
+    for n in nodes:
+        children[n.parent_id].append(n)
+    out: dict[int, tuple] = {}
+
+    def own(n):
+        if n.map_x is not None and n.map_width is not None:
+            return (float(n.map_x), float(n.map_y or 0), float(n.map_width), float(n.map_height or n.map_width),
+                    float(n.map_rotation or 0))
+        return None
+
+    def place(n, parent_rect):
+        rect = own(n)
+        if rect is None and parent_rect is not None:
+            rect = parent_rect
+        if rect is not None:
+            out[n.location_id] = rect
+        kids = sorted(children.get(n.location_id, []), key=lambda k: k.code)
+        if n.level in ("RACK", "SHELF") and rect is not None:
+            bins = [k for k in kids if k.level == "BIN" and own(k) is None]
+            x, y, w, h, rot = rect
+            vertical = h >= w
+            for i, b in enumerate(bins):
+                cell = (h / len(bins)) if vertical else (w / len(bins))
+                out[b.location_id] = (x, y + i * cell, w, cell, rot) if vertical else (x + i * cell, y, cell, h, rot)
+            for k in kids:
+                if k.level != "BIN" or own(k) is not None:
+                    place(k, rect if k.level == "SHELF" else None)
+            return
+        for k in kids:
+            place(k, None)
+
+    for n in nodes:
+        if n.parent_id is None or n.parent_id not in by_id:
+            place(n, None)
+    return out
+
+
+def _stock_by_bin(company_id: int, warehouse_id: int | None = None) -> list[tuple]:
+    with new_session() as session:
+        q = (select(StockBalance.bin_location_id, StockBalance.item_id, func.sum(StockBalance.quantity_on_hand),
+                    func.sum(StockBalance.quantity_reserved), func.sum(StockBalance.total_value))
+             .where(StockBalance.company_id == company_id))
+        if warehouse_id is not None:
+            q = q.where(StockBalance.warehouse_id == warehouse_id)
+        return session.execute(q.group_by(StockBalance.bin_location_id, StockBalance.item_id)).all()
+
+
+def _item_dims(company_id: int) -> dict[int, tuple]:
+    with new_session() as session:
+        return {i: (w, v) for i, w, v in session.execute(
+            select(Item.item_id, Item.weight_kg, Item.volume_m3).where(Item.company_id == company_id)).all()}
+
+
+def capacity_of(node) -> tuple[decimal.Decimal | None, decimal.Decimal | None]:
+    volume = node.max_volume_m3
+    if volume is None and node.width_m and node.length_m and node.height_m:
+        volume = (node.width_m * node.length_m * node.height_m).quantize(decimal.Decimal("0.001"))
+    return node.max_weight_kg, volume
+
+
+def occupancy(company_id: int, warehouse_id: int, nodes: list | None = None) -> dict[int, SimpleNamespace]:
+    """اشغالِ هر محل (با زیرمحل‌ها): مقدار، وزن، حجم، ارزش و درصد = بیشترینِ (وزن/ظرفیتِ وزنی، حجم/ظرفیتِ حجمی)."""
+    nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
+    dims = _item_dims(company_id)
+    own: dict[int, list] = defaultdict(lambda: [_ZERO, _ZERO, _ZERO, _ZERO, set()])
+    for bin_id, item_id, qty, _reserved, value in _stock_by_bin(company_id, warehouse_id):
+        if not qty:
+            continue
+        w, v = dims.get(item_id, (None, None))
+        o = own[bin_id]
+        o[0] += qty
+        o[1] += qty * (w or _ZERO)
+        o[2] += qty * (v or _ZERO)
+        o[3] += value or _ZERO
+        o[4].add(item_id)
+    children = defaultdict(list)
+    for n in nodes:
+        children[n.parent_id].append(n)
+    result: dict[int, SimpleNamespace] = {}
+
+    def total(n):
+        qty, weight, volume, value, items = own[n.location_id][:4] + [set(own[n.location_id][4])]
+        cap_w, cap_v = capacity_of(n)
+        child_cap_w, child_cap_v = _ZERO, _ZERO
+        child_caps_known_w = child_caps_known_v = bool(children.get(n.location_id))
+        for k in children.get(n.location_id, []):
+            r = total(k)
+            qty, weight, volume, value = qty + r.quantity, weight + r.weight, volume + r.volume, value + r.value
+            items |= r.items
+            child_cap_w += r.max_weight or _ZERO
+            child_cap_v += r.max_volume or _ZERO
+            child_caps_known_w &= r.max_weight is not None
+            child_caps_known_v &= r.max_volume is not None
+        cap_w = cap_w if cap_w is not None else (child_cap_w if child_caps_known_w else None)
+        cap_v = cap_v if cap_v is not None else (child_cap_v if child_caps_known_v else None)
+        pct = [x * 100 / c for x, c in ((weight, cap_w), (volume, cap_v)) if c]
+        r = SimpleNamespace(quantity=qty, weight=weight.quantize(decimal.Decimal("0.001")), volume=volume.quantize(decimal.Decimal("0.001")),
+                            value=value, items=items, max_weight=cap_w, max_volume=cap_v,
+                            percent=max(pct).quantize(decimal.Decimal("0.1")) if pct else None)
+        result[n.location_id] = r
+        return r
+
+    for n in nodes:
+        if n.location_id not in result:
+            total(n)
+    return result
+
+
+def is_operable(node) -> bool:
+    return node.is_active and node.status_code in _OPERABLE and not node.is_damaged
+
+
+# =====================================================================
+# محتوا، محلِ کالا، جستجو و QR
+# =====================================================================
+def contents(company_id: int, location_id: int) -> list[SimpleNamespace]:
+    """کالاهایِ این محل و زیرمحل‌هایش از موجودیِ سیستم + سریال‌هایِ همین محل و بچ/انقضایِ کالا در همان انبار."""
+    from peecha.services import inventory_catalog as catalog_service
+    from peecha.services import lot_tracking
+
+    with new_session() as session:
+        loc = _location(session, company_id, location_id)
+        warehouse_id = loc.warehouse_id
+    nodes = tree(company_id, warehouse_id)
+    bins = descendants(nodes, location_id)
+    by_id = {n.location_id: n for n in nodes}
+    items = {i.item_id: i for i in catalog_service.list_items(company_id)}
+    rows = [r for r in _stock_by_bin(company_id, warehouse_id) if r[0] in bins and r[2]]
+    lots = defaultdict(list)
+    if rows:
+        for lot in lot_tracking.list_lot_balances(company_id, warehouse_id=warehouse_id):
+            if lot.batch_no:
+                lots[lot.item_id].append(lot)
+    with new_session() as session:
+        serials = defaultdict(list)
+        for s in session.scalars(select(SerialNumber).where(SerialNumber.current_bin_location_id.in_(bins or {-1}),
+                                                            SerialNumber.status_code == "IN_STOCK")):
+            serials[(s.current_bin_location_id, s.item_id)].append(s.serial_no)
+    out = []
+    for bin_id, item_id, qty, reserved, value in sorted(rows, key=lambda r: (by_id[r[0]].full_code if r[0] in by_id else "", r[1])):
+        item = items.get(item_id)
+        item_lots = sorted(lots.get(item_id, []), key=lambda lt: lt.expiry_date or datetime.date.max)
+        out.append(SimpleNamespace(
+            location_id=bin_id, location_code=by_id[bin_id].full_code if bin_id in by_id else "", item_id=item_id,
+            item_code=item.code if item else "", item_name=item.name if item else "", sku=(item.sku or "") if item else "",
+            unit=item.base_uom_code if item else "", quantity=qty, reserved=reserved or _ZERO, value=value or _ZERO,
+            batches="، ".join(lt.batch_no for lt in item_lots[:5]),
+            expiry=item_lots[0].expiry_date if item_lots and item_lots[0].expiry_date else None,
+            serials="، ".join(serials.get((bin_id, item_id), [])[:10])))
+    return out
+
+
+def product_locations(company_id: int, item_id: int) -> list[SimpleNamespace]:
+    """همهٔ محل‌هایِ یک کالا (چند انبار/چند محل) با مقدار -- از موجودیِ سیستم."""
+    from peecha.services import inventory_locations as locations_service
+
+    rows = [r for r in _stock_by_bin(company_id) if r[1] == item_id and r[2]]
+    with new_session() as session:
+        bin_wh = dict(session.execute(select(BinLocation.bin_location_id, BinLocation.warehouse_id)
+                                      .where(BinLocation.bin_location_id.in_([r[0] for r in rows] or [-1]))).all())
+    warehouses = {w.warehouse_id: w for w in locations_service.list_warehouses(company_id)}
+    cache: dict[int, dict] = {}
+    out = []
+    for bin_id, _item, qty, reserved, value in rows:
+        wid = bin_wh.get(bin_id)
+        if wid not in cache:
+            cache[wid] = {n.location_id: n for n in tree(company_id, wid)}
+        chain = ancestors(cache[wid], bin_id)
+        part = {n.level: n.code.split("-")[-1] for n in chain if n.level}
+        out.append(SimpleNamespace(
+            warehouse_id=wid, warehouse=warehouses[wid].name if wid in warehouses else "", location_id=bin_id,
+            location_code=chain[-1].full_code if chain else "", zone=part.get("AREA", ""), aisle=part.get("AISLE", ""),
+            rack=part.get("RACK", ""), level=part.get("SHELF", ""), bin=part.get("BIN", chain[-1].code if chain else ""),
+            quantity=qty, reserved=reserved or _ZERO, value=value or _ZERO))
+    return sorted(out, key=lambda r: (r.warehouse, r.location_code))
+
+
+def qr_payload(location_id: int, location_code: str) -> str:
+    return f"{QR_PREFIX}:{location_id}:{location_code}"
+
+
+def decode_qr(company_id: int, payload: str) -> int:
+    """متنِ QR → شناسهٔ محل (کدِ ثبت‌شده باید با کدِ فعلیِ محل بخواند)."""
+    parts = (payload or "").strip().split(":", 2)
+    if len(parts) != 3 or parts[0] != QR_PREFIX or not parts[1].isdigit():
+        raise ValueError("QR محلِ انبار نیست.")
+    location_id = int(parts[1])
+    with new_session() as session:
+        loc = _location(session, company_id, location_id)
+        wh = session.get(Warehouse, loc.warehouse_id)
+        if display_code(loc, wh.code) != parts[2]:
+            raise ValueError("QR با کدِ فعلیِ محل نمی‌خواند (کدِ محل تغییر کرده است).")
+    return location_id
+
+
+def qr_matrix(payload: str) -> list[list[int]]:
+    import segno
+
+    return [list(row) for row in segno.make(payload, error="m", micro=False).matrix_iter(scale=1, border=0)]
+
+
+def barcode_bits(code: str) -> str:
+    """الگویِ میله‌هایِ Code128 (برایِ چاپِ برچسب با QPainter)."""
+    import barcode
+
+    return barcode.get_barcode_class("code128")(code).build()[0]
+
+
+def search(company_id: int, text: str, warehouse_id: int | None = None) -> SimpleNamespace:
+    """QR/کدِ محل/بارکدِ محل → همان محل؛ وگرنه کد/نام/بارکد/SKUِ کالا → همهٔ محل‌هایِ آن کالا."""
+    from peecha import numerals
+    from peecha.services import inventory_catalog as catalog_service
+
+    text = numerals.to_ascii_digits((text or "").strip())
+    if not text:
+        return SimpleNamespace(kind="NONE", location_ids=[], item_ids=[])
+    if text.startswith(QR_PREFIX + ":"):
+        return SimpleNamespace(kind="LOCATION", location_ids=[decode_qr(company_id, text)], item_ids=[])
+    upper = text.upper()
+    with new_session() as session:
+        q = (select(BinLocation.bin_location_id, BinLocation.location_code, BinLocation.code, BinLocation.barcode, Warehouse.code)
+             .join(Warehouse, Warehouse.warehouse_id == BinLocation.warehouse_id).where(Warehouse.company_id == company_id))
+        if warehouse_id is not None:
+            q = q.where(BinLocation.warehouse_id == warehouse_id)
+        matches = [lid for lid, full, code, bc, wcode in session.execute(q).all()
+                   if upper in ((full or "").upper(), f"{wcode}-{code}".upper(), (bc or "").upper())]
+    if matches:
+        return SimpleNamespace(kind="LOCATION", location_ids=matches, item_ids=[])
+    lowered = text.lower()
+    item_ids = [i.item_id for i in catalog_service.list_items(company_id)
+                if lowered in (i.code or "").lower() or lowered in (i.name or "").lower()
+                or lowered == (i.barcode or "").lower() or lowered == (i.sku or "").lower()]
+    if not item_ids:
+        from peecha.services import unit_conversion as uc
+
+        hit = uc.resolve_barcode(company_id, text, with_price=False)  # بارکدِ واحدهایِ کالا (همان سرویسِ فروش)
+        item_ids = [hit.item_id] if hit else []
+    locations = []
+    for item_id in item_ids:
+        locations += [r.location_id for r in product_locations(company_id, item_id)
+                      if warehouse_id is None or r.warehouse_id == warehouse_id]
+    return SimpleNamespace(kind="PRODUCT" if item_ids else "NONE", location_ids=sorted(set(locations)), item_ids=item_ids)
+
+
+# =====================================================================
+# پیشنهادِ جانمایی، مسیرِ برداشت، Heatmap و تاریخچه
+# =====================================================================
+def _leaf_nodes(nodes: list) -> list:
+    parents = {n.parent_id for n in nodes}
+    return [n for n in nodes if n.location_id not in parents and n.level in ("BIN", "SHELF", "RACK", None)]
+
+
+def putaway_suggestions(company_id: int, warehouse_id: int, item_id: int, quantity: decimal.Decimal, limit: int = 5) -> list:
+    """بهترین محل‌ها برایِ جانمایی: فقط محلِ فعال/مجاز با ظرفیتِ کافی؛ امتیاز با تجمیعِ همان کالا، تطبیقِ نوعِ محل
+    با کلاسِ ABC (A → جبههٔ برداشت، C → حجیم/ذخیره)، و ظرفیتِ باقی‌مانده."""
+    from peecha.services import purchase_reports as base
+    from peecha.services import warehouse_reports as wr
+
+    quantity = decimal.Decimal(quantity)
+    nodes = tree(company_id, warehouse_id)
+    by_id = {n.location_id: n for n in nodes}
+    occ = occupancy(company_id, warehouse_id, nodes)
+    weight, volume = _item_dims(company_id).get(item_id, (None, None))
+    need_w, need_v = quantity * (weight or _ZERO), quantity * (volume or _ZERO)
+    today = datetime.date.today()
+    f = base.PurchaseFilters(today - datetime.timedelta(days=365), today, warehouse_id=warehouse_id, side="INVENTORY")
+    cls = next((row[-1] for row in wr.abc_classes(company_id, f) if row[0] == item_id), "C")
+    out = []
+    for n in _leaf_nodes(nodes):
+        if not is_operable(n) or not n.allow_putaway:
+            continue
+        o = occ.get(n.location_id)
+        reasons, score = [], 0
+        if o and o.max_weight is not None and o.weight + need_w > o.max_weight:
+            continue
+        if o and o.max_volume is not None and o.volume + need_v > o.max_volume:
+            continue
+        if o and (o.max_weight is not None or o.max_volume is not None):
+            score += 20
+            reasons.append("ظرفیتِ کافی (وزن/حجم)")
+        else:
+            score += 5
+            reasons.append("ظرفیت تعریف نشده")
+        if o and item_id in o.items:
+            score += 40
+            reasons.append("همین کالا در این محل است (تجمیع)")
+        elif o and o.items:
+            score -= 10
+            reasons.append("محل کالایِ دیگر دارد")
+        types = {a.location_type_code for a in ancestors(by_id, n.location_id) if a.location_type_code}
+        if cls == "A" and types & {"PICK_FACE", "PICKING"}:
+            score += 25
+            reasons.append("نزدیکِ جبههٔ برداشت -- مناسبِ کالایِ A")
+        if cls in ("B", "C") and types & {"BULK", "RESERVE"}:
+            score += 15
+            reasons.append(f"منطقهٔ ذخیره/حجیم -- مناسبِ کالایِ {cls}")
+        if types & {"QUARANTINE", "DAMAGED", "RETURNS", "RECEIVING", "SHIPPING", "STAGING"}:
+            score -= 30
+            reasons.append("منطقهٔ عملیاتی/قرنطینه")
+        if o and o.percent is not None:
+            score += int((100 - min(o.percent, 100)) / 10)
+        out.append(SimpleNamespace(location_id=n.location_id, location_code=n.full_code, score=score, abc_class=cls,
+                                   reasons=reasons, occupancy=o.percent if o else None))
+    out.sort(key=lambda s: (-s.score, s.location_code))
+    return out[:limit]
+
+
+def picking_path(company_id: int, warehouse_id: int, location_ids: list[int]) -> SimpleNamespace:
+    """مسیرِ پیشنهادی (نزدیک‌ترین همسایه) از منطقهٔ دریافت/ابتدایِ انبار تا منطقهٔ ارسال، رویِ مراکزِ نقشه."""
+    nodes = tree(company_id, warehouse_id)
+    geo = geometry(company_id, warehouse_id, nodes)
+    center = lambda lid: (geo[lid][0] + geo[lid][2] / 2, geo[lid][1] + geo[lid][3] / 2)  # noqa: E731
+    zone_of_type = lambda types: next((n.location_id for n in nodes if n.location_type_code in types and n.location_id in geo), None)  # noqa: E731
+    start_zone, end_zone = zone_of_type({"PICKING", "STAGING", "RECEIVING"}), zone_of_type({"SHIPPING"})
+    current = center(start_zone) if start_zone else (0.0, 0.0)
+    pending = [lid for lid in dict.fromkeys(location_ids) if lid in geo]
+    order, distance = [], 0.0
+    while pending:
+        nxt = min(pending, key=lambda lid: math.dist(current, center(lid)))
+        distance += math.dist(current, center(nxt))
+        current = center(nxt)
+        order.append(nxt)
+        pending.remove(nxt)
+    if end_zone:
+        distance += math.dist(current, center(end_zone))
+    by_id = {n.location_id: n for n in nodes}
+    return SimpleNamespace(order=order, codes=[by_id[i].full_code for i in order], distance=round(distance, 1),
+                           start=start_zone, end=end_zone)
+
+
+HEATMAP_MODES = {"NORMAL": "عادی", "OCCUPANCY": "اشغال", "PICK_FREQ": "تواترِ برداشت", "VALUE": "ارزشِ موجودی", "ABC": "ABC",
+                 "EXPIRY": "ریسکِ انقضا", "CONGESTION": "ازدحام", "TEMPERATURE": "دما"}
+
+
+def heatmap(company_id: int, warehouse_id: int, mode: str, nodes: list | None = None) -> dict[int, object]:
+    """مقدارِ هر محل (برگ‌ها و والدها) برایِ حالتِ نقشه."""
+    nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
+    if mode == "OCCUPANCY":
+        return {k: v.percent for k, v in occupancy(company_id, warehouse_id, nodes).items()}
+    if mode == "VALUE":
+        return {k: v.value for k, v in occupancy(company_id, warehouse_id, nodes).items()}
+    if mode == "TEMPERATURE":
+        by_id = {n.location_id: n for n in nodes}
+        out = {}
+        for n in nodes:
+            t = next((a.temperature_min_c for a in reversed(ancestors(by_id, n.location_id)) if a.temperature_min_c is not None), None)
+            out[n.location_id] = t
+        return out
+    since = datetime.date.today() - datetime.timedelta(days=90 if mode == "PICK_FREQ" else 7)
+    if mode in ("PICK_FREQ", "CONGESTION"):
+        with new_session() as session:
+            q = (select(StockLedger.bin_location_id, func.count())
+                 .join(StockDocumentLine, StockDocumentLine.line_id == StockLedger.stock_document_line_id)
+                 .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
+                 .where(StockLedger.warehouse_id == warehouse_id, StockLedger.movement_date >= since))
+            if mode == "PICK_FREQ":
+                q = q.where(StockLedger.movement_direction == "OUT", StockDocument.document_type_code == "ISSUE")
+            counts = dict(session.execute(q.group_by(StockLedger.bin_location_id)).all())
+            if mode == "PICK_FREQ":
+                for (bin_id, n) in session.execute(select(WarehouseTask.from_bin_location_id, func.count()).where(
+                        WarehouseTask.warehouse_id == warehouse_id, WarehouseTask.task_type_code == "PICK",
+                        WarehouseTask.status_code == "DONE").group_by(WarehouseTask.from_bin_location_id)).all():
+                    counts[bin_id] = counts.get(bin_id, 0) + n
+            else:
+                for (bin_id, n) in session.execute(select(WarehouseTask.from_bin_location_id, func.count()).where(
+                        WarehouseTask.warehouse_id == warehouse_id,
+                        WarehouseTask.status_code.in_(("OPEN", "IN_PROGRESS"))).group_by(WarehouseTask.from_bin_location_id)).all():
+                    counts[bin_id] = counts.get(bin_id, 0) + n
+        return _roll_up(nodes, counts)
+    if mode == "ABC":
+        from peecha.services import purchase_reports as base
+        from peecha.services import warehouse_reports as wr
+
+        today = datetime.date.today()
+        f = base.PurchaseFilters(today - datetime.timedelta(days=365), today, warehouse_id=warehouse_id, side="INVENTORY")
+        classes = {row[0]: row[-1] for row in wr.abc_classes(company_id, f)}
+        best: dict[int, str] = {}
+        for bin_id, item_id, qty, _r, _v in _stock_by_bin(company_id, warehouse_id):
+            if qty and item_id in classes:
+                best[bin_id] = min(best.get(bin_id, "C"), classes[item_id])
+        return best
+    if mode == "EXPIRY":
+        from peecha.services import lot_tracking
+
+        nearest: dict[int, datetime.date] = {}
+        for lot in lot_tracking.list_lot_balances(company_id, warehouse_id=warehouse_id):
+            if lot.expiry_date:
+                nearest[lot.item_id] = min(nearest.get(lot.item_id, lot.expiry_date), lot.expiry_date)
+        days: dict[int, int] = {}
+        for bin_id, item_id, qty, _r, _v in _stock_by_bin(company_id, warehouse_id):
+            if qty and item_id in nearest:
+                left = (nearest[item_id] - datetime.date.today()).days
+                days[bin_id] = min(days.get(bin_id, left), left)
+        return days
+    return {}
+
+
+def _roll_up(nodes: list, values: dict[int, int]) -> dict[int, int]:
+    out = dict(values)
+    by_id = {n.location_id: n for n in nodes}
+    for lid, v in values.items():
+        current = by_id.get(lid)
+        while current is not None and current.parent_id is not None:
+            out[current.parent_id] = out.get(current.parent_id, 0) + v
+            current = by_id.get(current.parent_id)
+    return out
+
+
+def history(company_id: int, location_id: int, limit: int = 200) -> list[SimpleNamespace]:
+    """ورود/خروج/انتقال از دفترِ انبار + تغییرِ مشخصات/وضعیت/ظرفیت از audit.activity_log."""
+    from peecha.db.models.audit import ActivityLog
+    from peecha.services import inventory_catalog as catalog_service
+
+    with new_session() as session:
+        loc = _location(session, company_id, location_id)
+        warehouse_id = loc.warehouse_id
+    bins = descendants(tree(company_id, warehouse_id), location_id)
+    items = {i.item_id: f"{i.code} — {i.name or ''}" for i in catalog_service.list_items(company_id)}
+    with new_session() as session:
+        moves = session.execute(
+            select(StockLedger.movement_date, StockLedger.created_at, StockLedger.movement_direction, StockLedger.quantity_base,
+                   StockLedger.item_id, StockDocument.document_type_code, StockDocument.document_no, StockDocument.stock_document_id)
+            .join(StockDocumentLine, StockDocumentLine.line_id == StockLedger.stock_document_line_id)
+            .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
+            .where(StockLedger.bin_location_id.in_(bins)).order_by(StockLedger.ledger_id.desc()).limit(limit)).all()
+        audits = list(session.scalars(select(ActivityLog).where(ActivityLog.entity_type == "BinLocation",
+                                                                 ActivityLog.entity_id.in_(bins))
+                                      .order_by(ActivityLog.log_id.desc()).limit(limit)))
+    out = [SimpleNamespace(at=created or datetime.datetime.combine(d, datetime.time()), kind="ورود" if direction == "IN" else "خروج",
+                           detail=f"{doc_type} {doc_no}", item=items.get(item_id, ""), quantity=qty, stock_document_id=doc_id,
+                           doc_type=doc_type)
+           for d, created, direction, qty, item_id, doc_type, doc_no, doc_id in moves]
+    labels = {"CREATE": "ایجاد", "UPDATE": "تغییرِ مشخصات", "DELETE": "حذف"}
+    for a in audits:
+        detail = "، ".join(f"{k}: {v[0]} ← {v[1]}" if isinstance(v, list) else f"{k}: {v}" for k, v in (a.changes or {}).items())
+        out.append(SimpleNamespace(at=a.created_at, kind=labels.get(a.action, a.action), detail=detail, item="", quantity=None,
+                                   stock_document_id=None, doc_type=None))
+    return sorted(out, key=lambda h: h.at, reverse=True)[:limit]
+
+
+# =====================================================================
+# انتقال بینِ محل‌ها (با سندِ انتقالِ عادیِ سیستم)
+# =====================================================================
+def transfer(company_id: int, user_id: int, item_id: int, from_location_id: int, to_location_id: int,
+             quantity: decimal.Decimal, allow_over_capacity: bool = False) -> int:
+    """اعتبارسنجیِ محلِ مقصد (فعال، مجاز برایِ جانمایی، ظرفیت) و ثبتِ سندِ انتقالِ عادی؛ خروجی = شناسهٔ سند."""
+    from peecha.services import inventory_documents as inv_documents_service
+
+    quantity = decimal.Decimal(quantity)
+    if quantity <= 0:
+        raise ValueError("مقدارِ انتقال باید مثبت باشد.")
+    with new_session() as session:
+        src = _location(session, company_id, from_location_id)
+        dst = _location(session, company_id, to_location_id)
+        base_uom = session.scalar(select(Item.base_uom_id).where(Item.item_id == item_id, Item.company_id == company_id))
+        if base_uom is None:
+            raise ValueError("کالا نامعتبر است.")
+        available = session.scalar(select(func.coalesce(func.sum(StockBalance.quantity_on_hand), 0)).where(
+            StockBalance.bin_location_id == from_location_id, StockBalance.item_id == item_id)) or _ZERO
+        src_wh, dst_wh = src.warehouse_id, dst.warehouse_id
+    dst_node = next(n for n in tree(company_id, dst_wh) if n.location_id == to_location_id)
+    if not is_operable(dst_node) or not dst_node.allow_putaway:
+        raise ValueError(f"محلِ مقصد «{dst_node.full_code}» برایِ ورودِ کالا فعال/مجاز نیست ({STATUSES.get(dst_node.status_code)}).")
+    if quantity > available:
+        raise ValueError("مقدارِ انتقال بیش از موجودیِ محلِ مبدا است.")
+    if not allow_over_capacity:
+        o = occupancy(company_id, dst_wh).get(to_location_id)
+        weight, volume = _item_dims(company_id).get(item_id, (None, None))
+        if o and ((o.max_weight is not None and o.weight + quantity * (weight or _ZERO) > o.max_weight)
+                  or (o.max_volume is not None and o.volume + quantity * (volume or _ZERO) > o.max_volume)):
+            raise ValueError("ظرفیتِ محلِ مقصد کافی نیست (برایِ ادامه، عبور از ظرفیت را تایید کنید).")
+    doc_id = inv_documents_service.create_stock_document(
+        company_id, user_id, "TRANSFER", datetime.date.today(),
+        inv_documents_service.DocumentHeaderFields(source_warehouse_id=src_wh, destination_warehouse_id=dst_wh,
+                                                   description="انتقالِ محل از نقشهٔ انبار"))
+    inv_documents_service.add_line(doc_id, company_id, inv_documents_service.LineFields(
+        item_id=item_id, uom_id=base_uom, quantity=quantity, quantity_base=quantity, conversion_factor=decimal.Decimal(1),
+        bin_location_id=from_location_id, destination_bin_location_id=to_location_id))
+    inv_documents_service.confirm_stock_document(doc_id, company_id)
+    inv_documents_service.post_stock_document(doc_id, company_id, user_id)
+    return doc_id
+
+
+def can(user_id: int | None, company_id: int, action: str) -> bool:
+    """دسترسی از همان سیستمِ نقش‌ها (sec.role_form_permissions) با فرمِ «warehouse_map»."""
+    from peecha.services import roles as roles_service
+
+    return user_id is not None and roles_service.user_has_permission(user_id, company_id, FORM_CODE, action)

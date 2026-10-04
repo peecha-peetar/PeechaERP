@@ -509,6 +509,11 @@ class Warehouse(Base):
     # R247: ظرفیتِ همهٔ انبارها (migration 184)
     capacity_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
     capacity_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 3))
+    # R248: ابعادِ انبار برایِ نقشه
+    width_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    length_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    height_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    description: Mapped[str | None] = mapped_column(String(1000))
 
 
 class BinLocation(Base):
@@ -524,6 +529,29 @@ class BinLocation(Base):
     barcode: Mapped[str | None] = mapped_column(String(100))
     is_pickable: Mapped[bool] = mapped_column(default=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # R248: مدیریتِ محل و نقشه (migration 185) -- سطح همان bin_type_code است (AREA/AISLE/RACK/SHELF/BIN)
+    location_code: Mapped[str | None] = mapped_column(String(120))
+    location_type_code: Mapped[str | None] = mapped_column(String(20))
+    description: Mapped[str | None] = mapped_column(String(500))
+    status_code: Mapped[str] = mapped_column(String(15), default="ACTIVE")
+    level_number: Mapped[int | None] = mapped_column(SmallInteger)
+    direction: Mapped[str | None] = mapped_column(String(10))
+    width_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 3))
+    length_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 3))
+    height_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 3))
+    max_weight_kg: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 3))
+    max_volume_m3: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 3))
+    temperature_min_c: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    temperature_max_c: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    allow_putaway: Mapped[bool] = mapped_column(default=True)
+    allow_replenishment: Mapped[bool] = mapped_column(default=True)
+    is_damaged: Mapped[bool] = mapped_column(default=False)
+    map_x: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    map_y: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    map_z: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    map_width: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    map_height: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
+    map_rotation: Mapped[decimal.Decimal | None] = mapped_column(Numeric(6, 2))
 
 
 class WarehouseUserAccess(Base):

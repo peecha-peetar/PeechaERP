@@ -1764,6 +1764,9 @@ class MainWindow(QMainWindow):
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", WarehouseOperationsScreen())
+        from peecha.ui.screens.warehouse_map import WarehouseMapScreen
+
+        self.register_screen("warehouse_map", WarehouseMapScreen(self))
         from peecha.ui.screens.purchase_dashboards import ProcurementExceptionDashboard, ProcurementExecutiveDashboard
 
         self.register_screen("purchase_dashboard_exec", ProcurementExecutiveDashboard(self))

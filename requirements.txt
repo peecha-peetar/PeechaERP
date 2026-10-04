@@ -18,6 +18,8 @@ Pillow>=10.0
 fastapi>=0.110
 uvicorn>=0.29
 PyJWT>=2.8
+segno>=1.6
+python-barcode>=0.15
 # نکته: pytesseract فقط یک پوستهٔ Python است -- خودِ برنامهٔ Tesseract OCR
 # باید جداگانه رویِ سیستم نصب شود (رایگان/متن‌باز، مجوزِ Apache-2.0):
 # https://github.com/UB-Mannheim/tesseract/wiki -- هنگامِ نصب، بستهٔ

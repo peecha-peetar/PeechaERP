@@ -117,6 +117,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             ("shipping", self._build_shipping_tab(), "حمل‌ونقل"),
             ("qc", self._build_qc_tab(), "کنترلِ کیفیت"),
             ("asset", self._build_asset_tab(), "دارایی"),
+            ("locations", self._build_locations_tab(), "محل‌هایِ انبار"),  # R248
         ]
         for key, widget, label in tab_defs:
             self.tab_indexes[key] = self.tabs.addTab(widget, label)
@@ -1731,9 +1732,62 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._refresh_bom_lines()
         self._refresh_variants_table()
         self._refresh_ecommerce_mappings()
+        self._refresh_locations()
+
+    # --- R248: محل‌هایِ انبارِ کالا (از موجودیِ سیستم) ---------------------------
+    def _build_locations_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        hint = QLabel("موجودیِ این کالا به تفکیکِ محلِ نگهداری؛ یک کالا می‌تواند در چند محل و چند انبار باشد. "
+                      "دابل‌کلیک یا «نمایش روی نقشه» محل را رویِ نقشهٔ انبار نشان می‌دهد.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.locations_table = QTableWidget(0, 8)
+        self.locations_table.setHorizontalHeaderLabels(["انبار", "منطقه", "راهرو", "قفسه", "طبقه", "محل", "کدِ محل", "مقدار"])
+        self.locations_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.locations_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.locations_table.verticalHeader().setVisible(False)
+        self.locations_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.locations_table.horizontalHeader().setStretchLastSection(True)
+        self.locations_table.cellDoubleClicked.connect(lambda row, _c: self.show_location_on_map(row))
+        layout.addWidget(self.locations_table)
+        button = QPushButton("نمایش روی نقشه")
+        button.setObjectName("flatButton")
+        button.clicked.connect(lambda: self.show_location_on_map(self.locations_table.currentRow()))
+        layout.addWidget(button, alignment=Qt.AlignLeft)
+        self._location_rows = []
+        return tab
+
+    def _refresh_locations(self) -> None:
+        from peecha.services import warehouse_locations as wl_service
+
+        self._location_rows = wl_service.product_locations(self._company_id, self._item_id) \
+            if self._company_id is not None and self._item_id is not None else []
+        self.locations_table.setRowCount(len(self._location_rows))
+        for r, loc in enumerate(self._location_rows):
+            cells = [loc.warehouse, loc.zone, loc.aisle, loc.rack, loc.level, loc.bin, loc.location_code,
+                     numerals.format_money(loc.quantity, 2, None)]
+            for c, text in enumerate(cells):
+                self.locations_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
+
+    def show_location_on_map(self, row: int) -> bool:
+        from PySide6.QtWidgets import QApplication
+
+        if not (0 <= row < len(self._location_rows)):
+            return False
+        location_id = self._location_rows[row].location_id
+        main = next((w for w in QApplication.topLevelWidgets() if hasattr(w, "open_screen") and hasattr(w, "_screens")), None)
+        if main is None:
+            return False
+        main.open_screen("INV_WAREHOUSE_MAP", then=lambda screen: screen.focus_location(location_id))
+        return True
 
     def reset(self) -> None:
         self._item_id = None
+        if hasattr(self, "locations_table"):
+            self._location_rows = []
+            self.locations_table.setRowCount(0)
         self._current_bom_id = None
         self.latin_name_field.clear()
         self.short_name_field.clear()

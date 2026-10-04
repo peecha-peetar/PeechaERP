@@ -53,6 +53,7 @@ _TYPE_LABELS: dict[str, str] = {
     "CENTRAL": "مرکزی", "BRANCH": "شعبه", "STORE": "فروشگاه", "RAW_MATERIAL": "موادِ اولیه",
     "FINISHED_GOODS": "کالایِ ساخته‌شده", "SEMI_FINISHED": "نیمه‌ساخته", "SCRAP": "ضایعات",
     "CONSIGNMENT": "امانی", "VEHICLE": "خودرو (سیار)", "RETURNED": "مرجوعی",
+    "DISTRIBUTION": "مرکزِ توزیع", "COLD_STORAGE": "سردخانه", "HOT_STORAGE": "گرمخانه",
 }
 _WITHDRAWAL_POLICY_LABELS: dict[str, str] = {
     "FIFO": "اول‌وارد اول‌خارج (FIFO)", "LIFO": "آخر‌وارد اول‌خارج (LIFO)",

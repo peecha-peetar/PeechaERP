@@ -21,6 +21,8 @@ dependencies = [
     "fastapi>=0.110",         # لایهٔ API برایِ اپِ موبایلِ پخشِ سرد/گرم (R131)
     "uvicorn>=0.29",          # سرورِ ASGI برایِ اجرایِ peecha_api
     "PyJWT>=2.8",             # امضا/بررسیِ توکنِ دسترسیِ کوتاه‌مدتِ API
+    "segno>=1.6",             # QRِ برچسبِ محلِ انبار (R248؛ پایتونِ خالص، مجوزِ BSD)
+    "python-barcode>=0.15",   # بارکدِ Code128ِ برچسبِ محلِ انبار (R248؛ مجوزِ MIT)
 ]
 
 [project.optional-dependencies]
