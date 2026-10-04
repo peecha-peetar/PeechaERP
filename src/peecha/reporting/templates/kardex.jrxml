@@ -33,6 +33,12 @@
         <parameterDescription><![CDATA[تاریخِ تولیدِ گزارش]]></parameterDescription>
     </parameter>
 
+    <parameter name="companyLogoPath" class="java.lang.String">
+        <defaultValueExpression><![CDATA[""]]></defaultValueExpression>
+    </parameter>
+    <parameter name="companyLogoPosition" class="java.lang.String">
+        <defaultValueExpression><![CDATA["NONE"]]></defaultValueExpression>
+    </parameter>
     <field name="movement_date_display" class="java.lang.String">
 
         <property name="net.sf.jasperreports.json.field.expression" value="movement_date_display"/>
@@ -94,6 +100,18 @@
          خالی/نامرئی رندر می‌شود، بدونِ هیچ خطایی. حداقل ۳۰ ارتفاع لازم است. -->
     <pageHeader>
         <band height="72">
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank">
+                <reportElement x="738" y="0" width="64" height="48">
+                    <printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "RIGHT".equals($P{companyLogoPosition})]]></printWhenExpression>
+                </reportElement>
+                <imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression>
+            </image>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank">
+                <reportElement x="0" y="0" width="64" height="48">
+                    <printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "LEFT".equals($P{companyLogoPosition})]]></printWhenExpression>
+                </reportElement>
+                <imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression>
+            </image>
             <staticText>
                 <reportElement style="Title" x="0" y="0" width="802" height="30"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>

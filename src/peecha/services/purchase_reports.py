@@ -55,6 +55,9 @@ class PurchaseFilters:
     side: str = "PURCHASE"
     # R238: گزینه‌هایِ اختصاصیِ هر گزارش (مثلاً مرجعِ قیمت/بُعدِ تحلیل) -- {کلید: مقدار}
     options: dict = field(default_factory=dict)
+    # R245: گزارش‌هایِ حسابداری (side=ACCOUNTING)
+    account_id: int | None = None
+    detail_account_id: int | None = None
 
 
 ReportFilters = PurchaseFilters
@@ -126,6 +129,8 @@ class ReportResult:
                 out.append(sum((r[index] or 0 for r in self.rows), _ZERO if kind != INT else 0))
             else:
                 out.append("")
+        if all(v == "" for v in out):  # هیچ ستونِ جمع‌پذیری نیست -- ردیفِ خالیِ «جمعِ کل» نشان داده نشود
+            return None
         out[0] = "جمعِ کل"
         return out
 
@@ -1862,6 +1867,10 @@ SALES_REPORTS_BY_CODE = {r.code: r for r in SALES_REPORTS}
 
 
 def report_def(code: str, side: str = "PURCHASE") -> ReportDef:
+    if side == "ACCOUNTING":
+        from peecha.services.accounting_reports import ACCOUNTING_REPORTS_BY_CODE
+
+        return ACCOUNTING_REPORTS_BY_CODE[code]
     return (SALES_REPORTS_BY_CODE if side == "SALES" else REPORTS_BY_CODE)[code]
 
 
@@ -1886,3 +1895,9 @@ try:
 except ImportError:  # ماژولِ ext اول بارگذاری شده و در انتهایِ خودش ثبت می‌کند
     _EXT = []
 register_reports(_EXT)
+
+try:
+    from peecha.services.purchase_reports_r245 import PURCHASE_R245_REPORTS as _R245  # noqa: E402
+except ImportError:  # مثلِ ext: اگر آن ماژول اول بارگذاری شود، خودش ثبت می‌کند
+    _R245 = []
+register_reports(_R245)

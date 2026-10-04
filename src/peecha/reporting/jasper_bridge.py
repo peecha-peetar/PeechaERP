@@ -143,6 +143,25 @@ def open_template_for_editing(template_name: str) -> bool:
     return open_path_for_editing(template_path(template_name))
 
 
+def _logo_params(tmp_dir: str) -> dict:
+    """R245: لوگویِ شرکتِ جاری (اگر تعریف و «بدونِ لوگو» نباشد) به‌صورتِ فایلِ موقت برایِ قالب‌هایِ Jasper."""
+    try:
+        from peecha import session as app_session
+        from peecha.services import companies as companies_service
+
+        if app_session.current_company is None:
+            return {"companyLogoPath": "", "companyLogoPosition": "NONE"}
+        data, position = companies_service.get_report_logo(app_session.current_company.company_id)
+    except Exception:  # noqa: BLE001 -- نبودِ لوگو نباید جلویِ چاپ را بگیرد
+        return {"companyLogoPath": "", "companyLogoPosition": "NONE"}
+    if not data:
+        return {"companyLogoPath": "", "companyLogoPosition": "NONE"}
+    logo_path = os.path.join(tmp_dir, "logo.png")
+    with open(logo_path, "wb") as f:
+        f.write(data)
+    return {"companyLogoPath": logo_path, "companyLogoPosition": position}
+
+
 def render_report_at_path(
     jrxml_path: Path | str,
     rows: list[dict],
@@ -184,6 +203,9 @@ def render_report_at_path(
         safe_template_path = os.path.join(tmp_dir, "template.jrxml")
         shutil.copyfile(jrxml_path, safe_template_path)
 
+        params = dict(params)
+        if "companyLogoPath" not in params:
+            params.update(_logo_params(tmp_dir))
         rows_path = os.path.join(tmp_dir, "rows.json")
         params_path = os.path.join(tmp_dir, "params.json")
         with open(rows_path, "w", encoding="utf-8") as f:

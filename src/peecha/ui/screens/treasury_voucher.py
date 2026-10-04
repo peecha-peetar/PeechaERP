@@ -2791,7 +2791,7 @@ def _build_receipt_html(
     return f"""
     <html dir="rtl"><head><meta charset="utf-8"></head>
     <body style="font-family:'{font_family}', Tahoma, sans-serif; font-size:11pt;">
-      <div style="text-align:center; font-size:13pt; font-weight:bold;">{esc(company_name)}</div>
+      {report_export.logo_header_html(f'<div style="text-align:center; font-size:13pt; font-weight:bold;">{esc(company_name)}</div>')}
       <div style="text-align:center; font-size:12pt; font-weight:bold; margin:6px 0 16px 0;">
         رسیدِ {noun}
       </div>
@@ -2826,6 +2826,7 @@ def _print_receipt_document(parent: QWidget, html: str, printer_name: str | None
     if printer_name:
         printer.setPrinterName(printer_name)
     doc = QTextDocument()
+    report_export.attach_logo(doc)
     doc.setHtml(html)
     preview = QPrintPreviewDialog(printer, parent)
     preview.paintRequested.connect(lambda p: doc.print_(p))
@@ -2844,6 +2845,7 @@ def _export_receipt_pdf_document(parent: QWidget, html: str, default_filename: s
     printer.setPageMargins(QMarginsF(10, 10, 10, 10), QPageLayout.Unit.Millimeter)
     printer.setOutputFileName(path)
     doc = QTextDocument()
+    report_export.attach_logo(doc)
     doc.setHtml(html)
     doc.print_(printer)
     QMessageBox.information(parent, "خروجیِ PDF", "فایلِ PDF با موفقیت ساخته شد.")

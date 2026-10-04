@@ -128,6 +128,12 @@
         <parameterDescription><![CDATA[یادداشتِ طرفِ‌حساب]]></parameterDescription>
     </parameter>
 
+    <parameter name="companyLogoPath" class="java.lang.String">
+        <defaultValueExpression><![CDATA[""]]></defaultValueExpression>
+    </parameter>
+    <parameter name="companyLogoPosition" class="java.lang.String">
+        <defaultValueExpression><![CDATA["NONE"]]></defaultValueExpression>
+    </parameter>
     <field name="row_no_display" class="java.lang.String">
 
         <property name="net.sf.jasperreports.json.field.expression" value="row_no_display"/>
@@ -193,6 +199,18 @@
          نامرئی می‌شود؛ همه‌یِ ارتفاع‌هایِ زیر با حاشیه‌یِ امنِ آزمایش‌شده‌اند. -->
     <pageHeader>
         <band height="158">
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank">
+                <reportElement x="471" y="0" width="64" height="48">
+                    <printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "RIGHT".equals($P{companyLogoPosition})]]></printWhenExpression>
+                </reportElement>
+                <imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression>
+            </image>
+            <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle" onErrorType="Blank">
+                <reportElement x="0" y="0" width="64" height="48">
+                    <printWhenExpression><![CDATA[$P{companyLogoPath} != null && !$P{companyLogoPath}.isEmpty() && "LEFT".equals($P{companyLogoPosition})]]></printWhenExpression>
+                </reportElement>
+                <imageExpression><![CDATA[$P{companyLogoPath}]]></imageExpression>
+            </image>
             <textField>
                 <reportElement style="CompanyName" x="0" y="0" width="535" height="30"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"/>

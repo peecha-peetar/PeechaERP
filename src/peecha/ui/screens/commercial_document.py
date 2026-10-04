@@ -2629,7 +2629,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         purchase_type_layout.addWidget(QLabel("نوعِ خرید"))
         self.purchase_type_combo = _EnterComboBox()
         purchase_type_layout.addWidget(self.purchase_type_combo)
-        row2_grid.addWidget(self.purchase_type_box, 0, 8, 2, 1)
+        row2_grid.addWidget(self.purchase_type_box, 0, 9, 2, 1)
         self.purchase_type_box.setVisible(self.document_type_code in _PURCHASE_TYPE_DOCS)
 
         # R244: شعبه (خالی = شعبهٔ انبار) و دپارتمان (واحدِ سازمانی) -- اسنادِ خرید
@@ -2642,7 +2642,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.branch_combo, self.department_combo = _EnterComboBox(), _EnterComboBox()
         org_layout.addWidget(self.branch_combo, 1, 0)
         org_layout.addWidget(self.department_combo, 1, 1)
-        row2_grid.addWidget(self.org_box, 0, 9, 2, 1)
+        row2_grid.addWidget(self.org_box, 0, 10, 2, 1)
         self.org_box.setVisible(self.document_type_code in _PURCHASE_ORG_DOCS)
 
         # طبقِ درخواستِ صریح («امکانِ کنسل‌کردنِ مالیات رویِ فاکتور»): برایِ

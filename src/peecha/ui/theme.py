@@ -756,6 +756,14 @@ QPushButton#sidebarGearButton {{
 QPushButton#sidebarGearButton:hover {{
     color: {PRIMARY};
 }}
+QPushButton#sidebarSubGroupHeader {{
+    color: {TEXT_SECONDARY};
+    font-size: 12.5px;
+    font-weight: 700;
+}}
+QPushButton#sidebarSubGroupHeader:hover {{
+    color: {PRIMARY};
+}}
 QLabel#sidebarSubGroupTitle {{
     color: {TEXT_SECONDARY};
     font-size: 12px;

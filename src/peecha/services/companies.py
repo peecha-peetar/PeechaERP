@@ -217,3 +217,72 @@ def update_company(
         session.refresh(company)
         session.expunge(company)
         return company
+
+
+# --- R245: لوگویِ شرکت در سربرگِ گزارش‌ها -------------------------------------
+LOGO_POSITIONS = {"RIGHT": "سمتِ راستِ سربرگ", "LEFT": "سمتِ چپِ سربرگ", "NONE": "بدونِ لوگو"}
+_MAX_LOGO_BYTES = 2 * 1024 * 1024
+
+
+def get_report_logo(company_id: int) -> tuple[bytes | None, str]:
+    """(تصویرِ لوگو، محل) -- اگر محل «NONE» باشد یا لوگویی نباشد، تصویر None است."""
+    from peecha.db.models.core import Company
+
+    with new_session() as session:
+        row = session.get(Company, company_id)
+        if row is None:
+            return None, "NONE"
+        position = row.report_logo_position or "RIGHT"
+        if position == "NONE":
+            return None, position
+        return row.logo_image, position
+
+
+def has_logo(company_id: int) -> bool:
+    from peecha.db.models.core import Company
+
+    with new_session() as session:
+        row = session.get(Company, company_id)
+        return row is not None and row.logo_image is not None
+
+
+def set_company_logo(company_id: int, data: bytes | None, mime: str | None = None) -> None:
+    """data=None لوگو را حذف می‌کند. فقط تصویرِ معتبر (PNG/JPG/...) تا ۲ مگابایت پذیرفته می‌شود."""
+    from peecha.db.models.core import Company
+
+    if data is not None:
+        if len(data) > _MAX_LOGO_BYTES:
+            raise ValueError("حجمِ لوگو حداکثر ۲ مگابایت است.")
+        from PySide6.QtGui import QImage
+
+        image = QImage()
+        if not image.loadFromData(data):
+            raise ValueError("فایلِ انتخاب‌شده تصویرِ معتبر نیست.")
+    with new_session() as session:
+        row = session.get(Company, company_id)
+        if row is None:
+            raise ValueError("شرکت نامعتبر است.")
+        row.logo_image = data
+        row.logo_mime = mime if data is not None else None
+        session.commit()
+
+
+def set_report_logo_position(company_id: int, position: str) -> None:
+    from peecha.db.models.core import Company
+
+    if position not in LOGO_POSITIONS:
+        raise ValueError("محلِ لوگو نامعتبر است.")
+    with new_session() as session:
+        row = session.get(Company, company_id)
+        if row is None:
+            raise ValueError("شرکت نامعتبر است.")
+        row.report_logo_position = position
+        session.commit()
+
+
+def get_report_logo_position(company_id: int) -> str:
+    from peecha.db.models.core import Company
+
+    with new_session() as session:
+        row = session.get(Company, company_id)
+        return (row.report_logo_position or "RIGHT") if row is not None else "RIGHT"

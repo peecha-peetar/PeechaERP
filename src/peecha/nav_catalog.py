@@ -49,6 +49,7 @@ PURCHASE_REPORT_MENU = [
         ("CHANGED_AFTER_APPROVAL", "تغییرِ قیمت/مقدار پس از تایید"), ("MODIFIED_DOCS", "اسنادِ اصلاح‌شده پس از تایید"),
         ("APPROVAL_HISTORY", "تاریخچهٔ تایید و تصویب"), ("SOD_VIOLATIONS", "تخلفاتِ تفکیکِ وظایف"),
         ("PO_WITHOUT_PR", "سفارشِ خریدِ بدونِ درخواست"), ("PO_WITHOUT_RFQ", "خریدِ بدونِ استعلامِ رقابتی"),
+        ("DUPLICATE_INVOICES", "فاکتورهایِ خریدِ احتمالاً تکراری"), ("EXPIRING_CONTRACTS", "قراردادهایِ خریدِ در آستانهٔ انقضا"),
     ]),
     ("PROCESS", "فرآیندِ خرید", [
         ("PO_FLOW", "گردشِ سفارشِ خرید"), ("CYCLE_TIME", "زمانِ چرخهٔ خرید"),
@@ -58,6 +59,8 @@ PURCHASE_REPORT_MENU = [
         ("BY_CATEGORY", "خرید به تفکیکِ گروهِ کالا"), ("BY_COST_CENTER", "خرید به تفکیکِ مرکزِ هزینه/پروژه"),
         ("MONTHLY", "روندِ ماهانهٔ خرید"), ("ABC", "تحلیلِ ABC خرید (پارتو)"),
         ("CONCENTRATION", "تمرکزِ تامین (ریسکِ تک‌منبعی)"), ("BY_DIMENSION", "خرید به تفکیکِ شعبه/دپارتمان/پروژه/برند/..."),
+        ("PERIOD_COMPARE", "مقایسهٔ خرید با دورهٔ قبل"), ("SUPPLIER_SHARE", "سهمِ تامین‌کنندگان از هر کالا"),
+        ("BY_CURRENCY", "خرید به تفکیکِ ارز"),
     ]),
     ("PRICE", "قیمت و هزینه", [
         ("PRICE_HISTORY", "تاریخچهٔ قیمتِ خرید"), ("PRICE_COMPARE", "مقایسهٔ قیمتِ تامین‌کنندگان"),
@@ -65,6 +68,7 @@ PURCHASE_REPORT_MENU = [
         ("LANDED_COST", "هزینه‌هایِ جانبیِ خرید (Landed Cost)"), ("SAVINGS", "تخفیف‌ها و ریبیتِ خرید"),
         ("PRICE_VS_REFERENCE", "خرید بالاتر/پایین‌تر از قیمتِ مرجع"), ("PRICE_MOVERS", "بیشترین افزایش/کاهشِ قیمت"),
         ("LANDED_BY_TYPE", "هزینه‌هایِ جانبی به تفکیکِ نوع"), ("ACTUAL_COST", "بهایِ واقعیِ تامین"),
+        ("LAST_PURCHASE", "آخرین خریدِ هر کالا"), ("PURCHASE_VS_SALE", "قیمتِ خرید در برابرِ فروش"),
     ]),
     ("VENDOR", "ارزیابیِ تامین‌کننده", [
         ("SCORECARD", "کارنامهٔ تامین‌کننده"), ("OTD", "تحویلِ به‌موقع (OTD)"),
@@ -78,6 +82,7 @@ PURCHASE_REPORT_MENU = [
         ("FORECAST", "پیش‌بینیِ پرداخت‌ها"), ("STATEMENT", "صورت‌حسابِ تامین‌کننده"),
         ("PREPAYMENTS", "پیش‌پرداخت‌ها و سفارش‌هایِ در جریان"), ("UNPAID", "فاکتورهایِ پرداخت‌نشده (معوق/سررسیدنشده)"),
         ("PAYMENTS", "پرداخت‌هایِ خرید"), ("COMMITMENTS", "تعهداتِ خرید و پرداخت"),
+        ("VAT", "مالیات بر ارزش افزودهٔ خرید"), ("DPO", "دورهٔ پرداختِ بدهی (DPO)"),
     ]),
     ("INVENTORY", "انبار و تدارکات", [
         ("STOCK_POLICY", "وضعیتِ موجودی نسبت به سیاستِ سفارش"), ("SUGGESTED", "پیشنهادِ خرید"),
@@ -131,6 +136,49 @@ SALES_REPORT_MENU = [
     ("MASTER", "اطلاعاتِ پایه", [
         ("CUSTOMERS", "فهرستِ مشتریان"), ("ITEMS", "کالاهایِ قابلِ‌فروش و واحدها"),
         ("PRICE_LISTS", "فهرست‌هایِ قیمتِ فروش"), ("WAREHOUSES", "انبارها و انباردارِ مسئول"),
+    ]),
+]
+
+
+# R245: گزارش‌هایِ حسابداری -- صفحه‌هایِ اختصاصیِ قبلی (dict) + موتورِ عمومی (services/accounting_reports.py)
+ACCOUNTING_REPORT_MENU = [
+    ("LEDGERS", "دفاتر و تراز", [
+        {"code": "REPORTS_TRIAL_BALANCE", "label": "تراز آزمایشی", "screen": "report_trial_balance"},
+        {"code": "REPORTS_JOURNAL_BOOK", "label": "دفتر روزنامه", "screen": "report_journal_book"},
+        {"code": "REPORTS_ACCOUNT_LEDGER", "label": "دفتر کل / معین / تفصیلی", "screen": "report_account_ledger"},
+        ("COMPARATIVE_TB", "ترازِ مقایسه‌ای"),
+    ]),
+    ("STATEMENTS", "صورت‌هایِ مالی", [
+        {"code": "REPORTS_INCOME_STATEMENT", "label": "صورتِ سود و زیان", "screen": "report_income_statement"},
+        {"code": "REPORTS_BALANCE_SHEET", "label": "ترازنامه", "screen": "report_balance_sheet"},
+        {"code": "REPORTS_CASH_FLOW", "label": "صورتِ گردشِ وجوهِ نقد", "screen": "report_cash_flow"},
+        {"code": "REPORTS_EQUITY_CHANGES", "label": "تغییرات در حقوقِ صاحبانِ سهام", "screen": "report_equity_changes"},
+        {"code": "REPORTS_CUSTOM_STATEMENT", "label": "گزارشِ سفارشی (طبقِ الگو)", "screen": "report_custom_statement"},
+        {"code": "REPORTS_STATEMENT_DESIGNER", "label": "طراحیِ الگویِ گزارش", "screen": "statement_template_designer"},
+    ]),
+    ("FS_ANALYSIS", "تحلیلِ صورت‌هایِ مالی", [
+        {"code": "REPORTS_FINANCIAL_RATIOS", "label": "نسبت‌هایِ مالی", "screen": "report_financial_ratios"},
+        {"code": "REPORTS_PERIOD_COMPARISON", "label": "مقایسه‌یِ دوره‌ای", "screen": "report_period_comparison"},
+        ("IS_ANALYSIS", "تحلیلِ عمودی و افقیِ سود و زیان"), ("BS_ANALYSIS", "تحلیلِ عمودی و افقیِ ترازنامه"),
+        {"code": "REPORTS_COST_CENTER", "label": "گزارشِ مرکزِ هزینه و پروژه", "screen": "report_cost_center_breakdown"},
+    ]),
+    ("ACCOUNTS", "تحلیلِ حساب‌ها", [
+        ("ACCOUNT_PERIOD_MATRIX", "گردشِ دوره‌ایِ حساب‌ها (ماهانه/فصلی/سالانه)"),
+        ("MONTHLY_BALANCE", "گردش و ماندهٔ ماهانهٔ حساب"), ("CONTRA_ACCOUNTS", "تحلیلِ طرف‌حساب"),
+        ("DETAIL_BY_ACCOUNT", "گردشِ تفصیلی‌ها به تفکیکِ حساب"), ("ABNORMAL_BALANCES", "حساب‌هایِ با ماندهٔ خلافِ ماهیت"),
+        ("DORMANT_ACCOUNTS", "حساب‌هایِ راکد"),
+    ]),
+    ("VOUCHERS", "اسناد و دفاتر", [
+        ("VOUCHER_REGISTER", "دفترِ ثبتِ اسنادِ حسابداری"), ("DAILY_SUMMARY", "خلاصهٔ روزانهٔ اسناد"),
+        ("VOUCHERS_BY", "اسناد به تفکیکِ نوع/وضعیت/کاربر/منبع/ماه"), ("SPECIAL_ENTRIES", "اسنادِ افتتاحیه، اختتامیه و تعدیلی"),
+        ("REVERSED_ENTRIES", "اسنادِ برگشتی و باطل‌شده"),
+    ]),
+    ("AUDIT", "کنترل و حسابرسیِ اسناد", [
+        {"code": "REPORTS_ANOMALIES", "label": "تشخیصِ سندهایِ ناقص/آنومالی", "screen": "report_anomalies"},
+        ("UNBALANCED", "اسنادِ نامتوازن"), ("NUMBER_GAPS", "شکاف و تکرار در شماره‌گذاریِ اسناد"),
+        ("UNPOSTED", "اسنادِ پیش‌نویس و موقتِ قطعی‌نشده"), ("BACKDATED", "اسنادِ عطف به ماسبق / تاریخِ آینده"),
+        ("OFF_HOURS", "اسنادِ ثبت‌شده در تعطیلی یا خارج از ساعتِ کاری"), ("LARGE_LINES", "بزرگ‌ترین ردیف‌هایِ اسناد"),
+        ("ROUND_AMOUNTS", "ردیف‌هایِ با مبلغِ رُند"), ("SELF_APPROVED", "اسنادِ تاییدشده توسطِ صادرکننده (تفکیکِ وظایف)"),
     ]),
 ]
 
@@ -354,7 +402,7 @@ NAV_ITEMS = [
             # (_SETTINGS_TAB_BY_GROUP_CODE در shell_window.py).
         ],
     },
-    {"code": "INVOICES", "label": "فاکتورها", "screen": None},
+    # R245: آیتمِ «فاکتورها» (بدونِ صفحه) حذف شد -- فاکتورها در منوهایِ فروش و خرید هستند.
     {
         "code": "REPORTS",
         "label": "گزارش‌ها",
@@ -365,61 +413,8 @@ NAV_ITEMS = [
         # دیگر (فروش/انبار/...) ساخته شوند، هرکدام زیرمنویِ جداگانه‌یِ
         # خودشان را این‌جا می‌گیرند.
         "children": [
-            {
-                "code": "REPORTS_GL",
-                "label": "حسابداری",
-                "children": [
-                    {"code": "REPORTS_TRIAL_BALANCE", "label": "تراز آزمایشی", "screen": "report_trial_balance"},
-                    {"code": "REPORTS_JOURNAL_BOOK", "label": "دفتر روزنامه", "screen": "report_journal_book"},
-                    {
-                        "code": "REPORTS_ACCOUNT_LEDGER",
-                        "label": "دفتر کل / معین / تفصیلی",
-                        "screen": "report_account_ledger",
-                    },
-                    {
-                        "code": "REPORTS_INCOME_STATEMENT",
-                        "label": "صورتِ سود و زیان",
-                        "screen": "report_income_statement",
-                    },
-                    {"code": "REPORTS_BALANCE_SHEET", "label": "ترازنامه", "screen": "report_balance_sheet"},
-                    {"code": "REPORTS_CASH_FLOW", "label": "صورتِ گردشِ وجوهِ نقد", "screen": "report_cash_flow"},
-                    {
-                        "code": "REPORTS_EQUITY_CHANGES",
-                        "label": "تغییرات در حقوقِ صاحبانِ سهام",
-                        "screen": "report_equity_changes",
-                    },
-                    {
-                        "code": "REPORTS_CUSTOM_STATEMENT",
-                        "label": "گزارشِ سفارشی (طبقِ الگو)",
-                        "screen": "report_custom_statement",
-                    },
-                    {
-                        "code": "REPORTS_STATEMENT_DESIGNER",
-                        "label": "طراحیِ الگویِ گزارش",
-                        "screen": "statement_template_designer",
-                    },
-                    {
-                        "code": "REPORTS_FINANCIAL_RATIOS",
-                        "label": "نسبت‌هایِ مالی",
-                        "screen": "report_financial_ratios",
-                    },
-                    {
-                        "code": "REPORTS_PERIOD_COMPARISON",
-                        "label": "مقایسه‌یِ دوره‌ای",
-                        "screen": "report_period_comparison",
-                    },
-                    {
-                        "code": "REPORTS_ANOMALIES",
-                        "label": "تشخیصِ سندهایِ ناقص/آنومالی",
-                        "screen": "report_anomalies",
-                    },
-                    {
-                        "code": "REPORTS_COST_CENTER",
-                        "label": "گزارشِ مرکزِ هزینه و پروژه",
-                        "screen": "report_cost_center_breakdown",
-                    },
-                ],
-            },
+            # R245: گزارش‌هایِ حسابداری در زیرگروه‌هایِ جمع‌شونده (کدهایِ قبلی بدونِ تغییر)
+            {"code": "REPORTS_GL", "label": "حسابداری", "children": _report_menu("ACC_RPT", "accounting_report_", ACCOUNTING_REPORT_MENU)},
             {
                 "code": "REPORTS_INV",
                 "label": "انبار",
@@ -530,7 +525,6 @@ DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
         ("HR_ATTENDANCE_ENTRIES", "🕒"),
         ("HR_ATTENDANCE_SUMMARY", "📋"),
     ],
-    "INVOICES": [],
     "REPORTS": [
         ("REPORTS_TRIAL_BALANCE", "⚖️"),
         ("REPORTS_JOURNAL_BOOK", "📖"),

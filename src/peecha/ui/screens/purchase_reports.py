@@ -34,6 +34,7 @@ _TYPE_TO_NAV_CODE = {
     "PURCHASE_REQUEST": "PURCH_REQUESTS",
     "RFQ": "PURCH_RFQ",
 }
+_RPT_PREFIX = {"PURCHASE": "PURCH_RPT_", "SALES": "SALES_RPT_", "ACCOUNTING": "ACC_RPT_"}
 _NUMERIC = (reports_service.MONEY, reports_service.QTY, reports_service.INT, reports_service.PERCENT, reports_service.DAYS)
 _LABEL_KINDS = (reports_service.TEXT, reports_service.DATE)
 
@@ -153,7 +154,11 @@ class PurchaseReportScreen(ReportScreenBase):
         self.item_combo = _searchable_combo()
         self.category_combo = _searchable_combo()
         self.warehouse_combo = _searchable_combo()
+        self.account_combo = _searchable_combo()
+        self.detail_combo = _searchable_combo()
         self._filter_widgets = {
+            "account": ("حساب:", self.account_combo),
+            "detail": ("تفصیلی:", self.detail_combo),
             "supplier": ("تامین‌کننده:" if side == "PURCHASE" else "مشتری:", self.supplier_combo),
             "item": ("کالا:", self.item_combo),
             "category": ("گروهِ کالا:", self.category_combo),
@@ -165,14 +170,18 @@ class PurchaseReportScreen(ReportScreenBase):
             self.extra_filter_row.addWidget(widget)
         # R238: گزینه‌هایِ اختصاصیِ گزارش (مرجعِ قیمت، بُعد، آستانهٔ روز، ...)
         self._option_combos: dict[str, tuple[str, QComboBox]] = {}
+        # R245: گزینه‌ها در ردیفِ جدا تا ردیفِ فیلتر شلوغ و فشرده نشود
+        self.options_row = QHBoxLayout()
         for key, label, choices in self._def.options:
             combo = QComboBox()
             for value, text in choices:
                 combo.addItem(text, value)
             combo.currentIndexChanged.connect(lambda _i: self._reload())
-            self.extra_filter_row.addWidget(QLabel(f"{label}:"))
-            self.extra_filter_row.addWidget(combo)
+            self.options_row.addWidget(QLabel(f"{label}:"))
+            self.options_row.addWidget(combo)
+            self.options_row.addSpacing(12)
             self._option_combos[key] = (label, combo)
+        self.options_row.addStretch(1)
 
         self.hint_label = QLabel(self._def.hint)
         self.hint_label.setObjectName("sectionHint")
@@ -208,6 +217,8 @@ class PurchaseReportScreen(ReportScreenBase):
         delete_view.clicked.connect(lambda: self.delete_view(self.view_combo.currentData()))
         tools.addWidget(delete_view)
         tools.addStretch(1)
+        if self._def.options:
+            self.layout().insertLayout(self.layout().indexOf(self.table), self.options_row)
         self.layout().insertLayout(self.layout().indexOf(self.table), tools)
 
         header = self.table.horizontalHeader()
@@ -215,12 +226,15 @@ class PurchaseReportScreen(ReportScreenBase):
         header.sectionClicked.connect(self._on_header_clicked)
         self.table.cellDoubleClicked.connect(self._open_row)
         self.table.setToolTip("دابل‌کلیک: بازکردنِ سند یا ریزِ ردیفِ تجمیعی. کلیک رویِ سرِ ستون: مرتب‌سازی.")
-        persist_column_widths(self.table, f"{'purchase' if side == 'PURCHASE' else 'sales'}Report/{report_code}")
+        persist_column_widths(self.table, f"{side.lower() if side == 'ACCOUNTING' else 'purchase' if side == 'PURCHASE' else 'sales'}"
+                                          f"Report/{report_code}")
         self.add_field_help([
             (self.supplier_combo, "فقط اسنادِ همین طرفِ حساب. با تایپِ کد/نام جستجو کنید."),
             (self.item_combo, "فقط ردیف‌هایِ همین کالا."),
             (self.category_combo, "فقط کالاهایِ این گروه."),
             (self.warehouse_combo, "فقط ردیف‌هایِ این انبار."),
+            (self.account_combo, "فقط این حساب و همهٔ زیرحساب‌هایش."),
+            (self.detail_combo, "فقط ردیف‌هایی که این حسابِ تفصیلی را دارند."),
             (self.group_combo, "ردیف‌ها بر اساسِ این ستون گروه و برایِ هر گروه جمع زده می‌شوند."),
             (self.view_combo, "فیلترها، گزینه‌ها، مرتب‌سازی، گروه‌بندی و ستون‌هایِ پنهانِ ذخیره‌شده با یک نام."),
         ])
@@ -230,6 +244,13 @@ class PurchaseReportScreen(ReportScreenBase):
         company_id = self._company_id()
         if company_id is not None:
             self._decimal_places = companies_service.get_base_currency_decimal_places(company_id)
+        if company_id is not None and self._side == "ACCOUNTING":
+            from peecha.services import chart_of_accounts as coa_service
+
+            _fill(self.account_combo, [(f"{a.full_code} — {a.name}", a.account_id) for a in coa_service.list_accounts(company_id)])
+            _fill(self.detail_combo, [(f"{d.full_code or d.code} — {d.name or ''}", d.detail_account_id)
+                                      for d in dimensions_service.list_all_detail_accounts(company_id)])
+        elif company_id is not None:
             parties = dimensions_service.list_suppliers(company_id) if self._side == "PURCHASE" \
                 else dimensions_service.list_customers(company_id)
             _fill(self.supplier_combo, [(f"{s['code']} — {s['name'] or ''}", s["detail_account_id"]) for s in parties])
@@ -268,6 +289,7 @@ class PurchaseReportScreen(ReportScreenBase):
         return reports_service.PurchaseFilters(
             date_from=date_from, date_to=date_to, supplier_id=value("supplier"), item_id=value("item"),
             category_id=value("category"), warehouse_id=value("warehouse"), side=self._side,
+            account_id=value("account"), detail_account_id=value("detail"),
             options={key: combo.currentData() for key, (_label, combo) in self._option_combos.items()},
         )
 
@@ -502,6 +524,9 @@ class PurchaseReportScreen(ReportScreenBase):
         ref = self._row_ids[row]
         if ref:
             document_id, doc_type = ref
+            if doc_type == "JOURNAL_ENTRY":
+                self._main_window.open_screen("GL_JE", then=lambda screen: screen.edit_journal_entry(document_id))
+                return
             nav_code = _TYPE_TO_NAV_CODE.get(doc_type)
             if nav_code:
                 self._main_window.open_screen(nav_code, then=lambda screen: screen.edit_document(document_id))
@@ -510,15 +535,27 @@ class PurchaseReportScreen(ReportScreenBase):
         company_id = self._company_id()
         if raw is None or company_id is None:
             return
-        target = dashboard_service.drill_target(company_id, self._def.code, self._side, raw)
+        if self._side == "ACCOUNTING":
+            target = self._account_drill_target(raw)
+        else:
+            target = dashboard_service.drill_target(company_id, self._def.code, self._side, raw)
         if target is None:
             return
         code, filters = target
-        prefix = "PURCH_RPT_" if self._side == "PURCHASE" else "SALES_RPT_"
+        prefix = _RPT_PREFIX[self._side]
         date_from = self.date_from.date() if self._def.date_mode == "range" else None
         date_to = self.date_to.date()
         self._main_window.open_screen(
             f"{prefix}{code}", then=lambda screen: screen.apply_preset(date_from, date_to, **filters))
+
+    def _account_drill_target(self, raw: list) -> tuple[str, dict] | None:
+        """ردیفِ تجمیعیِ گزارشِ حسابداری: اولین برچسبِ حساب → گردش و ماندهٔ ماهانهٔ همان حساب."""
+        for cell in raw:
+            if isinstance(cell, str) and " — " in cell:
+                index = self.account_combo.findText(numerals.to_persian_digits(cell))
+                if index > 0:
+                    return "MONTHLY_BALANCE", {"account_id": self.account_combo.itemData(index)}
+        return None
 
     def raw_row(self, display_row: int) -> list | None:
         if self._result is None or not (0 <= display_row < len(self._rows)):

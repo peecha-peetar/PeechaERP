@@ -28,6 +28,7 @@ import json
 from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, QRect, QSettings, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QScreen
 from PySide6.QtWidgets import (
+    QSizePolicy,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -77,7 +78,8 @@ _NAV_ICONS = {
     "SETTINGS": "⚙️",
 }
 
-_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8}
+# R245: «گزارش‌ها» -> تبِ «چاپ و گزارش‌ها» (لوگو/سربرگ و قالب‌ها)
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9}
 
 
 def _leaf_nav_children(item: dict) -> list[dict]:
@@ -114,35 +116,30 @@ class _QuickAccessTile(QFrame):
         super().__init__()
         self.setObjectName("quickTile")
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedSize(84, 78)
+        # R245 (درخواستِ صریح): آیکون بدونِ کادر و بزرگ‌تر؛ کاشی در حالتِ عادی بی‌قاب، فقط با هاور پس‌زمینه می‌گیرد
+        self.setFixedSize(96, 88)
         self._on_click = on_click
         self._color = color or theme.ACCENT
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 10, 6, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 6, 4, 6)
+        layout.setSpacing(2)
         layout.setAlignment(Qt.AlignCenter)
 
         icon_label = QLabel(icon)
-        icon_label.setFixedSize(30, 30)
+        icon_label.setObjectName("quickTileIcon")
+        icon_label.setFixedSize(44, 44)
         icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setStyleSheet(
-            f"background-color: {theme.rgba(self._color, 0.16)}; "
-            f"border: 1px solid {theme.rgba(self._color, 0.30)}; "
-            "border-radius: 9px; font-size: 20px;"
-        )
+        icon_label.setStyleSheet("background: transparent; border: none; font-size: 32px;")
         layout.addWidget(icon_label, alignment=Qt.AlignCenter)
 
         text_label = QLabel(label)
         text_label.setAlignment(Qt.AlignCenter)
         text_label.setWordWrap(True)
-        text_label.setStyleSheet(f"font-size: 10px; font-weight: 600; color: {theme.TEXT_SECONDARY}; background: transparent;")
+        text_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {theme.TEXT_PRIMARY}; background: transparent; border: none;")
         layout.addWidget(text_label)
 
-        self._rest_style = (
-            f"QFrame#quickTile {{ background-color: {theme.rgba(self._color, 0.05)}; "
-            f"border: 1px solid {theme.rgba(self._color, 0.14)}; border-radius: 14px; }}"
-        )
+        self._rest_style = "QFrame#quickTile { background-color: transparent; border: none; border-radius: 14px; }"
         self._hover_style = (
             f"QFrame#quickTile {{ background-color: {theme.rgba(self._color, 0.14)}; "
             f"border: 1px solid {theme.rgba(self._color, 0.35)}; border-radius: 14px; }}"
@@ -183,6 +180,77 @@ class _QuickAccessTile(QFrame):
         super().leaveEvent(event)
 
 
+class _SidebarButton(HoverButton):
+    """R245: دکمهٔ ساید‌بار که متنِ بلندش را کوتاه (…) می‌کند به‌جایِ پهن‌کردنِ ساید‌بار
+    (پهن‌شدن، دکمهٔ تنظیماتِ کنارِ ماژول‌ها را از دید بیرون می‌برد)."""
+
+    def __init__(self, text: str, **kwargs) -> None:
+        super().__init__("", **kwargs)
+        self._full_text = text
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.setMinimumWidth(0)
+        self.setText(text)
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        self._full_text = text
+        self.setToolTip(text)
+        self._apply_elide()
+
+    def full_text(self) -> str:
+        return self._full_text
+
+    def _apply_elide(self) -> None:
+        available = max(self.width() - 34 - getattr(self, "_indent", 0), 40)
+        super().setText(self.fontMetrics().elidedText(self._full_text, Qt.ElideRight, available))
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._apply_elide()
+
+
+class _SidebarSubGroup(QWidget):
+    """R245: زیرگروهِ جمع‌شونده داخلِ یک ماژول (مثلاً گزارش‌ها › گزارشاتِ خرید › عملیاتی)."""
+
+    def __init__(self, item: dict, depth: int, on_toggle) -> None:
+        super().__init__()
+        self.code = item["code"]
+        self._label = item["label"]
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(1)
+        self.header = _SidebarButton(
+            "", hover_color=theme.HOVER, active_color=theme.ACCENT_LIGHT, radius=8, text_align=Qt.AlignRight, indent=depth * 14,
+        )
+        self.header.setObjectName("sidebarSubGroupHeader")
+        self.header.setMinimumHeight(32)
+        self.header.clicked.connect(lambda _checked=False: self.set_expanded(not self.expanded))
+        layout.addWidget(self.header)
+        self.body = QWidget()
+        self.body_layout = QVBoxLayout(self.body)
+        self.body_layout.setContentsMargins(0, 0, 0, 2)
+        self.body_layout.setSpacing(1)
+        layout.addWidget(self.body)
+        self.expanded = False
+        self._on_toggle = on_toggle
+        self.body.setVisible(False)
+        self._refresh_header()
+
+    def _refresh_header(self) -> None:
+        self.header.setText(f"{'⌄' if self.expanded else '‹'}  {self._label}")
+
+    def set_label(self, label: str) -> None:
+        self._label = label
+        self._refresh_header()
+
+    def set_expanded(self, expanded: bool) -> None:
+        if expanded == self.expanded:
+            return
+        self.expanded = expanded
+        self.body.setVisible(expanded)
+        self._refresh_header()
+        self._on_toggle()
+
+
 class _SidebarGroup(QWidget):
     """یک گروهِ آکاردئونیِ ساید‌بار — سرتیترِ آیکون‌دار که با کلیک، بدنه‌ی
     زیرِ خودش (فهرستِ آیتم‌هایِ برگ) را با انیمیشنِ ارتفاع باز/بسته
@@ -217,6 +285,7 @@ class _SidebarGroup(QWidget):
         )
         self.header.setObjectName("sidebarGroupHeader")
         self.header.setMinimumHeight(42)
+        self.header.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self._update_header_text(icon, item["label"], expanded=False)
         header_row.addWidget(self.header, stretch=1)
 
@@ -244,6 +313,8 @@ class _SidebarGroup(QWidget):
             self._anim = QPropertyAnimation(self.body, b"maximumHeight", self)
             self._anim.setDuration(180)
             self._anim.setEasingCurve(QEasingCurve.OutCubic)
+            # پس از بازشدن، سقفِ ارتفاع برداشته می‌شود تا بازوبسته‌شدنِ زیرگروه‌ها اندازه را درست کند
+            self._anim.finished.connect(lambda: self._expanded and self.body.setMaximumHeight(16777215))
             self.header.clicked.connect(self.toggle)
         else:
             self.body = None
@@ -261,7 +332,10 @@ class _SidebarGroup(QWidget):
     def _has_children_hint(self) -> bool:
         return getattr(self, "_has_children", False)
 
-    def _populate_body(self, item: dict, layout: QVBoxLayout, on_leaf_click, depth: int) -> None:
+    def _populate_body(self, item: dict, layout: QVBoxLayout, on_leaf_click, depth: int, parents: tuple = ()) -> None:
+        if not hasattr(self, "_subgroups_of"):
+            self._subgroups_of: dict[str, tuple] = {}
+            self._subgroups: list[_SidebarSubGroup] = []
         for child in item.get("children", []):
             # طبقِ تصمیمِ صریح («برگشت از فروش/به تامین‌کننده از منویِ
             # انبار حذف شود، چون سندِ تجاریِ SALES_RETURN/PURCHASE_RETURN
@@ -271,16 +345,16 @@ class _SidebarGroup(QWidget):
             if child.get("hidden_from_sidebar"):
                 continue
             if child.get("children"):
-                sub_title = QLabel(child["label"])
-                sub_title.setObjectName("sidebarSubGroupTitle")
-                sub_title.setContentsMargins(18 + depth * 10, 8, 12, 2)
-                layout.addWidget(sub_title)
-                self._widgets_by_code[child["code"]] = sub_title
+                sub = _SidebarSubGroup(child, depth, self._on_subgroup_toggled)
+                layout.addWidget(sub)
+                self._subgroups.append(sub)
+                self._widgets_by_code[child["code"]] = sub
                 self._source_by_code[child["code"]] = child["label"]
-                self._populate_body(child, layout, on_leaf_click, depth=depth + 1)
+                self._populate_body(child, sub.body_layout, on_leaf_click, depth=depth + 1, parents=parents + (sub,))
             else:
                 code = child["code"]
-                button = HoverButton(
+                self._subgroups_of[code] = parents
+                button = _SidebarButton(
                     child["label"],
                     hover_color=theme.HOVER,
                     active_color=theme.ACCENT_LIGHT,
@@ -297,6 +371,11 @@ class _SidebarGroup(QWidget):
                 self._widgets_by_code[code] = button
                 self._source_by_code[code] = child["label"]
 
+    def _on_subgroup_toggled(self) -> None:
+        if self.body is not None and self._expanded:
+            self.body.setMaximumHeight(16777215)
+            self.body.adjustSize()
+
     def retranslate(self, translate_fn) -> None:
         """طبقِ حسابرسیِ صریح: با تغییرِ زبانِ فعال، متنِ سرتیترِ گروه،
         زیرتیترها، و آیتم‌هایِ برگ (بدونِ بازسازیِ کاملِ ساید‌بار، تا
@@ -304,7 +383,11 @@ class _SidebarGroup(QWidget):
         self._label = translate_fn(self._item["code"], self._item["label"])
         self._update_header_text(self._icon, self._label, expanded=getattr(self, "_expanded", False))
         for code, widget in self._widgets_by_code.items():
-            widget.setText(translate_fn(code, self._source_by_code[code]))
+            text = translate_fn(code, self._source_by_code[code])
+            if isinstance(widget, _SidebarSubGroup):
+                widget.set_label(text)
+            else:
+                widget.setText(text)
 
     def toggle(self) -> None:
         if self.body is None:
@@ -335,6 +418,8 @@ class _SidebarGroup(QWidget):
             button.style().polish(button)
             button.set_active(is_active)
         if found and self.body is not None:
+            for sub in getattr(self, "_subgroups_of", {}).get(code, ()):
+                sub.set_expanded(True)
             self.set_expanded(True)
         return found
 
@@ -1205,7 +1290,7 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(96)
+        scroll.setFixedHeight(104)
 
         bar = QWidget()
         bar.setObjectName("quickAccessBar")
@@ -1664,6 +1749,11 @@ class MainWindow(QMainWindow):
 
         for report in _SALES_REPORTS:
             self.register_screen(f"sales_report_{report.code.lower()}", PurchaseReportScreen(report.code, self, side="SALES"))
+        from peecha.services.accounting_reports import ACCOUNTING_REPORTS as _ACCOUNTING_REPORTS
+
+        for report in _ACCOUNTING_REPORTS:
+            self.register_screen(f"accounting_report_{report.code.lower()}",
+                                 PurchaseReportScreen(report.code, self, side="ACCOUNTING"))
         from peecha.ui.screens.purchase_dashboards import ProcurementExceptionDashboard, ProcurementExecutiveDashboard
 
         self.register_screen("purchase_dashboard_exec", ProcurementExecutiveDashboard(self))

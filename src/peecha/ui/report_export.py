@@ -40,8 +40,8 @@ from __future__ import annotations
 import decimal
 from dataclasses import dataclass
 
-from PySide6.QtCore import QMarginsF, QRectF, QSettings, QSizeF
-from PySide6.QtGui import QAbstractTextDocumentLayout, QPageLayout, QPainter, QTextDocument
+from PySide6.QtCore import QMarginsF, QRectF, QSettings, QSizeF, Qt, QUrl
+from PySide6.QtGui import QAbstractTextDocumentLayout, QImage, QPageLayout, QPainter, QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrintPreviewDialog
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -205,6 +205,56 @@ def _auto_header_html(title: str, company_name: str, report_date: str, filters: 
             '<div style="font-size:9pt; color:#444;">' + " &nbsp;|&nbsp; ".join(meta_parts) + "</div>"
         )
     return header_lines
+
+
+# --- R245: لوگویِ شرکت در سربرگ ------------------------------------------------
+_LOGO_URL = "peecha-logo://report"
+_LOGO_HEIGHT_PT = 54
+
+
+def company_logo() -> tuple[bytes | None, str]:
+    """(بایت‌هایِ لوگو، محل) برایِ شرکتِ جاری؛ بدونِ لوگو یا با «بدونِ لوگو» -> (None, ...)."""
+    from peecha import session as app_session
+    from peecha.services import companies as companies_service
+
+    company = app_session.current_company
+    if company is None:
+        return None, "NONE"
+    try:
+        return companies_service.get_report_logo(company.company_id)
+    except Exception:  # noqa: BLE001 -- نبودِ ستون/اتصال نباید جلویِ چاپ را بگیرد
+        return None, "NONE"
+
+
+def _with_logo(header_html: str, position: str) -> str:
+    """لوگو در یک سو، متنِ سربرگ وسط، و یک ستونِ خالیِ هم‌عرض در سویِ دیگر تا متن وسط بماند (جهتِ سند rtl است)."""
+    logo_cell = f'<td width="90" valign="middle"><img src="{_LOGO_URL}" height="{_LOGO_HEIGHT_PT}"></td>'
+    blank_cell = '<td width="90"></td>'
+    first, last = (logo_cell, blank_cell) if position == "RIGHT" else (blank_cell, logo_cell)
+    return (f'<table width="100%" cellspacing="0" cellpadding="0"><tr>{first}'
+            f'<td align="center" valign="middle">{header_html}</td>{last}</tr></table>')
+
+
+def _add_logo_resource(document: QTextDocument, data: bytes) -> bool:
+    image = QImage()
+    if not image.loadFromData(data):
+        return False
+    if image.height() > 300:
+        image = image.scaledToHeight(300, Qt.SmoothTransformation)
+    document.addResource(QTextDocument.ImageResource, QUrl(_LOGO_URL), image)
+    return True
+
+
+def logo_header_html(inner_html: str) -> str:
+    """سربرگ با لوگویِ شرکتِ جاری (اگر تعریف شده)؛ سندی که این را می‌گیرد باید attach_logo هم بشود."""
+    data, position = company_logo()
+    return _with_logo(inner_html, position) if data else inner_html
+
+
+def attach_logo(document: QTextDocument) -> None:
+    data, _position = company_logo()
+    if data:
+        _add_logo_resource(document, data)
 
 
 def _multiline_html(text: str) -> str:
@@ -405,6 +455,9 @@ def _paint_report(
     page_height = page_rect.height()
 
     header_doc = QTextDocument()
+    logo_data, logo_position = company_logo()
+    if logo_data and _add_logo_resource(header_doc, logo_data):
+        header_html = _with_logo(header_html, logo_position)
     header_doc.setHtml(_wrap_document(f'<div style="text-align:center;">{header_html}</div>', font_family, font_size_pt))
     header_doc.setTextWidth(page_width)
     header_height = header_doc.size().height()
@@ -673,10 +726,17 @@ def export_report_excel(
     # طبقِ همان درخواستِ سربرگِ چاپ: نامِ شرکت + عنوان + تاریخ/فیلترها (یا
     # متنِ سفارشیِ کاربر) به‌عنوانِ چند سطرِ اول، پیش از جدولِ خودِ گزارش.
     header_text = options.header_text.strip() or _default_header_plain_text(title, company_name, report_date, filters)
-    for line in header_text.splitlines():
-        sheet.append([line])
-    sheet.cell(row=1, column=1).font = Font(bold=True, size=13)
+    header_lines = header_text.splitlines()
+    logo_data, logo_position = company_logo()
+    # R245: لوگو در گوشهٔ راست (ستونِ A در برگهٔ راست‌به‌چپ) یا چپ (آخرین ستون)؛ متنِ سربرگ در ستونِ کناری
+    text_column = 2 if logo_data and logo_position == "RIGHT" else 1
+    for line in header_lines:
+        sheet.append([None] * (text_column - 1) + [line])
+    sheet.cell(row=1, column=text_column).font = Font(bold=True, size=13)
     sheet.append([])
+    if logo_data:
+        _insert_excel_logo(sheet, logo_data, "A1" if logo_position == "RIGHT" else f"{_column_letter(max(len(headers), 2))}1",
+                           len(header_lines) + 1)
 
     header_row = sheet.max_row + 1
     sheet.append(headers)
@@ -707,6 +767,30 @@ def export_report_excel(
 
     workbook.save(path)
     QMessageBox.information(parent_widget, "خروجیِ Excel", "فایلِ Excel با موفقیت ساخته شد.")
+
+
+def _column_letter(index: int) -> str:
+    from openpyxl.utils import get_column_letter
+
+    return get_column_letter(index)
+
+
+def _insert_excel_logo(sheet, data: bytes, anchor: str, rows: int) -> None:
+    """لوگو با ارتفاعِ سطرهایِ سربرگ در اکسل؛ اگر کتابخانهٔ تصویر نبود، بی‌صدا رد می‌شود."""
+    import io
+
+    try:
+        from openpyxl.drawing.image import Image as XlImage
+    except ImportError:
+        return
+    try:
+        picture = XlImage(io.BytesIO(data))
+    except Exception:  # noqa: BLE001
+        return
+    target_height = max(rows, 3) * 20
+    ratio = target_height / picture.height if picture.height else 1
+    picture.height, picture.width = target_height, int(picture.width * ratio)
+    sheet.add_image(picture, anchor)
 
 
 def export_plain_excel(

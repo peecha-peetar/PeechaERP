@@ -123,7 +123,7 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         # طبقِ درخواستِ صریح («برایِ هر فرم بتوان چند گزارشِ نام‌گذاری‌شده
         # تعریف/ویرایش/اجرا کرد»): رجیستریِ گزارش‌هایِ حرفه‌ای (Jasper) --
         # هر فرمِ پشتیبانی‌شده (کاردکس، فاکتور) یک پنلِ مستقل این‌جا دارد.
-        self._add_outer_tab("گزارش‌هایِ حرفه‌ای", self._build_reports_tab())
+        self._add_outer_tab("چاپ و گزارش‌ها", self._build_reports_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
 
@@ -330,13 +330,11 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         )
 
     def _build_reports_tab(self):
-        screen = _ReportTemplatesTab()
-        self._sub_screens.append(screen)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setWidget(screen)
-        return scroll, screen.refresh
+        # R245: لوگو و سربرگِ گزارش‌ها + قالب‌هایِ گزارشِ حرفه‌ای
+        from peecha.ui.screens.report_branding import ReportBrandingScreen
+
+        self.report_branding = ReportBrandingScreen()
+        return self._sub_tabs([("لوگو و سربرگ", self.report_branding), ("قالب‌هایِ حرفه‌ای (Jasper)", _ReportTemplatesTab())])
 
     def refresh(self) -> None:
         # فقط زیرصفحه‌یِ *فعلاً قابلِ‌مشاهده* رفرش می‌شود، نه هر ~۴۰ زیرصفحه —
