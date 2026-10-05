@@ -55,6 +55,8 @@ import {
   LocationCountSession,
   LocationCountLine,
   WarehouseMapNode,
+  WmsKpis,
+  LocationLabel,
 } from "./types";
 
 export type Fetcher = typeof fetch;
@@ -501,13 +503,24 @@ export class ApiClient {
     return this.request<LocationCountLine[]>(`/locations/counts/${sessionId}`);
   }
 
-  async recordLocationCount(sessionId: number, locationId: number, itemId: number, quantity: string, idempotencyKey?: string): Promise<{ line_id: number }> {
-    return this.request(`/locations/counts/${sessionId}/record`, {
-      method: "POST", body: { location_id: locationId, item_id: itemId, quantity }, idempotencyKey,
-    });
+  async recordLocationCount(
+    sessionId: number, locationId: number, itemId: number, quantity: string, idempotencyKey?: string, batchNo?: string | null,
+  ): Promise<{ line_id: number }> {
+    const body: Record<string, unknown> = { location_id: locationId, item_id: itemId, quantity };
+    if (batchNo) body.batch_no = batchNo;
+    return this.request(`/locations/counts/${sessionId}/record`, { method: "POST", body, idempotencyKey });
   }
 
   async getWarehouseMap(warehouseId: number): Promise<WarehouseMapNode[]> {
     return this.request<WarehouseMapNode[]>(`/locations/warehouses/${warehouseId}/map`);
+  }
+
+  // --- R251 -------------------------------------------------------------------
+  async getWmsKpis(days = 30): Promise<WmsKpis> {
+    return this.request<WmsKpis>(`/locations/kpis?days=${days}`);
+  }
+
+  async getLocationLabel(locationId: number): Promise<LocationLabel> {
+    return this.request<LocationLabel>(`/locations/${locationId}/label`);
   }
 }

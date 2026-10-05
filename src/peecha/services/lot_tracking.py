@@ -24,7 +24,7 @@ from peecha.db.base import new_session
 from peecha.db.models.accounting import DetailAccount
 from peecha.db.models.commercial import CommercialDocument, CommercialDocumentLine
 from peecha.db.models.inventory import (
-    Batch, Item, LineTrackingEntry, LotMovement, SerialMovement, SerialNumber, StockDocument, StockDocumentLine,
+    Batch, Item, LineTrackingEntry, LotMovement, SerialMovement, SerialNumber, StockDocument, StockDocumentLine, StockLedger,
     Warehouse,
 )
 
@@ -371,12 +371,25 @@ def _pools(session, company_id: int, item_id: int, warehouse_id: int | None = No
     return [r for r in session.execute(q).all() if r[5] > 0]
 
 
+def _bin_pools(session, company_id: int, item_id: int, bin_id: int) -> dict[tuple, decimal.Decimal]:
+    """R251: موجودیِ هر استخر در یک محل (از ستونِ محلِ حرکت‌ها)."""
+    rows = session.execute(
+        select(LotMovement.batch_id, LotMovement.serial_id, LotMovement.supplier_detail_account_id, LotMovement.is_consignment,
+               func.sum(LotMovement.quantity_base))
+        .where(LotMovement.company_id == company_id, LotMovement.item_id == item_id, LotMovement.bin_location_id == bin_id)
+        .group_by(LotMovement.batch_id, LotMovement.serial_id, LotMovement.supplier_detail_account_id, LotMovement.is_consignment)).all()
+    return {(r[0], r[1], r[2], r[3]): r[4] for r in rows if r[4] > 0}
+
+
 def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quantity: decimal.Decimal,
-                  entries: list[TrackingEntry], preferred_supplier_id: int | None, prefer_consignment: bool):
-    """[(batch_id, serial_id, supplier_id, is_consignment, qty)] از استخرهایِ همین انبار."""
+                  entries: list[TrackingEntry], preferred_supplier_id: int | None, prefer_consignment: bool,
+                  bin_id: int | None = None):
+    """[(batch_id, serial_id, supplier_id, is_consignment, qty)] از استخرهایِ همین انبار.
+    R251: اگر محلِ خروج معلوم است، اول از استخرهایِ موجود در همان محل (تا سقفِ موجودیِ محل)."""
     pools = _pools(session, company_id, item.item_id, warehouse_id)
     if not pools:
         return []
+    in_bin = _bin_pools(session, company_id, item.item_id, bin_id) if bin_id is not None else {}
     batch_expiry = {
         b.batch_id: b.expiry_date for b in session.scalars(
             select(Batch).where(Batch.batch_id.in_({p[1] for p in pools if p[1] is not None}))
@@ -396,6 +409,19 @@ def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quant
                 continue
             q = min(available, wanted)
             remaining_by_pool[key] = available - q
+            result.append((key[0], key[1], key[2], key[3], q))
+            wanted -= q
+        return wanted
+
+    def take_in_bin(keys, wanted):
+        for key in keys:
+            if wanted <= 0:
+                break
+            q = min(in_bin.get(key, _ZERO), remaining_by_pool.get(key, _ZERO), wanted)
+            if q <= 0:
+                continue
+            remaining_by_pool[key] -= q
+            in_bin[key] -= q
             result.append((key[0], key[1], key[2], key[3], q))
             wanted -= q
         return wanted
@@ -427,6 +453,8 @@ def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quant
         requested = min(decimal.Decimal(e.quantity), wanted)
         left = take(ordered(keys), requested)
         wanted -= requested - left
+    if wanted > 0 and in_bin:
+        wanted = take_in_bin(ordered(list(in_bin)), wanted)
     if wanted > 0:
         take(ordered(list(remaining_by_pool)), wanted)
     return result
@@ -456,6 +484,14 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
             select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
             .order_by(StockDocumentLine.line_no)
         ).all()
+        # R251: محلِ هر جهت از دفترِ انبار (موتور پیش از این ثبت کرده است)
+        ledger_bin = {
+            (lid, wid, d): b for lid, wid, d, b in session.execute(
+                select(StockLedger.stock_document_line_id, StockLedger.warehouse_id, StockLedger.movement_direction,
+                       func.min(StockLedger.bin_location_id))
+                .where(StockLedger.stock_document_line_id.in_([ln.line_id for ln in lines] or [-1]))
+                .group_by(StockLedger.stock_document_line_id, StockLedger.warehouse_id, StockLedger.movement_direction)).all()
+        }
         for line in lines:
             item = session.get(Item, line.item_id)
             if item is None:
@@ -474,15 +510,17 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
                     continue
                 if direction == "OUT":
                     prefer_supplier = supplier_id if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN") else None
+                    out_bin = ledger_bin.get((line.line_id, warehouse_id, "OUT"))
                     allocations = _allocate_out(
                         session, company_id, item, warehouse_id, line.quantity_base, entries,
                         prefer_supplier, prefer_consignment=doc.document_type_code == "CONSIGN_RETURN",
+                        bin_id=out_bin if line.bin_location_id is not None else None,
                     )
                     for batch_id, serial_id, sup, cons, q in allocations:
                         session.add(LotMovement(
                             company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, batch_id=batch_id,
                             serial_id=serial_id, supplier_detail_account_id=sup, is_consignment=cons,
-                            stock_document_line_id=line.line_id, quantity_base=-q,
+                            stock_document_line_id=line.line_id, quantity_base=-q, bin_location_id=out_bin,
                         ))
                         if serial_id is not None and doc.document_type_code != "TRANSFER":
                             status = "RETURNED" if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN") else "SOLD"
@@ -490,12 +528,13 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
                     transfer_pools = allocations
                     continue
                 # ورودی
+                in_bin = ledger_bin.get((line.line_id, warehouse_id, "IN"))
                 if doc.document_type_code == "TRANSFER":
                     for batch_id, serial_id, sup, cons, q in transfer_pools:
                         session.add(LotMovement(
                             company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, batch_id=batch_id,
                             serial_id=serial_id, supplier_detail_account_id=sup, is_consignment=cons,
-                            stock_document_line_id=line.line_id, quantity_base=q,
+                            stock_document_line_id=line.line_id, quantity_base=q, bin_location_id=in_bin,
                         ))
                         if serial_id is not None:
                             _set_serial_state(session, serial_id, line.line_id, "IN_STOCK", directions[0][1], warehouse_id)
@@ -529,14 +568,14 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
                             company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id,
                             batch_id=batch.batch_id if batch else None, serial_id=serial_id,
                             supplier_detail_account_id=supplier_id, is_consignment=is_consignment_in,
-                            stock_document_line_id=line.line_id, quantity_base=decimal.Decimal(e.quantity),
+                            stock_document_line_id=line.line_id, quantity_base=decimal.Decimal(e.quantity), bin_location_id=in_bin,
                         ))
                 elif is_consignment_in:
                     # کالایِ امانیِ بدونِ بچ/سریال: فقط با تامین‌کننده ردیابی می‌شود
                     session.add(LotMovement(
                         company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id,
                         supplier_detail_account_id=supplier_id, is_consignment=True,
-                        stock_document_line_id=line.line_id, quantity_base=line.quantity_base,
+                        stock_document_line_id=line.line_id, quantity_base=line.quantity_base, bin_location_id=in_bin,
                     ))
         session.commit()
 
@@ -554,7 +593,7 @@ def reverse_document_movements(stock_document_id: int, company_id: int) -> None:
                 company_id=m.company_id, item_id=m.item_id, warehouse_id=m.warehouse_id, batch_id=m.batch_id,
                 serial_id=m.serial_id, supplier_detail_account_id=m.supplier_detail_account_id,
                 is_consignment=m.is_consignment, stock_document_line_id=m.stock_document_line_id,
-                quantity_base=-m.quantity_base,
+                quantity_base=-m.quantity_base, bin_location_id=m.bin_location_id,
             ))
             if m.serial_id is not None:
                 serial = session.get(SerialNumber, m.serial_id)

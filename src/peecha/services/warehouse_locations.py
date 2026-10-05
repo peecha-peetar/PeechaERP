@@ -424,7 +424,6 @@ def is_operable(node) -> bool:
 def contents(company_id: int, location_id: int) -> list[SimpleNamespace]:
     """کالاهایِ این محل و زیرمحل‌هایش از موجودیِ سیستم + سریال‌هایِ همین محل و بچ/انقضایِ کالا در همان انبار."""
     from peecha.services import inventory_catalog as catalog_service
-    from peecha.services import lot_tracking
 
     with new_session() as session:
         loc = _location(session, company_id, location_id)
@@ -434,11 +433,7 @@ def contents(company_id: int, location_id: int) -> list[SimpleNamespace]:
     by_id = {n.location_id: n for n in nodes}
     items = {i.item_id: i for i in catalog_service.list_items(company_id)}
     rows = [r for r in _stock_by_bin(company_id, warehouse_id) if r[0] in bins and r[2]]
-    lots = defaultdict(list)
-    if rows:
-        for lot in lot_tracking.list_lot_balances(company_id, warehouse_id=warehouse_id):
-            if lot.batch_no:
-                lots[lot.item_id].append(lot)
+    lots = bin_batches(company_id, warehouse_id) if rows else {}
     with new_session() as session:
         serials = defaultdict(list)
         for s in session.scalars(select(SerialNumber).where(SerialNumber.current_bin_location_id.in_(bins or {-1}),
@@ -451,13 +446,13 @@ def contents(company_id: int, location_id: int) -> list[SimpleNamespace]:
     for bin_id, item_id, qty, reserved, value in sorted(rows, key=lambda r: (by_id[r[0]].full_code if r[0] in by_id else "", r[1])):
         reserved = (reserved or _ZERO) + task_reserved.get((bin_id, item_id), _ZERO)
         item = items.get(item_id)
-        item_lots = sorted(lots.get(item_id, []), key=lambda lt: lt.expiry_date or datetime.date.max)
+        item_lots = lots.get((bin_id, item_id), [])
         out.append(SimpleNamespace(
             location_id=bin_id, location_code=by_id[bin_id].full_code if bin_id in by_id else "", item_id=item_id,
             item_code=item.code if item else "", item_name=item.name if item else "", sku=(item.sku or "") if item else "",
             unit=item.base_uom_code if item else "", quantity=qty, reserved=reserved or _ZERO, value=value or _ZERO,
-            batches="، ".join(lt.batch_no for lt in item_lots[:5]),
-            expiry=item_lots[0].expiry_date if item_lots and item_lots[0].expiry_date else None,
+            batches="، ".join(lt.batch_no for lt in item_lots[:5]), batch_rows=item_lots,
+            expiry=next((lt.expiry_date for lt in item_lots if lt.expiry_date), None),
             serials="، ".join(serials.get((bin_id, item_id), [])[:10])))
     return out
 
@@ -704,17 +699,12 @@ def heatmap(company_id: int, warehouse_id: int, mode: str, nodes: list | None = 
                 best[bin_id] = min(best.get(bin_id, "C"), classes[item_id])
         return best
     if mode == "EXPIRY":
-        from peecha.services import lot_tracking
-
-        nearest: dict[int, datetime.date] = {}
-        for lot in lot_tracking.list_lot_balances(company_id, warehouse_id=warehouse_id):
-            if lot.expiry_date:
-                nearest[lot.item_id] = min(nearest.get(lot.item_id, lot.expiry_date), lot.expiry_date)
         days: dict[int, int] = {}
-        for bin_id, item_id, qty, _r, _v in _stock_by_bin(company_id, warehouse_id):
-            if qty and item_id in nearest:
-                left = (nearest[item_id] - datetime.date.today()).days
-                days[bin_id] = min(days.get(bin_id, left), left)
+        for (bin_id, _item), lots in bin_batches(company_id, warehouse_id).items():
+            for lt in lots:
+                if lt.expiry_date:
+                    left = (lt.expiry_date - datetime.date.today()).days
+                    days[bin_id] = min(days.get(bin_id, left), left)
         return days
     return {}
 
@@ -1050,3 +1040,29 @@ def scene_3d(company_id: int, warehouse_id: int, nodes: list | None = None) -> l
         else:
             add(n, base, float(_DEFAULT_HEIGHT_M[n.level]) * UNITS_PER_M)
     return list(out.values())
+
+
+
+# =====================================================================
+# R251: بچ به تفکیکِ محل (از ستونِ محلِ inv.lot_movements)
+# =====================================================================
+def bin_batches(company_id: int, warehouse_id: int, item_id: int | None = None) -> dict[tuple[int, int], list[SimpleNamespace]]:
+    """(محل، کالا) → بچ‌هایِ موجود در همان محل به ترتیبِ انقضا (FEFO)."""
+    from peecha.db.models.inventory import Batch, LotMovement
+
+    with new_session() as session:
+        q = (select(LotMovement.bin_location_id, LotMovement.item_id, Batch.batch_id, Batch.batch_no, Batch.expiry_date,
+                    func.sum(LotMovement.quantity_base))
+             .join(Batch, Batch.batch_id == LotMovement.batch_id)
+             .where(LotMovement.company_id == company_id, LotMovement.warehouse_id == warehouse_id,
+                    LotMovement.bin_location_id.is_not(None))
+             .group_by(LotMovement.bin_location_id, LotMovement.item_id, Batch.batch_id, Batch.batch_no, Batch.expiry_date))
+        if item_id is not None:
+            q = q.where(LotMovement.item_id == item_id)
+        out: dict[tuple[int, int], list[SimpleNamespace]] = defaultdict(list)
+        for bin_id, iid, batch_id, batch_no, expiry, qty in session.execute(q).all():
+            if qty and qty > 0:
+                out[(bin_id, iid)].append(SimpleNamespace(batch_id=batch_id, batch_no=batch_no, expiry_date=expiry, quantity=qty))
+    for lots in out.values():
+        lots.sort(key=lambda lt: (lt.expiry_date or datetime.date.max, lt.batch_no))
+    return dict(out)

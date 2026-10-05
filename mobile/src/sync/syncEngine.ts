@@ -133,7 +133,7 @@ export class SyncEngine {
         return;
       case "WMS_COUNT":
         await this.api.recordLocationCount(action.payload.sessionId, action.payload.locationId, action.payload.itemId,
-          action.payload.quantity, action.idempotencyKey);
+          action.payload.quantity, action.idempotencyKey, action.payload.batchNo);
         return;
     }
   }

@@ -656,7 +656,8 @@ class _LocationCountTab(QWidget):
         self.table.setRowCount(len(self._lines))
         fmt = lambda v: numerals.format_money(v, 3, None) if v is not None else ""  # noqa: E731
         for row, ln in enumerate(self._lines):
-            cells = [ln.location_code, f"{ln.item_code} — {ln.item_name}", "—" if ln.blind and ln.counted is None else fmt(ln.expected),
+            cells = [ln.location_code, f"{ln.item_code} — {ln.item_name}" + (f" (بچ {ln.batch_no})" if ln.batch_no else ""),
+                     "—" if ln.blind and ln.counted is None else fmt(ln.expected),
                      fmt(ln.counted), fmt(ln.variance), _fmt_dt(ln.counted_at)]
             for col, text in enumerate(cells):
                 self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
@@ -689,7 +690,7 @@ class _LocationCountTab(QWidget):
             value = decimal.Decimal(str(qty))
         try:
             lc.record_location_count(self._company_id(), self.session_combo.currentData(), ln.location_id, ln.item_id, value,
-                                     app_session.current_user.user_id)
+                                     app_session.current_user.user_id, ln.batch_no)
         except ValueError as exc:
             QMessageBox.warning(self, "شمارشِ محل", str(exc))
             return False
@@ -720,6 +721,92 @@ class _LocationCountTab(QWidget):
             self.refresh()
 
 
+class _KpiTab(QWidget):
+    """R251: داشبوردِ عملیاتِ انبار -- شاخص‌ها، وظایف به تفکیکِ نوع و بهره‌وریِ اپراتور."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from PySide6.QtWidgets import QGridLayout
+
+        layout = QVBoxLayout(self)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("انبار:"))
+        self.warehouse_combo = QComboBox()
+        self.warehouse_combo.currentIndexChanged.connect(lambda _i: self._load())
+        top.addWidget(self.warehouse_combo)
+        top.addWidget(QLabel("روزهایِ اخیر:"))
+        self.days_spin = QSpinBox()
+        self.days_spin.setRange(1, 365)
+        self.days_spin.setValue(30)
+        self.days_spin.valueChanged.connect(lambda _v: self._load())
+        top.addWidget(self.days_spin)
+        top.addStretch(1)
+        layout.addLayout(top)
+        self.cards = QGridLayout()
+        layout.addLayout(self.cards)
+        self.card_labels: dict[str, QLabel] = {}
+        self.type_table = _table(["نوع", "انجام‌شده", "باز", "میانگینِ زمان (دقیقه)"])
+        self.operator_table = _table(["اپراتور", "وظایف", "ساعت", "وظیفه در ساعت", "برداشت", "دقتِ برداشت"])
+        layout.addWidget(self.type_table, stretch=1)
+        layout.addWidget(self.operator_table, stretch=1)
+        self.result = None
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        self.warehouse_combo.blockSignals(True)
+        self.warehouse_combo.clear()
+        self.warehouse_combo.addItem("— همه —", None)
+        for w in locations_service.list_warehouses(company_id):
+            self.warehouse_combo.addItem(w.name, w.warehouse_id)
+        self.warehouse_combo.blockSignals(False)
+        self._load()
+
+    def _load(self) -> None:
+        import datetime
+
+        from peecha.services import wms_kpis
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        today = datetime.date.today()
+        self.result = wms_kpis.dashboard(company_id, today - datetime.timedelta(days=self.days_spin.value()), today,
+                                         self.warehouse_combo.currentData())
+        for i, (code, title, value, unit) in enumerate(self.result.kpis):
+            if code not in self.card_labels:
+                card = QLabel()
+                card.setObjectName("card")
+                card.setWordWrap(True)
+                card.setMinimumHeight(64)
+                self.cards.addWidget(card, i // 4, i % 4)
+                self.card_labels[code] = card
+            shown = "—" if value is None else numerals.format_money(value, 1 if unit == "٪" or unit == "متر" else 0, None)
+            self.card_labels[code].setText(numerals.to_persian_digits(f"{title}\n{shown} {unit}"))
+        rows = list(self.result.by_type.values())
+        self.type_table.setRowCount(len(rows))
+        for r, t in enumerate(rows):
+            for c, text in enumerate([t.label, str(t.done), str(t.open), "—" if t.avg_minutes is None else str(t.avg_minutes)]):
+                self.type_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
+        from peecha.db.base import new_session
+        from peecha.db.models.security import User
+        from sqlalchemy import select
+
+        with new_session() as session:
+            names = dict(session.execute(select(User.user_id, User.full_name)).all())
+        ops_rows = sorted(self.result.operators.items(), key=lambda kv: -kv[1].tasks)
+        self.operator_table.setRowCount(len(ops_rows))
+        for r, (uid, o) in enumerate(ops_rows):
+            rate = f"{o.tasks / o.hours:.1f}" if o.hours >= 0.25 else "—"
+            acc = f"{o.exact * 100 / o.picks:.0f}٪" if o.picks else "—"
+            for c, text in enumerate([names.get(uid, "نامشخص"), str(o.tasks), f"{o.hours:.1f}", rate, str(o.picks), acc]):
+                self.operator_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(text)))
+
+
 class WarehouseOperationsScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -734,11 +821,13 @@ class WarehouseOperationsScreen(QWidget):
         self.replenish_tab = _ReplenishTab()
         self.waves_tab = _WavesTab()
         self.count_tab = _LocationCountTab()
+        self.kpi_tab = _KpiTab()
         self.tabs.addTab(self.tasks_tab, "وظایفِ جانمایی، برداشت و تأمین")
         self.tabs.addTab(self.plans_tab, "برنامهٔ شمارشِ دوره‌ای")
         self.tabs.addTab(self.replenish_tab, "قاعده‌هایِ تأمینِ مجدد")
         self.tabs.addTab(self.waves_tab, "موج‌هایِ برداشت")
         self.tabs.addTab(self.count_tab, "شمارشِ محل")
+        self.tabs.addTab(self.kpi_tab, "داشبوردِ عملیات")
         self.tabs.currentChanged.connect(lambda _i: self.tabs.currentWidget().refresh())
         layout.addWidget(self.tabs, stretch=1)
 
@@ -748,3 +837,4 @@ class WarehouseOperationsScreen(QWidget):
         self.replenish_tab.refresh()
         self.waves_tab.refresh()
         self.count_tab.refresh()
+        self.kpi_tab.refresh()

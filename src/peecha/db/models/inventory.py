@@ -1138,6 +1138,7 @@ class LotMovement(Base):
     stock_document_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
     commercial_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
     quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))  # R251
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 

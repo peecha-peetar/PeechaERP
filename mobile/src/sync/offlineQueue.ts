@@ -67,7 +67,7 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "WMS_PUTAWAY"; payload: { taskId: number; toLocationId: number } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_PICK"; payload: { taskId: number; quantity: string } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_REPLENISH"; payload: { taskId: number; quantity: string | null } }
-  | { idempotencyKey: string; createdAt: string; type: "WMS_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; quantity: string } };
+  | { idempotencyKey: string; createdAt: string; type: "WMS_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; quantity: string; batchNo?: string | null } };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">

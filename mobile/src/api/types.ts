@@ -843,6 +843,7 @@ export interface LocationCountLine {
   item_code: string;
   item_name: string;
   unit: string;
+  batch_no?: string | null;
   expected: string | null;
   counted: string | null;
   variance: string | null;
@@ -858,4 +859,26 @@ export interface WarehouseMapNode {
   occupancy_percent: string | null;
   quantity: string;
   map: { x: number; y: number; width: number; height: number; rotation: number; z: number | null } | null;
+}
+
+// --- R251: داشبوردِ عملیات و برچسبِ محل ----------------------------------------
+export interface WmsKpi {
+  code: string;
+  title: string;
+  value: string | null;
+  unit: string;
+}
+
+export interface WmsKpis {
+  kpis: WmsKpi[];
+  by_type: { type: string; label: string; done: number; open: number; avg_minutes: number | null }[];
+}
+
+export interface LocationLabel {
+  location_id: number;
+  code: string;
+  title: string | null;
+  qr_payload: string;
+  qr_svg: string;
+  barcode_svg: string;
 }

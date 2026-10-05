@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { ApiClient, ApiError } from "../api/client";
 import {
   LocationCountLine, LocationCountSession, LocationDetail, LocationSearchResult, PutawaySuggestion, WarehouseMapNode, WarehouseRow, WmsTask,
-  WmsTaskType, WmsWave,
+  WmsKpis, WmsTaskType, WmsWave,
 } from "../api/types";
 import { BarcodeScannerModal, Button, Card, EmptyState, Input, SearchBar, StatusBadge, useToast } from "../components";
 import { formatAmount, toAsciiDigits } from "../format";
@@ -12,6 +12,7 @@ import { SyncEngine } from "../sync/syncEngine";
 import { submitWmsAction } from "../sync/wmsSubmit";
 import { useTheme } from "../theme/ThemeProvider";
 import { layoutWarehouseMap, occupancyTone } from "../wms/mapLayout";
+import { printLocationLabels } from "../print/locationLabel";
 
 interface Props {
   apiClient: ApiClient;
@@ -20,7 +21,7 @@ interface Props {
   onBack: () => void;
 }
 
-type Tab = "SEARCH" | "TASKS" | "TRANSFER" | "COUNT" | "MAP";
+type Tab = "SEARCH" | "TASKS" | "TRANSFER" | "COUNT" | "MAP" | "KPI";
 type ScanTarget = "SEARCH" | "PUTAWAY_TARGET" | "TRANSFER_ITEM" | "TRANSFER_FROM" | "TRANSFER_TO" | "COUNT_LOCATION";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -80,11 +81,12 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const [countId, setCountId] = useState<number | null>(null);
   const [countLines, setCountLines] = useState<LocationCountLine[]>([]);
   const [countLocation, setCountLocation] = useState<{ id: number; code: string } | null>(null);
-  const [countQty, setCountQty] = useState<Record<number, string>>({});
+  const [countQty, setCountQty] = useState<Record<string, string>>({});
   const [mapWarehouse, setMapWarehouse] = useState<number | null>(null);
   const [mapNodes, setMapNodes] = useState<WarehouseMapNode[]>([]);
   const [mapZoom, setMapZoom] = useState(1);
   const [mapSelected, setMapSelected] = useState<LocationDetail | null>(null);
+  const [kpis, setKpis] = useState<WmsKpis | null>(null);
 
   const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -122,6 +124,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       apiClient.listWarehouses().then(setWarehouses).catch(() => setWarehouses([]));
     }
     if (tab === "COUNT") apiClient.listLocationCounts().then(setCounts).catch(() => setCounts([]));
+    if (tab === "KPI") apiClient.getWmsKpis().then(setKpis).catch((e) => toast.show(errorText(e, "دریافتِ شاخص‌ها ناموفق بود."), "danger"));
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openCount = async (sessionId: number) => {
@@ -135,11 +138,16 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     }
   };
 
+  const countKey = (line: LocationCountLine) => `${line.location_id}-${line.item_id}-${line.batch_no ?? ""}`;
+
   const submitCount = async (line: LocationCountLine) => {
-    const qty = toAsciiDigits(countQty[line.item_id] ?? "");
+    const qty = toAsciiDigits(countQty[countKey(line)] ?? "");
     if (countId === null || !qty) return;
     const ok = await submit(
-      { type: "WMS_COUNT", payload: { sessionId: countId, locationId: line.location_id, itemId: line.item_id, quantity: qty } },
+      {
+        type: "WMS_COUNT",
+        payload: { sessionId: countId, locationId: line.location_id, itemId: line.item_id, quantity: qty, batchNo: line.batch_no ?? null },
+      },
       "شمارش ثبت شد.",
     );
     if (ok) await openCount(countId);
@@ -268,6 +276,36 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     }
   };
 
+  const printLabel = async (locationId: number) => {
+    try {
+      await printLocationLabels([await apiClient.getLocationLabel(locationId)]);
+    } catch (e) {
+      toast.show(errorText(e, "چاپِ برچسب ناموفق بود."), "danger");
+    }
+  };
+
+  const renderKpis = () => (
+    <View style={{ gap: spacing.sm }}>
+      {kpis === null ? <EmptyState title="در حالِ دریافت..." /> : null}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+        {kpis?.kpis.map((k) => (
+          <Card key={k.code} style={{ width: "47%" }}>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>{k.title}</Text>
+            {text(typography.h2, k.value === null ? "—" : `${Number(k.value).toLocaleString("en-US", { maximumFractionDigits: 1 })} ${k.unit}`)}
+          </Card>
+        ))}
+      </View>
+      {kpis?.by_type.map((t) => (
+        <Card key={t.type}>
+          {text(typography.bodyBold, t.label)}
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            {`انجام‌شده ${t.done} · باز ${t.open}${t.avg_minutes !== null ? ` · میانگین ${t.avg_minutes} دقیقه` : ""}`}
+          </Text>
+        </Card>
+      ))}
+    </View>
+  );
+
   const startTransferFrom = (loc: LocationDetail, itemId: number, label: string) => {
     setTransferItem({ id: itemId, label });
     setTransferFrom({ id: loc.location_id, code: loc.code });
@@ -283,6 +321,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         {text(typography.bodyBold, loc.code)}
         <StatusBadge statusCode={loc.status} label={STATUS_LABELS[loc.status] ?? loc.status} />
       </View>
+      <Button label="چاپِ برچسب" size="md" variant="ghost" fullWidth={false} onPress={() => printLabel(loc.location_id)} />
       <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
         {loc.name ?? ""}
         {loc.occupancy_percent !== null ? ` · اشغال ${formatAmount(loc.occupancy_percent)}٪` : ""}
@@ -421,8 +460,8 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
           {countLines
             .filter((ln) => countLocation === null || ln.location_id === countLocation.id)
             .map((ln) => (
-              <Card key={`${ln.location_id}-${ln.item_id}`} onPress={() => setCountLocation({ id: ln.location_id, code: ln.location_code })}>
-                {text(typography.body, `${ln.item_code} — ${ln.item_name}`)}
+              <Card key={countKey(ln)} onPress={() => setCountLocation({ id: ln.location_id, code: ln.location_code })}>
+                {text(typography.body, `${ln.item_code} — ${ln.item_name}${ln.batch_no ? ` · بچ ${ln.batch_no}` : ""}`)}
                 <Text style={[typography.caption, { color: colors.textSecondary }]}>
                   {ln.location_code}
                   {ln.expected !== null ? ` · دفتری ${formatAmount(ln.expected)}` : ""}
@@ -432,8 +471,8 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
                   <View style={{ flexDirection: "row", gap: spacing.sm, alignItems: "flex-end", marginTop: spacing.sm }}>
                     <Input
                       label={`مقدار (${ln.unit})`}
-                      value={countQty[ln.item_id] ?? ""}
-                      onChangeText={(v) => setCountQty({ ...countQty, [ln.item_id]: v })}
+                      value={countQty[countKey(ln)] ?? ""}
+                      onChangeText={(v) => setCountQty({ ...countQty, [countKey(ln)]: v })}
                       numeric
                       keyboardType="decimal-pad"
                       style={{ flex: 1, marginBottom: 0 }}
@@ -562,6 +601,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
             ["TRANSFER", "انتقال"],
             ["COUNT", "شمارش"],
             ["MAP", "نقشه"],
+            ["KPI", "خلاصه"],
           ] as [Tab, string][]).map(([key, label]) => (
             <Button key={key} label={label} size="md" fullWidth={false} variant={tab === key ? "primary" : "secondary"} onPress={() => setTab(key)} />
           ))}
@@ -574,7 +614,9 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
               ? renderTransfer()
               : tab === "COUNT"
                 ? renderCount()
-                : renderMap()}
+                : tab === "MAP"
+                  ? renderMap()
+                  : renderKpis()}
       </ScrollView>
       <BarcodeScannerModal visible={scanTarget !== null} onClose={() => setScanTarget(null)} onScanned={onScanned} />
     </View>

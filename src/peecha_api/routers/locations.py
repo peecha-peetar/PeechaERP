@@ -259,7 +259,8 @@ def count_detail(session_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
         raise _bad_request(exc) from exc
     hide = lambda ln: ln.blind and ln.counted is None  # noqa: E731
     return [{"location_id": ln.location_id, "location_code": ln.location_code, "item_id": ln.item_id, "item_code": ln.item_code,
-             "item_name": ln.item_name, "unit": ln.unit, "expected": None if hide(ln) else str(ln.expected),
+             "item_name": ln.item_name, "unit": ln.unit, "batch_no": ln.batch_no,
+             "expected": None if hide(ln) else str(ln.expected),
              "counted": str(ln.counted) if ln.counted is not None else None,
              "variance": str(ln.variance) if ln.variance is not None else None} for ln in lines]
 
@@ -268,6 +269,7 @@ class CountRecord(BaseModel):
     location_id: int
     item_id: int
     quantity: decimal.Decimal
+    batch_no: str | None = None
 
 
 @router.post("/counts/{session_id}/record")
@@ -275,8 +277,47 @@ def record_count(session_id: int, body: CountRecord, ctx: AuthContext = _EDIT, k
     from peecha.services import location_counts as lc
 
     return _write(key, f"POST /locations/counts/{session_id}/record", ctx,
-                  lambda: lc.record_location_count(ctx.company_id, session_id, body.location_id, body.item_id, body.quantity, ctx.user_id),
+                  lambda: lc.record_location_count(ctx.company_id, session_id, body.location_id, body.item_id, body.quantity, ctx.user_id,
+                                                          body.batch_no),
                   lambda line_id: {"line_id": line_id})
+
+
+@router.get("/kpis")
+def kpis(days: int = 30, warehouse_id: int | None = None, ctx: AuthContext = _VIEW) -> dict:
+    """R251: داشبوردِ عملیاتِ انبار."""
+    import datetime
+
+    from peecha.services import wms_kpis
+
+    today = datetime.date.today()
+    r = wms_kpis.dashboard(ctx.company_id, today - datetime.timedelta(days=max(1, min(days, 365))), today, warehouse_id)
+    return {"kpis": [{"code": c, "title": t, "value": None if v is None else str(v), "unit": u} for c, t, v, u in r.kpis],
+            "by_type": [{"type": k, "label": v.label, "done": v.done, "open": v.open, "avg_minutes": v.avg_minutes}
+                        for k, v in r.by_type.items()]}
+
+
+def label_svgs(location_id: int, code: str) -> tuple[str, str]:
+    """QR و بارکدِ Code128 به‌صورتِ SVG (برایِ چاپ از موبایل)."""
+    import segno
+
+    qr = segno.make(wl.qr_payload(location_id, code), error="m", micro=False).svg_inline(scale=4, border=1)
+    bits = wl.barcode_bits(code)
+    bars = "".join(f'<rect x="{i}" y="0" width="1" height="40"/>' for i, b in enumerate(bits) if b == "1")
+    barcode = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {len(bits)} 40" preserveAspectRatio="none" '
+               f'width="100%" height="40">{bars}</svg>')
+    return qr, barcode
+
+
+@router.get("/{location_id}/label")
+def location_label(location_id: int, ctx: AuthContext = _VIEW) -> dict:
+    """R251: برچسبِ محل (QR + بارکد) برایِ چاپ از اپِ موبایل."""
+    try:
+        detail = _detail(ctx.company_id, location_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    qr, barcode = label_svgs(location_id, detail["code"])
+    return {"location_id": location_id, "code": detail["code"], "title": detail["name"], "qr_payload": detail["qr"],
+            "qr_svg": qr, "barcode_svg": barcode}
 
 
 @router.get("/{location_id}")
