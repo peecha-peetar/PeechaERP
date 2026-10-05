@@ -310,6 +310,8 @@ def delete_location(company_id: int, location_id: int, user_id: int | None = Non
             return "DEACTIVATED"
         for rule in session.scalars(select(LocationReplenishmentRule).where(LocationReplenishmentRule.bin_location_id.in_(ids))):
             session.delete(rule)
+        for w in session.scalars(select(Warehouse).where(Warehouse.default_bin_location_id.in_(ids))):
+            w.default_bin_location_id = None  # R253: پیش‌فرضِ حذف‌شده به رفتارِ قبلی برمی‌گردد
         depth = {n.location_id: len(ancestors({m.location_id: m for m in nodes}, n.location_id)) for n in nodes if n.location_id in subtree}
         for r in sorted(rows, key=lambda r: -depth.get(r.bin_location_id, 0)):  # فرزندان اول
             audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="BinLocation",

@@ -297,11 +297,46 @@ def list_bin_locations(warehouse_id: int, active_only: bool = False) -> list[Bin
         ]
 
 
+def set_default_bin_location(company_id: int, warehouse_id: int, bin_location_id: int | None, user_id: int | None = None) -> None:
+    """R253: مکانِ پیش‌فرضِ انبار (ردیفِ بی‌محلِ اسنادِ انبار در آن ثبت می‌شود)؛ None = رفتارِ قبلی (GENERAL)."""
+    from peecha.services import audit as audit_service
+
+    with new_session() as session:
+        wh = session.get(Warehouse, warehouse_id)
+        if wh is None or wh.company_id != company_id:
+            raise ValueError("انبار نامعتبر است.")
+        if bin_location_id is not None:
+            b = session.get(BinLocation, bin_location_id)
+            if b is None or b.warehouse_id != warehouse_id:
+                raise ValueError("مکانِ پیش‌فرض باید از همین انبار باشد.")
+            if not b.is_active:
+                raise ValueError("مکانِ غیرفعال نمی‌تواند پیش‌فرض باشد.")
+        if wh.default_bin_location_id != bin_location_id:
+            audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="Warehouse", entity_id=warehouse_id,
+                                       action="UPDATE", changes={"default_bin_location_id": [wh.default_bin_location_id, bin_location_id]})
+        wh.default_bin_location_id = bin_location_id
+        session.commit()
+
+
+def get_explicit_default_bin_id(warehouse_id: int) -> int | None:
+    """R253: همان مقدارِ انتخابیِ کاربر (بدونِ جایگزینیِ GENERAL) -- برایِ فرمِ انبار."""
+    with new_session() as session:
+        wh = session.get(Warehouse, warehouse_id)
+        return wh.default_bin_location_id if wh is not None else None
+
+
 def get_default_bin_location(warehouse_id: int) -> BinLocationRow | None:
     with new_session() as session:
-        row = session.scalar(
-            select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == DEFAULT_BIN_CODE)
-        )
+        row = None
+        wh = session.get(Warehouse, warehouse_id)
+        if wh is not None and wh.default_bin_location_id is not None:  # R253: مکانِ پیش‌فرضِ انتخابیِ کاربر
+            row = session.get(BinLocation, wh.default_bin_location_id)
+            if row is not None and not row.is_active:
+                row = None
+        if row is None:
+            row = session.scalar(
+                select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == DEFAULT_BIN_CODE)
+            )
         if row is None:
             row = session.scalar(
                 select(BinLocation).where(BinLocation.warehouse_id == warehouse_id).order_by(BinLocation.bin_location_id)

@@ -637,9 +637,16 @@ def post_stock_document(
         def resolve_bin(warehouse_id: int, bin_location_id: int | None) -> int:
             if bin_location_id is not None:
                 return bin_location_id
-            default_bin = session.scalar(
-                select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == "GENERAL")
-            )
+            default_bin = None
+            wh_row = session.get(Warehouse, warehouse_id)
+            if wh_row is not None and wh_row.default_bin_location_id is not None:  # R253: مکانِ پیش‌فرضِ انتخابی
+                default_bin = session.get(BinLocation, wh_row.default_bin_location_id)
+                if default_bin is not None and not default_bin.is_active:
+                    default_bin = None
+            if default_bin is None:
+                default_bin = session.scalar(
+                    select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == "GENERAL")
+                )
             if default_bin is None:
                 default_bin = session.scalar(
                     select(BinLocation).where(BinLocation.warehouse_id == warehouse_id).order_by(BinLocation.bin_location_id)

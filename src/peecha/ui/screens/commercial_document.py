@@ -144,7 +144,9 @@ _CONVERTS_TO_SALES_INVOICE = ("SALES_ORDER", "SALES_PROFORMA", "CONSIGNMENT_OUT"
 # یک ستونِ «عملیات» (ویرایش/حذفِ همان ردیف) در انتها، به‌جایِ خوشه‌یِ
 # جداگانه‌یِ دکمه‌هایِ زیرِ جدول که قبلاً روی «ردیفِ انتخاب‌شده»یِ کلی
 # عمل می‌کرد -- حالا هر دکمه دقیقاً برایِ همان ردیفی است که رویش است.
-_LINE_COLUMNS = ["#", "کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح", "عملیات"]
+_LINE_COLUMNS = ["#", "کالا", "مقدار", "بهایِ واحد", "تخفیف", "درصدِ مالیات", "مالیات", "جمعِ ردیف", "توضیح", "مکان", "عملیات"]
+_BIN_COL = _LINE_COLUMNS.index("مکان")
+_ACTIONS_COL = len(_LINE_COLUMNS) - 1
 _HISTORY_COLUMNS = ["نوع", "شماره", "تاریخ", "وضعیت", "جمعِ کل"]
 
 
@@ -2824,6 +2826,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             5: 70,   # درصدِ مالیات
             6: 90,   # مالیات
             7: 110,  # جمعِ ردیف
+            9: 150,  # مکان (R253)
         }
         settings = QSettings("Peecha", "PeechaERP")
         for column_index, width in _line_column_widths.items():
@@ -2837,6 +2840,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 saved_width = max(saved_width, 150)
             self.lines_table.setColumnWidth(column_index, saved_width if saved_width else width)
         self.lines_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
+        # R253: ستونِ «مکان» فقط برایِ اسنادِ خرید/امانیِ ورودی
+        self.lines_table.setColumnHidden(_BIN_COL, not self._shows_bin_column())
         self.lines_table.horizontalHeader().sectionResized.connect(self._on_lines_table_column_resized)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
@@ -3441,7 +3446,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # نه عملیات که Fixedاند، نه توضیح که Stretch است) ذخیره می‌شوند --
         # کلید مشترک بینِ همه‌یِ فرم‌هایِ خرید/فروش است تا طبقِ همان
         # درخواستِ یکسان‌سازیِ ظاهر، یک تنظیم برایِ همه اعمال شود.
-        if logical_index in (0, len(_LINE_COLUMNS) - 1, 8):
+        if logical_index in (0, _ACTIONS_COL, 8):
             return
         QSettings("Peecha", "PeechaERP").setValue(f"linesTable/column_{logical_index}/width", new_size)
 
@@ -3463,6 +3468,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         dp = self._decimal_places
         items_by_id = {it.item_id: it for it in self._items}
         editable = self._lines_are_editable()
+        self._bin_choices_cache = {}
         self.lines_table.setRowCount(len(self._lines) + (1 if editable else 0))
         for row_index, ln in enumerate(self._lines):
             item = items_by_id.get(ln.item_id)
@@ -3494,6 +3500,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             numerals.format_money(ln.tax_amount, dp),
             numerals.format_money(ln.line_total, dp),
             ln.description or "",
+            self._bin_code(ln),
         ]
         for col_index, value in enumerate(values):
             cell = QTableWidgetItem(value)
@@ -3507,7 +3514,61 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
                 # هیچ کلیکی، با نگه‌داشتنِ ماوس دیده می‌شود.
                 cell.setToolTip(self._item_info_tooltip_text(ln.item_id))
             self.lines_table.setItem(row_index, col_index, cell)
-        self.lines_table.setCellWidget(row_index, len(values), self._make_line_actions_widget(row_index))
+        self.lines_table.setCellWidget(row_index, _ACTIONS_COL, self._make_line_actions_widget(row_index))
+
+    def _shows_bin_column(self) -> bool:
+        return self.document_type_code.startswith("PURCHASE") or self.document_type_code == "CONSIGNMENT_IN"
+
+    def _line_warehouse_id(self, ln):
+        if ln.warehouse_id is not None:
+            return ln.warehouse_id
+        return self.warehouse_combo.currentData() if self.warehouse_combo is not None else None
+
+    def _bin_choices(self, warehouse_id) -> list[tuple[int, str]]:
+        """R253: محل‌هایِ برگِ فعالِ انبار (کدِ کامل)، یک‌بار برایِ هر انبار در هر بازسازیِ جدول."""
+        if warehouse_id is None:
+            return []
+        if warehouse_id not in self._bin_choices_cache:
+            from peecha.services import warehouse_locations as wl
+
+            nodes = wl.tree(self._company_id(), warehouse_id)
+            parents = {n.parent_id for n in nodes}
+            self._bin_choices_cache[warehouse_id] = sorted(
+                ((n.location_id, n.full_code) for n in nodes if n.is_active and n.location_id not in parents),
+                key=lambda t: t[1],
+            )
+        return self._bin_choices_cache[warehouse_id]
+
+    def _bin_code(self, ln) -> str:
+        if ln.bin_location_id is None or not self._shows_bin_column():
+            return ""
+        for location_id, code in self._bin_choices(self._line_warehouse_id(ln)):
+            if location_id == ln.bin_location_id:
+                return code
+        return str(ln.bin_location_id)
+
+    def _make_line_bin_combo(self, ln) -> QComboBox:
+        combo = QComboBox()
+        combo.addItem("—", None)
+        for location_id, code in self._bin_choices(self._line_warehouse_id(ln)):
+            combo.addItem(code, location_id)
+        if ln.bin_location_id is not None:
+            combo.setCurrentIndex(max(combo.findData(ln.bin_location_id), 0))
+        combo.setToolTip("محلِ ورودِ کالا در انبار؛ خالی = مکانِ پیش‌فرضِ انبار")
+        combo.setEnabled(ln.stock_document_line_id is None)
+        combo.currentIndexChanged.connect(lambda _i=0, c=combo, line_id=ln.line_id: self._on_line_bin_changed(line_id, c))
+        return combo
+
+    def _on_line_bin_changed(self, line_id: int, combo) -> None:
+        try:
+            documents_service.set_line_bin(self._company_id(), line_id, combo.currentData())
+        except ValueError as exc:
+            QMessageBox.warning(self, "خطا", str(exc))
+            self._load_document()
+            return
+        for ln in self._lines:
+            if ln.line_id == line_id:
+                ln.bin_location_id = combo.currentData()
 
     def _make_inline_discount_widget(self, dp: int, discount_amount: decimal.Decimal, discount_percent: decimal.Decimal) -> QWidget:
         container = QWidget()
@@ -3586,7 +3647,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setItem(row_index, 6, QTableWidgetItem(numerals.format_money(ln.tax_amount, dp)))
         self.lines_table.setItem(row_index, 7, QTableWidgetItem(numerals.format_money(ln.line_total, dp)))
         self.lines_table.setItem(row_index, 8, QTableWidgetItem(ln.description or ""))
-        self.lines_table.setCellWidget(row_index, 9, self._make_line_actions_widget(row_index))
+        if self._shows_bin_column():
+            self.lines_table.setCellWidget(row_index, _BIN_COL, self._make_line_bin_combo(ln))
+        self.lines_table.setCellWidget(row_index, _ACTIONS_COL, self._make_line_actions_widget(row_index))
 
     def _on_inline_discount_type_changed(self, row_index: int, discount_field) -> None:
         discount_field.setValue(0)
@@ -3716,7 +3779,9 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             lambda _checked=False, c=item_combo: self._open_item_price_history(c.currentData()) if c.currentData() is not None else None
         )
         actions_layout.addWidget(info_price_button)
-        self.lines_table.setCellWidget(row_index, 9, actions_container)
+        self.lines_table.removeCellWidget(row_index, _BIN_COL)
+        self.lines_table.setItem(row_index, _BIN_COL, QTableWidgetItem(""))
+        self.lines_table.setCellWidget(row_index, _ACTIONS_COL, actions_container)
 
         self._entry_row_widgets = {
             "item_combo": item_combo, "qty": qty_field, "uom": uom_combo, "uom_factors": {}, "price": price_field,

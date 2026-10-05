@@ -514,6 +514,7 @@ class Warehouse(Base):
     length_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
     height_m: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
     description: Mapped[str | None] = mapped_column(String(1000))
+    default_bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))  # R253
 
 
 class BinLocation(Base):

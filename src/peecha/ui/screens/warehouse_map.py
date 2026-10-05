@@ -375,7 +375,7 @@ class WarehouseMapScreen(QWidget):
         self.op_buttons = {}
         for code, text in (("EDIT", "ویرایش"), ("STATUS", "وضعیت"), ("TRANSFER", "انتقال"), ("PUTAWAY", "پیشنهادِ جانمایی"),
                            ("REPLENISH", "حداقل/حداکثرِ تأمین"), ("COUNT", "شمارشِ محل"), ("TASKS", "وظایفِ انبار"),
-                           ("DELETE", "حذف")):
+                           ("DEFAULT", "مکانِ پیش‌فرض"), ("DELETE", "حذف")):
             b = QPushButton(text)
             b.setObjectName("flatButton")
             b.clicked.connect(lambda _c=False, op=code: self.run_operation(op))
@@ -698,6 +698,10 @@ class WarehouseMapScreen(QWidget):
         flags = [t for t, ok in (("برداشت", node.is_pickable), ("جانمایی", node.allow_putaway),
                                  ("جایگزینی", node.allow_replenishment)) if ok]
         info.append("مجاز: " + ("، ".join(flags) or "—") + (" | آسیب‌دیده" if node.is_damaged else ""))
+        from peecha.services import inventory_locations as locations_service
+
+        if locations_service.get_explicit_default_bin_id(self.warehouse_id) == location_id:
+            info.append("<b>مکانِ پیش‌فرضِ انبار</b> (ردیف‌هایِ بی‌مکانِ رسید/حواله این‌جا ثبت می‌شوند)")
         self.detail_title.setText(_p(node.full_code))
         self.detail_info.setText("<br>".join(info))
         self._fill_contents(location_id)
@@ -881,6 +885,14 @@ class WarehouseMapScreen(QWidget):
 
                 sid = lc.create_location_count(company_id, self.warehouse_id, [node.location_id], user_id)
                 theme.set_status_label(self.status_label, _p(f"شمارشِ محل شروع شد (جلسهٔ {sid})؛ ادامه در «وظایفِ انبار» یا موبایل."), ok=True)
+            elif op == "DEFAULT":
+                from peecha.services import inventory_locations as locations_service
+
+                current = locations_service.get_explicit_default_bin_id(self.warehouse_id)
+                new = None if current == node.location_id else node.location_id
+                locations_service.set_default_bin_location(company_id, self.warehouse_id, new, user_id)
+                theme.set_status_label(self.status_label, _p(f"مکانِ پیش‌فرضِ انبار: {node.full_code}") if new
+                                       else "مکانِ پیش‌فرض برداشته شد (مکانِ عمومی).", ok=True)
             elif op == "TASKS":
                 if self._main_window is not None:
                     self._main_window.open_screen("INV_WMS_TASKS")

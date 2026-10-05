@@ -451,6 +451,11 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.max_temp_field.setRange(-100, 100)
         temp_layout.addWidget(self.max_temp_field)
 
+        # R253: ردیف‌هایِ بی‌مکانِ رسید/حواله در این مکان ثبت می‌شوند (خالی = GENERAL)
+        self.default_bin_combo = QComboBox()
+        self.default_bin_combo.setToolTip("ردیف‌هایِ بدونِ مکانِ اسنادِ انبار در این مکان ثبت می‌شوند؛ خالی = مکانِ عمومی (GENERAL)")
+        self.default_bin_combo.addItem("— (مکانِ عمومی)", None)
+
         self.operational_grid = FieldGrid([
             FieldSpec("allow_purchase", "", self.allow_purchase_checkbox, span=1),
             FieldSpec("allow_sale", "", self.allow_sale_checkbox, span=1),
@@ -464,6 +469,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             FieldSpec("requires_issue_approval", "", self.requires_issue_approval_checkbox, span=1),
             FieldSpec("temp_controlled", "", self.temp_controlled_checkbox, span=1),
             FieldSpec("temp_range", "بازهٔ دما", self.temp_row, span=2),
+            FieldSpec("default_bin", "مکانِ پیش‌فرض", self.default_bin_combo, span=2),
         ])
         self.operational_grid.set_field_visible("temp_range", False)
         layout.addWidget(self.operational_grid)
@@ -981,6 +987,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         _set_combo(self.manager_combo, f.manager_user_id)
 
         # عملیاتی
+        self._fill_default_bin_combo(w.warehouse_id)
         self.allow_purchase_checkbox.setChecked(f.allow_purchase)
         self.allow_sale_checkbox.setChecked(f.allow_sale)
         self.allow_production_checkbox.setChecked(f.allow_production)
@@ -1049,8 +1056,25 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._refresh_bins()
         self._refresh_access()
 
+    def _fill_default_bin_combo(self, warehouse_id: int | None) -> None:
+        self.default_bin_combo.clear()
+        self.default_bin_combo.addItem("— (مکانِ عمومی)", None)
+        if warehouse_id is None:
+            return
+        from peecha.services import warehouse_locations as wl
+
+        nodes = wl.tree(self._company_id(), warehouse_id)
+        parents = {n.parent_id for n in nodes}
+        for n in sorted(nodes, key=lambda n: n.full_code):
+            if n.is_active and n.location_id not in parents:
+                self.default_bin_combo.addItem(n.full_code, n.location_id)
+        current = locations_service.get_explicit_default_bin_id(warehouse_id)
+        if current is not None:
+            self.default_bin_combo.setCurrentIndex(max(self.default_bin_combo.findData(current), 0))
+
     def _reset_form(self) -> None:
         self._editing_id = None
+        self._fill_default_bin_combo(None)
         self.form_title.setText("انبارِ جدید")
         self.status_label.setText("")
 
@@ -1244,6 +1268,16 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
+
+        if self._editing_id is not None:
+            user = app_session.current_user
+            try:
+                locations_service.set_default_bin_location(
+                    company_id, warehouse_id, self.default_bin_combo.currentData(), user.user_id if user else None
+                )
+            except ValueError as exc:
+                self.status_label.setText(str(exc))
+                return
 
         for key, combo in self._mapping_combos.items():
             account_id = combo.currentData()

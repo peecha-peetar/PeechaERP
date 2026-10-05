@@ -1609,6 +1609,46 @@ def _recompute_header_totals(session, document_id: int) -> None:
 # ---------------------------------------------------------------------
 # ردیف‌ها
 # ---------------------------------------------------------------------
+def set_line_bin(company_id: int, line_id: int, bin_location_id: int | None) -> None:
+    """R253: محلِ ورود/خروجِ ردیف (ستونِ «مکان»)؛ باید از انبارِ همان ردیف (یا انبارِ سند) باشد و پس از صدورِ
+    سندِ انبار دیگر قابلِ‌تغییر نیست."""
+    from peecha.db.models.inventory import BinLocation
+
+    with new_session() as session:
+        line = session.get(CommercialDocumentLine, line_id)
+        doc = session.get(CommercialDocument, line.document_id) if line is not None else None
+        if doc is None or doc.company_id != company_id:
+            raise ValueError("ردیفِ سند نامعتبر است.")
+        if line.stock_document_line_id is not None:
+            raise ValueError("سندِ انبارِ این ردیف صادر شده است؛ مکان را در خودِ سندِ انبار یا با انتقال تغییر دهید.")
+        if bin_location_id is not None:
+            b = session.get(BinLocation, bin_location_id)
+            warehouse_id = line.warehouse_id or doc.warehouse_id
+            if b is None or (warehouse_id is not None and b.warehouse_id != warehouse_id):
+                raise ValueError("مکان باید از انبارِ همین ردیف باشد.")
+            if not b.is_active:
+                raise ValueError("مکانِ غیرفعال قابلِ‌انتخاب نیست.")
+        line.bin_location_id = bin_location_id
+        session.commit()
+
+
+def _apply_line_bin(session, comm_line, stock_line_id: int) -> None:
+    """R253: مکانِ ردیفِ سندِ بازرگانی به ردیفِ سندِ انبار (فقط اگر از انبارِ همان جهتِ سند باشد)."""
+    from peecha.db.models.inventory import BinLocation, StockDocument, StockDocumentLine
+
+    if comm_line is None or comm_line.bin_location_id is None:
+        return
+    stock_line = session.get(StockDocumentLine, stock_line_id)
+    stock_doc = session.get(StockDocument, stock_line.stock_document_id) if stock_line is not None else None
+    b = session.get(BinLocation, comm_line.bin_location_id)
+    if stock_doc is None or b is None or stock_line.bin_location_id is not None:
+        return
+    inbound = stock_doc.document_type_code in ("RECEIPT", "RETURN_IN", "CONSIGNMENT_IN")
+    warehouse_id = stock_doc.destination_warehouse_id if inbound else stock_doc.source_warehouse_id
+    if b.warehouse_id == warehouse_id:
+        stock_line.bin_location_id = b.bin_location_id
+
+
 def add_line(
     document_id: int, company_id: int, item_id: int, uom_id: int, quantity: decimal.Decimal,
     quantity_base: decimal.Decimal, unit_price: decimal.Decimal | None = None,
@@ -1728,6 +1768,9 @@ def add_line(
             expected_delivery_date=expected_delivery_date, purchase_request_line_id=purchase_request_line_id,
             rfq_quote_id=rfq_quote_id,
         )
+        if source_line_id is not None:  # R253: مکانِ ردیف در تبدیلِ سفارش به فاکتور/رسید حفظ می‌شود
+            source = session.get(CommercialDocumentLine, source_line_id)
+            line.bin_location_id = source.bin_location_id if source is not None else None
         session.add(line)
         session.flush()
         if _was_confirmed(session, document_id):
@@ -2856,6 +2899,7 @@ def _post_consignment_document(
         with new_session() as session:
             comm_line = session.get(CommercialDocumentLine, line_id)
             comm_line.stock_document_line_id = inv_line_id
+            _apply_line_bin(session, comm_line, inv_line_id)
             session.commit()
 
     inv_documents_service.confirm_stock_document(stock_document_id, company_id)
@@ -3181,6 +3225,7 @@ def post_document(
                 with new_session() as session:
                     comm_line = session.get(CommercialDocumentLine, line_id)
                     comm_line.stock_document_line_id = inv_line_id
+                    _apply_line_bin(session, comm_line, inv_line_id)
                     session.commit()
 
             inv_documents_service.confirm_stock_document(group_stock_document_id, company_id)

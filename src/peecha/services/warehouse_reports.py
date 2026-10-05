@@ -1744,7 +1744,6 @@ def wms_performance(company_id: int, f) -> ReportResult:
 def unlocated_stock(company_id: int, f) -> ReportResult:
     """دریافت‌شده ولی جانمایی‌نشده: موجودیِ محلِ پیش‌فرض در انبارهایی که محلِ دیگری هم دارند + وظایفِ جانماییِ باز."""
     from peecha.services import warehouse_operations as ops
-    from peecha.services.inventory_locations import DEFAULT_BIN_CODE
 
     m = _meta(company_id)
     with new_session() as session:
@@ -1755,12 +1754,12 @@ def unlocated_stock(company_id: int, f) -> ReportResult:
                                       func.sum(StockBalance.quantity_on_hand))
                                .where(StockBalance.company_id == company_id)
                                .group_by(StockBalance.item_id, StockBalance.warehouse_id, StockBalance.bin_location_id)).all()
+    from peecha.services.inventory_locations import get_default_bin_location
+
     per_wh: dict[int, int] = defaultdict(int)
-    default_bins = set()
-    for bin_id, wid, code in bins:
+    for _bin_id, wid, _code in bins:
         per_wh[wid] += 1
-        if code == DEFAULT_BIN_CODE:
-            default_bins.add(bin_id)
+    default_bins = {d.bin_location_id for d in (get_default_bin_location(w) for w in per_wh) if d}  # R253: پیش‌فرضِ انتخابی
     open_tasks: dict[tuple, decimal.Decimal] = defaultdict(lambda: _ZERO)
     for t in ops.list_tasks(company_id, "PUTAWAY"):
         if t.status_code in ("OPEN", "IN_PROGRESS"):

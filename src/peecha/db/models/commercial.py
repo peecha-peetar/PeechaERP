@@ -594,11 +594,14 @@ class CommercialDocumentLine(Base):
     purchase_request_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.purchase_request_lines.line_id"))
     # R242: پیشنهادِ استعلامِ برنده‌ای که این ردیفِ سفارش از آن ساخته شده
     rfq_quote_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.rfq_quotes.quote_id"))
+    bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))  # R253
 
 
 # =======================================================================
 # شرکا — معادلِ 068_commercial_partners.sql
 # =======================================================================
+
+
 class CommissionRule(Base):
     __tablename__ = "commission_rules"
     __table_args__ = (UniqueConstraint("company_id", "code"), {"schema": "comm"})

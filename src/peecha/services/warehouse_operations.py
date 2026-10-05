@@ -145,12 +145,10 @@ def due_counts(company_id: int, as_of: datetime.date | None = None, warehouse_id
 # وظایفِ جانمایی و برداشت
 # =====================================================================
 def _default_bin(session, warehouse_id: int) -> int | None:
-    from peecha.services.inventory_locations import DEFAULT_BIN_CODE
+    from peecha.services.inventory_locations import get_default_bin_location
 
-    bin_id = session.scalar(select(BinLocation.bin_location_id).where(
-        BinLocation.warehouse_id == warehouse_id, BinLocation.code == DEFAULT_BIN_CODE))
-    return bin_id or session.scalar(select(BinLocation.bin_location_id).where(BinLocation.warehouse_id == warehouse_id)
-                                    .order_by(BinLocation.bin_location_id))
+    row = get_default_bin_location(warehouse_id)
+    return row.bin_location_id if row else None
 
 
 def putaway_sources(company_id: int, days: int = 60) -> list[SimpleNamespace]:
