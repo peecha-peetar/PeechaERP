@@ -14,7 +14,7 @@ from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QGraphicsItem,
     QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView, QGridLayout,
-    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QSplitter, QStackedWidget,
+    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSpinBox, QSplitter, QStackedWidget,
     QStyleOptionGraphicsItem, QTableWidget, QTableWidgetItem, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
     QWidget,
 )
@@ -38,6 +38,12 @@ def _p(text) -> str:
 def _m(value) -> str:
     """متر بدونِ صفرهایِ اضافه (۱۰٫۵۰۰ → ۱۰٫۵)."""
     return _p(f"{float(value):g}") if value is not None else ""
+
+
+def _dims(n) -> str:
+    """«عرض × طول × ارتفاع متر» -- فقط ابعادِ واردشده."""
+    parts = [(label, v) for label, v in (("عرض", n.width_m), ("طول", n.length_m), ("ارتفاع", n.height_m)) if v]
+    return " × ".join(f"{label} {_m(v)}" for label, v in parts) + " متر" if parts else ""
 
 
 def _dec(value: float | None) -> decimal.Decimal | None:
@@ -363,8 +369,8 @@ class WarehouseMapScreen(QWidget):
         self.view = _MapView(self.scene)
         self.view.on_zoom = self.update_lod
         side = QTabWidget()
-        side.setMinimumWidth(340)
-        side.setMaximumWidth(460)
+        side.setMinimumWidth(400)
+        side.setMaximumWidth(560)
         # --- جزئیات
         details = QWidget()
         dl = QVBoxLayout(details)
@@ -382,8 +388,11 @@ class WarehouseMapScreen(QWidget):
                            ("DEFAULT", "مکانِ پیش‌فرض"), ("DELETE", "حذف")):
             b = QPushButton(text)
             b.setObjectName("flatButton")
+            # R255: دو ستون و ارتفاعِ کافی تا متنِ دکمه‌ها در پنلِ باریک بریده/پنهان نشود
+            b.setMinimumHeight(34)
+            b.setToolTip(text)
             b.clicked.connect(lambda _c=False, op=code: self.run_operation(op))
-            ops.addWidget(b, len(self.op_buttons) // 3, len(self.op_buttons) % 3)
+            ops.addWidget(b, len(self.op_buttons) // 2, len(self.op_buttons) % 2)
             self.op_buttons[code] = b
         dl.addLayout(ops)
         rot = QHBoxLayout()
@@ -395,16 +404,29 @@ class WarehouseMapScreen(QWidget):
         rot.addWidget(self.rotation_spin)
         rot.addStretch(1)
         dl.addLayout(rot)
-        dl.addWidget(QLabel("محتویات"))
-        self.contents_table = _table(["محل", "کالا", "مقدار", "واحد", "بچ", "سریال", "انقضا"])
-        dl.addWidget(self.contents_table, stretch=1)
-        dl.addWidget(QLabel("نمایِ قفسه (طبقه × محل)"))
+        self.rack_title = QLabel("نمایِ قفسه (طبقه × محل)")
+        self.rack_title.setObjectName("cardTitle")
+        dl.addWidget(self.rack_title)
+        self.rack_info = QLabel("")
+        self.rack_info.setWordWrap(True)
+        self.rack_info.setTextFormat(Qt.RichText)
+        dl.addWidget(self.rack_info)
         self.elevation_table = QTableWidget(0, 0)
         self.elevation_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.elevation_table.cellClicked.connect(self._elevation_clicked)
-        self.elevation_table.setMaximumHeight(170)
+        self.elevation_table.setMinimumHeight(200)
+        self.elevation_table.verticalHeader().setDefaultSectionSize(44)
+        self.elevation_table.horizontalHeader().setDefaultSectionSize(76)
         dl.addWidget(self.elevation_table)
-        side.addTab(details, "جزئیات")
+        dl.addWidget(QLabel("محتویات"))
+        self.contents_table = _table(["محل", "کالا", "مقدار", "واحد", "بچ", "سریال", "انقضا"])
+        self.contents_table.setMinimumHeight(200)
+        dl.addWidget(self.contents_table, stretch=1)
+        details_scroll = QScrollArea()  # R255: پنلِ جزئیات اسکرول می‌خورد تا هیچ بخشی فشرده/پنهان نشود
+        details_scroll.setWidgetResizable(True)
+        details_scroll.setFrameShape(QScrollArea.NoFrame)
+        details_scroll.setWidget(details)
+        side.addTab(details_scroll, "جزئیات")
         # --- درخت
         tree_tab = QWidget()
         tl = QVBoxLayout(tree_tab)
@@ -669,7 +691,34 @@ class WarehouseMapScreen(QWidget):
         boxes = wl.scene_3d(self._company_id(), self.warehouse_id, self.nodes)
         colors = {lid: item.fill for lid, item in self.items.items() if item.fill is not None}
         self.view3d.set_data(boxes, colors, highlighted=[lid for lid, i in self.items.items() if i.highlighted],
-                             dimmed=[lid for lid, i in self.items.items() if i.dimmed])
+                             dimmed=[lid for lid, i in self.items.items() if i.dimmed],
+                             info={b.location_id: self._hover_text(b.location_id) for b in boxes},
+                             names={b.location_id: self._short_name(b.location_id) for b in boxes})
+
+    def _short_name(self, location_id: int) -> str:
+        n = self.by_id.get(location_id)
+        if n is None:
+            return ""
+        seg = n.code.split("-")[-1]
+        return _p(f"{seg} {n.name}" if n.name and n.level in ("AREA", "AISLE") else seg)
+
+    def _hover_text(self, location_id: int) -> str:
+        """R255: متنِ نمایش با ماوس در نمایِ سه‌بعدی: کد/نام، نوع، ابعاد، اشغال و کالا."""
+        n = self.by_id.get(location_id)
+        if n is None:
+            return ""
+        o = self.occ.get(location_id)
+        lines = [_p(n.full_code) + (f" -- {n.name}" if n.name else ""),
+                 f"{wl.LEVEL_LABELS.get(n.level, 'محلِ قدیمی')} | {wl.STATUSES.get(n.status_code, '')}"]
+        if _dims(n):
+            lines.append(_dims(n))
+        if n.level == "RACK":
+            shelves = [k for k in self.nodes if k.parent_id == location_id and k.level == "SHELF"]
+            lines.append(_p(f"{len(shelves)} طبقه، {sum(1 for k in self.nodes if k.parent_id in {s.location_id for s in shelves})} محل"))
+        if o and o.quantity:
+            lines.append(_p(f"کالا: {len(o.items)} | مقدار: {numerals.format_money(o.quantity, 2, None)}")
+                         + (f" | اشغال: {_p(o.percent)}٪" if o.percent is not None else ""))
+        return "\n".join(lines)
 
     # --- انتخاب، جستجو و جزئیات ----------------------------------------------
     def select_location(self, location_id: int | None, focus: bool = True) -> None:
@@ -693,6 +742,8 @@ class WarehouseMapScreen(QWidget):
         cap = lambda v, unit: f"{_p(numerals.format_money(v, 2, None))} {unit}" if v is not None else "—"  # noqa: E731
         info = [f"<b>{_p(node.full_code)}</b> -- {wl.LEVEL_LABELS.get(node.level, 'محلِ قدیمی')}",
                 f"مسیر: {path}", f"نوع: {wl.LOCATION_TYPES.get(node.location_type_code, '—')} | وضعیت: {wl.STATUSES.get(node.status_code)}"]
+        if _dims(node):
+            info.append(f"ابعاد: {_dims(node)}")
         if o:
             info.append(f"وزن: {cap(o.weight, 'kg')} از {cap(o.max_weight, 'kg')} | حجم: {cap(o.volume, 'm³')} از {cap(o.max_volume, 'm³')}")
             info.append(f"اشغال: <b>{_p(o.percent) + '٪' if o.percent is not None else 'ظرفیت تعریف نشده'}</b> | "
@@ -732,6 +783,8 @@ class WarehouseMapScreen(QWidget):
         self.elevation_table.clear()
         self._elevation = {}
         if rack is None:
+            self.rack_title.setText("نمایِ قفسه (طبقه × محل)")
+            self.rack_info.setText("برایِ دیدنِ طبقه‌ها و محل‌ها، یک قفسه، طبقه یا Bin را انتخاب کنید.")
             self.elevation_table.setRowCount(0)
             self.elevation_table.setColumnCount(0)
             return
@@ -739,13 +792,26 @@ class WarehouseMapScreen(QWidget):
                          key=lambda n: -(n.level_number or 0))
         bins = {s.location_id: sorted([n for n in self.nodes if n.parent_id == s.location_id], key=lambda n: n.code) for s in shelves}
         cols = max([len(b) for b in bins.values()] + [1])
+        # R255: اطلاعاتِ خودِ قفسه (ابعاد، تعدادِ طبقه/محل، اشغال، کالا) بالایِ نمایِ قفسه
+        ro = self.occ.get(rack.location_id)
+        n_bins = sum(len(b) for b in bins.values())
+        lines = [f"ابعاد: {_dims(rack) or 'تعریف نشده'}",
+                 f"طبقه: {_p(len(shelves))} | محل (Bin): {_p(n_bins)} | وضعیت: {wl.STATUSES.get(rack.status_code, '')}"]
+        if ro:
+            lines.append(f"اشغال: <b>{_p(ro.percent) + '٪' if ro.percent is not None else 'ظرفیت تعریف نشده'}</b> | "
+                         f"تعدادِ کالا: {_p(len(ro.items))} | مقدار: {_p(numerals.format_money(ro.quantity, 2, None))}")
+        self.rack_title.setText(_p(f"قفسهٔ {rack.full_code}" + (f" -- {rack.name}" if rack.name else "")))
+        self.rack_info.setText("<br>".join(lines))
         self.elevation_table.setRowCount(len(shelves))
         self.elevation_table.setColumnCount(cols)
-        self.elevation_table.setVerticalHeaderLabels([_p(s.code.split("-")[-1]) for s in shelves])
+        self.elevation_table.setVerticalHeaderLabels(
+            [_p(s.code.split("-")[-1]) + (f" ({_m(s.height_m)} م)" if s.height_m else "") for s in shelves])
         for r, s in enumerate(shelves):
             for c, b in enumerate(bins[s.location_id]):
                 o = self.occ.get(b.location_id)
                 cell = QTableWidgetItem(_p(b.code.split("-")[-1]) + (f"\n{_p(o.percent)}٪" if o and o.percent is not None else ""))
+                cell.setToolTip(_p(f"{b.full_code}" + (f" -- {b.name}" if b.name else "") + (f"\n{_dims(b)}" if _dims(b) else "")
+                                   + (f"\nکالا: {len(o.items)} | مقدار: {numerals.format_money(o.quantity, 2, None)}" if o else "")))
                 fill = self.color_for("OCCUPANCY", o.percent, 100) if o and o.percent is not None else None
                 if fill is not None:
                     fill.setAlpha(120)

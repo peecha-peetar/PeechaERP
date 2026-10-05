@@ -50,12 +50,13 @@ _BIN_COL, _TRACK_COL = 5, 6
 _DOC_TITLES = {
     "PURCHASE_ORDER": "سفارشِ خرید", "SALES_ORDER": "سفارشِ فروش",
     "CONSIGNMENT_IN": "امانیِ ورودی", "CONSIGNMENT_OUT": "امانیِ خروجی",
+    "PURCHASE_INVOICE": "فاکتورِ خرید",
 }
 _ORDER_TYPES = ("PURCHASE_ORDER", "SALES_ORDER")
 # خروجِ کالا: بچ/سریال از موجودیِ همان انبار انتخاب می‌شود
 _OUT_TYPES = ("SALES_ORDER", "CONSIGNMENT_OUT")
 # R254: مکانِ ورود فقط در رسید (خروج را موتورِ انبار خودکار تعیین می‌کند)
-_IN_TYPES = ("PURCHASE_ORDER", "CONSIGNMENT_IN")
+_IN_TYPES = ("PURCHASE_ORDER", "CONSIGNMENT_IN", "PURCHASE_INVOICE")
 
 
 def _status_label(doc) -> str:
@@ -179,7 +180,7 @@ class _GoodsReceiptDialog(QDialog):
         is_inbound = doc.document_type_code in _IN_TYPES
         self.lines_table.setColumnHidden(_BIN_COL, not is_inbound)
         editable = doc.warehouse_approved_at is None and not converted
-        # R230: در امانی، انبار و مقدار همان سند است -- انباردار فقط تایید می‌کند
+        # R230: در امانی (و R255: فاکتورِ خریدِ مستقیم)، انبار و مقدار همان سند است -- انباردار فقط تایید می‌کند
         is_consignment = doc.document_type_code not in _ORDER_TYPES
         self.lines_table.setRowCount(len(lines))
         for row_index, ln in enumerate(lines):

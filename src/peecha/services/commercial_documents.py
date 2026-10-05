@@ -2088,6 +2088,24 @@ def consignment_requires_warehouse_approval(company_id: int, document_type_code:
     )
 
 
+def _invoice_needs_receipt(session, doc: CommercialDocument) -> bool:
+    """R255: فاکتورِ خریدِ مستقیم (نه اصلاحیه، نه تبدیل‌شده از سفارشِ رسیده) با Toggleِ
+    PURCHASE_INVOICE_WAREHOUSE_APPROVAL پیش از ثبتِ نهایی به تاییدِ انباردار نیاز دارد."""
+    if doc.document_type_code != "PURCHASE_INVOICE" or doc.corrects_document_id is not None:
+        return False
+    if not settings_service.is_feature_enabled(doc.company_id, "PURCHASE_INVOICE_WAREHOUSE_APPROVAL"):
+        return False
+    line_ids = set(session.scalars(select(CommercialDocumentLine.line_id).where(
+        CommercialDocumentLine.document_id == doc.document_id)))
+    return not line_ids or not line_ids <= _locked_line_ids(session, doc.document_id)
+
+
+def invoice_requires_warehouse_approval(document_id: int, company_id: int) -> bool:
+    with new_session() as session:
+        doc = session.get(CommercialDocument, document_id)
+        return doc is not None and doc.company_id == company_id and _invoice_needs_receipt(session, doc)
+
+
 def _is_goods_receipt_eligible_order(session, doc: CommercialDocument) -> bool:
     """طبقِ گزارشِ صریحِ کاربر («بعدِ تاییدِ سفارشِ خرید، انباردار کجا
     رسیدِ کالا را تایید کند؟»): همان زیرساختِ تاییدِ انبار/مقدارِ تحویلیِ
@@ -2098,6 +2116,8 @@ def _is_goods_receipt_eligible_order(session, doc: CommercialDocument) -> bool:
     if _is_pre_sales_order(session, doc):
         return True
     if consignment_requires_warehouse_approval(doc.company_id, doc.document_type_code):
+        return True
+    if _invoice_needs_receipt(session, doc):
         return True
     return order_warehouse_step_enabled(doc.company_id, doc.document_type_code)
 
@@ -2163,7 +2183,7 @@ def receivable_warehouse_ids(company_id: int, user_id: int) -> set[int] | None:
         ))
 
 
-_RECEIPT_BIN_TYPES = ("PURCHASE_ORDER", "CONSIGNMENT_IN")
+_RECEIPT_BIN_TYPES = ("PURCHASE_ORDER", "CONSIGNMENT_IN", "PURCHASE_INVOICE")
 
 
 def _apply_receipt_bins(session, doc, line_bins: dict[int, int | None]) -> None:
@@ -2275,6 +2295,12 @@ def approve_warehouse(
             allowed = receivable_warehouse_ids(company_id, approved_by_user_id)
             if allowed is not None and doc.warehouse_id not in allowed:
                 raise ValueError("شما انباردارِ انبارِ این سندِ امانی نیستید.")
+        if doc.document_type_code == "PURCHASE_INVOICE":
+            allowed = receivable_warehouse_ids(company_id, approved_by_user_id)
+            targets = {ln.warehouse_id or doc.warehouse_id for ln in session.scalars(
+                select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == document_id))}
+            if allowed is not None and not targets <= set(allowed):
+                raise ValueError("شما انباردارِ انبارِ این فاکتور نیستید.")
         if doc.document_type_code in _RECEIPT_BIN_TYPES:
             _apply_receipt_bins(session, doc, line_bins or {})
         doc.warehouse_approved_by_user_id = approved_by_user_id
@@ -2388,6 +2414,8 @@ def revert_warehouse_approval(document_id: int, company_id: int) -> None:
             raise ValueError("این عملیات فقط برایِ سفارش‌هایِ کانالِ «پخشِ سرد» یا سفارشِ خریدِ دارایِ Toggleِ رسیدِ انبار معنا دارد.")
         if doc.warehouse_approved_at is None:
             raise ValueError("این سفارش هنوز تاییدِ انبار نگرفته است.")
+        if doc.document_type_code == "PURCHASE_INVOICE" and doc.status_code == "POSTED":
+            raise ValueError("فاکتور ثبتِ نهایی شده -- تاییدِ رسیدش دیگر قابلِ‌بازگشت نیست.")
         if doc.weighing_approved_at is not None:
             raise ValueError("ابتدا تاییدِ توزین را برگردانید.")
         if _has_any_invoiced_quantity(session, document_id):
@@ -2464,6 +2492,13 @@ def list_purchase_order_goods_receipt_queue(company_id: int, user_id: int | None
                 doc for doc in session.scalars(stmt)
                 if not _is_pre_sales_order(session, doc) and not _has_any_invoiced_quantity(session, doc.document_id)
             ]
+        if settings_service.is_feature_enabled(company_id, "PURCHASE_INVOICE_WAREHOUSE_APPROVAL"):
+            # R255: فاکتورِ خریدِ مستقیمِ تاییدشده که هنوز ثبتِ نهایی نشده
+            docs += [d for d in session.scalars(
+                select(CommercialDocument).where(
+                    CommercialDocument.company_id == company_id, CommercialDocument.document_type_code == "PURCHASE_INVOICE",
+                    CommercialDocument.status_code.in_(_PRE_SALES_FULFILLMENT_ELIGIBLE_STATUSES),
+                ).order_by(CommercialDocument.document_id)) if _invoice_needs_receipt(session, d)]
         if settings_service.is_feature_enabled(company_id, "CONSIGNMENT_WAREHOUSE_APPROVAL"):
             # R230: امانیِ ورودی/خروجیِ تاییدشده که هنوز ثبتِ نهایی (جابه‌جاییِ کالا) نشده
             docs += list(session.scalars(
@@ -2983,6 +3018,8 @@ def post_document(
         # نهایی/شکست گیر می‌کردند.
         if consignment_requires_warehouse_approval(company_id, document_type_code) and doc.warehouse_approved_at is None:
             raise ValueError("این سندِ امانی هنوز به تاییدِ انباردار نرسیده است -- ابتدا از «تاییدِ رسیدِ کالا» تایید شود.")
+        if doc.warehouse_approved_at is None and _invoice_needs_receipt(session, doc):
+            raise ValueError("رسیدِ کالایِ این فاکتور هنوز توسطِ انباردار تایید نشده است -- ابتدا در «تاییدِ انبار» تایید شود.")
 
         if document_type_code in _STOCK_DOC_TYPE_BY_TYPE and doc.warehouse_id is None:
             default_warehouse = locations_service.get_default_warehouse(company_id)

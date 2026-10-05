@@ -518,6 +518,11 @@ class CommercialDocumentsListScreen(FieldHelpMixin, QWidget):
             if ready:
                 return ("تبدیل به فاکتور", "مرحلهٔ بعد: تبدیل به فاکتور", lambda: self._convert_document(doc_id))
             return None
+        if doc_type == "PURCHASE_INVOICE" and d.warehouse_approved_at is None \
+                and documents_service.invoice_requires_warehouse_approval(doc_id, company_id):
+            # R255: فاکتورِ خریدِ مستقیم ابتدا به تاییدِ رسیدِ انباردار می‌رسد
+            return ("تاییدِ انبار", "مرحلهٔ بعد: تاییدِ رسیدِ کالا توسطِ انباردار",
+                    lambda: self._main_window.open_screen("PURCH_GOODS_RECEIPT"))
         if doc_type in ("SALES_INVOICE", "PURCHASE_INVOICE", "SALES_RETURN", "PURCHASE_RETURN"):
             if not roles_service.is_manager(user.user_id, company_id):
                 return None

@@ -5166,6 +5166,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         if self._settlement_plan is None:
             return
+        if self.document_type_code == "PURCHASE_INVOICE" \
+                and documents_service.invoice_requires_warehouse_approval(self._document_id, company_id) \
+                and documents_service.get_document(self._document_id, company_id)[0].warehouse_approved_at is None:
+            theme.set_status_label(self.status_label, "فاکتور تایید شد؛ ثبتِ نهایی پس از تاییدِ رسیدِ کالا توسطِ انباردار.", ok=True)
+            return
         if (
             self._requires_doc_approval and self._status_code == "CONFIRMED"
         ):

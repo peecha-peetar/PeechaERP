@@ -9,15 +9,17 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
-    QGraphicsPolygonItem, QGraphicsScene, QGraphicsView, QHBoxLayout, QLabel, QSlider, QVBoxLayout, QWidget,
+    QCheckBox, QGraphicsItem, QGraphicsPolygonItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView,
+    QHBoxLayout, QLabel, QSlider, QToolTip, QVBoxLayout, QWidget,
 )
 
 from peecha.ui import theme
 
 _BASE = {"AREA": "#E7EEF7", "AISLE": "#F4F6F8", "RACK": "#9AA7B4", "SHELF": "#C9D3DD", "BIN": "#DCE5EE"}
 _BLOCKED = "#8C8C8C"
+_LABELED = ("AREA", "AISLE", "RACK")  # R255: برچسبِ ثابت؛ بقیه با نگه‌داشتنِ ماوس
 
 
 class _View(QGraphicsView):
@@ -29,6 +31,18 @@ class _View(QGraphicsView):
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setStyleSheet(f"background: {theme.BACKGROUND}; border: 1px solid {theme.BORDER}; border-radius: 8px;")
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        item = self.itemAt(event.position().toPoint())
+        lid = int(item.data(0)) if item is not None and item.data(0) is not None else None
+        self.owner.hover(lid, event.globalPosition().toPoint())
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self.owner.hover(None, None)
+        super().leaveEvent(event)
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         factor = 1.2 if event.angleDelta().y() > 0 else 1 / 1.2
@@ -69,7 +83,15 @@ class Warehouse3DView(QWidget):
         self.height_slider.setValue(100)
         self.height_slider.valueChanged.connect(lambda _v: self.redraw())
         controls.addWidget(self.height_slider, stretch=1)
+        self.labels_check = QCheckBox("برچسب‌ها")
+        self.labels_check.setChecked(True)
+        self.labels_check.toggled.connect(lambda _c: self.redraw())
+        controls.addWidget(self.labels_check)
         layout.addLayout(controls)
+        self.hover_label = QLabel("ماوس را رویِ هر محل نگه دارید تا نام و اطلاعاتش نمایش داده شود.")
+        self.hover_label.setObjectName("sectionHint")
+        self.hover_label.setWordWrap(True)
+        layout.addWidget(self.hover_label)
         self.scene = QGraphicsScene(self)
         self.view = _View(self.scene, self)
         layout.addWidget(self.view, stretch=1)
@@ -78,10 +100,17 @@ class Warehouse3DView(QWidget):
         self.highlighted: set[int] = set()
         self.dimmed: set[int] = set()
         self.polygons: dict[int, list[QGraphicsPolygonItem]] = {}
+        self.info: dict[int, str] = {}
+        self.names: dict[int, str] = {}
+        self._hovered: int | None = None
 
-    def set_data(self, boxes: list, colors: dict | None = None, highlighted=None, dimmed=None) -> None:
+    def set_data(self, boxes: list, colors: dict | None = None, highlighted=None, dimmed=None,
+                 info: dict | None = None, names: dict | None = None) -> None:
+        """info: متنِ کاملِ هر محل برایِ نمایش با ماوس؛ names: برچسبِ کوتاهِ رویِ منطقه/راهرو/قفسه."""
         self.boxes = boxes
         self.colors = colors or {}
+        self.info = info or {}
+        self.names = names or {}
         self.highlighted = set(highlighted or ())
         self.dimmed = set(dimmed or ())
         self.redraw()
@@ -117,6 +146,7 @@ class Warehouse3DView(QWidget):
     def redraw(self) -> None:
         self.scene.clear()
         self.polygons = {}
+        self._hovered = None
         project = self._projector()
         order = []
         for b in self.boxes:
@@ -127,6 +157,54 @@ class Warehouse3DView(QWidget):
         order.sort(key=lambda t: (t[2].level not in ("AREA", "AISLE"), t[1], t[0]))
         for z, _depth, b, corners in order:
             self._draw_box(b, corners, project)
+        if self.labels_check.isChecked():
+            for b in self.boxes:
+                if b.level in _LABELED:
+                    self._draw_label(b, project)
+
+    def _draw_label(self, b, project) -> None:
+        """برچسبِ خوانا با اندازهٔ ثابت (مستقل از زوم) و پس‌زمینه، رویِ مرکزِ سقفِ محل."""
+        center, _ = project(b.x + b.w / 2, b.y + b.d / 2, b.z + b.h)
+        text = QGraphicsSimpleTextItem(self.names.get(b.location_id) or b.code.split("-")[-1])
+        font = QFont(text.font())
+        font.setPointSizeF(10 if b.level == "RACK" else 11)
+        font.setBold(b.level != "RACK")
+        text.setFont(font)
+        text.setBrush(QColor("#1A1B2E"))  # رویِ زمینهٔ سفیدِ برچسب، مستقل از تمِ تیره/روشن
+        rect = text.boundingRect().adjusted(-4, -2, 4, 2)
+        box = QGraphicsRectItem(rect)
+        box.setBrush(QColor(255, 255, 255, 215))
+        box.setPen(QPen(QColor(0, 0, 0, 90), 0))
+        box.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+        box.setPos(center - QPointF(rect.width() / 2, rect.height() / 2))
+        box.setZValue(10000 + (1 if b.level == "RACK" else 0))
+        box.setData(0, b.location_id)
+        text.setParentItem(box)
+        text.setData(0, b.location_id)
+        self.scene.addItem(box)
+
+    def hover(self, location_id: int | None, global_pos) -> None:
+        if location_id == self._hovered:
+            return
+        for lid, width in ((self._hovered, None), (location_id, 2.5)):
+            for poly in self.polygons.get(lid, []) if lid is not None else []:
+                pen = QPen(poly.pen())
+                if width is None:
+                    selected = lid in self.highlighted
+                    pen.setColor(QColor(theme.ACCENT) if selected else QColor(0, 0, 0, 70))
+                    pen.setWidthF(3 if selected else 0.6)
+                else:
+                    pen.setColor(QColor(theme.ACCENT))
+                    pen.setWidthF(width)
+                poly.setPen(pen)
+        self._hovered = location_id
+        if location_id is None:
+            QToolTip.hideText()
+            return
+        text = self.info.get(location_id) or next((b.code for b in self.boxes if b.location_id == location_id), "")
+        self.hover_label.setText(text.replace("\n", " | "))
+        if global_pos is not None:
+            QToolTip.showText(global_pos, text, self.view)
 
     def _fill(self, b) -> QColor:
         color = self.colors.get(b.location_id)
@@ -164,6 +242,6 @@ class Warehouse3DView(QWidget):
         item.setBrush(QBrush(color))
         item.setPen(pen)
         item.setData(0, b.location_id)
-        item.setToolTip(b.code)
+        item.setToolTip(self.info.get(b.location_id) or b.code)
         self.scene.addItem(item)
         return item
