@@ -805,6 +805,8 @@ export interface WmsTask {
   to_location_id: number | null;
   to_location_code: string | null;
   created_at: string | null;
+  wave_id?: number | null;
+  wave_sequence?: number | null;
 }
 
 export interface StockTransferRequest {
@@ -813,4 +815,47 @@ export interface StockTransferRequest {
   to_location_id: number;
   quantity: string;
   allow_over_capacity?: boolean;
+}
+
+// --- R250: موج، شمارشِ محل، نقشه --------------------------------------------
+export interface WmsWave {
+  wave_id: number;
+  code: string;
+  warehouse_id: number;
+  status: string;
+  distance_m: number;
+  tasks: number;
+  done: number;
+}
+
+export interface LocationCountSession {
+  session_id: number;
+  code: string;
+  warehouse_id: number;
+  blind: boolean;
+  created_at: string | null;
+}
+
+export interface LocationCountLine {
+  location_id: number;
+  location_code: string;
+  item_id: number;
+  item_code: string;
+  item_name: string;
+  unit: string;
+  expected: string | null;
+  counted: string | null;
+  variance: string | null;
+}
+
+export interface WarehouseMapNode {
+  location_id: number;
+  parent_id: number | null;
+  code: string;
+  level: string | null;
+  name: string | null;
+  status: string;
+  occupancy_percent: string | null;
+  quantity: string;
+  map: { x: number; y: number; width: number; height: number; rotation: number; z: number | null } | null;
 }

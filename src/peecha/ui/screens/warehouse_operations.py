@@ -450,6 +450,276 @@ class _ReplenishTab(QWidget):
         return ids
 
 
+class _WavesTab(QWidget):
+    """R250: موجِ برداشت -- گروه‌بندیِ وظایفِ برداشت با ترتیبِ مسیرِ بهینه."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        hint = QLabel("وظایفِ برداشتِ بازِ یک انبار در یک موج جمع و به ترتیبِ کوتاه‌ترین مسیر (از منطقهٔ برداشت تا ارسال) مرتب می‌شوند.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("انبار:"))
+        self.warehouse_combo = QComboBox()
+        top.addWidget(self.warehouse_combo)
+        create = QPushButton("ساختِ موج از وظایفِ باز")
+        create.setObjectName("primaryButton")
+        create.clicked.connect(self.create)
+        top.addWidget(create)
+        top.addStretch(1)
+        layout.addLayout(top)
+        self.waves_table = _table(["موج", "انبار", "وضعیت", "مسیر (متر)", "وظایف", "انجام‌شده", "ایجاد"])
+        self.waves_table.itemSelectionChanged.connect(self._load_tasks)
+        layout.addWidget(self.waves_table, stretch=1)
+        self.tasks_table = _table(["ترتیب", "وظیفه", "کالا", "مقدار", "از محل", "وضعیت"])
+        layout.addWidget(self.tasks_table, stretch=1)
+        actions = QHBoxLayout()
+        for text, slot in (("لغوِ موج", self.release_selected), ("نمایشِ مسیر رویِ نقشه", self.show_on_map)):
+            b = QPushButton(text)
+            b.clicked.connect(slot)
+            actions.addWidget(b)
+        actions.addStretch(1)
+        self.status_label = QLabel("")
+        actions.addWidget(self.status_label)
+        layout.addLayout(actions)
+        self._waves, self._tasks = [], []
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        current = self.warehouse_combo.currentData()
+        self.warehouse_combo.clear()
+        self._whs = {}
+        for w in locations_service.list_warehouses(company_id):
+            self.warehouse_combo.addItem(w.name, w.warehouse_id)
+            self._whs[w.warehouse_id] = w.name
+        if current is not None:
+            self.warehouse_combo.setCurrentIndex(max(0, self.warehouse_combo.findData(current)))
+        self._items = {i.item_id: f"{i.code} — {i.name or ''}" for i in catalog_service.list_items(company_id)}
+        self._waves = ops.list_waves(company_id)
+        self.waves_table.setRowCount(len(self._waves))
+        for row, w in enumerate(self._waves):
+            tasks = ops.wave_tasks(company_id, w.wave_id)
+            done = sum(1 for t in tasks if t.status_code == "DONE")
+            cells = [w.wave_code, self._whs.get(w.warehouse_id, ""), {"OPEN": "باز", "DONE": "انجام‌شده", "CANCELLED": "لغوشده"}[w.status_code],
+                     numerals.format_money((w.path_distance or 0) / 20, 1, None), str(len(tasks)), str(done), _fmt_dt(w.created_at)]
+            for col, text in enumerate(cells):
+                self.waves_table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
+        self._load_tasks()
+
+    def _selected(self):
+        row = self.waves_table.currentRow()
+        return self._waves[row] if 0 <= row < len(self._waves) else None
+
+    def _load_tasks(self) -> None:
+        wave = self._selected()
+        self._tasks = ops.wave_tasks(self._company_id(), wave.wave_id) if wave else []
+        codes = {}
+        if wave:
+            from peecha.services import warehouse_locations as wl
+
+            codes = {n.location_id: n.full_code for n in wl.tree(self._company_id(), wave.warehouse_id)}
+        self.tasks_table.setRowCount(len(self._tasks))
+        for row, t in enumerate(self._tasks):
+            cells = [str(t.wave_sequence or ""), str(t.task_id), self._items.get(t.item_id, ""), numerals.format_money(t.quantity_base, 2, None),
+                     codes.get(t.from_bin_location_id, ""), ops.TASK_STATUSES[t.status_code]]
+            for col, text in enumerate(cells):
+                self.tasks_table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
+
+    def create(self) -> int | None:
+        try:
+            wave_id = ops.create_wave(self._company_id(), self.warehouse_combo.currentData(), app_session.current_user.user_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "موجِ برداشت", str(exc))
+            return None
+        theme.set_status_label(self.status_label, "موج ساخته شد.", ok=True)
+        self.refresh()
+        self.waves_table.selectRow(0)
+        return wave_id
+
+    def release_selected(self) -> None:
+        wave = self._selected()
+        if wave is None:
+            return
+        try:
+            ops.release_wave(self._company_id(), wave.wave_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "موجِ برداشت", str(exc))
+            return
+        self.refresh()
+
+    def show_on_map(self) -> bool:
+        from PySide6.QtWidgets import QApplication
+
+        wave = self._selected()
+        if wave is None:
+            return False
+        bins = [t.from_bin_location_id for t in self._tasks if t.from_bin_location_id and t.status_code in ("OPEN", "IN_PROGRESS")]
+        main = next((w for w in QApplication.topLevelWidgets() if hasattr(w, "open_screen") and hasattr(w, "_screens")), None)
+        if main is None or not bins:
+            return False
+        main.open_screen("INV_WAREHOUSE_MAP", then=lambda screen: (screen.load_warehouse(wave.warehouse_id), screen.show_picking_path(bins)))
+        return True
+
+
+class _LocationCountTab(QWidget):
+    """R250: شمارشِ دوره‌ایِ محل‌محور (کور)؛ اختلاف با سندِ اصلاحِ انبار رویِ همان محل."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        hint = QLabel("یک منطقه/قفسه/محل را انتخاب کنید تا موجودیِ دفتریِ همهٔ محل‌هایِ زیرش ثبت شود؛ انباردار (اینجا یا در موبایل) "
+                      "شمارش می‌کند و با «نهایی‌سازی» اختلاف رویِ همان محل اصلاح می‌شود. کالاهایِ بچ/سریال‌دار با انبارگردانیِ عادی.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        top = QHBoxLayout()
+        self.warehouse_combo = QComboBox()
+        self.warehouse_combo.currentIndexChanged.connect(lambda _i: self._fill_locations())
+        self.location_combo = QComboBox()
+        self.location_combo.setMinimumWidth(240)
+        self.blind_check = QCheckBox("شمارشِ کور")
+        self.blind_check.setChecked(True)
+        for label, widget in (("انبار:", self.warehouse_combo), ("محل:", self.location_combo)):
+            top.addWidget(QLabel(label))
+            top.addWidget(widget)
+        top.addWidget(self.blind_check)
+        create = QPushButton("شروعِ شمارش")
+        create.setObjectName("primaryButton")
+        create.clicked.connect(self.create)
+        top.addWidget(create)
+        top.addSpacing(16)
+        top.addWidget(QLabel("شمارش:"))
+        self.session_combo = QComboBox()
+        self.session_combo.setMinimumWidth(160)
+        self.session_combo.currentIndexChanged.connect(lambda _i: self._load_lines())
+        top.addWidget(self.session_combo)
+        top.addStretch(1)
+        layout.addLayout(top)
+        self.table = _table(["محل", "کالا", "دفتری", "شمارش", "اختلاف", "زمانِ شمارش"])
+        layout.addWidget(self.table, stretch=1)
+        actions = QHBoxLayout()
+        for text, slot in (("ثبتِ شمارش…", self.record_selected), ("نهایی‌سازی و اصلاحِ اختلاف", self.finalize), ("لغوِ شمارش", self.cancel)):
+            b = QPushButton(text)
+            b.clicked.connect(slot)
+            actions.addWidget(b)
+        actions.addStretch(1)
+        self.status_label = QLabel("")
+        actions.addWidget(self.status_label)
+        layout.addLayout(actions)
+        self._lines = []
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        from peecha.services import location_counts as lc
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        self.warehouse_combo.blockSignals(True)
+        self.warehouse_combo.clear()
+        for w in locations_service.list_warehouses(company_id):
+            self.warehouse_combo.addItem(w.name, w.warehouse_id)
+        self.warehouse_combo.blockSignals(False)
+        self._fill_locations()
+        self.session_combo.blockSignals(True)
+        self.session_combo.clear()
+        for s in lc.list_location_counts(company_id, open_only=True):
+            self.session_combo.addItem(s.session_code, s.session_id)
+        self.session_combo.blockSignals(False)
+        self._load_lines()
+
+    def _fill_locations(self) -> None:
+        from peecha.services import warehouse_locations as wl
+
+        self.location_combo.clear()
+        wid = self.warehouse_combo.currentData()
+        if wid is None:
+            return
+        for n in wl.tree(self._company_id(), wid, active_only=True):
+            if n.level is not None:
+                self.location_combo.addItem(f"{n.full_code} ({wl.LEVEL_LABELS.get(n.level, '')})", n.location_id)
+
+    def _load_lines(self) -> None:
+        from peecha.services import location_counts as lc
+
+        sid = self.session_combo.currentData()
+        self._lines = lc.count_lines(self._company_id(), sid) if sid else []
+        self.table.setRowCount(len(self._lines))
+        fmt = lambda v: numerals.format_money(v, 3, None) if v is not None else ""  # noqa: E731
+        for row, ln in enumerate(self._lines):
+            cells = [ln.location_code, f"{ln.item_code} — {ln.item_name}", "—" if ln.blind and ln.counted is None else fmt(ln.expected),
+                     fmt(ln.counted), fmt(ln.variance), _fmt_dt(ln.counted_at)]
+            for col, text in enumerate(cells):
+                self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
+
+    def create(self) -> int | None:
+        from peecha.services import location_counts as lc
+
+        try:
+            sid = lc.create_location_count(self._company_id(), self.warehouse_combo.currentData(), [self.location_combo.currentData()],
+                                           app_session.current_user.user_id, blind=self.blind_check.isChecked())
+        except (ValueError, TypeError) as exc:
+            QMessageBox.warning(self, "شمارشِ محل", str(exc))
+            return None
+        self.refresh()
+        self.session_combo.setCurrentIndex(max(0, self.session_combo.findData(sid)))
+        theme.set_status_label(self.status_label, "شمارش شروع شد.", ok=True)
+        return sid
+
+    def record_selected(self, value=None) -> bool:
+        from peecha.services import location_counts as lc
+
+        row = self.table.currentRow()
+        if not (0 <= row < len(self._lines)):
+            return False
+        ln = self._lines[row]
+        if value is None:
+            qty, ok = QInputDialog.getDouble(self, "شمارشِ محل", f"مقدارِ شمرده‌شده در {ln.location_code}:", 0, 0, 1e12, 3)
+            if not ok:
+                return False
+            value = decimal.Decimal(str(qty))
+        try:
+            lc.record_location_count(self._company_id(), self.session_combo.currentData(), ln.location_id, ln.item_id, value,
+                                     app_session.current_user.user_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "شمارشِ محل", str(exc))
+            return False
+        self._load_lines()
+        return True
+
+    def finalize(self) -> list[int]:
+        from peecha.services import location_counts as lc
+
+        sid = self.session_combo.currentData()
+        if sid is None:
+            return []
+        try:
+            docs = lc.finalize_location_count(self._company_id(), sid, app_session.current_user.user_id)
+        except ValueError as exc:
+            QMessageBox.warning(self, "شمارشِ محل", str(exc))
+            return []
+        theme.set_status_label(self.status_label, numerals.to_persian_digits(f"شمارش بسته شد؛ {len(docs)} سندِ اصلاح."), ok=True)
+        self.refresh()
+        return docs
+
+    def cancel(self) -> None:
+        from peecha.services import location_counts as lc
+
+        sid = self.session_combo.currentData()
+        if sid is not None:
+            lc.cancel_location_count(self._company_id(), sid)
+            self.refresh()
+
+
 class WarehouseOperationsScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -462,9 +732,13 @@ class WarehouseOperationsScreen(QWidget):
         self.tasks_tab = _TasksTab()
         self.plans_tab = _PlansTab()
         self.replenish_tab = _ReplenishTab()
+        self.waves_tab = _WavesTab()
+        self.count_tab = _LocationCountTab()
         self.tabs.addTab(self.tasks_tab, "وظایفِ جانمایی، برداشت و تأمین")
         self.tabs.addTab(self.plans_tab, "برنامهٔ شمارشِ دوره‌ای")
         self.tabs.addTab(self.replenish_tab, "قاعده‌هایِ تأمینِ مجدد")
+        self.tabs.addTab(self.waves_tab, "موج‌هایِ برداشت")
+        self.tabs.addTab(self.count_tab, "شمارشِ محل")
         self.tabs.currentChanged.connect(lambda _i: self.tabs.currentWidget().refresh())
         layout.addWidget(self.tabs, stretch=1)
 
@@ -472,3 +746,5 @@ class WarehouseOperationsScreen(QWidget):
         self.tasks_tab.refresh()
         self.plans_tab.refresh()
         self.replenish_tab.refresh()
+        self.waves_tab.refresh()
+        self.count_tab.refresh()

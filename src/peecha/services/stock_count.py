@@ -93,6 +93,8 @@ def record_count(
             raise ValueError("جلسهٔ انبارگردانی نامعتبر است.")
         if count_session.status_code != "COUNTING":
             raise ValueError("این انبارگردانی بسته شده است.")
+        if count_session.scope_type_code == "BY_BIN":  # R250: شمارشِ محل‌محور مسیرِ خودش را دارد
+            raise ValueError("این شمارشِ محل‌محور است؛ از «شمارشِ محل» ثبت کنید.")
         bin_row = locations_service.get_default_bin_location(count_session.warehouse_id)
         if bin_row is None:
             raise ValueError("این انبار هیچ مکانی ندارد.")
@@ -162,6 +164,9 @@ def finalize_count_session(session_id: int, company_id: int, approved_by_user_id
     data = get_count_session(session_id, company_id)
     if data.status_code != "COUNTING":
         raise ValueError("این انبارگردانی قبلاً بسته شده است.")
+    with new_session() as session:
+        if session.get(CycleCountSession, session_id).scope_type_code == "BY_BIN":
+            raise ValueError("این شمارشِ محل‌محور است؛ از «شمارشِ محل» نهایی کنید.")
     # R228: ردیفِ شمرده‌شده به تفکیکِ بچ/سریال، اختلاف را هم به تفکیکِ همان بچ/سریال
     # ثبت می‌کند (ممکن است جمع برابر باشد ولی بچ‌ها جابه‌جا شده باشند).
     gains: list[tuple] = []   # (item_id, qty, entry|None, description)

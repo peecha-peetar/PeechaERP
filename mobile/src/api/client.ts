@@ -51,6 +51,10 @@ import {
   StockTransferRequest,
   WmsTask,
   WmsTaskType,
+  WmsWave,
+  LocationCountSession,
+  LocationCountLine,
+  WarehouseMapNode,
 } from "./types";
 
 export type Fetcher = typeof fetch;
@@ -478,5 +482,32 @@ export class ApiClient {
 
   async transferStock(payload: StockTransferRequest, idempotencyKey?: string): Promise<{ stock_document_id: number }> {
     return this.request("/locations/transfer", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  // --- R250 -------------------------------------------------------------------
+  async listWaves(): Promise<WmsWave[]> {
+    return this.request<WmsWave[]>("/locations/waves");
+  }
+
+  async createWave(warehouseId: number): Promise<{ wave_id: number }> {
+    return this.request("/locations/waves", { method: "POST", body: { warehouse_id: warehouseId } });
+  }
+
+  async listLocationCounts(): Promise<LocationCountSession[]> {
+    return this.request<LocationCountSession[]>("/locations/counts");
+  }
+
+  async getLocationCountLines(sessionId: number): Promise<LocationCountLine[]> {
+    return this.request<LocationCountLine[]>(`/locations/counts/${sessionId}`);
+  }
+
+  async recordLocationCount(sessionId: number, locationId: number, itemId: number, quantity: string, idempotencyKey?: string): Promise<{ line_id: number }> {
+    return this.request(`/locations/counts/${sessionId}/record`, {
+      method: "POST", body: { location_id: locationId, item_id: itemId, quantity }, idempotencyKey,
+    });
+  }
+
+  async getWarehouseMap(warehouseId: number): Promise<WarehouseMapNode[]> {
+    return this.request<WarehouseMapNode[]>(`/locations/warehouses/${warehouseId}/map`);
   }
 }

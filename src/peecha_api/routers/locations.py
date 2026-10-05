@@ -178,6 +178,7 @@ def list_tasks(task_type: str | None = None, open_only: bool = True, warehouse_i
             "from_location_id": t.from_bin_location_id, "from_location_code": codes.get(t.from_bin_location_id),
             "to_location_id": t.to_bin_location_id, "to_location_code": codes.get(t.to_bin_location_id),
             "created_at": t.created_at.isoformat() if t.created_at else None,
+            "wave_id": t.wave_id, "wave_sequence": t.wave_sequence,
         })
     return out
 
@@ -189,6 +190,93 @@ def start_task(task_id: int, ctx: AuthContext = _EDIT) -> dict:
     except ValueError as exc:
         raise _bad_request(exc) from exc
     return {"task_id": task_id, "status": "IN_PROGRESS"}
+
+
+@router.get("/waves")
+def list_waves(open_only: bool = True, ctx: AuthContext = _VIEW) -> list[dict]:
+    """R250: موج‌هایِ برداشت با پیشرفت."""
+    out = []
+    for w in ops.list_waves(ctx.company_id, open_only):
+        tasks = ops.wave_tasks(ctx.company_id, w.wave_id)
+        out.append({"wave_id": w.wave_id, "code": w.wave_code, "warehouse_id": w.warehouse_id, "status": w.status_code,
+                    "distance_m": float(w.path_distance or 0) / wl.UNITS_PER_M, "tasks": len(tasks),
+                    "done": sum(1 for t in tasks if t.status_code == "DONE")})
+    return out
+
+
+class WaveCreate(BaseModel):
+    warehouse_id: int
+    task_ids: list[int] | None = None
+
+
+@router.post("/waves")
+def create_wave(body: WaveCreate, ctx: AuthContext = _EDIT) -> dict:
+    try:
+        return {"wave_id": ops.create_wave(ctx.company_id, body.warehouse_id, ctx.user_id, body.task_ids)}
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.post("/replenishment/generate")
+def generate_replenishment(warehouse_id: int | None = None, ctx: AuthContext = _EDIT) -> dict:
+    return {"task_ids": ops.generate_replenishment_tasks(ctx.company_id, ctx.user_id, warehouse_id)}
+
+
+@router.get("/counts")
+def list_counts(ctx: AuthContext = _VIEW) -> list[dict]:
+    """R250: شمارش‌هایِ بازِ محل‌محور."""
+    from peecha.services import location_counts as lc
+
+    return [{"session_id": s.session_id, "code": s.session_code, "warehouse_id": s.warehouse_id, "blind": s.is_blind_count,
+             "created_at": s.created_at.isoformat() if s.created_at else None}
+            for s in lc.list_location_counts(ctx.company_id, open_only=True)]
+
+
+class CountCreate(BaseModel):
+    warehouse_id: int
+    location_ids: list[int]
+    blind: bool = True
+
+
+@router.post("/counts")
+def create_count(body: CountCreate, ctx: AuthContext = _EDIT) -> dict:
+    from peecha.services import location_counts as lc
+
+    try:
+        return {"session_id": lc.create_location_count(ctx.company_id, body.warehouse_id, body.location_ids, ctx.user_id, body.blind)}
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/counts/{session_id}")
+def count_detail(session_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
+    """ردیف‌هایِ شمارش؛ در شمارشِ کور مقدارِ دفتری تا پیش از شمارش پنهان است."""
+    from peecha.services import location_counts as lc
+
+    try:
+        lines = lc.count_lines(ctx.company_id, session_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    hide = lambda ln: ln.blind and ln.counted is None  # noqa: E731
+    return [{"location_id": ln.location_id, "location_code": ln.location_code, "item_id": ln.item_id, "item_code": ln.item_code,
+             "item_name": ln.item_name, "unit": ln.unit, "expected": None if hide(ln) else str(ln.expected),
+             "counted": str(ln.counted) if ln.counted is not None else None,
+             "variance": str(ln.variance) if ln.variance is not None else None} for ln in lines]
+
+
+class CountRecord(BaseModel):
+    location_id: int
+    item_id: int
+    quantity: decimal.Decimal
+
+
+@router.post("/counts/{session_id}/record")
+def record_count(session_id: int, body: CountRecord, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+    from peecha.services import location_counts as lc
+
+    return _write(key, f"POST /locations/counts/{session_id}/record", ctx,
+                  lambda: lc.record_location_count(ctx.company_id, session_id, body.location_id, body.item_id, body.quantity, ctx.user_id),
+                  lambda line_id: {"line_id": line_id})
 
 
 @router.get("/{location_id}")

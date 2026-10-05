@@ -354,7 +354,8 @@ class WarehouseMapScreen(QWidget):
         ops = QGridLayout()
         self.op_buttons = {}
         for code, text in (("EDIT", "ویرایش"), ("STATUS", "وضعیت"), ("TRANSFER", "انتقال"), ("PUTAWAY", "پیشنهادِ جانمایی"),
-                           ("REPLENISH", "حداقل/حداکثرِ تأمین"), ("TASKS", "وظایفِ انبار"), ("DELETE", "حذف")):
+                           ("REPLENISH", "حداقل/حداکثرِ تأمین"), ("COUNT", "شمارشِ محل"), ("TASKS", "وظایفِ انبار"),
+                           ("DELETE", "حذف")):
             b = QPushButton(text)
             b.setObjectName("flatButton")
             b.clicked.connect(lambda _c=False, op=code: self.run_operation(op))
@@ -830,6 +831,11 @@ class WarehouseMapScreen(QWidget):
                 self._putaway_dialog()
             elif op == "REPLENISH":
                 self._replenishment_dialog(node)
+            elif op == "COUNT":
+                from peecha.services import location_counts as lc
+
+                sid = lc.create_location_count(company_id, self.warehouse_id, [node.location_id], user_id)
+                theme.set_status_label(self.status_label, _p(f"شمارشِ محل شروع شد (جلسهٔ {sid})؛ ادامه در «وظایفِ انبار» یا موبایل."), ok=True)
             elif op == "TASKS":
                 if self._main_window is not None:
                     self._main_window.open_screen("INV_WMS_TASKS")

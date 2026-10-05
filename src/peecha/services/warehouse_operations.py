@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 
 from peecha.db.base import new_session
 from peecha.db.models.inventory import (
-    BinLocation, CycleCountLine, CycleCountPlan, CycleCountSession, LocationReplenishmentRule, StockBalance, StockDocument,
+    BinLocation, CycleCountLine, CycleCountPlan, CycleCountSession, LocationReplenishmentRule, PickWave, StockBalance, StockDocument,
     StockDocumentLine, StockLedger, StockReservation, WarehouseTask,
 )
 
@@ -291,6 +291,7 @@ def cancel_task(task_id: int, company_id: int) -> None:
             raise ValueError("وظیفهٔ انجام‌شده لغو نمی‌شود.")
         task.status_code = "CANCELLED"
         _release(session, task, "CANCELLED")
+        _close_wave_if_done(session, task.wave_id)
         session.commit()
 
 
@@ -355,7 +356,10 @@ def complete_pick(task_id: int, company_id: int, user_id: int, picked_quantity: 
         task.started_at = task.started_at or now
         task.done_quantity_base = picked_quantity
         _release(session, task, "FULFILLED", picked_quantity)
+        warehouse_id, wave_id = task.warehouse_id, task.wave_id
+        _close_wave_if_done(session, wave_id)
         session.commit()
+    auto_replenish(company_id, user_id, warehouse_id)
 
 
 
@@ -600,3 +604,88 @@ def complete_replenishment(task_id: int, company_id: int, user_id: int, quantity
             res.status_code, res.fulfilled_quantity_base = "FULFILLED", min(qty, res.quantity)
         session.commit()
     return doc_id
+
+
+
+# =====================================================================
+# R250: تأمینِ خودکار و برداشتِ موجی
+# =====================================================================
+def auto_replenish(company_id: int, user_id: int, warehouse_id: int) -> list[int]:
+    """پس از هر برداشت: اگر قاعدهٔ فعالی در این انبار به حداقل رسیده، وظیفهٔ تأمین ساخته می‌شود."""
+    if not any(r.is_active for r in list_rules(company_id, warehouse_id)):
+        return []
+    return generate_replenishment_tasks(company_id, user_id, warehouse_id)
+
+
+def _close_wave_if_done(session, wave_id: int | None) -> None:
+    if wave_id is None:
+        return
+    open_left = session.scalar(select(func.count()).select_from(WarehouseTask).where(
+        WarehouseTask.wave_id == wave_id, WarehouseTask.status_code.in_(("OPEN", "IN_PROGRESS"))))
+    wave = session.get(PickWave, wave_id)
+    if wave is not None and not open_left and wave.status_code == "OPEN":
+        wave.status_code, wave.completed_at = "DONE", datetime.datetime.now()
+
+
+def create_wave(company_id: int, warehouse_id: int, user_id: int, task_ids: list[int] | None = None) -> int:
+    """موج از وظایفِ برداشتِ بازِ بی‌موجِ انبار (یا وظایفِ داده‌شده)، به ترتیبِ مسیرِ نزدیک‌ترین همسایه."""
+    from peecha.services import warehouse_locations as wl
+
+    with new_session() as session:
+        q = select(WarehouseTask).where(
+            WarehouseTask.company_id == company_id, WarehouseTask.warehouse_id == warehouse_id, WarehouseTask.task_type_code == "PICK",
+            WarehouseTask.status_code.in_(("OPEN", "IN_PROGRESS")), WarehouseTask.wave_id.is_(None))
+        if task_ids is not None:
+            q = q.where(WarehouseTask.task_id.in_(task_ids))
+        tasks = list(session.scalars(q))
+        if task_ids is not None and len(tasks) != len(set(task_ids)):
+            raise ValueError("بعضی از وظایف برداشتِ بازِ بی‌موجِ همین انبار نیستند.")
+        if not tasks:
+            raise ValueError("وظیفهٔ برداشتِ بازی برایِ موج نیست.")
+        bins = [t.from_bin_location_id for t in tasks if t.from_bin_location_id]
+        path = wl.picking_path(company_id, warehouse_id, bins)
+        rank = {lid: i for i, lid in enumerate(path.order)}
+        count = session.scalar(select(func.count()).select_from(PickWave).where(PickWave.company_id == company_id)) or 0
+        wave = PickWave(company_id=company_id, warehouse_id=warehouse_id, wave_code=f"WAVE-{count + 1:05d}",
+                        path_distance=decimal.Decimal(str(path.distance)), created_by_user_id=user_id)
+        session.add(wave)
+        session.flush()
+        ordered = sorted(tasks, key=lambda t: (rank.get(t.from_bin_location_id, len(rank)), t.task_id))
+        for seq, t in enumerate(ordered, start=1):
+            t.wave_id, t.wave_sequence = wave.wave_id, seq
+        session.commit()
+        return wave.wave_id
+
+
+def list_waves(company_id: int, open_only: bool = False, warehouse_id: int | None = None) -> list[PickWave]:
+    with new_session() as session:
+        q = select(PickWave).where(PickWave.company_id == company_id)
+        if open_only:
+            q = q.where(PickWave.status_code == "OPEN")
+        if warehouse_id is not None:
+            q = q.where(PickWave.warehouse_id == warehouse_id)
+        return list(session.scalars(q.order_by(PickWave.wave_id.desc())))
+
+
+def wave_tasks(company_id: int, wave_id: int) -> list[WarehouseTask]:
+    with new_session() as session:
+        wave = session.get(PickWave, wave_id)
+        if wave is None or wave.company_id != company_id:
+            raise ValueError("موج نامعتبر است.")
+        return list(session.scalars(select(WarehouseTask).where(WarehouseTask.wave_id == wave_id)
+                                    .order_by(WarehouseTask.wave_sequence)))
+
+
+def release_wave(company_id: int, wave_id: int) -> None:
+    """لغوِ موج: وظایفِ باز از موج خارج می‌شوند (خودِ وظیفه‌ها باقی می‌مانند)."""
+    with new_session() as session:
+        wave = session.get(PickWave, wave_id)
+        if wave is None or wave.company_id != company_id:
+            raise ValueError("موج نامعتبر است.")
+        if wave.status_code != "OPEN":
+            raise ValueError("فقط موجِ باز لغو می‌شود.")
+        for t in session.scalars(select(WarehouseTask).where(WarehouseTask.wave_id == wave_id,
+                                                            WarehouseTask.status_code.in_(("OPEN", "IN_PROGRESS")))):
+            t.wave_id, t.wave_sequence = None, None
+        wave.status_code = "CANCELLED"
+        session.commit()

@@ -131,6 +131,10 @@ export class SyncEngine {
       case "WMS_REPLENISH":
         await this.api.confirmReplenish(action.payload.taskId, action.payload.quantity, action.idempotencyKey);
         return;
+      case "WMS_COUNT":
+        await this.api.recordLocationCount(action.payload.sessionId, action.payload.locationId, action.payload.itemId,
+          action.payload.quantity, action.idempotencyKey);
+        return;
     }
   }
 

@@ -1,13 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { ApiClient, ApiError } from "../api/client";
-import { LocationDetail, LocationSearchResult, PutawaySuggestion, WmsTask, WmsTaskType } from "../api/types";
+import {
+  LocationCountLine, LocationCountSession, LocationDetail, LocationSearchResult, PutawaySuggestion, WarehouseMapNode, WarehouseRow, WmsTask,
+  WmsTaskType, WmsWave,
+} from "../api/types";
 import { BarcodeScannerModal, Button, Card, EmptyState, Input, SearchBar, StatusBadge, useToast } from "../components";
 import { formatAmount, toAsciiDigits } from "../format";
 import { OfflineQueue, PendingActionInput } from "../sync/offlineQueue";
 import { SyncEngine } from "../sync/syncEngine";
 import { submitWmsAction } from "../sync/wmsSubmit";
 import { useTheme } from "../theme/ThemeProvider";
+import { layoutWarehouseMap, occupancyTone } from "../wms/mapLayout";
 
 interface Props {
   apiClient: ApiClient;
@@ -16,8 +20,8 @@ interface Props {
   onBack: () => void;
 }
 
-type Tab = "SEARCH" | "TASKS" | "TRANSFER";
-type ScanTarget = "SEARCH" | "PUTAWAY_TARGET" | "TRANSFER_ITEM" | "TRANSFER_FROM" | "TRANSFER_TO";
+type Tab = "SEARCH" | "TASKS" | "TRANSFER" | "COUNT" | "MAP";
+type ScanTarget = "SEARCH" | "PUTAWAY_TARGET" | "TRANSFER_ITEM" | "TRANSFER_FROM" | "TRANSFER_TO" | "COUNT_LOCATION";
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "فعال", INACTIVE: "غیرفعال", BLOCKED: "مسدود", FULL: "پر", RESERVED: "رزرو", QUARANTINE: "قرنطینه",
@@ -68,6 +72,20 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const [transferQty, setTransferQty] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // R250: موج، شمارشِ محل، نقشه
+  const [waves, setWaves] = useState<WmsWave[]>([]);
+  const [activeWave, setActiveWave] = useState<number | null>(null);
+  const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
+  const [counts, setCounts] = useState<LocationCountSession[]>([]);
+  const [countId, setCountId] = useState<number | null>(null);
+  const [countLines, setCountLines] = useState<LocationCountLine[]>([]);
+  const [countLocation, setCountLocation] = useState<{ id: number; code: string } | null>(null);
+  const [countQty, setCountQty] = useState<Record<number, string>>({});
+  const [mapWarehouse, setMapWarehouse] = useState<number | null>(null);
+  const [mapNodes, setMapNodes] = useState<WarehouseMapNode[]>([]);
+  const [mapZoom, setMapZoom] = useState(1);
+  const [mapSelected, setMapSelected] = useState<LocationDetail | null>(null);
+
   const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
   const runSearch = async (text: string) => {
@@ -87,6 +105,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     setLoadingTasks(true);
     try {
       setTasks(await apiClient.listWmsTasks(taskFilter ?? undefined));
+      setWaves(await apiClient.listWaves().catch(() => []));
     } catch (e) {
       toast.show(errorText(e, "دریافتِ وظایف ناموفق بود."), "danger");
     } finally {
@@ -97,6 +116,55 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   useEffect(() => {
     if (tab === "TASKS") loadTasks();
   }, [tab, loadTasks]);
+
+  useEffect(() => {
+    if ((tab === "COUNT" || tab === "MAP" || tab === "TASKS") && warehouses.length === 0) {
+      apiClient.listWarehouses().then(setWarehouses).catch(() => setWarehouses([]));
+    }
+    if (tab === "COUNT") apiClient.listLocationCounts().then(setCounts).catch(() => setCounts([]));
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openCount = async (sessionId: number) => {
+    setCountId(sessionId);
+    setCountLocation(null);
+    setCountQty({});
+    try {
+      setCountLines(await apiClient.getLocationCountLines(sessionId));
+    } catch (e) {
+      toast.show(errorText(e, "دریافتِ شمارش ناموفق بود."), "danger");
+    }
+  };
+
+  const submitCount = async (line: LocationCountLine) => {
+    const qty = toAsciiDigits(countQty[line.item_id] ?? "");
+    if (countId === null || !qty) return;
+    const ok = await submit(
+      { type: "WMS_COUNT", payload: { sessionId: countId, locationId: line.location_id, itemId: line.item_id, quantity: qty } },
+      "شمارش ثبت شد.",
+    );
+    if (ok) await openCount(countId);
+  };
+
+  const loadMap = async (warehouseId: number) => {
+    setMapWarehouse(warehouseId);
+    setMapSelected(null);
+    try {
+      setMapNodes(await apiClient.getWarehouseMap(warehouseId));
+    } catch (e) {
+      toast.show(errorText(e, "دریافتِ نقشه ناموفق بود."), "danger");
+    }
+  };
+
+  const createWave = async (warehouseId: number) => {
+    try {
+      const { wave_id } = await apiClient.createWave(warehouseId);
+      setActiveWave(wave_id);
+      await loadTasks();
+      toast.show("موجِ برداشت ساخته شد.", "success");
+    } catch (e) {
+      toast.show(errorText(e, "ساختِ موج ناموفق بود."), "danger");
+    }
+  };
 
   const submit = async (input: PendingActionInput, okText: string): Promise<boolean> => {
     setBusy(true);
@@ -193,6 +261,7 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         if (target === "PUTAWAY_TARGET") setPutawayTarget(picked);
         if (target === "TRANSFER_FROM") setTransferFrom(picked);
         if (target === "TRANSFER_TO") setTransferTo(picked);
+        if (target === "COUNT_LOCATION") setCountLocation(picked);
       }
     } catch (e) {
       toast.show(errorText(e, "خواندنِ کد ناموفق بود."), "danger");
@@ -302,6 +371,126 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
     </Card>
   );
 
+  const visibleTasks = () =>
+    activeWave === null
+      ? tasks
+      : tasks.filter((t) => t.wave_id === activeWave).sort((a, b) => (a.wave_sequence ?? 0) - (b.wave_sequence ?? 0));
+
+  const renderWaves = () => (
+    <View style={{ gap: spacing.xs }}>
+      <Text style={[typography.captionBold, { color: colors.textSecondary }]}>موج‌هایِ برداشت (ترتیبِ مسیر)</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+        <Button label="همهٔ وظایف" size="md" fullWidth={false} variant={activeWave === null ? "primary" : "secondary"} onPress={() => setActiveWave(null)} />
+        {waves.map((w) => (
+          <Button
+            key={w.wave_id}
+            label={`${w.code} (${w.done}/${w.tasks})`}
+            size="md"
+            fullWidth={false}
+            variant={activeWave === w.wave_id ? "primary" : "secondary"}
+            onPress={() => setActiveWave(w.wave_id)}
+          />
+        ))}
+        {warehouses.map((wh) => (
+          <Button key={`new-${wh.warehouse_id}`} label={`موجِ تازه: ${wh.name}`} size="md" variant="ghost" fullWidth={false} onPress={() => createWave(wh.warehouse_id)} />
+        ))}
+      </View>
+    </View>
+  );
+
+  const renderCount = () => (
+    <View style={{ gap: spacing.md }}>
+      {countId === null ? (
+        counts.length === 0 ? (
+          <EmptyState title="شمارشِ بازی نیست" description="شمارشِ محل را از دسکتاپ (نقشه یا عملیاتِ انبار) شروع کنید." />
+        ) : (
+          counts.map((c) => (
+            <Card key={c.session_id} onPress={() => openCount(c.session_id)}>
+              {text(typography.bodyBold, c.code)}
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{c.blind ? "شمارشِ کور" : "با نمایشِ مقدارِ دفتری"}</Text>
+            </Card>
+          ))
+        )
+      ) : (
+        <>
+          <Button label="بازگشت به فهرستِ شمارش‌ها" size="md" variant="ghost" fullWidth={false} onPress={() => setCountId(null)} />
+          <Button label="اسکنِ محل" size="md" variant="secondary" onPress={() => setScanTarget("COUNT_LOCATION")} />
+          {countLocation ? text(typography.bodyBold, `محل: ${countLocation.code}`) : (
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>محلی را اسکن یا از فهرست انتخاب کنید.</Text>
+          )}
+          {countLines
+            .filter((ln) => countLocation === null || ln.location_id === countLocation.id)
+            .map((ln) => (
+              <Card key={`${ln.location_id}-${ln.item_id}`} onPress={() => setCountLocation({ id: ln.location_id, code: ln.location_code })}>
+                {text(typography.body, `${ln.item_code} — ${ln.item_name}`)}
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  {ln.location_code}
+                  {ln.expected !== null ? ` · دفتری ${formatAmount(ln.expected)}` : ""}
+                  {ln.counted !== null ? ` · شمرده‌شده ${formatAmount(ln.counted)}` : ""}
+                </Text>
+                {countLocation?.id === ln.location_id ? (
+                  <View style={{ flexDirection: "row", gap: spacing.sm, alignItems: "flex-end", marginTop: spacing.sm }}>
+                    <Input
+                      label={`مقدار (${ln.unit})`}
+                      value={countQty[ln.item_id] ?? ""}
+                      onChangeText={(v) => setCountQty({ ...countQty, [ln.item_id]: v })}
+                      numeric
+                      keyboardType="decimal-pad"
+                      style={{ flex: 1, marginBottom: 0 }}
+                    />
+                    <Button label="ثبت" size="md" fullWidth={false} loading={busy} onPress={() => submitCount(ln)} />
+                  </View>
+                ) : null}
+              </Card>
+            ))}
+        </>
+      )}
+    </View>
+  );
+
+  const toneColor = (tone: ReturnType<typeof occupancyTone>) =>
+    ({ empty: colors.surfaceAlt, low: colors.successSoft, mid: colors.warningSoft, high: colors.warning, full: colors.dangerSoft })[tone];
+
+  const renderMap = () => {
+    const width = 320 * mapZoom;
+    const { rects, height } = layoutWarehouseMap(mapNodes, width);
+    return (
+      <View style={{ gap: spacing.md }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+          {warehouses.map((wh) => (
+            <Button key={wh.warehouse_id} label={wh.name} size="md" fullWidth={false}
+              variant={mapWarehouse === wh.warehouse_id ? "primary" : "secondary"} onPress={() => loadMap(wh.warehouse_id)} />
+          ))}
+        </View>
+        {mapWarehouse !== null ? (
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            <Button label="بزرگ‌نمایی" size="md" variant="ghost" fullWidth={false} onPress={() => setMapZoom(Math.min(4, mapZoom * 1.5))} />
+            <Button label="کوچک‌نمایی" size="md" variant="ghost" fullWidth={false} onPress={() => setMapZoom(Math.max(1, mapZoom / 1.5))} />
+          </View>
+        ) : null}
+        {mapWarehouse !== null && rects.length === 0 ? <EmptyState title="این انبار نقشه ندارد" /> : null}
+        <ScrollView horizontal>
+          <View style={{ width, height, direction: "ltr" }}>
+            {rects.map((r) => (
+              <Pressable
+                key={r.locationId}
+                onPress={() => apiClient.getLocation(r.locationId).then(setMapSelected).catch(() => setMapSelected(null))}
+                style={{
+                  position: "absolute", left: r.left, top: r.top, width: r.width, height: r.height,
+                  backgroundColor: r.level === "AREA" || r.level === "AISLE" ? "transparent" : toneColor(occupancyTone(r.occupancy)),
+                  borderWidth: mapSelected?.location_id === r.locationId ? 2 : 1,
+                  borderColor: mapSelected?.location_id === r.locationId ? colors.primary : colors.border,
+                  opacity: r.status === "ACTIVE" ? 1 : 0.4,
+                }}
+              />
+            ))}
+          </View>
+        </ScrollView>
+        {mapSelected ? renderLocation(mapSelected, []) : null}
+      </View>
+    );
+  };
+
   const renderTasks = () => (
     <View style={{ gap: spacing.md }}>
       <View style={{ flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" }}>
@@ -317,11 +506,12 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         ))}
       </View>
       {activeTask ? renderTaskPanel(activeTask) : null}
+      {renderWaves()}
       {tasks.length === 0 && !loadingTasks ? <EmptyState title="وظیفهٔ بازی نیست" /> : null}
-      {tasks.map((t) => (
+      {visibleTasks().map((t) => (
         <Card key={t.task_id}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            {text(typography.bodyBold, `${t.task_label} #${t.task_id}`)}
+            {text(typography.bodyBold, `${t.wave_sequence && activeWave !== null ? `${t.wave_sequence}. ` : ""}${t.task_label} #${t.task_id}`)}
             <StatusBadge statusCode={t.status} label={STATUS_LABELS[t.status] ?? t.status} />
           </View>
           {text(typography.body, `${t.item_code} — ${t.item_name}`)}
@@ -365,16 +555,26 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       >
         <Button label="بازگشت" variant="ghost" fullWidth={false} onPress={onBack} />
         <Text style={[typography.h2, { color: colors.textPrimary }]}>انبار</Text>
-        <View style={{ flexDirection: "row", gap: spacing.xs }}>
+        <View style={{ flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" }}>
           {([
             ["SEARCH", "جستجو و اسکن"],
             ["TASKS", "وظایف"],
             ["TRANSFER", "انتقال"],
+            ["COUNT", "شمارش"],
+            ["MAP", "نقشه"],
           ] as [Tab, string][]).map(([key, label]) => (
             <Button key={key} label={label} size="md" fullWidth={false} variant={tab === key ? "primary" : "secondary"} onPress={() => setTab(key)} />
           ))}
         </View>
-        {tab === "SEARCH" ? renderSearch() : tab === "TASKS" ? renderTasks() : renderTransfer()}
+        {tab === "SEARCH"
+          ? renderSearch()
+          : tab === "TASKS"
+            ? renderTasks()
+            : tab === "TRANSFER"
+              ? renderTransfer()
+              : tab === "COUNT"
+                ? renderCount()
+                : renderMap()}
       </ScrollView>
       <BarcodeScannerModal visible={scanTarget !== null} onClose={() => setScanTarget(null)} onScanned={onScanned} />
     </View>

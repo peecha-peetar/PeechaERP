@@ -1209,6 +1209,8 @@ class WarehouseTask(Base):
     resulting_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
     notes: Mapped[str | None] = mapped_column(String(500))
     replenishment_rule_id: Mapped[int | None] = mapped_column(ForeignKey("inv.location_replenishment_rules.rule_id"))
+    wave_id: Mapped[int | None] = mapped_column(ForeignKey("inv.pick_waves.wave_id"))
+    wave_sequence: Mapped[int | None] = mapped_column(SmallInteger)
 
 
 class ItemStorageProfile(Base):
@@ -1242,3 +1244,20 @@ class LocationReplenishmentRule(Base):
     max_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class PickWave(Base):
+    """موجِ برداشت (R250)."""
+
+    __tablename__ = "pick_waves"
+    __table_args__ = {"schema": "inv"}
+
+    wave_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    wave_code: Mapped[str] = mapped_column(String(30))
+    status_code: Mapped[str] = mapped_column(String(15), default="OPEN")
+    path_distance: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 1))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    completed_at: Mapped[datetime.datetime | None]
