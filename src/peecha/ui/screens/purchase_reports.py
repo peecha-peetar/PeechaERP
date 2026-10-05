@@ -36,9 +36,14 @@ class ReportWorker(QThread):
 
     done = Signal(int, object, object)  # (نسل، نتیجه، خطا)
 
+    # R261: تا پایانِ اجرا نگه داشته می‌شود -- وگرنه با بارگذاریِ دوباره، QThreadِ در حالِ اجرا پاک و برنامه بسته می‌شد
+    _live: set = set()
+
     def __init__(self, generation: int, fn, *args) -> None:
         super().__init__()
         self._generation, self._fn, self._args = generation, fn, args
+        ReportWorker._live.add(self)
+        self.finished.connect(lambda w=self: ReportWorker._live.discard(w))
 
     def run(self) -> None:  # noqa: D401
         try:
@@ -383,8 +388,7 @@ class PurchaseReportScreen(ReportScreenBase):
     def _apply_result(self, result, error):
         self._page = 0
         if error is not None:
-            if not isinstance(error, ValueError):
-                raise error
+            # خطایِ غیرمنتظرهٔ اجرایِ پس‌زمینه هم فقط نمایش داده می‌شود (raise در slot برنامه را می‌بست)
             self.hint_label.setText(f"{self._def.hint}\n⚠ {error}")
             self._result = None
             return [], [], None

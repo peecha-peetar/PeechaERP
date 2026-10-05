@@ -47,6 +47,7 @@ _MODULES = [
     ("INVOICES", "فاکتورها", "receipt-text-outline", 8),
     ("REPORTS", "گزارش‌ها", "chart-bar", 9),
     ("SETTINGS", "مدیریت سیستم", "cog-outline", 10),
+    ("COSTING", "بهایِ تمام‌شده", "calculator-variant-outline", 11),
 ]
 
 # (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()
@@ -66,10 +67,13 @@ def ensure_catalog() -> None:
         session.flush()
 
         modules_by_code = {m.code: m.module_id for m in session.scalars(select(Module))}
-        existing_forms = {f.code for f in session.scalars(select(Form))}
+        existing_forms = {f.code: f for f in session.scalars(select(Form))}
         for code, module_code, _label in _FORMS:
             if code not in existing_forms:
                 session.add(Form(module_id=modules_by_code[module_code], code=code, is_active=True))
+            elif existing_forms[code].module_id != modules_by_code[module_code]:
+                # R261: جابه‌جاییِ فرم به ماژولِ دیگر (مثلِ بهایِ تمام‌شده) -- همان فرم و دسترسی‌ها، فقط گروهِ ماژول
+                existing_forms[code].module_id = modules_by_code[module_code]
         session.commit()
 
 

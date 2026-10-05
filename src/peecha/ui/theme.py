@@ -756,23 +756,36 @@ QPushButton#sidebarGearButton {{
 QPushButton#sidebarGearButton:hover {{
     color: {PRIMARY};
 }}
+/* R261: سلسله‌مراتبِ خوانا -- ماژولِ باز زمینهٔ متفاوت و نوارِ رنگی دارد، زیرگروه خطِ راهنما، برگ‌ها متنِ روشن‌تر */
+QWidget#sidebarGroupBody {{
+    background-color: {BACKGROUND};
+    border-right: 3px solid {ACCENT};
+    border-radius: 8px;
+    margin: 2px 4px 8px 0px;
+}}
+QWidget#sidebarSubGroupBody {{
+    background-color: {SURFACE};
+    border-right: 2px solid {BORDER_HOVER};
+    border-radius: 6px;
+    margin: 0px 10px 4px 2px;
+}}
 QPushButton#sidebarSubGroupHeader {{
-    color: {TEXT_SECONDARY};
-    font-size: 12.5px;
+    color: {PRIMARY};
+    font-size: 13px;
     font-weight: 700;
 }}
 QPushButton#sidebarSubGroupHeader:hover {{
-    color: {PRIMARY};
+    color: {ACCENT_HOVER};
 }}
 QLabel#sidebarSubGroupTitle {{
-    color: {TEXT_SECONDARY};
+    color: {PRIMARY};
     font-size: 12px;
     font-weight: 700;
 }}
 QPushButton#sidebarLeafItem {{
-    color: {TEXT_SECONDARY};
-    font-size: 13.5px;
-    font-weight: 500;
+    color: {TEXT_PRIMARY};
+    font-size: 13px;
+    font-weight: 400;
 }}
 QPushButton#sidebarLeafItem:hover {{
     color: {PRIMARY};

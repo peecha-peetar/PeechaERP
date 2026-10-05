@@ -70,6 +70,7 @@ _NAV_ICONS = {
     "GL": "💰",
     "TREASURY": "🏦",
     "INV": "📦",
+    "COSTING": "🧮",
     "SALES": "🛒",
     "PURCH": "🧺",
     "HR": "👥",
@@ -226,8 +227,11 @@ class _SidebarSubGroup(QWidget):
         self.header.clicked.connect(lambda _checked=False: self.set_expanded(not self.expanded))
         layout.addWidget(self.header)
         self.body = QWidget()
+        # R261: بدنهٔ زیرگروه با خطِ راهنما و زمینهٔ متفاوت -- سطحِ منو با یک نگاه معلوم است
+        self.body.setObjectName("sidebarSubGroupBody")
+        self.body.setAttribute(Qt.WA_StyledBackground, True)
         self.body_layout = QVBoxLayout(self.body)
-        self.body_layout.setContentsMargins(0, 0, 0, 2)
+        self.body_layout.setContentsMargins(0, 0, 6, 2)
         self.body_layout.setSpacing(1)
         layout.addWidget(self.body)
         self.expanded = False
@@ -302,6 +306,7 @@ class _SidebarGroup(QWidget):
         if self._has_children:
             self.body = QWidget()
             self.body.setObjectName("sidebarGroupBody")
+            self.body.setAttribute(Qt.WA_StyledBackground, True)
             body_layout = QVBoxLayout(self.body)
             body_layout.setContentsMargins(0, 2, 0, 6)
             body_layout.setSpacing(1)

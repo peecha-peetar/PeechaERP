@@ -359,19 +359,23 @@ NAV_ITEMS = [
             # کالایِ فروخته‌نشده/مصرف‌نشده (تسویه‌یِ واقعی از طریقِ همان
             # دکمه‌یِ «تبدیل به فاکتور» در خودِ فرمِ سند انجام می‌شود).
             {"code": "INV_CONSIGNMENT_TRACKING", "label": "پیگیریِ امانی", "screen": "commercial_consignment_tracking"},
-            # R259: بهایِ تمام‌شده و ارزش‌گذاریِ موجودی (یک سطح؛ گزارش‌ها همان صفحهٔ عمومیِ گزارشِ انبار)
-            {"code": "INV_COSTING", "label": "بهایِ تمام‌شده", "children": [
-                {"code": "INV_COST_DASHBOARD", "label": "داشبوردِ بهایِ تمام‌شده", "screen": "costing_dashboard"},
-                {"code": "INV_COST_SETTINGS", "label": "تنظیماتِ بهایِ تمام‌شده", "screen": "costing_settings"},
-                {"code": "INV_COST_LAYERS", "label": "لایه‌هایِ هزینه", "screen": "warehouse_report_cost_layers"},
-                {"code": "INV_COST_HISTORY", "label": "تاریخچهٔ بها", "screen": "warehouse_report_cost_history"},
-                {"code": "INV_COST_VALUATION", "label": "ارزش‌گذاریِ موجودی", "screen": "warehouse_report_cost_valuation"},
-                {"code": "INV_COST_ALLOCATION", "label": "تخصیصِ بهایِ خروج", "screen": "warehouse_report_cost_allocation"},
-                {"code": "INV_COST_COGS", "label": "بهایِ تمام‌شدهٔ فروش", "screen": "warehouse_report_cost_cogs"},
-                {"code": "INV_COST_REPLACEMENT", "label": "بهایِ جایگزینی", "screen": "costing_replacement"},
-                {"code": "INV_COST_RECALC", "label": "بازمحاسبهٔ بها", "screen": "costing_recalculation"},
-                {"code": "INV_COST_CENTER", "label": "هزینه‌یابیِ مرکزِ هزینه/پروژه", "screen": "warehouse_report_cost_center"},
-            ]},
+        ],
+    },
+    # R261: بهایِ تمام‌شده ماژولِ مستقلِ منویِ اصلی است (گزارش‌ها همان صفحهٔ عمومیِ گزارشِ انبار)
+    {
+        "code": "COSTING",
+        "label": "بهایِ تمام‌شده",
+        "children": [
+            {"code": "COST_DASHBOARD", "label": "داشبوردِ بهایِ تمام‌شده", "screen": "costing_dashboard"},
+            {"code": "COST_SETTINGS", "label": "تنظیماتِ بهایِ تمام‌شده", "screen": "costing_settings"},
+            {"code": "COST_LAYERS", "label": "لایه‌هایِ هزینه", "screen": "warehouse_report_cost_layers"},
+            {"code": "COST_HISTORY", "label": "تاریخچهٔ بها", "screen": "warehouse_report_cost_history"},
+            {"code": "COST_VALUATION", "label": "ارزش‌گذاریِ موجودی", "screen": "warehouse_report_cost_valuation"},
+            {"code": "COST_ALLOCATION", "label": "تخصیصِ بهایِ خروج", "screen": "warehouse_report_cost_allocation"},
+            {"code": "COST_COGS", "label": "بهایِ تمام‌شدهٔ فروش", "screen": "warehouse_report_cost_cogs"},
+            {"code": "COST_REPLACEMENT", "label": "بهایِ جایگزینی", "screen": "costing_replacement"},
+            {"code": "COST_RECALC", "label": "بازمحاسبهٔ بها", "screen": "costing_recalculation"},
+            {"code": "COST_CENTER", "label": "هزینه‌یابیِ مرکزِ هزینه/پروژه", "screen": "warehouse_report_cost_center"},
         ],
     },
     {

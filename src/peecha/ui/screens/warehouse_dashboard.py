@@ -7,7 +7,7 @@ import decimal
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QValueAxis
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QGridLayout, QPushButton
+from PySide6.QtWidgets import QGridLayout, QMessageBox, QPushButton
 
 from peecha import numerals
 from peecha.services import companies as companies_service
@@ -124,7 +124,8 @@ class WarehouseDashboard(_ProcurementDashboardBase):
         if generation != getattr(self, "_generation", 0):
             return
         if error is not None:
-            raise error
+            QMessageBox.warning(self, self.TITLE, f"بارگذاریِ داشبورد ناموفق بود:\n{error}")
+            return
         self._apply(*result)
 
     def _apply(self, kpis, chart_data) -> None:
