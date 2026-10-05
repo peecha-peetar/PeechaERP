@@ -274,7 +274,8 @@ check(documents_service.get_document(po3, company_id)[0].warehouse_approved_at i
 
 # ۶) سفارشِ فروش: ستونِ مکان در حواله پنهان
 from peecha.ui.screens import purchase_goods_receipt as gr
-check(gr._IN_TYPES == ("PURCHASE_ORDER", "CONSIGNMENT_IN"), "مکان فقط برایِ رسیدهایِ ورودی")
+check({"PURCHASE_ORDER", "CONSIGNMENT_IN"} <= set(gr._IN_TYPES) and not set(gr._OUT_TYPES) & set(gr._IN_TYPES),
+      "مکان فقط برایِ رسیدهایِ ورودی (R255: فاکتورِ خریدِ مستقیم هم)")
 
 # ۷) فرمِ انبار: روشِ قدیمیِ تعریفِ مکان حذف شد، بقیهٔ فرم سالم
 from peecha.ui.screens import inventory_warehouses as iw
