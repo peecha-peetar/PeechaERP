@@ -390,6 +390,27 @@ NAV_ITEMS = [
             {"code": "COST_CENTER", "label": "هزینه‌یابیِ مرکزِ هزینه/پروژه", "screen": "warehouse_report_cost_center"},
         ],
     },
+    # R265: دارایی‌هایِ ثابت -- ماژولِ مستقل؛ صفحهٔ «دارایی‌ها» مرکزِ عملیات است
+    {
+        "code": "FA",
+        "label": "دارایی‌هایِ ثابت",
+        "children": [
+            {"code": "FA_DASHBOARD", "label": "داشبوردِ دارایی‌ها", "screen": "fa_dashboard"},
+            {"code": "FA_ASSETS", "label": "دارایی‌ها", "screen": "fa_assets"},
+            {"code": "FA_DEPRECIATION", "label": "اجرایِ استهلاک", "screen": "fa_depreciation"},
+            {"code": "FA_CIP", "label": "دارایی در جریانِ تکمیل", "screen": "fa_cip"},
+            {"code": "FA_PHYSICAL", "label": "شمارشِ فیزیکی", "screen": "fa_physical_count"},
+            {"code": "FA_SETUP", "label": "تنظیمات و طبقه‌ها", "screen": "fa_setup"},
+            {"code": "FA_REPORTS", "label": "گزارش‌ها", "children": [
+                {"code": "FA_RPT_REGISTER", "label": "دفترِ دارایی‌ها", "screen": "warehouse_report_fa_register"},
+                {"code": "FA_RPT_DEPRECIATION", "label": "گزارشِ استهلاک", "screen": "warehouse_report_fa_depreciation"},
+                {"code": "FA_RPT_MOVEMENT", "label": "گردشِ دارایی‌ها", "screen": "warehouse_report_fa_movement"},
+                {"code": "FA_RPT_DISPOSALS", "label": "واگذاری‌ها و سود/زیان", "screen": "warehouse_report_fa_disposals"},
+                {"code": "FA_RPT_FORECAST", "label": "پیش‌بینیِ استهلاک", "screen": "warehouse_report_fa_forecast"},
+                {"code": "FA_RPT_MACHINE", "label": "بهایِ ماشین‌آلاتِ تولید", "screen": "warehouse_report_fa_machine_cost"},
+            ]},
+        ],
+    },
     {
         "code": "SALES",
         "label": "فروش و بازاریابی",
@@ -664,6 +685,13 @@ SETTINGS_SUB_FORMS = [
 # به‌صورتِ دستی به فهرستِ فرم‌ها اضافه می‌شود.
 _EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
     ("media_center", "SALES", "مرکزِ رسانه"),
+    # R265: دسترسی‌هایِ جداگانهٔ عملیاتِ دارایی (و فرمِ گردشِ کارِ تأییدِ هرکدام) -- صفحهٔ «دارایی‌ها» این‌ها را چک می‌کند
+    ("fa_capitalize", "FA", "دارایی: سرمایه‌ای‌کردن"), ("fa_transfer", "FA", "دارایی: انتقال"),
+    ("fa_reclassify", "FA", "دارایی: تغییرِ طبقه"), ("fa_improve", "FA", "دارایی: افزایشِ سرمایه‌ای/تعمیر"),
+    ("fa_impair", "FA", "دارایی: کاهشِ ارزش"), ("fa_revalue", "FA", "دارایی: تجدیدِ ارزیابی"),
+    ("fa_sell", "FA", "دارایی: فروش"), ("fa_scrap", "FA", "دارایی: اسقاط"), ("fa_dispose", "FA", "دارایی: واگذاری/حذف"),
+    ("fa_split_merge", "FA", "دارایی: تقسیم/ادغام/جزء"), ("fa_cost_view", "FA", "دارایی: مشاهدهٔ بها"),
+    ("fa_cost_adjust", "FA", "دارایی: ثبتِ بهایِ تحصیل"),
 ]
 
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط

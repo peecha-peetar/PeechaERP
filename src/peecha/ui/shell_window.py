@@ -71,6 +71,7 @@ _NAV_ICONS = {
     "TREASURY": "🏦",
     "INV": "📦",
     "COSTING": "🧮",
+    "FA": "🏭",
     "SALES": "🛒",
     "PURCH": "🧺",
     "HR": "👥",
@@ -1772,6 +1773,14 @@ class MainWindow(QMainWindow):
         self.register_screen("costing_settings", CostingSettingsScreen())
         self.register_screen("costing_replacement", ReplacementCostScreen())
         self.register_screen("costing_recalculation", RecalculationScreen())  # R260
+        from peecha.ui.screens import fixed_assets as fa_screens
+
+        self.register_screen("fa_dashboard", fa_screens.FaDashboard(self))  # R265
+        self.register_screen("fa_assets", fa_screens.AssetsScreen(self))
+        self.register_screen("fa_depreciation", fa_screens.DepreciationScreen())
+        self.register_screen("fa_cip", fa_screens.CipScreen())
+        self.register_screen("fa_physical_count", fa_screens.PhysicalCountScreen())
+        self.register_screen("fa_setup", fa_screens.SetupScreen())
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", WarehouseOperationsScreen())

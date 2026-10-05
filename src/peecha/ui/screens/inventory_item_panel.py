@@ -1329,6 +1329,12 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
 
         self.asset_status_label = QLabel("")
         layout.addWidget(self.asset_status_label)
+        # R265: مدیریتِ کاملِ دارایی (استهلاکِ دوره‌ای، انتقال، فروش، ...) در ماژولِ «دارایی‌هایِ ثابت»
+        fa_hint = QLabel("مدیریتِ کاملِ دارایی (ثبت با ویزارد، استهلاکِ دوره‌ای، انتقال، فروش و اسقاط) در منویِ «دارایی‌هایِ ثابت» است؛ "
+                         "اطلاعاتِ این بخش هنگامِ نصب به آن منتقل شده است.")
+        fa_hint.setObjectName("sectionHint")
+        fa_hint.setWordWrap(True)
+        layout.addWidget(fa_hint)
 
         layout.addStretch(1)
         return tab

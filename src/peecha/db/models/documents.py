@@ -35,3 +35,5 @@ class Attachment(Base):
     # چند عکسِ فعالِ یک رکورد (source_record_id)، دقیقاً یکی می‌تواند
     # عکسِ اصلی باشد -- برایِ بندانگشتیِ کنارِ نام و پیش‌فرضِ زومِ اول.
     is_primary: Mapped[bool] = mapped_column(default=False)
+    # R265: نوعِ مدرک (فاکتور/گارانتی/قرارداد/دفترچه/گواهی/تصویر/فنی) -- اختیاری، برایِ مدارکِ دارایی
+    document_type_code: Mapped[str | None] = mapped_column(String(20))

@@ -16,6 +16,7 @@ from peecha_api.routers import (
     customers,
     dashboard,
     delivery,
+    fixed_assets,
     inventory,
     locations,
     manager_dashboard,
@@ -52,6 +53,7 @@ app.include_router(manager_dashboard.router)
 app.include_router(collection.router)
 app.include_router(vehicle_settlement.router)
 app.include_router(locations.router)  # R248: محلِ انبار (اسکن/محتوا/جانمایی/برداشت)
+app.include_router(fixed_assets.router)  # R265: اسکنِ دارایی و شمارشِ فیزیکی
 
 
 @app.get("/health")

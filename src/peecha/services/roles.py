@@ -48,6 +48,7 @@ _MODULES = [
     ("REPORTS", "گزارش‌ها", "chart-bar", 9),
     ("SETTINGS", "مدیریت سیستم", "cog-outline", 10),
     ("COSTING", "بهایِ تمام‌شده", "calculator-variant-outline", 11),
+    ("FA", "دارایی‌هایِ ثابت", "office-building-cog-outline", 12),
 ]
 
 # (کدِ فرم، کدِ ماژول، برچسبِ فارسی) — از nav_catalog.build_form_catalog()

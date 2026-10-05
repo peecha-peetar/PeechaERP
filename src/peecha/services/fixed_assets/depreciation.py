@@ -330,7 +330,7 @@ def forecast(company_id: int, asset_id: int, months: int | None = None,
             DepreciationLine.asset_id == asset_id, DepreciationRun.status_code == "POSTED"))
     if asset.depreciation_start_date is None or asset.depreciation_method == "NONE":
         return []
-    start = c.add_months(last, 1) if last else max(asset.depreciation_start_date, datetime.date.today().replace(day=1))
+    start = c.add_months(last, 1) if last else asset.depreciation_start_date  # نخستین دورهٔ ثبت‌نشده
     start = c.period_of(start)[1]
     units_per_month = monthly_units if monthly_units is not None else (
         (asset.standard_hours / 12) if asset.standard_hours else None)
