@@ -230,6 +230,7 @@ class ProductionOrder(Base):
     completed_at: Mapped[datetime.datetime | None]
     closed_at: Mapped[datetime.datetime | None]
     closed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    plan_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("prd.production_plan_lines.line_id"))
 
     @property
     def remaining_qty(self) -> decimal.Decimal:
@@ -501,3 +502,76 @@ class CostClosing(Base):
     reopened_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     reopened_at: Mapped[datetime.datetime | None]
     reopen_reason: Mapped[str | None] = mapped_column(String(300))
+
+
+# --- فاز ۴: برنامه‌ریزی ------------------------------------------------------------------------
+class ProductionPlan(Base):
+    __tablename__ = "production_plans"
+    __table_args__ = _PRD
+
+    plan_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    period_type: Mapped[str] = mapped_column(String(5), default="MONTH")
+    start_date: Mapped[datetime.date]
+    end_date: Mapped[datetime.date]
+    status_code: Mapped[str] = mapped_column(String(10), default="DRAFT")
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class ProductionPlanLine(Base):
+    __tablename__ = "production_plan_lines"
+    __table_args__ = _PRD
+
+    line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("prd.production_plans.plan_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    planned_date: Mapped[datetime.date]
+    quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    work_center_id: Mapped[int | None] = mapped_column(ForeignKey("prd.work_centers.work_center_id"))
+    source_type: Mapped[str] = mapped_column(String(12), default="MANUAL")
+    sales_order_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_document_lines.line_id"))
+    order_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("prd.production_orders.order_id"))
+    notes: Mapped[str | None] = mapped_column(String(300))
+
+
+class MrpRun(Base):
+    __tablename__ = "mrp_runs"
+    __table_args__ = _PRD
+
+    run_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    run_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    horizon_date: Mapped[datetime.date]
+    params: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    lines_count: Mapped[int] = mapped_column(default=0)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+
+
+class MrpLine(Base):
+    __tablename__ = "mrp_lines"
+    __table_args__ = _PRD
+
+    mrp_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("prd.mrp_runs.run_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    level: Mapped[int] = mapped_column(default=0)
+    make_or_buy: Mapped[str] = mapped_column(String(4))
+    gross_requirement: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    independent_demand: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    dependent_demand: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    on_hand: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    reserved: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    available: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    scheduled_receipts: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    min_stock: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    net_requirement: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    suggested_action: Mapped[str] = mapped_column(String(10), default="NONE")
+    suggested_qty: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(0))
+    need_date: Mapped[datetime.date | None]
+    release_date: Mapped[datetime.date | None]
+    converted_ref: Mapped[str | None] = mapped_column(String(60))
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

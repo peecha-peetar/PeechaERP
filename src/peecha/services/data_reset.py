@@ -230,6 +230,11 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "(SELECT vehicle_loading_id FROM inv.vehicle_loadings WHERE company_id = :company_id)",
     "DELETE FROM inv.vehicle_loadings WHERE company_id = :company_id",
     # R266: تولید -- دستورها و همهٔ تراکنش/هزینه‌هایشان (به اسنادِ انبار/حسابداری و تخصیصِ ماشینِ دارایی ارجاع دارند)
+    "DELETE FROM prd.mrp_lines WHERE run_id IN (SELECT run_id FROM prd.mrp_runs WHERE company_id = :company_id)",
+    "DELETE FROM prd.mrp_runs WHERE company_id = :company_id",
+    "UPDATE prd.production_orders SET plan_line_id = NULL WHERE company_id = :company_id",
+    "DELETE FROM prd.production_plan_lines WHERE plan_id IN (SELECT plan_id FROM prd.production_plans WHERE company_id = :company_id)",
+    "DELETE FROM prd.production_plans WHERE company_id = :company_id",
     "DELETE FROM prd.cost_allocations WHERE pool_id IN (SELECT pool_id FROM prd.cost_pools WHERE company_id = :company_id)",
     "DELETE FROM prd.cost_pools WHERE company_id = :company_id",
     "DELETE FROM prd.cost_closings WHERE company_id = :company_id",
