@@ -1908,4 +1908,8 @@ WAREHOUSE_REPORTS: list[ReportDef] = [
 from peecha.services.costing.reports import COSTING_REPORTS  # noqa: E402
 
 WAREHOUSE_REPORTS += COSTING_REPORTS
+# R264: گزارش‌هایِ دارایی‌هایِ ثابت هم رویِ همین موتور/صفحه (بدونِ موتورِ گزارشِ جدید)
+from peecha.services.fixed_assets.reports import FA_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += FA_REPORTS
 WAREHOUSE_REPORTS_BY_CODE = {r.code: r for r in WAREHOUSE_REPORTS}

@@ -240,6 +240,18 @@ WAREHOUSE_REPORT_MENU = [
     ]),
 ]
 
+# R264: «گزارش‌ها ‹ دارایی‌هایِ ثابت» -- (کد، برچسب) = services/fixed_assets/reports.FA_REPORTS (همان موتور/صفحهٔ گزارش)
+FA_REPORT_MENU = [
+    ("FA", "دارایی‌هایِ ثابت", [
+        ("FA_REGISTER", "دفترِ دارایی‌هایِ ثابت"), ("FA_DEPRECIATION", "گزارشِ استهلاک"), ("FA_MOVEMENT", "گردشِ دارایی‌ها"),
+        ("FA_FULLY_DEPRECIATED", "دارایی‌هایِ کاملاً مستهلک"), ("FA_BY_LOCATION", "به تفکیکِ محل"),
+        ("FA_BY_BRANCH", "به تفکیکِ شعبه"), ("FA_BY_COST_CENTER", "به تفکیکِ مرکزِ هزینه"), ("FA_BY_CATEGORY", "به تفکیکِ طبقه"),
+        ("FA_CIP", "دارایی‌هایِ در جریانِ تکمیل"), ("FA_DISPOSALS", "واگذاری‌ها"), ("FA_GAIN_LOSS", "سود و زیانِ واگذاری"),
+        ("FA_PHYSICAL", "شمارشِ فیزیکی"), ("FA_AGING", "سنِ دارایی‌ها"), ("FA_FORECAST", "پیش‌بینیِ استهلاک"),
+        ("FA_MACHINE_COST", "بهایِ ماشین‌آلاتِ تولید"),
+    ]),
+]
+
 
 def _report_menu(prefix: str, screen_prefix: str, menu: list) -> list[dict]:
     return [
@@ -496,6 +508,7 @@ NAV_ITEMS = [
             {"code": "REPORTS_GL", "label": "حسابداری", "children": _report_menu("ACC_RPT", "accounting_report_", ACCOUNTING_REPORT_MENU)},
             # R246: گزارش‌ها و تحلیلِ انبار (services/warehouse_reports.py) -- کاردکسِ قبلی با همان کد
             {"code": "REPORTS_INV", "label": "انبار", "children": _report_menu("INV_RPT", "warehouse_report_", WAREHOUSE_REPORT_MENU)},
+            {"code": "REPORTS_FA", "label": "دارایی‌هایِ ثابت", "children": _report_menu("INV_RPT", "warehouse_report_", FA_REPORT_MENU)},
             # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
             {"code": "REPORTS_PURCHASE", "label": "گزارشاتِ خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
             {"code": "REPORTS_SALES", "label": "گزارشاتِ فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},
