@@ -347,7 +347,7 @@ old_item = catalog_service.create_item(company_id, "OLD-1", "داراییِ قد
 inventory_extended.set_asset_detail(old_item, 10, jd(1), D(1_000_000), "STRAIGHT_LINE", "TAG-9", None, D(0))
 inventory_extended.post_monthly_depreciation(old_item, company_id, user.user_id, jd(1, 28), dep_exp.account_id, fa_accum.account_id)
 inventory_extended.post_monthly_depreciation(old_item, company_id, user.user_id, jd(2, 28), dep_exp.account_id, fa_accum.account_id)
-sql = pathlib.Path("db/schema/197_fixed_assets_docs_legacy.sql").read_text(encoding="utf-8")
+sql = (pathlib.Path(__file__).resolve().parents[2] / "db/schema/197_fixed_assets_docs_legacy.sql").read_text(encoding="utf-8")
 with get_engine().begin() as conn:
     conn.exec_driver_sql(sql)
     conn.exec_driver_sql(sql)   # اجرایِ دوباره بی‌اثر
