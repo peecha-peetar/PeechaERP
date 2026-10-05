@@ -834,6 +834,10 @@ class CompanyCostingSettings(Base):
         SmallInteger, ForeignKey("inv.costing_methods.costing_method_id")
     )
     allow_item_override: Mapped[bool] = mapped_column(default=True)
+    # R257: WAREHOUSE (رفتارِ قبلی: تنظیمِ هر انبار) | BLOCK | PENDING | FALLBACK
+    negative_stock_policy: Mapped[str] = mapped_column(String(20), default="WAREHOUSE")
+    nifo_price_sources: Mapped[str] = mapped_column(
+        String(200), default="LAST_RECEIPT,LAST_PURCHASE_PRICE,LAST_PURCHASE_ORDER,SUPPLIER_PRICE,MANUAL")
 
 
 class CostLayer(Base):
@@ -851,6 +855,37 @@ class CostLayer(Base):
     original_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     remaining_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     unit_cost: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    # R257 (migration 192)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("core.companies.company_id"))
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("inv.batches.batch_id"))
+    serial_id: Mapped[int | None] = mapped_column(ForeignKey("inv.serial_numbers.serial_id"))
+    source_type_code: Mapped[str | None] = mapped_column(String(20))
+    source_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
+    receipt_date: Mapped[datetime.date | None] = mapped_column(Date)
+    status_code: Mapped[str] = mapped_column(String(15), default="OPEN")
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CostAllocation(Base):
+    """R257: بهایِ هر خروج از کدام لایه (یا میانگین/استاندارد) آمده است."""
+
+    __tablename__ = "cost_allocations"
+    __table_args__ = {"schema": "inv"}
+
+    allocation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    stock_document_line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    cost_layer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.cost_layers.cost_layer_id"))
+    costing_method_code: Mapped[str] = mapped_column(String(20))
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    unit_cost: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    total_cost: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2), Computed("round(quantity_base * unit_cost, 2)"))
+    movement_date: Mapped[datetime.date] = mapped_column(Date)
+    costing_status_code: Mapped[str] = mapped_column(String(25), default="CALCULATED")
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
 class StandardCost(Base):

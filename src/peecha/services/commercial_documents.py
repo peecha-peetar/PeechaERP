@@ -45,6 +45,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import unit_conversion as uc
 from peecha.services import inventory_documents as inv_documents_service
 from peecha.services import inventory_engine as inv_engine_service
+from peecha.services.costing.strategies import is_layer_method
 from peecha.services import inventory_locations as locations_service
 from peecha.services import journal_entries as je_service
 from peecha.services import roles as roles_service
@@ -957,7 +958,7 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
                 continue
             effective_warehouse_id = (draft_by_item.get(item_id) or original_by_item.get(item_id))["warehouse_id"] or warehouse_id
             in_unit_cost = None
-            if delta < 0 and inv_engine_service.get_effective_costing_method(item_id, company_id) == "FIFO":
+            if delta < 0 and is_layer_method(inv_engine_service.get_effective_costing_method(item_id, company_id)):
                 # طبقِ طراحی: FIFO میانگینی برایِ «بازگرداندنِ خنثی» ندارد --
                 # بهایِ صادقانه‌یِ همان واحدهایی که در همین فاکتورِ اصلی
                 # واقعاً مصرف شده بودند از رویِ خودِ Ledger خوانده می‌شود.
@@ -1030,7 +1031,7 @@ def post_invoice_correction(document_id: int, company_id: int, posted_by_user_id
                     adj_je_lines.append(_L(payable_account_id, result.amount, _ZERO, item_id=item_id, party=True))
                     adj_je_lines.append(_L(inventory_account_id, _ZERO, result.amount, item_id=item_id))
             elif old_unit_cost != new_unit_cost and old_qty > 0:
-                if inv_engine_service.get_effective_costing_method(item_id, company_id) == "FIFO":
+                if is_layer_method(inv_engine_service.get_effective_costing_method(item_id, company_id)):
                     cost_result = inv_engine_service.apply_purchase_cost_correction_fifo(
                         original_stock_document_id, item_id, new_unit_cost - old_unit_cost,
                     )
@@ -3277,7 +3278,8 @@ def post_document(
                 )
                 # R237: برگشت از فروشِ دارایِ ارجاع به فاکتور -> بهایِ همان فروش (ردیفِ حوالهٔ فاکتور)
                 source_stock_line_id = None
-                if stock_document_type == "RETURN_IN":
+                # R257: برگشت به تامین‌کننده هم به ردیفِ رسیدِ فاکتورِ مرجع وصل می‌شود (مصرف از لایهٔ همان رسید)
+                if stock_document_type in ("RETURN_IN", "RETURN_OUT"):
                     with new_session() as session:
                         comm_line = session.get(CommercialDocumentLine, line_id)
                         source_comm_line = session.get(CommercialDocumentLine, comm_line.source_line_id) \

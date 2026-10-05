@@ -55,7 +55,7 @@ _WITHDRAWAL_POLICY_LABELS: dict[str, str] = {
     "FEFO": "زودانقضاتر اول‌خارج (FEFO)", "MANUAL": "دستی",
 }
 _ACCESS_LEVEL_LABELS: dict[str, str] = {"PUBLIC": "عمومی", "RESTRICTED": "محدود (فقط کاربرانِ مجاز)"}
-_COSTING_METHOD_LABELS: dict[str, str] = {"FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
+from peecha.services.costing.strategies import METHOD_LABELS as _COSTING_METHOD_LABELS  # noqa: E402
 _FINANCIAL_MAPPING_KEYS = ("INVENTORY_ASSET", "INVENTORY_ADJUSTMENT_GAIN", "INVENTORY_ADJUSTMENT_LOSS")
 
 
@@ -127,7 +127,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             (self.min_temp_field, "پایین‌ترین دمایِ مجازِ نگه‌داری در این انبار."),
             (self.max_temp_field, "بالاترین دمایِ مجازِ نگه‌داری در این انبار."),
             # کنترلِ موجودی
-            (self.costing_method_combo, "روشِ بهایابیِ موجودیِ این انبار -- خالی یعنی از روشِ پیش‌فرضِ شرکت پیروی می‌کند."),
+            (self.costing_method_combo, "فقط اطلاعاتی -- موتورِ بهایِ تمام‌شده روشِ شرکت (یا کالا) را به‌کار می‌برد، نه این فیلد."),
             (self.min_qty_field, "حداقلِ موجودیِ پیش‌فرض برایِ کالاهایی که خودشان مقدارِ اختصاصی ندارند -- برایِ هشدارِ کمبود."),
             (self.max_qty_field, "حداکثرِ موجودیِ پیش‌فرضِ توصیه‌شده -- برایِ هشدارِ مازاد."),
             (self.reorder_point_field, "نقطه‌یِ سفارشِ پیش‌فرض -- وقتی موجودی به این عدد برسد، هشدارِ سفارشِ مجدد صادر می‌شود."),
@@ -453,7 +453,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.default_tax_percent_field = QLineEdit()
 
         self.stock_control_grid = FieldGrid([
-            FieldSpec("costing_method", "روشِ قیمت‌گذاری", self.costing_method_combo, span=1),
+            FieldSpec("costing_method", "روشِ قیمت‌گذاری (فقط اطلاعاتی)", self.costing_method_combo, span=1),
             FieldSpec("min_qty", "حداقلِ موجودی (پیش‌فرض)", self.min_qty_field, span=1),
             FieldSpec("max_qty", "حداکثرِ موجودی (پیش‌فرض)", self.max_qty_field, span=1),
             FieldSpec("reorder_point", "نقطهٔ‌سفارش (پیش‌فرض)", self.reorder_point_field, span=1),

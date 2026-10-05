@@ -39,6 +39,8 @@ from peecha.db.models.inventory import (
 )
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
+from peecha.services.costing import engine as costing_engine
+from peecha.services.costing import strategies as costing_strategies
 
 _Q2 = decimal.Decimal("0.01")
 _ZERO = decimal.Decimal(0)
@@ -156,22 +158,47 @@ def get_costing_settings(company_id: int) -> tuple[str | None, bool]:
         return (method.code if method is not None else None), row.allow_item_override
 
 
-def set_costing_settings(company_id: int, default_costing_method_code: str, allow_item_override: bool = True) -> None:
+def get_negative_stock_policy(company_id: int) -> str:
+    with new_session() as session:
+        return costing_engine.company_settings(session, company_id).negative_policy
+
+
+def set_costing_settings(company_id: int, default_costing_method_code: str, allow_item_override: bool = True,
+                         negative_stock_policy: str | None = None, user_id: int | None = None, reason: str | None = None) -> None:
+    """R257: + سیاستِ موجودیِ منفی؛ هر تغییر با کاربر/مقدارِ قبلی و جدید/علت در Auditِ موجود ثبت می‌شود."""
+    from peecha.services import audit as audit_service
+
+    if negative_stock_policy is not None and negative_stock_policy not in costing_engine.NEGATIVE_POLICIES:
+        raise ValueError("سیاستِ موجودیِ منفی نامعتبر است.")
+    if default_costing_method_code in costing_engine.NOT_YET_AVAILABLE:
+        raise ValueError(costing_engine.NOT_YET_AVAILABLE[default_costing_method_code])
     with new_session() as session:
         method = session.scalar(select(CostingMethod).where(CostingMethod.code == default_costing_method_code))
         if method is None:
             raise ValueError("روشِ قیمت‌گذاری نامعتبر است.")
         row = session.get(CompanyCostingSettings, company_id)
+        old = costing_engine.company_settings(session, company_id) if row is not None else None
         if row is None:
-            session.add(
-                CompanyCostingSettings(
-                    company_id=company_id, default_costing_method_id=method.costing_method_id,
-                    allow_item_override=allow_item_override,
-                )
+            row = CompanyCostingSettings(
+                company_id=company_id, default_costing_method_id=method.costing_method_id,
+                allow_item_override=allow_item_override, negative_stock_policy=negative_stock_policy or "WAREHOUSE",
             )
+            session.add(row)
         else:
             row.default_costing_method_id = method.costing_method_id
             row.allow_item_override = allow_item_override
+            if negative_stock_policy is not None:
+                row.negative_stock_policy = negative_stock_policy
+        changes = {}
+        if old is None or old.method != method.code:
+            changes["costing_method"] = [old.method if old else None, method.code]
+        if negative_stock_policy is not None and (old is None or old.negative_policy != negative_stock_policy):
+            changes["negative_stock_policy"] = [old.negative_policy if old else None, negative_stock_policy]
+        if changes:
+            if reason:
+                changes["reason"] = reason
+            audit_service.log_activity(session, company_id=company_id, user_id=user_id, entity_type="CostingSettings",
+                                       entity_id=company_id, action="UPDATE", changes=changes)
         session.commit()
 
 
@@ -630,9 +657,21 @@ def post_stock_document(
         if costing_settings is not None:
             method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
             default_costing_method_code = method_row.code if method_row is not None else None
+        negative_policy = costing_engine.company_settings(session, company_id).negative_policy  # R257
 
         def costing_method(item: Item) -> str:
             return item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
+
+        # R257: آخرین مصرفِ consume_out به تفکیکِ لایه -- انتقال با همان تاریخ/بچِ لایهٔ مبدأ لایهٔ مقصد می‌سازد
+        last_consumed: list[tuple[decimal.Decimal, decimal.Decimal, CostLayer | None]] = []
+
+        def add_layer(item: Item, warehouse_id: int, ledger: StockLedger, quantity: decimal.Decimal, unit_cost: decimal.Decimal,
+                      line: StockDocumentLine, receipt_date: datetime.date | None = None, batch_id: int | None = None) -> None:
+            if costing_strategies.is_layer_method(costing_method(item)):
+                costing_engine.create_layer(
+                    session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, ledger_id=ledger.ledger_id,
+                    quantity=quantity, unit_cost=unit_cost, receipt_date=receipt_date or movement_date, source_type=doc_type,
+                    source_line_id=line.line_id, batch_id=batch_id if batch_id is not None else line.batch_id)
 
         def resolve_bin(warehouse_id: int, bin_location_id: int | None) -> int:
             if bin_location_id is not None:
@@ -704,42 +743,63 @@ def post_stock_document(
             bal.quantity_on_hand += quantity_base
             bal.last_movement_at = datetime.datetime.now()
 
-        def consume_out(item: Item, warehouse_id: int, bin_location_id: int, quantity_base: decimal.Decimal, movement_date: datetime.date) -> list[tuple[decimal.Decimal, decimal.Decimal]]:
+        def consume_out(item: Item, warehouse_id: int, bin_location_id: int, quantity_base: decimal.Decimal, movement_date: datetime.date,
+                        line: StockDocumentLine | None = None, preferred_source_line_id: int | None = None) -> list[tuple[decimal.Decimal, decimal.Decimal]]:
             """موجودی را کم می‌کند و لیستِ بخش‌هایِ (unit_cost, quantity)
             مصرف‌شده را برمی‌گرداند — برایِ درجِ ردیف(هایِ) Ledger و برایِ
-            بازتولیدِ عینیِ همان بهایِ خروجی در مقصدِ TRANSFER."""
+            بازتولیدِ عینیِ همان بهایِ خروجی در مقصدِ TRANSFER.
+            R257: بهایِ روش‌هایِ لایه‌ای از costing.engine؛ تخصیصِ هر بخش در inv.cost_allocations ثبت می‌شود."""
             bal = get_or_create_balance(item.item_id, warehouse_id, bin_location_id)
             warehouse = warehouses_by_id[warehouse_id]
             item_label = item_codes.get(item.item_id, str(item.item_id))
-            if bal.quantity_on_hand < quantity_base and not warehouse.allow_negative_stock:
+            shortage = quantity_base - max(bal.quantity_on_hand, _ZERO)
+            short_status = costing_engine.negative_outcome(negative_policy, warehouse.allow_negative_stock, shortage)
+            if short_status is None:
                 raise ValueError(
                     f"موجودیِ کافی در انبار «{warehouse.name}» برایِ کالایِ «{item_label}» وجود ندارد "
                     f"(موجود: {bal.quantity_on_hand}، درخواستی: {quantity_base})."
                 )
 
+            def fallback_cost() -> decimal.Decimal:
+                if bal.average_unit_cost or negative_policy == "WAREHOUSE":
+                    return bal.average_unit_cost or _ZERO
+                return _last_known_unit_cost(session, item.item_id) or _ZERO
+
             method = costing_method(item)
             segments: list[tuple[decimal.Decimal, decimal.Decimal]] = []
-            if method == "FIFO":
-                remaining = quantity_base
-                layers = session.scalars(
-                    select(CostLayer)
-                    .where(CostLayer.item_id == item.item_id, CostLayer.warehouse_id == warehouse_id, CostLayer.remaining_quantity > 0)
-                    .order_by(CostLayer.received_at)
-                    .with_for_update()
-                ).all()
-                for layer in layers:
-                    if remaining <= 0:
-                        break
-                    take = min(layer.remaining_quantity, remaining)
-                    layer.remaining_quantity -= take
-                    segments.append((layer.unit_cost, take))
-                    remaining -= take
+            last_consumed.clear()
+            allocations: list[tuple[decimal.Decimal, decimal.Decimal, int | None, str]] = []
+            if costing_strategies.is_layer_method(method):
+                picks, remaining = costing_engine.consume_layers(
+                    session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, quantity=quantity_base,
+                    method=method, preferred_source_line_id=preferred_source_line_id)
+                for p in picks:
+                    segments.append((p.layer.unit_cost, p.quantity))
+                    last_consumed.append((p.layer.unit_cost, p.quantity, p.layer))
+                    allocations.append((p.layer.unit_cost, p.quantity, p.layer.cost_layer_id, "CALCULATED"))
                 if remaining > 0:
-                    segments.append((bal.average_unit_cost or _ZERO, remaining))
-            elif method == "STANDARD":
-                segments.append((_standard_cost(session, item.item_id, movement_date), quantity_base))
+                    cost = fallback_cost()
+                    segments.append((cost, remaining))
+                    last_consumed.append((cost, remaining, None))
+                    allocations.append((cost, remaining, None, short_status if shortage > 0 else "CALCULATED"))
             else:
-                segments.append((bal.average_unit_cost or _ZERO, quantity_base))
+                cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else (
+                    bal.average_unit_cost or (_ZERO if shortage <= 0 else fallback_cost()))
+                segments.append((cost, quantity_base))
+                last_consumed.append((cost, quantity_base, None))
+                if shortage > 0 and short_status != "CALCULATED":
+                    covered = quantity_base - shortage
+                    allocations.append((cost, covered, None, "CALCULATED"))
+                    allocations.append((cost, shortage, None, short_status))
+                else:
+                    allocations.append((cost, quantity_base, None, "CALCULATED"))
+            if line is not None:
+                for cost, qty, layer_id, status in allocations:
+                    costing_engine.record_allocation(
+                        session, company_id=company_id, stock_line_id=line.line_id, item_id=item.item_id,
+                        warehouse_id=warehouse_id, method=method, quantity=qty, unit_cost=cost, movement_date=movement_date,
+                        layer_id=layer_id, status=status,
+                        note="کمبودِ موجودی -- بهایِ جایگزین" if layer_id is None and status != "CALCULATED" else None)
 
             bal.quantity_on_hand -= quantity_base
             if method == "STANDARD":
@@ -854,14 +914,7 @@ def post_stock_document(
                     unit_cost=ledger_unit_cost, movement_date=movement_date,
                 )
                 apply_in(item, warehouse_id, bin_id, line.quantity_base, ledger_unit_cost, movement_date)
-                if method == "FIFO":
-                    session.add(
-                        CostLayer(
-                            item_id=item.item_id, warehouse_id=warehouse_id, stock_ledger_id=in_ledger.ledger_id,
-                            received_at=datetime.datetime.now(), original_quantity=line.quantity_base,
-                            remaining_quantity=line.quantity_base, unit_cost=ledger_unit_cost,
-                        )
-                    )
+                add_layer(item, warehouse_id, in_ledger, line.quantity_base, ledger_unit_cost, line)
 
                 inventory_amount = _money(ledger_unit_cost * line.quantity_base)
                 payable_amount = _money(actual_cost * line.quantity_base)
@@ -917,7 +970,9 @@ def post_stock_document(
             elif doc_type in ("ISSUE", "RETURN_OUT"):
                 warehouse_id = doc.source_warehouse_id
                 bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date)
+                # R257: برگشت به تامین‌کننده اول از لایهٔ همان رسید
+                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line,
+                                       preferred_source_line_id=line.source_line_id if doc_type == "RETURN_OUT" else None)
                 total_amount = _ZERO
                 for seg_cost, seg_qty in segments:
                     insert_ledger(
@@ -963,9 +1018,9 @@ def post_stock_document(
                 source_wh, dest_wh = doc.source_warehouse_id, doc.destination_warehouse_id
                 source_bin = resolve_bin(source_wh, line.bin_location_id)
                 dest_bin = resolve_bin(dest_wh, line.destination_bin_location_id)
-                segments = consume_out(item, source_wh, source_bin, line.quantity_base, movement_date)
-                method = costing_method(item)
-                for seg_cost, seg_qty in segments:
+                segments = consume_out(item, source_wh, source_bin, line.quantity_base, movement_date, line)
+                consumed = list(last_consumed)
+                for seg_cost, seg_qty, src_layer in consumed:
                     insert_ledger(
                         stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=source_wh,
                         bin_location_id=source_bin, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
@@ -977,14 +1032,11 @@ def post_stock_document(
                         movement_date=movement_date,
                     )
                     apply_in(item, dest_wh, dest_bin, seg_qty, seg_cost, movement_date)
-                    if method == "FIFO":
-                        session.add(
-                            CostLayer(
-                                item_id=item.item_id, warehouse_id=dest_wh, stock_ledger_id=in_ledger.ledger_id,
-                                received_at=datetime.datetime.now(), original_quantity=seg_qty,
-                                remaining_quantity=seg_qty, unit_cost=seg_cost,
-                            )
-                        )
+                    # R257: بها و تاریخِ دریافتِ لایهٔ مبدأ حفظ می‌شود (انتقال بها را دوباره محاسبه نمی‌کند)
+                    if source_wh != dest_wh or src_layer is not None:
+                        add_layer(item, dest_wh, in_ledger, seg_qty, seg_cost, line,
+                                  receipt_date=src_layer.receipt_date if src_layer is not None else None,
+                                  batch_id=src_layer.batch_id if src_layer is not None else None)
                 # طبقِ قاعدهٔ ۷۶: بینِ دو انبارِ همان شرکت، TRANSFER هرگز اثرِ
                 # حسابداری تولید نمی‌کند — فقط جابه‌جاییِ Ledger است.
 
@@ -992,7 +1044,7 @@ def post_stock_document(
                 if doc.source_warehouse_id is not None:
                     warehouse_id = doc.source_warehouse_id
                     bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                    segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date)
+                    segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line)
                     total_amount = _ZERO
                     for seg_cost, seg_qty in segments:
                         insert_ledger(
@@ -1039,14 +1091,7 @@ def post_stock_document(
                         unit_cost=unit_cost, movement_date=movement_date,
                     )
                     apply_in(item, warehouse_id, bin_id, line.quantity_base, unit_cost, movement_date)
-                    if method == "FIFO":
-                        session.add(
-                            CostLayer(
-                                item_id=item.item_id, warehouse_id=warehouse_id, stock_ledger_id=in_ledger.ledger_id,
-                                received_at=datetime.datetime.now(), original_quantity=line.quantity_base,
-                                remaining_quantity=line.quantity_base, unit_cost=unit_cost,
-                            )
-                        )
+                    add_layer(item, warehouse_id, in_ledger, line.quantity_base, unit_cost, line)
                     amount = _money(unit_cost * line.quantity_base)
                     add_debit("INVENTORY_ASSET", amount, je_item_detail_account_id)
                     add_credit("INVENTORY_ADJUSTMENT_GAIN", amount, je_item_detail_account_id)
@@ -1075,14 +1120,7 @@ def post_stock_document(
                     unit_cost=unit_cost, movement_date=movement_date,
                 )
                 apply_in(item, warehouse_id, bin_id, line.quantity_base, unit_cost, movement_date)
-                if method == "FIFO":
-                    session.add(
-                        CostLayer(
-                            item_id=item.item_id, warehouse_id=warehouse_id, stock_ledger_id=in_ledger.ledger_id,
-                            received_at=datetime.datetime.now(), original_quantity=line.quantity_base,
-                            remaining_quantity=line.quantity_base, unit_cost=unit_cost,
-                        )
-                    )
+                add_layer(item, warehouse_id, in_ledger, line.quantity_base, unit_cost, line)
 
             elif doc_type == "CONSIGN_RETURN":
                 # طبقِ اصلِ فاکتورِ امانیِ ورودی: بازگرداندنِ کالایِ
@@ -1090,7 +1128,8 @@ def post_stock_document(
                 # اثرِ حسابداری‌ای هم ندارد (بدونِ add_debit/add_credit).
                 warehouse_id = doc.source_warehouse_id
                 bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date)
+                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line,
+                                       preferred_source_line_id=line.source_line_id)
                 for seg_cost, seg_qty in segments:
                     insert_ledger(
                         stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
@@ -1265,9 +1304,9 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
 
         for item in items_by_id.values():
             method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
-            if method == "FIFO":
+            if costing_strategies.is_layer_method(method):
                 raise ValueError(
-                    "برگشت‌زدنِ سند برایِ کالایی که با روشِ FIFO قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود."
+                    f"برگشت‌زدنِ سند برایِ کالایی که با روشِ لایه‌ایِ {method} قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود."
                 )
 
         is_receipt = doc.document_type_code == "RECEIPT"
@@ -1486,8 +1525,8 @@ def adjust_stock_quantity(
             raise ValueError("انبار نامعتبر است.")
 
         method = get_effective_costing_method(item_id, company_id)
-        if method == "FIFO" and quantity_delta < 0 and in_unit_cost is None:
-            raise ValueError("برایِ کالایِ FIFO، بازگرداندن/افزایشِ مقدار بدونِ مشخص‌کردنِ بهایِ واحد ممکن نیست.")
+        if costing_strategies.is_layer_method(method) and quantity_delta < 0 and in_unit_cost is None:
+            raise ValueError(f"برایِ کالایِ {method}، بازگرداندن/افزایشِ مقدار بدونِ مشخص‌کردنِ بهایِ واحد ممکن نیست.")
 
         if bin_location_id is None:
             default_bin = session.scalar(
@@ -1515,6 +1554,7 @@ def adjust_stock_quantity(
         # (unit_cost, quantity) به‌ازایِ هر بخش -- برایِ FIFOِ OUT ممکن
         # است چند لایه‌یِ جداگانه باشد؛ در بقیه‌یِ حالت‌ها همیشه یکی است.
         segments: list[tuple[decimal.Decimal, decimal.Decimal]] = []
+        layer_ids: list[int | None] = []  # R257: لایهٔ هر بخش برایِ ثبتِ تخصیص
 
         if quantity_delta > 0:
             qty = quantity_delta
@@ -1524,23 +1564,15 @@ def adjust_stock_quantity(
                     f"(موجود: {bal.quantity_on_hand}، نیاز به کاهشِ: {qty})."
                 )
             direction = "OUT"
-            if method == "FIFO":
-                remaining = qty
-                layers = session.scalars(
-                    select(CostLayer)
-                    .where(CostLayer.item_id == item_id, CostLayer.warehouse_id == warehouse_id, CostLayer.remaining_quantity > 0)
-                    .order_by(CostLayer.received_at)
-                    .with_for_update()
-                ).all()
-                for layer in layers:
-                    if remaining <= 0:
-                        break
-                    take = min(layer.remaining_quantity, remaining)
-                    layer.remaining_quantity -= take
-                    segments.append((layer.unit_cost, take))
-                    remaining -= take
+            if costing_strategies.is_layer_method(method):
+                picks, remaining = costing_engine.consume_layers(
+                    session, company_id=company_id, item_id=item_id, warehouse_id=warehouse_id, quantity=qty, method=method)
+                for p in picks:
+                    segments.append((p.layer.unit_cost, p.quantity))
+                    layer_ids.append(p.layer.cost_layer_id)
                 if remaining > 0:
                     segments.append((bal.average_unit_cost or _ZERO, remaining))
+                    layer_ids.append(None)
             elif method == "STANDARD":
                 segments.append((_standard_cost(session, item_id, today), qty))
             else:
@@ -1551,7 +1583,7 @@ def adjust_stock_quantity(
             direction = "IN"
             if method == "STANDARD":
                 segments.append((_standard_cost(session, item_id, today), qty))
-            elif method == "FIFO":
+            elif costing_strategies.is_layer_method(method):
                 # طبقِ طراحی: بازگرداندن/افزایشِ مقدارِ FIFO همیشه یک
                 # لایه‌یِ هزینه‌یِ *تازه* می‌سازد، دقیقاً مثلِ یک رسیدِ
                 # معمولیِ امروز -- لایه‌هایِ قدیمی هرگز دست‌کاری نمی‌شوند.
@@ -1619,15 +1651,16 @@ def adjust_stock_quantity(
             )
             session.add(in_ledger)
             session.flush()
-            if direction == "IN" and method == "FIFO":
-                session.add(
-                    CostLayer(
-                        item_id=item_id, warehouse_id=warehouse_id, stock_ledger_id=in_ledger.ledger_id,
-                        received_at=datetime.datetime.now(), original_quantity=seg_qty,
-                        remaining_quantity=seg_qty, unit_cost=seg_cost,
-                    )
-                )
+            if direction == "IN" and costing_strategies.is_layer_method(method):
+                costing_engine.create_layer(
+                    session, company_id=company_id, item_id=item_id, warehouse_id=warehouse_id, ledger_id=in_ledger.ledger_id,
+                    quantity=seg_qty, unit_cost=seg_cost, receipt_date=today, source_type="ADJUSTMENT", source_line_id=line.line_id)
             total_amount += _money(seg_cost * seg_qty)
+        if direction == "OUT":
+            for (seg_cost, seg_qty), layer_id in zip(segments, layer_ids or [None] * len(segments)):
+                costing_engine.record_allocation(
+                    session, company_id=company_id, stock_line_id=line.line_id, item_id=item_id, warehouse_id=warehouse_id,
+                    method=method, quantity=seg_qty, unit_cost=seg_cost, movement_date=today, layer_id=layer_id)
         adjustment_doc.posted_by_user_id = created_by_user_id
         adjustment_doc.posted_at = datetime.datetime.now()
         session.commit()
@@ -1688,8 +1721,8 @@ def apply_purchase_cost_correction(
             method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
             default_costing_method_code = method_row.code if method_row is not None else None
         method = item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
-        if method == "FIFO":
-            raise ValueError("اصلاحِ بهایِ واحد برایِ کالایی که با روشِ FIFO قیمت‌گذاری می‌شود، فعلاً پشتیبانی نمی‌شود.")
+        if costing_strategies.is_layer_method(method):
+            raise ValueError(f"اصلاحِ بهایِ واحد برایِ کالایِ {method} از مسیرِ لایه‌ای (apply_purchase_cost_correction_fifo) انجام می‌شود.")
 
         if bin_location_id is None:
             default_bin = session.scalar(

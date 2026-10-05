@@ -57,7 +57,9 @@ _KIND_LABELS = {
     "FINISHED_GOOD": "ساخته‌شده", "ASSET": "دارایی", "BUNDLE": "بسته", "KIT": "کیت",
 }
 _LIFECYCLE_LABELS = {"DRAFT": "پیش‌نویس", "ACTIVE": "فعال", "DISCONTINUED": "متوقف‌شده"}
-_COSTING_LABELS = {"": "(پیش‌فرضِ شرکت)", "FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
+from peecha.services.costing.strategies import METHOD_LABELS as _METHOD_LABELS  # noqa: E402
+
+_COSTING_LABELS = {"": "(پیش‌فرضِ شرکت)", **_METHOD_LABELS}
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
 _RELATION_LABELS = {"SUBSTITUTE": "جایگزین", "COMPLEMENTARY": "مکمل"}
 _UNIT_COLUMNS = ["واحد", "ضریب", "خرید", "فروش", "پیش‌فرضِ خرید", "پیش‌فرضِ فروش", "بارکدها", "قیمت", "وضعیت"]
@@ -246,8 +248,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.country_of_origin_field = QLineEdit()
 
         self.costing_combo = QComboBox()
+        from peecha.services.costing.engine import NOT_YET_AVAILABLE
+
         for code, label in _COSTING_LABELS.items():
-            self.costing_combo.addItem(label, code or None)
+            if code not in NOT_YET_AVAILABLE:
+                self.costing_combo.addItem(label, code or None)
 
         self.lifecycle_combo = QComboBox()
         for code, label in _LIFECYCLE_LABELS.items():

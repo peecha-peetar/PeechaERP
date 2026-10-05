@@ -323,7 +323,9 @@ class CostingMethodRow:
 def list_costing_methods() -> list[CostingMethodRow]:
     with new_session() as session:
         rows = session.scalars(select(CostingMethod).order_by(CostingMethod.costing_method_id)).all()
-        return [CostingMethodRow(r.costing_method_id, r.code) for r in rows]
+        from peecha.services.costing.engine import NOT_YET_AVAILABLE
+
+        return [CostingMethodRow(r.costing_method_id, r.code) for r in rows if r.code not in NOT_YET_AVAILABLE]
 
 
 # ---------------------------------------------------------------------

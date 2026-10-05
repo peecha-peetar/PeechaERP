@@ -45,7 +45,8 @@ _AUTO_SUPPLIED_DIMENSION_CODES = (
 )
 
 _UOM_TYPE_LABELS = {"COUNT": "شمارشی", "WEIGHT": "وزن", "VOLUME": "حجم", "LENGTH": "طول", "AREA": "مساحت", "TIME": "زمان"}
-_COSTING_METHOD_LABELS = {"FIFO": "FIFO", "WEIGHTED_AVERAGE": "میانگینِ موزون", "STANDARD": "بهایِ استاندارد"}
+from peecha.services.costing.engine import NEGATIVE_POLICIES, NOT_YET_AVAILABLE  # noqa: E402
+from peecha.services.costing.strategies import METHOD_LABELS as _COSTING_METHOD_LABELS  # noqa: E402
 
 
 def _company_id() -> int | None:
@@ -507,14 +508,23 @@ class _CostingSettingsTab(LayoutEditMixin, QWidget):
 
         self.method_combo = QComboBox()
         for code, label in _COSTING_METHOD_LABELS.items():
-            self.method_combo.addItem(label, code)
+            if code not in NOT_YET_AVAILABLE:
+                self.method_combo.addItem(label, code)
 
         self.allow_override_checkbox = QCheckBox("اجازهٔ override در سطحِ کالا")
         self.allow_override_checkbox.setChecked(True)
+        # R257: رفتارِ موجودیِ منفی
+        self.negative_combo = QComboBox()
+        for code, label in NEGATIVE_POLICIES.items():
+            self.negative_combo.addItem(label, code)
+        self.reason_field = QLineEdit()
+        self.reason_field.setPlaceholderText("علتِ تغییر (برایِ Audit)")
 
         self.costing_grid = FieldGrid([
-            FieldSpec("method", "روشِ پیش‌فرضِ قیمت‌گذاری", self.method_combo, span=1),
+            FieldSpec("method", "روشِ ارزش‌گذاریِ موجودی", self.method_combo, span=1),
             FieldSpec("allow_override", "", self.allow_override_checkbox, span=1),
+            FieldSpec("negative", "رفتارِ موجودیِ منفی", self.negative_combo, span=2),
+            FieldSpec("reason", "علتِ تغییر", self.reason_field, span=2),
         ])
         layout.addWidget(self.costing_grid)
         self.register_field_grids("inventory_settings_costing", [self.costing_grid])
@@ -536,17 +546,29 @@ class _CostingSettingsTab(LayoutEditMixin, QWidget):
         if company_id is None:
             return
         method_code, allow_override = engine_service.get_costing_settings(company_id)
-        if method_code:
-            self.method_combo.setCurrentIndex(max(0, self.method_combo.findData(method_code)))
+        self._loaded_method = method_code or "WEIGHTED_AVERAGE"
+        self.method_combo.setCurrentIndex(max(0, self.method_combo.findData(self._loaded_method)))
         self.allow_override_checkbox.setChecked(allow_override)
+        self.negative_combo.setCurrentIndex(max(0, self.negative_combo.findData(engine_service.get_negative_stock_policy(company_id))))
+        self.reason_field.clear()
         self.status_label.setText("")
 
     def _save(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
+        if self.method_combo.currentData() != getattr(self, "_loaded_method", None) and QMessageBox.question(
+                self, "تغییرِ روشِ ارزش‌گذاری",
+                "تغییرِ روش بر بهایِ تمام‌شدهٔ خروج‌هایِ بعدی اثر می‌گذارد. برایِ موجودیِ فعلیِ کالاهایی که لایه ندارند، "
+                "در نخستین خروج یک «لایهٔ آغازین» با میانگینِ فعلی ساخته می‌شود. ادامه می‌دهید؟",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        user = app_session.current_user
         try:
-            engine_service.set_costing_settings(company_id, self.method_combo.currentData(), self.allow_override_checkbox.isChecked())
+            engine_service.set_costing_settings(
+                company_id, self.method_combo.currentData(), self.allow_override_checkbox.isChecked(),
+                negative_stock_policy=self.negative_combo.currentData(), user_id=user.user_id if user else None,
+                reason=self.reason_field.text().strip() or None)
         except ValueError as exc:
             self.status_label.setText(str(exc))
             return
