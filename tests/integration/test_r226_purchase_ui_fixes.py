@@ -196,7 +196,7 @@ check(raises(lambda: documents_service.update_line(p2l1, po2, company_id, D(3), 
 check(raises(lambda: documents_service.delete_line(p2l1, po2, company_id)), "حذفِ ردیفِ سفارشِ تاییدشده رد می‌شود")
 po_screen = CommercialDocumentScreen("PURCHASE_ORDER", None)
 po_screen.edit_document(po2)
-actions = po_screen.lines_table.cellWidget(0, 9)
+actions = po_screen.lines_table.cellWidget(0, po_screen.lines_table.columnCount() - 1)  # R253: «عملیات» ستونِ آخر است
 from PySide6.QtWidgets import QPushButton as _QPB
 edit_btns = [b for b in actions.findChildren(_QPB) if b.toolTip() and "فقط-خواندنی" in b.toolTip()]
 check(len(edit_btns) == 2 and all(not b.isEnabled() for b in edit_btns), "دکمه‌هایِ ویرایش/حذفِ ردیفِ سفارشِ تاییدشده غیرفعال‌اند")
