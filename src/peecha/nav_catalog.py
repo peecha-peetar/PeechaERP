@@ -223,6 +223,9 @@ WAREHOUSE_REPORT_MENU = [
     ("WMS", "جانمایی و برداشت", [
         ("PUTAWAY", "جانمایی (Putaway)"), ("UNLOCATED_STOCK", "دریافت‌شده ولی جانمایی‌نشده"), ("PICKING", "برداشت (Picking)"),
         ("WMS_PERFORMANCE", "عملکردِ اپراتورهایِ انبار"),
+        # R252: گزارش‌هایِ محل‌محور
+        ("BIN_BATCH_STOCK", "بچ به تفکیکِ محل"), ("WAVES", "موج‌هایِ برداشت"), ("LOCATION_COUNTS", "شمارش‌هایِ محل"),
+        ("REPLENISH_TASKS", "تأمینِ مجددِ جبههٔ برداشت"),
     ]),
     ("MASTER", "اطلاعاتِ پایه", [
         ("MD_WAREHOUSES", "فهرستِ انبارها"), ("MD_UNITS", "واحدها و تبدیلِ واحدِ کالاها"),

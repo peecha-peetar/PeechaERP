@@ -652,6 +652,10 @@ def post_stock_document(
 ) -> engine_service.PostResult:
     from peecha.services import lot_tracking
 
+    from peecha.services import warehouse_locations
+
+    # R252: ردیفِ خروجیِ بی‌محل در انبارِ دارایِ نقشه، محلی که واقعاً موجودی دارد می‌گیرد (نه محلِ پیش‌فرضِ خالی)
+    warehouse_locations.assign_outbound_bins(company_id, stock_document_id)
     # R227: بچ/سریال/انقضا -- اعتبارسنجی پیش از موتورِ انبار، ثبتِ ردیابی پس از آن.
     lot_tracking.validate_before_post(stock_document_id, company_id)
     result = engine_service.post_stock_document(

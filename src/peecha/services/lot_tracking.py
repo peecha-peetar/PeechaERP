@@ -460,7 +460,8 @@ def _allocate_out(session, company_id: int, item: Item, warehouse_id: int, quant
     return result
 
 
-def _set_serial_state(session, serial_id: int, line_id: int, to_status: str, from_wh: int | None, to_wh: int | None) -> None:
+def _set_serial_state(session, serial_id: int, line_id: int, to_status: str, from_wh: int | None, to_wh: int | None,
+                      to_bin: int | None = None) -> None:
     serial = session.get(SerialNumber, serial_id)
     if serial is None:
         return
@@ -470,6 +471,7 @@ def _set_serial_state(session, serial_id: int, line_id: int, to_status: str, fro
     ))
     serial.status_code = to_status
     serial.current_warehouse_id = to_wh
+    serial.current_bin_location_id = to_bin if to_status == "IN_STOCK" else None  # R252: محلِ فعلیِ سریال
 
 
 def apply_after_post(stock_document_id: int, company_id: int) -> None:
@@ -537,7 +539,7 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
                             stock_document_line_id=line.line_id, quantity_base=q, bin_location_id=in_bin,
                         ))
                         if serial_id is not None:
-                            _set_serial_state(session, serial_id, line.line_id, "IN_STOCK", directions[0][1], warehouse_id)
+                            _set_serial_state(session, serial_id, line.line_id, "IN_STOCK", directions[0][1], warehouse_id, in_bin)
                     continue
                 total = sum((decimal.Decimal(e.quantity) for e in entries), _ZERO)
                 if tracked and entries and total == line.quantity_base:
@@ -553,7 +555,7 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
                                 serial = SerialNumber(
                                     company_id=company_id, item_id=item.item_id, serial_no=e.serial_no,
                                     batch_id=batch.batch_id if batch else None, current_warehouse_id=warehouse_id,
-                                    status_code="IN_STOCK", source_line_id=line.line_id,
+                                    current_bin_location_id=in_bin, status_code="IN_STOCK", source_line_id=line.line_id,
                                 )
                                 session.add(serial)
                                 session.flush()
@@ -562,7 +564,7 @@ def apply_after_post(stock_document_id: int, company_id: int) -> None:
                                     from_status_code=None, to_status_code="IN_STOCK", to_warehouse_id=warehouse_id,
                                 ))
                             else:
-                                _set_serial_state(session, serial.serial_id, line.line_id, "IN_STOCK", None, warehouse_id)
+                                _set_serial_state(session, serial.serial_id, line.line_id, "IN_STOCK", None, warehouse_id, in_bin)
                             serial_id = serial.serial_id
                         session.add(LotMovement(
                             company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id,
@@ -600,6 +602,7 @@ def reverse_document_movements(stock_document_id: int, company_id: int) -> None:
                 if serial is not None:
                     serial.status_code = "IN_STOCK" if m.quantity_base < 0 else "RETURNED"
                     serial.current_warehouse_id = m.warehouse_id if m.quantity_base < 0 else None
+                    serial.current_bin_location_id = m.bin_location_id if m.quantity_base < 0 else None
         session.commit()
 
 

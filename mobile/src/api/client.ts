@@ -57,6 +57,7 @@ import {
   WarehouseMapNode,
   WmsKpis,
   LocationLabel,
+  PutawaySource,
 } from "./types";
 
 export type Fetcher = typeof fetch;
@@ -522,5 +523,28 @@ export class ApiClient {
 
   async getLocationLabel(locationId: number): Promise<LocationLabel> {
     return this.request<LocationLabel>(`/locations/${locationId}/label`);
+  }
+
+  // --- R252 -------------------------------------------------------------------
+  async createLocationCount(warehouseId: number, locationIds: number[], blind = true): Promise<{ session_id: number }> {
+    return this.request("/locations/counts", { method: "POST", body: { warehouse_id: warehouseId, location_ids: locationIds, blind } });
+  }
+
+  async recordSerialCount(sessionId: number, locationId: number, itemId: number, serialNos: string[], idempotencyKey?: string): Promise<{ line_id: number }> {
+    return this.request(`/locations/counts/${sessionId}/serials`, {
+      method: "POST", body: { location_id: locationId, item_id: itemId, serial_nos: serialNos }, idempotencyKey,
+    });
+  }
+
+  async listPutawaySources(): Promise<PutawaySource[]> {
+    return this.request<PutawaySource[]>("/locations/putaway-sources");
+  }
+
+  async generatePutawayTasks(documentId: number): Promise<{ task_ids: number[] }> {
+    return this.request("/locations/tasks/generate", { method: "POST", body: { document_id: documentId, task_type: "PUTAWAY" } });
+  }
+
+  async getLocationLabels(locationId: number): Promise<LocationLabel[]> {
+    return this.request<LocationLabel[]>(`/locations/${locationId}/labels`);
   }
 }

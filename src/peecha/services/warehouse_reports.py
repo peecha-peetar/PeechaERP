@@ -1454,6 +1454,103 @@ def bin_stock(company_id: int, f) -> ReportResult:
 
 
 # ---------------------------------------------------------------------
+# R252: محل‌محور -- بچ به تفکیکِ محل، موج‌ها، شمارشِ محل، تأمینِ مجدد
+# ---------------------------------------------------------------------
+def _location_codes(company_id: int) -> dict[int, str]:
+    from peecha.services import warehouse_locations as wl
+
+    with new_session() as session:
+        rows = session.execute(select(BinLocation, Warehouse.code).join(Warehouse, Warehouse.warehouse_id == BinLocation.warehouse_id)
+                               .where(Warehouse.company_id == company_id)).all()
+    return {b.bin_location_id: wl.display_code(b, wcode) for b, wcode in rows}
+
+
+def bin_batch_stock(company_id: int, f) -> ReportResult:
+    from peecha.services import inventory_locations as locations_service
+    from peecha.services import warehouse_locations as wl
+
+    m, codes = _meta(company_id), _location_codes(company_id)
+    as_of = f.date_to
+    r = ReportResult([("انبار", TEXT), ("محل", TEXT), ("کالا", TEXT), ("بچ", TEXT), ("انقضا", DATE), ("روزِ مانده", INT), ("موجودی", QTY)],
+                     no_total={5})
+    for w in locations_service.list_warehouses(company_id):
+        if not _wh_ok(m, f, w.warehouse_id):
+            continue
+        for (bin_id, item_id), lots in sorted(wl.bin_batches(company_id, w.warehouse_id).items(), key=lambda kv: codes.get(kv[0][0], "")):
+            if not _item_ok(m, f, item_id):
+                continue
+            for lt in lots:
+                r.add([_wh_label(m, w.warehouse_id), codes.get(bin_id, ""), m.ctx.item_label(item_id), lt.batch_no, lt.expiry_date,
+                       (lt.expiry_date - as_of).days if lt.expiry_date else None, lt.quantity])
+    r.note = "بچ به تفکیکِ محل از حرکاتِ بچ (ستونِ محل، R251)؛ حرکاتِ بدونِ محل در این گزارش نیستند."
+    return r
+
+
+def waves_report(company_id: int, f) -> ReportResult:
+    from peecha.services import warehouse_operations as ops
+
+    m, codes = _meta(company_id), _location_codes(company_id)
+    status = {"OPEN": "باز", "DONE": "انجام‌شده", "CANCELLED": "لغوشده"}
+    r = ReportResult([("موج", TEXT), ("انبار", TEXT), ("وضعیت", TEXT), ("مسیر (متر)", QTY), ("وظایف", INT), ("انجام‌شده", INT),
+                      ("محل‌هایِ مسیر", TEXT), ("ایجاد", DATE), ("زمانِ انجام (دقیقه)", QTY), ("سازنده", TEXT)], no_total={3, 8})
+    for w in ops.list_waves(company_id):
+        if not _wh_ok(m, f, w.warehouse_id) or not (f.date_from <= w.created_at.date() <= f.date_to):
+            continue
+        tasks = ops.wave_tasks(company_id, w.wave_id)
+        stops = list(dict.fromkeys(codes.get(t.from_bin_location_id, "") for t in tasks if t.from_bin_location_id))
+        r.add([w.wave_code, _wh_label(m, w.warehouse_id), status.get(w.status_code, w.status_code),
+               decimal.Decimal(str(round(float(w.path_distance or 0) / 20, 1))), len(tasks), sum(1 for t in tasks if t.status_code == "DONE"),
+               " ← ".join(stops[:12]), w.created_at.date(), _minutes(w.created_at, w.completed_at), m.users.get(w.created_by_user_id, "")])
+    return r
+
+
+def location_counts_report(company_id: int, f) -> ReportResult:
+    from peecha.services import location_counts as lc
+
+    m = _meta(company_id)
+    r = ReportResult([("شمارش", TEXT), ("انبار", TEXT), ("وضعیت", TEXT), ("محل", TEXT), ("کالا", TEXT), ("بچ", TEXT), ("دفتری", QTY),
+                      ("شمارش", QTY), ("اختلاف", QTY), ("زمانِ شمارش", DATE)], no_total={6, 7})
+    status = {"COUNTING": "در حالِ شمارش", "POSTED": "نهایی‌شده", "CANCELLED": "لغوشده"}
+    for s in lc.list_location_counts(company_id):
+        if not _wh_ok(m, f, s.warehouse_id) or not (f.date_from <= s.created_at.date() <= f.date_to):
+            continue
+        for ln in lc.count_lines(company_id, s.session_id):
+            if not _item_ok(m, f, ln.item_id):
+                continue
+            if _opt(f, "view", "ALL") == "DIFF" and not ln.variance:
+                continue
+            r.add([s.session_code, _wh_label(m, s.warehouse_id), status.get(s.status_code, s.status_code), ln.location_code,
+                   m.ctx.item_label(ln.item_id), ln.batch_no or "", ln.expected, ln.counted, ln.variance,
+                   ln.counted_at.date() if ln.counted_at else None],
+                  _ref(s.resulting_stock_document_id, "ADJUSTMENT") if s.resulting_stock_document_id else None)
+    return r
+
+
+def replenishment_tasks(company_id: int, f) -> ReportResult:
+    from peecha.services import warehouse_operations as ops
+    from peecha.services.warehouse_operations import TASK_STATUSES
+
+    m, codes = _meta(company_id), _location_codes(company_id)
+    rules = {r_.rule_id: r_ for r_ in ops.list_rules(company_id)}
+    r = ReportResult([("وظیفه", INT), ("انبار", TEXT), ("کالا", TEXT), ("از محل", TEXT), ("به محل", TEXT), ("حداقل/حداکثر", TEXT),
+                      ("مقدار", QTY), ("انجام‌شده", QTY), ("وضعیت", TEXT), ("ایجاد", DATE), ("زمانِ انجام (دقیقه)", QTY)], no_total={0, 10})
+    for t in _tasks(company_id, f, m, "REPLENISH"):
+        rule = rules.get(t.replenishment_rule_id)
+        r.add([t.task_id, _wh_label(m, t.warehouse_id), m.ctx.item_label(t.item_id), codes.get(t.from_bin_location_id, ""),
+               codes.get(t.to_bin_location_id, ""), f"{rule.min_quantity.normalize()} / {rule.max_quantity.normalize()}" if rule else "",
+               t.quantity_base, t.done_quantity_base, TASK_STATUSES[t.status_code], t.created_at.date(),
+               _minutes(t.started_at or t.created_at, t.completed_at)],
+              _ref(t.resulting_stock_document_id, "TRANSFER") if t.resulting_stock_document_id else None)
+    for need in ops.replenishment_needs(company_id):
+        if not (_item_ok(m, f, need.item_id) and _wh_ok(m, f, need.warehouse_id)):
+            continue
+        r.add([None, _wh_label(m, need.warehouse_id), m.ctx.item_label(need.item_id), "، ".join(x.location_code for x in need.sources[:3]),
+               need.location_code, f"{need.rule.min_quantity.normalize()} / {need.rule.max_quantity.normalize()}", need.need, None,
+               "نیازِ بی‌وظیفه", None, None])
+    return r
+
+
+# ---------------------------------------------------------------------
 # ۲۹) اطلاعاتِ پایه
 # ---------------------------------------------------------------------
 _WH_TYPES = {"GENERAL": "عمومی", "PROJECT": "پروژه", "PRODUCTION_LINE": "خطِ تولید", "QUARANTINE": "قرنطینه", "TRANSIT": "ترانزیت",
@@ -1791,6 +1888,15 @@ WAREHOUSE_REPORTS: list[ReportDef] = [
               "آمادهٔ برداشت، برداشته‌شده، در انتظار، ناقص؛ دقت و زمانِ برداشت.", group=_OP, options=(_PICK_VIEW,)),
     ReportDef("WMS_PERFORMANCE", "عملکردِ اپراتورهایِ انبار", wms_performance, ("warehouse", "branch"),
               "وظایفِ انجام‌شده، میانگینِ زمان، ردیف در ساعت و دقتِ برداشتِ هر اپراتور.", group=_OP),
+    ReportDef("BIN_BATCH_STOCK", "بچ به تفکیکِ محل", bin_batch_stock, _IF,
+              "بچ/لات و انقضایِ موجود در هر محل (Bin) -- برایِ برداشتِ FEFO از محلِ درست.", "as_of", _OP),
+    ReportDef("WAVES", "موج‌هایِ برداشت", waves_report, ("warehouse", "branch"),
+              "موج‌ها با طولِ مسیر، محل‌هایِ مسیر به ترتیب، پیشرفت و زمانِ انجام.", group=_OP),
+    ReportDef("LOCATION_COUNTS", "شمارش‌هایِ محل", location_counts_report, _IF,
+              "ردیف‌هایِ شمارشِ محل‌محور با دفتری، شمارش و اختلاف.", group=_OP,
+              options=(("view", "نمایش", (("ALL", "همه"), ("DIFF", "فقط دارایِ اختلاف"))),)),
+    ReportDef("REPLENISH_TASKS", "تأمینِ مجددِ جبههٔ برداشت", replenishment_tasks, _IF,
+              "وظایفِ تأمینِ مجدد و نیازهایِ بی‌وظیفه با قاعدهٔ حداقل/حداکثر.", group=_OP),
     ReportDef("MD_WAREHOUSES", "فهرستِ انبارها", md_warehouses, ("warehouse", "branch"),
               "نوع، شعبه، مسئول، محل‌ها، تعداد و ارزشِ کالاهایِ هر انبار.", "none", _MD),
     ReportDef("MD_UNITS", "واحدها و تبدیلِ واحدِ کالاها", md_units, _IFNW, "واحدهایِ فرعیِ هر کالا و ضریبِ تبدیل.", "none", _MD),

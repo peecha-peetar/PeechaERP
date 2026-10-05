@@ -67,7 +67,8 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "WMS_PUTAWAY"; payload: { taskId: number; toLocationId: number } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_PICK"; payload: { taskId: number; quantity: string } }
   | { idempotencyKey: string; createdAt: string; type: "WMS_REPLENISH"; payload: { taskId: number; quantity: string | null } }
-  | { idempotencyKey: string; createdAt: string; type: "WMS_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; quantity: string; batchNo?: string | null } };
+  | { idempotencyKey: string; createdAt: string; type: "WMS_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; quantity: string; batchNo?: string | null } }
+  | { idempotencyKey: string; createdAt: string; type: "WMS_SERIAL_COUNT"; payload: { sessionId: number; locationId: number; itemId: number; serialNos: string[] } };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">
@@ -82,7 +83,8 @@ export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "WMS_PUTAWAY" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "WMS_PICK" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "WMS_REPLENISH" }>, "idempotencyKey" | "createdAt">
-  | Omit<Extract<PendingAction, { type: "WMS_COUNT" }>, "idempotencyKey" | "createdAt">;
+  | Omit<Extract<PendingAction, { type: "WMS_COUNT" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WMS_SERIAL_COUNT" }>, "idempotencyKey" | "createdAt">;
 
 /** صفِ اقدام‌هایِ آفلاین -- الگویِ pull-latest + push-queue طبقِ سندِ
  * معماری: هر اقدامِ کاربر (شروع/تکمیل/ردِ ویزیت، ثبتِ سفارش، تاییدِ

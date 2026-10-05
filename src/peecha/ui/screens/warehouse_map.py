@@ -35,6 +35,11 @@ def _p(text) -> str:
     return numerals.to_persian_digits(str(text))
 
 
+def _m(value) -> str:
+    """متر بدونِ صفرهایِ اضافه (۱۰٫۵۰۰ → ۱۰٫۵)."""
+    return _p(f"{float(value):g}") if value is not None else ""
+
+
 def _dec(value: float | None) -> decimal.Decimal | None:
     return decimal.Decimal(str(round(value, 3))) if value not in (None, 0, 0.0) else None
 
@@ -100,15 +105,25 @@ class LocationItem(QGraphicsRectItem):
         painter.drawRoundedRect(rect, 3, 3)
         if lod >= 0.6 or self.node.level == "AREA":
             painter.setPen(QColor(theme.TEXT_PRIMARY if self.node.level != "AREA" else theme.TEXT_SECONDARY))
-            font = QFont(painter.font())
-            font.setPointSizeF(9 if self.node.level == "AREA" else 7)
-            font.setBold(self.node.level in ("AREA", "RACK"))
-            painter.setFont(font)
             label = self.node.code.split("-")[-1]
             if self.node.level == "AREA" and self.node.name:
                 label = f"{label}  {self.node.name}"
+            if self.node.level in ("AREA", "AISLE", "RACK") and self.node.width_m and self.node.length_m and lod >= 0.4:
+                dims = f"{_m(self.node.width_m)}×{_m(self.node.length_m)}م"
+                label = f"{label}  ({dims})" if self.node.level == "AREA" else f"{label}\n{dims}"
             align = Qt.AlignTop | Qt.AlignHCenter if self.node.level == "AREA" else Qt.AlignCenter
-            painter.drawText(rect.adjusted(2, 2, -2, -2), int(align), _p(label))
+            # R252: اندازهٔ نوشته متناسب با خودِ محل (در انبارِ کوچک نوشته‌ها از محل بیرون نمی‌زنند)
+            lines = label.split("\n")
+            longest = max(len(t) for t in lines)
+            size = min(9.0 if self.node.level == "AREA" else 7.0,
+                       rect.height() / (10 if self.node.level == "AREA" else len(lines) * 1.9), rect.width() / (longest * 0.75 + 1))
+            if size < 1.2:
+                return
+            font = QFont(painter.font())
+            font.setPointSizeF(size)
+            font.setBold(self.node.level in ("AREA", "RACK"))
+            painter.setFont(font)
+            painter.drawText(rect.adjusted(1, 1, -1, -1), int(align), _p(label))
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         self._press_state = (self.pos(), self.rect())
@@ -161,6 +176,10 @@ class _MapView(QGraphicsView):
     def wheelEvent(self, event) -> None:  # noqa: N802
         factor = 1.2 if event.angleDelta().y() > 0 else 1 / 1.2
         self.scale(factor, factor)
+        if self.on_zoom is not None:
+            self.on_zoom()
+
+    on_zoom = None
 
 
 class LocationDialog(QDialog):
@@ -338,6 +357,7 @@ class WarehouseMapScreen(QWidget):
         self.scene = QGraphicsScene(self)
         self.scene.setItemIndexMethod(QGraphicsScene.BspTreeIndex)  # رندرِ فقط ناحیهٔ دیدنی برایِ انبارهایِ بزرگ
         self.view = _MapView(self.scene)
+        self.view.on_zoom = self.update_lod
         side = QTabWidget()
         side.setMinimumWidth(340)
         side.setMaximumWidth(460)
@@ -423,6 +443,9 @@ class WarehouseMapScreen(QWidget):
         self.occupancy_filter.setSuffix("٪")
         self.occupancy_filter.valueChanged.connect(lambda _v: self.apply_filters())
         filters.addWidget(self.occupancy_filter)
+        self.show_inactive_check = QCheckBox("نمایشِ محل‌هایِ غیرفعال")
+        self.show_inactive_check.toggled.connect(lambda _c: self.load_warehouse(self.warehouse_id))
+        filters.addWidget(self.show_inactive_check)
         filters.addStretch(1)
         self.status_label = QLabel("")
         filters.addWidget(self.status_label)
@@ -488,8 +511,17 @@ class WarehouseMapScreen(QWidget):
             outline = self.scene.addRect(0, 0, float(wh.fields.width_m) * 20, float(wh.fields.length_m) * 20,
                                          QPen(QColor(theme.TEXT_SECONDARY), 2, Qt.DashLine))
             outline.setZValue(-1)
+            dims = self.scene.addSimpleText(_p(f"{_m(wh.fields.width_m)} × {_m(wh.fields.length_m)} متر"))
+            dims.setBrush(QColor(theme.TEXT_SECONDARY))
+            dim_font = QFont(dims.font())
+            dim_font.setPointSizeF(max(2.0, min(10.0, float(min(wh.fields.width_m, wh.fields.length_m)) * 20 * 0.06)))
+            dims.setFont(dim_font)
+            dims.setPos(0, -dims.boundingRect().height() - 2)
+            dims.setZValue(-1)
+        show_inactive = self.show_inactive_check.isChecked()
         for n in self.nodes:
-            if n.location_id in geo:
+            # R252: طبقه هم‌جایِ قفسه است و لایهٔ نامرئیِ رویِ آن کلیک‌ها را می‌دزدید؛ در «نمایِ قفسه»/درخت انتخاب می‌شود
+            if n.location_id in geo and n.level != "SHELF" and (show_inactive or n.is_active):
                 item = LocationItem(n, geo[n.location_id], self)
                 self.scene.addItem(item)
                 self.items[n.location_id] = item
@@ -527,11 +559,20 @@ class WarehouseMapScreen(QWidget):
     # --- زوم و ویرایش -----------------------------------------------------
     def zoom(self, factor: float) -> None:
         self.view.scale(factor, factor)
+        self.update_lod()
 
     def fit(self) -> None:
         rect = self.scene.itemsBoundingRect()
         if not rect.isEmpty():
             self.view.fitInView(rect.adjusted(-20, -20, 20, 20), Qt.KeepAspectRatio)
+        self.update_lod()
+
+    def update_lod(self) -> None:
+        """Binها فقط وقتی دیده و کلیک می‌شوند که زوم کافی است (وگرنه کلیکِ قفسه را می‌گرفتند)."""
+        lod = self.view.transform().m11()
+        for item in self.items.values():
+            if item.node.level in ("BIN", None):
+                item.setVisible(lod >= _DETAIL_SCALE or item.highlighted or item.node.location_id == self.selected_id)
 
     def set_edit_mode(self, editable: bool) -> None:
         editable = editable and self.allowed("EDIT")
@@ -724,6 +765,7 @@ class WarehouseMapScreen(QWidget):
         for lid, item in self.items.items():
             item.highlighted = lid in location_ids
             item.update()
+        self.update_lod()
         if self.view3d_check.isChecked():
             self.refresh_3d()
         targets = [self.items[i] for i in location_ids if i in self.items]
@@ -821,7 +863,10 @@ class WarehouseMapScreen(QWidget):
                 if ok:
                     wl.set_status(company_id, node.location_id, list(wl.STATUSES)[labels.index(choice)], user_id)
             elif op == "DELETE":
-                if QMessageBox.question(self, "حذف", f"محلِ «{_p(node.full_code)}» حذف شود؟ (اگر سابقه دارد غیرفعال می‌شود)") \
+                children = len(wl.descendants(self.nodes, node.location_id)) - 1
+                note = f" همراهِ {_p(children)} زیرمحل" if children else ""
+                if QMessageBox.question(self, "حذف", f"محلِ «{_p(node.full_code)}»{note} حذف شود؟\n"
+                                        "اگر هر کدام موجودی یا سابقه داشته باشد، به‌جایِ حذف غیرفعال و از نقشه پنهان می‌شوند.") \
                         == QMessageBox.Yes:
                     result = wl.delete_location(company_id, node.location_id, user_id)
                     theme.set_status_label(self.status_label, "حذف شد." if result == "DELETED" else "سابقه داشت؛ غیرفعال شد.", ok=True)

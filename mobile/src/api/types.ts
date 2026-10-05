@@ -844,6 +844,8 @@ export interface LocationCountLine {
   item_name: string;
   unit: string;
   batch_no?: string | null;
+  serial?: boolean;
+  expected_serials?: string[] | null;
   expected: string | null;
   counted: string | null;
   variance: string | null;
@@ -881,4 +883,14 @@ export interface LocationLabel {
   qr_payload: string;
   qr_svg: string;
   barcode_svg: string;
+}
+
+// --- R252 ----------------------------------------------------------------------
+export interface PutawaySource {
+  document_id: number;
+  document_type: string;
+  document_no: number;
+  document_date: string;
+  warehouse_id: number | null;
+  open_lines: number | null;
 }

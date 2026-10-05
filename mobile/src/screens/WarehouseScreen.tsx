@@ -3,13 +3,14 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { ApiClient, ApiError } from "../api/client";
 import {
   LocationCountLine, LocationCountSession, LocationDetail, LocationSearchResult, PutawaySuggestion, WarehouseMapNode, WarehouseRow, WmsTask,
-  WmsKpis, WmsTaskType, WmsWave,
+  PutawaySource, WmsKpis, WmsTaskType, WmsWave,
 } from "../api/types";
 import { BarcodeScannerModal, Button, Card, EmptyState, Input, SearchBar, StatusBadge, useToast } from "../components";
 import { formatAmount, toAsciiDigits } from "../format";
 import { OfflineQueue, PendingActionInput } from "../sync/offlineQueue";
 import { SyncEngine } from "../sync/syncEngine";
 import { submitWmsAction } from "../sync/wmsSubmit";
+import { formatJalaliDate } from "../jalali";
 import { useTheme } from "../theme/ThemeProvider";
 import { layoutWarehouseMap, occupancyTone } from "../wms/mapLayout";
 import { printLocationLabels } from "../print/locationLabel";
@@ -22,7 +23,8 @@ interface Props {
 }
 
 type Tab = "SEARCH" | "TASKS" | "TRANSFER" | "COUNT" | "MAP" | "KPI";
-type ScanTarget = "SEARCH" | "PUTAWAY_TARGET" | "TRANSFER_ITEM" | "TRANSFER_FROM" | "TRANSFER_TO" | "COUNT_LOCATION";
+type ScanTarget =
+  | "SEARCH" | "PUTAWAY_TARGET" | "TRANSFER_ITEM" | "TRANSFER_FROM" | "TRANSFER_TO" | "COUNT_LOCATION" | "COUNT_START" | "COUNT_SERIAL";
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "فعال", INACTIVE: "غیرفعال", BLOCKED: "مسدود", FULL: "پر", RESERVED: "رزرو", QUARANTINE: "قرنطینه",
@@ -87,6 +89,10 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const [mapZoom, setMapZoom] = useState(1);
   const [mapSelected, setMapSelected] = useState<LocationDetail | null>(null);
   const [kpis, setKpis] = useState<WmsKpis | null>(null);
+  // R252: شمارشِ سریال، منابعِ جانمایی
+  const [serialKey, setSerialKey] = useState<string | null>(null);
+  const [countSerials, setCountSerials] = useState<Record<string, string[]>>({});
+  const [putawaySources, setPutawaySources] = useState<PutawaySource[] | null>(null);
 
   const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -251,6 +257,12 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
 
   const onScanned = async (code: string) => {
     const target = scanTarget;
+    if (target === "COUNT_SERIAL" && serialKey !== null) {  // اسکنِ پشتِ‌سرِهمِ سریال‌ها؛ اسکنر باز می‌ماند
+      const serial = code.trim();
+      const current = countSerials[serialKey] ?? [];
+      if (serial && !current.includes(serial)) setCountSerials({ ...countSerials, [serialKey]: [...current, serial] });
+      return;
+    }
     setScanTarget(null);
     try {
       if (target === "SEARCH") {
@@ -270,9 +282,57 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         if (target === "TRANSFER_FROM") setTransferFrom(picked);
         if (target === "TRANSFER_TO") setTransferTo(picked);
         if (target === "COUNT_LOCATION") setCountLocation(picked);
+        if (target === "COUNT_START") {
+          const { session_id } = await apiClient.createLocationCount(loc.warehouse_id, [loc.location_id]);
+          setCounts(await apiClient.listLocationCounts());
+          await openCount(session_id);
+          setCountLocation(picked);
+          toast.show(`شمارشِ «${loc.code}» شروع شد.`, "success");
+        }
       }
     } catch (e) {
       toast.show(errorText(e, "خواندنِ کد ناموفق بود."), "danger");
+    }
+  };
+
+  const submitSerialCount = async (line: LocationCountLine) => {
+    if (countId === null) return;
+    const ok = await submit(
+      {
+        type: "WMS_SERIAL_COUNT",
+        payload: { sessionId: countId, locationId: line.location_id, itemId: line.item_id, serialNos: countSerials[countKey(line)] ?? [] },
+      },
+      "سریال‌ها ثبت شد.",
+    );
+    if (ok) await openCount(countId);
+  };
+
+  const loadPutawaySources = async () => {
+    try {
+      setPutawaySources(await apiClient.listPutawaySources());
+    } catch (e) {
+      toast.show(errorText(e, "دریافتِ رسیدها ناموفق بود."), "danger");
+    }
+  };
+
+  const createPutaway = async (documentId: number) => {
+    try {
+      const { task_ids } = await apiClient.generatePutawayTasks(documentId);
+      toast.show(`${task_ids.length} وظیفهٔ جانمایی ساخته شد.`, "success");
+      setPutawaySources(null);
+      await loadTasks();
+    } catch (e) {
+      toast.show(errorText(e, "ساختِ وظیفه ناموفق بود."), "danger");
+    }
+  };
+
+  const printChildLabels = async (locationId: number) => {
+    try {
+      const labels = await apiClient.getLocationLabels(locationId);
+      if (labels.length === 0) throw new ApiError(404, "محلی برایِ چاپ نیست.");
+      await printLocationLabels(labels);
+    } catch (e) {
+      toast.show(errorText(e, "چاپِ برچسب‌ها ناموفق بود."), "danger");
     }
   };
 
@@ -321,7 +381,10 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
         {text(typography.bodyBold, loc.code)}
         <StatusBadge statusCode={loc.status} label={STATUS_LABELS[loc.status] ?? loc.status} />
       </View>
-      <Button label="چاپِ برچسب" size="md" variant="ghost" fullWidth={false} onPress={() => printLabel(loc.location_id)} />
+      <View style={{ flexDirection: "row", gap: spacing.xs }}>
+        <Button label="چاپِ برچسب" size="md" variant="ghost" fullWidth={false} onPress={() => printLabel(loc.location_id)} />
+        <Button label="برچسبِ همهٔ زیرمحل‌ها" size="md" variant="ghost" fullWidth={false} onPress={() => printChildLabels(loc.location_id)} />
+      </View>
       <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>
         {loc.name ?? ""}
         {loc.occupancy_percent !== null ? ` · اشغال ${formatAmount(loc.occupancy_percent)}٪` : ""}
@@ -440,8 +503,11 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
   const renderCount = () => (
     <View style={{ gap: spacing.md }}>
       {countId === null ? (
+        <Button label="شروعِ شمارش: اسکنِ محل/قفسه/منطقه" size="md" onPress={() => setScanTarget("COUNT_START")} />
+      ) : null}
+      {countId === null ? (
         counts.length === 0 ? (
-          <EmptyState title="شمارشِ بازی نیست" description="شمارشِ محل را از دسکتاپ (نقشه یا عملیاتِ انبار) شروع کنید." />
+          <EmptyState title="شمارشِ بازی نیست" description="محلی را اسکن کنید تا شمارشِ آن شروع شود." />
         ) : (
           counts.map((c) => (
             <Card key={c.session_id} onPress={() => openCount(c.session_id)}>
@@ -467,7 +533,19 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
                   {ln.expected !== null ? ` · دفتری ${formatAmount(ln.expected)}` : ""}
                   {ln.counted !== null ? ` · شمرده‌شده ${formatAmount(ln.counted)}` : ""}
                 </Text>
-                {countLocation?.id === ln.location_id ? (
+                {countLocation?.id === ln.location_id && ln.serial ? (
+                  <View style={{ gap: spacing.xs, marginTop: spacing.sm }}>
+                    <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                      {`اسکن‌شده (${(countSerials[countKey(ln)] ?? []).length}): ${(countSerials[countKey(ln)] ?? []).join("، ")}`}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                      <Button label="اسکنِ سریال‌ها" size="md" variant="secondary" fullWidth={false}
+                        onPress={() => { setSerialKey(countKey(ln)); setScanTarget("COUNT_SERIAL"); }} />
+                      <Button label="ثبتِ سریال‌ها" size="md" fullWidth={false} loading={busy} onPress={() => submitSerialCount(ln)} />
+                    </View>
+                  </View>
+                ) : null}
+                {countLocation?.id === ln.location_id && !ln.serial ? (
                   <View style={{ flexDirection: "row", gap: spacing.sm, alignItems: "flex-end", marginTop: spacing.sm }}>
                     <Input
                       label={`مقدار (${ln.unit})`}
@@ -546,6 +624,16 @@ export function WarehouseScreen({ apiClient, offlineQueue, syncEngine, onBack }:
       </View>
       {activeTask ? renderTaskPanel(activeTask) : null}
       {renderWaves()}
+      <Button label="ساختِ وظیفهٔ جانمایی از رسیدِ تازه" size="md" variant="secondary" onPress={loadPutawaySources} />
+      {putawaySources !== null && putawaySources.length === 0 ? <EmptyState title="رسیدِ بی‌وظیفه‌ای نیست" /> : null}
+      {(putawaySources ?? []).map((src) => (
+        <Card key={src.document_id} onPress={() => createPutaway(src.document_id)}>
+          {text(typography.bodyBold, `رسیدِ ${src.document_no}`)}
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            {`${formatJalaliDate(src.document_date)}${src.open_lines !== null ? ` · ${src.open_lines} ردیفِ بی‌وظیفه` : ""}`}
+          </Text>
+        </Card>
+      ))}
       {tasks.length === 0 && !loadingTasks ? <EmptyState title="وظیفهٔ بازی نیست" /> : null}
       {visibleTasks().map((t) => (
         <Card key={t.task_id}>

@@ -135,6 +135,10 @@ export class SyncEngine {
         await this.api.recordLocationCount(action.payload.sessionId, action.payload.locationId, action.payload.itemId,
           action.payload.quantity, action.idempotencyKey, action.payload.batchNo);
         return;
+      case "WMS_SERIAL_COUNT":
+        await this.api.recordSerialCount(action.payload.sessionId, action.payload.locationId, action.payload.itemId,
+          action.payload.serialNos, action.idempotencyKey);
+        return;
     }
   }
 

@@ -370,9 +370,23 @@ def _reserve(session, task: WarehouseTask) -> None:
     """رزروِ قطعیِ مقدارِ وظیفه در همان inv.stock_reservations (ستونِ رزروِ موتورِ انبار دست نمی‌خورد)."""
     if task.task_type_code not in _RESERVATION_SOURCE or not task.quantity_base or task.quantity_base <= 0:
         return
-    session.add(StockReservation(company_id=task.company_id, item_id=task.item_id, warehouse_id=task.warehouse_id,
-                                 bin_location_id=task.from_bin_location_id, quantity=task.quantity_base,
-                                 source_type_code=_RESERVATION_SOURCE[task.task_type_code], source_record_id=task.task_id))
+    res = StockReservation(company_id=task.company_id, item_id=task.item_id, warehouse_id=task.warehouse_id,
+                           bin_location_id=task.from_bin_location_id, quantity=task.quantity_base,
+                           source_type_code=_RESERVATION_SOURCE[task.task_type_code], source_record_id=task.task_id)
+    session.add(res)
+    _hold(session, res, 1)
+
+
+def _hold(session, res: StockReservation, sign: int) -> None:
+    """R252: رزروِ فعال در ستونِ رزروِ مانده هم نگه داشته می‌شود تا «موجودیِ آزاد» (کاتالوگ/فروشگاه/بارگیری) کم شود.
+    موتورِ انبار این ستون را بررسی نمی‌کند، پس ثبتِ حواله و فروش هرگز به‌خاطرِ آن رد نمی‌شود."""
+    if res.bin_location_id is None:
+        return
+    bal = session.scalar(select(StockBalance).where(
+        StockBalance.item_id == res.item_id, StockBalance.warehouse_id == res.warehouse_id,
+        StockBalance.bin_location_id == res.bin_location_id, StockBalance.batch_id.is_(None)))
+    if bal is not None:
+        bal.quantity_reserved = max(_ZERO, (bal.quantity_reserved or _ZERO) + sign * res.quantity)
 
 
 def _release(session, task: WarehouseTask, status: str, fulfilled: decimal.Decimal | None = None) -> None:
@@ -383,6 +397,7 @@ def _release(session, task: WarehouseTask, status: str, fulfilled: decimal.Decim
             StockReservation.source_type_code == source, StockReservation.source_record_id == task.task_id,
             StockReservation.status_code == "ACTIVE")):
         res.status_code, res.released_at = status, datetime.datetime.now()
+        _hold(session, res, -1)
         if fulfilled is not None:
             res.fulfilled_quantity_base = min(decimal.Decimal(fulfilled), res.quantity)
 
@@ -591,6 +606,7 @@ def complete_replenishment(task_id: int, company_id: int, user_id: int, quantity
             for res in session.scalars(select(StockReservation).where(
                     StockReservation.source_type_code == "WMS_REPLENISH_TASK", StockReservation.source_record_id == task_id)):
                 res.status_code, res.released_at = "ACTIVE", None
+                _hold(session, res, 1)
             session.commit()
         raise
     with new_session() as session:

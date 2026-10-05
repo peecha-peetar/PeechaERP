@@ -683,6 +683,20 @@ class _LocationCountTab(QWidget):
         if not (0 <= row < len(self._lines)):
             return False
         ln = self._lines[row]
+        if ln.serial:  # R252: کالایِ سریال‌دار با فهرستِ سریال‌ها
+            if value is None:
+                text, ok = QInputDialog.getMultiLineText(self, "شمارشِ سریال", f"سریال‌هایِ موجود در {ln.location_code} (هر خط یکی):")
+                if not ok:
+                    return False
+                value = [x.strip() for x in text.splitlines() if x.strip()]
+            try:
+                lc.record_serial_count(self._company_id(), self.session_combo.currentData(), ln.location_id, ln.item_id, list(value),
+                                       app_session.current_user.user_id)
+            except ValueError as exc:
+                QMessageBox.warning(self, "شمارشِ محل", str(exc))
+                return False
+            self._load_lines()
+            return True
         if value is None:
             qty, ok = QInputDialog.getDouble(self, "شمارشِ محل", f"مقدارِ شمرده‌شده در {ln.location_code}:", 0, 0, 1e12, 3)
             if not ok:

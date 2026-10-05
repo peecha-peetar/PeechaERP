@@ -713,11 +713,31 @@ class PurchaseReportScreen(ReportScreenBase):
                     break
         return found
 
+    def _location_in_row(self, raw: list | None) -> int | None:
+        import re
+
+        from peecha.services import warehouse_locations as wl
+
+        for cell in raw or []:
+            if isinstance(cell, str) and re.fullmatch(r"[A-Za-z0-9]+(-[A-Za-z0-9]+)+", cell.strip()):
+                try:
+                    hit = wl.search(self._company_id(), cell.strip())
+                except ValueError:
+                    continue
+                if hit.kind == "LOCATION" and len(hit.location_ids) == 1:
+                    return hit.location_ids[0]
+        return None
+
     def show_on_map(self, row: int) -> bool:
         """R248: کالایِ ردیف → محل‌هایش رویِ نقشه (هایلایت)؛ فقط انبار → نقشهٔ همان انبار."""
         if self._main_window is None:
             return False
-        found = self._labels_in_row(self.raw_row(row) if row >= 0 else None)
+        raw = self.raw_row(row) if row >= 0 else None
+        location_id = self._location_in_row(raw)
+        if location_id is not None:  # R252: ردیفِ دارایِ کدِ محل → همان محل رویِ نقشه
+            self._main_window.open_screen("INV_WAREHOUSE_MAP", then=lambda screen: screen.focus_location(location_id))
+            return True
+        found = self._labels_in_row(raw)
         item_id, warehouse_id = found.get("item_id"), found.get("warehouse_id")
         if item_id is None and warehouse_id is None:
             self._main_window.open_screen("INV_WAREHOUSE_MAP")

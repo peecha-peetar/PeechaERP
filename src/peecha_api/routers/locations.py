@@ -259,7 +259,8 @@ def count_detail(session_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
         raise _bad_request(exc) from exc
     hide = lambda ln: ln.blind and ln.counted is None  # noqa: E731
     return [{"location_id": ln.location_id, "location_code": ln.location_code, "item_id": ln.item_id, "item_code": ln.item_code,
-             "item_name": ln.item_name, "unit": ln.unit, "batch_no": ln.batch_no,
+             "item_name": ln.item_name, "unit": ln.unit, "batch_no": ln.batch_no, "serial": ln.serial,
+             "expected_serials": None if hide(ln) or not ln.serial else lc.expected_serials(ctx.company_id, ln.location_id, ln.item_id),
              "expected": None if hide(ln) else str(ln.expected),
              "counted": str(ln.counted) if ln.counted is not None else None,
              "variance": str(ln.variance) if ln.variance is not None else None} for ln in lines]
@@ -280,6 +281,43 @@ def record_count(session_id: int, body: CountRecord, ctx: AuthContext = _EDIT, k
                   lambda: lc.record_location_count(ctx.company_id, session_id, body.location_id, body.item_id, body.quantity, ctx.user_id,
                                                           body.batch_no),
                   lambda line_id: {"line_id": line_id})
+
+
+class SerialCountRecord(BaseModel):
+    location_id: int
+    item_id: int
+    serial_nos: list[str]
+
+
+@router.post("/counts/{session_id}/serials")
+def record_serial_count(session_id: int, body: SerialCountRecord, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+    """R252: سریال‌هایِ اسکن‌شده در یک محل."""
+    from peecha.services import location_counts as lc
+
+    return _write(key, f"POST /locations/counts/{session_id}/serials", ctx,
+                  lambda: lc.record_serial_count(ctx.company_id, session_id, body.location_id, body.item_id, body.serial_nos, ctx.user_id),
+                  lambda line_id: {"line_id": line_id})
+
+
+@router.get("/putaway-sources")
+def putaway_sources(ctx: AuthContext = _VIEW) -> list[dict]:
+    """R252: رسیدهایِ ثبت‌شدهٔ اخیر که هنوز وظیفهٔ جانمایی ندارند (برایِ ساختِ وظیفه از موبایل)."""
+    return [{"document_id": src.key[1], "document_type": src.doc.document_type_code, "document_no": src.doc.document_no,
+             "document_date": src.doc.document_date.isoformat(), "warehouse_id": src.doc.destination_warehouse_id,
+             "open_lines": src.open_lines} for src in ops.putaway_sources(ctx.company_id)]
+
+
+class TaskGenerate(BaseModel):
+    document_id: int
+    task_type: str = "PUTAWAY"
+
+
+@router.post("/tasks/generate")
+def generate_tasks(body: TaskGenerate, ctx: AuthContext = _EDIT) -> dict:
+    try:
+        return {"task_ids": ops.generate_tasks(ctx.company_id, body.task_type, ("STOCK", body.document_id), ctx.user_id)}
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
 
 
 @router.get("/kpis")
@@ -306,6 +344,32 @@ def label_svgs(location_id: int, code: str) -> tuple[str, str]:
     barcode = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {len(bits)} 40" preserveAspectRatio="none" '
                f'width="100%" height="40">{bars}</svg>')
     return qr, barcode
+
+
+@router.get("/{location_id}/labels")
+def location_labels(location_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
+    """R252: برچسبِ خودِ محل و همهٔ زیرمحل‌هایش (چاپِ گروهیِ یک منطقه/قفسه از موبایل؛ حداکثر ۳۰۰)."""
+    from peecha.db.base import new_session
+    from peecha.db.models.inventory import BinLocation
+
+    with new_session() as session:
+        row = session.get(BinLocation, location_id)
+        warehouse_id = row.warehouse_id if row else None
+    if warehouse_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="محل نامعتبر است.")
+    try:
+        nodes = wl.tree(ctx.company_id, warehouse_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    by_id = {n.location_id: n for n in nodes}
+    ids = sorted(wl.descendants(nodes, location_id), key=lambda i: by_id[i].full_code)[:300]
+    out = []
+    for lid in ids:
+        n = by_id[lid]
+        qr, barcode = label_svgs(lid, n.full_code)
+        out.append({"location_id": lid, "code": n.full_code, "title": n.name, "qr_payload": wl.qr_payload(lid, n.full_code),
+                    "qr_svg": qr, "barcode_svg": barcode})
+    return out
 
 
 @router.get("/{location_id}/label")
