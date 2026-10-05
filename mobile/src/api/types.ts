@@ -725,3 +725,92 @@ export interface InvoicePrintData {
   settled_amount: string;
   remaining_amount: string;
 }
+
+// --- R249: انبار (WMS) -------------------------------------------------------
+export interface LocationContentRow {
+  location_code: string;
+  item_id: number;
+  item_code: string;
+  item_name: string;
+  sku: string;
+  quantity: string;
+  unit: string;
+  batches: string;
+  serials: string;
+  expiry: string | null;
+}
+
+export interface LocationDetail {
+  location_id: number;
+  parent_id: number | null;
+  warehouse_id: number;
+  code: string;
+  level: string | null;
+  name: string | null;
+  location_type: string | null;
+  status: string;
+  picking_allowed: boolean;
+  putaway_allowed: boolean;
+  replenishment_allowed: boolean;
+  damaged: boolean;
+  occupancy_percent: string | null;
+  quantity: string;
+  qr: string;
+  contents: LocationContentRow[];
+}
+
+export interface LocationSearchResult {
+  kind: "LOCATION" | "PRODUCT" | "NONE";
+  item_ids: number[];
+  locations: LocationDetail[];
+}
+
+export interface ItemLocationRow {
+  warehouse_id: number;
+  warehouse: string;
+  location_id: number;
+  location_code: string;
+  zone: string;
+  aisle: string;
+  rack: string;
+  level: string;
+  bin: string;
+  quantity: string;
+}
+
+export interface PutawaySuggestion {
+  location_id: number;
+  location_code: string;
+  score: number;
+  abc_class: string;
+  reasons: string[];
+}
+
+export type WmsTaskType = "PUTAWAY" | "PICK" | "REPLENISH";
+
+export interface WmsTask {
+  task_id: number;
+  task_type: WmsTaskType;
+  task_label: string;
+  status: string;
+  warehouse_id: number;
+  item_id: number;
+  item_code: string;
+  item_name: string;
+  unit: string;
+  quantity: string;
+  done_quantity: string | null;
+  from_location_id: number | null;
+  from_location_code: string | null;
+  to_location_id: number | null;
+  to_location_code: string | null;
+  created_at: string | null;
+}
+
+export interface StockTransferRequest {
+  item_id: number;
+  from_location_id: number;
+  to_location_id: number;
+  quantity: string;
+  allow_over_capacity?: boolean;
+}

@@ -5,6 +5,7 @@ import {
   OrderCreateRequest,
   PaymentCreateRequest,
   StartVisitRequest,
+  StockTransferRequest,
 } from "../api/types";
 import { generateIdempotencyKey } from "./idempotency";
 
@@ -60,7 +61,12 @@ export type PendingAction =
   | { idempotencyKey: string; createdAt: string; type: "CREATE_DELIVERY_CONFIRMATION"; payload: DeliveryConfirmationRequest }
   | { idempotencyKey: string; createdAt: string; type: "CREATE_VAN_SALE_DELIVERY"; payload: VanSaleDeliveryPayload }
   | { idempotencyKey: string; createdAt: string; type: "CREATE_PAYMENT"; payload: PaymentCreateRequest }
-  | { idempotencyKey: string; createdAt: string; type: "CREATE_CUSTOMER"; payload: CustomerCreateRequest };
+  | { idempotencyKey: string; createdAt: string; type: "CREATE_CUSTOMER"; payload: CustomerCreateRequest }
+  // R249: عملیاتِ انبار (اپِ انباردار)
+  | { idempotencyKey: string; createdAt: string; type: "WMS_TRANSFER"; payload: StockTransferRequest }
+  | { idempotencyKey: string; createdAt: string; type: "WMS_PUTAWAY"; payload: { taskId: number; toLocationId: number } }
+  | { idempotencyKey: string; createdAt: string; type: "WMS_PICK"; payload: { taskId: number; quantity: string } }
+  | { idempotencyKey: string; createdAt: string; type: "WMS_REPLENISH"; payload: { taskId: number; quantity: string | null } };
 
 export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "START_VISIT" }>, "idempotencyKey" | "createdAt">
@@ -70,7 +76,11 @@ export type PendingActionInput =
   | Omit<Extract<PendingAction, { type: "CREATE_DELIVERY_CONFIRMATION" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CREATE_VAN_SALE_DELIVERY" }>, "idempotencyKey" | "createdAt">
   | Omit<Extract<PendingAction, { type: "CREATE_PAYMENT" }>, "idempotencyKey" | "createdAt">
-  | Omit<Extract<PendingAction, { type: "CREATE_CUSTOMER" }>, "idempotencyKey" | "createdAt">;
+  | Omit<Extract<PendingAction, { type: "CREATE_CUSTOMER" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WMS_TRANSFER" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WMS_PUTAWAY" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WMS_PICK" }>, "idempotencyKey" | "createdAt">
+  | Omit<Extract<PendingAction, { type: "WMS_REPLENISH" }>, "idempotencyKey" | "createdAt">;
 
 /** صفِ اقدام‌هایِ آفلاین -- الگویِ pull-latest + push-queue طبقِ سندِ
  * معماری: هر اقدامِ کاربر (شروع/تکمیل/ردِ ویزیت، ثبتِ سفارش، تاییدِ

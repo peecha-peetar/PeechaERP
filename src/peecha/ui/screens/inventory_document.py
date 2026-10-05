@@ -1556,8 +1556,25 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             return
         self._load_document()
 
+    def _locations_ok(self) -> bool:
+        """R248/R249: محلِ غیرفعال/مسدود مانعِ تایید و ثبت است؛ ناسازگاری و عبور از ظرفیت فقط هشدار."""
+        from peecha.services import warehouse_locations as wl_service
+
+        check = wl_service.check_document_locations(self._company_id(), self._document_id)
+        if check.errors:
+            QMessageBox.warning(self, "محلِ انبار", "\n".join(check.errors))
+            self.status_label.setText(check.errors[0])
+            return False
+        if check.warnings:
+            answer = QMessageBox.question(self, "هشدارِ محلِ انبار", "\n".join(check.warnings) + "\n\nادامه می‌دهید؟",
+                                          QMessageBox.Yes | QMessageBox.No)
+            return answer == QMessageBox.Yes
+        return True
+
     def _confirm(self) -> None:
         if self._document_id is None:
+            return
+        if not self._locations_ok():
             return
         try:
             documents_service.confirm_stock_document(self._document_id, self._company_id())
@@ -1592,6 +1609,8 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
             QMessageBox.Yes | QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
+            return
+        if not self._locations_ok():
             return
         try:
             result = documents_service.post_stock_document(self._document_id, self._company_id(), app_session.current_user.user_id)

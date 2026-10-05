@@ -21,6 +21,8 @@ interface Props {
    * مدیریت -- همیشه نشان داده می‌شود؛ کارتابلِ خالی/بدونِ مشتریِ
    * درانتظار یعنی چیزی برایِ این کاربر نیست، نه خطا. */
   onOpenApprovals: () => void;
+  /** R249: اپِ انباردار (جستجو/اسکنِ محل، وظایف، انتقال). */
+  onOpenWarehouse?: () => void;
   /** طبقِ درخواستِ صریحِ کاربر («تسویه آخر روز باید بصورتِ انتخابی به
    * یک نفر از ۳ نقش واگذار بشه»): فقط برایِ همان یک نفر تعریف می‌شود --
    * undefined یعنی این کاربر مسئولِ تسویهٔ هیچ خودرویی نیست. */
@@ -47,7 +49,7 @@ interface Props {
  * کاربر از چنین حالتی است، بدونِ نیاز به پاک‌کردنِ کاملِ دیتایِ اپ. */
 export function SettingsScreen({
   apiClient, offlineQueue, syncEngine, syncErrorLog, userFullName, onLoggedOut, onBack, onOpenManagerDashboard,
-  onOpenApprovals, onOpenVehicleSettlement, onChangeMode,
+  onOpenApprovals, onOpenWarehouse, onOpenVehicleSettlement, onChangeMode,
 }: Props) {
   const { colors, spacing, typography, mode } = useTheme();
   const { toggleMode } = useThemeControls();
@@ -161,6 +163,8 @@ export function SettingsScreen({
       <Button label="داشبوردِ مدیریت" variant="secondary" onPress={onOpenManagerDashboard} />
 
       <Button label="صندوقِ تاییدها" variant="secondary" onPress={onOpenApprovals} />
+
+      {onOpenWarehouse ? <Button label="انبار: اسکن، وظایف و انتقال" variant="secondary" onPress={onOpenWarehouse} /> : null}
 
       {onOpenVehicleSettlement ? (
         <Button label="تسویهٔ پایانِ روزِ خودرو" variant="secondary" onPress={onOpenVehicleSettlement} />

@@ -30,6 +30,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import { VehicleSettlementScreen } from "./screens/VehicleSettlementScreen";
 import { VisitDetailScreen } from "./screens/VisitDetailScreen";
 import { VisitListScreen } from "./screens/VisitListScreen";
+import { WarehouseScreen } from "./screens/WarehouseScreen";
 import { createServices } from "./services";
 import { SignaturePadProvider, useSignaturePad } from "./signature/SignaturePadProvider";
 import { applyRtlLayout, ThemeProvider, useTheme } from "./theme";
@@ -78,6 +79,7 @@ export type RootStackParamList = {
   ManagerDashboard: undefined;
   Approvals: undefined;
   VehicleSettlement: undefined;
+  Warehouse: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -565,6 +567,7 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 onBack={() => navigation.navigate("Main", { screen: "HOME" })}
                 onOpenManagerDashboard={() => navigation.navigate("ManagerDashboard")}
                 onOpenApprovals={() => navigation.navigate("Approvals")}
+                onOpenWarehouse={() => navigation.navigate("Warehouse")}
                 onOpenVehicleSettlement={
                   settlementVehicleWarehouseId != null ? () => navigation.navigate("VehicleSettlement") : undefined
                 }
@@ -591,6 +594,19 @@ function AppContent({ locationProvider = new ExpoLocationProvider(), captureProv
                 apiClient={services.apiClient}
                 onBack={() => navigation.navigate("Settings")}
                 onOpenCustomer={(detailAccountId) => navigation.navigate("CustomerDetail", { detailAccountId })}
+              />
+            </SafeAreaView>
+          )}
+        </RootStack.Screen>
+
+        <RootStack.Screen name="Warehouse">
+          {({ navigation }) => (
+            <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
+              <WarehouseScreen
+                apiClient={services.apiClient}
+                offlineQueue={services.offlineQueue}
+                syncEngine={services.syncEngine}
+                onBack={() => navigation.navigate("Settings")}
               />
             </SafeAreaView>
           )}

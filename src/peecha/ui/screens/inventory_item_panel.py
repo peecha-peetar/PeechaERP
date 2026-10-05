@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -1756,8 +1757,74 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         button.setObjectName("flatButton")
         button.clicked.connect(lambda: self.show_location_on_map(self.locations_table.currentRow()))
         layout.addWidget(button, alignment=Qt.AlignLeft)
+        layout.addWidget(self._build_storage_profile())
         self._location_rows = []
         return tab
+
+    # --- R249: شرایطِ نگهداری (سازگاری با محلِ انبار) -------------------------------
+    def _build_storage_profile(self) -> QWidget:
+        from peecha.services import warehouse_locations as wl_service
+
+        box = QWidget()
+        grid = QHBoxLayout(box)
+        title = QLabel("شرایطِ نگهداری:")
+        title.setObjectName("cardTitle")
+        grid.addWidget(title)
+        self.storage_temp_min, self.storage_temp_max = QDoubleSpinBox(), QDoubleSpinBox()
+        for spin in (self.storage_temp_min, self.storage_temp_max):
+            spin.setRange(-80.01, 80)
+            spin.setDecimals(1)
+            spin.setSpecialValueText("—")
+            spin.setValue(-80.01)
+        self.storage_hazard_combo = QComboBox()
+        self.storage_hazard_combo.addItem("— غیرِ خطرناک —", None)
+        for code, label in wl_service.HAZARD_CLASSES.items():
+            self.storage_hazard_combo.addItem(label, code)
+        self.storage_type_combo = QComboBox()
+        self.storage_type_combo.addItem("— هر محل —", None)
+        for code, label in wl_service.LOCATION_TYPES.items():
+            self.storage_type_combo.addItem(label, code)
+        self.storage_fragile_checkbox = QCheckBox("شکستنی")
+        for label, widget in (("دما از", self.storage_temp_min), ("تا", self.storage_temp_max), ("کلاسِ خطر", self.storage_hazard_combo),
+                              ("فقط در محلِ", self.storage_type_combo)):
+            grid.addWidget(QLabel(label))
+            grid.addWidget(widget)
+        grid.addWidget(self.storage_fragile_checkbox)
+        save = QPushButton("ذخیرهٔ شرایطِ نگهداری")
+        save.setObjectName("flatButton")
+        save.clicked.connect(self.save_storage_profile)
+        grid.addWidget(save)
+        grid.addStretch(1)
+        return box
+
+    def _load_storage_profile(self) -> None:
+        from peecha.services import warehouse_locations as wl_service
+
+        p = wl_service.get_storage_profile(self._company_id, self._item_id) \
+            if self._company_id is not None and self._item_id is not None else wl_service.StorageProfile()
+        self.storage_temp_min.setValue(float(p.temperature_min_c) if p.temperature_min_c is not None else -80.01)
+        self.storage_temp_max.setValue(float(p.temperature_max_c) if p.temperature_max_c is not None else -80.01)
+        self.storage_hazard_combo.setCurrentIndex(max(0, self.storage_hazard_combo.findData(p.hazard_class_code)))
+        self.storage_type_combo.setCurrentIndex(max(0, self.storage_type_combo.findData(p.required_location_type_code)))
+        self.storage_fragile_checkbox.setChecked(p.is_fragile)
+
+    def save_storage_profile(self) -> bool:
+        from peecha.services import warehouse_locations as wl_service
+
+        if self._company_id is None or self._item_id is None:
+            QMessageBox.information(self, "شرایطِ نگهداری", "ابتدا کالا را ذخیره کنید.")
+            return False
+        temp = lambda s: decimal.Decimal(str(round(s.value(), 1))) if s.value() > -80 else None  # noqa: E731
+        try:
+            wl_service.save_storage_profile(self._company_id, self._item_id, wl_service.StorageProfile(
+                temperature_min_c=temp(self.storage_temp_min), temperature_max_c=temp(self.storage_temp_max),
+                hazard_class_code=self.storage_hazard_combo.currentData(), is_fragile=self.storage_fragile_checkbox.isChecked(),
+                required_location_type_code=self.storage_type_combo.currentData()),
+                app_session.current_user.user_id if app_session.current_user else None)
+        except ValueError as exc:
+            QMessageBox.warning(self, "شرایطِ نگهداری", str(exc))
+            return False
+        return True
 
     def _refresh_locations(self) -> None:
         from peecha.services import warehouse_locations as wl_service
@@ -1770,6 +1837,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
                      numerals.format_money(loc.quantity, 2, None)]
             for c, text in enumerate(cells):
                 self.locations_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
+        self._load_storage_profile()
 
     def show_location_on_map(self, row: int) -> bool:
         from PySide6.QtWidgets import QApplication
@@ -1788,6 +1856,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         if hasattr(self, "locations_table"):
             self._location_rows = []
             self.locations_table.setRowCount(0)
+            self._load_storage_profile()
         self._current_bom_id = None
         self.latin_name_field.clear()
         self.short_name_field.clear()

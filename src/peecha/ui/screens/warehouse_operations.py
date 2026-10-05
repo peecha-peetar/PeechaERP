@@ -5,7 +5,7 @@ from __future__ import annotations
 import decimal
 
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
+    QAbstractItemView, QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
     QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -102,6 +102,12 @@ class _TasksTab(QWidget):
             self._users = dict(session.execute(select(User.user_id, User.full_name)).all())
         task_type = self.type_combo.currentData()
         self.source_combo.clear()
+        if task_type == "REPLENISH":
+            needs = ops.replenishment_needs(company_id)
+            if needs:
+                self.source_combo.addItem(numerals.to_persian_digits(f"{len(needs)} محلِ زیرِ حداقل"), ("REPLENISH", 0))
+            self._load()
+            return
         sources = ops.putaway_sources(company_id) if task_type == "PUTAWAY" else ops.pick_sources(company_id)
         for s in sources:
             d = s.doc
@@ -143,6 +149,8 @@ class _TasksTab(QWidget):
         source = self.source_combo.currentData()
         if source is None:
             return False
+        if self.type_combo.currentData() == "REPLENISH":
+            return self._run(lambda: ops.generate_replenishment_tasks(self._company_id(), self._user_id()), "وظایفِ تأمینِ مجدد ساخته شد.")
         return self._run(lambda: ops.generate_tasks(self._company_id(), self.type_combo.currentData(), tuple(source), self._user_id()),
                          "وظایف ساخته شد.")
 
@@ -169,6 +177,14 @@ class _TasksTab(QWidget):
                     return False
                 value = bins[labels.index(choice)].bin_location_id
             return self._run(lambda: ops.complete_putaway(task.task_id, company_id, user_id, value), "جانمایی انجام شد.")
+        if task.task_type_code == "REPLENISH":
+            if value is None:
+                qty, ok = QInputDialog.getDouble(self, "تأمینِ مجدد", "مقدارِ جابه‌جاشده:", float(task.quantity_base), 0.001,
+                                                 float(task.quantity_base), 3)
+                if not ok:
+                    return False
+                value = decimal.Decimal(str(qty))
+            return self._run(lambda: ops.complete_replenishment(task.task_id, company_id, user_id, value), "تأمینِ مجدد انجام شد.")
         if value is None:
             qty, ok = QInputDialog.getDouble(self, "برداشت", "مقدارِ برداشته (واحدِ اصلی):", float(task.quantity_base), 0, 1e12, 3)
             if not ok:
@@ -309,6 +325,131 @@ class _PlansTab(QWidget):
             self.refresh()
 
 
+class _ReplenishTab(QWidget):
+    """R249: حداقل/حداکثرِ کالا در محلِ برداشت و نیازهایِ تأمینِ مجدد."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        hint = QLabel("برایِ هر محلِ برداشت، حداقل و حداکثرِ کالا را تعریف کنید. وقتی موجودیِ محل به حداقل برسد، "
+                      "وظیفهٔ تأمینِ مجدد از محل‌هایِ ذخیره/حجیمِ همان انبار ساخته و مقدارش رزرو می‌شود.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        form = QHBoxLayout()
+        self.warehouse_combo = QComboBox()
+        self.warehouse_combo.currentIndexChanged.connect(lambda _i: self._fill_locations())
+        self.location_combo = QComboBox()
+        self.location_combo.setMinimumWidth(220)
+        self.item_combo = QComboBox()
+        self.item_combo.setMinimumWidth(220)
+        self.min_spin, self.max_spin = QDoubleSpinBox(), QDoubleSpinBox()
+        for spin in (self.min_spin, self.max_spin):
+            spin.setRange(0, 1e9)
+            spin.setDecimals(3)
+        for label, widget in (("انبار:", self.warehouse_combo), ("محل:", self.location_combo), ("کالا:", self.item_combo),
+                              ("حداقل:", self.min_spin), ("حداکثر:", self.max_spin)):
+            form.addWidget(QLabel(label))
+            form.addWidget(widget)
+        save = QPushButton("ذخیرهٔ قاعده")
+        save.setObjectName("primaryButton")
+        save.clicked.connect(self.save)
+        form.addWidget(save)
+        form.addStretch(1)
+        layout.addLayout(form)
+        self.table = _table(["محل", "کالا", "حداقل", "حداکثر", "موجودیِ محل", "نیاز", "منابع", "فعال"])
+        layout.addWidget(self.table, stretch=1)
+        actions = QHBoxLayout()
+        delete = QPushButton("حذف/غیرفعال‌سازیِ قاعده")
+        delete.clicked.connect(self.delete_selected)
+        generate = QPushButton("ایجادِ وظایفِ تأمینِ مجدد")
+        generate.clicked.connect(self.generate)
+        actions.addWidget(delete)
+        actions.addWidget(generate)
+        actions.addStretch(1)
+        self.status_label = QLabel("")
+        actions.addWidget(self.status_label)
+        layout.addLayout(actions)
+        self._rules = []
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        self.warehouse_combo.blockSignals(True)
+        self.warehouse_combo.clear()
+        for w in locations_service.list_warehouses(company_id):
+            self.warehouse_combo.addItem(w.name, w.warehouse_id)
+        self.warehouse_combo.blockSignals(False)
+        self.item_combo.clear()
+        items = catalog_service.list_items(company_id, transactable_only=True)
+        self._items = {i.item_id: f"{i.code} — {i.name or ''}" for i in items}
+        for i in items:
+            self.item_combo.addItem(self._items[i.item_id], i.item_id)
+        self._fill_locations()
+        self._load()
+
+    def _fill_locations(self) -> None:
+        from peecha.services import warehouse_locations as wl
+
+        self.location_combo.clear()
+        wid = self.warehouse_combo.currentData()
+        if wid is None:
+            return
+        nodes = wl.tree(self._company_id(), wid, active_only=True)
+        parents = {n.parent_id for n in nodes}
+        for n in nodes:
+            if n.location_id not in parents and n.allow_replenishment:
+                self.location_combo.addItem(n.full_code, n.location_id)
+
+    def _load(self) -> None:
+        from peecha.services import warehouse_locations as wl
+
+        company_id = self._company_id()
+        self._rules = ops.list_rules(company_id)
+        needs = {n.rule.rule_id: n for n in ops.replenishment_needs(company_id)}
+        codes = {}
+        for wid in {self.warehouse_combo.itemData(i) for i in range(self.warehouse_combo.count())}:
+            codes.update({n.location_id: n.full_code for n in wl.tree(company_id, wid)})
+        self.table.setRowCount(len(self._rules))
+        for row, r in enumerate(self._rules):
+            need = needs.get(r.rule_id)
+            cells = [codes.get(r.bin_location_id, ""), self._items.get(r.item_id, ""), numerals.format_money(r.min_quantity, 3, None),
+                     numerals.format_money(r.max_quantity, 3, None),
+                     numerals.format_money(need.on_hand, 3, None) if need else "",
+                     numerals.format_money(need.need, 3, None) if need else "",
+                     "، ".join(s.location_code for s in need.sources[:3]) if need else "", "بله" if r.is_active else "خیر"]
+            for col, text in enumerate(cells):
+                self.table.setItem(row, col, QTableWidgetItem(numerals.to_persian_digits(text)))
+
+    def save(self) -> bool:
+        try:
+            ops.save_rule(self._company_id(), ops.RuleFields(
+                self.location_combo.currentData(), self.item_combo.currentData(),
+                decimal.Decimal(str(self.min_spin.value())), decimal.Decimal(str(self.max_spin.value()))))
+        except (ValueError, TypeError) as exc:
+            QMessageBox.warning(self, "تأمینِ مجدد", str(exc))
+            return False
+        theme.set_status_label(self.status_label, "قاعده ذخیره شد.", ok=True)
+        self._load()
+        return True
+
+    def delete_selected(self) -> None:
+        row = self.table.currentRow()
+        if 0 <= row < len(self._rules):
+            ops.delete_rule(self._company_id(), self._rules[row].rule_id)
+            self._load()
+
+    def generate(self) -> list[int]:
+        ids = ops.generate_replenishment_tasks(self._company_id(), app_session.current_user.user_id)
+        theme.set_status_label(self.status_label, numerals.to_persian_digits(f"{len(ids)} وظیفهٔ تأمینِ مجدد ساخته شد."), ok=True)
+        self._load()
+        return ids
+
+
 class WarehouseOperationsScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -320,11 +461,14 @@ class WarehouseOperationsScreen(QWidget):
         self.tabs = QTabWidget()
         self.tasks_tab = _TasksTab()
         self.plans_tab = _PlansTab()
-        self.tabs.addTab(self.tasks_tab, "وظایفِ جانمایی و برداشت")
+        self.replenish_tab = _ReplenishTab()
+        self.tabs.addTab(self.tasks_tab, "وظایفِ جانمایی، برداشت و تأمین")
         self.tabs.addTab(self.plans_tab, "برنامهٔ شمارشِ دوره‌ای")
+        self.tabs.addTab(self.replenish_tab, "قاعده‌هایِ تأمینِ مجدد")
         self.tabs.currentChanged.connect(lambda _i: self.tabs.currentWidget().refresh())
         layout.addWidget(self.tabs, stretch=1)
 
     def refresh(self) -> None:
         self.tasks_tab.refresh()
         self.plans_tab.refresh()
+        self.replenish_tab.refresh()

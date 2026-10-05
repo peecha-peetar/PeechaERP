@@ -44,6 +44,13 @@ import {
   BankRow,
   CatalogResponse,
   InvoicePrintData,
+  ItemLocationRow,
+  LocationDetail,
+  LocationSearchResult,
+  PutawaySuggestion,
+  StockTransferRequest,
+  WmsTask,
+  WmsTaskType,
 } from "./types";
 
 export type Fetcher = typeof fetch;
@@ -425,5 +432,51 @@ export class ApiClient {
     idempotencyKey?: string,
   ): Promise<VehicleSettlementSubmitResponse> {
     return this.request<VehicleSettlementSubmitResponse>("/vehicle-settlement", { method: "POST", body: payload, idempotencyKey });
+  }
+
+  // --- R249: انبار (WMS) -- مسیرهایِ /locations ------------------------------
+  async searchLocations(query: string): Promise<LocationSearchResult> {
+    return this.request<LocationSearchResult>(`/locations/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async scanLocation(payload: string): Promise<LocationDetail> {
+    return this.request<LocationDetail>(`/locations/scan?payload=${encodeURIComponent(payload)}`);
+  }
+
+  async getLocation(locationId: number): Promise<LocationDetail> {
+    return this.request<LocationDetail>(`/locations/${locationId}`);
+  }
+
+  async getItemLocations(itemId: number): Promise<ItemLocationRow[]> {
+    return this.request<ItemLocationRow[]>(`/locations/items/${itemId}`);
+  }
+
+  async getPutawaySuggestions(warehouseId: number, itemId: number, quantity: string): Promise<PutawaySuggestion[]> {
+    const q = new URLSearchParams({ warehouse_id: String(warehouseId), item_id: String(itemId), quantity });
+    return this.request<PutawaySuggestion[]>(`/locations/putaway-suggestions?${q.toString()}`);
+  }
+
+  async listWmsTasks(taskType?: WmsTaskType): Promise<WmsTask[]> {
+    return this.request<WmsTask[]>(`/locations/tasks${taskType ? `?task_type=${taskType}` : ""}`);
+  }
+
+  async startWmsTask(taskId: number): Promise<void> {
+    await this.request<void>(`/locations/tasks/${taskId}/start`, { method: "POST" });
+  }
+
+  async confirmPutaway(taskId: number, toLocationId: number, idempotencyKey?: string): Promise<{ stock_document_id: number | null }> {
+    return this.request(`/locations/tasks/${taskId}/putaway`, { method: "POST", body: { to_location_id: toLocationId }, idempotencyKey });
+  }
+
+  async confirmPick(taskId: number, quantity: string, idempotencyKey?: string): Promise<{ status: string }> {
+    return this.request(`/locations/tasks/${taskId}/pick`, { method: "POST", body: { quantity }, idempotencyKey });
+  }
+
+  async confirmReplenish(taskId: number, quantity: string | null, idempotencyKey?: string): Promise<{ stock_document_id: number }> {
+    return this.request(`/locations/tasks/${taskId}/replenish`, { method: "POST", body: { quantity }, idempotencyKey });
+  }
+
+  async transferStock(payload: StockTransferRequest, idempotencyKey?: string): Promise<{ stock_document_id: number }> {
+    return this.request("/locations/transfer", { method: "POST", body: payload, idempotencyKey });
   }
 }

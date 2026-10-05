@@ -14,7 +14,7 @@ from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QGraphicsItem,
     QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView, QGridLayout,
-    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QSplitter,
+    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QSplitter, QStackedWidget,
     QStyleOptionGraphicsItem, QTableWidget, QTableWidgetItem, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
     QWidget,
 )
@@ -24,6 +24,7 @@ from peecha import session as app_session
 from peecha.services import inventory_locations as locations_service
 from peecha.services import warehouse_locations as wl
 from peecha.ui import theme
+from peecha.ui.screens.warehouse_3d import Warehouse3DView
 
 _Z = {"AREA": 0, "AISLE": 1, "RACK": 2, "SHELF": 2.5, "BIN": 3, None: 3}
 _DETAIL_SCALE = 1.4  # زیرِ این زوم Bin/برچسب‌ها رسم نمی‌شوند (Level of Detail)
@@ -213,6 +214,8 @@ class LocationDialog(QDialog):
         self.putaway.setChecked(f.allow_putaway)
         self.replenish.setChecked(f.allow_replenishment)
         self.damaged.setChecked(f.is_damaged)
+        self.hazardous = QCheckBox("کالایِ خطرناک مجاز")
+        self.hazardous.setChecked(f.allows_hazardous)
         self._fields = f
         rows = [("کدِ بخش", self.segment), ("نام", self.name), ("نوعِ محل", self.type_combo), ("وضعیت", self.status_combo),
                 ("عرض (متر)", self.width_m), ("طول (متر)", self.length_m), ("ارتفاع (متر)", self.height_m),
@@ -227,7 +230,7 @@ class LocationDialog(QDialog):
             grid.addWidget(QLabel(label), i // 2, (i % 2) * 2)
             grid.addWidget(widget, i // 2, (i % 2) * 2 + 1)
         flags = QHBoxLayout()
-        for w in (self.pickable, self.putaway, self.replenish, self.damaged):
+        for w in (self.pickable, self.putaway, self.replenish, self.damaged, self.hazardous):
             flags.addWidget(w)
         grid.addLayout(flags, len(rows) // 2 + 1, 0, 1, 4)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -246,7 +249,7 @@ class LocationDialog(QDialog):
             max_weight_kg=_dec(self.max_weight.value()), max_volume_m3=_dec(self.max_volume.value()),
             temperature_min_c=temp(self.temp_min), temperature_max_c=temp(self.temp_max), is_pickable=self.pickable.isChecked(),
             allow_putaway=self.putaway.isChecked(), allow_replenishment=self.replenish.isChecked(), is_damaged=self.damaged.isChecked(),
-            barcode=f.barcode, map_x=f.map_x, map_y=f.map_y, map_z=f.map_z, map_width=f.map_width, map_height=f.map_height,
+            allows_hazardous=self.hazardous.isChecked(), barcode=f.barcode, map_x=f.map_x, map_y=f.map_y, map_z=f.map_z, map_width=f.map_width, map_height=f.map_height,
             map_rotation=f.map_rotation)
 
 
@@ -320,6 +323,9 @@ class WarehouseMapScreen(QWidget):
             tools.addWidget(b)
             self.add_buttons[level] = b
         tools.addStretch(1)
+        self.view3d_check = QCheckBox("نمایِ سه‌بعدی")
+        self.view3d_check.toggled.connect(self.set_3d)
+        tools.addWidget(self.view3d_check)
         for text, slot in (("مسیرِ برداشت", self.show_picking_path), ("چاپِ برچسب", self.print_labels),
                            ("ابعادِ انبار", self.edit_warehouse_dimensions)):
             b = QPushButton(text)
@@ -348,7 +354,7 @@ class WarehouseMapScreen(QWidget):
         ops = QGridLayout()
         self.op_buttons = {}
         for code, text in (("EDIT", "ویرایش"), ("STATUS", "وضعیت"), ("TRANSFER", "انتقال"), ("PUTAWAY", "پیشنهادِ جانمایی"),
-                           ("TASKS", "برداشت/جانمایی"), ("DELETE", "حذف")):
+                           ("REPLENISH", "حداقل/حداکثرِ تأمین"), ("TASKS", "وظایفِ انبار"), ("DELETE", "حذف")):
             b = QPushButton(text)
             b.setObjectName("flatButton")
             b.clicked.connect(lambda _c=False, op=code: self.run_operation(op))
@@ -386,7 +392,12 @@ class WarehouseMapScreen(QWidget):
         self.history_table = _table(["زمان", "رویداد", "شرح", "کالا", "مقدار"])
         side.addTab(self.history_table, "تاریخچه")
         self.side_tabs = side
-        splitter.addWidget(self.view)
+        self.view3d = Warehouse3DView()
+        self.view3d.location_clicked.connect(lambda lid: self.select_location(lid, focus=False))
+        self.view_stack = QStackedWidget()
+        self.view_stack.addWidget(self.view)
+        self.view_stack.addWidget(self.view3d)
+        splitter.addWidget(self.view_stack)
         splitter.addWidget(side)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
@@ -599,6 +610,20 @@ class WarehouseMapScreen(QWidget):
                 and (min_occ == 0 or (o is not None and o.percent is not None and o.percent >= min_occ))
             item.dimmed = not visible_match
             item.update()
+        self.refresh_3d()
+
+    # --- نمایِ سه‌بعدی (R249) ----------------------------------------------
+    def set_3d(self, on: bool) -> None:
+        self.view_stack.setCurrentWidget(self.view3d if on else self.view)
+        self.refresh_3d()
+
+    def refresh_3d(self) -> None:
+        if not self.view3d_check.isChecked() or self.warehouse_id is None:
+            return
+        boxes = wl.scene_3d(self._company_id(), self.warehouse_id, self.nodes)
+        colors = {lid: item.fill for lid, item in self.items.items() if item.fill is not None}
+        self.view3d.set_data(boxes, colors, highlighted=[lid for lid, i in self.items.items() if i.highlighted],
+                             dimmed=[lid for lid, i in self.items.items() if i.dimmed])
 
     # --- انتخاب، جستجو و جزئیات ----------------------------------------------
     def select_location(self, location_id: int | None, focus: bool = True) -> None:
@@ -698,6 +723,8 @@ class WarehouseMapScreen(QWidget):
         for lid, item in self.items.items():
             item.highlighted = lid in location_ids
             item.update()
+        if self.view3d_check.isChecked():
+            self.refresh_3d()
         targets = [self.items[i] for i in location_ids if i in self.items]
         on_map = [i for i in location_ids if i in self.items]
         if on_map:
@@ -801,6 +828,8 @@ class WarehouseMapScreen(QWidget):
                 self._transfer_dialog(node)
             elif op == "PUTAWAY":
                 self._putaway_dialog()
+            elif op == "REPLENISH":
+                self._replenishment_dialog(node)
             elif op == "TASKS":
                 if self._main_window is not None:
                     self._main_window.open_screen("INV_WMS_TASKS")
@@ -811,6 +840,28 @@ class WarehouseMapScreen(QWidget):
         self.load_warehouse(self.warehouse_id)
         if node.location_id in self.by_id:
             self.select_location(node.location_id, focus=False)
+
+    def _replenishment_dialog(self, node) -> None:
+        """R249: حداقل/حداکثرِ یک کالا در این محلِ برداشت."""
+        from peecha.services import inventory_catalog as catalog_service
+        from peecha.services import warehouse_operations as ops
+
+        items = catalog_service.list_items(self._company_id(), transactable_only=True)
+        labels = [_p(f"{i.code} — {i.name or ''}") for i in items]
+        if not labels:
+            raise ValueError("کالایی تعریف نشده است.")
+        choice, ok = QInputDialog.getItem(self, "تأمینِ مجدد", "کالا:", labels, 0, True)
+        if not ok or choice not in labels:
+            return
+        low, ok = QInputDialog.getDouble(self, "تأمینِ مجدد", "حداقل در این محل:", 0, 0, 1e9, 3)
+        if not ok:
+            return
+        high, ok = QInputDialog.getDouble(self, "تأمینِ مجدد", "حداکثر (تا این مقدار پر می‌شود):", low + 1, 0, 1e9, 3)
+        if not ok:
+            return
+        ops.save_rule(self._company_id(), ops.RuleFields(node.location_id, items[labels.index(choice)].item_id,
+                                                          decimal.Decimal(str(low)), decimal.Decimal(str(high))))
+        theme.set_status_label(self.status_label, "قاعدهٔ تأمینِ مجدد ذخیره شد.", ok=True)
 
     def _transfer_dialog(self, node) -> None:
         rows = [c for c in getattr(self, "_contents", []) if c.location_id == node.location_id] or getattr(self, "_contents", [])

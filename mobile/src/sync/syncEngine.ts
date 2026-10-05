@@ -119,6 +119,18 @@ export class SyncEngine {
       case "CREATE_VAN_SALE_DELIVERY":
         await this.sendVanSaleDelivery(action);
         return;
+      case "WMS_TRANSFER":
+        await this.api.transferStock(action.payload, action.idempotencyKey);
+        return;
+      case "WMS_PUTAWAY":
+        await this.api.confirmPutaway(action.payload.taskId, action.payload.toLocationId, action.idempotencyKey);
+        return;
+      case "WMS_PICK":
+        await this.api.confirmPick(action.payload.taskId, action.payload.quantity, action.idempotencyKey);
+        return;
+      case "WMS_REPLENISH":
+        await this.api.confirmReplenish(action.payload.taskId, action.payload.quantity, action.idempotencyKey);
+        return;
     }
   }
 

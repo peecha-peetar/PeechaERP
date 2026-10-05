@@ -13,12 +13,24 @@ from pydantic import BaseModel
 
 from peecha.services import warehouse_locations as wl
 from peecha.services import warehouse_operations as ops
-from peecha_api.deps import AuthContext
+from peecha_api.deps import AuthContext, get_idempotency_key
+from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import require_permission
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 _VIEW = Depends(require_permission(wl.FORM_CODE, "VIEW"))
 _EDIT = Depends(require_permission(wl.FORM_CODE, "EDIT"))
+_KEY = Depends(get_idempotency_key)
+
+
+def _write(key: str | None, endpoint: str, ctx: AuthContext, compute, serialize) -> dict:
+    """نوشتن‌هایِ موبایل از صفِ آفلاین می‌آیند؛ تکرارِ همان کلید پاسخِ قبلی را برمی‌گرداند."""
+    try:
+        return run_idempotent(key, endpoint, ctx.user_id, ctx.company_id, status.HTTP_200_OK, compute, serialize)
+    except IdempotentReplay as replay:
+        return replay.body
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
 
 
 def _bad_request(exc: ValueError) -> HTTPException:
@@ -110,6 +122,75 @@ def putaway_suggestions(warehouse_id: int, item_id: int, quantity: decimal.Decim
              "reasons": s.reasons} for s in rows]
 
 
+@router.get("/warehouses/{warehouse_id}/scene3d")
+def warehouse_scene_3d(warehouse_id: int, ctx: AuthContext = _VIEW) -> list[dict]:
+    """R249: جعبه‌هایِ سه‌بعدی (واحدِ نقشه؛ ۲۰ واحد = ۱ متر) با درصدِ اشغال."""
+    try:
+        nodes = wl.tree(ctx.company_id, warehouse_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    occ = wl.occupancy(ctx.company_id, warehouse_id, nodes)
+    return [{"location_id": b.location_id, "level": b.level, "code": b.code, "x": b.x, "y": b.y, "z": b.z, "w": b.w, "d": b.d,
+             "h": b.h, "status": b.status,
+             "occupancy_percent": str(occ[b.location_id].percent) if b.location_id in occ and occ[b.location_id].percent is not None else None}
+            for b in wl.scene_3d(ctx.company_id, warehouse_id, nodes)]
+
+
+@router.get("/compatibility")
+def compatibility(item_id: int, location_id: int, ctx: AuthContext = _VIEW) -> dict:
+    try:
+        issues = wl.compatibility_issues(ctx.company_id, item_id, location_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    return {"compatible": not issues, "issues": issues}
+
+
+@router.get("/items/{item_id}/storage-profile")
+def storage_profile(item_id: int, ctx: AuthContext = _VIEW) -> dict:
+    p = wl.get_storage_profile(ctx.company_id, item_id)
+    return {"temperature_min_c": str(p.temperature_min_c) if p.temperature_min_c is not None else None,
+            "temperature_max_c": str(p.temperature_max_c) if p.temperature_max_c is not None else None,
+            "hazard_class": p.hazard_class_code, "hazard_label": wl.HAZARD_CLASSES.get(p.hazard_class_code),
+            "fragile": p.is_fragile, "required_location_type": p.required_location_type_code}
+
+
+@router.get("/tasks")
+def list_tasks(task_type: str | None = None, open_only: bool = True, warehouse_id: int | None = None,
+               ctx: AuthContext = _VIEW) -> list[dict]:
+    """وظایفِ انبار برایِ اپِ انباردار (جانمایی/برداشت/تأمینِ مجدد) با کدِ کالا و محل."""
+    from peecha.services import inventory_catalog as catalog_service
+
+    tasks = ops.list_tasks(ctx.company_id, task_type, None, warehouse_id)
+    if open_only:
+        tasks = [t for t in tasks if t.status_code in ("OPEN", "IN_PROGRESS")]
+    items = {i.item_id: i for i in catalog_service.list_items(ctx.company_id)}
+    codes: dict[int, str] = {}
+    for wid in {t.warehouse_id for t in tasks}:
+        codes.update({n.location_id: n.full_code for n in wl.tree(ctx.company_id, wid)})
+    out = []
+    for t in tasks:
+        item = items.get(t.item_id)
+        out.append({
+            "task_id": t.task_id, "task_type": t.task_type_code, "task_label": ops.TASK_TYPES.get(t.task_type_code),
+            "status": t.status_code, "warehouse_id": t.warehouse_id, "item_id": t.item_id,
+            "item_code": item.code if item else "", "item_name": item.name if item else "", "unit": item.base_uom_code if item else "",
+            "quantity": str(t.quantity_base), "done_quantity": str(t.done_quantity_base) if t.done_quantity_base is not None else None,
+            "from_location_id": t.from_bin_location_id, "from_location_code": codes.get(t.from_bin_location_id),
+            "to_location_id": t.to_bin_location_id, "to_location_code": codes.get(t.to_bin_location_id),
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
+    return out
+
+
+@router.post("/tasks/{task_id}/start")
+def start_task(task_id: int, ctx: AuthContext = _EDIT) -> dict:
+    try:
+        ops.start_task(task_id, ctx.company_id, ctx.user_id)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    return {"task_id": task_id, "status": "IN_PROGRESS"}
+
+
 @router.get("/{location_id}")
 def location_detail(location_id: int, ctx: AuthContext = _VIEW) -> dict:
     try:
@@ -127,13 +208,11 @@ class TransferRequest(BaseModel):
 
 
 @router.post("/transfer")
-def transfer(body: TransferRequest, ctx: AuthContext = _EDIT) -> dict:
-    try:
-        doc_id = wl.transfer(ctx.company_id, ctx.user_id, body.item_id, body.from_location_id, body.to_location_id,
-                             body.quantity, body.allow_over_capacity)
-    except ValueError as exc:
-        raise _bad_request(exc) from exc
-    return {"stock_document_id": doc_id}
+def transfer(body: TransferRequest, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+    return _write(key, "POST /locations/transfer", ctx,
+                  lambda: wl.transfer(ctx.company_id, ctx.user_id, body.item_id, body.from_location_id, body.to_location_id,
+                                      body.quantity, body.allow_over_capacity),
+                  lambda doc_id: {"stock_document_id": doc_id})
 
 
 class PutawayConfirm(BaseModel):
@@ -141,12 +220,10 @@ class PutawayConfirm(BaseModel):
 
 
 @router.post("/tasks/{task_id}/putaway")
-def confirm_putaway(task_id: int, body: PutawayConfirm, ctx: AuthContext = _EDIT) -> dict:
-    try:
-        doc_id = ops.complete_putaway(task_id, ctx.company_id, ctx.user_id, body.to_location_id)
-    except ValueError as exc:
-        raise _bad_request(exc) from exc
-    return {"task_id": task_id, "stock_document_id": doc_id}
+def confirm_putaway(task_id: int, body: PutawayConfirm, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+    return _write(key, f"POST /locations/tasks/{task_id}/putaway", ctx,
+                  lambda: ops.complete_putaway(task_id, ctx.company_id, ctx.user_id, body.to_location_id),
+                  lambda doc_id: {"task_id": task_id, "stock_document_id": doc_id})
 
 
 class PickConfirm(BaseModel):
@@ -154,9 +231,18 @@ class PickConfirm(BaseModel):
 
 
 @router.post("/tasks/{task_id}/pick")
-def confirm_pick(task_id: int, body: PickConfirm, ctx: AuthContext = _EDIT) -> dict:
-    try:
-        ops.complete_pick(task_id, ctx.company_id, ctx.user_id, body.quantity)
-    except ValueError as exc:
-        raise _bad_request(exc) from exc
-    return {"task_id": task_id, "status": "DONE"}
+def confirm_pick(task_id: int, body: PickConfirm, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+    return _write(key, f"POST /locations/tasks/{task_id}/pick", ctx,
+                  lambda: ops.complete_pick(task_id, ctx.company_id, ctx.user_id, body.quantity),
+                  lambda _r: {"task_id": task_id, "status": "DONE"})
+
+
+class ReplenishConfirm(BaseModel):
+    quantity: decimal.Decimal | None = None
+
+
+@router.post("/tasks/{task_id}/replenish")
+def confirm_replenish(task_id: int, body: ReplenishConfirm, ctx: AuthContext = _EDIT, key: str | None = _KEY) -> dict:
+    return _write(key, f"POST /locations/tasks/{task_id}/replenish", ctx,
+                  lambda: ops.complete_replenishment(task_id, ctx.company_id, ctx.user_id, body.quantity),
+                  lambda doc_id: {"task_id": task_id, "stock_document_id": doc_id})

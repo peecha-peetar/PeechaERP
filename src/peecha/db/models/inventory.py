@@ -546,6 +546,7 @@ class BinLocation(Base):
     allow_putaway: Mapped[bool] = mapped_column(default=True)
     allow_replenishment: Mapped[bool] = mapped_column(default=True)
     is_damaged: Mapped[bool] = mapped_column(default=False)
+    allows_hazardous: Mapped[bool] = mapped_column(default=False)
     map_x: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
     map_y: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
     map_z: Mapped[decimal.Decimal | None] = mapped_column(Numeric(10, 2))
@@ -1207,3 +1208,37 @@ class WarehouseTask(Base):
     completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     resulting_stock_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_documents.stock_document_id"))
     notes: Mapped[str | None] = mapped_column(String(500))
+    replenishment_rule_id: Mapped[int | None] = mapped_column(ForeignKey("inv.location_replenishment_rules.rule_id"))
+
+
+class ItemStorageProfile(Base):
+    """شرایطِ نگهداریِ کالا برایِ سازگاری با محل (R249)."""
+
+    __tablename__ = "item_storage_profiles"
+    __table_args__ = {"schema": "inv"}
+
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    temperature_min_c: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    temperature_max_c: Mapped[decimal.Decimal | None] = mapped_column(Numeric(5, 2))
+    hazard_class_code: Mapped[str | None] = mapped_column(String(20))
+    is_fragile: Mapped[bool] = mapped_column(default=False)
+    required_location_type_code: Mapped[str | None] = mapped_column(String(20))
+    notes: Mapped[str | None] = mapped_column(String(500))
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class LocationReplenishmentRule(Base):
+    """حداقل/حداکثرِ کالا در محلِ برداشت (R249)."""
+
+    __tablename__ = "location_replenishment_rules"
+    __table_args__ = {"schema": "inv"}
+
+    rule_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    bin_location_id: Mapped[int] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    min_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    max_quantity: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
