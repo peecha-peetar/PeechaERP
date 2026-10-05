@@ -176,7 +176,7 @@ check(set(lines) == {(bulk1, item), (bulk2, milk)} and lines[(bulk1, item)].expe
       f"شمارشِ کورِ قفسه با موجودیِ دفتریِ هر محل ({sorted(lines)})")
 check(raises(lambda: lc.create_location_count(company_id, wh, [bulk1], user.user_id)), "محلِ در شمارشِ باز دوباره شمرده نمی‌شود")
 check(raises(lambda: lc.record_location_count(company_id, sid, pick1, item, D(1))), "محلِ خارج از دامنه رد شد")
-check(raises(lambda: lc.record_location_count(company_id, sid, bulk1, med, D(1))), "کالایِ بچ‌دار در شمارشِ محل رد شد")
+check(raises(lambda: lc.record_location_count(company_id, sid, bulk1, med, D(1))), "کالایِ بچ‌دار بدونِ شمارهٔ بچ در شمارشِ محل رد شد")
 check(raises(lambda: lc.record_location_count(company_id, sid, bulk1, item, D(-1))), "مقدارِ منفی رد شد")
 check(raises(lambda: count_service.record_count(sid, company_id, item, pcs, D(1))), "انبارگردانیِ عادی رویِ شمارشِ محل ثبت نمی‌کند")
 check(raises(lambda: count_service.finalize_count_session(sid, company_id, user.user_id)), "انبارگردانیِ عادی شمارشِ محل را نهایی نمی‌کند")

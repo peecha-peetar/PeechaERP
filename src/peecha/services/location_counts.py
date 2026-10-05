@@ -148,9 +148,10 @@ def record_location_count(company_id: int, session_id: int, location_id: int, it
             batch_id = session.scalar(select(Batch.batch_id).where(Batch.item_id == item_id, Batch.batch_no == batch_no.strip()))
             if batch_id is None:
                 raise ValueError(f"بچِ «{batch_no}» برایِ این کالا تعریف نشده است.")
-        elif item.track_batch and session.scalar(select(func.count()).select_from(CycleCountLine).where(
+        elif item.track_batch and not session.scalar(select(func.count()).select_from(CycleCountLine).where(
                 CycleCountLine.session_id == session_id, CycleCountLine.item_id == item_id,
-                CycleCountLine.bin_location_id == location_id, CycleCountLine.batch_id.is_not(None))):
+                CycleCountLine.bin_location_id == location_id, CycleCountLine.batch_id.is_(None))):
+            # فقط ماندهٔ قدیمیِ بی‌بچِ همین محل (ردیفِ ازپیش‌ساخته) بدونِ شمارهٔ بچ شمرده می‌شود
             raise ValueError("این کالا بچ‌دار است؛ شمارهٔ بچ را وارد کنید.")
         line = session.scalar(select(CycleCountLine).where(
             CycleCountLine.session_id == session_id, CycleCountLine.item_id == item_id, CycleCountLine.bin_location_id == location_id,
