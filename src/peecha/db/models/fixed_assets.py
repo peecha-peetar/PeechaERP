@@ -127,6 +127,7 @@ class Asset(Base):
     accumulated_impairment: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     revaluation_surplus: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
     units_consumed: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 4), default=0)
+    depreciated_months_offset: Mapped[int] = mapped_column(default=0)  # R263
     branch_id: Mapped[int | None] = mapped_column(ForeignKey("comm.branches.branch_id"))
     department_id: Mapped[int | None] = mapped_column(ForeignKey("hr.organizational_units.org_unit_id"))
     cost_center_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))

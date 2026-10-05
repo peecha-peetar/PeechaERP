@@ -94,10 +94,15 @@ def compute(asset, period_start: datetime.date, period_end: datetime.date, *, bo
 
 
 def months_done(session, asset_id: int) -> int:
-    """تعدادِ دوره‌هایِ استهلاکِ ثبت‌شده (برگشت‌نخورده) برایِ دارایی."""
-    return session.scalar(select(func.count()).select_from(DepreciationLine).join(
-        DepreciationRun, DepreciationRun.run_id == DepreciationLine.run_id).where(
-        DepreciationLine.asset_id == asset_id, DepreciationRun.status_code == "POSTED")) or 0
+    """ماه‌هایِ مستهلک‌شده = از شروعِ استهلاک تا پایانِ آخرین دورهٔ ثبت‌شده (هر اجرا ماه‌هایِ عقب‌افتاده را هم پوشش
+    می‌دهد). داراییِ حاصل از تقسیم/جزء پیش از نخستین اجرایِ خودش ماه‌هایِ مبدأ را دارد (depreciated_months_offset)."""
+    last_end = session.scalar(select(func.max(DepreciationRun.period_end)).join(
+        DepreciationLine, DepreciationLine.run_id == DepreciationRun.run_id).where(
+        DepreciationLine.asset_id == asset_id, DepreciationRun.status_code == "POSTED"))
+    start, offset = session.execute(select(Asset.depreciation_start_date, Asset.depreciated_months_offset)
+                                    .where(Asset.asset_id == asset_id)).one()
+    by_runs = c.months_between(start, last_end) if last_end and start and last_end >= start else 0
+    return max(by_runs, offset or 0)
 
 
 # --- اجرایِ دوره ---------------------------------------------------------------------------------
