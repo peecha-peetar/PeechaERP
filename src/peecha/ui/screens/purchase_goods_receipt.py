@@ -43,7 +43,8 @@ from peecha.ui.screens.journal_entry import _AmountField
 from peecha.ui.widgets import FieldHelpMixin, persist_column_widths
 
 _COLUMNS = ["شماره", "تاریخ", "طرفِ حساب", "وضعیت", "عملیات"]
-_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی/تحویلی", "انبار", "بچ/سریال/انقضا"]
+_LINE_COLUMNS = ["کالا", "واحد", "مقدارِ سفارش", "مقدارِ دریافتی/تحویلی", "انبار", "مکان", "بچ/سریال/انقضا"]
+_BIN_COL, _TRACK_COL = 5, 6
 
 
 _DOC_TITLES = {
@@ -53,6 +54,8 @@ _DOC_TITLES = {
 _ORDER_TYPES = ("PURCHASE_ORDER", "SALES_ORDER")
 # خروجِ کالا: بچ/سریال از موجودیِ همان انبار انتخاب می‌شود
 _OUT_TYPES = ("SALES_ORDER", "CONSIGNMENT_OUT")
+# R254: مکانِ ورود فقط در رسید (خروج را موتورِ انبار خودکار تعیین می‌کند)
+_IN_TYPES = ("PURCHASE_ORDER", "CONSIGNMENT_IN")
 
 
 def _status_label(doc) -> str:
@@ -75,6 +78,8 @@ class _GoodsReceiptDialog(QDialog):
         self._company_id = company_id
         self._qty_fields: dict[int, _AmountField] = {}
         self._line_warehouse_combos: dict[int, QComboBox] = {}
+        self._line_bin_combos: dict[int, QComboBox] = {}
+        self._bin_cache: dict[int, list[tuple[int, str]]] = {}
         self.changed = False
 
         layout = QVBoxLayout(self)
@@ -169,6 +174,10 @@ class _GoodsReceiptDialog(QDialog):
         uom_names = {u.uom_id: u.name or u.code for u in uoms}
         self._qty_fields = {}
         self._line_warehouse_combos = {}
+        self._line_bin_combos = {}
+        self._bin_cache = {}
+        is_inbound = doc.document_type_code in _IN_TYPES
+        self.lines_table.setColumnHidden(_BIN_COL, not is_inbound)
         editable = doc.warehouse_approved_at is None and not converted
         # R230: در امانی، انبار و مقدار همان سند است -- انباردار فقط تایید می‌کند
         is_consignment = doc.document_type_code not in _ORDER_TYPES
@@ -193,13 +202,15 @@ class _GoodsReceiptDialog(QDialog):
             wh_combo.setEnabled(editable and not is_consignment)
             self._line_warehouse_combos[ln.line_id] = wh_combo
             self.lines_table.setCellWidget(row_index, 4, wh_combo)
+            if is_inbound:
+                self.lines_table.setCellWidget(row_index, _BIN_COL, self._make_bin_cell(ln, item, wh_combo, editable))
             if item is not None and (item.track_batch or item.track_serial):
                 # R227: ورودِ بچ/سریال/انقضا هنگامِ تاییدِ رسید
                 track_button = QPushButton("🏷 ردیابی")
                 track_button.clicked.connect(
                     lambda _c=False, line=ln, it=item, ro=not editable: self._open_lot_tracking(line, it, ro)
                 )
-                self.lines_table.setCellWidget(row_index, 5, track_button)
+                self.lines_table.setCellWidget(row_index, _TRACK_COL, track_button)
 
         word = "حوالهٔ انبار" if doc.document_type_code in _OUT_TYPES else "رسیدِ کالا"
         self.save_button.setEnabled(not converted and not is_consignment)
@@ -221,6 +232,63 @@ class _GoodsReceiptDialog(QDialog):
         self.receipt_button.setStyleSheet("")
         self.receipt_button.style().unpolish(self.receipt_button)
         self.receipt_button.style().polish(self.receipt_button)
+
+    def _bins_of(self, warehouse_id) -> list[tuple[int, str]]:
+        """محل‌هایِ برگِ فعالِ انبار (کدِ کامل)."""
+        if warehouse_id is None:
+            return []
+        if warehouse_id not in self._bin_cache:
+            from peecha.services import warehouse_locations as wl
+
+            nodes = wl.tree(self._company_id, warehouse_id)
+            parents = {n.parent_id for n in nodes}
+            self._bin_cache[warehouse_id] = sorted(
+                ((n.location_id, n.full_code) for n in nodes if n.is_active and n.location_id not in parents), key=lambda t: t[1])
+        return self._bin_cache[warehouse_id]
+
+    def _fill_bin_combo(self, combo: QComboBox, warehouse_id, current) -> None:
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("— انتخاب کنید —", None)
+        for location_id, code in self._bins_of(warehouse_id):
+            combo.addItem(code, location_id)
+        combo.setCurrentIndex(max(0, combo.findData(current)) if current is not None else 0)
+        combo.blockSignals(False)
+
+    def _make_bin_cell(self, ln, item, wh_combo: QComboBox, editable: bool) -> QWidget:
+        cell = QWidget()
+        row = QHBoxLayout(cell)
+        row.setContentsMargins(2, 0, 2, 0)
+        row.setSpacing(4)
+        combo = QComboBox()
+        combo.setMinimumWidth(150)
+        self._fill_bin_combo(combo, wh_combo.currentData(), ln.bin_location_id)
+        combo.setEnabled(editable)
+        combo.setToolTip("مکانِ قرارگیریِ کالا در انبار -- برایِ انبارِ دارایِ مکان‌بندی الزامی است.")
+        wh_combo.currentIndexChanged.connect(lambda _i, c=combo, w=wh_combo: self._fill_bin_combo(c, w.currentData(), None))
+        map_button = QPushButton("نقشه")
+        map_button.setToolTip("انتخابِ مکان رویِ نقشهٔ انبار (با پیشنهادِ جانمایی)")
+        map_button.setEnabled(editable)
+        map_button.clicked.connect(lambda _c=False, line=ln, it=item, c=combo, w=wh_combo: self._pick_on_map(line, it, c, w))
+        row.addWidget(combo, stretch=1)
+        row.addWidget(map_button)
+        self._line_bin_combos[ln.line_id] = combo
+        return cell
+
+    def _pick_on_map(self, line, item, combo: QComboBox, wh_combo: QComboBox) -> None:
+        from peecha.ui.screens.warehouse_map import LocationPickerDialog
+
+        warehouse_id = wh_combo.currentData()
+        if warehouse_id is None:
+            self.status_label.setText("ابتدا انبارِ ردیف را انتخاب کنید.")
+            return
+        field = self._qty_fields.get(line.line_id)
+        qty = decimal.Decimal(str(field.value())) if field is not None else line.quantity
+        dialog = LocationPickerDialog(self, warehouse_id, combo.currentData(), line.item_id, qty * (line.conversion_factor or 1),
+                                      f"{item.code} — {item.name or ''}" if item else "")
+        if dialog.exec() == QDialog.Accepted and dialog.selected_location_id is not None:
+            self._bin_cache.pop(warehouse_id, None)
+            self._fill_bin_combo(combo, warehouse_id, dialog.selected_location_id)
 
     def _open_lot_tracking(self, line, item, read_only: bool) -> None:
         from peecha.ui.screens.lot_tracking_dialog import LotTrackingDialog
@@ -262,6 +330,7 @@ class _GoodsReceiptDialog(QDialog):
                         line_id: combo.currentData() for line_id, combo in self._line_warehouse_combos.items()
                         if combo.currentData() is not None
                     },
+                    line_bins={line_id: combo.currentData() for line_id, combo in self._line_bin_combos.items()} or None,
                 )
             else:
                 documents_service.revert_warehouse_approval(self._document_id, self._company_id)

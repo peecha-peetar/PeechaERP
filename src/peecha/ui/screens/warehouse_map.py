@@ -240,7 +240,11 @@ class LocationDialog(QDialog):
                 ("عرض (متر)", self.width_m), ("طول (متر)", self.length_m), ("ارتفاع (متر)", self.height_m),
                 ("حداکثر وزن (کیلوگرم)", self.max_weight), ("حداکثر حجم (مترمکعب)", self.max_volume),
                 ("حداقلِ دما", self.temp_min), ("حداکثرِ دما", self.temp_max)]
+        if level == "BIN":
+            self.width_m.setToolTip("طولی که Bin در امتدادِ قفسه می‌گیرد؛ خالی = سهمِ مساوی از باقی‌ماندهٔ طولِ قفسه")
+            self.length_m.setToolTip("عمقِ Bin؛ خالی = عمقِ قفسه")
         if level == "SHELF":
+            self.height_m.setToolTip("ارتفاعِ همین طبقه؛ خالی = سهمِ مساوی از باقی‌ماندهٔ ارتفاعِ قفسه")
             rows.append(("شمارهٔ طبقه", self.level_number))
         if level == "AISLE":
             rows.append(("جهت", self.direction))
@@ -1026,3 +1030,75 @@ class WarehouseMapScreen(QWidget):
             values.append(_dec(v))
         wl.save_warehouse_dimensions(self._company_id(), self.warehouse_id, *values, description=wh.fields.description)
         self.load_warehouse(self.warehouse_id)
+
+
+class _PickerMap(WarehouseMapScreen):
+    """نقشهٔ فقط‌انتخاب (بدونِ ویرایش) برایِ تعیینِ مکان در تاییدِ رسید."""
+
+    def __init__(self, on_select) -> None:
+        super().__init__(None)
+        self._on_select = on_select
+        self.edit_check.setVisible(False)
+        for b in self.add_buttons.values():
+            b.setVisible(False)
+        self.warehouse_combo.setEnabled(False)
+        self.side_tabs.setCurrentIndex(1)
+
+    def select_location(self, location_id: int | None, focus: bool = True) -> None:
+        super().select_location(location_id, focus)
+        if getattr(self, "_on_select", None) is not None:
+            self._on_select(location_id)
+
+
+class LocationPickerDialog(QDialog):
+    """R254: انتخابِ مکانِ ردیف رویِ نقشه؛ فقط محلِ برگِ فعال (Bin/طبقهٔ بی‌زیرمحل) پذیرفته می‌شود."""
+
+    def __init__(self, parent, warehouse_id: int, current_id: int | None = None, item_id: int | None = None,
+                 quantity: decimal.Decimal | None = None, title: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"انتخابِ مکان رویِ نقشه{' -- ' + title if title else ''}")
+        self.resize(1200, 760)
+        self.selected_location_id: int | None = None
+        layout = QVBoxLayout(self)
+        self.map = _PickerMap(self._picked)
+        layout.addWidget(self.map, stretch=1)
+        bottom = QHBoxLayout()
+        self.choice_label = QLabel("رویِ یک Bin یا طبقه کلیک کنید (از نقشه، درختِ محل‌ها یا نمایِ قفسه).")
+        bottom.addWidget(self.choice_label, stretch=1)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.button(QDialogButtonBox.Ok).setText("انتخابِ این مکان")
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        bottom.addWidget(self.buttons)
+        layout.addLayout(bottom)
+        self.map.refresh()
+        self.map.load_warehouse(warehouse_id)
+        suggested = []
+        if item_id is not None and quantity:
+            try:
+                suggested = [s.location_id for s in wl.putaway_suggestions(self.map._company_id(), warehouse_id, item_id, quantity)]
+            except ValueError:
+                suggested = []
+        if suggested:
+            self.map.highlight(suggested[:3])
+        if current_id is not None and current_id in self.map.by_id:
+            self.map.select_location(current_id, focus=True)
+        elif suggested:
+            self.choice_label.setText(_p("پیشنهادِ جانمایی: " + "، ".join(self.map.by_id[i].full_code for i in suggested[:3]
+                                                                         if i in self.map.by_id)))
+
+    def _picked(self, location_id: int | None) -> None:
+        node = self.map.by_id.get(location_id)
+        has_children = node is not None and any(n.parent_id == location_id for n in self.map.nodes)
+        ok = node is not None and node.is_active and not has_children
+        self.selected_location_id = location_id if ok else None
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(ok)
+        if node is None:
+            return
+        if ok:
+            self.choice_label.setText(_p(f"مکانِ انتخابی: {node.full_code}"))
+        elif has_children:
+            self.choice_label.setText(_p(f"«{node.full_code}» زیرمحل دارد؛ یک Bin یا طبقهٔ داخلِ آن را انتخاب کنید."))
+        else:
+            self.choice_label.setText(_p(f"«{node.full_code}» غیرفعال است."))

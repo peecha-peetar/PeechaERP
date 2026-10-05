@@ -142,6 +142,9 @@ def _place_new(row, level: str, parent, wh, siblings: list[tuple[float, float, f
     off = g if parent is None or box is None else max(2 * g, min(box[3] * 0.15, 1.5 * _U))  # جایِ برچسبِ والد
     if row.width_m and row.length_m:
         width, height = float(row.width_m) * _U, float(row.length_m) * _U
+    elif row.width_m or row.length_m:  # R254: یک بُعد واقعی، دیگری پیش‌فرض
+        width = float(row.width_m) * _U if row.width_m else float(_DEFAULT_SIZE[level][0])
+        height = float(row.length_m) * _U if row.length_m else float(_DEFAULT_SIZE[level][1])
     else:
         width, height = (float(v) for v in _DEFAULT_SIZE[level])
         if box is not None:
@@ -382,7 +385,8 @@ def ancestors(nodes_by_id: dict, location_id: int) -> list:
 
 def geometry(company_id: int, warehouse_id: int, nodes: list | None = None) -> dict[int, tuple[float, float, float, float, float]]:
     """(x, y, w, h, rotation) هر محل رویِ نقشه. Zone/Aisle/Rack مختصاتِ ذخیره‌شده دارند؛ طبقه هم‌اندازهٔ قفسه
-    است و Binهایِ بی‌مختصات به‌صورتِ سلول‌هایِ مساویِ طولِ قفسه/طبقه چیده می‌شوند."""
+    است و Binهایِ بی‌مختصات پشتِ‌سرِهم در طولِ قفسه با عرضِ واقعیِ خودشان (R254) چیده می‌شوند؛ فقط Binِ بی‌اندازه
+    از باقی‌ماندهٔ طولِ قفسه سهمِ مساوی می‌گیرد."""
     nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
     by_id = {n.location_id: n for n in nodes}
     children = defaultdict(list)
@@ -409,9 +413,10 @@ def geometry(company_id: int, warehouse_id: int, nodes: list | None = None) -> d
             bins = [k for k in kids if k.level == "BIN" and own(k) is None]
             x, y, w, h, rot = rect
             vertical = h >= w
-            for i, b in enumerate(bins):
-                cell = (h / len(bins)) if vertical else (w / len(bins))
-                out[b.location_id] = (x, y + i * cell, w, cell, rot) if vertical else (x + i * cell, y, cell, h, rot)
+            along, across = (h, w) if vertical else (w, h)
+            for b, (offset, size) in zip(bins, _split_real(along, [float(b.width_m) * _U if b.width_m else None for b in bins])):
+                depth = min(float(b.length_m) * _U, across) if b.length_m else across
+                out[b.location_id] = (x, y + offset, depth, size, rot) if vertical else (x + offset, y, size, depth, rot)
             for k in kids:
                 if k.level != "BIN" or own(k) is not None:
                     place(k, rect if k.level == "SHELF" else None)
@@ -422,6 +427,19 @@ def geometry(company_id: int, warehouse_id: int, nodes: list | None = None) -> d
     for n in nodes:
         if n.parent_id is None or n.parent_id not in by_id:
             place(n, None)
+    return out
+
+
+def _split_real(total: float, sizes: list[float | None]) -> list[tuple[float, float]]:
+    """(شروع، اندازه)ِ اجزایِ پشتِ‌سرِهم: اندازهٔ واقعیِ هر جزء؛ اجزایِ بی‌اندازه باقی‌مانده را مساوی تقسیم می‌کنند."""
+    unknown = sum(1 for v in sizes if not v)
+    rest = total - sum(v for v in sizes if v)
+    share = (rest / unknown if rest > 0 else total / len(sizes)) if unknown else 0.0
+    out, pos = [], 0.0
+    for v in sizes:
+        size = v or share
+        out.append((pos, size))
+        pos += size
     return out
 
 
@@ -1104,12 +1122,13 @@ def scene_3d(company_id: int, warehouse_id: int, nodes: list | None = None) -> l
             add(n, base, rack_h)
             shelves = sorted((k for k in children.get(n.location_id, []) if k.level == "SHELF"),
                              key=lambda k: (k.level_number or 0, k.code))
-            slab = rack_h / len(shelves) if shelves else rack_h
-            for i, shelf in enumerate(shelves):
-                z = base + i * slab
+            # R254: ارتفاعِ واقعیِ هر طبقه؛ طبقهٔ بی‌ارتفاع از باقی‌ماندهٔ ارتفاعِ قفسه سهمِ مساوی می‌گیرد
+            slabs = _split_real(rack_h, [float(k.height_m) * UNITS_PER_M if k.height_m else None for k in shelves]) if shelves else []
+            for shelf, (offset, slab) in zip(shelves, slabs):
+                z = base + offset
                 add(shelf, z, slab)
                 for b in children.get(shelf.location_id, []):
-                    add(b, z, slab)
+                    add(b, z, float(b.height_m) * UNITS_PER_M if b.height_m and float(b.height_m) * UNITS_PER_M < slab else slab)
             for b in (k for k in children.get(n.location_id, []) if k.level == "BIN"):
                 add(b, base, rack_h)
         else:

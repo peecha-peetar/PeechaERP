@@ -1,6 +1,6 @@
 """انبارها و مکان‌هایِ انبار (inv.warehouses/bin_locations) — فرمِ تب‌دار
 پوشش‌دهندهٔ انبارِ ساده تا چندشعبه‌ای (پایه/مکانی/عملیاتی/کنترلِ‌موجودی/
-کیفیت/امنیت/تجهیزات/POS/تولید/مالی/توضیحات) + درختِ Bin Location."""
+کیفیت/امنیت/تجهیزات/POS/تولید/مالی/توضیحات). تعریفِ مکان‌ها فقط از «نقشه و محل‌هایِ انبار» (R254)."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
@@ -27,8 +25,6 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTextEdit,
-    QTreeWidget,
-    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -45,7 +41,6 @@ from peecha.services import users as users_service
 from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "پیش‌فرض", "نوع", "نام", "کد"]
-_BIN_COLUMNS = ["فعال", "قابلِ‌برداشت", "نوع", "بارکد", "نام", "کد"]
 
 _TYPE_LABELS: dict[str, str] = {
     "GENERAL": "عمومی", "PROJECT": "پروژه‌ای", "PRODUCTION_LINE": "خطِ تولید",
@@ -78,59 +73,10 @@ def _decimal_or_none(text: str) -> decimal.Decimal | None:
         return None
 
 
-class _BinLocationDialog(QDialog):
-    def __init__(self, parent: QWidget, existing_bins: list[locations_service.BinLocationRow]) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("مکانِ انبارِ جدید")
-        layout = QVBoxLayout(self)
-
-        layout.addWidget(QLabel("کد"))
-        self.code_field = QLineEdit()
-        layout.addWidget(self.code_field)
-
-        layout.addWidget(QLabel("نام"))
-        self.name_field = QLineEdit()
-        layout.addWidget(self.name_field)
-
-        layout.addWidget(QLabel("نوع"))
-        self.type_combo = QComboBox()
-        self.type_combo.addItem("(بدونِ نوع)", None)
-        for code, label in locations_service.BIN_TYPE_LABELS.items():
-            self.type_combo.addItem(label, code)
-        layout.addWidget(self.type_combo)
-
-        layout.addWidget(QLabel("بارکد (اختیاری)"))
-        self.barcode_field = QLineEdit()
-        layout.addWidget(self.barcode_field)
-
-        layout.addWidget(QLabel("والد (اختیاری)"))
-        self.parent_combo = QComboBox()
-        self.parent_combo.addItem("(بدونِ والد)", None)
-        for b in existing_bins:
-            self.parent_combo.addItem(f"{b.code} — {b.name or ''}", b.bin_location_id)
-        layout.addWidget(self.parent_combo)
-
-        self.pickable_checkbox = QCheckBox("قابلِ‌برداشت")
-        self.pickable_checkbox.setChecked(True)
-        layout.addWidget(self.pickable_checkbox)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def values(self) -> tuple[str, str, str | None, str, int | None, bool]:
-        return (
-            self.code_field.text().strip(), self.name_field.text().strip(), self.type_combo.currentData(),
-            self.barcode_field.text().strip(), self.parent_combo.currentData(), self.pickable_checkbox.isChecked(),
-        )
-
-
 class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[locations_service.WarehouseRow] = []
-        self._bin_rows: list[locations_service.BinLocationRow] = []
         self._user_access_rows: list[locations_service.WarehouseUserAccessRow] = []
         self._mapping_combos: dict[str, QComboBox] = {}
         self._editing_id: int | None = None
@@ -141,8 +87,6 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
         outer.addWidget(self._build_form_panel(), stretch=3)
-        self.bins_panel = self._build_bins_panel()
-        outer.addWidget(self.bins_panel, stretch=2)
 
         self.set_field_help([
             # پایه
@@ -689,101 +633,6 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         return panel
 
     # ------------------------------------------------------------------
-    # مکان‌هایِ انبار (Bin Location — درختی)
-    # ------------------------------------------------------------------
-    def _build_bins_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(12)
-
-        title = QLabel("مکان‌هایِ انبار")
-        title.setObjectName("pageTitle")
-        layout.addWidget(title)
-
-        self.add_bin_button = QPushButton("➕")
-        self.add_bin_button.setObjectName("primaryIconButton")
-        self.add_bin_button.setFixedWidth(48)
-        self.add_bin_button.setToolTip("مکانِ جدید")
-        self.add_bin_button.clicked.connect(self._add_bin)
-        self.add_bin_button.setEnabled(False)
-        layout.addWidget(self.add_bin_button, alignment=Qt.AlignLeft)
-
-        self.bin_tree = QTreeWidget()
-        self.bin_tree.setColumnCount(len(_BIN_COLUMNS))
-        self.bin_tree.setHeaderLabels(_BIN_COLUMNS)
-        self.bin_tree.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.bin_tree.header().setSectionResizeMode(4, QHeaderView.Stretch)
-        layout.addWidget(self.bin_tree)
-
-        self.delete_bin_button = QPushButton("🗑️")
-        self.delete_bin_button.setObjectName("dangerIconButton")
-        self.delete_bin_button.setFixedWidth(44)
-        self.delete_bin_button.setToolTip("حذفِ مکانِ انتخاب‌شده")
-        self.delete_bin_button.clicked.connect(self._delete_bin)
-        layout.addWidget(self.delete_bin_button)
-        return wrap_scrollable(panel)
-
-    def _refresh_bins(self) -> None:
-        self.bin_tree.clear()
-        if self._editing_id is None:
-            self._bin_rows = []
-            return
-        self._bin_rows = locations_service.list_bin_locations(self._editing_id)
-        items_by_id: dict[int, QTreeWidgetItem] = {}
-        for b in self._bin_rows:
-            values = [
-                "بله" if b.is_active else "خیر", "بله" if b.is_pickable else "خیر",
-                locations_service.BIN_TYPE_LABELS.get(b.bin_type_code, b.bin_type_code or ""),
-                b.barcode or "", b.name or "", b.code,
-            ]
-            item = QTreeWidgetItem(values)
-            item.setData(0, Qt.UserRole, b.bin_location_id)
-            items_by_id[b.bin_location_id] = item
-        for b in self._bin_rows:
-            item = items_by_id[b.bin_location_id]
-            parent_item = items_by_id.get(b.parent_bin_location_id) if b.parent_bin_location_id else None
-            if parent_item is not None:
-                parent_item.addChild(item)
-            else:
-                self.bin_tree.addTopLevelItem(item)
-        self.bin_tree.expandAll()
-
-    def _add_bin(self) -> None:
-        if self._editing_id is None:
-            return
-        dialog = _BinLocationDialog(self, self._bin_rows)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        code, name, bin_type_code, barcode, parent_id, pickable = dialog.values()
-        if not code:
-            return
-        try:
-            locations_service.create_bin_location(
-                self._editing_id, code, name or None, parent_bin_location_id=parent_id,
-                bin_type_code=bin_type_code, barcode=barcode or None, is_pickable=pickable,
-            )
-        except ValueError as exc:
-            QMessageBox.warning(self, "خطا", str(exc))
-            return
-        self._refresh_bins()
-
-    def _delete_bin(self) -> None:
-        selected = self.bin_tree.selectedItems()
-        if not selected or self._editing_id is None:
-            return
-        bin_location_id = selected[0].data(0, Qt.UserRole)
-        confirm = QMessageBox.question(self, "حذفِ مکان", "این مکانِ انبار حذف شود؟", QMessageBox.Yes | QMessageBox.No)
-        if confirm != QMessageBox.Yes:
-            return
-        try:
-            locations_service.delete_bin_location(bin_location_id, self._editing_id)
-        except ValueError as exc:
-            QMessageBox.warning(self, "خطا", str(exc))
-            return
-        self._refresh_bins()
-
-    # ------------------------------------------------------------------
     # کاربرانِ مجاز
     # ------------------------------------------------------------------
     def _refresh_access(self) -> None:
@@ -929,7 +778,6 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.temp_controlled_checkbox.setEnabled("TEMPERATURE_CONTROL" in self._enabled_features)
         self.tabs.setTabVisible(self.tab_indexes["quality"], "QUALITY_CONTROL" in self._enabled_features)
         self.tabs.setTabVisible(self.tab_indexes["security"], "WAREHOUSE_ACCESS_CONTROL" in self._enabled_features)
-        self.bins_panel.setVisible("BIN_LOCATIONS" in self._enabled_features)
 
         self.table.setRowCount(len(self._rows))
         for row_index, w in enumerate(self._rows):
@@ -1052,8 +900,6 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.notes_field.setPlainText(f.notes or "")
 
         self.delete_button.setVisible(True)
-        self.add_bin_button.setEnabled(True)
-        self._refresh_bins()
         self._refresh_access()
 
     def _fill_default_bin_combo(self, warehouse_id: int | None) -> None:
@@ -1155,9 +1001,7 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.notes_field.clear()
 
         self.delete_button.setVisible(False)
-        self.add_bin_button.setEnabled(False)
         self.table.clearSelection()
-        self._refresh_bins()
         self._refresh_access()
 
     def _collect_fields(self) -> locations_service.WarehouseFields:

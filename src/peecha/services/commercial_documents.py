@@ -1621,6 +1621,8 @@ def set_line_bin(company_id: int, line_id: int, bin_location_id: int | None) -> 
             raise ValueError("ردیفِ سند نامعتبر است.")
         if line.stock_document_line_id is not None:
             raise ValueError("سندِ انبارِ این ردیف صادر شده است؛ مکان را در خودِ سندِ انبار یا با انتقال تغییر دهید.")
+        if line.bin_location_id is not None and line_id in _locked_line_ids(session, doc.document_id):
+            raise ValueError("مکانِ این ردیف را انباردار در تاییدِ رسید تعیین کرده است.")
         if bin_location_id is not None:
             b = session.get(BinLocation, bin_location_id)
             warehouse_id = line.warehouse_id or doc.warehouse_id
@@ -2161,6 +2163,36 @@ def receivable_warehouse_ids(company_id: int, user_id: int) -> set[int] | None:
         ))
 
 
+_RECEIPT_BIN_TYPES = ("PURCHASE_ORDER", "CONSIGNMENT_IN")
+
+
+def _apply_receipt_bins(session, doc, line_bins: dict[int, int | None]) -> None:
+    """R254: مکانِ هر ردیفِ رسید هنگامِ تاییدِ انباردار؛ انبارِ دارایِ مکان (جز GENERAL) بی‌مکان پذیرفته نمی‌شود."""
+    from peecha.db.models.inventory import BinLocation
+    from peecha.services.inventory_locations import DEFAULT_BIN_CODE
+
+    lines = session.scalars(select(CommercialDocumentLine).where(CommercialDocumentLine.document_id == doc.document_id)
+                            .order_by(CommercialDocumentLine.line_no)).all()
+    for ln in lines:
+        target = ln.warehouse_id or doc.warehouse_id
+        if ln.line_id in line_bins:
+            ln.bin_location_id = line_bins[ln.line_id]
+        if ln.bin_location_id is None:
+            continue
+        b = session.get(BinLocation, ln.bin_location_id)
+        if b is None or b.warehouse_id != target:
+            raise ValueError(f"مکانِ ردیفِ #{ln.line_no} باید از انبارِ همان ردیف باشد.")
+        if not b.is_active:
+            raise ValueError(f"مکانِ ردیفِ #{ln.line_no} غیرفعال است.")
+    mapped = set(session.scalars(select(BinLocation.warehouse_id).where(
+        BinLocation.is_active.is_(True), BinLocation.code != DEFAULT_BIN_CODE,
+        BinLocation.warehouse_id.in_({ln.warehouse_id or doc.warehouse_id for ln in lines} - {None}))).all())
+    for ln in lines:
+        delivered = ln.warehouse_delivered_quantity if ln.warehouse_delivered_quantity is not None else ln.quantity
+        if ln.bin_location_id is None and delivered and (ln.warehouse_id or doc.warehouse_id) in mapped:
+            raise ValueError(f"مکانِ ردیفِ #{ln.line_no} را در انبار مشخص کنید (از فهرست یا رویِ نقشه).")
+
+
 def _validate_line_warehouses(session, company_id: int, line_warehouses: dict[int, int] | None) -> None:
     for warehouse_id in set((line_warehouses or {}).values()):
         warehouse = session.get(Warehouse, warehouse_id)
@@ -2189,10 +2221,11 @@ def _require_receipt_tracking(session, ln: CommercialDocumentLine) -> None:
 
 def approve_warehouse(
     document_id: int, company_id: int, approved_by_user_id: int, warehouse_id: int | None = None,
-    line_warehouses: dict[int, int] | None = None,
+    line_warehouses: dict[int, int] | None = None, line_bins: dict[int, int | None] | None = None,
 ) -> None:
     """line_warehouses (R226): انبارِ هر ردیف -- انباردارِ چند انبار می‌تواند
-    هر کالا را در انبارِ جداگانه رسید کند."""
+    هر کالا را در انبارِ جداگانه رسید کند. line_bins (R254): مکانِ هر ردیف؛ در رسیدِ ورودی به انبارِ دارایِ
+    مکان‌بندی الزامی است."""
     with new_session() as session:
         doc = session.get(CommercialDocument, document_id)
         if doc is None or doc.company_id != company_id:
@@ -2242,6 +2275,8 @@ def approve_warehouse(
             allowed = receivable_warehouse_ids(company_id, approved_by_user_id)
             if allowed is not None and doc.warehouse_id not in allowed:
                 raise ValueError("شما انباردارِ انبارِ این سندِ امانی نیستید.")
+        if doc.document_type_code in _RECEIPT_BIN_TYPES:
+            _apply_receipt_bins(session, doc, line_bins or {})
         doc.warehouse_approved_by_user_id = approved_by_user_id
         doc.warehouse_approved_at = datetime.datetime.now()
         session.commit()

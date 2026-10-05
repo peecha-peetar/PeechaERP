@@ -3555,7 +3555,10 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         if ln.bin_location_id is not None:
             combo.setCurrentIndex(max(combo.findData(ln.bin_location_id), 0))
         combo.setToolTip("محلِ ورودِ کالا در انبار؛ خالی = مکانِ پیش‌فرضِ انبار")
-        combo.setEnabled(ln.stock_document_line_id is None)
+        receipt_locked = ln.bin_location_id is not None and ln.line_id in self._locked_line_ids
+        combo.setEnabled(ln.stock_document_line_id is None and not receipt_locked)
+        if receipt_locked:
+            combo.setToolTip("مکان را انباردار در تاییدِ رسید تعیین کرده است.")
         combo.currentIndexChanged.connect(lambda _i=0, c=combo, line_id=ln.line_id: self._on_line_bin_changed(line_id, c))
         return combo
 
