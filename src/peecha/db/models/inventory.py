@@ -362,6 +362,16 @@ class BomHeader(Base):
     production_time_minutes: Mapped[int | None]
     scrap_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=decimal.Decimal(0))
     is_active: Mapped[bool] = mapped_column(default=True)
+    # R266 (198_production_foundation.sql)
+    name: Mapped[str | None] = mapped_column(String(150))
+    status_code: Mapped[str] = mapped_column(String(10), default="ACTIVE")
+    is_default: Mapped[bool] = mapped_column(default=False)
+    valid_from: Mapped[datetime.date | None] = mapped_column(Date)
+    valid_to: Mapped[datetime.date | None] = mapped_column(Date)
+    routing_id: Mapped[int | None] = mapped_column(ForeignKey("prd.routings.routing_id"))
+    notes: Mapped[str | None] = mapped_column(String(500))
+    is_locked: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime.datetime | None] = mapped_column(server_default="now()")
 
 
 class BomLine(Base):
@@ -374,6 +384,16 @@ class BomLine(Base):
     quantity_per: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
     scrap_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=decimal.Decimal(0))
     line_no: Mapped[int] = mapped_column(SmallInteger)
+    # R266
+    uom_id: Mapped[int | None] = mapped_column(ForeignKey("inv.uom.uom_id"))
+    conversion_factor: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6), default=decimal.Decimal(1))
+    quantity_type: Mapped[str] = mapped_column(String(10), default="VARIABLE")
+    component_type: Mapped[str] = mapped_column(String(15), default="MATERIAL")
+    warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    operation_seq: Mapped[int | None]
+    substitute_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    is_optional: Mapped[bool] = mapped_column(default=False)
+    notes: Mapped[str | None] = mapped_column(String(300))
 
 
 class AssetDetail(Base):

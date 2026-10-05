@@ -242,46 +242,52 @@ def split_layers_by_lot(stock_document_id: int) -> int:
     """پس از ثبتِ ردیابی (apply_after_post): لایهٔ تازهٔ بی‌بچ/سریالِ هر ردیفِ ورودی به تفکیکِ بچ/سریالِ واقعی شکسته
     می‌شود (هنوز مصرف‌نشده، پس بها و مقدارِ کل عوض نمی‌شود) -- پایهٔ شناساییِ ویژه و بهایِ هر بچ/سریال."""
     from peecha.db.base import new_session
-    from peecha.db.models.inventory import StockDocumentLine
 
-    split = 0
     with new_session() as session:
-        line_ids = list(session.scalars(select(StockDocumentLine.line_id).where(
-            StockDocumentLine.stock_document_id == stock_document_id)))
-        for line_id in line_ids:
-            moves = session.execute(
-                select(LotMovement.warehouse_id, LotMovement.batch_id, LotMovement.serial_id, func.sum(LotMovement.quantity_base))
-                .where(LotMovement.stock_document_line_id == line_id, LotMovement.quantity_base > 0,
-                       (LotMovement.batch_id.is_not(None)) | (LotMovement.serial_id.is_not(None)))
-                .group_by(LotMovement.warehouse_id, LotMovement.batch_id, LotMovement.serial_id)).all()
-            if not moves:
-                continue
-            fresh = list(session.scalars(select(CostLayer).where(
-                CostLayer.source_line_id == line_id, CostLayer.batch_id.is_(None), CostLayer.serial_id.is_(None),
-                CostLayer.remaining_quantity == CostLayer.original_quantity).order_by(CostLayer.cost_layer_id).with_for_update()))
-            for wh_id, batch_id, serial_id, qty in moves:
-                qty = decimal.Decimal(qty)
-                for layer in [lyr for lyr in fresh if lyr.warehouse_id == wh_id]:
-                    if qty <= 0 or layer.original_quantity <= 0:
-                        continue
-                    take = min(qty, layer.original_quantity)
-                    if take == layer.original_quantity:
-                        layer.batch_id, layer.serial_id = batch_id, serial_id
-                        fresh.remove(layer)
-                    else:
-                        layer.original_quantity -= take
-                        layer.remaining_quantity -= take
-                        session.add(CostLayer(
-                            company_id=layer.company_id, item_id=layer.item_id, warehouse_id=layer.warehouse_id,
-                            stock_ledger_id=layer.stock_ledger_id, received_at=layer.received_at, receipt_date=layer.receipt_date,
-                            original_quantity=take, remaining_quantity=take, unit_cost=layer.unit_cost,
-                            source_type_code=layer.source_type_code, source_line_id=layer.source_line_id,
-                            batch_id=batch_id, serial_id=serial_id, status_code="OPEN"))
-                    qty -= take
-                    split += 1
+        split = split_layers_by_lot_in(session, stock_document_id)
         session.commit()
     return split
 
+
+def split_layers_by_lot_in(session, stock_document_id: int) -> int:
+    """R266: همان منطق در تراکنشِ فراخواننده (بدونِ commit)."""
+    from peecha.db.models.inventory import StockDocumentLine
+
+    split = 0
+    line_ids = list(session.scalars(select(StockDocumentLine.line_id).where(
+        StockDocumentLine.stock_document_id == stock_document_id)))
+    for line_id in line_ids:
+        moves = session.execute(
+            select(LotMovement.warehouse_id, LotMovement.batch_id, LotMovement.serial_id, func.sum(LotMovement.quantity_base))
+            .where(LotMovement.stock_document_line_id == line_id, LotMovement.quantity_base > 0,
+                   (LotMovement.batch_id.is_not(None)) | (LotMovement.serial_id.is_not(None)))
+            .group_by(LotMovement.warehouse_id, LotMovement.batch_id, LotMovement.serial_id)).all()
+        if not moves:
+            continue
+        fresh = list(session.scalars(select(CostLayer).where(
+            CostLayer.source_line_id == line_id, CostLayer.batch_id.is_(None), CostLayer.serial_id.is_(None),
+            CostLayer.remaining_quantity == CostLayer.original_quantity).order_by(CostLayer.cost_layer_id).with_for_update()))
+        for wh_id, batch_id, serial_id, qty in moves:
+            qty = decimal.Decimal(qty)
+            for layer in [lyr for lyr in fresh if lyr.warehouse_id == wh_id]:
+                if qty <= 0 or layer.original_quantity <= 0:
+                    continue
+                take = min(qty, layer.original_quantity)
+                if take == layer.original_quantity:
+                    layer.batch_id, layer.serial_id = batch_id, serial_id
+                    fresh.remove(layer)
+                else:
+                    layer.original_quantity -= take
+                    layer.remaining_quantity -= take
+                    session.add(CostLayer(
+                        company_id=layer.company_id, item_id=layer.item_id, warehouse_id=layer.warehouse_id,
+                        stock_ledger_id=layer.stock_ledger_id, received_at=layer.received_at, receipt_date=layer.receipt_date,
+                        original_quantity=take, remaining_quantity=take, unit_cost=layer.unit_cost,
+                        source_type_code=layer.source_type_code, source_line_id=layer.source_line_id,
+                        batch_id=batch_id, serial_id=serial_id, status_code="OPEN"))
+                qty -= take
+                split += 1
+    return split
 
 def lot_issue_cost(session, source_line_id: int, serial_ids: list[int], batch_ids: list[int]) -> decimal.Decimal | None:
     """بهایِ واقعیِ همان سریال/بچی که در خروجِ مرجع مصرف شده بود (برگشت از فروشِ کالایِ ردیابی‌شده)."""

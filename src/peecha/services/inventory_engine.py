@@ -65,6 +65,13 @@ MAPPING_LABELS: dict[str, str] = {
     "SALES_TAX_PAYABLE": "مالياتِ فروشِ پرداختنی (برایِ برگشت از فروش)",
     # R237: کاهشِ درآمد در برگشت از فروش (اگر تعریف نشود: خودِ «درآمدِ فروش» در تنظیماتِ بازرگانی)
     "SALES_RETURNS": "برگشت از فروش (کاهشِ درآمد)",
+    # R266: نقش‌هایِ ماژولِ تولید (production/common.py)
+    "PRODUCTION_WIP": "کالایِ در جریانِ ساخت (WIP)",
+    "PRODUCTION_LABOR_APPLIED": "دستمزدِ جذب‌شدهٔ تولید",
+    "PRODUCTION_MACHINE_APPLIED": "هزینهٔ ماشینِ جذب‌شدهٔ تولید",
+    "PRODUCTION_OVERHEAD_APPLIED": "سربارِ جذب‌شدهٔ تولید",
+    "PRODUCTION_VARIANCE": "انحرافِ بهایِ تولید",
+    "PRODUCTION_SCRAP_LOSS": "زیانِ ضایعاتِ غیرعادیِ تولید",
 }
 
 
@@ -601,419 +608,502 @@ def _source_line_unit_cost(session, source_line_id: int) -> decimal.Decimal:
     return (total_cost / total_qty) if total_qty else _ZERO
 
 
-def post_stock_document(
-    stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
-    extra_je_lines: list[je_service.LineInput] | None = None,
-) -> PostResult:
-    with new_session() as session:
-        doc = session.get(StockDocument, stock_document_id)
-        if doc is None or doc.company_id != company_id:
-            raise ValueError("سند نامعتبر است.")
-        if doc.status_code == "POSTED":
-            raise ValueError("این سند قبلاً ثبتِ نهایی شده است.")
-        if doc.status_code != "CONFIRMED":
-            raise ValueError("فقط سندِ تاییدشده قابلِ‌ثبتِ‌نهایی است.")
+def _post_stock_document_core(session, stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool,
+                              extra_je_lines, role_overrides: dict[str, str] | None):
+    overrides = role_overrides or {}
+    doc = session.get(StockDocument, stock_document_id)
+    if doc is None or doc.company_id != company_id:
+        raise ValueError("سند نامعتبر است.")
+    if doc.status_code == "POSTED":
+        raise ValueError("این سند قبلاً ثبتِ نهایی شده است.")
+    if doc.status_code != "CONFIRMED":
+        raise ValueError("فقط سندِ تاییدشده قابلِ‌ثبتِ‌نهایی است.")
 
-        lines = session.scalars(
-            select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
+    lines = session.scalars(
+        select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
+    ).all()
+    if not lines:
+        raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+
+    # ترتیبِ قفل‌گذاری: (item_id, warehouse_id, bin_location_id) — طبقِ
+    # قاعدهٔ ۶۰ (پیشگیری از Deadlock در اسنادِ چندردیفی).
+    sorted_lines = sorted(
+        lines, key=lambda ln: (ln.item_id, ln.bin_location_id or 0, ln.destination_bin_location_id or 0)
+    )
+
+    item_ids = {ln.item_id for ln in lines}
+    items_by_id = {it.item_id: it for it in session.scalars(select(Item).where(Item.item_id.in_(item_ids)))}
+    # طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در
+    # هیچ مرحله انتخاب و مقدار بگیره»): این هم یک گیتِ سختِ سمتِ
+    # سرور است -- مستقل از فیلترشدنِ درستِ گزینشگرهایِ رابطِ کاربری --
+    # چون خودِ کالای اصلی/الگو موجودیِ مستقلی ندارد.
+    variant_parent_item_ids = set(
+        session.scalars(
+            select(Item.variant_parent_item_id).where(
+                Item.company_id == company_id, Item.variant_parent_item_id.isnot(None)
+            )
         ).all()
-        if not lines:
-            raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+    )
+    # طبقِ درخواستِ صریحِ کاربر («بله، مثلِ کاردکس تجمیع شود»): سندِ
+    # حسابداریِ متغیرها هم‌الگو با تجمیعِ کاردکسِ R151 باید زیرِ بُعدِ
+    # کالایِ *اصلی* نوشته شود، نه یک ردیفِ جداگانه برایِ هر متغیر --
+    # وگرنه وقتی متغیر خودش تفصیلیِ اختصاصی ندارد، هر متغیر یک سطرِ
+    # جداگانه در دفترِ روزنامه می‌سازد.
+    variant_parent_ids = {it.variant_parent_item_id for it in items_by_id.values() if it.variant_parent_item_id is not None}
+    parent_detail_account_by_item_id: dict[int, int | None] = (
+        dict(session.execute(select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(variant_parent_ids))).all())
+        if variant_parent_ids else {}
+    )
 
-        # ترتیبِ قفل‌گذاری: (item_id, warehouse_id, bin_location_id) — طبقِ
-        # قاعدهٔ ۶۰ (پیشگیری از Deadlock در اسنادِ چندردیفی).
-        sorted_lines = sorted(
-            lines, key=lambda ln: (ln.item_id, ln.bin_location_id or 0, ln.destination_bin_location_id or 0)
-        )
+    def je_dimension_account_id(item: Item) -> int | None:
+        if item.variant_parent_item_id is not None:
+            return parent_detail_account_by_item_id.get(item.variant_parent_item_id, item.item_detail_account_id)
+        return item.item_detail_account_id
 
-        item_ids = {ln.item_id for ln in lines}
-        items_by_id = {it.item_id: it for it in session.scalars(select(Item).where(Item.item_id.in_(item_ids)))}
-        # طبقِ رفعِ باگِ واقعی («کالای اصلی که متغیر داره اصلا نباید در
-        # هیچ مرحله انتخاب و مقدار بگیره»): این هم یک گیتِ سختِ سمتِ
-        # سرور است -- مستقل از فیلترشدنِ درستِ گزینشگرهایِ رابطِ کاربری --
-        # چون خودِ کالای اصلی/الگو موجودیِ مستقلی ندارد.
-        variant_parent_item_ids = set(
-            session.scalars(
-                select(Item.variant_parent_item_id).where(
-                    Item.company_id == company_id, Item.variant_parent_item_id.isnot(None)
-                )
-            ).all()
-        )
-        # طبقِ درخواستِ صریحِ کاربر («بله، مثلِ کاردکس تجمیع شود»): سندِ
-        # حسابداریِ متغیرها هم‌الگو با تجمیعِ کاردکسِ R151 باید زیرِ بُعدِ
-        # کالایِ *اصلی* نوشته شود، نه یک ردیفِ جداگانه برایِ هر متغیر --
-        # وگرنه وقتی متغیر خودش تفصیلیِ اختصاصی ندارد، هر متغیر یک سطرِ
-        # جداگانه در دفترِ روزنامه می‌سازد.
-        variant_parent_ids = {it.variant_parent_item_id for it in items_by_id.values() if it.variant_parent_item_id is not None}
-        parent_detail_account_by_item_id: dict[int, int | None] = (
-            dict(session.execute(select(Item.item_id, Item.item_detail_account_id).where(Item.item_id.in_(variant_parent_ids))).all())
-            if variant_parent_ids else {}
-        )
+    item_codes = dict(
+        session.execute(
+            select(Item.item_id, DetailAccount.code)
+            .join(DetailAccount, DetailAccount.detail_account_id == Item.item_detail_account_id)
+            .where(Item.item_id.in_(item_ids))
+        ).all()
+    )
+    warehouse_ids = {wid for wid in (doc.source_warehouse_id, doc.destination_warehouse_id) if wid is not None}
+    warehouses_by_id = {
+        w.warehouse_id: w for w in session.scalars(select(Warehouse).where(Warehouse.warehouse_id.in_(warehouse_ids)))
+    }
 
-        def je_dimension_account_id(item: Item) -> int | None:
-            if item.variant_parent_item_id is not None:
-                return parent_detail_account_by_item_id.get(item.variant_parent_item_id, item.item_detail_account_id)
-            return item.item_detail_account_id
+    costing_settings = session.get(CompanyCostingSettings, company_id)
+    default_costing_method_code = None
+    if costing_settings is not None:
+        method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
+        default_costing_method_code = method_row.code if method_row is not None else None
+    _cset = costing_engine.company_settings(session, company_id)
+    negative_policy, nifo_sources = _cset.negative_policy, _cset.nifo_sources  # R257/R258
 
-        item_codes = dict(
-            session.execute(
-                select(Item.item_id, DetailAccount.code)
-                .join(DetailAccount, DetailAccount.detail_account_id == Item.item_detail_account_id)
-                .where(Item.item_id.in_(item_ids))
-            ).all()
-        )
-        warehouse_ids = {wid for wid in (doc.source_warehouse_id, doc.destination_warehouse_id) if wid is not None}
-        warehouses_by_id = {
-            w.warehouse_id: w for w in session.scalars(select(Warehouse).where(Warehouse.warehouse_id.in_(warehouse_ids)))
-        }
+    def costing_method(item: Item) -> str:
+        return item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
 
-        costing_settings = session.get(CompanyCostingSettings, company_id)
-        default_costing_method_code = None
-        if costing_settings is not None:
-            method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
-            default_costing_method_code = method_row.code if method_row is not None else None
-        _cset = costing_engine.company_settings(session, company_id)
-        negative_policy, nifo_sources = _cset.negative_policy, _cset.nifo_sources  # R257/R258
+    # R257: آخرین مصرفِ consume_out به تفکیکِ لایه -- انتقال با همان تاریخ/بچِ لایهٔ مبدأ لایهٔ مقصد می‌سازد
+    last_consumed: list[tuple[decimal.Decimal, decimal.Decimal, CostLayer | None]] = []
+    # R258: بهایِ تمام‌شدهٔ NIFO (بهایِ جایگزینی) برایِ آخرین خروج -- جدا از بهایِ دفتریِ موجودی
+    nifo_issue: dict[str, decimal.Decimal] = {}
 
-        def costing_method(item: Item) -> str:
-            return item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
+    def add_layer(item: Item, warehouse_id: int, ledger: StockLedger, quantity: decimal.Decimal, unit_cost: decimal.Decimal,
+                  line: StockDocumentLine, receipt_date: datetime.date | None = None, batch_id: int | None = None,
+                  serial_id: int | None = None) -> None:
+        if costing_strategies.is_layer_method(costing_method(item)):
+            costing_engine.create_layer(
+                session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, ledger_id=ledger.ledger_id,
+                quantity=quantity, unit_cost=unit_cost, receipt_date=receipt_date or movement_date, source_type=doc_type,
+                source_line_id=line.line_id, batch_id=batch_id if batch_id is not None else line.batch_id,
+                serial_id=serial_id)
 
-        # R257: آخرین مصرفِ consume_out به تفکیکِ لایه -- انتقال با همان تاریخ/بچِ لایهٔ مبدأ لایهٔ مقصد می‌سازد
-        last_consumed: list[tuple[decimal.Decimal, decimal.Decimal, CostLayer | None]] = []
-        # R258: بهایِ تمام‌شدهٔ NIFO (بهایِ جایگزینی) برایِ آخرین خروج -- جدا از بهایِ دفتریِ موجودی
-        nifo_issue: dict[str, decimal.Decimal] = {}
-
-        def add_layer(item: Item, warehouse_id: int, ledger: StockLedger, quantity: decimal.Decimal, unit_cost: decimal.Decimal,
-                      line: StockDocumentLine, receipt_date: datetime.date | None = None, batch_id: int | None = None,
-                      serial_id: int | None = None) -> None:
-            if costing_strategies.is_layer_method(costing_method(item)):
-                costing_engine.create_layer(
-                    session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, ledger_id=ledger.ledger_id,
-                    quantity=quantity, unit_cost=unit_cost, receipt_date=receipt_date or movement_date, source_type=doc_type,
-                    source_line_id=line.line_id, batch_id=batch_id if batch_id is not None else line.batch_id,
-                    serial_id=serial_id)
-
-        def resolve_bin(warehouse_id: int, bin_location_id: int | None) -> int:
-            if bin_location_id is not None:
-                return bin_location_id
-            default_bin = None
-            wh_row = session.get(Warehouse, warehouse_id)
-            if wh_row is not None and wh_row.default_bin_location_id is not None:  # R253: مکانِ پیش‌فرضِ انتخابی
-                default_bin = session.get(BinLocation, wh_row.default_bin_location_id)
-                if default_bin is not None and not default_bin.is_active:
-                    default_bin = None
-            if default_bin is None:
-                default_bin = session.scalar(
-                    select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == "GENERAL")
-                )
-            if default_bin is None:
-                default_bin = session.scalar(
-                    select(BinLocation).where(BinLocation.warehouse_id == warehouse_id).order_by(BinLocation.bin_location_id)
-                )
-            if default_bin is None:
-                raise ValueError("این انبار هیچ مکانی ندارد.")
-            return default_bin.bin_location_id
-
-        def get_or_create_balance(item_id: int, warehouse_id: int, bin_location_id: int) -> StockBalance:
-            bal = session.scalar(
-                select(StockBalance)
-                .where(
-                    StockBalance.item_id == item_id,
-                    StockBalance.warehouse_id == warehouse_id,
-                    StockBalance.bin_location_id == bin_location_id,
-                    StockBalance.batch_id.is_(None),
-                )
-                .with_for_update()
+    def resolve_bin(warehouse_id: int, bin_location_id: int | None) -> int:
+        if bin_location_id is not None:
+            return bin_location_id
+        default_bin = None
+        wh_row = session.get(Warehouse, warehouse_id)
+        if wh_row is not None and wh_row.default_bin_location_id is not None:  # R253: مکانِ پیش‌فرضِ انتخابی
+            default_bin = session.get(BinLocation, wh_row.default_bin_location_id)
+            if default_bin is not None and not default_bin.is_active:
+                default_bin = None
+        if default_bin is None:
+            default_bin = session.scalar(
+                select(BinLocation).where(BinLocation.warehouse_id == warehouse_id, BinLocation.code == "GENERAL")
             )
-            if bal is None:
-                bal = StockBalance(
-                    company_id=company_id, item_id=item_id, warehouse_id=warehouse_id, bin_location_id=bin_location_id,
-                    quantity_on_hand=_ZERO, quantity_reserved=_ZERO, average_unit_cost=_ZERO,
-                )
-                session.add(bal)
-                session.flush()
-            return bal
-
-        def insert_ledger(
-            *, stock_document_line_id: int, item_id: int, warehouse_id: int, bin_location_id: int,
-            direction: str, quantity_base: decimal.Decimal, unit_cost: decimal.Decimal, movement_date: datetime.date,
-        ) -> StockLedger:
-            ledger = StockLedger(
-                company_id=company_id, stock_document_line_id=stock_document_line_id, item_id=item_id,
-                warehouse_id=warehouse_id, bin_location_id=bin_location_id, movement_direction=direction,
-                quantity_base=quantity_base, unit_cost=unit_cost, movement_date=movement_date,
+        if default_bin is None:
+            default_bin = session.scalar(
+                select(BinLocation).where(BinLocation.warehouse_id == warehouse_id).order_by(BinLocation.bin_location_id)
             )
-            session.add(ledger)
+        if default_bin is None:
+            raise ValueError("این انبار هیچ مکانی ندارد.")
+        return default_bin.bin_location_id
+
+    def get_or_create_balance(item_id: int, warehouse_id: int, bin_location_id: int) -> StockBalance:
+        bal = session.scalar(
+            select(StockBalance)
+            .where(
+                StockBalance.item_id == item_id,
+                StockBalance.warehouse_id == warehouse_id,
+                StockBalance.bin_location_id == bin_location_id,
+                StockBalance.batch_id.is_(None),
+            )
+            .with_for_update()
+        )
+        if bal is None:
+            bal = StockBalance(
+                company_id=company_id, item_id=item_id, warehouse_id=warehouse_id, bin_location_id=bin_location_id,
+                quantity_on_hand=_ZERO, quantity_reserved=_ZERO, average_unit_cost=_ZERO,
+            )
+            session.add(bal)
             session.flush()
-            return ledger
+        return bal
 
-        def apply_in(item: Item, warehouse_id: int, bin_location_id: int, quantity_base: decimal.Decimal, unit_cost: decimal.Decimal, movement_date: datetime.date) -> None:
-            bal = get_or_create_balance(item.item_id, warehouse_id, bin_location_id)
-            method = costing_method(item)
-            if method == "STANDARD":
-                bal.average_unit_cost = _standard_cost(session, item.item_id, movement_date)
-            elif bal.quantity_on_hand < 0:
-                bal.average_unit_cost = unit_cost
+    def insert_ledger(
+        *, stock_document_line_id: int, item_id: int, warehouse_id: int, bin_location_id: int,
+        direction: str, quantity_base: decimal.Decimal, unit_cost: decimal.Decimal, movement_date: datetime.date,
+    ) -> StockLedger:
+        ledger = StockLedger(
+            company_id=company_id, stock_document_line_id=stock_document_line_id, item_id=item_id,
+            warehouse_id=warehouse_id, bin_location_id=bin_location_id, movement_direction=direction,
+            quantity_base=quantity_base, unit_cost=unit_cost, movement_date=movement_date,
+        )
+        session.add(ledger)
+        session.flush()
+        return ledger
+
+    def apply_in(item: Item, warehouse_id: int, bin_location_id: int, quantity_base: decimal.Decimal, unit_cost: decimal.Decimal, movement_date: datetime.date) -> None:
+        bal = get_or_create_balance(item.item_id, warehouse_id, bin_location_id)
+        method = costing_method(item)
+        if method == "STANDARD":
+            bal.average_unit_cost = _standard_cost(session, item.item_id, movement_date)
+        elif bal.quantity_on_hand < 0:
+            bal.average_unit_cost = unit_cost
+        else:
+            denom = bal.quantity_on_hand + quantity_base
+            bal.average_unit_cost = (
+                ((bal.quantity_on_hand * bal.average_unit_cost) + (quantity_base * unit_cost)) / denom
+                if denom != 0 else unit_cost
+            )
+        bal.quantity_on_hand += quantity_base
+        bal.last_movement_at = datetime.datetime.now()
+
+    def consume_out(item: Item, warehouse_id: int, bin_location_id: int, quantity_base: decimal.Decimal, movement_date: datetime.date,
+                    line: StockDocumentLine | None = None, preferred_source_line_id: int | None = None) -> list[tuple[decimal.Decimal, decimal.Decimal]]:
+        """موجودی را کم می‌کند و لیستِ بخش‌هایِ (unit_cost, quantity)
+        مصرف‌شده را برمی‌گرداند — برایِ درجِ ردیف(هایِ) Ledger و برایِ
+        بازتولیدِ عینیِ همان بهایِ خروجی در مقصدِ TRANSFER.
+        R257: بهایِ روش‌هایِ لایه‌ای از costing.engine؛ تخصیصِ هر بخش در inv.cost_allocations ثبت می‌شود."""
+        bal = get_or_create_balance(item.item_id, warehouse_id, bin_location_id)
+        warehouse = warehouses_by_id[warehouse_id]
+        item_label = item_codes.get(item.item_id, str(item.item_id))
+        shortage = quantity_base - max(bal.quantity_on_hand, _ZERO)
+        short_status = costing_engine.negative_outcome(negative_policy, warehouse.allow_negative_stock, shortage)
+        if short_status is None:
+            raise ValueError(
+                f"موجودیِ کافی در انبار «{warehouse.name}» برایِ کالایِ «{item_label}» وجود ندارد "
+                f"(موجود: {bal.quantity_on_hand}، درخواستی: {quantity_base})."
+            )
+
+        def fallback_cost() -> decimal.Decimal:
+            if bal.average_unit_cost or negative_policy == "WAREHOUSE":
+                return bal.average_unit_cost or _ZERO
+            return _last_known_unit_cost(session, item.item_id) or _ZERO
+
+        method = costing_method(item)
+        segments: list[tuple[decimal.Decimal, decimal.Decimal]] = []
+        last_consumed.clear()
+        allocations: list[tuple[decimal.Decimal, decimal.Decimal, int | None, str]] = []
+        nifo_issue.clear()
+        if costing_strategies.is_layer_method(method):
+            # R258: شناساییِ ویژه -- سریال/بچِ تعیین‌شده برایِ همین ردیف اول
+            lots = costing_engine.line_lots(session, company_id, item.item_id, line) if method == "SPECIFIC" and line is not None else None
+            picks, remaining = costing_engine.consume_layers(
+                session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, quantity=quantity_base,
+                method=method, preferred_source_line_id=preferred_source_line_id, lots=lots)
+            for p in picks:
+                segments.append((p.layer.unit_cost, p.quantity))
+                last_consumed.append((p.layer.unit_cost, p.quantity, p.layer))
+                allocations.append((p.layer.unit_cost, p.quantity, p.layer.cost_layer_id, "CALCULATED"))
+            if remaining > 0:
+                cost = fallback_cost()
+                segments.append((cost, remaining))
+                last_consumed.append((cost, remaining, None))
+                allocations.append((cost, remaining, None, short_status if shortage > 0 else "CALCULATED"))
+        else:
+            cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else (
+                bal.average_unit_cost or (_ZERO if shortage <= 0 else fallback_cost()))
+            segments.append((cost, quantity_base))
+            last_consumed.append((cost, quantity_base, None))
+            issue_cost, nifo_note = cost, None
+            if method == "NIFO" and doc_type == "ISSUE":
+                # R258: بهایِ تمام‌شده = بهایِ جایگزینی؛ موجودی با بهایِ دفتری (cost) کم می‌شود
+                found = costing_replacement.replacement_cost(session, company_id, item.item_id, warehouse_id, movement_date, nifo_sources)
+                if found is not None:
+                    issue_cost, source = found
+                    nifo_note = f"NIFO: {costing_replacement.SOURCES.get(source, source)}؛ بهایِ دفتری {cost.normalize()}"
+                else:
+                    nifo_note = "NIFO: منبعِ بهایِ جایگزینی یافت نشد -- بهایِ دفتری"
+                nifo_issue["amount"] = _money(issue_cost * quantity_base)
+            if shortage > 0 and short_status != "CALCULATED":
+                covered = quantity_base - shortage
+                allocations.append((issue_cost, covered, None, "CALCULATED"))
+                allocations.append((issue_cost, shortage, None, short_status))
             else:
-                denom = bal.quantity_on_hand + quantity_base
-                bal.average_unit_cost = (
-                    ((bal.quantity_on_hand * bal.average_unit_cost) + (quantity_base * unit_cost)) / denom
-                    if denom != 0 else unit_cost
-                )
-            bal.quantity_on_hand += quantity_base
-            bal.last_movement_at = datetime.datetime.now()
+                allocations.append((issue_cost, quantity_base, None, "CALCULATED"))
+        if line is not None:
+            for cost, qty, layer_id, status in allocations:
+                costing_engine.record_allocation(
+                    session, company_id=company_id, stock_line_id=line.line_id, item_id=item.item_id,
+                    warehouse_id=warehouse_id, method=method, quantity=qty, unit_cost=cost, movement_date=movement_date,
+                    layer_id=layer_id, status=status,
+                    note=("کمبودِ موجودی -- بهایِ جایگزین" if layer_id is None and status != "CALCULATED"
+                          else (nifo_note if method == "NIFO" and doc_type == "ISSUE" else None)))
 
-        def consume_out(item: Item, warehouse_id: int, bin_location_id: int, quantity_base: decimal.Decimal, movement_date: datetime.date,
-                        line: StockDocumentLine | None = None, preferred_source_line_id: int | None = None) -> list[tuple[decimal.Decimal, decimal.Decimal]]:
-            """موجودی را کم می‌کند و لیستِ بخش‌هایِ (unit_cost, quantity)
-            مصرف‌شده را برمی‌گرداند — برایِ درجِ ردیف(هایِ) Ledger و برایِ
-            بازتولیدِ عینیِ همان بهایِ خروجی در مقصدِ TRANSFER.
-            R257: بهایِ روش‌هایِ لایه‌ای از costing.engine؛ تخصیصِ هر بخش در inv.cost_allocations ثبت می‌شود."""
-            bal = get_or_create_balance(item.item_id, warehouse_id, bin_location_id)
-            warehouse = warehouses_by_id[warehouse_id]
-            item_label = item_codes.get(item.item_id, str(item.item_id))
-            shortage = quantity_base - max(bal.quantity_on_hand, _ZERO)
-            short_status = costing_engine.negative_outcome(negative_policy, warehouse.allow_negative_stock, shortage)
-            if short_status is None:
-                raise ValueError(
-                    f"موجودیِ کافی در انبار «{warehouse.name}» برایِ کالایِ «{item_label}» وجود ندارد "
-                    f"(موجود: {bal.quantity_on_hand}، درخواستی: {quantity_base})."
-                )
+        bal.quantity_on_hand -= quantity_base
+        if method == "STANDARD":
+            bal.average_unit_cost = _standard_cost(session, item.item_id, movement_date)
+        bal.last_movement_at = datetime.datetime.now()
+        return segments
 
-            def fallback_cost() -> decimal.Decimal:
-                if bal.average_unit_cost or negative_policy == "WAREHOUSE":
-                    return bal.average_unit_cost or _ZERO
-                return _last_known_unit_cost(session, item.item_id) or _ZERO
+    # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ کالا الزامی است» رویِ
+    # حساب‌هایِ نقش‌محورِ اسنادِ انبار — رسید/حواله/اصلاح/برگشت — نه
+    # فقط حسابِ درآمدِ فروش): این‌جا هم مثلِ فروش، مبلغِ هر نقش قبلاً
+    # به‌صورتِ یک جمعِ کلی (بدونِ ردِ کالا) جمع می‌شد، پس اگر معینِ آن
+    # نقش «کالا» را الزامی می‌کرد، هرگز قابلِ‌تامین نبود. حالا مبلغِ
+    # هر نقش به‌تفکیکِ تفصیلیِ کالایِ همان ردیف هم نگه داشته می‌شود.
+    debits: dict[str, dict[int | None, decimal.Decimal]] = {}
+    credits: dict[str, dict[int | None, decimal.Decimal]] = {}
 
+    def add_debit(role: str, amount: decimal.Decimal, item_detail_account_id: int | None = None) -> None:
+        if amount == 0:
+            return
+        role = overrides.get(role, role)
+        by_item = debits.setdefault(role, {})
+        by_item[item_detail_account_id] = by_item.get(item_detail_account_id, _ZERO) + amount
+
+    def add_credit(role: str, amount: decimal.Decimal, item_detail_account_id: int | None = None) -> None:
+        if amount == 0:
+            return
+        role = overrides.get(role, role)
+        by_item = credits.setdefault(role, {})
+        by_item[item_detail_account_id] = by_item.get(item_detail_account_id, _ZERO) + amount
+
+    doc_type = doc.document_type_code
+    movement_date = doc.document_date
+
+    def return_variance_role(difference: decimal.Decimal) -> str:
+        """R235: حسابِ اختلافِ مبلغِ برگشت با بهایِ تمام‌شده."""
+        if get_account_mapping(company_id, "INVENTORY_COST_VARIANCE") is not None:
+            return "INVENTORY_COST_VARIANCE"
+        if difference > 0 and get_account_mapping(company_id, "INVENTORY_ADJUSTMENT_GAIN") is not None:
+            return "INVENTORY_ADJUSTMENT_GAIN"
+        return "INVENTORY_ADJUSTMENT_LOSS"
+
+    for line in sorted_lines:
+        item = items_by_id.get(line.item_id)
+        if item is None or item.company_id != company_id:
+            raise ValueError("کالایِ ردیف نامعتبر است.")
+        if item.lifecycle_status_code != "ACTIVE":
+            raise ValueError(f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» در وضعیتِ فعال نیست و قابلِ‌ثبت در سند نیست.")
+        if not item.is_stock_tracked:
+            raise ValueError("این کالا موجودی‌محور نیست.")
+        if item.item_id in variant_parent_item_ids:
+            raise ValueError(
+                f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» خودِ کالای اصلیِ دارایِ متغیر است -- "
+                "فقط متغیرهایِ زیرمجموعه‌اش قابلِ‌انتخاب/موجودی‌گیری هستند."
+            )
+        je_item_detail_account_id = je_dimension_account_id(item)
+
+        if doc_type in ("RECEIPT", "RETURN_IN"):
+            warehouse_id = doc.destination_warehouse_id
+            bin_id = resolve_bin(warehouse_id, line.bin_location_id)
             method = costing_method(item)
-            segments: list[tuple[decimal.Decimal, decimal.Decimal]] = []
-            last_consumed.clear()
-            allocations: list[tuple[decimal.Decimal, decimal.Decimal, int | None, str]] = []
-            nifo_issue.clear()
-            if costing_strategies.is_layer_method(method):
-                # R258: شناساییِ ویژه -- سریال/بچِ تعیین‌شده برایِ همین ردیف اول
-                lots = costing_engine.line_lots(session, company_id, item.item_id, line) if method == "SPECIFIC" and line is not None else None
-                picks, remaining = costing_engine.consume_layers(
-                    session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, quantity=quantity_base,
-                    method=method, preferred_source_line_id=preferred_source_line_id, lots=lots)
-                for p in picks:
-                    segments.append((p.layer.unit_cost, p.quantity))
-                    last_consumed.append((p.layer.unit_cost, p.quantity, p.layer))
-                    allocations.append((p.layer.unit_cost, p.quantity, p.layer.cost_layer_id, "CALCULATED"))
-                if remaining > 0:
-                    cost = fallback_cost()
-                    segments.append((cost, remaining))
-                    last_consumed.append((cost, remaining, None))
-                    allocations.append((cost, remaining, None, short_status if shortage > 0 else "CALCULATED"))
+
+            # R237: برگشت از فروشِ مشتری با فیِ برگشت -- کالا با «بها» به انبار برمی‌گردد
+            # (بهایِ همان فروش اگر ارجاع دارد، وگرنه میانگینِ فعلیِ انبار)، نه با فیِ فروش.
+            return_price_unit = (
+                line.unit_cost if doc_type == "RETURN_IN" and doc.counterparty_detail_account_id is not None
+                and line.unit_cost is not None else None
+            )
+            if doc_type == "RETURN_IN" and line.source_line_id is not None:
+                actual_cost = _source_line_unit_cost(session, line.source_line_id)
+                # R258: کالایِ سریال/بچ‌دار -- بهایِ واقعیِ همان سریال/بچِ برگشتی در فروشِ مرجع
+                lots = costing_engine.line_lots(session, company_id, item.item_id, line)
+                lot_cost = costing_engine.lot_issue_cost(
+                    session, line.source_line_id, [s_id for _b, s_id, _q in lots if s_id],
+                    [b_id for b_id, s_id, _q in lots if b_id and not s_id]) if lots else None
+                if lot_cost is not None:
+                    actual_cost = lot_cost
+            elif return_price_unit is not None:
+                actual_cost = _current_average_cost(session, item.item_id, warehouse_id)
+                if actual_cost is None:
+                    actual_cost = _last_known_unit_cost(session, item.item_id) or return_price_unit
             else:
-                cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else (
-                    bal.average_unit_cost or (_ZERO if shortage <= 0 else fallback_cost()))
-                segments.append((cost, quantity_base))
-                last_consumed.append((cost, quantity_base, None))
-                issue_cost, nifo_note = cost, None
-                if method == "NIFO" and doc_type == "ISSUE":
-                    # R258: بهایِ تمام‌شده = بهایِ جایگزینی؛ موجودی با بهایِ دفتری (cost) کم می‌شود
-                    found = costing_replacement.replacement_cost(session, company_id, item.item_id, warehouse_id, movement_date, nifo_sources)
-                    if found is not None:
-                        issue_cost, source = found
-                        nifo_note = f"NIFO: {costing_replacement.SOURCES.get(source, source)}؛ بهایِ دفتری {cost.normalize()}"
+                actual_cost = line.unit_cost
+                if actual_cost is None:
+                    if method == "STANDARD":
+                        actual_cost = _standard_cost(session, item.item_id, movement_date)
                     else:
-                        nifo_note = "NIFO: منبعِ بهایِ جایگزینی یافت نشد -- بهایِ دفتری"
-                    nifo_issue["amount"] = _money(issue_cost * quantity_base)
-                if shortage > 0 and short_status != "CALCULATED":
-                    covered = quantity_base - shortage
-                    allocations.append((issue_cost, covered, None, "CALCULATED"))
-                    allocations.append((issue_cost, shortage, None, short_status))
+                        # طبقِ تصمیمِ صریح: بهایِ واحد در رسیدِ مستقیمِ
+                        # انبار الزامی نیست — اگر خالی بماند، آخرین بهایِ
+                        # واقعاً ثبت‌شده برایِ همین کالا (از دفترِ انبار)
+                        # به‌طورِ نامرئی جایگزین می‌شود. طبقِ رفعِ باگِ
+                        # واقعی («سندِ حسابداریِ بهایِ تمام‌شده/موجودی
+                        # هیچ‌وقت ساخته نمی‌شود»): اگر هیچ سابقه‌یِ
+                        # بهایِ *مثبتی* هم نبود، دیگر صفرِ نامرئی جایگزین
+                        # نمی‌شود (چون آن صفر عملاً یعنی این حواله هیچ‌وقت
+                        # اثرِ حسابداری پیدا نمی‌کند و هیچ‌جا هم دیده
+                        # نمی‌شود) — به‌جایش صریحاً بهایِ واحد خواسته می‌شود.
+                        actual_cost = _last_known_unit_cost(session, item.item_id)
+                        if actual_cost is None:
+                            raise ValueError(
+                                f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» هنوز هیچ بهایِ "
+                                "ثبت‌شده‌ای در سابقه نیست — واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
+                            )
+
+            ledger_unit_cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else actual_cost
+
+            # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ
+            # اقلامِ فاکتور، به حسابِ موجودی و بهایِ تمام‌شده لحاظ
+            # بشه»): سهمِ همین ردیف از هزینه‌هایِ جانبی (که
+            # commercial_documents.py از رویِ ارزشِ نسبیِ ردیف‌ها
+            # محاسبه کرده) به بهایِ لجر/موجودی اضافه می‌شود -- تا هم
+            # ارزشِ موجودیِ همین لحظه هم بهایِ تمام‌شده‌یِ فروشِ آینده
+            # (میانگین/FIFO) درست باشد. فقط RECEIPT (فاکتورِ خرید) این
+            # ردیف را دارد.
+            landed_cost_amount = (line.landed_cost_amount or _ZERO) if doc_type == "RECEIPT" else _ZERO
+            if landed_cost_amount and line.quantity_base:
+                ledger_unit_cost = ledger_unit_cost + (landed_cost_amount / line.quantity_base)
+
+            in_ledger = insert_ledger(
+                stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
+                bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
+                unit_cost=ledger_unit_cost, movement_date=movement_date,
+            )
+            apply_in(item, warehouse_id, bin_id, line.quantity_base, ledger_unit_cost, movement_date)
+            add_layer(item, warehouse_id, in_ledger, line.quantity_base, ledger_unit_cost, line)
+
+            inventory_amount = _money(ledger_unit_cost * line.quantity_base)
+            payable_amount = _money(actual_cost * line.quantity_base)
+            add_debit("INVENTORY_ASSET", inventory_amount, je_item_detail_account_id)
+            # طبقِ همان تسهیمِ هزینه‌هایِ جانبی: این سهم نباید بستانکاریِ
+            # حساب‌هایِ پرداختنیِ تامین‌کننده (payable_amount) را عوض
+            # کند -- پس در محاسبهٔ مغایرتِ بهایِ استاندارد (که فقط
+            # اختلافِ actual_cost/ledger_unit_costِ خودِ آن دو مکانیزم
+            # را باید نشان دهد) دوباره کسر می‌شود، وگرنه به‌اشتباه
+            # به‌عنوانِ «مغایرتِ بهایِ استاندارد» ثبت می‌شد.
+            variance = payable_amount - inventory_amount + landed_cost_amount
+            if doc_type == "RECEIPT" and variance != 0:
+                if variance > 0:
+                    add_debit("INVENTORY_COST_VARIANCE", variance, je_item_detail_account_id)
                 else:
-                    allocations.append((issue_cost, quantity_base, None, "CALCULATED"))
-            if line is not None:
-                for cost, qty, layer_id, status in allocations:
-                    costing_engine.record_allocation(
-                        session, company_id=company_id, stock_line_id=line.line_id, item_id=item.item_id,
-                        warehouse_id=warehouse_id, method=method, quantity=qty, unit_cost=cost, movement_date=movement_date,
-                        layer_id=layer_id, status=status,
-                        note=("کمبودِ موجودی -- بهایِ جایگزین" if layer_id is None and status != "CALCULATED"
-                              else (nifo_note if method == "NIFO" and doc_type == "ISSUE" else None)))
-
-            bal.quantity_on_hand -= quantity_base
-            if method == "STANDARD":
-                bal.average_unit_cost = _standard_cost(session, item.item_id, movement_date)
-            bal.last_movement_at = datetime.datetime.now()
-            return segments
-
-        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ کالا الزامی است» رویِ
-        # حساب‌هایِ نقش‌محورِ اسنادِ انبار — رسید/حواله/اصلاح/برگشت — نه
-        # فقط حسابِ درآمدِ فروش): این‌جا هم مثلِ فروش، مبلغِ هر نقش قبلاً
-        # به‌صورتِ یک جمعِ کلی (بدونِ ردِ کالا) جمع می‌شد، پس اگر معینِ آن
-        # نقش «کالا» را الزامی می‌کرد، هرگز قابلِ‌تامین نبود. حالا مبلغِ
-        # هر نقش به‌تفکیکِ تفصیلیِ کالایِ همان ردیف هم نگه داشته می‌شود.
-        debits: dict[str, dict[int | None, decimal.Decimal]] = {}
-        credits: dict[str, dict[int | None, decimal.Decimal]] = {}
-
-        def add_debit(role: str, amount: decimal.Decimal, item_detail_account_id: int | None = None) -> None:
-            if amount == 0:
-                return
-            by_item = debits.setdefault(role, {})
-            by_item[item_detail_account_id] = by_item.get(item_detail_account_id, _ZERO) + amount
-
-        def add_credit(role: str, amount: decimal.Decimal, item_detail_account_id: int | None = None) -> None:
-            if amount == 0:
-                return
-            by_item = credits.setdefault(role, {})
-            by_item[item_detail_account_id] = by_item.get(item_detail_account_id, _ZERO) + amount
-
-        doc_type = doc.document_type_code
-        movement_date = doc.document_date
-
-        def return_variance_role(difference: decimal.Decimal) -> str:
-            """R235: حسابِ اختلافِ مبلغِ برگشت با بهایِ تمام‌شده."""
-            if get_account_mapping(company_id, "INVENTORY_COST_VARIANCE") is not None:
-                return "INVENTORY_COST_VARIANCE"
-            if difference > 0 and get_account_mapping(company_id, "INVENTORY_ADJUSTMENT_GAIN") is not None:
-                return "INVENTORY_ADJUSTMENT_GAIN"
-            return "INVENTORY_ADJUSTMENT_LOSS"
-
-        for line in sorted_lines:
-            item = items_by_id.get(line.item_id)
-            if item is None or item.company_id != company_id:
-                raise ValueError("کالایِ ردیف نامعتبر است.")
-            if item.lifecycle_status_code != "ACTIVE":
-                raise ValueError(f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» در وضعیتِ فعال نیست و قابلِ‌ثبت در سند نیست.")
-            if not item.is_stock_tracked:
-                raise ValueError("این کالا موجودی‌محور نیست.")
-            if item.item_id in variant_parent_item_ids:
-                raise ValueError(
-                    f"کالایِ «{item_codes.get(item.item_id, item.item_id)}» خودِ کالای اصلیِ دارایِ متغیر است -- "
-                    "فقط متغیرهایِ زیرمجموعه‌اش قابلِ‌انتخاب/موجودی‌گیری هستند."
-                )
-            je_item_detail_account_id = je_dimension_account_id(item)
-
-            if doc_type in ("RECEIPT", "RETURN_IN"):
-                warehouse_id = doc.destination_warehouse_id
-                bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                method = costing_method(item)
-
-                # R237: برگشت از فروشِ مشتری با فیِ برگشت -- کالا با «بها» به انبار برمی‌گردد
-                # (بهایِ همان فروش اگر ارجاع دارد، وگرنه میانگینِ فعلیِ انبار)، نه با فیِ فروش.
-                return_price_unit = (
-                    line.unit_cost if doc_type == "RETURN_IN" and doc.counterparty_detail_account_id is not None
-                    and line.unit_cost is not None else None
-                )
-                if doc_type == "RETURN_IN" and line.source_line_id is not None:
-                    actual_cost = _source_line_unit_cost(session, line.source_line_id)
-                    # R258: کالایِ سریال/بچ‌دار -- بهایِ واقعیِ همان سریال/بچِ برگشتی در فروشِ مرجع
-                    lots = costing_engine.line_lots(session, company_id, item.item_id, line)
-                    lot_cost = costing_engine.lot_issue_cost(
-                        session, line.source_line_id, [s_id for _b, s_id, _q in lots if s_id],
-                        [b_id for b_id, s_id, _q in lots if b_id and not s_id]) if lots else None
-                    if lot_cost is not None:
-                        actual_cost = lot_cost
-                elif return_price_unit is not None:
-                    actual_cost = _current_average_cost(session, item.item_id, warehouse_id)
-                    if actual_cost is None:
-                        actual_cost = _last_known_unit_cost(session, item.item_id) or return_price_unit
+                    add_credit("INVENTORY_COST_VARIANCE", -variance, je_item_detail_account_id)
+            # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید محاسبه
+            # می‌شود ولی سندش ثبت نمی‌شود»): مالياتِ همین ردیف (اگر از
+            # یک فاکتورِ خرید آمده باشد) بدهکارِ «مالياتِ خرید-قابلِ
+            # مطالبه» می‌شود و رویِ بستانکاریِ حساب‌هایِ پرداختنی هم
+            # افزوده می‌شود — بدونِ اینکه وارد ارزشِ خودِ موجودی شود.
+            # برایِ RETURN_IN (برگشت از فروش)، همین مالیات بازگشتِ
+            # «مالياتِ فروش-پرداختنی»یِ فاکتورِ اصلی است، نه مطالبه‌یِ
+            # خرید. طبقِ دو نوعِ ثبتِ رسمی/غیررسمی: در حالتِ غیررسمی
+            # ردیفِ جداگانه‌یِ مالياتی ساخته نمی‌شود -- همان مبلغ به
+            # ارزشِ موجودی افزوده می‌شود (بهایِ واحدِ Ledger/میانگین
+            # دست‌نخورده می‌ماند، این فقط یک تعدیلِ سطحِ سند است).
+            tax_amount = line.tax_amount or _ZERO
+            if return_price_unit is not None:
+                # R237: سندِ استانداردِ برگشت از فروش:
+                #   بدهکار موجودی / بستانکار بهایِ تمام‌شده (به بها)
+                #   بدهکار برگشت از فروش (+ مالیات) / بستانکار مشتری (به مبلغِ برگشت)
+                price_amount = _money(return_price_unit * line.quantity_base)
+                add_credit("COGS", inventory_amount, je_item_detail_account_id)
+                add_debit("SALES_RETURNS", price_amount + (tax_amount if is_informal_tax else _ZERO), je_item_detail_account_id)
+                if tax_amount and not is_informal_tax:
+                    add_debit("SALES_TAX_PAYABLE", tax_amount, je_item_detail_account_id)
+                add_credit("CUSTOMER_RECEIVABLE", price_amount + tax_amount, je_item_detail_account_id)
+                continue
+            if tax_amount:
+                if is_informal_tax:
+                    add_debit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
                 else:
-                    actual_cost = line.unit_cost
-                    if actual_cost is None:
-                        if method == "STANDARD":
-                            actual_cost = _standard_cost(session, item.item_id, movement_date)
-                        else:
-                            # طبقِ تصمیمِ صریح: بهایِ واحد در رسیدِ مستقیمِ
-                            # انبار الزامی نیست — اگر خالی بماند، آخرین بهایِ
-                            # واقعاً ثبت‌شده برایِ همین کالا (از دفترِ انبار)
-                            # به‌طورِ نامرئی جایگزین می‌شود. طبقِ رفعِ باگِ
-                            # واقعی («سندِ حسابداریِ بهایِ تمام‌شده/موجودی
-                            # هیچ‌وقت ساخته نمی‌شود»): اگر هیچ سابقه‌یِ
-                            # بهایِ *مثبتی* هم نبود، دیگر صفرِ نامرئی جایگزین
-                            # نمی‌شود (چون آن صفر عملاً یعنی این حواله هیچ‌وقت
-                            # اثرِ حسابداری پیدا نمی‌کند و هیچ‌جا هم دیده
-                            # نمی‌شود) — به‌جایش صریحاً بهایِ واحد خواسته می‌شود.
-                            actual_cost = _last_known_unit_cost(session, item.item_id)
-                            if actual_cost is None:
-                                raise ValueError(
-                                    f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» هنوز هیچ بهایِ "
-                                    "ثبت‌شده‌ای در سابقه نیست — واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
-                                )
+                    tax_role = "PURCHASE_TAX_RECEIVABLE" if doc_type == "RECEIPT" else "SALES_TAX_PAYABLE"
+                    add_debit(tax_role, tax_amount, je_item_detail_account_id)
+            credit_amount = payable_amount + tax_amount
+            credit_role = "SUPPLIER_PAYABLE" if doc_type == "RECEIPT" else "CUSTOMER_RECEIVABLE"
+            if doc.counterparty_detail_account_id is not None:
+                add_credit(credit_role, credit_amount, je_item_detail_account_id)
+            else:
+                add_credit("INVENTORY_ADJUSTMENT_GAIN", credit_amount, je_item_detail_account_id)
 
-                ledger_unit_cost = _standard_cost(session, item.item_id, movement_date) if method == "STANDARD" else actual_cost
-
-                # طبقِ درخواستِ صریح («تسهیمِ هزینه‌هایِ جانبیِ خرید رویِ
-                # اقلامِ فاکتور، به حسابِ موجودی و بهایِ تمام‌شده لحاظ
-                # بشه»): سهمِ همین ردیف از هزینه‌هایِ جانبی (که
-                # commercial_documents.py از رویِ ارزشِ نسبیِ ردیف‌ها
-                # محاسبه کرده) به بهایِ لجر/موجودی اضافه می‌شود -- تا هم
-                # ارزشِ موجودیِ همین لحظه هم بهایِ تمام‌شده‌یِ فروشِ آینده
-                # (میانگین/FIFO) درست باشد. فقط RECEIPT (فاکتورِ خرید) این
-                # ردیف را دارد.
-                landed_cost_amount = (line.landed_cost_amount or _ZERO) if doc_type == "RECEIPT" else _ZERO
-                if landed_cost_amount and line.quantity_base:
-                    ledger_unit_cost = ledger_unit_cost + (landed_cost_amount / line.quantity_base)
-
-                in_ledger = insert_ledger(
+        elif doc_type in ("ISSUE", "RETURN_OUT"):
+            warehouse_id = doc.source_warehouse_id
+            bin_id = resolve_bin(warehouse_id, line.bin_location_id)
+            # R257: برگشت به تامین‌کننده اول از لایهٔ همان رسید
+            segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line,
+                                   preferred_source_line_id=line.source_line_id if doc_type == "RETURN_OUT" else None)
+            total_amount = _ZERO
+            for seg_cost, seg_qty in segments:
+                insert_ledger(
                     stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
-                    bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
-                    unit_cost=ledger_unit_cost, movement_date=movement_date,
+                    bin_location_id=bin_id, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
+                    movement_date=movement_date,
                 )
-                apply_in(item, warehouse_id, bin_id, line.quantity_base, ledger_unit_cost, movement_date)
-                add_layer(item, warehouse_id, in_ledger, line.quantity_base, ledger_unit_cost, line)
-
-                inventory_amount = _money(ledger_unit_cost * line.quantity_base)
-                payable_amount = _money(actual_cost * line.quantity_base)
-                add_debit("INVENTORY_ASSET", inventory_amount, je_item_detail_account_id)
-                # طبقِ همان تسهیمِ هزینه‌هایِ جانبی: این سهم نباید بستانکاریِ
-                # حساب‌هایِ پرداختنیِ تامین‌کننده (payable_amount) را عوض
-                # کند -- پس در محاسبهٔ مغایرتِ بهایِ استاندارد (که فقط
-                # اختلافِ actual_cost/ledger_unit_costِ خودِ آن دو مکانیزم
-                # را باید نشان دهد) دوباره کسر می‌شود، وگرنه به‌اشتباه
-                # به‌عنوانِ «مغایرتِ بهایِ استاندارد» ثبت می‌شد.
-                variance = payable_amount - inventory_amount + landed_cost_amount
-                if doc_type == "RECEIPT" and variance != 0:
-                    if variance > 0:
-                        add_debit("INVENTORY_COST_VARIANCE", variance, je_item_detail_account_id)
-                    else:
-                        add_credit("INVENTORY_COST_VARIANCE", -variance, je_item_detail_account_id)
-                # طبقِ رفعِ باگِ واقعی («مالياتِ ردیفِ فاکتورِ خرید محاسبه
-                # می‌شود ولی سندش ثبت نمی‌شود»): مالياتِ همین ردیف (اگر از
-                # یک فاکتورِ خرید آمده باشد) بدهکارِ «مالياتِ خرید-قابلِ
-                # مطالبه» می‌شود و رویِ بستانکاریِ حساب‌هایِ پرداختنی هم
-                # افزوده می‌شود — بدونِ اینکه وارد ارزشِ خودِ موجودی شود.
-                # برایِ RETURN_IN (برگشت از فروش)، همین مالیات بازگشتِ
-                # «مالياتِ فروش-پرداختنی»یِ فاکتورِ اصلی است، نه مطالبه‌یِ
-                # خرید. طبقِ دو نوعِ ثبتِ رسمی/غیررسمی: در حالتِ غیررسمی
-                # ردیفِ جداگانه‌یِ مالياتی ساخته نمی‌شود -- همان مبلغ به
-                # ارزشِ موجودی افزوده می‌شود (بهایِ واحدِ Ledger/میانگین
-                # دست‌نخورده می‌ماند، این فقط یک تعدیلِ سطحِ سند است).
+                total_amount += _money(seg_cost * seg_qty)
+            add_credit("INVENTORY_ASSET", total_amount, je_item_detail_account_id)
+            if doc_type == "ISSUE" and "amount" in nifo_issue and nifo_issue["amount"] != total_amount:
+                # R258: NIFO -- بهایِ تمام‌شده به بهایِ جایگزینی، اختلاف با بهایِ دفتری به مغایرتِ بها
+                add_debit("COGS", nifo_issue["amount"], je_item_detail_account_id)
+                # بهایِ جایگزینیِ بیشتر از دفتری → بستانکارِ مغایرت (و برعکس)
+                difference = nifo_issue["amount"] - total_amount
+                variance_role = return_variance_role(difference)
+                if difference > 0:
+                    add_credit(variance_role, difference, je_item_detail_account_id)
+                else:
+                    add_debit(variance_role, -difference, je_item_detail_account_id)
+            elif doc_type == "ISSUE":
+                add_debit("COGS", total_amount, je_item_detail_account_id)
+            else:
+                # طبقِ دو نوعِ ثبتِ رسمی/غیررسمی برایِ برگشت به تامین‌کننده:
+                # رسمی مالياتِ ردیف را جداگانه بستانکارِ «مالياتِ
+                # خرید-قابلِ‌مطالبه» می‌کند (یعنی همان مطالبه‌یِ قبلی را
+                # برمی‌گرداند)؛ غیررسمی همان مبلغ را مستقیماً به بستانکاریِ
+                # موجودی می‌افزاید -- بدهکاریِ پرداختنی (یا زیانِ تعدیل)
+                # در هردو حالت با احتسابِ مالیات یکسان است.
                 tax_amount = line.tax_amount or _ZERO
-                if return_price_unit is not None:
-                    # R237: سندِ استانداردِ برگشت از فروش:
-                    #   بدهکار موجودی / بستانکار بهایِ تمام‌شده (به بها)
-                    #   بدهکار برگشت از فروش (+ مالیات) / بستانکار مشتری (به مبلغِ برگشت)
-                    price_amount = _money(return_price_unit * line.quantity_base)
-                    add_credit("COGS", inventory_amount, je_item_detail_account_id)
-                    add_debit("SALES_RETURNS", price_amount + (tax_amount if is_informal_tax else _ZERO), je_item_detail_account_id)
-                    if tax_amount and not is_informal_tax:
-                        add_debit("SALES_TAX_PAYABLE", tax_amount, je_item_detail_account_id)
-                    add_credit("CUSTOMER_RECEIVABLE", price_amount + tax_amount, je_item_detail_account_id)
-                    continue
                 if tax_amount:
                     if is_informal_tax:
-                        add_debit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
+                        add_credit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
                     else:
-                        tax_role = "PURCHASE_TAX_RECEIVABLE" if doc_type == "RECEIPT" else "SALES_TAX_PAYABLE"
-                        add_debit(tax_role, tax_amount, je_item_detail_account_id)
-                credit_amount = payable_amount + tax_amount
-                credit_role = "SUPPLIER_PAYABLE" if doc_type == "RECEIPT" else "CUSTOMER_RECEIVABLE"
-                if doc.counterparty_detail_account_id is not None:
-                    add_credit(credit_role, credit_amount, je_item_detail_account_id)
+                        add_credit("PURCHASE_TAX_RECEIVABLE", tax_amount, je_item_detail_account_id)
+                if doc.counterparty_detail_account_id is not None and line.unit_cost is not None:
+                    # R235: طبقِ استاندارد، حسابِ تامین‌کننده با «مبلغِ برگشت» (فیِ توافقی) بدهکار
+                    # می‌شود و موجودی با بهایِ تمام‌شده بستانکار؛ اختلاف به مغایرتِ بها.
+                    agreed = _money(line.unit_cost * line.quantity_base)
+                    add_debit("SUPPLIER_PAYABLE", agreed + tax_amount, je_item_detail_account_id)
+                    difference = agreed - total_amount
+                    if difference:
+                        variance_role = return_variance_role(difference)
+                        if difference > 0:
+                            add_credit(variance_role, difference, je_item_detail_account_id)
+                        else:
+                            add_debit(variance_role, -difference, je_item_detail_account_id)
+                elif doc.counterparty_detail_account_id is not None:
+                    add_debit("SUPPLIER_PAYABLE", total_amount + tax_amount, je_item_detail_account_id)
                 else:
-                    add_credit("INVENTORY_ADJUSTMENT_GAIN", credit_amount, je_item_detail_account_id)
+                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount + tax_amount, je_item_detail_account_id)
 
-            elif doc_type in ("ISSUE", "RETURN_OUT"):
+        elif doc_type == "TRANSFER":
+            source_wh, dest_wh = doc.source_warehouse_id, doc.destination_warehouse_id
+            source_bin = resolve_bin(source_wh, line.bin_location_id)
+            dest_bin = resolve_bin(dest_wh, line.destination_bin_location_id)
+            segments = consume_out(item, source_wh, source_bin, line.quantity_base, movement_date, line)
+            consumed = list(last_consumed)
+            for seg_cost, seg_qty, src_layer in consumed:
+                insert_ledger(
+                    stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=source_wh,
+                    bin_location_id=source_bin, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
+                    movement_date=movement_date,
+                )
+                in_ledger = insert_ledger(
+                    stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=dest_wh,
+                    bin_location_id=dest_bin, direction="IN", quantity_base=seg_qty, unit_cost=seg_cost,
+                    movement_date=movement_date,
+                )
+                apply_in(item, dest_wh, dest_bin, seg_qty, seg_cost, movement_date)
+                # R257: بها و تاریخِ دریافتِ لایهٔ مبدأ حفظ می‌شود (انتقال بها را دوباره محاسبه نمی‌کند)
+                if source_wh != dest_wh or src_layer is not None:
+                    add_layer(item, dest_wh, in_ledger, seg_qty, seg_cost, line,
+                              receipt_date=src_layer.receipt_date if src_layer is not None else None,
+                              batch_id=src_layer.batch_id if src_layer is not None else None,
+                              serial_id=src_layer.serial_id if src_layer is not None else None)
+            # طبقِ قاعدهٔ ۷۶: بینِ دو انبارِ همان شرکت، TRANSFER هرگز اثرِ
+            # حسابداری تولید نمی‌کند — فقط جابه‌جاییِ Ledger است.
+
+        elif doc_type == "ADJUSTMENT":
+            if doc.source_warehouse_id is not None:
                 warehouse_id = doc.source_warehouse_id
                 bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                # R257: برگشت به تامین‌کننده اول از لایهٔ همان رسید
-                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line,
-                                       preferred_source_line_id=line.source_line_id if doc_type == "RETURN_OUT" else None)
+                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line)
                 total_amount = _ZERO
                 for seg_cost, seg_qty in segments:
                     insert_ledger(
@@ -1023,149 +1113,37 @@ def post_stock_document(
                     )
                     total_amount += _money(seg_cost * seg_qty)
                 add_credit("INVENTORY_ASSET", total_amount, je_item_detail_account_id)
-                if doc_type == "ISSUE" and "amount" in nifo_issue and nifo_issue["amount"] != total_amount:
-                    # R258: NIFO -- بهایِ تمام‌شده به بهایِ جایگزینی، اختلاف با بهایِ دفتری به مغایرتِ بها
-                    add_debit("COGS", nifo_issue["amount"], je_item_detail_account_id)
-                    # بهایِ جایگزینیِ بیشتر از دفتری → بستانکارِ مغایرت (و برعکس)
-                    difference = nifo_issue["amount"] - total_amount
-                    variance_role = return_variance_role(difference)
-                    if difference > 0:
-                        add_credit(variance_role, difference, je_item_detail_account_id)
-                    else:
-                        add_debit(variance_role, -difference, je_item_detail_account_id)
-                elif doc_type == "ISSUE":
-                    add_debit("COGS", total_amount, je_item_detail_account_id)
-                else:
-                    # طبقِ دو نوعِ ثبتِ رسمی/غیررسمی برایِ برگشت به تامین‌کننده:
-                    # رسمی مالياتِ ردیف را جداگانه بستانکارِ «مالياتِ
-                    # خرید-قابلِ‌مطالبه» می‌کند (یعنی همان مطالبه‌یِ قبلی را
-                    # برمی‌گرداند)؛ غیررسمی همان مبلغ را مستقیماً به بستانکاریِ
-                    # موجودی می‌افزاید -- بدهکاریِ پرداختنی (یا زیانِ تعدیل)
-                    # در هردو حالت با احتسابِ مالیات یکسان است.
-                    tax_amount = line.tax_amount or _ZERO
-                    if tax_amount:
-                        if is_informal_tax:
-                            add_credit("INVENTORY_ASSET", tax_amount, je_item_detail_account_id)
-                        else:
-                            add_credit("PURCHASE_TAX_RECEIVABLE", tax_amount, je_item_detail_account_id)
-                    if doc.counterparty_detail_account_id is not None and line.unit_cost is not None:
-                        # R235: طبقِ استاندارد، حسابِ تامین‌کننده با «مبلغِ برگشت» (فیِ توافقی) بدهکار
-                        # می‌شود و موجودی با بهایِ تمام‌شده بستانکار؛ اختلاف به مغایرتِ بها.
-                        agreed = _money(line.unit_cost * line.quantity_base)
-                        add_debit("SUPPLIER_PAYABLE", agreed + tax_amount, je_item_detail_account_id)
-                        difference = agreed - total_amount
-                        if difference:
-                            variance_role = return_variance_role(difference)
-                            if difference > 0:
-                                add_credit(variance_role, difference, je_item_detail_account_id)
-                            else:
-                                add_debit(variance_role, -difference, je_item_detail_account_id)
-                    elif doc.counterparty_detail_account_id is not None:
-                        add_debit("SUPPLIER_PAYABLE", total_amount + tax_amount, je_item_detail_account_id)
-                    else:
-                        add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount + tax_amount, je_item_detail_account_id)
-
-            elif doc_type == "TRANSFER":
-                source_wh, dest_wh = doc.source_warehouse_id, doc.destination_warehouse_id
-                source_bin = resolve_bin(source_wh, line.bin_location_id)
-                dest_bin = resolve_bin(dest_wh, line.destination_bin_location_id)
-                segments = consume_out(item, source_wh, source_bin, line.quantity_base, movement_date, line)
-                consumed = list(last_consumed)
-                for seg_cost, seg_qty, src_layer in consumed:
-                    insert_ledger(
-                        stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=source_wh,
-                        bin_location_id=source_bin, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
-                        movement_date=movement_date,
-                    )
-                    in_ledger = insert_ledger(
-                        stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=dest_wh,
-                        bin_location_id=dest_bin, direction="IN", quantity_base=seg_qty, unit_cost=seg_cost,
-                        movement_date=movement_date,
-                    )
-                    apply_in(item, dest_wh, dest_bin, seg_qty, seg_cost, movement_date)
-                    # R257: بها و تاریخِ دریافتِ لایهٔ مبدأ حفظ می‌شود (انتقال بها را دوباره محاسبه نمی‌کند)
-                    if source_wh != dest_wh or src_layer is not None:
-                        add_layer(item, dest_wh, in_ledger, seg_qty, seg_cost, line,
-                                  receipt_date=src_layer.receipt_date if src_layer is not None else None,
-                                  batch_id=src_layer.batch_id if src_layer is not None else None,
-                                  serial_id=src_layer.serial_id if src_layer is not None else None)
-                # طبقِ قاعدهٔ ۷۶: بینِ دو انبارِ همان شرکت، TRANSFER هرگز اثرِ
-                # حسابداری تولید نمی‌کند — فقط جابه‌جاییِ Ledger است.
-
-            elif doc_type == "ADJUSTMENT":
-                if doc.source_warehouse_id is not None:
-                    warehouse_id = doc.source_warehouse_id
-                    bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                    segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line)
-                    total_amount = _ZERO
-                    for seg_cost, seg_qty in segments:
-                        insert_ledger(
-                            stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
-                            bin_location_id=bin_id, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
-                            movement_date=movement_date,
-                        )
-                        total_amount += _money(seg_cost * seg_qty)
-                    add_credit("INVENTORY_ASSET", total_amount, je_item_detail_account_id)
-                    add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount, je_item_detail_account_id)
-                if doc.destination_warehouse_id is not None:
-                    warehouse_id = doc.destination_warehouse_id
-                    bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                    method = costing_method(item)
-                    if method == "STANDARD":
-                        unit_cost = _standard_cost(session, item.item_id, movement_date)
-                    elif line.unit_cost is not None:
-                        unit_cost = line.unit_cost
-                    else:
-                        # طبقِ رفعِ باگِ واقعی («سندِ حسابداریِ بهایِ
-                        # تمام‌شده/موجودی هیچ‌وقت ساخته نمی‌شود»): قبلاً
-                        # اگر این کالا هنوز میانگینِ بهایِ واقعی‌ای نداشت
-                        # (اولین حرکتش)، این‌جا صفر جایگزین می‌شد و همان
-                        # صفر برایِ همیشه به کالا می‌چسبید — هر فروشِ بعدی
-                        # هم بهایِ تمام‌شده‌اش صفر می‌شد و اصلاً سندِ
-                        # حسابداری نمی‌ساخت (چون ردیفِ صفر مجاز نیست).
-                        # حالا اگر میانگینِ محلی صفر بود، آخرین بهایِ
-                        # مثبتِ واقعیِ همین کالا (از هر انباری) امتحان
-                        # می‌شود؛ اگر آن هم نبود، صریحاً بهایِ واحد خواسته
-                        # می‌شود.
-                        bal = get_or_create_balance(item.item_id, warehouse_id, bin_id)
-                        if bal.quantity_on_hand > 0 and bal.average_unit_cost > 0:
-                            unit_cost = bal.average_unit_cost
-                        else:
-                            unit_cost = _last_known_unit_cost(session, item.item_id)
-                            if unit_cost is None:
-                                raise ValueError(
-                                    f"برایِ افزایشِ موجودیِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» که "
-                                    "هنوز هیچ بهایِ ثبت‌شده‌ای ندارد، واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
-                                )
-                    in_ledger = insert_ledger(
-                        stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
-                        bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
-                        unit_cost=unit_cost, movement_date=movement_date,
-                    )
-                    apply_in(item, warehouse_id, bin_id, line.quantity_base, unit_cost, movement_date)
-                    add_layer(item, warehouse_id, in_ledger, line.quantity_base, unit_cost, line)
-                    amount = _money(unit_cost * line.quantity_base)
-                    add_debit("INVENTORY_ASSET", amount, je_item_detail_account_id)
-                    add_credit("INVENTORY_ADJUSTMENT_GAIN", amount, je_item_detail_account_id)
-
-            elif doc_type == "CONSIGNMENT_IN":
-                # طبقِ اصلِ فاکتورِ امانیِ ورودی: کالا در این لحظه هنوز مالِ
-                # شرکت نیست (فقط در اختیارِ فیزیکی‌اش قرار گرفته) -- پس
-                # درست مثلِ TRANSFER، هیچ اثرِ حسابداری‌ای (add_debit/
-                # add_credit) این‌جا ثبت نمی‌شود. با این‌حال، بهایِ
-                # توافق‌شده باید ثبت شود تا اگر همین کالا پیش از تسویه با
-                # تامین‌کننده فروخته شد، بهایِ تمام‌شده‌اش درست محاسبه شود؛
-                # سندِ حسابداریِ واقعیِ دریافتنی/پرداختنی فقط در لحظهٔ تسویه
-                # (services/commercial_consignment.py) ساخته می‌شود.
+                add_debit("INVENTORY_ADJUSTMENT_LOSS", total_amount, je_item_detail_account_id)
+            if doc.destination_warehouse_id is not None:
                 warehouse_id = doc.destination_warehouse_id
                 bin_id = resolve_bin(warehouse_id, line.bin_location_id)
                 method = costing_method(item)
-                if line.unit_cost is None:
-                    raise ValueError(
-                        f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» در امانیِ ورودی، "
-                        "واردکردنِ بهایِ توافق‌شده الزامی است."
-                    )
-                unit_cost = line.unit_cost
+                if method == "STANDARD":
+                    unit_cost = _standard_cost(session, item.item_id, movement_date)
+                elif line.unit_cost is not None:
+                    unit_cost = line.unit_cost
+                else:
+                    # طبقِ رفعِ باگِ واقعی («سندِ حسابداریِ بهایِ
+                    # تمام‌شده/موجودی هیچ‌وقت ساخته نمی‌شود»): قبلاً
+                    # اگر این کالا هنوز میانگینِ بهایِ واقعی‌ای نداشت
+                    # (اولین حرکتش)، این‌جا صفر جایگزین می‌شد و همان
+                    # صفر برایِ همیشه به کالا می‌چسبید — هر فروشِ بعدی
+                    # هم بهایِ تمام‌شده‌اش صفر می‌شد و اصلاً سندِ
+                    # حسابداری نمی‌ساخت (چون ردیفِ صفر مجاز نیست).
+                    # حالا اگر میانگینِ محلی صفر بود، آخرین بهایِ
+                    # مثبتِ واقعیِ همین کالا (از هر انباری) امتحان
+                    # می‌شود؛ اگر آن هم نبود، صریحاً بهایِ واحد خواسته
+                    # می‌شود.
+                    bal = get_or_create_balance(item.item_id, warehouse_id, bin_id)
+                    if bal.quantity_on_hand > 0 and bal.average_unit_cost > 0:
+                        unit_cost = bal.average_unit_cost
+                    else:
+                        unit_cost = _last_known_unit_cost(session, item.item_id)
+                        if unit_cost is None:
+                            raise ValueError(
+                                f"برایِ افزایشِ موجودیِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» که "
+                                "هنوز هیچ بهایِ ثبت‌شده‌ای ندارد، واردکردنِ بهایِ واحد برایِ این ردیف الزامی است."
+                            )
                 in_ledger = insert_ledger(
                     stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
                     bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
@@ -1173,120 +1151,176 @@ def post_stock_document(
                 )
                 apply_in(item, warehouse_id, bin_id, line.quantity_base, unit_cost, movement_date)
                 add_layer(item, warehouse_id, in_ledger, line.quantity_base, unit_cost, line)
+                amount = _money(unit_cost * line.quantity_base)
+                add_debit("INVENTORY_ASSET", amount, je_item_detail_account_id)
+                add_credit("INVENTORY_ADJUSTMENT_GAIN", amount, je_item_detail_account_id)
 
-            elif doc_type == "CONSIGN_RETURN":
-                # طبقِ اصلِ فاکتورِ امانیِ ورودی: بازگرداندنِ کالایِ
-                # مصرف‌نشده به تامین‌کننده -- چون هرگز خریداری نشده، هیچ
-                # اثرِ حسابداری‌ای هم ندارد (بدونِ add_debit/add_credit).
-                warehouse_id = doc.source_warehouse_id
-                bin_id = resolve_bin(warehouse_id, line.bin_location_id)
-                segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line,
-                                       preferred_source_line_id=line.source_line_id)
-                for seg_cost, seg_qty in segments:
-                    insert_ledger(
-                        stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
-                        bin_location_id=bin_id, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
-                        movement_date=movement_date,
-                    )
-            else:
-                raise ValueError("نوعِ سند نامعتبر است.")
-
-        person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
-        # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
-        # الزامی فراموش شده است» حتی وقتی تفصیلیِ طرفِ‌حساب درست انتخاب
-        # شده بود): قبلاً هیچ‌کدام از ردیف‌هایِ خودکارِ این سند (موجودیِ
-        # کالا، بهایِ تمام‌شده، و...) مرکزِ هزینه/پروژهٔ خودِ سند را
-        # نمی‌فرستادند — اگر حسابِ نقش‌محورشان به آن بُعدها هم نیاز
-        # داشت، ثبتِ نهایی همیشه رد می‌شد.
-        extra_dims: dict[int, int] = {}
-        if doc.cost_center_detail_account_id is not None:
-            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = doc.cost_center_detail_account_id
-        if doc.project_detail_account_id is not None:
-            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = doc.project_detail_account_id
-        # «مرکزِ سود» هیچ فیلدی در سرِسند ندارد — تنها منبعِ آن انبارِ خودِ
-        # سند است (که از قبل در فرمِ انبارها قابلِ تعریف است). بدونِ این،
-        # هر حسابِ نقش‌محوری که این بُعد را الزامی کند، ثبت را همیشه با
-        # پیامِ «تفصیلیِ الزامی» رد می‌کرد — چون هیچ‌جا راهی برایِ فرستادنش نبود.
-        warehouse_id_for_profit_center = doc.destination_warehouse_id or doc.source_warehouse_id
-        if warehouse_id_for_profit_center is not None:
-            warehouse = session.get(Warehouse, warehouse_id_for_profit_center)
-            if warehouse is not None and warehouse.profit_center_detail_account_id is not None:
-                extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
-                    warehouse.profit_center_detail_account_id
+        elif doc_type == "CONSIGNMENT_IN":
+            # طبقِ اصلِ فاکتورِ امانیِ ورودی: کالا در این لحظه هنوز مالِ
+            # شرکت نیست (فقط در اختیارِ فیزیکی‌اش قرار گرفته) -- پس
+            # درست مثلِ TRANSFER، هیچ اثرِ حسابداری‌ای (add_debit/
+            # add_credit) این‌جا ثبت نمی‌شود. با این‌حال، بهایِ
+            # توافق‌شده باید ثبت شود تا اگر همین کالا پیش از تسویه با
+            # تامین‌کننده فروخته شد، بهایِ تمام‌شده‌اش درست محاسبه شود؛
+            # سندِ حسابداریِ واقعیِ دریافتنی/پرداختنی فقط در لحظهٔ تسویه
+            # (services/commercial_consignment.py) ساخته می‌شود.
+            warehouse_id = doc.destination_warehouse_id
+            bin_id = resolve_bin(warehouse_id, line.bin_location_id)
+            method = costing_method(item)
+            if line.unit_cost is None:
+                raise ValueError(
+                    f"برایِ کالایِ «{item_codes.get(item.item_id, item.item_id)}» در امانیِ ورودی، "
+                    "واردکردنِ بهایِ توافق‌شده الزامی است."
                 )
-        item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
+            unit_cost = line.unit_cost
+            in_ledger = insert_ledger(
+                stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
+                bin_location_id=bin_id, direction="IN", quantity_base=line.quantity_base,
+                unit_cost=unit_cost, movement_date=movement_date,
+            )
+            apply_in(item, warehouse_id, bin_id, line.quantity_base, unit_cost, movement_date)
+            add_layer(item, warehouse_id, in_ledger, line.quantity_base, unit_cost, line)
 
-        def _account_requires_item_dim(account_id: int) -> bool:
-            required = dimensions_service.get_required_dimensions_for_account(account_id)
-            return any(r.dimension_type_id == item_dim_type_id for r in required)
+        elif doc_type == "CONSIGN_RETURN":
+            # طبقِ اصلِ فاکتورِ امانیِ ورودی: بازگرداندنِ کالایِ
+            # مصرف‌نشده به تامین‌کننده -- چون هرگز خریداری نشده، هیچ
+            # اثرِ حسابداری‌ای هم ندارد (بدونِ add_debit/add_credit).
+            warehouse_id = doc.source_warehouse_id
+            bin_id = resolve_bin(warehouse_id, line.bin_location_id)
+            segments = consume_out(item, warehouse_id, bin_id, line.quantity_base, movement_date, line,
+                                   preferred_source_line_id=line.source_line_id)
+            for seg_cost, seg_qty in segments:
+                insert_ledger(
+                    stock_document_line_id=line.line_id, item_id=item.item_id, warehouse_id=warehouse_id,
+                    bin_location_id=bin_id, direction="OUT", quantity_base=seg_qty, unit_cost=seg_cost,
+                    movement_date=movement_date,
+                )
+        else:
+            raise ValueError("نوعِ سند نامعتبر است.")
 
-        je_lines: list[je_service.LineInput] = []
-        description = doc.description or f"سندِ انبار #{doc.document_no}"
+    person_dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    # طبقِ رفعِ باگِ واقعی («برای حساب X انتخابِ گروه‌هایِ تفصیلیِ
+    # الزامی فراموش شده است» حتی وقتی تفصیلیِ طرفِ‌حساب درست انتخاب
+    # شده بود): قبلاً هیچ‌کدام از ردیف‌هایِ خودکارِ این سند (موجودیِ
+    # کالا، بهایِ تمام‌شده، و...) مرکزِ هزینه/پروژهٔ خودِ سند را
+    # نمی‌فرستادند — اگر حسابِ نقش‌محورشان به آن بُعدها هم نیاز
+    # داشت، ثبتِ نهایی همیشه رد می‌شد.
+    extra_dims: dict[int, int] = {}
+    if doc.cost_center_detail_account_id is not None:
+        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)] = doc.cost_center_detail_account_id
+    if doc.project_detail_account_id is not None:
+        extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROJECT_CODE)] = doc.project_detail_account_id
+    # «مرکزِ سود» هیچ فیلدی در سرِسند ندارد — تنها منبعِ آن انبارِ خودِ
+    # سند است (که از قبل در فرمِ انبارها قابلِ تعریف است). بدونِ این،
+    # هر حسابِ نقش‌محوری که این بُعد را الزامی کند، ثبت را همیشه با
+    # پیامِ «تفصیلیِ الزامی» رد می‌کرد — چون هیچ‌جا راهی برایِ فرستادنش نبود.
+    warehouse_id_for_profit_center = doc.destination_warehouse_id or doc.source_warehouse_id
+    if warehouse_id_for_profit_center is not None:
+        warehouse = session.get(Warehouse, warehouse_id_for_profit_center)
+        if warehouse is not None and warehouse.profit_center_detail_account_id is not None:
+            extra_dims[dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.PROFIT_CENTER_CODE)] = (
+                warehouse.profit_center_detail_account_id
+            )
+    item_dim_type_id = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.INVENTORY_ITEM_CODE)
 
-        # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی
-        # جایی برایِ انتخابش نیست»): بعضی حساب‌هایِ نقش‌محور یک تفصیلیِ
-        # الزامی دارند که نه از سرِسند (مرکزِ هزینه/پروژه) و نه از
-        # طرفِ‌حساب/کالایِ ردیف تامین می‌شود -- و معمولاً هم همیشه یک
-        # مقدارِ *ثابت* دارد (مثلاً یک ردیفِ تعریف‌شده برایِ «ماليات»).
-        # این تفصیلیِ ثابت را از خودِ نگاشتِ همان نقش می‌خوانیم.
-        def _fixed_role_detail(role: str) -> tuple[int, int] | None:
-            mapping_row = session.get(InventoryAccountMapping, (company_id, role))
-            if mapping_row is None or mapping_row.detail_account_id is None:
-                return None
-            detail = session.get(DetailAccount, mapping_row.detail_account_id)
-            if detail is None:
-                return None
-            return detail.dimension_type_id, detail.detail_account_id
+    def _account_requires_item_dim(account_id: int) -> bool:
+        required = dimensions_service.get_required_dimensions_for_account(account_id)
+        return any(r.dimension_type_id == item_dim_type_id for r in required)
 
-        def _build_lines(role_amounts: dict[str, dict[int | None, decimal.Decimal]], is_debit: bool) -> None:
-            for role, by_item in role_amounts.items():
-                account_id = _resolve_role_account(session, company_id, role)
-                base_details: dict[int, int] = {}
-                fixed_detail = _fixed_role_detail(role)
-                if fixed_detail is not None:
-                    base_details[fixed_detail[0]] = fixed_detail[1]
-                base_details.update(extra_dims)
-                if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
-                    base_details[person_dimension_type_id] = doc.counterparty_detail_account_id
-                if _account_requires_item_dim(account_id):
-                    for item_detail_account_id, item_amount in by_item.items():
-                        details = dict(base_details)
-                        if item_detail_account_id is not None:
-                            details[item_dim_type_id] = item_detail_account_id
-                        je_lines.append(
-                            je_service.LineInput(
-                                account_id=account_id, description=description,
-                                debit=item_amount if is_debit else _ZERO, credit=_ZERO if is_debit else item_amount,
-                                details=details,
-                            )
-                        )
-                else:
-                    total = sum(by_item.values(), _ZERO)
+    je_lines: list[je_service.LineInput] = []
+    description = doc.description or f"سندِ انبار #{doc.document_no}"
+
+    # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی
+    # جایی برایِ انتخابش نیست»): بعضی حساب‌هایِ نقش‌محور یک تفصیلیِ
+    # الزامی دارند که نه از سرِسند (مرکزِ هزینه/پروژه) و نه از
+    # طرفِ‌حساب/کالایِ ردیف تامین می‌شود -- و معمولاً هم همیشه یک
+    # مقدارِ *ثابت* دارد (مثلاً یک ردیفِ تعریف‌شده برایِ «ماليات»).
+    # این تفصیلیِ ثابت را از خودِ نگاشتِ همان نقش می‌خوانیم.
+    def _fixed_role_detail(role: str) -> tuple[int, int] | None:
+        mapping_row = session.get(InventoryAccountMapping, (company_id, role))
+        if mapping_row is None or mapping_row.detail_account_id is None:
+            return None
+        detail = session.get(DetailAccount, mapping_row.detail_account_id)
+        if detail is None:
+            return None
+        return detail.dimension_type_id, detail.detail_account_id
+
+    def _build_lines(role_amounts: dict[str, dict[int | None, decimal.Decimal]], is_debit: bool) -> None:
+        for role, by_item in role_amounts.items():
+            account_id = _resolve_role_account(session, company_id, role)
+            base_details: dict[int, int] = {}
+            fixed_detail = _fixed_role_detail(role)
+            if fixed_detail is not None:
+                base_details[fixed_detail[0]] = fixed_detail[1]
+            base_details.update(extra_dims)
+            if role in ("SUPPLIER_PAYABLE", "CUSTOMER_RECEIVABLE") and doc.counterparty_detail_account_id is not None:
+                base_details[person_dimension_type_id] = doc.counterparty_detail_account_id
+            if _account_requires_item_dim(account_id):
+                for item_detail_account_id, item_amount in by_item.items():
+                    details = dict(base_details)
+                    if item_detail_account_id is not None:
+                        details[item_dim_type_id] = item_detail_account_id
                     je_lines.append(
                         je_service.LineInput(
                             account_id=account_id, description=description,
-                            debit=total if is_debit else _ZERO, credit=_ZERO if is_debit else total,
-                            details=dict(base_details),
+                            debit=item_amount if is_debit else _ZERO, credit=_ZERO if is_debit else item_amount,
+                            details=details,
                         )
                     )
+            else:
+                total = sum(by_item.values(), _ZERO)
+                je_lines.append(
+                    je_service.LineInput(
+                        account_id=account_id, description=description,
+                        debit=total if is_debit else _ZERO, credit=_ZERO if is_debit else total,
+                        details=dict(base_details),
+                    )
+                )
 
-        _build_lines(debits, is_debit=True)
-        _build_lines(credits, is_debit=False)
+    _build_lines(debits, is_debit=True)
+    _build_lines(credits, is_debit=False)
 
-        # طبقِ درخواستِ صریح («بستانکاریِ حسابِ سفارشات همراهِ سندِ خودِ
-        # فاکتورِ خرید»): ردیف‌هایِ حسابِ آزادانه‌ایِ هزینه‌هایِ جانبی
-        # (commercial_documents.py، حسابِ معین+تفصیلیِ انتخابیِ خودِ
-        # کاربر برایِ هر ردیفِ هزینه) مستقیماً به همین سند اضافه می‌شوند —
-        # نه یک نقشِ ازپیش‌نگاشته‌شده، پس از مکانیزمِ debits/credits بالا
-        # عبور نمی‌کنند.
-        je_lines.extend(extra_je_lines or [])
-        # R260: سندِ عقب‌دار -- خروج‌هایِ بعدیِ همین کالا/انبارها «نیازمندِ بازمحاسبه»
-        costing_engine.flag_backdated(session, company_id, {(ln.item_id, w) for ln in lines for w in warehouse_ids},
-                                      movement_date, {ln.line_id for ln in lines})
+    # طبقِ درخواستِ صریح («بستانکاریِ حسابِ سفارشات همراهِ سندِ خودِ
+    # فاکتورِ خرید»): ردیف‌هایِ حسابِ آزادانه‌ایِ هزینه‌هایِ جانبی
+    # (commercial_documents.py، حسابِ معین+تفصیلیِ انتخابیِ خودِ
+    # کاربر برایِ هر ردیفِ هزینه) مستقیماً به همین سند اضافه می‌شوند —
+    # نه یک نقشِ ازپیش‌نگاشته‌شده، پس از مکانیزمِ debits/credits بالا
+    # عبور نمی‌کنند.
+    je_lines.extend(extra_je_lines or [])
+    # R260: سندِ عقب‌دار -- خروج‌هایِ بعدیِ همین کالا/انبارها «نیازمندِ بازمحاسبه»
+    costing_engine.flag_backdated(session, company_id, {(ln.item_id, w) for ln in lines for w in warehouse_ids},
+                                  movement_date, {ln.line_id for ln in lines})
 
-        doc.status_code = "POSTED"
-        doc.posted_by_user_id = posted_by_user_id
-        doc.posted_at = datetime.datetime.now()
+    doc.status_code = "POSTED"
+    doc.posted_by_user_id = posted_by_user_id
+    doc.posted_at = datetime.datetime.now()
+    return doc, je_lines, description
+
+
+def post_stock_document(
+    stock_document_id: int, company_id: int, posted_by_user_id: int, is_informal_tax: bool = False,
+    extra_je_lines: list[je_service.LineInput] | None = None, *, session=None,
+    role_overrides: dict[str, str] | None = None,
+) -> PostResult:
+    """R266: با session، موجودی و سندِ حسابداری در همان تراکنشِ فراخواننده ثبت می‌شوند (بدونِ commit)؛
+    role_overrides نقشِ حساب را فقط برایِ همین سند عوض می‌کند (مثلاً COGS ← PRODUCTION_WIP در حوالهٔ تولید).
+    بدونِ این دو پارامتر رفتار دقیقاً همان قبلی است."""
+    if session is not None:
+        doc, je_lines, description = _post_stock_document_core(
+            session, stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, role_overrides)
+        journal_entry_id = None
+        if je_lines:
+            journal_entry_id = je_service.create_journal_entry(
+                company_id, posted_by_user_id, doc.document_date, description, je_lines, entry_type_code="INVENTORY",
+                session=session,
+            ).journal_entry_id
+            doc.journal_entry_id = journal_entry_id
+        session.flush()
+        return PostResult(stock_document_id=doc.stock_document_id, journal_entry_id=journal_entry_id)
+
+    with new_session() as session:
+        doc, je_lines, description = _post_stock_document_core(
+            session, stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines, role_overrides)
         session.commit()
 
         result_stock_document_id = doc.stock_document_id

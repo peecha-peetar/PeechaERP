@@ -295,42 +295,47 @@ def _directions(doc: StockDocument) -> list[tuple[str, int | None]]:
 def validate_before_post(stock_document_id: int, company_id: int) -> None:
     """ورودیِ کاملِ بچ/سریال/انقضا برایِ رسیدِ انبار، فاکتورِ خرید و امانیِ ورودی."""
     with new_session() as session:
-        doc = session.get(StockDocument, stock_document_id)
-        if doc is None or doc.company_id != company_id:
-            return
-        if doc.document_type_code not in _INBOUND_TYPES:
-            return
-        for line in session.scalars(
-            select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
-            .order_by(StockDocumentLine.line_no)
-        ):
-            item = session.get(Item, line.item_id)
-            if item is None or not (item.track_batch or item.track_serial):
-                continue
-            _comm_line, comm_doc = _commercial_context(session, line.line_id)
-            required = (
-                comm_doc.document_type_code in _REQUIRED_COMMERCIAL_TYPES if comm_doc is not None
-                else doc.document_type_code in _REQUIRED_STOCK_TYPES
+        validate_before_post_in(session, stock_document_id, company_id)
+
+
+def validate_before_post_in(session, stock_document_id: int, company_id: int) -> None:
+    """R266: همان منطق در تراکنشِ فراخواننده (بدونِ commit)."""
+    doc = session.get(StockDocument, stock_document_id)
+    if doc is None or doc.company_id != company_id:
+        return
+    if doc.document_type_code not in _INBOUND_TYPES:
+        return
+    for line in session.scalars(
+        select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
+        .order_by(StockDocumentLine.line_no)
+    ):
+        item = session.get(Item, line.item_id)
+        if item is None or not (item.track_batch or item.track_serial):
+            continue
+        _comm_line, comm_doc = _commercial_context(session, line.line_id)
+        required = (
+            comm_doc.document_type_code in _REQUIRED_COMMERCIAL_TYPES if comm_doc is not None
+            else doc.document_type_code in _REQUIRED_STOCK_TYPES
+        )
+        if not required:
+            continue
+        entries = _entries_for_stock_line(session, line)
+        total = sum((decimal.Decimal(e.quantity) for e in entries), _ZERO)
+        if total != line.quantity_base:
+            kinds = "/".join(k for k, on in (("بچ", item.track_batch), ("انقضا", item.track_expiry), ("سریال", item.track_serial)) if on)
+            raise ValueError(
+                f"اطلاعاتِ {kinds}ِ «{_item_name(session, item)}» کامل نیست -- {total.normalize()} از {line.quantity_base.normalize()} "
+                "وارد شده. از دکمهٔ «ردیابی» (بچ/سریال/انقضا) رویِ همان ردیف وارد کنید."
             )
-            if not required:
-                continue
-            entries = _entries_for_stock_line(session, line)
-            total = sum((decimal.Decimal(e.quantity) for e in entries), _ZERO)
-            if total != line.quantity_base:
-                kinds = "/".join(k for k, on in (("بچ", item.track_batch), ("انقضا", item.track_expiry), ("سریال", item.track_serial)) if on)
-                raise ValueError(
-                    f"اطلاعاتِ {kinds}ِ «{_item_name(session, item)}» کامل نیست -- {total.normalize()} از {line.quantity_base.normalize()} "
-                    "وارد شده. از دکمهٔ «ردیابی» (بچ/سریال/انقضا) رویِ همان ردیف وارد کنید."
-                )
-            _validate_entries(item, entries, line.quantity_base, _item_name(session, item))
-            if item.track_serial:
-                for e in entries:
-                    existing = session.scalar(select(SerialNumber).where(
-                        SerialNumber.company_id == company_id, SerialNumber.item_id == item.item_id,
-                        SerialNumber.serial_no == e.serial_no,
-                    ))
-                    if existing is not None and existing.status_code == "IN_STOCK":
-                        raise ValueError(f"سریالِ «{e.serial_no}» از قبل در انبار موجود است.")
+        _validate_entries(item, entries, line.quantity_base, _item_name(session, item))
+        if item.track_serial:
+            for e in entries:
+                existing = session.scalar(select(SerialNumber).where(
+                    SerialNumber.company_id == company_id, SerialNumber.item_id == item.item_id,
+                    SerialNumber.serial_no == e.serial_no,
+                ))
+                if existing is not None and existing.status_code == "IN_STOCK":
+                    raise ValueError(f"سریالِ «{e.serial_no}» از قبل در انبار موجود است.")
 
 
 def _get_or_create_batch(session, company_id: int, item_id: int, e: TrackingEntry, supplier_id: int | None,
@@ -476,110 +481,115 @@ def _set_serial_state(session, serial_id: int, line_id: int, to_status: str, fro
 
 def apply_after_post(stock_document_id: int, company_id: int) -> None:
     with new_session() as session:
-        doc = session.get(StockDocument, stock_document_id)
-        if doc is None or doc.company_id != company_id:
-            return
-        directions = _directions(doc)
-        if not directions:
-            return
-        lines = session.scalars(
-            select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
-            .order_by(StockDocumentLine.line_no)
-        ).all()
-        # R251: محلِ هر جهت از دفترِ انبار (موتور پیش از این ثبت کرده است)
-        ledger_bin = {
-            (lid, wid, d): b for lid, wid, d, b in session.execute(
-                select(StockLedger.stock_document_line_id, StockLedger.warehouse_id, StockLedger.movement_direction,
-                       func.min(StockLedger.bin_location_id))
-                .where(StockLedger.stock_document_line_id.in_([ln.line_id for ln in lines] or [-1]))
-                .group_by(StockLedger.stock_document_line_id, StockLedger.warehouse_id, StockLedger.movement_direction)).all()
-        }
-        for line in lines:
-            item = session.get(Item, line.item_id)
-            if item is None:
+        apply_after_post_in(session, stock_document_id, company_id)
+        session.commit()
+
+
+def apply_after_post_in(session, stock_document_id: int, company_id: int) -> None:
+    """R266: همان منطق در تراکنشِ فراخواننده (بدونِ commit)."""
+    doc = session.get(StockDocument, stock_document_id)
+    if doc is None or doc.company_id != company_id:
+        return
+    directions = _directions(doc)
+    if not directions:
+        return
+    lines = session.scalars(
+        select(StockDocumentLine).where(StockDocumentLine.stock_document_id == stock_document_id)
+        .order_by(StockDocumentLine.line_no)
+    ).all()
+    # R251: محلِ هر جهت از دفترِ انبار (موتور پیش از این ثبت کرده است)
+    ledger_bin = {
+        (lid, wid, d): b for lid, wid, d, b in session.execute(
+            select(StockLedger.stock_document_line_id, StockLedger.warehouse_id, StockLedger.movement_direction,
+                   func.min(StockLedger.bin_location_id))
+            .where(StockLedger.stock_document_line_id.in_([ln.line_id for ln in lines] or [-1]))
+            .group_by(StockLedger.stock_document_line_id, StockLedger.warehouse_id, StockLedger.movement_direction)).all()
+    }
+    for line in lines:
+        item = session.get(Item, line.item_id)
+        if item is None:
+            continue
+        comm_line, comm_doc = _commercial_context(session, line.line_id)
+        supplier_id = (
+            comm_doc.counterparty_detail_account_id if comm_doc is not None else doc.counterparty_detail_account_id
+        )
+        is_consignment_in = comm_doc is not None and comm_doc.document_type_code == "CONSIGNMENT_IN"
+        tracked = bool(item.track_batch or item.track_serial)
+        # R228: انتخابِ منبع (تامین‌کننده/امانی) برایِ کالایِ بدونِ بچ/سریال هم خوانده می‌شود
+        entries = _entries_for_stock_line(session, line)
+        transfer_pools: list[tuple] = []
+        for direction, warehouse_id in directions:
+            if warehouse_id is None:
                 continue
-            comm_line, comm_doc = _commercial_context(session, line.line_id)
-            supplier_id = (
-                comm_doc.counterparty_detail_account_id if comm_doc is not None else doc.counterparty_detail_account_id
-            )
-            is_consignment_in = comm_doc is not None and comm_doc.document_type_code == "CONSIGNMENT_IN"
-            tracked = bool(item.track_batch or item.track_serial)
-            # R228: انتخابِ منبع (تامین‌کننده/امانی) برایِ کالایِ بدونِ بچ/سریال هم خوانده می‌شود
-            entries = _entries_for_stock_line(session, line)
-            transfer_pools: list[tuple] = []
-            for direction, warehouse_id in directions:
-                if warehouse_id is None:
-                    continue
-                if direction == "OUT":
-                    prefer_supplier = supplier_id if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN") else None
-                    out_bin = ledger_bin.get((line.line_id, warehouse_id, "OUT"))
-                    allocations = _allocate_out(
-                        session, company_id, item, warehouse_id, line.quantity_base, entries,
-                        prefer_supplier, prefer_consignment=doc.document_type_code == "CONSIGN_RETURN",
-                        bin_id=out_bin if line.bin_location_id is not None else None,
-                    )
-                    for batch_id, serial_id, sup, cons, q in allocations:
-                        session.add(LotMovement(
-                            company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, batch_id=batch_id,
-                            serial_id=serial_id, supplier_detail_account_id=sup, is_consignment=cons,
-                            stock_document_line_id=line.line_id, quantity_base=-q, bin_location_id=out_bin,
+            if direction == "OUT":
+                prefer_supplier = supplier_id if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN") else None
+                out_bin = ledger_bin.get((line.line_id, warehouse_id, "OUT"))
+                allocations = _allocate_out(
+                    session, company_id, item, warehouse_id, line.quantity_base, entries,
+                    prefer_supplier, prefer_consignment=doc.document_type_code == "CONSIGN_RETURN",
+                    bin_id=out_bin if line.bin_location_id is not None else None,
+                )
+                for batch_id, serial_id, sup, cons, q in allocations:
+                    session.add(LotMovement(
+                        company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, batch_id=batch_id,
+                        serial_id=serial_id, supplier_detail_account_id=sup, is_consignment=cons,
+                        stock_document_line_id=line.line_id, quantity_base=-q, bin_location_id=out_bin,
+                    ))
+                    if serial_id is not None and doc.document_type_code != "TRANSFER":
+                        status = "RETURNED" if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN") else "SOLD"
+                        _set_serial_state(session, serial_id, line.line_id, status, warehouse_id, None)
+                transfer_pools = allocations
+                continue
+            # ورودی
+            in_bin = ledger_bin.get((line.line_id, warehouse_id, "IN"))
+            if doc.document_type_code == "TRANSFER":
+                for batch_id, serial_id, sup, cons, q in transfer_pools:
+                    session.add(LotMovement(
+                        company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, batch_id=batch_id,
+                        serial_id=serial_id, supplier_detail_account_id=sup, is_consignment=cons,
+                        stock_document_line_id=line.line_id, quantity_base=q, bin_location_id=in_bin,
+                    ))
+                    if serial_id is not None:
+                        _set_serial_state(session, serial_id, line.line_id, "IN_STOCK", directions[0][1], warehouse_id, in_bin)
+                continue
+            total = sum((decimal.Decimal(e.quantity) for e in entries), _ZERO)
+            if tracked and entries and total == line.quantity_base:
+                for e in entries:
+                    batch = _get_or_create_batch(session, company_id, item.item_id, e, supplier_id, line.line_id)
+                    serial_id = None
+                    if e.serial_no:
+                        serial = session.scalar(select(SerialNumber).where(
+                            SerialNumber.company_id == company_id, SerialNumber.item_id == item.item_id,
+                            SerialNumber.serial_no == e.serial_no,
                         ))
-                        if serial_id is not None and doc.document_type_code != "TRANSFER":
-                            status = "RETURNED" if doc.document_type_code in ("RETURN_OUT", "CONSIGN_RETURN") else "SOLD"
-                            _set_serial_state(session, serial_id, line.line_id, status, warehouse_id, None)
-                    transfer_pools = allocations
-                    continue
-                # ورودی
-                in_bin = ledger_bin.get((line.line_id, warehouse_id, "IN"))
-                if doc.document_type_code == "TRANSFER":
-                    for batch_id, serial_id, sup, cons, q in transfer_pools:
-                        session.add(LotMovement(
-                            company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, batch_id=batch_id,
-                            serial_id=serial_id, supplier_detail_account_id=sup, is_consignment=cons,
-                            stock_document_line_id=line.line_id, quantity_base=q, bin_location_id=in_bin,
-                        ))
-                        if serial_id is not None:
-                            _set_serial_state(session, serial_id, line.line_id, "IN_STOCK", directions[0][1], warehouse_id, in_bin)
-                    continue
-                total = sum((decimal.Decimal(e.quantity) for e in entries), _ZERO)
-                if tracked and entries and total == line.quantity_base:
-                    for e in entries:
-                        batch = _get_or_create_batch(session, company_id, item.item_id, e, supplier_id, line.line_id)
-                        serial_id = None
-                        if e.serial_no:
-                            serial = session.scalar(select(SerialNumber).where(
-                                SerialNumber.company_id == company_id, SerialNumber.item_id == item.item_id,
-                                SerialNumber.serial_no == e.serial_no,
+                        if serial is None:
+                            serial = SerialNumber(
+                                company_id=company_id, item_id=item.item_id, serial_no=e.serial_no,
+                                batch_id=batch.batch_id if batch else None, current_warehouse_id=warehouse_id,
+                                current_bin_location_id=in_bin, status_code="IN_STOCK", source_line_id=line.line_id,
+                            )
+                            session.add(serial)
+                            session.flush()
+                            session.add(SerialMovement(
+                                serial_id=serial.serial_id, stock_document_line_id=line.line_id,
+                                from_status_code=None, to_status_code="IN_STOCK", to_warehouse_id=warehouse_id,
                             ))
-                            if serial is None:
-                                serial = SerialNumber(
-                                    company_id=company_id, item_id=item.item_id, serial_no=e.serial_no,
-                                    batch_id=batch.batch_id if batch else None, current_warehouse_id=warehouse_id,
-                                    current_bin_location_id=in_bin, status_code="IN_STOCK", source_line_id=line.line_id,
-                                )
-                                session.add(serial)
-                                session.flush()
-                                session.add(SerialMovement(
-                                    serial_id=serial.serial_id, stock_document_line_id=line.line_id,
-                                    from_status_code=None, to_status_code="IN_STOCK", to_warehouse_id=warehouse_id,
-                                ))
-                            else:
-                                _set_serial_state(session, serial.serial_id, line.line_id, "IN_STOCK", None, warehouse_id, in_bin)
-                            serial_id = serial.serial_id
-                        session.add(LotMovement(
-                            company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id,
-                            batch_id=batch.batch_id if batch else None, serial_id=serial_id,
-                            supplier_detail_account_id=supplier_id, is_consignment=is_consignment_in,
-                            stock_document_line_id=line.line_id, quantity_base=decimal.Decimal(e.quantity), bin_location_id=in_bin,
-                        ))
-                elif is_consignment_in:
-                    # کالایِ امانیِ بدونِ بچ/سریال: فقط با تامین‌کننده ردیابی می‌شود
+                        else:
+                            _set_serial_state(session, serial.serial_id, line.line_id, "IN_STOCK", None, warehouse_id, in_bin)
+                        serial_id = serial.serial_id
                     session.add(LotMovement(
                         company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id,
-                        supplier_detail_account_id=supplier_id, is_consignment=True,
-                        stock_document_line_id=line.line_id, quantity_base=line.quantity_base, bin_location_id=in_bin,
+                        batch_id=batch.batch_id if batch else None, serial_id=serial_id,
+                        supplier_detail_account_id=supplier_id, is_consignment=is_consignment_in,
+                        stock_document_line_id=line.line_id, quantity_base=decimal.Decimal(e.quantity), bin_location_id=in_bin,
                     ))
-        session.commit()
+            elif is_consignment_in:
+                # کالایِ امانیِ بدونِ بچ/سریال: فقط با تامین‌کننده ردیابی می‌شود
+                session.add(LotMovement(
+                    company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id,
+                    supplier_detail_account_id=supplier_id, is_consignment=True,
+                    stock_document_line_id=line.line_id, quantity_base=line.quantity_base, bin_location_id=in_bin,
+                ))
 
 
 def reverse_document_movements(stock_document_id: int, company_id: int) -> None:

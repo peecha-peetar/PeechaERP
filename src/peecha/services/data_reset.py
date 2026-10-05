@@ -229,6 +229,25 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM inv.vehicle_loading_lines WHERE vehicle_loading_id IN "
     "(SELECT vehicle_loading_id FROM inv.vehicle_loadings WHERE company_id = :company_id)",
     "DELETE FROM inv.vehicle_loadings WHERE company_id = :company_id",
+    # R266: تولید -- دستورها و همهٔ تراکنش/هزینه‌هایشان (به اسنادِ انبار/حسابداری و تخصیصِ ماشینِ دارایی ارجاع دارند)
+    "DELETE FROM prd.cost_allocations WHERE pool_id IN (SELECT pool_id FROM prd.cost_pools WHERE company_id = :company_id)",
+    "DELETE FROM prd.cost_pools WHERE company_id = :company_id",
+    "DELETE FROM prd.cost_closings WHERE company_id = :company_id",
+    "DELETE FROM prd.labor_entries WHERE company_id = :company_id",
+    "DELETE FROM prd.machine_entries WHERE company_id = :company_id",
+    "DELETE FROM prd.order_variances WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",
+    "DELETE FROM prd.order_cost_summaries WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",
+    "DELETE FROM inv.stock_reservations WHERE company_id = :company_id AND source_type_code = 'PRODUCTION_ORDER'",
+    "ALTER TABLE prd.order_transactions DISABLE TRIGGER tr_prd_order_txn_immutable",
+    "DELETE FROM prd.order_transactions WHERE company_id = :company_id",
+    "ALTER TABLE prd.order_transactions ENABLE TRIGGER tr_prd_order_txn_immutable",
+    "DELETE FROM prd.order_operations WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",
+    "DELETE FROM prd.order_outputs WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",
+    "DELETE FROM prd.order_materials WHERE order_id IN (SELECT order_id FROM prd.production_orders WHERE company_id = :company_id)",
+    "UPDATE prd.production_orders SET parent_order_id = NULL WHERE company_id = :company_id",
+    "DELETE FROM prd.production_orders WHERE company_id = :company_id",
+    "DELETE FROM prd.work_center_machines WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
+    "UPDATE prd.routing_operations SET asset_id = NULL WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
     # R262: دارایی‌هایِ ثابت -- ارقامِ دارایی از همین اسناد می‌آیند، پس شناسنامه‌ها هم پاک می‌شوند
     # (طبقه/محل/گروه/تنظیمات می‌مانند). دفترِ دارایی مثلِ دفترِ انبار فقط درونِ همین تراکنش باز می‌شود.
     "DELETE FROM fa.machine_cost_allocations WHERE company_id = :company_id",
@@ -344,6 +363,19 @@ _MASTER_DATA_DELETE_STATEMENTS = [
     # R225: بارکدهایِ هر واحد پیش از خودِ واحدهایِ کالا
     "DELETE FROM inv.item_unit_barcodes WHERE company_id = :company_id",
     "DELETE FROM inv.item_uom_conversions WHERE item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",
+    # R266: اطلاعاتِ پایهٔ تولید (پیش از BOM/کالا/انبار)
+    "DELETE FROM prd.bom_outputs WHERE item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id) OR bom_id IN "
+    "(SELECT bom_id FROM inv.bom_headers WHERE finished_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id))",
+    "UPDATE inv.bom_headers SET routing_id = NULL WHERE finished_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",
+    "DELETE FROM prd.standard_cost_cards WHERE company_id = :company_id",
+    "DELETE FROM prd.item_production_profiles WHERE company_id = :company_id",
+    "DELETE FROM prd.routing_operations WHERE routing_id IN (SELECT routing_id FROM prd.routings WHERE company_id = :company_id)",
+    "DELETE FROM prd.routings WHERE company_id = :company_id",
+    "DELETE FROM prd.operations WHERE company_id = :company_id",
+    "DELETE FROM prd.labor_rates WHERE company_id = :company_id",
+    "DELETE FROM prd.work_center_machines WHERE work_center_id IN (SELECT work_center_id FROM prd.work_centers WHERE company_id = :company_id)",
+    "DELETE FROM prd.work_centers WHERE company_id = :company_id",
+    "DELETE FROM prd.production_settings WHERE company_id = :company_id",
     "DELETE FROM inv.bom_lines WHERE bom_id IN "
     "(SELECT bom_id FROM inv.bom_headers WHERE finished_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)) "
     "OR component_item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",

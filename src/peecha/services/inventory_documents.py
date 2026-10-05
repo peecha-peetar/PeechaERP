@@ -679,3 +679,66 @@ def reverse_stock_document(stock_document_id: int, company_id: int, reversed_by_
     result = engine_service.reverse_stock_document(stock_document_id, company_id, reversed_by_user_id)
     lot_tracking.reverse_document_movements(stock_document_id, company_id)
     return result
+
+
+def create_and_post_in_session(
+    session, company_id: int, user_id: int, document_type_code: str, document_date: datetime.date,
+    fields: DocumentHeaderFields, lines: list[LineFields], role_overrides: dict[str, str] | None = None,
+    tracking: dict[int, list] | None = None,
+) -> tuple[engine_service.PostResult, list[int]]:
+    """R266: ساخت + تأیید + ثبتِ نهاییِ یک سندِ انبار در تراکنشِ فراخواننده (بدونِ commit) -- برایِ عملیاتِ اتمیکِ
+    ماژول‌هایی مثلِ تولید. همان موتورِ انبار، همان ردیابیِ بچ/سریال و همان لایه‌هایِ بها؛ اگر هر مرحله خطا بدهد کلِ
+    تراکنشِ فراخواننده برمی‌گردد. tracking: {اندیسِ ردیف: [lot_tracking.TrackingEntry]}."""
+    from peecha.db.models.inventory import LineTrackingEntry
+    from peecha.services import lot_tracking
+    from peecha.services.costing import engine as costing_engine
+
+    if document_type_code not in DOCUMENT_TYPE_CODES or document_type_code in _REASON_REQUIRED_TYPES:
+        raise ValueError("نوعِ سند برایِ ثبتِ خودکار نامعتبر است.")
+    _validate_header_warehouses(document_type_code, fields)
+    if not lines:
+        raise ValueError("سند حداقل باید یک ردیف داشته باشد.")
+    fiscal_year_id = _resolve_fiscal_year_id(session, company_id, document_date)
+    next_no = (session.scalar(select(func.max(StockDocument.document_no)).where(
+        StockDocument.company_id == company_id, StockDocument.fiscal_year_id == fiscal_year_id,
+        StockDocument.document_type_code == document_type_code)) or 0) + 1
+    doc = StockDocument(
+        company_id=company_id, fiscal_year_id=fiscal_year_id, document_type_code=document_type_code, document_no=next_no,
+        document_date=document_date, status_code="CONFIRMED", source_warehouse_id=fields.source_warehouse_id,
+        destination_warehouse_id=fields.destination_warehouse_id,
+        counterparty_detail_account_id=fields.counterparty_detail_account_id,
+        cost_center_detail_account_id=fields.cost_center_detail_account_id,
+        project_detail_account_id=fields.project_detail_account_id, reference_no=fields.reference_no or None,
+        description=fields.description or None, created_by_user_id=user_id,
+    )
+    session.add(doc)
+    session.flush()
+    line_ids: list[int] = []
+    for i, f in enumerate(lines, start=1):
+        if f.quantity <= 0 or f.quantity_base <= 0:
+            raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+        line = StockDocumentLine(
+            stock_document_id=doc.stock_document_id, line_no=i, item_id=f.item_id, uom_id=f.uom_id, quantity=f.quantity,
+            quantity_base=f.quantity_base, conversion_factor=f.conversion_factor or (f.quantity_base / f.quantity),
+            bin_location_id=f.bin_location_id, destination_bin_location_id=f.destination_bin_location_id,
+            batch_id=f.batch_id, unit_cost=f.unit_cost, tax_amount=decimal.Decimal(0), landed_cost_amount=decimal.Decimal(0),
+            source_line_id=f.source_line_id, description=f.description or None,
+        )
+        session.add(line)
+        session.flush()
+        line_ids.append(line.line_id)
+        for e in (tracking or {}).get(i - 1, []):
+            session.add(LineTrackingEntry(
+                company_id=company_id, stock_line_id=line.line_id, batch_no=(e.batch_no or "").strip() or None,
+                manufacture_date=e.manufacture_date, expiry_date=e.expiry_date, serial_no=(e.serial_no or "").strip() or None,
+                quantity=decimal.Decimal(e.quantity), supplier_detail_account_id=e.supplier_detail_account_id,
+                is_consignment=e.is_consignment))
+    session.flush()
+    lot_tracking.validate_before_post_in(session, doc.stock_document_id, company_id)
+    result = engine_service.post_stock_document(doc.stock_document_id, company_id, user_id, session=session,
+                                                role_overrides=role_overrides)
+    lot_tracking.apply_after_post_in(session, doc.stock_document_id, company_id)
+    session.flush()
+    costing_engine.split_layers_by_lot_in(session, doc.stock_document_id)
+    session.flush()
+    return result, line_ids
