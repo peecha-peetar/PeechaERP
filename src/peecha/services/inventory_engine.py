@@ -1280,6 +1280,9 @@ def post_stock_document(
         # نه یک نقشِ ازپیش‌نگاشته‌شده، پس از مکانیزمِ debits/credits بالا
         # عبور نمی‌کنند.
         je_lines.extend(extra_je_lines or [])
+        # R260: سندِ عقب‌دار -- خروج‌هایِ بعدیِ همین کالا/انبارها «نیازمندِ بازمحاسبه»
+        costing_engine.flag_backdated(session, company_id, {(ln.item_id, w) for ln in lines for w in warehouse_ids},
+                                      movement_date, {ln.line_id for ln in lines})
 
         doc.status_code = "POSTED"
         doc.posted_by_user_id = posted_by_user_id

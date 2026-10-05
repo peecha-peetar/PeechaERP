@@ -20,6 +20,7 @@ from peecha.db.models.inventory import (
     Batch, CompanyCostingSettings, CostAllocation, CostingMethod, CostLayer, Item, LotMovement, SerialNumber, StockBalance,
     StockLedger,
 )
+from peecha.numerals import format_jalali_date
 from peecha.services.costing import strategies
 
 _ZERO = decimal.Decimal(0)
@@ -214,6 +215,27 @@ def record_allocation(session, *, company_id: int, stock_line_id: int, item_id: 
         company_id=company_id, stock_document_line_id=stock_line_id, item_id=item_id, warehouse_id=warehouse_id,
         cost_layer_id=layer_id, costing_method_code=method, quantity_base=quantity, unit_cost=unit_cost or _ZERO,
         movement_date=movement_date, costing_status_code=status, note=note))
+
+
+# روش‌هایی که ترتیبِ زمانیِ حرکت‌ها بهایِ خروج را عوض می‌کند (شناساییِ ویژه/استاندارد/NIFO وابسته به ترتیب نیستند)
+ORDER_SENSITIVE_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO", "WEIGHTED_AVERAGE")
+
+
+def flag_backdated(session, company_id: int, pairs: set[tuple[int, int]], movement_date: datetime.date,
+                   own_line_ids: set[int]) -> int:
+    """R260: سندِ عقب‌دار -- خروج‌هایِ بعدیِ همان کالا/انبار «نیازمندِ بازمحاسبه» علامت می‌خورند (بها خودکار عوض نمی‌شود)."""
+    flagged = 0
+    for item_id, warehouse_id in pairs:
+        for alloc in session.scalars(select(CostAllocation).where(
+                CostAllocation.company_id == company_id, CostAllocation.item_id == item_id,
+                CostAllocation.warehouse_id == warehouse_id, CostAllocation.movement_date > movement_date,
+                CostAllocation.costing_status_code == "CALCULATED",
+                CostAllocation.costing_method_code.in_(ORDER_SENSITIVE_METHODS),
+                CostAllocation.stock_document_line_id.not_in(own_line_ids or {-1}))):
+            alloc.costing_status_code = "RECALCULATION_REQUIRED"
+            alloc.note = f"سندِ عقب‌دار به تاریخِ {format_jalali_date(movement_date)} پس از این خروج ثبت شد"
+            flagged += 1
+    return flagged
 
 
 def split_layers_by_lot(stock_document_id: int) -> int:

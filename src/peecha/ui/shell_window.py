@@ -1761,11 +1761,12 @@ class MainWindow(QMainWindow):
             self.register_screen(f"warehouse_report_{report.code.lower()}",
                                  PurchaseReportScreen(report.code, self, side="INVENTORY"))
         self.register_screen("warehouse_dashboard", WarehouseDashboard(self))
-        from peecha.ui.screens.costing import CostingDashboard, CostingSettingsScreen, ReplacementCostScreen
+        from peecha.ui.screens.costing import CostingDashboard, CostingSettingsScreen, RecalculationScreen, ReplacementCostScreen
 
         self.register_screen("costing_dashboard", CostingDashboard(self))  # R259
         self.register_screen("costing_settings", CostingSettingsScreen())
         self.register_screen("costing_replacement", ReplacementCostScreen())
+        self.register_screen("costing_recalculation", RecalculationScreen())  # R260
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", WarehouseOperationsScreen())

@@ -906,6 +906,45 @@ class CostAllocation(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 
+class CostRecalculationRun(Base):
+    """R260: یک اجرایِ بازمحاسبهٔ بها (سندِ حسابداریِ اصلاحی + خلاصه)."""
+
+    __tablename__ = "cost_recalculation_runs"
+    __table_args__ = {"schema": "inv"}
+
+    run_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
+    warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    date_from: Mapped[datetime.date] = mapped_column(Date)
+    posting_date: Mapped[datetime.date] = mapped_column(Date)
+    reason: Mapped[str | None] = mapped_column(String(300))
+    items_count: Mapped[int] = mapped_column(default=0)
+    lines_count: Mapped[int] = mapped_column(default=0)
+    total_delta: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=0)
+    journal_entry_id: Mapped[int | None] = mapped_column(ForeignKey("acc.journal_entries.journal_entry_id"))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CostRecalculationLine(Base):
+    __tablename__ = "cost_recalculation_lines"
+    __table_args__ = {"schema": "inv"}
+
+    recalc_line_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.cost_recalculation_runs.run_id"))
+    stock_document_line_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    warehouse_id: Mapped[int] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    bin_location_id: Mapped[int | None] = mapped_column(ForeignKey("inv.bin_locations.bin_location_id"))
+    movement_direction: Mapped[str] = mapped_column(String(3))
+    costing_method_code: Mapped[str] = mapped_column(String(20))
+    quantity_base: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    old_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    new_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2))
+    delta_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2), Computed("new_amount - old_amount"))
+
+
 class StandardCost(Base):
     __tablename__ = "standard_costs"
     __table_args__ = {"schema": "inv"}

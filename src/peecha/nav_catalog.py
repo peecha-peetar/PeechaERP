@@ -193,6 +193,7 @@ WAREHOUSE_REPORT_MENU = [
         ("COST_VALUATION", "ارزش‌گذاریِ موجودی"), ("COST_LAYERS", "لایه‌هایِ هزینه"), ("COST_ALLOCATION", "تخصیصِ بهایِ خروج"),
         ("COST_HISTORY", "تاریخچهٔ بهایِ کالا"), ("COST_COGS", "بهایِ تمام‌شدهٔ فروش و سودِ ناخالص"),
         ("COST_REPLACEMENT", "بهایِ جایگزینی"), ("COST_VARIANCE", "مغایرتِ بها"), ("COST_PENDING", "بهایِ در انتظار"),
+        ("COST_CENTER", "بهایِ مصرف به تفکیکِ مرکزِ هزینه/پروژه"),
     ]),
     ("STOCK", "موجودی", [
         ("STOCK_ON_HAND", "موجودیِ لحظه‌ای"), ("STOCK_BY_WAREHOUSE", "موجودی به تفکیکِ انبار"),
@@ -368,6 +369,8 @@ NAV_ITEMS = [
                 {"code": "INV_COST_ALLOCATION", "label": "تخصیصِ بهایِ خروج", "screen": "warehouse_report_cost_allocation"},
                 {"code": "INV_COST_COGS", "label": "بهایِ تمام‌شدهٔ فروش", "screen": "warehouse_report_cost_cogs"},
                 {"code": "INV_COST_REPLACEMENT", "label": "بهایِ جایگزینی", "screen": "costing_replacement"},
+                {"code": "INV_COST_RECALC", "label": "بازمحاسبهٔ بها", "screen": "costing_recalculation"},
+                {"code": "INV_COST_CENTER", "label": "هزینه‌یابیِ مرکزِ هزینه/پروژه", "screen": "warehouse_report_cost_center"},
             ]},
         ],
     },

@@ -231,7 +231,7 @@ check(cv.item_cost_info(company_id, fi).replacement_cost == 260, "بهایِ ج�
 
 # --- ۵) همهٔ گزارش‌ها اجرا می‌شوند و منو/ثبت دارند ---------------------------------------------
 codes = [r.code for r in cr.COSTING_REPORTS]
-check(len(codes) == 8 and all(c in wr.WAREHOUSE_REPORTS_BY_CODE for c in codes), "۸ گزارشِ بهایِ تمام‌شده در فهرستِ گزارش‌هایِ انبار")
+check(len(codes) >= 8 and all(c in wr.WAREHOUSE_REPORTS_BY_CODE for c in codes), "۸ گزارشِ بهایِ تمام‌شده در فهرستِ گزارش‌هایِ انبار")
 f = PurchaseFilters(today - datetime.timedelta(days=60), today, side="INVENTORY")
 results = {}
 for r in cr.COSTING_REPORTS:

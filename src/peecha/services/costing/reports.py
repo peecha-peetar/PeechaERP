@@ -281,6 +281,41 @@ def pending_costs(company_id: int, f) -> ReportResult:
     return r
 
 
+def cost_by_center(company_id: int, f) -> ReportResult:
+    """R260 (هزینه‌یابی): بهایِ کالایِ مصرف/فروش‌رفته به تفکیکِ مرکزِ هزینه یا پروژهٔ سندِ انبار."""
+    from peecha.services import detail_dimensions as dimensions_service
+
+    wr = _wr()
+    m = wr._meta(company_id)
+    by_project = str(f.options.get("by") or "CENTER") == "PROJECT"
+    dim = StockDocument.project_detail_account_id if by_project else StockDocument.cost_center_detail_account_id
+    agg: dict[tuple, list] = defaultdict(lambda: [_ZERO, _ZERO])
+    with new_session() as session:
+        rows = session.execute(
+            select(dim, StockDocumentLine.line_id, StockDocumentLine.item_id, StockDocumentLine.quantity_base,
+                   StockDocument.source_warehouse_id, StockDocument.document_type_code)
+            .join(StockDocument, StockDocument.stock_document_id == StockDocumentLine.stock_document_id)
+            .where(StockDocument.company_id == company_id, StockDocument.status_code == "POSTED",
+                   StockDocument.document_type_code.in_(("ISSUE", "ADJUSTMENT")), StockDocument.source_warehouse_id.is_not(None),
+                   StockDocument.document_date.between(f.date_from, f.date_to))).all()
+        for center, line_id, item_id, qty, wid, _dtype in rows:
+            if not _ok(m, f, item_id, wid):
+                continue
+            a = agg[(center, item_id)]
+            a[0] += qty
+            a[1] += _line_cost(session, line_id, "OUT")
+    total = sum((v[1] for v in agg.values()), _ZERO)
+    title = "پروژه" if by_project else "مرکزِ هزینه"
+    r = ReportResult([(title, TEXT), ("کالا", TEXT), ("مقدار", QTY), ("بهایِ تمام‌شده", MONEY), ("سهم از کل", PERCENT)],
+                     no_total={4}, note="حواله‌ها و کسریِ انبار در بازه؛ بها از تخصیص‌هایِ موتورِ بها (پس از بازمحاسبه هم به‌روز).")
+    labels: dict = {}
+    for (center, item_id), (qty, cost) in sorted(agg.items(), key=lambda kv: (kv[0][0] is None, -kv[1][1])):
+        if center not in labels:
+            labels[center] = dimensions_service.get_detail_account_label(center) if center else f"بدونِ {title}"
+        r.add([labels[center], m.ctx.item_label(item_id), qty, cost.quantize(decimal.Decimal("0.01")), _pct(cost, total)])
+    return r
+
+
 COSTING_REPORTS: list[ReportDef] = [
     ReportDef("COST_VALUATION", "ارزش‌گذاریِ موجودی (بهایِ تمام‌شده)", cost_valuation, _IF,
               "کالا، انبار، مقدار، بهایِ واحد و ارزش در تاریخ (یا ریزِ بچ/سریالِ جاری).", "as_of", _GROUP,
@@ -298,6 +333,9 @@ COSTING_REPORTS: list[ReportDef] = [
               "بهایِ جاری، بهایِ جایگزینی، اختلاف و درصد.", "as_of", _GROUP),
     ReportDef("COST_VARIANCE", "مغایرتِ بها (مورد انتظار/واقعی)", cost_variance, _IF,
               "بهایِ مورد انتظار (استاندارد/جایگزینی) در برابرِ بهایِ واقعیِ خروج.", "range", _GROUP),
+    ReportDef("COST_CENTER", "بهایِ مصرف به تفکیکِ مرکزِ هزینه/پروژه", cost_by_center, _IF,
+              "هزینه‌یابی: بهایِ کالایِ خارج‌شده به تفکیکِ مرکزِ هزینه یا پروژهٔ سند.", "range", _GROUP,
+              options=(("by", "تفکیک", (("CENTER", "مرکزِ هزینه"), ("PROJECT", "پروژه"))),)),
     ReportDef("COST_PENDING", "تراکنش‌هایِ بهایِ در انتظار", pending_costs, _IF,
               "خروج‌هایِ دارایِ بهایِ موقت (موجودیِ منفی) یا نیازمندِ محاسبهٔ مجدد.", "none", _GROUP),
 ]

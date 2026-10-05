@@ -248,3 +248,150 @@ class ReplacementCostScreen(QWidget):
         self.note_field.clear()
         self._fill_table()
         return True
+
+
+class RecalculationScreen(QWidget):
+    """R260: بازمحاسبهٔ بهایِ تمام‌شده -- پیش‌نمایش، هشدار، اعمال با سندِ اصلاحی."""
+
+    FORM = "costing_recalculation"
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 14, 20, 14)
+        title = QLabel("بازمحاسبهٔ بهایِ تمام‌شده")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        hint = QLabel("حرکت‌ها از «تاریخِ شروع» به ترتیبِ زمانی دوباره محاسبه می‌شوند (لازم پس از سندِ عقب‌دار یا "
+                      "خروجِ با بهایِ موقت). دفترِ انبار تغییر نمی‌کند؛ اختلاف با یک سندِ حسابداریِ اصلاحی در «تاریخِ ثبت» "
+                      "ثبت می‌شود. با انتخابِ یک انبار، همهٔ انبارهایِ همان کالا بازمحاسبه می‌شوند (به خاطرِ انتقال‌ها).")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        form = QHBoxLayout()
+        self.item_combo = QComboBox()
+        self.item_combo.setEditable(True)
+        self.item_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.item_combo.setMinimumWidth(220)
+        self.warehouse_combo = QComboBox()
+        self.from_date = JalaliDateEdit()
+        self.posting_date = JalaliDateEdit()
+        self.reason_field = QLineEdit()
+        self.reason_field.setPlaceholderText("علتِ بازمحاسبه")
+        for label, w in (("کالا", self.item_combo), ("انبار", self.warehouse_combo), ("از تاریخ", self.from_date),
+                         ("تاریخِ ثبت", self.posting_date), ("علت", self.reason_field)):
+            form.addWidget(QLabel(label))
+            form.addWidget(w)
+        self.preview_button = QPushButton("پیش‌نمایش")
+        self.preview_button.clicked.connect(self.preview)
+        self.apply_button = QPushButton("اجرایِ بازمحاسبه")
+        self.apply_button.setObjectName("primaryButton")
+        self.apply_button.clicked.connect(self.apply)
+        form.addWidget(self.preview_button)
+        form.addWidget(self.apply_button)
+        layout.addLayout(form)
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+        self.table = QTableWidget(0, 8)
+        self.table.setHorizontalHeaderLabels(["کالا", "انبار", "سند", "تاریخ", "مقدار", "بهایِ قبلی", "بهایِ جدید", "اختلاف"])
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(self.table, stretch=1)
+        self.skipped_label = QLabel("")
+        self.skipped_label.setObjectName("sectionHint")
+        self.skipped_label.setWordWrap(True)
+        layout.addWidget(self.skipped_label)
+        self.results = []
+        self.confirm = lambda text: QMessageBox.question(self, "بازمحاسبهٔ بهایِ تمام‌شده", text) == QMessageBox.Yes
+
+    def _company_id(self):
+        return app_session.current_company.company_id if app_session.current_company else None
+
+    def refresh(self) -> None:
+        from peecha.services import inventory_catalog as catalog_service
+        from peecha.services import inventory_locations as locations_service
+        from peecha.services.costing import recalculation
+
+        company_id = self._company_id()
+        if company_id is None:
+            return
+        self.item_combo.clear()
+        self.item_combo.addItem("— همهٔ کالاها —", None)
+        self._items = {i.item_id: i for i in catalog_service.list_items(company_id, transactable_only=True)}
+        for i in self._items.values():
+            self.item_combo.addItem(numerals.to_persian_digits(f"{i.code} — {i.name or ''}"), i.item_id)
+        self.warehouse_combo.clear()
+        self.warehouse_combo.addItem("— همهٔ انبارها —", None)
+        self._warehouses = {}
+        for w in locations_service.list_warehouses(company_id, active_only=False):
+            self._warehouses[w.warehouse_id] = w.name
+            self.warehouse_combo.addItem(f"{w.code} — {w.name}", w.warehouse_id)
+        today = datetime.date.today()
+        self.from_date.setDate(today.replace(day=1))
+        self.posting_date.setDate(today)
+        self.apply_button.setEnabled(can(self.FORM, "EDIT"))
+        flagged = recalculation.flagged_count(company_id)
+        self.status_label.setText(numerals.to_persian_digits(
+            f"{flagged} خروج «نیازمندِ بازمحاسبه» است (سندِ عقب‌دار)." if flagged else "خروجِ نیازمندِ بازمحاسبه وجود ندارد."))
+
+    def _filters(self) -> dict:
+        return {"item_id": self.item_combo.currentData(), "warehouse_id": self.warehouse_combo.currentData(),
+                "date_from": self.from_date.date()}
+
+    def preview(self) -> list:
+        from peecha.services.costing import recalculation
+
+        company_id = self._company_id()
+        if company_id is None:
+            return []
+        self.results = recalculation.preview(company_id, **self._filters())
+        changed = [ln for r in self.results if r.ok for ln in r.changed]
+        self.table.setRowCount(len(changed))
+        from peecha.services.warehouse_reports import DOC_TYPE_TITLES
+
+        for row, ln in enumerate(changed):
+            item = self._items.get(ln.item_id)
+            cells = [f"{item.code} — {item.name or ''}" if item else str(ln.item_id), self._warehouses.get(ln.warehouse_id, ""),
+                     f"{DOC_TYPE_TITLES.get(ln.doc_type, ln.doc_type)} {ln.document_no}" + (" (ورود)" if ln.direction == "IN" else ""),
+                     numerals.format_jalali_date(ln.movement_date), numerals.format_money(ln.quantity, 2, None),
+                     numerals.format_money(ln.old_amount, 0), numerals.format_money(ln.new_amount, 0),
+                     numerals.format_money(ln.delta, 0)]
+            for c, text in enumerate(cells):
+                self.table.setItem(row, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
+        skipped = [r for r in self.results if not r.ok]
+        self.skipped_label.setText("\n".join(
+            f"«{self._items[r.item_id].code if r.item_id in self._items else r.item_id}»: {r.message}" for r in skipped))
+        total = sum((ln.delta for ln in changed if ln.direction == "OUT"), decimal.Decimal(0))
+        self.status_label.setText(numerals.to_persian_digits(
+            f"{len(changed)} ردیف تغییر می‌کند؛ اثر بر بهایِ تمام‌شده: {numerals.format_money(total, 0)}" if changed
+            else "اختلافی پیدا نشد."))
+        return changed
+
+    def apply(self):
+        from peecha.services.costing import recalculation
+
+        company_id = self._company_id()
+        if company_id is None:
+            return None
+        if not can(self.FORM, "EDIT"):
+            QMessageBox.warning(self, "بازمحاسبه", "دسترسیِ اجرایِ بازمحاسبه ندارید.")
+            return None
+        changed = self.preview()
+        warning = ("هشدار: بهایِ خروج‌ها، لایه‌ها و میانگینِ موجودی تغییر می‌کند و یک سندِ حسابداریِ اصلاحی "
+                   f"در تاریخِ {numerals.format_jalali_date(self.posting_date.date())} ثبت می‌شود. "
+                   f"{numerals.to_persian_digits(str(len(changed)))} ردیف تغییر می‌کند. ادامه می‌دهید؟")
+        if not self.confirm(warning):
+            return None
+        user = app_session.current_user
+        try:
+            run = recalculation.recalculate(company_id, user.user_id if user else None, posting_date=self.posting_date.date(),
+                                            reason=self.reason_field.text().strip() or None, **self._filters())
+        except ValueError as exc:
+            theme.set_status_label(self.status_label, str(exc), ok=False)
+            return None
+        self.preview()
+        theme.set_status_label(self.status_label, numerals.to_persian_digits(
+            f"بازمحاسبه #{run.run_id} انجام شد ({run.lines_count} ردیف)." if run else "اختلافی نبود؛ وضعیت‌ها به‌روز شد."), ok=True)
+        return run or True
