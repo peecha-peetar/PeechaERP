@@ -229,6 +229,27 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM inv.vehicle_loading_lines WHERE vehicle_loading_id IN "
     "(SELECT vehicle_loading_id FROM inv.vehicle_loadings WHERE company_id = :company_id)",
     "DELETE FROM inv.vehicle_loadings WHERE company_id = :company_id",
+    # R262: دارایی‌هایِ ثابت -- ارقامِ دارایی از همین اسناد می‌آیند، پس شناسنامه‌ها هم پاک می‌شوند
+    # (طبقه/محل/گروه/تنظیمات می‌مانند). دفترِ دارایی مثلِ دفترِ انبار فقط درونِ همین تراکنش باز می‌شود.
+    "DELETE FROM fa.machine_cost_allocations WHERE company_id = :company_id",
+    "DELETE FROM fa.asset_usage WHERE company_id = :company_id",
+    "DELETE FROM fa.physical_count_items WHERE count_id IN (SELECT count_id FROM fa.physical_counts WHERE company_id = :company_id)",
+    "DELETE FROM fa.physical_counts WHERE company_id = :company_id",
+    "DELETE FROM fa.depreciation_lines WHERE run_id IN (SELECT run_id FROM fa.depreciation_runs WHERE company_id = :company_id)",
+    "DELETE FROM fa.depreciation_runs WHERE company_id = :company_id",
+    "DELETE FROM fa.cip_costs WHERE cip_id IN (SELECT cip_id FROM fa.cip_projects WHERE company_id = :company_id)",
+    "DELETE FROM fa.asset_events WHERE company_id = :company_id",
+    "ALTER TABLE fa.asset_transactions DISABLE TRIGGER tr_fa_asset_txn_immutable",
+    "DELETE FROM fa.asset_transactions WHERE company_id = :company_id",
+    "ALTER TABLE fa.asset_transactions ENABLE TRIGGER tr_fa_asset_txn_immutable",
+    "DELETE FROM fa.asset_cost_items WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
+    "DELETE FROM fa.asset_warranties WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
+    "DELETE FROM fa.asset_insurances WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
+    "DELETE FROM fa.asset_book_settings WHERE asset_id IN (SELECT asset_id FROM fa.assets WHERE company_id = :company_id)",
+    "UPDATE fa.cip_projects SET capitalized_asset_id = NULL WHERE company_id = :company_id",
+    "DELETE FROM fa.cip_projects WHERE company_id = :company_id",
+    "UPDATE fa.assets SET parent_asset_id = NULL WHERE company_id = :company_id",
+    "DELETE FROM fa.assets WHERE company_id = :company_id",
     # انبار
     "DELETE FROM inv.cost_layers WHERE stock_ledger_id IN "
     "(SELECT ledger_id FROM inv.stock_ledger WHERE company_id = :company_id)",

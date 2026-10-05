@@ -431,96 +431,109 @@ def create_journal_entry(
     alternative_number: str = "",
     as_draft: bool = False,
     entry_type_code: str = "NORMAL",
+    session=None,
 ) -> JournalEntryResult:
+    """R262: با session، سند در همان تراکنشِ فراخوان ساخته می‌شود (بدونِ commit) -- ثبتِ اتمیکِ ماژول‌ها مثلِ دارایی."""
     require_balance = not as_draft
     real_lines = _validate_lines(lines, require_balance=require_balance)
+    if session is not None:
+        return _create_journal_entry_in(session, company_id, created_by_user_id, document_date, description, real_lines,
+                                        alternative_number, as_draft, entry_type_code)
+    with new_session() as own_session:
+        result = _create_journal_entry_in(own_session, company_id, created_by_user_id, document_date, description, real_lines,
+                                          alternative_number, as_draft, entry_type_code)
+        own_session.commit()
+        return result
 
-    with new_session() as session:
-        company = session.get(Company, company_id)
-        if company is None:
-            raise ValueError("شرکت نامعتبر است.")
 
-        resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance)
+def _create_journal_entry_in(session, company_id, created_by_user_id, document_date, description, real_lines,
+                             alternative_number, as_draft, entry_type_code) -> JournalEntryResult:
+    require_balance = not as_draft
+    company = session.get(Company, company_id)
+    if company is None:
+        raise ValueError("شرکت نامعتبر است.")
 
-        status_code = "DRAFT" if as_draft else "TEMPORARY"
-        entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == entry_type_code))
-        status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == status_code))
-        if entry_type is None or status is None:
-            raise ValueError("داده‌ی پایه‌ی نوع/وضعیت سند در دیتابیس یافت نشد.")
+    resolved_lines = _resolve_lines(session, company, real_lines, require_balance=require_balance)
 
-        fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
-        _ensure_fiscal_year_open(fiscal_year)
-        _ensure_fiscal_period_open(session, fiscal_year.fiscal_year_id, document_date)
+    status_code = "DRAFT" if as_draft else "TEMPORARY"
+    entry_type = session.scalar(select(JournalEntryType).where(JournalEntryType.code == entry_type_code))
+    status = session.scalar(select(JournalEntryStatus).where(JournalEntryStatus.code == status_code))
+    if entry_type is None or status is None:
+        raise ValueError("داده‌ی پایه‌ی نوع/وضعیت سند در دیتابیس یافت نشد.")
 
-        next_no = (
-            session.scalar(
-                select(func.max(JournalEntry.temporary_no)).where(
-                    JournalEntry.company_id == company_id,
-                    JournalEntry.fiscal_year_id == fiscal_year.fiscal_year_id,
-                )
+    fiscal_year = _get_or_create_fiscal_year(session, company, document_date)
+    _ensure_fiscal_year_open(fiscal_year)
+    _ensure_fiscal_period_open(session, fiscal_year.fiscal_year_id, document_date)
+
+    next_no = (
+        session.scalar(
+            select(func.max(JournalEntry.temporary_no)).where(
+                JournalEntry.company_id == company_id,
+                JournalEntry.fiscal_year_id == fiscal_year.fiscal_year_id,
             )
-            or 0
-        ) + 1
-
-        entry = JournalEntry(
-            company_id=company_id,
-            fiscal_year_id=fiscal_year.fiscal_year_id,
-            temporary_no=next_no,
-            permanent_no=None,
-            document_date=document_date,
-            alternative_number=alternative_number or None,
-            entry_type_id=entry_type.entry_type_id,
-            status_id=status.status_id,
-            description=description or None,
-            created_by_user_id=created_by_user_id,
         )
-        session.add(entry)
+        or 0
+    ) + 1
+
+    entry = JournalEntry(
+        company_id=company_id,
+        fiscal_year_id=fiscal_year.fiscal_year_id,
+        temporary_no=next_no,
+        permanent_no=None,
+        document_date=document_date,
+        alternative_number=alternative_number or None,
+        entry_type_id=entry_type.entry_type_id,
+        status_id=status.status_id,
+        description=description or None,
+        created_by_user_id=created_by_user_id,
+    )
+    session.add(entry)
+    session.flush()
+
+    for line_no, resolved in enumerate(resolved_lines, start=1):
+        ln = resolved.line
+        line = JournalEntryLine(
+            journal_entry_id=entry.journal_entry_id,
+            line_no=line_no,
+            account_id=ln.account_id,
+            description=ln.description or None,
+            tax_code=ln.tax_code or None,
+            currency_id=resolved.currency_id,
+            exchange_rate=resolved.exchange_rate,
+            debit_amount_fc=ln.debit,
+            credit_amount_fc=ln.credit,
+        )
+        session.add(line)
         session.flush()
-
-        for line_no, resolved in enumerate(resolved_lines, start=1):
-            ln = resolved.line
-            line = JournalEntryLine(
-                journal_entry_id=entry.journal_entry_id,
-                line_no=line_no,
-                account_id=ln.account_id,
-                description=ln.description or None,
-                tax_code=ln.tax_code or None,
-                currency_id=resolved.currency_id,
-                exchange_rate=resolved.exchange_rate,
-                debit_amount_fc=ln.debit,
-                credit_amount_fc=ln.credit,
-            )
-            session.add(line)
-            session.flush()
-            for dimension_type_id, detail_account_id in ln.details.items():
-                session.add(
-                    JournalEntryLineDetail(
-                        line_id=line.line_id,
-                        dimension_type_id=dimension_type_id,
-                        detail_account_id=detail_account_id,
-                    )
+        for dimension_type_id, detail_account_id in ln.details.items():
+            session.add(
+                JournalEntryLineDetail(
+                    line_id=line.line_id,
+                    dimension_type_id=dimension_type_id,
+                    detail_account_id=detail_account_id,
                 )
+            )
 
-        audit_service.log_activity(
-            session,
-            company_id=company_id,
-            user_id=created_by_user_id,
-            entity_type="JournalEntry",
-            entity_id=entry.journal_entry_id,
-            action="CREATE",
-            changes={
-                "after": {
-                    "document_date": document_date.isoformat(),
-                    "description": description,
-                    "alternative_number": alternative_number or None,
-                    "status": status_code,
-                    "lines": _lines_snapshot([r.line for r in resolved_lines]),
-                }
-            },
-        )
+    audit_service.log_activity(
+        session,
+        company_id=company_id,
+        user_id=created_by_user_id,
+        entity_type="JournalEntry",
+        entity_id=entry.journal_entry_id,
+        action="CREATE",
+        changes={
+            "after": {
+                "document_date": document_date.isoformat(),
+                "description": description,
+                "alternative_number": alternative_number or None,
+                "status": status_code,
+                "lines": _lines_snapshot([r.line for r in resolved_lines]),
+            }
+        },
+    )
 
-        session.commit()
-        return JournalEntryResult(journal_entry_id=entry.journal_entry_id, temporary_no=entry.temporary_no)
+    session.flush()
+    return JournalEntryResult(journal_entry_id=entry.journal_entry_id, temporary_no=entry.temporary_no)
 
 
 def list_journal_entries(company_id: int, entry_type_codes: list[str] | None = None) -> list[JournalEntrySummary]:

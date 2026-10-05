@@ -34,7 +34,8 @@ _REF = "JOURNAL_ENTRY"
 
 STATUS_LABELS = {"DRAFT": "پیش‌نویس", "TEMPORARY": "موقت", "PERMANENT": "دائم", "REVERSED": "برگشت‌خورده", "CANCELLED": "باطل‌شده"}
 TYPE_LABELS = {"NORMAL": "عادی", "OPENING": "افتتاحیه", "CLOSING": "اختتامیه", "ADJUSTING": "تعدیلی", "RECEIPT": "دریافت",
-               "PAYMENT": "پرداخت", "PAYROLL": "حقوق", "TANKHAH": "تنخواه", "INVENTORY": "انبار", "COMMERCIAL": "بازرگانی"}
+               "PAYMENT": "پرداخت", "PAYROLL": "حقوق", "TANKHAH": "تنخواه", "INVENTORY": "انبار", "COMMERCIAL": "بازرگانی",
+               "FIXED_ASSET": "دارایی ثابت"}
 SOURCE_LABELS = {"MANUAL": "دستی"}
 _STATUS_OPTION = ("status", "وضعیتِ سند", (("EXCLUDE_DRAFT", "بدونِ پیش‌نویس"), ("ALL", "همه"),
                                            ("PERMANENT_ONLY", "فقط دائم"), ("DRAFT_ONLY", "فقط پیش‌نویس")))
