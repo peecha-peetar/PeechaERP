@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -121,6 +122,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             ("qc", self._build_qc_tab(), "کنترلِ کیفیت"),
             ("asset", self._build_asset_tab(), "دارایی"),
             ("locations", self._build_locations_tab(), "محل‌هایِ انبار"),  # R248
+            ("cost", self._build_cost_tab(), "اطلاعاتِ بها"),  # R259
         ]
         for key, widget, label in tab_defs:
             self.tab_indexes[key] = self.tabs.addTab(widget, label)
@@ -1739,6 +1741,7 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         self._refresh_variants_table()
         self._refresh_ecommerce_mappings()
         self._refresh_locations()
+        self._refresh_cost()
 
     # --- R248: محل‌هایِ انبارِ کالا (از موجودیِ سیستم) ---------------------------
     def _build_locations_tab(self) -> QWidget:
@@ -1830,6 +1833,77 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             QMessageBox.warning(self, "شرایطِ نگهداری", str(exc))
             return False
         return True
+
+    # --- R259: اطلاعاتِ بها (از موتورِ بهایِ تمام‌شده) ---------------------------------
+    _COST_FIELDS = (("method_label", "روشِ ارزش‌گذاری"), ("current_cost", "بهایِ جاری"), ("average_cost", "میانگینِ بها"),
+                    ("last_purchase_cost", "آخرین بهایِ خرید"), ("replacement_cost", "بهایِ جایگزینی"),
+                    ("quantity", "موجودی"), ("inventory_value", "ارزشِ موجودی"), ("pending_allocations", "بهایِ در انتظار"))
+
+    def _build_cost_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        grid = QGridLayout()
+        self.cost_labels: dict[str, QLabel] = {}
+        for i, (key, title) in enumerate(self._COST_FIELDS):
+            caption = QLabel(title)
+            caption.setObjectName("sectionHint")
+            value = QLabel("—")
+            value.setObjectName("cardTitle")
+            grid.addWidget(caption, (i // 4) * 2, i % 4)
+            grid.addWidget(value, (i // 4) * 2 + 1, i % 4)
+            self.cost_labels[key] = value
+        layout.addLayout(grid)
+        title = QLabel("تاریخچهٔ بها (آخرین حرکت‌ها)")
+        title.setObjectName("cardTitle")
+        layout.addWidget(title)
+        self.cost_history_table = QTableWidget(0, 7)
+        self.cost_history_table.setHorizontalHeaderLabels(["تاریخ", "بها", "نوع", "منبع", "تامین‌کننده", "سند", "روش"])
+        self.cost_history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.cost_history_table.verticalHeader().setVisible(False)
+        self.cost_history_table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(self.cost_history_table, stretch=1)
+        return tab
+
+    def _can_view_cost(self) -> bool:
+        from peecha.services import roles as roles_service
+
+        user = app_session.current_user
+        return user is not None and self._company_id is not None and (
+            bool(getattr(user, "is_super_admin", False))
+            or roles_service.user_has_permission(user.user_id, self._company_id, "costing_dashboard", "VIEW"))
+
+    def _refresh_cost(self) -> None:
+        from peecha.services.costing import strategies as cost_strategies
+        from peecha.services.costing import valuation as cost_valuation
+        from peecha.services.warehouse_reports import DOC_TYPE_TITLES
+
+        allowed = self._can_view_cost()
+        self.tabs.setTabVisible(self.tab_indexes["cost"], allowed)
+        self.cost_history_table.setRowCount(0)
+        if not allowed or self._item_id is None:
+            for label in self.cost_labels.values():
+                label.setText("—")
+            return
+        info = cost_valuation.item_cost_info(self._company_id, self._item_id)
+        for key, label in self.cost_labels.items():
+            value = getattr(info, key)
+            if key == "method_label":
+                text = value
+            elif key in ("quantity", "pending_allocations"):
+                text = numerals.format_money(value, 2, None) if value is not None else "—"
+            else:
+                text = numerals.format_money(value, 0) if value is not None else "—"
+            if key == "replacement_cost" and info.replacement_source:
+                text += f"  ({info.replacement_source})"
+            label.setText(numerals.to_persian_digits(str(text)))
+        rows = cost_valuation.cost_history(self._company_id, self._item_id)[-20:][::-1]
+        self.cost_history_table.setRowCount(len(rows))
+        for r, h in enumerate(rows):
+            cells = [numerals.format_jalali_date(h.date), numerals.format_money(h.unit_cost, 0),
+                     "ورود" if h.direction == "IN" else "خروج", DOC_TYPE_TITLES.get(h.source, h.source), h.supplier,
+                     str(h.document_no or ""), cost_strategies.METHOD_LABELS.get(h.method, h.method)]
+            for c, text in enumerate(cells):
+                self.cost_history_table.setItem(r, c, QTableWidgetItem(numerals.to_persian_digits(str(text))))
 
     def _refresh_locations(self) -> None:
         from peecha.services import warehouse_locations as wl_service

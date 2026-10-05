@@ -188,6 +188,12 @@ WAREHOUSE_REPORT_MENU = [
     ("DASH", "داشبورد", [
         {"code": "INV_RPT_DASHBOARD", "label": "داشبوردِ انبار", "screen": "warehouse_dashboard"},
     ]),
+    # R259: بهایِ تمام‌شده و ارزش‌گذاریِ موجودی
+    ("COSTING", "بهایِ تمام‌شده", [
+        ("COST_VALUATION", "ارزش‌گذاریِ موجودی"), ("COST_LAYERS", "لایه‌هایِ هزینه"), ("COST_ALLOCATION", "تخصیصِ بهایِ خروج"),
+        ("COST_HISTORY", "تاریخچهٔ بهایِ کالا"), ("COST_COGS", "بهایِ تمام‌شدهٔ فروش و سودِ ناخالص"),
+        ("COST_REPLACEMENT", "بهایِ جایگزینی"), ("COST_VARIANCE", "مغایرتِ بها"), ("COST_PENDING", "بهایِ در انتظار"),
+    ]),
     ("STOCK", "موجودی", [
         ("STOCK_ON_HAND", "موجودیِ لحظه‌ای"), ("STOCK_BY_WAREHOUSE", "موجودی به تفکیکِ انبار"),
         ("STOCK_BY_CATEGORY", "موجودی به تفکیکِ گروهِ کالا"), ("STOCK_BY_BRAND", "موجودی به تفکیکِ برند"),
@@ -352,6 +358,17 @@ NAV_ITEMS = [
             # کالایِ فروخته‌نشده/مصرف‌نشده (تسویه‌یِ واقعی از طریقِ همان
             # دکمه‌یِ «تبدیل به فاکتور» در خودِ فرمِ سند انجام می‌شود).
             {"code": "INV_CONSIGNMENT_TRACKING", "label": "پیگیریِ امانی", "screen": "commercial_consignment_tracking"},
+            # R259: بهایِ تمام‌شده و ارزش‌گذاریِ موجودی (یک سطح؛ گزارش‌ها همان صفحهٔ عمومیِ گزارشِ انبار)
+            {"code": "INV_COSTING", "label": "بهایِ تمام‌شده", "children": [
+                {"code": "INV_COST_DASHBOARD", "label": "داشبوردِ بهایِ تمام‌شده", "screen": "costing_dashboard"},
+                {"code": "INV_COST_SETTINGS", "label": "تنظیماتِ بهایِ تمام‌شده", "screen": "costing_settings"},
+                {"code": "INV_COST_LAYERS", "label": "لایه‌هایِ هزینه", "screen": "warehouse_report_cost_layers"},
+                {"code": "INV_COST_HISTORY", "label": "تاریخچهٔ بها", "screen": "warehouse_report_cost_history"},
+                {"code": "INV_COST_VALUATION", "label": "ارزش‌گذاریِ موجودی", "screen": "warehouse_report_cost_valuation"},
+                {"code": "INV_COST_ALLOCATION", "label": "تخصیصِ بهایِ خروج", "screen": "warehouse_report_cost_allocation"},
+                {"code": "INV_COST_COGS", "label": "بهایِ تمام‌شدهٔ فروش", "screen": "warehouse_report_cost_cogs"},
+                {"code": "INV_COST_REPLACEMENT", "label": "بهایِ جایگزینی", "screen": "costing_replacement"},
+            ]},
         ],
     },
     {

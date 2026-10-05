@@ -175,7 +175,21 @@ def consume_layers(session, *, company_id: int, item_id: int, warehouse_id: int,
         if p.layer.remaining_quantity == 0:
             p.layer.status_code = "CONSUMED"
     session.flush()
+    sync_balance_average(session, item_id, warehouse_id)  # R259
     return picks, remaining
+
+
+def sync_balance_average(session, item_id: int, warehouse_id: int) -> None:
+    """روش‌هایِ لایه‌ای: میانگینِ ماندهٔ انبار = ارزشِ لایه‌هایِ باز / مقدارشان، تا ارزشِ مانده با حسابداری یکی بماند."""
+    qty, value = session.execute(
+        select(func.coalesce(func.sum(CostLayer.remaining_quantity), 0),
+               func.coalesce(func.sum(CostLayer.remaining_quantity * CostLayer.unit_cost), 0))
+        .where(CostLayer.item_id == item_id, CostLayer.warehouse_id == warehouse_id, CostLayer.remaining_quantity > 0)).one()
+    if not qty:
+        return
+    avg = decimal.Decimal(value) / decimal.Decimal(qty)
+    for bal in session.scalars(select(StockBalance).where(StockBalance.item_id == item_id, StockBalance.warehouse_id == warehouse_id)):
+        bal.average_unit_cost = avg
 
 
 def negative_outcome(policy: str, warehouse_allows_negative: bool, shortage: decimal.Decimal) -> str | None:

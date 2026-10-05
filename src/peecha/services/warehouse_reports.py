@@ -1904,4 +1904,8 @@ WAREHOUSE_REPORTS: list[ReportDef] = [
     ReportDef("MD_MIN_MAX", "کالاهایِ دارایِ حداقل/حداکثر موجودی", md_min_max, _IF,
               "سیاستِ سفارشِ کالا یا پیش‌فرضِ انبار با موجودیِ فعلی.", "none", _MD),
 ]
+# R259: گزارش‌هایِ بهایِ تمام‌شده (ماژولِ costing) در همین موتور/صفحه
+from peecha.services.costing.reports import COSTING_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += COSTING_REPORTS
 WAREHOUSE_REPORTS_BY_CODE = {r.code: r for r in WAREHOUSE_REPORTS}
