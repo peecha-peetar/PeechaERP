@@ -40,6 +40,7 @@ from peecha.db.models.inventory import (
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import journal_entries as je_service
 from peecha.services.costing import engine as costing_engine
+from peecha.services.costing import replacement as costing_replacement
 from peecha.services.costing import strategies as costing_strategies
 
 _Q2 = decimal.Decimal("0.01")
@@ -164,12 +165,16 @@ def get_negative_stock_policy(company_id: int) -> str:
 
 
 def set_costing_settings(company_id: int, default_costing_method_code: str, allow_item_override: bool = True,
-                         negative_stock_policy: str | None = None, user_id: int | None = None, reason: str | None = None) -> None:
+                         negative_stock_policy: str | None = None, user_id: int | None = None, reason: str | None = None,
+                         nifo_price_sources: list[str] | None = None) -> None:
     """R257: + سیاستِ موجودیِ منفی؛ هر تغییر با کاربر/مقدارِ قبلی و جدید/علت در Auditِ موجود ثبت می‌شود."""
     from peecha.services import audit as audit_service
 
     if negative_stock_policy is not None and negative_stock_policy not in costing_engine.NEGATIVE_POLICIES:
         raise ValueError("سیاستِ موجودیِ منفی نامعتبر است.")
+    if nifo_price_sources is not None and (not nifo_price_sources or any(
+            src not in costing_replacement.SOURCES for src in nifo_price_sources)):
+        raise ValueError("ترتیبِ منابعِ بهایِ جایگزینی نامعتبر است.")
     if default_costing_method_code in costing_engine.NOT_YET_AVAILABLE:
         raise ValueError(costing_engine.NOT_YET_AVAILABLE[default_costing_method_code])
     with new_session() as session:
@@ -189,7 +194,17 @@ def set_costing_settings(company_id: int, default_costing_method_code: str, allo
             row.allow_item_override = allow_item_override
             if negative_stock_policy is not None:
                 row.negative_stock_policy = negative_stock_policy
+        if nifo_price_sources is not None:
+            if old is not None and old.nifo_sources != nifo_price_sources:
+                changes_nifo = [",".join(old.nifo_sources), ",".join(nifo_price_sources)]
+            else:
+                changes_nifo = None
+            row.nifo_price_sources = ",".join(nifo_price_sources)
+        else:
+            changes_nifo = None
         changes = {}
+        if changes_nifo:
+            changes["nifo_price_sources"] = changes_nifo
         if old is None or old.method != method.code:
             changes["costing_method"] = [old.method if old else None, method.code]
         if negative_stock_policy is not None and (old is None or old.negative_policy != negative_stock_policy):
@@ -657,21 +672,26 @@ def post_stock_document(
         if costing_settings is not None:
             method_row = session.get(CostingMethod, costing_settings.default_costing_method_id)
             default_costing_method_code = method_row.code if method_row is not None else None
-        negative_policy = costing_engine.company_settings(session, company_id).negative_policy  # R257
+        _cset = costing_engine.company_settings(session, company_id)
+        negative_policy, nifo_sources = _cset.negative_policy, _cset.nifo_sources  # R257/R258
 
         def costing_method(item: Item) -> str:
             return item.costing_method_code or default_costing_method_code or "WEIGHTED_AVERAGE"
 
         # R257: آخرین مصرفِ consume_out به تفکیکِ لایه -- انتقال با همان تاریخ/بچِ لایهٔ مبدأ لایهٔ مقصد می‌سازد
         last_consumed: list[tuple[decimal.Decimal, decimal.Decimal, CostLayer | None]] = []
+        # R258: بهایِ تمام‌شدهٔ NIFO (بهایِ جایگزینی) برایِ آخرین خروج -- جدا از بهایِ دفتریِ موجودی
+        nifo_issue: dict[str, decimal.Decimal] = {}
 
         def add_layer(item: Item, warehouse_id: int, ledger: StockLedger, quantity: decimal.Decimal, unit_cost: decimal.Decimal,
-                      line: StockDocumentLine, receipt_date: datetime.date | None = None, batch_id: int | None = None) -> None:
+                      line: StockDocumentLine, receipt_date: datetime.date | None = None, batch_id: int | None = None,
+                      serial_id: int | None = None) -> None:
             if costing_strategies.is_layer_method(costing_method(item)):
                 costing_engine.create_layer(
                     session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, ledger_id=ledger.ledger_id,
                     quantity=quantity, unit_cost=unit_cost, receipt_date=receipt_date or movement_date, source_type=doc_type,
-                    source_line_id=line.line_id, batch_id=batch_id if batch_id is not None else line.batch_id)
+                    source_line_id=line.line_id, batch_id=batch_id if batch_id is not None else line.batch_id,
+                    serial_id=serial_id)
 
         def resolve_bin(warehouse_id: int, bin_location_id: int | None) -> int:
             if bin_location_id is not None:
@@ -769,10 +789,13 @@ def post_stock_document(
             segments: list[tuple[decimal.Decimal, decimal.Decimal]] = []
             last_consumed.clear()
             allocations: list[tuple[decimal.Decimal, decimal.Decimal, int | None, str]] = []
+            nifo_issue.clear()
             if costing_strategies.is_layer_method(method):
+                # R258: شناساییِ ویژه -- سریال/بچِ تعیین‌شده برایِ همین ردیف اول
+                lots = costing_engine.line_lots(session, company_id, item.item_id, line) if method == "SPECIFIC" and line is not None else None
                 picks, remaining = costing_engine.consume_layers(
                     session, company_id=company_id, item_id=item.item_id, warehouse_id=warehouse_id, quantity=quantity_base,
-                    method=method, preferred_source_line_id=preferred_source_line_id)
+                    method=method, preferred_source_line_id=preferred_source_line_id, lots=lots)
                 for p in picks:
                     segments.append((p.layer.unit_cost, p.quantity))
                     last_consumed.append((p.layer.unit_cost, p.quantity, p.layer))
@@ -787,19 +810,30 @@ def post_stock_document(
                     bal.average_unit_cost or (_ZERO if shortage <= 0 else fallback_cost()))
                 segments.append((cost, quantity_base))
                 last_consumed.append((cost, quantity_base, None))
+                issue_cost, nifo_note = cost, None
+                if method == "NIFO" and doc_type == "ISSUE":
+                    # R258: بهایِ تمام‌شده = بهایِ جایگزینی؛ موجودی با بهایِ دفتری (cost) کم می‌شود
+                    found = costing_replacement.replacement_cost(session, company_id, item.item_id, warehouse_id, movement_date, nifo_sources)
+                    if found is not None:
+                        issue_cost, source = found
+                        nifo_note = f"NIFO: {costing_replacement.SOURCES.get(source, source)}؛ بهایِ دفتری {cost.normalize()}"
+                    else:
+                        nifo_note = "NIFO: منبعِ بهایِ جایگزینی یافت نشد -- بهایِ دفتری"
+                    nifo_issue["amount"] = _money(issue_cost * quantity_base)
                 if shortage > 0 and short_status != "CALCULATED":
                     covered = quantity_base - shortage
-                    allocations.append((cost, covered, None, "CALCULATED"))
-                    allocations.append((cost, shortage, None, short_status))
+                    allocations.append((issue_cost, covered, None, "CALCULATED"))
+                    allocations.append((issue_cost, shortage, None, short_status))
                 else:
-                    allocations.append((cost, quantity_base, None, "CALCULATED"))
+                    allocations.append((issue_cost, quantity_base, None, "CALCULATED"))
             if line is not None:
                 for cost, qty, layer_id, status in allocations:
                     costing_engine.record_allocation(
                         session, company_id=company_id, stock_line_id=line.line_id, item_id=item.item_id,
                         warehouse_id=warehouse_id, method=method, quantity=qty, unit_cost=cost, movement_date=movement_date,
                         layer_id=layer_id, status=status,
-                        note="کمبودِ موجودی -- بهایِ جایگزین" if layer_id is None and status != "CALCULATED" else None)
+                        note=("کمبودِ موجودی -- بهایِ جایگزین" if layer_id is None and status != "CALCULATED"
+                              else (nifo_note if method == "NIFO" and doc_type == "ISSUE" else None)))
 
             bal.quantity_on_hand -= quantity_base
             if method == "STANDARD":
@@ -867,6 +901,13 @@ def post_stock_document(
                 )
                 if doc_type == "RETURN_IN" and line.source_line_id is not None:
                     actual_cost = _source_line_unit_cost(session, line.source_line_id)
+                    # R258: کالایِ سریال/بچ‌دار -- بهایِ واقعیِ همان سریال/بچِ برگشتی در فروشِ مرجع
+                    lots = costing_engine.line_lots(session, company_id, item.item_id, line)
+                    lot_cost = costing_engine.lot_issue_cost(
+                        session, line.source_line_id, [s_id for _b, s_id, _q in lots if s_id],
+                        [b_id for b_id, s_id, _q in lots if b_id and not s_id]) if lots else None
+                    if lot_cost is not None:
+                        actual_cost = lot_cost
                 elif return_price_unit is not None:
                     actual_cost = _current_average_cost(session, item.item_id, warehouse_id)
                     if actual_cost is None:
@@ -982,7 +1023,17 @@ def post_stock_document(
                     )
                     total_amount += _money(seg_cost * seg_qty)
                 add_credit("INVENTORY_ASSET", total_amount, je_item_detail_account_id)
-                if doc_type == "ISSUE":
+                if doc_type == "ISSUE" and "amount" in nifo_issue and nifo_issue["amount"] != total_amount:
+                    # R258: NIFO -- بهایِ تمام‌شده به بهایِ جایگزینی، اختلاف با بهایِ دفتری به مغایرتِ بها
+                    add_debit("COGS", nifo_issue["amount"], je_item_detail_account_id)
+                    # بهایِ جایگزینیِ بیشتر از دفتری → بستانکارِ مغایرت (و برعکس)
+                    difference = nifo_issue["amount"] - total_amount
+                    variance_role = return_variance_role(difference)
+                    if difference > 0:
+                        add_credit(variance_role, difference, je_item_detail_account_id)
+                    else:
+                        add_debit(variance_role, -difference, je_item_detail_account_id)
+                elif doc_type == "ISSUE":
                     add_debit("COGS", total_amount, je_item_detail_account_id)
                 else:
                     # طبقِ دو نوعِ ثبتِ رسمی/غیررسمی برایِ برگشت به تامین‌کننده:
@@ -1036,7 +1087,8 @@ def post_stock_document(
                     if source_wh != dest_wh or src_layer is not None:
                         add_layer(item, dest_wh, in_ledger, seg_qty, seg_cost, line,
                                   receipt_date=src_layer.receipt_date if src_layer is not None else None,
-                                  batch_id=src_layer.batch_id if src_layer is not None else None)
+                                  batch_id=src_layer.batch_id if src_layer is not None else None,
+                                  serial_id=src_layer.serial_id if src_layer is not None else None)
                 # طبقِ قاعدهٔ ۷۶: بینِ دو انبارِ همان شرکت، TRANSFER هرگز اثرِ
                 # حسابداری تولید نمی‌کند — فقط جابه‌جاییِ Ledger است.
 

@@ -837,7 +837,7 @@ class CompanyCostingSettings(Base):
     # R257: WAREHOUSE (رفتارِ قبلی: تنظیمِ هر انبار) | BLOCK | PENDING | FALLBACK
     negative_stock_policy: Mapped[str] = mapped_column(String(20), default="WAREHOUSE")
     nifo_price_sources: Mapped[str] = mapped_column(
-        String(200), default="LAST_RECEIPT,LAST_PURCHASE_PRICE,LAST_PURCHASE_ORDER,SUPPLIER_PRICE,MANUAL")
+        String(200), default="MANUAL,LAST_RECEIPT,LAST_PURCHASE_PRICE,LAST_PURCHASE_ORDER,SUPPLIER_PRICE")
 
 
 class CostLayer(Base):
@@ -863,6 +863,24 @@ class CostLayer(Base):
     source_line_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("inv.stock_document_lines.line_id"))
     receipt_date: Mapped[datetime.date | None] = mapped_column(Date)
     status_code: Mapped[str] = mapped_column(String(15), default="OPEN")
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class ReplacementCost(Base):
+    """R258: بهایِ جایگزینی (به ازایِ واحدِ پایه) برایِ NIFO و گزارشِ مغایرتِ بهایِ جایگزینی."""
+
+    __tablename__ = "replacement_costs"
+    __table_args__ = {"schema": "inv"}
+
+    replacement_cost_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("inv.items.item_id"))
+    warehouse_id: Mapped[int | None] = mapped_column(ForeignKey("inv.warehouses.warehouse_id"))
+    unit_cost: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 6))
+    effective_date: Mapped[datetime.date] = mapped_column(Date)
+    source_code: Mapped[str] = mapped_column(String(25), default="MANUAL")
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
 
 

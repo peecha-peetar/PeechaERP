@@ -17,7 +17,8 @@ from types import SimpleNamespace
 from sqlalchemy import func, select, text
 
 from peecha.db.models.inventory import (
-    CompanyCostingSettings, CostAllocation, CostingMethod, CostLayer, Item, StockBalance, StockLedger,
+    Batch, CompanyCostingSettings, CostAllocation, CostingMethod, CostLayer, Item, LotMovement, SerialNumber, StockBalance,
+    StockLedger,
 )
 from peecha.services.costing import strategies
 
@@ -29,7 +30,7 @@ NEGATIVE_POLICIES = {
     "FALLBACK": "مجاز با آخرین بهایِ معتبر",
 }
 # روش‌هایی که جدولشان آماده است ولی موتورشان در تحویلِ بعد فعال می‌شود
-NOT_YET_AVAILABLE = {"NIFO": "روشِ بهایِ جایگزینی (NIFO) در نسخهٔ بعد (R258) فعال می‌شود."}
+NOT_YET_AVAILABLE: dict[str, str] = {}
 STATUS_LABELS = {
     "CALCULATED": "محاسبه‌شده", "PENDING": "در انتظار", "RECALCULATION_REQUIRED": "نیازمندِ محاسبهٔ مجدد", "ERROR": "خطا",
 }
@@ -105,9 +106,32 @@ def ensure_opening_layer(session, company_id: int, item_id: int, warehouse_id: i
                         source_line_id=None)
 
 
+def line_lots(session, company_id: int, item_id: int, stock_line) -> list[tuple[int | None, int | None, decimal.Decimal]]:
+    """(batch_id, serial_id, مقدار)ِ مشخص‌شده برایِ ردیف پیش از ثبت (ورودیِ ردیابیِ خودِ ردیف یا ردیفِ بازرگانی)."""
+    from peecha.services import lot_tracking
+
+    out = []
+    for e in lot_tracking._entries_for_stock_line(session, stock_line):
+        serial_id = batch_id = None
+        if e.serial_no:
+            serial = session.scalar(select(SerialNumber).where(
+                SerialNumber.company_id == company_id, SerialNumber.item_id == item_id, SerialNumber.serial_no == e.serial_no))
+            serial_id = serial.serial_id if serial is not None else None
+            batch_id = serial.batch_id if serial is not None else None
+        elif e.batch_no:
+            batch = session.scalar(select(Batch).where(Batch.item_id == item_id, Batch.batch_no == e.batch_no))
+            batch_id = batch.batch_id if batch is not None else None
+        if serial_id is not None or batch_id is not None:
+            out.append((batch_id, serial_id, decimal.Decimal(e.quantity)))
+    return out
+
+
 def consume_layers(session, *, company_id: int, item_id: int, warehouse_id: int, quantity: decimal.Decimal, method: str,
-                   preferred_source_line_id: int | None = None) -> tuple[list[strategies.Pick], decimal.Decimal]:
+                   preferred_source_line_id: int | None = None,
+                   lots: list[tuple[int | None, int | None, decimal.Decimal]] | None = None,
+                   ) -> tuple[list[strategies.Pick], decimal.Decimal]:
     """مصرفِ لایه‌ها طبقِ راهبردِ روش؛ preferred_source_line_id (برگشت به تامین‌کننده) لایهٔ همان رسید را اول مصرف می‌کند.
+    lots (شناساییِ ویژه): لایه‌هایِ همان سریال/بچ اول -- به ترتیبِ راهبرد درونِ همان بچ.
     خروجی: (انتخاب‌ها، مقدارِ تأمین‌نشده -- کمبود)."""
     lock_item_warehouse(session, item_id, warehouse_id)
     ensure_opening_layer(session, company_id, item_id, warehouse_id)
@@ -119,9 +143,33 @@ def consume_layers(session, *, company_id: int, item_id: int, warehouse_id: int,
         own = [lyr for lyr in layers if lyr.source_line_id == preferred_source_line_id]
         picks, remaining = strategies.Fifo().pick(own, remaining)
         layers = [lyr for lyr in layers if lyr not in own]
+    for batch_id, serial_id, lot_qty in lots or []:
+        if remaining <= 0:
+            break
+        own = [lyr for lyr in layers if (lyr.serial_id == serial_id if serial_id is not None else lyr.batch_id == batch_id)
+               and lyr.remaining_quantity > sum((p.quantity for p in picks if p.layer is lyr), _ZERO)]
+        avail = [strategies.Pick(lyr, lyr.remaining_quantity - sum((p.quantity for p in picks if p.layer is lyr), _ZERO))
+                 for lyr in own]
+        want = min(lot_qty, remaining)
+        for cand in strategy.order([a.layer for a in avail]):
+            if want <= 0:
+                break
+            free = next(a.quantity for a in avail if a.layer is cand)
+            take = min(free, want)
+            picks.append(strategies.Pick(cand, take))
+            want -= take
+            remaining -= take
     if remaining > 0:
-        more, remaining = strategy.pick(layers, remaining)
-        picks += more
+        used = {}
+        for p in picks:
+            used[id(p.layer)] = used.get(id(p.layer), _ZERO) + p.quantity
+        rest = [lyr for lyr in layers if lyr.remaining_quantity > used.get(id(lyr), _ZERO)]
+        for cand in strategy.order(rest):
+            if remaining <= 0:
+                break
+            take = min(cand.remaining_quantity - used.get(id(cand), _ZERO), remaining)
+            picks.append(strategies.Pick(cand, take))
+            remaining -= take
     for p in picks:
         p.layer.remaining_quantity -= p.quantity
         if p.layer.remaining_quantity == 0:
@@ -152,3 +200,63 @@ def record_allocation(session, *, company_id: int, stock_line_id: int, item_id: 
         company_id=company_id, stock_document_line_id=stock_line_id, item_id=item_id, warehouse_id=warehouse_id,
         cost_layer_id=layer_id, costing_method_code=method, quantity_base=quantity, unit_cost=unit_cost or _ZERO,
         movement_date=movement_date, costing_status_code=status, note=note))
+
+
+def split_layers_by_lot(stock_document_id: int) -> int:
+    """پس از ثبتِ ردیابی (apply_after_post): لایهٔ تازهٔ بی‌بچ/سریالِ هر ردیفِ ورودی به تفکیکِ بچ/سریالِ واقعی شکسته
+    می‌شود (هنوز مصرف‌نشده، پس بها و مقدارِ کل عوض نمی‌شود) -- پایهٔ شناساییِ ویژه و بهایِ هر بچ/سریال."""
+    from peecha.db.base import new_session
+    from peecha.db.models.inventory import StockDocumentLine
+
+    split = 0
+    with new_session() as session:
+        line_ids = list(session.scalars(select(StockDocumentLine.line_id).where(
+            StockDocumentLine.stock_document_id == stock_document_id)))
+        for line_id in line_ids:
+            moves = session.execute(
+                select(LotMovement.warehouse_id, LotMovement.batch_id, LotMovement.serial_id, func.sum(LotMovement.quantity_base))
+                .where(LotMovement.stock_document_line_id == line_id, LotMovement.quantity_base > 0,
+                       (LotMovement.batch_id.is_not(None)) | (LotMovement.serial_id.is_not(None)))
+                .group_by(LotMovement.warehouse_id, LotMovement.batch_id, LotMovement.serial_id)).all()
+            if not moves:
+                continue
+            fresh = list(session.scalars(select(CostLayer).where(
+                CostLayer.source_line_id == line_id, CostLayer.batch_id.is_(None), CostLayer.serial_id.is_(None),
+                CostLayer.remaining_quantity == CostLayer.original_quantity).order_by(CostLayer.cost_layer_id).with_for_update()))
+            for wh_id, batch_id, serial_id, qty in moves:
+                qty = decimal.Decimal(qty)
+                for layer in [lyr for lyr in fresh if lyr.warehouse_id == wh_id]:
+                    if qty <= 0 or layer.original_quantity <= 0:
+                        continue
+                    take = min(qty, layer.original_quantity)
+                    if take == layer.original_quantity:
+                        layer.batch_id, layer.serial_id = batch_id, serial_id
+                        fresh.remove(layer)
+                    else:
+                        layer.original_quantity -= take
+                        layer.remaining_quantity -= take
+                        session.add(CostLayer(
+                            company_id=layer.company_id, item_id=layer.item_id, warehouse_id=layer.warehouse_id,
+                            stock_ledger_id=layer.stock_ledger_id, received_at=layer.received_at, receipt_date=layer.receipt_date,
+                            original_quantity=take, remaining_quantity=take, unit_cost=layer.unit_cost,
+                            source_type_code=layer.source_type_code, source_line_id=layer.source_line_id,
+                            batch_id=batch_id, serial_id=serial_id, status_code="OPEN"))
+                    qty -= take
+                    split += 1
+        session.commit()
+    return split
+
+
+def lot_issue_cost(session, source_line_id: int, serial_ids: list[int], batch_ids: list[int]) -> decimal.Decimal | None:
+    """بهایِ واقعیِ همان سریال/بچی که در خروجِ مرجع مصرف شده بود (برگشت از فروشِ کالایِ ردیابی‌شده)."""
+    q = (select(func.sum(CostAllocation.quantity_base * CostAllocation.unit_cost), func.sum(CostAllocation.quantity_base))
+         .join(CostLayer, CostLayer.cost_layer_id == CostAllocation.cost_layer_id)
+         .where(CostAllocation.stock_document_line_id == source_line_id))
+    if serial_ids:
+        q = q.where(CostLayer.serial_id.in_(serial_ids))
+    elif batch_ids:
+        q = q.where(CostLayer.batch_id.in_(batch_ids))
+    else:
+        return None
+    value, qty = session.execute(q).one()
+    return (decimal.Decimal(value) / decimal.Decimal(qty)) if qty else None

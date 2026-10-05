@@ -662,6 +662,10 @@ def post_stock_document(
         stock_document_id, company_id, posted_by_user_id, is_informal_tax, extra_je_lines,
     )
     lot_tracking.apply_after_post(stock_document_id, company_id)
+    # R258: لایه‌هایِ ورودی به تفکیکِ بچ/سریالِ واقعی (پایهٔ شناساییِ ویژه)
+    from peecha.services.costing import engine as costing_engine
+
+    costing_engine.split_layers_by_lot(stock_document_id)
     return result
 
 

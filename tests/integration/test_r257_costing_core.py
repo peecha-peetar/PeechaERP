@@ -310,8 +310,9 @@ check(raises(lambda: post(doc)), "WAREHOUSE: انبارِ غیرمجاز به م
 with new_session() as s:
     logs = s.scalars(select(ActivityLog).where(ActivityLog.entity_type == "CostingSettings")).all()
 check(len(logs) >= 3 and any("آزمون" in str(l.changes) for l in logs), "تغییرِ تنظیمات با علت در Audit ثبت شد")
-check(raises(lambda: engine_service.set_costing_settings(company_id, "NIFO", True)), "NIFO تا تحویلِ بعد قابلِ‌انتخاب نیست")
-check(all(m.code != "NIFO" for m in catalog_service.list_costing_methods()), "NIFO در فهرستِ روش‌ها نیست")
+check(raises(lambda: engine_service.set_costing_settings(company_id, "XYZ", True)), "روشِ ناشناخته رد شد")
+check({"FIFO", "LIFO", "HIFO", "LOFO", "WEIGHTED_AVERAGE", "SPECIFIC", "NIFO", "STANDARD"} <= {m.code for m in catalog_service.list_costing_methods()},
+      "همهٔ روش‌ها در فهرست (R258: NIFO هم)")
 
 # --- ۷) لایهٔ آغازین برایِ موجودیِ قبلی ---------------------------------------------------
 # item (G-1) با میانگین ۸۵ عدد موجودی دارد؛ به FIFO تغییر می‌کند
