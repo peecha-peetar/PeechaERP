@@ -554,6 +554,43 @@ def contents(company_id: int, location_id: int) -> list[SimpleNamespace]:
     return out
 
 
+def item_presence(company_id: int, warehouse_id: int, item_ids: list[int], nodes: list | None = None) -> dict[int, SimpleNamespace]:
+    """R256: برایِ کالا(های) جستجوشده: هر محل → مقدار، سریال‌ها و بچ‌هایِ همان کالا؛ جمعِ زیرمحل‌ها رویِ والدها
+    (قفسه/منطقه) هم می‌نشیند تا با بردنِ ماوس رویِ هر سطح دیده شود."""
+    if not item_ids:
+        return {}
+    nodes = nodes if nodes is not None else tree(company_id, warehouse_id)
+    by_id = {n.location_id: n for n in nodes}
+    wanted = set(item_ids)
+    own: dict[int, SimpleNamespace] = {}
+
+    def slot(lid):
+        return own.setdefault(lid, SimpleNamespace(quantity=_ZERO, serials=[], batches=[]))
+
+    for bin_id, item_id, qty, _reserved, _value in _stock_by_bin(company_id, warehouse_id):
+        if item_id in wanted and qty:
+            slot(bin_id).quantity += qty
+    with new_session() as session:
+        for s in session.scalars(select(SerialNumber).where(
+                SerialNumber.item_id.in_(wanted), SerialNumber.status_code == "IN_STOCK",
+                SerialNumber.current_bin_location_id.in_(list(by_id) or [-1])).order_by(SerialNumber.serial_no)):
+            slot(s.current_bin_location_id).serials.append(s.serial_no)
+    for item_id in wanted:
+        for (bin_id, _iid), lots in bin_batches(company_id, warehouse_id, item_id).items():
+            slot(bin_id).batches += lots
+    out: dict[int, SimpleNamespace] = {}
+    for lid, o in own.items():
+        for n in ancestors(by_id, lid) or [SimpleNamespace(location_id=lid)]:
+            agg = out.setdefault(n.location_id, SimpleNamespace(quantity=_ZERO, serials=[], batches=[]))
+            agg.quantity += o.quantity
+            agg.serials += o.serials
+            agg.batches += o.batches
+    for agg in out.values():
+        agg.serials.sort()
+        agg.batches.sort(key=lambda lt: (lt.expiry_date or datetime.date.max, lt.batch_no))
+    return out
+
+
 def product_locations(company_id: int, item_id: int) -> list[SimpleNamespace]:
     """همهٔ محل‌هایِ یک کالا (چند انبار/چند محل) با مقدار -- از موجودیِ سیستم."""
     from peecha.services import inventory_locations as locations_service
@@ -639,6 +676,12 @@ def search(company_id: int, text: str, warehouse_id: int | None = None) -> Simpl
 
         hit = uc.resolve_barcode(company_id, text, with_price=False)  # بارکدِ واحدهایِ کالا (همان سرویسِ فروش)
         item_ids = [hit.item_id] if hit else []
+    if not item_ids:  # R256: شمارهٔ سریال → همان کالا و محلِ فعلیِ همان سریال
+        with new_session() as session:
+            serial = session.scalar(select(SerialNumber).join(Item, Item.item_id == SerialNumber.item_id).where(
+                Item.company_id == company_id, func.upper(SerialNumber.serial_no) == upper, SerialNumber.status_code == "IN_STOCK"))
+        if serial is not None and serial.current_bin_location_id is not None:
+            return SimpleNamespace(kind="SERIAL", location_ids=[serial.current_bin_location_id], item_ids=[serial.item_id])
     locations = []
     for item_id in item_ids:
         locations += [r.location_id for r in product_locations(company_id, item_id)

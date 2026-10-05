@@ -30,7 +30,7 @@ class _View(QGraphicsView):
         self.setRenderHint(QPainter.Antialiasing)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        self.setStyleSheet(f"background: {theme.BACKGROUND}; border: 1px solid {theme.BORDER}; border-radius: 8px;")
+        self.setStyleSheet(f"QGraphicsView {{ background: {theme.BACKGROUND}; border: 1px solid {theme.BORDER}; border-radius: 8px; }}")
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
 
@@ -91,6 +91,7 @@ class Warehouse3DView(QWidget):
         self.hover_label = QLabel("ماوس را رویِ هر محل نگه دارید تا نام و اطلاعاتش نمایش داده شود.")
         self.hover_label.setObjectName("sectionHint")
         self.hover_label.setWordWrap(True)
+        self.hover_label.setTextFormat(Qt.RichText)
         layout.addWidget(self.hover_label)
         self.scene = QGraphicsScene(self)
         self.view = _View(self.scene, self)
@@ -202,7 +203,7 @@ class Warehouse3DView(QWidget):
             QToolTip.hideText()
             return
         text = self.info.get(location_id) or next((b.code for b in self.boxes if b.location_id == location_id), "")
-        self.hover_label.setText(text.replace("\n", " | "))
+        self.hover_label.setText(text)
         if global_pos is not None:
             QToolTip.showText(global_pos, text, self.view)
 

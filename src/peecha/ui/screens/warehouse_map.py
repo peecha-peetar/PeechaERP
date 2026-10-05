@@ -177,7 +177,8 @@ class _MapView(QGraphicsView):
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setViewportUpdateMode(QGraphicsView.SmartViewportUpdate)
-        self.setStyleSheet(f"background: {theme.BACKGROUND}; border: 1px solid {theme.BORDER}; border-radius: 8px;")
+        # R256: انتخاب‌گرِ صریح -- سبکِ بی‌انتخاب‌گر به تولتیپِ فرزند هم می‌رسید و متنِ روشن رویِ زمینهٔ روشن ناخوانا می‌شد
+        self.setStyleSheet(f"QGraphicsView {{ background: {theme.BACKGROUND}; border: 1px solid {theme.BORDER}; border-radius: 8px; }}")
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         factor = 1.2 if event.angleDelta().y() > 0 else 1 / 1.2
@@ -302,6 +303,9 @@ class WarehouseMapScreen(QWidget):
         self.warehouse_id: int | None = None
         self.nodes, self.by_id, self.items = [], {}, {}
         self.selected_id: int | None = None
+        self.search_item_ids: list[int] = []
+        self.presence: dict = {}
+        self._item_labels: dict[int, tuple[str, str]] = {}
         self.occ = {}
         self.path_item: QGraphicsPathItem | None = None
         outer = QVBoxLayout(self)
@@ -551,6 +555,8 @@ class WarehouseMapScreen(QWidget):
                 item = LocationItem(n, geo[n.location_id], self)
                 self.scene.addItem(item)
                 self.items[n.location_id] = item
+        self.presence = wl.item_presence(company_id, warehouse_id, self.search_item_ids, self.nodes) if self.search_item_ids else {}
+        self._apply_tooltips()
         self.set_edit_mode(self.edit_check.isChecked())
         self._fill_tree()
         self._fill_zone_filter()
@@ -702,13 +708,40 @@ class WarehouseMapScreen(QWidget):
         seg = n.code.split("-")[-1]
         return _p(f"{seg} {n.name}" if n.name and n.level in ("AREA", "AISLE") else seg)
 
+    def _apply_tooltips(self) -> None:
+        for lid, item in self.items.items():
+            item.setToolTip(self._hover_text(lid))
+
+    def _presence_html(self, location_id: int) -> list[str]:
+        """R256: مقدار، سریال‌ها و بچ‌هایِ کالایِ جستجوشده در همین محل (با زیرمحل‌ها)."""
+        if not self.search_item_ids:
+            return []
+        names = "، ".join(f"{c} {n}" for c, n in (self._item_labels.get(i, ("", "", ""))[:2] for i in self.search_item_ids))
+        p = self.presence.get(location_id)
+        if p is None or not (p.quantity or p.serials):
+            return [f"<hr><b>{_p(names)}</b>: در این محل موجودی ندارد"]
+        unit = self._item_labels.get(self.search_item_ids[0], ("", "", ""))[2] if len(self.search_item_ids) == 1 else ""
+        lines = ["<hr>" + _p(f"<b>{names}</b>"),
+                 _p(f"مقدار در این محل: <b>{numerals.format_money(p.quantity, 2, None)}</b> {unit}")]
+        if p.serials:
+            shown = p.serials[:30]
+            more = len(p.serials) - len(shown)
+            lines.append(_p(f"سریال‌ها ({len(p.serials)}): ") + "، ".join(shown) + (_p(f" و {more} سریالِ دیگر") if more else ""))
+        if p.batches:
+            lines.append("بچ‌ها: " + _p("، ".join(
+                f"{lt.batch_no} ({numerals.format_money(lt.quantity, 2, None)}"
+                + (f"، انقضا {numerals.format_jalali_date(lt.expiry_date)}" if lt.expiry_date else "") + ")"
+                for lt in p.batches[:10])))
+        return lines
+
     def _hover_text(self, location_id: int) -> str:
-        """R255: متنِ نمایش با ماوس در نمایِ سه‌بعدی: کد/نام، نوع، ابعاد، اشغال و کالا."""
+        """R255: متنِ نمایش با ماوس (نقشه، سه‌بعدی، نمایِ قفسه): کد/نام، نوع، ابعاد، اشغال و کالا؛
+        R256: + مقدار/سریال/بچِ کالایِ جستجوشده در همان محل."""
         n = self.by_id.get(location_id)
         if n is None:
             return ""
         o = self.occ.get(location_id)
-        lines = [_p(n.full_code) + (f" -- {n.name}" if n.name else ""),
+        lines = ["<b>" + _p(n.full_code) + "</b>" + (f" -- {n.name}" if n.name else ""),
                  f"{wl.LEVEL_LABELS.get(n.level, 'محلِ قدیمی')} | {wl.STATUSES.get(n.status_code, '')}"]
         if _dims(n):
             lines.append(_dims(n))
@@ -718,7 +751,8 @@ class WarehouseMapScreen(QWidget):
         if o and o.quantity:
             lines.append(_p(f"کالا: {len(o.items)} | مقدار: {numerals.format_money(o.quantity, 2, None)}")
                          + (f" | اشغال: {_p(o.percent)}٪" if o.percent is not None else ""))
-        return "\n".join(lines)
+        lines += self._presence_html(location_id)
+        return "<div dir='rtl'>" + "<br>".join(lines) + "</div>"
 
     # --- انتخاب، جستجو و جزئیات ----------------------------------------------
     def select_location(self, location_id: int | None, focus: bool = True) -> None:
@@ -757,6 +791,7 @@ class WarehouseMapScreen(QWidget):
 
         if locations_service.get_explicit_default_bin_id(self.warehouse_id) == location_id:
             info.append("<b>مکانِ پیش‌فرضِ انبار</b> (ردیف‌هایِ بی‌مکانِ رسید/حواله این‌جا ثبت می‌شوند)")
+        info += self._presence_html(location_id)
         self.detail_title.setText(_p(node.full_code))
         self.detail_info.setText("<br>".join(info))
         self._fill_contents(location_id)
@@ -810,8 +845,7 @@ class WarehouseMapScreen(QWidget):
             for c, b in enumerate(bins[s.location_id]):
                 o = self.occ.get(b.location_id)
                 cell = QTableWidgetItem(_p(b.code.split("-")[-1]) + (f"\n{_p(o.percent)}٪" if o and o.percent is not None else ""))
-                cell.setToolTip(_p(f"{b.full_code}" + (f" -- {b.name}" if b.name else "") + (f"\n{_dims(b)}" if _dims(b) else "")
-                                   + (f"\nکالا: {len(o.items)} | مقدار: {numerals.format_money(o.quantity, 2, None)}" if o else "")))
+                cell.setToolTip(self._hover_text(b.location_id))
                 fill = self.color_for("OCCUPANCY", o.percent, 100) if o and o.percent is not None else None
                 if fill is not None:
                     fill.setAlpha(120)
@@ -860,7 +894,15 @@ class WarehouseMapScreen(QWidget):
         except ValueError as exc:
             self._warn(str(exc))
             return []
+        self.search_item_ids = list(result.item_ids) if result.kind in ("PRODUCT", "SERIAL") else []
+        if self.search_item_ids:
+            from peecha.services import inventory_catalog as catalog_service
+
+            self._item_labels = {i.item_id: (i.code, i.name or "", i.base_uom_code or "")
+                                 for i in catalog_service.list_items(self._company_id()) if i.item_id in self.search_item_ids}
         if not result.location_ids:
+            self.presence = {}
+            self._apply_tooltips()
             theme.set_status_label(self.status_label, "چیزی پیدا نشد.", ok=False)
             return []
         from peecha.db.base import new_session
@@ -874,6 +916,10 @@ class WarehouseMapScreen(QWidget):
         if not in_current:
             self.load_warehouse(whs[result.location_ids[0]])
             in_current = [lid for lid in result.location_ids if whs.get(lid) == self.warehouse_id]
+        else:
+            self.presence = wl.item_presence(self._company_id(), self.warehouse_id, self.search_item_ids, self.nodes) \
+                if self.search_item_ids else {}
+            self._apply_tooltips()
         self.highlight(in_current)
         others = len(result.location_ids) - len(in_current)
         theme.set_status_label(self.status_label, _p(f"{len(in_current)} محل یافت شد" + (f" (+{others} در انبارهایِ دیگر)" if others else "")),
