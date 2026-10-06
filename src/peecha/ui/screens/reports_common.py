@@ -518,6 +518,18 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         hidden = self.hidden_columns()
         for col_index, header in enumerate(headers):
             self.table.setColumnHidden(col_index, header in hidden)
+        self._fill_table_width()
+
+    def _fill_table_width(self) -> None:
+        """R275: فضایِ خالیِ کنارِ جدول به نسبتِ عرضِ ستون‌ها پخش می‌شود تا جدول کلِ عرض را بگیرد."""
+        columns = [c for c in range(self.table.columnCount()) if not self.table.isColumnHidden(c)]
+        used = sum(self.table.columnWidth(c) for c in columns)
+        extra = self.table.viewport().width() - used
+        if not columns or used <= 0 or extra <= 0:
+            return
+        for c in columns:
+            width = self.table.columnWidth(c)
+            self.table.setColumnWidth(c, width + extra * width // used)
 
     def load_report(
         self, company_id: int, date_from: datetime.date, date_to: datetime.date

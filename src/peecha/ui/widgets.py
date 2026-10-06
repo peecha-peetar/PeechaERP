@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import time
 from dataclasses import dataclass
 
 from PySide6.QtCore import (
@@ -534,11 +535,14 @@ class FieldHelpPanel(QFrame):
         self._fade_animation.setEasingCurve(QEasingCurve.OutCubic)
 
         parent.installEventFilter(self)
-        # R275: کادر رویِ فرم نمی‌ماند -- فقط با فوکوسِ یک فیلد ظاهر و پس از چند ثانیه خودکار پنهان می‌شود
+        # R275: کادر رویِ فرم نمی‌ماند -- فقط با فوکوسِ کاربر رویِ یک فیلد، کنارِ همان فیلد ظاهر و
+        # پس از چند ثانیه خودکار پنهان می‌شود (فوکوسِ خودکارِ لحظهٔ بازشدنِ فرم آن را باز نمی‌کند)
         self._has_text = False
+        self._anchor: QWidget | None = None
+        self._quiet_until = 0.0
         self._auto_hide = QTimer(self)
         self._auto_hide.setSingleShot(True)
-        self._auto_hide.setInterval(7000)
+        self._auto_hide.setInterval(6000)
         self._auto_hide.timeout.connect(self.dismiss)
 
     def dismiss(self) -> None:
@@ -556,6 +560,7 @@ class FieldHelpPanel(QFrame):
         """صدا زده می‌شود وقتی صفحه‌ای که از این راهنما استفاده می‌کند نمایان می‌شود."""
         self._active = True
         self._has_text = False
+        self._quiet_until = time.monotonic() + 1.0
         self.text_label.setText(self._PLACEHOLDER)
         self._sync_visibility()
 
@@ -565,8 +570,11 @@ class FieldHelpPanel(QFrame):
         self._active = False
         self._sync_visibility()
 
-    def show_text(self, text: str) -> None:
+    def show_text(self, text: str, anchor: QWidget | None = None) -> None:
         self.text_label.setText(text)
+        self._anchor = anchor
+        if time.monotonic() < self._quiet_until:
+            return
         self._has_text = True
         self._sync_visibility()
         self._auto_hide.start()
@@ -641,6 +649,16 @@ class FieldHelpPanel(QFrame):
             y = max(0, min(self._custom_position.y(), max(0, parent.height() - self.height())))
             self.move(x, y)
             return
+        anchor = self._anchor
+        if anchor is not None and anchor.isVisible() and parent.isAncestorOf(anchor):
+            # R275: زیرِ همان فیلد (هم‌لبه از راست)، یا بالایش اگر جا نبود -- نه رویِ عنوانِ فرم
+            top_left = anchor.mapTo(parent, QPoint(0, 0))
+            x = top_left.x() + anchor.width() - self.width()
+            y = top_left.y() + anchor.height() + 6
+            if y + self.height() > parent.height():
+                y = top_left.y() - self.height() - 6
+            self.move(max(0, min(x, parent.width() - self.width())), max(0, min(y, parent.height() - self.height())))
+            return
         # پیش‌فرض (پیش از هر جابجاییِ دستی): گوشه‌یِ بالا-راستِ ناحیه‌یِ محتوا.
         margin = 20
         x = parent.width() - self.width() - margin
@@ -680,7 +698,7 @@ class FieldHelpController(QObject):
             return
         text = self._help_texts.get(new)
         if text is not None:
-            self._panel.show_text(text)
+            self._panel.show_text(text, new)
         elif self._panel.isVisible() and new.window() is self._panel.window():
             self._panel.dismiss()
 

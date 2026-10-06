@@ -2298,6 +2298,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         while self.detail_container.count():
             child = self.detail_container.takeAt(0)
             if child.widget():
+                child.widget().hide()
                 child.widget().deleteLater()
         self._detail_combos = {}
         self._update_balance_label()
@@ -2332,6 +2333,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
             self.detail_container.addWidget(QLabel(label))
             options = dimensions_service.list_leaf_detail_accounts(self.company_id, type_id)
             combo = _make_searchable_combo([(d.detail_account_id, _detail_option_label(d)) for d in options])
+            combo.setMinimumWidth(110)
             combo.setMaximumWidth(160)
             combo.setEnabled(type_id in required_type_ids)
             self.detail_container.addWidget(combo)
