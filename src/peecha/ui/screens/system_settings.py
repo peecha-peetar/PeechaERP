@@ -60,6 +60,52 @@ from peecha.ui.screens.workflow_designer import WorkflowDesignerScreen
 from peecha.ui.widgets import FieldHelpMixin
 
 
+# R272: دسترسیِ هر تب/زیرتب جداگانه از جدولِ نقش‌ها (VIEW). مدیرِ کل یا دارندهٔ دسترسیِ کلِ
+# «تنظیمات سیستم» (system_settings) همه را می‌بیند؛ بقیه فقط تب‌هایی که فرمشان را دارند.
+_TAB_FORMS: dict[str, tuple[str, ...]] = {
+    "کدینگِ حسابداری": ("accounting_coding",),
+    "خزانه‌داری": ("treasury_settings",),
+    "عمومی": ("companies",),
+    "کاربران و دسترسی‌ها": ("users",),
+    "داده‌های حسابداری": ("field_labels",),
+    "امنیت": ("audit_log",),
+    "حقوق و دستمزد": ("payroll_settings",),
+    "انبار و موجودی": ("inventory_settings",),
+    "مدیریتِ بازرگانی": ("commercial_settings",),
+    "چاپ و گزارش‌ها": ("report_settings",),
+    "دارایی‌هایِ ثابت": ("fa_setup",),
+    "تولید": ("prd_settings",),
+}
+_SUBTAB_FORMS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("کدینگِ حسابداری", "تعدادِ رقمِ سطوحِ تفصیلی"): ("detail_level_digits",),
+    ("کدینگِ حسابداری", "تنظیماتِ صورت‌هایِ مالی"): ("financial_statement_mapping",),
+    ("عمومی", "زبان‌ها"): ("languages",),
+    ("عمومی", "ارزها"): ("currencies",),
+    ("عمومی", "سال‌های مالی"): ("fiscal_years",),
+    ("کاربران و دسترسی‌ها", "نقش‌ها و دسترسی‌ها"): ("roles",),
+    ("کاربران و دسترسی‌ها", "طراحیِ گردشِ کار"): ("workflow_designer",),
+    ("داده‌های حسابداری", "ترجمه‌ها"): ("translations",),
+    ("انبار و موجودی", "قیمت‌گذاری"): ("inventory_settings", "costing_settings"),
+}
+
+
+def _user_can_view(form_codes: tuple[str, ...], cache: dict[str, bool]) -> bool:
+    from peecha import session as app_session
+    from peecha.services import roles as roles_service
+
+    user, company = app_session.current_user, app_session.current_company
+    if user is None or company is None:
+        return True  # بیرون از ورود (ابزار/آزمون): بدونِ فیلتر
+    if getattr(user, "is_super_admin", False):
+        return True
+    for code in ("system_settings", *form_codes):
+        if code not in cache:
+            cache[code] = roles_service.user_has_permission(user.user_id, company.company_id, code, "VIEW")
+        if cache[code]:
+            return True
+    return False
+
+
 class SystemSettingsScreen(FieldHelpMixin, QWidget):
     # طبقِ رفعِ باگِ صریح («بازکردنِ تنظیماتِ حسابداری/ماژول‌ها ۱۰ تا ۱۵
     # ثانیه طول می‌کشد»): این صفحه یک singletonِ سنگین است که ~۴۰ زیرصفحه‌یِ
@@ -130,6 +176,11 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self._add_outer_tab("تولید", self._build_production_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
+        self.no_access_label = QLabel("به هیچ بخشی از تنظیمات دسترسی ندارید؛ از مدیرِ سیستم بخواهید در «نقش‌ها و دسترسی‌ها» فعال کند.")
+        self.no_access_label.setObjectName("sectionHint")
+        self.no_access_label.setWordWrap(True)
+        self.no_access_label.hide()
+        outer.addWidget(self.no_access_label)
 
         search_items = [self.settings_search.itemText(i) for i in range(self.settings_search.count())]
         completer = QCompleter(search_items)
@@ -165,6 +216,8 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
 
     def _jump_to(self, target: tuple[int, QTabWidget | None, int | None]) -> None:
         outer_index, inner_widget, inner_index = target
+        if not self._target_visible(outer_index, inner_widget, inner_index):
+            return
         self.tabs.setCurrentIndex(outer_index)
         if inner_widget is not None and inner_index is not None:
             inner_widget.setCurrentIndex(inner_index)
@@ -350,7 +403,38 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
 
         return self._sub_tabs([("تنظیماتِ کلیِ تولید", PrdSettingsScreen())])
 
+    def apply_permissions(self) -> None:
+        cache: dict[str, bool] = {}
+        any_visible = False
+        for outer_index in range(self.tabs.count()):
+            outer_label = self.tabs.tabText(outer_index)
+            outer_forms = _TAB_FORMS.get(outer_label, ())
+            inner = self.tabs.widget(outer_index)
+            if isinstance(inner, QTabWidget):
+                visible = False
+                for i in range(inner.count()):
+                    forms = _SUBTAB_FORMS.get((outer_label, inner.tabText(i)), outer_forms)
+                    ok = _user_can_view(forms, cache)
+                    inner.setTabVisible(i, ok)
+                    visible = visible or ok
+                if visible and not inner.isTabVisible(inner.currentIndex()):
+                    inner.setCurrentIndex(next(i for i in range(inner.count()) if inner.isTabVisible(i)))
+            else:
+                visible = _user_can_view(outer_forms, cache)
+            self.tabs.setTabVisible(outer_index, visible)
+            any_visible = any_visible or visible
+        if any_visible and not self.tabs.isTabVisible(self.tabs.currentIndex()):
+            self.tabs.setCurrentIndex(next(i for i in range(self.tabs.count()) if self.tabs.isTabVisible(i)))
+        self.tabs.setVisible(any_visible)
+        self.no_access_label.setVisible(not any_visible)
+
+    def _target_visible(self, outer_index: int, inner_widget, inner_index) -> bool:
+        if not self.tabs.isTabVisible(outer_index):
+            return False
+        return inner_widget is None or inner_index is None or inner_widget.isTabVisible(inner_index)
+
     def refresh(self) -> None:
+        self.apply_permissions()
         # فقط زیرصفحه‌یِ *فعلاً قابلِ‌مشاهده* رفرش می‌شود، نه هر ~۴۰ زیرصفحه —
         # ر.ک. توضیحِ رفعِ باگِ کندیِ ۱۰-۱۵ ثانیه‌ای در docstringِ بالایِ کلاس.
         self._on_outer_tab_changed(self.tabs.currentIndex())
@@ -358,11 +442,14 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
     def select_tab(self, index: int, inner_label: str | None = None) -> None:
         """برایِ دکمه‌ی چرخ‌دنده‌یِ ریبون — پرش مستقیم به تبِ تنظیماتِ همان
         بخش (مثلاً «کدینگِ حسابداری» برایِ بخشِ «مالی و حسابداری»)."""
+        self.apply_permissions()
+        if not self.tabs.isTabVisible(index):
+            return
         self.tabs.setCurrentIndex(index)
         inner = self.tabs.widget(index)
         if inner_label and isinstance(inner, QTabWidget):
             for i in range(inner.count()):
-                if inner.tabText(i) == inner_label:
+                if inner.tabText(i) == inner_label and inner.isTabVisible(i):
                     inner.setCurrentIndex(i)
         # setCurrentIndex اگر ایندکس از قبل همان بود، currentChanged را صدا
         # نمی‌زند — پس صراحتاً هم رفرش می‌کنیم تا کلیکِ دوباره‌ی همان

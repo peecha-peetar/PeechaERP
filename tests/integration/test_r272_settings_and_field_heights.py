@@ -81,6 +81,64 @@ check(any(isinstance(w, QScrollArea) and w.widget() is mw.get_screen("prd_orders
 mw._sidebar_groups["PRD"]._gear_click()
 check(mw._current_screen_code == "SETTINGS" and mw.get_screen("system_settings").tabs.currentIndex() == 11, "PRD gear opens settings")
 
+# ۳) دسترسیِ جداگانهٔ هر تبِ تنظیمات برایِ هر کاربر/نقش
+from peecha.db.models.security import User
+from peecha.services.production import roles_setup
+forms = {c_ for c_, _m, _l in nav_catalog.build_form_catalog()}
+check({"treasury_settings", "inventory_settings", "commercial_settings", "report_settings"} <= forms, "settings tab forms in role catalog")
+roles_service.ensure_catalog()
+form_ids = {f.code: f.form_id for f in roles_service.list_forms()}
+
+
+def make_user(name, grants):
+    with new_session() as s:
+        u = User(username=name, full_name=name, password_hash=b"x", password_salt=b"x", is_super_admin=False)
+        s.add(u)
+        s.commit()
+        uid_ = u.user_id
+    if grants:
+        role = roles_service.create_role(company_id, "R_" + name.upper(), None)
+        for code in grants:
+            roles_service.set_role_permission(role.role_id, form_ids[code], "VIEW", True)
+        roles_service.set_user_role(uid_, role.role_id, company_id, True)
+    return type("U", (), {"user_id": uid_, "is_super_admin": False})()
+
+
+def visible_tabs(u):
+    sess.current_user = u
+    scr = SystemSettingsScreen()
+    scr.refresh()
+    out = {}
+    for i in range(scr.tabs.count()):
+        if scr.tabs.isTabVisible(i):
+            inner = scr.tabs.widget(i)
+            out[scr.tabs.tabText(i)] = ([inner.tabText(j) for j in range(inner.count()) if inner.isTabVisible(j)]
+                                        if hasattr(inner, "count") else [])
+    return scr, out
+
+
+admin_user = sess.current_user
+_, tabs = visible_tabs(make_user("prd_only", ["prd_settings"]))
+check(list(tabs) == ["تولید"], f"production-settings user sees only production tab {tabs}")
+_, tabs = visible_tabs(make_user("cost_only", ["costing_settings"]))
+check(tabs == {"انبار و موجودی": ["قیمت‌گذاری"]}, f"costing user sees only inventory > pricing {tabs}")
+_, tabs = visible_tabs(make_user("fa_users", ["fa_setup", "users"]))
+check(tabs == {"کاربران و دسترسی‌ها": ["کاربران"], "دارایی‌هایِ ثابت": ["طبقه‌ها، حساب‌ها، محل‌ها و سیاست‌ها"]}, f"mixed grants {tabs}")
+scr_, tabs = visible_tabs(make_user("nobody", []))
+check(not tabs and not scr_.no_access_label.isHidden(), "no grants -> no settings, explanatory message")
+scr_.select_tab(11)
+check(not scr_.tabs.isVisible() or not scr_.tabs.isTabVisible(11), "gear cannot open a hidden tab")
+_, tabs = visible_tabs(make_user("all_settings", ["system_settings"]))
+check(len(tabs) == 12, "whole system_settings permission keeps every tab")
+mgr = roles_setup.ensure_role_templates(company_id)["PRD_MANAGER"]
+u = make_user("prd_mgr", [])
+roles_service.set_user_role(u.user_id, mgr, company_id, True)
+_, tabs = visible_tabs(u)
+check("تولید" in tabs and "دارایی‌هایِ ثابت" not in tabs, "production manager template reaches production settings")
+sess.current_user = admin_user
+_, tabs = visible_tabs(admin_user)
+check(len(tabs) == 12, "admin sees all tabs")
+
 fx.finish()
 sys.stdout.flush()
 os._exit(0)  # Qt teardown of several MDI areas is irrelevant here
