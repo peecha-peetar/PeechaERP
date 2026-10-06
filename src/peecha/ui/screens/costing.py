@@ -20,6 +20,7 @@ from peecha.services import roles as roles_service
 from peecha.services.costing import dashboard as costing_dashboard
 from peecha.services.costing import replacement as costing_replacement
 from peecha.ui import theme
+from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
 from peecha.ui.widgets import JalaliDateEdit
 
@@ -131,6 +132,7 @@ class CostingSettingsScreen(QWidget):
             self.tab.status_label.setText("برایِ تغییرِ روش و سیاست‌ها دسترسیِ «ویرایش» لازم است.")
 
 
+@ms.styled
 class ReplacementCostScreen(QWidget):
     """ثبت و فهرستِ بهایِ جایگزینیِ دستی (منبعِ MANUAL برایِ NIFO و گزارشِ مغایرت)."""
 
@@ -254,6 +256,7 @@ class ReplacementCostScreen(QWidget):
         return True
 
 
+@ms.styled
 class RecalculationScreen(QWidget):
     """R260: بازمحاسبهٔ بهایِ تمام‌شده -- پیش‌نمایش، هشدار، اعمال با سندِ اصلاحی."""
 

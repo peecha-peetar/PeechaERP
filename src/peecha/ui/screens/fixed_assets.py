@@ -28,6 +28,7 @@ from peecha.services.fixed_assets import documents as fdocs
 from peecha.services.fixed_assets import events as fe
 from peecha.services.fixed_assets import physical as fp
 from peecha.ui import theme
+from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
 from peecha.ui.widgets import JalaliDateEdit
@@ -483,6 +484,7 @@ class AssetWizard(QDialog):
 
 
 # =========================================================================================================
+@ms.styled
 class AssetsScreen(QWidget):
     """مرکزِ عملیاتِ دارایی."""
 
@@ -500,10 +502,8 @@ class AssetsScreen(QWidget):
         self.dialog_runner = lambda dlg: dlg.exec() == QDialog.Accepted
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        top = QHBoxLayout()
         title = QLabel("دارایی‌هایِ ثابت")
         title.setObjectName("pageTitle")
-        top.addWidget(title)
         self.search = QLineEdit()
         self.search.setPlaceholderText("جستجو: کد، نام، سریال، بارکد یا QR")
         self.search.returnPressed.connect(self.reload_list)
@@ -518,9 +518,7 @@ class AssetsScreen(QWidget):
         self.new_button = QPushButton("ثبتِ دارایی")
         self.new_button.setObjectName("primaryButton")
         self.new_button.clicked.connect(self.new_asset)
-        for wdg in (self.search, self.category_filter, self.status_filter, self.new_button):
-            top.addWidget(wdg)
-        outer.addLayout(top)
+        outer.addWidget(ms.header_card(title, self.search, self.category_filter, self.status_filter, self.new_button))
         self.status_label = QLabel("")
         outer.addWidget(self.status_label)
         split = QSplitter(Qt.Horizontal)
@@ -532,21 +530,12 @@ class AssetsScreen(QWidget):
         self.header_title = QLabel("")
         self.header_title.setObjectName("pageTitle")
         dl.addWidget(self.header_title)
-        cards = QGridLayout()
-        self.cards = {}
-        for i, (key, caption) in enumerate((("status", "وضعیت"), ("gross", "بهایِ تمام‌شده"), ("accum", "استهلاکِ انباشته"),
-                                            ("nbv", "ارزشِ فعلی (دفتری)"), ("location", "محل"), ("cost_center", "مرکزِ هزینه"),
-                                            ("custodian", "تحویل‌گیرنده"), ("end_of_life", "پایانِ عمر"))):
-            cap = QLabel(caption)
-            cap.setObjectName("sectionHint")
-            val = QLabel("—")
-            val.setObjectName("cardTitle")
-            val.setWordWrap(True)
-            cards.addWidget(cap, (i // 4) * 2, i % 4)
-            cards.addWidget(val, (i // 4) * 2 + 1, i % 4)
-            self.cards[key] = val
-        dl.addLayout(cards)
-        actions = QGridLayout()
+        cards_box, self.cards = ms.summary([
+            ("status", "وضعیت", "info", "📌"), ("gross", "بهایِ تمام‌شده", "neutral", "🧾"),
+            ("accum", "استهلاکِ انباشته", "warning", "📉"), ("nbv", "ارزشِ فعلی (دفتری)", "success", "✅"),
+            ("location", "محل", "neutral", "📍"), ("cost_center", "مرکزِ هزینه", "neutral", "🏢"),
+            ("custodian", "تحویل‌گیرنده", "neutral", "👤"), ("end_of_life", "پایانِ عمر", "neutral", "📅")])
+        dl.addWidget(cards_box)
         self.actions = {}
         specs = (("capitalize", "سرمایه‌ای‌کردن", "fa_capitalize"), ("transfer", "انتقال", "fa_transfer"),
                  ("depreciate", "محاسبهٔ استهلاک", "fa_depreciation"), ("improve", "افزایشِ سرمایه / تعمیر", "fa_improve"),
@@ -557,9 +546,7 @@ class AssetsScreen(QWidget):
             b = QPushButton(label)
             b.setProperty("form", form)
             b.clicked.connect(lambda _c=False, k=key: self.action(k))
-            actions.addWidget(b, i // 6, i % 6)
             self.actions[key] = b
-        dl.addLayout(actions)
         self.tabs = QTabWidget()
         self.t_overview = QLabel("")
         self.t_overview.setWordWrap(True)
@@ -594,6 +581,13 @@ class AssetsScreen(QWidget):
         split.addWidget(self.detail)
         split.setSizes([380, 820])
         outer.addWidget(split, stretch=1)
+        A = self.actions
+        outer.addWidget(ms.footer([
+            [A["capitalize"], A["transfer"], A["reclassify"]],
+            [A["depreciate"], A["usage"]],
+            [A["improve"], A["impair"], A["revalue"]],
+            [A["sell"], A["scrap"]],
+            [A["label"], A["ledger"]]]))
 
     # --- بارگذاری ---------------------------------------------------------------------------------
     def refresh(self) -> None:
@@ -896,6 +890,7 @@ class AssetsScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class DepreciationScreen(QWidget):
     scroll_in_mdi = True
     FORM = "fa_depreciation"
@@ -997,6 +992,7 @@ class DepreciationScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class SetupScreen(QWidget):
     """طبقه‌ها (با حساب‌ها)، محل‌ها، گروه‌ها و سیاست‌ها."""
 
@@ -1200,6 +1196,7 @@ class SetupScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class CipScreen(QWidget):
     scroll_in_mdi = True
     FORM = "fa_cip"
@@ -1310,6 +1307,7 @@ class CipScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class PhysicalCountScreen(QWidget):
     scroll_in_mdi = True
     FORM = "fa_physical_count"

@@ -25,6 +25,7 @@ from peecha.services.production import master as pm
 from peecha.services.production import orders as po
 from peecha.services.production import planning as pp
 from peecha.ui import theme
+from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.fixed_assets import (
     FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, set_combo, table, user_id,
@@ -331,6 +332,7 @@ class ProductionWizard(QDialog):
 
 
 # =========================================================================================================
+@ms.styled
 class OrdersScreen(QWidget):
     """صفحهٔ مرکزیِ دستورِ تولید."""
 
@@ -362,10 +364,8 @@ class OrdersScreen(QWidget):
         self.confirm = lambda text: QMessageBox.question(self, "دستورِ تولید", text) == QMessageBox.Yes
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
-        top = QHBoxLayout()
         title = QLabel("دستورهایِ تولید")
         title.setObjectName("pageTitle")
-        top.addWidget(title)
         self.search = QLineEdit()
         self.search.setPlaceholderText("جستجو: کدِ دستور یا محصول")
         self.search.returnPressed.connect(self.reload_list)
@@ -379,9 +379,7 @@ class OrdersScreen(QWidget):
         self.wizard_button = QPushButton("ویزاردِ تولید")
         self.wizard_button.setObjectName("primaryButton")
         self.wizard_button.clicked.connect(self.open_wizard)
-        for w in (self.search, self.status_filter, self.new_button, self.wizard_button):
-            top.addWidget(w)
-        outer.addLayout(top)
+        outer.addWidget(ms.header_card(title, self.search, self.status_filter, self.new_button, self.wizard_button))
         split = QSplitter(Qt.Horizontal)
         self.list_table = table(["دستور", "محصول", "وضعیت", "برنامه", "تولید", "پایان"])
         self.list_table.itemSelectionChanged.connect(self._selected)
@@ -391,32 +389,20 @@ class OrdersScreen(QWidget):
         self.header = QLabel("")
         self.header.setObjectName("pageTitle")
         dl.addWidget(self.header)
-        cards = QGridLayout()
-        self.cards = {}
-        for i, (key, caption) in enumerate((("product", "محصول"), ("status", "وضعیت"), ("planned", "برنامه"), ("produced", "تولیدشده"),
-                                            ("scrapped", "ضایعات"), ("dates", "شروع / پایان"), ("wip", "WIP"), ("unit", "بهایِ واحد"))):
-            cap = QLabel(caption)
-            cap.setObjectName("sectionHint")
-            val = QLabel("—")
-            val.setObjectName("cardTitle")
-            cards.addWidget(cap, (i // 4) * 2, i % 4)
-            cards.addWidget(val, (i // 4) * 2 + 1, i % 4)
-            self.cards[key] = val
-        dl.addLayout(cards)
+        cards_box, self.cards = ms.summary([
+            ("product", "محصول", "neutral", "🏷️"), ("status", "وضعیت", "info", "📌"), ("planned", "برنامه", "neutral", "🎯"),
+            ("produced", "تولیدشده", "success", "✅"), ("scrapped", "ضایعات", "danger", "♻️"), ("dates", "شروع / پایان", "neutral", "📅"),
+            ("wip", "کالایِ در جریانِ ساخت", "warning", "⏳"), ("unit", "بهایِ واحد", "info", "💵")])
+        dl.addWidget(cards_box)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         dl.addWidget(self.progress)
-        actions = QGridLayout()
         self.actions = {}
-        for i, (key, label, form) in enumerate(self.ACTIONS):
+        for key, label, form in self.ACTIONS:
             b = QPushButton(label)
-            if key in ("receipt", "complete"):
-                b.setObjectName("primaryButton")
             b.setProperty("form", form)
             b.clicked.connect(lambda _c=False, k=key: self.action(k))
-            actions.addWidget(b, i // 6, i % 6)
             self.actions[key] = b
-        dl.addLayout(actions)
         self.tabs = QTabWidget()
         self.t_materials = table(["ماده", "نوع", "نیاز", "رزرو", "مصرف‌شده", "مانده", "موجودی"])
         self.t_operations = table(["", "ترتیب", "عملیات", "مرکزِ کاری", "ساعتِ استاندارد", "ساعتِ واقعی", "انجام‌شده"])
@@ -435,6 +421,13 @@ class OrdersScreen(QWidget):
         split.addWidget(detail)
         split.setSizes([380, 900])
         outer.addWidget(split, stretch=1)
+        A = self.actions
+        outer.addWidget(ms.footer([
+            [A["release"], A["reserve"], A["start"], A["hold"], A["resume"], A["cancel"]],
+            [A["issue"], A["issue_all"], A["return"], A["scrap"]],
+            [A["labor"], A["machine"]],
+            [A["receipt"], A["reverse"], A["complete"], A["close"], A["reopen"]],
+            [A["children"]]]))
 
     # --- بارگذاری ----------------------------------------------------------------------------
     def refresh(self) -> None:
@@ -637,6 +630,7 @@ class OrdersScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class MasterDataScreen(QWidget):
     """اطلاعاتِ پایهٔ تولید: BOM (نسخه‌ها، اجزا، خروجی‌ها، انفجارِ چندسطحی)، مسیرِ تولید، مرکزِ کاری، دستمزد، عملیات."""
 
@@ -1001,6 +995,7 @@ class MasterDataScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class PlanningScreen(QWidget):
     """برنامهٔ تولید، MRP، ظرفیت و تقویمِ تولید."""
 
@@ -1154,6 +1149,7 @@ class PlanningScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class PrdCostingScreen(QWidget):
     """استخرهایِ هزینه و سرشکن، بهایِ استانداردِ چندسطحی، بستنِ دوره‌ایِ بها."""
 
@@ -1305,6 +1301,7 @@ class PrdCostingScreen(QWidget):
 
 
 # =========================================================================================================
+@ms.styled
 class PrdSettingsScreen(QWidget):
     """تنظیماتِ تولید (هم‌الگو با تنظیماتِ ماژول‌هایِ دیگر) + وضعیتِ نگاشتِ حساب‌ها."""
 
