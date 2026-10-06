@@ -31,7 +31,7 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import distribution_runs as distribution_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import report_export
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _LIST_COLUMNS = ["تاریخ", "خودرو", "وضعیت"]
 _ELIGIBLE_COLUMNS = ["شماره", "تاریخ", "طرفِ‌حساب", "جمعِ کل", "نوعِ تسویه", "عملیات"]
@@ -58,7 +58,10 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=2)
-        outer.addWidget(self._build_detail_panel(), stretch=3)
+        form_panel = self._build_detail_panel()
+        outer.addWidget(form_panel, stretch=3)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.runs_table.clicked], on_new=self._reset_form, new_tooltip="تیمِ پخشِ تازه")
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -70,12 +73,6 @@ class DistributionTeamScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        new_button = QPushButton("➕")
-        new_button.setObjectName("primaryIconButton")
-        new_button.setFixedWidth(48)
-        new_button.setToolTip("تیمِ پخشِ تازه")
-        new_button.clicked.connect(self._reset_form)
-        layout.addWidget(new_button, alignment=Qt.AlignLeft)
 
         self.runs_table = QTableWidget(0, len(_LIST_COLUMNS))
         self.runs_table.setHorizontalHeaderLabels(_LIST_COLUMNS)

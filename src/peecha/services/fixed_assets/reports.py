@@ -66,6 +66,36 @@ class _Labels:
         return self._emp[employee_id]
 
 
+def _filtered(session, company_id: int, f) -> set[int] | None:
+    """R275: شناسهٔ دارایی‌هایِ مجاز طبقِ فیلترهایِ طبقه/محل (با زیرمحل‌ها)/شعبه/مرکزِ هزینه؛ None یعنی بدونِ فیلتر."""
+    from peecha.db.models.fixed_assets import AssetLocation
+
+    category, location = getattr(f, "fa_category_id", None), getattr(f, "fa_location_id", None)
+    branch, cost_center = getattr(f, "branch_id", None), getattr(f, "cost_center_id", None)
+    if not any((category, location, branch, cost_center)):
+        return None
+    q = select(Asset.asset_id).where(Asset.company_id == company_id)
+    if category:
+        q = q.where(Asset.category_id == category)
+    if branch:
+        q = q.where(Asset.branch_id == branch)
+    if cost_center:
+        q = q.where(Asset.cost_center_detail_account_id == cost_center)
+    if location:
+        children: dict[int, list[int]] = defaultdict(list)
+        for loc_id, parent in session.execute(select(AssetLocation.location_id, AssetLocation.parent_location_id)
+                                              .where(AssetLocation.company_id == company_id)).all():
+            children[parent].append(loc_id)
+        ids, stack = set(), [location]
+        while stack:
+            node = stack.pop()
+            if node not in ids:
+                ids.add(node)
+                stack.extend(children.get(node, ()))
+        q = q.where(Asset.location_id.in_(ids))
+    return set(session.scalars(q))
+
+
 def _assets(session, company_id: int, f, status_default: str = "ACTIVE"):
     status = str(f.options.get("status") or status_default)
     q = select(Asset).where(Asset.company_id == company_id)
@@ -73,6 +103,9 @@ def _assets(session, company_id: int, f, status_default: str = "ACTIVE"):
         q = q.where(Asset.status_code.not_in(c.CLOSED_STATUSES))
     elif status == "CLOSED":
         q = q.where(Asset.status_code.in_(c.CLOSED_STATUSES))
+    allowed = _filtered(session, company_id, f)
+    if allowed is not None:
+        q = q.where(Asset.asset_id.in_(allowed or {-1}))
     return list(session.scalars(q.order_by(Asset.asset_code)))
 
 
@@ -120,8 +153,11 @@ def fully_depreciated(company_id: int, f) -> ReportResult:
                       ("تاریخِ بهره‌برداری", DATE), ("محل", TEXT)], note="دارایی‌هایی که هنوز در اختیارند ولی کاملاً مستهلک شده‌اند.")
     with new_session() as session:
         lab = _Labels(session, company_id)
+        allowed = _filtered(session, company_id, f)
         for a in session.scalars(select(Asset).where(Asset.company_id == company_id, Asset.status_code == "FULLY_DEPRECIATED")
                                  .order_by(Asset.asset_code)):
+            if allowed is not None and a.asset_id not in allowed:
+                continue
             r.add([a.asset_code, a.name, lab.cats.get(a.category_id, ""), a.gross_cost, a.residual_value, a.in_service_date,
                    lab.location(a.location_id)], _ref(a.asset_id))
     return r
@@ -141,7 +177,10 @@ def depreciation(company_id: int, f) -> ReportResult:
             .where(DepreciationRun.company_id == company_id, DepreciationRun.status_code == "POSTED",
                    DepreciationRun.period_end >= f.date_from, DepreciationRun.period_start <= f.date_to)
             .order_by(DepreciationRun.period_start, Asset.asset_code)).all()
+        allowed = _filtered(session, company_id, f)
         for period, _je, ln, code, name in rows:
+            if allowed is not None and ln.asset_id not in allowed:
+                continue
             r.add([period, code, name, ln.opening_book_value, ln.amount, ln.closing_book_value, ln.units,
                    lab.detail(ln.cost_center_detail_account_id)], _ref(ln.asset_id))
     return r
@@ -157,7 +196,10 @@ def movement(company_id: int, f) -> ReportResult:
              .where(AssetTransaction.company_id == company_id, AssetTransaction.txn_date.between(f.date_from, f.date_to)))
         if kinds and kinds != "ALL":
             q = q.where(AssetTransaction.txn_type == kinds)
+        allowed = _filtered(session, company_id, f)
         for t, code, name in session.execute(q.order_by(AssetTransaction.txn_date, AssetTransaction.txn_id)).all():
+            if allowed is not None and t.asset_id not in allowed:
+                continue
             r.add([t.txn_date, code, name, c.TXN_LABELS.get(t.txn_type, t.txn_type), t.cost_delta, t.depreciation_delta,
                    t.impairment_delta, t.revaluation_delta, t.description or ""],
                   (t.journal_entry_id, "JOURNAL_ENTRY") if t.journal_entry_id else _ref(t.asset_id))
@@ -174,7 +216,10 @@ def disposals(company_id: int, f) -> ReportResult:
                                .where(AssetEvent.company_id == company_id, AssetEvent.event_type.in_(tuple(labels)),
                                       AssetEvent.status_code == "POSTED", AssetEvent.event_date.between(f.date_from, f.date_to))
                                .order_by(AssetEvent.event_date)).all()
+        allowed = _filtered(session, company_id, f)
         for ev, code, name in rows:
+            if allowed is not None and ev.asset_id not in allowed:
+                continue
             d = ev.details or {}
             acc = decimal.Decimal(d.get("accumulated_depreciation", 0)) + decimal.Decimal(d.get("impairment", 0))
             r.add([ev.event_date, code, name, labels[ev.event_type], ev.amount, acc, ev.previous_book_value, ev.proceeds,
@@ -225,7 +270,10 @@ def physical(company_id: int, f) -> ReportResult:
         if count is None:
             return r
         code, count_id = count.code, count.count_id
+        allowed = _filtered(session, company_id, f)
     for it in fp.count_items(company_id, count_id, discrepancies_only=f.options.get("rows", "DIFF") == "DIFF"):
+        if allowed is not None and it.asset_id not in allowed:
+            continue
         r.add([code, it.asset_code, it.name, it.label, it.expected_location, it.found_location, it.method or "", it.note or ""],
               _ref(it.asset_id))
     return r
@@ -260,6 +308,9 @@ def forecast_report(company_id: int, f) -> ReportResult:
     with new_session() as session:
         ids = list(session.scalars(select(Asset.asset_id).where(Asset.company_id == company_id,
                                                                 Asset.status_code.in_(c.DEPRECIABLE_STATUSES))))
+        allowed = _filtered(session, company_id, f)
+    if allowed is not None:
+        ids = [i for i in ids if i in allowed]
     for asset_id in ids:
         for row in fd.forecast(company_id, asset_id, months=months):
             by_period[row.period_code] += row.amount
@@ -284,7 +335,10 @@ def machine_cost(company_id: int, f) -> ReportResult:
                                          .where(MachineCostAllocation.company_id == company_id,
                                                 MachineCostAllocation.period_code == period_code)
                                          .group_by(MachineCostAllocation.asset_id)).all())
+        allowed = _filtered(session, company_id, f)
     for m in fprod.machines(company_id):
+        if allowed is not None and m.asset_id not in allowed:
+            continue
         info = fprod.machine_rate(company_id, m.asset_id, period_code)
         r.add([m.asset_code, m.name, m.work_center_code or "", period_code, info.depreciation, info.hours, info.rate,
                allocated.get(m.asset_id, ZERO)], _ref(m.asset_id))
@@ -292,32 +346,34 @@ def machine_cost(company_id: int, f) -> ReportResult:
 
 
 _NONE = ()
+# R275: فیلترهایِ دارایی (طبقه، محل، شعبه، مرکزِ هزینه)
+_FA = ("fa_category", "fa_location", "branch", "cost_center")
 FA_REPORTS: list[ReportDef] = [
-    ReportDef("FA_REGISTER", "دفترِ دارایی‌هایِ ثابت", register, _NONE,
+    ReportDef("FA_REGISTER", "دفترِ دارایی‌هایِ ثابت", register, _FA,
               "کد، نام، طبقه، بها، استهلاک، ارزشِ دفتری، محل، مرکزِ هزینه و وضعیت.", "none", _GROUP, options=_STATUS_OPT),
-    ReportDef("FA_DEPRECIATION", "گزارشِ استهلاک", depreciation, _NONE, "استهلاکِ ثبت‌شدهٔ هر دارایی در هر دوره.", "range", _GROUP),
-    ReportDef("FA_MOVEMENT", "گردشِ دارایی‌ها", movement, _NONE, "تحصیل، انتقال، بهسازی، تجدیدِ ارزیابی، کاهشِ ارزش، واگذاری.",
+    ReportDef("FA_DEPRECIATION", "گزارشِ استهلاک", depreciation, _FA, "استهلاکِ ثبت‌شدهٔ هر دارایی در هر دوره.", "range", _GROUP),
+    ReportDef("FA_MOVEMENT", "گردشِ دارایی‌ها", movement, _FA, "تحصیل، انتقال، بهسازی، تجدیدِ ارزیابی، کاهشِ ارزش، واگذاری.",
               "range", _GROUP, options=(("kind", "نوع", (("ALL", "همه"),) + tuple(c.TXN_LABELS.items())),)),
-    ReportDef("FA_FULLY_DEPRECIATED", "دارایی‌هایِ کاملاً مستهلک", fully_depreciated, _NONE, "در اختیار ولی بدونِ ارزشِ قابلِ استهلاک.",
+    ReportDef("FA_FULLY_DEPRECIATED", "دارایی‌هایِ کاملاً مستهلک", fully_depreciated, _FA, "در اختیار ولی بدونِ ارزشِ قابلِ استهلاک.",
               "none", _GROUP),
-    ReportDef("FA_BY_LOCATION", "دارایی‌ها به تفکیکِ محل", _by("LOCATION"), _NONE, "تعداد و ارزش در هر محل.", "none", _GROUP,
+    ReportDef("FA_BY_LOCATION", "دارایی‌ها به تفکیکِ محل", _by("LOCATION"), _FA, "تعداد و ارزش در هر محل.", "none", _GROUP,
               options=_STATUS_OPT),
-    ReportDef("FA_BY_BRANCH", "دارایی‌ها به تفکیکِ شعبه", _by("BRANCH"), _NONE, "تعداد و ارزش در هر شعبه.", "none", _GROUP,
+    ReportDef("FA_BY_BRANCH", "دارایی‌ها به تفکیکِ شعبه", _by("BRANCH"), _FA, "تعداد و ارزش در هر شعبه.", "none", _GROUP,
               options=_STATUS_OPT),
-    ReportDef("FA_BY_COST_CENTER", "دارایی‌ها به تفکیکِ مرکزِ هزینه", _by("COST_CENTER"), _NONE, "تعداد و ارزش در هر مرکزِ هزینه.",
+    ReportDef("FA_BY_COST_CENTER", "دارایی‌ها به تفکیکِ مرکزِ هزینه", _by("COST_CENTER"), _FA, "تعداد و ارزش در هر مرکزِ هزینه.",
               "none", _GROUP, options=_STATUS_OPT),
-    ReportDef("FA_BY_CATEGORY", "دارایی‌ها به تفکیکِ طبقه", _by("CATEGORY"), _NONE, "تعداد و ارزش در هر طبقه.", "none", _GROUP,
+    ReportDef("FA_BY_CATEGORY", "دارایی‌ها به تفکیکِ طبقه", _by("CATEGORY"), _FA, "تعداد و ارزش در هر طبقه.", "none", _GROUP,
               options=_STATUS_OPT),
     ReportDef("FA_CIP", "دارایی‌هایِ در جریانِ تکمیل", cip_report, _NONE, "پروژه‌هایِ ساخت و جمعِ هزینه.", "none", _GROUP,
               options=(("status", "وضعیت", (("ACTIVE", "در جریان"), ("ALL", "همه"))),)),
-    ReportDef("FA_DISPOSALS", "واگذاری‌ها (فروش/اسقاط)", disposals, _NONE, "بها، استهلاک، ارزشِ دفتری، مبلغِ دریافتی و سود/زیان.",
+    ReportDef("FA_DISPOSALS", "واگذاری‌ها (فروش/اسقاط)", disposals, _FA, "بها، استهلاک، ارزشِ دفتری، مبلغِ دریافتی و سود/زیان.",
               "range", _GROUP),
-    ReportDef("FA_GAIN_LOSS", "سود و زیانِ واگذاری", gain_loss, _NONE, "جمعِ سود/زیان به تفکیکِ نوعِ واگذاری.", "range", _GROUP),
-    ReportDef("FA_PHYSICAL", "شمارشِ فیزیکیِ دارایی", physical, _NONE, "مغایرت‌هایِ آخرین شمارش.", "none", _GROUP,
+    ReportDef("FA_GAIN_LOSS", "سود و زیانِ واگذاری", gain_loss, _FA, "جمعِ سود/زیان به تفکیکِ نوعِ واگذاری.", "range", _GROUP),
+    ReportDef("FA_PHYSICAL", "شمارشِ فیزیکیِ دارایی", physical, _FA, "مغایرت‌هایِ آخرین شمارش.", "none", _GROUP,
               options=(("rows", "ردیف‌ها", (("DIFF", "فقط مغایرت"), ("ALL", "همه"))),)),
-    ReportDef("FA_AGING", "سنِ دارایی‌ها", aging, _NONE, "تعداد و ارزش به تفکیکِ سنِ دارایی.", "as_of", _GROUP, options=_STATUS_OPT),
-    ReportDef("FA_FORECAST", "پیش‌بینیِ استهلاک", forecast_report, _NONE, "استهلاکِ ماه‌هایِ آینده.", "none", _GROUP,
+    ReportDef("FA_AGING", "سنِ دارایی‌ها", aging, _FA, "تعداد و ارزش به تفکیکِ سنِ دارایی.", "as_of", _GROUP, options=_STATUS_OPT),
+    ReportDef("FA_FORECAST", "پیش‌بینیِ استهلاک", forecast_report, _FA, "استهلاکِ ماه‌هایِ آینده.", "none", _GROUP,
               options=(("months", "ماه", (("12", "۱۲ ماه"), ("24", "۲۴ ماه"), ("60", "۶۰ ماه"))),)),
-    ReportDef("FA_MACHINE_COST", "بهایِ ماشین‌آلاتِ تولید", machine_cost, _NONE, "نرخِ هر ساعتِ ماشین و تخصیص به تولید.",
+    ReportDef("FA_MACHINE_COST", "بهایِ ماشین‌آلاتِ تولید", machine_cost, _FA, "نرخِ هر ساعتِ ماشین و تخصیص به تولید.",
               "as_of", _GROUP),
 ]

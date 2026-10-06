@@ -405,8 +405,8 @@ QLabel#avatarBadge {{
 QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
     background-color: {rgba(SURFACE, 0.7)};
     border: 1.5px solid {BORDER};
-    border-radius: 10px;
-    padding: 8px 12px;
+    border-radius: 9px;
+    padding: 5px 10px;
     font-size: 14px;
     color: {TEXT_PRIMARY};
     selection-background-color: {ACCENT};
@@ -461,8 +461,8 @@ QCalendarWidget QAbstractItemView:enabled {{
 
 /* --- دکمه‌ها -------------------------------------------------------- */
 QPushButton {{
-    border-radius: 10px;
-    padding: 9px 18px;
+    border-radius: 9px;
+    padding: 6px 14px;
     font-size: 14px;
     font-weight: 600;
     border: none;
@@ -611,6 +611,40 @@ QPushButton#primaryIconButton:disabled {{
     border: 1px solid {rgba(TEXT_DISABLED, 0.25)};
     border-bottom: 1px solid {rgba(TEXT_DISABLED, 0.25)};
 }}
+/* R275: دکمه‌هایِ کشویِ فرم (FormDrawer) -- QToolButton تا قفلِ دسترسیِ دکمه‌هایِ صفحه شاملشان نشود */
+QToolButton#drawerButton, QToolButton#drawerPrimary {{
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(TEXT_PRIMARY, 0.10)}, stop:1 {rgba(TEXT_PRIMARY, 0.03)});
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER};
+    border-bottom: 2px solid {rgba(TEXT_PRIMARY, 0.25)};
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 2px;
+}}
+QToolButton#drawerPrimary {{
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {rgba(ACCENT, 0.16)}, stop:1 {rgba(ACCENT, 0.06)});
+    color: {ACCENT};
+    border: 1px solid {rgba(ACCENT, 0.4)};
+    border-bottom: 2px solid {rgba(ACCENT, 0.55)};
+}}
+QToolButton#drawerButton:hover {{
+    background-color: {rgba(TEXT_PRIMARY, 0.16)};
+}}
+QToolButton#drawerPrimary:hover {{
+    background-color: {rgba(ACCENT, 0.26)};
+}}
+QWidget#formDrawerRail {{
+    background-color: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+}}
+QLabel#formDrawerRailText {{
+    color: {TEXT_SECONDARY};
+    font-size: 11px;
+}}
 QPushButton#dangerButton {{
     background-color: transparent;
     color: {DANGER};
@@ -635,7 +669,7 @@ QTableWidget {{
     alternate-background-color: {GRID_ROW_ALT};
 }}
 QTableWidget::item {{
-    padding: 6px 4px;
+    padding: 3px 4px;
     border-bottom: 1px solid {GRID_BORDER};
 }}
 QTableWidget::item:selected {{
@@ -645,7 +679,7 @@ QTableWidget::item:selected {{
 QHeaderView::section {{
     background-color: {GRID_HEADER_BG};
     color: {TEXT_SECONDARY};
-    padding: 10px 8px;
+    padding: 6px 8px;
     border: none;
     border-bottom: 2px solid {GRID_BORDER};
     font-weight: 700;
@@ -667,7 +701,7 @@ QTabBar::tab {{
     background-color: {HOVER};
     color: {TEXT_SECONDARY};
     border: none;
-    padding: 9px 20px;
+    padding: 6px 16px;
     margin-left: 4px;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
@@ -702,7 +736,7 @@ QListWidget {{
     outline: none;
 }}
 QListWidget::item {{
-    padding: 8px 10px;
+    padding: 5px 10px;
     border-radius: 8px;
 }}
 QListWidget::item:selected {{

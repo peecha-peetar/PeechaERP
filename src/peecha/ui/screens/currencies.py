@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session
 from peecha.services import currencies as currencies_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, JalaliDateEdit, wrap_scrollable_with_footer
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, JalaliDateEdit, LayoutEditMixin, wrap_scrollable_with_footer
 
 _COLUMNS = ["فعال", "رقمِ اعشار", "نماد", "کدِ ارز"]
 _RATE_COLUMNS = ["تاریخ", "نرخ به ارزِ پایه"]
@@ -63,7 +63,10 @@ class CurrenciesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=1)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=1)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="ارزِ جدید")
         outer.addWidget(self._build_rate_panel(), stretch=2)
 
         self.set_field_help([

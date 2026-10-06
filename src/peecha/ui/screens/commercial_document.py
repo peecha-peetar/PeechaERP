@@ -2422,7 +2422,11 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         title = DOC_TYPE_TITLES[document_type_code]
         self.page_title = QLabel(title)
         self.page_title.setObjectName("pageTitle")
-        self.body_layout.addWidget(self.page_title)
+        # R275: عنوان و گام‌نما در یک ردیف
+        title_row = QHBoxLayout()
+        title_row.addWidget(self.page_title)
+        title_row.addStretch(1)
+        self.body_layout.addLayout(title_row)
 
         # طبقِ نمونه‌طراحیِ استپردار/کارت‌رنگیِ ارسالیِ کاربر — هم‌الگو با
         # treasury_voucher.py/journal_entry.py: صرفاً لایه‌یِ بصری/ناوبری،
@@ -2430,7 +2434,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # هدرش را در یک کارتِ جداگانه نمی‌پیچد، از خودِ page_title/
         # lines_table به‌عنوانِ لنگرِ شروعِ هر بخش استفاده می‌شود.
         self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
-        self.body_layout.addWidget(self.step_stepper)
+        title_row.addWidget(self.step_stepper)
+        self.step_stepper.setMaximumWidth(460)
 
         # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر (کارت‌هایِ رنگیِ آیکون‌دار): چیدمانِ
         # این سه کارت هم‌راستا با ترتیبِ اهمیت است -- «جمعِ کل» (سبز، مهم‌ترین
@@ -2803,7 +2808,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # نوعِ تخفیف، و ۴ دکمهٔ ستونِ عملیات) به هر ردیف اضافه کردند،
         # عددِ قبلی (۴۰) دیگر برایِ این‌همه ویجتِ فشرده در یک ردیف کافی
         # نبود -- به ۴۸ افزایش یافت.
-        self.lines_table.verticalHeader().setDefaultSectionSize(48)
+        self.lines_table.verticalHeader().setDefaultSectionSize(44)
         # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر: ستونِ «#» و «عملیات» عرضِ ثابتِ
         # کوچک دارند، ستونِ «کالا» (که حالا اندیسِ ۱ است، نه ۰) کاملِ
         # فضایِ باقی‌مانده را می‌گیرد.
@@ -2853,7 +2858,8 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.horizontalHeader().sectionResized.connect(self._on_lines_table_column_resized)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
-        self.body_layout.addWidget(self.lines_table)
+        # R275: جدولِ ردیف‌ها فضایِ باقی‌ماندهٔ فرم را می‌گیرد (نه ارتفاعِ ثابتِ کوچک با فضایِ خالیِ زیرش)
+        self.body_layout.addWidget(self.lines_table, stretch=1)
         # R230: موجودیِ کالایِ انتخاب‌شده در ردیفِ ورودی -- بلافاصله پس از انتخاب
         self.entry_stock_label = QLabel("")
         self.entry_stock_label.setObjectName("sectionHint")
@@ -2889,7 +2895,6 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         self.body_layout.addWidget(self.status_label)
-        self.body_layout.addStretch(1)
 
         # طبقِ درخواستِ صریح («یک دکمه سمت راست اضافه کن که بتونم نحوه‌یِ
         # تسویه را مشخص کنم»): چون در چیدمانِ راست‌به‌چپ اولین ویجتِ

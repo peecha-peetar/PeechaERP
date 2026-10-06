@@ -38,7 +38,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "پیش‌فرض", "نوع", "نام", "کد"]
 
@@ -86,7 +86,10 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=3)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=3)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="انبارِ جدید")
 
         self.set_field_help([
             # پایه
@@ -190,12 +193,6 @@ class InventoryWarehousesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        new_button = QPushButton("➕")
-        new_button.setObjectName("primaryIconButton")
-        new_button.setFixedWidth(48)
-        new_button.setToolTip("انبارِ جدید")
-        new_button.clicked.connect(self._reset_form)
-        layout.addWidget(new_button, alignment=Qt.AlignLeft)
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)

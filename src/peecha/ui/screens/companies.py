@@ -32,6 +32,7 @@ from peecha.ui.widgets import (
     FieldGrid,
     FieldHelpMixin,
     FieldSpec,
+    FormDrawer,
     LayoutEditMixin,
     PersianDigitLineEdit,
     wrap_scrollable_with_footer,
@@ -52,7 +53,10 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="شرکتِ جدید")
 
         self.set_field_help([
             (

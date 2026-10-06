@@ -617,8 +617,10 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         title_row.addStretch(1)
         self.body_layout.addLayout(title_row)
 
+        # R275: گام‌نما در همان ردیفِ عنوان (یک ردیفِ کمتر در سرِ فرم)
         self.step_stepper = SectionStepper(["اطلاعاتِ سند", "ردیف‌ها"])
-        self.body_layout.addWidget(self.step_stepper)
+        title_row.addWidget(self.step_stepper)
+        self.step_stepper.setMaximumWidth(460)
 
         # طبقِ درخواستِ صریح: همه‌یِ فیلدهایِ هدر در یک ردیفِ واحد و فشرده —
         # تاریخ/انبار(ها)/جهت هرکدام فقط به‌اندازه‌یِ متنِ خودشان (نه بیشتر)
@@ -782,7 +784,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.lines_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.lines_table.verticalHeader().setVisible(False)
-        self.lines_table.verticalHeader().setDefaultSectionSize(48)
+        self.lines_table.verticalHeader().setDefaultSectionSize(44)
         persist_column_widths(self.lines_table, f"stockLines/{self.document_type_code}")
         self.lines_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         last_col = len(_LINE_COLUMNS) - 1
@@ -790,7 +792,7 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.lines_table.setColumnWidth(last_col, 100)
         self.lines_table.setMinimumHeight(220)
         self.lines_table.cellDoubleClicked.connect(self._edit_line)
-        self.body_layout.addWidget(self.lines_table)
+        self.body_layout.addWidget(self.lines_table, stretch=1)
         self._entry_row_widgets: dict | None = None
 
         self.step_stepper.register_sections(self._scroll, [self.page_title, self.lines_table])
@@ -817,7 +819,6 @@ class InventoryDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.status_label.setObjectName("statusError")
         self.status_label.setWordWrap(True)
         self.body_layout.addWidget(self.status_label)
-        self.body_layout.addStretch(1)
 
         # طبقِ گزارشِ صریح («بعضی فرم‌ها روی دکمه‌هاش نوشته داره و نصف
         # نوشته‌هاست»): این فوتر ۵ دکمه‌یِ متنیِ کنارِ هم داشت — دقیقاً

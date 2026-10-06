@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 
 from peecha import session as app_session
 from peecha.services import hr as hr_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable, wrap_scrollable_with_footer
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, wrap_scrollable, wrap_scrollable_with_footer
 
 _COLUMNS = ["فعال", "والد", "نام", "کد"]
 
@@ -36,7 +36,10 @@ class OrgUnitsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="واحدِ سازمانیِ جدید")
 
         self.set_field_help([
             (self.code_field, "کدِ یکتایِ این واحدِ سازمانی در سطحِ شرکت."),

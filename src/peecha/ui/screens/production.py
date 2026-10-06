@@ -31,6 +31,7 @@ from peecha.ui.screens.fixed_assets import (
     FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, set_combo, table, user_id,
 )
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
+from peecha.ui.widgets import FormDrawer
 
 ZERO = decimal.Decimal(0)
 AVAIL_ICON = {"GREEN": "● موجود", "YELLOW": "◐ بخشی موجود", "RED": "○ کمبود"}
@@ -420,6 +421,8 @@ class OrdersScreen(QWidget):
         dl.addWidget(self.tabs, stretch=1)
         split.addWidget(detail)
         split.setSizes([380, 900])
+        # R275: جزئیاتِ دستور کنارِ فهرست فقط با انتخابِ ردیف باز می‌شود؛ فهرست تمام‌عرض می‌ماند
+        self.detail_drawer = FormDrawer(split, detail, open_signals=[self.list_table.clicked])
         outer.addWidget(split, stretch=1)
         A = self.actions
         outer.addWidget(ms.footer([
@@ -466,6 +469,7 @@ class OrdersScreen(QWidget):
                 self.list_table.selectRow(r)
         self.list_table.blockSignals(False)
         self.load_order(order_id)
+        self.detail_drawer.open()
 
     def load_order(self, order_id: int) -> None:
         cid = company_id()

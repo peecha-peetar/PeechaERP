@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import promotions as promotions_service
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "کد", "نام", "نوع"]
 _TYPE_LABELS = {"BUY_X_GET_Y": "بخر و ببر", "THRESHOLD_DISCOUNT": "تخفیفِ پلکانی"}
@@ -50,7 +50,10 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=3)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=3)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="پروموشنِ جدید")
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -62,12 +65,6 @@ class PromotionRulesScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        new_button = QPushButton("➕")
-        new_button.setObjectName("primaryIconButton")
-        new_button.setFixedWidth(48)
-        new_button.setToolTip("پروموشنِ جدید")
-        new_button.clicked.connect(self._reset_form)
-        layout.addWidget(new_button, alignment=Qt.AlignLeft)
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)

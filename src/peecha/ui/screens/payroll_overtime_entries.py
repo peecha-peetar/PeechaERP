@@ -41,6 +41,7 @@ from peecha.ui import theme
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
 from peecha.ui.widgets import (
     FieldHelpMixin,
+    FormDrawer,
     PersianDigitLineEdit,
     wrap_scrollable,
     wrap_scrollable_with_footer,
@@ -86,8 +87,11 @@ class PayrollOvertimeEntriesScreen(FieldHelpMixin, QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
         outer.addWidget(self._build_entries_panel(), stretch=3)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.form_status_label.clear, new_tooltip="ثبتِ اضافه‌کاریِ جدید", handle_new=False)
 
         self.set_field_help([
             (self.employee_combo, "کارمندی که این اضافه‌کاری برایِ او ثبت می‌شود."),

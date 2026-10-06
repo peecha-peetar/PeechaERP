@@ -607,7 +607,22 @@ NAV_ITEMS = [
 # کاربر که در QSettings ذخیره می‌شود) دوباره می‌سازد. دکمه‌یِ ⚙ در انتهایِ
 # ریبون امکانِ تیک‌زدن/بردا‌شتنِ هرکدام از آیتم‌هایِ همان ماژول را می‌دهد.
 DEFAULT_QUICK_ACCESS_BY_MODULE: dict[str, list[tuple[str, str]]] = {
-    "dashboard": [],
+    # R275: صفحهٔ اصلی هم ریبون دارد -- میان‌برِ پرکاربردترین فرم‌هایِ همهٔ ماژول‌ها
+    "dashboard": [
+        ("SALES_INVOICE", "🧾"),
+        ("SALES_ORDER", "📝"),
+        ("PURCH_INVOICE", "🛍️"),
+        ("PURCH_ORDER", "📋"),
+        ("TREASURY_RECEIPT", "💵"),
+        ("TREASURY_PAYMENT", "💸"),
+        ("GL_JE", "📒"),
+        ("INV_RECEIPT", "📥"),
+        ("INV_ISSUE", "📤"),
+        ("SALES_DOCUMENTS_LIST", "📚"),
+        ("PURCH_DOCUMENTS_LIST", "🗃️"),
+        ("REPORTS_TRIAL_BALANCE", "⚖️"),
+        ("MY_TASKS", "📌"),
+    ],
     "MY_TASKS": [],
     "GL": [
         ("GL_JE", "📝"),

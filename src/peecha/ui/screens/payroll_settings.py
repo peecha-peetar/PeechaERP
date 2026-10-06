@@ -46,6 +46,7 @@ from peecha.ui.widgets import (
     FieldGrid,
     FieldHelpMixin,
     FieldSpec,
+    FormDrawer,
     FormScreenBase,
     JalaliDateEdit,
     LayoutEditMixin,
@@ -271,7 +272,10 @@ class _MinimumWageTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(14, 10, 14, 10)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
             (self.from_date_field, "شروعِ اعتبارِ این نرخِ حداقل‌دستمزد."),
@@ -597,7 +601,10 @@ class _PayItemsTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
             (self.code_field, "کدِ یکتایِ این آیتمِ حقوقی -- در فرمول‌هایِ آیتم‌هایِ دیگر با {CODE} به آن ارجاع داده می‌شود."),
@@ -957,7 +964,10 @@ class _InsuranceTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
             (self.employee_rate_field, "سهمِ بیمهٔ کارمند به‌صورتِ درصد، مثلاً ۷ برایِ ۷٪."),
@@ -1403,7 +1413,10 @@ class _OvertimeRulesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(14, 10, 14, 10)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
             (self.code_combo, "نوعِ اضافه‌کاری که این قانون تعریف می‌کند (مثلاً روزانه، تعطیل، شب‌کاری)."),
@@ -1633,7 +1646,10 @@ class _AttendanceTemplatesTab(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setContentsMargins(14, 10, 14, 10)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form)
 
         self.set_field_help([
             (

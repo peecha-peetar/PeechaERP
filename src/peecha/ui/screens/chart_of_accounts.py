@@ -36,7 +36,7 @@ from peecha.ui import report_export, theme
 from peecha.services import chart_of_accounts as coa_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.ui.excel_import import ExcelColumnMappingDialog, read_excel_rows
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, build_action_footer
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, build_action_footer
 
 # طبقِ درخواستِ صریح («در فرمِ تعریفِ حساب‌ها هم بتوان از اکسل ایمپورت
 # کرد») — «کدِ کامل» (full_code، مثلِ 1-01-001) به‌جایِ کدِ بخش گرفته
@@ -131,7 +131,10 @@ class ChartOfAccountsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         outer.setSpacing(16)
 
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="حسابِ جدید")
 
     # --- فهرست --------------------------------------------------------------
     def _build_list_panel(self) -> QWidget:

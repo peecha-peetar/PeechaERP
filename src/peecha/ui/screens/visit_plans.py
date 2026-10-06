@@ -26,7 +26,7 @@ from peecha import session as app_session
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import field_sales as field_sales_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldHelpMixin, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, FormDrawer, build_action_footer, wrap_scrollable
 
 _COLUMNS = ["فعال", "مشتری", "روز", "ترتیب", "ویزیتور"]
 _DAY_LABELS = ("دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه")
@@ -43,7 +43,10 @@ class VisitPlansScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="برنامهٔ جدید")
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -55,12 +58,6 @@ class VisitPlansScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        new_button = QPushButton("➕")
-        new_button.setObjectName("primaryIconButton")
-        new_button.setFixedWidth(48)
-        new_button.setToolTip("برنامهٔ جدید")
-        new_button.clicked.connect(self._reset_form)
-        layout.addWidget(new_button, alignment=Qt.AlignLeft)
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)

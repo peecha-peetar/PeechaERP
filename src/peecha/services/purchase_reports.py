@@ -61,6 +61,10 @@ class PurchaseFilters:
     # R246: گزارش‌هایِ انبار (side=INVENTORY)
     brand_id: int | None = None
     branch_id: int | None = None
+    # R275: گزارش‌هایِ دارایی (طبقه/محلِ دارایی، مرکزِ هزینه) -- خالی یعنی بدونِ فیلتر
+    fa_category_id: int | None = None
+    fa_location_id: int | None = None
+    cost_center_id: int | None = None
 
 
 ReportFilters = PurchaseFilters

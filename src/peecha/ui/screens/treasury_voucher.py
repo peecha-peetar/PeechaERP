@@ -1985,7 +1985,7 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
         # ردیفِ جدول را با موردهایِ متنیِ ساده به‌درستی حساب می‌کند، ولی با
         # ویجت‌هایِ setCellWidget (کمبو/فیلدِ مبلغ با padding خودشان) نه —
         # دقیقاً هم‌الگو با جدولِ ردیف‌هایِ journal_entry.py.
-        self.table.verticalHeader().setDefaultSectionSize(52)
+        self.table.verticalHeader().setDefaultSectionSize(46)
         # طبقِ همان گزارشِ صریح: ۱۶۰px فقط کمی بیشتر از ارتفاعِ سرستون +
         # یک‌ونیم ردیف بود -- عملاً هیچ ردیفی به‌طورِ کامل دیده نمی‌شد.
         self.table.setMinimumHeight(220)

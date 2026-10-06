@@ -27,6 +27,7 @@ from PySide6.QtCore import (
     QPoint,
     QPropertyAnimation,
     QSettings,
+    QTimer,
     Qt,
     Signal,
 )
@@ -45,6 +46,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QSplitter,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -531,6 +534,16 @@ class FieldHelpPanel(QFrame):
         self._fade_animation.setEasingCurve(QEasingCurve.OutCubic)
 
         parent.installEventFilter(self)
+        # R275: کادر رویِ فرم نمی‌ماند -- فقط با فوکوسِ یک فیلد ظاهر و پس از چند ثانیه خودکار پنهان می‌شود
+        self._has_text = False
+        self._auto_hide = QTimer(self)
+        self._auto_hide.setSingleShot(True)
+        self._auto_hide.setInterval(7000)
+        self._auto_hide.timeout.connect(self.dismiss)
+
+    def dismiss(self) -> None:
+        self._has_text = False
+        self.hide()
 
     def set_enabled(self, value: bool) -> None:
         self._enabled = value
@@ -542,6 +555,7 @@ class FieldHelpPanel(QFrame):
     def activate(self) -> None:
         """صدا زده می‌شود وقتی صفحه‌ای که از این راهنما استفاده می‌کند نمایان می‌شود."""
         self._active = True
+        self._has_text = False
         self.text_label.setText(self._PLACEHOLDER)
         self._sync_visibility()
 
@@ -553,7 +567,9 @@ class FieldHelpPanel(QFrame):
 
     def show_text(self, text: str) -> None:
         self.text_label.setText(text)
+        self._has_text = True
         self._sync_visibility()
+        self._auto_hide.start()
         if self._active and self._enabled:
             self._play_fade_in()
 
@@ -566,7 +582,7 @@ class FieldHelpPanel(QFrame):
         self._fade_animation.start()
 
     def _sync_visibility(self) -> None:
-        if self._active and self._enabled:
+        if self._active and self._enabled and self._has_text:
             self._reposition()
             self.show()
             self.raise_()
@@ -665,6 +681,8 @@ class FieldHelpController(QObject):
         text = self._help_texts.get(new)
         if text is not None:
             self._panel.show_text(text)
+        elif self._panel.isVisible() and new.window() is self._panel.window():
+            self._panel.dismiss()
 
 
 class FieldHelpMixin:
@@ -1200,8 +1218,8 @@ class SummaryCard(QFrame):
         # طبقِ گزارشِ صریح («هدرِ فرم‌ها خیلی بزرگ است، فضا به آیتم‌ها
         # بدهید»): پدینگِ قبلی (۱۶/۱۲) این کارت‌هایِ خلاصه را بی‌جهت
         # بلند می‌کرد — همه‌ی صفحاتی که SummaryCard دارند یک‌جا جمع‌تر شدند.
-        outer.setContentsMargins(10, 6, 10, 6)
-        outer.setSpacing(2)
+        outer.setContentsMargins(10, 4, 10, 4)
+        outer.setSpacing(0)
 
         # طبقِ طرحِ نمونه‌یِ ارسالیِ کاربر (کارت‌هایِ رنگیِ آیکون‌دار در
         # نوارِ خلاصه‌یِ فاکتور): آیکون اختیاری است -- صفحاتِ قدیمی‌تر
@@ -1233,7 +1251,7 @@ class SummaryCard(QFrame):
     def refresh_theme(self) -> None:
         color = self._color()
         self._title_label.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11.5px; font-weight: 600;")
-        self.value_label.setStyleSheet(f"color: {color}; font-size: 21px; font-weight: 800;")
+        self.value_label.setStyleSheet(f"color: {color}; font-size: 17px; font-weight: 800;")
         self.setStyleSheet(
             f"QFrame#card {{ border: 1px solid {theme.rgba(color, 0.28)}; "
             f"background-color: {theme.rgba(color, 0.08)}; border-radius: 12px; }}"
@@ -1367,3 +1385,150 @@ class SectionStepper(QWidget):
                 current = i
         if current != self._current:
             self.set_current(current)
+
+
+class FormDrawer(QWidget):
+    """R275: فرمِ ورودِ کنارِ فهرست، کشویِ جمع‌شونده است -- فهرست تمام‌عرض می‌ماند و فرم
+    فقط با کلیکِ یک ردیف یا «جدید» باز می‌شود (✕ دوباره جمعش می‌کند). فقط چیدمان:
+    همان ویجتِ فرم با همهٔ فیلدها و هندلرهایش جابه‌جا می‌شود، چیزی حذف یا عوض نمی‌شود.
+
+    layout: چیدمان یا QSplitterی که form_panel در آن نشسته (جایگاه و stretchِ همان خانه حفظ می‌شود).
+    open_signals: سیگنال‌هایِ کلیکِ ردیف؛ on_new: هندلرِ «جدید»ِ خودِ صفحه (مثلِ _reset_form)؛
+    new_buttons: دکمه‌هایِ «جدید»ِ موجودِ صفحه که باید کشو را هم باز کنند؛
+    handle_new=False برایِ فرم‌هایِ فقط‌ثبت که دکمهٔ ثبتِ خودشان ➕ است.
+    """
+
+    RAIL_WIDTH = 60
+
+    def __init__(
+        self,
+        layout,
+        form_panel: QWidget,
+        *,
+        open_signals=(),
+        on_new=None,
+        new_buttons=(),
+        new_tooltip: str = "جدید",
+        handle_new: bool = True,
+        start_open: bool = False,
+    ) -> None:
+        super().__init__()
+        self.setObjectName("formDrawer")
+        self.form_panel = form_panel
+        self._splitter = layout if isinstance(layout, QSplitter) else None
+        self._open_ratio = 0.6
+        if self._splitter is not None:
+            index = layout.indexOf(form_panel)
+            sizes = layout.sizes()
+            if sum(sizes) > 0 and sizes[index] > 0:
+                self._open_ratio = sizes[index] / sum(sizes)
+            layout.replaceWidget(index, self)
+            layout.setCollapsible(index, False)
+            at_start = index == 0
+        else:
+            layout.replaceWidget(form_panel, self)
+            at_start = layout.indexOf(self) == 0
+        self._on_new = on_new
+
+        box = QHBoxLayout(self)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(6)
+
+        # نوارِ باریکِ حالتِ جمع‌شده: «جدید» و «نمایشِ فرم»
+        self.rail = QWidget()
+        self.rail.setObjectName("formDrawerRail")
+        self.rail.setAttribute(Qt.WA_StyledBackground, True)
+        self.rail.setFixedWidth(self.RAIL_WIDTH)
+        rail_layout = QVBoxLayout(self.rail)
+        rail_layout.setContentsMargins(6, 10, 6, 10)
+        rail_layout.setSpacing(8)
+        self.new_button = None
+        if on_new is not None:
+            self.new_button = self._tool_button("➕", new_tooltip, primary=True)
+            self.new_button.clicked.connect(self._new)
+            rail_layout.addWidget(self.new_button, alignment=Qt.AlignHCenter)
+        self.show_button = self._tool_button("📝", "نمایشِ فرم")
+        self.show_button.clicked.connect(self.open)
+        rail_layout.addWidget(self.show_button, alignment=Qt.AlignHCenter)
+        rail_layout.addStretch(1)
+
+        # حالتِ باز: دکمهٔ جمع‌کردن در لبهٔ کشو + خودِ فرم
+        self.handle = QWidget()
+        handle_layout = QVBoxLayout(self.handle)
+        handle_layout.setContentsMargins(0, 4, 0, 4)
+        handle_layout.setSpacing(6)
+        self.close_button = self._tool_button("✕", "بستنِ فرم (فهرست تمام‌عرض)")
+        self.close_button.clicked.connect(self.collapse)
+        handle_layout.addWidget(self.close_button)
+        if on_new is not None and handle_new:
+            self.handle_new_button = self._tool_button("➕", new_tooltip, primary=True)
+            self.handle_new_button.clicked.connect(self._new)
+            handle_layout.addWidget(self.handle_new_button)
+        handle_layout.addStretch(1)
+
+        # دستگیره همیشه لبهٔ رو به فهرست را می‌گیرد (کشو اولِ چیدمان باشد یا آخرش)
+        for widget in ((form_panel, self.handle) if at_start else (self.handle, form_panel)):
+            box.addWidget(widget, 1 if widget is form_panel else 0)
+        box.addWidget(self.rail)
+
+        for signal in open_signals:
+            signal.connect(lambda *_args: self.open())
+        for button in new_buttons:
+            button.clicked.connect(lambda *_args: self.open())
+        self.set_open(start_open)
+
+    @staticmethod
+    def _tool_button(text: str, tooltip: str, primary: bool = False) -> QToolButton:
+        button = QToolButton()
+        button.setText(text)
+        button.setToolTip(tooltip)
+        button.setAccessibleName(tooltip)
+        button.setObjectName("drawerPrimary" if primary else "drawerButton")
+        button.setFixedSize(40, 36)
+        button.setCursor(Qt.PointingHandCursor)
+        return button
+
+    def is_open(self) -> bool:
+        return self._open
+
+    def set_open(self, value: bool) -> None:
+        was_open = getattr(self, "_open", None)
+        self._open = bool(value)
+        if self._splitter is not None and was_open and not self._open:
+            sizes = self._splitter.sizes()
+            if sum(sizes) > 0:
+                self._open_ratio = sizes[self._splitter.indexOf(self)] / sum(sizes)
+        self.rail.setVisible(not self._open)
+        self.handle.setVisible(self._open)
+        self.form_panel.setVisible(self._open)
+        self.setMaximumWidth(16777215 if self._open else self.RAIL_WIDTH)
+        if self._splitter is not None and self._open and was_open is False:
+            self._restore_splitter_size()
+
+    def _restore_splitter_size(self) -> None:
+        # QSplitter پهنایِ کشویِ جمع‌شده را نگه می‌دارد؛ هنگامِ باز شدن سهمِ قبلی‌اش برمی‌گردد
+        sizes = self._splitter.sizes()
+        index = self._splitter.indexOf(self)
+        total = sum(sizes)
+        if total <= 0:
+            return
+        want = min(max(int(total * self._open_ratio), self.RAIL_WIDTH * 4), total - self.RAIL_WIDTH)
+        others = [i for i in range(len(sizes)) if i != index]
+        rest = total - want
+        other_total = sum(sizes[i] for i in others) or len(others)
+        for i in others:
+            sizes[i] = max(1, int(rest * (sizes[i] or 1) / other_total))
+        sizes[index] = want
+        self._splitter.setSizes(sizes)
+
+    def open(self) -> None:
+        if not self._open:
+            self.set_open(True)
+
+    def collapse(self) -> None:
+        self.set_open(False)
+
+    def _new(self) -> None:
+        self._on_new()
+        self.open()
+

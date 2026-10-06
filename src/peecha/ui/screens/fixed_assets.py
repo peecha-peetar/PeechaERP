@@ -31,7 +31,7 @@ from peecha.ui import theme
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
-from peecha.ui.widgets import JalaliDateEdit
+from peecha.ui.widgets import FormDrawer, JalaliDateEdit
 
 ZERO = decimal.Decimal(0)
 
@@ -580,6 +580,8 @@ class AssetsScreen(QWidget):
         dl.addWidget(self.tabs, stretch=1)
         split.addWidget(self.detail)
         split.setSizes([380, 820])
+        # R275: جزئیاتِ دارایی کنارِ فهرست فقط با انتخابِ ردیف باز می‌شود؛ فهرست تمام‌عرض می‌ماند
+        self.detail_drawer = FormDrawer(split, self.detail, open_signals=[self.list_table.clicked])
         outer.addWidget(split, stretch=1)
         A = self.actions
         outer.addWidget(ms.footer([
@@ -649,6 +651,7 @@ class AssetsScreen(QWidget):
                 break
         self.list_table.blockSignals(False)
         self.load_asset(asset_id)
+        self.detail_drawer.open()
 
     def _clear(self) -> None:
         self.header_title.setText("")
@@ -1040,6 +1043,9 @@ class SetupScreen(QWidget):
         brow.addWidget(self.cat_save)
         self.cat_form.addRow(brow)
         cl.addWidget(form_box, stretch=1)
+        # R275: فرمِ طبقه کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.cat_drawer = FormDrawer(cl, form_box, open_signals=[self.cat_table.clicked], on_new=self._cat_clear,
+                                     new_tooltip="طبقهٔ جدید")
         self.tabs.addTab(cat, "طبقه‌ها و حساب‌ها")
         # محل‌ها
         loc = QWidget()

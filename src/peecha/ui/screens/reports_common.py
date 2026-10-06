@@ -139,8 +139,9 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         self._row_bold: list[bool] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 14, 20, 14)
-        layout.setSpacing(16)
+        # R275: سرِ گزارش فشرده‌تر تا ردیف‌هایِ بیشتری دیده شود
+        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setSpacing(8)
 
         header = QHBoxLayout()
         title_label = QLabel(title)
@@ -148,6 +149,7 @@ class ReportScreenBase(FieldHelpMixin, QWidget):
         header.addWidget(title_label)
         header.addStretch(1)
         layout.addLayout(header)
+        self.header_row = header
 
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("از تاریخ:"))

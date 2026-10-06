@@ -32,7 +32,7 @@ from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_documents as documents_service
 from peecha.services import inventory_engine as engine_service
 from peecha.services import unit_conversion as uc
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
+from peecha.ui.widgets import FieldGrid, FieldSpec, FormDrawer, LayoutEditMixin
 
 # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
 # برایِ انتخابش نیست»): این بُعدها یا از سرِسند (مرکزِ هزینه/پروژه)، یا
@@ -876,7 +876,10 @@ class _CategoriesTab(LayoutEditMixin, QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(16)
         layout.addWidget(self._build_list_panel(), stretch=1)
-        layout.addWidget(self._build_mapping_panel(), stretch=1)
+        mapping_panel = self._build_mapping_panel()
+        layout.addWidget(mapping_panel, stretch=1)
+        # R275: نگاشتِ حسابِ دسته کنارِ فهرست فقط با کلیکِ یک دسته باز می‌شود
+        self.form_drawer = FormDrawer(layout, mapping_panel, open_signals=[self.table.clicked])
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()

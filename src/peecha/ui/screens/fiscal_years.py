@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha import session as app_session
 from peecha.services import fiscal_years as fiscal_years_service
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable, wrap_scrollable_with_footer
+from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, wrap_scrollable, wrap_scrollable_with_footer
 
 _YEAR_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
 _PERIOD_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "دوره"]
@@ -43,7 +43,10 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=3)
-        outer.addWidget(self._build_form_panel(), stretch=1)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=1)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.status_label.clear, new_tooltip="سالِ مالیِ جدید", handle_new=False)
 
         self.set_field_help([
             (

@@ -107,6 +107,28 @@ def _leaf_nav_children_for_module(module_code: str) -> list[dict]:
     return _leaf_nav_children(module_item)
 
 
+def _ribbon_module(module_code: str) -> str:
+    """R275: صفحه‌هایِ تک‌برگ (داشبورد، کارتابل، تنظیمات، ...) ریبونِ صفحهٔ اصلی را نشان می‌دهند، نه ریبونِ خالی."""
+    if module_code in DEFAULT_QUICK_ACCESS_BY_MODULE and DEFAULT_QUICK_ACCESS_BY_MODULE[module_code]:
+        return module_code
+    return module_code if _leaf_nav_children_for_module(module_code) else "dashboard"
+
+
+def _ribbon_choices(module_code: str) -> list[tuple[str, list[dict]]]:
+    """گزینه‌هایِ فرمِ تنظیمِ ریبون: [(عنوانِ گروه، برگ‌ها)] -- ریبونِ صفحهٔ اصلی از همهٔ ماژول‌ها."""
+    if module_code != "dashboard":
+        return [("", _leaf_nav_children_for_module(module_code))]
+    groups: list[tuple[str, list[dict]]] = []
+    singles = [item for item in NAV_ITEMS if not item.get("children") and item["code"] != "dashboard"]
+    if singles:
+        groups.append(("عمومی", singles))
+    for item in NAV_ITEMS:
+        leaves = _leaf_nav_children(item) if item.get("children") else []
+        if leaves:
+            groups.append((item["label"], leaves))
+    return groups
+
+
 class _QuickAccessTile(QFrame):
     """کاشیِ ریبونِ میان‌بر — طبقِ نمونه‌طراحیِ کارت‌رنگیِ ارسالیِ کاربر،
     هم‌زبان با widgets.SummaryCard شد: بجِ آیکونِ ته‌رنگ‌دار (شیشه‌ایِ رنگیِ
@@ -122,12 +144,12 @@ class _QuickAccessTile(QFrame):
         self.setObjectName("quickTile")
         self.setCursor(Qt.PointingHandCursor)
         # R245 (درخواستِ صریح): آیکون بدونِ کادر و بزرگ‌تر؛ کاشی در حالتِ عادی بی‌قاب، فقط با هاور پس‌زمینه می‌گیرد
-        self.setFixedSize(96, 88)
+        self.setFixedSize(96, 82)
         self._on_click = on_click
         self._color = color or theme.ACCENT
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 6, 4, 6)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
         layout.setAlignment(Qt.AlignCenter)
 
@@ -1339,12 +1361,12 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(104)
+        scroll.setFixedHeight(96)
 
         bar = QWidget()
         bar.setObjectName("quickAccessBar")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(20, 8, 20, 8)
+        layout.setContentsMargins(20, 6, 20, 6)
         layout.setSpacing(10)
 
         scroll.setWidget(bar)
@@ -1375,6 +1397,7 @@ class MainWindow(QMainWindow):
         """ریبون را با میان‌برهایِ مربوط به ماژولِ فعلی دوباره می‌سازد —
         طبقِ درخواستِ صریح، ریبون باید مرتبط با ماژولی باشد که در ساید‌بار
         باز شده، نه یک فهرستِ ثابتِ سراسری."""
+        module_code = _ribbon_module(module_code)
         if module_code == self._quick_access_module_code:
             return
         self._quick_access_module_code = module_code
@@ -1392,7 +1415,8 @@ class MainWindow(QMainWindow):
                 widget.deleteLater()
 
         flat_items_by_code = {i["code"]: i for i in _flatten_nav_items()}
-        icon_by_code = dict(DEFAULT_QUICK_ACCESS_BY_MODULE.get(module_code, []))
+        icon_by_code = {code: icon for items in DEFAULT_QUICK_ACCESS_BY_MODULE.values() for code, icon in items}
+        icon_by_code.update(DEFAULT_QUICK_ACCESS_BY_MODULE.get(module_code, []))
         codes = self._quick_access_codes_for_module(module_code)
         for code in codes:
             item = flat_items_by_code.get(code)
@@ -1404,7 +1428,7 @@ class MainWindow(QMainWindow):
 
         self._quick_access_layout.addStretch(1)
 
-        if module_code in DEFAULT_QUICK_ACCESS_BY_MODULE and _leaf_nav_children_for_module(module_code):
+        if module_code in DEFAULT_QUICK_ACCESS_BY_MODULE and any(leaves for _title, leaves in _ribbon_choices(module_code)):
             config_button = HoverButton("⚙", hover_color=theme.HOVER, radius=8, margin=4)
             config_button.setObjectName("quickAccessConfigButton")
             config_button.setFixedSize(30, 30)
@@ -1416,8 +1440,8 @@ class MainWindow(QMainWindow):
         """طبقِ درخواستِ صریح («قابلیتِ کم‌وزیادکردنِ دکمه‌هایِ ریبون»):
         همه‌یِ آیتم‌هایِ برگِ همین ماژول را با تیک نشان می‌دهد — کاربر
         هرکدام را می‌تواند اضافه/کم کند."""
-        leaves = _leaf_nav_children_for_module(module_code)
-        if not leaves:
+        groups = _ribbon_choices(module_code)
+        if not any(leaves for _title, leaves in groups):
             return
         current_codes = set(self._quick_access_codes_for_module(module_code))
 
@@ -1429,12 +1453,31 @@ class MainWindow(QMainWindow):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
+        # R275: فهرستِ بلندِ صفحهٔ اصلی (همهٔ ماژول‌ها) در ناحیهٔ اسکرول‌دار
+        list_host = QWidget()
+        list_layout = QVBoxLayout(list_host)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(2)
         checkboxes: list[tuple[str, QCheckBox]] = []
-        for leaf in leaves:
-            checkbox = QCheckBox(leaf["label"])
-            checkbox.setChecked(leaf["code"] in current_codes)
-            layout.addWidget(checkbox)
-            checkboxes.append((leaf["code"], checkbox))
+        # ترتیبِ فعلیِ ریبون حفظ می‌شود؛ تیک‌هایِ تازه به انتها اضافه می‌شوند
+        ordered_codes = list(self._quick_access_codes_for_module(module_code))
+        for title, leaves in groups:
+            if title:
+                header = QLabel(title)
+                header.setStyleSheet("font-weight: bold; padding-top: 6px;")
+                list_layout.addWidget(header)
+            for leaf in leaves:
+                checkbox = QCheckBox(leaf["label"])
+                checkbox.setChecked(leaf["code"] in current_codes)
+                list_layout.addWidget(checkbox)
+                checkboxes.append((leaf["code"], checkbox))
+        list_layout.addStretch(1)
+        list_scroll = QScrollArea()
+        list_scroll.setWidgetResizable(True)
+        list_scroll.setFrameShape(QFrame.NoFrame)
+        list_scroll.setWidget(list_host)
+        list_scroll.setMinimumHeight(min(520, 28 * len(checkboxes) + 20))
+        layout.addWidget(list_scroll, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
@@ -1444,7 +1487,9 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.Accepted:
             return
 
-        selected_codes = [code for code, checkbox in checkboxes if checkbox.isChecked()]
+        checked = {code for code, checkbox in checkboxes if checkbox.isChecked()}
+        selected_codes = [code for code in ordered_codes if code in checked]
+        selected_codes += [code for code, _checkbox in checkboxes if code in checked and code not in selected_codes]
         settings = QSettings("Peecha", "PeechaERP")
         settings.setValue(self._quick_access_settings_key(module_code), json.dumps(selected_codes))
         self._quick_access_module_code = None  # مجبور به بازسازی

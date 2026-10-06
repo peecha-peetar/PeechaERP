@@ -31,6 +31,7 @@ from peecha.services import payroll_loans as loan_service
 from peecha.ui import theme
 from peecha.ui.widgets import (
     FieldHelpMixin,
+    FormDrawer,
     ZeroPaddedSpinBox,
     wrap_scrollable_with_footer,
 )
@@ -60,9 +61,12 @@ class PayrollLoansScreen(FieldHelpMixin, QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
-        outer.addWidget(self._build_form_panel(), stretch=2)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=2)
         outer.addWidget(self._build_loans_panel(), stretch=3)
         outer.addWidget(self._build_installments_panel(), stretch=3)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, on_new=self.form_status_label.clear, new_tooltip="ثبتِ وام/مساعدهٔ جدید", handle_new=False)
 
         self.set_field_help([
             (self.employee_combo, "کارمندی که این وام/مساعده برایِ او ثبت می‌شود."),

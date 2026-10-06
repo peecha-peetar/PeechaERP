@@ -934,7 +934,7 @@ class JournalEntryScreen(FieldHelpMixin, FormScreenBase):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         # طبقِ بازخورد: ارتفاعِ ردیف ۴۴ کافی نبود — فیلدها (با پدینگ+حاشیه)
         # حسِ فشرده/نصفه داشتند؛ ۵۲ فضایِ عمودیِ راحت‌تری به متن می‌دهد.
-        self.table.verticalHeader().setDefaultSectionSize(52)
+        self.table.verticalHeader().setDefaultSectionSize(46)
         self.table.setMinimumHeight(160)
         header = self.table.horizontalHeader()
         # طبقِ بازخورد: حساب/تفصیلی نباید غالب/بزرگ‌تر از بقیه باشند —

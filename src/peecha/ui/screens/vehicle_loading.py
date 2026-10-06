@@ -29,7 +29,7 @@ from peecha.numerals import format_jalali_date
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import vehicle_loading as vehicle_loading_service
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, build_action_footer, wrap_scrollable
+from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, build_action_footer, wrap_scrollable
 
 _LIST_COLUMNS = ["تاریخ", "خودرو", "انبارِ مبدا", "وضعیت"]
 _LINE_COLUMNS = ["کالا", "واحد", "مقدارِ برنامه‌ریزی‌شده", "موجودیِ لحظهٔ برنامه‌ریزی", "کسری"]
@@ -54,7 +54,10 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         outer.setContentsMargins(20, 14, 20, 14)
         outer.setSpacing(16)
         outer.addWidget(self._build_list_panel(), stretch=2)
-        outer.addWidget(self._build_form_panel(), stretch=3)
+        form_panel = self._build_form_panel()
+        outer.addWidget(form_panel, stretch=3)
+        # R275: فرم کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
+        self.form_drawer = FormDrawer(outer, form_panel, open_signals=[self.table.clicked], on_new=self._reset_form, new_tooltip="بارگیریِ جدید")
 
     def _build_list_panel(self) -> QWidget:
         panel = QWidget()
@@ -66,12 +69,6 @@ class VehicleLoadingScreen(FieldHelpMixin, QWidget):
         title.setObjectName("pageTitle")
         layout.addWidget(title)
 
-        new_button = QPushButton("➕")
-        new_button.setObjectName("primaryIconButton")
-        new_button.setFixedWidth(48)
-        new_button.setToolTip("بارگیریِ جدید")
-        new_button.clicked.connect(self._reset_form)
-        layout.addWidget(new_button, alignment=Qt.AlignLeft)
 
         self.table = QTableWidget(0, len(_LIST_COLUMNS))
         self.table.setHorizontalHeaderLabels(_LIST_COLUMNS)

@@ -13,7 +13,8 @@ import decimal
 
 from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QCompleter, QDialog, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QVBoxLayout,
+    QCheckBox, QComboBox, QCompleter, QDialog, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QSizePolicy,
+    QVBoxLayout,
 )
 
 from peecha import numerals
@@ -152,6 +153,43 @@ class ReportChartDialog(QDialog):
             render_bar_chart(self.chart_view, [k for k, _v in data], [v for _k, v in data], self.value_combo.currentText())
 
 
+# R275: فیلترهایِ واقعیِ هر گزارش -- با بررسیِ کدِ هر گزارش: فیلتری که گزارش نمی‌خواند حذف و فیلتری که می‌خواند
+# ولی در سرِ گزارش نبود، اضافه شد. (سمت، کد) ← (حذف، افزودن)
+_FILTER_FIXES: dict[tuple[str, str], tuple[tuple[str, ...], tuple[str, ...]]] = {
+    ("ACCOUNTING", "NUMBER_GAPS"): ((), ("account", "detail")),
+    ("INVENTORY", "COST_VARIANCE"): (("branch", "warehouse"), ()),
+    ("INVENTORY", "ISSUES"): (("brand",), ()),
+    ("INVENTORY", "RECEIVING"): (("brand",), ()),
+    ("INVENTORY", "TRANSFERS"): ((), ("item", "category", "brand")),
+    ("INVENTORY", "WMS_PERFORMANCE"): ((), ("item", "category", "brand")),
+    ("INVENTORY", "PRD_COST"): ((), ("warehouse",)),
+    **{("INVENTORY", code): ((), ("branch",)) for code in (
+        "PRD_BY_PERIOD", "PRD_BY_PRODUCT", "PRD_BY_WAREHOUSE", "PRD_BY_WORK_CENTER", "PRD_COST_TREND", "PRD_PROFITABILITY")},
+    **{("INVENTORY", code): ((), ("warehouse", "branch")) for code in (
+        "PRD_COST_VARIANCE", "PRD_EFFICIENCY", "PRD_MATERIAL_REQUIREMENT", "PRD_MATERIAL_VARIANCE", "PRD_MATERIAL_WASTE",
+        "PRD_SCRAP_ANALYSIS", "PRD_STD_VS_ACTUAL", "PRD_UNIT_COST")},
+    ("PURCHASE", "CONCENTRATION"): ((), ("warehouse",)),
+    ("PURCHASE", "LANDED_BY_TYPE"): ((), ("item", "category", "warehouse")),
+    ("PURCHASE", "LATE_ORDERS"): ((), ("item", "category", "warehouse")),
+    ("PURCHASE", "PRICE_COMPARE"): ((), ("warehouse",)),
+    ("PURCHASE", "PRICE_STABILITY"): ((), ("warehouse",)),
+    ("PURCHASE", "RFQ_RESPONSE"): ((), ("item",)),
+    ("PURCHASE", "SCORECARD"): ((), ("warehouse",)),
+    ("PURCHASE", "SUPPLIERS"): ((), ("item", "category", "warehouse")),
+    ("PURCHASE", "VAT"): ((), ("item", "category", "warehouse")),
+    ("SALES", "CUSTOMERS"): ((), ("item", "category", "warehouse")),
+    ("SALES", "PRICE_COMPARE"): ((), ("warehouse",)),
+}
+_FILTER_ORDER = ("supplier", "item", "category", "brand", "fa_category", "fa_location", "warehouse", "branch", "cost_center",
+                 "account", "detail")
+
+
+def effective_filters(side: str, report_def) -> tuple[str, ...]:
+    drop, add = _FILTER_FIXES.get((side, report_def.code), ((), ()))
+    keys = (set(report_def.filters) - set(drop)) | set(add)
+    return tuple(k for k in _FILTER_ORDER if k in keys)
+
+
 class PurchaseReportScreen(ReportScreenBase):
     def __init__(self, report_code: str, main_window=None, side: str = "PURCHASE") -> None:
         self._side = side
@@ -184,7 +222,14 @@ class PurchaseReportScreen(ReportScreenBase):
         self.brand_combo = _searchable_combo()
         self.branch_combo = _searchable_combo()
         self.detail_combo = _searchable_combo()
+        self.fa_category_combo = _searchable_combo()
+        self.fa_location_combo = _searchable_combo()
+        self.cost_center_combo_f = _searchable_combo()
+        self._filters_used = effective_filters(side, self._def)
         self._filter_widgets = {
+            "fa_category": ("طبقه:", self.fa_category_combo),
+            "fa_location": ("محل:", self.fa_location_combo),
+            "cost_center": ("مرکزِ هزینه:", self.cost_center_combo_f),
             "account": ("حساب:", self.account_combo),
             "detail": ("تفصیلی:", self.detail_combo),
             "brand": ("برند:", self.brand_combo),
@@ -194,7 +239,7 @@ class PurchaseReportScreen(ReportScreenBase):
             "category": ("گروهِ کالا:", self.category_combo),
             "warehouse": ("انبار:", self.warehouse_combo),
         }
-        for key in self._def.filters:
+        for key in self._filters_used:
             label, widget = self._filter_widgets[key]
             self.extra_filter_row.addWidget(QLabel(label))
             self.extra_filter_row.addWidget(widget)
@@ -213,13 +258,20 @@ class PurchaseReportScreen(ReportScreenBase):
             self._option_combos[key] = (label, combo)
         self.options_row.addStretch(1)
 
+        # R275: توضیحِ گزارش کنارِ عنوان (نه یک ردیفِ جدا)؛ متنِ کامل در تول‌تیپ
         self.hint_label = QLabel(self._def.hint)
         self.hint_label.setObjectName("sectionHint")
-        self.hint_label.setWordWrap(True)
-        self.layout().insertWidget(1, self.hint_label)
+        self.hint_label.setToolTip(self._def.hint)
+        self.hint_label.setMinimumWidth(0)
+        self.hint_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.header_row.insertWidget(1, self.hint_label, stretch=1)
 
         # R239: نوارِ نما -- گروه‌بندی، نمودار، نماهایِ ذخیره‌شده
-        tools = QHBoxLayout()
+        # R275: گزینه‌هایِ گزارش و ابزارِ نما در یک ردیف
+        tools = self.options_row
+        tools.takeAt(tools.count() - 1)  # stretch
+        if self._def.options:
+            tools.addSpacing(24)
         tools.addWidget(QLabel("گروه‌بندی:"))
         self.group_combo = QComboBox()
         self.group_combo.addItem("— بدونِ گروه‌بندی —", None)
@@ -229,7 +281,8 @@ class PurchaseReportScreen(ReportScreenBase):
         chart_button.setObjectName("flatButton")
         chart_button.clicked.connect(self.open_chart)
         tools.addWidget(chart_button)
-        if side == "INVENTORY":  # R248: اتصال به نقشهٔ انبار
+        # R248: اتصال به نقشهٔ انبار -- R275: فقط گزارش‌هایی که انبار/کالا دارند (نه دارایی/تولید/بها)
+        if side == "INVENTORY" and not report_code.startswith(("FA_", "PRD_", "COST_")):
             map_button = QPushButton("نمایش روی نقشه")
             map_button.setObjectName("flatButton")
             map_button.clicked.connect(lambda: self.show_on_map(self.table.currentRow()))
@@ -252,8 +305,6 @@ class PurchaseReportScreen(ReportScreenBase):
         delete_view.clicked.connect(lambda: self.delete_view(self.view_combo.currentData()))
         tools.addWidget(delete_view)
         tools.addStretch(1)
-        if self._def.options:
-            self.layout().insertLayout(self.layout().indexOf(self.table), self.options_row)
         self.layout().insertLayout(self.layout().indexOf(self.table), tools)
 
         # R247: صفحه‌بندیِ نمایش (چاپ/خروجی همیشه همهٔ ردیف‌ها را دارد)
@@ -318,6 +369,15 @@ class PurchaseReportScreen(ReportScreenBase):
 
                 _fill(self.brand_combo, [(f"{b.code} — {b.name}", b.brand_id) for b in catalog_service.list_brands(company_id)])
                 _fill(self.branch_combo, [(f"{b.code} — {b.name}", b.branch_id) for b in masters_service.list_branches(company_id)])
+                if {"fa_category", "fa_location"} & set(self._filters_used):
+                    from peecha.services.fixed_assets import common as fa_common
+
+                    _fill(self.fa_category_combo, [(f"{x.code} — {x.name}", x.category_id) for x in fa_common.list_categories(company_id)])
+                    _fill(self.fa_location_combo, [(f"{x.code} — {x.name}", x.location_id) for x in fa_common.list_locations(company_id)])
+                if "cost_center" in self._filters_used:
+                    cc_type = dimensions_service.get_specialized_dimension_type_id(company_id, dimensions_service.COST_CENTER_CODE)
+                    _fill(self.cost_center_combo_f, [(f"{d.code} — {d.name or ''}", d.detail_account_id)
+                                                     for d in dimensions_service.list_leaf_detail_accounts(company_id, cc_type)])
             else:
                 parties = dimensions_service.list_suppliers(company_id) if self._side == "PURCHASE" \
                     else dimensions_service.list_customers(company_id)
@@ -336,7 +396,7 @@ class PurchaseReportScreen(ReportScreenBase):
             self.date_from.setDate(date_from)
         if date_to is not None:
             self.date_to.setDate(date_to)
-        for key in self._def.filters:
+        for key in self._filters_used:
             combo = self._filter_widgets[key][1]
             combo.setCurrentIndex(max(0, combo.findData(filters.get(f"{key}_id"))))
         for key, (_label, combo) in self._option_combos.items():
@@ -348,7 +408,7 @@ class PurchaseReportScreen(ReportScreenBase):
 
     def _filters(self, date_from: datetime.date, date_to: datetime.date) -> reports_service.PurchaseFilters:
         def value(key: str):
-            return self._filter_widgets[key][1].currentData() if key in self._def.filters else None
+            return self._filter_widgets[key][1].currentData() if key in self._filters_used else None
 
         if self._def.date_mode == "none":
             date_from, date_to = datetime.date(1900, 1, 1), datetime.date.today()
@@ -359,6 +419,7 @@ class PurchaseReportScreen(ReportScreenBase):
             category_id=value("category"), warehouse_id=value("warehouse"), side=self._side,
             account_id=value("account"), detail_account_id=value("detail"),
             brand_id=value("brand"), branch_id=value("branch"),
+            fa_category_id=value("fa_category"), fa_location_id=value("fa_location"), cost_center_id=value("cost_center"),
             options={key: combo.currentData() for key, (_label, combo) in self._option_combos.items()},
         )
 
@@ -594,7 +655,7 @@ class PurchaseReportScreen(ReportScreenBase):
 
     def current_view(self) -> dict:
         return {
-            "filters": {key: self._filter_widgets[key][1].currentData() for key in self._def.filters},
+            "filters": {key: self._filter_widgets[key][1].currentData() for key in self._filters_used},
             "options": {key: combo.currentData() for key, (_l, combo) in self._option_combos.items()},
             "sort": [self._sort_col, self._sort_desc],
             "group": self.group_combo.currentData(),
@@ -652,7 +713,7 @@ class PurchaseReportScreen(ReportScreenBase):
 
     def extra_filters_summary(self) -> list[tuple[str, str]]:
         parts = []
-        for key in self._def.filters:
+        for key in self._filters_used:
             label, widget = self._filter_widgets[key]
             if widget.currentData() is not None:
                 parts.append((label.rstrip(":"), widget.currentText()))
