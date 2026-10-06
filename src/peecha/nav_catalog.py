@@ -252,6 +252,32 @@ FA_REPORT_MENU = [
     ]),
 ]
 
+# R270: «گزارش‌ها ‹ تولید» -- services/production/reports.PRODUCTION_REPORTS
+PRD_REPORT_MENU = [
+    ("PRD", "تولید", [
+        ("PRD_ORDERS", "دستورهایِ تولید"), ("PRD_BY_PRODUCT", "تولید به تفکیکِ محصول"), ("PRD_BY_WAREHOUSE", "تولید به تفکیکِ انبار"),
+        ("PRD_BY_BRANCH", "تولید به تفکیکِ شعبه"), ("PRD_BY_PERIOD", "تولید به تفکیکِ دوره"),
+        ("PRD_BY_WORK_CENTER", "تولید به تفکیکِ مرکزِ کاری"),
+    ]),
+    ("PRD_MAT", "مواد", [
+        ("PRD_MATERIAL_CONSUMPTION", "مصرفِ مواد"), ("PRD_MATERIAL_VARIANCE", "انحرافِ مواد"),
+        ("PRD_MATERIAL_WASTE", "ضایعات و هدررفتِ مواد"), ("PRD_MATERIAL_REQUIREMENT", "نیازِ مواد"),
+    ]),
+    ("PRD_COST", "بهایِ تمام‌شده", [
+        ("PRD_COST", "بهایِ تمام‌شدهٔ تولید"), ("PRD_UNIT_COST", "بهایِ واحدِ محصول"), ("PRD_STD_VS_ACTUAL", "استاندارد در برابرِ واقعی"),
+        ("PRD_COST_VARIANCE", "تحلیلِ انحرافِ بها"), ("PRD_OVERHEAD", "تخصیصِ سربار"), ("PRD_LABOR", "هزینهٔ دستمزد"),
+        ("PRD_MACHINE", "هزینهٔ ماشین"),
+    ]),
+    ("PRD_INV", "موجودیِ تولید", [
+        ("PRD_WIP", "کالایِ در جریانِ ساخت (WIP)"), ("PRD_SEMI_STOCK", "موجودیِ نیمه‌ساخته"), ("PRD_FG_STOCK", "موجودیِ محصولِ نهایی"),
+        ("PRD_SCRAP", "ضایعات"), ("PRD_BYPRODUCTS", "محصولاتِ جانبی و مشترک"),
+    ]),
+    ("PRD_MGMT", "مدیریتی", [
+        ("PRD_PROFITABILITY", "سودآوریِ تولید"), ("PRD_COST_TREND", "روندِ بهایِ تمام‌شده"), ("PRD_EFFICIENCY", "کاراییِ تولید"),
+        ("PRD_CAPACITY", "بهره‌برداری از ظرفیت"), ("PRD_SCRAP_ANALYSIS", "تحلیلِ ضایعات"), ("PRD_TRACE", "ردیابیِ تولید"),
+    ]),
+]
+
 
 def _report_menu(prefix: str, screen_prefix: str, menu: list) -> list[dict]:
     return [
@@ -411,6 +437,27 @@ NAV_ITEMS = [
             ]},
         ],
     },
+    # R270: تولید -- «دستورهایِ تولید» صفحهٔ مرکزی است؛ اطلاعاتِ پایه/برنامه‌ریزی/بها پشتِ آن
+    {
+        "code": "PRD",
+        "label": "تولید",
+        "children": [
+            {"code": "PRD_DASHBOARD", "label": "داشبوردِ تولید", "screen": "prd_dashboard"},
+            {"code": "PRD_ORDERS", "label": "دستورهایِ تولید", "screen": "prd_orders"},
+            {"code": "PRD_PLANNING", "label": "برنامه‌ریزی، MRP و ظرفیت", "screen": "prd_planning"},
+            {"code": "PRD_MASTER", "label": "اطلاعاتِ پایه (BOM، مسیر، مرکزِ کاری)", "screen": "prd_master"},
+            {"code": "PRD_COSTING", "label": "بهایِ تمام‌شده، سربار و بستنِ دوره", "screen": "prd_costing"},
+            {"code": "PRD_SETTINGS", "label": "تنظیماتِ تولید", "screen": "prd_settings"},
+            {"code": "PRD_REPORTS", "label": "گزارش‌ها", "children": [
+                {"code": "PRD_RPT_ORDERS", "label": "دستورهایِ تولید", "screen": "warehouse_report_prd_orders"},
+                {"code": "PRD_RPT_COST", "label": "بهایِ تمام‌شدهٔ تولید", "screen": "warehouse_report_prd_cost"},
+                {"code": "PRD_RPT_VARIANCE", "label": "تحلیلِ انحرافِ بها", "screen": "warehouse_report_prd_cost_variance"},
+                {"code": "PRD_RPT_WIP", "label": "کالایِ در جریانِ ساخت", "screen": "warehouse_report_prd_wip"},
+                {"code": "PRD_RPT_PROFIT", "label": "سودآوریِ تولید", "screen": "warehouse_report_prd_profitability"},
+                {"code": "PRD_RPT_TRACE", "label": "ردیابیِ تولید", "screen": "warehouse_report_prd_trace"},
+            ]},
+        ],
+    },
     {
         "code": "SALES",
         "label": "فروش و بازاریابی",
@@ -530,6 +577,7 @@ NAV_ITEMS = [
             # R246: گزارش‌ها و تحلیلِ انبار (services/warehouse_reports.py) -- کاردکسِ قبلی با همان کد
             {"code": "REPORTS_INV", "label": "انبار", "children": _report_menu("INV_RPT", "warehouse_report_", WAREHOUSE_REPORT_MENU)},
             {"code": "REPORTS_FA", "label": "دارایی‌هایِ ثابت", "children": _report_menu("INV_RPT", "warehouse_report_", FA_REPORT_MENU)},
+            {"code": "REPORTS_PRD", "label": "تولید", "children": _report_menu("INV_RPT", "warehouse_report_", PRD_REPORT_MENU)},
             # R236: گزارشاتِ خرید و فروش (services/purchase_reports.py، صفحهٔ عمومیِ purchase_reports.py)
             {"code": "REPORTS_PURCHASE", "label": "گزارشاتِ خرید", "children": _report_menu("PURCH_RPT", "purchase_report_", PURCHASE_REPORT_MENU)},
             {"code": "REPORTS_SALES", "label": "گزارشاتِ فروش", "children": _report_menu("SALES_RPT", "sales_report_", SALES_REPORT_MENU)},
@@ -692,6 +740,12 @@ _EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
     ("fa_sell", "FA", "دارایی: فروش"), ("fa_scrap", "FA", "دارایی: اسقاط"), ("fa_dispose", "FA", "دارایی: واگذاری/حذف"),
     ("fa_split_merge", "FA", "دارایی: تقسیم/ادغام/جزء"), ("fa_cost_view", "FA", "دارایی: مشاهدهٔ بها"),
     ("fa_cost_adjust", "FA", "دارایی: ثبتِ بهایِ تحصیل"),
+    # R270: دسترسی‌هایِ جداگانهٔ تولید (بندِ ۳۶) -- «مشاهده/ایجاد/ویرایشِ دستور» همان VIEW/CREATE/EDITِ prd_orders است
+    ("prd_release", "PRD", "تولید: صدور و رزرو"), ("prd_consume", "PRD", "تولید: مصرفِ مواد و ثبتِ کار"),
+    ("prd_complete", "PRD", "تولید: ثبتِ تولید و اتمام"), ("prd_close", "PRD", "تولید: بستنِ دستور"),
+    ("prd_cost_view", "PRD", "تولید: مشاهدهٔ بها"), ("prd_cost_adjust", "PRD", "تولید: اصلاحِ بها/بازگشایی"),
+    ("prd_bom", "PRD", "تولید: مدیریتِ BOM"), ("prd_routing", "PRD", "تولید: مدیریتِ مسیرِ تولید"),
+    ("prd_allocation", "PRD", "تولید: مدیریتِ سرشکنِ هزینه"),
 ]
 
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط

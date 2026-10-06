@@ -1912,4 +1912,8 @@ WAREHOUSE_REPORTS += COSTING_REPORTS
 from peecha.services.fixed_assets.reports import FA_REPORTS  # noqa: E402
 
 WAREHOUSE_REPORTS += FA_REPORTS
+# R270: گزارش‌هایِ تولید
+from peecha.services.production.reports import PRODUCTION_REPORTS  # noqa: E402
+
+WAREHOUSE_REPORTS += PRODUCTION_REPORTS
 WAREHOUSE_REPORTS_BY_CODE = {r.code: r for r in WAREHOUSE_REPORTS}

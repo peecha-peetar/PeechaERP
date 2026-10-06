@@ -72,6 +72,7 @@ _NAV_ICONS = {
     "INV": "📦",
     "COSTING": "🧮",
     "FA": "🏭",
+    "PRD": "🔩",
     "SALES": "🛒",
     "PURCH": "🧺",
     "HR": "👥",
@@ -1781,6 +1782,14 @@ class MainWindow(QMainWindow):
         self.register_screen("fa_cip", fa_screens.CipScreen())
         self.register_screen("fa_physical_count", fa_screens.PhysicalCountScreen())
         self.register_screen("fa_setup", fa_screens.SetupScreen())
+        from peecha.ui.screens import production as prd_screens
+
+        self.register_screen("prd_dashboard", prd_screens.PrdDashboard(self))  # R270
+        self.register_screen("prd_orders", prd_screens.OrdersScreen(self))
+        self.register_screen("prd_planning", prd_screens.PlanningScreen())
+        self.register_screen("prd_master", prd_screens.MasterDataScreen())
+        self.register_screen("prd_costing", prd_screens.PrdCostingScreen())
+        self.register_screen("prd_settings", prd_screens.PrdSettingsScreen())
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", WarehouseOperationsScreen())

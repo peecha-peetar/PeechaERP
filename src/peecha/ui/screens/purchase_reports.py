@@ -676,6 +676,9 @@ class PurchaseReportScreen(ReportScreenBase):
             if doc_type == "FA_ASSET":  # R265: صفحهٔ دارایی
                 self._main_window.open_screen("FA_ASSETS", then=lambda screen: screen.open_asset(document_id))
                 return
+            if doc_type == "PRD_ORDER":  # R270: صفحهٔ مرکزیِ دستورِ تولید
+                self._main_window.open_screen("PRD_ORDERS", then=lambda screen: screen.open_order(document_id))
+                return
             if doc_type.startswith("STOCK:"):
                 from peecha.ui.screens.inventory_documents_list import _TYPE_TO_NAV_CODE as _STOCK_NAV
 
