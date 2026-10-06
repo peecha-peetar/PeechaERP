@@ -144,12 +144,12 @@ class _QuickAccessTile(QFrame):
         self.setObjectName("quickTile")
         self.setCursor(Qt.PointingHandCursor)
         # R245 (درخواستِ صریح): آیکون بدونِ کادر و بزرگ‌تر؛ کاشی در حالتِ عادی بی‌قاب، فقط با هاور پس‌زمینه می‌گیرد
-        self.setFixedSize(96, 82)
+        self.setFixedSize(96, 88)
         self._on_click = on_click
         self._color = color or theme.ACCENT
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(4, 6, 4, 6)
         layout.setSpacing(2)
         layout.setAlignment(Qt.AlignCenter)
 
@@ -1361,12 +1361,12 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedHeight(96)
+        scroll.setFixedHeight(104)
 
         bar = QWidget()
         bar.setObjectName("quickAccessBar")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(20, 6, 20, 6)
+        layout.setContentsMargins(20, 8, 20, 8)
         layout.setSpacing(10)
 
         scroll.setWidget(bar)
