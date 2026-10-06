@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from peecha.db.base import new_session
 from peecha.db.models.inventory import Item, StockBalance, Warehouse
 from peecha.db.models.production import (
-    CostAllocationRow, CostPool, LaborEntry, MachineEntry, OrderMaterial, OrderOperation, OrderOutput, OrderTransaction,
+    CostAllocationRow, CostPool, LaborEntry, MachineEntry, OrderMaterial, OrderOperation, OrderTransaction,
     ProductionOrder, WorkCenter,
 )
 from peecha.services.production import common as c
