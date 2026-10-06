@@ -434,6 +434,14 @@ def _show_invoice_print(
     _print_receipt_document(parent, html)
 
 
+
+def _set_initial_visibility(widget, visible: bool) -> None:
+    # دکمهٔ هنوز بی‌والد با setVisible(True) یک پنجرهٔ مستقل باز می‌کند و فوکوسِ برنامه را می‌گیرد
+    if not visible:
+        widget.hide()
+    elif widget.parent() is not None:
+        widget.show()
+
 class _CounterpartyHistoryDialog(QDialog):
     """طبقِ درخواستِ صریح: مثلاً ۱۰ فاکتورِ آخرِ طرفِ‌حساب -- با تعدادِ
     ردیفِ قابلِ‌تنظیم. دابل‌کلیک رویِ هر ردیف، خلاصهٔ همان سند را نمایش
@@ -2896,7 +2904,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             "پیش از ثبتِ نهایی نیازِ تاییدِ مدیر دارد."
         )
         self.settlement_plan_button.clicked.connect(self._open_settlement_plan)
-        self.settlement_plan_button.setVisible(document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
+        _set_initial_visibility(self.settlement_plan_button, document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
         self.footer_layout.addWidget(self.settlement_plan_button)
 
         # طبقِ گزارشِ صریح («بعضی فرم‌ها روی دکمه‌هاش نوشته داره و نصف
@@ -2954,7 +2962,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         # فاکتور (فروش) طبقِ همان تصمیمِ قبلی («دکمه‌هایِ ثبتِ فراوان»)
         # همچنان پنهان می‌ماند، چون approve_document برایِ آن‌ها هیچ اثرِ
         # واقعی‌ای ندارد.
-        self.approve_button.setVisible(not self._is_invoice or self.document_type_code in _TWO_STAGE_APPROVAL_TYPES)
+        _set_initial_visibility(self.approve_button, not self._is_invoice or self.document_type_code in _TWO_STAGE_APPROVAL_TYPES)
         self.footer_layout.addWidget(self.approve_button)
 
         self.post_button = QPushButton("🔒")
@@ -2995,7 +3003,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.line_dates_button.setFixedWidth(44)
         self.line_dates_button.setToolTip("تاریخِ تحویلِ موردِ انتظارِ هر ردیف (حتی پس از تایید)")
         self.line_dates_button.clicked.connect(self._edit_line_dates)
-        self.line_dates_button.setVisible(self.document_type_code == "PURCHASE_ORDER")
+        _set_initial_visibility(self.line_dates_button, self.document_type_code == "PURCHASE_ORDER")
         self.footer_layout.addWidget(self.line_dates_button)
 
         # طبقِ درخواستِ صریح («مدیر بتواند فاکتورِ ثبت‌شده را اصلاح کند»):
@@ -3012,7 +3020,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             "و یک پیش‌نویسِ تازه برایِ ویرایش باز می‌شود."
         )
         self.correct_button.clicked.connect(self._correct_invoice)
-        self.correct_button.setVisible(document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
+        _set_initial_visibility(self.correct_button, document_type_code in ("SALES_INVOICE", "PURCHASE_INVOICE"))
         self.footer_layout.addWidget(self.correct_button)
 
         # طبقِ درخواستِ صریح («فرمِ تسهیمِ هزینه در فاکتورِ خرید»): فقط
@@ -3026,7 +3034,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
             "و حساب‌هایِ انتخاب‌شده برایِ هرکدام بستانکار می‌شوند."
         )
         self.landed_cost_button.clicked.connect(self._open_landed_costs)
-        self.landed_cost_button.setVisible(document_type_code == "PURCHASE_INVOICE")
+        _set_initial_visibility(self.landed_cost_button, document_type_code == "PURCHASE_INVOICE")
         self.footer_layout.addWidget(self.landed_cost_button)
 
         # طبقِ درخواستِ صریح («سفارش/پیش‌فاکتور بتواند به فاکتور تبدیل
@@ -3036,7 +3044,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.convert_button.setFixedWidth(48)
         self.convert_button.setToolTip("تبدیل به فاکتور — از مقدارِ باقی‌ماندهٔ این سند، فاکتورِ تازه می‌سازد")
         self.convert_button.clicked.connect(self._convert_to_invoice)
-        self.convert_button.setVisible(document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
+        _set_initial_visibility(self.convert_button, document_type_code in _CONVERTIBLE_TO_INVOICE_TYPES)
         self.footer_layout.addWidget(self.convert_button)
 
         # طبقِ درخواستِ صریح («در انتهایِ فرم‌هایِ بازرگانی دکمه‌ای که
@@ -3058,7 +3066,7 @@ class CommercialDocumentScreen(FieldHelpMixin, FormScreenBase):
         self.pick_from_invoice_button.setFixedWidth(48)
         self.pick_from_invoice_button.setToolTip("انتخابِ اقلام از یکی از فاکتورهایِ قبلیِ همین طرفِ‌حساب")
         self.pick_from_invoice_button.clicked.connect(self._pick_lines_from_invoice)
-        self.pick_from_invoice_button.setVisible(document_type_code in ("SALES_RETURN", "PURCHASE_RETURN"))
+        _set_initial_visibility(self.pick_from_invoice_button, document_type_code in ("SALES_RETURN", "PURCHASE_RETURN"))
         self.footer_layout.addWidget(self.pick_from_invoice_button)
 
         self.report_button = QPushButton("📄")

@@ -145,6 +145,7 @@ def insert_asset(session, company_id: int, user_id: int | None, f: AssetFields, 
     _apply_fields(asset, f, category)
     session.add(asset)
     session.flush()
+    c.ensure_asset_detail(session, asset)
     c.audit(session, company_id, user_id, asset.asset_id, "CREATE",
             {"asset_code": asset.asset_code, "name": asset.name, "category_id": asset.category_id})
     return asset
@@ -181,6 +182,7 @@ def update_asset(company_id: int, user_id: int | None, asset_id: int, f: AssetFi
         changes = {k: [str(before[k]), str(getattr(asset, k))] for k in _TRACKED if before[k] != getattr(asset, k)}
         if changes:
             c.audit(session, company_id, user_id, asset_id, "EDIT", {**changes, "reason": reason})
+        c.ensure_asset_detail(session, asset)
         session.commit()
 
 
@@ -188,7 +190,8 @@ def update_asset(company_id: int, user_id: int | None, asset_id: int, f: AssetFi
 def _cost_lines(asset: Asset, category: AssetCategory, items: list[CostItem], memo: str) -> list[c.JLine]:
     total = sum((c.money(i.amount) for i in items), ZERO)
     lines = [c.JLine(category.asset_account_id, debit=total, detail_ids=(asset.cost_center_detail_account_id,
-                                                                       asset.project_detail_account_id), description=memo)]
+                                                                       asset.project_detail_account_id, c.asset_detail_id(asset)),
+                     description=memo)]
     for i in items:
         if i.offset_account_id is None:
             raise ValueError(f"حسابِ طرفِ مقابلِ «{COST_TYPES.get(i.cost_type, i.cost_type)}» مشخص نشده است.")
@@ -465,7 +468,7 @@ def reclassify(company_id: int, user_id: int, asset_id: int, new_category_id: in
             c.require_accounts(new, ("asset_account_id",) + (("accumulated_depreciation_account_id",)
                                                               if asset.accumulated_depreciation + asset.accumulated_impairment else ()))
             accumulated = asset.accumulated_depreciation + asset.accumulated_impairment
-            dims = (asset.cost_center_detail_account_id, asset.project_detail_account_id)
+            dims = (asset.cost_center_detail_account_id, asset.project_detail_account_id, c.asset_detail_id(asset))
             memo = f"تغییرِ طبقهٔ دارایی {asset.asset_code}: {old.name} ← {new.name}"
             lines = [c.JLine(new.asset_account_id, debit=asset.gross_cost, detail_ids=dims),
                      c.JLine(old.asset_account_id, credit=asset.gross_cost, detail_ids=dims)]

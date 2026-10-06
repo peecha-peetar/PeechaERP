@@ -215,9 +215,10 @@ def post_run(company_id: int, user_id: int, run_id: int) -> int | None:
             if asset.book_value != ln.opening_book_value or asset.status_code not in c.DEPRECIABLE_STATUSES:
                 raise ValueError(f"دارایی «{asset.asset_code}» پس از محاسبه تغییر کرده است؛ دوباره محاسبه کنید.")
             assets[ln.asset_id] = asset
-            dims = (ln.cost_center_detail_account_id, asset.project_detail_account_id)
+            dims = (ln.cost_center_detail_account_id, asset.project_detail_account_id, asset.detail_account_id)
             jl.append(c.JLine(ln.expense_account_id, debit=ln.amount, detail_ids=dims))
-            jl.append(c.JLine(ln.accumulated_account_id, credit=ln.amount, detail_ids=(ln.cost_center_detail_account_id,)))
+            jl.append(c.JLine(ln.accumulated_account_id, credit=ln.amount,
+                              detail_ids=(ln.cost_center_detail_account_id, asset.detail_account_id)))
         memo = f"استهلاکِ دارایی‌هایِ ثابت -- دورهٔ {run.period_code}"
         je_id = c.post_journal(session, company_id, user_id, run.posting_date, memo, jl) if jl else None
         for ln in lines:
@@ -254,9 +255,10 @@ def reverse_run(company_id: int, user_id: int, run_id: int, date: datetime.date 
             asset = c.lock_asset(session, ln.asset_id, company_id)
             c.ensure_open(asset)
             assets[ln.asset_id] = asset
-            jl.append(c.JLine(ln.accumulated_account_id, debit=ln.amount, detail_ids=(ln.cost_center_detail_account_id,)))
+            jl.append(c.JLine(ln.accumulated_account_id, debit=ln.amount,
+                              detail_ids=(ln.cost_center_detail_account_id, asset.detail_account_id)))
             jl.append(c.JLine(ln.expense_account_id, credit=ln.amount,
-                              detail_ids=(ln.cost_center_detail_account_id, asset.project_detail_account_id)))
+                              detail_ids=(ln.cost_center_detail_account_id, asset.project_detail_account_id, asset.detail_account_id)))
         memo = f"برگشتِ استهلاکِ دورهٔ {run.period_code}" + (f" -- {reason}" if reason else "")
         je_id = c.post_journal(session, company_id, user_id, date, memo, jl) if jl else None
         for ln in lines:

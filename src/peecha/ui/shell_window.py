@@ -727,6 +727,38 @@ class _FramelessMdiSubWindow(QMdiSubWindow):
             self._normalizing = False
 
 
+class _LazyScreens(dict):
+    """نام ← صفحه؛ صفحه‌یِ ثبت‌شده با factory در اولین دسترسی ساخته می‌شود. values() فقط ساخته‌شده‌ها."""
+
+    def __init__(self, on_build) -> None:
+        super().__init__()
+        self._factories: dict = {}
+        self._on_build = on_build
+
+    def add_factory(self, name: str, factory) -> None:
+        dict.pop(self, name, None)
+        self._factories[name] = factory
+
+    def __missing__(self, name: str):
+        factory = self._factories.pop(name)
+        # ساختِ بعضی صفحه‌ها (فوکوس رویِ ویجتِ بی‌والد) پنجرهٔ اصلی را از حالتِ فعال خارج می‌کند
+        active = QApplication.activeWindow()
+        widget = factory()
+        if active is not None and QApplication.activeWindow() is not active:
+            active.activateWindow()
+        dict.__setitem__(self, name, widget)
+        self._on_build(widget)
+        return widget
+
+    def get(self, name, default=None):
+        if dict.__contains__(self, name) or name in self._factories:
+            return self[name]
+        return default
+
+    def __contains__(self, name) -> bool:
+        return dict.__contains__(self, name) or name in self._factories
+
+
 class _MdiFormWrapper(QFrame):
     """محتوایِ واقعیِ زیرپنجره — تیتربارِ سفارشی (بالا) + خودِ صفحه
     (پایین). این ویجت، نه خودِ صفحه، رویِ QMdiSubWindow.setWidget
@@ -868,7 +900,7 @@ class MainWindow(QMainWindow):
         self._sms_campaign_timer.timeout.connect(self._tick_sms_campaigns)
         self._sms_campaign_timer.start()
 
-        self._screens: dict[str, QWidget] = {}
+        self._screens: _LazyScreens = _LazyScreens(theme.apply_card_shadows)
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
         self._mdi_subwindows: dict[str, _FramelessMdiSubWindow] = {}
         self._current_screen_code: str | None = None
@@ -1486,7 +1518,10 @@ class MainWindow(QMainWindow):
         # نگه دارد، از فرمِ دیگری (مثلاً خزانه‌داری) یک فاکتور را تسویه
         # کند، و بعد مستقیماً رویِ همان پنجره‌یِ لیستِ (هنوز رویِ صفحه
         # قابلِ‌کلیک) کلیک کند، وضعیت/رقم‌هایِ آن هنوز کهنه می‌ماند.
-        if active_sub_window is not None:
+        # R273: فقط وقتی کاربر واقعاً به پنجرهٔ دیگری رفته و برگشته؛ فعال‌شدنِ دوبارهٔ همان پنجره
+        # (بسته‌شدنِ پاپ‌آپِ کمبو/دیالوگ) ردیفِ درحالِ ورودِ سند را پاک نکند.
+        if active_sub_window is not None and active_sub_window is not getattr(self, "_last_active_sub_window", None):
+            self._last_active_sub_window = active_sub_window
             screen_name = getattr(active_sub_window, "_screen_name", None)
             screen = self._screens.get(screen_name) if screen_name else None
             if screen is not None and hasattr(screen, "refresh"):
@@ -1673,53 +1708,49 @@ class MainWindow(QMainWindow):
             ),
         )
 
-        self.register_screen("dashboard", DashboardScreen(self))
-        self.register_screen("my_tasks", MyTasksScreen(self))
-        self.register_screen("placeholder", PlaceholderScreen())
-        self.register_screen("chart_of_accounts", ChartOfAccountsScreen())
-        self.register_screen("system_settings", SystemSettingsScreen())
-        self.register_screen("system_backup", SystemBackupScreen())
-        self.register_screen("system_data_reset", SystemDataResetScreen())
-        self.register_screen("dimension_group_config", DimensionGroupConfigScreen())
-        self.register_screen("detail_dimensions", DetailDimensionsScreen())
-        self.register_screen("detail_accounts_list", DetailAccountsListScreen(self))
-        self.register_screen("journal_entry", JournalEntryScreen())
-        self.register_screen("journal_entries_list", JournalEntriesListScreen(self))
-        self.register_screen("hr_org_units", OrgUnitsScreen())
-        self.register_screen("hr_job_grades", JobGradesScreen())
-        self.register_screen("hr_positions", PositionsScreen())
-        self.register_screen("payroll_run", PayrollRunScreen())
-        self.register_screen("payroll_loans", PayrollLoansScreen())
-        self.register_screen("payroll_overtime_entries", PayrollOvertimeEntriesScreen())
-        self.register_screen("hr_attendance_entries", HrAttendanceEntriesScreen())
-        self.register_screen("hr_attendance_summary", HrAttendanceSummaryScreen())
-        self.register_screen("inventory_warehouses", InventoryWarehousesScreen())
-        self.register_screen("inventory_documents_list", InventoryDocumentsListScreen(self))
-        self.register_screen("inventory_document_receipt", InventoryDocumentScreen("RECEIPT", self))
-        self.register_screen("inventory_document_issue", InventoryDocumentScreen("ISSUE", self))
-        self.register_screen("inventory_document_transfer", InventoryDocumentScreen("TRANSFER", self))
-        self.register_screen("inventory_document_return_in", InventoryDocumentScreen("RETURN_IN", self))
-        self.register_screen("inventory_document_return_out", InventoryDocumentScreen("RETURN_OUT", self))
-        self.register_screen("inventory_document_adjustment", InventoryDocumentScreen("ADJUSTMENT", self))
-        self.register_screen("commercial_document_sales_order", CommercialDocumentScreen("SALES_ORDER", self))
-        self.register_screen("commercial_document_sales_proforma", CommercialDocumentScreen("SALES_PROFORMA", self))
-        self.register_screen("commercial_document_sales_invoice", CommercialDocumentScreen("SALES_INVOICE", self))
-        self.register_screen("commercial_document_sales_return", CommercialDocumentScreen("SALES_RETURN", self))
-        self.register_screen("commercial_document_purchase_order", CommercialDocumentScreen("PURCHASE_ORDER", self))
-        self.register_screen("commercial_document_purchase_proforma", CommercialDocumentScreen("PURCHASE_PROFORMA", self))
-        self.register_screen("commercial_document_purchase_invoice", CommercialDocumentScreen("PURCHASE_INVOICE", self))
-        self.register_screen("commercial_document_purchase_return", CommercialDocumentScreen("PURCHASE_RETURN", self))
-        self.register_screen("commercial_document_consignment_out", CommercialDocumentScreen("CONSIGNMENT_OUT", self))
-        self.register_screen("commercial_document_consignment_in", CommercialDocumentScreen("CONSIGNMENT_IN", self))
-        self.register_screen(
-            "commercial_documents_list_sales",
-            CommercialDocumentsListScreen(
+        self.register_screen("dashboard", lambda: DashboardScreen(self))
+        self.register_screen("my_tasks", lambda: MyTasksScreen(self))
+        self.register_screen("placeholder", lambda: PlaceholderScreen())
+        self.register_screen("chart_of_accounts", lambda: ChartOfAccountsScreen())
+        self.register_screen("system_settings", lambda: SystemSettingsScreen())
+        self.register_screen("system_backup", lambda: SystemBackupScreen())
+        self.register_screen("system_data_reset", lambda: SystemDataResetScreen())
+        self.register_screen("dimension_group_config", lambda: DimensionGroupConfigScreen())
+        self.register_screen("detail_dimensions", lambda: DetailDimensionsScreen())
+        self.register_screen("detail_accounts_list", lambda: DetailAccountsListScreen(self))
+        self.register_screen("journal_entry", lambda: JournalEntryScreen())
+        self.register_screen("journal_entries_list", lambda: JournalEntriesListScreen(self))
+        self.register_screen("hr_org_units", lambda: OrgUnitsScreen())
+        self.register_screen("hr_job_grades", lambda: JobGradesScreen())
+        self.register_screen("hr_positions", lambda: PositionsScreen())
+        self.register_screen("payroll_run", lambda: PayrollRunScreen())
+        self.register_screen("payroll_loans", lambda: PayrollLoansScreen())
+        self.register_screen("payroll_overtime_entries", lambda: PayrollOvertimeEntriesScreen())
+        self.register_screen("hr_attendance_entries", lambda: HrAttendanceEntriesScreen())
+        self.register_screen("hr_attendance_summary", lambda: HrAttendanceSummaryScreen())
+        self.register_screen("inventory_warehouses", lambda: InventoryWarehousesScreen())
+        self.register_screen("inventory_documents_list", lambda: InventoryDocumentsListScreen(self))
+        self.register_screen("inventory_document_receipt", lambda: InventoryDocumentScreen("RECEIPT", self))
+        self.register_screen("inventory_document_issue", lambda: InventoryDocumentScreen("ISSUE", self))
+        self.register_screen("inventory_document_transfer", lambda: InventoryDocumentScreen("TRANSFER", self))
+        self.register_screen("inventory_document_return_in", lambda: InventoryDocumentScreen("RETURN_IN", self))
+        self.register_screen("inventory_document_return_out", lambda: InventoryDocumentScreen("RETURN_OUT", self))
+        self.register_screen("inventory_document_adjustment", lambda: InventoryDocumentScreen("ADJUSTMENT", self))
+        self.register_screen("commercial_document_sales_order", lambda: CommercialDocumentScreen("SALES_ORDER", self))
+        self.register_screen("commercial_document_sales_proforma", lambda: CommercialDocumentScreen("SALES_PROFORMA", self))
+        self.register_screen("commercial_document_sales_invoice", lambda: CommercialDocumentScreen("SALES_INVOICE", self))
+        self.register_screen("commercial_document_sales_return", lambda: CommercialDocumentScreen("SALES_RETURN", self))
+        self.register_screen("commercial_document_purchase_order", lambda: CommercialDocumentScreen("PURCHASE_ORDER", self))
+        self.register_screen("commercial_document_purchase_proforma", lambda: CommercialDocumentScreen("PURCHASE_PROFORMA", self))
+        self.register_screen("commercial_document_purchase_invoice", lambda: CommercialDocumentScreen("PURCHASE_INVOICE", self))
+        self.register_screen("commercial_document_purchase_return", lambda: CommercialDocumentScreen("PURCHASE_RETURN", self))
+        self.register_screen("commercial_document_consignment_out", lambda: CommercialDocumentScreen("CONSIGNMENT_OUT", self))
+        self.register_screen("commercial_document_consignment_in", lambda: CommercialDocumentScreen("CONSIGNMENT_IN", self))
+        self.register_screen("commercial_documents_list_sales", lambda: CommercialDocumentsListScreen(
                 self, type_filter_codes=("SALES_ORDER", "SALES_PROFORMA", "SALES_INVOICE", "SALES_RETURN", "CONSIGNMENT_OUT")
             ),
         )
-        self.register_screen(
-            "commercial_documents_list_purchase",
-            CommercialDocumentsListScreen(
+        self.register_screen("commercial_documents_list_purchase", lambda: CommercialDocumentsListScreen(
                 self, type_filter_codes=("PURCHASE_ORDER", "PURCHASE_PROFORMA", "PURCHASE_INVOICE", "PURCHASE_RETURN", "CONSIGNMENT_IN")
             ),
         )
@@ -1728,108 +1759,104 @@ class MainWindow(QMainWindow):
         # نگهبانِ اتصال همگی زیرِ یک صفحه‌یِ تب‌دار (خودِ کلاس این‌ها را
         # داخلی می‌سازد) -- تنظیماتِ کلیِ اتصال/فهرستِ قیمت همچنان در تبِ
         # «تنظیماتِ فروشِ اینترنتی» زیرِ سیستم‌سِتینگزِ بازرگانی می‌ماند.
-        self.register_screen("commercial_online_sales_hub", CommercialOnlineSalesHubScreen(self))
+        self.register_screen("commercial_online_sales_hub", lambda: CommercialOnlineSalesHubScreen(self))
         # طبقِ درخواستِ صریحِ کاربر («وقتی منویِ پخشِ گرم اجرا می‌شود فقط
         # تب‌هایِ مربوط به پخشِ گرم باز شود»): دیگر ابزارهایِ میدانیِ
         # مشترک را ندارد -- فقط چهار تبِ واقعاً مخصوصِ خودرو.
-        self.register_screen("commercial_distribution_hub", CommercialDistributionHubScreen(self))
+        self.register_screen("commercial_distribution_hub", lambda: CommercialDistributionHubScreen(self))
         # طبقِ درخواستِ صریحِ کاربر («قسمتِ پخشِ سرد جدا باید باشه، فرمِ جدا
         # براش درست کن»): آیتمِ ناوبریِ مستقل، جدا از پخشِ گرم/زیرساختِ
         # میدانیِ بالا.
-        self.register_screen("cold_distribution", ColdDistributionScreen(self))
+        self.register_screen("cold_distribution", lambda: ColdDistributionScreen(self))
         # طبقِ همان تفکیک: فروشِ تلفنی مخصوصِ سفارش‌گیریِ پخشِ سرد است،
         # آیتمِ ناوبریِ مستقلِ خودش را گرفت (دیگر تبِ commercial_
         # distribution_hub نیست).
-        self.register_screen("commercial_telesales", TelesalesScreen(self))
+        self.register_screen("commercial_telesales", lambda: TelesalesScreen(self))
         # برنامهٔ مراجعه/ویزیت‌ها/پروموشن‌ها/داشبوردِ سرپرست/بازاریابی:
         # مشترکِ هر دو کانال (نه مخصوصِ گرم، نه سرد) -- آیتمِ تب‌دارِ
         # مستقلِ خودشان.
-        self.register_screen("sales_planning_hub", SalesPlanningHubScreen())
-        self.register_screen("commercial_consignment_tracking", ConsignmentTrackingScreen(self))
-        self.register_screen("sales_assistant", SalesAssistantScreen(self))
-        self.register_screen("commercial_pricing", CommercialPricingScreen())
-        self.register_screen("commercial_pos_sale", CommercialPosSaleScreen(self))
-        self.register_screen("commercial_pos_approval", CommercialPosApprovalScreen())
-        self.register_screen("commercial_aftersales", CommercialAftersalesScreen())
-        self.register_screen("commercial_purchasing_extras", CommercialPurchasingExtrasScreen())
-        self.register_screen("order_tracking", OrderTrackingScreen(self))
-        self.register_screen("purchase_goods_receipt", PurchaseGoodsReceiptScreen())
-        self.register_screen("stock_count", StockCountScreen())
-        self.register_screen("lot_trace", LotTraceScreen())
-        self.register_screen("inventory_residual", InventoryResidualScreen())
+        self.register_screen("sales_planning_hub", lambda: SalesPlanningHubScreen())
+        self.register_screen("commercial_consignment_tracking", lambda: ConsignmentTrackingScreen(self))
+        self.register_screen("sales_assistant", lambda: SalesAssistantScreen(self))
+        self.register_screen("commercial_pricing", lambda: CommercialPricingScreen())
+        self.register_screen("commercial_pos_sale", lambda: CommercialPosSaleScreen(self))
+        self.register_screen("commercial_pos_approval", lambda: CommercialPosApprovalScreen())
+        self.register_screen("commercial_aftersales", lambda: CommercialAftersalesScreen())
+        self.register_screen("commercial_purchasing_extras", lambda: CommercialPurchasingExtrasScreen())
+        self.register_screen("order_tracking", lambda: OrderTrackingScreen(self))
+        self.register_screen("purchase_goods_receipt", lambda: PurchaseGoodsReceiptScreen())
+        self.register_screen("stock_count", lambda: StockCountScreen())
+        self.register_screen("lot_trace", lambda: LotTraceScreen())
+        self.register_screen("inventory_residual", lambda: InventoryResidualScreen())
         from peecha.services.purchase_reports import REPORTS as _PURCHASE_REPORTS
         from peecha.ui.screens.purchase_reports import PurchaseReportScreen
 
         for report in _PURCHASE_REPORTS:
-            self.register_screen(f"purchase_report_{report.code.lower()}", PurchaseReportScreen(report.code, self))
+            self.register_screen(f"purchase_report_{report.code.lower()}", lambda c=report.code: PurchaseReportScreen(c, self))
         from peecha.services.purchase_reports import SALES_REPORTS as _SALES_REPORTS
 
         for report in _SALES_REPORTS:
-            self.register_screen(f"sales_report_{report.code.lower()}", PurchaseReportScreen(report.code, self, side="SALES"))
+            self.register_screen(f"sales_report_{report.code.lower()}", lambda c=report.code: PurchaseReportScreen(c, self, side="SALES"))
         from peecha.services.accounting_reports import ACCOUNTING_REPORTS as _ACCOUNTING_REPORTS
 
         for report in _ACCOUNTING_REPORTS:
-            self.register_screen(f"accounting_report_{report.code.lower()}",
-                                 PurchaseReportScreen(report.code, self, side="ACCOUNTING"))
+            self.register_screen(f"accounting_report_{report.code.lower()}", lambda c=report.code: PurchaseReportScreen(c, self, side="ACCOUNTING"))
         from peecha.services.warehouse_reports import WAREHOUSE_REPORTS as _WAREHOUSE_REPORTS
         from peecha.ui.screens.warehouse_dashboard import WarehouseDashboard
 
         for report in _WAREHOUSE_REPORTS:
-            self.register_screen(f"warehouse_report_{report.code.lower()}",
-                                 PurchaseReportScreen(report.code, self, side="INVENTORY"))
-        self.register_screen("warehouse_dashboard", WarehouseDashboard(self))
+            self.register_screen(f"warehouse_report_{report.code.lower()}", lambda c=report.code: PurchaseReportScreen(c, self, side="INVENTORY"))
+        self.register_screen("warehouse_dashboard", lambda: WarehouseDashboard(self))
         from peecha.ui.screens.costing import CostingDashboard, CostingSettingsScreen, RecalculationScreen, ReplacementCostScreen
 
-        self.register_screen("costing_dashboard", CostingDashboard(self))  # R259
-        self.register_screen("costing_settings", CostingSettingsScreen())
-        self.register_screen("costing_replacement", ReplacementCostScreen())
-        self.register_screen("costing_recalculation", RecalculationScreen())  # R260
+        self.register_screen("costing_dashboard", lambda: CostingDashboard(self))  # R259
+        self.register_screen("costing_settings", lambda: CostingSettingsScreen())
+        self.register_screen("costing_replacement", lambda: ReplacementCostScreen())
+        self.register_screen("costing_recalculation", lambda: RecalculationScreen())  # R260
         from peecha.ui.screens import fixed_assets as fa_screens
 
-        self.register_screen("fa_dashboard", fa_screens.FaDashboard(self))  # R265
-        self.register_screen("fa_assets", fa_screens.AssetsScreen(self))
-        self.register_screen("fa_depreciation", fa_screens.DepreciationScreen())
-        self.register_screen("fa_cip", fa_screens.CipScreen())
-        self.register_screen("fa_physical_count", fa_screens.PhysicalCountScreen())
-        self.register_screen("fa_setup", fa_screens.SetupScreen())
+        self.register_screen("fa_dashboard", lambda: fa_screens.FaDashboard(self))  # R265
+        self.register_screen("fa_assets", lambda: fa_screens.AssetsScreen(self))
+        self.register_screen("fa_depreciation", lambda: fa_screens.DepreciationScreen())
+        self.register_screen("fa_cip", lambda: fa_screens.CipScreen())
+        self.register_screen("fa_physical_count", lambda: fa_screens.PhysicalCountScreen())
+        self.register_screen("fa_setup", lambda: fa_screens.SetupScreen())
         from peecha.ui.screens import production as prd_screens
 
-        self.register_screen("prd_dashboard", prd_screens.PrdDashboard(self))  # R270
-        self.register_screen("prd_orders", prd_screens.OrdersScreen(self))
-        self.register_screen("prd_planning", prd_screens.PlanningScreen())
-        self.register_screen("prd_master", prd_screens.MasterDataScreen())
-        self.register_screen("prd_costing", prd_screens.PrdCostingScreen())
-        self.register_screen("prd_settings", prd_screens.PrdSettingsScreen())
+        self.register_screen("prd_dashboard", lambda: prd_screens.PrdDashboard(self))  # R270
+        self.register_screen("prd_orders", lambda: prd_screens.OrdersScreen(self))
+        self.register_screen("prd_planning", lambda: prd_screens.PlanningScreen())
+        self.register_screen("prd_master", lambda: prd_screens.MasterDataScreen())
+        self.register_screen("prd_costing", lambda: prd_screens.PrdCostingScreen())
+        self.register_screen("prd_settings", lambda: prd_screens.PrdSettingsScreen())
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
-        self.register_screen("warehouse_operations", WarehouseOperationsScreen())
+        self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())
         from peecha.ui.screens.warehouse_map import WarehouseMapScreen
 
-        self.register_screen("warehouse_map", WarehouseMapScreen(self))
+        self.register_screen("warehouse_map", lambda: WarehouseMapScreen(self))
         from peecha.ui.screens.purchase_dashboards import ProcurementExceptionDashboard, ProcurementExecutiveDashboard
 
-        self.register_screen("purchase_dashboard_exec", ProcurementExecutiveDashboard(self))
-        self.register_screen("purchase_dashboard_exceptions", ProcurementExceptionDashboard(self))
+        self.register_screen("purchase_dashboard_exec", lambda: ProcurementExecutiveDashboard(self))
+        self.register_screen("purchase_dashboard_exceptions", lambda: ProcurementExceptionDashboard(self))
         from peecha.ui.screens.procurement_masters import ProcurementMastersScreen
 
-        self.register_screen("procurement_masters", ProcurementMastersScreen())
+        self.register_screen("procurement_masters", lambda: ProcurementMastersScreen())
         from peecha.ui.screens.purchase_requests import PurchaseRequestScreen
 
-        self.register_screen("purchase_requests", PurchaseRequestScreen(self))
+        self.register_screen("purchase_requests", lambda: PurchaseRequestScreen(self))
         from peecha.ui.screens.rfqs import RfqScreen
 
-        self.register_screen("rfqs", RfqScreen(self))
+        self.register_screen("rfqs", lambda: RfqScreen(self))
         # طبقِ درخواستِ صریح («فرمِ تسویه‌یِ فاکتورهایِ خرید و فروش جدا از
         # هم باشه»): دیگر یک صفحه‌یِ مشترک نیست -- هرکدام نمونه‌یِ جداگانه‌یِ
         # همان کلاس با invoice_type متفاوت است.
-        self.register_screen("commercial_invoice_settlement_sales", InvoiceSettlementScreen(self, "SALES_INVOICE"))
-        self.register_screen("commercial_invoice_settlement_purchase", InvoiceSettlementScreen(self, "PURCHASE_INVOICE"))
-        self.register_screen("installments_list", InstallmentsListScreen(self))
-        self.register_screen("treasury_voucher_receipt", TreasuryVoucherScreen("RECEIPT", self))
-        self.register_screen("treasury_voucher_payment", TreasuryVoucherScreen("PAYMENT", self))
-        self.register_screen(
-            "treasury_vouchers_list",
-            JournalEntriesListScreen(
+        self.register_screen("commercial_invoice_settlement_sales", lambda: InvoiceSettlementScreen(self, "SALES_INVOICE"))
+        self.register_screen("commercial_invoice_settlement_purchase", lambda: InvoiceSettlementScreen(self, "PURCHASE_INVOICE"))
+        self.register_screen("installments_list", lambda: InstallmentsListScreen(self))
+        self.register_screen("treasury_voucher_receipt", lambda: TreasuryVoucherScreen("RECEIPT", self))
+        self.register_screen("treasury_voucher_payment", lambda: TreasuryVoucherScreen("PAYMENT", self))
+        self.register_screen("treasury_vouchers_list", lambda: JournalEntriesListScreen(
                 self,
                 entry_type_codes=["RECEIPT", "PAYMENT"],
                 title="اسنادِ خزانه‌داری",
@@ -1846,43 +1873,45 @@ class MainWindow(QMainWindow):
         # مستقل؛ افتتاح = یک سندِ پرداختِ واقعی، ردیف‌هایِ ثبت‌شده در دورانِ
         # بازبودن هیچ سندی نمی‌سازند، بستن = یک سندِ موقتِ پیش‌نویس که
         # تنخواه‌دار را بستانکار می‌کند.
-        self.register_screen("treasury_petty_cash", PettyCashScreen(self))
-        self.register_screen(
-            "treasury_petty_cash_list",
-            JournalEntriesListScreen(
+        self.register_screen("treasury_petty_cash", lambda: PettyCashScreen(self))
+        self.register_screen("treasury_petty_cash_list", lambda: JournalEntriesListScreen(
                 self,
                 entry_type_codes=["TANKHAH"],
                 title="اسنادِ تنخواه‌گردان",
                 new_entry_options=[("+ تنخواه‌گردان", "TREASURY_PETTY_CASH")],
             ),
         )
-        self.register_screen("treasury_checks_received", ReceivedChecksScreen())
-        self.register_screen("treasury_checks_issued", IssuedChecksScreen())
-        self.register_screen("treasury_checks_due", TreasuryChecksDueScreen())
-        self.register_screen("report_checks", ChecksReportScreen())
-        self.register_screen("bank_reconciliation", BankReconciliationScreen())
-        self.register_screen("report_trial_balance", TrialBalanceScreen())
-        self.register_screen("report_journal_book", JournalBookScreen())
-        self.register_screen("report_account_ledger", AccountLedgerScreen())
-        self.register_screen("report_income_statement", IncomeStatementScreen())
-        self.register_screen("report_balance_sheet", BalanceSheetScreen())
-        self.register_screen("report_cash_flow", CashFlowScreen())
-        self.register_screen("report_cost_center_breakdown", CostCenterBreakdownScreen())
-        self.register_screen("report_equity_changes", EquityChangesScreen())
-        self.register_screen("report_custom_statement", CustomStatementScreen())
-        self.register_screen("statement_template_designer", StatementTemplateDesignerScreen())
-        self.register_screen("report_financial_ratios", FinancialRatiosScreen())
-        self.register_screen("report_period_comparison", PeriodComparisonScreen())
-        self.register_screen("report_item_ledger", ItemLedgerScreen())
-        self.register_screen("report_anomalies", AnomaliesScreen())
-        self.register_screen("report_sales", SalesReportScreen())
-        self.register_screen("report_sales_by_channel", SalesReportByChannelScreen())
-        self.register_screen("report_customer_profit", CustomerProfitScreen())
-        self.register_screen("report_sales_forecast", SalesForecastScreen())
+        self.register_screen("treasury_checks_received", lambda: ReceivedChecksScreen())
+        self.register_screen("treasury_checks_issued", lambda: IssuedChecksScreen())
+        self.register_screen("treasury_checks_due", lambda: TreasuryChecksDueScreen())
+        self.register_screen("report_checks", lambda: ChecksReportScreen())
+        self.register_screen("bank_reconciliation", lambda: BankReconciliationScreen())
+        self.register_screen("report_trial_balance", lambda: TrialBalanceScreen())
+        self.register_screen("report_journal_book", lambda: JournalBookScreen())
+        self.register_screen("report_account_ledger", lambda: AccountLedgerScreen())
+        self.register_screen("report_income_statement", lambda: IncomeStatementScreen())
+        self.register_screen("report_balance_sheet", lambda: BalanceSheetScreen())
+        self.register_screen("report_cash_flow", lambda: CashFlowScreen())
+        self.register_screen("report_cost_center_breakdown", lambda: CostCenterBreakdownScreen())
+        self.register_screen("report_equity_changes", lambda: EquityChangesScreen())
+        self.register_screen("report_custom_statement", lambda: CustomStatementScreen())
+        self.register_screen("statement_template_designer", lambda: StatementTemplateDesignerScreen())
+        self.register_screen("report_financial_ratios", lambda: FinancialRatiosScreen())
+        self.register_screen("report_period_comparison", lambda: PeriodComparisonScreen())
+        self.register_screen("report_item_ledger", lambda: ItemLedgerScreen())
+        self.register_screen("report_anomalies", lambda: AnomaliesScreen())
+        self.register_screen("report_sales", lambda: SalesReportScreen())
+        self.register_screen("report_sales_by_channel", lambda: SalesReportByChannelScreen())
+        self.register_screen("report_customer_profit", lambda: CustomerProfitScreen())
+        self.register_screen("report_sales_forecast", lambda: SalesForecastScreen())
 
-    def register_screen(self, name: str, widget: QWidget) -> None:
-        self._screens[name] = widget
-        theme.apply_card_shadows(widget)
+    def register_screen(self, name: str, factory) -> None:
+        # R273: صفحه‌ها در اولین بازشدن ساخته می‌شوند، نه همه (~۴۰۰ صفحه) هنگامِ ورود
+        if isinstance(factory, QWidget):
+            self._screens[name] = factory
+            theme.apply_card_shadows(factory)
+        else:
+            self._screens.add_factory(name, factory)
 
     def get_screen(self, name: str) -> QWidget | None:
         return self._screens.get(name)

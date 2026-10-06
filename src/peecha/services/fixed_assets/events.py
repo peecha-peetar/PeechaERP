@@ -40,7 +40,12 @@ def _event(session, asset: Asset, event_type: str, date: datetime.date, user_id:
 
 
 def _dims(asset: Asset) -> tuple:
-    return (asset.cost_center_detail_account_id, asset.project_detail_account_id)
+    return (asset.cost_center_detail_account_id, asset.project_detail_account_id, c.asset_detail_id(asset))
+
+
+def _acc_dims(asset: Asset) -> tuple:
+    """ردیفِ استهلاکِ انباشته: مرکزِ هزینه + تفصیلیِ دارایی."""
+    return (asset.cost_center_detail_account_id, c.asset_detail_id(asset))
 
 
 def _category(session, asset: Asset) -> AssetCategory:
@@ -121,7 +126,7 @@ def impair(company_id: int, user_id: int, asset_id: int, date: datetime.date, re
         memo = f"کاهشِ ارزشِ دارایی {asset.asset_code}: {reason}"
         je_id = c.post_journal(session, company_id, user_id, date, memo, [
             c.JLine(cat.impairment_account_id, debit=amount, detail_ids=_dims(asset)),
-            c.JLine(cat.accumulated_depreciation_account_id, credit=amount, detail_ids=(asset.cost_center_detail_account_id,))])
+            c.JLine(cat.accumulated_depreciation_account_id, credit=amount, detail_ids=_acc_dims(asset))])
         ev = _event(session, asset, "IMPAIRMENT", date, user_id, amount=amount, previous_book_value=previous,
                     new_value=c.money(recoverable_amount), reason=reason, journal_entry_id=je_id,
                     idempotency_key=idempotency_key, approved_by_user_id=approved_by_user_id)
@@ -162,20 +167,20 @@ def revalue(company_id: int, user_id: int, asset_id: int, date: datetime.date, n
         dims = _dims(asset)
         lines = []
         if accumulated:
-            lines += [c.JLine(cat.accumulated_depreciation_account_id, debit=accumulated, detail_ids=(asset.cost_center_detail_account_id,)),
+            lines += [c.JLine(cat.accumulated_depreciation_account_id, debit=accumulated, detail_ids=_acc_dims(asset)),
                       c.JLine(cat.asset_account_id, credit=accumulated, detail_ids=dims)]
         surplus_change, loss = ZERO, ZERO
         if diff > 0:
             surplus_change = diff
             lines += [c.JLine(cat.asset_account_id, debit=diff, detail_ids=dims),
-                      c.JLine(cat.revaluation_account_id, credit=diff)]
+                      c.JLine(cat.revaluation_account_id, credit=diff, detail_ids=(c.asset_detail_id(asset),))]
         else:
             from_surplus = min(-diff, max(asset.revaluation_surplus, ZERO))
             loss = -diff - from_surplus
             surplus_change = -from_surplus
             if loss:
                 c.require_accounts(cat, ("impairment_account_id",))
-            lines += [c.JLine(cat.revaluation_account_id, debit=from_surplus),
+            lines += [c.JLine(cat.revaluation_account_id, debit=from_surplus, detail_ids=(c.asset_detail_id(asset),)),
                       c.JLine(cat.impairment_account_id, debit=loss, detail_ids=dims),
                       c.JLine(cat.asset_account_id, credit=-diff, detail_ids=dims)]
         memo = f"تجدیدِ ارزیابیِ دارایی {asset.asset_code}: {reason}"
@@ -243,7 +248,7 @@ def dispose(company_id: int, user_id: int, asset_id: int, date: datetime.date, k
         memo = f"{label}ِ دارایی {asset.asset_code} -- {asset.name}" + (f": {reason}" if reason else "")
         lines = [c.JLine(cat.asset_account_id, credit=gross, detail_ids=dims)]
         if dep + imp:
-            lines.append(c.JLine(cat.accumulated_depreciation_account_id, debit=dep + imp, detail_ids=(asset.cost_center_detail_account_id,)))
+            lines.append(c.JLine(cat.accumulated_depreciation_account_id, debit=dep + imp, detail_ids=_acc_dims(asset)))
         if proceeds:
             lines.append(c.JLine(proceeds_account_id, debit=proceeds, detail_ids=(counterparty_detail_account_id,)))
         if gain > 0:
@@ -296,8 +301,8 @@ def _move_value(session, source: Asset, target: Asset, cost, dep, imp, date, use
         lines = [c.JLine(t_cat.asset_account_id, debit=cost, detail_ids=_dims(target)),
                  c.JLine(s_cat.asset_account_id, credit=cost, detail_ids=_dims(source))]
         if dep + imp:
-            lines += [c.JLine(s_cat.accumulated_depreciation_account_id, debit=dep + imp),
-                      c.JLine(t_cat.accumulated_depreciation_account_id, credit=dep + imp)]
+            lines += [c.JLine(s_cat.accumulated_depreciation_account_id, debit=dep + imp, detail_ids=_acc_dims(source)),
+                      c.JLine(t_cat.accumulated_depreciation_account_id, credit=dep + imp, detail_ids=_acc_dims(target))]
         je_id = c.post_journal(session, source.company_id, user_id, date, memo, lines)
     c.record_txn(session, source, book_id, out_type, date, cost=-cost, depreciation=-dep, impairment=-imp, description=memo,
                  journal_entry_id=je_id, source_type="EVENT", source_id=event_id, user_id=user_id)

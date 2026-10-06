@@ -205,6 +205,7 @@ def save_category(company_id: int, fields: CategoryFields, category_id: int | No
 
 def ensure_default_categories(company_id: int) -> None:
     """طبقه‌هایِ پیش‌فرض (زمین، ساختمان، ماشین‌آلات، ...) بدونِ حساب -- حساب‌ها را کاربر در تنظیمات تعیین می‌کند."""
+    backfill_asset_details(company_id)
     with new_session() as session:
         existing = set(session.scalars(select(AssetCategory.code).where(AssetCategory.company_id == company_id)))
         for code, name, method, life in DEFAULT_CATEGORIES:
@@ -374,7 +375,80 @@ def lock_asset(session, asset_id: int, company_id: int) -> Asset:
     asset = session.scalar(select(Asset).where(Asset.asset_id == asset_id).with_for_update())
     if asset is None or asset.company_id != company_id:
         raise ValueError("دارایی نامعتبر است.")
+    ensure_asset_detail(session, asset)
     return asset
+
+
+# --- R273: تفصیلیِ دارایی ثابت (نوعِ FIXED_ASSET)، هم‌الگو با تفصیلیِ کالا ------------------------------
+def _asset_dimension_type_id(session, company_id: int) -> int:
+    from peecha.services import detail_dimensions as dims
+
+    return dims.ensure_specialized_dimensions(session, company_id)[dims.FIXED_ASSET_CODE]
+
+
+def _free_detail_code(session, company_id: int, dim_type_id: int, preferred: str) -> str:
+    """کدِ دارایی اگر با قواعدِ طول/بازهٔ تفصیلی سازگار و آزاد باشد؛ وگرنه کدِ عددیِ بعدیِ همین گروه."""
+    from peecha.db.models.accounting import DetailGroupLevel, DetailLevelDigitConfig
+    from peecha.services import detail_dimensions as dims
+
+    used = set(session.scalars(select(DetailAccount.code).where(
+        DetailAccount.company_id == company_id, DetailAccount.dimension_type_id == dim_type_id)))
+    preferred = (preferred or "").strip()
+    if preferred and preferred not in used and len(preferred) <= 30:
+        try:
+            dims._validate_code_length(session, company_id, dim_type_id, 1, preferred)
+            return preferred
+        except ValueError:
+            pass
+    rng = session.get(DetailGroupLevel, (dim_type_id, 0, 1))
+    start = rng.range_from if rng is not None and rng.range_from is not None else 1
+    digits = session.get(DetailLevelDigitConfig, (company_id, 1))
+    width = digits.code_length if digits is not None and digits.code_length else 0
+    value = max([int(x) for x in used if x.isdigit()] + [start - 1]) + 1
+    code = str(value).zfill(width) if width else str(value)
+    dims._validate_code_length(session, company_id, dim_type_id, 1, code)
+    return code
+
+
+def ensure_asset_detail(session, asset: Asset) -> int:
+    """تفصیلیِ دارایی را (در همان تراکنش) می‌سازد یا نامش را هم‌گام می‌کند. تفصیلیِ موجودِ هم‌کد (تعریفِ دستیِ قبلی) استفاده می‌شود."""
+    if asset.detail_account_id is not None:
+        detail = session.get(DetailAccount, asset.detail_account_id)
+        if detail is not None and detail.name != asset.name:
+            detail.name = asset.name
+        return asset.detail_account_id
+    dim_type_id = _asset_dimension_type_id(session, asset.company_id)
+    taken = select(Asset.detail_account_id).where(Asset.detail_account_id.is_not(None))
+    detail = session.scalar(select(DetailAccount).where(
+        DetailAccount.company_id == asset.company_id, DetailAccount.dimension_type_id == dim_type_id,
+        DetailAccount.code == asset.asset_code.strip(), DetailAccount.detail_account_id.not_in(taken)))
+    if detail is None:
+        detail = DetailAccount(company_id=asset.company_id, dimension_type_id=dim_type_id, level_no=1, extra_fields={},
+                               code=_free_detail_code(session, asset.company_id, dim_type_id, asset.asset_code),
+                               name=asset.name)
+        session.add(detail)
+        session.flush()
+    detail.name = asset.name
+    asset.detail_account_id = detail.detail_account_id
+    session.flush()
+    return detail.detail_account_id
+
+
+def asset_detail_id(asset: Asset) -> int:
+    from sqlalchemy.orm import object_session
+
+    return ensure_asset_detail(object_session(asset), asset)
+
+
+def backfill_asset_details(company_id: int) -> int:
+    """یک‌بار برایِ دارایی‌هایِ قبل از R273؛ اسنادِ قبلی دست نمی‌خورند."""
+    with new_session() as session:
+        rows = list(session.scalars(select(Asset).where(Asset.company_id == company_id, Asset.detail_account_id.is_(None))
+                                    .order_by(Asset.asset_id)))
+        for asset in rows:
+            ensure_asset_detail(session, asset)
+        session.commit()
+        return len(rows)
 
 
 def ensure_open(asset: Asset) -> None:
