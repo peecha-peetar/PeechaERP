@@ -27,7 +27,7 @@ from peecha.services.production import planning as pp
 from peecha.ui import theme
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.fixed_assets import (
-    FormDialog, P, combo, company_id, date_field, dec, fill, money, num_field, set_combo, table, user_id,
+    FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, set_combo, table, user_id,
 )
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
 
@@ -236,7 +236,7 @@ class ProductionWizard(QDialog):
             form.addRow(label, w)
         layout.addLayout(form)
         layout.addStretch(1)
-        self.stack.addWidget(page)
+        self.stack.addWidget(scrolled(page))
 
     def _page_widget(self, hint: str, widget: QWidget) -> None:
         page = QWidget()
@@ -334,6 +334,8 @@ class ProductionWizard(QDialog):
 class OrdersScreen(QWidget):
     """صفحهٔ مرکزیِ دستورِ تولید."""
 
+    scroll_in_mdi = True
+
     FORM = "prd_orders"
     ACTIONS = (("release", "صدور", "prd_release"), ("start", "شروعِ تولید", "prd_consume"), ("issue", "ثبتِ مصرف", "prd_consume"),
                ("issue_all", "مصرفِ کاملِ استاندارد", "prd_consume"), ("return", "برگشتِ مواد", "prd_consume"),
@@ -412,7 +414,7 @@ class OrdersScreen(QWidget):
                 b.setObjectName("primaryButton")
             b.setProperty("form", form)
             b.clicked.connect(lambda _c=False, k=key: self.action(k))
-            actions.addWidget(b, i // 9, i % 9)
+            actions.addWidget(b, i // 6, i % 6)
             self.actions[key] = b
         dl.addLayout(actions)
         self.tabs = QTabWidget()
@@ -637,6 +639,8 @@ class OrdersScreen(QWidget):
 # =========================================================================================================
 class MasterDataScreen(QWidget):
     """اطلاعاتِ پایهٔ تولید: BOM (نسخه‌ها، اجزا، خروجی‌ها، انفجارِ چندسطحی)، مسیرِ تولید، مرکزِ کاری، دستمزد، عملیات."""
+
+    scroll_in_mdi = True
 
     def __init__(self) -> None:
         super().__init__()
@@ -1000,6 +1004,8 @@ class MasterDataScreen(QWidget):
 class PlanningScreen(QWidget):
     """برنامهٔ تولید، MRP، ظرفیت و تقویمِ تولید."""
 
+    scroll_in_mdi = True
+
     def __init__(self) -> None:
         super().__init__()
         self.dialog_runner = None
@@ -1151,6 +1157,8 @@ class PlanningScreen(QWidget):
 class PrdCostingScreen(QWidget):
     """استخرهایِ هزینه و سرشکن، بهایِ استانداردِ چندسطحی، بستنِ دوره‌ایِ بها."""
 
+    scroll_in_mdi = True
+
     def __init__(self) -> None:
         super().__init__()
         self.dialog_runner = None
@@ -1299,6 +1307,8 @@ class PrdCostingScreen(QWidget):
 # =========================================================================================================
 class PrdSettingsScreen(QWidget):
     """تنظیماتِ تولید (هم‌الگو با تنظیماتِ ماژول‌هایِ دیگر) + وضعیتِ نگاشتِ حساب‌ها."""
+
+    scroll_in_mdi = True
 
     def __init__(self) -> None:
         super().__init__()

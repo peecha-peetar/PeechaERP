@@ -124,6 +124,10 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         # تعریف/ویرایش/اجرا کرد»): رجیستریِ گزارش‌هایِ حرفه‌ای (Jasper) --
         # هر فرمِ پشتیبانی‌شده (کاردکس، فاکتور) یک پنلِ مستقل این‌جا دارد.
         self._add_outer_tab("چاپ و گزارش‌ها", self._build_reports_tab())
+        # R272: تنظیماتِ دارایی و تولید هم مثلِ بقیهٔ ماژول‌ها این‌جاست (چرخ‌دندهٔ کنارِ منو)؛
+        # تنظیماتِ بهایِ تمام‌شده همان «انبار و موجودی › قیمت‌گذاری» است.
+        self._add_outer_tab("دارایی‌هایِ ثابت", self._build_fixed_assets_tab())
+        self._add_outer_tab("تولید", self._build_production_tab())
         self.tabs.currentChanged.connect(self._on_outer_tab_changed)
         outer.addWidget(self.tabs, stretch=1)
 
@@ -336,15 +340,30 @@ class SystemSettingsScreen(FieldHelpMixin, QWidget):
         self.report_branding = ReportBrandingScreen()
         return self._sub_tabs([("لوگو و سربرگ", self.report_branding), ("قالب‌هایِ حرفه‌ای (Jasper)", _ReportTemplatesTab())])
 
+    def _build_fixed_assets_tab(self):
+        from peecha.ui.screens.fixed_assets import SetupScreen
+
+        return self._sub_tabs([("طبقه‌ها، حساب‌ها، محل‌ها و سیاست‌ها", SetupScreen())])
+
+    def _build_production_tab(self):
+        from peecha.ui.screens.production import PrdSettingsScreen
+
+        return self._sub_tabs([("تنظیماتِ کلیِ تولید", PrdSettingsScreen())])
+
     def refresh(self) -> None:
         # فقط زیرصفحه‌یِ *فعلاً قابلِ‌مشاهده* رفرش می‌شود، نه هر ~۴۰ زیرصفحه —
         # ر.ک. توضیحِ رفعِ باگِ کندیِ ۱۰-۱۵ ثانیه‌ای در docstringِ بالایِ کلاس.
         self._on_outer_tab_changed(self.tabs.currentIndex())
 
-    def select_tab(self, index: int) -> None:
+    def select_tab(self, index: int, inner_label: str | None = None) -> None:
         """برایِ دکمه‌ی چرخ‌دنده‌یِ ریبون — پرش مستقیم به تبِ تنظیماتِ همان
         بخش (مثلاً «کدینگِ حسابداری» برایِ بخشِ «مالی و حسابداری»)."""
         self.tabs.setCurrentIndex(index)
+        inner = self.tabs.widget(index)
+        if inner_label and isinstance(inner, QTabWidget):
+            for i in range(inner.count()):
+                if inner.tabText(i) == inner_label:
+                    inner.setCurrentIndex(i)
         # setCurrentIndex اگر ایندکس از قبل همان بود، currentChanged را صدا
         # نمی‌زند — پس صراحتاً هم رفرش می‌کنیم تا کلیکِ دوباره‌ی همان
         # چرخ‌دنده همیشه داده‌یِ تازه نشان بدهد.

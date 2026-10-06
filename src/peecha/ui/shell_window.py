@@ -82,7 +82,9 @@ _NAV_ICONS = {
 }
 
 # R245: «گزارش‌ها» -> تبِ «چاپ و گزارش‌ها» (لوگو/سربرگ و قالب‌ها)
-_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9}
+_SETTINGS_TAB_BY_GROUP_CODE = {"GL": 0, "TREASURY": 1, "HR": 6, "INV": 7, "SALES": 8, "PURCH": 8, "REPORTS": 9, "FA": 10, "PRD": 11}
+# زیرتبِ مقصد برایِ ماژول‌هایی که تنظیماتشان درونِ تبِ ماژولِ دیگری است
+_SETTINGS_SUBTAB_BY_GROUP_CODE = {"COSTING": (7, "قیمت‌گذاری")}
 
 
 def _leaf_nav_children(item: dict) -> list[dict]:
@@ -747,7 +749,15 @@ class _MdiFormWrapper(QFrame):
 
         self.title_bar = _MdiTitleBar(title, icon, sub_window)
         outer.addWidget(self.title_bar)
-        outer.addWidget(screen, stretch=1)
+        if getattr(screen, "scroll_in_mdi", False):
+            # پنجرهٔ کوچک‌تر از حداقلِ فرم: اسکرول، نه له‌شدنِ ارتفاعِ فیلدها
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setWidget(screen)
+            outer.addWidget(scroll, stretch=1)
+        else:
+            outer.addWidget(screen, stretch=1)
 
 
 class _ClampingMdiArea(QMdiArea):
@@ -1426,10 +1436,10 @@ class MainWindow(QMainWindow):
 
         for item in NAV_ITEMS:
             gear_click = None
-            if item["code"] in _SETTINGS_TAB_BY_GROUP_CODE:
-                idx = _SETTINGS_TAB_BY_GROUP_CODE[item["code"]]
-                gear_click = lambda _checked=False, i=idx: self.open_screen(
-                    "SETTINGS", then=lambda screen: screen.select_tab(i)
+            if item["code"] in _SETTINGS_TAB_BY_GROUP_CODE or item["code"] in _SETTINGS_SUBTAB_BY_GROUP_CODE:
+                idx, inner = _SETTINGS_SUBTAB_BY_GROUP_CODE.get(item["code"], (_SETTINGS_TAB_BY_GROUP_CODE.get(item["code"]), None))
+                gear_click = lambda _checked=False, i=idx, sub=inner: self.open_screen(
+                    "SETTINGS", then=lambda screen: screen.select_tab(i, sub)
                 )
             group = _SidebarGroup(item, _NAV_ICONS.get(item["code"], "•"), self.open_screen, gear_click)
             layout.addWidget(group)

@@ -13,9 +13,9 @@ import decimal
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGridLayout,
-    QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QSplitter, QStackedWidget, QTableWidget,
-    QTableWidgetItem, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
+    QAbstractItemView, QCheckBox, QComboBox, QCompleter, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
+    QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSplitter, QStackedWidget,
+    QTableWidget, QTableWidgetItem, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from peecha import numerals, session as app_session
@@ -128,6 +128,17 @@ class Lookups:
         self.locations = [(f"{loc.code} — {loc.name}", loc.location_id) for loc in fac.list_locations(cid)]
 
 
+def scrolled(widget: QWidget, max_height: int = 0) -> QScrollArea:
+    """فرمِ بلند در پنجرهٔ کوچک اسکرول بخورد، نه این‌که فیلدها له شوند و متن دیده نشود."""
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QFrame.NoFrame)
+    area.setWidget(widget)
+    if max_height:
+        area.setMinimumHeight(min(widget.sizeHint().height() + 4, max_height))
+    return area
+
+
 class FormDialog(QDialog):
     """فرمِ کوچکِ عملیات: [(کلید، برچسب، ویجت)] -- values() با تبدیلِ تاریخ/عدد/داده."""
 
@@ -141,12 +152,14 @@ class FormDialog(QDialog):
             note.setObjectName("sectionHint")
             note.setWordWrap(True)
             layout.addWidget(note)
-        form = QFormLayout()
+        body = QWidget()
+        form = QFormLayout(body)
+        form.setContentsMargins(0, 0, 0, 0)
         self.widgets = {}
         for key, label, widget in fields:
             form.addRow(label, widget)
             self.widgets[key] = widget
-        layout.addLayout(form)
+        layout.addWidget(scrolled(body, 560), stretch=1)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -387,7 +400,7 @@ class AssetWizard(QDialog):
             form.addRow(label, self.w[key])
         layout.addLayout(form)
         layout.addStretch(1)
-        self.stack.addWidget(page)
+        self.stack.addWidget(scrolled(page))
 
     def go(self, index: int) -> None:
         index = max(0, min(index, len(self.STEPS) - 1))
@@ -472,6 +485,8 @@ class AssetWizard(QDialog):
 # =========================================================================================================
 class AssetsScreen(QWidget):
     """مرکزِ عملیاتِ دارایی."""
+
+    scroll_in_mdi = True
 
     FORM = "fa_assets"
     TABS = ("نمایِ کلی", "مالی", "استهلاک", "تراکنش‌ها", "انتقال‌ها", "تعمیر و بهسازی", "مدارک", "تاریخچه")
@@ -882,6 +897,7 @@ class AssetsScreen(QWidget):
 
 # =========================================================================================================
 class DepreciationScreen(QWidget):
+    scroll_in_mdi = True
     FORM = "fa_depreciation"
 
     def __init__(self) -> None:
@@ -983,6 +999,8 @@ class DepreciationScreen(QWidget):
 # =========================================================================================================
 class SetupScreen(QWidget):
     """طبقه‌ها (با حساب‌ها)، محل‌ها، گروه‌ها و سیاست‌ها."""
+
+    scroll_in_mdi = True
 
     FORM = "fa_setup"
 
@@ -1183,6 +1201,7 @@ class SetupScreen(QWidget):
 
 # =========================================================================================================
 class CipScreen(QWidget):
+    scroll_in_mdi = True
     FORM = "fa_cip"
 
     def __init__(self) -> None:
@@ -1292,6 +1311,7 @@ class CipScreen(QWidget):
 
 # =========================================================================================================
 class PhysicalCountScreen(QWidget):
+    scroll_in_mdi = True
     FORM = "fa_physical_count"
 
     def __init__(self) -> None:

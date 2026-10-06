@@ -399,13 +399,15 @@ NAV_ITEMS = [
             {"code": "INV_CONSIGNMENT_TRACKING", "label": "پیگیریِ امانی", "screen": "commercial_consignment_tracking"},
         ],
     },
+    # R272: آیتم‌هایِ تنظیماتِ COSTING/FA/PRD فقط برایِ دسترسی می‌مانند و در منو دیده نمی‌شوند؛
+    # تنظیمات در «تنظیماتِ سیستم» است و چرخ‌دندهٔ کنارِ گروه مستقیم به آن می‌رود.
     # R261: بهایِ تمام‌شده ماژولِ مستقلِ منویِ اصلی است (گزارش‌ها همان صفحهٔ عمومیِ گزارشِ انبار)
     {
         "code": "COSTING",
         "label": "بهایِ تمام‌شده",
         "children": [
             {"code": "COST_DASHBOARD", "label": "داشبوردِ بهایِ تمام‌شده", "screen": "costing_dashboard"},
-            {"code": "COST_SETTINGS", "label": "تنظیماتِ بهایِ تمام‌شده", "screen": "costing_settings"},
+            {"code": "COST_SETTINGS", "label": "تنظیماتِ بهایِ تمام‌شده", "screen": "costing_settings", "hidden_from_sidebar": True},
             {"code": "COST_LAYERS", "label": "لایه‌هایِ هزینه", "screen": "warehouse_report_cost_layers"},
             {"code": "COST_HISTORY", "label": "تاریخچهٔ بها", "screen": "warehouse_report_cost_history"},
             {"code": "COST_VALUATION", "label": "ارزش‌گذاریِ موجودی", "screen": "warehouse_report_cost_valuation"},
@@ -426,7 +428,7 @@ NAV_ITEMS = [
             {"code": "FA_DEPRECIATION", "label": "اجرایِ استهلاک", "screen": "fa_depreciation"},
             {"code": "FA_CIP", "label": "دارایی در جریانِ تکمیل", "screen": "fa_cip"},
             {"code": "FA_PHYSICAL", "label": "شمارشِ فیزیکی", "screen": "fa_physical_count"},
-            {"code": "FA_SETUP", "label": "تنظیمات و طبقه‌ها", "screen": "fa_setup"},
+            {"code": "FA_SETUP", "label": "تنظیمات و طبقه‌ها", "screen": "fa_setup", "hidden_from_sidebar": True},
             {"code": "FA_REPORTS", "label": "گزارش‌ها", "children": [
                 {"code": "FA_RPT_REGISTER", "label": "دفترِ دارایی‌ها", "screen": "warehouse_report_fa_register"},
                 {"code": "FA_RPT_DEPRECIATION", "label": "گزارشِ استهلاک", "screen": "warehouse_report_fa_depreciation"},
@@ -447,7 +449,7 @@ NAV_ITEMS = [
             {"code": "PRD_PLANNING", "label": "برنامه‌ریزی، MRP و ظرفیت", "screen": "prd_planning"},
             {"code": "PRD_MASTER", "label": "اطلاعاتِ پایه (BOM، مسیر، مرکزِ کاری)", "screen": "prd_master"},
             {"code": "PRD_COSTING", "label": "بهایِ تمام‌شده، سربار و بستنِ دوره", "screen": "prd_costing"},
-            {"code": "PRD_SETTINGS", "label": "تنظیماتِ تولید", "screen": "prd_settings"},
+            {"code": "PRD_SETTINGS", "label": "تنظیماتِ تولید", "screen": "prd_settings", "hidden_from_sidebar": True},
             {"code": "PRD_REPORTS", "label": "گزارش‌ها", "children": [
                 {"code": "PRD_RPT_ORDERS", "label": "دستورهایِ تولید", "screen": "warehouse_report_prd_orders"},
                 {"code": "PRD_RPT_COST", "label": "بهایِ تمام‌شدهٔ تولید", "screen": "warehouse_report_prd_cost"},

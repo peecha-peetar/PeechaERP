@@ -109,6 +109,8 @@ class CostingDashboard(_ProcurementDashboardBase):
 class CostingSettingsScreen(QWidget):
     """تنظیماتِ بهایِ تمام‌شده -- همان تبِ «تنظیماتِ قیمت‌گذاری» (یک منبعِ واحد)، با دسترسیِ EDIT."""
 
+    scroll_in_mdi = True
+
     FORM = "costing_settings"
 
     def __init__(self) -> None:
@@ -131,6 +133,8 @@ class CostingSettingsScreen(QWidget):
 
 class ReplacementCostScreen(QWidget):
     """ثبت و فهرستِ بهایِ جایگزینیِ دستی (منبعِ MANUAL برایِ NIFO و گزارشِ مغایرت)."""
+
+    scroll_in_mdi = True
 
     FORM = "costing_replacement"
 
@@ -252,6 +256,8 @@ class ReplacementCostScreen(QWidget):
 
 class RecalculationScreen(QWidget):
     """R260: بازمحاسبهٔ بهایِ تمام‌شده -- پیش‌نمایش، هشدار، اعمال با سندِ اصلاحی."""
+
+    scroll_in_mdi = True
 
     FORM = "costing_recalculation"
 
