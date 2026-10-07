@@ -135,8 +135,20 @@ with new_session() as s:
     check(pm.effective_bom_id(s, fg) == bom_v2, "expired default -> latest valid version")
 pm.update_bom(company_id, bom_v1, BF(batch_size_qty=D(100), name="فرمول اصلی", routing_id=rt), uid)
 
-# قفل: نسخهٔ استفاده‌شده تغییر نمی‌کند (نه از سرویسِ جدید نه از تبِ قدیمیِ فرمِ کالا)
+# قفل: نسخهٔ استفاده‌شده در دستورِ دارای گردش تغییر نمی‌کند (نه از سرویسِ جدید نه از تبِ قدیمیِ فرمِ کالا)
+# R280: قفلِ دستی بدون دستورِ دارای گردش خودبه‌خود باز می‌شود؛ پس یک دستور با ثبتِ دستمزد (گردش) شبیه‌سازی می‌شود.
+from peecha.db.models.production import LaborEntry, ProductionOrder
 with new_session() as s:
+    pm.lock_bom(s, bom_v1)
+    s.commit()
+check(pm.list_bom_versions(company_id, fg)[0].is_locked is False, "manual lock without an order having movement is not effective")
+with new_session() as s:
+    o = ProductionOrder(company_id=company_id, order_no=999, order_code="T-999", item_id=fg, bom_id=bom_v1, uom_id=pcs,
+                        planned_qty=D(1), produced_qty=D(0), scrapped_qty=D(0), status_code="RELEASED", start_date=today,
+                        due_date=today, priority=3, joint_cost_method="QUANTITY", created_by_user_id=uid)
+    s.add(o)
+    s.flush()
+    s.add(LaborEntry(company_id=company_id, order_id=o.order_id, work_date=today, hours=D(1), rate=D(1), amount=D(1)))
     pm.lock_bom(s, bom_v1)
     s.commit()
 check(raises(lambda: pm.add_bom_component(company_id, bom_v1, BL(r3, D(1))), "قفل"), "locked BOM rejects new component")

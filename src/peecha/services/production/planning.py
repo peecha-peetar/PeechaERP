@@ -97,6 +97,64 @@ def remove_plan_line(company_id: int, line_id: int) -> None:
         session.commit()
 
 
+def update_plan(company_id: int, user_id: int, plan_id: int, code: str, name: str, start_date: datetime.date,
+                end_date: datetime.date, period_type: str = "MONTH", notes: str | None = None) -> None:
+    """R280: ویرایش سر برنامهٔ پیش‌نویس."""
+    if period_type not in ("DAY", "WEEK", "MONTH"):
+        raise ValueError("دورهٔ برنامه نامعتبر است.")
+    if not code.strip() or not name.strip() or end_date < start_date:
+        raise ValueError("کد، نام و بازهٔ تاریخ معتبر الزامی است.")
+    with new_session() as session:
+        plan = _plan(session, company_id, plan_id, editable=True)
+        dup = session.scalar(select(ProductionPlan.plan_id).where(ProductionPlan.company_id == company_id,
+                                                                  ProductionPlan.code == code.strip()))
+        if dup is not None and dup != plan_id:
+            raise ValueError("این کد برنامه قبلاً تعریف شده است.")
+        outside = session.scalar(select(func.count()).select_from(ProductionPlanLine).where(
+            ProductionPlanLine.plan_id == plan_id,
+            (ProductionPlanLine.planned_date < start_date) | (ProductionPlanLine.planned_date > end_date)))
+        if outside:
+            raise ValueError("تاریخ بعضی ردیف‌های برنامه خارج از بازهٔ جدید است — ابتدا آن ردیف‌ها را اصلاح کنید.")
+        plan.code, plan.name, plan.start_date, plan.end_date, plan.period_type = code.strip(), name.strip(), start_date, end_date, period_type
+        plan.notes = notes if notes is not None else plan.notes
+        c.audit(session, company_id, user_id, "ProductionPlan", plan_id, "UPDATE", {"code": plan.code})
+        session.commit()
+
+
+def delete_plan(company_id: int, user_id: int, plan_id: int) -> None:
+    """R280: حذف برنامه‌ای که هیچ ردیفش به دستور تولید تبدیل نشده است."""
+    with new_session() as session:
+        plan = _plan(session, company_id, plan_id)
+        if session.scalar(select(ProductionPlanLine.line_id).where(ProductionPlanLine.plan_id == plan_id,
+                                                                   ProductionPlanLine.order_id.is_not(None)).limit(1)):
+            raise ValueError("بخشی از این برنامه به دستور تولید تبدیل شده است و قابل حذف نیست.")
+        session.query(ProductionPlanLine).filter(ProductionPlanLine.plan_id == plan_id).delete()
+        c.audit(session, company_id, user_id, "ProductionPlan", plan_id, "DELETE", {"code": plan.code})
+        session.delete(plan)
+        session.commit()
+
+
+def update_plan_line(company_id: int, line_id: int, item_id: int, planned_date: datetime.date, quantity) -> None:
+    """R280: ویرایش ردیف برنامهٔ پیش‌نویس."""
+    quantity = decimal.Decimal(quantity)
+    if quantity <= 0:
+        raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    with new_session() as session:
+        row = session.get(ProductionPlanLine, line_id)
+        if row is None:
+            raise ValueError("ردیف برنامه نامعتبر است.")
+        plan = _plan(session, company_id, row.plan_id, editable=True)
+        c.item_of(session, company_id, item_id)
+        if not plan.start_date <= planned_date <= plan.end_date:
+            raise ValueError("تاریخ ردیف خارج از بازهٔ برنامه است.")
+        if item_id != row.item_id:
+            if pm.effective_bom_id(session, item_id, planned_date) is None:
+                raise ValueError(f"برای «{c.item_label(session, item_id)}» فهرست مواد معتبری وجود ندارد.")
+            row.work_center_id = _main_work_center(session, item_id)
+        row.item_id, row.planned_date, row.quantity = item_id, planned_date, quantity
+        session.commit()
+
+
 def _period_dates(plan: ProductionPlan) -> list[datetime.date]:
     """تاریخ شروع هر بازهٔ برنامه (روزانه/هفتگی/ماهانهٔ شمسی)."""
     from peecha.services.fixed_assets.common import add_months, period_of

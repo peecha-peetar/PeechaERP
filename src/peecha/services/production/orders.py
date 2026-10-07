@@ -1252,6 +1252,76 @@ def cancel_order(company_id: int, user_id: int, order_id: int, reason: str) -> N
 
 
 # =====================================================================================
+# حذف / بازگشت به پیش‌نویس (R280) — فقط دستورِ بدونِ گردش
+# =====================================================================================
+def order_has_movement(session, order_id: int) -> bool:
+    """گردش = هر تراکنش تولید (مصرف، تولید، ضایعات...)، دستمزد، ساعت ماشین یا سرشکن هزینه روی دستور."""
+    from peecha.db.models.production import CostAllocationRow, LaborEntry, MachineEntry
+
+    for model in (OrderTransaction, LaborEntry, MachineEntry, CostAllocationRow):
+        if session.scalar(select(model.order_id).where(model.order_id == order_id).limit(1)) is not None:
+            return True
+    return False
+
+
+def _require_no_movement(session, order: ProductionOrder, action: str) -> None:
+    if order_has_movement(session, order.order_id):
+        raise ValueError(f"دستور {order.order_code} گردش دارد (مصرف، تولید، دستمزد یا هزینه ثبت شده) و قابل {action} نیست — "
+                         "در صورت نیاز آن را لغو کنید.")
+
+
+def _clear_snapshot(session, order: ProductionOrder) -> None:
+    _release_all(session, order.order_id)
+    session.query(OrderMaterial).filter(OrderMaterial.order_id == order.order_id).delete()
+    session.query(OrderOutput).filter(OrderOutput.order_id == order.order_id).delete()
+    session.query(OrderOperation).filter(OrderOperation.order_id == order.order_id).delete()
+    session.flush()
+
+
+def revert_to_draft(company_id: int, user_id: int, order_id: int) -> None:
+    """دستور صادرشده/شروع‌شده‌ای که هنوز گردشی ندارد به پیش‌نویس برمی‌گردد تا ویرایش شود (رزروها آزاد می‌شوند)."""
+    with new_session() as session:
+        order = lock_order(session, company_id, order_id)
+        if order.status_code in EDITABLE_STATUSES:
+            return
+        if order.status_code not in ("RELEASED", "IN_PROGRESS", "ON_HOLD", "CANCELLED"):
+            raise ValueError(f"دستور در وضعیت «{STATUS_LABELS[order.status_code]}» قابل بازگشت به پیش‌نویس نیست.")
+        _require_no_movement(session, order, "بازگشت به پیش‌نویس")
+        _clear_snapshot(session, order)
+        before = order.status_code
+        order.status_code, order.released_at, order.hold_reason = "DRAFT", None, None
+        session.flush()
+        pm.refresh_bom_lock(session, order.bom_id)
+        c.audit(session, company_id, user_id, "ProductionOrder", order_id, "REVERT_TO_DRAFT", {"status": [before, "DRAFT"]})
+        session.commit()
+
+
+def delete_order(company_id: int, user_id: int, order_id: int) -> None:
+    """حذف کامل دستور بدون گردش (هر وضعیتی جز تکمیل/بسته)."""
+    from peecha.db.models.production import OrderCostSummary, OrderVariance, ProductionPlanLine
+
+    with new_session() as session:
+        order = lock_order(session, company_id, order_id)
+        if order.status_code in ("COMPLETED", "CLOSED"):
+            raise ValueError("دستور تکمیل/بسته‌شده قابل حذف نیست.")
+        _require_no_movement(session, order, "حذف")
+        _clear_snapshot(session, order)
+        session.query(OrderCostSummary).filter(OrderCostSummary.order_id == order_id).delete()
+        session.query(OrderVariance).filter(OrderVariance.order_id == order_id).delete()
+        for child in session.scalars(select(ProductionOrder).where(ProductionOrder.parent_order_id == order_id)):
+            child.parent_order_id = None
+        for line in session.scalars(select(ProductionPlanLine).where(ProductionPlanLine.order_id == order_id)):
+            line.order_id = None
+        bom_id, code = order.bom_id, order.order_code
+        c.audit(session, company_id, user_id, "ProductionOrder", order_id, "DELETE", {"code": code, "item_id": order.item_id,
+                                                                                    "qty": str(order.planned_qty)})
+        session.delete(order)
+        session.flush()
+        pm.refresh_bom_lock(session, bom_id)
+        session.commit()
+
+
+# =====================================================================================
 # چندسطحی
 # =====================================================================================
 def create_child_orders(company_id: int, user_id: int, order_id: int, shortage_only: bool = True) -> list[int]:
@@ -1362,7 +1432,7 @@ def order_view(company_id: int, order_id: int) -> SimpleNamespace:
                                    output_type=o.output_type, planned_qty=o.planned_qty, produced_qty=o.produced_qty,
                                    produced_amount=o.produced_amount) for o in outs]
         transactions = [SimpleNamespace(txn_id=t.txn_id, txn_type=t.txn_type, label=TXN_LABELS.get(t.txn_type, t.txn_type),
-                                        date=t.txn_date, item_label=labels.get(t.item_id, ""), quantity=t.quantity, amount=t.amount,
+                                        date=t.txn_date, item_id=t.item_id, item_label=labels.get(t.item_id, ""), quantity=t.quantity, amount=t.amount,
                                         wip_delta=t.wip_delta, stock_document_id=t.stock_document_id,
                                         journal_entry_id=t.journal_entry_id, reason=t.reason,
                                         reversed=t.txn_id in {x.reversed_txn_id for x in txns}) for t in txns

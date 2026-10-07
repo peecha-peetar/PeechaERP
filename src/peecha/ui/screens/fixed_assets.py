@@ -164,14 +164,31 @@ class FormDialog(QDialog):
         form = QFormLayout(body)
         form.setContentsMargins(0, 0, 0, 0)
         self.widgets = {}
+        self._labels = {}
         for key, label, widget in fields:
             form.addRow(label, widget)
             self.widgets[key] = widget
+            self._labels[key] = label
         layout.addWidget(scrolled(body, 560), stretch=1)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def accept(self) -> None:
+        problem = self.qty_precision_problem()
+        if problem:
+            QMessageBox.warning(self, self.windowTitle(), problem)
+            return
+        super().accept()
+
+    def qty_precision_problem(self) -> str | None:
+        """R280: مقدار با اعشار بیش از تنظیمات واحد کالا پذیرفته نمی‌شود."""
+        for key, w in self.widgets.items():
+            problem = qty_precision_problem(w, self._labels[key])
+            if problem:
+                return problem
+        return None
 
     def values(self) -> dict:
         out = {}
@@ -190,9 +207,60 @@ class FormDialog(QDialog):
         return out
 
 
-def num_field(value=None) -> QLineEdit:
-    w = QLineEdit(P(value) if value is not None else "")
+def num_field(value=None, dp: int | None = None) -> QLineEdit:
+    """فیلد عددی؛ مقدار دیتابیس بدون صفرهای اضافهٔ اعشار (۵ نه ۵٫۰۰۰)."""
+    if isinstance(value, (decimal.Decimal, int, float)) and not isinstance(value, bool):
+        text = decimals.plain(value, dp)
+    else:
+        text = P(value) if value is not None else ""
+    w = QLineEdit(text)
     w.setProperty("numeric", True)
+    return w
+
+
+def qty_precision_problem(w: QWidget, label: str, dp: int | None = None) -> str | None:
+    if dp is None:
+        dp = w.property("qty_dp") if isinstance(w, QLineEdit) else None
+    text = w.text().strip() if isinstance(w, QLineEdit) else ""
+    if dp is None or dp < 0 or not text:
+        return None
+    try:
+        value = dec(text)
+    except decimal.InvalidOperation:
+        return f"«{label}» عدد معتبر نیست."
+    if decimals.trimmed_decimals(value) <= dp:
+        return None
+    if dp == 0:
+        return f"«{label}»: واحد این کالا اعشار ندارد — مقدار باید عدد صحیح باشد (طبق تنظیمات واحد)."
+    return f"«{label}»: واحد این کالا حداکثر {P(dp)} رقم اعشار می‌پذیرد (طبق تنظیمات واحد)."
+
+
+def qty_field(value=None, item_id: int | None = None, item_combo: QComboBox | None = None, item_of=None,
+              uom_id: int | None = None) -> QLineEdit:
+    """R280: فیلد مقدار با اعشار واحد کالا؛ با تغییر کالای فهرست، اعشار هم عوض می‌شود.
+    item_of داده‌ی فهرست را به شناسهٔ کالا تبدیل می‌کند (مثلاً ردیف مادهٔ دستور تولید → کالا)."""
+    w = num_field(value)
+
+    def apply() -> None:
+        iid = item_id
+        if item_combo is not None:
+            data = item_combo.currentData()
+            iid = item_of(data) if item_of is not None and data is not None else data
+        dp = decimals.qty_decimals(uom_id if item_combo is None else None, iid)
+        w.setProperty("qty_dp", -1 if dp is None else dp)
+        w.setPlaceholderText("" if dp is None else ("عدد صحیح" if dp == 0 else f"حداکثر {P(dp)} رقم اعشار"))
+        text = w.text().strip()
+        if dp is not None and text:
+            try:
+                number = dec(text)
+            except decimal.InvalidOperation:
+                return
+            if decimals.trimmed_decimals(number) <= dp:
+                w.setText(decimals.plain(number))
+
+    if item_combo is not None:
+        item_combo.currentIndexChanged.connect(lambda _i: apply())
+    apply()
     return w
 
 

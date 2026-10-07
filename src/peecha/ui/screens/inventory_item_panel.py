@@ -2557,13 +2557,14 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
             return
         latest = boms[-1]
         self._current_bom_id = latest.bom_id
-        self.bom_status_label.setText(f"نسخهٔ {latest.version_no} — اندازهٔ دسته: {latest.batch_size_qty}")
+        self.bom_status_label.setText(numerals.to_persian_digits(
+            f"نسخهٔ {latest.version_no} — اندازهٔ دسته: {decimals.format_qty(latest.batch_size_qty, item_id=self._item_id)}"))
         lines = extended_service.list_bom_lines(latest.bom_id)
         self.bom_lines_table.setRowCount(len(lines))
         for row_index, line in enumerate(lines):
             other = next((r for r in self._rows if r.item_id == line.component_item_id), None)
             label = f"{other.code} — {other.name or ''}" if other is not None else str(line.component_item_id)
-            values = [decimals.format_qty(line.quantity_per), label]
+            values = [decimals.format_qty(line.quantity_per, item_id=line.component_item_id), label]
             for col_index, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, line.bom_line_id)
@@ -2585,6 +2586,11 @@ class ItemDetailPanel(FieldHelpMixin, LayoutEditMixin, QWidget):
         component_id = self.bom_component_combo.currentData()
         qty = _decimal_or_none(self.bom_qty_field.text())
         if component_id is None or qty is None:
+            return
+        dp = decimals.qty_decimals(item_id=component_id)
+        if dp is not None and decimals.trimmed_decimals(qty) > dp:
+            QMessageBox.warning(self, "خطا", "واحد این کالا اعشار ندارد — مقدار باید عدد صحیح باشد." if dp == 0
+                                else f"واحد این کالا حداکثر {numerals.to_persian_digits(dp)} رقم اعشار می‌پذیرد.")
             return
         try:
             extended_service.add_bom_line(self._current_bom_id, component_id, qty)

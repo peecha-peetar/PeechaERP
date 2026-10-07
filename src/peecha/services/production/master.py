@@ -404,6 +404,50 @@ def remove_routing_operation(company_id: int, routing_operation_id: int, user_id
         session.commit()
 
 
+def update_routing(company_id: int, routing_id: int, name: str | None, status_code: str = "ACTIVE",
+                   user_id: int | None = None) -> None:
+    if status_code not in c.BOM_STATUS:
+        raise ValueError("وضعیت مسیر نامعتبر است.")
+    with new_session() as session:
+        row = session.get(Routing, routing_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("مسیر تولید نامعتبر است.")
+        before = {"name": row.name, "status": row.status_code}
+        row.name, row.status_code = (name or "").strip() or None, status_code
+        if status_code != "ACTIVE" and row.is_default:
+            row.is_default = False
+        c.audit(session, company_id, user_id, "Routing", routing_id, "UPDATE", {"before": before, "name": row.name, "status": status_code})
+        session.commit()
+
+
+def delete_routing(company_id: int, routing_id: int, user_id: int | None = None) -> None:
+    """R280: حذف مسیری که در هیچ دستور تولیدی استفاده نشده است؛ ارجاع فهرست مواد/کارت بهای استاندارد برداشته می‌شود."""
+    from peecha.db.models.production import ProductionOrder, StandardCostCard
+
+    with new_session() as session:
+        row = session.get(Routing, routing_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("مسیر تولید نامعتبر است.")
+        codes = list(session.scalars(select(ProductionOrder.order_code).where(ProductionOrder.routing_id == routing_id).limit(5)))
+        if codes:
+            raise ValueError("این مسیر در دستور تولید " + "، ".join(codes) + " استفاده شده است — ابتدا آن دستور(ها) را حذف کنید.")
+        for bom in session.scalars(select(BomHeader).where(BomHeader.routing_id == routing_id)):
+            bom.routing_id = None
+        for card in session.scalars(select(StandardCostCard).where(StandardCostCard.routing_id == routing_id)):
+            card.routing_id = None
+        session.query(RoutingOperation).filter(RoutingOperation.routing_id == routing_id).delete()
+        was_default, item_id = row.is_default, row.item_id
+        c.audit(session, company_id, user_id, "Routing", routing_id, "DELETE", {"item_id": item_id, "version": row.version_no})
+        session.delete(row)
+        session.flush()
+        if was_default:
+            other = session.scalar(select(Routing).where(Routing.item_id == item_id, Routing.status_code == "ACTIVE")
+                                   .order_by(Routing.version_no.desc()).limit(1))
+            if other is not None:
+                _set_default_routing(session, other)
+        session.commit()
+
+
 def list_routings(company_id: int, item_id: int | None = None) -> list[Routing]:
     with new_session() as session:
         q = select(Routing).where(Routing.company_id == company_id)
@@ -486,10 +530,28 @@ def _bom_company(session, bom: BomHeader) -> int:
     return session.scalar(select(Item.company_id).where(Item.item_id == bom.finished_item_id))
 
 
+def bom_used_with_movement(session, bom_id: int) -> bool:
+    """R280: نسخه فقط وقتی قفل می‌ماند که دستور تولیدی با گردش (مصرف، تولید، دستمزد، هزینه) از آن استفاده کرده باشد."""
+    from peecha.db.models.production import CostAllocationRow, LaborEntry, MachineEntry, OrderTransaction, ProductionOrder
+
+    orders = select(ProductionOrder.order_id).where(ProductionOrder.bom_id == bom_id)
+    return any(session.scalar(select(m.order_id).where(m.order_id.in_(orders)).limit(1)) is not None
+               for m in (OrderTransaction, LaborEntry, MachineEntry, CostAllocationRow))
+
+
+def refresh_bom_lock(session, bom_id: int | None) -> None:
+    bom = session.get(BomHeader, bom_id) if bom_id else None
+    if bom is not None and bom.is_locked and not bom_used_with_movement(session, bom_id):
+        bom.is_locked = False
+        session.flush()
+
+
 def _get_bom(session, company_id: int, bom_id: int, for_edit: bool = False) -> BomHeader:
     bom = session.get(BomHeader, bom_id)
     if bom is None or _bom_company(session, bom) != company_id:
         raise ValueError("فهرست مواد (BOM) نامعتبر است.")
+    if for_edit:
+        refresh_bom_lock(session, bom_id)
     if for_edit and bom.is_locked:
         raise ValueError(f"نسخهٔ {bom.version_no} این فهرست مواد در دستور تولید استفاده شده و قفل است — برای تغییر، نسخهٔ تازه بسازید.")
     return bom
@@ -550,6 +612,7 @@ def update_bom(company_id: int, bom_id: int, fields: BomFields, user_id: int | N
     _validate_bom_fields(fields)
     with new_session() as session:
         bom = _get_bom(session, company_id, bom_id)
+        refresh_bom_lock(session, bom_id)
         changed = {k: [str(getattr(bom, k)), str(v)] for k, v in fields.__dict__.items() if _differs(getattr(bom, k), v)}
         if bom.is_locked and set(changed) - {"valid_to", "status_code", "name", "notes"}:
             raise ValueError("این نسخه قفل است؛ فقط پایان اعتبار، وضعیت و توضیحات قابل تغییر است — نسخهٔ تازه بسازید.")
@@ -666,6 +729,10 @@ def remove_bom_component(company_id: int, bom_line_id: int, user_id: int | None 
         if line is None:
             raise ValueError("ردیف فهرست مواد نامعتبر است.")
         bom = _get_bom(session, company_id, line.bom_id, for_edit=True)
+        from peecha.db.models.production import OrderMaterial
+
+        for m in session.scalars(select(OrderMaterial).where(OrderMaterial.bom_line_id == bom_line_id)):
+            m.bom_line_id = None  # ردیف کپی‌شده روی دستورِ بدون گردش می‌ماند؛ فقط ارجاعش برداشته می‌شود
         c.audit(session, company_id, user_id, "BOM", bom.bom_id, "REMOVE_COMPONENT",
                 {"line_no": line.line_no, "item_id": line.component_item_id, "quantity": str(line.quantity_per)})
         session.delete(line)
@@ -706,6 +773,32 @@ def remove_bom_output(company_id: int, bom_output_id: int, user_id: int | None =
         session.commit()
 
 
+def delete_bom_version(company_id: int, bom_id: int, user_id: int | None = None) -> None:
+    """R280: حذف نسخهٔ فهرست مواد که در هیچ دستور تولیدی استفاده نشده است."""
+    from peecha.db.models.production import ProductionOrder, StandardCostCard
+
+    with new_session() as session:
+        bom = _get_bom(session, company_id, bom_id)
+        codes = list(session.scalars(select(ProductionOrder.order_code).where(ProductionOrder.bom_id == bom_id).limit(5)))
+        if codes:
+            raise ValueError("این نسخه در دستور تولید " + "، ".join(codes) + " استفاده شده است — ابتدا آن دستور(ها) را حذف کنید "
+                             "یا نسخه را بایگانی کنید.")
+        for card in session.scalars(select(StandardCostCard).where(StandardCostCard.bom_id == bom_id)):
+            card.bom_id = None
+        session.query(BomOutput).filter(BomOutput.bom_id == bom_id).delete()
+        session.query(BomLine).filter(BomLine.bom_id == bom_id).delete()
+        was_default, item_id = bom.is_default, bom.finished_item_id
+        c.audit(session, company_id, user_id, "BOM", bom_id, "DELETE", {"item_id": item_id, "version": bom.version_no})
+        session.delete(bom)
+        session.flush()
+        if was_default:
+            other = session.scalar(select(BomHeader).where(BomHeader.finished_item_id == item_id, BomHeader.status_code == "ACTIVE")
+                                   .order_by(BomHeader.version_no.desc()).limit(1))
+            if other is not None:
+                _set_default_bom(session, other)
+        session.commit()
+
+
 def lock_bom(session, bom_id: int) -> None:
     bom = session.get(BomHeader, bom_id)
     if bom is not None and not bom.is_locked:
@@ -724,7 +817,8 @@ def list_bom_versions(company_id: int, item_id: int | None = None) -> list[Simpl
         return [SimpleNamespace(bom_id=r.bom_id, item_id=r.finished_item_id, item_label=labels.get(r.finished_item_id, ""),
                                 code=f"BOM-{r.finished_item_id}-V{r.version_no}", version_no=r.version_no, name=r.name,
                                 batch_size_qty=r.batch_size_qty, scrap_percent=r.scrap_percent, status_code=r.status_code or "ACTIVE",
-                                is_default=r.is_default, is_locked=r.is_locked, valid_from=r.valid_from, valid_to=r.valid_to,
+                                is_default=r.is_default, is_locked=r.is_locked and bom_used_with_movement(session, r.bom_id),
+                                valid_from=r.valid_from, valid_to=r.valid_to,
                                 routing_id=r.routing_id, production_time_minutes=r.production_time_minutes, notes=r.notes,
                                 component_count=counts.get(r.bom_id, 0)) for r in rows]
 

@@ -28,7 +28,8 @@ from peecha.ui import theme
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.fixed_assets import (
-    FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, set_combo, table, user_id,
+    FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, qty_field, qty_precision_problem,
+    set_combo, table, user_id,
 )
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
 from peecha.ui.widgets import FormDrawer, confirm_and_delete
@@ -39,8 +40,9 @@ AVAIL_ICON = {"GREEN": "● موجود", "YELLOW": "◐ بخشی موجود", "R
 OP_ICON = {"DONE": "✓", "IN_PROGRESS": "●", "PENDING": "○", "SKIPPED": "–"}
 
 
-def qty(value) -> str:
-    return P(numerals.format_money(value, 3).rstrip("0").rstrip(".") if value is not None else "—")
+def qty(value, item_id: int | None = None, uom_id: int | None = None) -> str:
+    """مقدار با اعشار واحد کالا (R280)؛ بدون کالا، بدون صفرهای اضافه."""
+    return decimals.format_qty(value, uom_id=uom_id, item_id=item_id) if value is not None else "—"
 
 
 class PrdLookups:
@@ -211,7 +213,7 @@ class ProductionWizard(QDialog):
         self._page("کالای تولیدی را انتخاب کنید (نوشتن بخشی از نام کافی است).", [("محصول", self.item_box)])
         self.bom_box = QComboBox()
         self._page("نسخهٔ معتبر فهرست مواد پیش‌فرض انتخاب شده است.", [("فهرست مواد", self.bom_box)])
-        self.qty_edit = num_field(100)
+        self.qty_edit = qty_field(100, item_combo=self.item_box)
         self.due_edit = date_field()
         self._page("مقدار و تاریخ تحویل.", [("مقدار تولید", self.qty_edit), ("تاریخ پایان", self.due_edit)])
         self.avail_table = table(["ماده", "نیاز", "موجود", "کمبود", "وضعیت"])
@@ -223,8 +225,8 @@ class ProductionWizard(QDialog):
         self.consume_table = table(["ماده", "نیاز", "مصرف واقعی"])
         self._page_widget("مصرف واقعی (پیش‌فرض = استاندارد؛ می‌توانید مقدار را تغییر دهید).", self.consume_table)
         self.consume_table.setEditTriggers(QTableWidget.AllEditTriggers)
-        self.produced_edit = num_field()
-        self.scrap_edit = num_field(0)
+        self.produced_edit = qty_field(item_combo=self.item_box)
+        self.scrap_edit = qty_field(0, item_combo=self.item_box)
         self._page("مقدار تولید سالم و ضایعات.", [("تولید سالم", self.produced_edit), ("ضایعات", self.scrap_edit)])
         self.cost_label = QLabel("")
         self.cost_label.setWordWrap(True)
@@ -295,10 +297,15 @@ class ProductionWizard(QDialog):
                 raise ValueError("محصول را انتخاب کنید.")
             if i == 1 and self.bom_box.currentData() is None:
                 raise ValueError("برای این محصول فهرست مواد فعالی تعریف نشده است — از «اطلاعات پایهٔ تولید» یک فهرست مواد بسازید.")
+            for w, label, step in ((self.qty_edit, "مقدار تولید", 2), (self.produced_edit, "تولید سالم", 7),
+                                   (self.scrap_edit, "ضایعات", 7)):
+                problem = qty_precision_problem(w, label) if i == step else None
+                if problem:
+                    raise ValueError(problem)
             if i == 2:
                 rows = po.availability(cid, item_id=self.item_box.currentData(), quantity=dec(self.qty_edit.text()),
                                        bom_id=self.bom_box.currentData())
-                fill(self.avail_table, [[a.item_label, qty(a.required), qty(a.available), qty(a.shortage), AVAIL_ICON[a.status]]
+                fill(self.avail_table, [[a.item_label, qty(a.required, a.item_id), qty(a.available, a.item_id), qty(a.shortage, a.item_id), AVAIL_ICON[a.status]]
                                         for a in rows])
             if i == 3:
                 if self.order_id is None:
@@ -313,13 +320,21 @@ class ProductionWizard(QDialog):
             if i == 5:
                 po.start_order(cid, uid, self.order_id)
                 view = po.order_view(cid, self.order_id)
-                fill(self.consume_table, [[m.item_label, qty(m.required), qty(m.remaining)] for m in view.materials if not m.is_optional],
+                fill(self.consume_table, [[m.item_label, qty(m.required, m.item_id), qty(m.remaining, m.item_id)]
+                                          for m in view.materials if not m.is_optional],
                      [m.material_id for m in view.materials if not m.is_optional])
+                self._consume_items = [m.item_id for m in view.materials if not m.is_optional]
                 self.produced_edit.setText(decimals.plain(po.get_order(cid, self.order_id).planned_qty))
+                self.produced_edit.setProperty("qty_dp", decimals.qty_decimals(item_id=self.item_box.currentData()))
             if i == 6:
                 lines = []
                 for r in range(self.consume_table.rowCount()):
-                    q = dec(self.consume_table.item(r, 2).text())
+                    cell = QLineEdit(self.consume_table.item(r, 2).text())
+                    problem = qty_precision_problem(cell, self.consume_table.item(r, 0).text(),
+                                                    decimals.qty_decimals(item_id=self._consume_items[r]))
+                    if problem:
+                        raise ValueError(problem)
+                    q = dec(cell.text())
                     if q > 0:
                         lines.append(po.IssueLine(self.consume_table.item(r, 0).data(Qt.UserRole), q))
                 if lines:
@@ -396,10 +411,15 @@ class OrdersScreen(QWidget):
         self.status_filter.currentIndexChanged.connect(self.reload_list)
         self.new_button = QPushButton("دستور جدید")
         self.new_button.clicked.connect(self.new_order)
+        self.edit_button = QPushButton("ویرایش دستور")
+        self.edit_button.clicked.connect(lambda: self.edit_order())
+        self.delete_button = QPushButton("حذف دستور")
+        self.delete_button.clicked.connect(lambda: self.delete_order())
         self.wizard_button = QPushButton("ویزارد تولید")
         self.wizard_button.setObjectName("primaryButton")
         self.wizard_button.clicked.connect(self.open_wizard)
-        outer.addWidget(ms.header_card(title, self.search, self.status_filter, self.new_button, self.wizard_button))
+        outer.addWidget(ms.header_card(title, self.search, self.status_filter, self.new_button, self.edit_button,
+                                        self.delete_button, self.wizard_button))
         split = QSplitter(Qt.Horizontal)
         self.list_table = table(["دستور", "محصول", "وضعیت", "برنامه", "تولید", "پایان"])
         self.list_table.itemSelectionChanged.connect(self._selected)
@@ -466,8 +486,8 @@ class OrdersScreen(QWidget):
         if cid is None:
             return
         rows = po.list_orders(cid, status=self.status_filter.currentData(), search=self.search.text().strip() or None)
-        fill(self.list_table, [[r.order_code, r.item_label, ("⚠ " if r.is_late else "") + r.status_label, qty(r.planned_qty),
-                                qty(r.produced_qty), r.due_date] for r in rows], [r.order_id for r in rows])
+        fill(self.list_table, [[r.order_code, r.item_label, ("⚠ " if r.is_late else "") + r.status_label, qty(r.planned_qty, r.item_id),
+                                qty(r.produced_qty, r.item_id), r.due_date] for r in rows], [r.order_id for r in rows])
         if rows and (self.view is None or self.view.order.order_id not in {r.order_id for r in rows}):
             self.list_table.selectRow(0)
 
@@ -497,18 +517,19 @@ class OrdersScreen(QWidget):
         show_cost = can("prd_cost_view", "VIEW")
         self.header.setText(P(f"دستور تولید {o.order_code}"))
         values = {"product": o.item_label, "status": "● " + o.status_label + (f" ({o.hold_reason})" if o.hold_reason else ""),
-                  "planned": qty(o.planned_qty), "produced": qty(o.produced_qty), "scrapped": qty(o.scrapped_qty),
+                  "planned": qty(o.planned_qty, o.item_id), "produced": qty(o.produced_qty, o.item_id),
+                  "scrapped": qty(o.scrapped_qty, o.item_id),
                   "dates": f"{numerals.format_jalali_date(o.start_date)} / {numerals.format_jalali_date(o.due_date)}",
                   "wip": money(v.wip) if show_cost else "—", "unit": money(v.costs.actual_unit_cost) if show_cost else "—"}
         for key, text in values.items():
             self.cards[key].setText(P(text))
         self.progress.setValue(int(o.progress))
         self.progress.setFormat(P(f"{int(o.progress)}٪"))
-        fill(self.t_materials, [[m.item_label, pc.COMPONENT_TYPES.get(m.component_type, ""), qty(m.required), qty(m.reserved),
-                                 qty(m.consumed), qty(m.remaining), AVAIL_ICON[m.availability]] for m in v.materials],
+        fill(self.t_materials, [[m.item_label, pc.COMPONENT_TYPES.get(m.component_type, ""), qty(m.required, m.item_id),
+                                 qty(m.reserved, m.item_id), qty(m.consumed, m.item_id), qty(m.remaining, m.item_id), AVAIL_ICON[m.availability]] for m in v.materials],
              [m.material_id for m in v.materials])
         fill(self.t_operations, [[OP_ICON[x.status_code], x.seq, x.name, x.work_center, qty(x.std_labor_hours), qty(x.actual_labor_hours),
-                                  qty(x.completed_qty)] for x in v.operations], [x.order_operation_id for x in v.operations])
+                                  qty(x.completed_qty, o.item_id)] for x in v.operations], [x.order_operation_id for x in v.operations])
         k = v.costs
         if show_cost:
             fill(self.t_costs, [["مواد", k.material, k.material_std, k.material - k.material_std],
@@ -524,9 +545,9 @@ class OrdersScreen(QWidget):
         else:
             fill(self.t_costs, [["مشاهدهٔ بها نیازمند دسترسی «تولید: مشاهدهٔ بها» است.", "", "", ""]])
             fill(self.t_variances, [])
-        fill(self.t_outputs, [[x.item_label, pc.OUTPUT_TYPES[x.output_type], qty(x.planned_qty), qty(x.produced_qty),
+        fill(self.t_outputs, [[x.item_label, pc.OUTPUT_TYPES[x.output_type], qty(x.planned_qty, x.item_id), qty(x.produced_qty, x.item_id),
                                x.produced_amount if show_cost else "—"] for x in v.outputs])
-        fill(self.t_txns, [[t.date, t.label + (" (برگشت‌خورده)" if t.reversed else ""), t.item_label, qty(t.quantity),
+        fill(self.t_txns, [[t.date, t.label + (" (برگشت‌خورده)" if t.reversed else ""), t.item_label, qty(t.quantity, t.item_id),
                             t.amount if show_cost else "—", t.wip_delta if show_cost else "—", t.reason or ""] for t in v.transactions],
              [t.txn_id for t in v.transactions])
         fill(self.t_checklist, [[x.label, "✓" if x.ok else "✗", x.note] for x in po.closing_checklist(cid, order_id)])
@@ -534,6 +555,9 @@ class OrdersScreen(QWidget):
 
     def _update_actions(self) -> None:
         status = self.view.order.status_code if self.view else None
+        open_order = status is not None and status not in ("COMPLETED", "CLOSED")
+        self.edit_button.setEnabled(open_order and can(self.FORM, "EDIT"))
+        self.delete_button.setEnabled(open_order and can(self.FORM, "DELETE"))
         for key, b in self.actions.items():
             b.setEnabled(status in self.ALLOWED[key] and can(b.property("form"), "EDIT" if b.property("form") == self.FORM else "VIEW"))
 
@@ -553,14 +577,8 @@ class OrdersScreen(QWidget):
 
     # --- عملیات --------------------------------------------------------------------------------
     def new_order(self) -> None:
-        lk = self.lk
-        values = _ask(self, "دستور تولید جدید", [
-            ("item_id", "محصول", combo(lk.made)), ("planned_qty", "مقدار", num_field()), ("start_date", "شروع", date_field()),
-            ("due_date", "پایان", date_field()), ("priority", "اولویت (۱ تا ۵)", num_field(3)),
-            ("material_warehouse_id", "انبار مواد", combo(lk.warehouses, "— پیش‌فرض —")),
-            ("fg_warehouse_id", "انبار محصول", combo(lk.warehouses, "— پیش‌فرض —")),
-            ("branch_id", "شعبه", combo(lk.branches, "—")), ("cost_center_detail_account_id", "مرکز هزینه", combo(lk.cost_centers, "—")),
-            ("notes", "توضیحات", QLineEdit())], "فهرست مواد، مسیر و انبارها خودکار از تنظیمات و تعریف کالا پر می‌شوند.")
+        values = _ask(self, "دستور تولید جدید", self._order_form(),
+                      "فهرست مواد، مسیر و انبارها خودکار از تنظیمات و تعریف کالا پر می‌شوند.")
         if not values:
             return None
         values["priority"] = int(values["priority"] or 3)
@@ -568,6 +586,70 @@ class OrdersScreen(QWidget):
         if ok:
             self.open_order(oid)
         return oid
+
+    def _order_form(self, order=None) -> list:
+        lk = self.lk
+        item_box = _combo_at(combo(lk.made), order.item_id if order else None)
+        g = (lambda name: getattr(order, name)) if order is not None else (lambda name: None)
+        return [
+            ("item_id", "محصول", item_box),
+            ("planned_qty", "مقدار", qty_field(g("planned_qty"), item_combo=item_box)),
+            ("start_date", "شروع", date_field(g("start_date"))), ("due_date", "پایان", date_field(g("due_date"))),
+            ("priority", "اولویت (۱ تا ۵)", num_field(g("priority") or 3)),
+            ("material_warehouse_id", "انبار مواد", _combo_at(combo(lk.warehouses, "— پیش‌فرض —"), g("material_warehouse_id"))),
+            ("fg_warehouse_id", "انبار محصول", _combo_at(combo(lk.warehouses, "— پیش‌فرض —"), g("fg_warehouse_id"))),
+            ("branch_id", "شعبه", _combo_at(combo(lk.branches, "—"), g("branch_id"))),
+            ("cost_center_detail_account_id", "مرکز هزینه", _combo_at(combo(lk.cost_centers, "—"), g("cost_center_detail_account_id"))),
+            ("notes", "توضیحات", QLineEdit(g("notes") or ""))]
+
+    def edit_order(self, values: dict | None = None) -> bool:
+        """R280: ویرایش دستور؛ دستور صادرشدهٔ بدون گردش اول به پیش‌نویس برمی‌گردد."""
+        if self.view is None:
+            return False
+        cid, uid, oid = company_id(), user_id(), self.view.order.order_id
+        order = po.get_order(cid, oid)
+        if order.status_code not in po.EDITABLE_STATUSES:
+            if not self.confirm("برای ویرایش، دستور به «پیش‌نویس» برمی‌گردد و رزرو مواد آزاد می‌شود (فقط اگر هنوز گردشی ندارد). "
+                                "پس از ویرایش دوباره «صدور» بزنید. ادامه می‌دهید؟"):
+                return False
+            if not _run(self, "ویرایش دستور تولید", po.revert_to_draft, cid, uid, oid)[1]:
+                return False
+            order = po.get_order(cid, oid)
+            self.reload_list()
+            self.load_order(oid)
+        if values is None:
+            values = _ask(self, f"ویرایش دستور {order.order_code}", self._order_form(order))
+            if values is None:
+                return False
+        values["priority"] = int(values.get("priority") or 3)
+        same_item = values["item_id"] == order.item_id
+        fields = po.OrderFields(**values, bom_id=order.bom_id if same_item else None, routing_id=order.routing_id if same_item else None,
+                                wip_warehouse_id=order.wip_warehouse_id, scrap_warehouse_id=order.scrap_warehouse_id,
+                                project_detail_account_id=order.project_detail_account_id, work_center_id=order.work_center_id if same_item else None,
+                                responsible_user_id=order.responsible_user_id, sales_order_line_id=order.sales_order_line_id,
+                                parent_order_id=order.parent_order_id, joint_cost_method=order.joint_cost_method)
+        _r, ok = _run(self, "ویرایش دستور تولید", po.update_order, cid, uid, oid, fields)
+        if ok:
+            self.reload_list()
+            self.load_order(oid)
+        return ok
+
+    def delete_order(self) -> bool:
+        if self.view is None:
+            return False
+        o = self.view.order
+        if not self.confirm(f"دستور تولید {o.order_code} حذف شود؟ (فقط دستوری که هیچ گردشی ندارد قابل حذف است.)"):
+            return False
+        _r, ok = _run(self, "حذف دستور تولید", po.delete_order, company_id(), user_id(), o.order_id)
+        if ok:
+            self.view = None
+            self.reload_list()
+            if self.view is None:
+                for t in (self.t_materials, self.t_operations, self.t_outputs, self.t_txns, self.t_costs, self.t_variances, self.t_checklist):
+                    fill(t, [])
+                self.header.setText("")
+                self._update_actions()
+        return ok
 
     def open_wizard(self) -> None:
         wiz = ProductionWizard(self.lk or PrdLookups(company_id()), self)
@@ -582,15 +664,20 @@ class OrdersScreen(QWidget):
             return False
         cid, uid, oid = company_id(), user_id(), self.view.order.order_id
         mats = [(m.item_label, m.material_id) for m in self.view.materials]
+        mat_items = {m.material_id: m.item_id for m in self.view.materials}
+        product = self.view.order.item_id
+        issue_box, return_box = combo(mats), combo(mats)
         ops = [(f"{x.seq} -- {x.name}", x.order_operation_id) for x in self.view.operations]
         forms = {
-            "issue": [("material_id", "ماده", combo(mats)), ("quantity", "مقدار مصرف", num_field()), ("reason", "توضیح", QLineEdit())],
-            "return": [("material_id", "ماده", combo(mats)), ("quantity", "مقدار برگشت", num_field()), ("reason", "علت", QLineEdit())],
-            "receipt": [("quantity", "تولید سالم", num_field(decimals.plain(self.view.order.remaining_qty))),
+            "issue": [("material_id", "ماده", issue_box),
+                      ("quantity", "مقدار مصرف", qty_field(item_combo=issue_box, item_of=mat_items.get)), ("reason", "توضیح", QLineEdit())],
+            "return": [("material_id", "ماده", return_box),
+                       ("quantity", "مقدار برگشت", qty_field(item_combo=return_box, item_of=mat_items.get)), ("reason", "علت", QLineEdit())],
+            "receipt": [("quantity", "تولید سالم", qty_field(self.view.order.remaining_qty, item_id=product)),
                         ("batch_no", "شمارهٔ بچ (اختیاری)", QLineEdit())]
-            + [(f"out_{o.item_id}", f"{pc.OUTPUT_TYPES[o.output_type]}: {o.item_label}", num_field(0))
+            + [(f"out_{o.item_id}", f"{pc.OUTPUT_TYPES[o.output_type]}: {o.item_label}", qty_field(0, item_id=o.item_id))
                for o in self.view.outputs if o.output_type != "MAIN"],
-            "scrap": [("quantity", "مقدار ضایعات", num_field()), ("reason", "علت", QLineEdit()),
+            "scrap": [("quantity", "مقدار ضایعات", qty_field(item_id=product)), ("reason", "علت", QLineEdit()),
                       ("scrap_item_id", "کالای ضایعات قابل فروش", combo(self.lk.items if self.lk else [], "— بدون بازیافت —")),
                       ("recovery", "ارزش بازیافت واحد", num_field(0))],
             "labor": [("order_operation_id", "عملیات", combo(ops, "—")), ("employee_id", "کارمند", combo(self.lk.employees if self.lk else [], "—")),
@@ -598,10 +685,10 @@ class OrdersScreen(QWidget):
             "machine": [("order_operation_id", "عملیات", combo(ops, "—")), ("hours", "ساعت", num_field()),
                         ("rate", "نرخ (خالی = خودکار)", num_field())],
             "hold": [("reason", "دلیل توقف", QLineEdit())],
-            "complete": [("quantity", "رسید نهایی (اختیاری)", num_field(decimals.plain(self.view.order.remaining_qty))),
+            "complete": [("quantity", "رسید نهایی (اختیاری)", qty_field(self.view.order.remaining_qty, item_id=product)),
                          ("joint_method", "روش تخصیص تولید مشترک", combo([(v, k) for k, v in pc.JOINT_METHODS.items()]))],
             "reopen": [("reason", "دلیل بازگشایی", QLineEdit())], "cancel": [("reason", "دلیل لغو", QLineEdit())],
-            "reverse": [("txn_id", "رسید", combo([(f"{numerals.format_jalali_date(t.date)} -- {t.item_label} -- {decimals.format_qty(t.quantity)}", t.txn_id)
+            "reverse": [("txn_id", "رسید", combo([(f"{numerals.format_jalali_date(t.date)} -- {t.item_label} -- {decimals.format_qty(t.quantity, item_id=t.item_id)}", t.txn_id)
                                                    for t in self.view.transactions if t.txn_type in ("RECEIPT", "CO_PRODUCT", "BY_PRODUCT")
                                                    and not t.reversed])),
                         ("reason", "دلیل", QLineEdit())],
@@ -679,10 +766,10 @@ class MasterDataScreen(QWidget):
         row.addWidget(QLabel("محصول:"))
         row.addWidget(self.bom_item, stretch=1)
         self.bom_buttons = {}
-        for key, label in (("new", "نسخهٔ جدید"), ("edit_version", "ویرایش نسخه"), ("copy", "کپی به نسخهٔ جدید"),
-                           ("default", "پیش‌فرض"), ("archive", "بایگانی"),
+        for key, label in (("new", "نسخهٔ جدید"), ("edit_version", "ویرایش نسخه"), ("delete_version", "حذف نسخه"),
+                           ("copy", "کپی به نسخهٔ جدید"), ("default", "پیش‌فرض"), ("archive", "بایگانی"),
                            ("component", "افزودن جزء"), ("edit_component", "ویرایش جزء"), ("remove", "حذف جزء"),
-                           ("output", "جانبی/مشترک"), ("remove_output", "حذف خروجی"),
+                           ("output", "جانبی/مشترک"), ("edit_output", "ویرایش خروجی"), ("remove_output", "حذف خروجی"),
                            ("explode", "انفجار چندسطحی"), ("profile", "مشخصات تولیدی کالا")):
             b = QPushButton(label)
             b.setProperty("form", "prd_bom")
@@ -709,7 +796,8 @@ class MasterDataScreen(QWidget):
         self.rt_item.currentIndexChanged.connect(self.load_routings)
         rrow.addWidget(QLabel("محصول:"))
         rrow.addWidget(self.rt_item, stretch=1)
-        for key, label in (("new", "مسیر جدید"), ("copy", "کپی به نسخهٔ جدید"), ("default", "پیش‌فرض"), ("op", "افزودن عملیات"),
+        for key, label in (("new", "مسیر جدید"), ("edit_routing", "ویرایش مسیر"), ("delete_routing", "حذف مسیر"),
+                           ("copy", "کپی به نسخهٔ جدید"), ("default", "پیش‌فرض"), ("op", "افزودن عملیات"),
                            ("edit_op", "ویرایش عملیات"), ("remove", "حذف عملیات")):
             b = QPushButton(label)
             b.setProperty("form", "prd_routing")
@@ -790,7 +878,7 @@ class MasterDataScreen(QWidget):
     def load_boms(self) -> None:
         item_id = self.bom_item.currentData()
         rows = pm.list_bom_versions(company_id(), item_id) if item_id else []
-        fill(self.t_versions, [[r.code, r.name or "", qty(r.batch_size_qty), pc.BOM_STATUS.get(r.status_code, ""),
+        fill(self.t_versions, [[r.code, r.name or "", qty(r.batch_size_qty, r.item_id), pc.BOM_STATUS.get(r.status_code, ""),
                                 "✓" if r.is_default else "", "🔒" if r.is_locked else "", r.component_count] for r in rows],
              [r.bom_id for r in rows])
         if rows:
@@ -806,13 +894,13 @@ class MasterDataScreen(QWidget):
             return
         cid = company_id()
         rows = pm.bom_components(cid, bom_id)
-        fill(self.t_components, [[r.line_no, r.item_label, pc.COMPONENT_TYPES.get(r.component_type, ""), qty(r.quantity),
-                                  qty(r.base_quantity), qty(r.scrap_percent), "ثابت" if r.quantity_type == "FIXED" else "متغیر",
+        fill(self.t_components, [[r.line_no, r.item_label, pc.COMPONENT_TYPES.get(r.component_type, ""), qty(r.quantity, r.item_id, r.uom_id),
+                                  qty(r.base_quantity, r.item_id), qty(r.scrap_percent), "ثابت" if r.quantity_type == "FIXED" else "متغیر",
                                   r.operation_seq or "", r.substitute_label, "✓" if r.is_optional else ""] for r in rows],
              [r.bom_line_id for r in rows])
         labels = dict((d, lb) for lb, d in (self.lk.items if self.lk else []))
         outputs = pm.bom_outputs(cid, bom_id)
-        fill(self.t_outputs, [[labels.get(o.item_id, o.item_id), pc.OUTPUT_TYPES[o.output_type], qty(o.quantity_per),
+        fill(self.t_outputs, [[labels.get(o.item_id, o.item_id), pc.OUTPUT_TYPES[o.output_type], qty(o.quantity_per, o.item_id),
                                o.recovery_value_per_unit or o.sales_value_per_unit or ""] for o in outputs],
              [o.bom_output_id for o in outputs])
 
@@ -831,6 +919,19 @@ class MasterDataScreen(QWidget):
             if version is None:
                 QMessageBox.warning(self, "BOM", "یک نسخه را انتخاب کنید.")
                 return False
+        if key == "delete_version" and values is None:
+            if bom_id is None:
+                QMessageBox.warning(self, "BOM", "یک نسخه را انتخاب کنید.")
+                return False
+            if QMessageBox.question(self, "BOM", "نسخهٔ انتخاب‌شدهٔ فهرست مواد با همهٔ اجزایش حذف شود؟") != QMessageBox.Yes:
+                return False
+        output = None
+        if key == "edit_output":
+            out_id = selected_or_none(self.t_outputs)
+            output = next((o for o in pm.bom_outputs(cid, bom_id) if o.bom_output_id == out_id), None) if bom_id and out_id else None
+            if output is None:
+                QMessageBox.warning(self, "BOM", "یک خروجی جانبی/مشترک را انتخاب کنید.")
+                return False
         if key == "remove_output":
             out_id = selected_or_none(self.t_outputs)
             if out_id is None:
@@ -841,33 +942,40 @@ class MasterDataScreen(QWidget):
         if key == "remove" and values is None:
             if QMessageBox.question(self, "BOM", "جزء انتخاب‌شده حذف شود؟") != QMessageBox.Yes:
                 return False
+        component_box = combo(lk.items)
+        edit_box = _combo_at(combo(lk.items), line.item_id) if line is not None else None
+        output_box = _combo_at(combo(lk.items), output.item_id if output else None)
         forms = {
-            "new": [("batch_size_qty", "مقدار تولید فهرست مواد", num_field(1)), ("scrap_percent", "ضایعات پیش‌فرض٪", num_field(0)),
+            "new": [("batch_size_qty", "مقدار تولید فهرست مواد", qty_field(1, item_id=item_id)), ("scrap_percent", "ضایعات پیش‌فرض٪", num_field(0)),
                     ("name", "نام", QLineEdit()), ("valid_from", "شروع اعتبار", date_field())],
             "edit_version": [] if version is None else [
-                ("batch_size_qty", "مقدار تولید فهرست مواد", num_field(version.batch_size_qty)),
+                ("batch_size_qty", "مقدار تولید فهرست مواد", qty_field(version.batch_size_qty, item_id=item_id)),
                 ("scrap_percent", "ضایعات پیش‌فرض٪", num_field(version.scrap_percent)),
                 ("name", "نام", QLineEdit(version.name or ""))],
             "edit_component": [] if line is None else [
-                ("component_item_id", "جزء", _combo_at(combo(lk.items), line.item_id)), ("quantity", "مقدار", num_field(line.quantity)),
+                ("component_item_id", "جزء", edit_box), ("quantity", "مقدار", qty_field(line.quantity, item_combo=edit_box)),
                 ("scrap_percent", "ضایعات٪", num_field(line.scrap_percent)),
                 ("component_type", "نوع", _combo_at(combo([(v, k) for k, v in pc.COMPONENT_TYPES.items()]), line.component_type)),
                 ("fixed", "مقدار ثابت (مستقل از تعداد)", _checked(line.quantity_type == "FIXED")),
                 ("operation_seq", "ترتیب عملیات", num_field(line.operation_seq)),
                 ("substitute_item_id", "جایگزین", _combo_at(combo(lk.items, "—"), line.substitute_item_id)),
                 ("is_optional", "اختیاری", _checked(line.is_optional))],
-            "component": [("component_item_id", "جزء", combo(lk.items)), ("quantity", "مقدار", num_field()),
+            "component": [("component_item_id", "جزء", component_box), ("quantity", "مقدار", qty_field(item_combo=component_box)),
                           ("scrap_percent", "ضایعات٪", num_field(0)),
                           ("component_type", "نوع", combo([(v, k) for k, v in pc.COMPONENT_TYPES.items()])),
                           ("fixed", "مقدار ثابت (مستقل از تعداد)", QCheckBox()), ("operation_seq", "ترتیب عملیات", num_field()),
                           ("substitute_item_id", "جایگزین", combo(lk.items, "—")), ("is_optional", "اختیاری", QCheckBox())],
-            "output": [("item_id", "کالا", combo(lk.items)), ("output_type", "نوع", combo([("محصول جانبی", "BY_PRODUCT"),
-                                                                                         ("محصول مشترک", "CO_PRODUCT")])),
-                       ("quantity_per", "مقدار به ازای دسته", num_field()), ("value", "ارزش بازیافت/فروش واحد", num_field(0))],
+            "output": [("item_id", "کالا", output_box), ("output_type", "نوع", _combo_at(combo([("محصول جانبی", "BY_PRODUCT"),
+                                                                                         ("محصول مشترک", "CO_PRODUCT")]),
+                                                                                  output.output_type if output else None)),
+                       ("quantity_per", "مقدار به ازای دسته", qty_field(output.quantity_per if output else None, item_combo=output_box)),
+                       ("value", "ارزش بازیافت/فروش واحد", num_field(
+                           (output.recovery_value_per_unit or output.sales_value_per_unit or 0) if output else 0))],
             "profile": [("make_or_buy", "تامین", combo([("ساخت", "MAKE"), ("خرید", "BUY")])), ("lead_time_days", "زمان تولید (روز)", num_field(0)),
-                        ("min_lot_qty", "حداقل تولید", num_field()), ("max_lot_qty", "حداکثر تولید", num_field()),
+                        ("min_lot_qty", "حداقل تولید", qty_field(item_id=item_id)), ("max_lot_qty", "حداکثر تولید", qty_field(item_id=item_id)),
                         ("standard_scrap_percent", "ضایعات استاندارد٪", num_field(0)), ("backflush", "مصرف خودکار (Backflush)", QCheckBox())],
         }
+        forms["edit_output"] = forms["output"]
         if key in forms and values is None:
             values = _ask(self, "BOM", forms[key])
             if values is None:
@@ -890,6 +998,8 @@ class MasterDataScreen(QWidget):
                 status_code=version.status_code), uid),
             "edit_component": lambda: pm.update_bom_component(cid, line.bom_line_id, line_fields(), uid),
             "remove_output": lambda: pm.remove_bom_output(cid, selected_or_none(self.t_outputs), uid),
+            "delete_version": lambda: pm.delete_bom_version(cid, bom_id, uid),
+            "edit_output": lambda: self._save_output(cid, bom_id, values, uid, output),
             "new": lambda: pm.create_bom_version(cid, item_id, pm.BomFields(
                 batch_size_qty=values["batch_size_qty"] or decimal.Decimal(1), scrap_percent=values.get("scrap_percent") or ZERO,
                 name=values.get("name"), valid_from=values.get("valid_from")), user_id=uid),
@@ -915,6 +1025,15 @@ class MasterDataScreen(QWidget):
             self.load_boms()
         return ok
 
+    @staticmethod
+    def _save_output(cid: int, bom_id: int, values: dict, uid, old) -> None:
+        if old is not None and old.item_id != values["item_id"]:
+            pm.remove_bom_output(cid, old.bom_output_id, uid)
+        pm.save_bom_output(cid, bom_id, pm.BomOutputFields(
+            values["item_id"], values["output_type"], values["quantity_per"],
+            recovery_value_per_unit=values.get("value") if values["output_type"] == "BY_PRODUCT" else None,
+            sales_value_per_unit=values.get("value") if values["output_type"] == "CO_PRODUCT" else None), uid)
+
     def _fields_of(self, bom_id: int, status: str) -> pm.BomFields:
         v = next(x for x in pm.list_bom_versions(company_id()) if x.bom_id == bom_id)
         return pm.BomFields(batch_size_qty=v.batch_size_qty, scrap_percent=v.scrap_percent, name=v.name, valid_from=v.valid_from,
@@ -923,7 +1042,7 @@ class MasterDataScreen(QWidget):
 
     def _show_explosion(self, cid: int, item_id: int) -> None:
         rows = pm.explode(cid, item_id, decimal.Decimal(1))
-        text = "\n".join(("  " * (r.level - 1)) + f"{'▸' if r.is_made else '•'} {r.item_label}: {qty(r.gross_qty)}" for r in rows)
+        text = "\n".join(("  " * (r.level - 1)) + f"{'▸' if r.is_made else '•'} {r.item_label}: {qty(r.gross_qty, r.item_id)}" for r in rows)
         QMessageBox.information(self, "انفجار چندسطحی فهرست مواد (برای یک واحد)", P(text or "فهرست مواد ندارد."))
 
     @staticmethod
@@ -965,6 +1084,19 @@ class MasterDataScreen(QWidget):
             values = _ask(self, "مسیر تولید", [("name", "نام", QLineEdit())])
             if values is None:
                 return False
+        if key in ("edit_routing", "delete_routing") and rid is None:
+            QMessageBox.warning(self, "مسیر تولید", "یک مسیر را انتخاب کنید.")
+            return False
+        if key == "edit_routing" and values is None:
+            routing = next(r for r in pm.list_routings(cid, item_id) if r.routing_id == rid)
+            values = _ask(self, "ویرایش مسیر تولید", [
+                ("name", "نام", QLineEdit(routing.name or "")),
+                ("status_code", "وضعیت", _combo_at(combo([(v, k) for k, v in pc.BOM_STATUS.items()]), routing.status_code))])
+            if values is None:
+                return False
+        if key == "delete_routing" and values is None:
+            if QMessageBox.question(self, "مسیر تولید", "مسیر انتخاب‌شده با همهٔ عملیاتش حذف شود؟") != QMessageBox.Yes:
+                return False
         cur = None
         if key == "edit_op":
             op_id = selected_or_none(self.t_ops)
@@ -1004,6 +1136,8 @@ class MasterDataScreen(QWidget):
         fn = {
             "new": lambda: pm.create_routing(cid, item_id, values.get("name"), user_id=uid),
             "copy": lambda: pm.create_routing(cid, item_id, None, copy_from_routing_id=rid, user_id=uid),
+            "edit_routing": lambda: pm.update_routing(cid, rid, values.get("name"), values.get("status_code") or "ACTIVE", uid),
+            "delete_routing": lambda: pm.delete_routing(cid, rid, uid),
             "default": lambda: pm.set_default_routing(cid, rid),
             "edit_op": lambda: pm.update_routing_operation(cid, cur.routing_operation_id, op_fields(), uid),
             "op": lambda: pm.add_routing_operation(cid, rid, pm.RoutingOpFields(
@@ -1171,8 +1305,10 @@ class PlanningScreen(QWidget):
         plans = QWidget()
         pl = QVBoxLayout(plans)
         prow = QHBoxLayout()
-        for key, label in (("new", "برنامهٔ جدید"), ("line", "افزودن ردیف"), ("sales", "از سفارش‌های فروش"),
-                           ("min", "از حداقل موجودی"), ("approve", "تایید"), ("convert", "تبدیل به دستور تولید")):
+        for key, label in (("new", "برنامهٔ جدید"), ("edit_plan", "ویرایش برنامه"), ("delete_plan", "حذف برنامه"),
+                           ("line", "افزودن ردیف"), ("edit_line", "ویرایش ردیف"), ("delete_line", "حذف ردیف"),
+                           ("sales", "از سفارش‌های فروش"), ("min", "از حداقل موجودی"), ("approve", "تایید"),
+                           ("convert", "تبدیل به دستور تولید")):
             b = QPushButton(label)
             b.clicked.connect(lambda _c=False, k=key: self.plan_action(k))
             prow.addWidget(b)
@@ -1220,7 +1356,7 @@ class PlanningScreen(QWidget):
         df, dt = self.date_from.date(), self.date_to.date()
         fill(self.t_capacity, [[f"{x.code} — {x.name}", qty(x.capacity_hours), qty(x.load_hours), qty(x.free_hours), qty(x.utilization),
                                 "🔴 اضافه‌بار" if x.overloaded else "🟢 عادی", "، ".join(x.orders[:6])] for x in pp.capacity_load(cid, df, dt)])
-        fill(self.t_calendar, [[e.date, e.work_center, e.item_label, qty(e.quantity), e.ref, ("⚠ " if e.late else "") + e.status]
+        fill(self.t_calendar, [[e.date, e.work_center, e.item_label, qty(e.quantity, e.item_id), e.ref, ("⚠ " if e.late else "") + e.status]
                                for e in pp.calendar(cid, df, dt)])
 
     def _plan_id(self):
@@ -1233,20 +1369,40 @@ class PlanningScreen(QWidget):
             return
         rows = pp.plan_lines(company_id(), pid)
         src = {"MANUAL": "دستی", "SALES_ORDER": "سفارش فروش", "MIN_STOCK": "حداقل موجودی", "MRP": "MRP"}
-        fill(self.t_plan_lines, [[r.planned_date, r.item_label, qty(r.quantity), src[r.source_type], r.order_code] for r in rows])
+        self._plan_rows = rows
+        fill(self.t_plan_lines, [[r.planned_date, r.item_label, qty(r.quantity, r.item_id), src[r.source_type], r.order_code] for r in rows],
+             [r.line_id for r in rows])
 
     def plan_action(self, key: str, values: dict | None = None) -> bool:
         cid, uid, pid = company_id(), user_id(), self._plan_id()
-        if key == "new" and values is None:
-            values = _ask(self, "برنامهٔ تولید", [("code", "کد", QLineEdit()), ("name", "نام", QLineEdit()),
-                                                  ("period_type", "دوره", combo([("ماهانه", "MONTH"), ("هفتگی", "WEEK"), ("روزانه", "DAY")])),
-                                                  ("start_date", "از", date_field()), ("end_date", "تا", date_field(
-                                                      datetime.date.today() + datetime.timedelta(days=30)))])
+        if key != "new" and pid is None:
+            QMessageBox.warning(self, "برنامهٔ تولید", "یک برنامه را انتخاب کنید.")
+            return False
+        plan = next((p for p in pp.list_plans(cid) if p.plan_id == pid), None) if key == "edit_plan" else None
+        line = None
+        if key in ("edit_line", "delete_line"):
+            line_id = selected_or_none(self.t_plan_lines)
+            line = next((r for r in getattr(self, "_plan_rows", []) if r.line_id == line_id), None)
+            if line is None:
+                QMessageBox.warning(self, "برنامهٔ تولید", "یک ردیف برنامه را انتخاب کنید.")
+                return False
+        if key in ("new", "edit_plan") and values is None:
+            g = (lambda name, default=None: getattr(plan, name)) if plan else (lambda name, default=None: default)
+            values = _ask(self, "برنامهٔ تولید", [
+                ("code", "کد", QLineEdit(g("code", ""))), ("name", "نام", QLineEdit(g("name", ""))),
+                ("period_type", "دوره", _combo_at(combo([("ماهانه", "MONTH"), ("هفتگی", "WEEK"), ("روزانه", "DAY")]), g("period_type"))),
+                ("start_date", "از", date_field(g("start_date"))),
+                ("end_date", "تا", date_field(g("end_date", datetime.date.today() + datetime.timedelta(days=30))))])
             if values is None:
                 return False
-        if key == "line" and values is None:
-            values = _ask(self, "ردیف برنامه", [("item_id", "محصول", combo(self.lk.made)), ("planned_date", "تاریخ", date_field()),
-                                                ("quantity", "مقدار", num_field())])
+        if key in ("delete_plan", "delete_line") and values is None:
+            if QMessageBox.question(self, "برنامهٔ تولید", "برنامه حذف شود؟" if key == "delete_plan" else "ردیف حذف شود؟") != QMessageBox.Yes:
+                return False
+        if key in ("line", "edit_line") and values is None:
+            plan_item = _combo_at(combo(self.lk.made), line.item_id if line else None)
+            values = _ask(self, "ردیف برنامه", [("item_id", "محصول", plan_item),
+                                                ("planned_date", "تاریخ", date_field(line.planned_date if line else None)),
+                                                ("quantity", "مقدار", qty_field(line.quantity if line else None, item_combo=plan_item))])
             if values is None:
                 return False
         values = values or {}
@@ -1254,6 +1410,11 @@ class PlanningScreen(QWidget):
             "new": lambda: pp.create_plan(cid, uid, values["code"] or "", values["name"] or "", values["start_date"], values["end_date"],
                                           values["period_type"]),
             "line": lambda: pp.add_plan_line(cid, pid, values["item_id"], values["planned_date"], values["quantity"]),
+            "edit_plan": lambda: pp.update_plan(cid, uid, pid, values["code"] or "", values["name"] or "", values["start_date"],
+                                                values["end_date"], values["period_type"]),
+            "delete_plan": lambda: pp.delete_plan(cid, uid, pid),
+            "edit_line": lambda: pp.update_plan_line(cid, line.line_id, values["item_id"], values["planned_date"], values["quantity"]),
+            "delete_line": lambda: pp.remove_plan_line(cid, line.line_id),
             "sales": lambda: pp.generate_from_sales_orders(cid, pid),
             "min": lambda: pp.generate_from_min_stock(cid, pid),
             "approve": lambda: pp.approve_plan(cid, uid, pid),
@@ -1266,10 +1427,10 @@ class PlanningScreen(QWidget):
 
     def load_mrp(self) -> None:
         self._mrp = pp.mrp_lines(company_id())
-        fill(self.t_mrp, [[r.level, r.item_label, qty(r.gross_requirement), qty(r.on_hand), qty(r.reserved), qty(r.available),
-                           qty(r.scheduled_receipts), qty(r.min_stock), qty(r.net_requirement),
+        fill(self.t_mrp, [[r.level, r.item_label, qty(r.gross_requirement, r.item_id), qty(r.on_hand, r.item_id), qty(r.reserved, r.item_id), qty(r.available, r.item_id),
+                           qty(r.scheduled_receipts, r.item_id), qty(r.min_stock, r.item_id), qty(r.net_requirement, r.item_id),
                            ("🔨 " if r.suggested_action == "PRODUCE" else "🛒 " if r.suggested_action == "PURCHASE" else "") + r.action_label,
-                           qty(r.suggested_qty), r.need_date or "", r.release_date or "", r.converted_ref or ""] for r in self._mrp],
+                           qty(r.suggested_qty, r.item_id), r.need_date or "", r.release_date or "", r.converted_ref or ""] for r in self._mrp],
              [r.mrp_line_id for r in self._mrp])
 
     def run_mrp(self) -> bool:

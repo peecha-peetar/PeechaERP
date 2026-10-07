@@ -208,6 +208,9 @@ def add_bom_line(
         bom = session.get(BomHeader, bom_id)
         if bom is None:
             raise ValueError("فهرست مواد اولیه نامعتبر است.")
+        from peecha.services.production import master as prd_master
+
+        prd_master.refresh_bom_lock(session, bom_id)  # R280: قفل فقط با دستورِ دارای گردش
         if bom.is_locked:  # R266: نسخهٔ استفاده‌شده در دستورِ تولید
             raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ تازه بسازید.")
         if bom.finished_item_id == component_item_id:
@@ -230,8 +233,14 @@ def remove_bom_line(bom_line_id: int, bom_id: int) -> None:
         row = session.get(BomLine, bom_line_id)
         if row is None or row.bom_id != bom_id:
             raise ValueError("ردیف فهرست مواد اولیه نامعتبر است.")
+        from peecha.db.models.production import OrderMaterial
+        from peecha.services.production import master as prd_master
+
+        prd_master.refresh_bom_lock(session, bom_id)
         if session.get(BomHeader, bom_id).is_locked:  # R266
             raise ValueError("این نسخهٔ فهرست مواد در دستور تولید استفاده شده و قفل است — نسخهٔ تازه بسازید.")
+        for m in session.scalars(select(OrderMaterial).where(OrderMaterial.bom_line_id == bom_line_id)):
+            m.bom_line_id = None
         session.delete(row)
         session.commit()
 
