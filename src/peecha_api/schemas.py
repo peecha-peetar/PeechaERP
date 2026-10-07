@@ -415,6 +415,39 @@ class CrmSlaPolicyRequest(BaseModel):
     is_active: bool = True
 
 
+class CrmAutomationRuleRequest(BaseModel):
+    name: str
+    trigger_code: str
+    conditions: dict = {}
+    action_code: str
+    action_params: dict = {}
+    cooldown_days: int = 7
+    is_active: bool = True
+
+
+class CrmPreviewRequest(BaseModel):
+    trigger_code: str
+    conditions: dict = {}
+
+
+class CrmMessageRequest(BaseModel):
+    channel: str = "SMS"
+    body: str = ""
+    customer_id: int | None = None
+    lead_id: int | None = None
+    subject: str | None = None
+    template_id: int | None = None
+
+
+class CrmTemplateRequest(BaseModel):
+    code: str
+    name: str
+    channel: str = "SMS"
+    body: str
+    subject: str | None = None
+    is_active: bool = True
+
+
 class CrmStageMoveRequest(BaseModel):
     stage_id: int
     lost_reason: str | None = None

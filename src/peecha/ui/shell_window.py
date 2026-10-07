@@ -922,6 +922,11 @@ class MainWindow(QMainWindow):
         self._sms_campaign_timer.setInterval(60_000)
         self._sms_campaign_timer.timeout.connect(self._tick_sms_campaigns)
         self._sms_campaign_timer.start()
+        # R287: قاعده‌های فعال اتوماسیون CRM و بررسی SLA تیکت‌ها (هر ۱۰ دقیقه، بی‌صدا)
+        self._crm_automation_timer = QTimer(self)
+        self._crm_automation_timer.setInterval(600_000)
+        self._crm_automation_timer.timeout.connect(self._tick_crm_automation)
+        self._crm_automation_timer.start()
 
         self._screens: _LazyScreens = _LazyScreens(theme.apply_card_shadows)
         self._sidebar_groups: dict[str, _SidebarGroup] = {}
@@ -1048,6 +1053,16 @@ class MainWindow(QMainWindow):
 
             social_service.run_due_posts(session.current_company.company_id)
         except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
+            pass
+
+    def _tick_crm_automation(self) -> None:
+        if session.current_company is None:
+            return
+        try:
+            from peecha.services.crm import automation as crm_automation
+
+            crm_automation.run_all(session.current_company.company_id)
+        except Exception:  # noqa: BLE001 -- تیک پس‌زمینه نباید برنامه را متوقف کند
             pass
 
     def _tick_sms_campaigns(self) -> None:
@@ -1887,6 +1902,7 @@ class MainWindow(QMainWindow):
         self.register_screen("crm_analytics", lambda: crm_screens.AnalyticsScreen(self))  # R283
         self.register_screen("crm_campaigns", lambda: crm_screens.CampaignsScreen(self))  # R284
         self.register_screen("crm_tickets", lambda: crm_screens.TicketsScreen(self))  # R285
+        self.register_screen("crm_automation", lambda: crm_screens.AutomationScreen(self))  # R287
         self.register_screen("crm_settings", lambda: crm_screens.CrmSettingsScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 

@@ -13,6 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services.crm import activities as act_service
 from peecha.services.crm import analytics
+from peecha.services.crm import automation as auto_service
+from peecha.services.crm import communication as comm_service
 from peecha.services.crm import campaigns as camp_service
 from peecha.services.crm import loyalty as loyalty_service
 from peecha.services.crm import customer360 as c360
@@ -27,7 +29,8 @@ from peecha_api.deps import AuthContext, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import require_permission
 from peecha_api.schemas import (
-    CrmActivityCompleteRequest, CrmActivityRequest, CrmAssignRequest, CrmCampaignLaunchRequest, CrmCampaignMembersRequest,
+    CrmActivityCompleteRequest, CrmActivityRequest, CrmAssignRequest, CrmAutomationRuleRequest, CrmMessageRequest,
+    CrmPreviewRequest, CrmTemplateRequest, CrmCampaignLaunchRequest, CrmCampaignMembersRequest,
     CrmCampaignRequest, CrmLoyaltyAdjustRequest, CrmMemberStatusRequest, CrmReferralRequest, CrmLeadConvertRequest, CrmLeadRequest,
     CrmLeadStatusRequest, CrmOpportunityLine, CrmOpportunityRequest, CrmSegmentRequest, CrmSlaPolicyRequest, CrmStageMoveRequest,
     CrmTicketRateRequest, CrmTicketRequest, CrmTicketTextRequest,
@@ -637,4 +640,114 @@ def sla_update(policy_id: int, body: CrmSlaPolicyRequest, ctx: AuthContext = Dep
 @router.delete("/sla-policies/{policy_id}")
 def sla_delete(policy_id: int, ctx: AuthContext = Depends(require_permission("crm_settings", "EDIT"))) -> dict:
     _call(ticket_service.delete_policy, ctx.company_id, ctx.user_id, policy_id)
+    return {"ok": True}
+
+
+
+# --- اتوماسیون و مرکز ارتباطات (R287) ------------------------------------------------------------------
+F_AUTO = "crm_automation"
+
+
+def _rule(r) -> dict:
+    return _json({"rule_id": r.rule_id, "name": r.name, "trigger_code": r.trigger_code,
+                  "trigger_label": auto_service.TRIGGERS[r.trigger_code][0], "conditions": r.conditions, "action_code": r.action_code,
+                  "action_label": auto_service.ACTIONS[r.action_code][0], "action_params": r.action_params,
+                  "cooldown_days": r.cooldown_days, "is_active": r.is_active, "last_run_at": r.last_run_at, "run_count": r.run_count})
+
+
+@router.get("/automation/catalog")
+def automation_catalog(ctx: AuthContext = Depends(require_permission(F_AUTO, "VIEW"))) -> dict:
+    spec = lambda params: [{"key": p.key, "label": p.label, "kind": p.kind, "default": p.default} for p in params]
+    return {"triggers": {k: {"label": v[0], "entity": v[1], "params": spec(v[2])} for k, v in auto_service.TRIGGERS.items()},
+            "actions": {k: {"label": v[0], "params": spec(v[1])} for k, v in auto_service.ACTIONS.items()},
+            "channels": comm_service.CHANNELS, "template_fields": comm_service.TEMPLATE_FIELDS}
+
+
+@router.get("/automation/rules")
+def automation_rules(ctx: AuthContext = Depends(require_permission(F_AUTO, "VIEW"))) -> list[dict]:
+    return [_rule(r) for r in auto_service.list_rules(ctx.company_id)]
+
+
+@router.post("/automation/rules")
+def automation_create(body: CrmAutomationRuleRequest, ctx: AuthContext = Depends(require_permission(F_AUTO, "CREATE"))) -> dict:
+    return {"rule_id": _call(lambda: auto_service.save_rule(ctx.company_id, ctx.user_id, **body.model_dump()))}
+
+
+@router.put("/automation/rules/{rule_id}")
+def automation_update(rule_id: int, body: CrmAutomationRuleRequest, ctx: AuthContext = Depends(require_permission(F_AUTO, "EDIT"))) -> dict:
+    _call(lambda: auto_service.save_rule(ctx.company_id, ctx.user_id, rule_id=rule_id, **body.model_dump()))
+    return {"rule_id": rule_id}
+
+
+@router.delete("/automation/rules/{rule_id}")
+def automation_delete(rule_id: int, ctx: AuthContext = Depends(require_permission(F_AUTO, "DELETE"))) -> dict:
+    _call(auto_service.delete_rule, ctx.company_id, ctx.user_id, rule_id)
+    return {"ok": True}
+
+
+@router.post("/automation/rules/{rule_id}/run")
+def automation_run_one(rule_id: int, ctx: AuthContext = Depends(require_permission(F_AUTO, "EDIT"))) -> dict:
+    return {"processed": _call(auto_service.run_rule, ctx.company_id, rule_id, ctx.user_id)}
+
+
+@router.post("/automation/run")
+def automation_run(ctx: AuthContext = Depends(require_permission(F_AUTO, "EDIT"))) -> dict:
+    return {"rules": {str(k): v for k, v in auto_service.run_all(ctx.company_id, ctx.user_id).items()}}
+
+
+@router.post("/automation/preview")
+def automation_preview(body: CrmPreviewRequest, ctx: AuthContext = Depends(require_permission(F_AUTO, "VIEW"))) -> dict:
+    return {"count": _call(auto_service.preview, ctx.company_id, body.trigger_code, body.conditions)}
+
+
+@router.get("/automation/log")
+def automation_log(rule_id: int | None = None, ctx: AuthContext = Depends(require_permission(F_AUTO, "VIEW"))) -> list[dict]:
+    return _json(auto_service.list_log(ctx.company_id, rule_id))
+
+
+@router.get("/messages")
+def messages_list(customer_id: int | None = None, channel: str | None = None, status_code: str | None = None,
+                  ctx: AuthContext = Depends(require_permission(F_360, "VIEW"))) -> list[dict]:
+    return [_json(m.__dict__) for m in comm_service.list_messages(ctx.company_id, customer_id=customer_id, channel=channel,
+                                                                  status=status_code)]
+
+
+@router.post("/messages")
+def messages_send(body: CrmMessageRequest, ctx: AuthContext = Depends(require_permission(F_ACT, "CREATE")),
+                  idempotency_key: str | None = Depends(get_idempotency_key)) -> dict:
+    if body.channel == "INTERNAL":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="اعلان داخلی از این مسیر فرستاده نمی‌شود.")
+    mid = _idem(idempotency_key, "POST /crm/messages", ctx,
+                lambda: comm_service.send_message(ctx.company_id, ctx.user_id, body.channel, body.body, customer_id=body.customer_id,
+                                                  lead_id=body.lead_id, subject=body.subject, template_id=body.template_id),
+                lambda m: {"message_id": m})
+    row = next(m for m in comm_service.list_messages(ctx.company_id, limit=50) if m.message_id == mid["message_id"])
+    return {**mid, "status_code": row.status_code, "error_message": row.error_message}
+
+
+@router.post("/messages/{message_id}/retry")
+def messages_retry(message_id: int, ctx: AuthContext = Depends(require_permission(F_ACT, "CREATE"))) -> dict:
+    return {"message_id": _call(comm_service.retry_message, ctx.company_id, ctx.user_id, message_id)}
+
+
+@router.get("/message-templates")
+def templates_list(ctx: AuthContext = Depends(require_permission(F_360, "VIEW"))) -> list[dict]:
+    return [_json({k: getattr(t, k) for k in ("template_id", "code", "name", "channel", "subject", "body", "is_active")})
+            for t in comm_service.list_templates(ctx.company_id)]
+
+
+@router.post("/message-templates")
+def templates_create(body: CrmTemplateRequest, ctx: AuthContext = Depends(require_permission(F_AUTO, "CREATE"))) -> dict:
+    return {"template_id": _call(lambda: comm_service.save_template(ctx.company_id, ctx.user_id, **body.model_dump()))}
+
+
+@router.put("/message-templates/{template_id}")
+def templates_update(template_id: int, body: CrmTemplateRequest, ctx: AuthContext = Depends(require_permission(F_AUTO, "EDIT"))) -> dict:
+    _call(lambda: comm_service.save_template(ctx.company_id, ctx.user_id, template_id=template_id, **body.model_dump()))
+    return {"template_id": template_id}
+
+
+@router.delete("/message-templates/{template_id}")
+def templates_delete(template_id: int, ctx: AuthContext = Depends(require_permission(F_AUTO, "DELETE"))) -> dict:
+    _call(comm_service.delete_template, ctx.company_id, ctx.user_id, template_id)
     return {"ok": True}

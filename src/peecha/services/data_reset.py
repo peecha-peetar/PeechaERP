@@ -117,6 +117,8 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM comm.customer_activities WHERE company_id = :company_id",
     # R281: فرصت‌ها (اقلام و پیوند سند با آن‌ها می‌روند) و سرنخ‌های CRM
     "DELETE FROM crm.customer_scores WHERE company_id = :company_id",
+    "DELETE FROM crm.automation_log WHERE company_id = :company_id",
+    "DELETE FROM crm.messages WHERE company_id = :company_id",
     "DELETE FROM crm.campaign_members WHERE campaign_id IN (SELECT campaign_id FROM crm.campaigns WHERE company_id = :company_id)",
     "DELETE FROM crm.opportunities WHERE company_id = :company_id",
     "DELETE FROM crm.leads WHERE company_id = :company_id",
@@ -570,6 +572,8 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM crm.lead_sources WHERE company_id = :company_id",
     "DELETE FROM crm.segments WHERE company_id = :company_id",
     "DELETE FROM crm.sla_policies WHERE company_id = :company_id",
+    "DELETE FROM crm.automation_rules WHERE company_id = :company_id",
+    "DELETE FROM crm.message_templates WHERE company_id = :company_id",
     "DELETE FROM crm.settings WHERE company_id = :company_id",
     "DELETE FROM acc.statement_row_refs WHERE row_id IN "
     "(SELECT sr.row_id FROM acc.statement_rows sr JOIN acc.statement_templates st ON st.template_id = sr.template_id WHERE st.company_id = :company_id)",

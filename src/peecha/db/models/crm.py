@@ -272,3 +272,76 @@ class SlaPolicy(Base):
     escalate_to_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+# --- R287: اتوماسیون و ارتباطات -------------------------------------------------------------------------
+class MessageTemplate(Base):
+    __tablename__ = "message_templates"
+    __table_args__ = _CRM
+
+    template_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    channel: Mapped[str] = mapped_column(String(12), default="SMS")
+    subject: Mapped[str | None] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(String(2000))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = _CRM
+
+    message_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    channel: Mapped[str] = mapped_column(String(12))
+    provider_code: Mapped[str | None] = mapped_column(String(30))
+    customer_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    lead_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("crm.leads.lead_id"))
+    recipient: Mapped[str | None] = mapped_column(String(200))
+    subject: Mapped[str | None] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(String(2000))
+    status_code: Mapped[str] = mapped_column(String(10), default="QUEUED")
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("crm.message_templates.template_id"))
+    campaign_id: Mapped[int | None] = mapped_column(ForeignKey("crm.campaigns.campaign_id"))
+    rule_id: Mapped[int | None]
+    activity_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.customer_activities.activity_id"))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    sent_at: Mapped[datetime.datetime | None]
+
+
+class AutomationRule(Base):
+    __tablename__ = "automation_rules"
+    __table_args__ = _CRM
+
+    rule_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(150))
+    trigger_code: Mapped[str] = mapped_column(String(30))
+    conditions: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    action_code: Mapped[str] = mapped_column(String(20))
+    action_params: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    cooldown_days: Mapped[int] = mapped_column(default=7)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    last_run_at: Mapped[datetime.datetime | None]
+    run_count: Mapped[int] = mapped_column(default=0)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class AutomationLog(Base):
+    __tablename__ = "automation_log"
+    __table_args__ = _CRM
+
+    log_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(ForeignKey("crm.automation_rules.rule_id", ondelete="CASCADE"))
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    entity_type: Mapped[str] = mapped_column(String(20))
+    entity_id: Mapped[int] = mapped_column(BigInteger)
+    customer_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

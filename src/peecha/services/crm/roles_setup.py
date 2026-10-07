@@ -12,17 +12,17 @@ _RW = ("VIEW", "CREATE", "EDIT")
 TEMPLATES: dict[str, tuple[str, dict[str, tuple[str, ...]]]] = {
     "CRM_USER": ("کارشناس فروش (CRM)", {
         "crm_customer360": ("VIEW",), "crm_tasks": ("VIEW",), "crm_leads": _RW, "crm_pipeline": _RW, "crm_activities": _ALL[:4],
-        "crm_analytics": ("VIEW",), "crm_campaigns": ("VIEW",), "crm_tickets": _RW,
+        "crm_analytics": ("VIEW",), "crm_campaigns": ("VIEW",), "crm_tickets": _RW, "crm_automation": ("VIEW",),
     }),
     "CRM_MANAGER": ("مدیر فروش (CRM)", {
         "crm_customer360": ("VIEW", "EXPORT"), "crm_tasks": ("VIEW",), "crm_leads": _ALL, "crm_pipeline": _ALL,
         "crm_activities": _ALL, "crm_assign": ("VIEW", "EDIT"), "crm_settings": ("VIEW",),
-        "crm_analytics": _ALL, "crm_campaigns": _ALL, "crm_tickets": _ALL,
+        "crm_analytics": _ALL, "crm_campaigns": _ALL, "crm_tickets": _ALL, "crm_automation": _ALL,
     }),
     "CRM_ADMIN": ("مدیر سیستم CRM", {
         "crm_customer360": ("VIEW", "EXPORT"), "crm_tasks": ("VIEW",), "crm_leads": _ALL, "crm_pipeline": _ALL,
         "crm_activities": _ALL, "crm_assign": ("VIEW", "EDIT"), "crm_settings": ("VIEW", "EDIT"),
-        "crm_analytics": _ALL, "crm_campaigns": _ALL, "crm_tickets": _ALL,
+        "crm_analytics": _ALL, "crm_campaigns": _ALL, "crm_tickets": _ALL, "crm_automation": _ALL,
     }),
 }
 

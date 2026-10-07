@@ -19,8 +19,10 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha.services.crm import activities as act_service
 from peecha.services.crm import analytics
+from peecha.services.crm import automation as auto_service
 from peecha.services.crm import campaigns as camp_service
 from peecha.services.crm import common as cc
+from peecha.services.crm import communication as comm_service
 from peecha.services.crm import customer360 as c360
 from peecha.services.crm import leads as lead_service
 from peecha.services.crm import loyalty as loyalty_service
@@ -220,6 +222,8 @@ class Customer360Screen(QWidget):
             "order": _quick("🛒 سفارش", lambda: self.new_order()),
             "payment": _quick("💰 دریافت", lambda: self.open_erp("TREASURY_RECEIPT")),
             "ticket": _quick("⚠️ شکایت", lambda: self.quick_activity("COMPLAINT")),
+            "service": _quick("🎫 تیکت", lambda: self.new_ticket()),
+            "message": _quick("✉️ پیام", lambda: self.send_message()),
         }
         bar = QHBoxLayout()
         for b in self.quick.values():
@@ -505,6 +509,46 @@ class Customer360Screen(QWidget):
         if ok:
             self.reload()
         return aid
+
+    def new_ticket(self, values: dict | None = None) -> int | None:
+        """R285: تیکت/شکایت با SLA برای همین مشتری."""
+        if not self.customer_id:
+            return None
+        if values is None:
+            values = _ask(self, "تیکت تازه", [
+                ("subject", "موضوع", QLineEdit()),
+                ("ticket_type", "نوع", combo([(v, k) for k, v in ticket_service.TYPES.items()])),
+                ("priority_code", "اولویت", _with(combo(self.lk.priorities), "NORMAL")),
+                ("assigned_to_user_id", "مسئول رسیدگی", combo(self.lk.users, "—")), ("description", "شرح", _text(""))])
+            if values is None:
+                return None
+        tid, ok = _run(self, "تیکت", ticket_service.create_ticket, company_id(), user_id(), ticket_service.TicketFields(
+            self.customer_id, values.get("subject") or "", values.get("ticket_type") or "COMPLAINT", values.get("priority_code") or "NORMAL",
+            channel_code="PHONE", description=values.get("description"), assigned_to_user_id=values.get("assigned_to_user_id")))
+        if ok:
+            self.reload()
+        return tid if ok else None
+
+    def send_message(self, values: dict | None = None) -> int | None:
+        """R287: پیام به مشتری از مرکز ارتباطات (پیامک یا کانال وصل‌شده)؛ در تایم‌لاین ثبت می‌شود."""
+        if not self.customer_id:
+            return None
+        if values is None:
+            templates = [(t.name, t.template_id) for t in comm_service.list_templates(company_id(), active_only=True)]
+            values = _ask(self, "ارسال پیام", [
+                ("channel", "کانال", combo([(v, k) for k, v in comm_service.CHANNELS.items() if k != "INTERNAL"])),
+                ("template_id", "الگو", combo(templates, "— بدون الگو —")), ("body", "متن (یا از الگو)", _text(""))],
+                "در متن می‌توانید از {name} برای نام مشتری استفاده کنید.")
+            if values is None:
+                return None
+        mid, ok = _run(self, "پیام", comm_service.send_message, company_id(), user_id(), values.get("channel") or "SMS",
+                       values.get("body") or "", customer_id=self.customer_id, template_id=values.get("template_id"))
+        if ok:
+            row = next((m for m in comm_service.list_messages(company_id(), customer_id=self.customer_id, limit=5) if m.message_id == mid), None)
+            if row is not None and row.status_code == "FAILED" and not self.dialog_runner:
+                QMessageBox.warning(self, "پیام", f"پیام ثبت شد ولی ارسال نشد: {row.error_message}")
+            self.reload()
+        return mid if ok else None
 
     def _smart_action(self, item: QListWidgetItem) -> None:
         a = item.data(Qt.UserRole)
@@ -2560,4 +2604,316 @@ class TicketsScreen(QWidget):
         _x, ok = _run(self, "SLA", ticket_service.delete_policy, company_id(), user_id(), pid)
         if ok:
             self.load_policies()
+        return ok
+
+
+
+# =========================================================================================================
+# اتوماسیون، پیام‌ها و الگوها (R287)
+class RuleDialog(QDialog):
+    """ویرایشگر قاعده: فیلدهای شرط و اقدام با تغییر رویداد/اقدام عوض می‌شوند."""
+
+    def __init__(self, rule=None, segments=None, templates=None, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("قاعدهٔ اتوماسیون")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(620, 520)
+        self.segments, self.templates = segments or [], templates or []
+        lay = QVBoxLayout(self)
+        self.name = QLineEdit(rule.name if rule else "")
+        self.trigger = combo([(v[0], k) for k, v in auto_service.TRIGGERS.items()])
+        self.action = combo([(v[0], k) for k, v in auto_service.ACTIONS.items()])
+        self.cooldown = num_field(rule.cooldown_days if rule else 7)
+        self.active = QCheckBox("فعال")
+        self.active.setChecked(rule.is_active if rule else True)
+        for label, w in (("نام", self.name), ("وقتی", self.trigger), ("آنگاه", self.action),
+                         ("فاصلهٔ تکرار برای هر مورد (روز، ۰ = فقط یک بار)", self.cooldown)):
+            lay.addWidget(QLabel(label))
+            lay.addWidget(w)
+        lay.addWidget(self.active)
+        self.cond_box, self.act_box = QVBoxLayout(), QVBoxLayout()
+        lay.addWidget(QLabel("شرط‌ها:"))
+        lay.addLayout(self.cond_box)
+        lay.addWidget(QLabel("جزئیات اقدام:"))
+        lay.addLayout(self.act_box)
+        self.cond_fields: dict = {}
+        self.act_fields: dict = {}
+        if rule:
+            set_combo(self.trigger, rule.trigger_code)
+            set_combo(self.action, rule.action_code)
+        self._build(self.cond_box, self.cond_fields, auto_service.TRIGGERS[self.trigger.currentData()][2], rule.conditions if rule else {})
+        self._build(self.act_box, self.act_fields, auto_service.ACTIONS[self.action.currentData()][1], rule.action_params if rule else {})
+        self.trigger.currentIndexChanged.connect(lambda _i: self._build(
+            self.cond_box, self.cond_fields, auto_service.TRIGGERS[self.trigger.currentData()][2], {}))
+        self.action.currentIndexChanged.connect(lambda _i: self._build(
+            self.act_box, self.act_fields, auto_service.ACTIONS[self.action.currentData()][1], {}))
+        hint = QLabel("در متن‌ها: " + "، ".join(f"{{{k}}} {v}" for k, v in comm_service.TEMPLATE_FIELDS.items()))
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        buttons = QHBoxLayout()
+        for text, slot in (("پیش‌نمایش تعداد", self.preview), ("ذخیره", self.accept), ("انصراف", self.reject)):
+            b = QPushButton(text)
+            b.clicked.connect(lambda _c=False, f=slot: f())
+            buttons.addWidget(b)
+        lay.addLayout(buttons)
+
+    def _build(self, box, store: dict, params, values: dict) -> None:
+        while box.count():
+            item = box.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+        store.clear()
+        for p in params:
+            v = values.get(p.key, p.default)
+            if p.kind == "segment":
+                w = _with(combo(self.segments), v)
+            elif p.key == "template_id":
+                w = _with(combo(self.templates, "— بدون الگو —"), v)
+            elif p.key == "channel":
+                w = _with(combo([(lbl, k) for k, lbl in comm_service.CHANNELS.items() if k != "INTERNAL"]), v)
+            elif p.key == "activity_type":
+                w = _with(combo([(lbl, k) for k, lbl in cc.ACTIVITY_TYPES.items() if k != "OPPORTUNITY"]), v)
+            elif p.key == "priority":
+                w = _with(combo([(lbl, k) for k, lbl in cc.PRIORITIES.items()]), v)
+            elif p.kind == "int":
+                w = num_field(v)
+            else:
+                w = QLineEdit("" if v is None else str(v))
+            row = QWidget()
+            h = QHBoxLayout(row)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.addWidget(QLabel(p.label), 1)
+            h.addWidget(w, 2)
+            box.addWidget(row)
+            store[p.key] = (p, w)
+
+    @staticmethod
+    def _read(store: dict) -> dict:
+        out = {}
+        for key, (p, w) in store.items():
+            if isinstance(w, QComboBox):
+                out[key] = w.currentData()
+            else:
+                text = numerals.to_ascii_digits(w.text().strip())
+                out[key] = (int(float(text)) if text else None) if p.kind == "int" else text
+        return out
+
+    def values(self) -> dict:
+        cooldown = numerals.to_ascii_digits(self.cooldown.text().strip()) or "0"
+        return {"name": self.name.text(), "trigger_code": self.trigger.currentData(), "conditions": self._read(self.cond_fields),
+                "action_code": self.action.currentData(), "action_params": self._read(self.act_fields),
+                "cooldown_days": int(float(cooldown)), "is_active": self.active.isChecked()}
+
+    def preview(self) -> None:
+        try:
+            n = auto_service.preview(company_id(), self.trigger.currentData(), self._read(self.cond_fields))
+        except ValueError as exc:
+            QMessageBox.warning(self, "قاعده", str(exc))
+            return
+        QMessageBox.information(self, "قاعده", P(f"اکنون {n} مورد با این شرط جور درمی‌آید."))
+
+
+@ms.styled
+class AutomationScreen(QWidget):
+    scroll_in_mdi = True
+
+    def __init__(self, main_window=None) -> None:
+        super().__init__()
+        self._main_window = main_window
+        self.dialog_runner = None
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        title = QLabel("اتوماسیون و پیام‌ها")
+        title.setObjectName("pageTitle")
+        self.run_all_btn = _quick("اجرای همهٔ قاعده‌ها", self.run_all)
+        outer.addWidget(ms.header_card(title, self.run_all_btn))
+        cards, self.cards = ms.summary([("active", "قاعدهٔ فعال", "info", "⚙️"), ("runs", "اقدام‌های خودکار", "success", "🤖"),
+                                        ("sent", "پیام ارسال‌شده", "success", "✉️"), ("failed", "پیام ناموفق", "danger", "⚠️")], per_row=4)
+        outer.addWidget(cards)
+        self.tabs = QTabWidget()
+        rw = QWidget()
+        rl = QVBoxLayout(rw)
+        self.t_rules = table(["نام", "وقتی", "آنگاه", "فاصلهٔ تکرار", "فعال", "آخرین اجرا", "تعداد اقدام"])
+        self.t_rules.cellDoubleClicked.connect(lambda _r, _c: self.edit_rule())
+        rl.addWidget(self.t_rules, stretch=1)
+        self.rule_buttons = {k: QPushButton(t) for k, t in (("new", "قاعدهٔ جدید"), ("edit", "ویرایش"), ("delete", "حذف"),
+                                                            ("toggle", "فعال/غیرفعال"), ("run", "اجرای این قاعده"))}
+        for k, f in (("new", lambda: self.edit_rule(new=True)), ("edit", lambda: self.edit_rule()), ("delete", lambda: self.delete_rule()),
+                     ("toggle", lambda: self.toggle_rule()), ("run", lambda: self.run_rule())):
+            self.rule_buttons[k].clicked.connect(lambda _c=False, fn=f: fn())
+        rl.addWidget(ms.footer([list(self.rule_buttons.values())]))
+        self.tabs.addTab(rw, "قاعده‌ها")
+        self.t_log = table(["زمان", "قاعده", "نوع", "شناسه", "مشتری", "نتیجه"])
+        self.tabs.addTab(self.t_log, "گزارش اجرا")
+        mw = QWidget()
+        ml = QVBoxLayout(mw)
+        self.msg_channel = combo([(v, k) for k, v in comm_service.CHANNELS.items()], "همهٔ کانال‌ها")
+        self.msg_status = combo([(v, k) for k, v in comm_service.STATUS.items()], "همهٔ وضعیت‌ها")
+        for w in (self.msg_channel, self.msg_status):
+            w.currentIndexChanged.connect(lambda _i: self.load_messages())
+        fl = QHBoxLayout()
+        fl.addWidget(self.msg_channel)
+        fl.addWidget(self.msg_status)
+        fl.addStretch(1)
+        ml.addLayout(fl)
+        self.t_msgs = table(["زمان", "کانال", "گیرنده", "نشانی", "متن", "وضعیت", "خطا"])
+        ml.addWidget(self.t_msgs, stretch=1)
+        self.retry_btn = QPushButton("ارسال دوباره")
+        self.retry_btn.clicked.connect(lambda: self.retry())
+        ml.addWidget(ms.footer([[self.retry_btn]]))
+        self.tabs.addTab(mw, "دفتر پیام‌ها")
+        tw = QWidget()
+        tl = QVBoxLayout(tw)
+        self.t_tpl = table(["کد", "نام", "کانال", "متن", "فعال"])
+        self.t_tpl.cellDoubleClicked.connect(lambda _r, _c: self.edit_template())
+        tl.addWidget(self.t_tpl, stretch=1)
+        self.tpl_buttons = {k: QPushButton(t) for k, t in (("new", "الگوی جدید"), ("edit", "ویرایش الگو"), ("delete", "حذف الگو"))}
+        self.tpl_buttons["new"].clicked.connect(lambda: self.edit_template(new=True))
+        self.tpl_buttons["edit"].clicked.connect(lambda: self.edit_template())
+        self.tpl_buttons["delete"].clicked.connect(lambda: self.delete_template())
+        tl.addWidget(ms.footer([list(self.tpl_buttons.values())]))
+        self.tabs.addTab(tw, "الگوهای پیام")
+        outer.addWidget(self.tabs, stretch=1)
+
+    def refresh(self) -> None:
+        if company_id() is None:
+            return
+        edit = can("crm_automation", "EDIT")
+        self.run_all_btn.setEnabled(edit)
+        self.rule_buttons["new"].setEnabled(can("crm_automation", "CREATE"))
+        for k in ("edit", "toggle", "run"):
+            self.rule_buttons[k].setEnabled(edit)
+        self.rule_buttons["delete"].setEnabled(can("crm_automation", "DELETE"))
+        self.tpl_buttons["new"].setEnabled(can("crm_automation", "CREATE"))
+        self.tpl_buttons["edit"].setEnabled(edit)
+        self.tpl_buttons["delete"].setEnabled(can("crm_automation", "DELETE"))
+        self.retry_btn.setEnabled(can("crm_activities", "CREATE"))
+        self.reload()
+
+    def reload(self) -> None:
+        cid = company_id()
+        self.rules = auto_service.list_rules(cid)
+        fill(self.t_rules, [[r.name, auto_service.TRIGGERS[r.trigger_code][0], auto_service.ACTIONS[r.action_code][0], r.cooldown_days,
+                             "بله" if r.is_active else "خیر", _dt(r.last_run_at), r.run_count] for r in self.rules],
+             [r.rule_id for r in self.rules])
+        log = auto_service.list_log(cid)
+        fill(self.t_log, [[_dt(x["created_at"]), x["rule_name"], x["entity_type"], x["entity_id"], x["customer_name"],
+                           x["result"].get("error") or "انجام شد"] for x in log])
+        self.templates = comm_service.list_templates(cid)
+        fill(self.t_tpl, [[t.code, t.name, comm_service.CHANNELS[t.channel], t.body[:80], "بله" if t.is_active else "خیر"]
+                          for t in self.templates], [t.template_id for t in self.templates])
+        self.load_messages()
+        self.cards["active"].setText(P(sum(1 for r in self.rules if r.is_active)))
+        self.cards["runs"].setText(P(sum(r.run_count for r in self.rules)))
+
+    def load_messages(self) -> None:
+        cid = company_id()
+        self.msgs = comm_service.list_messages(cid, channel=self.msg_channel.currentData(), status=self.msg_status.currentData())
+        fill(self.t_msgs, [[_dt(m.created_at), m.channel_label, m.party_name, m.recipient or "", m.body[:80], m.status_label,
+                            m.error_message or ""] for m in self.msgs], [m.message_id for m in self.msgs])
+        for i, m in enumerate(self.msgs):
+            if m.status_code == "FAILED":
+                self.t_msgs.item(i, 5).setForeground(_RED)
+        allm = comm_service.list_messages(cid, limit=10000)
+        self.cards["sent"].setText(P(sum(1 for m in allm if m.status_code == "SENT")))
+        self.cards["failed"].setText(P(sum(1 for m in allm if m.status_code == "FAILED")))
+
+    def _rule(self):
+        rid = _selected(self.t_rules)
+        return next((r for r in self.rules if r.rule_id == rid), None)
+
+    def edit_rule(self, new: bool = False, values: dict | None = None) -> int | None:
+        r = None if new else self._rule()
+        if not new and r is None:
+            QMessageBox.warning(self, "قاعده", "یک قاعده را انتخاب کنید.")
+            return None
+        if values is None:
+            dlg = RuleDialog(r, [(s.name, s.segment_id) for s in seg_service.list_segments(company_id(), active_only=True)],
+                             [(t.name, t.template_id) for t in self.templates if t.is_active], self)
+            ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
+            if not ok:
+                return None
+            values = dlg.values()
+        rid, ok = _run(self, "قاعده", auto_service.save_rule, company_id(), user_id(), rule_id=r.rule_id if r else None, **values)
+        if ok:
+            self.reload()
+        return rid if ok else None
+
+    def delete_rule(self) -> bool:
+        r = self._rule()
+        if r is None or not _confirm(self, "قاعده", f"قاعدهٔ «{r.name}» حذف شود؟"):
+            return False
+        _x, ok = _run(self, "قاعده", auto_service.delete_rule, company_id(), user_id(), r.rule_id)
+        if ok:
+            self.reload()
+        return ok
+
+    def toggle_rule(self) -> bool:
+        r = self._rule()
+        if r is None:
+            return False
+        _x, ok = _run(self, "قاعده", auto_service.save_rule, company_id(), user_id(), rule_id=r.rule_id, name=r.name,
+                      trigger_code=r.trigger_code, conditions=r.conditions, action_code=r.action_code, action_params=r.action_params,
+                      cooldown_days=r.cooldown_days, is_active=not r.is_active)
+        if ok:
+            self.reload()
+        return ok
+
+    def run_rule(self) -> int | None:
+        r = self._rule()
+        if r is None:
+            return None
+        n, ok = _run(self, "قاعده", auto_service.run_rule, company_id(), r.rule_id, user_id())
+        if ok:
+            self.reload()
+            if not self.dialog_runner:
+                QMessageBox.information(self, "قاعده", P(f"اقدام برای {n} مورد انجام شد."))
+        return n if ok else None
+
+    def run_all(self) -> dict | None:
+        res, ok = _run(self, "اتوماسیون", auto_service.run_all, company_id(), user_id())
+        if ok:
+            self.reload()
+            if not self.dialog_runner:
+                QMessageBox.information(self, "اتوماسیون", P(f"اقدام برای {sum(v for v in res.values() if v > 0)} مورد انجام شد."))
+        return res if ok else None
+
+    def retry(self) -> int | None:
+        mid = _selected(self.t_msgs)
+        if mid is None:
+            return None
+        new, ok = _run(self, "پیام", comm_service.retry_message, company_id(), user_id(), mid)
+        if ok:
+            self.load_messages()
+        return new if ok else None
+
+    def edit_template(self, new: bool = False, values: dict | None = None) -> int | None:
+        tid = None if new else _selected(self.t_tpl)
+        if not new and tid is None:
+            QMessageBox.warning(self, "الگو", "یک الگو را انتخاب کنید.")
+            return None
+        t = next((x for x in self.templates if x.template_id == tid), None)
+        g = (lambda name, default=None: getattr(t, name)) if t else (lambda name, default=None: default)
+        if values is None:
+            values = _ask(self, "الگوی پیام", [
+                ("code", "کد", QLineEdit(g("code", "") or "")), ("name", "نام", QLineEdit(g("name", "") or "")),
+                ("channel", "کانال", _with(combo([(v, k) for k, v in comm_service.CHANNELS.items()]), g("channel", "SMS"))),
+                ("subject", "عنوان (ایمیل)", QLineEdit(g("subject", "") or "")), ("body", "متن", _text(g("body"))),
+                ("is_active", "فعال", _checked(g("is_active", True)))],
+                "در متن: " + "، ".join(f"{{{k}}} {v}" for k, v in comm_service.TEMPLATE_FIELDS.items()))
+            if values is None:
+                return None
+        new_id, ok = _run(self, "الگو", comm_service.save_template, company_id(), user_id(), template_id=tid, **values)
+        if ok:
+            self.reload()
+        return new_id if ok else None
+
+    def delete_template(self) -> bool:
+        tid = _selected(self.t_tpl)
+        if tid is None or not _confirm(self, "الگو", "این الگو حذف شود؟"):
+            return False
+        _x, ok = _run(self, "الگو", comm_service.delete_template, company_id(), user_id(), tid)
+        if ok:
+            self.reload()
         return ok
