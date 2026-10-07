@@ -1685,7 +1685,7 @@ def row_actions(*buttons: QWidget) -> QWidget:
 
 
 def set_qty_decimals(spin, dp: int) -> None:
-    """اعشار فیلد مقدار؛ اگر حداقلِ فیلد مثبت بود، کمترین مقدار مجاز همان واحد (۱ برای واحد بی‌اعشار) می‌شود."""
+    """اعشار فیلد مقدار؛ اگر حداقل فیلد مثبت بود، کمترین مقدار مجاز همان واحد (۱ برای واحد بی‌اعشار) می‌شود."""
     positive_min = spin.minimum() > 0
     spin.setDecimals(dp)
     if positive_min:
