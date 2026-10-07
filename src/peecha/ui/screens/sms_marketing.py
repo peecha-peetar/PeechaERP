@@ -26,7 +26,8 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals, session as app_session
 from peecha.services import sms_marketing as sms_marketing_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit
+from peecha.db.models.commercial import SmsCampaign, SmsCampaignRecipient
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, confirm_and_delete, delete_button
 
 _COLUMNS = ["نام", "زمانِ ارسال", "وضعیت", "گیرندگان", "ارسال‌شده", "ناموفق"]
 
@@ -81,11 +82,16 @@ class SmsMarketingScreen(FieldHelpMixin, QWidget):
         refresh_button.setFixedWidth(44)
         refresh_button.clicked.connect(self.refresh)
         header_row.addWidget(refresh_button)
+        # R276: حذفِ کمپینِ هنوز ارسال‌نشده
+        delete = delete_button("حذفِ کمپینِ انتخاب‌شده (فقط پیش از ارسال)")
+        delete.clicked.connect(self._delete_campaign)
+        header_row.addWidget(delete)
         outer.addLayout(header_row)
 
         self.table = QTableWidget(0, len(_COLUMNS))
         self.table.setHorizontalHeaderLabels(_COLUMNS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         outer.addWidget(self.table, stretch=1)
@@ -105,6 +111,7 @@ class SmsMarketingScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
         campaigns = sms_marketing_service.list_campaigns(company_id)
+        self._campaigns = campaigns
         self.table.setRowCount(len(campaigns))
         for row_index, c in enumerate(campaigns):
             values = [
@@ -113,6 +120,16 @@ class SmsMarketingScreen(FieldHelpMixin, QWidget):
             ]
             for col_index, value in enumerate(values):
                 self.table.setItem(row_index, col_index, QTableWidgetItem(numerals.to_persian_digits(value)))
+
+    def _delete_campaign(self) -> None:
+        row = self.table.currentRow()
+        campaign = self._campaigns[row] if 0 <= row < len(getattr(self, "_campaigns", [])) and self.table.selectedItems() else None
+        if campaign is not None and (campaign.sent_count or campaign.status_code not in ("PENDING", "SCHEDULED")):
+            self.status_label.setText("کمپینی که ارسالش شروع شده قابلِ حذف نیست.")
+            return
+        confirm_and_delete(self, "کمپینِ پیامکی", campaign.name if campaign else "", SmsCampaign,
+                           campaign.campaign_id if campaign else None, self._company_id(), self.refresh,
+                           children=((SmsCampaignRecipient, "campaign_id"),))
 
     def _create_campaign(self) -> None:
         company_id = self._company_id()

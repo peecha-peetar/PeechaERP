@@ -51,7 +51,8 @@ from peecha.services import commercial_pricing as pricing_service
 from peecha.services import supplier_price_import as spi_service
 from peecha.ui import theme
 from peecha.ui.screens.journal_entry import _fill_options, _make_searchable_combo
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, wrap_scrollable
+from peecha.db.models.commercial import DiscountRule, DiscountRuleTier, PriceList, PriceListItem, PriceListItemPriceHistory
+from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, confirm_and_delete, delete_button, wrap_scrollable
 
 _DISCOUNT_TYPE_LABELS = {"PERCENT": "درصدی", "AMOUNT": "مبلغِ ثابت", "TIERED": "پلکانی"}
 _PREVIEW_FIXED_COLUMNS = ["ردیف", "کدِ تامین‌کننده", "نامِ تامین‌کننده", "کالایِ شناسایی‌شده", "قیمتِ تامین‌کننده"]
@@ -166,6 +167,19 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         add_pl_button.setToolTip("فهرستِ قیمتِ تازه")
         add_pl_button.clicked.connect(self._add_price_list)
         new_pl_box.addWidget(add_pl_button)
+        # R276: ویرایش و حذفِ فهرستِ انتخاب‌شده
+        save_pl_button = QPushButton("💾")
+        save_pl_button.setObjectName("iconButton")
+        save_pl_button.setFixedWidth(44)
+        save_pl_button.setToolTip("ذخیرهٔ تغییراتِ فهرستِ انتخاب‌شده (نام/فعال‌بودن)")
+        save_pl_button.clicked.connect(self._update_price_list)
+        new_pl_box.addWidget(save_pl_button)
+        self.pl_active_checkbox = QCheckBox("فعال")
+        self.pl_active_checkbox.setChecked(True)
+        new_pl_box.addWidget(self.pl_active_checkbox)
+        del_pl_button = delete_button("حذفِ فهرستِ قیمتِ انتخاب‌شده (اگر استفاده شده باشد غیرفعال می‌شود)")
+        del_pl_button.clicked.connect(self._delete_price_list)
+        new_pl_box.addWidget(del_pl_button)
         left.addLayout(new_pl_box)
         outer.addLayout(left, stretch=2)
 
@@ -184,6 +198,8 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         self.pl_items_table = QTableWidget(0, 4)
         self.pl_items_table.setHorizontalHeaderLabels(["کالا", "واحد", "حداقلِ مقدار", "بهایِ واحد"])
         self.pl_items_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pl_items_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.pl_items_table.cellClicked.connect(self._on_price_item_selected)
         self.pl_items_table.verticalHeader().setVisible(False)
         self.pl_items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         right.addWidget(self.pl_items_table, stretch=1)
@@ -207,7 +223,11 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         add_item_button.setFixedWidth(44)
         add_item_button.setToolTip("ثبتِ قیمت")
         add_item_button.clicked.connect(self._add_price_list_item)
+        add_item_button.setToolTip("ثبتِ قیمت (ردیفِ انتخاب‌شده با همان کالا/حداقلِ مقدار ویرایش می‌شود)")
         item_form.addWidget(add_item_button)
+        del_item_button = delete_button("حذفِ ردیفِ قیمتِ انتخاب‌شده")
+        del_item_button.clicked.connect(self._delete_price_list_item)
+        item_form.addWidget(del_item_button)
         right.addLayout(item_form)
 
         self.pl_status_label = QLabel("")
@@ -223,7 +243,8 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         self._price_lists = pricing_service.list_price_lists(company_id)
         self.price_lists_table.setRowCount(len(self._price_lists))
         for row_index, pl in enumerate(self._price_lists):
-            for col_index, value in enumerate([pl.code, pl.name, "فروش" if pl.price_list_type_code == "SALES" else "خرید"]):
+            type_text = ("فروش" if pl.price_list_type_code == "SALES" else "خرید") + ("" if pl.is_active else " (غیرفعال)")
+            for col_index, value in enumerate([pl.code, pl.name, type_text]):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.UserRole, pl.price_list_id)
                 self.price_lists_table.setItem(row_index, col_index, cell)
@@ -275,6 +296,12 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
 
     def _on_price_list_selected(self, row: int, _column: int) -> None:
         self._selected_price_list_id = self.price_lists_table.item(row, 0).data(Qt.UserRole)
+        pl = next((p for p in self._price_lists if p.price_list_id == self._selected_price_list_id), None)
+        if pl is not None:
+            self.pl_code_field.setText(pl.code)
+            self.pl_name_field.setText(pl.name)
+            self.pl_type_combo.setCurrentIndex(max(0, self.pl_type_combo.findData(pl.price_list_type_code)))
+            self.pl_active_checkbox.setChecked(pl.is_active)
         self._refresh_price_list_items()
 
     def _refresh_price_list_items(self) -> None:
@@ -283,6 +310,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
             return
         items_by_id = {it.item_id: it for it in self._items}
         rows = pricing_service.list_price_list_items(self._selected_price_list_id)
+        self._price_items = rows
         self.pl_items_table.setRowCount(len(rows))
         for row_index, r in enumerate(rows):
             item = items_by_id.get(r.item_id)
@@ -293,7 +321,9 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
                 numerals.format_company_amount(r.unit_price),
             ]
             for col_index, value in enumerate(values):
-                self.pl_items_table.setItem(row_index, col_index, QTableWidgetItem(value))
+                cell = QTableWidgetItem(value)
+                cell.setData(Qt.UserRole, r.price_list_item_id)
+                self.pl_items_table.setItem(row_index, col_index, cell)
 
     def _add_price_list(self) -> None:
         company_id = self._company_id()
@@ -302,14 +332,54 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         if company_id is None or not code or not name:
             self.pl_status_label.setText("کد و نام را وارد کنید.")
             return
-        pricing_service.create_price_list(
-            company_id, code, name, self.pl_type_combo.currentData(), app_session.current_company.base_currency_id,
-            datetime.date.today(),
-        )
+        try:
+            pricing_service.create_price_list(
+                company_id, code, name, self.pl_type_combo.currentData(), app_session.current_company.base_currency_id,
+                datetime.date.today(),
+            )
+        except ValueError as exc:
+            self.pl_status_label.setText(str(exc))
+            return
         self.pl_code_field.clear()
         self.pl_name_field.clear()
         self.pl_status_label.setText("")
         self.refresh()
+
+    def _update_price_list(self) -> None:
+        if self._selected_price_list_id is None:
+            self.pl_status_label.setText("ابتدا یک فهرستِ قیمت را از فهرست انتخاب کنید.")
+            return
+        try:
+            pricing_service.update_price_list(self._company_id(), self._selected_price_list_id, self.pl_name_field.text(),
+                                              self.pl_active_checkbox.isChecked())
+        except ValueError as exc:
+            self.pl_status_label.setText(str(exc))
+            return
+        self.pl_status_label.setText("")
+        self.refresh()
+
+    def _delete_price_list(self) -> None:
+        if confirm_and_delete(self, "فهرستِ قیمت", self.pl_name_field.text(), PriceList, self._selected_price_list_id,
+                              self._company_id(), children=((PriceListItem, "price_list_id"), (PriceListItemPriceHistory, "price_list_id"))):
+            self._selected_price_list_id = None
+            self.pl_code_field.clear()
+            self.pl_name_field.clear()
+            self.refresh()
+
+    def _on_price_item_selected(self, row: int, _column: int) -> None:
+        item_row = next((r for r in getattr(self, "_price_items", [])
+                         if r.price_list_item_id == self.pl_items_table.item(row, 0).data(Qt.UserRole)), None)
+        if item_row is None:
+            return
+        self.pl_item_combo.setCurrentIndex(max(0, self.pl_item_combo.findData(item_row.item_id)))
+        self.pl_min_qty_field.setValue(float(item_row.min_quantity))
+        self.pl_unit_price_field.setValue(float(item_row.unit_price))
+
+    def _delete_price_list_item(self) -> None:
+        row = self.pl_items_table.currentRow()
+        item_id = self.pl_items_table.item(row, 0).data(Qt.UserRole) if row >= 0 and self.pl_items_table.item(row, 0) else None
+        label = self.pl_items_table.item(row, 0).text() if item_id is not None else ""
+        confirm_and_delete(self, "ردیفِ فهرستِ قیمت", label, PriceListItem, item_id, None, self._refresh_price_list_items)
 
     def _add_price_list_item(self) -> None:
         if self._selected_price_list_id is None:
@@ -444,6 +514,19 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         add_rule_button.setToolTip("قاعدهٔ تازه")
         add_rule_button.clicked.connect(self._add_discount_rule)
         form.addWidget(add_rule_button)
+        # R276: ویرایش/حذفِ قاعدهٔ انتخاب‌شده
+        self.rule_active_checkbox = QCheckBox("فعال")
+        self.rule_active_checkbox.setChecked(True)
+        form.addWidget(self.rule_active_checkbox)
+        save_rule_button = QPushButton("💾")
+        save_rule_button.setObjectName("iconButton")
+        save_rule_button.setFixedWidth(44)
+        save_rule_button.setToolTip("ذخیرهٔ تغییراتِ قاعدهٔ انتخاب‌شده")
+        save_rule_button.clicked.connect(self._update_discount_rule)
+        form.addWidget(save_rule_button)
+        del_rule_button = delete_button("حذفِ قاعدهٔ انتخاب‌شده")
+        del_rule_button.clicked.connect(self._delete_discount_rule)
+        form.addWidget(del_rule_button)
         outer.addLayout(form)
         self._on_rule_type_changed()
 
@@ -469,8 +552,18 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
         add_tier_button.setToolTip("افزودنِ پله")
         add_tier_button.clicked.connect(self._add_tier)
         tier_form.addWidget(add_tier_button)
+        del_tier_button = delete_button("حذفِ پلهٔ انتخاب‌شده")
+        del_tier_button.clicked.connect(self._delete_tier)
+        tier_form.addWidget(del_tier_button)
         tier_form.addStretch(1)
         outer.addLayout(tier_form)
+        self.tiers_table = QTableWidget(0, 3)
+        self.tiers_table.setHorizontalHeaderLabels(["حداقلِ مقدار", "حداقلِ مبلغ", "درصدِ تخفیف"])
+        self.tiers_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tiers_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tiers_table.verticalHeader().setVisible(False)
+        self.tiers_table.setMaximumHeight(150)
+        outer.addWidget(self.tiers_table)
 
         self.rule_status_label = QLabel("")
         self.rule_status_label.setObjectName("statusError")
@@ -495,6 +588,56 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
 
     def _on_rule_selected(self, row: int, _column: int) -> None:
         self._selected_rule_id = self.rules_table.item(row, 0).data(Qt.UserRole)
+        rule = next((r for r in self._discount_rules if r.rule_id == self._selected_rule_id), None)
+        if rule is not None:
+            self.rule_code_field.setText(rule.code)
+            self.rule_name_field.setText(rule.name)
+            self.rule_type_combo.setCurrentIndex(max(0, self.rule_type_combo.findData(rule.discount_type_code)))
+            self.rule_value_field.setValue(float(rule.discount_value or 0))
+            self.rule_priority_field.setValue(rule.priority)
+            self.rule_stackable_checkbox.setChecked(rule.is_stackable)
+            self.rule_active_checkbox.setChecked(rule.is_active)
+        self._refresh_tiers()
+
+    def _refresh_tiers(self) -> None:
+        tiers = pricing_service.list_discount_rule_tiers(self._selected_rule_id) if self._selected_rule_id else []
+        self.tiers_table.setRowCount(len(tiers))
+        for row_index, t in enumerate(tiers):
+            values = [numerals.to_persian_digits(str(t.min_quantity or "")), numerals.format_company_amount(t.min_amount)
+                      if t.min_amount is not None else "", numerals.to_persian_digits(str(t.discount_value))]
+            for col_index, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                cell.setData(Qt.UserRole, t.tier_id)
+                self.tiers_table.setItem(row_index, col_index, cell)
+
+    def _update_discount_rule(self) -> None:
+        if self._selected_rule_id is None:
+            self.rule_status_label.setText("ابتدا یک قاعده را از فهرست انتخاب کنید.")
+            return
+        try:
+            pricing_service.update_discount_rule(
+                self._company_id(), self._selected_rule_id, self.rule_name_field.text(), self.rule_priority_field.value(),
+                self.rule_stackable_checkbox.isChecked(), decimal.Decimal(str(self.rule_value_field.value())),
+                self.rule_active_checkbox.isChecked())
+        except ValueError as exc:
+            self.rule_status_label.setText(str(exc))
+            return
+        self.rule_status_label.setText("قاعده ذخیره شد.")
+        self.refresh()
+
+    def _delete_discount_rule(self) -> None:
+        if confirm_and_delete(self, "قاعدهٔ تخفیف", self.rule_name_field.text(), DiscountRule, self._selected_rule_id,
+                              self._company_id(), children=((DiscountRuleTier, "rule_id"),)):
+            self._selected_rule_id = None
+            self.rule_code_field.clear()
+            self.rule_name_field.clear()
+            self.refresh()
+            self._refresh_tiers()
+
+    def _delete_tier(self) -> None:
+        row = self.tiers_table.currentRow()
+        tier_id = self.tiers_table.item(row, 0).data(Qt.UserRole) if row >= 0 and self.tiers_table.item(row, 0) else None
+        confirm_and_delete(self, "پلهٔ تخفیف", "پلهٔ انتخاب‌شده", DiscountRuleTier, tier_id, None, self._refresh_tiers)
 
     def _add_discount_rule(self) -> None:
         company_id = self._company_id()
@@ -504,11 +647,15 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
             self.rule_status_label.setText("کد و نام را وارد کنید.")
             return
         discount_type = self.rule_type_combo.currentData()
-        pricing_service.create_discount_rule(
-            company_id, code, name, discount_type, "ALL", priority=self.rule_priority_field.value(),
-            is_stackable=self.rule_stackable_checkbox.isChecked(),
-            discount_value=None if discount_type == "TIERED" else decimal.Decimal(str(self.rule_value_field.value())),
-        )
+        try:
+            pricing_service.create_discount_rule(
+                company_id, code, name, discount_type, "ALL", priority=self.rule_priority_field.value(),
+                is_stackable=self.rule_stackable_checkbox.isChecked(),
+                discount_value=None if discount_type == "TIERED" else decimal.Decimal(str(self.rule_value_field.value())),
+            )
+        except ValueError as exc:
+            self.rule_status_label.setText(str(exc))
+            return
         self.rule_code_field.clear()
         self.rule_name_field.clear()
         self.rule_status_label.setText("")
@@ -527,6 +674,7 @@ class CommercialPricingScreen(FieldHelpMixin, QWidget):
             min_quantity=decimal.Decimal(str(self.tier_min_qty_field.value())),
         )
         self.rule_status_label.setText("پله افزوده شد.")
+        self._refresh_tiers()
 
     # --- واردکردنِ لیستِ قیمتِ تامین‌کننده --------------------------------
     def _build_supplier_import_tab(self) -> QWidget:

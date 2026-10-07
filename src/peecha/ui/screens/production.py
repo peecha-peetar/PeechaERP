@@ -31,7 +31,8 @@ from peecha.ui.screens.fixed_assets import (
     FormDialog, P, combo, scrolled, company_id, date_field, dec, fill, money, num_field, set_combo, table, user_id,
 )
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
-from peecha.ui.widgets import FormDrawer
+from peecha.ui.widgets import FormDrawer, confirm_and_delete
+from peecha.db.models import production as prm
 
 ZERO = decimal.Decimal(0)
 AVAIL_ICON = {"GREEN": "● موجود", "YELLOW": "◐ بخشی موجود", "RED": "○ کمبود"}
@@ -68,6 +69,24 @@ def _ask(parent, title: str, fields, hint: str = "") -> dict | None:
     if getattr(parent, "dialog_runner", None):
         return dlg.values() if parent.dialog_runner(dlg) else None
     return dlg.values() if dlg.exec() == QDialog.Accepted else None
+
+
+def selected_or_none(t: QTableWidget):
+    row = t.currentRow()
+    item = t.item(row, 0) if row >= 0 else None
+    return item.data(Qt.UserRole) if item is not None and t.selectedItems() else None
+
+
+def _checked(value: bool) -> QCheckBox:
+    box = QCheckBox()
+    box.setChecked(bool(value))
+    return box
+
+
+def _combo_at(box: QComboBox, value) -> QComboBox:
+    """R276: کمبویِ فرمِ ویرایش رویِ مقدارِ فعلیِ ردیف."""
+    set_combo(box, value)
+    return box
 
 
 def _run(parent, title: str, fn, *args, **kwargs):
@@ -660,8 +679,10 @@ class MasterDataScreen(QWidget):
         row.addWidget(QLabel("محصول:"))
         row.addWidget(self.bom_item, stretch=1)
         self.bom_buttons = {}
-        for key, label in (("new", "نسخهٔ جدید"), ("copy", "کپی به نسخهٔ جدید"), ("default", "پیش‌فرض"), ("archive", "بایگانی"),
-                           ("component", "افزودنِ جزء"), ("remove", "حذفِ جزء"), ("output", "جانبی/مشترک"),
+        for key, label in (("new", "نسخهٔ جدید"), ("edit_version", "ویرایشِ نسخه"), ("copy", "کپی به نسخهٔ جدید"),
+                           ("default", "پیش‌فرض"), ("archive", "بایگانی"),
+                           ("component", "افزودنِ جزء"), ("edit_component", "ویرایشِ جزء"), ("remove", "حذفِ جزء"),
+                           ("output", "جانبی/مشترک"), ("remove_output", "حذفِ خروجی"),
                            ("explode", "انفجارِ چندسطحی"), ("profile", "مشخصاتِ تولیدیِ کالا")):
             b = QPushButton(label)
             b.setProperty("form", "prd_bom")
@@ -689,7 +710,7 @@ class MasterDataScreen(QWidget):
         rrow.addWidget(QLabel("محصول:"))
         rrow.addWidget(self.rt_item, stretch=1)
         for key, label in (("new", "مسیرِ جدید"), ("copy", "کپی به نسخهٔ جدید"), ("default", "پیش‌فرض"), ("op", "افزودنِ عملیات"),
-                           ("remove", "حذفِ عملیات")):
+                           ("edit_op", "ویرایشِ عملیات"), ("remove", "حذفِ عملیات")):
             b = QPushButton(label)
             b.setProperty("form", "prd_routing")
             b.clicked.connect(lambda _c=False, k=key: self.routing_action(k))
@@ -708,7 +729,8 @@ class MasterDataScreen(QWidget):
         wc = QWidget()
         wl = QVBoxLayout(wc)
         wrow = QHBoxLayout()
-        for key, label in (("new", "مرکزِ کاریِ جدید"), ("edit", "ویرایش"), ("machine", "اتصالِ ماشین")):
+        for key, label in (("new", "مرکزِ کاریِ جدید"), ("edit", "ویرایش"), ("delete", "حذفِ مرکزِ کاری"),
+                           ("machine", "اتصالِ ماشین"), ("unlink", "جداکردنِ ماشین")):
             b = QPushButton(label)
             b.clicked.connect(lambda _c=False, k=key: self.wc_action(k))
             wrow.addWidget(b)
@@ -721,7 +743,9 @@ class MasterDataScreen(QWidget):
         lab = QWidget()
         ll = QVBoxLayout(lab)
         lrow = QHBoxLayout()
-        for key, label in (("labor", "نرخِ دستمزدِ جدید"), ("operation", "عملیاتِ استاندارد")):
+        for key, label in (("labor", "نرخِ دستمزدِ جدید"), ("edit_labor", "ویرایشِ نرخِ دستمزد"), ("delete_labor", "حذفِ نرخِ دستمزد"),
+                           ("operation", "عملیاتِ استاندارد"), ("edit_operation", "ویرایشِ عملیات"),
+                           ("delete_operation", "حذفِ عملیاتِ استاندارد")):
             b = QPushButton(label)
             b.clicked.connect(lambda _c=False, k=key: self.misc_action(k))
             lrow.addWidget(b)
@@ -751,9 +775,12 @@ class MasterDataScreen(QWidget):
         self.load_boms()
         self.load_routings()
         self.load_wcs()
-        fill(self.t_labor, [[r.code, r.name, r.hourly_rate, r.overtime_multiplier] for r in pm.list_labor_rates(cid)])
+        self._labor_rows = pm.list_labor_rates(cid)
+        fill(self.t_labor, [[r.code, r.name, r.hourly_rate, r.overtime_multiplier] for r in self._labor_rows],
+             [r.labor_rate_id for r in self._labor_rows])
+        self._op_rows = pm.list_operations(cid)
         fill(self.t_operations, [[o.code, o.name, o.default_setup_minutes, o.default_run_minutes, "بله" if o.is_qc else ""]
-                                 for o in pm.list_operations(cid)])
+                                 for o in self._op_rows], [o.operation_id for o in self._op_rows])
 
     # BOM
     def _bom_id(self):
@@ -784,15 +811,51 @@ class MasterDataScreen(QWidget):
                                   r.operation_seq or "", r.substitute_label, "✓" if r.is_optional else ""] for r in rows],
              [r.bom_line_id for r in rows])
         labels = dict((d, lb) for lb, d in (self.lk.items if self.lk else []))
+        outputs = pm.bom_outputs(cid, bom_id)
         fill(self.t_outputs, [[labels.get(o.item_id, o.item_id), pc.OUTPUT_TYPES[o.output_type], qty(o.quantity_per),
-                               o.recovery_value_per_unit or o.sales_value_per_unit or ""] for o in pm.bom_outputs(cid, bom_id)])
+                               o.recovery_value_per_unit or o.sales_value_per_unit or ""] for o in outputs],
+             [o.bom_output_id for o in outputs])
 
     def bom_action(self, key: str, values: dict | None = None) -> bool:
         cid, uid, item_id, bom_id = company_id(), user_id(), self.bom_item.currentData(), self._bom_id()
         lk = self.lk
+        line = version = None
+        if key == "edit_component":
+            line_id = selected_or_none(self.t_components)
+            line = next((r for r in pm.bom_components(cid, bom_id) if r.bom_line_id == line_id), None) if bom_id else None
+            if line is None:
+                QMessageBox.warning(self, "BOM", "یک جزء را انتخاب کنید.")
+                return False
+        if key == "edit_version":
+            version = next((v for v in pm.list_bom_versions(cid, item_id) if v.bom_id == bom_id), None) if bom_id else None
+            if version is None:
+                QMessageBox.warning(self, "BOM", "یک نسخه را انتخاب کنید.")
+                return False
+        if key == "remove_output":
+            out_id = selected_or_none(self.t_outputs)
+            if out_id is None:
+                QMessageBox.warning(self, "BOM", "یک خروجیِ جانبی/مشترک را انتخاب کنید.")
+                return False
+            if QMessageBox.question(self, "BOM", "خروجیِ انتخاب‌شده حذف شود؟") != QMessageBox.Yes:
+                return False
+        if key == "remove" and values is None:
+            if QMessageBox.question(self, "BOM", "جزءِ انتخاب‌شده حذف شود؟") != QMessageBox.Yes:
+                return False
         forms = {
             "new": [("batch_size_qty", "مقدارِ تولیدِ BOM", num_field(1)), ("scrap_percent", "ضایعاتِ پیش‌فرض٪", num_field(0)),
                     ("name", "نام", QLineEdit()), ("valid_from", "شروعِ اعتبار", date_field())],
+            "edit_version": [] if version is None else [
+                ("batch_size_qty", "مقدارِ تولیدِ BOM", num_field(version.batch_size_qty)),
+                ("scrap_percent", "ضایعاتِ پیش‌فرض٪", num_field(version.scrap_percent)),
+                ("name", "نام", QLineEdit(version.name or ""))],
+            "edit_component": [] if line is None else [
+                ("component_item_id", "جزء", _combo_at(combo(lk.items), line.item_id)), ("quantity", "مقدار", num_field(line.quantity)),
+                ("scrap_percent", "ضایعات٪", num_field(line.scrap_percent)),
+                ("component_type", "نوع", _combo_at(combo([(v, k) for k, v in pc.COMPONENT_TYPES.items()]), line.component_type)),
+                ("fixed", "مقدارِ ثابت (مستقل از تعداد)", _checked(line.quantity_type == "FIXED")),
+                ("operation_seq", "ترتیبِ عملیات", num_field(line.operation_seq)),
+                ("substitute_item_id", "جایگزین", _combo_at(combo(lk.items, "—"), line.substitute_item_id)),
+                ("is_optional", "اختیاری", _checked(line.is_optional))],
             "component": [("component_item_id", "جزء", combo(lk.items)), ("quantity", "مقدار", num_field()),
                           ("scrap_percent", "ضایعات٪", num_field(0)),
                           ("component_type", "نوع", combo([(v, k) for k, v in pc.COMPONENT_TYPES.items()])),
@@ -810,7 +873,23 @@ class MasterDataScreen(QWidget):
             if values is None:
                 return False
         values = values or {}
+        def line_fields() -> pm.BomLineFields:
+            return pm.BomLineFields(
+                component_item_id=values["component_item_id"], quantity=values["quantity"], uom_id=lk.uoms.get(values["component_item_id"]),
+                scrap_percent=values.get("scrap_percent") or ZERO, quantity_type="FIXED" if values.get("fixed") else "VARIABLE",
+                component_type=values.get("component_type") or "MATERIAL",
+                operation_seq=int(values["operation_seq"]) if values.get("operation_seq") else None,
+                substitute_item_id=values.get("substitute_item_id"), is_optional=bool(values.get("is_optional")),
+                warehouse_id=line.warehouse_id if line else None, notes=line.notes if line else None)
+
         fn = {
+            "edit_version": lambda: pm.update_bom(cid, bom_id, pm.BomFields(
+                batch_size_qty=values.get("batch_size_qty") or version.batch_size_qty, scrap_percent=values.get("scrap_percent") or ZERO,
+                name=values.get("name"), valid_from=version.valid_from, valid_to=version.valid_to,
+                routing_id=version.routing_id, production_time_minutes=version.production_time_minutes, notes=version.notes,
+                status_code=version.status_code), uid),
+            "edit_component": lambda: pm.update_bom_component(cid, line.bom_line_id, line_fields(), uid),
+            "remove_output": lambda: pm.remove_bom_output(cid, selected_or_none(self.t_outputs), uid),
             "new": lambda: pm.create_bom_version(cid, item_id, pm.BomFields(
                 batch_size_qty=values["batch_size_qty"] or decimal.Decimal(1), scrap_percent=values.get("scrap_percent") or ZERO,
                 name=values.get("name"), valid_from=values.get("valid_from")), user_id=uid),
@@ -839,7 +918,8 @@ class MasterDataScreen(QWidget):
     def _fields_of(self, bom_id: int, status: str) -> pm.BomFields:
         v = next(x for x in pm.list_bom_versions(company_id()) if x.bom_id == bom_id)
         return pm.BomFields(batch_size_qty=v.batch_size_qty, scrap_percent=v.scrap_percent, name=v.name, valid_from=v.valid_from,
-                            valid_to=v.valid_to, routing_id=v.routing_id, status_code=status)
+                            valid_to=v.valid_to, routing_id=v.routing_id, production_time_minutes=v.production_time_minutes,
+                            notes=v.notes, status_code=status)
 
     def _show_explosion(self, cid: int, item_id: int) -> None:
         rows = pm.explode(cid, item_id, decimal.Decimal(1))
@@ -885,21 +965,47 @@ class MasterDataScreen(QWidget):
             values = _ask(self, "مسیرِ تولید", [("name", "نام", QLineEdit())])
             if values is None:
                 return False
-        if key == "op" and values is None:
+        cur = None
+        if key == "edit_op":
+            op_id = selected_or_none(self.t_ops)
+            cur = next((o for o in pm.routing_operations(cid, rid) if o.routing_operation_id == op_id), None) if rid else None
+            if cur is None:
+                QMessageBox.warning(self, "مسیرِ تولید", "یک عملیات را انتخاب کنید.")
+                return False
+        if key == "remove" and values is None:
+            if QMessageBox.question(self, "مسیرِ تولید", "عملیاتِ انتخاب‌شده حذف شود؟") != QMessageBox.Yes:
+                return False
+        if key in ("op", "edit_op") and values is None:
+            g = (lambda name, default=None: getattr(cur, name)) if cur else (lambda name, default=None: default)
             values = _ask(self, "عملیاتِ مسیر", [
-                ("seq", "ترتیب", num_field(10)), ("name", "نام", QLineEdit()), ("work_center_id", "مرکزِ کاری", combo(self.lk.work_centers, "—")),
-                ("setup_minutes", "آماده‌سازی (دقیقه)", num_field(0)), ("run_minutes", "اجرا (دقیقه به ازایِ واحد)", num_field(0)),
-                ("machine_minutes", "ماشین (دقیقه/واحد، خالی = برابرِ اجرا)", num_field()), ("queue_minutes", "انتظار", num_field(0)),
-                ("move_minutes", "جابه‌جایی", num_field(0)), ("labor_count", "تعدادِ نیرو", num_field(1)),
-                ("labor_rate", "نرخِ دستمزد (خالی = مرکزِ کاری)", num_field()), ("machine_rate", "نرخِ ماشین", num_field()),
-                ("overhead_rate", "نرخِ سربار", num_field())])
+                ("seq", "ترتیب", num_field(g("seq", 10))), ("name", "نام", QLineEdit(g("name", "") or "")),
+                ("work_center_id", "مرکزِ کاری", _combo_at(combo(self.lk.work_centers, "—"), g("work_center_id"))),
+                ("setup_minutes", "آماده‌سازی (دقیقه)", num_field(g("setup_minutes", 0))),
+                ("run_minutes", "اجرا (دقیقه به ازایِ واحد)", num_field(g("run_minutes", 0))),
+                ("machine_minutes", "ماشین (دقیقه/واحد، خالی = برابرِ اجرا)", num_field(g("machine_minutes"))),
+                ("queue_minutes", "انتظار", num_field(g("queue_minutes", 0))),
+                ("move_minutes", "جابه‌جایی", num_field(g("move_minutes", 0))), ("labor_count", "تعدادِ نیرو", num_field(g("labor_count", 1))),
+                ("labor_rate", "نرخِ دستمزد (خالی = مرکزِ کاری)", num_field(g("labor_rate"))),
+                ("machine_rate", "نرخِ ماشین", num_field(g("machine_rate"))),
+                ("overhead_rate", "نرخِ سربار", num_field(g("overhead_rate")))])
             if values is None:
                 return False
         values = values or {}
+
+        def op_fields() -> pm.RoutingOpFields:
+            return pm.RoutingOpFields(
+                seq=int(values["seq"]), name=values.get("name") or "", work_center_id=values.get("work_center_id"),
+                setup_minutes=values.get("setup_minutes") or ZERO, run_minutes=values.get("run_minutes") or ZERO,
+                machine_minutes=values.get("machine_minutes") or None, queue_minutes=values.get("queue_minutes") or ZERO,
+                move_minutes=values.get("move_minutes") or ZERO, labor_count=values.get("labor_count") or decimal.Decimal(1),
+                labor_rate=values.get("labor_rate") or None, machine_rate=values.get("machine_rate") or None,
+                overhead_rate=values.get("overhead_rate") or None)
+
         fn = {
             "new": lambda: pm.create_routing(cid, item_id, values.get("name"), user_id=uid),
             "copy": lambda: pm.create_routing(cid, item_id, None, copy_from_routing_id=rid, user_id=uid),
             "default": lambda: pm.set_default_routing(cid, rid),
+            "edit_op": lambda: pm.update_routing_operation(cid, cur.routing_operation_id, op_fields(), uid),
             "op": lambda: pm.add_routing_operation(cid, rid, pm.RoutingOpFields(
                 seq=int(values["seq"]), name=values.get("name") or "", work_center_id=values.get("work_center_id"),
                 setup_minutes=values.get("setup_minutes") or ZERO, run_minutes=values.get("run_minutes") or ZERO,
@@ -927,13 +1033,27 @@ class MasterDataScreen(QWidget):
         cid, uid = company_id(), user_id()
         wc_id = None
         current = None
-        if key in ("edit", "machine"):
+        if key in ("edit", "machine", "delete", "unlink"):
             try:
                 wc_id = self._selected_id(self.t_wcs)
             except ValueError as exc:
                 QMessageBox.warning(self, "مرکزِ کاری", str(exc))
                 return False
             current = pm.get_work_center(cid, wc_id)
+        if key == "delete":
+            return confirm_and_delete(self, "مرکزِ کاری", current.name, prm.WorkCenter, wc_id, cid, self.refresh)
+        if key == "unlink":
+            linked = pm.work_center_machines(cid, wc_id)
+            if not linked:
+                QMessageBox.information(self, "مرکزِ کاری", "ماشینی به این مرکزِ کاری متصل نیست.")
+                return False
+            if values is None:
+                values = _ask(self, "جداکردنِ ماشین", [("asset_id", "ماشین", combo([(f"{m.code} — {m.name}", m.asset_id) for m in linked]))])
+                if values is None:
+                    return False
+            _r, ok = _run(self, "مرکزِ کاری", pm.unlink_machine, cid, wc_id, values["asset_id"])
+            self.load_wcs()
+            return ok
         if key == "machine":
             from peecha.services.fixed_assets import production as fa_prod
 
@@ -949,7 +1069,7 @@ class MasterDataScreen(QWidget):
             c_ = current
             values = _ask(self, "مرکزِ کاری", [
                 ("code", "کد", QLineEdit(c_.code if c_ else "")), ("name", "نام", QLineEdit(c_.name if c_ else "")),
-                ("center_type", "نوع", combo([(v, k) for k, v in pc.CENTER_TYPES.items()])),
+                ("center_type", "نوع", _combo_at(combo([(v, k) for k, v in pc.CENTER_TYPES.items()]), c_.center_type if c_ else None)),
                 ("operator_count", "تعدادِ اپراتور", num_field(c_.operator_count if c_ else 1)),
                 ("shifts_per_day", "شیفت در روز", num_field(c_.shifts_per_day if c_ else 1)),
                 ("hours_per_shift", "ساعتِ هر شیفت", num_field((c_.hours_per_shift if c_ else 8))),
@@ -958,8 +1078,10 @@ class MasterDataScreen(QWidget):
                 ("labor_rate", "نرخِ دستمزد", num_field(c_.labor_rate if c_ else 0)),
                 ("machine_rate", "نرخِ ماشین", num_field(c_.machine_rate if c_ else 0)),
                 ("overhead_rate", "نرخِ سربار", num_field(c_.overhead_rate if c_ else 0)),
-                ("cost_center_detail_account_id", "مرکزِ هزینه", combo(self.lk.cost_centers, "—")),
-                ("warehouse_id", "انبارِ خط", combo(self.lk.warehouses, "—")), ("branch_id", "شعبه", combo(self.lk.branches, "—"))])
+                ("cost_center_detail_account_id", "مرکزِ هزینه",
+                 _combo_at(combo(self.lk.cost_centers, "—"), c_.cost_center_detail_account_id if c_ else None)),
+                ("warehouse_id", "انبارِ خط", _combo_at(combo(self.lk.warehouses, "—"), c_.warehouse_id if c_ else None)),
+                ("branch_id", "شعبه", _combo_at(combo(self.lk.branches, "—"), c_.branch_id if c_ else None))])
             if values is None:
                 return False
         for k in ("operator_count", "shifts_per_day"):
@@ -973,26 +1095,46 @@ class MasterDataScreen(QWidget):
 
     def misc_action(self, key: str, values: dict | None = None) -> bool:
         cid, uid = company_id(), user_id()
-        if key == "labor":
-            values = values or _ask(self, "نرخِ دستمزد", [("code", "کد", QLineEdit()), ("name", "نام", QLineEdit()),
-                                                          ("hourly_rate", "نرخِ ساعتی", num_field()),
-                                                          ("employee_id", "کارمند (اختیاری)", combo(self.lk.employees, "—")),
-                                                          ("overtime_multiplier", "ضریبِ اضافه‌کار", num_field("1.4"))])
+        labor = op = None
+        if key in ("edit_labor", "delete_labor"):
+            labor_id = selected_or_none(self.t_labor)
+            labor = next((r for r in getattr(self, "_labor_rows", []) if r.labor_rate_id == labor_id), None)
+            if labor is None:
+                QMessageBox.warning(self, "دستمزد", "یک نرخِ دستمزد را انتخاب کنید.")
+                return False
+            if key == "delete_labor":
+                return confirm_and_delete(self, "نرخِ دستمزد", labor.name, prm.LaborRate, labor_id, cid, self.refresh)
+        if key in ("edit_operation", "delete_operation"):
+            op_id = selected_or_none(self.t_operations)
+            op = next((o for o in getattr(self, "_op_rows", []) if o.operation_id == op_id), None)
+            if op is None:
+                QMessageBox.warning(self, "عملیات", "یک عملیاتِ استاندارد را انتخاب کنید.")
+                return False
+            if key == "delete_operation":
+                return confirm_and_delete(self, "عملیاتِ استاندارد", op.name, prm.Operation, op_id, cid, self.refresh)
+        if key in ("labor", "edit_labor"):
+            values = values or _ask(self, "نرخِ دستمزد", [
+                ("code", "کد", QLineEdit(labor.code if labor else "")), ("name", "نام", QLineEdit(labor.name if labor else "")),
+                ("hourly_rate", "نرخِ ساعتی", num_field(labor.hourly_rate if labor else None)),
+                ("employee_id", "کارمند (اختیاری)", _combo_at(combo(self.lk.employees, "—"), labor.employee_id if labor else None)),
+                ("overtime_multiplier", "ضریبِ اضافه‌کار", num_field(labor.overtime_multiplier if labor else "1.4"))])
             if not values:
                 return False
             _r, ok = _run(self, "دستمزد", pm.save_labor_rate, cid, values["code"] or "", values["name"] or "", values["hourly_rate"],
-                          values.get("employee_id"), values.get("overtime_multiplier") or decimal.Decimal("1.4"), user_id=uid)
+                          values.get("employee_id"), values.get("overtime_multiplier") or decimal.Decimal("1.4"),
+                          labor.labor_rate_id if labor else None, labor.is_active if labor else True, user_id=uid)
         else:
-            values = values or _ask(self, "عملیاتِ استاندارد", [("code", "کد", QLineEdit()), ("name", "نام", QLineEdit()),
-                                                               ("default_work_center_id", "مرکزِ کاری", combo(self.lk.work_centers, "—")),
-                                                               ("default_setup_minutes", "آماده‌سازی", num_field(0)),
-                                                               ("default_run_minutes", "اجرا", num_field(0)),
-                                                               ("is_qc", "کنترلِ کیفیت", QCheckBox())])
+            values = values or _ask(self, "عملیاتِ استاندارد", [
+                ("code", "کد", QLineEdit(op.code if op else "")), ("name", "نام", QLineEdit(op.name if op else "")),
+                ("default_work_center_id", "مرکزِ کاری", _combo_at(combo(self.lk.work_centers, "—"), op.default_work_center_id if op else None)),
+                ("default_setup_minutes", "آماده‌سازی", num_field(op.default_setup_minutes if op else 0)),
+                ("default_run_minutes", "اجرا", num_field(op.default_run_minutes if op else 0)),
+                ("is_qc", "کنترلِ کیفیت", _checked(bool(op and op.is_qc)))])
             if not values:
                 return False
             _r, ok = _run(self, "عملیات", pm.save_operation, cid, values["code"] or "", values["name"] or "",
                           values.get("default_work_center_id"), values.get("default_setup_minutes") or ZERO,
-                          values.get("default_run_minutes") or ZERO, bool(values.get("is_qc")))
+                          values.get("default_run_minutes") or ZERO, bool(values.get("is_qc")), op.operation_id if op else None)
         if ok:
             self.refresh()
         return ok
@@ -1172,7 +1314,8 @@ class PrdCostingScreen(QWidget):
         pools = QWidget()
         pl = QVBoxLayout(pools)
         row = QHBoxLayout()
-        for key, label in (("new", "استخرِ هزینهٔ جدید"), ("preview", "پیش‌نمایشِ سرشکن"), ("allocate", "سرشکن")):
+        for key, label in (("new", "استخرِ هزینهٔ جدید"), ("edit", "ویرایشِ استخر"), ("delete", "حذفِ استخر"),
+                           ("preview", "پیش‌نمایشِ سرشکن"), ("allocate", "سرشکن")):
             b = QPushButton(label)
             b.setProperty("form", "prd_allocation")
             b.clicked.connect(lambda _c=False, k=key: self.pool_action(k))
@@ -1248,17 +1391,32 @@ class PrdCostingScreen(QWidget):
 
     def pool_action(self, key: str, values: dict | None = None) -> bool:
         cid, uid = company_id(), user_id()
-        if key == "new":
+        pool = None
+        if key in ("edit", "delete"):
+            pool_id = selected_or_none(self.t_pools)
+            pool = next((p for p in pcost.list_pools(cid) if p.pool_id == pool_id), None)
+            if pool is None:
+                QMessageBox.warning(self, "استخرِ هزینه", "یک استخر را انتخاب کنید.")
+                return False
+            if pool.status_code == "ALLOCATED" or pool.allocated_amount:
+                QMessageBox.warning(self, "استخرِ هزینه", "استخرِ سرشکن‌شده قابلِ ویرایش یا حذف نیست.")
+                return False
+            if key == "delete":
+                return confirm_and_delete(self, "استخرِ هزینه", pool.name, prm.CostPool, pool.pool_id, cid, self.refresh)
+        if key in ("new", "edit"):
             values = values or _ask(self, "استخرِ هزینه", [
-                ("code", "کد", QLineEdit()), ("name", "نام", QLineEdit()), ("period_code", "دوره", QLineEdit(P(self._period()))),
-                ("amount", "مبلغ", num_field()), ("category", "نوع", combo([(v, k) for k, v in pcost.POOL_CATEGORIES.items()])),
-                ("basis", "مبنایِ سرشکن", combo([(v, k) for k, v in pc.OVERHEAD_BASES.items()])),
-                ("work_center_id", "فقط مرکزِ کاری", combo(self.lk.work_centers, "— همه —"))])
+                ("code", "کد", QLineEdit(pool.code if pool else "")), ("name", "نام", QLineEdit(pool.name if pool else "")),
+                ("period_code", "دوره", QLineEdit(P(pool.period_code if pool else self._period()))),
+                ("amount", "مبلغ", num_field(pool.amount if pool else None)),
+                ("category", "نوع", _combo_at(combo([(v, k) for k, v in pcost.POOL_CATEGORIES.items()]), pool.category if pool else None)),
+                ("basis", "مبنایِ سرشکن", _combo_at(combo([(v, k) for k, v in pc.OVERHEAD_BASES.items()]), pool.basis if pool else None)),
+                ("work_center_id", "فقط مرکزِ کاری", _combo_at(combo(self.lk.work_centers, "— همه —"), pool.work_center_id if pool else None))])
             if not values:
                 return False
             _r, ok = _run(self, "استخرِ هزینه", pcost.save_pool, cid, values["code"] or "", values["name"] or "",
                           numerals.to_ascii_digits(values["period_code"] or ""), values["amount"], values["basis"],
-                          values["category"], values.get("work_center_id"), user_id=uid)
+                          values["category"], values.get("work_center_id"), pool.notes if pool else None, user_id=uid,
+                          pool_id=pool.pool_id if pool else None)
         else:
             try:
                 pool_id = MasterDataScreen._selected_id(self.t_pools)

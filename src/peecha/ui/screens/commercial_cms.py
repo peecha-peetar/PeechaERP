@@ -23,7 +23,8 @@ from PySide6.QtWidgets import (
 from peecha import session as app_session
 from peecha.services import commercial_cms as cms_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin, LayoutEditMixin, wrap_scrollable
+from peecha.db.models.commercial import CmsArticle, CmsConnection
+from peecha.ui.widgets import FieldHelpMixin, LayoutEditMixin, confirm_and_delete, delete_button, row_actions, wrap_scrollable
 
 _PLATFORM_LABELS = {"WORDPRESS": "وردپرس"}
 _ARTICLE_STATUS_LABELS = {"DRAFT": "پیش‌نویس", "PUBLISHED": "منتشرشده", "FAILED": "ناموفق"}
@@ -104,6 +105,10 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         test_connection_button.setToolTip("آزمایشِ اتصالِ انتخاب‌شده")
         test_connection_button.clicked.connect(self._test_connection)
         form.addWidget(test_connection_button)
+        # R276: حذفِ اتصالِ انتخاب‌شده
+        delete_connection_button = delete_button("حذفِ اتصالِ انتخاب‌شده")
+        delete_connection_button.clicked.connect(self._delete_connection)
+        form.addWidget(delete_connection_button)
         outer.addLayout(form)
 
         self.cms_status_label = QLabel("")
@@ -220,7 +225,18 @@ class CommercialCmsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             publish_button.setObjectName("primaryIconButton")
             publish_button.setToolTip("انتشار" if article.status_code != "PUBLISHED" else "به‌روزرسانیِ پستِ منتشرشده")
             publish_button.clicked.connect(lambda _checked=False, article_id=article.article_id: self._publish_article(article_id))
-            self.articles_table.setCellWidget(row_index, 4, publish_button)
+            remove = delete_button("حذفِ مقاله (فقط از این برنامه)")
+            remove.clicked.connect(lambda _checked=False, a=article: confirm_and_delete(
+                self, "مقاله", a.title, CmsArticle, a.article_id, self._company_id(), self._refresh_articles))
+            self.articles_table.setCellWidget(row_index, 4, row_actions(publish_button, remove))
+
+    def _delete_connection(self) -> None:
+        connection_id = getattr(self, "_selected_connection_id", None)
+        connection = next((c for c in self._connections if c.connection_id == connection_id), None)
+        if confirm_and_delete(self, "اتصالِ سایت", connection.display_name if connection else "", CmsConnection, connection_id,
+                              self._company_id()):
+            self._selected_connection_id = None
+            self.refresh()
 
     def _add_article(self) -> None:
         company_id = self._company_id()

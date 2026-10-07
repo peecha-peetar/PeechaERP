@@ -65,6 +65,21 @@ def create_channel(
         return row.channel_code
 
 
+def update_channel(company_id: int, channel_code: str, name: str, channel_type_code: str, is_active: bool = True) -> None:
+    """R276: ویرایشِ نام/نوع/فعال‌بودنِ کانال (کد کلید است و ثابت می‌ماند)."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("نامِ کانال الزامی است.")
+    if channel_type_code not in ("POS", "WHOLESALE", "ONLINE", "AGENT", "MARKETPLACE", "VAN_SALES", "PRE_SALES"):
+        raise ValueError("نوعِ کانال نامعتبر است.")
+    with new_session() as session:
+        row = session.get(Channel, (channel_code, company_id))
+        if row is None:
+            raise ValueError("کانال نامعتبر است.")
+        row.name, row.channel_type_code, row.is_active = name, channel_type_code, is_active
+        session.commit()
+
+
 def set_channel_mobile_defaults(
     company_id: int, channel_code: str,
     cost_center_detail_account_id: int | None, project_detail_account_id: int | None,
@@ -188,6 +203,8 @@ def create_price_list(
     if price_list_type_code not in ("SALES", "PURCHASE"):
         raise ValueError("نوعِ فهرستِ قیمت نامعتبر است.")
     with new_session() as session:
+        if session.scalar(select(PriceList.price_list_id).where(PriceList.company_id == company_id, PriceList.code == code)):
+            raise ValueError("این کدِ فهرستِ قیمت قبلاً تعریف شده است.")
         row = PriceList(
             company_id=company_id, code=code, name=name, price_list_type_code=price_list_type_code,
             currency_id=currency_id, channel_code=channel_code, valid_from=valid_from, valid_to=valid_to,
@@ -195,6 +212,20 @@ def create_price_list(
         session.add(row)
         session.commit()
         return row.price_list_id
+
+
+def update_price_list(company_id: int, price_list_id: int, name: str, is_active: bool = True,
+                      valid_to: datetime.date | None = None) -> None:
+    """R276: ویرایشِ فهرستِ قیمت (نام/فعال‌بودن/پایانِ اعتبار)."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("نامِ فهرستِ قیمت الزامی است.")
+    with new_session() as session:
+        row = session.get(PriceList, price_list_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("فهرستِ قیمت نامعتبر است.")
+        row.name, row.is_active, row.valid_to = name, is_active, valid_to
+        session.commit()
 
 
 def set_price_list_item(
@@ -327,6 +358,8 @@ def create_discount_rule(
     scope_ref_id: int | None = None, valid_from: datetime.date | None = None, valid_to: datetime.date | None = None,
 ) -> int:
     with new_session() as session:
+        if session.scalar(select(DiscountRule.rule_id).where(DiscountRule.company_id == company_id, DiscountRule.code == code)):
+            raise ValueError("این کدِ قاعده قبلاً تعریف شده است.")
         row = DiscountRule(
             company_id=company_id, code=code, name=name, discount_type_code=discount_type_code,
             scope_type_code=scope_type_code, scope_ref_id=scope_ref_id, discount_value=discount_value,
@@ -336,6 +369,28 @@ def create_discount_rule(
         session.add(row)
         session.commit()
         return row.rule_id
+
+
+def update_discount_rule(company_id: int, rule_id: int, name: str, priority: int, is_stackable: bool,
+                         discount_value: decimal.Decimal | None, is_active: bool = True) -> None:
+    """R276: ویرایشِ قاعدهٔ تخفیف (کد و نوع ثابت می‌مانند)."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("نامِ قاعده الزامی است.")
+    with new_session() as session:
+        row = session.get(DiscountRule, rule_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("قاعدهٔ تخفیف نامعتبر است.")
+        row.name, row.priority, row.is_stackable, row.is_active = name, priority, is_stackable, is_active
+        if row.discount_type_code != "TIERED":
+            row.discount_value = discount_value
+        session.commit()
+
+
+def list_discount_rule_tiers(rule_id: int) -> list[DiscountRuleTier]:
+    with new_session() as session:
+        return list(session.scalars(select(DiscountRuleTier).where(DiscountRuleTier.rule_id == rule_id)
+                                    .order_by(DiscountRuleTier.min_quantity, DiscountRuleTier.min_amount)))
 
 
 def add_discount_rule_tier(rule_id: int, discount_value: decimal.Decimal, min_quantity: decimal.Decimal | None = None, min_amount: decimal.Decimal | None = None) -> int:

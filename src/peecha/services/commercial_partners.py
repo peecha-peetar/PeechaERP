@@ -377,11 +377,11 @@ def find_duplicate_customers(
     return matches[:limit]
 
 
-def list_customer_detail_accounts(company_id: int) -> list[dict]:
+def list_customer_detail_accounts(company_id: int, all_levels: bool = False) -> list[dict]:
     profiles = {p.customer_detail_account_id: p for p in list_customer_profiles(company_id)}
     blank = {key: None for key in _CUSTOMER_PROFILE_FIELD_KEYS} | {"status_code": None}
     result = []
-    for row in dimensions_service.list_customers(company_id):
+    for row in dimensions_service.list_customers(company_id, all_levels):
         merged = dict(row)
         profile = profiles.get(row["detail_account_id"])
         if profile is not None:
@@ -550,11 +550,11 @@ def _split_supplier_fields(person_fields: dict) -> tuple[dict, dict]:
     return detail_fields, profile_fields
 
 
-def list_supplier_detail_accounts(company_id: int) -> list[dict]:
+def list_supplier_detail_accounts(company_id: int, all_levels: bool = False) -> list[dict]:
     profiles = {p.supplier_detail_account_id: p for p in list_supplier_profiles(company_id)}
     blank = {key: None for key in _SUPPLIER_PROFILE_FIELD_KEYS} | {"status_code": None}
     result = []
-    for row in dimensions_service.list_suppliers(company_id):
+    for row in dimensions_service.list_suppliers(company_id, all_levels):
         merged = dict(row)
         profile = profiles.get(row["detail_account_id"])
         if profile is not None:

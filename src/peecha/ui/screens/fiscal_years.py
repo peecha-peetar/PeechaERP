@@ -26,7 +26,10 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha import session as app_session
 from peecha.services import fiscal_years as fiscal_years_service
-from peecha.ui.widgets import FieldHelpMixin, FormDrawer, JalaliDateEdit, wrap_scrollable, wrap_scrollable_with_footer
+from peecha.db.models.accounting import FiscalPeriod, FiscalYear
+from peecha.ui.widgets import (
+    FieldHelpMixin, FormDrawer, JalaliDateEdit, confirm_and_delete, delete_button, wrap_scrollable, wrap_scrollable_with_footer,
+)
 
 _YEAR_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "کد"]
 _PERIOD_COLUMNS = ["وضعیت", "تاریخِ پایان", "تاریخِ شروع", "دوره"]
@@ -89,6 +92,11 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         self.toggle_year_button.setEnabled(False)
         self.toggle_year_button.clicked.connect(self._toggle_selected_year)
         toggle_year_row.addWidget(self.toggle_year_button)
+        # R276: حذفِ سالِ مالیِ بی‌سند (با دوره‌هایش)؛ سالِ دارایِ سند قابلِ حذف نیست
+        self.delete_year_button = delete_button("حذفِ سالِ مالیِ انتخاب‌شده (فقط اگر هیچ سندی نداشته باشد)")
+        self.delete_year_button.setEnabled(False)
+        self.delete_year_button.clicked.connect(self._delete_selected_year)
+        toggle_year_row.addWidget(self.delete_year_button)
         toggle_year_row.addStretch(1)
         layout.addLayout(toggle_year_row)
 
@@ -139,6 +147,19 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         layout.addStretch(1)
         return wrap_scrollable_with_footer(panel, [create_button])
 
+    def _delete_selected_year(self) -> None:
+        year = self._selected_year_row()
+        if year is None:
+            return
+        current = app_session.current_fiscal_year
+        if current is not None and current.fiscal_year_id == year.fiscal_year_id:
+            QMessageBox.warning(self, "سالِ مالی", "سالِ مالیِ جاری را نمی‌توان حذف کرد.")
+            return
+        if confirm_and_delete(self, "سالِ مالی", numerals.to_persian_digits(year.code), FiscalYear, year.fiscal_year_id,
+                              self._company_id(), children=((FiscalPeriod, "fiscal_year_id"),)):
+            self._selected_fiscal_year_id = None
+            self.refresh()
+
     def _company_id(self) -> int | None:
         return app_session.current_company.company_id if app_session.current_company else None
 
@@ -166,6 +187,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         else:
             self._selected_fiscal_year_id = None
             self.toggle_year_button.setEnabled(False)
+            self.delete_year_button.setEnabled(False)
             self.periods_table.setRowCount(0)
 
     def _selected_year_row(self) -> fiscal_years_service.FiscalYearRow | None:
@@ -175,6 +197,7 @@ class FiscalYearsScreen(FieldHelpMixin, QWidget):
         fiscal_year_id = self.table.item(row, 0).data(Qt.UserRole)
         self._selected_fiscal_year_id = fiscal_year_id
         self.toggle_year_button.setEnabled(True)
+        self.delete_year_button.setEnabled(True)
         self._load_periods(fiscal_year_id)
 
     def _load_periods(self, fiscal_year_id: int) -> None:

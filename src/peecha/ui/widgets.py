@@ -1550,3 +1550,44 @@ class FormDrawer(QWidget):
         self._on_new()
         self.open()
 
+
+
+def confirm_and_delete(parent: QWidget, title: str, label: str, model, pk: int | None, company_id: int | None,
+                       after=None, children=()) -> bool:
+    """R276: «حذف»ِ یکسانِ فرم‌هایِ تعریف -- تأیید، حذفِ امن (یا غیرفعال‌سازی اگر استفاده شده)، پیام و رفرش."""
+    from peecha.services import master_data
+
+    if pk is None:
+        QMessageBox.warning(parent, title, "ابتدا یک ردیف را انتخاب کنید.")
+        return False
+    if QMessageBox.question(parent, title, f"«{label}» حذف شود؟") != QMessageBox.Yes:
+        return False
+    try:
+        result = master_data.delete_or_deactivate(model, pk, company_id, children)
+    except ValueError as exc:
+        QMessageBox.warning(parent, title, str(exc))
+        return False
+    QMessageBox.information(parent, title, master_data.result_message(result, label))
+    if after is not None:
+        after()
+    return True
+
+
+def delete_button(tooltip: str = "حذفِ ردیفِ انتخاب‌شده") -> QPushButton:
+    button = QPushButton("🗑️")
+    button.setObjectName("dangerIconButton")
+    button.setFixedWidth(44)
+    button.setToolTip(tooltip)
+    return button
+
+
+def row_actions(*buttons: QWidget) -> QWidget:
+    """R276: چند دکمهٔ عملیات (مثلاً انتشار + حذف) در یک خانهٔ جدول."""
+    host = QWidget()
+    box = QHBoxLayout(host)
+    box.setContentsMargins(0, 0, 0, 0)
+    box.setSpacing(4)
+    for button in buttons:
+        box.addWidget(button)
+    box.addStretch(1)
+    return host

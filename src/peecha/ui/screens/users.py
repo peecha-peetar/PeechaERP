@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -26,7 +27,10 @@ from peecha.services import commercial_pos as pos_service
 from peecha.services import commercial_pricing as pricing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import users as users_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, wrap_scrollable_with_footer
+from peecha.db.models.security import User, UserCompany, UserModuleRole, UserRole
+from peecha.ui.widgets import (
+    FieldGrid, FieldHelpMixin, FieldSpec, FormDrawer, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable_with_footer,
+)
 
 _COLUMNS = ["فعال", "مدیرِ کل", "شرکت‌ها", "نامِ کامل", "نامِ کاربری"]
 
@@ -226,7 +230,10 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         cancel_button.clicked.connect(self._reset_form)
 
         layout.addStretch(1)
-        return wrap_scrollable_with_footer(panel, [save_button, cancel_button])
+        # R276: حذف (اگر سابقه دارد غیرفعال می‌شود)
+        delete = delete_button()
+        delete.clicked.connect(self._delete)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, delete])
 
     def refresh(self) -> None:
         self._company_options = users_service.list_companies_for_picker()
@@ -364,6 +371,16 @@ class UsersScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             if item.checkState() == Qt.Checked:
                 ids.append(item.data(Qt.UserRole))
         return ids
+
+    def _delete(self) -> None:
+        current = app_session.current_user
+        if current is not None and self._editing_id == current.user_id:
+            QMessageBox.warning(self, "کاربر", "کاربرِ واردشده نمی‌تواند خودش را حذف کند.")
+            return
+        if confirm_and_delete(self, "کاربر", self.username_field.text(), User, self._editing_id, None,
+                              children=((UserCompany, "user_id"), (UserRole, "user_id"), (UserModuleRole, "user_id"))):
+            self._reset_form()
+            self.refresh()
 
     def _save(self) -> None:
         full_name = self.full_name_field.text().strip()

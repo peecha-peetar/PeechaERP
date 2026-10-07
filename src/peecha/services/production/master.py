@@ -725,7 +725,8 @@ def list_bom_versions(company_id: int, item_id: int | None = None) -> list[Simpl
                                 code=f"BOM-{r.finished_item_id}-V{r.version_no}", version_no=r.version_no, name=r.name,
                                 batch_size_qty=r.batch_size_qty, scrap_percent=r.scrap_percent, status_code=r.status_code or "ACTIVE",
                                 is_default=r.is_default, is_locked=r.is_locked, valid_from=r.valid_from, valid_to=r.valid_to,
-                                routing_id=r.routing_id, component_count=counts.get(r.bom_id, 0)) for r in rows]
+                                routing_id=r.routing_id, production_time_minutes=r.production_time_minutes, notes=r.notes,
+                                component_count=counts.get(r.bom_id, 0)) for r in rows]
 
 
 def bom_components(company_id: int, bom_id: int) -> list[SimpleNamespace]:

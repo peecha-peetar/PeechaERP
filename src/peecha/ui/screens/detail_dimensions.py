@@ -446,9 +446,16 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         dialog.resize(680, 560)
         layout = QVBoxLayout(dialog)
 
+        top_row = QHBoxLayout()
+        self.picker_search_field = QLineEdit()
+        self.picker_search_field.setPlaceholderText("جست‌وجو در کد یا نام…")
+        self.picker_search_field.textChanged.connect(lambda _text: self._rebuild_accounts_tree())
+        top_row.addWidget(self.picker_search_field, stretch=1)
         self.show_all_levels_checkbox = QCheckBox("نمایشِ همه‌یِ سطوح")
+        self.show_all_levels_checkbox.setChecked(True)
         self.show_all_levels_checkbox.toggled.connect(lambda _checked: self._rebuild_accounts_tree())
-        layout.addWidget(self.show_all_levels_checkbox)
+        top_row.addWidget(self.show_all_levels_checkbox)
+        layout.addLayout(top_row)
 
         self.accounts_table = QTreeWidget()
         self.accounts_table.setColumnCount(len(_COLUMNS))
@@ -478,6 +485,10 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.account_form_title = QLabel("حسابِ تفصیلیِ جدید")
         self.account_form_title.setObjectName("pageTitle")
         layout.addWidget(self.account_form_title)
+        # R276: سطحِ حسابِ درحالِ ثبت/ویرایش و جایگاهش در ساختارِ گروه.
+        self.level_info_label = QLabel("")
+        self.level_info_label.setObjectName("sectionHint")
+        layout.addWidget(self.level_info_label)
 
         # طبقِ درخواستِ صریح («بشه از تفضیلی‌هایِ دیگر کپی کرد و تفصیلیِ
         # جدید ایجاد نمود»): وقتی در حالِ ساختنِ رکوردِ تازه هستیم، انتخابِ
@@ -1752,7 +1763,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         )
 
         if self._is_person():
-            rows = self._person_meta()["list_fn"](company_id)
+            rows = self._person_meta()["list_fn"](company_id, all_levels=True)
             self._person_rows_by_id = {r["detail_account_id"]: r for r in rows}
             self._accounts_by_id = {}
         else:
@@ -1872,9 +1883,12 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                     company_id, [row[0] for row in rows]
                 )
 
+        parent_ids = {row[1] for row in rows if row[1] is not None}
+        max_level_no = self._current_max_level_no
+
         def make_item(row: tuple) -> QTreeWidgetItem:
             detail_account_id, _parent_id, full_code, name, level_no, is_active = row[:6]
-            values = [full_code, name or "—", str(level_no), "فعال" if is_active else "غیرفعال"]
+            values = [full_code, name or "—", f"{level_no} از {max_level_no}", "فعال" if is_active else "غیرفعال"]
             if is_personnel_view or is_item_view:
                 values.extend(row[6:])
             item = QTreeWidgetItem(values)
@@ -1887,12 +1901,32 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 pixmap = QPixmap(photo.storage_key)
                 if not pixmap.isNull():
                     item.setIcon(1, QIcon(pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
+            if detail_account_id in parent_ids:
+                font = item.font(0)
+                font.setBold(True)
+                for col in range(2):
+                    item.setFont(col, font)
             return item
+
+        query = self.picker_search_field.text().strip()
+        by_id = {row[0]: row for row in rows}
+        if query:
+            matched = {row[0] for row in rows if query in row[2] or (row[3] and query in row[3])}
+            keep = set(matched)
+            if self.show_all_levels_checkbox.isChecked():
+                for row_id in matched:
+                    parent_id = by_id[row_id][1]
+                    while parent_id is not None and parent_id in by_id and parent_id not in keep:
+                        keep.add(parent_id)
+                        parent_id = by_id[parent_id][1]
+            rows = [row for row in rows if row[0] in keep]
+            by_id = {row[0]: row for row in rows}
 
         if self.show_all_levels_checkbox.isChecked():
             children_by_parent: dict[int | None, list[tuple]] = {}
             for row in rows:
-                children_by_parent.setdefault(row[1], []).append(row)
+                # والدی که در فهرست نیست (مثلاً فیلترشده) ردیف را یتیم نکند.
+                children_by_parent.setdefault(row[1] if row[1] in by_id else None, []).append(row)
             for siblings in children_by_parent.values():
                 siblings.sort(key=lambda row: row[2])
 
@@ -1908,7 +1942,6 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             add_children(None, None)
             self.accounts_table.expandAll()
         else:
-            parent_ids = {row[1] for row in rows if row[1] is not None}
             leaves = [row for row in rows if row[0] not in parent_ids]
             for row in sorted(leaves, key=lambda row: row[2]):
                 self.accounts_table.addTopLevelItem(make_item(row))
@@ -1924,6 +1957,19 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             self._render_person_fields()
         self._render_extra_fields()
         self._render_item_panel()
+
+    def _update_level_info(self) -> None:
+        if self._selected is None:
+            self.level_info_label.setText("")
+            return
+        level_no = self._current_level_no()
+        max_level_no = self._current_max_level_no
+        kind = "سطحِ آخر (قابلِ انتخاب در اسناد)" if level_no >= max_level_no else "سطحِ گروه‌بندی (والدِ سطحِ بعد)"
+        text = f"سطحِ {level_no} از {max_level_no} — {kind}"
+        parent_id = self.parent_combo.currentData()
+        if parent_id is not None:
+            text += f" — زیرمجموعهٔ {self.parent_combo.currentText()}"
+        self.level_info_label.setText(text)
 
     def _current_level_no(self) -> int:
         """سطحِ حسابی که در حالِ ساخت/ویرایشِ آن هستیم — از رویِ والدِ
@@ -2033,6 +2079,7 @@ class DetailDimensionsScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             if child.widget():
                 child.widget().deleteLater()
         self._extra_widgets = {}
+        self._update_level_info()
         if self._selected is None:
             return
         # طبقِ گزارشِ صریح: فیلدهایِ اختصاصیِ تعریف‌شده (برایِ همه‌یِ

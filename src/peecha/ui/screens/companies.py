@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -35,8 +36,11 @@ from peecha.ui.widgets import (
     FormDrawer,
     LayoutEditMixin,
     PersianDigitLineEdit,
+    confirm_and_delete,
+    delete_button,
     wrap_scrollable_with_footer,
 )
+from peecha.db.models.core import Company
 
 _COLUMNS = ["فعال", "زبانِ پیش‌فرض", "ارزِ پایه", "نامِ نمایشی", "کد"]
 
@@ -258,7 +262,10 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         cancel_button.clicked.connect(self._reset_form)
 
         layout.addStretch(1)
-        return wrap_scrollable_with_footer(panel, [save_button, cancel_button])
+        # R276: حذف (اگر سابقه دارد غیرفعال می‌شود)
+        delete = delete_button()
+        delete.clicked.connect(self._delete)
+        return wrap_scrollable_with_footer(panel, [save_button, cancel_button, delete])
 
     def refresh(self) -> None:
         self._currency_options = companies_service.list_currencies()
@@ -326,6 +333,16 @@ class CompaniesScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
 
     def _on_clone_checkbox_toggled(self, checked: bool) -> None:
         self._set_clone_options_visible(checked)
+
+    def _delete(self) -> None:
+        current = app_session.current_company
+        if current is not None and self._editing_id == current.company_id:
+            QMessageBox.warning(self, "شرکت", "شرکتِ جاری را نمی‌توان حذف کرد؛ ابتدا به شرکتِ دیگری بروید.")
+            return
+        if confirm_and_delete(self, "شرکت", self.display_name_field.text() or self.legal_name_field.text(), Company,
+                              self._editing_id, None):
+            self._reset_form()
+            self.refresh()
 
     def _reset_form(self) -> None:
         self._editing_id = None

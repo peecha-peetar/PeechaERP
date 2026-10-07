@@ -53,10 +53,25 @@ def list_terminals(company_id: int) -> list[PosTerminal]:
 
 def create_terminal(company_id: int, warehouse_id: int, code: str, name: str) -> int:
     with new_session() as session:
+        if session.scalar(select(PosTerminal.terminal_id).where(PosTerminal.company_id == company_id, PosTerminal.code == code)):
+            raise ValueError("این کدِ ترمینال قبلاً تعریف شده است.")
         row = PosTerminal(company_id=company_id, warehouse_id=warehouse_id, code=code, name=name)
         session.add(row)
         session.commit()
         return row.terminal_id
+
+
+def update_terminal(company_id: int, terminal_id: int, warehouse_id: int, name: str, is_active: bool = True) -> None:
+    """R276: ویرایشِ نام/انبار/فعال‌بودنِ ترمینال (کد ثابت می‌ماند)."""
+    name = (name or "").strip()
+    if not name or warehouse_id is None:
+        raise ValueError("نام و انبارِ ترمینال الزامی است.")
+    with new_session() as session:
+        row = session.get(PosTerminal, terminal_id)
+        if row is None or row.company_id != company_id:
+            raise ValueError("ترمینال نامعتبر است.")
+        row.name, row.warehouse_id, row.is_active = name, warehouse_id, is_active
+        session.commit()
 
 
 def get_open_session(terminal_id: int) -> PosSession | None:

@@ -31,11 +31,14 @@ from peecha.services import payroll_journal as journal_service
 from peecha.services import payroll_payslip as payslip_service
 from peecha.services import treasury as treasury_service
 from peecha.ui import report_export
+from peecha.db.models.payroll import PayrollPeriod
 from peecha.ui import theme
 from peecha.ui.widgets import (
     FieldHelpMixin,
     JalaliDateEdit,
     ZeroPaddedSpinBox,
+    confirm_and_delete,
+    delete_button,
     wrap_scrollable,
     wrap_scrollable_with_footer,
 )
@@ -120,7 +123,10 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
         create_period_button.setToolTip("دورهٔ تازه")
         create_period_button.clicked.connect(self._create_period)
 
-        return wrap_scrollable_with_footer(panel, [create_period_button])
+        # R276: حذفِ دورهٔ بی‌محاسبه (دورهٔ دارایِ اجرایِ حقوق قابلِ حذف نیست)
+        delete_period_button = delete_button("حذفِ دورهٔ انتخاب‌شده (اگر هنوز محاسبه‌ای ندارد)")
+        delete_period_button.clicked.connect(self._delete_period)
+        return wrap_scrollable_with_footer(panel, [create_period_button, delete_period_button])
 
     def _build_runs_panel(self) -> QWidget:
         panel = QWidget()
@@ -316,6 +322,14 @@ class PayrollRunScreen(FieldHelpMixin, QWidget):
 
     def _on_payslip_clicked(self, row: int, _column: int) -> None:
         self._selected_payslip_id = self.payslips_table.item(row, 0).data(Qt.UserRole)
+
+    def _delete_period(self) -> None:
+        period = next((p for p in self._periods if p.period_id == self._selected_period_id), None)
+        label = f"{period.jalali_year}/{period.jalali_month:02d}" if period else ""
+        if confirm_and_delete(self, "دورهٔ حقوق", numerals.to_persian_digits(label), PayrollPeriod, self._selected_period_id,
+                              _company_id()):
+            self._selected_period_id = None
+            self.refresh()
 
     def _create_period(self) -> None:
         company_id = _company_id()

@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
 from peecha import numerals, session
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
+from peecha.db.models.commercial import Branch, CancellationReason, PurchaseType
 from peecha.services import procurement_masters as masters_service
+from peecha.ui.widgets import confirm_and_delete, delete_button
 
 
 def _company_id() -> int | None:
@@ -70,7 +72,18 @@ class _CodeNameTab(QWidget):
         save_button.clicked.connect(self.save)
         form.addWidget(new_button)
         form.addWidget(save_button)
+        # R276: حذفِ ردیفِ انتخاب‌شده (اگر استفاده شده باشد غیرفعال می‌شود)
+        remove = delete_button()
+        remove.clicked.connect(self.delete)
+        form.addWidget(remove)
         layout.addLayout(form)
+
+    MODEL = None
+
+    def delete(self) -> None:
+        if confirm_and_delete(self, "حذف", self.name_field.text(), self.MODEL, self._editing_id, _company_id()):
+            self.clear_form()
+            self.refresh()
 
     def clear_form(self) -> None:
         self._editing_id = None
@@ -114,6 +127,8 @@ class _CodeNameTab(QWidget):
 
 
 class _PurchaseTypesTab(_CodeNameTab):
+    MODEL = PurchaseType
+
     def __init__(self) -> None:
         super().__init__(["کد", "عنوان", "اضطراری", "فعال"], with_emergency=True)
 
@@ -132,6 +147,8 @@ class _PurchaseTypesTab(_CodeNameTab):
 
 
 class _CancelReasonsTab(_CodeNameTab):
+    MODEL = CancellationReason
+
     def __init__(self) -> None:
         super().__init__(["کد", "عنوان", "فعال"], with_emergency=False)
 
@@ -150,6 +167,8 @@ class _CancelReasonsTab(_CodeNameTab):
 
 class _BranchesTab(_CodeNameTab):
     """R244: شعبه‌ها و اختصاصِ انبارها به شعبه (سندِ بدونِ شعبه، شعبهٔ انبارش را می‌گیرد)."""
+
+    MODEL = Branch
 
     def __init__(self) -> None:
         super().__init__(["کد", "نام", "فعال", "انبارها"], with_emergency=False)

@@ -7,13 +7,17 @@ import decimal
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -26,7 +30,8 @@ from peecha.services import commercial_settlements as settlements_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import sms_gateway as sms_gateway_service
 from peecha.services import voip_settings as voip_settings_service
-from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin
+from peecha.db.models.commercial import Channel, DistributionSettlementType
+from peecha.ui.widgets import FieldGrid, FieldSpec, LayoutEditMixin, confirm_and_delete, delete_button
 
 # طبقِ رفعِ باگِ واقعی («حسابِ مالياتِ خرید تفصیلی می‌خواهد ولی جایی
 # برایِ انتخابش نیست» -- هم‌الگو با inventory_settings._AccountMappingsTab):
@@ -37,6 +42,41 @@ _AUTO_SUPPLIED_DIMENSION_CODES = (
     dimensions_service.COST_CENTER_CODE, dimensions_service.PROJECT_CODE,
     dimensions_service.PROFIT_CENTER_CODE, dimensions_service.INVENTORY_ITEM_CODE,
 )
+
+
+def _list_table(headers: list[str], on_selected) -> QTableWidget:
+    """R276: جدولِ ردیف‌هایِ تعریف‌شده -- کلیک، ردیف را در فرمِ بالا برایِ ویرایش/حذف بار می‌کند."""
+    table = QTableWidget(0, len(headers))
+    table.setHorizontalHeaderLabels(headers)
+    table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+    table.setSelectionBehavior(QAbstractItemView.SelectRows)
+    table.verticalHeader().setVisible(False)
+    table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+    table.cellClicked.connect(lambda row, _col: on_selected(table.item(row, 0).data(Qt.UserRole)))
+    return table
+
+
+def _fill_table(table: QTableWidget, rows: list[list], keys: list) -> None:
+    table.setRowCount(len(rows))
+    for r, (values, key) in enumerate(zip(rows, keys)):
+        for c, value in enumerate(values):
+            item = QTableWidgetItem(str(value))
+            item.setData(Qt.UserRole, key)
+            table.setItem(r, c, item)
+
+
+def _selected_key(table: QTableWidget):
+    row = table.currentRow()
+    return table.item(row, 0).data(Qt.UserRole) if row >= 0 and table.item(row, 0) and table.selectedItems() else None
+
+
+def _save_button(slot) -> QPushButton:
+    button = QPushButton("💾")
+    button.setObjectName("iconButton")
+    button.setFixedWidth(44)
+    button.setToolTip("ذخیرهٔ تغییراتِ ردیفِ انتخاب‌شده")
+    button.clicked.connect(slot)
+    return button
 
 
 def _company_id() -> int | None:
@@ -635,11 +675,18 @@ class _ChannelsTab(QWidget):
         add_button.setToolTip("افزودن")
         add_button.clicked.connect(self._add)
         form.addWidget(add_button)
+        # R276: ویرایش/حذفِ کانالِ انتخاب‌شده (به‌جایِ فهرستِ متنیِ فقط‌خواندنی)
+        self.active_checkbox = QCheckBox("فعال")
+        self.active_checkbox.setChecked(True)
+        form.addWidget(self.active_checkbox)
+        form.addWidget(_save_button(self._update))
+        delete = delete_button("حذفِ کانالِ انتخاب‌شده")
+        delete.clicked.connect(self._delete)
+        form.addWidget(delete)
         layout.addLayout(form)
 
-        self.list_label = QLabel("")
-        self.list_label.setWordWrap(True)
-        layout.addWidget(self.list_label)
+        self.table = _list_table(["کد", "نام", "نوع", "وضعیت"], self._on_selected)
+        layout.addWidget(self.table)
 
         # طبقِ درخواستِ صریح («در تنظیماتِ موبایل مرکزِ هزینه/پروژه تعیین
         # شود»): سفارش‌هایِ ثبت‌شده از موبایل (پخشِ گرم) اگر به حسابی با
@@ -694,10 +741,9 @@ class _ChannelsTab(QWidget):
         if company_id is None:
             return
         channels = pricing_service.list_channels(company_id)
-        self.list_label.setText(
-            "\n".join(f"{ch.channel_code} — {ch.name} ({self._CHANNEL_TYPES.get(ch.channel_type_code, ch.channel_type_code)})" for ch in channels)
-            or "هنوز کانالی تعریف نشده است."
-        )
+        self._channels = channels
+        _fill_table(self.table, [[ch.channel_code, ch.name, self._CHANNEL_TYPES.get(ch.channel_type_code, ch.channel_type_code),
+                                  "فعال" if ch.is_active else "غیرفعال"] for ch in channels], [ch.channel_code for ch in channels])
         self.status_label.setText("")
 
         current_channel = self.defaults_channel_combo.currentData()
@@ -798,6 +844,34 @@ class _ChannelsTab(QWidget):
         )
         self.status_label.setText("لیست‌قیمت/تخفیفِ پیش‌فرضِ این کانال ذخیره شد.")
 
+    def _on_selected(self, code) -> None:
+        ch = next((c for c in self._channels if c.channel_code == code), None)
+        if ch is None:
+            return
+        self.code_field.setText(ch.channel_code)
+        self.name_field.setText(ch.name)
+        self.type_combo.setCurrentIndex(max(0, self.type_combo.findData(ch.channel_type_code)))
+        self.active_checkbox.setChecked(ch.is_active)
+
+    def _update(self) -> None:
+        code = _selected_key(self.table)
+        if code is None:
+            self.status_label.setText("ابتدا یک کانال را از جدول انتخاب کنید.")
+            return
+        try:
+            pricing_service.update_channel(_company_id(), code, self.name_field.text(), self.type_combo.currentData(),
+                                           self.active_checkbox.isChecked())
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.refresh()
+        self.status_label.setText("کانال ذخیره شد.")
+
+    def _delete(self) -> None:
+        code = _selected_key(self.table)
+        confirm_and_delete(self, "کانالِ فروش", self.name_field.text(), Channel,
+                           (code, _company_id()) if code else None, _company_id(), self.refresh)
+
     def _add(self) -> None:
         company_id = _company_id()
         code = self.code_field.text().strip().upper()
@@ -855,27 +929,57 @@ class _DistributionSettlementTypesTab(QWidget):
         add_button.setToolTip("افزودن")
         add_button.clicked.connect(self._add)
         form.addWidget(add_button)
+        self.active_checkbox = QCheckBox("فعال")
+        self.active_checkbox.setChecked(True)
+        form.addWidget(self.active_checkbox)
+        form.addWidget(_save_button(self._update))
+        delete = delete_button("حذفِ نوعِ تسویهٔ انتخاب‌شده")
+        delete.clicked.connect(self._delete)
+        form.addWidget(delete)
         layout.addLayout(form)
 
-        self.list_label = QLabel("")
-        self.list_label.setWordWrap(True)
-        layout.addWidget(self.list_label)
+        self.table = _list_table(["کد", "نام", "وضعیت"], self._on_selected)
+        layout.addWidget(self.table)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusError")
         layout.addWidget(self.status_label)
-        layout.addStretch(1)
 
     def refresh(self) -> None:
         company_id = _company_id()
         if company_id is None:
             return
-        types = pricing_service.list_distribution_settlement_types(company_id)
-        self.list_label.setText(
-            "\n".join(f"{t.code} — {t.name}" + ("" if t.is_active else " (غیرِفعال)") for t in types)
-            or "هنوز نوعِ تسویه‌ای تعریف نشده است."
-        )
+        self._types = pricing_service.list_distribution_settlement_types(company_id)
+        _fill_table(self.table, [[t.code, t.name, "فعال" if t.is_active else "غیرفعال"] for t in self._types],
+                    [t.code for t in self._types])
         self.status_label.setText("")
+
+    def _on_selected(self, code) -> None:
+        t = next((x for x in self._types if x.code == code), None)
+        if t is None:
+            return
+        self.code_field.setText(t.code)
+        self.name_field.setText(t.name)
+        self.active_checkbox.setChecked(t.is_active)
+
+    def _update(self) -> None:
+        code = _selected_key(self.table)
+        if code is None:
+            self.status_label.setText("ابتدا یک ردیف را از جدول انتخاب کنید.")
+            return
+        try:
+            pricing_service.update_distribution_settlement_type(_company_id(), code, self.name_field.text(),
+                                                                self.active_checkbox.isChecked())
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.refresh()
+        self.status_label.setText("ذخیره شد.")
+
+    def _delete(self) -> None:
+        code = _selected_key(self.table)
+        confirm_and_delete(self, "نوعِ تسویهٔ پخش", self.name_field.text(), DistributionSettlementType,
+                           (code, _company_id()) if code else None, _company_id(), self.refresh)
 
     def _add(self) -> None:
         company_id = _company_id()

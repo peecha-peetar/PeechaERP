@@ -724,7 +724,7 @@ def get_employee_by_personnel_detail_account_id(personnel_detail_account_id: int
     return get_employee(employee_id)
 
 
-def list_personnel_detail_accounts(company_id: int) -> list[dict]:
+def list_personnel_detail_accounts(company_id: int, all_levels: bool = False) -> list[dict]:
     """جایگزینِ dimensions_service.list_personnel در _PERSON_GROUP_META
     (detail_dimensions.py) — همان ردیف‌هایِ تفصیلیِ گروهِ PERSONNEL را با
     اطلاعاتِ قراردادِ فعال (واحدِ سازمانی/پست/حقوقِ پایه/نوعِ استخدام) و
@@ -759,7 +759,7 @@ def list_personnel_detail_accounts(company_id: int) -> list[dict]:
         "position_id": None, "position_name": None, "employment_type_lookup_id": None, "base_salary": None,
     }
     result = []
-    for p in dimensions_service.list_personnel(company_id):
+    for p in dimensions_service.list_personnel(company_id, all_levels):
         merged = dict(p)
         merged.update(by_detail_account_id.get(p["detail_account_id"], _blank))
         result.append(merged)

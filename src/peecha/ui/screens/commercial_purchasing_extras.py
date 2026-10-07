@@ -31,7 +31,10 @@ from peecha.services import commercial_documents as documents_service
 from peecha.services import commercial_purchasing as purchasing_service
 from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, wrap_scrollable
+from peecha.db.models.commercial import VendorRebateAgreement, VendorRebateTier
+from peecha.ui.widgets import (
+    FieldGrid, FieldHelpMixin, FieldSpec, JalaliDateEdit, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable,
+)
 
 _REBATE_BASIS_LABELS = {"FLAT_PERCENT": "درصدِ ثابت", "VOLUME_TIER": "پلکانیِ حجمی"}
 _ACCRUAL_STATUS_LABELS = {"ACCRUING": "درحالِ تجمیع", "SETTLED": "تسویه‌شده"}
@@ -110,13 +113,27 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         add_agreement_button.setFixedWidth(48)
         add_agreement_button.setToolTip("قراردادِ تازه")
         add_agreement_button.clicked.connect(self._add_agreement)
-        agreement_form.addWidget(add_agreement_button)
+        # R276: ویرایش/حذفِ قراردادِ انتخاب‌شده
+        agreement_buttons = QHBoxLayout()
+        agreement_buttons.addWidget(add_agreement_button)
+        save_agreement_button = QPushButton("💾")
+        save_agreement_button.setObjectName("iconButton")
+        save_agreement_button.setFixedWidth(44)
+        save_agreement_button.setToolTip("ذخیرهٔ تغییراتِ قراردادِ انتخاب‌شده")
+        save_agreement_button.clicked.connect(self._update_agreement)
+        agreement_buttons.addWidget(save_agreement_button)
+        delete_agreement_button = delete_button("حذفِ قراردادِ انتخاب‌شده (با پله‌هایش)")
+        delete_agreement_button.clicked.connect(self._delete_agreement)
+        agreement_buttons.addWidget(delete_agreement_button)
+        agreement_buttons.addStretch(1)
+        agreement_form.addLayout(agreement_buttons)
         left.addLayout(agreement_form)
 
         left.addWidget(QLabel("پله‌هایِ قراردادِ انتخاب‌شده"))
         self.tier_table = QTableWidget(0, 2)
         self.tier_table.setHorizontalHeaderLabels(["حداقلِ خرید", "درصدِ ریبیت"])
         self.tier_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tier_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tier_table.verticalHeader().setVisible(False)
         self.tier_table.setMaximumHeight(120)
         left.addWidget(self.tier_table)
@@ -133,6 +150,9 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         add_tier_button.setToolTip("پله")
         add_tier_button.clicked.connect(self._add_tier)
         tier_form.addWidget(add_tier_button)
+        delete_tier_button = delete_button("حذفِ پلهٔ انتخاب‌شده")
+        delete_tier_button.clicked.connect(self._delete_tier)
+        tier_form.addWidget(delete_tier_button)
         left.addLayout(tier_form)
         outer.addLayout(left, stretch=3)
 
@@ -186,6 +206,12 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
 
     def _on_agreement_selected(self, row: int, _column: int) -> None:
         self._selected_agreement_id = self.agreement_table.item(row, 0).data(Qt.UserRole)
+        agreement = next((a for a in getattr(self, "_agreements", []) if a.agreement_id == self._selected_agreement_id), None)
+        if agreement is not None:
+            for combo, value in ((self.rebate_supplier_combo, agreement.supplier_detail_account_id),
+                                 (self.rebate_item_combo, agreement.item_id), (self.rebate_basis_combo, agreement.rebate_basis_code)):
+                combo.setCurrentIndex(max(0, combo.findData(value)))
+            self.rebate_valid_from_field.setDate(agreement.valid_from)
         self._refresh_tiers()
         self._refresh_accruals()
 
@@ -205,6 +231,32 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         self.rebate_status_label.setText("")
         self.refresh()
 
+    def _update_agreement(self) -> None:
+        if self._selected_agreement_id is None:
+            self.rebate_status_label.setText("ابتدا یک قرارداد را از فهرست انتخاب کنید.")
+            return
+        try:
+            purchasing_service.update_rebate_agreement(
+                self._selected_agreement_id, self.rebate_basis_combo.currentData(), self.rebate_valid_from_field.date(),
+                item_id=self.rebate_item_combo.currentData())
+        except ValueError as exc:
+            self.rebate_status_label.setText(str(exc))
+            return
+        self.rebate_status_label.setText("قرارداد ذخیره شد.")
+        self.refresh()
+
+    def _delete_agreement(self) -> None:
+        if confirm_and_delete(self, "قراردادِ ریبیت", "قراردادِ انتخاب‌شده", VendorRebateAgreement, self._selected_agreement_id,
+                              None, children=((VendorRebateTier, "agreement_id"),)):
+            self._selected_agreement_id = None
+            self.refresh()
+            self._refresh_tiers()
+
+    def _delete_tier(self) -> None:
+        row = self.tier_table.currentRow()
+        tier_id = self.tier_table.item(row, 0).data(Qt.UserRole) if row >= 0 and self.tier_table.item(row, 0) else None
+        confirm_and_delete(self, "پلهٔ ریبیت", "پلهٔ انتخاب‌شده", VendorRebateTier, tier_id, None, self._refresh_tiers)
+
     def _refresh_tiers(self) -> None:
         self.tier_table.setRowCount(0)
         if self._selected_agreement_id is None:
@@ -212,7 +264,9 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
         tiers = purchasing_service.list_rebate_tiers(self._selected_agreement_id)
         self.tier_table.setRowCount(len(tiers))
         for row_index, t in enumerate(tiers):
-            self.tier_table.setItem(row_index, 0, QTableWidgetItem(str(t.min_purchase_amount)))
+            first = QTableWidgetItem(str(t.min_purchase_amount))
+            first.setData(Qt.UserRole, t.tier_id)
+            self.tier_table.setItem(row_index, 0, first)
             self.tier_table.setItem(row_index, 1, QTableWidgetItem(str(t.rebate_percent)))
 
     def _add_tier(self) -> None:
@@ -322,6 +376,7 @@ class CommercialPurchasingExtrasScreen(FieldHelpMixin, LayoutEditMixin, QWidget)
             return
         suppliers_by_id = {s["detail_account_id"]: s for s in self._suppliers}
         agreements = purchasing_service.list_rebate_agreements(company_id)
+        self._agreements = agreements
         self.agreement_table.setRowCount(len(agreements))
         for row_index, a in enumerate(agreements):
             supplier = suppliers_by_id.get(a.supplier_detail_account_id)

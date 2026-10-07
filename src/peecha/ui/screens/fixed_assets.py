@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from peecha import numerals, session as app_session
+from peecha.db.models import fixed_assets as fam
 from peecha.services.fixed_assets import approval
 from peecha.services.fixed_assets import assets as fa
 from peecha.services.fixed_assets import common as fac
@@ -31,7 +32,7 @@ from peecha.ui import theme
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.purchase_dashboards import _ClickableKpiCard, _ProcurementDashboardBase, format_kpi
-from peecha.ui.widgets import FormDrawer, JalaliDateEdit
+from peecha.ui.widgets import FormDrawer, JalaliDateEdit, confirm_and_delete, delete_button
 
 ZERO = decimal.Decimal(0)
 
@@ -87,6 +88,12 @@ def table(headers: list[str]) -> QTableWidget:
     t.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
     t.horizontalHeader().setStretchLastSection(True)
     return t
+
+
+def selected_data(t: QTableWidget):
+    """شناسهٔ ردیفِ انتخاب‌شده (UserRoleِ ستونِ اول) یا None."""
+    items = t.selectedItems()
+    return t.item(items[0].row(), 0).data(Qt.UserRole) if items else None
 
 
 def fill(t: QTableWidget, rows: list[list], data: list | None = None) -> None:
@@ -1039,8 +1046,13 @@ class SetupScreen(QWidget):
         self.cat_save.setObjectName("primaryButton")
         self.cat_new.clicked.connect(self._cat_clear)
         self.cat_save.clicked.connect(self.save_category)
+        # R276: حذفِ طبقه (اگر در دارایی‌ها استفاده شده باشد غیرفعال می‌شود)
+        self.cat_delete = delete_button("حذفِ طبقهٔ انتخاب‌شده")
+        self.cat_delete.clicked.connect(lambda: confirm_and_delete(
+            self, "طبقهٔ دارایی", self.cat_name.text(), fam.AssetCategory, self._cat_id, company_id(), self.refresh))
         brow.addWidget(self.cat_new)
         brow.addWidget(self.cat_save)
+        brow.addWidget(self.cat_delete)
         self.cat_form.addRow(brow)
         cl.addWidget(form_box, stretch=1)
         # R275: فرمِ طبقه کنارِ فهرست فقط با کلیکِ ردیف یا «جدید» باز می‌شود
@@ -1051,15 +1063,23 @@ class SetupScreen(QWidget):
         loc = QWidget()
         ll = QVBoxLayout(loc)
         self.loc_table = table(["کد", "نام", "نوع", "مسیر"])
+        # R276: انتخابِ ردیف برایِ ویرایش/حذف
+        self.loc_table.itemSelectionChanged.connect(self._loc_selected)
         ll.addWidget(self.loc_table)
         lrow = QHBoxLayout()
         self.loc_code, self.loc_name = QLineEdit(), QLineEdit()
         self.loc_type = combo([("سایت/کارخانه", "SITE"), ("ساختمان", "BUILDING"), ("طبقه", "FLOOR"), ("اتاق", "ROOM"),
                                ("خطِ تولید", "LINE"), ("سایر", "OTHER")])
         self.loc_parent = QComboBox()
-        add_loc = QPushButton("افزودنِ محل")
+        add_loc = QPushButton("ذخیرهٔ محل")
         add_loc.clicked.connect(self.save_location)
-        for w in (QLabel("کد"), self.loc_code, QLabel("نام"), self.loc_name, self.loc_type, QLabel("زیرِ"), self.loc_parent, add_loc):
+        new_loc = QPushButton("محلِ جدید")
+        new_loc.clicked.connect(self._loc_clear)
+        del_loc = delete_button("حذفِ محلِ انتخاب‌شده")
+        del_loc.clicked.connect(lambda: confirm_and_delete(
+            self, "محلِ دارایی", self.loc_name.text(), fam.AssetLocation, self._loc_id, company_id(), self.refresh))
+        for w in (QLabel("کد"), self.loc_code, QLabel("نام"), self.loc_name, self.loc_type, QLabel("زیرِ"), self.loc_parent, add_loc,
+                  new_loc, del_loc):
             lrow.addWidget(w)
         ll.addLayout(lrow)
         self.tabs.addTab(loc, "محل‌ها")
@@ -1067,12 +1087,18 @@ class SetupScreen(QWidget):
         grp = QWidget()
         gl = QVBoxLayout(grp)
         self.grp_table = table(["کد", "نام"])
+        self.grp_table.itemSelectionChanged.connect(self._grp_selected)
         gl.addWidget(self.grp_table)
         grow = QHBoxLayout()
         self.grp_code, self.grp_name = QLineEdit(), QLineEdit()
-        add_grp = QPushButton("افزودنِ گروه")
+        add_grp = QPushButton("ذخیرهٔ گروه")
         add_grp.clicked.connect(self.save_group)
-        for w in (QLabel("کد"), self.grp_code, QLabel("نام"), self.grp_name, add_grp):
+        new_grp = QPushButton("گروهِ جدید")
+        new_grp.clicked.connect(self._grp_clear)
+        del_grp = delete_button("حذفِ گروهِ انتخاب‌شده")
+        del_grp.clicked.connect(lambda: confirm_and_delete(
+            self, "گروهِ دارایی", self.grp_name.text(), fam.AssetGroup, self._grp_id, company_id(), self.refresh))
+        for w in (QLabel("کد"), self.grp_code, QLabel("نام"), self.grp_name, add_grp, new_grp, del_grp):
             grow.addWidget(w)
         gl.addLayout(grow)
         self.tabs.addTab(grp, "گروه‌ها")
@@ -1092,6 +1118,8 @@ class SetupScreen(QWidget):
         self.tabs.addTab(pol, "سیاست‌ها")
         self._cat_id = None
         self._cats = []
+        self._loc_id = self._grp_id = None
+        self._locs, self._grps = [], []
 
     def refresh(self) -> None:
         cid = company_id()
@@ -1118,12 +1146,17 @@ class SetupScreen(QWidget):
         with new_session() as session:
             paths = {loc.location_id: fac.location_path(session, loc.location_id) for loc in locs}
         types = {"SITE": "سایت", "BUILDING": "ساختمان", "FLOOR": "طبقه", "ROOM": "اتاق", "LINE": "خطِ تولید", "OTHER": "سایر"}
-        fill(self.loc_table, [[loc.code, loc.name, types.get(loc.location_type, ""), paths[loc.location_id]] for loc in locs])
+        self._locs = locs
+        fill(self.loc_table, [[loc.code, loc.name, types.get(loc.location_type, ""), paths[loc.location_id]] for loc in locs],
+             [loc.location_id for loc in locs])
         self.loc_parent.clear()
         self.loc_parent.addItem("— ریشه —", None)
         for loc in locs:
             self.loc_parent.addItem(P(f"{loc.code} — {loc.name}"), loc.location_id)
-        fill(self.grp_table, [[g.code, g.name] for g in fac.list_groups(cid)])
+        self._grps = fac.list_groups(cid)
+        fill(self.grp_table, [[g.code, g.name] for g in self._grps], [g.group_id for g in self._grps])
+        self._loc_clear()
+        self._grp_clear()
         s = fac.get_settings(cid)
         set_combo(self.start_rule, s.depreciation_start_rule)
         self.improve_min.setText(P(s.improvement_capitalize_min.normalize()))
@@ -1132,6 +1165,36 @@ class SetupScreen(QWidget):
         allowed = can(self.FORM, "EDIT")
         for b in self.findChildren(QPushButton):
             b.setEnabled(allowed)
+
+    def _loc_clear(self) -> None:
+        self._loc_id = None
+        self.loc_code.clear()
+        self.loc_name.clear()
+
+    def _loc_selected(self) -> None:
+        loc_id = selected_data(self.loc_table)
+        loc = next((x for x in self._locs if x.location_id == loc_id), None)
+        if loc is None:
+            return
+        self._loc_id = loc_id
+        self.loc_code.setText(loc.code)
+        self.loc_name.setText(loc.name)
+        set_combo(self.loc_type, loc.location_type)
+        set_combo(self.loc_parent, loc.parent_location_id)
+
+    def _grp_clear(self) -> None:
+        self._grp_id = None
+        self.grp_code.clear()
+        self.grp_name.clear()
+
+    def _grp_selected(self) -> None:
+        grp_id = selected_data(self.grp_table)
+        grp = next((x for x in self._grps if x.group_id == grp_id), None)
+        if grp is None:
+            return
+        self._grp_id = grp_id
+        self.grp_code.setText(grp.code)
+        self.grp_name.setText(grp.name)
 
     def _cat_clear(self) -> None:
         self._cat_id = None
@@ -1175,7 +1238,7 @@ class SetupScreen(QWidget):
     def save_location(self) -> bool:
         try:
             fac.save_location(company_id(), self.loc_code.text(), self.loc_name.text(), self.loc_type.currentData(),
-                              self.loc_parent.currentData())
+                              self.loc_parent.currentData(), location_id=self._loc_id)
         except ValueError as exc:
             theme.set_status_label(self.status_label, str(exc), ok=False)
             return False
@@ -1186,7 +1249,7 @@ class SetupScreen(QWidget):
 
     def save_group(self) -> bool:
         try:
-            fac.save_group(company_id(), self.grp_code.text(), self.grp_name.text())
+            fac.save_group(company_id(), self.grp_code.text(), self.grp_name.text(), self._grp_id)
         except ValueError as exc:
             theme.set_status_label(self.status_label, str(exc), ok=False)
             return False

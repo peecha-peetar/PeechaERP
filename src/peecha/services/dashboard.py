@@ -438,3 +438,72 @@ def hr_summary(company_id: int | None) -> HrSummary:
             )
         ) or 0
     return summary
+
+
+@dataclass
+class ExecutiveOverview:
+    """R276: نمایِ مدیریتیِ تبِ «کلی» -- از همان سرویس‌هایِ ماژول‌ها، بدونِ محاسبهٔ موازی."""
+    sales_this_month: decimal.Decimal = _ZERO
+    purchases_this_month: decimal.Decimal = _ZERO
+    receivables: decimal.Decimal = _ZERO
+    payables: decimal.Decimal = _ZERO
+    inventory_value: decimal.Decimal = _ZERO
+    received_checks_amount: decimal.Decimal = _ZERO
+    open_production_orders: int = 0
+    fixed_assets_book_value: decimal.Decimal = _ZERO
+
+
+def executive_overview(company_id: int | None) -> ExecutiveOverview:
+    result = ExecutiveOverview()
+    if company_id is None:
+        return result
+    from peecha.db.models.fixed_assets import Asset
+    from peecha.db.models.production import ProductionOrder
+    from peecha.services.fixed_assets.common import CLOSED_STATUSES
+    from peecha.services.production.dashboard import OPEN
+
+    sales = commercial_summary(company_id, "SALES_INVOICE")
+    purchases = commercial_summary(company_id, "PURCHASE_INVOICE")
+    result.sales_this_month = sales.this_month_total
+    result.purchases_this_month = purchases.this_month_total
+    result.receivables = sales.unsettled_amount
+    result.payables = purchases.unsettled_amount
+    result.inventory_value = inventory_summary(company_id).total_value
+    result.received_checks_amount = treasury_summary(company_id).pending_received_checks_amount
+    with new_session() as db_session:
+        result.open_production_orders = db_session.scalar(
+            select(func.count()).select_from(ProductionOrder).where(
+                ProductionOrder.company_id == company_id, ProductionOrder.status_code.in_(OPEN)
+            )
+        ) or 0
+        result.fixed_assets_book_value = db_session.scalar(
+            select(func.coalesce(func.sum(
+                Asset.gross_cost - Asset.accumulated_depreciation - Asset.accumulated_impairment
+            ), 0)).where(Asset.company_id == company_id, Asset.status_code.notin_(CLOSED_STATUSES))
+        ) or _ZERO
+    return result
+
+
+def sales_vs_purchases_per_month(company_id: int | None, months: int = 6) -> tuple[list[str], dict[str, list]]:
+    labels, sales = commercial_amount_per_month(company_id, "SALES_INVOICE", months)
+    _labels, purchases = commercial_amount_per_month(company_id, "PURCHASE_INVOICE", months)
+    return labels, {"فروش": sales, "خرید": purchases}
+
+
+def employees_by_org_unit(company_id: int | None, limit: int = 8) -> list[tuple[str, int]]:
+    if company_id is None:
+        return []
+    from peecha.db.models.hr import EmploymentContract, OrganizationalUnit
+
+    with new_session() as db_session:
+        rows = db_session.execute(
+            select(OrganizationalUnit.name, func.count(func.distinct(EmploymentContract.employee_id)))
+            .join(EmploymentContract, EmploymentContract.org_unit_id == OrganizationalUnit.org_unit_id)
+            .join(Employee, Employee.employee_id == EmploymentContract.employee_id)
+            .where(OrganizationalUnit.company_id == company_id, EmploymentContract.status == "ACTIVE",
+                   Employee.status == "ACTIVE")
+            .group_by(OrganizationalUnit.name)
+            .order_by(func.count(func.distinct(EmploymentContract.employee_id)).desc())
+            .limit(limit)
+        ).all()
+    return [(name, count) for name, count in rows]

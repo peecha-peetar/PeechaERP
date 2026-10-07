@@ -639,6 +639,21 @@ def _validate_code_length(
             raise ValueError(f"کدِ سطحِ {level_no} باید حداکثر {range_config.range_to} باشد.")
 
 
+def _ensure_code_free(session, company_id: int, dimension_type_id: int, code: str, exclude_id: int | None = None) -> None:
+    """کدِ هر حساب در کلِ نوع‌بُعد یکتاست (uq_detail_accounts)، نه فقط در سطحِ خودش؛
+    برایِ اشخاص یعنی مشتری/تامین‌کننده/پرسنل هم کدِ مشترک ندارند."""
+    query = select(DetailAccount).where(
+        DetailAccount.company_id == company_id,
+        DetailAccount.dimension_type_id == dimension_type_id,
+        DetailAccount.code == code,
+    )
+    if exclude_id is not None:
+        query = query.where(DetailAccount.detail_account_id != exclude_id)
+    other = session.scalars(query.limit(1)).first()
+    if other is not None:
+        raise ValueError(f"کدِ «{code}» قبلاً برایِ «{other.name or other.code}» (سطحِ {other.level_no}) ثبت شده؛ کدِ دیگری وارد کنید.")
+
+
 def _get_group_max_level_no(session, dimension_type_id: int, person_group_id: int = 0) -> int:
     """سقفِ تعدادِ سطحِ سلسله‌مراتبِ این گروه — برایِ مشتری/تامین‌کننده/پرسنل
     از acc.person_groups.max_level_no، برایِ بقیه‌ی گروه‌ها از
@@ -709,7 +724,19 @@ def suggest_next_code(company_id: int, dimension_type_id: int, level_no: int, pe
 
         digit_config = session.get(DetailLevelDigitConfig, (company_id, level_no))
         code_length = digit_config.code_length if digit_config is not None else None
-        return str(next_value).zfill(code_length) if code_length else str(next_value)
+
+        def fmt(value: int) -> str:
+            return str(value).zfill(code_length) if code_length else str(value)
+
+        # کد در کلِ نوع‌بُعد یکتاست؛ کدی که سطح/گروهِ دیگری گرفته پیشنهاد نشود.
+        used_codes = set(session.scalars(
+            select(DetailAccount.code).where(
+                DetailAccount.company_id == company_id, DetailAccount.dimension_type_id == dimension_type_id
+            )
+        ).all())
+        while fmt(next_value) in used_codes:
+            next_value += 1
+        return fmt(next_value)
 
 
 def create_detail_account(
@@ -741,6 +768,7 @@ def create_detail_account(
             level_no = parent.level_no + 1
 
         _validate_code_length(session, company_id, dimension_type_id, level_no, segment_code)
+        _ensure_code_free(session, company_id, dimension_type_id, segment_code)
 
         detail_account = DetailAccount(
             company_id=company_id,
@@ -772,6 +800,7 @@ def update_detail_account(
             raise ValueError("حسابِ تفصیلی نامعتبر است.")
         segment_code = code.strip()
         _validate_code_length(session, company_id, detail_account.dimension_type_id, detail_account.level_no, segment_code)
+        _ensure_code_free(session, company_id, detail_account.dimension_type_id, segment_code, detail_account_id)
         detail_account.code = segment_code
         detail_account.name = name or None
         detail_account.is_active = is_active
@@ -1715,7 +1744,9 @@ def _group_row_to_person_row(
     return row
 
 
-def _list_group_persons(company_id: int, group_code: str, detail_model, extra_field_names: tuple[str, ...]) -> list[dict]:
+def _list_group_persons(
+    company_id: int, group_code: str, detail_model, extra_field_names: tuple[str, ...], all_levels: bool = False
+) -> list[dict]:
     """طبقِ رفعِ باگِ واقعی: این تابع پایه‌یِ list_customers/list_suppliers/
     list_personnel است — همه‌جایِ برنامه (فرمِ سند خرید/فروش، تبِ
     تامین‌کننده‌یِ فرمِ کالا، فروشِ حضوری، ...) برایِ فهرستِ *انتخابیِ*
@@ -1738,7 +1769,8 @@ def _list_group_persons(company_id: int, group_code: str, detail_model, extra_fi
             .order_by(DetailAccount.code)
         ).all()
         parent_ids = {r.parent_detail_account_id for r in rows if r.parent_detail_account_id is not None}
-        leaf_rows = [r for r in rows if r.is_active and r.detail_account_id not in parent_ids]
+        # all_levels: فرمِ تعریف به همهٔ سطوح (والدها و غیرفعال‌ها) نیاز دارد.
+        leaf_rows = rows if all_levels else [r for r in rows if r.is_active and r.detail_account_id not in parent_ids]
         full_codes = _compute_full_codes(rows)
         detail_account_ids = [r.detail_account_id for r in leaf_rows]
         extras_by_id = {
@@ -1785,6 +1817,7 @@ def _create_group_person(
             level_no = parent.level_no + 1
 
         _validate_code_length(session, company_id, dimension_type_id, level_no, code.strip(), person_group_id=person_group_id)
+        _ensure_code_free(session, company_id, dimension_type_id, code.strip())
 
         detail_account = DetailAccount(
             company_id=company_id,
@@ -1826,6 +1859,7 @@ def _update_group_person(
             code.strip(),
             person_group_id=detail_account.person_group_id or 0,
         )
+        _ensure_code_free(session, company_id, detail_account.dimension_type_id, code.strip(), detail_account_id)
 
         detail_account.code = code.strip()
         detail_account.name = name.strip() or None
@@ -1891,8 +1925,8 @@ _PERSONNEL_FIELDS = (
 )
 
 
-def list_customers(company_id: int) -> list[dict]:
-    return _list_group_persons(company_id, CUSTOMER_GROUP_CODE, CustomerDetail, _CUSTOMER_FIELDS)
+def list_customers(company_id: int, all_levels: bool = False) -> list[dict]:
+    return _list_group_persons(company_id, CUSTOMER_GROUP_CODE, CustomerDetail, _CUSTOMER_FIELDS, all_levels)
 
 
 def create_customer(
@@ -1924,8 +1958,8 @@ def delete_customer(detail_account_id: int, company_id: int) -> None:
     _delete_group_person(detail_account_id, company_id, CustomerDetail)
 
 
-def list_suppliers(company_id: int) -> list[dict]:
-    return _list_group_persons(company_id, SUPPLIER_GROUP_CODE, SupplierDetail, _SUPPLIER_FIELDS)
+def list_suppliers(company_id: int, all_levels: bool = False) -> list[dict]:
+    return _list_group_persons(company_id, SUPPLIER_GROUP_CODE, SupplierDetail, _SUPPLIER_FIELDS, all_levels)
 
 
 def create_supplier(
@@ -1957,8 +1991,8 @@ def delete_supplier(detail_account_id: int, company_id: int) -> None:
     _delete_group_person(detail_account_id, company_id, SupplierDetail)
 
 
-def list_personnel(company_id: int) -> list[dict]:
-    return _list_group_persons(company_id, PERSONNEL_GROUP_CODE, PersonnelDetail, _PERSONNEL_FIELDS)
+def list_personnel(company_id: int, all_levels: bool = False) -> list[dict]:
+    return _list_group_persons(company_id, PERSONNEL_GROUP_CODE, PersonnelDetail, _PERSONNEL_FIELDS, all_levels)
 
 
 def create_personnel(

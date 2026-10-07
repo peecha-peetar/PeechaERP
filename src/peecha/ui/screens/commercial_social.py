@@ -26,7 +26,10 @@ from peecha import numerals
 from peecha import session as app_session
 from peecha.services import commercial_social as social_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldHelpMixin, JalaliDateEdit, LayoutEditMixin, wrap_scrollable
+from peecha.db.models.commercial import ContentCalendarPost, SocialConnection
+from peecha.ui.widgets import (
+    FieldHelpMixin, JalaliDateEdit, LayoutEditMixin, confirm_and_delete, delete_button, row_actions, wrap_scrollable,
+)
 
 _PLATFORM_LABELS = {"TELEGRAM": "تلگرام", "BALE": "بله"}
 _POST_STATUS_LABELS = {"SCHEDULED": "زمان‌بندی‌شده", "SENT": "ارسال‌شده", "FAILED": "ناموفق", "CANCELED": "لغوشده"}
@@ -106,6 +109,10 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         test_connection_button.setToolTip("آزمایشِ اتصالِ انتخاب‌شده")
         test_connection_button.clicked.connect(self._test_connection)
         form.addWidget(test_connection_button)
+        # R276: حذفِ اتصالِ انتخاب‌شده
+        delete_connection_button = delete_button("حذفِ اتصالِ انتخاب‌شده")
+        delete_connection_button.clicked.connect(self._delete_connection)
+        form.addWidget(delete_connection_button)
         outer.addLayout(form)
 
         self.social_status_label = QLabel("")
@@ -260,12 +267,26 @@ class CommercialSocialScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
             ]
             for col_index, value in enumerate(values):
                 self.calendar_table.setItem(row_index, col_index, QTableWidgetItem(value))
+            actions = []
             if post.status_code == "SCHEDULED":
                 send_now_button = QPushButton("📤")
                 send_now_button.setObjectName("primaryIconButton")
                 send_now_button.setToolTip("ارسالِ الان")
                 send_now_button.clicked.connect(lambda _checked=False, post_id=post.post_id: self._send_post_now(post_id))
-                self.calendar_table.setCellWidget(row_index, 5, send_now_button)
+                actions.append(send_now_button)
+            remove = delete_button("حذفِ پست از تقویم")
+            remove.clicked.connect(lambda _checked=False, p=post: confirm_and_delete(
+                self, "پست", p.title or "", ContentCalendarPost, p.post_id, self._company_id(), self._refresh_calendar))
+            actions.append(remove)
+            self.calendar_table.setCellWidget(row_index, 5, row_actions(*actions))
+
+    def _delete_connection(self) -> None:
+        connection_id = getattr(self, "_selected_connection_id", None)
+        connection = next((c for c in self._connections if c.connection_id == connection_id), None)
+        if confirm_and_delete(self, "اتصالِ شبکهٔ اجتماعی", connection.display_name if connection else "", SocialConnection,
+                              connection_id, self._company_id()):
+            self._selected_connection_id = None
+            self.refresh()
 
     def _add_post(self) -> None:
         company_id = self._company_id()

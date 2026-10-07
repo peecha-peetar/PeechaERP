@@ -89,6 +89,19 @@ def create_rebate_agreement(supplier_detail_account_id: int, rebate_basis_code: 
         return row.agreement_id
 
 
+def update_rebate_agreement(agreement_id: int, rebate_basis_code: str, valid_from: datetime.date, item_id: int | None = None,
+                            valid_to: datetime.date | None = None) -> None:
+    """R276: ویرایشِ قراردادِ ریبیت (تامین‌کننده ثابت می‌ماند)."""
+    if rebate_basis_code not in ("FLAT_PERCENT", "VOLUME_TIER"):
+        raise ValueError("مبنایِ ریبیت نامعتبر است.")
+    with new_session() as session:
+        row = session.get(VendorRebateAgreement, agreement_id)
+        if row is None:
+            raise ValueError("قراردادِ ریبیت نامعتبر است.")
+        row.rebate_basis_code, row.valid_from, row.item_id, row.valid_to = rebate_basis_code, valid_from, item_id, valid_to
+        session.commit()
+
+
 def list_rebate_agreements(company_id: int) -> list[VendorRebateAgreement]:
     with new_session() as session:
         stmt = (

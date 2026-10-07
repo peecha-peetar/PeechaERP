@@ -41,7 +41,8 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_locations as locations_service
 from peecha.services import treasury as treasury_service
 from peecha.ui.screens.commercial_pos_menu_groups import CommercialPosMenuGroupsScreen
-from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable
+from peecha.db.models.commercial import PosTerminal
+from peecha.ui.widgets import FieldHelpMixin, confirm_and_delete, delete_button, wrap_scrollable
 
 _SESSION_STATUS_LABELS = {"OPEN": "باز", "CLOSED": "بسته"}
 
@@ -94,6 +95,16 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         add_terminal_button.setToolTip("ترمینالِ تازه")
         add_terminal_button.clicked.connect(self._add_terminal)
         new_terminal_box.addWidget(add_terminal_button)
+        # R276: ویرایش/حذفِ ترمینالِ انتخاب‌شده
+        save_terminal_button = QPushButton("💾")
+        save_terminal_button.setObjectName("iconButton")
+        save_terminal_button.setFixedWidth(44)
+        save_terminal_button.setToolTip("ذخیرهٔ تغییراتِ ترمینالِ انتخاب‌شده (نام/انبار)")
+        save_terminal_button.clicked.connect(self._update_terminal)
+        new_terminal_box.addWidget(save_terminal_button)
+        delete_terminal_button = delete_button("حذفِ ترمینالِ انتخاب‌شده (اگر سابقه دارد غیرفعال می‌شود)")
+        delete_terminal_button.clicked.connect(self._delete_terminal)
+        new_terminal_box.addWidget(delete_terminal_button)
         left.addLayout(new_terminal_box)
 
         settings_title = QLabel("تنظیماتِ فاکتورِ صندوق (تک‌فروشی)")
@@ -534,7 +545,7 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         self._terminals = pos_service.list_terminals(company_id)
         self.terminals_table.setRowCount(len(self._terminals))
         for row_index, t in enumerate(self._terminals):
-            for col_index, value in enumerate([t.code, t.name]):
+            for col_index, value in enumerate([t.code, t.name + ("" if t.is_active else " (غیرفعال)")]):
                 cell = QTableWidgetItem(value)
                 cell.setData(Qt.UserRole, t.terminal_id)
                 self.terminals_table.setItem(row_index, col_index, cell)
@@ -821,7 +832,11 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
         if company_id is None or not code or not name or warehouse_id is None:
             self.status_label.setText("کد، نام و انبار را وارد کنید.")
             return
-        pos_service.create_terminal(company_id, warehouse_id, code, name)
+        try:
+            pos_service.create_terminal(company_id, warehouse_id, code, name)
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
         self.terminal_code_field.clear()
         self.terminal_name_field.clear()
         self.status_label.setText("")
@@ -829,7 +844,34 @@ class CommercialPosSessionsScreen(FieldHelpMixin, QWidget):
 
     def _on_terminal_selected(self, row: int, _column: int) -> None:
         self._selected_terminal_id = self.terminals_table.item(row, 0).data(Qt.UserRole)
+        terminal = next((t for t in self._terminals if t.terminal_id == self._selected_terminal_id), None)
+        if terminal is not None:
+            self.terminal_code_field.setText(terminal.code)
+            self.terminal_name_field.setText(terminal.name)
+            self.terminal_warehouse_combo.setCurrentIndex(max(0, self.terminal_warehouse_combo.findData(terminal.warehouse_id)))
         self._refresh_session_panel()
+
+    def _update_terminal(self) -> None:
+        if self._selected_terminal_id is None:
+            self.status_label.setText("ابتدا یک ترمینال را از فهرست انتخاب کنید.")
+            return
+        try:
+            pos_service.update_terminal(self._company_id(), self._selected_terminal_id,
+                                        self.terminal_warehouse_combo.currentData(), self.terminal_name_field.text())
+        except ValueError as exc:
+            self.status_label.setText(str(exc))
+            return
+        self.status_label.setText("ترمینال ذخیره شد.")
+        self.refresh()
+
+    def _delete_terminal(self) -> None:
+        if confirm_and_delete(self, "ترمینالِ صندوق", self.terminal_name_field.text(), PosTerminal, self._selected_terminal_id,
+                              self._company_id()):
+            self._selected_terminal_id = None
+            self.terminal_code_field.clear()
+            self.terminal_name_field.clear()
+            self.refresh()
+            self._refresh_session_panel()
 
     def _refresh_session_panel(self) -> None:
         if self._selected_terminal_id is None:

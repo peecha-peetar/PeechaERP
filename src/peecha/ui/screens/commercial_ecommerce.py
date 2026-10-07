@@ -32,7 +32,8 @@ from peecha.services import detail_dimensions as dimensions_service
 from peecha.services import inventory_catalog as catalog_service
 from peecha.services import inventory_locations as locations_service
 from peecha.ui import theme
-from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, wrap_scrollable
+from peecha.db.models.commercial import FulfillmentRoutingRule
+from peecha.ui.widgets import FieldGrid, FieldHelpMixin, FieldSpec, LayoutEditMixin, confirm_and_delete, delete_button, wrap_scrollable
 
 _PLATFORM_LABELS = {"WOOCOMMERCE": "ووکامرس", "PRESTASHOP": "پرستاشاپ", "TOROB": "ترب", "OTHER": "سایر"}
 _SYNC_STATUS_LABELS = {"IMPORTED": "ایمپورت‌شده", "FAILED": "ناموفق", "DUPLICATE": "تکراری"}
@@ -562,6 +563,7 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         self.routing_table = QTableWidget(0, 4)
         self.routing_table.setHorizontalHeaderLabels(["کانال", "استراتژی", "انبارِ پیش‌فرض", "اولویت"])
         self.routing_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.routing_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.routing_table.verticalHeader().setVisible(False)
         outer.addWidget(self.routing_table, stretch=1)
 
@@ -584,6 +586,10 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
         add_rule_button.setToolTip("قاعدهٔ تازه")
         add_rule_button.clicked.connect(self._add_routing_rule)
         form.addWidget(add_rule_button)
+        # R276: حذفِ قاعدهٔ انتخاب‌شده
+        delete_rule_button = delete_button("حذفِ قاعدهٔ انتخاب‌شده")
+        delete_rule_button.clicked.connect(self._delete_routing_rule)
+        form.addWidget(delete_rule_button)
         outer.addLayout(form)
 
         self.routing_status_label = QLabel("")
@@ -605,7 +611,15 @@ class CommercialEcommerceScreen(FieldHelpMixin, LayoutEditMixin, QWidget):
                 f"{warehouse.code} — {warehouse.name}" if warehouse else str(r.fallback_warehouse_id), str(r.priority),
             ]
             for col_index, value in enumerate(values):
-                self.routing_table.setItem(row_index, col_index, QTableWidgetItem(value))
+                cell = QTableWidgetItem(value)
+                cell.setData(Qt.UserRole, r.rule_id)
+                self.routing_table.setItem(row_index, col_index, cell)
+
+    def _delete_routing_rule(self) -> None:
+        row = self.routing_table.currentRow()
+        rule_id = self.routing_table.item(row, 0).data(Qt.UserRole) if row >= 0 and self.routing_table.item(row, 0) else None
+        confirm_and_delete(self, "قاعدهٔ ارسال", "قاعدهٔ انتخاب‌شده", FulfillmentRoutingRule, rule_id, self._company_id(),
+                           self._refresh_routing_rules)
 
     def _add_routing_rule(self) -> None:
         company_id = self._company_id()
