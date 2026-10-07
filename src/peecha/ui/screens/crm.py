@@ -29,6 +29,7 @@ from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
 from peecha.services.crm import segments as seg_service
 from peecha.services.crm import tasks as task_service
+from peecha.services.crm import tickets as ticket_service
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
 from peecha.ui.screens.fixed_assets import (
@@ -2250,4 +2251,313 @@ class CampaignsScreen(QWidget):
         _x, ok = _run(self, "امتیاز سرنخ", lead_service.save_scoring_config, company_id(), user_id(),
                       factor_max={k: num(f) for k, f in self.s_factors.items()}, source_points=sources,
                       bands={k: num(f) for k, f in self.s_bands.items()})
+        return ok
+
+
+# =========================================================================================================
+# تیکت‌ها، شکایات و SLA (R285)
+_SLA_TONE = {"BREACHED": _RED, "AT_RISK": _AMBER, "OK": _GREEN}
+_SLA_LABEL = {"BREACHED": "نقض SLA", "AT_RISK": "نزدیک موعد", "OK": "در موعد", "NONE": "—"}
+
+
+def _dt(value) -> str:
+    return f"{_date(value.date())} {value.astimezone().strftime('%H:%M')}" if value else "—"
+
+
+@ms.styled
+class TicketsScreen(QWidget):
+    scroll_in_mdi = True
+
+    def __init__(self, main_window=None) -> None:
+        super().__init__()
+        self._main_window = main_window
+        self.dialog_runner = None
+        self.rows: list = []
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        title = QLabel("تیکت‌ها و شکایات")
+        title.setObjectName("pageTitle")
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("جستجو: موضوع، مشتری، دسته")
+        self.search.returnPressed.connect(self.reload)
+        self.status = combo([(v, k) for k, v in ticket_service.STATUS.items()], "همهٔ وضعیت‌ها")
+        self.kind = combo([(v, k) for k, v in ticket_service.TYPES.items()], "همهٔ انواع")
+        self.priority = combo([(v, k) for k, v in cc.PRIORITIES.items()], "همهٔ اولویت‌ها")
+        self.open_only = QCheckBox("فقط باز")
+        self.open_only.setChecked(True)
+        self.mine = QCheckBox("فقط ارجاع به من")
+        self.breached = QCheckBox("فقط نقض SLA")
+        for w in (self.status, self.kind, self.priority):
+            w.currentIndexChanged.connect(lambda _i: self.reload())
+        for w in (self.open_only, self.mine, self.breached):
+            w.toggled.connect(lambda _c: self.reload())
+        outer.addWidget(ms.header_card(title, self.search, self.status, self.kind, self.priority, self.open_only, self.mine, self.breached))
+        cards, self.cards = ms.summary([("open", "تیکت باز", "info", "🎫"), ("breached", "نقض SLA", "danger", "⏰"),
+                                        ("compliance", "پایبندی به SLA", "success", "✅"), ("csat", "رضایت مشتری (از ۵)", "success", "⭐"),
+                                        ("response", "میانگین اولین پاسخ (ساعت)", "warning", "💬"),
+                                        ("resolution", "میانگین زمان حل (ساعت)", "warning", "🛠"),
+                                        ("complaints", "شکایت‌ها", "danger", "📢"), ("total", "کل تیکت‌ها", "info", "📋")], per_row=4)
+        outer.addWidget(cards)
+        self.tabs = QTabWidget()
+        tw = QWidget()
+        tl = QVBoxLayout(tw)
+        split = QSplitter(Qt.Horizontal)
+        self.t = table(["شماره", "مشتری", "موضوع", "نوع", "اولویت", "وضعیت", "SLA", "موعد حل", "مسئول", "کانال", "رضایت"])
+        self.t.itemSelectionChanged.connect(self._selected_changed)
+        self.t.cellDoubleClicked.connect(lambda _r, _c: self.edit_ticket())
+        split.addWidget(self.t)
+        side = QWidget()
+        sl = QVBoxLayout(side)
+        self.detail = QLabel("")
+        self.detail.setWordWrap(True)
+        self.detail.setObjectName("sectionHint")
+        sl.addWidget(self.detail)
+        self.t_conv = table(["زمان", "نوع", "کاربر", "متن"])
+        sl.addWidget(self.t_conv, stretch=1)
+        split.addWidget(side)
+        split.setSizes([860, 420])
+        tl.addWidget(split, stretch=1)
+        self.buttons = {k: QPushButton(t) for k, t in (
+            ("new", "تیکت جدید"), ("edit", "ویرایش"), ("assign", "ارجاع"), ("reply", "پاسخ/پیگیری"), ("resolve", "حل شد"),
+            ("close", "بستن"), ("reopen", "بازکردن دوباره"), ("rate", "ثبت رضایت"), ("customer", "پروندهٔ ۳۶۰"))}
+        actions = {"new": self.new_ticket, "edit": self.edit_ticket, "assign": self.assign, "reply": self.reply, "resolve": self.resolve,
+                   "close": self.close_ticket, "reopen": self.reopen, "rate": self.rate, "customer": self.open_customer}
+        for k, b in self.buttons.items():
+            b.clicked.connect(lambda _c=False, f=actions[k]: f())
+        B = self.buttons
+        tl.addWidget(ms.footer([[B["new"], B["edit"], B["assign"]], [B["reply"], B["resolve"], B["close"], B["reopen"]],
+                                [B["rate"], B["customer"]]]))
+        self.tabs.addTab(tw, "تیکت‌ها")
+        pw = QWidget()
+        pl_ = QVBoxLayout(pw)
+        self.t_sla = table(["نام", "نوع تیکت", "اولویت", "اولین پاسخ (ساعت)", "حل (ساعت)", "ارجاع نقض به", "فعال"])
+        self.t_sla.cellDoubleClicked.connect(lambda _r, _c: self.edit_policy())
+        pl_.addWidget(self.t_sla, stretch=1)
+        self.sla_buttons = {"new": QPushButton("SLA جدید"), "edit": QPushButton("ویرایش SLA"), "delete": QPushButton("حذف SLA")}
+        self.sla_buttons["new"].clicked.connect(lambda: self.edit_policy(new=True))
+        self.sla_buttons["edit"].clicked.connect(lambda: self.edit_policy())
+        self.sla_buttons["delete"].clicked.connect(lambda: self.delete_policy())
+        pl_.addWidget(ms.footer([list(self.sla_buttons.values())]))
+        self.tabs.addTab(pw, "سیاست‌های SLA")
+        outer.addWidget(self.tabs, stretch=1)
+
+    def refresh(self) -> None:
+        cid = company_id()
+        if cid is None:
+            return
+        self.lk = CrmLookups(cid)
+        self.buttons["new"].setEnabled(can("crm_tickets", "CREATE"))
+        for k in ("edit", "reply", "resolve", "close", "reopen", "rate"):
+            self.buttons[k].setEnabled(can("crm_tickets", "EDIT"))
+        self.buttons["assign"].setEnabled(can("crm_assign", "EDIT"))
+        for b in self.sla_buttons.values():
+            b.setEnabled(can("crm_settings", "EDIT"))
+        ticket_service.check_sla(cid)
+        self.load_policies()
+        self.reload()
+
+    def reload(self) -> None:
+        cid = company_id()
+        self.rows = ticket_service.list_tickets(
+            cid, status=self.status.currentData(), open_only=self.open_only.isChecked(), ticket_type=self.kind.currentData(),
+            priority=self.priority.currentData(), assignee_user_id=user_id() if self.mine.isChecked() else None,
+            breached_only=self.breached.isChecked(), search=self.search.text().strip() or None)
+        channels = ticket_service.CHANNELS
+        fill(self.t, [[r.ticket_no or r.ticket_id, r.customer_name, r.subject, r.type_label, r.priority_label, r.status_label,
+                       _SLA_LABEL[r.sla_state()], _dt(r.resolution_due_at), r.assignee_name, channels.get(r.channel_code or "", ""),
+                       "★" * (r.satisfaction_score or 0)] for r in self.rows], [r.ticket_id for r in self.rows])
+        for i, r in enumerate(self.rows):
+            tone = _SLA_TONE.get(r.sla_state())
+            if tone is not None:
+                self.t.item(i, 6).setForeground(tone)
+            if r.priority_code == "CRITICAL":
+                self.t.item(i, 4).setForeground(_RED)
+        st = ticket_service.stats(cid)
+        self.cards["open"].setText(P(st["open"]))
+        self.cards["breached"].setText(P(st["breached"]))
+        self.cards["compliance"].setText(P(f"{st['sla_compliance']}٪") if st["sla_compliance"] is not None else "—")
+        self.cards["csat"].setText(P(st["csat"]) if st["csat"] is not None else "—")
+        self.cards["response"].setText(P(st["avg_first_response_hours"]) if st["avg_first_response_hours"] is not None else "—")
+        self.cards["resolution"].setText(P(st["avg_resolution_hours"]) if st["avg_resolution_hours"] is not None else "—")
+        self.cards["complaints"].setText(P(st["by_type"]["COMPLAINT"]))
+        self.cards["total"].setText(P(st["total"]))
+        self._selected_changed()
+
+    def _row(self):
+        tid = _selected(self.t)
+        return next((r for r in self.rows if r.ticket_id == tid), None)
+
+    def _need(self):
+        r = self._row()
+        if r is None:
+            QMessageBox.warning(self, "تیکت", "یک تیکت را انتخاب کنید.")
+        return r
+
+    def _selected_changed(self) -> None:
+        r = self._row()
+        if r is None:
+            self.detail.setText("")
+            fill(self.t_conv, [])
+            return
+        parts = [f"تیکت {r.ticket_no} — {r.customer_name}", f"باز شده: {_dt(r.opened_at)}",
+                 f"موعد اولین پاسخ: {_dt(r.first_response_due_at)} — پاسخ: {_dt(r.first_responded_at)}",
+                 f"موعد حل: {_dt(r.resolution_due_at)} — حل: {_dt(r.resolved_at)}"]
+        if r.escalation_level:
+            parts.append(f"سطح ارجاع: {r.escalation_level}")
+        if r.description:
+            parts.append(f"شرح: {r.description}")
+        if r.resolution_text:
+            parts.append(f"راه‌حل: {r.resolution_text}")
+        if r.satisfaction_comment:
+            parts.append(f"نظر مشتری: {r.satisfaction_comment}")
+        self.detail.setText(P("\n".join(parts)))
+        conv = ticket_service.conversation(company_id(), r.ticket_id)
+        fill(self.t_conv, [[_dt(a.created_at), a.type_label, a.assigned_name, a.description or a.result_text or a.subject] for a in conv])
+
+    def _form(self, r=None) -> list:
+        g = (lambda name, default=None: getattr(r, name)) if r else (lambda name, default=None: default)
+        return [("customer_detail_account_id", "مشتری", _with(combo(self.lk.customers), g("customer_detail_account_id"))),
+                ("subject", "موضوع", QLineEdit(g("subject", "") or "")),
+                ("ticket_type", "نوع", _with(combo([(v, k) for k, v in ticket_service.TYPES.items()]), g("ticket_type", "COMPLAINT"))),
+                ("priority_code", "اولویت", _with(combo(self.lk.priorities), g("priority_code", "NORMAL"))),
+                ("channel_code", "کانال دریافت", _with(combo([(v, k) for k, v in ticket_service.CHANNELS.items()], "—"), g("channel_code"))),
+                ("category", "دسته", QLineEdit(g("category", "") or "")),
+                ("assigned_to_user_id", "مسئول رسیدگی", _with(combo(self.lk.users, "—"), g("assigned_to_user_id"))),
+                ("description", "شرح", _text(g("description")))]
+
+    @staticmethod
+    def _fields(v: dict) -> ticket_service.TicketFields:
+        return ticket_service.TicketFields(
+            v.get("customer_detail_account_id"), v.get("subject") or "", v.get("ticket_type") or "COMPLAINT",
+            v.get("priority_code") or "NORMAL", channel_code=v.get("channel_code"), category=v.get("category"),
+            description=v.get("description"), assigned_to_user_id=v.get("assigned_to_user_id"),
+            related_document_id=v.get("related_document_id"))
+
+    def new_ticket(self, values: dict | None = None) -> int | None:
+        values = values or _ask(self, "تیکت جدید", self._form())
+        if values is None:
+            return None
+        if not values.get("customer_detail_account_id"):
+            QMessageBox.warning(self, "تیکت", "مشتری را انتخاب کنید.")
+            return None
+        tid, ok = _run(self, "تیکت", ticket_service.create_ticket, company_id(), user_id(), self._fields(values))
+        if ok:
+            self.reload()
+        return tid if ok else None
+
+    def edit_ticket(self, values: dict | None = None) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        values = values or _ask(self, "ویرایش تیکت", self._form(r))
+        if values is None:
+            return False
+        _x, ok = _run(self, "تیکت", ticket_service.update_ticket, company_id(), user_id(), r.ticket_id,
+                      self._fields({**values, "related_document_id": r.related_document_id}))
+        if ok:
+            self.reload()
+        return ok
+
+    def _simple(self, title: str, fn, *args) -> bool:
+        _x, ok = _run(self, title, fn, *args)
+        if ok:
+            self.reload()
+        return ok
+
+    def assign(self, values: dict | None = None) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        values = values or _ask(self, "ارجاع تیکت", [("user", "به", _with(combo(self.lk.users), r.assigned_to_user_id))])
+        if not values:
+            return False
+        return self._simple("ارجاع", ticket_service.assign_ticket, company_id(), user_id(), r.ticket_id, values.get("user"))
+
+    def reply(self, values: dict | None = None) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        kinds = [("یادداشت", "NOTE"), ("تماس", "CALL"), ("ایمیل", "EMAIL"), ("پیام", "MESSAGE"), ("بازدید", "VISIT")]
+        values = values or _ask(self, "پاسخ به تیکت", [("kind", "نوع", combo(kinds)), ("text", "متن", _text(""))])
+        if not values:
+            return False
+        return self._simple("پاسخ", ticket_service.add_reply, company_id(), user_id(), r.ticket_id, values.get("text") or "",
+                            values.get("kind") or "NOTE")
+
+    def resolve(self, values: dict | None = None) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        values = values or _ask(self, "حل تیکت", [("text", "شرح راه‌حل", _text(""))])
+        if not values:
+            return False
+        return self._simple("حل تیکت", ticket_service.resolve_ticket, company_id(), user_id(), r.ticket_id, values.get("text") or "")
+
+    def close_ticket(self) -> bool:
+        r = self._need()
+        return bool(r) and self._simple("بستن تیکت", ticket_service.close_ticket, company_id(), user_id(), r.ticket_id)
+
+    def reopen(self, values: dict | None = None) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        values = values or _ask(self, "بازکردن دوباره", [("text", "علت", QLineEdit())])
+        if values is None:
+            return False
+        return self._simple("بازکردن تیکت", ticket_service.reopen_ticket, company_id(), user_id(), r.ticket_id, values.get("text"))
+
+    def rate(self, values: dict | None = None) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        values = values or _ask(self, "رضایت مشتری", [("score", "امتیاز", combo([(f"{n} از ۵", n) for n in range(5, 0, -1)])),
+                                                      ("comment", "نظر مشتری", QLineEdit())])
+        if not values:
+            return False
+        return self._simple("رضایت", ticket_service.rate_ticket, company_id(), user_id(), r.ticket_id, int(values.get("score") or 0),
+                            values.get("comment"))
+
+    def open_customer(self) -> None:
+        r = self._row()
+        if r is not None and self._main_window is not None:
+            self._main_window.open_screen("CRM_CUSTOMER360", then=lambda s: s.load_customer(r.customer_detail_account_id))
+
+    # --- SLA ---
+    def load_policies(self) -> None:
+        self._policies = ticket_service.list_policies(company_id())
+        users = dict((uid, name) for name, uid in self.lk.users)
+        fill(self.t_sla, [[p.name, ticket_service.TYPES.get(p.ticket_type or "", "همه"), cc.PRIORITIES.get(p.priority_code or "", "همه"),
+                           p.first_response_hours.normalize(), p.resolution_hours.normalize(), users.get(p.escalate_to_user_id, ""),
+                           "بله" if p.is_active else "خیر"] for p in self._policies], [p.sla_policy_id for p in self._policies])
+
+    def edit_policy(self, new: bool = False, values: dict | None = None) -> int | None:
+        pid = None if new else _selected(self.t_sla)
+        if not new and pid is None:
+            QMessageBox.warning(self, "SLA", "یک SLA را انتخاب کنید.")
+            return None
+        p = next((x for x in self._policies if x.sla_policy_id == pid), None)
+        g = (lambda name, default=None: getattr(p, name)) if p else (lambda name, default=None: default)
+        if values is None:
+            values = _ask(self, "سیاست SLA", [
+                ("name", "نام", QLineEdit(g("name", "") or "")),
+                ("ticket_type", "نوع تیکت", _with(combo([(v, k) for k, v in ticket_service.TYPES.items()], "همه"), g("ticket_type"))),
+                ("priority_code", "اولویت", _with(combo(self.lk.priorities, "همه"), g("priority_code"))),
+                ("first_response_hours", "اولین پاسخ (ساعت)", num_field(g("first_response_hours"))),
+                ("resolution_hours", "حل (ساعت)", num_field(g("resolution_hours"))),
+                ("escalate_to_user_id", "ارجاع نقض به", _with(combo(self.lk.users, "—"), g("escalate_to_user_id"))),
+                ("is_active", "فعال", _checked(g("is_active", True)))])
+            if values is None:
+                return None
+        sid, ok = _run(self, "SLA", ticket_service.save_policy, company_id(), user_id(), sla_policy_id=pid, **values)
+        if ok:
+            self.load_policies()
+        return sid if ok else None
+
+    def delete_policy(self) -> bool:
+        pid = _selected(self.t_sla)
+        if pid is None or not _confirm(self, "SLA", "این SLA حذف شود؟"):
+            return False
+        _x, ok = _run(self, "SLA", ticket_service.delete_policy, company_id(), user_id(), pid)
+        if ok:
+            self.load_policies()
         return ok

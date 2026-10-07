@@ -1180,6 +1180,27 @@ class ServiceTicket(Base):
     assigned_to_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
     opened_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     closed_at: Mapped[datetime.datetime | None]
+    # R285: تیکت و شکایت CRM با SLA (ستون‌های افزوده؛ تیکت خدمات موجود مقدار پیش‌فرض می‌گیرد)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("core.companies.company_id"))
+    ticket_no: Mapped[int | None]
+    ticket_type: Mapped[str] = mapped_column(String(15), default="SERVICE")
+    priority_code: Mapped[str] = mapped_column(String(10), default="NORMAL")
+    channel_code: Mapped[str | None] = mapped_column(String(15))
+    category: Mapped[str | None] = mapped_column(String(100))
+    related_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"))
+    sla_policy_id: Mapped[int | None] = mapped_column(ForeignKey("crm.sla_policies.sla_policy_id"))
+    first_response_due_at: Mapped[datetime.datetime | None]
+    resolution_due_at: Mapped[datetime.datetime | None]
+    first_responded_at: Mapped[datetime.datetime | None]
+    resolved_at: Mapped[datetime.datetime | None]
+    sla_breached: Mapped[bool] = mapped_column(default=False)
+    escalation_level: Mapped[int] = mapped_column(SmallInteger, default=0)
+    escalated_at: Mapped[datetime.datetime | None]
+    resolution_text: Mapped[str | None] = mapped_column(Text)
+    satisfaction_score: Mapped[int | None] = mapped_column(SmallInteger)
+    satisfaction_comment: Mapped[str | None] = mapped_column(String(500))
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    updated_at: Mapped[datetime.datetime | None]
 
 
 class RmaRequest(Base):

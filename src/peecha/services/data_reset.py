@@ -569,6 +569,7 @@ _SETTINGS_DELETE_STATEMENTS = [
     "DELETE FROM crm.pipelines WHERE company_id = :company_id",
     "DELETE FROM crm.lead_sources WHERE company_id = :company_id",
     "DELETE FROM crm.segments WHERE company_id = :company_id",
+    "DELETE FROM crm.sla_policies WHERE company_id = :company_id",
     "DELETE FROM crm.settings WHERE company_id = :company_id",
     "DELETE FROM acc.statement_row_refs WHERE row_id IN "
     "(SELECT sr.row_id FROM acc.statement_rows sr JOIN acc.statement_templates st ON st.template_id = sr.template_id WHERE st.company_id = :company_id)",

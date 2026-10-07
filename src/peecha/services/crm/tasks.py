@@ -26,6 +26,7 @@ class TaskCenter:
     planned_visits: list[dict] = field(default_factory=list)
     pending_orders: list[dict] = field(default_factory=list)
     due_collections: list[dict] = field(default_factory=list)
+    open_tickets: list[dict] = field(default_factory=list)  # R285
 
     def count(self, bucket: str) -> int:
         return len(self.buckets.get(bucket, []))
@@ -69,6 +70,12 @@ def task_center(company_id: int, user_id: int | None = None, today: datetime.dat
         buckets[key].sort(key=lambda a: (a.due_date or datetime.date.max, a.priority_code != "CRITICAL",
                                          a.priority_code != "HIGH", a.activity_id))
     tc = TaskCenter(buckets=buckets)
+    from peecha.services.crm import tickets as ticket_service
+
+    tc.open_tickets = [{"ticket_id": t.ticket_id, "ticket_no": t.ticket_no, "customer_detail_account_id": t.customer_detail_account_id,
+                        "customer_name": t.customer_name, "subject": t.subject, "type_label": t.type_label,
+                        "priority_code": t.priority_code, "resolution_due_at": t.resolution_due_at, "sla_state": t.sla_state()}
+                       for t in ticket_service.list_tickets(company_id, open_only=True, assignee_user_id=user_id, limit=300)]
     if not include_erp_queues:
         return tc
     weekday = today.weekday()  # هم‌الگو با VisitPlan.visit_day_of_week

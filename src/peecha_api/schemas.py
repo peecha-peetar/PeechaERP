@@ -381,6 +381,40 @@ class CrmReferralRequest(BaseModel):
     referred_customer_id: int
 
 
+class CrmTicketRequest(BaseModel):
+    customer_detail_account_id: int
+    subject: str
+    ticket_type: str = "COMPLAINT"
+    priority_code: str = "NORMAL"
+    channel_code: str | None = None
+    category: str | None = None
+    description: str | None = None
+    assigned_to_user_id: int | None = None
+    related_document_id: int | None = None
+    item_id: int | None = None
+    warranty_id: int | None = None
+
+
+class CrmTicketTextRequest(BaseModel):
+    text: str = ""
+    kind: str = "NOTE"
+
+
+class CrmTicketRateRequest(BaseModel):
+    score: int
+    comment: str | None = None
+
+
+class CrmSlaPolicyRequest(BaseModel):
+    name: str
+    first_response_hours: decimal.Decimal
+    resolution_hours: decimal.Decimal
+    ticket_type: str | None = None
+    priority_code: str | None = None
+    escalate_to_user_id: int | None = None
+    is_active: bool = True
+
+
 class CrmStageMoveRequest(BaseModel):
     stage_id: int
     lost_reason: str | None = None

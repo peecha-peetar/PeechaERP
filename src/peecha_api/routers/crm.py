@@ -22,13 +22,15 @@ from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
 from peecha.services.crm import segments as seg_service
 from peecha.services.crm import tasks as task_service
+from peecha.services.crm import tickets as ticket_service
 from peecha_api.deps import AuthContext, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import require_permission
 from peecha_api.schemas import (
     CrmActivityCompleteRequest, CrmActivityRequest, CrmAssignRequest, CrmCampaignLaunchRequest, CrmCampaignMembersRequest,
     CrmCampaignRequest, CrmLoyaltyAdjustRequest, CrmMemberStatusRequest, CrmReferralRequest, CrmLeadConvertRequest, CrmLeadRequest,
-    CrmLeadStatusRequest, CrmOpportunityLine, CrmOpportunityRequest, CrmSegmentRequest, CrmStageMoveRequest,
+    CrmLeadStatusRequest, CrmOpportunityLine, CrmOpportunityRequest, CrmSegmentRequest, CrmSlaPolicyRequest, CrmStageMoveRequest,
+    CrmTicketRateRequest, CrmTicketRequest, CrmTicketTextRequest,
 )
 
 router = APIRouter(prefix="/crm", tags=["crm"])
@@ -300,7 +302,7 @@ def tasks(bucket: str | None = None, ctx: AuthContext = Depends(require_permissi
     buckets = {k: [_row(a) for a in rows] for k, rows in tc.buckets.items() if bucket in (None, k)}
     return {"buckets": buckets, "counts": {k: len(v) for k, v in tc.buckets.items()},
             "planned_visits": _json(tc.planned_visits), "pending_orders": _json(tc.pending_orders),
-            "due_collections": _json(tc.due_collections)}
+            "due_collections": _json(tc.due_collections), "open_tickets": _json(tc.open_tickets)}
 
 
 # --- Customer 360 -----------------------------------------------------------------------------------
@@ -524,3 +526,115 @@ def marketing_settings_save(body: dict, ctx: AuthContext = Depends(require_permi
         _call(lambda: lead_service.save_scoring_config(ctx.company_id, ctx.user_id, factor_max=ls.get("factor_max"),
                                                        source_points=ls.get("source_points"), bands=ls.get("bands")))
     return marketing_settings(ctx)
+
+
+
+# --- تیکت، شکایت و SLA (R285) -------------------------------------------------------------------------
+F_TICKETS = "crm_tickets"
+
+
+def _ticket(r: ticket_service.TicketRow) -> dict:
+    return _json({**r.__dict__, "sla_state": r.sla_state()})
+
+
+def _ticket_fields(p: CrmTicketRequest) -> ticket_service.TicketFields:
+    return ticket_service.TicketFields(**{k: getattr(p, k) for k in ticket_service.TicketFields.__dataclass_fields__})
+
+
+@router.get("/tickets")
+def tickets_list(status_code: str | None = None, open_only: bool = False, ticket_type: str | None = None, priority: str | None = None,
+                 mine: bool = False, customer_id: int | None = None, breached: bool = False, q: str | None = None, limit: int = 100,
+                 offset: int = 0, ctx: AuthContext = Depends(require_permission(F_TICKETS, "VIEW"))) -> list[dict]:
+    rows = ticket_service.list_tickets(ctx.company_id, status=status_code, open_only=open_only, ticket_type=ticket_type,
+                                       priority=priority, assignee_user_id=ctx.user_id if mine else None, customer_id=customer_id,
+                                       breached_only=breached, search=q, limit=min(limit, 500), offset=offset)
+    return [_ticket(r) for r in rows]
+
+
+@router.get("/tickets/stats")
+def tickets_stats(date_from: datetime.date | None = None, date_to: datetime.date | None = None,
+                  ctx: AuthContext = Depends(require_permission(F_TICKETS, "VIEW"))) -> dict:
+    ticket_service.check_sla(ctx.company_id)
+    return _json(ticket_service.stats(ctx.company_id, date_from, date_to))
+
+
+@router.post("/tickets")
+def tickets_create(payload: CrmTicketRequest, ctx: AuthContext = Depends(require_permission(F_TICKETS, "CREATE")),
+                   idempotency_key: str | None = Depends(get_idempotency_key)) -> dict:
+    return _idem(idempotency_key, "POST /crm/tickets", ctx,
+                 lambda: ticket_service.create_ticket(ctx.company_id, ctx.user_id, _ticket_fields(payload)),
+                 lambda tid: {"ticket_id": tid})
+
+
+@router.get("/tickets/{ticket_id}")
+def tickets_get(ticket_id: int, ctx: AuthContext = Depends(require_permission(F_TICKETS, "VIEW"))) -> dict:
+    row = _call(ticket_service.get_ticket, ctx.company_id, ticket_id)
+    return {**_ticket(row), "conversation": [_row(a) for a in ticket_service.conversation(ctx.company_id, ticket_id)]}
+
+
+@router.put("/tickets/{ticket_id}")
+def tickets_update(ticket_id: int, payload: CrmTicketRequest, ctx: AuthContext = Depends(require_permission(F_TICKETS, "EDIT"))) -> dict:
+    _call(ticket_service.update_ticket, ctx.company_id, ctx.user_id, ticket_id, _ticket_fields(payload))
+    return {"ticket_id": ticket_id}
+
+
+@router.post("/tickets/{ticket_id}/assign")
+def tickets_assign(ticket_id: int, body: CrmAssignRequest, ctx: AuthContext = Depends(require_permission(F_ASSIGN, "EDIT"))) -> dict:
+    _call(ticket_service.assign_ticket, ctx.company_id, ctx.user_id, ticket_id, body.owner_user_id)
+    return {"ok": True}
+
+
+@router.post("/tickets/{ticket_id}/reply")
+def tickets_reply(ticket_id: int, body: CrmTicketTextRequest, ctx: AuthContext = Depends(require_permission(F_TICKETS, "EDIT")),
+                  idempotency_key: str | None = Depends(get_idempotency_key)) -> dict:
+    return _idem(idempotency_key, f"POST /crm/tickets/{ticket_id}/reply", ctx,
+                 lambda: ticket_service.add_reply(ctx.company_id, ctx.user_id, ticket_id, body.text, body.kind),
+                 lambda aid: {"activity_id": aid})
+
+
+@router.post("/tickets/{ticket_id}/resolve")
+def tickets_resolve(ticket_id: int, body: CrmTicketTextRequest, ctx: AuthContext = Depends(require_permission(F_TICKETS, "EDIT"))) -> dict:
+    _call(ticket_service.resolve_ticket, ctx.company_id, ctx.user_id, ticket_id, body.text)
+    return {"ok": True}
+
+
+@router.post("/tickets/{ticket_id}/close")
+def tickets_close(ticket_id: int, ctx: AuthContext = Depends(require_permission(F_TICKETS, "EDIT"))) -> dict:
+    _call(ticket_service.close_ticket, ctx.company_id, ctx.user_id, ticket_id)
+    return {"ok": True}
+
+
+@router.post("/tickets/{ticket_id}/reopen")
+def tickets_reopen(ticket_id: int, body: CrmTicketTextRequest, ctx: AuthContext = Depends(require_permission(F_TICKETS, "EDIT"))) -> dict:
+    _call(ticket_service.reopen_ticket, ctx.company_id, ctx.user_id, ticket_id, body.text or None)
+    return {"ok": True}
+
+
+@router.post("/tickets/{ticket_id}/rate")
+def tickets_rate(ticket_id: int, body: CrmTicketRateRequest, ctx: AuthContext = Depends(require_permission(F_TICKETS, "VIEW"))) -> dict:
+    _call(ticket_service.rate_ticket, ctx.company_id, ctx.user_id, ticket_id, body.score, body.comment)
+    return {"ok": True}
+
+
+@router.get("/sla-policies")
+def sla_list(ctx: AuthContext = Depends(require_permission(F_TICKETS, "VIEW"))) -> list[dict]:
+    return [_json({k: getattr(p, k) for k in ("sla_policy_id", "name", "ticket_type", "priority_code", "first_response_hours",
+                                               "resolution_hours", "escalate_to_user_id", "is_active")})
+            for p in ticket_service.list_policies(ctx.company_id)]
+
+
+@router.post("/sla-policies")
+def sla_create(body: CrmSlaPolicyRequest, ctx: AuthContext = Depends(require_permission("crm_settings", "EDIT"))) -> dict:
+    return {"sla_policy_id": _call(lambda: ticket_service.save_policy(ctx.company_id, ctx.user_id, **body.model_dump()))}
+
+
+@router.put("/sla-policies/{policy_id}")
+def sla_update(policy_id: int, body: CrmSlaPolicyRequest, ctx: AuthContext = Depends(require_permission("crm_settings", "EDIT"))) -> dict:
+    _call(lambda: ticket_service.save_policy(ctx.company_id, ctx.user_id, sla_policy_id=policy_id, **body.model_dump()))
+    return {"sla_policy_id": policy_id}
+
+
+@router.delete("/sla-policies/{policy_id}")
+def sla_delete(policy_id: int, ctx: AuthContext = Depends(require_permission("crm_settings", "EDIT"))) -> dict:
+    _call(ticket_service.delete_policy, ctx.company_id, ctx.user_id, policy_id)
+    return {"ok": True}

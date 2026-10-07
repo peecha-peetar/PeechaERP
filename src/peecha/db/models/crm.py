@@ -255,3 +255,20 @@ class CampaignMember(Base):
     converted_at: Mapped[datetime.datetime | None]
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+# --- R285: خدمات مشتری ---------------------------------------------------------------------------------
+class SlaPolicy(Base):
+    __tablename__ = "sla_policies"
+    __table_args__ = _CRM
+
+    sla_policy_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    name: Mapped[str] = mapped_column(String(150))
+    ticket_type: Mapped[str | None] = mapped_column(String(15))
+    priority_code: Mapped[str | None] = mapped_column(String(10))
+    first_response_hours: Mapped[decimal.Decimal] = mapped_column(Numeric(8, 2))
+    resolution_hours: Mapped[decimal.Decimal] = mapped_column(Numeric(8, 2))
+    escalate_to_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
