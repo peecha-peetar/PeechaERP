@@ -33,11 +33,7 @@ from sqlalchemy.exc import IntegrityError
 
 from peecha.db.base import new_session
 
-_FK_HINT = (
-    "برخی اطلاعات دیگر (احتمالاً از ماژولی مثل فروشگاه/باشگاه مشتریان/"
-    "شمارش چرخه‌ای/بازارهای آنلاین که این ابزار پوشش نمی‌دهد) هنوز به این رکوردها "
-    "وابسته‌اند — هیچ‌چیز حذف نشد. جزئیات فنی: "
-)
+_FK_HINT = "برخی اطلاعات دیگر هنوز به این رکوردها وابسته‌اند — هیچ‌چیز حذف نشد. جزئیات فنی: "
 
 
 _DELETE_RE = re.compile(r"^DELETE FROM ([a-z_]+\.[a-z_]+) WHERE (.+)$", re.S)
@@ -84,25 +80,57 @@ def _clear_references(session, table: str, where: str, params: dict, depth: int 
         session.execute(text(f"DELETE FROM {child} WHERE {child_where}"), params)
 
 
-def _run_delete_sequence(company_id: int, statements: list[str]) -> None:
+def _run_delete_sequence(company_id: int, statements: list[str]) -> int:
+    """تعداد ردیف‌های حذف‌شده از جدول‌های اصلی فهرست را برمی‌گرداند."""
     params = {"company_id": company_id}
+    deleted = 0
     with new_session() as session:
         try:
             for sql in statements:
                 match = _DELETE_RE.match(sql.strip())
                 if match is not None and match.group(1) not in _SKIP_REFERENCE_TABLES:
                     _clear_references(session, match.group(1), match.group(2), params)
-                session.execute(text(sql), params)
+                result = session.execute(text(sql), params)
+                if match is not None and result.rowcount and result.rowcount > 0:
+                    deleted += result.rowcount
             session.commit()
         except IntegrityError as exc:
             session.rollback()
             raise ValueError(f"{_FK_HINT}{exc.orig}") from exc
+    return deleted
 
 
 # ---------------------------------------------------------------------
 # ۱) اسناد — فروش/خرید + انبار + مالی/حسابداری، با هم، یک تراکنشِ واحد.
 # ---------------------------------------------------------------------
 _DOCUMENT_DELETE_STATEMENTS = [
+    # R278: ماژول‌هایی که بعد از ساخت این ابزار اضافه شدند (درخواست خرید، استعلام، بودجه، CRM و ویزیت،
+    # حضور و غیاب، دورهٔ حقوق، وظایف انبار، کارتابل و ...). ردیف‌های وابستهٔ آن‌ها خودکار پاک می‌شوند.
+    "DELETE FROM comm.customer_activities WHERE company_id = :company_id",
+    "DELETE FROM comm.customer_call_logs WHERE company_id = :company_id",
+    "DELETE FROM comm.customer_sales_notes WHERE company_id = :company_id",
+    "DELETE FROM comm.customer_visits WHERE company_id = :company_id",
+    "DELETE FROM comm.daily_kpi_snapshots WHERE company_id = :company_id",
+    "DELETE FROM comm.order_trackings WHERE company_id = :company_id",
+    "DELETE FROM comm.purchase_requests WHERE company_id = :company_id",
+    "DELETE FROM comm.rfqs WHERE company_id = :company_id",
+    "DELETE FROM comm.purchase_budgets WHERE company_id = :company_id",
+    "DELETE FROM comm.sms_campaigns WHERE company_id = :company_id",
+    "DELETE FROM comm.content_calendar_posts WHERE company_id = :company_id",
+    "DELETE FROM comm.gift_cards WHERE company_id = :company_id",
+    "DELETE FROM comm.recurring_billing_schedules WHERE company_id = :company_id",
+    "DELETE FROM wf.cartable_items WHERE company_id = :company_id",
+    "DELETE FROM sec.notifications WHERE company_id = :company_id",
+    "DELETE FROM sec.api_idempotency_keys WHERE company_id = :company_id",
+    "DELETE FROM hr.attendance_records WHERE company_id = :company_id",
+    "DELETE FROM payroll.periods WHERE company_id = :company_id",
+    "DELETE FROM inv.warehouse_tasks WHERE company_id = :company_id",
+    "DELETE FROM inv.pick_waves WHERE company_id = :company_id",
+    "DELETE FROM inv.cost_allocations WHERE company_id = :company_id",
+    "DELETE FROM inv.cost_adjustment_log WHERE company_id = :company_id",
+    "DELETE FROM inv.cost_recalculation_runs WHERE company_id = :company_id",
+    "DELETE FROM inv.daily_kpi_snapshots WHERE company_id = :company_id",
+    "DELETE FROM inv.reorder_suggestion_acknowledgements WHERE company_id = :company_id",
     # R228: لایهٔ ردیابی (R227) و انبارگردانی/بچ/سریال -- هم به ردیف‌هایِ سندِ
     # بازرگانی و هم به ردیف‌هایِ سندِ انبار وصل‌اند؛ پیش از همه پاک می‌شوند.
     "DELETE FROM inv.lot_movements WHERE company_id = :company_id",
@@ -311,17 +339,68 @@ _DOCUMENT_DELETE_STATEMENTS = [
 ]
 
 
-def wipe_documents(company_id: int) -> None:
+# جدول‌های شرکت‌محوری که عمداً پاک نمی‌شوند: خود شرکت، کاربران و دسترسی‌ها، سابقهٔ حسابرسی،
+# سال‌های مالی و ارزهای فعال شرکت (بدون آن‌ها هیچ سند تازه‌ای ثبت نمی‌شود).
+KEPT_TABLES = frozenset({
+    "core.companies", "core.company_currencies", "acc.fiscal_years", "audit.activity_log",
+    "sec.roles", "sec.user_companies", "sec.user_roles", "sec.user_roles_history",
+    "sec.user_module_roles", "sec.user_module_roles_history", "sec.device_tokens",
+})
+
+
+def covered_tables() -> set[str]:
+    """همهٔ جدول‌هایی که یکی از سه عملیات پاک می‌کند (برای بررسی کامل‌بودن در تست‌ها)."""
+    names = set()
+    for statements in (_DOCUMENT_DELETE_STATEMENTS, _MASTER_DATA_DELETE_STATEMENTS, _SETTINGS_DELETE_STATEMENTS):
+        for sql in statements:
+            match = re.match(r"\s*DELETE FROM ([a-z_]+\.[a-z_]+)", sql)
+            if match:
+                names.add(match.group(1))
+    return names
+
+
+def wipe_documents(company_id: int) -> int:
     """همهٔ اسناد فروش/خرید، انبار، و مالی/حسابداری یک شرکت را حذف
     می‌کند — یک تراکنش واحد، همه‌یا-هیچ. اطلاعات پایه و تنظیمات
     دست‌نخورده می‌مانند."""
-    _run_delete_sequence(company_id, _DOCUMENT_DELETE_STATEMENTS)
+    return _run_delete_sequence(company_id, _DOCUMENT_DELETE_STATEMENTS)
 
 
 # ---------------------------------------------------------------------
 # ۲) اطلاعاتِ پایه — فقط وقتی هیچ سندی نمانده باشد (وگرنه FK رد می‌کند).
 # ---------------------------------------------------------------------
 _MASTER_DATA_DELETE_STATEMENTS = [
+    # R278: اطلاعات پایهٔ ماژول‌های جدیدتر (شعبه، صندوق، کارکنان و ساختار سازمانی، طبقه و محل دارایی، ...)
+    "DELETE FROM comm.cms_articles WHERE company_id = :company_id",
+    "DELETE FROM comm.online_coupons WHERE company_id = :company_id",
+    "DELETE FROM comm.promotion_rules WHERE company_id = :company_id",
+    "DELETE FROM comm.bundle_definitions WHERE company_id = :company_id",
+    "DELETE FROM comm.visit_plans WHERE company_id = :company_id",
+    "DELETE FROM comm.commercial_contracts WHERE company_id = :company_id",
+    "DELETE FROM comm.customer_guarantees WHERE company_id = :company_id",
+    "DELETE FROM comm.pos_menu_groups WHERE company_id = :company_id",
+    "DELETE FROM comm.pos_terminals WHERE company_id = :company_id",
+    "DELETE FROM comm.order_payment_titles WHERE company_id = :company_id",
+    "DELETE FROM comm.supplier_price_import_templates WHERE company_id = :company_id",
+    "DELETE FROM comm.purchase_types WHERE company_id = :company_id",
+    "DELETE FROM comm.cancellation_reasons WHERE company_id = :company_id",
+    "DELETE FROM comm.branches WHERE company_id = :company_id",
+    "DELETE FROM inv.cycle_count_plans WHERE company_id = :company_id",
+    "DELETE FROM inv.item_storage_profiles WHERE company_id = :company_id",
+    "DELETE FROM inv.location_replenishment_rules WHERE company_id = :company_id",
+    "DELETE FROM inv.replacement_costs WHERE company_id = :company_id",
+    "DELETE FROM fa.asset_books WHERE company_id = :company_id",
+    "DELETE FROM fa.asset_categories WHERE company_id = :company_id",
+    "DELETE FROM fa.asset_groups WHERE company_id = :company_id",
+    "DELETE FROM fa.asset_locations WHERE company_id = :company_id",
+    "DELETE FROM payroll.pay_item_definitions WHERE company_id = :company_id",
+    "DELETE FROM hr.employees WHERE company_id = :company_id",
+    "DELETE FROM hr.positions WHERE company_id = :company_id",
+    "DELETE FROM hr.job_grades WHERE company_id = :company_id",
+    "DELETE FROM hr.organizational_units WHERE company_id = :company_id",
+    "DELETE FROM hr.lookup_values WHERE company_id = :company_id",
+    "DELETE FROM core.exchange_rates WHERE company_id = :company_id",
+    "DELETE FROM doc.attachments WHERE company_id = :company_id",
     # اشخاص (تفصیلیِ مشتری/تامین‌کننده/پرسنل + گروه‌ها).
     "DELETE FROM comm.party_contacts WHERE party_detail_account_id IN "
     "(SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id)",
@@ -435,7 +514,7 @@ _MASTER_DATA_DELETE_STATEMENTS = [
 ]
 
 
-def wipe_master_data(company_id: int) -> None:
+def wipe_master_data(company_id: int) -> int:
     """اطلاعات پایه (حساب‌ها، کالاها، انبارها، مشتریان/تامین‌کنندگان و...)
     را حذف می‌کند. طبق درخواست صریح، این کار فقط وقتی مجاز است که
     هیچ سندی برای این شرکت نمانده باشد — وگرنه با پیام روشن رد
@@ -446,13 +525,17 @@ def wipe_master_data(company_id: int) -> None:
                 "SELECT "
                 "(SELECT count(*) FROM comm.commercial_documents WHERE company_id = :company_id) + "
                 "(SELECT count(*) FROM inv.stock_documents WHERE company_id = :company_id) + "
-                "(SELECT count(*) FROM acc.journal_entries WHERE company_id = :company_id)"
+                "(SELECT count(*) FROM acc.journal_entries WHERE company_id = :company_id) + "
+                "(SELECT count(*) FROM comm.purchase_requests WHERE company_id = :company_id) + "
+                "(SELECT count(*) FROM payroll.periods WHERE company_id = :company_id) + "
+                "(SELECT count(*) FROM prd.production_orders WHERE company_id = :company_id) + "
+                "(SELECT count(*) FROM fa.assets WHERE company_id = :company_id)"
             ),
             {"company_id": company_id},
         ).scalar_one()
     if remaining:
-        raise ValueError("ابتدا باید همهٔ اسناد (فروش/خرید، انبار، مالی) پاک شوند — اطلاعات پایه هنوز به آن‌ها وصل است.")
-    _run_delete_sequence(company_id, _MASTER_DATA_DELETE_STATEMENTS)
+        raise ValueError("ابتدا باید همهٔ اسناد (گزینهٔ ۱) پاک شوند — اطلاعات پایه هنوز به آن‌ها وصل است.")
+    return _run_delete_sequence(company_id, _MASTER_DATA_DELETE_STATEMENTS)
 
 
 # ---------------------------------------------------------------------
@@ -489,12 +572,41 @@ _SETTINGS_DELETE_STATEMENTS = [
     # طبقِ همان رفعِ باگ: تنظیماتِ آلارمِ موعدِ تسویه هم بعدِ ساختِ اولیه‌یِ
     # این ابزار اضافه شد.
     "DELETE FROM comm.settlement_alarm_settings WHERE company_id = :company_id",
+    # R278: تنظیمات ماژول‌های جدیدتر (صندوق، پیامک، سانترال، فروش اینترنتی، حقوق، گردش کار، ...)
+    "DELETE FROM comm.ai_content_settings WHERE company_id = :company_id",
+    "DELETE FROM comm.cms_connections WHERE company_id = :company_id",
+    "DELETE FROM comm.marketplace_connections WHERE company_id = :company_id",
+    "DELETE FROM comm.social_connections WHERE company_id = :company_id",
+    "DELETE FROM comm.smart_publish_settings WHERE company_id = :company_id",
+    "DELETE FROM comm.sms_gateway_settings WHERE company_id = :company_id",
+    "DELETE FROM comm.voip_connections WHERE company_id = :company_id",
+    "DELETE FROM comm.mobile_settlement_methods WHERE company_id = :company_id",
+    "DELETE FROM comm.order_tracking_settings WHERE company_id = :company_id",
+    "DELETE FROM comm.pos_cashier_settings WHERE company_id = :company_id",
+    "DELETE FROM comm.pos_settings WHERE company_id = :company_id",
+    "DELETE FROM comm.pos_settlement_method_defaults WHERE company_id = :company_id",
+    "DELETE FROM comm.pricing_policies WHERE company_id = :company_id",
+    "DELETE FROM comm.credit_policies WHERE company_id = :company_id",
+    "DELETE FROM comm.fulfillment_routing_rules WHERE company_id = :company_id",
+    "DELETE FROM comm.report_views WHERE company_id = :company_id",
+    "DELETE FROM rpt.report_templates WHERE company_id = :company_id",
+    "DELETE FROM fa.asset_settings WHERE company_id = :company_id",
+    "DELETE FROM hr.attendance_import_templates WHERE company_id = :company_id",
+    "DELETE FROM wf.approval_workflows WHERE company_id = :company_id",
+    "DELETE FROM payroll.company_settings WHERE company_id = :company_id",
+    "DELETE FROM payroll.description_templates WHERE company_id = :company_id",
+    "DELETE FROM payroll.insurance_configs WHERE company_id = :company_id",
+    "DELETE FROM payroll.minimum_wage_rates WHERE company_id = :company_id",
+    "DELETE FROM payroll.overtime_rules WHERE company_id = :company_id",
+    "DELETE FROM payroll.policies WHERE company_id = :company_id",
+    "DELETE FROM payroll.tax_brackets WHERE company_id = :company_id",
+    "DELETE FROM payroll.tax_exemptions WHERE company_id = :company_id",
 ]
 
 
-def wipe_settings(company_id: int) -> None:
+def wipe_settings(company_id: int) -> int:
     """تنظیمات شرکت (نگاشت حساب‌ها، سطح‌بندی حساب/تفصیلی، شماره‌گذاری
     اسناد، Toggleهای ماژول) را حذف می‌کند — به تعریف‌های سراسری/مشترک
     بین همهٔ شرکت‌ها (مثل فهرست ویژگی‌های قابل‌فعال‌سازی) دست
     نمی‌زند، فقط انتخاب/مقدار همین شرکت را."""
-    _run_delete_sequence(company_id, _SETTINGS_DELETE_STATEMENTS)
+    return _run_delete_sequence(company_id, _SETTINGS_DELETE_STATEMENTS)

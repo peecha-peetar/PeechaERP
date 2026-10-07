@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QLabel, QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
-from peecha import session
+from peecha import numerals, session
 from peecha.services import data_reset as reset_service
 from peecha.ui.widgets import FieldHelpMixin, wrap_scrollable_with_footer
 
@@ -94,39 +94,39 @@ class SystemDataResetScreen(FieldHelpMixin, QWidget):
         layout.addWidget(title)
 
         hint = QLabel(
-            "هرکدام از این سه عملیات فقط روی شرکت جاری اثر می‌گذارد و ساختار برنامه/تنظیمات سراسری را "
-            "دست‌نخورده می‌گذارد. هرسه بازگشت‌ناپذیرند — قبل از اجرا، پیشنهاد می‌شود از «پشتیبان‌گیری و بازیابی» "
-            "یک بک‌آپ بگیرید."
+            "هرکدام از این سه عملیات فقط روی شرکت جاری اثر می‌گذارد و برگشت‌ناپذیر است — قبل از اجرا از "
+            "«پشتیبان‌گیری و بازیابی» یک نسخهٔ پشتیبان بگیرید. خود شرکت، کاربران و دسترسی‌ها، سال‌های مالی، "
+            "ارزهای شرکت و سابقهٔ تغییرات (حسابرسی) هرگز پاک نمی‌شوند."
         )
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         self.documents_section = _ResetSection(
-            "۱) اسناد (فروش/خرید + انبار + مالی/حسابداری)",
-            "همهٔ سفارش/پیش‌فاکتور/فاکتور/برگشت، سندهای انبار (رسید/حواله/اصلاح)، و اسناد حسابداری با هم "
-            "پاک می‌شوند — چون به هم وصل‌اند. اطلاعات پایه و تنظیمات دست‌نخورده می‌مانند. توجه: تنخواه‌گردان‌ها و "
-            "چک‌ها هم چون هرکدام سند حسابداری خودشان را دارند، جزو همین دسته‌اند. ماژول‌های کمترمعمول "
-            "(فروشگاه/باشگاه مشتریان/گارانتی و مجوز مرجوعی/بازارهای آنلاین/شمارش چرخه‌ای) پوشش داده نمی‌شوند — اگر "
-            "چیزی از آن‌ها به این اسناد وابسته باشد، عملیات با پیام روشن متوقف می‌شود و هیچ‌چیز حذف نمی‌شود.",
+            "۱) اسناد و عملیات",
+            "همهٔ اسناد فروش و خرید (سفارش، پیش‌فاکتور، فاکتور، برگشت، امانی)، اسناد انبار و انبارگردانی، اسناد "
+            "حسابداری و خزانه‌داری (چک، تنخواه، اقساط، تسویه)، فروش حضوری، پخش، درخواست خرید، استعلام قیمت، "
+            "بودجه، تولید، دارایی‌های ثابت و استهلاک، حضور و غیاب و دوره‌های حقوق، ویزیت‌ها و سوابق ارتباط با "
+            "مشتری، کارتابل و اعلان‌ها پاک می‌شوند. اطلاعات پایه و تنظیمات دست‌نخورده می‌مانند.",
             "پاک‌کردن همهٔ اسناد",
             self._wipe_documents,
         )
         layout.addWidget(self.documents_section)
 
         self.master_data_section = _ResetSection(
-            "۲) اطلاعات پایه (حساب‌ها، کالاها، انبارها، مشتریان/تامین‌کنندگان، فهرست قیمت، بانک‌ها و...)",
-            "فقط وقتی مجاز است که هیچ سندی نمانده باشد (ابتدا گزینهٔ ۱ را بزنید). نگاشت حساب‌ها هم چون به "
-            "همین حساب‌ها وصل است، با این عملیات پاک می‌شود.",
+            "۲) اطلاعات پایه",
+            "کدینگ حساب‌ها و تفصیلی‌ها، کالاها و گروه‌ها، انبارها و محل‌ها، مشتریان و تامین‌کنندگان، فهرست قیمت و "
+            "تخفیف، بانک‌ها، شعبه‌ها، صندوق‌های فروش، کارکنان و ساختار سازمانی، طبقه و محل دارایی، اطلاعات پایهٔ "
+            "تولید، نرخ ارزها و فایل‌های پیوست. فقط وقتی مجاز است که هیچ سندی نمانده باشد (ابتدا گزینهٔ ۱).",
             "پاک‌کردن اطلاعات پایه",
             self._wipe_master_data,
         )
         layout.addWidget(self.master_data_section)
 
         self.settings_section = _ResetSection(
-            "۳) تنظیمات (نگاشت حساب‌ها، سطح‌بندی کدینگ، شماره‌گذاری اسناد، Toggleهای ماژول)",
-            "مستقل از دو مورد بالاست — بدون نیاز به پاک‌کردن اسناد/اطلاعات پایه هم قابل‌اجراست. تعریف‌های "
-            "سراسری مشترک بین همهٔ شرکت‌ها (مثلاً فهرست ویژگی‌های قابل‌فعال‌سازی) هرگز پاک نمی‌شوند.",
+            "۳) تنظیمات",
+            "نگاشت حساب‌ها، سطح‌بندی کدینگ، شماره‌گذاری اسناد، قابلیت‌های فعال، تنظیمات صندوق و پیامک و سانترال و "
+            "فروش اینترنتی، تنظیمات حقوق و بیمه و مالیات، گردش کار تایید و الگوهای گزارش. مستقل از دو مورد بالاست.",
             "پاک‌کردن تنظیمات",
             self._wipe_settings,
         )
@@ -142,7 +142,7 @@ class SystemDataResetScreen(FieldHelpMixin, QWidget):
         outer.addWidget(wrap_scrollable_with_footer(panel, []))
 
         self.set_field_help([
-            (self.status_text, "پیام/خطای آخرین عملیات خام‌کردن این‌جا نشان داده می‌شود — هیچ فیلدی برای ورود نیست."),
+            (self.status_text, "پیام یا خطای آخرین عملیات پاک‌سازی این‌جا نشان داده می‌شود — هیچ فیلدی برای ورود نیست."),
         ])
 
     def _company_id(self) -> int | None:
@@ -153,16 +153,17 @@ class SystemDataResetScreen(FieldHelpMixin, QWidget):
         if company_id is None:
             return
         try:
-            func(company_id)
+            deleted = func(company_id)
         except ValueError as exc:
             self.status_text.setPlainText(str(exc))
             QMessageBox.warning(self, "خطا", str(exc))
             return
-        self.status_text.setPlainText(success_message)
-        QMessageBox.information(self, "انجام شد", success_message)
+        message = f"{success_message} ({numerals.to_persian_digits(str(deleted or 0))} رکورد)"
+        self.status_text.setPlainText(message)
+        QMessageBox.information(self, "انجام شد", message)
 
     def _wipe_documents(self) -> None:
-        self._run(reset_service.wipe_documents, "همهٔ اسناد فروش/خرید، انبار، و مالی/حسابداری این شرکت پاک شدند.")
+        self._run(reset_service.wipe_documents, "همهٔ اسناد و عملیات این شرکت پاک شدند.")
 
     def _wipe_master_data(self) -> None:
         self._run(reset_service.wipe_master_data, "اطلاعات پایهٔ این شرکت پاک شدند.")
