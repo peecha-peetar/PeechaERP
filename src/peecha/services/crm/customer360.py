@@ -291,7 +291,14 @@ def customer_360(company_id: int, customer_id: int, today: datetime.date | None 
             "counts": {"open_activities": open_acts, "overdue_activities": overdue_acts, "open_opportunities": opps[0],
                        "open_opportunity_value": decimal.Decimal(opps[1]), "open_tickets": tickets, "last_visit": last_visit},
             "smart_actions": smart_actions(ident, fin, sal, tickets), "summary": summary_text(ident, fin, sal),
-            "analytics": analytics_block(company_id, customer_id)}
+            "analytics": analytics_block(company_id, customer_id), "loyalty": _loyalty(company_id, customer_id)}
+
+
+def _loyalty(company_id: int, customer_id: int) -> dict:
+    from peecha.services.crm import loyalty
+
+    s = loyalty.summary(company_id, customer_id, limit=0)
+    return {k: s[k] for k in ("points", "wallet", "tier", "tier_label", "lifetime_points")}
 
 
 def analytics_block(company_id: int, customer_id: int) -> dict | None:

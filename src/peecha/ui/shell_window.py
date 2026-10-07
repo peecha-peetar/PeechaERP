@@ -1059,6 +1059,9 @@ class MainWindow(QMainWindow):
             from peecha.services import sms_marketing as sms_marketing_service
 
             sms_marketing_service.run_due_campaigns(session.current_company.company_id)
+            from peecha.services.crm import campaigns as crm_campaigns  # R284: وضعیت ارسال مخاطبان کمپین CRM
+
+            crm_campaigns.sync_delivery(session.current_company.company_id)
         except Exception:  # noqa: BLE001 -- تیکِ پس‌زمینه‌ای نباید هیچ‌وقت برنامه را متوقف کند
             pass
 
@@ -1882,6 +1885,7 @@ class MainWindow(QMainWindow):
         self.register_screen("crm_leads", lambda: crm_screens.LeadsScreen(self))
         self.register_screen("crm_pipeline", lambda: crm_screens.PipelineScreen(self))
         self.register_screen("crm_analytics", lambda: crm_screens.AnalyticsScreen(self))  # R283
+        self.register_screen("crm_campaigns", lambda: crm_screens.CampaignsScreen(self))  # R284
         self.register_screen("crm_settings", lambda: crm_screens.CrmSettingsScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 

@@ -19,9 +19,11 @@ from PySide6.QtWidgets import (
 from peecha import numerals
 from peecha.services.crm import activities as act_service
 from peecha.services.crm import analytics
+from peecha.services.crm import campaigns as camp_service
 from peecha.services.crm import common as cc
 from peecha.services.crm import customer360 as c360
 from peecha.services.crm import leads as lead_service
+from peecha.services.crm import loyalty as loyalty_service
 from peecha.services.crm import opportunities as opp_service
 from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
@@ -405,6 +407,9 @@ class Customer360Screen(QWidget):
                      ("RFM", f"{an['rfm']} — {an['rfm_label']}"),
                      ("ارزش طول عمر (تاکنون / پیش‌بینی)", f"{money(an['clv_historical'])} / {money(an['clv_predicted'])}"),
                      ("سگمنت‌ها", "، ".join(an["segments"])), ("اقدام پیشنهادی", an["next_best_action"])]
+        lo = d.get("loyalty")
+        if lo and (lo["points"] or lo["lifetime_points"]):
+            info.append(("باشگاه مشتریان", P(f"{lo['points']} امتیاز — سطح {lo['tier_label']}")))
         fill(self.t_info, [[k, v if v not in (None, "") else "—"] for k, v in info])
         fill(self.t_top, [[x["name"], x["times"], x["quantity"].normalize() if x["quantity"] is not None else "", x["amount"]]
                           for x in sal["top_items"]])
@@ -1824,3 +1829,425 @@ class AnalyticsScreen(QWidget):
         aid, ok = _run(self, "پیگیری", act_service.create_activity, company_id(), user_id(),
                        activity_fields(values, customer_detail_account_id=r["customer_detail_account_id"]))
         return aid if ok else None
+
+
+# =========================================================================================================
+# کمپین‌ها، باشگاه مشتریان و امتیاز سرنخ (R284)
+@ms.styled
+class CampaignsScreen(QWidget):
+    scroll_in_mdi = True
+
+    def __init__(self, main_window=None) -> None:
+        super().__init__()
+        self._main_window = main_window
+        self.dialog_runner = None
+        self.rows: list = []
+        self.members: list[dict] = []
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        title = QLabel("کمپین‌ها و باشگاه مشتریان")
+        title.setObjectName("pageTitle")
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("جستجوی نام کمپین")
+        self.search.returnPressed.connect(self.reload)
+        self.status = combo([(v, k) for k, v in camp_service.STATUS.items()], "همهٔ وضعیت‌ها")
+        self.status.currentIndexChanged.connect(lambda _i: self.reload())
+        outer.addWidget(ms.header_card(title, self.search, self.status))
+        cards, self.cards = ms.summary([("active", "کمپین فعال", "info", "📣"), ("members", "مخاطبان کمپین انتخابی", "info", "👥"),
+                                        ("response", "نرخ پاسخ", "success", "💬"), ("leads", "سرنخ‌ها / تبدیل‌شده", "warning", "🧲"),
+                                        ("revenue", "فروش نسبت‌داده‌شده", "success", "💰"), ("roi", "بازگشت سرمایه (ROI)", "success", "📈"),
+                                        ("cpl", "هزینه به ازای سرنخ", "warning", "🎯"), ("won", "فرصت برنده / مبلغ", "success", "🏆")],
+                                       per_row=4)
+        outer.addWidget(cards)
+        self.tabs = QTabWidget()
+        cw = QWidget()
+        cl = QVBoxLayout(cw)
+        split = QSplitter(Qt.Horizontal)
+        self.t = table(["شماره", "نام", "نوع", "وضعیت", "سگمنت", "شروع", "پایان", "مخاطبان", "بودجه", "هزینه", "مسئول"])
+        self.t.itemSelectionChanged.connect(self._selected_changed)
+        self.t.cellDoubleClicked.connect(lambda _r, _c: self.edit_campaign())
+        split.addWidget(self.t)
+        self.t_members = table(["مخاطب", "تماس", "وضعیت", "پاسخ", "یادداشت"])
+        split.addWidget(self.t_members)
+        split.setSizes([800, 480])
+        cl.addWidget(split, stretch=1)
+        self.buttons = {k: QPushButton(t) for k, t in (
+            ("new", "کمپین جدید"), ("edit", "ویرایش"), ("delete", "حذف"), ("build", "ساخت مخاطبان از سگمنت"),
+            ("add_customer", "افزودن مشتری"), ("add_lead", "افزودن سرنخ"), ("launch", "اجرای کمپین"), ("complete", "پایان"),
+            ("cancel", "لغو"), ("responded", "پاسخ داد"), ("converted", "تبدیل شد"), ("opted_out", "انصراف"),
+            ("new_lead", "ثبت سرنخ از کمپین"))}
+        actions = {"new": lambda: self.new_campaign(), "edit": lambda: self.edit_campaign(), "delete": lambda: self.delete_campaign(),
+                   "build": lambda: self.build_members(), "add_customer": lambda: self.add_customer(), "add_lead": lambda: self.add_lead(),
+                   "launch": lambda: self.launch(), "complete": lambda: self.close_campaign("COMPLETED"),
+                   "cancel": lambda: self.close_campaign("CANCELLED"), "responded": lambda: self.member_status("RESPONDED"),
+                   "converted": lambda: self.member_status("CONVERTED"), "opted_out": lambda: self.member_status("OPTED_OUT"),
+                   "new_lead": lambda: self.new_lead()}
+        for k, b in self.buttons.items():
+            b.clicked.connect(lambda _c=False, f=actions[k]: f())
+        B = self.buttons
+        cl.addWidget(ms.footer([[B["new"], B["edit"], B["delete"]], [B["build"], B["add_customer"], B["add_lead"]],
+                                [B["launch"], B["complete"], B["cancel"]], [B["responded"], B["converted"], B["opted_out"], B["new_lead"]]]))
+        self.tabs.addTab(cw, "کمپین‌ها")
+        self.tabs.addTab(self._loyalty_tab(), "باشگاه مشتریان")
+        self.tabs.addTab(self._scoring_tab(), "امتیاز سرنخ")
+        outer.addWidget(self.tabs, stretch=1)
+
+    # --- باشگاه مشتریان ---
+    def _loyalty_tab(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        self.l_enabled = QCheckBox("باشگاه مشتریان فعال است (امتیاز خرید از فاکتورهای ثبت‌شده)")
+        self.l_fields = {k: num_field() for k in ("amount_per_point", "first_purchase_bonus", "repeat_every", "repeat_bonus",
+                                                   "referral_points", "SILVER", "GOLD", "PLATINUM")}
+        labels = {"amount_per_point": "مبلغ هر امتیاز", "first_purchase_bonus": "جایزهٔ اولین خرید", "repeat_every": "هر چندمین خرید",
+                  "repeat_bonus": "جایزهٔ خرید تکراری", "referral_points": "امتیاز معرفی", "SILVER": "مرز نقره‌ای", "GOLD": "مرز طلایی",
+                  "PLATINUM": "مرز پلاتینی"}
+        lay.addWidget(self.l_enabled)
+        grid = QHBoxLayout()
+        for k, f in self.l_fields.items():
+            box = QVBoxLayout()
+            box.addWidget(QLabel(labels[k]))
+            box.addWidget(f)
+            grid.addLayout(box)
+        lay.addLayout(grid)
+        self.l_customer = QComboBox()
+        self.l_customer.currentIndexChanged.connect(lambda _i: self.load_loyalty_customer())
+        self.l_summary = QLabel("")
+        self.l_summary.setObjectName("sectionHint")
+        row = QHBoxLayout()
+        row.addWidget(QLabel("مشتری:"))
+        row.addWidget(self.l_customer, 1)
+        row.addWidget(self.l_summary, 2)
+        lay.addLayout(row)
+        self.t_loyalty = table(["تاریخ", "نوع", "امتیاز", "کیف پول", "سند"])
+        lay.addWidget(self.t_loyalty, stretch=1)
+        self.l_buttons = {"save": QPushButton("ذخیرهٔ قواعد"), "award": QPushButton("اعمال امتیاز فاکتورها"),
+                          "adjust": QPushButton("اصلاح امتیاز"), "referral": QPushButton("ثبت معرفی")}
+        self.l_buttons["save"].clicked.connect(lambda: self.save_loyalty())
+        self.l_buttons["award"].clicked.connect(lambda: self.award())
+        self.l_buttons["adjust"].clicked.connect(lambda: self.adjust_points())
+        self.l_buttons["referral"].clicked.connect(lambda: self.referral())
+        lay.addWidget(ms.footer([list(self.l_buttons.values())]))
+        return w
+
+    def _scoring_tab(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        hint = QLabel("سقف امتیاز هر عامل (۰ تا ۵۰) و مرز سطح‌ها؛ پس از ذخیره، سرنخ‌های باز دوباره امتیازدهی می‌شوند.")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self.s_factors = {k: num_field() for k in lead_service.FACTOR_MAX}
+        self.s_bands = {k: num_field() for k in ("VERY_HOT", "HOT", "WARM")}
+        for group, labels in ((self.s_factors, lead_service.FACTOR_LABELS), (self.s_bands, cc.SCORE_BANDS)):
+            row = QHBoxLayout()
+            for k, f in group.items():
+                box = QVBoxLayout()
+                box.addWidget(QLabel(labels[k]))
+                box.addWidget(f)
+                row.addLayout(box)
+            lay.addLayout(row)
+        self.t_sources = table(["منبع", "امتیاز"])
+        self.t_sources.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        lay.addWidget(self.t_sources, stretch=1)
+        self.s_save = QPushButton("ذخیرهٔ امتیازدهی سرنخ")
+        self.s_save.clicked.connect(lambda: self.save_scoring())
+        lay.addWidget(ms.footer([[self.s_save]]))
+        return w
+
+    def refresh(self) -> None:
+        cid = company_id()
+        if cid is None:
+            return
+        self.lk = CrmLookups(cid)
+        for k in ("new",):
+            self.buttons[k].setEnabled(can("crm_campaigns", "CREATE"))
+        for k in ("edit", "build", "add_customer", "add_lead", "launch", "complete", "cancel", "responded", "converted", "opted_out"):
+            self.buttons[k].setEnabled(can("crm_campaigns", "EDIT"))
+        self.buttons["delete"].setEnabled(can("crm_campaigns", "DELETE"))
+        self.buttons["new_lead"].setEnabled(can("crm_leads", "CREATE"))
+        admin = can("crm_settings", "EDIT")
+        self.l_buttons["save"].setEnabled(admin)
+        self.s_save.setEnabled(admin)
+        for k in ("award", "adjust", "referral"):
+            self.l_buttons[k].setEnabled(can("crm_campaigns", "EDIT"))
+        current = self.l_customer.currentData()
+        self.l_customer.blockSignals(True)
+        self.l_customer.clear()
+        for label, value in self.lk.customers:
+            self.l_customer.addItem(label, value)
+        set_combo(self.l_customer, current)
+        self.l_customer.blockSignals(False)
+        self.load_settings()
+        camp_service.sync_delivery(cid)
+        self.reload()
+        self.load_loyalty_customer()
+
+    def load_settings(self) -> None:
+        cid = company_id()
+        rules = loyalty_service.get_rules(cid)
+        self.l_enabled.setChecked(bool(rules["enabled"]))
+        for k, f in self.l_fields.items():
+            f.setText(str(rules["tiers"][k] if k in rules["tiers"] else rules[k]))
+        from peecha.db.base import new_session
+
+        with new_session() as session:
+            cfg = lead_service.scoring_config(session, cid)
+        for k, f in self.s_factors.items():
+            f.setText(str(cfg["factor_max"][k]))
+        bands = dict(cfg["bands"])
+        for k, f in self.s_bands.items():
+            f.setText(str(bands[k]))
+        sources = pl_service.list_lead_sources(cid)
+        fill(self.t_sources, [[s.name, cfg["source_points"].get(s.code, 5)] for s in sources], [s.code for s in sources])
+        self.t_sources.setEditTriggers(QAbstractItemView.AllEditTriggers)
+
+    def reload(self) -> None:
+        cid = company_id()
+        self.rows = camp_service.list_campaigns(cid, self.status.currentData(), self.search.text().strip() or None)
+        fill(self.t, [[r.campaign_no, r.name, r.type_label, r.status_label, r.segment_name, r.start_date or "", r.end_date or "",
+                       r.member_count, r.budget_amount if r.budget_amount is not None else "", r.actual_cost, r.owner_name]
+                      for r in self.rows], [r.campaign_id for r in self.rows])
+        self.cards["active"].setText(P(sum(1 for r in self.rows if r.status_code in ("ACTIVE", "SCHEDULED"))))
+        self._selected_changed()
+
+    def _row(self):
+        cid = _selected(self.t)
+        return next((r for r in self.rows if r.campaign_id == cid), None)
+
+    def _need(self):
+        r = self._row()
+        if r is None:
+            QMessageBox.warning(self, "کمپین", "یک کمپین را انتخاب کنید.")
+        return r
+
+    def _selected_changed(self) -> None:
+        r = self._row()
+        if r is None:
+            fill(self.t_members, [])
+            for k in ("members", "response", "leads", "revenue", "roi", "cpl", "won"):
+                self.cards[k].setText("—")
+            return
+        cid = company_id()
+        self.members = camp_service.list_members(cid, r.campaign_id)
+        fill(self.t_members, [[m["name"], m["contact"] or "", m["status_label"], m["responded_at"].date() if m["responded_at"] else "",
+                               m["note"] or ""] for m in self.members], [m["member_id"] for m in self.members])
+        a = camp_service.campaign_analytics(cid, r.campaign_id)
+        self.cards["members"].setText(P(a["members"]))
+        self.cards["response"].setText(P(f"{a['response_rate']}٪") if a["response_rate"] is not None else "—")
+        self.cards["leads"].setText(P(f"{a['leads']} / {a['leads_converted']}"))
+        self.cards["revenue"].setText(money(a["revenue"]))
+        self.cards["roi"].setText(P(f"{a['roi_percent']}٪") if a["roi_percent"] is not None else "—")
+        self.cards["cpl"].setText(money(a["cost_per_lead"]) if a["cost_per_lead"] is not None else "—")
+        self.cards["won"].setText(P(f"{a['opportunities_won']} / ") + money(a["won_amount"]))
+
+    def _form(self, r=None) -> list:
+        segs = [(s.name, s.segment_id) for s in seg_service.list_segments(company_id(), active_only=True)]
+        g = (lambda name, default=None: getattr(r, name)) if r else (lambda name, default=None: default)
+        today = datetime.date.today()
+        return [("name", "نام کمپین", QLineEdit(g("name", "") or "")),
+                ("campaign_type", "نوع", _with(combo([(v, k) for k, v in camp_service.TYPES.items()]), g("campaign_type", "SMS"))),
+                ("segment_id", "سگمنت مخاطبان", _with(combo(segs, "— بدون سگمنت —"), g("segment_id"))),
+                ("lead_source_id", "منبع سرنخ‌های کمپین", _with(combo(self.lk.sources, "—"), g("lead_source_id"))),
+                ("start_date", "شروع", date_field(g("start_date") or today)),
+                ("end_date", "پایان", date_field(g("end_date") or today + datetime.timedelta(days=30))),
+                ("attribution_days", "بازهٔ نسبت‌دهی فروش (روز پس از پایان)", num_field(g("attribution_days", 30))),
+                ("budget_amount", "بودجه", num_field(g("budget_amount"))), ("actual_cost", "هزینهٔ واقعی", num_field(g("actual_cost", 0))),
+                ("expected_revenue", "درآمد مورد انتظار", num_field(g("expected_revenue"))),
+                ("owner_user_id", "مسئول", _with(combo(self.lk.users, "— خودم —"), g("owner_user_id"))),
+                ("message_text", "متن پیام (کمپین پیامکی)", _text(g("message_text"))),
+                ("description", "توضیحات", _text(g("description")))]
+
+    @staticmethod
+    def _fields(v: dict) -> camp_service.CampaignFields:
+        return camp_service.CampaignFields(
+            v["name"] or "", v.get("campaign_type") or "SMS", segment_id=v.get("segment_id"), lead_source_id=v.get("lead_source_id"),
+            start_date=v.get("start_date"), end_date=v.get("end_date"), attribution_days=int(v.get("attribution_days") or 0),
+            budget_amount=v.get("budget_amount"), actual_cost=v.get("actual_cost") or ZERO, expected_revenue=v.get("expected_revenue"),
+            message_text=v.get("message_text"), owner_user_id=v.get("owner_user_id"), description=v.get("description"))
+
+    def new_campaign(self, values: dict | None = None) -> int | None:
+        values = values or _ask(self, "کمپین جدید", self._form())
+        if values is None:
+            return None
+        cid, ok = _run(self, "کمپین", camp_service.create_campaign, company_id(), user_id(), self._fields(values))
+        if ok:
+            self.reload()
+        return cid if ok else None
+
+    def edit_campaign(self, values: dict | None = None) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        values = values or _ask(self, "ویرایش کمپین", self._form(r))
+        if values is None:
+            return False
+        _x, ok = _run(self, "کمپین", camp_service.update_campaign, company_id(), user_id(), r.campaign_id, self._fields(values))
+        if ok:
+            self.reload()
+        return ok
+
+    def delete_campaign(self) -> bool:
+        r = self._need()
+        if r is None or not _confirm(self, "کمپین", f"کمپین «{r.name}» حذف شود؟"):
+            return False
+        _x, ok = _run(self, "کمپین", camp_service.delete_campaign, company_id(), user_id(), r.campaign_id)
+        if ok:
+            self.reload()
+        return ok
+
+    def _after(self, campaign_id: int) -> None:
+        self.reload()
+        for i in range(self.t.rowCount()):
+            if self.t.item(i, 0).data(Qt.UserRole) == campaign_id:
+                self.t.selectRow(i)
+
+    def build_members(self) -> int | None:
+        r = self._need()
+        if r is None:
+            return None
+        n, ok = _run(self, "مخاطبان", camp_service.build_members, company_id(), user_id(), r.campaign_id)
+        if ok:
+            self._after(r.campaign_id)
+        return n if ok else None
+
+    def add_customer(self, values: dict | None = None) -> int | None:
+        r = self._need()
+        if r is None:
+            return None
+        values = values or _ask(self, "افزودن مشتری", [("customer", "مشتری", combo(self.lk.customers))])
+        if not values or not values.get("customer"):
+            return None
+        n, ok = _run(self, "مخاطبان", camp_service.add_customers, company_id(), user_id(), r.campaign_id, [values["customer"]])
+        if ok:
+            self._after(r.campaign_id)
+        return n if ok else None
+
+    def add_lead(self, values: dict | None = None) -> int | None:
+        r = self._need()
+        if r is None:
+            return None
+        leads = [(f"{x.lead_no} — {x.full_name}", x.lead_id) for x in lead_service.list_leads(company_id(), open_only=True)]
+        values = values or _ask(self, "افزودن سرنخ", [("lead", "سرنخ", combo(leads))])
+        if not values or not values.get("lead"):
+            return None
+        n, ok = _run(self, "مخاطبان", camp_service.add_leads, company_id(), user_id(), r.campaign_id, [values["lead"]])
+        if ok:
+            self._after(r.campaign_id)
+        return n if ok else None
+
+    def launch(self, confirm: bool = True) -> dict | None:
+        r = self._need()
+        if r is None:
+            return None
+        if confirm and not _confirm(self, "اجرای کمپین", f"کمپین «{r.name}» برای {P(r.member_count)} مخاطب اجرا شود؟"):
+            return None
+        res, ok = _run(self, "اجرای کمپین", camp_service.launch, company_id(), user_id(), r.campaign_id)
+        if ok:
+            self._after(r.campaign_id)
+        return res if ok else None
+
+    def close_campaign(self, status_code: str) -> bool:
+        r = self._need()
+        if r is None:
+            return False
+        _x, ok = _run(self, "کمپین", camp_service.set_status, company_id(), user_id(), r.campaign_id, status_code)
+        if ok:
+            self._after(r.campaign_id)
+        return ok
+
+    def member_status(self, status_code: str) -> bool:
+        r, mid = self._row(), _selected(self.t_members)
+        if r is None or mid is None:
+            QMessageBox.warning(self, "مخاطب", "یک مخاطب را انتخاب کنید.")
+            return False
+        _x, ok = _run(self, "مخاطب", camp_service.set_member_status, company_id(), user_id(), mid, status_code)
+        if ok:
+            self._after(r.campaign_id)
+        return ok
+
+    def new_lead(self, values: dict | None = None) -> int | None:
+        """سرنخ پاسخ‌دهنده به کمپین (نسبت‌دادن خودکار به کمپین)."""
+        r = self._need()
+        if r is None:
+            return None
+        values = values or _ask(self, "سرنخ از کمپین", [("full_name", "نام", QLineEdit()), ("mobile", "موبایل", QLineEdit()),
+                                                        ("interested_text", "علاقه/نیاز", QLineEdit())])
+        if values is None:
+            return None
+        lid, ok = _run(self, "سرنخ", lead_service.create_lead, company_id(), user_id(), lead_service.LeadFields(
+            values.get("full_name") or "", mobile=values.get("mobile"), interested_text=values.get("interested_text")),
+            campaign_id=r.campaign_id)
+        if ok:
+            self._after(r.campaign_id)
+        return lid if ok else None
+
+    # --- باشگاه و امتیاز ---
+    def save_loyalty(self) -> bool:
+        def num(k):
+            return int(numerals.to_ascii_digits(self.l_fields[k].text().strip() or "0").replace(",", "").split(".")[0])
+
+        _x, ok = _run(self, "باشگاه مشتریان", loyalty_service.save_rules, company_id(), user_id(), enabled=self.l_enabled.isChecked(),
+                      amount_per_point=num("amount_per_point"), first_purchase_bonus=num("first_purchase_bonus"),
+                      repeat_every=num("repeat_every"), repeat_bonus=num("repeat_bonus"), referral_points=num("referral_points"),
+                      tiers={k: num(k) for k in ("SILVER", "GOLD", "PLATINUM")})
+        return ok
+
+    def award(self) -> dict | None:
+        res, ok = _run(self, "باشگاه مشتریان", loyalty_service.award_for_invoices, company_id())
+        if ok:
+            self.load_loyalty_customer()
+            if not self.dialog_runner:
+                QMessageBox.information(self, "باشگاه مشتریان", P(f"{res['points']} امتیاز برای {res['invoices']} فاکتور ثبت شد."))
+        return res if ok else None
+
+    def load_loyalty_customer(self) -> None:
+        cust = self.l_customer.currentData()
+        if cust is None:
+            self.l_summary.setText("")
+            fill(self.t_loyalty, [])
+            return
+        s = loyalty_service.summary(company_id(), cust)
+        self.l_summary.setText(P(f"امتیاز: {s['points']} — سطح: {s['tier_label']} — کل امتیاز کسب‌شده: {s['lifetime_points']} — "
+                                 f"کیف پول: ") + money(s["wallet"]))
+        types = {"EARN": "کسب", "REDEEM": "مصرف", "ADJUST": "اصلاح"}
+        fill(self.t_loyalty, [[t["at"].date(), types.get(t["type"], t["type"]), t["points"], t["wallet"], t["document_no"] or ""]
+                              for t in s["transactions"]])
+
+    def adjust_points(self, values: dict | None = None) -> int | None:
+        cust = self.l_customer.currentData()
+        if cust is None:
+            return None
+        values = values or _ask(self, "اصلاح امتیاز", [("points", "امتیاز (منفی برای کسر)", num_field()), ("reason", "علت", QLineEdit())])
+        if values is None:
+            return None
+        bal, ok = _run(self, "اصلاح امتیاز", loyalty_service.adjust_points, company_id(), user_id(), cust, int(values.get("points") or 0),
+                       values.get("reason") or "")
+        if ok:
+            self.load_loyalty_customer()
+        return bal if ok else None
+
+    def referral(self, values: dict | None = None) -> int | None:
+        cust = self.l_customer.currentData()
+        if cust is None:
+            return None
+        values = values or _ask(self, "ثبت معرفی", [("referred", "مشتری معرفی‌شده", combo(self.lk.customers))])
+        if not values or not values.get("referred"):
+            return None
+        pts, ok = _run(self, "معرفی", loyalty_service.award_referral, company_id(), user_id(), cust, values["referred"])
+        if ok:
+            self.load_loyalty_customer()
+        return pts if ok else None
+
+    def save_scoring(self) -> bool:
+        def num(f):
+            return int(numerals.to_ascii_digits(f.text().strip() or "0").split(".")[0])
+
+        sources = {}
+        for i in range(self.t_sources.rowCount()):
+            code = self.t_sources.item(i, 0).data(Qt.UserRole)
+            sources[code] = int(numerals.to_ascii_digits(self.t_sources.item(i, 1).text().strip() or "0").split(".")[0])
+        _x, ok = _run(self, "امتیاز سرنخ", lead_service.save_scoring_config, company_id(), user_id(),
+                      factor_max={k: num(f) for k, f in self.s_factors.items()}, source_points=sources,
+                      bands={k: num(f) for k, f in self.s_bands.items()})
+        return ok

@@ -15,7 +15,7 @@ from sqlalchemy import func, or_, select
 from peecha.db.base import new_session
 from peecha.db.models.accounting import CustomerDetail, DetailAccount
 from peecha.db.models.commercial import CustomerActivity
-from peecha.db.models.crm import Lead, LeadSource, Opportunity
+from peecha.db.models.crm import Campaign, CampaignMember, CrmSettings, Lead, LeadSource, Opportunity
 from peecha.services import commercial_partners as partners_service
 from peecha.services.crm import common as c
 
@@ -80,8 +80,53 @@ SOURCE_POINTS = {"REFERRAL": 15, "EXHIBITION": 12, "VISITOR": 12, "PHONE": 10, "
 BAND_THRESHOLDS = (("VERY_HOT", 75), ("HOT", 55), ("WARM", 30), ("COLD", 0))
 
 
-def score_band(score: int) -> str:
-    return next(band for band, floor in BAND_THRESHOLDS if score >= floor)
+FACTOR_MAX = {"engagement": 20, "responsiveness": 10, "interest": 10, "value": 20, "history": 10, "profile": 10, "source": 15,
+              "recency": 10}
+FACTOR_LABELS = {"engagement": "تعامل", "responsiveness": "پاسخ‌گویی", "interest": "علاقه به محصول", "value": "ارزش احتمالی",
+                 "history": "سابقهٔ خرید", "profile": "صنعت و موقعیت", "source": "منبع", "recency": "فعالیت اخیر"}
+
+
+def score_band(score: int, thresholds=BAND_THRESHOLDS) -> str:
+    return next(band for band, floor in thresholds if score >= floor)
+
+
+def scoring_config(session, company_id: int) -> dict:
+    """تنظیم امتیاز سرنخ شرکت (crm.settings.options["lead_scoring"]): سقف هر عامل، امتیاز منبع‌ها و مرز سطح‌ها."""
+    row = session.get(CrmSettings, company_id)
+    cfg = (row.options or {}).get("lead_scoring", {}) if row else {}
+    bands = cfg.get("bands") or {}
+    return {"factor_max": {**FACTOR_MAX, **(cfg.get("factor_max") or {})},
+            "source_points": {**SOURCE_POINTS, **(cfg.get("source_points") or {})},
+            "bands": tuple((b, int(bands.get(b, floor))) for b, floor in BAND_THRESHOLDS)}
+
+
+def save_scoring_config(company_id: int, user_id: int | None, *, factor_max: dict | None = None,
+                        source_points: dict | None = None, bands: dict | None = None) -> dict:
+    for k, v in (factor_max or {}).items():
+        if k not in FACTOR_MAX or not 0 <= int(v) <= 50:
+            raise ValueError(f"سقف عامل «{FACTOR_LABELS.get(k, k)}» باید بین ۰ تا ۵۰ باشد.")
+    for v in (source_points or {}).values():
+        if not 0 <= int(v) <= 50:
+            raise ValueError("امتیاز منبع باید بین ۰ تا ۵۰ باشد.")
+    if bands:
+        merged = {**{b: f for b, f in BAND_THRESHOLDS}, **{k: int(v) for k, v in bands.items()}}
+        if not 100 >= merged["VERY_HOT"] > merged["HOT"] > merged["WARM"] > 0:
+            raise ValueError("مرز سطح‌ها باید به ترتیب «بسیار داغ > داغ > گرم > ۰» باشد.")
+    with new_session() as session:
+        row = session.get(CrmSettings, company_id) or CrmSettings(company_id=company_id, options={})
+        cfg = {"factor_max": {k: int(v) for k, v in (factor_max or {}).items()},
+               "source_points": {k: int(v) for k, v in (source_points or {}).items()},
+               "bands": {k: int(v) for k, v in (bands or {}).items()}}
+        row.options = {**(row.options or {}), "lead_scoring": cfg}
+        row.updated_at = c.now()
+        session.add(row)
+        c.audit(session, company_id, user_id, "Settings", company_id, "UPDATE", {"lead_scoring": cfg})
+        session.commit()
+        leads = list(session.scalars(select(Lead).where(Lead.company_id == company_id, Lead.status_code.in_(c.LEAD_OPEN_STATUSES))))
+        for lead in leads:
+            _rescore(session, lead)
+        session.commit()
+        return scoring_config(session, company_id)
 
 
 def compute_lead_score(session, lead: Lead) -> tuple[int, dict[str, int]]:
@@ -112,12 +157,17 @@ def compute_lead_score(session, lead: Lead) -> tuple[int, dict[str, int]]:
     if lead.last_activity_at:
         days = (c.now() - lead.last_activity_at).days
         parts["recency"] = 10 if days <= 3 else 6 if days <= 14 else 2 if days <= 45 else 0
+    cfg = scoring_config(session, lead.company_id)
+    if lead.source_id:
+        parts["source"] = min(50, int(cfg["source_points"].get(code, 5)))
+    # هر عامل به نسبت سقف تنظیم‌شده مقیاس می‌شود (پیش‌فرض: بدون تغییر)
+    parts = {k: round(v * cfg["factor_max"][k] / FACTOR_MAX[k]) if k != "source" else v for k, v in parts.items()}
     return min(100, sum(parts.values())), parts
 
 
 def _rescore(session, lead: Lead) -> None:
     lead.score, _parts = compute_lead_score(session, lead)
-    lead.score_band = score_band(lead.score)
+    lead.score_band = score_band(lead.score, scoring_config(session, lead.company_id)["bands"])
 
 
 def rescore_lead(company_id: int, lead_id: int) -> int:
@@ -166,7 +216,8 @@ def find_duplicates(company_id: int, mobile: str | None = None, email: str | Non
     return out
 
 
-def create_lead(company_id: int, user_id: int, f: LeadFields, allow_duplicate: bool = False) -> int:
+def create_lead(company_id: int, user_id: int, f: LeadFields, allow_duplicate: bool = False, campaign_id: int | None = None) -> int:
+    """campaign_id: سرنخ پاسخ به کمپین است (عضو کمپین با وضعیت «پاسخ داده» ثبت می‌شود)."""
     _clean(f)
     if not allow_duplicate:
         dups = [d for d in find_duplicates(company_id, f.mobile, f.email) if d.startswith("سرنخ")]
@@ -178,8 +229,17 @@ def create_lead(company_id: int, user_id: int, f: LeadFields, allow_duplicate: b
         lead = Lead(company_id=company_id, lead_no=c.next_number(session, Lead, company_id, Lead.lead_no),
                     created_by_user_id=user_id, status_code="NEW", **f.__dict__)
         lead.owner_user_id = lead.owner_user_id or user_id
+        if campaign_id:
+            camp = session.get(Campaign, campaign_id)
+            if camp is None or camp.company_id != company_id:
+                raise ValueError("کمپین نامعتبر است.")
+            lead.campaign_id = campaign_id
+            lead.source_id = lead.source_id or camp.lead_source_id
         session.add(lead)
         session.flush()
+        if campaign_id:
+            session.add(CampaignMember(campaign_id=campaign_id, lead_id=lead.lead_id, contact=f.mobile or f.email or f.phone,
+                                       status_code="RESPONDED", responded_at=c.now()))
         _rescore(session, lead)
         c.audit(session, company_id, user_id, "Lead", lead.lead_id, "CREATE",
                 {"no": lead.lead_no, "name": lead.full_name, "owner": lead.owner_user_id, "source": f.source_id})
@@ -312,6 +372,8 @@ def convert_lead(company_id: int, user_id: int, lead_id: int, *, existing_custom
         session.query(CustomerActivity).filter(CustomerActivity.lead_id == lead_id,
                                                CustomerActivity.customer_detail_account_id.is_(None)).update(
             {"customer_detail_account_id": customer_id})
+        session.query(CampaignMember).filter(CampaignMember.lead_id == lead_id).update(
+            {"status_code": "CONVERTED", "converted_at": c.now()})
         c.audit(session, company_id, user_id, "Lead", lead_id, "CONVERT",
                 {"customer": customer_id, "new_customer": existing_customer_id is None, "opportunity": opportunity_id})
         session.commit()

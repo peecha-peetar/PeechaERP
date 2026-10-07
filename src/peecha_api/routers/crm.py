@@ -13,6 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services.crm import activities as act_service
 from peecha.services.crm import analytics
+from peecha.services.crm import campaigns as camp_service
+from peecha.services.crm import loyalty as loyalty_service
 from peecha.services.crm import customer360 as c360
 from peecha.services.crm import leads as lead_service
 from peecha.services.crm import opportunities as opp_service
@@ -24,7 +26,8 @@ from peecha_api.deps import AuthContext, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import require_permission
 from peecha_api.schemas import (
-    CrmActivityCompleteRequest, CrmActivityRequest, CrmAssignRequest, CrmLeadConvertRequest, CrmLeadRequest,
+    CrmActivityCompleteRequest, CrmActivityRequest, CrmAssignRequest, CrmCampaignLaunchRequest, CrmCampaignMembersRequest,
+    CrmCampaignRequest, CrmLoyaltyAdjustRequest, CrmMemberStatusRequest, CrmReferralRequest, CrmLeadConvertRequest, CrmLeadRequest,
     CrmLeadStatusRequest, CrmOpportunityLine, CrmOpportunityRequest, CrmSegmentRequest, CrmStageMoveRequest,
 )
 
@@ -94,6 +97,16 @@ def kanban(pipeline_id: int, mine: bool = False, ctx: AuthContext = Depends(requ
 
 
 # --- سرنخ --------------------------------------------------------------------------------------------
+def _valid_campaign(company_id: int, campaign_id: int | None) -> int | None:
+    """کمپین نامعتبر سرنخ موبایل را رد نمی‌کند (صف آفلاین)، فقط نسبت‌دادن انجام نمی‌شود."""
+    if not campaign_id:
+        return None
+    try:
+        return camp_service.get_campaign(company_id, campaign_id).campaign_id
+    except ValueError:
+        return None
+
+
 def _lead_fields(p: CrmLeadRequest) -> lead_service.LeadFields:
     return lead_service.LeadFields(**{k: getattr(p, k) for k in lead_service.LeadFields.__dataclass_fields__})
 
@@ -111,7 +124,8 @@ def list_leads(status_code: str | None = None, open_only: bool = False, mine: bo
 def create_lead(payload: CrmLeadRequest, ctx: AuthContext = Depends(require_permission(F_LEADS, "CREATE")),
                 idempotency_key: str | None = Depends(get_idempotency_key)) -> dict:
     return _idem(idempotency_key, "POST /crm/leads", ctx,
-                 lambda: lead_service.create_lead(ctx.company_id, ctx.user_id, _lead_fields(payload), payload.allow_duplicate),
+                 lambda: lead_service.create_lead(ctx.company_id, ctx.user_id, _lead_fields(payload), payload.allow_duplicate,
+                                                  campaign_id=_valid_campaign(ctx.company_id, payload.campaign_id)),
                  lambda lead_id: {"lead_id": lead_id})
 
 
@@ -389,3 +403,124 @@ def segments_members(segment_id: int, ctx: AuthContext = Depends(require_permiss
     analytics.ensure_fresh(ctx.company_id)
     ids = _call(seg_service.members, ctx.company_id, segment_id)
     return _json(analytics.list_scores(ctx.company_id, customer_ids=ids, order="monetary"))
+
+
+
+# --- کمپین و باشگاه مشتریان (R284) -------------------------------------------------------------------
+F_CAMP = "crm_campaigns"
+
+
+def _camp_fields(p: CrmCampaignRequest) -> camp_service.CampaignFields:
+    return camp_service.CampaignFields(**{k: getattr(p, k) for k in camp_service.CampaignFields.__dataclass_fields__})
+
+
+@router.get("/campaigns")
+def campaigns_list(status_code: str | None = None, q: str | None = None,
+                   ctx: AuthContext = Depends(require_permission(F_CAMP, "VIEW"))) -> list[dict]:
+    return [_json(r.__dict__) for r in camp_service.list_campaigns(ctx.company_id, status_code, q)]
+
+
+@router.post("/campaigns")
+def campaigns_create(body: CrmCampaignRequest, ctx: AuthContext = Depends(require_permission(F_CAMP, "CREATE"))) -> dict:
+    return {"campaign_id": _call(camp_service.create_campaign, ctx.company_id, ctx.user_id, _camp_fields(body))}
+
+
+@router.get("/campaigns/{campaign_id}")
+def campaigns_get(campaign_id: int, ctx: AuthContext = Depends(require_permission(F_CAMP, "VIEW"))) -> dict:
+    camp_service.sync_delivery(ctx.company_id)
+    return _json({**_call(camp_service.get_campaign, ctx.company_id, campaign_id).__dict__,
+                  "analytics": camp_service.campaign_analytics(ctx.company_id, campaign_id)})
+
+
+@router.put("/campaigns/{campaign_id}")
+def campaigns_update(campaign_id: int, body: CrmCampaignRequest, ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    _call(camp_service.update_campaign, ctx.company_id, ctx.user_id, campaign_id, _camp_fields(body))
+    return {"campaign_id": campaign_id}
+
+
+@router.delete("/campaigns/{campaign_id}")
+def campaigns_delete(campaign_id: int, ctx: AuthContext = Depends(require_permission(F_CAMP, "DELETE"))) -> dict:
+    _call(camp_service.delete_campaign, ctx.company_id, ctx.user_id, campaign_id)
+    return {"ok": True}
+
+
+@router.get("/campaigns/{campaign_id}/members")
+def campaigns_members(campaign_id: int, ctx: AuthContext = Depends(require_permission(F_CAMP, "VIEW"))) -> list[dict]:
+    return _json(_call(camp_service.list_members, ctx.company_id, campaign_id))
+
+
+@router.post("/campaigns/{campaign_id}/members")
+def campaigns_add_members(campaign_id: int, body: CrmCampaignMembersRequest,
+                          ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    added = 0
+    if body.from_segment:
+        added += _call(camp_service.build_members, ctx.company_id, ctx.user_id, campaign_id)
+    if body.customer_ids:
+        added += _call(camp_service.add_customers, ctx.company_id, ctx.user_id, campaign_id, body.customer_ids)
+    if body.lead_ids:
+        added += _call(camp_service.add_leads, ctx.company_id, ctx.user_id, campaign_id, body.lead_ids)
+    return {"added": added}
+
+
+@router.post("/campaigns/members/{member_id}/status")
+def campaigns_member_status(member_id: int, body: CrmMemberStatusRequest,
+                            ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    _call(camp_service.set_member_status, ctx.company_id, ctx.user_id, member_id, body.status_code, body.note)
+    return {"ok": True}
+
+
+@router.post("/campaigns/{campaign_id}/launch")
+def campaigns_launch(campaign_id: int, body: CrmCampaignLaunchRequest,
+                     ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    return _call(camp_service.launch, ctx.company_id, ctx.user_id, campaign_id, body.scheduled_at)
+
+
+@router.post("/campaigns/{campaign_id}/complete")
+def campaigns_complete(campaign_id: int, ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    _call(camp_service.set_status, ctx.company_id, ctx.user_id, campaign_id, "COMPLETED")
+    return {"ok": True}
+
+
+@router.post("/campaigns/{campaign_id}/cancel")
+def campaigns_cancel(campaign_id: int, ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    _call(camp_service.set_status, ctx.company_id, ctx.user_id, campaign_id, "CANCELLED")
+    return {"ok": True}
+
+
+@router.get("/customers/{customer_id}/loyalty")
+def customer_loyalty(customer_id: int, ctx: AuthContext = Depends(require_permission(F_360, "VIEW"))) -> dict:
+    _call(c360.identity, ctx.company_id, customer_id)
+    return _json(loyalty_service.summary(ctx.company_id, customer_id))
+
+
+@router.post("/customers/{customer_id}/loyalty/adjust")
+def customer_loyalty_adjust(customer_id: int, body: CrmLoyaltyAdjustRequest,
+                            ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    return {"points": _call(loyalty_service.adjust_points, ctx.company_id, ctx.user_id, customer_id, body.points, body.reason)}
+
+
+@router.post("/customers/{customer_id}/loyalty/referral")
+def customer_loyalty_referral(customer_id: int, body: CrmReferralRequest,
+                              ctx: AuthContext = Depends(require_permission(F_CAMP, "EDIT"))) -> dict:
+    return {"points": _call(loyalty_service.award_referral, ctx.company_id, ctx.user_id, customer_id, body.referred_customer_id)}
+
+
+@router.get("/settings/marketing")
+def marketing_settings(ctx: AuthContext = Depends(require_permission("crm_settings", "VIEW"))) -> dict:
+    from peecha.db.base import new_session
+    with new_session() as session:
+        scoring = lead_service.scoring_config(session, ctx.company_id)
+    return {"loyalty": loyalty_service.get_rules(ctx.company_id),
+            "lead_scoring": {"factor_max": scoring["factor_max"], "source_points": scoring["source_points"],
+                             "bands": dict(scoring["bands"])}}
+
+
+@router.put("/settings/marketing")
+def marketing_settings_save(body: dict, ctx: AuthContext = Depends(require_permission("crm_settings", "EDIT"))) -> dict:
+    if "loyalty" in body:
+        _call(lambda: loyalty_service.save_rules(ctx.company_id, ctx.user_id, **body["loyalty"]))
+    if "lead_scoring" in body:
+        ls = body["lead_scoring"]
+        _call(lambda: lead_service.save_scoring_config(ctx.company_id, ctx.user_id, factor_max=ls.get("factor_max"),
+                                                       source_points=ls.get("source_points"), bands=ls.get("bands")))
+    return marketing_settings(ctx)

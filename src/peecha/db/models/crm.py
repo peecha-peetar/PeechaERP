@@ -75,6 +75,7 @@ class Lead(Base):
     phone: Mapped[str | None] = mapped_column(String(20))
     email: Mapped[str | None] = mapped_column(String(150))
     source_id: Mapped[int | None] = mapped_column(ForeignKey("crm.lead_sources.source_id"))
+    campaign_id: Mapped[int | None] = mapped_column(ForeignKey("crm.campaigns.campaign_id"))  # R284
     interested_item_id: Mapped[int | None] = mapped_column(ForeignKey("inv.items.item_id"))
     interested_text: Mapped[str | None] = mapped_column(String(300))
     estimated_value: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
@@ -115,6 +116,7 @@ class Opportunity(Base):
     probability_percent: Mapped[decimal.Decimal] = mapped_column(Numeric(5, 2), default=decimal.Decimal(0))
     expected_close_date: Mapped[datetime.date | None]
     source_id: Mapped[int | None] = mapped_column(ForeignKey("crm.lead_sources.source_id"))
+    campaign_id: Mapped[int | None] = mapped_column(ForeignKey("crm.campaigns.campaign_id"))  # R284
     description: Mapped[str | None] = mapped_column(String(2000))
     status_code: Mapped[str] = mapped_column(String(5), default="OPEN")
     lost_reason: Mapped[str | None] = mapped_column(String(300))
@@ -208,3 +210,48 @@ class CustomerScore(Base):
     factors: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     next_best_action: Mapped[str | None] = mapped_column(String(300))
     computed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+# --- R284: بازاریابی -----------------------------------------------------------------------------------
+class Campaign(Base):
+    __tablename__ = "campaigns"
+    __table_args__ = _CRM
+
+    campaign_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    campaign_no: Mapped[int]
+    name: Mapped[str] = mapped_column(String(150))
+    campaign_type: Mapped[str] = mapped_column(String(15), default="SMS")
+    status_code: Mapped[str] = mapped_column(String(12), default="DRAFT")
+    segment_id: Mapped[int | None] = mapped_column(ForeignKey("crm.segments.segment_id"))
+    lead_source_id: Mapped[int | None] = mapped_column(ForeignKey("crm.lead_sources.source_id"))
+    start_date: Mapped[datetime.date | None]
+    end_date: Mapped[datetime.date | None]
+    attribution_days: Mapped[int] = mapped_column(default=30)
+    budget_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    actual_cost: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal(0))
+    expected_revenue: Mapped[decimal.Decimal | None] = mapped_column(Numeric(18, 2))
+    message_text: Mapped[str | None] = mapped_column(String(1000))
+    scheduled_at: Mapped[datetime.datetime | None]
+    sms_campaign_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.sms_campaigns.campaign_id"))
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    description: Mapped[str | None] = mapped_column(String(1000))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CampaignMember(Base):
+    __tablename__ = "campaign_members"
+    __table_args__ = _CRM
+
+    member_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("crm.campaigns.campaign_id", ondelete="CASCADE"))
+    customer_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    lead_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("crm.leads.lead_id", ondelete="CASCADE"))
+    contact: Mapped[str | None] = mapped_column(String(150))
+    status_code: Mapped[str] = mapped_column(String(12), default="TARGETED")
+    responded_at: Mapped[datetime.datetime | None]
+    converted_at: Mapped[datetime.datetime | None]
+    note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

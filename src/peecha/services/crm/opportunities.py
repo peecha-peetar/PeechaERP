@@ -158,6 +158,8 @@ def _apply(session, company_id: int, opp: Opportunity, f: OpportunityFields) -> 
         if lead is None or lead.company_id != company_id:
             raise ValueError("سرنخ نامعتبر است.")
         f.customer_detail_account_id = f.customer_detail_account_id or lead.converted_customer_detail_account_id
+        if opp.campaign_id is None and lead.campaign_id:
+            opp.campaign_id = lead.campaign_id  # نسبت‌دادن فرصت به کمپین سرنخ
     if not f.customer_detail_account_id and not f.lead_id:
         raise ValueError("فرصت باید به یک مشتری یا سرنخ مربوط باشد.")
     for k in ("title", "customer_detail_account_id", "lead_id", "owner_user_id", "amount", "expected_close_date",

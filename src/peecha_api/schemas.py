@@ -300,6 +300,7 @@ class CrmLeadRequest(BaseModel):
     next_action: str | None = None
     next_action_date: datetime.date | None = None
     allow_duplicate: bool = False
+    campaign_id: int | None = None
 
 
 class CrmLeadStatusRequest(BaseModel):
@@ -338,6 +339,46 @@ class CrmSegmentRequest(BaseModel):
     rule: dict = {"all": []}
     description: str | None = None
     is_active: bool = True
+
+
+class CrmCampaignRequest(BaseModel):
+    name: str
+    campaign_type: str = "SMS"
+    segment_id: int | None = None
+    lead_source_id: int | None = None
+    start_date: datetime.date | None = None
+    end_date: datetime.date | None = None
+    attribution_days: int = 30
+    budget_amount: decimal.Decimal | None = None
+    actual_cost: decimal.Decimal = decimal.Decimal(0)
+    expected_revenue: decimal.Decimal | None = None
+    message_text: str | None = None
+    owner_user_id: int | None = None
+    description: str | None = None
+
+
+class CrmCampaignMembersRequest(BaseModel):
+    customer_ids: list[int] = []
+    lead_ids: list[int] = []
+    from_segment: bool = False
+
+
+class CrmCampaignLaunchRequest(BaseModel):
+    scheduled_at: datetime.datetime | None = None
+
+
+class CrmMemberStatusRequest(BaseModel):
+    status_code: str
+    note: str | None = None
+
+
+class CrmLoyaltyAdjustRequest(BaseModel):
+    points: int
+    reason: str
+
+
+class CrmReferralRequest(BaseModel):
+    referred_customer_id: int
 
 
 class CrmStageMoveRequest(BaseModel):

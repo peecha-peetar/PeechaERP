@@ -520,6 +520,7 @@ NAV_ITEMS = [
             {"code": "CRM_LEADS", "label": "سرنخ‌ها", "screen": "crm_leads"},
             {"code": "CRM_PIPELINE", "label": "قیف فروش و فرصت‌ها", "screen": "crm_pipeline"},
             {"code": "CRM_ANALYTICS", "label": "تحلیل مشتری و سگمنت‌ها", "screen": "crm_analytics"},
+            {"code": "CRM_CAMPAIGNS", "label": "کمپین‌ها و باشگاه مشتریان", "screen": "crm_campaigns"},
             {"code": "CRM_SETTINGS", "label": "تنظیمات ارتباط با مشتری (قیف فروش، منابع سرنخ)", "screen": "crm_settings", "in_ribbon": False},
         ],
     },
