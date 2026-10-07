@@ -15,6 +15,7 @@ from peecha.services.crm import activities as act_service
 from peecha.services.crm import customer360 as c360
 from peecha.services.crm import leads as lead_service
 from peecha.services.crm import opportunities as opp_service
+from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
 from peecha.services.crm import tasks as task_service
 from peecha_api.deps import AuthContext, get_idempotency_key
@@ -210,6 +211,21 @@ def move_stage(opportunity_id: int, payload: CrmStageMoveRequest,
     return _row(opp_service.get_opportunity(ctx.company_id, opportunity_id))
 
 
+@router.post("/opportunities/{opportunity_id}/documents")
+def create_sales_document(opportunity_id: int, payload: dict, ctx: AuthContext = Depends(require_permission(F_PIPE, "EDIT")),
+                          idempotency_key: str | None = Depends(get_idempotency_key)) -> dict:
+    """R282: پیش‌فاکتور یا سفارش فروش از فرصت — با همان سرویس اسناد فروش."""
+    doc_type = payload.get("document_type_code", "SALES_PROFORMA")
+    return _idem(idempotency_key, f"POST /crm/opportunities/{opportunity_id}/documents", ctx,
+                 lambda: opp_sales.create_sales_document(ctx.company_id, ctx.user_id, opportunity_id, doc_type),
+                 lambda doc_id: {"document_id": doc_id, "document_type_code": doc_type})
+
+
+@router.get("/opportunities/{opportunity_id}/sales-chain")
+def sales_chain(opportunity_id: int, ctx: AuthContext = Depends(require_permission(F_PIPE, "VIEW"))) -> list[dict]:
+    return _json(_call(opp_sales.sales_chain, ctx.company_id, opportunity_id))
+
+
 @router.delete("/opportunities/{opportunity_id}")
 def delete_opportunity(opportunity_id: int, ctx: AuthContext = Depends(require_permission(F_PIPE, "DELETE"))) -> dict:
     _call(opp_service.delete_opportunity, ctx.company_id, ctx.user_id, opportunity_id)
@@ -272,6 +288,15 @@ def tasks(bucket: str | None = None, ctx: AuthContext = Depends(require_permissi
 
 
 # --- Customer 360 -----------------------------------------------------------------------------------
+@router.post("/customers/{customer_id}/orders")
+def customer_order(customer_id: int, ctx: AuthContext = Depends(require_permission("commercial_document_sales_order", "CREATE")),
+                   idempotency_key: str | None = Depends(get_idempotency_key)) -> dict:
+    """R282: سفارش فروش پیش‌نویس برای مشتری (ردیف‌ها با همان API سفارش فروش اضافه می‌شوند)."""
+    return _idem(idempotency_key, f"POST /crm/customers/{customer_id}/orders", ctx,
+                 lambda: opp_sales.create_customer_document(ctx.company_id, ctx.user_id, customer_id),
+                 lambda doc_id: {"document_id": doc_id})
+
+
 @router.get("/customers/{customer_id}/360")
 def customer_360(customer_id: int, ctx: AuthContext = Depends(require_permission(F_360, "VIEW"))) -> dict:
     return _json(_call(c360.customer_360, ctx.company_id, customer_id))

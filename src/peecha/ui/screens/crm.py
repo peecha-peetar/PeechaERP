@@ -22,6 +22,7 @@ from peecha.services.crm import common as cc
 from peecha.services.crm import customer360 as c360
 from peecha.services.crm import leads as lead_service
 from peecha.services.crm import opportunities as opp_service
+from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
 from peecha.services.crm import tasks as task_service
 from peecha.ui.screens import module_style as ms
@@ -79,6 +80,17 @@ def _text(value) -> QTextEdit:
     w.setPlainText(value or "")
     w.setMaximumHeight(90)
     return w
+
+
+_DOC_NAV = {"SALES_ORDER": "SALES_ORDER", "SALES_PROFORMA": "SALES_PROFORMA", "SALES_INVOICE": "SALES_INVOICE",
+            "SALES_RETURN": "SALES_RETURN"}
+
+
+def open_document(main_window, document_type_code: str, document_id: int) -> None:
+    """سند فروش در همان فرم فروش ERP باز می‌شود (تأیید، تبدیل به فاکتور، ثبت و تسویه همان‌جا)."""
+    nav = _DOC_NAV.get(document_type_code)
+    if main_window is not None and nav:
+        main_window.open_screen(nav, then=lambda screen: screen.edit_document(document_id))
 
 
 class CrmLookups:
@@ -200,7 +212,7 @@ class Customer360Screen(QWidget):
             "visit": _quick("🚚 ویزیت", lambda: self.quick_activity("VISIT")),
             "note": _quick("💬 یادداشت", lambda: self.quick_activity("NOTE")),
             "opportunity": _quick("🎯 فرصت", self.new_opportunity),
-            "order": _quick("🛒 سفارش", lambda: self.open_erp("SALES_ORDER")),
+            "order": _quick("🛒 سفارش", lambda: self.new_order()),
             "payment": _quick("💰 دریافت", lambda: self.open_erp("TREASURY_RECEIPT")),
             "ticket": _quick("⚠️ شکایت", lambda: self.quick_activity("COMPLAINT")),
         }
@@ -269,6 +281,7 @@ class Customer360Screen(QWidget):
         self._timeline_rows: list = []
         # تب‌های فهرستی ساده
         self.t_sales = table(["سند", "شماره", "تاریخ", "مبلغ", "وضعیت"])
+        self.t_sales.cellDoubleClicked.connect(lambda r, _c: self._open_doc(self.t_sales, r))
         self.t_payments = table(["", "تاریخ", "شرح", "مبلغ"])
         acts = QWidget()
         al = QVBoxLayout(acts)
@@ -287,6 +300,7 @@ class Customer360Screen(QWidget):
         self.t_opps = table(["فرصت", "مرحله", "مبلغ", "احتمال", "تاریخ پیش‌بینی", "مسئول", "وضعیت"])
         self.t_notes = table(["", "زمان", "یادداشت"])
         self.t_documents = table(["نوع", "شماره", "تاریخ", "مبلغ", "وضعیت", "شرح"])
+        self.t_documents.cellDoubleClicked.connect(lambda r, _c: self._open_doc(self.t_documents, r))
         for key, w in (("sales", self.t_sales), ("payments", self.t_payments), ("activities", acts), ("visits", self.t_visits),
                        ("tickets", self.t_tickets), ("opportunities", self.t_opps), ("notes", self.t_notes),
                        ("documents", self.t_documents)):
@@ -424,7 +438,12 @@ class Customer360Screen(QWidget):
             row = [documents_service._DOC_TYPE_TITLES.get(doc.document_type_code, doc.document_type_code),
                    doc.document_no, doc.document_date, doc.total_amount, doc.status_code]
             rows.append(row + ([doc.description or ""] if with_desc else []))
-        fill(t, rows, [doc.document_id for doc in docs])
+        fill(t, rows, [(doc.document_type_code, doc.document_id) for doc in docs])
+
+    def _open_doc(self, t: QTableWidget, row: int) -> None:
+        data = t.item(row, 0).data(Qt.UserRole) if t.item(row, 0) else None
+        if data:
+            open_document(self._main_window, *data)
 
     def _load_payments(self) -> None:
         ev = self._events(["PAYMENT"])
@@ -526,6 +545,17 @@ class Customer360Screen(QWidget):
         if ok:
             self.reload()
         return oid
+
+    def new_order(self) -> int | None:
+        """سفارش پیش‌نویس با همان سرویس فروش برای این مشتری ساخته و در فرم سفارش فروش باز می‌شود."""
+        if not self.customer_id:
+            return None
+        doc_id, ok = _run(self, "سفارش فروش", opp_sales.create_customer_document, company_id(), user_id(), self.customer_id)
+        if ok:
+            open_document(self._main_window, "SALES_ORDER", doc_id)
+            self._loaded.discard("sales")
+            self._loaded.discard("documents")
+        return doc_id
 
     def open_erp(self, nav_code: str) -> None:
         """سفارش و دریافت فقط با فرم‌های موجود ERP ثبت می‌شوند؛ مشتری انتخاب‌شده در صورت امکان پر می‌شود."""
@@ -1029,13 +1059,17 @@ class PipelineScreen(QWidget):
         outer.addWidget(self.board_area, stretch=1)
         self.buttons = {k: QPushButton(t) for k, t in (
             ("new", "فرصت جدید"), ("edit", "ویرایش فرصت"), ("lines", "اقلام پیشنهادی"), ("activity", "ثبت فعالیت"),
-            ("won", "برنده شد"), ("lost", "از دست رفت"), ("customer", "پروندهٔ مشتری"), ("delete", "حذف فرصت"))}
+            ("won", "برنده شد"), ("lost", "از دست رفت"), ("customer", "پروندهٔ مشتری"), ("delete", "حذف فرصت"),
+            ("proforma", "صدور پیش‌فاکتور"), ("order", "صدور سفارش فروش"), ("chain", "اسناد فروش فرصت"))}
         actions = {"new": "new_opportunity", "edit": "edit_opportunity", "lines": "edit_lines", "activity": "add_activity",
-                   "won": "mark_won", "lost": "mark_lost", "customer": "open_customer", "delete": "delete_opportunity"}
+                   "won": "mark_won", "lost": "mark_lost", "customer": "open_customer", "delete": "delete_opportunity",
+                   "proforma": "issue_proforma", "order": "issue_order", "chain": "show_chain"}
         for key, b in self.buttons.items():
             b.clicked.connect(lambda _c=False, k=key: getattr(self, actions[k])())
         outer.addWidget(ms.footer([[self.buttons[k] for k in ("new", "edit", "lines", "delete")],
-                                   [self.buttons["activity"], self.buttons["customer"]], [self.buttons["won"], self.buttons["lost"]]]))
+                                   [self.buttons["activity"], self.buttons["customer"]],
+                                   [self.buttons["proforma"], self.buttons["order"], self.buttons["chain"]],
+                                   [self.buttons["won"], self.buttons["lost"]]]))
 
     def refresh(self) -> None:
         cid = company_id()
@@ -1052,12 +1086,15 @@ class PipelineScreen(QWidget):
         self.buttons["new"].setEnabled(can("crm_pipeline", "CREATE"))
         for k in ("edit", "lines", "won", "lost"):
             self.buttons[k].setEnabled(can("crm_pipeline", "EDIT"))
+        for k in ("proforma", "order"):
+            self.buttons[k].setEnabled(can("crm_pipeline", "EDIT") and can("commercial_document_sales_order", "CREATE"))
         self.buttons["delete"].setEnabled(can("crm_pipeline", "DELETE"))
         self.reload()
 
     def reload(self) -> None:
         cid, pid = company_id(), self.pipeline.currentData()
         owner = user_id() if self.mine.isChecked() else None
+        opp_sales.sync_won_from_sales(cid)
         self.board = opp_service.kanban(cid, pid, owner)
         while self.board_layout.count():
             w = self.board_layout.takeAt(0).widget()
@@ -1232,6 +1269,44 @@ class PipelineScreen(QWidget):
         if ok:
             self.reload()
         return ok
+
+    def _issue(self, document_type_code: str) -> int | None:
+        oid = self._need()
+        if oid is None:
+            return None
+        doc_id, ok = _run(self, "سند فروش", opp_sales.create_sales_document, company_id(), user_id(), oid, document_type_code)
+        self.reload()
+        self.select(oid)
+        if ok:
+            open_document(self._main_window, document_type_code, doc_id)
+        return doc_id
+
+    def issue_proforma(self) -> int | None:
+        return self._issue("SALES_PROFORMA")
+
+    def issue_order(self) -> int | None:
+        return self._issue("SALES_ORDER")
+
+    def show_chain(self) -> list | None:
+        oid = self._need()
+        if oid is None:
+            return None
+        chain = opp_sales.sales_chain(company_id(), oid)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("اسناد فروش فرصت")
+        dlg.setLayoutDirection(Qt.RightToLeft)
+        lay = QVBoxLayout(dlg)
+        t = table(["سند", "شماره", "تاریخ", "وضعیت", "مبلغ", "ماندهٔ تسویه"])
+        fill(t, [[d["type_label"], d["document_no"], d["document_date"], d["status_code"], d["total_amount"],
+                  ("تسویه‌شده" if d["paid"] else d["remaining_amount"]) if d["remaining_amount"] is not None else "—"] for d in chain],
+             [(d["document_type_code"], d["document_id"]) for d in chain])
+        t.cellDoubleClicked.connect(lambda r, _c: (open_document(self._main_window, *t.item(r, 0).data(Qt.UserRole)), dlg.accept()))
+        lay.addWidget(QLabel("دوبار کلیک روی هر سند آن را در فرم فروش باز می‌کند (تبدیل، ثبت و تسویه همان‌جا)."))
+        lay.addWidget(t)
+        dlg.resize(760, 320)
+        if getattr(self, "dialog_runner", None) is None:
+            dlg.exec()
+        return chain
 
     def open_customer(self) -> None:
         oid = self._need()

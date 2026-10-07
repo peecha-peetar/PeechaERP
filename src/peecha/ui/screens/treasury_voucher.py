@@ -2050,6 +2050,12 @@ class TreasuryVoucherScreen(FieldHelpMixin, FormScreenBase):
     def _company_id(self) -> int | None:
         return session.current_company.company_id if session.current_company else None
 
+    def preselect_counterparty(self, detail_account_id: int) -> None:
+        """R282: بازشدن فرم دریافت از پروندهٔ مشتری (CRM) با همان طرف‌حساب انتخاب‌شده."""
+        index = self.account_combo.findData(detail_account_id)
+        if index >= 0:
+            self.account_combo.setCurrentIndex(index)
+
     def refresh(self) -> None:
         self.company_id = self._company_id()
         if self.company_id is None:
