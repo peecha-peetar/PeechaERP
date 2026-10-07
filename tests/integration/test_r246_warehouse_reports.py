@@ -250,8 +250,9 @@ for r in wr.WAREHOUSE_REPORTS:
         assert all(len(x) == len(res.columns) for x in res.rows)
     except Exception as exc:  # noqa: BLE001
         check(False, f"گزارش {r.code} خطا داد: {exc}")
-check(sorted(e[0] for _g, _l, es in nav_catalog.WAREHOUSE_REPORT_MENU + nav_catalog.FA_REPORT_MENU + nav_catalog.PRD_REPORT_MENU for e in es if not isinstance(e, dict))
-      == sorted(r.code for r in wr.WAREHOUSE_REPORTS) and len(wr.WAREHOUSE_REPORTS) == 103, "۱۰۳ گزارش در منو (R259/R260: +۹ بهای تمام‌شده، R264: +۱۵ دارایی، R270: +۲۸ تولید)")
+check(sorted(e[0] for _g, _l, es in nav_catalog.WAREHOUSE_REPORT_MENU + nav_catalog.FA_REPORT_MENU + nav_catalog.PRD_REPORT_MENU + nav_catalog.CRM_REPORT_MENU for e in es if not isinstance(e, dict))
+      == sorted(r.code for r in wr.WAREHOUSE_REPORTS) and len(wr.WAREHOUSE_REPORTS) == 119,
+      "۱۱۹ گزارش در منو (R259/R260: +۹ بهای تمام‌شده، R264: +۱۵ دارایی، R270: +۲۸ تولید، R288: +۱۶ CRM)")
 with new_session() as s:
     idx = {r[0] for r in s.execute(text("select indexname from pg_indexes where indexname like 'ix_%stock_line' or indexname like 'ix_inv_stock_ledger_doc_line'"))}
 check({"ix_inv_stock_ledger_doc_line", "ix_comm_document_lines_stock_line"} <= idx, "ایندکس‌های گزارش ساخته شدند")
