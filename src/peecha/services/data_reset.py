@@ -42,18 +42,18 @@ _DELETE_RE = re.compile(r"^DELETE FROM ([a-z_]+\.[a-z_]+) WHERE (.+)$", re.S)
 _SKIP_REFERENCE_TABLES = {"inv.stock_ledger", "acc.journal_entry_lines", "acc.journal_entries"}
 
 
-def _foreign_keys_to(session, table: str) -> list[tuple[str, str, str, bool]]:
-    """(جدول فرزند، ستون فرزند، ستون والد، nullable) برای FKهای تک‌ستونی به table."""
+def _foreign_keys_to(session, table: str) -> list[tuple[str, str, str, bool, bool]]:
+    """(جدول فرزند، ستون فرزند، ستون والد، nullable، cascade) برای FKهای تک‌ستونی به table."""
     rows = session.execute(text(
-        "SELECT n.nspname || '.' || c.relname, a.attname, pa.attname, NOT a.attnotnull "
+        "SELECT n.nspname || '.' || c.relname, a.attname, pa.attname, NOT a.attnotnull, k.confdeltype = 'c' "
         "FROM pg_constraint k "
         "JOIN pg_class c ON c.oid = k.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace "
         "JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = k.conkey[1] "
         "JOIN pg_attribute pa ON pa.attrelid = k.confrelid AND pa.attnum = k.confkey[1] "
         "WHERE k.contype = 'f' AND k.confrelid = CAST(:t AS regclass) AND array_length(k.conkey, 1) = 1 "
-        "AND k.confdeltype NOT IN ('c', 'n')"
+        "AND k.confdeltype <> 'n'"
     ), {"t": table}).all()
-    return [(r[0], r[1], r[2], bool(r[3])) for r in rows]
+    return [(r[0], r[1], r[2], bool(r[3]), bool(r[4])) for r in rows]
 
 
 def _clear_references(session, table: str, where: str, params: dict, depth: int = 0) -> None:
@@ -62,10 +62,15 @@ def _clear_references(session, table: str, where: str, params: dict, depth: int 
     NULL می‌شود و ردیف وابستهٔ اجباری — با همین قاعده، بازگشتی — حذف."""
     if depth > 8:
         return
-    for child, col, parent_col, nullable in _foreign_keys_to(session, table):
+    for child, col, parent_col, nullable, cascade in _foreign_keys_to(session, table):
         if child in _SKIP_REFERENCE_TABLES:
             continue
         subquery = f"SELECT {parent_col} FROM {table} WHERE {where}"
+        if cascade:
+            # ردیف فرزند را خود دیتابیس حذف می‌کند؛ فقط وابسته‌های آن (مثل ردیف سفارشی که به ردیف درخواست خرید اشاره دارد) پاک شوند
+            if child != table:
+                _clear_references(session, child, f"{col} IN ({subquery})", params, depth + 1)
+            continue
         if child == table or nullable:
             savepoint = session.begin_nested()
             try:
@@ -329,6 +334,12 @@ _DOCUMENT_DELETE_STATEMENTS = [
     "DELETE FROM comm.vendor_rebate_accruals WHERE agreement_id IN "
     "(SELECT agreement_id FROM comm.vendor_rebate_agreements WHERE supplier_detail_account_id IN "
     " (SELECT detail_account_id FROM acc.detail_accounts WHERE company_id = :company_id))",
+    # جدول‌هایی که مستقیم به سند حسابداری اشاره می‌کنند (استهلاک قدیمی کالا، پیوند سند حقوق)
+    "DELETE FROM inv.asset_depreciation_entries WHERE journal_entry_id IN "
+    "(SELECT journal_entry_id FROM acc.journal_entries WHERE company_id = :company_id) "
+    "OR item_id IN (SELECT item_id FROM inv.items WHERE company_id = :company_id)",
+    "DELETE FROM payroll.journal_entry_links WHERE journal_entry_id IN "
+    "(SELECT journal_entry_id FROM acc.journal_entries WHERE company_id = :company_id)",
     # حسابداری
     "DELETE FROM acc.journal_entry_line_details WHERE line_id IN "
     "(SELECT jel.line_id FROM acc.journal_entry_lines jel "
