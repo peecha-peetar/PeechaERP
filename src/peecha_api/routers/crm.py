@@ -1,6 +1,6 @@
 """API CRM (R281) — لایهٔ نازک روی services/crm؛ دسترسی‌ها همان RBAC (فرم‌های crm_*).
 
-نوشتن‌های موبایل با Idempotency-Key تکرارناپذیرند. خطای اعتبارسنجی 400 است؛ برای ثبت فعالیت از موبایل، نبودِ
+نوشتن‌های موبایل با Idempotency-Key تکرارناپذیرند. خطای اعتبارسنجی 400 است؛ برای ثبت فعالیت از موبایل، نبود
 تنظیمات به خطا تبدیل نمی‌شود (قاعدهٔ صف آفلاین).
 """
 
@@ -12,18 +12,20 @@ import decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from peecha.services.crm import activities as act_service
+from peecha.services.crm import analytics
 from peecha.services.crm import customer360 as c360
 from peecha.services.crm import leads as lead_service
 from peecha.services.crm import opportunities as opp_service
 from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
+from peecha.services.crm import segments as seg_service
 from peecha.services.crm import tasks as task_service
 from peecha_api.deps import AuthContext, get_idempotency_key
 from peecha_api.idempotency import IdempotentReplay, run_idempotent
 from peecha_api.permissions import require_permission
 from peecha_api.schemas import (
     CrmActivityCompleteRequest, CrmActivityRequest, CrmAssignRequest, CrmLeadConvertRequest, CrmLeadRequest,
-    CrmLeadStatusRequest, CrmOpportunityLine, CrmOpportunityRequest, CrmStageMoveRequest,
+    CrmLeadStatusRequest, CrmOpportunityLine, CrmOpportunityRequest, CrmSegmentRequest, CrmStageMoveRequest,
 )
 
 router = APIRouter(prefix="/crm", tags=["crm"])
@@ -309,3 +311,81 @@ def customer_timeline(customer_id: int, kinds: str | None = None, date_from: dat
     events = _call(c360.timeline, ctx.company_id, customer_id, kinds=kinds.split(",") if kinds else None, date_from=date_from,
                    date_to=date_to, search=q, limit=min(limit, 200), offset=offset)
     return [_json(e.__dict__) for e in events]
+
+
+# --- تحلیل مشتری و سگمنت (R283) ---------------------------------------------------------------------
+F_ANALYTICS = "crm_analytics"
+
+
+@router.post("/analytics/refresh")
+def analytics_refresh(ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "EDIT"))) -> dict:
+    n = analytics.refresh_scores(ctx.company_id)
+    seg_service.refresh_counts(ctx.company_id)
+    return {"customers": n}
+
+
+@router.get("/analytics/scores")
+def analytics_scores(rfm_segment: str | None = None, health_band: str | None = None, churn_band: str | None = None,
+                     segment_id: int | None = None, order: str = "churn", limit: int = 200, offset: int = 0,
+                     ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "VIEW"))) -> list[dict]:
+    if order not in ("churn", "health", "clv", "monetary"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ترتیب نامعتبر است.")
+    analytics.ensure_fresh(ctx.company_id)
+    ids = _call(seg_service.members, ctx.company_id, segment_id) if segment_id else None
+    return _json(analytics.list_scores(ctx.company_id, rfm_segment_code=rfm_segment, health_band=health_band, churn_band=churn_band,
+                                       customer_ids=ids, order=order, limit=min(limit, 1000), offset=offset))
+
+
+@router.get("/analytics/summary")
+def analytics_summary(ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "VIEW"))) -> dict:
+    analytics.ensure_fresh(ctx.company_id)
+    return _json({"rfm": analytics.rfm_matrix(ctx.company_id), "bands": analytics.band_counts(ctx.company_id)})
+
+
+@router.get("/segments/fields")
+def segment_fields(ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "VIEW"))) -> dict:
+    return {"fields": {k: {"label": f.label, "kind": f.kind, "choices": f.choices} for k, f in seg_service.FIELDS.items()},
+            "operators": seg_service.OPERATORS}
+
+
+def _segment(s) -> dict:
+    return _json({"segment_id": s.segment_id, "code": s.code, "name": s.name, "description": s.description, "rule": s.rule,
+                  "is_system": s.is_system, "is_active": s.is_active, "member_count": s.member_count, "refreshed_at": s.refreshed_at})
+
+
+@router.get("/segments")
+def segments_list(ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "VIEW"))) -> list[dict]:
+    return [_segment(s) for s in seg_service.list_segments(ctx.company_id)]
+
+
+@router.post("/segments/preview")
+def segments_preview(body: CrmSegmentRequest, ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "VIEW"))) -> dict:
+    return {"count": _call(seg_service.count, ctx.company_id, body.rule)}
+
+
+@router.post("/segments")
+def segments_create(body: CrmSegmentRequest, ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "CREATE"))) -> dict:
+    sid = _call(seg_service.save_segment, ctx.company_id, ctx.user_id, code=body.code, name=body.name, rule=body.rule,
+                description=body.description, is_active=body.is_active)
+    return {"segment_id": sid}
+
+
+@router.put("/segments/{segment_id}")
+def segments_update(segment_id: int, body: CrmSegmentRequest,
+                    ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "EDIT"))) -> dict:
+    _call(seg_service.save_segment, ctx.company_id, ctx.user_id, segment_id=segment_id, code=body.code, name=body.name,
+          rule=body.rule, description=body.description, is_active=body.is_active)
+    return {"segment_id": segment_id}
+
+
+@router.delete("/segments/{segment_id}")
+def segments_delete(segment_id: int, ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "DELETE"))) -> dict:
+    _call(seg_service.delete_segment, ctx.company_id, ctx.user_id, segment_id)
+    return {"ok": True}
+
+
+@router.get("/segments/{segment_id}/members")
+def segments_members(segment_id: int, ctx: AuthContext = Depends(require_permission(F_ANALYTICS, "VIEW"))) -> list[dict]:
+    analytics.ensure_fresh(ctx.company_id)
+    ids = _call(seg_service.members, ctx.company_id, segment_id)
+    return _json(analytics.list_scores(ctx.company_id, customer_ids=ids, order="monetary"))

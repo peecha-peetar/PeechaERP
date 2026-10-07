@@ -146,3 +146,65 @@ class OpportunityDocument(Base):
         BigInteger, ForeignKey("crm.opportunities.opportunity_id", ondelete="CASCADE"), primary_key=True)
     document_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("comm.commercial_documents.document_id"), primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+# --- R283: تحلیل مشتری ---------------------------------------------------------------------------------
+class CrmSettings(Base):
+    __tablename__ = "settings"
+    __table_args__ = _CRM
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"), primary_key=True)
+    options: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    updated_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class Segment(Base):
+    __tablename__ = "segments"
+    __table_args__ = _CRM
+
+    segment_id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str | None] = mapped_column(String(500))
+    rule: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    is_system: Mapped[bool] = mapped_column(default=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    member_count: Mapped[int | None]
+    refreshed_at: Mapped[datetime.datetime | None]
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
+
+
+class CustomerScore(Base):
+    """کش محاسباتی تحلیل مشتری؛ با refresh از دادهٔ فروش/حسابداری دوباره ساخته می‌شود."""
+
+    __tablename__ = "customer_scores"
+    __table_args__ = _CRM
+
+    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"), primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
+    recency_days: Mapped[int | None]
+    frequency_365: Mapped[int] = mapped_column(default=0)
+    monetary_365: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal(0))
+    sales_90d: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal(0))
+    invoice_count_total: Mapped[int] = mapped_column(default=0)
+    first_purchase: Mapped[datetime.date | None]
+    last_purchase: Mapped[datetime.date | None]
+    avg_gap_days: Mapped[decimal.Decimal | None] = mapped_column(Numeric(8, 1))
+    r_score: Mapped[int | None] = mapped_column(SmallInteger)
+    f_score: Mapped[int | None] = mapped_column(SmallInteger)
+    m_score: Mapped[int | None] = mapped_column(SmallInteger)
+    rfm_segment: Mapped[str | None] = mapped_column(String(20))
+    health_score: Mapped[int] = mapped_column(SmallInteger, default=0)
+    health_band: Mapped[str] = mapped_column(String(10), default="ATTENTION")
+    churn_risk: Mapped[int] = mapped_column(SmallInteger, default=0)
+    churn_band: Mapped[str] = mapped_column(String(10), default="LOW")
+    clv_historical: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal(0))
+    clv_predicted: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal(0))
+    overdue_amount: Mapped[decimal.Decimal] = mapped_column(Numeric(18, 2), default=decimal.Decimal(0))
+    open_complaints: Mapped[int] = mapped_column(default=0)
+    activities_90d: Mapped[int] = mapped_column(default=0)
+    factors: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    next_best_action: Mapped[str | None] = mapped_column(String(300))
+    computed_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")

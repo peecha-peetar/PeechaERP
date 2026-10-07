@@ -332,6 +332,14 @@ class CrmOpportunityRequest(BaseModel):
     description: str | None = None
 
 
+class CrmSegmentRequest(BaseModel):
+    code: str = ""
+    name: str = ""
+    rule: dict = {"all": []}
+    description: str | None = None
+    is_active: bool = True
+
+
 class CrmStageMoveRequest(BaseModel):
     stage_id: int
     lost_reason: str | None = None

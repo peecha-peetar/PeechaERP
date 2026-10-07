@@ -290,7 +290,22 @@ def customer_360(company_id: int, customer_id: int, today: datetime.date | None 
     return {"identity": ident, "financial": fin, "sales": sal,
             "counts": {"open_activities": open_acts, "overdue_activities": overdue_acts, "open_opportunities": opps[0],
                        "open_opportunity_value": decimal.Decimal(opps[1]), "open_tickets": tickets, "last_visit": last_visit},
-            "smart_actions": smart_actions(ident, fin, sal, tickets), "summary": summary_text(ident, fin, sal)}
+            "smart_actions": smart_actions(ident, fin, sal, tickets), "summary": summary_text(ident, fin, sal),
+            "analytics": analytics_block(company_id, customer_id)}
+
+
+def analytics_block(company_id: int, customer_id: int) -> dict | None:
+    """امتیازهای کش‌شدهٔ تحلیل (RFM، سلامت، ریزش، CLV) و سگمنت‌های فعلی مشتری؛ بدون کش ← None."""
+    from peecha.services.crm import analytics, insights, segments
+    sc = analytics.get_score(company_id, customer_id)
+    if sc is None:
+        return None
+    return {"health_score": sc.health_score, "health_band": sc.health_band, "health_label": insights.HEALTH_BANDS[sc.health_band][0],
+            "churn_risk": sc.churn_risk, "churn_band": sc.churn_band, "churn_label": insights.CHURN_BANDS[sc.churn_band],
+            "rfm": f"{sc.r_score or '-'}{sc.f_score or '-'}{sc.m_score or '-'}", "rfm_segment": sc.rfm_segment,
+            "rfm_label": analytics.RFM_SEGMENTS.get(sc.rfm_segment or "", ""), "clv_historical": sc.clv_historical,
+            "clv_predicted": sc.clv_predicted, "next_best_action": sc.next_best_action, "factors": sc.factors,
+            "computed_at": sc.computed_at, "segments": [s.name for s in segments.segments_of_customer(company_id, customer_id)]}
 
 
 # --- تایم‌لاین ---------------------------------------------------------------------------------------

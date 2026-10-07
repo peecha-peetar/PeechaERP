@@ -18,12 +18,14 @@ from PySide6.QtWidgets import (
 
 from peecha import numerals
 from peecha.services.crm import activities as act_service
+from peecha.services.crm import analytics
 from peecha.services.crm import common as cc
 from peecha.services.crm import customer360 as c360
 from peecha.services.crm import leads as lead_service
 from peecha.services.crm import opportunities as opp_service
 from peecha.services.crm import opportunity_sales as opp_sales
 from peecha.services.crm import pipelines as pl_service
+from peecha.services.crm import segments as seg_service
 from peecha.services.crm import tasks as task_service
 from peecha.ui.screens import module_style as ms
 from peecha.ui.screens.costing import can
@@ -397,6 +399,12 @@ class Customer360Screen(QWidget):
                 ("اولین خرید", _date(sal["first_purchase"])), ("تعداد سفارش", sal["order_count"]),
                 ("میانگین مبلغ فاکتور", money(sal["avg_invoice"])), ("خرید ماه جاری", money(sal["sales_this_month"])),
                 ("خرید سال گذشته", money(sal["sales_last_year"])), ("برگشت از فروش", money(sal["returns"]))]
+        an = d.get("analytics")
+        if an:
+            info += [("سلامت مشتری", f"{an['health_score']} — {an['health_label']}"), ("ریسک ریزش", f"{an['churn_risk']}٪ — {an['churn_label']}"),
+                     ("RFM", f"{an['rfm']} — {an['rfm_label']}"),
+                     ("ارزش طول عمر (تاکنون / پیش‌بینی)", f"{money(an['clv_historical'])} / {money(an['clv_predicted'])}"),
+                     ("سگمنت‌ها", "، ".join(an["segments"])), ("اقدام پیشنهادی", an["next_best_action"])]
         fill(self.t_info, [[k, v if v not in (None, "") else "—"] for k, v in info])
         fill(self.t_top, [[x["name"], x["times"], x["quantity"].normalize() if x["quantity"] is not None else "", x["amount"]]
                           for x in sal["top_items"]])
@@ -1473,3 +1481,346 @@ class CrmSettingsScreen(QWidget):
         if ok:
             self.load_sources()
         return ok
+
+
+# =========================================================================================================
+# تحلیل مشتری و سگمنت‌ها (R283)
+class SegmentDialog(QDialog):
+    """سازندهٔ قاعدهٔ سگمنت: هر ردیف «فیلد / عملگر / مقدار»؛ ترکیب ردیف‌ها با «و» یا «یا»."""
+
+    def __init__(self, seg=None, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("سگمنت مشتری")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(760, 460)
+        lay = QVBoxLayout(self)
+        top = QHBoxLayout()
+        self.code, self.name = QLineEdit(seg.code if seg else ""), QLineEdit(seg.name if seg else "")
+        self.code.setEnabled(not (seg and seg.is_system))
+        self.match = combo([("همهٔ شرط‌ها برقرار باشد (و)", "all"), ("یکی از شرط‌ها کافی است (یا)", "any")])
+        rule = seg.rule if seg else {"all": []}
+        set_combo(self.match, "any" if "any" in rule else "all")
+        self.active = QCheckBox("فعال")
+        self.active.setChecked(seg.is_active if seg else True)
+        for w in (QLabel("کد:"), self.code, QLabel("نام:"), self.name, self.match, self.active):
+            top.addWidget(w)
+        lay.addLayout(top)
+        self.rows_box = QVBoxLayout()
+        lay.addLayout(self.rows_box)
+        self.rows: list[tuple[QWidget, QComboBox, QComboBox, QComboBox]] = []
+        for cond in rule.get("all", rule.get("any")) or []:
+            if "field" in cond:
+                self.add_row(cond)
+        if not self.rows:
+            self.add_row()
+        lay.addStretch(1)
+        self.hint = QLabel("برای فیلد تاریخ، مقدار = «چند روز پیش». برای «یکی از» و «بین» مقدارها را با ویرگول جدا کنید.")
+        self.hint.setObjectName("sectionHint")
+        self.hint.setWordWrap(True)
+        lay.addWidget(self.hint)
+        buttons = QHBoxLayout()
+        for text, slot in (("افزودن شرط", lambda: self.add_row()), ("پیش‌نمایش تعداد", self.preview), ("ذخیره", self._accept),
+                           ("انصراف", self.reject)):
+            b = QPushButton(text)
+            b.clicked.connect(lambda _c=False, f=slot: f())
+            buttons.addWidget(b)
+        lay.addLayout(buttons)
+
+    def add_row(self, cond: dict | None = None) -> None:
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        field = combo([(f.label, k) for k, f in seg_service.FIELDS.items()])
+        op = combo([(v, k) for k, v in seg_service.OPERATORS.items()])
+        value = QComboBox()
+        value.setEditable(True)
+        rm = QPushButton("حذف")
+        h.addWidget(field, 3)
+        h.addWidget(op, 2)
+        h.addWidget(value, 3)
+        h.addWidget(rm)
+        entry = (w, field, op, value)
+        field.currentIndexChanged.connect(lambda _i: self._choices(entry))
+        rm.clicked.connect(lambda _c=False: self._remove(entry))
+        self.rows.append(entry)
+        self.rows_box.addWidget(w)
+        if cond:
+            set_combo(field, cond["field"])
+            set_combo(op, cond.get("op"))
+        self._choices(entry)
+        if cond:
+            v = cond.get("value")
+            if isinstance(v, dict) and "days_ago" in v:
+                v = v["days_ago"]
+            fd = seg_service.FIELDS.get(cond["field"])
+            if fd and fd.choices and isinstance(v, str) and v in fd.choices:
+                set_combo(value, v)
+            else:
+                value.setEditText(",".join(str(x) for x in v) if isinstance(v, list) else ("" if v is None else str(v)))
+
+    def _choices(self, entry) -> None:
+        _w, field, _op, value = entry
+        fd = seg_service.FIELDS[field.currentData()]
+        value.clear()
+        for k, label in (fd.choices or {}).items():
+            value.addItem(label, k)
+        value.setEditText("")
+
+    def _remove(self, entry) -> None:
+        entry[0].setParent(None)
+        self.rows.remove(entry)
+
+    def rule(self) -> dict:
+        conds = []
+        for _w, field, op, value in self.rows:
+            fd, o = seg_service.FIELDS[field.currentData()], op.currentData()
+            text = value.currentText().strip()
+            label_to_code = {v: k for k, v in (fd.choices or {}).items()}
+
+            def conv(t: str):
+                t = numerals.to_ascii_digits(t.strip())
+                t = label_to_code.get(t, t)
+                if fd.kind == "date":
+                    return {"days_ago": int(t)}
+                if fd.kind == "number":
+                    return float(t) if "." in t else int(t)
+                return t
+
+            if o in ("is_null", "not_null"):
+                conds.append({"field": field.currentData(), "op": o})
+                continue
+            if not text:
+                continue
+            try:
+                v = [conv(x) for x in text.replace("،", ",").split(",") if x.strip()] if o in ("in", "not_in", "between") else conv(text)
+            except ValueError as exc:
+                raise ValueError(f"مقدار «{text}» برای «{fd.label}» معتبر نیست.") from exc
+            conds.append({"field": field.currentData(), "op": o, "value": v})
+        return {self.match.currentData(): conds}
+
+    def values(self) -> dict:
+        return {"code": self.code.text(), "name": self.name.text(), "rule": self.rule(), "is_active": self.active.isChecked()}
+
+    def preview(self) -> None:
+        try:
+            n = seg_service.count(company_id(), self.rule())
+        except ValueError as exc:
+            QMessageBox.warning(self, "سگمنت", str(exc))
+            return
+        QMessageBox.information(self, "سگمنت", P(f"{n} مشتری در این سگمنت قرار می‌گیرند."))
+
+    def _accept(self) -> None:
+        try:
+            seg_service.validate_rule(self.rule())
+        except ValueError as exc:
+            QMessageBox.warning(self, "سگمنت", str(exc))
+            return
+        self.accept()
+
+
+@ms.styled
+class AnalyticsScreen(QWidget):
+    scroll_in_mdi = True
+
+    def __init__(self, main_window=None) -> None:
+        super().__init__()
+        self._main_window = main_window
+        self.dialog_runner = None
+        self.rows: list[dict] = []
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        title = QLabel("تحلیل مشتری و سگمنت‌ها")
+        title.setObjectName("pageTitle")
+        self.segment = QComboBox()
+        self.rfm = combo([(v, k) for k, v in analytics.RFM_SEGMENTS.items()], "همهٔ بخش‌های RFM")
+        self.health = combo([(v[0], k) for k, v in analytics.insights.HEALTH_BANDS.items()], "همهٔ وضعیت‌های سلامت")
+        self.churn = combo([(v, k) for k, v in analytics.insights.CHURN_BANDS.items()], "همهٔ سطوح ریسک ریزش")
+        self.order = combo([("بیشترین ریسک ریزش", "churn"), ("کمترین سلامت", "health"), ("بیشترین ارزش طول عمر", "clv"),
+                            ("بیشترین خرید ۱۲ ماه", "monetary")])
+        for w in (self.segment, self.rfm, self.health, self.churn, self.order):
+            w.currentIndexChanged.connect(lambda _i: self.reload())
+        self.recalc = _quick("محاسبهٔ دوباره", self.recompute)
+        outer.addWidget(ms.header_card(title, self.segment, self.rfm, self.health, self.churn, self.order, self.recalc))
+        cards, self.cards = ms.summary([("healthy", "مشتری سالم", "success", "🟢"), ("attention", "نیازمند توجه", "warning", "🟡"),
+                                        ("risk", "در معرض خطر", "danger", "🔴"), ("churn", "ریسک ریزش زیاد", "danger", "📉"),
+                                        ("clv", "ارزش طول عمر کل (تاکنون)", "success", "💎"), ("clv_pred", "ارزش پیش‌بینی‌شده", "info", "🔮"),
+                                        ("overdue", "بدهی معوق", "warning", "⏰"), ("computed", "آخرین محاسبه", "info", "🕒")], per_row=4)
+        outer.addWidget(cards)
+        self.tabs = QTabWidget()
+        self.t = table(["کد", "مشتری", "RFM", "بخش RFM", "سلامت", "ریسک ریزش", "روز از آخرین خرید", "دفعات ۱۲ ماه",
+                        "خرید ۱۲ ماه", "ارزش طول عمر", "پیش‌بینی ارزش", "بدهی معوق", "اقدام پیشنهادی"])
+        self.t.cellDoubleClicked.connect(lambda _r, _c: self.open_customer())
+        self.tabs.addTab(self.t, "مشتریان")
+        self.t_rfm = table(["بخش RFM", "تعداد مشتری", "خرید ۱۲ ماه"])
+        self.t_rfm.cellDoubleClicked.connect(lambda r, _c: set_combo(self.rfm, self.t_rfm.item(r, 0).data(Qt.UserRole)))
+        self.tabs.addTab(self.t_rfm, "ماتریس RFM")
+        sw = QWidget()
+        sl = QVBoxLayout(sw)
+        self.t_seg = table(["کد", "نام", "تعداد اعضا", "سیستمی", "فعال", "قاعده"])
+        self.t_seg.cellDoubleClicked.connect(lambda _r, _c: self.edit_segment())
+        sl.addWidget(self.t_seg, stretch=1)
+        self.seg_buttons = {k: QPushButton(t) for k, t in (("new", "سگمنت جدید"), ("edit", "ویرایش سگمنت"),
+                                                           ("delete", "حذف سگمنت"), ("members", "نمایش اعضا"))}
+        self.seg_buttons["new"].clicked.connect(lambda: self.edit_segment(new=True))
+        self.seg_buttons["edit"].clicked.connect(lambda: self.edit_segment())
+        self.seg_buttons["delete"].clicked.connect(lambda: self.delete_segment())
+        self.seg_buttons["members"].clicked.connect(lambda: self.show_members())
+        sl.addWidget(ms.footer([list(self.seg_buttons.values())]))
+        self.tabs.addTab(sw, "سگمنت‌ها")
+        outer.addWidget(self.tabs, stretch=1)
+        self.buttons = {"open": QPushButton("پروندهٔ ۳۶۰"), "activity": QPushButton("ثبت پیگیری پیشنهادی")}
+        self.buttons["open"].clicked.connect(lambda: self.open_customer())
+        self.buttons["activity"].clicked.connect(lambda: self.follow_up())
+        outer.addWidget(ms.footer([list(self.buttons.values())]))
+
+    def refresh(self) -> None:
+        cid = company_id()
+        if cid is None:
+            return
+        analytics.ensure_fresh(cid)
+        self.recalc.setEnabled(can("crm_analytics", "EDIT"))
+        self.seg_buttons["new"].setEnabled(can("crm_analytics", "CREATE"))
+        self.seg_buttons["edit"].setEnabled(can("crm_analytics", "EDIT"))
+        self.seg_buttons["delete"].setEnabled(can("crm_analytics", "DELETE"))
+        self.buttons["activity"].setEnabled(can("crm_activities", "CREATE"))
+        self.load_segments()
+        self.reload()
+
+    def recompute(self) -> None:
+        cid = company_id()
+        n = analytics.refresh_scores(cid)
+        seg_service.refresh_counts(cid)
+        self.load_segments()
+        self.reload()
+        if not self.dialog_runner:
+            QMessageBox.information(self, "تحلیل مشتری", P(f"امتیاز {n} مشتری دوباره محاسبه شد."))
+
+    def load_segments(self) -> None:
+        cid = company_id()
+        if any(s.member_count is None for s in seg_service.list_segments(cid, active_only=True)):
+            seg_service.refresh_counts(cid)
+        self._segs = seg_service.list_segments(cid)
+        current = self.segment.currentData()
+        self.segment.blockSignals(True)
+        self.segment.clear()
+        self.segment.addItem("همهٔ مشتریان", None)
+        for s in self._segs:
+            if s.is_active:
+                self.segment.addItem(f"{s.name} ({P(s.member_count or 0)})", s.segment_id)
+        set_combo(self.segment, current)
+        self.segment.blockSignals(False)
+        fill(self.t_seg, [[s.code, s.name, s.member_count if s.member_count is not None else "", "بله" if s.is_system else "",
+                           "بله" if s.is_active else "خیر", self._rule_text(s.rule)] for s in self._segs],
+             [s.segment_id for s in self._segs])
+
+    @staticmethod
+    def _rule_text(rule: dict) -> str:
+        joiner = " و " if "all" in rule else " یا "
+        parts = []
+        for cnd in rule.get("all", rule.get("any")) or []:
+            if "field" not in cnd:
+                parts.append("(گروه شرط)")
+                continue
+            fd = seg_service.FIELDS.get(cnd["field"])
+            v = cnd.get("value")
+            if isinstance(v, dict) and "days_ago" in v:
+                v = f"{v['days_ago']} روز پیش"
+            elif fd and fd.choices:
+                v = "، ".join(fd.choices.get(x, str(x)) for x in v) if isinstance(v, list) else fd.choices.get(v, v)
+            parts.append(f"{fd.label if fd else cnd['field']} {seg_service.OPERATORS.get(cnd['op'], cnd['op'])} {'' if v is None else v}".strip())
+        return P(joiner.join(parts))
+
+    def reload(self) -> None:
+        cid = company_id()
+        sid = self.segment.currentData()
+        ids = seg_service.members(cid, sid) if sid else None
+        self.rows = analytics.list_scores(cid, rfm_segment_code=self.rfm.currentData(), health_band=self.health.currentData(),
+                                          churn_band=self.churn.currentData(), customer_ids=ids, order=self.order.currentData())
+        fill(self.t, [[r["code"], r["name"], f"{r['r_score'] or '-'}{r['f_score'] or '-'}{r['m_score'] or '-'}", r["rfm_label"],
+                       f"{r['health_score']} {r['health_label']}", f"{r['churn_risk']}٪ {r['churn_label']}",
+                       r["recency_days"] if r["recency_days"] is not None else "—", r["frequency_365"], r["monetary_365"],
+                       r["clv_historical"], r["clv_predicted"], r["overdue_amount"], r["next_best_action"] or ""] for r in self.rows],
+             [r["customer_detail_account_id"] for r in self.rows])
+        tone = {"AT_RISK": _RED, "ATTENTION": _AMBER, "HEALTHY": _GREEN}
+        for i, r in enumerate(self.rows):
+            self.t.item(i, 4).setForeground(tone[r["health_band"]])
+            if r["churn_band"] == "HIGH":
+                self.t.item(i, 5).setForeground(_RED)
+        counts = {"HEALTHY": 0, "ATTENTION": 0, "AT_RISK": 0}
+        for r in self.rows:
+            counts[r["health_band"]] += 1
+        self.cards["healthy"].setText(P(counts["HEALTHY"]))
+        self.cards["attention"].setText(P(counts["ATTENTION"]))
+        self.cards["risk"].setText(P(counts["AT_RISK"]))
+        self.cards["churn"].setText(P(sum(1 for r in self.rows if r["churn_band"] == "HIGH")))
+        self.cards["clv"].setText(money(sum((r["clv_historical"] for r in self.rows), ZERO)))
+        self.cards["clv_pred"].setText(money(sum((r["clv_predicted"] for r in self.rows), ZERO)))
+        self.cards["overdue"].setText(money(sum((r["overdue_amount"] for r in self.rows), ZERO)))
+        newest = max((r["computed_at"] for r in self.rows), default=None)
+        self.cards["computed"].setText(_date(newest.date()) if newest else "—")
+        matrix = analytics.rfm_matrix(cid)
+        fill(self.t_rfm, [[m["label"], m["count"], m["monetary"]] for m in matrix], [m["code"] for m in matrix])
+
+    def _selected_seg(self):
+        sid = _selected(self.t_seg)
+        return next((s for s in self._segs if s.segment_id == sid), None)
+
+    def edit_segment(self, new: bool = False, values: dict | None = None) -> int | None:
+        seg = None if new else self._selected_seg()
+        if not new and seg is None:
+            QMessageBox.warning(self, "سگمنت", "یک سگمنت را انتخاب کنید.")
+            return None
+        if values is None:
+            dlg = SegmentDialog(seg, self)
+            ok = self.dialog_runner(dlg) if self.dialog_runner else dlg.exec() == QDialog.Accepted
+            if not ok:
+                return None
+            values = dlg.values()
+        sid, ok = _run(self, "سگمنت", seg_service.save_segment, company_id(), user_id(),
+                       segment_id=seg.segment_id if seg else None, **values)
+        if ok:
+            seg_service.refresh_counts(company_id())
+            self.load_segments()
+        return sid if ok else None
+
+    def delete_segment(self) -> bool:
+        seg = self._selected_seg()
+        if seg is None or not _confirm(self, "سگمنت", f"سگمنت «{seg.name}» حذف شود؟"):
+            return False
+        _r, ok = _run(self, "سگمنت", seg_service.delete_segment, company_id(), user_id(), seg.segment_id)
+        if ok:
+            self.load_segments()
+        return ok
+
+    def show_members(self) -> None:
+        seg = self._selected_seg()
+        if seg is None:
+            return
+        set_combo(self.segment, seg.segment_id)
+        self.tabs.setCurrentIndex(0)
+
+    def _row(self):
+        cid = _selected(self.t)
+        return next((r for r in self.rows if r["customer_detail_account_id"] == cid), None)
+
+    def open_customer(self) -> None:
+        r = self._row()
+        if r is not None and self._main_window is not None:
+            self._main_window.open_screen("CRM_CUSTOMER360", then=lambda s: s.load_customer(r["customer_detail_account_id"]))
+
+    def follow_up(self, values: dict | None = None) -> int | None:
+        """فعالیت پیگیری با موضوع «اقدام پیشنهادی» مشتری انتخاب‌شده."""
+        r = self._row()
+        if r is None:
+            QMessageBox.warning(self, "پیگیری", "یک مشتری را انتخاب کنید.")
+            return None
+        lk = CrmLookups(company_id())
+        if values is None:
+            values = _ask(self, "ثبت پیگیری", activity_form(lk, kind="FOLLOW_UP"))
+            if values is None:
+                return None
+        if not values.get("subject"):
+            values["subject"] = r["next_best_action"] or "پیگیری مشتری"
+        aid, ok = _run(self, "پیگیری", act_service.create_activity, company_id(), user_id(),
+                       activity_fields(values, customer_detail_account_id=r["customer_detail_account_id"]))
+        return aid if ok else None
