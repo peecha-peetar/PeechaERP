@@ -239,11 +239,7 @@ def _create_customer(payload: CustomerCreateRequest, ctx: AuthContext) -> tuple[
     # همگام‌سازیِ واقعی -- نه در گوشی) کدِ بعدی پیشنهاد/اختصاص می‌شود.
     code = (payload.code or "").strip()
     if not code:
-        dimension_type_id = dimensions_service.get_person_dimension_type_id(ctx.company_id)
-        person_group_id = dimensions_service.get_person_group_id(ctx.company_id, dimensions_service.CUSTOMER_GROUP_CODE)
-        code = dimensions_service.suggest_next_code(
-            ctx.company_id, dimension_type_id, level_no=hierarchy["leaf_level_no"], person_group_id=person_group_id
-        )
+        code = partners_service.suggest_customer_code(ctx.company_id)
     fields = partners_service.CustomerProfileFields(
         customer_group_id=payload.customer_group_id,
         default_price_list_id=payload.default_price_list_id,

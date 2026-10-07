@@ -277,3 +277,93 @@ class VehicleSettlementLineRequest(BaseModel):
 class VehicleSettlementSubmitRequest(BaseModel):
     declared_cash_amount: decimal.Decimal
     lines: list[VehicleSettlementLineRequest]
+
+
+# ---------------------------------------------------------------------
+# R281: CRM (سرنخ، فرصت، فعالیت) — همان قرارداد: فقط اعتبارسنجی ورودی.
+# ---------------------------------------------------------------------
+class CrmLeadRequest(BaseModel):
+    full_name: str
+    company_name: str | None = None
+    mobile: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    source_id: int | None = None
+    interested_item_id: int | None = None
+    interested_text: str | None = None
+    estimated_value: decimal.Decimal | None = None
+    owner_user_id: int | None = None
+    city: str | None = None
+    province: str | None = None
+    industry: str | None = None
+    notes: str | None = None
+    next_action: str | None = None
+    next_action_date: datetime.date | None = None
+    allow_duplicate: bool = False
+
+
+class CrmLeadStatusRequest(BaseModel):
+    status_code: str
+    reason: str | None = None
+
+
+class CrmAssignRequest(BaseModel):
+    owner_user_id: int
+
+
+class CrmLeadConvertRequest(BaseModel):
+    existing_customer_id: int | None = None
+    create_opportunity: bool = True
+    opportunity_title: str | None = None
+    opportunity_amount: decimal.Decimal | None = None
+
+
+class CrmOpportunityRequest(BaseModel):
+    title: str
+    customer_detail_account_id: int | None = None
+    lead_id: int | None = None
+    owner_user_id: int | None = None
+    pipeline_id: int | None = None
+    stage_id: int | None = None
+    amount: decimal.Decimal = decimal.Decimal(0)
+    probability_percent: decimal.Decimal | None = None
+    expected_close_date: datetime.date | None = None
+    source_id: int | None = None
+    description: str | None = None
+
+
+class CrmStageMoveRequest(BaseModel):
+    stage_id: int
+    lost_reason: str | None = None
+
+
+class CrmOpportunityLine(BaseModel):
+    item_id: int | None = None
+    quantity: decimal.Decimal = decimal.Decimal(1)
+    unit_price: decimal.Decimal = decimal.Decimal(0)
+    discount_amount: decimal.Decimal = decimal.Decimal(0)
+    description: str | None = None
+
+
+class CrmActivityRequest(BaseModel):
+    activity_type_code: str
+    subject: str
+    customer_detail_account_id: int | None = None
+    lead_id: int | None = None
+    opportunity_id: int | None = None
+    customer_visit_id: int | None = None
+    description: str | None = None
+    due_date: datetime.date | None = None
+    start_at: datetime.datetime | None = None
+    duration_minutes: int | None = None
+    priority_code: str = "NORMAL"
+    assigned_to_user_id: int | None = None
+    next_action: str | None = None
+    next_action_date: datetime.date | None = None
+
+
+class CrmActivityCompleteRequest(BaseModel):
+    result_text: str | None = None
+    status_code: str | None = None
+    follow_up_date: datetime.date | None = None
+    follow_up_subject: str | None = None

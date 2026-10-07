@@ -641,6 +641,30 @@ def list_unsettled_invoices(company_id: int, document_type_code: str | None = No
         return result
 
 
+def list_unsettled_invoices_bulk(
+    company_id: int, counterparty_ids: list[int] | None = None, due_on_or_before: datetime.date | None = None,
+    document_type_code: str = "SALES_INVOICE",
+) -> list[InvoiceSettlementStatus]:
+    """همان قاعدهٔ list_unsettled_invoices (فقط POSTED، مانده > ۰) با یک پرس‌وجوی تجمیعی — برای فهرست‌های بزرگ
+    (CRM، داشبوردها) بدون پرس‌وجوی جدا برای هر فاکتور."""
+    settled = (select(InvoiceSettlement.invoice_document_id, func.sum(InvoiceSettlement.amount).label("settled"))
+               .group_by(InvoiceSettlement.invoice_document_id).subquery())
+    with new_session() as session:
+        stmt = (select(CommercialDocument.document_id, CommercialDocument.total_amount, func.coalesce(settled.c.settled, 0),
+                       CommercialDocument.due_date, CommercialDocument.counterparty_detail_account_id)
+                .outerjoin(settled, settled.c.invoice_document_id == CommercialDocument.document_id)
+                .where(CommercialDocument.company_id == company_id, CommercialDocument.status_code == "POSTED",
+                       CommercialDocument.document_type_code == document_type_code,
+                       CommercialDocument.total_amount > func.coalesce(settled.c.settled, 0)))
+        if counterparty_ids is not None:
+            stmt = stmt.where(CommercialDocument.counterparty_detail_account_id.in_(counterparty_ids or [-1]))
+        if due_on_or_before is not None:
+            stmt = stmt.where(CommercialDocument.due_date <= due_on_or_before)
+        return [InvoiceSettlementStatus(document_id=d, total_amount=t, settled_amount=decimal.Decimal(st), remaining_amount=t - st,
+                                        due_date=due, counterparty_detail_account_id=cp)
+                for d, t, st, due, cp in session.execute(stmt.order_by(CommercialDocument.due_date.nulls_last()))]
+
+
 def list_invoices_due_soon(company_id: int, document_type_code: str | None = None) -> list[InvoiceSettlementStatus]:
     """طبق درخواست صریح («آپشنی که N روز مانده به موعد تسویه آلارم
     بدهد»): فقط اگر آلارم برای این شرکت فعال باشد، فاکتورهای

@@ -790,7 +790,7 @@ class CustomerActivity(Base):
 
     activity_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("core.companies.company_id"))
-    customer_detail_account_id: Mapped[int] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
+    customer_detail_account_id: Mapped[int | None] = mapped_column(ForeignKey("acc.detail_accounts.detail_account_id"))
     activity_type_code: Mapped[str] = mapped_column(String(15))
     subject: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(String(1000))
@@ -802,6 +802,18 @@ class CustomerActivity(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(server_default="now()")
     resolved_at: Mapped[datetime.datetime | None]
     resolved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("sec.users.user_id"))
+    # R281: جدول واحد فعالیت CRM (سرنخ/فرصت/تیکت/ویزیت، زمان، اولویت، نتیجه، اقدام بعدی)
+    lead_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("crm.leads.lead_id"))
+    opportunity_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("crm.opportunities.opportunity_id"))
+    ticket_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.service_tickets.ticket_id"))
+    customer_visit_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("comm.customer_visits.customer_visit_id"))
+    start_at: Mapped[datetime.datetime | None]
+    duration_minutes: Mapped[int | None]
+    priority_code: Mapped[str] = mapped_column(String(10), default="NORMAL")
+    result_text: Mapped[str | None] = mapped_column(String(1000))
+    next_action: Mapped[str | None] = mapped_column(String(300))
+    next_action_date: Mapped[datetime.date | None]
+    updated_at: Mapped[datetime.datetime | None]
 
 
 class CustomerMerchandising(Base):

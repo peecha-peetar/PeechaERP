@@ -6,6 +6,7 @@ from peecha.db.models import (  # noqa: F401
     audit,
     commercial,
     core,
+    crm,
     documents,
     fixed_assets,
     hr,

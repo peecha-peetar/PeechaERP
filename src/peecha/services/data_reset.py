@@ -112,6 +112,9 @@ _DOCUMENT_DELETE_STATEMENTS = [
     # R278: ماژول‌هایی که بعد از ساخت این ابزار اضافه شدند (درخواست خرید، استعلام، بودجه، CRM و ویزیت،
     # حضور و غیاب، دورهٔ حقوق، وظایف انبار، کارتابل و ...). ردیف‌های وابستهٔ آن‌ها خودکار پاک می‌شوند.
     "DELETE FROM comm.customer_activities WHERE company_id = :company_id",
+    # R281: فرصت‌ها (اقلام و پیوند سند با آن‌ها می‌روند) و سرنخ‌های CRM
+    "DELETE FROM crm.opportunities WHERE company_id = :company_id",
+    "DELETE FROM crm.leads WHERE company_id = :company_id",
     "DELETE FROM comm.customer_call_logs WHERE company_id = :company_id",
     "DELETE FROM comm.customer_sales_notes WHERE company_id = :company_id",
     "DELETE FROM comm.customer_visits WHERE company_id = :company_id",
@@ -553,6 +556,10 @@ def wipe_master_data(company_id: int) -> int:
 # ۳) تنظیمات — نگاشتِ حساب‌ها، سطح‌بندی، شماره‌گذاری، Toggleهایِ ماژول.
 # ---------------------------------------------------------------------
 _SETTINGS_DELETE_STATEMENTS = [
+    # R281: قیف فروش و منابع سرنخ اختصاصی شرکت (منابع پیش‌فرض سیستم شرکت ندارند و می‌مانند)
+    "DELETE FROM crm.pipeline_stages WHERE pipeline_id IN (SELECT pipeline_id FROM crm.pipelines WHERE company_id = :company_id)",
+    "DELETE FROM crm.pipelines WHERE company_id = :company_id",
+    "DELETE FROM crm.lead_sources WHERE company_id = :company_id",
     "DELETE FROM acc.statement_row_refs WHERE row_id IN "
     "(SELECT sr.row_id FROM acc.statement_rows sr JOIN acc.statement_templates st ON st.template_id = sr.template_id WHERE st.company_id = :company_id)",
     "DELETE FROM acc.statement_row_accounts WHERE row_id IN "

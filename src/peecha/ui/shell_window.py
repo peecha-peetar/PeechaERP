@@ -74,6 +74,7 @@ _NAV_ICONS = {
     "FA": "🏭",
     "PRD": "🔩",
     "SALES": "🛒",
+    "CRM": "🤝",
     "PURCH": "🧺",
     "HR": "👥",
     "INVOICES": "🧾",
@@ -1874,6 +1875,13 @@ class MainWindow(QMainWindow):
         self.register_screen("prd_master", lambda: prd_screens.MasterDataScreen())
         self.register_screen("prd_costing", lambda: prd_screens.PrdCostingScreen())
         self.register_screen("prd_settings", lambda: prd_screens.PrdSettingsScreen())
+        from peecha.ui.screens import crm as crm_screens
+
+        self.register_screen("crm_customer360", lambda: crm_screens.Customer360Screen(self))  # R281
+        self.register_screen("crm_tasks", lambda: crm_screens.TaskCenterScreen(self))
+        self.register_screen("crm_leads", lambda: crm_screens.LeadsScreen(self))
+        self.register_screen("crm_pipeline", lambda: crm_screens.PipelineScreen(self))
+        self.register_screen("crm_settings", lambda: crm_screens.CrmSettingsScreen(self))
         from peecha.ui.screens.warehouse_operations import WarehouseOperationsScreen
 
         self.register_screen("warehouse_operations", lambda: WarehouseOperationsScreen())

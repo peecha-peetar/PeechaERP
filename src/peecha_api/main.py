@@ -13,6 +13,7 @@ from peecha_api.routers import (
     approvals,
     auth,
     collection,
+    crm,
     customers,
     dashboard,
     delivery,
@@ -54,6 +55,7 @@ app.include_router(collection.router)
 app.include_router(vehicle_settlement.router)
 app.include_router(locations.router)  # R248: محلِ انبار (اسکن/محتوا/جانمایی/برداشت)
 app.include_router(fixed_assets.router)  # R265: اسکنِ دارایی و شمارشِ فیزیکی
+app.include_router(crm.router)  # R281: CRM
 
 
 @app.get("/health")

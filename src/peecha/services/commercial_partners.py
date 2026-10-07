@@ -344,6 +344,16 @@ def get_customer_hierarchy_options(company_id: int) -> dict:
     return {"max_level_no": max_level_no, "leaf_level_no": max_level_no, "parent_options": parent_options}
 
 
+def suggest_customer_code(company_id: int) -> str:
+    """کد پیشنهادی مشتری تازه در سطح آخر گروه مشتری (همان قاعدهٔ فرم مشتری موبایل/دسکتاپ)."""
+    hierarchy = get_customer_hierarchy_options(company_id)
+    dimension_type_id = dimensions_service.get_person_dimension_type_id(company_id)
+    person_group_id = dimensions_service.get_person_group_id(company_id, dimensions_service.CUSTOMER_GROUP_CODE)
+    return dimensions_service.suggest_next_code(
+        company_id, dimension_type_id, level_no=hierarchy["leaf_level_no"], person_group_id=person_group_id
+    )
+
+
 def find_duplicate_customers(
     company_id: int, name: str | None = None, mobile: str | None = None, phone: str | None = None, limit: int = 5,
 ) -> list[dict]:
@@ -802,13 +812,16 @@ def set_customer_merchandising(
 # ---------------------------------------------------------------------
 # CRMِ کامل: شکایت/جلسه/فرصتِ فروش/وظیفه (R219، بخشِ ۱۱).
 # ---------------------------------------------------------------------
-_ACTIVITY_TYPES = ("COMPLAINT", "MEETING", "OPPORTUNITY", "TASK")
+_ACTIVITY_TYPES = ("COMPLAINT", "MEETING", "OPPORTUNITY", "TASK",
+                   # R281: نوع‌های فعالیت CRM روی همین جدول واحد
+                   "CALL", "VISIT", "FOLLOW_UP", "EMAIL", "MESSAGE", "REMINDER", "NOTE")
 _ACTIVITY_OPEN_STATUSES = ("OPEN", "IN_PROGRESS")
 _ACTIVITY_CLOSE_STATUSES = {
     "COMPLAINT": ("RESOLVED", "CANCELLED"),
     "MEETING": ("DONE", "CANCELLED"),
     "OPPORTUNITY": ("WON", "LOST", "CANCELLED"),
     "TASK": ("DONE", "CANCELLED"),
+    **{t: ("DONE", "CANCELLED") for t in ("CALL", "VISIT", "FOLLOW_UP", "EMAIL", "MESSAGE", "REMINDER", "NOTE")},
 }
 
 

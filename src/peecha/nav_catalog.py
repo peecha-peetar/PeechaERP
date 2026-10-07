@@ -510,6 +510,18 @@ NAV_ITEMS = [
             {"code": "SALES_AFTERSALES", "label": "خدمات پس‌ازفروش و گارانتی", "screen": "commercial_aftersales"},
         ],
     },
+    # R281: مدیریت ارتباط با مشتری — لایه‌ای روی همان مشتری/فروش/دریافت ERP (docs/crm-implementation-plan.md)
+    {
+        "code": "CRM",
+        "label": "مدیریت ارتباط با مشتری",
+        "children": [
+            {"code": "CRM_CUSTOMER360", "label": "پروندهٔ ۳۶۰ مشتری", "screen": "crm_customer360"},
+            {"code": "CRM_TASKS", "label": "مرکز کارها و پیگیری‌ها", "screen": "crm_tasks"},
+            {"code": "CRM_LEADS", "label": "سرنخ‌ها", "screen": "crm_leads"},
+            {"code": "CRM_PIPELINE", "label": "قیف فروش و فرصت‌ها", "screen": "crm_pipeline"},
+            {"code": "CRM_SETTINGS", "label": "تنظیمات ارتباط با مشتری (قیف فروش، منابع سرنخ)", "screen": "crm_settings", "in_ribbon": False},
+        ],
+    },
     {
         "code": "PURCH",
         "label": "خرید و تدارکات",
@@ -798,6 +810,8 @@ _EMBEDDED_HUB_SUB_FORMS: list[tuple[str, str, str]] = [
     ("prd_cost_view", "PRD", "تولید: مشاهدهٔ بها"), ("prd_cost_adjust", "PRD", "تولید: اصلاح بها/بازگشایی"),
     ("prd_bom", "PRD", "تولید: مدیریت فهرست مواد (BOM)"), ("prd_routing", "PRD", "تولید: مدیریت مسیر تولید"),
     ("prd_allocation", "PRD", "تولید: مدیریت سرشکن هزینه"),
+    # R281: دسترسی‌های CRM بدون صفحهٔ جدا (CRM_EXPORT = اکشن EXPORT روی هر فرم CRM؛ CRM_ADMIN = فرم crm_settings)
+    ("crm_activities", "CRM", "ارتباط با مشتری: فعالیت‌ها و پیگیری‌ها"), ("crm_assign", "CRM", "ارتباط با مشتری: واگذاری سرنخ و فرصت"),
 ]
 
 # نگاشتِ کدِ ماژولِ آیتم‌هایِ سطحِ بالایی که خودشان زیرگروه ندارند — فقط
